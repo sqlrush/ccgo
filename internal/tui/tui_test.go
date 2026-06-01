@@ -263,6 +263,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionDeleteToEnd {
 		t.Fatalf("ctrl-k action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x0c")); action != ActionRedraw {
+		t.Fatalf("ctrl-l action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x17")); action != ActionDeleteWordBack {
 		t.Fatalf("ctrl-w action = %q", action)
 	}
@@ -289,7 +292,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-u", "ctrl-k", "ctrl-w"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-w"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -473,6 +476,20 @@ func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	}
 	if screen.Dialog != nil {
 		t.Fatalf("dialog should close after mouse click")
+	}
+}
+
+func TestREPLScreenRedrawEvent(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	event := screen.ApplyKey(ParseKey("\x0c"))
+	if event.Type != ScreenEventRedraw {
+		t.Fatalf("redraw event = %#v", event)
+	}
+
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow"}}
+	event = screen.ApplyKey(ParseKey("\x0c"))
+	if event.Type != ScreenEventRedraw || screen.Dialog == nil {
+		t.Fatalf("dialog redraw event = %#v dialog=%#v", event, screen.Dialog)
 	}
 }
 

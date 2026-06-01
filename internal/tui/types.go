@@ -76,6 +76,7 @@ const (
 	KeyCtrlE     KeyType = "ctrl+e"
 	KeyCtrlF     KeyType = "ctrl+f"
 	KeyCtrlK     KeyType = "ctrl+k"
+	KeyCtrlL     KeyType = "ctrl+l"
 	KeyCtrlR     KeyType = "ctrl+r"
 	KeyCtrlU     KeyType = "ctrl+u"
 	KeyCtrlW     KeyType = "ctrl+w"

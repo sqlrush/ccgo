@@ -8,6 +8,7 @@ const (
 	ScreenEventDialogAction     ScreenEventType = "dialog_action"
 	ScreenEventCancelled        ScreenEventType = "cancelled"
 	ScreenEventInterrupted      ScreenEventType = "interrupted"
+	ScreenEventRedraw           ScreenEventType = "redraw"
 	ScreenEventReverseSearch    ScreenEventType = "reverse_search"
 	ScreenEventReverseSelected  ScreenEventType = "reverse_search_selected"
 	ScreenEventFocusIn          ScreenEventType = "focus_in"
@@ -103,6 +104,9 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		}
 	}
 	action := s.Keymap.Resolve(key)
+	if action == ActionRedraw {
+		return ScreenEvent{Type: ScreenEventRedraw}
+	}
 	if s.Dialog != nil {
 		return s.applyDialogAction(action)
 	}

@@ -10,6 +10,7 @@ const (
 	ActionSubmitPrompt     Action = "submit_prompt"
 	ActionCancel           Action = "cancel"
 	ActionInterrupt        Action = "interrupt"
+	ActionRedraw           Action = "redraw"
 	ActionMoveLeft         Action = "move_left"
 	ActionMoveRight        Action = "move_right"
 	ActionMoveStart        Action = "move_start"
@@ -46,6 +47,7 @@ func DefaultKeymap() Keymap {
 		KeyEnter:     ActionSubmitPrompt,
 		KeyEsc:       ActionCancel,
 		KeyCtrlC:     ActionInterrupt,
+		KeyCtrlL:     ActionRedraw,
 		KeyLeft:      ActionMoveLeft,
 		KeyCtrlB:     ActionMoveLeft,
 		KeyRight:     ActionMoveRight,
