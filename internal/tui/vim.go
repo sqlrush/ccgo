@@ -1,6 +1,10 @@
 package tui
 
-import "ccgo/internal/session"
+import (
+	"unicode"
+
+	"ccgo/internal/session"
+)
 
 type VimMode string
 
@@ -41,6 +45,30 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	switch key.Type {
 	case KeyEsc:
 		s.clearVimPending()
+		return ScreenEvent{}, true
+	case KeyLeft:
+		return s.applyVimNormalRune('h'), true
+	case KeyRight:
+		return s.applyVimNormalRune('l'), true
+	case KeyUp:
+		return s.applyVimNormalRune('k'), true
+	case KeyDown:
+		return s.applyVimNormalRune('j'), true
+	case KeyBackspace:
+		if s.VimPendingReplace || s.VimPendingCharMotion != 0 {
+			return ScreenEvent{}, true
+		}
+		return s.applyVimNormalRune('h'), true
+	case KeyDelete:
+		if s.VimPendingReplace || s.VimPendingCharMotion != 0 {
+			return ScreenEvent{}, true
+		}
+		if s.VimPendingOperator == 0 && s.VimCount == 0 {
+			return s.applyVimNormalRune('x'), true
+		}
+		if s.VimCount > 0 {
+			s.VimCount = 0
+		}
 		return ScreenEvent{}, true
 	case KeyRune:
 		return s.applyVimNormalRune(key.Rune), true
@@ -103,6 +131,14 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		applyN(count, func() { s.Prompt.moveWordBackward() })
 	case 'e':
 		applyN(count, func() { s.Prompt.moveWordEnd() })
+	case 'W':
+		applyN(count, func() { s.Prompt.moveWORDForward() })
+	case 'B':
+		applyN(count, func() { s.Prompt.moveWORDBackward() })
+	case 'E':
+		applyN(count, func() { s.Prompt.moveWORDEnd() })
+	case '^':
+		s.Prompt.moveFirstNonBlank()
 	case '$':
 		s.Prompt.Apply(Key{Type: KeyEnd})
 	case 'x':
@@ -160,6 +196,24 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		if change {
 			s.VimMode = VimInsert
 		}
+	case 'W':
+		s.recordVimUndo()
+		applyN(count, func() { s.Prompt.deleteWORDForward() })
+		if change {
+			s.VimMode = VimInsert
+		}
+	case 'e':
+		s.recordVimUndo()
+		applyN(count, func() { s.Prompt.deleteToWordEnd(false) })
+		if change {
+			s.VimMode = VimInsert
+		}
+	case 'E':
+		s.recordVimUndo()
+		applyN(count, func() { s.Prompt.deleteToWordEnd(true) })
+		if change {
+			s.VimMode = VimInsert
+		}
 	case '$':
 		s.recordVimUndo()
 		s.Prompt.deleteToEnd()
@@ -175,6 +229,18 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 	case 'b':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.deleteWordBackward() })
+		if change {
+			s.VimMode = VimInsert
+		}
+	case 'B':
+		s.recordVimUndo()
+		applyN(count, func() { s.Prompt.deleteWORDBackward() })
+		if change {
+			s.VimMode = VimInsert
+		}
+	case '^':
+		s.recordVimUndo()
+		s.Prompt.deleteToFirstNonBlank()
 		if change {
 			s.VimMode = VimInsert
 		}
@@ -373,6 +439,65 @@ func (p *PromptState) moveWordEnd() {
 	p.Cursor = i
 }
 
+func (p *PromptState) moveWORDForward() {
+	runes := []rune(p.Text)
+	i := p.Cursor
+	for i < len(runes) && unicode.IsSpace(runes[i]) {
+		i++
+	}
+	for i < len(runes) && !unicode.IsSpace(runes[i]) {
+		i++
+	}
+	for i < len(runes) && unicode.IsSpace(runes[i]) {
+		i++
+	}
+	p.Cursor = i
+}
+
+func (p *PromptState) moveWORDBackward() {
+	runes := []rune(p.Text)
+	i := p.Cursor
+	if i > len(runes) {
+		i = len(runes)
+	}
+	for i > 0 && unicode.IsSpace(runes[i-1]) {
+		i--
+	}
+	for i > 0 && !unicode.IsSpace(runes[i-1]) {
+		i--
+	}
+	p.Cursor = i
+}
+
+func (p *PromptState) moveWORDEnd() {
+	runes := []rune(p.Text)
+	i := p.Cursor
+	if i < len(runes) && !unicode.IsSpace(runes[i]) {
+		i++
+	}
+	for i < len(runes) && unicode.IsSpace(runes[i]) {
+		i++
+	}
+	for i < len(runes) && !unicode.IsSpace(runes[i]) {
+		i++
+	}
+	if i > 0 {
+		i--
+	}
+	p.Cursor = i
+}
+
+func (p *PromptState) moveFirstNonBlank() {
+	runes := []rune(p.Text)
+	for i, r := range runes {
+		if !unicode.IsSpace(r) {
+			p.Cursor = i
+			return
+		}
+	}
+	p.Cursor = 0
+}
+
 func (p *PromptState) deleteAll() {
 	p.Text = ""
 	p.Cursor = 0
@@ -415,6 +540,42 @@ func (p *PromptState) deleteWordForward() {
 func (p *PromptState) deleteWordBackward() {
 	end := p.Cursor
 	p.moveWordBackward()
+	start := p.Cursor
+	p.deleteRange(start, end)
+}
+
+func (p *PromptState) deleteWORDForward() {
+	start := p.Cursor
+	p.moveWORDForward()
+	end := p.Cursor
+	p.deleteRange(start, end)
+}
+
+func (p *PromptState) deleteWORDBackward() {
+	end := p.Cursor
+	p.moveWORDBackward()
+	start := p.Cursor
+	p.deleteRange(start, end)
+}
+
+func (p *PromptState) deleteToWordEnd(big bool) {
+	start := p.Cursor
+	if big {
+		p.moveWORDEnd()
+	} else {
+		p.moveWordEnd()
+	}
+	end := p.Cursor
+	runes := []rune(p.Text)
+	if end < len(runes) {
+		end++
+	}
+	p.deleteRange(start, end)
+}
+
+func (p *PromptState) deleteToFirstNonBlank() {
+	end := p.Cursor
+	p.moveFirstNonBlank()
 	start := p.Cursor
 	p.deleteRange(start, end)
 }

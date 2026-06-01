@@ -788,6 +788,52 @@ func TestREPLScreenVimRepeatsFindTillMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimWORDMotionsAndFirstNonBlank(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{" ", " ", "f", "o", "o", ".", "b", "a", "r", " ", "b", "a", "z", "-", "q", "u", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("^"))
+	if screen.Prompt.Cursor != 2 {
+		t.Fatalf("cursor after ^ = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("W"))
+	if screen.Prompt.Cursor != len([]rune("  foo.bar ")) {
+		t.Fatalf("cursor after W = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("E"))
+	if screen.Prompt.Cursor != len([]rune("  foo.bar baz-qux"))-1 {
+		t.Fatalf("cursor after E = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("B"))
+	if screen.Prompt.Cursor != len([]rune("  foo.bar ")) {
+		t.Fatalf("cursor after B = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"d", "B"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "  baz-qux" || screen.Prompt.Cursor != 2 {
+		t.Fatalf("after dB prompt = %#v", screen.Prompt)
+	}
+}
+
+func TestREPLScreenVimNormalModeSpecialKeys(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "b", "c", "d"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(Key{Type: KeyLeft})
+	screen.ApplyKey(Key{Type: KeyBackspace})
+	screen.ApplyKey(Key{Type: KeyDelete})
+	if screen.Prompt.Text != "abd" || screen.Prompt.Cursor != 2 {
+		t.Fatalf("prompt after special keys = %#v", screen.Prompt)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()
