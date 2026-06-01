@@ -15,6 +15,7 @@ type ScriptStep struct {
 	SnapshotName           string
 	ExpectEvent            *ScreenEvent
 	ExpectDialog           *DialogExpectation
+	ExpectPrompt           *PromptExpectation
 	ExpectReverseSearch    *ReverseSearchExpectation
 	ExpectStatusContains   []string
 	ExpectSnapshotContains []string
@@ -25,6 +26,13 @@ type DialogExpectation struct {
 	ID     string
 	Kind   DialogKind
 	Title  string
+}
+
+type PromptExpectation struct {
+	Text     string
+	Expanded string
+	Cursor   *int
+	Empty    bool
 }
 
 type ReverseSearchExpectation struct {
@@ -112,6 +120,11 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, err
 			}
 		}
+		if step.ExpectPrompt != nil {
+			if err := comparePrompt(index, screen.Prompt, *step.ExpectPrompt); err != nil {
+				return result, dialogResults, err
+			}
+		}
 		if step.ExpectReverseSearch != nil {
 			if err := compareReverseSearch(index, screen.ReverseSearch, *step.ExpectReverseSearch); err != nil {
 				return result, dialogResults, err
@@ -158,6 +171,25 @@ func compareDialog(index int, got *Dialog, want DialogExpectation) error {
 	}
 	if want.Title != "" && got.Title != want.Title {
 		return fmt.Errorf("script step %d dialog title = %q, want %q", index, got.Title, want.Title)
+	}
+	return nil
+}
+
+func comparePrompt(index int, got PromptState, want PromptExpectation) error {
+	if want.Empty {
+		if got.Text != "" {
+			return fmt.Errorf("script step %d prompt text = %q, want empty", index, got.Text)
+		}
+		return nil
+	}
+	if want.Text != "" && got.Text != want.Text {
+		return fmt.Errorf("script step %d prompt text = %q, want %q", index, got.Text, want.Text)
+	}
+	if want.Expanded != "" && got.ExpandedText() != want.Expanded {
+		return fmt.Errorf("script step %d prompt expanded = %q, want %q", index, got.ExpandedText(), want.Expanded)
+	}
+	if want.Cursor != nil && got.Cursor != *want.Cursor {
+		return fmt.Errorf("script step %d prompt cursor = %d, want %d", index, got.Cursor, *want.Cursor)
 	}
 	return nil
 }

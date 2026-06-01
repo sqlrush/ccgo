@@ -782,10 +782,11 @@ func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	permission := PermissionDialog(PermissionRequest{ID: "perm_1", ToolName: "Edit"})
+	cursor := 3
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
 		{Message: &Message{Role: RoleAssistant, Text: "ready"}, SnapshotName: "initial", ExpectSnapshotContains: []string{"assistant: ready"}},
-		{Keys: []string{"r", "u", "n"}},
-		{Key: "\n", SnapshotName: "submitted", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "run"}},
+		{Keys: []string{"r", "u", "n"}, ExpectPrompt: &PromptExpectation{Text: "run", Cursor: &cursor}},
+		{Key: "\n", SnapshotName: "submitted", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "run"}, ExpectPrompt: &PromptExpectation{Empty: true}},
 		{Dialog: &permission},
 		{Key: "\t"},
 		{Key: "\n", SnapshotName: "permission", ExpectEvent: &ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow Session", DialogID: "perm_1", DialogKind: DialogPermission}},
@@ -804,6 +805,19 @@ func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	}
 	if len(result.Snapshots) != 3 || !strings.Contains(result.Snapshots[0].Text, "assistant: ready") {
 		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
+func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
+	screen := NewREPLScreen(30, 6, nil)
+	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{
+			Key:          "\x1b[200~alpha\nbeta\x1b[201~",
+			ExpectPrompt: &PromptExpectation{Text: "[Pasted text #1 +1 lines]", Expanded: "alpha\nbeta"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

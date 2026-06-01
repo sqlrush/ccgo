@@ -104,6 +104,51 @@ func TestBuildConversationChainRecoversOrphanedParallelToolResults(t *testing.T)
 	}
 }
 
+func TestBuildResumeConversationConvertsTranscriptChain(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","parentUuid":null,"timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","uuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hello"}]}}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","parentUuid":"u1","timestamp":"2026-01-01T00:00:01Z","message":{"id":"msg_1","type":"assistant","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"user","uuid":"u2","sessionId":"s1","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z","content":[{"type":"text","text":"continue"}]}`,
+	})
+	resume, err := BuildResumeConversation(path, "u2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || resume.Leaf != "u2" || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1,u2" {
+		t.Fatalf("resume = %#v", resume)
+	}
+	if len(resume.Messages) != 3 {
+		t.Fatalf("messages = %#v", resume.Messages)
+	}
+	if resume.Messages[0].Type != "user" || resume.Messages[0].UUID != "u1" || resume.Messages[0].Content[0].Text != "hello" {
+		t.Fatalf("first message = %#v", resume.Messages[0])
+	}
+	if resume.Messages[1].Type != "assistant" || resume.Messages[1].ID != "msg_1" || resume.Messages[1].ParentUUID == nil || *resume.Messages[1].ParentUUID != "u1" {
+		t.Fatalf("assistant = %#v", resume.Messages[1])
+	}
+	if resume.Messages[2].Type != "user" || resume.Messages[2].Content[0].Text != "continue" || resume.Messages[2].ParentUUID == nil || *resume.Messages[2].ParentUUID != "a1" {
+		t.Fatalf("last message = %#v", resume.Messages[2])
+	}
+}
+
+func TestBuildResumeConversationUsesLatestLeaf(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","parentUuid":null,"message":{"type":"user","content":[{"type":"text","text":"first"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","message":{"type":"assistant","content":[{"type":"text","text":"ok"}]}}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1","message":{"type":"user","content":[{"type":"text","text":"latest"}]}}`,
+	})
+	resume, err := BuildResumeConversation(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || resume.Leaf != "u2" || len(resume.Messages) != 3 {
+		t.Fatalf("resume = %#v", resume)
+	}
+	if resume.Messages[2].Content[0].Text != "latest" {
+		t.Fatalf("latest message = %#v", resume.Messages[2])
+	}
+}
+
 func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
