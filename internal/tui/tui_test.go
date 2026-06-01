@@ -963,6 +963,48 @@ func TestREPLScreenVimWORDMotionsAndFirstNonBlank(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimBackwardEndMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta.gamma delta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"$", "g", "e"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha beta.gamma delta"))-1 {
+		t.Fatalf("cursor after ge = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"g", "e"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha beta.gamma"))-1 {
+		t.Fatalf("cursor after second ge = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"g", "e"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha beta"))-1 {
+		t.Fatalf("cursor after third ge = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "foo.bar baz-qux tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"$", "g", "E"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("foo.bar baz-qux tail"))-1 {
+		t.Fatalf("cursor after gE = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"2", "g", "E"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("foo.bar"))-1 {
+		t.Fatalf("cursor after 2gE = %d", screen.Prompt.Cursor)
+	}
+}
+
 func TestREPLScreenVimNormalModeSpecialKeys(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

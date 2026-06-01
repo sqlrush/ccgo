@@ -295,6 +295,14 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 		} else {
 			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()-count+1, 'k', count)
 		}
+	case 'e':
+		if operator == 0 {
+			applyN(count, func() { s.Prompt.moveWordBackwardEnd() })
+		}
+	case 'E':
+		if operator == 0 {
+			applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
+		}
 	}
 	return ScreenEvent{}
 }
@@ -1113,6 +1121,25 @@ func (p *PromptState) moveWordEnd() {
 	p.Cursor = i
 }
 
+func (p *PromptState) moveWordBackwardEnd() {
+	runes := []rune(p.Text)
+	i := p.clampCursor(p.Cursor)
+	if i < len(runes) && isWordRune(runes[i]) {
+		for i >= 0 && isWordRune(runes[i]) {
+			i--
+		}
+	} else {
+		i--
+	}
+	for i >= 0 && !isWordRune(runes[i]) {
+		i--
+	}
+	if i < 0 {
+		i = 0
+	}
+	p.Cursor = i
+}
+
 func (p *PromptState) moveWORDForward() {
 	runes := []rune(p.Text)
 	i := p.Cursor
@@ -1157,6 +1184,25 @@ func (p *PromptState) moveWORDEnd() {
 	}
 	if i > 0 {
 		i--
+	}
+	p.Cursor = i
+}
+
+func (p *PromptState) moveWORDBackwardEnd() {
+	runes := []rune(p.Text)
+	i := p.clampCursor(p.Cursor)
+	if i < len(runes) && !unicode.IsSpace(runes[i]) {
+		for i >= 0 && !unicode.IsSpace(runes[i]) {
+			i--
+		}
+	} else {
+		i--
+	}
+	for i >= 0 && unicode.IsSpace(runes[i]) {
+		i--
+	}
+	if i < 0 {
+		i = 0
 	}
 	p.Cursor = i
 }
