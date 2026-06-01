@@ -1,0 +1,256 @@
+package permissions
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"ccgo/internal/contracts"
+)
+
+func TestParseRuleAndMatchCommand(t *testing.T) {
+	rule, err := ParseRule(contracts.PermissionSourceUserSettings, contracts.PermissionAllow, "Bash(git status*)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rule.Matches(Request{ToolName: "Bash", Command: "git status --short"}) {
+		t.Fatalf("expected command to match")
+	}
+	if rule.Matches(Request{ToolName: "Bash", Command: "git push origin main"}) {
+		t.Fatalf("unexpected command match")
+	}
+}
+
+func TestParseRuleEscapesAndLegacyNames(t *testing.T) {
+	value := PermissionRuleValueFromString(`Bash(python -c "print\(1\)")`)
+	if value.ToolName != "Bash" || value.RuleContent != `python -c "print(1)"` {
+		t.Fatalf("value = %#v", value)
+	}
+	if got := PermissionRuleValueToString(value); got != `Bash(python -c "print\(1\)")` {
+		t.Fatalf("string = %q", got)
+	}
+	legacy := PermissionRuleValueFromString("Task")
+	if legacy.ToolName != "Agent" {
+		t.Fatalf("legacy tool = %q", legacy.ToolName)
+	}
+}
+
+func TestShellRuleMatching(t *testing.T) {
+	tests := []struct {
+		pattern string
+		command string
+		want    bool
+	}{
+		{pattern: "git:*", command: "git", want: true},
+		{pattern: "git:*", command: "git status", want: true},
+		{pattern: "git *", command: "git", want: true},
+		{pattern: "git *", command: "git status --short", want: true},
+		{pattern: `echo \*`, command: "echo *", want: true},
+		{pattern: `echo \*`, command: "echo abc", want: false},
+	}
+	for _, tt := range tests {
+		if got := matchPattern(tt.pattern, tt.command); got != tt.want {
+			t.Fatalf("matchPattern(%q, %q) = %v, want %v", tt.pattern, tt.command, got, tt.want)
+		}
+	}
+}
+
+func TestDenyBeatsAllow(t *testing.T) {
+	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault},
+		MustParseRule(contracts.PermissionSourceUserSettings, contracts.PermissionAllow, "Bash(*)"),
+		MustParseRule(contracts.PermissionSourcePolicySettings, contracts.PermissionDeny, "Bash(rm *)"),
+	)
+
+	got := engine.Decide(Request{ToolName: "Bash", Command: "rm -rf tmp"})
+	if got.Behavior != contracts.PermissionDeny {
+		t.Fatalf("behavior = %q, want deny", got.Behavior)
+	}
+}
+
+func TestModes(t *testing.T) {
+	tests := []struct {
+		name string
+		mode contracts.PermissionMode
+		req  Request
+		want contracts.PermissionBehavior
+	}{
+		{name: "default read", mode: contracts.PermissionDefault, req: Request{ToolName: "Read", ReadOnly: true}, want: contracts.PermissionAllow},
+		{name: "default write", mode: contracts.PermissionDefault, req: Request{ToolName: "Write", WritesFiles: true}, want: contracts.PermissionAsk},
+		{name: "dont ask write", mode: contracts.PermissionDontAsk, req: Request{ToolName: "Write", WritesFiles: true}, want: contracts.PermissionDeny},
+		{name: "accept edits write", mode: contracts.PermissionAcceptEdits, req: Request{ToolName: "Edit", WritesFiles: true}, want: contracts.PermissionAllow},
+		{name: "plan read", mode: contracts.PermissionPlan, req: Request{ToolName: "Read", ReadOnly: true}, want: contracts.PermissionAllow},
+		{name: "plan write", mode: contracts.PermissionPlan, req: Request{ToolName: "Edit", WritesFiles: true}, want: contracts.PermissionAsk},
+		{name: "bypass", mode: contracts.PermissionBypassPermissions, req: Request{ToolName: "Bash", Destructive: true}, want: contracts.PermissionAllow},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := NewEngine(contracts.PermissionContext{Mode: tt.mode, BypassAvailable: true, AutoAvailable: true})
+			got := engine.Decide(tt.req)
+			if got.Behavior != tt.want {
+				t.Fatalf("behavior = %q, want %q", got.Behavior, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnginePathSafetyRunsBeforeAllowRules(t *testing.T) {
+	root := t.TempDir()
+	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionAcceptEdits},
+		MustParseRule(contracts.PermissionSourceUserSettings, contracts.PermissionAllow, "Edit(*)"),
+	)
+	got := engine.Decide(Request{
+		ToolName:         "Edit",
+		Path:             filepath.Join(root, ".git", "config"),
+		WorkingDirectory: root,
+		WritesFiles:      true,
+	})
+	if got.Behavior != contracts.PermissionAsk || !strings.Contains(got.Message, "sensitive") {
+		t.Fatalf("decision = %#v", got)
+	}
+}
+
+func TestEngineAllowsInternalEditablePathBeforeSafety(t *testing.T) {
+	root := t.TempDir()
+	scratchpad := filepath.Join(t.TempDir(), ".claude", "scratchpad")
+	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
+	got := engine.Decide(Request{
+		ToolName:         "Write",
+		Path:             filepath.Join(scratchpad, "note.txt"),
+		WorkingDirectory: root,
+		WritesFiles:      true,
+		InternalPaths: InternalPathContext{
+			ScratchpadEnabled: true,
+			ScratchpadDir:     scratchpad,
+		},
+	})
+	if got.Behavior != contracts.PermissionAllow || !strings.Contains(got.Message, "scratchpad") {
+		t.Fatalf("decision = %#v", got)
+	}
+}
+
+func TestSettingsRulesUseJSONInputTarget(t *testing.T) {
+	settings := &contracts.PermissionsSetting{
+		Allow:       []string{"Read(/tmp/*)"},
+		DefaultMode: contracts.PermissionDontAsk,
+	}
+	engine, err := NewEngineFromSettings(contracts.PermissionSourceProjectSettings, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := json.Marshal(map[string]string{"path": "/tmp/a.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := engine.Decide(Request{ToolName: "Read", Input: raw})
+	if got.Behavior != contracts.PermissionAllow {
+		t.Fatalf("behavior = %q, want allow", got.Behavior)
+	}
+}
+
+func TestNewEngineFromSettingsSourcesHonorsManagedRulesOnly(t *testing.T) {
+	engine, err := NewEngineFromSettingsSources(true,
+		SettingsSource{
+			Source: contracts.PermissionSourcePolicySettings,
+			Permissions: &contracts.PermissionsSetting{
+				Deny: []string{"Bash(rm *)"},
+			},
+		},
+		SettingsSource{
+			Source: contracts.PermissionSourceUserSettings,
+			Permissions: &contracts.PermissionsSetting{
+				Allow:                 []string{"Bash(rm *)"},
+				DefaultMode:           contracts.PermissionPlan,
+				AdditionalDirectories: []string{"/tmp/work"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if engine.Mode() != contracts.PermissionPlan {
+		t.Fatalf("mode = %q", engine.Mode())
+	}
+	if _, ok := engine.Context().AdditionalWorkingDirectories["/tmp/work"]; !ok {
+		t.Fatalf("additional directories = %#v", engine.Context().AdditionalWorkingDirectories)
+	}
+	decision := engine.Decide(Request{ToolName: "Bash", Command: "rm -rf /tmp/x"})
+	if decision.Behavior != contracts.PermissionDeny {
+		t.Fatalf("decision = %#v", decision)
+	}
+	if len(engine.Rules()) != 1 || engine.Rules()[0].Source != contracts.PermissionSourcePolicySettings {
+		t.Fatalf("rules = %#v", engine.Rules())
+	}
+}
+
+func TestApplyRuleUpdate(t *testing.T) {
+	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
+	next, err := engine.ApplyUpdate(contracts.PermissionUpdate{
+		Type:        "addRules",
+		Destination: string(contracts.PermissionSourceSession),
+		Behavior:    contracts.PermissionAllow,
+		Rules:       []contracts.PermissionRuleValue{{ToolName: "Bash", RuleContent: "go test *"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := next.Decide(Request{ToolName: "Bash", Command: "go test ./..."})
+	if got.Behavior != contracts.PermissionAllow {
+		t.Fatalf("behavior = %q, want allow", got.Behavior)
+	}
+}
+
+func TestReplaceAndRemoveRules(t *testing.T) {
+	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault},
+		MustParseRule(contracts.PermissionSourceSession, contracts.PermissionAllow, "Bash(go test *)"),
+	)
+	replaced, err := engine.ApplyUpdate(contracts.PermissionUpdate{
+		Type:        "replaceRules",
+		Destination: string(contracts.PermissionSourceSession),
+		Behavior:    contracts.PermissionAllow,
+		Rules:       []contracts.PermissionRuleValue{{ToolName: "Bash", RuleContent: "npm test"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := replaced.Decide(Request{ToolName: "Bash", Command: "go test ./..."}); got.Behavior == contracts.PermissionAllow {
+		t.Fatalf("old rule still matched")
+	}
+	removed, err := replaced.ApplyUpdate(contracts.PermissionUpdate{
+		Type:        "removeRules",
+		Destination: string(contracts.PermissionSourceSession),
+		Behavior:    contracts.PermissionAllow,
+		Rules:       []contracts.PermissionRuleValue{{ToolName: "Bash", RuleContent: "npm test"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := removed.Decide(Request{ToolName: "Bash", Command: "npm test"}); got.Behavior == contracts.PermissionAllow {
+		t.Fatalf("removed rule still matched")
+	}
+}
+
+func TestValidatePermissionRule(t *testing.T) {
+	if got := ValidatePermissionRule("bash(ls)"); got.Valid || got.Error == "" {
+		t.Fatalf("got = %#v", got)
+	}
+	if got := ValidatePermissionRule("Bash(:*)"); got.Valid || got.Error == "" {
+		t.Fatalf("got = %#v", got)
+	}
+	if got := ValidatePermissionRule(`Bash(python -c "print\(1\)")`); !got.Valid {
+		t.Fatalf("got = %#v", got)
+	}
+	if got := ValidatePermissionRule("mcp__server__tool(pattern)"); got.Valid {
+		t.Fatalf("got = %#v", got)
+	}
+	if got := ValidatePermissionRule("WebSearch(foo*)"); got.Valid || got.Error != "WebSearch does not support wildcards" {
+		t.Fatalf("got = %#v", got)
+	}
+	if got := ValidatePermissionRule("WebFetch(https://example.com)"); got.Valid || got.Error != "WebFetch permissions use domain format, not URLs" {
+		t.Fatalf("got = %#v", got)
+	}
+	if got := ValidatePermissionRule("WebFetch(domain:example.com)"); !got.Valid {
+		t.Fatalf("got = %#v", got)
+	}
+}

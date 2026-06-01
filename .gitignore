@@ -1,0 +1,14 @@
+# Go build/test artifacts
+bin/
+*.test
+*.out
+coverage.*
+
+# Local/editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary files
+tmp/
+*.tmp

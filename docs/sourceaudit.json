@@ -1,0 +1,2414 @@
+{
+  "source_root": "/Users/sqlrush/agent/claude-code",
+  "src_bytes": 30382832,
+  "assets_bytes": 666099,
+  "source_files": 1902,
+  "source_lines": 513237,
+  "extension_counts": {
+    "js": 18,
+    "ts": 1332,
+    "tsx": 552
+  },
+  "top_level_counts": {
+    "QueryEngine.ts": 1,
+    "Task.ts": 1,
+    "Tool.ts": 1,
+    "assistant": 1,
+    "bootstrap": 1,
+    "bridge": 31,
+    "buddy": 6,
+    "cli": 19,
+    "commands": 207,
+    "commands.ts": 1,
+    "components": 389,
+    "constants": 21,
+    "context": 9,
+    "context.ts": 1,
+    "coordinator": 1,
+    "cost-tracker.ts": 1,
+    "costHook.ts": 1,
+    "dialogLaunchers.tsx": 1,
+    "entrypoints": 8,
+    "history.ts": 1,
+    "hooks": 104,
+    "ink": 96,
+    "ink.ts": 1,
+    "interactiveHelpers.tsx": 1,
+    "keybindings": 14,
+    "main.tsx": 1,
+    "memdir": 8,
+    "migrations": 11,
+    "moreright": 1,
+    "native-ts": 4,
+    "outputStyles": 1,
+    "plugins": 2,
+    "projectOnboardingState.ts": 1,
+    "query": 4,
+    "query.ts": 1,
+    "remote": 4,
+    "replLauncher.tsx": 1,
+    "schemas": 1,
+    "screens": 3,
+    "server": 3,
+    "services": 130,
+    "setup.ts": 1,
+    "skills": 20,
+    "state": 6,
+    "tasks": 12,
+    "tasks.ts": 1,
+    "tools": 184,
+    "tools.ts": 1,
+    "types": 11,
+    "upstreamproxy": 2,
+    "utils": 564,
+    "vim": 5,
+    "voice": 1
+  },
+  "inline_source_map_files": 552,
+  "missing_imports": [
+    {
+      "target": "src/types/message",
+      "references": [
+        "src/QueryEngine.ts",
+        "src/Tool.ts",
+        "src/bridge/bridgeMessaging.ts",
+        "src/bridge/initReplBridge.ts",
+        "src/bridge/remoteBridgeCore.ts",
+        "src/bridge/replBridge.ts",
+        "src/buddy/prompt.ts",
+        "src/cli/print.ts",
+        "src/cli/structuredIO.ts",
+        "src/commands/btw/btw.tsx",
+        "src/commands/clear/conversation.ts",
+        "src/commands/compact/compact.ts",
+        "src/commands/context/context-noninteractive.ts",
+        "src/commands/context/context.tsx",
+        "src/commands/copy/copy.tsx",
+        "src/commands/export/export.tsx",
+        "src/commands/feedback/feedback.tsx",
+        "src/commands/rename/generateSessionName.ts",
+        "src/components/CompactSummary.tsx",
+        "src/components/Feedback.tsx",
+        "src/components/FeedbackSurvey/submitTranscriptShare.ts",
+        "src/components/FeedbackSurvey/useFeedbackSurvey.tsx",
+        "src/components/FeedbackSurvey/useMemorySurvey.tsx",
+        "src/components/FeedbackSurvey/usePostCompactSurvey.tsx",
+        "src/components/FullscreenLayout.tsx",
+        "src/components/Message.tsx",
+        "src/components/MessageModel.tsx",
+        "src/components/MessageRow.tsx",
+        "src/components/MessageSelector.tsx",
+        "src/components/MessageTimestamp.tsx",
+        "src/components/Messages.tsx",
+        "src/components/PromptInput/Notifications.tsx",
+        "src/components/PromptInput/PromptInput.tsx",
+        "src/components/PromptInput/PromptInputFooter.tsx",
+        "src/components/StatusLine.tsx",
+        "src/components/VirtualMessageList.tsx",
+        "src/components/diff/DiffDialog.tsx",
+        "src/components/messageActions.tsx",
+        "src/components/messages/AssistantToolUseMessage.tsx",
+        "src/components/messages/CollapsedReadSearchContent.tsx",
+        "src/components/messages/GroupedToolUseContent.tsx",
+        "src/components/messages/SystemAPIErrorMessage.tsx",
+        "src/components/messages/SystemTextMessage.tsx",
+        "src/components/messages/UserToolResultMessage/UserToolErrorMessage.tsx",
+        "src/components/messages/UserToolResultMessage/UserToolRejectMessage.tsx",
+        "src/components/messages/UserToolResultMessage/UserToolResultMessage.tsx",
+        "src/components/messages/UserToolResultMessage/UserToolSuccessMessage.tsx",
+        "src/components/messages/nullRenderingAttachments.ts",
+        "src/components/messages/teamMemCollapsed.tsx",
+        "src/components/messages/teamMemSaved.ts",
+        "src/components/permissions/PermissionExplanation.tsx",
+        "src/components/permissions/PermissionRequest.tsx",
+        "src/hooks/toolPermission/PermissionContext.ts",
+        "src/hooks/useAssistantHistory.ts",
+        "src/hooks/useAwaySummary.ts",
+        "src/hooks/useCanUseTool.tsx",
+        "src/hooks/useDeferredHookMessages.ts",
+        "src/hooks/useDirectConnect.ts",
+        "src/hooks/useIssueFlagBanner.ts",
+        "src/hooks/useLogMessages.ts",
+        "src/hooks/useRemoteSession.ts",
+        "src/hooks/useReplBridge.tsx",
+        "src/hooks/useSSHSession.ts",
+        "src/hooks/useScheduledTasks.ts",
+        "src/hooks/useSessionBackgrounding.ts",
+        "src/hooks/useSkillImprovementSurvey.ts",
+        "src/hooks/useSwarmInitialization.ts",
+        "src/hooks/useTurnDiffs.ts",
+        "src/main.tsx",
+        "src/query.ts",
+        "src/query/stopHooks.ts",
+        "src/remote/remotePermissionBridge.ts",
+        "src/remote/sdkMessageAdapter.ts",
+        "src/screens/REPL.tsx",
+        "src/screens/ResumeConversation.tsx",
+        "src/services/PromptSuggestion/promptSuggestion.ts",
+        "src/services/PromptSuggestion/speculation.ts",
+        "src/services/SessionMemory/sessionMemory.ts",
+        "src/services/api/claude.ts",
+        "src/services/api/errors.ts",
+        "src/services/api/logging.ts",
+        "src/services/api/promptCacheBreakDetection.ts",
+        "src/services/api/withRetry.ts",
+        "src/services/autoDream/autoDream.ts",
+        "src/services/awaySummary.ts",
+        "src/services/compact/autoCompact.ts",
+        "src/services/compact/compact.ts",
+        "src/services/compact/grouping.ts",
+        "src/services/compact/microCompact.ts",
+        "src/services/compact/prompt.ts",
+        "src/services/compact/sessionMemoryCompact.ts",
+        "src/services/extractMemories/extractMemories.ts",
+        "src/services/mcp/client.ts",
+        "src/services/tools/StreamingToolExecutor.ts",
+        "src/services/tools/toolExecution.ts",
+        "src/services/tools/toolHooks.ts",
+        "src/services/tools/toolOrchestration.ts",
+        "src/services/vcr.ts",
+        "src/skills/bundled/skillify.ts",
+        "src/state/AppStateStore.ts",
+        "src/tasks/InProcessTeammateTask/InProcessTeammateTask.tsx",
+        "src/tasks/InProcessTeammateTask/types.ts",
+        "src/tasks/LocalAgentTask/LocalAgentTask.tsx",
+        "src/tasks/LocalMainSessionTask.ts",
+        "src/tools/AgentTool/AgentTool.tsx",
+        "src/tools/AgentTool/UI.tsx",
+        "src/tools/AgentTool/agentToolUtils.ts",
+        "src/tools/AgentTool/forkSubagent.ts",
+        "src/tools/AgentTool/runAgent.ts",
+        "src/tools/BashTool/BashTool.tsx",
+        "src/tools/BashTool/UI.tsx",
+        "src/tools/BriefTool/UI.tsx",
+        "src/tools/EnterPlanModeTool/UI.tsx",
+        "src/tools/EnterWorktreeTool/UI.tsx",
+        "src/tools/ExitPlanModeTool/UI.tsx",
+        "src/tools/ExitWorktreeTool/UI.tsx",
+        "src/tools/FileEditTool/UI.tsx",
+        "src/tools/FileWriteTool/UI.tsx",
+        "src/tools/GrepTool/UI.tsx",
+        "src/tools/ListMcpResourcesTool/UI.tsx",
+        "src/tools/MCPTool/UI.tsx",
+        "src/tools/NotebookEditTool/UI.tsx",
+        "src/tools/PowerShellTool/PowerShellTool.tsx",
+        "src/tools/PowerShellTool/UI.tsx",
+        "src/tools/ReadMcpResourceTool/UI.tsx",
+        "src/tools/SkillTool/SkillTool.ts",
+        "src/tools/SkillTool/UI.tsx",
+        "src/tools/WebFetchTool/UI.tsx",
+        "src/tools/WebSearchTool/UI.tsx",
+        "src/tools/utils.ts",
+        "src/types/command.ts",
+        "src/types/hooks.ts",
+        "src/types/logs.ts",
+        "src/types/textInputTypes.ts",
+        "src/utils/analyzeContext.ts",
+        "src/utils/api.ts",
+        "src/utils/attachments.ts",
+        "src/utils/collapseBackgroundBashNotifications.ts",
+        "src/utils/collapseHookSummaries.ts",
+        "src/utils/collapseReadSearch.ts",
+        "src/utils/collapseTeammateShutdowns.ts",
+        "src/utils/contextAnalysis.ts",
+        "src/utils/conversationRecovery.ts",
+        "src/utils/exportRenderer.tsx",
+        "src/utils/fingerprint.ts",
+        "src/utils/forkedAgent.ts",
+        "src/utils/groupToolUses.ts",
+        "src/utils/handlePromptSubmit.ts",
+        "src/utils/hooks.ts",
+        "src/utils/hooks/apiQueryHookHelper.ts",
+        "src/utils/hooks/execAgentHook.ts",
+        "src/utils/hooks/execPromptHook.ts",
+        "src/utils/hooks/postSamplingHooks.ts",
+        "src/utils/hooks/sessionHooks.ts",
+        "src/utils/hooks/skillImprovement.ts",
+        "src/utils/mcpInstructionsDelta.ts",
+        "src/utils/messagePredicates.ts",
+        "src/utils/messages.ts",
+        "src/utils/messages/mappers.ts",
+        "src/utils/permissions/permissionExplainer.ts",
+        "src/utils/permissions/permissions.ts",
+        "src/utils/permissions/yoloClassifier.ts",
+        "src/utils/plans.ts",
+        "src/utils/processUserInput/processBashCommand.tsx",
+        "src/utils/processUserInput/processSlashCommand.tsx",
+        "src/utils/processUserInput/processTextPrompt.ts",
+        "src/utils/processUserInput/processUserInput.ts",
+        "src/utils/queryContext.ts",
+        "src/utils/queryHelpers.ts",
+        "src/utils/sessionRestore.ts",
+        "src/utils/sessionStart.ts",
+        "src/utils/sessionStorage.ts",
+        "src/utils/sessionTitle.ts",
+        "src/utils/sideQuestion.ts",
+        "src/utils/swarm/inProcessRunner.ts",
+        "src/utils/teammateMailbox.ts",
+        "src/utils/telemetry/betaSessionTracing.ts",
+        "src/utils/telemetry/sessionTracing.ts",
+        "src/utils/teleport.tsx",
+        "src/utils/tokens.ts",
+        "src/utils/toolResultStorage.ts",
+        "src/utils/toolSearch.ts",
+        "src/utils/transcriptSearch.ts"
+      ]
+    },
+    {
+      "target": "src/constants/querySource",
+      "references": [
+        "src/Tool.ts",
+        "src/query.ts",
+        "src/query/stopHooks.ts",
+        "src/services/api/claude.ts",
+        "src/services/api/promptCacheBreakDetection.ts",
+        "src/services/api/withRetry.ts",
+        "src/services/compact/autoCompact.ts",
+        "src/services/compact/compact.ts",
+        "src/services/compact/microCompact.ts",
+        "src/services/compact/postCompactCleanup.ts",
+        "src/tools/AgentTool/runAgent.ts",
+        "src/utils/attachments.ts",
+        "src/utils/forkedAgent.ts",
+        "src/utils/handlePromptSubmit.ts",
+        "src/utils/hooks/apiQueryHookHelper.ts",
+        "src/utils/hooks/postSamplingHooks.ts",
+        "src/utils/log.ts",
+        "src/utils/processUserInput/processUserInput.ts",
+        "src/utils/promptCategory.ts",
+        "src/utils/shell/prefix.ts",
+        "src/utils/sideQuery.ts"
+      ]
+    },
+    {
+      "target": "src/entrypoints/sdk/controlTypes",
+      "references": [
+        "src/bridge/bridgeMessaging.ts",
+        "src/bridge/initReplBridge.ts",
+        "src/bridge/remoteBridgeCore.ts",
+        "src/bridge/replBridge.ts",
+        "src/bridge/replBridgeTransport.ts",
+        "src/cli/print.ts",
+        "src/cli/remoteIO.ts",
+        "src/cli/structuredIO.ts",
+        "src/cli/transports/HybridTransport.ts",
+        "src/cli/transports/SSETransport.ts",
+        "src/cli/transports/WebSocketTransport.ts",
+        "src/cli/transports/ccrClient.ts",
+        "src/entrypoints/agentSdkTypes.ts",
+        "src/hooks/useReplBridge.tsx",
+        "src/remote/RemoteSessionManager.ts",
+        "src/remote/SessionsWebSocket.ts",
+        "src/remote/remotePermissionBridge.ts",
+        "src/server/directConnectManager.ts",
+        "src/utils/streamlinedTransform.ts"
+      ]
+    },
+    {
+      "target": "src/keybindings/types",
+      "references": [
+        "src/components/ConfigurableShortcutHint.tsx",
+        "src/components/permissions/PermissionPrompt.tsx",
+        "src/hooks/useExitOnCtrlCD.ts",
+        "src/hooks/useVoiceIntegration.tsx",
+        "src/keybindings/KeybindingContext.tsx",
+        "src/keybindings/KeybindingProviderSetup.tsx",
+        "src/keybindings/defaultBindings.ts",
+        "src/keybindings/loadUserBindings.ts",
+        "src/keybindings/match.ts",
+        "src/keybindings/parser.ts",
+        "src/keybindings/resolver.ts",
+        "src/keybindings/shortcutFormat.ts",
+        "src/keybindings/template.ts",
+        "src/keybindings/useKeybinding.ts",
+        "src/keybindings/useShortcutDisplay.ts",
+        "src/keybindings/validate.ts",
+        "src/utils/exportRenderer.tsx"
+      ]
+    },
+    {
+      "target": "src/types/tools",
+      "references": [
+        "src/Tool.ts",
+        "src/components/BashModeProgress.tsx",
+        "src/tools/AgentTool/AgentTool.tsx",
+        "src/tools/AgentTool/UI.tsx",
+        "src/tools/BashTool/BashTool.tsx",
+        "src/tools/MCPTool/MCPTool.ts",
+        "src/tools/MCPTool/UI.tsx",
+        "src/tools/PowerShellTool/PowerShellTool.tsx",
+        "src/tools/PowerShellTool/UI.tsx",
+        "src/tools/SkillTool/SkillTool.ts",
+        "src/tools/TaskOutputTool/TaskOutputTool.tsx",
+        "src/tools/WebSearchTool/WebSearchTool.ts",
+        "src/utils/processUserInput/processBashCommand.tsx",
+        "src/utils/sdkEventQueue.ts",
+        "src/utils/task/sdkProgress.ts"
+      ]
+    },
+    {
+      "target": "src/types/utils",
+      "references": [
+        "src/Tool.ts",
+        "src/components/tasks/AsyncAgentDetailDialog.tsx",
+        "src/components/tasks/BackgroundTask.tsx",
+        "src/components/tasks/BackgroundTasksDialog.tsx",
+        "src/components/tasks/DreamDetailDialog.tsx",
+        "src/components/tasks/InProcessTeammateDetailDialog.tsx",
+        "src/components/tasks/RemoteSessionDetailDialog.tsx",
+        "src/components/tasks/RemoteSessionProgress.tsx",
+        "src/components/tasks/ShellDetailDialog.tsx",
+        "src/components/tasks/ShellProgress.tsx",
+        "src/components/tasks/taskStatusUtils.tsx",
+        "src/state/AppStateStore.ts",
+        "src/utils/messageQueueManager.ts",
+        "src/utils/messages.ts",
+        "src/utils/messages/mappers.ts"
+      ]
+    },
+    {
+      "target": "src/components/agents/new-agent-creation/types",
+      "references": [
+        "src/components/agents/new-agent-creation/CreateAgentWizard.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/ColorStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/ConfirmStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/ConfirmStepWrapper.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/DescriptionStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/GenerateStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/LocationStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/MemoryStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/MethodStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/ModelStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/PromptStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/ToolsStep.tsx",
+        "src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx"
+      ]
+    },
+    {
+      "target": "src/proactive/index",
+      "references": [
+        "src/cli/print.ts",
+        "src/commands/clear/conversation.ts",
+        "src/components/Messages.tsx",
+        "src/components/PromptInput/PromptInputFooterLeftSide.tsx",
+        "src/components/PromptInput/usePromptInputPlaceholder.ts",
+        "src/constants/prompts.ts",
+        "src/main.tsx",
+        "src/screens/REPL.tsx",
+        "src/services/compact/prompt.ts",
+        "src/tools/AgentTool/AgentTool.tsx",
+        "src/utils/systemPrompt.ts"
+      ]
+    },
+    {
+      "target": "src/components/mcp/types",
+      "references": [
+        "src/commands/plugin/ManagePlugins.tsx",
+        "src/components/mcp/MCPAgentServerMenu.tsx",
+        "src/components/mcp/MCPListPanel.tsx",
+        "src/components/mcp/MCPRemoteServerMenu.tsx",
+        "src/components/mcp/MCPSettings.tsx",
+        "src/components/mcp/MCPStdioServerMenu.tsx",
+        "src/components/mcp/MCPToolDetailView.tsx",
+        "src/components/mcp/MCPToolListView.tsx",
+        "src/components/mcp/index.ts",
+        "src/services/mcp/utils.ts"
+      ]
+    },
+    {
+      "target": "src/services/contextCollapse/index",
+      "references": [
+        "src/commands/context/context-noninteractive.ts",
+        "src/components/ContextVisualization.tsx",
+        "src/components/TokenWarning.tsx",
+        "src/query.ts",
+        "src/screens/REPL.tsx",
+        "src/services/compact/autoCompact.ts",
+        "src/services/compact/postCompactCleanup.ts",
+        "src/setup.ts",
+        "src/utils/analyzeContext.ts"
+      ]
+    },
+    {
+      "target": "src/services/oauth/types",
+      "references": [
+        "src/cli/handlers/auth.ts",
+        "src/components/Passes/Passes.tsx",
+        "src/services/api/referral.ts",
+        "src/services/mockRateLimits.ts",
+        "src/services/oauth/client.ts",
+        "src/services/oauth/getOauthProfile.ts",
+        "src/services/oauth/index.ts",
+        "src/utils/auth.ts",
+        "src/utils/config.ts"
+      ]
+    },
+    {
+      "target": "src/components/FeedbackSurvey/utils",
+      "references": [
+        "src/components/FeedbackSurvey/FeedbackSurvey.tsx",
+        "src/components/FeedbackSurvey/FeedbackSurveyView.tsx",
+        "src/components/FeedbackSurvey/useFeedbackSurvey.tsx",
+        "src/components/FeedbackSurvey/useMemorySurvey.tsx",
+        "src/components/FeedbackSurvey/usePostCompactSurvey.tsx",
+        "src/components/FeedbackSurvey/useSurveyState.tsx",
+        "src/components/SkillImprovementSurvey.tsx",
+        "src/hooks/useSkillImprovementSurvey.ts"
+      ]
+    },
+    {
+      "target": "src/components/Spinner/types",
+      "references": [
+        "src/components/Spinner/GlimmerMessage.tsx",
+        "src/components/Spinner/SpinnerAnimationRow.tsx",
+        "src/components/Spinner/index.ts",
+        "src/components/Spinner/useShimmerAnimation.ts",
+        "src/components/Spinner/utils.ts",
+        "src/hooks/useCancelRequest.ts",
+        "src/hooks/useRemoteSession.ts",
+        "src/utils/handlePromptSubmit.ts"
+      ]
+    },
+    {
+      "target": "src/commands/plugin/types",
+      "references": [
+        "src/commands/plugin/AddMarketplace.tsx",
+        "src/commands/plugin/BrowseMarketplace.tsx",
+        "src/commands/plugin/DiscoverPlugins.tsx",
+        "src/commands/plugin/ManageMarketplaces.tsx",
+        "src/commands/plugin/ManagePlugins.tsx",
+        "src/commands/plugin/PluginSettings.tsx"
+      ]
+    },
+    {
+      "target": "src/utils/secureStorage/types",
+      "references": [
+        "src/services/mcp/auth.ts",
+        "src/utils/secureStorage/fallbackStorage.ts",
+        "src/utils/secureStorage/index.ts",
+        "src/utils/secureStorage/macOsKeychainHelpers.ts",
+        "src/utils/secureStorage/macOsKeychainStorage.ts",
+        "src/utils/secureStorage/plainTextStorage.ts"
+      ]
+    },
+    {
+      "target": "src/commands/install-github-app/types",
+      "references": [
+        "src/commands/install-github-app/CreatingStep.tsx",
+        "src/commands/install-github-app/WarningsStep.tsx",
+        "src/commands/install-github-app/install-github-app.tsx",
+        "src/commands/install-github-app/setupGitHubActions.ts",
+        "src/components/WorkflowMultiselectDialog.tsx"
+      ]
+    },
+    {
+      "target": "src/services/compact/snipCompact",
+      "references": [
+        "src/QueryEngine.ts",
+        "src/components/Message.tsx",
+        "src/query.ts",
+        "src/utils/attachments.ts",
+        "src/utils/messages.ts"
+      ]
+    },
+    {
+      "target": "src/services/lsp/types",
+      "references": [
+        "src/services/lsp/LSPServerInstance.ts",
+        "src/services/lsp/LSPServerManager.ts",
+        "src/services/lsp/config.ts",
+        "src/types/plugin.ts",
+        "src/utils/plugins/lspPluginIntegration.ts"
+      ]
+    },
+    {
+      "target": "src/assistant/index",
+      "references": [
+        "src/bridge/initReplBridge.ts",
+        "src/commands/bridge/bridge.tsx",
+        "src/hooks/useReplBridge.tsx",
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/cli/transports/Transport",
+      "references": [
+        "src/cli/remoteIO.ts",
+        "src/cli/transports/SSETransport.ts",
+        "src/cli/transports/WebSocketTransport.ts",
+        "src/cli/transports/transportUtils.ts"
+      ]
+    },
+    {
+      "target": "src/components/wizard/types",
+      "references": [
+        "src/components/agents/new-agent-creation/CreateAgentWizard.tsx",
+        "src/components/wizard/WizardProvider.tsx",
+        "src/components/wizard/index.ts",
+        "src/components/wizard/useWizard.ts"
+      ]
+    },
+    {
+      "target": "src/tasks/MonitorMcpTask/MonitorMcpTask",
+      "references": [
+        "src/components/tasks/BackgroundTasksDialog.tsx",
+        "src/tasks.ts",
+        "src/tasks/types.ts",
+        "src/tools/AgentTool/runAgent.ts"
+      ]
+    },
+    {
+      "target": "src/types/connectorText",
+      "references": [
+        "src/components/Message.tsx",
+        "src/services/api/claude.ts",
+        "src/services/api/logging.ts",
+        "src/utils/messages.ts"
+      ]
+    },
+    {
+      "target": "src/entrypoints/sdk/sdkUtilityTypes",
+      "references": [
+        "src/entrypoints/sdk/coreTypes.ts",
+        "src/services/api/emptyUsage.ts",
+        "src/services/api/logging.ts"
+      ]
+    },
+    {
+      "target": "src/services/compact/snipProjection",
+      "references": [
+        "src/QueryEngine.ts",
+        "src/components/Message.tsx",
+        "src/utils/messages.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/featureCheck",
+      "references": [
+        "src/constants/prompts.ts",
+        "src/tools/SkillTool/SkillTool.ts",
+        "src/utils/attachments.ts"
+      ]
+    },
+    {
+      "target": "src/ssh/createSSHSession",
+      "references": [
+        "src/hooks/useSSHSession.ts",
+        "src/main.tsx",
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/tasks/LocalWorkflowTask/LocalWorkflowTask",
+      "references": [
+        "src/components/tasks/BackgroundTasksDialog.tsx",
+        "src/tasks.ts",
+        "src/tasks/types.ts"
+      ]
+    },
+    {
+      "target": "src/tools/SendUserFileTool/prompt",
+      "references": [
+        "src/components/Messages.tsx",
+        "src/tools/ToolSearchTool/prompt.ts",
+        "src/utils/conversationRecovery.ts"
+      ]
+    },
+    {
+      "target": "src/tools/TungstenTool/TungstenTool",
+      "references": [
+        "src/commands/clear/caches.ts",
+        "src/components/agents/ToolSelector.tsx",
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/types/messageQueueTypes",
+      "references": [
+        "src/types/logs.ts",
+        "src/utils/messageQueueManager.ts",
+        "src/utils/sessionStorage.ts"
+      ]
+    },
+    {
+      "target": "src/types/notebook",
+      "references": [
+        "src/components/permissions/NotebookEditPermissionRequest/NotebookEditToolDiff.tsx",
+        "src/tools/NotebookEditTool/NotebookEditTool.ts",
+        "src/utils/notebook.ts"
+      ]
+    },
+    {
+      "target": "src/utils/attributionHooks",
+      "references": [
+        "src/commands/clear/caches.ts",
+        "src/services/compact/postCompactCleanup.ts",
+        "src/setup.ts"
+      ]
+    },
+    {
+      "target": "src/utils/udsMessaging",
+      "references": [
+        "src/cli/print.ts",
+        "src/setup.ts",
+        "src/utils/messages/systemInit.ts"
+      ]
+    },
+    {
+      "target": "src/assistant/sessionDiscovery",
+      "references": [
+        "src/dialogLaunchers.tsx",
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/commands/plugin/unifiedTypes",
+      "references": [
+        "src/commands/plugin/ManagePlugins.tsx",
+        "src/commands/plugin/UnifiedInstalledCell.tsx"
+      ]
+    },
+    {
+      "target": "src/components/agents/SnapshotUpdateDialog",
+      "references": [
+        "src/dialogLaunchers.tsx",
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/entrypoints/sdk/runtimeTypes",
+      "references": [
+        "src/entrypoints/agentSdkTypes.ts",
+        "src/utils/effort.ts"
+      ]
+    },
+    {
+      "target": "src/ink/global.d.ts",
+      "references": [
+        "src/ink/components/Box.tsx",
+        "src/ink/components/ScrollBox.tsx"
+      ]
+    },
+    {
+      "target": "src/jobs/classifier",
+      "references": [
+        "src/query.ts",
+        "src/query/stopHooks.ts"
+      ]
+    },
+    {
+      "target": "src/memdir/memoryShapeTelemetry",
+      "references": [
+        "src/memdir/findRelevantMemories.ts",
+        "src/utils/sessionFileAccessHooks.ts"
+      ]
+    },
+    {
+      "target": "src/services/compact/cachedMicrocompact",
+      "references": [
+        "src/services/api/claude.ts",
+        "src/services/compact/microCompact.ts"
+      ]
+    },
+    {
+      "target": "src/services/compact/reactiveCompact",
+      "references": [
+        "src/commands/compact/compact.ts",
+        "src/query.ts"
+      ]
+    },
+    {
+      "target": "src/services/contextCollapse/operations",
+      "references": [
+        "src/commands/context/context-noninteractive.ts",
+        "src/commands/context/context.tsx"
+      ]
+    },
+    {
+      "target": "src/services/contextCollapse/persist",
+      "references": [
+        "src/screens/ResumeConversation.tsx",
+        "src/utils/sessionRestore.ts"
+      ]
+    },
+    {
+      "target": "src/services/sessionTranscript/sessionTranscript",
+      "references": [
+        "src/services/compact/compact.ts",
+        "src/utils/attachments.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/localSearch",
+      "references": [
+        "src/commands.ts",
+        "src/services/mcp/useManageMCPConnections.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/prefetch",
+      "references": [
+        "src/query.ts",
+        "src/utils/attachments.ts"
+      ]
+    },
+    {
+      "target": "src/services/tips/types",
+      "references": [
+        "src/services/tips/tipRegistry.ts",
+        "src/services/tips/tipScheduler.ts"
+      ]
+    },
+    {
+      "target": "src/skills/mcpSkills",
+      "references": [
+        "src/services/mcp/client.ts",
+        "src/services/mcp/useManageMCPConnections.ts"
+      ]
+    },
+    {
+      "target": "src/tools/MonitorTool/MonitorTool",
+      "references": [
+        "src/components/permissions/PermissionRequest.tsx",
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/OverflowTestTool/OverflowTestTool",
+      "references": [
+        "src/tools.ts",
+        "src/utils/permissions/classifierDecision.ts"
+      ]
+    },
+    {
+      "target": "src/tools/WorkflowTool/WorkflowTool",
+      "references": [
+        "src/components/permissions/PermissionRequest.tsx",
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/WorkflowTool/constants",
+      "references": [
+        "src/constants/tools.ts",
+        "src/utils/permissions/classifierDecision.ts"
+      ]
+    },
+    {
+      "target": "src/types/fileSuggestion",
+      "references": [
+        "src/hooks/fileSuggestions.ts",
+        "src/utils/hooks.ts"
+      ]
+    },
+    {
+      "target": "src/types/statusLine",
+      "references": [
+        "src/components/StatusLine.tsx",
+        "src/utils/hooks.ts"
+      ]
+    },
+    {
+      "target": "src/utils/filePersistence/types",
+      "references": [
+        "src/utils/filePersistence/filePersistence.ts",
+        "src/utils/filePersistence/outputsScanner.ts"
+      ]
+    },
+    {
+      "target": "src/utils/udsClient",
+      "references": [
+        "src/tools/SendMessageTool/SendMessageTool.ts",
+        "src/utils/conversationRecovery.ts"
+      ]
+    },
+    {
+      "target": "src/assistant/AssistantSessionChooser",
+      "references": [
+        "src/dialogLaunchers.tsx"
+      ]
+    },
+    {
+      "target": "src/assistant/gate",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/bridge/peerSessions",
+      "references": [
+        "src/tools/SendMessageTool/SendMessageTool.ts"
+      ]
+    },
+    {
+      "target": "src/bridge/webhookSanitizer",
+      "references": [
+        "src/hooks/useReplBridge.tsx"
+      ]
+    },
+    {
+      "target": "src/cli/bg",
+      "references": [
+        "src/entrypoints/cli.tsx"
+      ]
+    },
+    {
+      "target": "src/cli/handlers/ant",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/cli/handlers/templateJobs",
+      "references": [
+        "src/entrypoints/cli.tsx"
+      ]
+    },
+    {
+      "target": "src/cli/rollback",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/cli/up",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/commands/agents-platform/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/assistant/assistant",
+      "references": [
+        "src/dialogLaunchers.tsx"
+      ]
+    },
+    {
+      "target": "src/commands/assistant/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/buddy/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/force-snip",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/fork/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/peers/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/proactive",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/remoteControlServer/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/subscribe-pr",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/torch",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/commands/workflows/index",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/components/AntModelSwitchCallout",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/components/FeedbackSurvey/useFrustrationDetection",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/components/UndercoverAutoCallout",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/components/messages/SnipBoundaryMessage",
+      "references": [
+        "src/components/Message.tsx"
+      ]
+    },
+    {
+      "target": "src/components/messages/UserCrossSessionMessage",
+      "references": [
+        "src/components/messages/UserTextMessage.tsx"
+      ]
+    },
+    {
+      "target": "src/components/messages/UserForkBoilerplateMessage",
+      "references": [
+        "src/components/messages/UserTextMessage.tsx"
+      ]
+    },
+    {
+      "target": "src/components/messages/UserGitHubWebhookMessage",
+      "references": [
+        "src/components/messages/UserTextMessage.tsx"
+      ]
+    },
+    {
+      "target": "src/components/permissions/MonitorPermissionRequest/MonitorPermissionRequest",
+      "references": [
+        "src/components/permissions/PermissionRequest.tsx"
+      ]
+    },
+    {
+      "target": "src/components/permissions/ReviewArtifactPermissionRequest/ReviewArtifactPermissionRequest",
+      "references": [
+        "src/components/permissions/PermissionRequest.tsx"
+      ]
+    },
+    {
+      "target": "src/components/tasks/MonitorMcpDetailDialog",
+      "references": [
+        "src/components/tasks/BackgroundTasksDialog.tsx"
+      ]
+    },
+    {
+      "target": "src/components/tasks/WorkflowDetailDialog",
+      "references": [
+        "src/components/tasks/BackgroundTasksDialog.tsx"
+      ]
+    },
+    {
+      "target": "src/components/ui/option",
+      "references": [
+        "src/components/permissions/rules/PermissionRuleList.tsx"
+      ]
+    },
+    {
+      "target": "src/coordinator/workerAgent",
+      "references": [
+        "src/tools/AgentTool/builtInAgents.ts"
+      ]
+    },
+    {
+      "target": "src/daemon/main",
+      "references": [
+        "src/entrypoints/cli.tsx"
+      ]
+    },
+    {
+      "target": "src/daemon/workerRegistry",
+      "references": [
+        "src/entrypoints/cli.tsx"
+      ]
+    },
+    {
+      "target": "src/entrypoints/sdk/coreTypes.generated",
+      "references": [
+        "src/entrypoints/sdk/coreTypes.ts"
+      ]
+    },
+    {
+      "target": "src/entrypoints/sdk/settingsTypes.generated",
+      "references": [
+        "src/entrypoints/agentSdkTypes.ts"
+      ]
+    },
+    {
+      "target": "src/entrypoints/sdk/toolTypes",
+      "references": [
+        "src/entrypoints/agentSdkTypes.ts"
+      ]
+    },
+    {
+      "target": "src/environment-runner/main",
+      "references": [
+        "src/entrypoints/cli.tsx"
+      ]
+    },
+    {
+      "target": "src/hooks/notifs/useAntOrgWarningNotification",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/ink/cursor",
+      "references": [
+        "src/ink/frame.ts"
+      ]
+    },
+    {
+      "target": "src/ink/devtools",
+      "references": [
+        "src/ink/reconciler.ts"
+      ]
+    },
+    {
+      "target": "src/ink/events/paste-event",
+      "references": [
+        "src/ink/events/event-handlers.ts"
+      ]
+    },
+    {
+      "target": "src/ink/events/resize-event",
+      "references": [
+        "src/ink/events/event-handlers.ts"
+      ]
+    },
+    {
+      "target": "src/proactive/useProactive",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/query/transitions",
+      "references": [
+        "src/query.ts"
+      ]
+    },
+    {
+      "target": "src/self-hosted-runner/main",
+      "references": [
+        "src/entrypoints/cli.tsx"
+      ]
+    },
+    {
+      "target": "src/server/backends/dangerousBackend",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/connectHeadless",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/lockfile",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/parseConnectUrl",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/server",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/serverBanner",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/serverLog",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/server/sessionManager",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/services/compact/cachedMCConfig",
+      "references": [
+        "src/constants/prompts.ts"
+      ]
+    },
+    {
+      "target": "src/services/remoteManagedSettings/securityCheck.jsx",
+      "references": [
+        "src/services/remoteManagedSettings/index.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/remoteSkillLoader",
+      "references": [
+        "src/tools/SkillTool/SkillTool.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/remoteSkillState",
+      "references": [
+        "src/tools/SkillTool/SkillTool.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/signals",
+      "references": [
+        "src/utils/attachments.ts"
+      ]
+    },
+    {
+      "target": "src/services/skillSearch/telemetry",
+      "references": [
+        "src/tools/SkillTool/SkillTool.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/SKILL.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/csharp/claude-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/curl/examples.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/go/claude-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/java/claude-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/php/claude-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/agent-sdk/README.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/agent-sdk/patterns.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/claude-api/README.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/claude-api/batches.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/claude-api/files-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/claude-api/streaming.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/python/claude-api/tool-use.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/ruby/claude-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/shared/error-codes.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/shared/live-sources.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/shared/models.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/shared/prompt-caching.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/shared/tool-use-concepts.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/agent-sdk/README.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/agent-sdk/patterns.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/claude-api/README.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/claude-api/batches.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/claude-api/files-api.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/claude-api/streaming.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/claude-api/typescript/claude-api/tool-use.md",
+      "references": [
+        "src/skills/bundled/claudeApiContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/dream",
+      "references": [
+        "src/skills/bundled/index.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/hunter",
+      "references": [
+        "src/skills/bundled/index.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/runSkillGenerator",
+      "references": [
+        "src/skills/bundled/index.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/verify/SKILL.md",
+      "references": [
+        "src/skills/bundled/verifyContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/verify/examples/cli.md",
+      "references": [
+        "src/skills/bundled/verifyContent.ts"
+      ]
+    },
+    {
+      "target": "src/skills/bundled/verify/examples/server.md",
+      "references": [
+        "src/skills/bundled/verifyContent.ts"
+      ]
+    },
+    {
+      "target": "src/ssh/SSHSessionManager",
+      "references": [
+        "src/hooks/useSSHSession.ts"
+      ]
+    },
+    {
+      "target": "src/tools/CtxInspectTool/CtxInspectTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/DiscoverSkillsTool/prompt",
+      "references": [
+        "src/constants/prompts.ts"
+      ]
+    },
+    {
+      "target": "src/tools/ListPeersTool/ListPeersTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/PushNotificationTool/PushNotificationTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/REPLTool/REPLTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/ReviewArtifactTool/ReviewArtifactTool",
+      "references": [
+        "src/components/permissions/PermissionRequest.tsx"
+      ]
+    },
+    {
+      "target": "src/tools/SendUserFileTool/SendUserFileTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/SleepTool/SleepTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/SnipTool/SnipTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/SnipTool/prompt",
+      "references": [
+        "src/utils/collapseReadSearch.ts"
+      ]
+    },
+    {
+      "target": "src/tools/SubscribePRTool/SubscribePRTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/TerminalCaptureTool/TerminalCaptureTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/TerminalCaptureTool/prompt",
+      "references": [
+        "src/utils/permissions/classifierDecision.ts"
+      ]
+    },
+    {
+      "target": "src/tools/TungstenTool/TungstenLiveMonitor",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/tools/VerifyPlanExecutionTool/VerifyPlanExecutionTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/VerifyPlanExecutionTool/constants",
+      "references": [
+        "src/utils/permissions/classifierDecision.ts"
+      ]
+    },
+    {
+      "target": "src/tools/WebBrowserTool/WebBrowserPanel",
+      "references": [
+        "src/screens/REPL.tsx"
+      ]
+    },
+    {
+      "target": "src/tools/WebBrowserTool/WebBrowserTool",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/WorkflowTool/WorkflowPermissionRequest",
+      "references": [
+        "src/components/permissions/PermissionRequest.tsx"
+      ]
+    },
+    {
+      "target": "src/tools/WorkflowTool/bundled/index",
+      "references": [
+        "src/tools.ts"
+      ]
+    },
+    {
+      "target": "src/tools/WorkflowTool/createWorkflowCommand",
+      "references": [
+        "src/commands.ts"
+      ]
+    },
+    {
+      "target": "src/utils/attributionTrailer",
+      "references": [
+        "src/utils/attribution.ts"
+      ]
+    },
+    {
+      "target": "src/utils/ccshareResume",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/utils/eventLoopStallDetector",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/utils/permissions/yolo-classifier-prompts/auto_mode_system_prompt.txt",
+      "references": [
+        "src/utils/permissions/yoloClassifier.ts"
+      ]
+    },
+    {
+      "target": "src/utils/permissions/yolo-classifier-prompts/permissions_anthropic.txt",
+      "references": [
+        "src/utils/permissions/yoloClassifier.ts"
+      ]
+    },
+    {
+      "target": "src/utils/permissions/yolo-classifier-prompts/permissions_external.txt",
+      "references": [
+        "src/utils/permissions/yoloClassifier.ts"
+      ]
+    },
+    {
+      "target": "src/utils/postCommitAttribution",
+      "references": [
+        "src/utils/worktree.ts"
+      ]
+    },
+    {
+      "target": "src/utils/protectedNamespace",
+      "references": [
+        "src/utils/envUtils.ts"
+      ]
+    },
+    {
+      "target": "src/utils/sdkHeapDumpMonitor",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/utils/sessionDataUploader",
+      "references": [
+        "src/main.tsx"
+      ]
+    },
+    {
+      "target": "src/utils/systemThemeWatcher",
+      "references": [
+        "src/components/design-system/ThemeProvider.tsx"
+      ]
+    },
+    {
+      "target": "src/utils/taskSummary",
+      "references": [
+        "src/query.ts"
+      ]
+    },
+    {
+      "target": "src/utils/ultraplan/prompt.txt",
+      "references": [
+        "src/commands/ultraplan.tsx"
+      ]
+    }
+  ],
+  "feature_gates": {
+    "ABLATION_BASELINE": 1,
+    "AGENT_MEMORY_SNAPSHOT": 2,
+    "AGENT_TRIGGERS": 11,
+    "AGENT_TRIGGERS_REMOTE": 2,
+    "ALLOW_TEST_VERSIONS": 2,
+    "ANTI_DISTILLATION_CC": 1,
+    "AUTO_THEME": 3,
+    "AWAY_SUMMARY": 2,
+    "BASH_CLASSIFIER": 49,
+    "BG_SESSIONS": 11,
+    "BREAK_CACHE_COMMAND": 2,
+    "BRIDGE_MODE": 29,
+    "BUDDY": 18,
+    "BUILDING_CLAUDE_APPS": 1,
+    "BUILTIN_EXPLORE_PLAN_AGENTS": 1,
+    "BYOC_ENVIRONMENT_RUNNER": 1,
+    "CACHED_MICROCOMPACT": 12,
+    "CCR_AUTO_CONNECT": 3,
+    "CCR_MIRROR": 4,
+    "CCR_REMOTE_SETUP": 1,
+    "CHICAGO_MCP": 16,
+    "COMMIT_ATTRIBUTION": 12,
+    "COMPACTION_REMINDERS": 1,
+    "CONNECTOR_TEXT": 8,
+    "CONTEXT_COLLAPSE": 23,
+    "COORDINATOR_MODE": 32,
+    "COWORKER_TYPE_TELEMETRY": 2,
+    "DAEMON": 3,
+    "DIRECT_CONNECT": 5,
+    "DOWNLOAD_USER_SETTINGS": 5,
+    "DUMP_SYSTEM_PROMPT": 1,
+    "ENHANCED_TELEMETRY_BETA": 2,
+    "EXPERIMENTAL_SKILL_SEARCH": 21,
+    "EXTRACT_MEMORIES": 7,
+    "FILE_PERSISTENCE": 3,
+    "FORK_SUBAGENT": 5,
+    "HARD_FAIL": 2,
+    "HISTORY_PICKER": 4,
+    "HISTORY_SNIP": 16,
+    "HOOK_PROMPTS": 1,
+    "IS_LIBC_GLIBC": 1,
+    "IS_LIBC_MUSL": 1,
+    "KAIROS": 156,
+    "KAIROS_BRIEF": 39,
+    "KAIROS_CHANNELS": 21,
+    "KAIROS_DREAM": 1,
+    "KAIROS_GITHUB_WEBHOOKS": 4,
+    "KAIROS_PUSH_NOTIFICATION": 4,
+    "LODESTONE": 6,
+    "MCP_RICH_OUTPUT": 3,
+    "MCP_SKILLS": 9,
+    "MEMORY_SHAPE_TELEMETRY": 3,
+    "MESSAGE_ACTIONS": 5,
+    "MONITOR_TOOL": 13,
+    "NATIVE_CLIENT_ATTESTATION": 1,
+    "NATIVE_CLIPBOARD_IMAGE": 2,
+    "NEW_INIT": 2,
+    "OVERFLOW_TEST_TOOL": 2,
+    "PERFETTO_TRACING": 1,
+    "POWERSHELL_AUTO_MODE": 2,
+    "PROACTIVE": 37,
+    "PROMPT_CACHE_BREAK_DETECTION": 9,
+    "QUICK_SEARCH": 5,
+    "REACTIVE_COMPACT": 5,
+    "REVIEW_ARTIFACT": 4,
+    "RUN_SKILL_GENERATOR": 1,
+    "SELF_HOSTED_RUNNER": 1,
+    "SHOT_STATS": 10,
+    "SKILL_IMPROVEMENT": 1,
+    "SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED": 1,
+    "SLOW_OPERATION_LOGGING": 1,
+    "SSH_REMOTE": 4,
+    "STREAMLINED_OUTPUT": 1,
+    "TEAMMEM": 53,
+    "TEMPLATES": 6,
+    "TERMINAL_PANEL": 5,
+    "TOKEN_BUDGET": 9,
+    "TORCH": 1,
+    "TRANSCRIPT_CLASSIFIER": 110,
+    "TREE_SITTER_BASH": 3,
+    "TREE_SITTER_BASH_SHADOW": 5,
+    "UDS_INBOX": 18,
+    "ULTRAPLAN": 10,
+    "ULTRATHINK": 1,
+    "UNATTENDED_RETRY": 1,
+    "UPLOAD_USER_SETTINGS": 2,
+    "VERIFICATION_AGENT": 4,
+    "VOICE_MODE": 49,
+    "WEB_BROWSER_TOOL": 4,
+    "WORKFLOW_SCRIPTS": 10
+  },
+  "environment_keys": {
+    "ANTHROPIC_API_KEY": 74,
+    "ANTHROPIC_AUTH_TOKEN": 10,
+    "ANTHROPIC_BASE_URL": 37,
+    "ANTHROPIC_BEDROCK_BASE_URL": 6,
+    "ANTHROPIC_BETAS": 3,
+    "ANTHROPIC_CUSTOM_HEADERS": 5,
+    "ANTHROPIC_CUSTOM_MODEL_OPTION": 5,
+    "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": 2,
+    "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": 2,
+    "ANTHROPIC_DEFAULT_": 1,
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": 6,
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": 4,
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": 3,
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES": 3,
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": 6,
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": 4,
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": 3,
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": 3,
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": 6,
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": 4,
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": 3,
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": 3,
+    "ANTHROPIC_FOUNDRY_API_KEY": 6,
+    "ANTHROPIC_FOUNDRY_BASE_URL": 4,
+    "ANTHROPIC_FOUNDRY_RESOURCE": 4,
+    "ANTHROPIC_INTERNAL_RESEARCH": 1,
+    "ANTHROPIC_LOG": 1,
+    "ANTHROPIC_MODEL": 12,
+    "ANTHROPIC_PERMISSIONS_TEMPLATE": 2,
+    "ANTHROPIC_SMALL_FAST_MODEL": 6,
+    "ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION": 5,
+    "ANTHROPIC_UNIX_SOCKET": 10,
+    "ANTHROPIC_VERSION": 8,
+    "ANTHROPIC_VERTEX_BASE_URL": 2,
+    "ANTHROPIC_VERTEX_PROJECT_ID": 5,
+    "CLAUDE_3_5_HAIKU_CONFIG": 4,
+    "CLAUDE_3_5_V2_SONNET_CONFIG": 4,
+    "CLAUDE_3_7_SONNET_CONFIG": 4,
+    "CLAUDE_4_5_OR_4_6_MODEL_IDS": 4,
+    "CLAUDE_AFTER_LAST_COMPACT": 1,
+    "CLAUDE_AGENT_SDK_CLIENT_APP": 6,
+    "CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS": 1,
+    "CLAUDE_AGENT_SDK_MCP_NO_PREFIX": 3,
+    "CLAUDE_AGENT_SDK_VERSION": 6,
+    "CLAUDE_AI_AUTHORIZE_URL": 7,
+    "CLAUDE_AI_BASE_URL": 2,
+    "CLAUDE_AI_INFERENCE_SCOPE": 13,
+    "CLAUDE_AI_LOCAL_BASE_URL": 2,
+    "CLAUDE_AI_MCP_TIMEOUT_MS": 3,
+    "CLAUDE_AI_OAUTH_SCOPES": 5,
+    "CLAUDE_AI_ORIGIN": 8,
+    "CLAUDE_AI_PROFILE_SCOPE": 7,
+    "CLAUDE_AI_STAGING_BASE_URL": 2,
+    "CLAUDE_ALIAS_REGEX": 3,
+    "CLAUDE_API_KEY": 1,
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 1,
+    "CLAUDE_AUTO_BACKGROUND_TASKS": 1,
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": 3,
+    "CLAUDE_BRIDGE_": 1,
+    "CLAUDE_BRIDGE_BASE_URL": 5,
+    "CLAUDE_BRIDGE_OAUTH_TOKEN": 3,
+    "CLAUDE_BRIDGE_SESSION_INGRESS_URL": 7,
+    "CLAUDE_BRIDGE_USE_CCR_V2": 3,
+    "CLAUDE_CHROME_PERMISSION_MODE": 4,
+    "CLAUDE_CODE_": 4,
+    "CLAUDE_CODE_20250219_BETA_HEADER": 6,
+    "CLAUDE_CODE_ABLATION_BASELINE": 1,
+    "CLAUDE_CODE_ACCESSIBILITY": 3,
+    "CLAUDE_CODE_ACCOUNT_TAGGED_ID": 1,
+    "CLAUDE_CODE_ACCOUNT_UUID": 1,
+    "CLAUDE_CODE_ACTION": 2,
+    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": 2,
+    "CLAUDE_CODE_ADDITIONAL_PROTECTION": 1,
+    "CLAUDE_CODE_AGENT": 2,
+    "CLAUDE_CODE_AGENT_COLOR": 3,
+    "CLAUDE_CODE_AGENT_ID": 8,
+    "CLAUDE_CODE_AGENT_LIST_IN_MESSAGES": 3,
+    "CLAUDE_CODE_AGENT_NAME": 4,
+    "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT": 1,
+    "CLAUDE_CODE_API_BASE_URL": 1,
+    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR": 3,
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": 4,
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": 1,
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": 1,
+    "CLAUDE_CODE_AUTO_CONNECT_IDE": 2,
+    "CLAUDE_CODE_AUTO_MODE_MODEL": 1,
+    "CLAUDE_CODE_BASE_REF": 2,
+    "CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR": 1,
+    "CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE": 1,
+    "CLAUDE_CODE_BRIEF": 9,
+    "CLAUDE_CODE_BRIEF_UPLOAD": 2,
+    "CLAUDE_CODE_BUBBLEWRAP": 2,
+    "CLAUDE_CODE_CCR_MIRROR": 1,
+    "CLAUDE_CODE_CLIENT_CERT": 7,
+    "CLAUDE_CODE_CLIENT_KEY": 6,
+    "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE": 2,
+    "CLAUDE_CODE_COMMIT_LOG": 1,
+    "CLAUDE_CODE_CONTAINER_ID": 4,
+    "CLAUDE_CODE_COORDINATOR_MODE": 10,
+    "CLAUDE_CODE_COWORKER_TYPE": 2,
+    "CLAUDE_CODE_CUSTOM_OAUTH_URL": 5,
+    "CLAUDE_CODE_DATADOG_FLUSH_INTERVAL_MS": 1,
+    "CLAUDE_CODE_DEBUG_LOGS_DIR": 1,
+    "CLAUDE_CODE_DEBUG_LOG_LEVEL": 2,
+    "CLAUDE_CODE_DEBUG_REPAINTS": 3,
+    "CLAUDE_CODE_DIAGNOSTICS_FILE": 1,
+    "CLAUDE_CODE_DISABLE_1M_CONTEXT": 1,
+    "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": 1,
+    "CLAUDE_CODE_DISABLE_ADVISOR_TOOL": 1,
+    "CLAUDE_CODE_DISABLE_ATTACHMENTS": 1,
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": 5,
+    "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": 11,
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": 3,
+    "CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK": 4,
+    "CLAUDE_CODE_DISABLE_CRON": 3,
+    "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": 9,
+    "CLAUDE_CODE_DISABLE_FAST_MODE": 2,
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": 3,
+    "CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING": 3,
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": 1,
+    "CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP": 2,
+    "CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS": 1,
+    "CLAUDE_CODE_DISABLE_MOUSE": 3,
+    "CLAUDE_CODE_DISABLE_MOUSE_CLICKS": 2,
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 8,
+    "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK": 1,
+    "CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL": 1,
+    "CLAUDE_CODE_DISABLE_POLICY_SKILLS": 1,
+    "CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP": 3,
+    "CLAUDE_CODE_DISABLE_SESSION_DATA_UPLOAD": 1,
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": 5,
+    "CLAUDE_CODE_DISABLE_THINKING": 2,
+    "CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL": 2,
+    "CLAUDE_CODE_DOCS_MAP_URL": 3,
+    "CLAUDE_CODE_DONT_INHERIT_ENV": 1,
+    "CLAUDE_CODE_DUMP_AUTO_MODE": 2,
+    "CLAUDE_CODE_EAGER_FLUSH": 6,
+    "CLAUDE_CODE_EFFORT_LEVEL": 7,
+    "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": 1,
+    "CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES": 1,
+    "CLAUDE_CODE_ENABLE_CFC": 2,
+    "CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING": 1,
+    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": 3,
+    "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING": 1,
+    "CLAUDE_CODE_ENABLE_TASKS": 1,
+    "CLAUDE_CODE_ENABLE_TELEMETRY": 5,
+    "CLAUDE_CODE_ENABLE_TOKEN_USAGE_ATTACHMENT": 1,
+    "CLAUDE_CODE_ENABLE_XAA": 6,
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": 1,
+    "CLAUDE_CODE_ENTRYPOINT": 43,
+    "CLAUDE_CODE_ENVIRONMENT_KIND": 6,
+    "CLAUDE_CODE_ENVIRONMENT_RUNNER_VERSION": 2,
+    "CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER": 3,
+    "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY": 2,
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": 7,
+    "CLAUDE_CODE_EXTRA_BODY": 5,
+    "CLAUDE_CODE_EXTRA_METADATA": 2,
+    "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS": 1,
+    "CLAUDE_CODE_FORCE_FULL_LOGO": 2,
+    "CLAUDE_CODE_FORCE_SANDBOX": 1,
+    "CLAUDE_CODE_FRAME_TIMING_LOG": 1,
+    "CLAUDE_CODE_GB_BASE_URL": 1,
+    "CLAUDE_CODE_GIT_BASH_PATH": 6,
+    "CLAUDE_CODE_GLOB_HIDDEN": 2,
+    "CLAUDE_CODE_GLOB_NO_IGNORE": 2,
+    "CLAUDE_CODE_GLOB_TIMEOUT_SECONDS": 1,
+    "CLAUDE_CODE_GUIDE_AGENT": 3,
+    "CLAUDE_CODE_GUIDE_AGENT_TYPE": 4,
+    "CLAUDE_CODE_HOST_PLATFORM": 4,
+    "CLAUDE_CODE_IDE_HOST_OVERRIDE": 2,
+    "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL": 2,
+    "CLAUDE_CODE_IDE_SKIP_VALID_CHECK": 1,
+    "CLAUDE_CODE_IDLE_THRESHOLD_MINUTES": 2,
+    "CLAUDE_CODE_IDLE_TOKEN_THRESHOLD": 2,
+    "CLAUDE_CODE_INCLUDE_PARTIAL_MESSAGES": 1,
+    "CLAUDE_CODE_IS_COWORK": 6,
+    "CLAUDE_CODE_JSONL_TRANSCRIPT": 1,
+    "CLAUDE_CODE_MANAGED_SETTINGS_PATH": 2,
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": 2,
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": 7,
+    "CLAUDE_CODE_MAX_RETRIES": 2,
+    "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY": 1,
+    "CLAUDE_CODE_MCP_INSTR_DELTA": 3,
+    "CLAUDE_CODE_MCP_SERVER_NAME": 1,
+    "CLAUDE_CODE_MCP_SERVER_URL": 1,
+    "CLAUDE_CODE_MESSAGING_SOCKET": 2,
+    "CLAUDE_CODE_NEW_INIT": 2,
+    "CLAUDE_CODE_NO_FLICKER": 10,
+    "CLAUDE_CODE_OAUTH_CLIENT_ID": 1,
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN": 3,
+    "CLAUDE_CODE_OAUTH_SCOPES": 2,
+    "CLAUDE_CODE_OAUTH_TOKEN": 31,
+    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR": 9,
+    "CLAUDE_CODE_ORGANIZATION_UUID": 2,
+    "CLAUDE_CODE_OTEL_FLUSH_TIMEOUT_MS": 1,
+    "CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS": 1,
+    "CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS": 3,
+    "CLAUDE_CODE_OVERRIDE_DATE": 4,
+    "CLAUDE_CODE_PARENT_SESSION_ID": 3,
+    "CLAUDE_CODE_PERFETTO_TRACE": 5,
+    "CLAUDE_CODE_PERFETTO_WRITE_INTERVAL_S": 3,
+    "CLAUDE_CODE_PLAN_MODE_INTERVIEW_PHASE": 1,
+    "CLAUDE_CODE_PLAN_MODE_REQUIRED": 2,
+    "CLAUDE_CODE_PLAN_V2_AGENT_COUNT": 2,
+    "CLAUDE_CODE_PLAN_V2_EXPLORE_AGENT_COUNT": 2,
+    "CLAUDE_CODE_PLUGIN_CACHE_DIR": 9,
+    "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS": 5,
+    "CLAUDE_CODE_PLUGIN_SEED_DIR": 7,
+    "CLAUDE_CODE_PLUGIN_USE_ZIP_CACHE": 3,
+    "CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2": 3,
+    "CLAUDE_CODE_PROACTIVE": 4,
+    "CLAUDE_CODE_PROFILE_QUERY": 3,
+    "CLAUDE_CODE_PROFILE_STARTUP": 6,
+    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST": 6,
+    "CLAUDE_CODE_PROXY_RESOLVES_HOSTS": 1,
+    "CLAUDE_CODE_PS_SHELL_PREFIX": 1,
+    "CLAUDE_CODE_PWSH_PARSE_TIMEOUT_MS": 1,
+    "CLAUDE_CODE_QUESTION_PREVIEW_FORMAT": 1,
+    "CLAUDE_CODE_REMOTE": 33,
+    "CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE": 2,
+    "CLAUDE_CODE_REMOTE_MEMORY_DIR": 12,
+    "CLAUDE_CODE_REMOTE_SEND_KEEPALIVES": 3,
+    "CLAUDE_CODE_REMOTE_SESSION_ID": 13,
+    "CLAUDE_CODE_REPL": 2,
+    "CLAUDE_CODE_RESUME_INTERRUPTED_TURN": 1,
+    "CLAUDE_CODE_SAVE_HOOK_ADDITIONAL_CONTEXT": 1,
+    "CLAUDE_CODE_SCROLL_SPEED": 4,
+    "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS": 3,
+    "CLAUDE_CODE_SESSION_ACCESS_TOKEN": 14,
+    "CLAUDE_CODE_SESSION_ID": 3,
+    "CLAUDE_CODE_SESSION_KIND": 1,
+    "CLAUDE_CODE_SESSION_LOG": 1,
+    "CLAUDE_CODE_SESSION_NAME": 1,
+    "CLAUDE_CODE_SETTINGS_SCHEMA_URL": 3,
+    "CLAUDE_CODE_SHELL": 2,
+    "CLAUDE_CODE_SHELL_PREFIX": 12,
+    "CLAUDE_CODE_SIMPLE": 21,
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH": 8,
+    "CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS": 2,
+    "CLAUDE_CODE_SKIP_FOUNDRY_AUTH": 4,
+    "CLAUDE_CODE_SKIP_PROMPT_HISTORY": 7,
+    "CLAUDE_CODE_SKIP_VERTEX_AUTH": 6,
+    "CLAUDE_CODE_SLOW_OPERATION_THRESHOLD_MS": 2,
+    "CLAUDE_CODE_SSE_PORT": 3,
+    "CLAUDE_CODE_STALL_TIMEOUT_MS_FOR_TESTING": 1,
+    "CLAUDE_CODE_STREAMLINED_OUTPUT": 2,
+    "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT": 1,
+    "CLAUDE_CODE_SUBAGENT_MODEL": 4,
+    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": 2,
+    "CLAUDE_CODE_SYNC_PLUGIN_INSTALL": 10,
+    "CLAUDE_CODE_SYNC_PLUGIN_INSTALL_TIMEOUT_MS": 2,
+    "CLAUDE_CODE_SYNTAX_HIGHLIGHT": 5,
+    "CLAUDE_CODE_TAGS": 2,
+    "CLAUDE_CODE_TASK_LIST_ID": 4,
+    "CLAUDE_CODE_TEAMMATE_COMMAND": 1,
+    "CLAUDE_CODE_TEAM_NAME": 4,
+    "CLAUDE_CODE_TERMINAL_RECORDING": 3,
+    "CLAUDE_CODE_TEST_FIXTURES_ROOT": 2,
+    "CLAUDE_CODE_TMPDIR": 7,
+    "CLAUDE_CODE_TMUX_PREFIX": 9,
+    "CLAUDE_CODE_TMUX_PREFIX_CONFLICTS": 3,
+    "CLAUDE_CODE_TMUX_SESSION": 5,
+    "CLAUDE_CODE_TMUX_TRUECOLOR": 1,
+    "CLAUDE_CODE_TWO_STAGE_CLASSIFIER": 1,
+    "CLAUDE_CODE_UNATTENDED_RETRY": 2,
+    "CLAUDE_CODE_UNDERCOVER": 3,
+    "CLAUDE_CODE_USER_EMAIL": 1,
+    "CLAUDE_CODE_USE_BEDROCK": 19,
+    "CLAUDE_CODE_USE_CCR_V2": 10,
+    "CLAUDE_CODE_USE_COWORK_PLUGINS": 5,
+    "CLAUDE_CODE_USE_FOUNDRY": 12,
+    "CLAUDE_CODE_USE_NATIVE_FILE_SEARCH": 3,
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": 4,
+    "CLAUDE_CODE_USE_VERTEX": 16,
+    "CLAUDE_CODE_VERIFY_PLAN": 6,
+    "CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR": 4,
+    "CLAUDE_CODE_WORKER_EPOCH": 4,
+    "CLAUDE_CODE_WORKSPACE_HOST_PATHS": 1,
+    "CLAUDE_CONFIG_DIR": 13,
+    "CLAUDE_CONFIG_DIRECTORIES": 4,
+    "CLAUDE_CONTEXT_COLLAPSE": 1,
+    "CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES": 2,
+    "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE": 7,
+    "CLAUDE_DEBUG": 1,
+    "CLAUDE_ENABLE_STREAM_WATCHDOG": 1,
+    "CLAUDE_ENV_FILE": 7,
+    "CLAUDE_FOLDER_PERMISSION_PATTERN": 5,
+    "CLAUDE_FORCE_DISPLAY_SURVEY": 1,
+    "CLAUDE_HAIKU_4_5_CONFIG": 4,
+    "CLAUDE_INTERNAL_FC_OVERRIDES": 5,
+    "CLAUDE_IN_CHROME_MCP_SERVER_NAME": 15,
+    "CLAUDE_IN_CHROME_MCP_TOOLS": 2,
+    "CLAUDE_IN_CHROME_SKILL_HINT": 3,
+    "CLAUDE_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER": 3,
+    "CLAUDE_JOB_DIR": 3,
+    "CLAUDE_LOCAL_OAUTH_API_BASE": 1,
+    "CLAUDE_LOCAL_OAUTH_APPS_BASE": 1,
+    "CLAUDE_LOCAL_OAUTH_CONSOLE_BASE": 1,
+    "CLAUDE_MOCK_HEADERLESS_429": 3,
+    "CLAUDE_MORERIGHT": 1,
+    "CLAUDE_OPUS_4_1_CONFIG": 4,
+    "CLAUDE_OPUS_4_5_CONFIG": 4,
+    "CLAUDE_OPUS_4_6_CONFIG": 7,
+    "CLAUDE_OPUS_4_CONFIG": 4,
+    "CLAUDE_PLUGIN_DATA": 18,
+    "CLAUDE_PLUGIN_OPTION_": 2,
+    "CLAUDE_PLUGIN_ROOT": 27,
+    "CLAUDE_PROJECT_DIR": 3,
+    "CLAUDE_REPL_MODE": 2,
+    "CLAUDE_SESSION_ID": 6,
+    "CLAUDE_SESSION_INGRESS_TOKEN_FILE": 3,
+    "CLAUDE_SKILL_DIR": 9,
+    "CLAUDE_SOCKET_PREFIX": 2,
+    "CLAUDE_SONNET_4_5_CONFIG": 4,
+    "CLAUDE_SONNET_4_6_CONFIG": 4,
+    "CLAUDE_SONNET_4_CONFIG": 4,
+    "CLAUDE_STREAM_IDLE_TIMEOUT_MS": 1,
+    "CLAUDE_TRUSTED_DEVICE_TOKEN": 4,
+    "DISABLE_AUTOUPDATER": 8,
+    "DISABLE_AUTO_COMPACT": 3,
+    "DISABLE_BACKGROUND_TASKS": 1,
+    "DISABLE_BUG_COMMAND": 2,
+    "DISABLE_CLAUDE_CODE_SM_COMPACT": 1,
+    "DISABLE_COMPACT": 4,
+    "DISABLE_COST_WARNINGS": 2,
+    "DISABLE_DOCTOR_COMMAND": 1,
+    "DISABLE_ERROR_REPORTING": 2,
+    "DISABLE_EXTRA_USAGE_COMMAND": 1,
+    "DISABLE_FEEDBACK_COMMAND": 2,
+    "DISABLE_INSTALLATION_CHECKS": 4,
+    "DISABLE_INSTALL_GITHUB_APP_COMMAND": 1,
+    "DISABLE_INTERLEAVED_THINKING": 2,
+    "DISABLE_KITTY_KEYBOARD": 10,
+    "DISABLE_LOGIN_COMMAND": 1,
+    "DISABLE_LOGOUT_COMMAND": 1,
+    "DISABLE_MODIFY_OTHER_KEYS": 8,
+    "DISABLE_MOUSE_TRACKING": 13,
+    "DISABLE_PROMPT_CACHING": 1,
+    "DISABLE_PROMPT_CACHING_HAIKU": 1,
+    "DISABLE_PROMPT_CACHING_OPUS": 1,
+    "DISABLE_PROMPT_CACHING_SONNET": 1,
+    "DISABLE_TELEMETRY": 5,
+    "DISABLE_UPGRADE_COMMAND": 1,
+    "ENABLE_AGENT_SWARMS": 3,
+    "ENABLE_BETA_TRACING_DETAILED": 4,
+    "ENABLE_CLAUDEAI_MCP_SERVERS": 1,
+    "ENABLE_CLAUDE_CODE_SM_COMPACT": 1,
+    "ENABLE_DUMP_STATE": 2,
+    "ENABLE_ENHANCED_TELEMETRY_BETA": 1,
+    "ENABLE_GROWTHBOOK_DEV": 2,
+    "ENABLE_KITTY_KEYBOARD": 6,
+    "ENABLE_LOCKLESS_UPDATES": 2,
+    "ENABLE_LSP_TOOL": 2,
+    "ENABLE_MCP_LARGE_OUTPUT_FILES": 1,
+    "ENABLE_MODIFY_OTHER_KEYS": 6,
+    "ENABLE_MOUSE_TRACKING": 8,
+    "ENABLE_PID_BASED_VERSION_LOCKING": 3,
+    "ENABLE_PROMPT_CACHING_1H_BEDROCK": 1,
+    "ENABLE_SESSION_PERSISTENCE": 2,
+    "ENABLE_TOOL_SEARCH": 18,
+    "MCP_AUTH_CACHE_TTL_MS": 2,
+    "MCP_BATCH_FLUSH_MS": 3,
+    "MCP_CLIENT_METADATA_URL": 3,
+    "MCP_CLIENT_SECRET": 4,
+    "MCP_COMMANDS": 2,
+    "MCP_FETCH_CACHE_SIZE": 4,
+    "MCP_OAUTH_CALLBACK_PORT": 1,
+    "MCP_OAUTH_CLIENT_METADATA_URL": 2,
+    "MCP_OUTPUT_WARNING_THRESHOLD_TOKENS": 2,
+    "MCP_PROXY_PATH": 5,
+    "MCP_PROXY_URL": 5,
+    "MCP_REMOTE_SERVER_CONNECTION_BATCH_SIZE": 1,
+    "MCP_REQUEST_TIMEOUT_MS": 3,
+    "MCP_RICH_OUTPUT": 3,
+    "MCP_SERVERS_BETA_HEADER": 2,
+    "MCP_SERVER_CONNECTION_BATCH_SIZE": 1,
+    "MCP_SERVER_PATTERNS": 3,
+    "MCP_SETTLE_POLL_MS": 2,
+    "MCP_SETTLE_TIMEOUT_MS": 2,
+    "MCP_SKILLS": 9,
+    "MCP_STREAMABLE_HTTP_ACCEPT": 2,
+    "MCP_TIMEOUT": 2,
+    "MCP_TOKEN_COUNT_THRESHOLD_FACTOR": 2,
+    "MCP_TOOLS_THRESHOLD": 7,
+    "MCP_TOOL_TIMEOUT": 3,
+    "MCP_XAA_IDP_CLIENT_SECRET": 3,
+    "NODE_ENV": 52,
+    "USER_TYPE": 373,
+    "VOICE_STREAM_BASE_URL": 4,
+    "VOICE_STREAM_PATH": 2
+  },
+  "largest_files": [
+    {
+      "path": "src/screens/REPL.tsx",
+      "bytes": 895850
+    },
+    {
+      "path": "src/main.tsx",
+      "bytes": 803924
+    },
+    {
+      "path": "src/components/PromptInput/PromptInput.tsx",
+      "bytes": 355032
+    },
+    {
+      "path": "src/commands/plugin/ManagePlugins.tsx",
+      "bytes": 321775
+    },
+    {
+      "path": "src/components/Settings/Config.tsx",
+      "bytes": 271407
+    },
+    {
+      "path": "src/ink/ink.tsx",
+      "bytes": 251886
+    },
+    {
+      "path": "src/tools/AgentTool/AgentTool.tsx",
+      "bytes": 233734
+    },
+    {
+      "path": "src/utils/ansiToPng.ts",
+      "bytes": 214955
+    },
+    {
+      "path": "src/cli/print.ts",
+      "bytes": 212735
+    },
+    {
+      "path": "src/hooks/useTypeahead.tsx",
+      "bytes": 212610
+    },
+    {
+      "path": "src/components/LogSelector.tsx",
+      "bytes": 200487
+    },
+    {
+      "path": "src/utils/messages.ts",
+      "bytes": 193203
+    },
+    {
+      "path": "src/utils/sessionStorage.ts",
+      "bytes": 180620
+    },
+    {
+      "path": "src/components/mcp/ElicitationDialog.tsx",
+      "bytes": 179643
+    },
+    {
+      "path": "src/utils/teleport.tsx",
+      "bytes": 175779
+    },
+    {
+      "path": "src/tools/BashTool/BashTool.tsx",
+      "bytes": 160530
+    },
+    {
+      "path": "src/utils/hooks.ts",
+      "bytes": 159458
+    },
+    {
+      "path": "src/components/Stats.tsx",
+      "bytes": 152782
+    },
+    {
+      "path": "src/components/ScrollKeybindingHandler.tsx",
+      "bytes": 149202
+    },
+    {
+      "path": "src/components/VirtualMessageList.tsx",
+      "bytes": 148516
+    },
+    {
+      "path": "src/components/Messages.tsx",
+      "bytes": 147457
+    },
+    {
+      "path": "src/utils/processUserInput/processSlashCommand.tsx",
+      "bytes": 144807
+    },
+    {
+      "path": "src/tools/PowerShellTool/PowerShellTool.tsx",
+      "bytes": 144624
+    },
+    {
+      "path": "src/utils/bash/bashParser.ts",
+      "bytes": 130810
+    },
+    {
+      "path": "src/commands/plugin/PluginSettings.tsx",
+      "bytes": 128668
+    },
+    {
+      "path": "src/utils/attachments.ts",
+      "bytes": 127423
+    },
+    {
+      "path": "src/tasks/RemoteAgentTask/RemoteAgentTask.tsx",
+      "bytes": 126389
+    },
+    {
+      "path": "src/services/api/claude.ts",
+      "bytes": 125779
+    },
+    {
+      "path": "src/tools/AgentTool/UI.tsx",
+      "bytes": 125359
+    },
+    {
+      "path": "src/components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.tsx",
+      "bytes": 121607
+    },
+    {
+      "path": "src/commands/plugin/BrowseMarketplace.tsx",
+      "bytes": 119562
+    },
+    {
+      "path": "src/services/mcp/client.ts",
+      "bytes": 119060
+    },
+    {
+      "path": "src/components/permissions/rules/PermissionRuleList.tsx",
+      "bytes": 118930
+    },
+    {
+      "path": "src/commands/plugin/ManageMarketplaces.tsx",
+      "bytes": 118912
+    },
+    {
+      "path": "src/components/tasks/BackgroundTasksDialog.tsx",
+      "bytes": 116395
+    },
+    {
+      "path": "src/commands/insights.ts",
+      "bytes": 115949
+    },
+    {
+      "path": "src/hooks/useReplBridge.tsx",
+      "bytes": 115652
+    },
+    {
+      "path": "src/components/MessageSelector.tsx",
+      "bytes": 115618
+    },
+    {
+      "path": "src/bridge/bridgeMain.ts",
+      "bytes": 115571
+    },
+    {
+      "path": "src/components/CustomSelect/select.tsx",
+      "bytes": 115187
+    }
+  ],
+  "longest_files": [
+    {
+      "path": "src/cli/print.ts",
+      "lines": 5594
+    },
+    {
+      "path": "src/utils/messages.ts",
+      "lines": 5512
+    },
+    {
+      "path": "src/utils/sessionStorage.ts",
+      "lines": 5105
+    },
+    {
+      "path": "src/utils/hooks.ts",
+      "lines": 5022
+    },
+    {
+      "path": "src/screens/REPL.tsx",
+      "lines": 5006
+    },
+    {
+      "path": "src/main.tsx",
+      "lines": 4684
+    },
+    {
+      "path": "src/utils/bash/bashParser.ts",
+      "lines": 4436
+    },
+    {
+      "path": "src/utils/attachments.ts",
+      "lines": 3997
+    },
+    {
+      "path": "src/services/api/claude.ts",
+      "lines": 3419
+    },
+    {
+      "path": "src/services/mcp/client.ts",
+      "lines": 3348
+    },
+    {
+      "path": "src/utils/plugins/pluginLoader.ts",
+      "lines": 3302
+    },
+    {
+      "path": "src/commands/insights.ts",
+      "lines": 3200
+    },
+    {
+      "path": "src/bridge/bridgeMain.ts",
+      "lines": 2999
+    },
+    {
+      "path": "src/utils/bash/ast.ts",
+      "lines": 2679
+    },
+    {
+      "path": "src/utils/plugins/marketplaceManager.ts",
+      "lines": 2643
+    },
+    {
+      "path": "src/tools/BashTool/bashPermissions.ts",
+      "lines": 2621
+    },
+    {
+      "path": "src/tools/BashTool/bashSecurity.ts",
+      "lines": 2592
+    },
+    {
+      "path": "src/native-ts/yoga-layout/index.ts",
+      "lines": 2578
+    },
+    {
+      "path": "src/services/mcp/auth.ts",
+      "lines": 2465
+    },
+    {
+      "path": "src/bridge/replBridge.ts",
+      "lines": 2406
+    },
+    {
+      "path": "src/components/PromptInput/PromptInput.tsx",
+      "lines": 2339
+    },
+    {
+      "path": "src/commands/plugin/ManagePlugins.tsx",
+      "lines": 2215
+    },
+    {
+      "path": "src/tools/PowerShellTool/pathValidation.ts",
+      "lines": 2049
+    },
+    {
+      "path": "src/utils/auth.ts",
+      "lines": 2002
+    },
+    {
+      "path": "src/tools/BashTool/readOnlyValidation.ts",
+      "lines": 1990
+    },
+    {
+      "path": "src/utils/shell/readOnlyCommandValidation.ts",
+      "lines": 1893
+    },
+    {
+      "path": "src/entrypoints/sdk/coreSchemas.ts",
+      "lines": 1889
+    },
+    {
+      "path": "src/tools/PowerShellTool/readOnlyValidation.ts",
+      "lines": 1823
+    },
+    {
+      "path": "src/components/Settings/Config.tsx",
+      "lines": 1822
+    },
+    {
+      "path": "src/utils/config.ts",
+      "lines": 1817
+    },
+    {
+      "path": "src/utils/powershell/parser.ts",
+      "lines": 1804
+    },
+    {
+      "path": "src/utils/permissions/filesystem.ts",
+      "lines": 1777
+    },
+    {
+      "path": "src/bootstrap/state.ts",
+      "lines": 1758
+    },
+    {
+      "path": "src/services/tools/toolExecution.ts",
+      "lines": 1745
+    },
+    {
+      "path": "src/query.ts",
+      "lines": 1729
+    },
+    {
+      "path": "src/ink/ink.tsx",
+      "lines": 1723
+    },
+    {
+      "path": "src/utils/nativeInstaller/installer.ts",
+      "lines": 1708
+    },
+    {
+      "path": "src/services/compact/compact.ts",
+      "lines": 1705
+    },
+    {
+      "path": "src/utils/plugins/schemas.ts",
+      "lines": 1681
+    },
+    {
+      "path": "src/tools/PowerShellTool/powershellPermissions.ts",
+      "lines": 1648
+    }
+  ]
+}

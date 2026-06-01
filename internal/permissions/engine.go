@@ -1,0 +1,377 @@
+package permissions
+
+import (
+	"fmt"
+	"sort"
+
+	"ccgo/internal/contracts"
+)
+
+type Engine struct {
+	mode    contracts.PermissionMode
+	context contracts.PermissionContext
+	rules   []Rule
+}
+
+type SettingsSource struct {
+	Source      contracts.PermissionRuleSource
+	Permissions *contracts.PermissionsSetting
+}
+
+func NewEngine(context contracts.PermissionContext, rules ...Rule) Engine {
+	mode := context.Mode
+	if mode == "" {
+		mode = contracts.PermissionDefault
+	}
+	context.Mode = mode
+	return Engine{mode: mode, context: context, rules: append([]Rule(nil), rules...)}
+}
+
+func NewEngineFromSettings(source contracts.PermissionRuleSource, settings *contracts.PermissionsSetting) (Engine, error) {
+	context := ContextFromSettings(source, settings)
+	rules, err := RulesFromSettings(source, settings)
+	if err != nil {
+		return Engine{}, err
+	}
+	return NewEngine(context, rules...), nil
+}
+
+func NewEngineFromSettingsSources(managedRulesOnly bool, sources ...SettingsSource) (Engine, error) {
+	context := contracts.PermissionContext{
+		Mode:                         contracts.PermissionDefault,
+		AdditionalWorkingDirectories: map[string]contracts.PermissionRuleSource{},
+		AlwaysAllowRules:             map[contracts.PermissionRuleSource][]string{},
+		AlwaysDenyRules:              map[contracts.PermissionRuleSource][]string{},
+		AlwaysAskRules:               map[contracts.PermissionRuleSource][]string{},
+		BypassAvailable:              true,
+		AutoAvailable:                true,
+	}
+	var rules []Rule
+	for _, source := range sources {
+		if source.Permissions == nil {
+			continue
+		}
+		sourceContext := ContextFromSettings(source.Source, source.Permissions)
+		if source.Permissions.DefaultMode != "" {
+			context.Mode = sourceContext.Mode
+		}
+		if !sourceContext.BypassAvailable {
+			context.BypassAvailable = false
+		}
+		if !sourceContext.AutoAvailable {
+			context.AutoAvailable = false
+		}
+		for dir, dirSource := range sourceContext.AdditionalWorkingDirectories {
+			context.AdditionalWorkingDirectories[dir] = dirSource
+		}
+		if managedRulesOnly && source.Source != contracts.PermissionSourcePolicySettings {
+			continue
+		}
+		sourceRules, err := RulesFromSettings(source.Source, source.Permissions)
+		if err != nil {
+			return Engine{}, err
+		}
+		rules = append(rules, sourceRules...)
+		if len(source.Permissions.Allow) > 0 {
+			context.AlwaysAllowRules[source.Source] = append([]string(nil), source.Permissions.Allow...)
+		}
+		if len(source.Permissions.Deny) > 0 {
+			context.AlwaysDenyRules[source.Source] = append([]string(nil), source.Permissions.Deny...)
+		}
+		if len(source.Permissions.Ask) > 0 {
+			context.AlwaysAskRules[source.Source] = append([]string(nil), source.Permissions.Ask...)
+		}
+	}
+	return NewEngine(context, rules...), nil
+}
+
+func ContextFromSettings(source contracts.PermissionRuleSource, settings *contracts.PermissionsSetting) contracts.PermissionContext {
+	context := contracts.PermissionContext{
+		Mode:                         contracts.PermissionDefault,
+		AdditionalWorkingDirectories: map[string]contracts.PermissionRuleSource{},
+		AlwaysAllowRules:             map[contracts.PermissionRuleSource][]string{},
+		AlwaysDenyRules:              map[contracts.PermissionRuleSource][]string{},
+		AlwaysAskRules:               map[contracts.PermissionRuleSource][]string{},
+		BypassAvailable:              true,
+		AutoAvailable:                true,
+	}
+	if settings == nil {
+		return context
+	}
+	if settings.DefaultMode != "" {
+		context.Mode = settings.DefaultMode
+	}
+	if truthy(settings.DisableBypassMode) {
+		context.BypassAvailable = false
+	}
+	if truthy(settings.DisableAutoMode) {
+		context.AutoAvailable = false
+	}
+	for _, dir := range settings.AdditionalDirectories {
+		context.AdditionalWorkingDirectories[dir] = source
+	}
+	if len(settings.Allow) > 0 {
+		context.AlwaysAllowRules[source] = append([]string(nil), settings.Allow...)
+	}
+	if len(settings.Deny) > 0 {
+		context.AlwaysDenyRules[source] = append([]string(nil), settings.Deny...)
+	}
+	if len(settings.Ask) > 0 {
+		context.AlwaysAskRules[source] = append([]string(nil), settings.Ask...)
+	}
+	return context
+}
+
+func (e Engine) Mode() contracts.PermissionMode {
+	return e.mode
+}
+
+func (e Engine) Context() contracts.PermissionContext {
+	return e.context
+}
+
+func (e Engine) Rules() []Rule {
+	out := append([]Rule(nil), e.rules...)
+	return out
+}
+
+func (e *Engine) AddRule(rule Rule) {
+	e.rules = append(e.rules, rule)
+}
+
+func (e Engine) Decide(req Request) contracts.PermissionDecision {
+	req.ToolName = normalizeToolName(req.ToolName)
+	if req.ToolName == "" {
+		return decision(contracts.PermissionDeny, req, "missing tool name", "")
+	}
+
+	matched := e.matchingRules(req)
+	if rule, ok := firstByBehavior(matched, contracts.PermissionDeny); ok {
+		return decision(contracts.PermissionDeny, req, fmt.Sprintf("denied by %s rule %q", rule.Source, rule.String()), "")
+	}
+	if pathDecision, ok := e.pathDecision(req); ok {
+		return pathDecision
+	}
+	if rule, ok := firstByBehavior(matched, contracts.PermissionAllow); ok {
+		return decision(contracts.PermissionAllow, req, fmt.Sprintf("allowed by %s rule %q", rule.Source, rule.String()), "")
+	}
+	if rule, ok := firstByBehavior(matched, contracts.PermissionAsk); ok {
+		return decision(contracts.PermissionAsk, req, fmt.Sprintf("ask required by %s rule %q", rule.Source, rule.String()), "")
+	}
+
+	switch e.mode {
+	case contracts.PermissionBypassPermissions:
+		if e.context.BypassAvailable {
+			return decision(contracts.PermissionAllow, req, "bypassPermissions mode", "")
+		}
+		return decision(contracts.PermissionAsk, req, "bypassPermissions mode is disabled", "")
+	case contracts.PermissionDontAsk:
+		if req.ReadOnly {
+			return decision(contracts.PermissionAllow, req, "read-only tool in dontAsk mode", "")
+		}
+		return decision(contracts.PermissionDeny, req, "dontAsk mode denies unmatched write or destructive tools", "")
+	case contracts.PermissionAcceptEdits:
+		if req.ReadOnly || req.WritesFiles {
+			return decision(contracts.PermissionAllow, req, "acceptEdits mode", "")
+		}
+		return decision(contracts.PermissionAsk, req, "acceptEdits mode requires confirmation for non-file action", "")
+	case contracts.PermissionPlan:
+		if req.ReadOnly {
+			return decision(contracts.PermissionAllow, req, "read-only tool in plan mode", "")
+		}
+		return decision(contracts.PermissionAsk, req, "plan mode requires confirmation for mutating tools", "")
+	case contracts.PermissionAuto:
+		if e.context.AutoAvailable && req.ReadOnly && !req.Destructive {
+			return decision(contracts.PermissionAllow, req, "auto mode allowed read-only tool", "")
+		}
+		if req.Destructive {
+			return decision(contracts.PermissionAsk, req, "auto mode requires confirmation for destructive tool", "")
+		}
+		return decision(contracts.PermissionAsk, req, "auto mode requires confirmation", "")
+	default:
+		if req.ReadOnly {
+			return decision(contracts.PermissionAllow, req, "default mode allowed read-only tool", "")
+		}
+		return decision(contracts.PermissionAsk, req, "default mode requires confirmation", "")
+	}
+}
+
+func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {
+	if req.Path == "" {
+		return contracts.PermissionDecision{}, false
+	}
+	cwd := req.WorkingDirectory
+	if cwd == "" {
+		cwd = "."
+	}
+	resolved := expandPathForCwd(req.Path, cwd)
+	operation := FileOperationWrite
+	if req.ReadOnly && !req.WritesFiles && !req.Destructive {
+		operation = FileOperationRead
+	}
+	if operation == FileOperationRead {
+		if internal := CheckReadableInternalPath(resolved, req.InternalPaths); internal.Allowed {
+			return decision(contracts.PermissionAllow, req, internal.Reason, ""), true
+		}
+		return contracts.PermissionDecision{}, false
+	}
+	if internal := CheckEditableInternalPath(resolved, req.InternalPaths); internal.Allowed {
+		return decision(contracts.PermissionAllow, req, internal.Reason, ""), true
+	}
+	pathsToCheck := PathsForPermissionCheck(resolved)
+	if IsDangerousRemovalPath(resolved) {
+		got := decision(contracts.PermissionAsk, req, "path targets a dangerous filesystem root", "")
+		got.BlockedPath = resolved
+		return got, true
+	}
+	if safety := CheckPathSafetyForAutoEdit(resolved, pathsToCheck); !safety.Safe {
+		got := decision(contracts.PermissionAsk, req, safety.Message, "")
+		got.BlockedPath = resolved
+		return got, true
+	}
+	return contracts.PermissionDecision{}, false
+}
+
+func (e Engine) ApplyUpdate(update contracts.PermissionUpdate) (Engine, error) {
+	next := e
+	switch update.Type {
+	case "", "rules", "addRules":
+		for _, value := range update.Rules {
+			raw := PermissionRuleValueToString(value)
+			source := contracts.PermissionSourceSession
+			if update.Destination != "" {
+				source = contracts.PermissionRuleSource(update.Destination)
+			}
+			rule, err := ParseRule(source, update.Behavior, raw)
+			if err != nil {
+				return Engine{}, err
+			}
+			next.rules = append(next.rules, rule)
+		}
+	case "replaceRules":
+		source := contracts.PermissionSourceSession
+		if update.Destination != "" {
+			source = contracts.PermissionRuleSource(update.Destination)
+		}
+		filtered := next.rules[:0]
+		for _, rule := range next.rules {
+			if rule.Source == source && rule.Behavior == update.Behavior {
+				continue
+			}
+			filtered = append(filtered, rule)
+		}
+		next.rules = filtered
+		for _, value := range update.Rules {
+			rule, err := ParseRule(source, update.Behavior, PermissionRuleValueToString(value))
+			if err != nil {
+				return Engine{}, err
+			}
+			next.rules = append(next.rules, rule)
+		}
+	case "removeRules":
+		source := contracts.PermissionSourceSession
+		if update.Destination != "" {
+			source = contracts.PermissionRuleSource(update.Destination)
+		}
+		remove := map[string]struct{}{}
+		for _, value := range update.Rules {
+			remove[PermissionRuleValueToString(value)] = struct{}{}
+		}
+		filtered := next.rules[:0]
+		for _, rule := range next.rules {
+			if rule.Source == source && rule.Behavior == update.Behavior {
+				if _, ok := remove[rule.String()]; ok {
+					continue
+				}
+			}
+			filtered = append(filtered, rule)
+		}
+		next.rules = filtered
+	case "mode", "setMode":
+		if update.Mode == "" {
+			return Engine{}, fmt.Errorf("mode update missing mode")
+		}
+		next.mode = update.Mode
+		next.context.Mode = update.Mode
+	case "directories", "addDirectories":
+		if next.context.AdditionalWorkingDirectories == nil {
+			next.context.AdditionalWorkingDirectories = map[string]contracts.PermissionRuleSource{}
+		}
+		source := contracts.PermissionSourceSession
+		if update.Destination != "" {
+			source = contracts.PermissionRuleSource(update.Destination)
+		}
+		for _, dir := range update.Directories {
+			next.context.AdditionalWorkingDirectories[dir] = source
+		}
+	case "removeDirectories":
+		for _, dir := range update.Directories {
+			delete(next.context.AdditionalWorkingDirectories, dir)
+		}
+	default:
+		return Engine{}, fmt.Errorf("unsupported permission update type %q", update.Type)
+	}
+	return next, nil
+}
+
+func (e Engine) matchingRules(req Request) []Rule {
+	var matches []Rule
+	for _, rule := range e.rules {
+		if rule.Matches(req) {
+			matches = append(matches, rule)
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		return behaviorRank(matches[i].Behavior) < behaviorRank(matches[j].Behavior)
+	})
+	return matches
+}
+
+func firstByBehavior(rules []Rule, behavior contracts.PermissionBehavior) (Rule, bool) {
+	for _, rule := range rules {
+		if rule.Behavior == behavior {
+			return rule, true
+		}
+	}
+	return Rule{}, false
+}
+
+func behaviorRank(behavior contracts.PermissionBehavior) int {
+	switch behavior {
+	case contracts.PermissionDeny:
+		return 0
+	case contracts.PermissionAllow:
+		return 1
+	case contracts.PermissionAsk:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func decision(behavior contracts.PermissionBehavior, req Request, reason string, message string) contracts.PermissionDecision {
+	if message == "" {
+		message = reason
+	}
+	return contracts.PermissionDecision{
+		Behavior:       behavior,
+		Message:        message,
+		DecisionReason: map[string]any{"type": "other", "reason": reason},
+		ToolUseID:      req.ToolUseID,
+	}
+}
+
+func normalizeToolName(name string) string {
+	return name
+}
+
+func truthy(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true" || v == "disable" || v == "disabled"
+	default:
+		return false
+	}
+}

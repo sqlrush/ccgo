@@ -1,0 +1,197 @@
+package session
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"ccgo/internal/contracts"
+)
+
+func TestPastedTextReferences(t *testing.T) {
+	if got := PastedTextRefNumLines("one\r\ntwo\nthree\rfour"); got != 3 {
+		t.Fatalf("PastedTextRefNumLines = %d", got)
+	}
+	if got := FormatPastedTextRef(1, 0); got != "[Pasted text #1]" {
+		t.Fatalf("FormatPastedTextRef zero = %q", got)
+	}
+	if got := FormatPastedTextRef(2, 7); got != "[Pasted text #2 +7 lines]" {
+		t.Fatalf("FormatPastedTextRef lines = %q", got)
+	}
+	if got := FormatImageRef(3); got != "[Image #3]" {
+		t.Fatalf("FormatImageRef = %q", got)
+	}
+
+	input := "a [Pasted text #1 +1 lines] b [Image #2] c [...Truncated text #3.] d [Pasted text #0]"
+	refs := ParseReferences(input)
+	if len(refs) != 3 {
+		t.Fatalf("len(refs) = %d", len(refs))
+	}
+	if refs[0].ID != 1 || refs[0].Kind != "Pasted text" || refs[1].ID != 2 || refs[2].ID != 3 {
+		t.Fatalf("refs = %#v", refs)
+	}
+
+	expanded := ExpandPastedTextRefs("x [Pasted text #1] y [Image #2] z [Pasted text #3]", map[int]PastedContent{
+		1: {ID: 1, Type: PastedContentText, Content: "TEXT"},
+		2: {ID: 2, Type: PastedContentImage, Content: "IMAGE"},
+		3: {ID: 3, Type: PastedContentText, Content: "[Pasted text #1]"},
+	})
+	if expanded != "x TEXT y [Image #2] z [Pasted text #1]" {
+		t.Fatalf("expanded = %q", expanded)
+	}
+}
+
+func TestPrepareStoredPastedContents(t *testing.T) {
+	large := strings.Repeat("x", MaxPastedContentLength+1)
+	stored := PrepareStoredPastedContents(map[int]PastedContent{
+		1: {ID: 1, Type: PastedContentText, Content: "small", MediaType: "text/plain"},
+		2: {ID: 2, Type: PastedContentText, Content: large},
+		3: {ID: 3, Type: PastedContentImage, Content: "base64"},
+	})
+	if stored[1].Content != "small" || stored[1].ContentHash != "" {
+		t.Fatalf("small stored = %#v", stored[1])
+	}
+	if stored[2].Content != "" || stored[2].ContentHash != HashPastedText(large) {
+		t.Fatalf("large stored = %#v", stored[2])
+	}
+	if _, ok := stored[3]; ok {
+		t.Fatalf("image content should not be stored in prompt history: %#v", stored[3])
+	}
+
+	entry := LogEntryToHistoryEntry(LogEntry{
+		Display: "cmd",
+		PastedContents: map[int]StoredPastedContent{
+			1: stored[1],
+			2: stored[2],
+		},
+	}, func(hash string) (string, bool) {
+		if hash != HashPastedText(large) {
+			return "", false
+		}
+		return large, true
+	})
+	if entry.PastedContents[1].Content != "small" || entry.PastedContents[2].Content != large {
+		t.Fatalf("resolved entry = %#v", entry)
+	}
+}
+
+func TestAppendAndLoadPromptHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	project := "/repo"
+	currentSession := contracts.ID("current")
+	otherSession := contracts.ID("other")
+
+	entries := []LogEntry{
+		{Display: "other-old", PastedContents: map[int]StoredPastedContent{}, Timestamp: 100, Project: project, SessionID: otherSession},
+		{Display: "current-old", PastedContents: map[int]StoredPastedContent{}, Timestamp: 200, Project: project, SessionID: currentSession},
+		{Display: "other-new", PastedContents: map[int]StoredPastedContent{}, Timestamp: 300, Project: project, SessionID: otherSession},
+		{Display: "wrong-project", PastedContents: map[int]StoredPastedContent{}, Timestamp: 400, Project: "/else", SessionID: currentSession},
+	}
+	for _, entry := range entries {
+		if err := AppendHistory(path, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{malformed\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, project, currentSession, MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := displays(history)
+	want := []string{"current-old", "other-new", "other-old"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("history = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadTimestampedHistoryDedupesNewestFirst(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	project := "/repo"
+	for _, entry := range []LogEntry{
+		{Display: "same", PastedContents: map[int]StoredPastedContent{}, Timestamp: 100, Project: project},
+		{Display: "other", PastedContents: map[int]StoredPastedContent{}, Timestamp: 200, Project: project},
+		{Display: "same", PastedContents: map[int]StoredPastedContent{}, Timestamp: 300, Project: project},
+	} {
+		if err := AppendHistory(path, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	history, err := LoadTimestampedHistory(path, project, MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 || history[0].Display != "same" || history[0].Timestamp != 300 || history[1].Display != "other" {
+		t.Fatalf("history = %#v", history)
+	}
+}
+
+func TestAddToHistoryStoresLargePasteAndHonorsSkipEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	t.Setenv("CLAUDE_CODE_SKIP_PROMPT_HISTORY", "true")
+	path := filepath.Join(dir, "history.jsonl")
+
+	written, err := AddToHistory(path, "/repo", "session", HistoryEntry{Display: "skip", PastedContents: map[int]PastedContent{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written {
+		t.Fatal("history was written while CLAUDE_CODE_SKIP_PROMPT_HISTORY was truthy")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("history file should not exist, stat err = %v", err)
+	}
+
+	t.Setenv("CLAUDE_CODE_SKIP_PROMPT_HISTORY", "false")
+	large := strings.Repeat("paste", 300)
+	written, err = AddToHistory(path, "/repo", "session", HistoryEntry{
+		Display: "cmd",
+		PastedContents: map[int]PastedContent{
+			1: {ID: 1, Type: PastedContentText, Content: large},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !written {
+		t.Fatal("history was not written")
+	}
+	if got, ok := RetrievePastedText(HashPastedText(large)); !ok || got != large {
+		t.Fatalf("retrieved paste ok=%v len=%d", ok, len(got))
+	}
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, RetrievePastedText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].PastedContents[1].Content != large {
+		t.Fatalf("history = %#v", history)
+	}
+}
+
+func TestNewLogEntryUsesUnixMillis(t *testing.T) {
+	now := time.Unix(42, 123_000_000)
+	entry := NewLogEntry("/repo", "session", HistoryEntry{Display: "cmd", PastedContents: map[int]PastedContent{}}, now)
+	if entry.Timestamp != 42123 {
+		t.Fatalf("timestamp = %d", entry.Timestamp)
+	}
+}
+
+func displays(entries []HistoryEntry) []string {
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, entry.Display)
+	}
+	return out
+}

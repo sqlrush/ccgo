@@ -1,0 +1,40 @@
+package contracts
+
+type CommandType string
+
+const (
+	CommandPrompt   CommandType = "prompt"
+	CommandLocal    CommandType = "local"
+	CommandLocalJSX CommandType = "local-jsx"
+)
+
+type CommandSource string
+
+const (
+	CommandSourceBuiltin CommandSource = "builtin"
+	CommandSourceSkills  CommandSource = "skills"
+	CommandSourcePlugin  CommandSource = "plugin"
+	CommandSourceBundled CommandSource = "bundled"
+	CommandSourceMCP     CommandSource = "mcp"
+)
+
+type Command struct {
+	Type                    CommandType   `json:"type"`
+	Name                    string        `json:"name"`
+	Aliases                 []string      `json:"aliases,omitempty"`
+	Description             string        `json:"description,omitempty"`
+	ArgumentHint            string        `json:"argument_hint,omitempty"`
+	Source                  CommandSource `json:"source,omitempty"`
+	LoadedFrom              string        `json:"loaded_from,omitempty"`
+	DisableModelInvocation  bool          `json:"disable_model_invocation,omitempty"`
+	DisableNonInteractive   bool          `json:"disable_non_interactive,omitempty"`
+	SupportsNonInteractive  bool          `json:"supports_non_interactive,omitempty"`
+	Immediate               bool          `json:"immediate,omitempty"`
+	Sensitive               bool          `json:"sensitive,omitempty"`
+	AllowedTools            []string      `json:"allowed_tools,omitempty"`
+	WhenToUse               string        `json:"when_to_use,omitempty"`
+	ContentLength           int           `json:"content_length,omitempty"`
+	ProgressMessage         string        `json:"progress_message,omitempty"`
+	Availability            []string      `json:"availability,omitempty"`
+	HasUserSpecifiedDetails bool          `json:"has_user_specified_details,omitempty"`
+}
