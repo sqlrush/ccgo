@@ -27,6 +27,7 @@ const (
 	ActionDeleteToEnd      Action = "delete_to_end"
 	ActionDeleteWordBack   Action = "delete_word_backward"
 	ActionYank             Action = "yank"
+	ActionYankPop          Action = "yank_pop"
 	ActionHistoryPrevious  Action = "history_previous"
 	ActionHistoryNext      Action = "history_next"
 	ActionScrollUp         Action = "scroll_up"
@@ -53,6 +54,7 @@ func DefaultKeymap() Keymap {
 	return Keymap{Bindings: map[KeyType]Action{
 		KeyEnter:     ActionSubmitPrompt,
 		KeyEsc:       ActionCancel,
+		KeyAltY:      ActionYankPop,
 		KeyCtrlC:     ActionInterrupt,
 		KeyCtrlD:     ActionExit,
 		KeyCtrlL:     ActionRedraw,

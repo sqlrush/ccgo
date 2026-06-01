@@ -475,6 +475,8 @@ func keyForAction(action Action, key Key) Key {
 		return Key{Type: KeyCtrlW}
 	case ActionYank:
 		return Key{Type: KeyCtrlY}
+	case ActionYankPop:
+		return Key{Type: KeyAltY}
 	case ActionHistoryPrevious:
 		return Key{Type: KeyUp}
 	case ActionHistoryNext:

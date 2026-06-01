@@ -122,6 +122,34 @@ func TestPromptStateKillRingYank(t *testing.T) {
 	}
 }
 
+func TestPromptStateYankPopCyclesAndResets(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.killRing = []string{"beta", "gamma", "delta"}
+
+	prompt.Apply(ParseKey("\x19"))
+	if prompt.Text != "beta" || prompt.Cursor != len([]rune("beta")) {
+		t.Fatalf("after ctrl-y prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x1by"))
+	if prompt.Text != "gamma" || prompt.Cursor != len([]rune("gamma")) {
+		t.Fatalf("after first alt-y prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x1by"))
+	if prompt.Text != "delta" || prompt.Cursor != len([]rune("delta")) {
+		t.Fatalf("after second alt-y prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x1by"))
+	if prompt.Text != "beta" || prompt.Cursor != len([]rune("beta")) {
+		t.Fatalf("after wrapped alt-y prompt = %#v", prompt)
+	}
+
+	prompt.Apply(ParseKey("!"))
+	prompt.Apply(ParseKey("\x1by"))
+	if prompt.Text != "beta!" || prompt.Cursor != len([]rune("beta!")) {
+		t.Fatalf("alt-y after non-yank key should be ignored: %#v", prompt)
+	}
+}
+
 func TestPromptHistoryNavigationKeepsDraft(t *testing.T) {
 	prompt := NewPromptState([]string{"one", "two"})
 	prompt.Apply(ParseKey("d"))
@@ -344,6 +372,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x19")); action != ActionYank {
 		t.Fatalf("ctrl-y action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x1by")); action != ActionYankPop {
+		t.Fatalf("alt-y action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("x")); action != ActionInsertRune {
 		t.Fatalf("rune action = %q", action)
 	}
@@ -382,7 +413,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "alt-y", "meta-y", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

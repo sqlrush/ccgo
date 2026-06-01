@@ -72,6 +72,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyEnter, nil
 	case "esc", "escape":
 		return KeyEsc, nil
+	case "alt+y", "alt-y", "meta+y", "meta-y", "option+y", "option-y":
+		return KeyAltY, nil
 	case "backspace", "bs":
 		return KeyBackspace, nil
 	case "delete", "del":
@@ -169,6 +171,7 @@ func IsKnownAction(action Action) bool {
 		ActionDeleteToEnd,
 		ActionDeleteWordBack,
 		ActionYank,
+		ActionYankPop,
 		ActionHistoryPrevious,
 		ActionHistoryNext,
 		ActionScrollUp,

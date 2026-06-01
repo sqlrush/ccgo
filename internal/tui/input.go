@@ -60,6 +60,8 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyBackspace}
 	case "\x1b":
 		return Key{Type: KeyEsc}
+	case "\x1by", "\x1bY":
+		return Key{Type: KeyAltY}
 	case "\x01":
 		return Key{Type: KeyCtrlA}
 	case "\x02":
@@ -161,7 +163,7 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	if !isPromptKillKey(key.Type) {
 		p.lastActionWasKill = false
 	}
-	if key.Type != KeyCtrlY {
+	if !isPromptYankKey(key.Type) {
 		p.lastActionWasYank = false
 	}
 	runes := []rune(p.Text)
@@ -218,6 +220,8 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.deleteWordBackward()
 	case KeyCtrlY:
 		p.yankLastKill()
+	case KeyAltY:
+		p.yankPop()
 	case KeyUp:
 		p.historyPrev()
 	case KeyDown:
@@ -246,6 +250,10 @@ func (p *PromptState) Apply(key Key) PromptResult {
 
 func isPromptKillKey(key KeyType) bool {
 	return key == KeyCtrlK || key == KeyCtrlU || key == KeyCtrlW
+}
+
+func isPromptYankKey(key KeyType) bool {
+	return key == KeyCtrlY || key == KeyAltY
 }
 
 func (p *PromptState) EnablePasteReferences() {
@@ -340,6 +348,34 @@ func (p *PromptState) yankLastKill() {
 	p.lastYankStart = start
 	p.lastYankLength = len([]rune(text))
 	p.lastActionWasYank = true
+}
+
+func (p *PromptState) yankPop() {
+	if !p.lastActionWasYank || len(p.killRing) <= 1 {
+		return
+	}
+	runes := []rune(p.Text)
+	start := p.lastYankStart
+	if start < 0 {
+		start = 0
+	}
+	if start > len(runes) {
+		start = len(runes)
+	}
+	end := start + p.lastYankLength
+	if end > len(runes) {
+		end = len(runes)
+	}
+	p.killRingIndex = (p.killRingIndex + 1) % len(p.killRing)
+	text := p.killRing[p.killRingIndex]
+	insert := []rune(text)
+	runes = append(runes[:start], append(insert, runes[end:]...)...)
+	p.Text = string(runes)
+	p.Cursor = start + len(insert)
+	p.lastYankStart = start
+	p.lastYankLength = len(insert)
+	p.lastActionWasYank = true
+	p.resetHistoryCursor()
 }
 
 func (p *PromptState) resetHistoryCursor() {
