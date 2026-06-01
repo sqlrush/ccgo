@@ -240,15 +240,21 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		return "", nil, false
 	}
 	var object struct {
-		Query              string   `json:"query"`
-		SearchQuery        string   `json:"search_query"`
-		SessionID          string   `json:"session_id"`
-		SessionIDs         []string `json:"session_ids"`
-		SessionIDsCamel    []string `json:"sessionIds"`
-		SelectedSessionID  string   `json:"selected_session_id"`
-		SelectedSessionIDs []string `json:"selected_session_ids"`
-		ID                 string   `json:"id"`
-		IDs                []string `json:"ids"`
+		Query              string            `json:"query"`
+		SearchQuery        string            `json:"search_query"`
+		SessionID          string            `json:"session_id"`
+		SessionIDs         []string          `json:"session_ids"`
+		SessionIDsCamel    []string          `json:"sessionIds"`
+		SelectedSessionID  string            `json:"selected_session_id"`
+		SelectedSessionIDs []string          `json:"selected_session_ids"`
+		SelectedIDs        []string          `json:"selected_ids"`
+		RelevantSessionIDs []string          `json:"relevant_session_ids"`
+		ID                 string            `json:"id"`
+		IDs                []string          `json:"ids"`
+		Matches            []json.RawMessage `json:"matches"`
+		Memories           []json.RawMessage `json:"memories"`
+		Sessions           []json.RawMessage `json:"sessions"`
+		SelectedSessions   []json.RawMessage `json:"selected_sessions"`
 	}
 	if err := json.Unmarshal([]byte(raw), &object); err == nil {
 		ids := recallIDs(append([]string{object.SessionID}, object.SessionIDs...))
@@ -259,7 +265,13 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			ids = recallIDs(append([]string{object.SelectedSessionID}, object.SelectedSessionIDs...))
 		}
 		if len(ids) == 0 {
+			ids = recallIDs(append(object.SelectedIDs, object.RelevantSessionIDs...))
+		}
+		if len(ids) == 0 {
 			ids = recallIDs(append([]string{object.ID}, object.IDs...))
+		}
+		if len(ids) == 0 {
+			ids = recallIDsFromRawItems(object.Matches, object.Memories, object.Sessions, object.SelectedSessions)
 		}
 		query := strings.TrimSpace(object.Query)
 		if query == "" {
@@ -271,7 +283,37 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 	if err := json.Unmarshal([]byte(raw), &ids); err == nil {
 		return "", recallIDs(ids), len(ids) > 0
 	}
+	var items []json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &items); err == nil {
+		parsedIDs := recallIDsFromRawItems(items)
+		return "", parsedIDs, len(parsedIDs) > 0
+	}
 	return "", nil, false
+}
+
+func recallIDsFromRawItems(groups ...[]json.RawMessage) []contracts.ID {
+	var raw []string
+	for _, group := range groups {
+		for _, item := range group {
+			var id string
+			if err := json.Unmarshal(item, &id); err == nil {
+				raw = append(raw, id)
+				continue
+			}
+			var object struct {
+				SessionID       string `json:"session_id"`
+				SessionIDCamel  string `json:"sessionId"`
+				SelectedID      string `json:"selected_id"`
+				SelectedSession string `json:"selected_session"`
+				ID              string `json:"id"`
+				UUID            string `json:"uuid"`
+			}
+			if err := json.Unmarshal(item, &object); err == nil {
+				raw = append(raw, object.SessionID, object.SessionIDCamel, object.SelectedID, object.SelectedSession, object.ID, object.UUID)
+			}
+		}
+	}
+	return recallIDs(raw)
 }
 
 func stripMarkdownFence(raw string) string {
