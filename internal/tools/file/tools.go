@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/memory"
 	"ccgo/internal/tool"
 )
 
@@ -232,6 +233,9 @@ func validateWrite(ctx tool.Context, raw json.RawMessage) error {
 		return fmt.Errorf("file_path is required")
 	}
 	path := resolvePath(ctx.WorkingDirectory, input.FilePath)
+	if err := memory.GuardTeamMemoryWrite(path, input.Content); err != nil {
+		return err
+	}
 	if info, err := os.Stat(path); err == nil {
 		if info.IsDir() {
 			return fmt.Errorf("cannot write directory: %s", input.FilePath)
@@ -300,6 +304,9 @@ func validateEdit(ctx tool.Context, raw json.RawMessage) error {
 		return fmt.Errorf("No changes to make: old_string and new_string are exactly the same.")
 	}
 	path := resolvePath(ctx.WorkingDirectory, input.FilePath)
+	if err := memory.GuardTeamMemoryWrite(path, input.NewString); err != nil {
+		return err
+	}
 	if strings.HasSuffix(strings.ToLower(path), ".ipynb") {
 		return fmt.Errorf("File is a Jupyter Notebook. Use the NotebookEdit tool to edit this file.")
 	}

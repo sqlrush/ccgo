@@ -167,6 +167,21 @@ func TestWriteCreatesNewFileWithoutPriorRead(t *testing.T) {
 	}
 }
 
+func TestWriteRejectsTeamMemorySecrets(t *testing.T) {
+	dir := t.TempDir()
+	ctx := fileToolContext(dir)
+	executor := fileExecutor(t)
+
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_secret",
+		Name:  "Write",
+		Input: json.RawMessage(`{"file_path":".claude/team-memory/auth.md","content":"token = ghp_123456789012345678901234567890123456"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "possible secret") {
+		t.Fatalf("secret err = %v", err)
+	}
+}
+
 func TestEditRequiresUniqueMatchUnlessReplaceAll(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "dup.txt")

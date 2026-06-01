@@ -28,6 +28,8 @@
 | Conversation loop | 已有 tool loop、fallback、stream aggregation、transcript append |
 | Tool runtime | 已有 registry、executor、hooks 框架、并发分区、权限判定、结果截断 |
 | 文件工具 M5 初版 | 已完成文本版 `Read`、`Write`、`Edit`，含读前写、mtime stale guard、`replace_all`、Read 去重 |
+| M6 初始上下文层 | 已完成 CLAUDE.md/memdir 扫描、memory manifest、team-memory secret guard、compact threshold/prompt/boundary plan、session list/search/title |
+| M7 初始 TUI 层 | 已完成轻量 terminal frame renderer、PromptInput 状态机、history 导航、status/dialog/message components、viewport/selection |
 | 全量测试 | 当前 `go test ./...` 通过 |
 
 当前状态不是 100% 还原，而是“核心地基 + 运行时框架 + 第一批具体工具”的可编译阶段。
@@ -150,7 +152,7 @@
 - compact、auto compact、microcompact、token warning。
 - content replacement、compact boundary、tombstone。
 
-当前状态：session/history 有大量基础能力；compact/memory/subagent layout 仍缺。
+当前状态：session/history 有大量基础能力；memory/compact 初始包和 session resume/search/title 支撑已落地；subagent layout、完整 compact API 调用、auto-compact 接入 query loop、memory extraction/recall agent 仍缺。
 
 ### M7: TUI Renderer And Interaction
 
@@ -164,7 +166,7 @@
 - keybindings、vim mode、history/search。
 - ANSI snapshots 和交互脚本。
 
-当前状态：未开始真实 TUI。
+当前状态：轻量 terminal frame renderer、PromptInput 状态机、history 导航、status/dialog/message components、viewport/selection 已落地；真实 REPL screen、完整 ANSI parity、permission/task dialogs、vim/keybinding 系统和交互脚本仍缺。
 
 ### M8: Commands, Skills, Plugins
 
