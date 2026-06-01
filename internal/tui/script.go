@@ -25,6 +25,7 @@ type ScriptStep struct {
 	ExpectTasks               *TasksExpectation
 	ExpectReverseSearch       *ReverseSearchExpectation
 	ExpectViewport            *ViewportExpectation
+	ExpectScreen              *ScreenExpectation
 	ExpectFocused             *bool
 	ExpectStatusContains      []string
 	ExpectStatusNotContains   []string
@@ -81,6 +82,11 @@ type ViewportExpectation struct {
 	VisibleLineCount   int
 	VisibleContains    []string
 	VisibleNotContains []string
+}
+
+type ScreenExpectation struct {
+	Width  int
+	Height int
 }
 
 type ReverseSearchExpectation struct {
@@ -210,6 +216,11 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 		if step.ExpectViewport != nil {
 			if err := compareViewport(index, screen.Viewport, *step.ExpectViewport); err != nil {
+				return result, dialogResults, err
+			}
+		}
+		if step.ExpectScreen != nil {
+			if err := compareScreen(index, *screen, *step.ExpectScreen); err != nil {
 				return result, dialogResults, err
 			}
 		}
@@ -427,6 +438,16 @@ func compareViewport(index int, got Viewport, want ViewportExpectation) error {
 		if strings.Contains(visible, text) {
 			return fmt.Errorf("script step %d viewport unexpectedly contains %q in %q", index, text, visible)
 		}
+	}
+	return nil
+}
+
+func compareScreen(index int, got REPLScreen, want ScreenExpectation) error {
+	if want.Width > 0 && got.Width != want.Width {
+		return fmt.Errorf("script step %d screen width = %d, want %d", index, got.Width, want.Width)
+	}
+	if want.Height > 0 && got.Height != want.Height {
+		return fmt.Errorf("script step %d screen height = %d, want %d", index, got.Height, want.Height)
 	}
 	return nil
 }

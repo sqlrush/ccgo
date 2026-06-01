@@ -2222,7 +2222,8 @@ func TestRunInteractionScriptChecksFocusState(t *testing.T) {
 	focused := true
 	blurred := false
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
-		{ExpectFocused: &focused},
+		{ExpectFocused: &focused, ExpectScreen: &ScreenExpectation{Width: 30, Height: 6}},
+		{ResizeWidth: 42, ResizeHeight: 8, ExpectScreen: &ScreenExpectation{Width: 42, Height: 8}},
 		{Key: "\x1b[O", ExpectEvent: &ScreenEvent{Type: ScreenEventFocusOut}, ExpectFocused: &blurred},
 		{Key: "\x1b[I", ExpectEvent: &ScreenEvent{Type: ScreenEventFocusIn}, ExpectFocused: &focused},
 	})
