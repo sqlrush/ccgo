@@ -1,6 +1,9 @@
 package tui
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 type DialogResultStatus string
 
@@ -116,6 +119,26 @@ func (r *DialogRuntime) SortedTasks() []TaskStatus {
 	return tasks
 }
 
+func (r *DialogRuntime) StatusLine(base string) string {
+	var parts []string
+	if strings.TrimSpace(base) != "" {
+		parts = append(parts, strings.TrimSpace(base))
+	}
+	if r.Active != nil && r.Active.Title != "" {
+		parts = append(parts, "dialog: "+strings.ToLower(r.Active.Title))
+	}
+	if pending := len(r.Permissions); pending > 0 {
+		parts = append(parts, "permissions: "+itoa(pending))
+	}
+	for _, part := range taskStateSummary(r.SortedTasks()) {
+		parts = append(parts, part)
+	}
+	if len(parts) == 0 {
+		return "ready"
+	}
+	return strings.Join(parts, " | ")
+}
+
 func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 	if event.Type != ScreenEventDialogAction && event.Type != ScreenEventCancelled {
 		return DialogResult{}
@@ -183,6 +206,28 @@ func taskStateRank(state string) int {
 	default:
 		return 4
 	}
+}
+
+func taskStateSummary(tasks []TaskStatus) []string {
+	if len(tasks) == 0 {
+		return nil
+	}
+	counts := map[string]int{}
+	for _, task := range tasks {
+		state := task.State
+		if state == "" {
+			state = TaskPending
+		}
+		counts[state]++
+	}
+	order := []string{TaskRunning, TaskPending, TaskFailed, TaskCancelled, TaskCompleted}
+	var out []string
+	for _, state := range order {
+		if counts[state] > 0 {
+			out = append(out, state+": "+itoa(counts[state]))
+		}
+	}
+	return out
 }
 
 func (r *DialogRuntime) updateTask(id string, title string, state string, detail string, progress int) TaskStatus {

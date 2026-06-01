@@ -114,9 +114,7 @@ func LoadTranscript(path string) (Transcript, error) {
 	transcript := newTranscript()
 	progressBridge := map[contracts.ID]*contracts.ID{}
 
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 0, 1024*1024)
-	scanner.Buffer(buf, 50*1024*1024)
+	scanner := newTranscriptScanner(f)
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
@@ -196,6 +194,17 @@ func LoadTranscript(path string) (Transcript, error) {
 	transcript.applySnipRemovals()
 	transcript.computeLeafUUIDs()
 	return transcript, nil
+}
+
+func newTranscriptScanner(r *os.File) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, 0, 1024*1024)
+	scanner.Buffer(buf, 50*1024*1024)
+	return scanner
+}
+
+func unmarshalTranscriptLine(line []byte, value any) error {
+	return json.Unmarshal(bytes.TrimSpace(line), value)
 }
 
 func (m TranscriptMessage) IsCompactBoundary() bool {

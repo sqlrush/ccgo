@@ -14,7 +14,15 @@ type ScriptStep struct {
 	ResizeHeight           int
 	SnapshotName           string
 	ExpectEvent            *ScreenEvent
+	ExpectReverseSearch    *ReverseSearchExpectation
 	ExpectSnapshotContains []string
+}
+
+type ReverseSearchExpectation struct {
+	Active      bool
+	Query       string
+	Current     string
+	ResultCount int
 }
 
 type ScriptResult struct {
@@ -64,6 +72,11 @@ func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (Script
 				return result, err
 			}
 		}
+		if step.ExpectReverseSearch != nil {
+			if err := compareReverseSearch(index, screen.ReverseSearch, *step.ExpectReverseSearch); err != nil {
+				return result, err
+			}
+		}
 		if step.SnapshotName != "" {
 			snapshot = CaptureANSISnapshot(step.SnapshotName, screen.Width, screen.Height, screen.Frame())
 			result.Snapshots = append(result.Snapshots, snapshot)
@@ -80,6 +93,25 @@ func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (Script
 		}
 	}
 	return result, nil
+}
+
+func compareReverseSearch(index int, got ReverseSearchState, want ReverseSearchExpectation) error {
+	if got.Active != want.Active {
+		return fmt.Errorf("script step %d reverse active = %v, want %v", index, got.Active, want.Active)
+	}
+	if want.Query != "" && got.Query != want.Query {
+		return fmt.Errorf("script step %d reverse query = %q, want %q", index, got.Query, want.Query)
+	}
+	if want.ResultCount > 0 && len(got.Results) != want.ResultCount {
+		return fmt.Errorf("script step %d reverse result count = %d, want %d", index, len(got.Results), want.ResultCount)
+	}
+	if want.Current != "" {
+		current, _ := got.Current()
+		if current != want.Current {
+			return fmt.Errorf("script step %d reverse current = %q, want %q", index, current, want.Current)
+		}
+	}
+	return nil
 }
 
 func compareEvent(index int, got ScreenEvent, want ScreenEvent) error {

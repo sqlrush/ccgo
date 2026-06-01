@@ -46,6 +46,13 @@ func TestListProjectSessionsSortsAndBuildsTitles(t *testing.T) {
 	if sessions[1].Title != "first title from prompt" {
 		t.Fatalf("second title = %#v", sessions[1])
 	}
+	page, err := ListProjectSessionsPage(root, 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 || !page.HasMore || len(page.Sessions) != 1 || page.Sessions[0].ID != "sess_2" {
+		t.Fatalf("page = %#v", page)
+	}
 }
 
 func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
@@ -69,6 +76,23 @@ func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 	}
 	if index.SummaryCount != 1 || index.ContentReplacementCount != 2 {
 		t.Fatalf("index metadata = %#v", index)
+	}
+}
+
+func TestSearchTranscriptFileStreamsMatches(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{malformed`,
+		`{"type":"summary","leafUuid":"a1","summary":"compact summary"}`,
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","message":{"type":"user","content":[{"type":"text","text":"alpha compact memory support"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"sess_1","message":{"type":"assistant","content":[{"type":"text","text":"compact done"}]}}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1","sessionId":"sess_1","message":{"type":"user","content":[{"type":"text","text":"compact followup"}]}}`,
+	})
+	matches, err := SearchTranscriptFile(path, "compact", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 2 || !strings.Contains(matches[0], "alpha compact") || !strings.Contains(matches[1], "compact done") {
+		t.Fatalf("matches = %#v", matches)
 	}
 }
 

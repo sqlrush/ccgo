@@ -24,6 +24,14 @@ type SearchResult struct {
 	Matches []string
 }
 
+type SessionListPage struct {
+	Sessions []SessionInfo
+	Offset   int
+	Limit    int
+	Total    int
+	HasMore  bool
+}
+
 func ListProjectSessions(root string) ([]SessionInfo, error) {
 	dir := ProjectDir(root)
 	entries, err := os.ReadDir(dir)
@@ -62,6 +70,34 @@ func ListProjectSessions(root string) ([]SessionInfo, error) {
 	return sessions, nil
 }
 
+func ListProjectSessionsPage(root string, offset int, limit int) (SessionListPage, error) {
+	sessions, err := ListProjectSessions(root)
+	if err != nil {
+		return SessionListPage{}, err
+	}
+	total := len(sessions)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	if limit <= 0 {
+		limit = total - offset
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return SessionListPage{
+		Sessions: append([]SessionInfo(nil), sessions[offset:end]...),
+		Offset:   offset,
+		Limit:    limit,
+		Total:    total,
+		HasMore:  end < total,
+	}, nil
+}
+
 func SearchProjectSessions(root string, query string, limit int) ([]SearchResult, error) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if limit <= 0 {
@@ -73,11 +109,10 @@ func SearchProjectSessions(root string, query string, limit int) ([]SearchResult
 	}
 	var results []SearchResult
 	for _, info := range sessions {
-		transcript, err := LoadTranscript(info.Path)
+		matches, err := SearchTranscriptFile(info.Path, query, 3)
 		if err != nil {
 			continue
 		}
-		matches := SearchTranscript(transcript, query, 3)
 		if query != "" && len(matches) == 0 && !strings.Contains(strings.ToLower(info.Title), query) {
 			continue
 		}
@@ -87,6 +122,50 @@ func SearchProjectSessions(root string, query string, limit int) ([]SearchResult
 		}
 	}
 	return results, nil
+}
+
+func SearchTranscriptFile(path string, query string, maxMatches int) ([]string, error) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil, nil
+	}
+	if maxMatches <= 0 {
+		maxMatches = 3
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var matches []string
+	scanner := newTranscriptScanner(f)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		var envelope transcriptEnvelope
+		if err := unmarshalTranscriptLine(line, &envelope); err != nil || !isTranscriptType(envelope.Type) {
+			continue
+		}
+		var msg TranscriptMessage
+		if err := unmarshalTranscriptLine(line, &msg); err != nil || msg.UUID == "" {
+			continue
+		}
+		text := strings.TrimSpace(textFromTranscriptMessage(&msg))
+		if text == "" || !strings.Contains(strings.ToLower(text), query) {
+			continue
+		}
+		matches = append(matches, snippet(text, query, 160))
+		if len(matches) >= maxMatches {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return matches, nil
 }
 
 func SearchTranscript(transcript Transcript, query string, maxMatches int) []string {

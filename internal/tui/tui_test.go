@@ -248,6 +248,27 @@ func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 	if selected.Type != ScreenEventReverseSelected || selected.Value != "deploy new" || screen.Prompt.Text != "deploy new" || screen.ReverseSearch.Active {
 		t.Fatalf("selected = %#v prompt=%#v state=%#v", selected, screen.Prompt, screen.ReverseSearch)
 	}
+
+	scriptScreen := NewREPLScreen(40, 8, []string{"deploy old", "test", "deploy new"})
+	_, err := RunInteractionScriptChecked(&scriptScreen, []ScriptStep{
+		{
+			Keys: []string{"\x12", "d", "e", "p"},
+			ExpectReverseSearch: &ReverseSearchExpectation{
+				Active:      true,
+				Query:       "dep",
+				Current:     "deploy new",
+				ResultCount: 2,
+			},
+			ExpectSnapshotContains: []string{"(reverse-i-search) `dep': deploy new"},
+		},
+		{
+			Key:         "\n",
+			ExpectEvent: &ScreenEvent{Type: ScreenEventReverseSelected, Value: "deploy new"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPermissionAndTaskDialogs(t *testing.T) {
@@ -349,6 +370,10 @@ func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
 	closed := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Close", DialogID: "tasks", DialogKind: DialogTask})
 	if !closed.Found || closed.Status != DialogResultClosed {
 		t.Fatalf("closed = %#v", closed)
+	}
+	status := runtime.StatusLine("ready")
+	if !strings.Contains(status, "running: 1") || !strings.Contains(status, "completed: 1") {
+		t.Fatalf("status = %q", status)
 	}
 }
 
