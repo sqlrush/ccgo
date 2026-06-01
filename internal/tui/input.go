@@ -117,23 +117,23 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyFocusIn}
 	case "\x1b[O":
 		return Key{Type: KeyFocusOut}
-	case "\x1b[D":
+	case "\x1b[D", "\x1bOD", "\x1b[d":
 		return Key{Type: KeyLeft}
-	case "\x1b[C":
+	case "\x1b[C", "\x1bOC", "\x1b[c":
 		return Key{Type: KeyRight}
-	case "\x1b[A":
+	case "\x1b[A", "\x1bOA", "\x1b[a":
 		return Key{Type: KeyUp}
-	case "\x1b[B":
+	case "\x1b[B", "\x1bOB", "\x1b[b":
 		return Key{Type: KeyDown}
-	case "\x1b[H", "\x1b[1~":
+	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^":
 		return Key{Type: KeyHome}
-	case "\x1b[F", "\x1b[4~":
+	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^":
 		return Key{Type: KeyEnd}
-	case "\x1b[3~":
+	case "\x1b[3~", "\x1b[3$", "\x1b[3^":
 		return Key{Type: KeyDelete}
-	case "\x1b[5~":
+	case "\x1b[5~", "\x1b[[5~", "\x1b[5$", "\x1b[5^":
 		return Key{Type: KeyPageUp}
-	case "\x1b[6~":
+	case "\x1b[6~", "\x1b[[6~", "\x1b[6$", "\x1b[6^":
 		return Key{Type: KeyPageDown}
 	default:
 		r, size := utf8.DecodeRuneInString(seq)

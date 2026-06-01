@@ -366,6 +366,34 @@ func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	}
 }
 
+func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
+	cases := []struct {
+		seq  string
+		want KeyType
+	}{
+		{seq: "\x1bOA", want: KeyUp},
+		{seq: "\x1bOB", want: KeyDown},
+		{seq: "\x1bOC", want: KeyRight},
+		{seq: "\x1bOD", want: KeyLeft},
+		{seq: "\x1bOH", want: KeyHome},
+		{seq: "\x1bOF", want: KeyEnd},
+		{seq: "\x1b[7~", want: KeyHome},
+		{seq: "\x1b[8~", want: KeyEnd},
+		{seq: "\x1b[[5~", want: KeyPageUp},
+		{seq: "\x1b[[6~", want: KeyPageDown},
+		{seq: "\x1b[5$", want: KeyPageUp},
+		{seq: "\x1b[6$", want: KeyPageDown},
+		{seq: "\x1b[5^", want: KeyPageUp},
+		{seq: "\x1b[6^", want: KeyPageDown},
+		{seq: "\x1b[3$", want: KeyDelete},
+	}
+	for _, tc := range cases {
+		if key := ParseKey(tc.seq); key.Type != tc.want {
+			t.Fatalf("ParseKey(%q) = %#v, want %q", tc.seq, key, tc.want)
+		}
+	}
+}
+
 func TestParseSGRMouse(t *testing.T) {
 	press := ParseKey("\x1b[<64;10;4M")
 	if press.Type != KeyMouse || press.MouseButton != 64 || press.MouseX != 10 || press.MouseY != 4 || press.MouseRelease {
