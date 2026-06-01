@@ -240,6 +240,10 @@ func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 	if screen.ReverseSearch.Query != "dep" || len(screen.ReverseSearch.Results) != 2 || screen.ReverseSearch.Results[0] != "deploy new" {
 		t.Fatalf("reverse state = %#v", screen.ReverseSearch)
 	}
+	output := screen.Render()
+	if !strings.Contains(output, "(reverse-i-search) `dep': deploy new") {
+		t.Fatalf("reverse search render = %q", output)
+	}
 	selected := screen.ApplyKey(ParseKey("\n"))
 	if selected.Type != ScreenEventReverseSelected || selected.Value != "deploy new" || screen.Prompt.Text != "deploy new" || screen.ReverseSearch.Active {
 		t.Fatalf("selected = %#v prompt=%#v state=%#v", selected, screen.Prompt, screen.ReverseSearch)

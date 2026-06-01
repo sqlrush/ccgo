@@ -198,7 +198,7 @@ test/parity/                 # golden tests against TS/official behavior
 
 当前进度：
 
-- 已落地轻量 terminal frame renderer、PromptInput/history、reverse-search 状态和选择回填、paste/image hint 输入、pasted-content 引用和提交展开、SGR mouse 解析和滚轮滚动、focus/blur 事件、resize 视口保持、keybinding resolver/config、vim insert/normal 基础、REPL screen、permission/task dialog builder、dialog kind/id routing/runtime、stale dialog race guard、cancel active、task lifecycle 初版、alternate screen lifecycle 初版、ANSI snapshot 基础、snapshot corpus write/compare、scripted interaction runner/assertions/multi-key 初版、viewport/selection。
+- 已落地轻量 terminal frame renderer、PromptInput/history、reverse-search 状态/渲染和选择回填、paste/image hint 输入、pasted-content 引用和提交展开、SGR mouse 解析和滚轮滚动、focus/blur 事件、resize 视口保持、keybinding resolver/config、vim insert/normal 基础、REPL screen、permission/task dialog builder、dialog kind/id routing/runtime、stale dialog race guard、cancel active、task lifecycle 初版、alternate screen lifecycle 初版、ANSI snapshot 基础、snapshot corpus write/compare、scripted interaction runner/assertions/multi-key 初版、viewport/selection。
 
 ### M8: Commands、skills、plugins
 

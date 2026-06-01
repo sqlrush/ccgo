@@ -34,14 +34,15 @@ type Dialog struct {
 }
 
 type Frame struct {
-	Width      int
-	Height     int
-	Messages   []Message
-	BodyLines  []string
-	Status     string
-	Prompt     PromptState
-	Dialog     *Dialog
-	ShowCursor bool
+	Width         int
+	Height        int
+	Messages      []Message
+	BodyLines     []string
+	Status        string
+	Prompt        PromptState
+	Dialog        *Dialog
+	ReverseSearch *ReverseSearchState
+	ShowCursor    bool
 }
 
 type ReverseSearchState struct {

@@ -39,6 +39,15 @@ func RenderPromptLine(prompt PromptState, width int) string {
 	return padOrTrim(line, width)
 }
 
+func RenderReverseSearchLine(state ReverseSearchState, width int) string {
+	current, ok := state.Current()
+	if !ok {
+		current = "no matches"
+	}
+	line := "(reverse-i-search) `" + state.Query + "': " + current
+	return padOrTrim(line, width)
+}
+
 func RenderDialog(dialog Dialog, width int) []string {
 	if width < 4 {
 		return nil

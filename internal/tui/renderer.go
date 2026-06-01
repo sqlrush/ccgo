@@ -79,7 +79,11 @@ func (r Renderer) Render(frame Frame) string {
 		lines = append(lines, padOrTrim(line, width))
 	}
 	lines = append(lines, RenderStatusLine(frame.Status, width))
-	lines = append(lines, RenderPromptLine(frame.Prompt, width))
+	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
+		lines = append(lines, RenderReverseSearchLine(*frame.ReverseSearch, width))
+	} else {
+		lines = append(lines, RenderPromptLine(frame.Prompt, width))
+	}
 
 	var out strings.Builder
 	out.WriteString(HomeCursor)
@@ -91,7 +95,7 @@ func (r Renderer) Render(frame Frame) string {
 	}
 	out.WriteString(strings.Join(lines, "\r\n"))
 	if frame.ShowCursor {
-		cursorCol := 3 + frame.Prompt.Cursor
+		cursorCol := promptCursorColumn(frame, width)
 		if cursorCol > width {
 			cursorCol = width
 		}
@@ -102,6 +106,17 @@ func (r Renderer) Render(frame Frame) string {
 		out.WriteString("H")
 	}
 	return out.String()
+}
+
+func promptCursorColumn(frame Frame, width int) int {
+	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
+		col := len([]rune("(reverse-i-search) `")) + len([]rune(frame.ReverseSearch.Query)) + 1
+		if col < 1 {
+			return 1
+		}
+		return col
+	}
+	return 3 + frame.Prompt.Cursor
 }
 
 func RenderOnce(width int, height int, frame Frame) string {

@@ -159,14 +159,20 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 }
 
 func (s *REPLScreen) Frame() Frame {
+	var reverseSearch *ReverseSearchState
+	if s.ReverseSearch.Active {
+		state := s.ReverseSearch
+		reverseSearch = &state
+	}
 	return Frame{
-		Width:      s.Width,
-		Height:     s.Height,
-		BodyLines:  s.Viewport.Visible(),
-		Status:     s.Status,
-		Prompt:     s.Prompt,
-		Dialog:     s.Dialog,
-		ShowCursor: s.Dialog == nil,
+		Width:         s.Width,
+		Height:        s.Height,
+		BodyLines:     s.Viewport.Visible(),
+		Status:        s.Status,
+		Prompt:        s.Prompt,
+		Dialog:        s.Dialog,
+		ReverseSearch: reverseSearch,
+		ShowCursor:    s.Dialog == nil,
 	}
 }
 
