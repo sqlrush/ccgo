@@ -14,6 +14,7 @@ type SnapshotCorpus struct {
 type SnapshotComparison struct {
 	Name         string
 	Match        bool
+	Missing      bool
 	ExpectedText string
 	ActualText   string
 }
@@ -46,6 +47,13 @@ func (c SnapshotCorpus) LoadText(name string) (string, error) {
 func (c SnapshotCorpus) Compare(snapshot ANSISnapshot) (SnapshotComparison, error) {
 	expected, err := c.LoadText(snapshot.Name)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return SnapshotComparison{
+				Name:       snapshot.Name,
+				Missing:    true,
+				ActualText: snapshot.Text,
+			}, nil
+		}
 		return SnapshotComparison{}, err
 	}
 	actual := snapshot.Text

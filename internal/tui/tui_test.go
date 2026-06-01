@@ -1968,6 +1968,15 @@ func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	if comparison.Match || !strings.Contains(comparison.ExpectedText, "hello") || !strings.Contains(comparison.ActualText, "bye") {
 		t.Fatalf("changed comparison = %#v", comparison)
 	}
+	missing := changed
+	missing.Name = "missing:view"
+	comparison, err = corpus.Compare(missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !comparison.Missing || comparison.Match || comparison.Name != "missing:view" || !strings.Contains(comparison.ActualText, "bye") {
+		t.Fatalf("missing comparison = %#v", comparison)
+	}
 	if _, err := os.Stat(filepath.Join(corpus.Dir, "main_view.ansi")); err != nil {
 		t.Fatal(err)
 	}
