@@ -18,6 +18,7 @@ type ScriptStep struct {
 	ExpectPrompt           *PromptExpectation
 	ExpectReverseSearch    *ReverseSearchExpectation
 	ExpectViewport         *ViewportExpectation
+	ExpectFocused          *bool
 	ExpectStatusContains   []string
 	ExpectSnapshotContains []string
 }
@@ -142,6 +143,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			if err := compareViewport(index, screen.Viewport, *step.ExpectViewport); err != nil {
 				return result, dialogResults, err
 			}
+		}
+		if step.ExpectFocused != nil && screen.Focused != *step.ExpectFocused {
+			return result, dialogResults, fmt.Errorf("script step %d focused = %v, want %v", index, screen.Focused, *step.ExpectFocused)
 		}
 		for _, want := range step.ExpectStatusContains {
 			if !strings.Contains(screen.Status, want) {

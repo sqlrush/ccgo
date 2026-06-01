@@ -836,6 +836,20 @@ func TestRunInteractionScriptChecksViewport(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptChecksFocusState(t *testing.T) {
+	screen := NewREPLScreen(30, 6, nil)
+	focused := true
+	blurred := false
+	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{ExpectFocused: &focused},
+		{Key: "\x1b[O", ExpectEvent: &ScreenEvent{Type: ScreenEventFocusOut}, ExpectFocused: &blurred},
+		{Key: "\x1b[I", ExpectEvent: &ScreenEvent{Type: ScreenEventFocusIn}, ExpectFocused: &focused},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptCheckedFailsOnExpectationMismatch(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{

@@ -3,11 +3,14 @@ package memory
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 	"ccgo/internal/session"
 )
+
+const CurrentSessionContextSubtype = "session_memory_current"
 
 type ResumeContextOptions struct {
 	SessionPath string
@@ -22,6 +25,45 @@ type ResumeContext struct {
 	CurrentSummary *SessionSummary
 	RecallQuery    string
 	Recalled       []RecallMatch
+}
+
+func (c ResumeContext) ContextMessages() []contracts.Message {
+	var messages []contracts.Message
+	if message := CurrentSessionSummaryMessage(c.CurrentSummary); message.Type != "" {
+		messages = append(messages, message)
+	}
+	if message := RecallContextMessage(c.Recalled); message.Type != "" {
+		messages = append(messages, message)
+	}
+	return messages
+}
+
+func (c ResumeContext) MessagesWithContext() []contracts.Message {
+	contextMessages := c.ContextMessages()
+	out := make([]contracts.Message, 0, len(contextMessages)+len(c.Conversation.Messages))
+	out = append(out, contextMessages...)
+	out = append(out, c.Conversation.Messages...)
+	return out
+}
+
+func CurrentSessionSummaryMessage(summary *SessionSummary) contracts.Message {
+	if summary == nil {
+		return contracts.Message{}
+	}
+	text := strings.TrimSpace(summary.Summary)
+	if text == "" {
+		return contracts.Message{}
+	}
+	return contracts.Message{
+		Type:      contracts.MessageUser,
+		UUID:      contracts.NewID(),
+		SessionID: summary.SessionID,
+		Subtype:   CurrentSessionContextSubtype,
+		IsMeta:    true,
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(
+			"Current session memory:\n" + text,
+		)},
+	}
 }
 
 func BuildResumeContext(options ResumeContextOptions) (ResumeContext, error) {

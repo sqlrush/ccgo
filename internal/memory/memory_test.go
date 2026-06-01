@@ -297,6 +297,17 @@ func TestBuildResumeContextLoadsCurrentSummaryAndRecallsRelatedSessions(t *testi
 	if len(context.Recalled) != 1 || context.Recalled[0].Summary.SessionID != "prior" {
 		t.Fatalf("recalled = %#v", context.Recalled)
 	}
+	contextMessages := context.ContextMessages()
+	if len(contextMessages) != 2 || contextMessages[0].Subtype != CurrentSessionContextSubtype || contextMessages[1].Subtype != RecallContextSubtype {
+		t.Fatalf("context messages = %#v", contextMessages)
+	}
+	if !contextMessages[0].IsMeta || !strings.Contains(contextMessages[0].Content[0].Text, "current session summary") {
+		t.Fatalf("current context message = %#v", contextMessages[0])
+	}
+	withContext := context.MessagesWithContext()
+	if len(withContext) != 4 || withContext[0].Subtype != CurrentSessionContextSubtype || withContext[2].UUID != "u1" {
+		t.Fatalf("messages with context = %#v", withContext)
+	}
 }
 
 func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {
