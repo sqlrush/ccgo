@@ -970,6 +970,43 @@ func TestREPLScreenVimBraceTextObjectAliases(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimYankPasteRegister(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abc")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "y", "l", "$", "2", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "abcaa" || screen.VimRegister != "a" || screen.Prompt.Cursor != len([]rune("abcaa"))-1 {
+		t.Fatalf("after yl 2p screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "d", "w", "P"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha beta" || screen.VimRegister != "alpha " {
+		t.Fatalf("after dw P screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "y", "y", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\none\ntwo" || screen.VimRegister != "one\n" || !screen.VimRegisterLinewise || screen.Prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("after yy p screen = %#v", screen)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()

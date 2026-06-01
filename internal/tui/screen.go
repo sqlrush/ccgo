@@ -42,6 +42,8 @@ type REPLScreen struct {
 	VimCount             int
 	VimPendingCount      int
 	VimPendingReplace    bool
+	VimRegister          string
+	VimRegisterLinewise  bool
 	VimUndoStack         []vimPromptSnapshot
 	Focused              bool
 	ReverseSearch        ReverseSearchState

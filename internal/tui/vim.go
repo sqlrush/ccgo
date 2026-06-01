@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"unicode"
 
 	"ccgo/internal/session"
@@ -112,9 +113,13 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case ';', ',':
 		s.applyVimRepeatedCharMotion(count, r == ',')
-	case 'd', 'c':
+	case 'd', 'c', 'y':
 		s.VimPendingOperator = r
 		s.VimPendingCount = count
+	case 'Y':
+		s.applyVimLineOperator('y', count)
+	case 'p', 'P':
+		s.applyVimPaste(r == 'p', count)
 	case 'a':
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
 		s.VimMode = VimInsert
@@ -169,15 +174,10 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 	operator := s.VimPendingOperator
 	count := s.takeVimOperatorCount()
 	s.clearVimPending()
-	change := operator == 'c'
 	switch r {
-	case 'd', 'c':
+	case 'd', 'c', 'y':
 		if r == operator {
-			s.recordVimUndo()
-			s.Prompt.deleteAll()
-			if change {
-				s.VimMode = VimInsert
-			}
+			s.applyVimLineOperator(operator, count)
 		}
 	case 'f', 't', 'F', 'T':
 		s.VimPendingOperator = operator
@@ -197,60 +197,8 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		}
 		s.VimRepeatingChar = true
 		return s.applyVimCharMotion(s.VimLastCharTarget)
-	case 'w':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.deleteWordForward() })
-		if change {
-			s.VimMode = VimInsert
-		}
-	case 'W':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.deleteWORDForward() })
-		if change {
-			s.VimMode = VimInsert
-		}
-	case 'e':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.deleteToWordEnd(false) })
-		if change {
-			s.VimMode = VimInsert
-		}
-	case 'E':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.deleteToWordEnd(true) })
-		if change {
-			s.VimMode = VimInsert
-		}
-	case '$':
-		s.recordVimUndo()
-		s.Prompt.deleteToEnd()
-		if change {
-			s.VimMode = VimInsert
-		}
-	case '0':
-		s.recordVimUndo()
-		s.Prompt.deleteToStart()
-		if change {
-			s.VimMode = VimInsert
-		}
-	case 'b':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.deleteWordBackward() })
-		if change {
-			s.VimMode = VimInsert
-		}
-	case 'B':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.deleteWORDBackward() })
-		if change {
-			s.VimMode = VimInsert
-		}
-	case '^':
-		s.recordVimUndo()
-		s.Prompt.deleteToFirstNonBlank()
-		if change {
-			s.VimMode = VimInsert
-		}
+	case 'h', 'l', 'w', 'W', 'e', 'E', '$', '0', 'b', 'B', '^':
+		s.applyVimMotionOperator(operator, r, count)
 	}
 	return ScreenEvent{}
 }
@@ -269,11 +217,7 @@ func (s *REPLScreen) applyVimTextObject(obj rune) ScreenEvent {
 	if !ok {
 		return ScreenEvent{}
 	}
-	s.recordVimUndo()
-	s.Prompt.deleteRange(start, end)
-	if operator == 'c' {
-		s.VimMode = VimInsert
-	}
+	s.applyVimRangeOperator(operator, start, end, false)
 	return ScreenEvent{}
 }
 
@@ -299,12 +243,87 @@ func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
 		s.Prompt.Cursor = end
 		return ScreenEvent{}
 	}
-	s.recordVimUndo()
-	s.Prompt.deleteCharMotionRange(start, end, motion)
-	if operator == 'c' {
-		s.VimMode = VimInsert
-	}
+	from, to := vimCharMotionRange(start, end, motion)
+	s.applyVimRangeOperator(operator, from, to, false)
 	return ScreenEvent{}
+}
+
+func vimCharMotionRange(start int, end int, motion rune) (int, int) {
+	switch motion {
+	case 'f', 't':
+		return start, end + 1
+	case 'F':
+		return end, start + 1
+	case 'T':
+		return end + 1, start + 1
+	default:
+		return start, end
+	}
+}
+
+func (s *REPLScreen) applyVimMotionOperator(operator rune, motion rune, count int) {
+	start, end, linewise, ok := s.Prompt.operatorMotionRange(operator, motion, count)
+	if !ok {
+		return
+	}
+	s.applyVimRangeOperator(operator, start, end, linewise)
+}
+
+func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
+	start, end := s.Prompt.lineRange(count)
+	s.setVimRegister(s.Prompt.rangeText(start, end), true)
+	switch operator {
+	case 'y':
+		s.Prompt.Cursor = s.Prompt.clampCursor(start)
+	case 'd', 'c':
+		s.recordVimUndo()
+		deleteStart := start
+		runes := []rune(s.Prompt.Text)
+		if operator == 'd' && end == len(runes) && deleteStart > 0 && runes[deleteStart-1] == '\n' {
+			deleteStart--
+		}
+		s.Prompt.deleteRange(deleteStart, end)
+		if operator == 'c' {
+			s.VimMode = VimInsert
+		}
+	}
+}
+
+func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, linewise bool) {
+	s.setVimRegister(s.Prompt.rangeText(start, end), linewise)
+	switch operator {
+	case 'y':
+		s.Prompt.Cursor = s.Prompt.clampCursor(start)
+	case 'd', 'c':
+		s.recordVimUndo()
+		s.Prompt.deleteRange(start, end)
+		if operator == 'c' {
+			s.VimMode = VimInsert
+		}
+	}
+}
+
+func (s *REPLScreen) setVimRegister(content string, linewise bool) {
+	if linewise && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	s.VimRegister = content
+	s.VimRegisterLinewise = linewise
+}
+
+func (s *REPLScreen) applyVimPaste(after bool, count int) {
+	if s.VimRegister == "" {
+		return
+	}
+	if count <= 0 {
+		count = 1
+	}
+	s.recordVimUndo()
+	if s.VimRegisterLinewise || strings.HasSuffix(s.VimRegister, "\n") {
+		s.Prompt.pasteLinewise(s.VimRegister, after, count)
+		return
+	}
+	s.Prompt.pasteCharacterwise(s.VimRegister, after, count)
 }
 
 func (s *REPLScreen) applyVimRepeatedCharMotion(count int, reverse bool) {
@@ -419,6 +438,192 @@ func applyN(count int, fn func()) {
 	for i := 0; i < count; i++ {
 		fn()
 	}
+}
+
+func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int) (int, int, bool, bool) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(p.Text)
+	start := p.clampCursor(p.Cursor)
+	cursor := *p
+	if operator == 'c' && (motion == 'w' || motion == 'W') {
+		for i := 0; i < count-1; i++ {
+			if motion == 'w' {
+				cursor.moveWordForward()
+			} else {
+				cursor.moveWORDForward()
+			}
+		}
+		if motion == 'w' {
+			cursor.moveWordEnd()
+		} else {
+			cursor.moveWORDEnd()
+		}
+		end := cursor.Cursor
+		if end < len(runes) {
+			end++
+		}
+		return orderedRange(start, end, false)
+	}
+	for i := 0; i < count; i++ {
+		switch motion {
+		case 'h':
+			cursor.Apply(Key{Type: KeyLeft})
+		case 'l':
+			cursor.Apply(Key{Type: KeyRight})
+		case 'w':
+			cursor.moveWordForward()
+		case 'W':
+			cursor.moveWORDForward()
+		case 'e':
+			cursor.moveWordEnd()
+		case 'E':
+			cursor.moveWORDEnd()
+		case 'b':
+			cursor.moveWordBackward()
+		case 'B':
+			cursor.moveWORDBackward()
+		case '$':
+			cursor.Apply(Key{Type: KeyEnd})
+		case '0':
+			cursor.Apply(Key{Type: KeyHome})
+		case '^':
+			cursor.moveFirstNonBlank()
+		default:
+			return 0, 0, false, false
+		}
+	}
+	end := cursor.Cursor
+	if (motion == 'e' || motion == 'E') && start <= end && end < len(runes) {
+		end++
+	}
+	return orderedRange(start, end, false)
+}
+
+func orderedRange(start int, end int, linewise bool) (int, int, bool, bool) {
+	if start == end {
+		return 0, 0, false, false
+	}
+	if end < start {
+		start, end = end, start
+	}
+	return start, end, linewise, true
+}
+
+func (p *PromptState) clampCursor(cursor int) int {
+	runes := []rune(p.Text)
+	if cursor < 0 {
+		return 0
+	}
+	if cursor > len(runes) {
+		return len(runes)
+	}
+	return cursor
+}
+
+func (p *PromptState) rangeText(start int, end int) string {
+	runes := []rune(p.Text)
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if end < start {
+		start, end = end, start
+	}
+	return string(runes[start:end])
+}
+
+func (p *PromptState) lineRange(count int) (int, int) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(p.Text)
+	cursor := p.clampCursor(p.Cursor)
+	start := 0
+	for i := cursor - 1; i >= 0; i-- {
+		if runes[i] == '\n' {
+			start = i + 1
+			break
+		}
+	}
+	end := start
+	for i := 0; i < count && end < len(runes); i++ {
+		for end < len(runes) && runes[end] != '\n' {
+			end++
+		}
+		if end < len(runes) {
+			end++
+		}
+	}
+	return start, end
+}
+
+func (p *PromptState) currentLogicalLine() int {
+	line := 0
+	for i, r := range []rune(p.Text) {
+		if i >= p.Cursor {
+			break
+		}
+		if r == '\n' {
+			line++
+		}
+	}
+	return line
+}
+
+func (p *PromptState) pasteCharacterwise(content string, after bool, count int) {
+	runes := []rune(p.Text)
+	insert := p.clampCursor(p.Cursor)
+	if after && insert < len(runes) {
+		insert++
+	}
+	insertRunes := []rune(strings.Repeat(content, count))
+	runes = append(runes[:insert], append(insertRunes, runes[insert:]...)...)
+	p.Text = string(runes)
+	if len(insertRunes) > 0 {
+		p.Cursor = insert + len(insertRunes) - 1
+	} else {
+		p.Cursor = insert
+	}
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) pasteLinewise(content string, after bool, count int) {
+	content = strings.TrimSuffix(content, "\n")
+	lines := strings.Split(p.Text, "\n")
+	insertLine := p.currentLogicalLine()
+	if after {
+		insertLine++
+	}
+	contentLines := strings.Split(content, "\n")
+	repeated := make([]string, 0, len(contentLines)*count)
+	for i := 0; i < count; i++ {
+		repeated = append(repeated, contentLines...)
+	}
+	newLines := make([]string, 0, len(lines)+len(repeated))
+	newLines = append(newLines, lines[:insertLine]...)
+	newLines = append(newLines, repeated...)
+	newLines = append(newLines, lines[insertLine:]...)
+	p.Text = strings.Join(newLines, "\n")
+	p.Cursor = lineStartOffset(newLines, insertLine)
+	p.resetHistoryCursor()
+}
+
+func lineStartOffset(lines []string, lineIndex int) int {
+	if lineIndex <= 0 {
+		return 0
+	}
+	if lineIndex > len(lines) {
+		lineIndex = len(lines)
+	}
+	offset := 0
+	for i := 0; i < lineIndex; i++ {
+		offset += len([]rune(lines[i]))
+	}
+	return offset + lineIndex
 }
 
 func (p *PromptState) moveWordForward() {
