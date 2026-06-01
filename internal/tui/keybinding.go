@@ -19,6 +19,8 @@ const (
 	ActionKillAgents       Action = "kill_agents"
 	ActionMoveLeft         Action = "move_left"
 	ActionMoveRight        Action = "move_right"
+	ActionMoveWordLeft     Action = "move_word_left"
+	ActionMoveWordRight    Action = "move_word_right"
 	ActionMoveStart        Action = "move_start"
 	ActionMoveEnd          Action = "move_end"
 	ActionDeleteBackward   Action = "delete_backward"
@@ -26,6 +28,7 @@ const (
 	ActionDeleteToStart    Action = "delete_to_start"
 	ActionDeleteToEnd      Action = "delete_to_end"
 	ActionDeleteWordBack   Action = "delete_word_backward"
+	ActionDeleteWordFwd    Action = "delete_word_forward"
 	ActionYank             Action = "yank"
 	ActionYankPop          Action = "yank_pop"
 	ActionHistoryPrevious  Action = "history_previous"
@@ -64,17 +67,21 @@ func DefaultKeymap() Keymap {
 		KeyCtrlS:     ActionStashPrompt,
 		KeyLeft:      ActionMoveLeft,
 		KeyCtrlB:     ActionMoveLeft,
+		KeyAltB:      ActionMoveWordLeft,
 		KeyRight:     ActionMoveRight,
 		KeyCtrlF:     ActionMoveRight,
+		KeyAltF:      ActionMoveWordRight,
 		KeyHome:      ActionMoveStart,
 		KeyCtrlA:     ActionMoveStart,
 		KeyEnd:       ActionMoveEnd,
 		KeyCtrlE:     ActionMoveEnd,
 		KeyBackspace: ActionDeleteBackward,
+		KeyAltBS:     ActionDeleteWordBack,
 		KeyDelete:    ActionDeleteForward,
 		KeyCtrlU:     ActionDeleteToStart,
 		KeyCtrlK:     ActionDeleteToEnd,
 		KeyCtrlW:     ActionDeleteWordBack,
+		KeyAltD:      ActionDeleteWordFwd,
 		KeyCtrlY:     ActionYank,
 		KeyUp:        ActionHistoryPrevious,
 		KeyDown:      ActionHistoryNext,

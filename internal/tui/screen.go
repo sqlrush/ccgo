@@ -264,6 +264,10 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 		s.ReverseSearch.MoveCursor(-1)
 	case KeyRight, KeyCtrlF:
 		s.ReverseSearch.MoveCursor(1)
+	case KeyAltB:
+		s.ReverseSearch.MoveWordBackward()
+	case KeyAltF:
+		s.ReverseSearch.MoveWordForward()
 	case KeyHome, KeyCtrlA:
 		s.ReverseSearch.MoveStart()
 	case KeyEnd, KeyCtrlE:
@@ -274,6 +278,10 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 		s.ReverseSearch.DeleteToStart(s.Prompt.History)
 	case KeyCtrlW:
 		s.ReverseSearch.DeleteWordBackward(s.Prompt.History)
+	case KeyAltBS:
+		s.ReverseSearch.DeleteWordBackward(s.Prompt.History)
+	case KeyAltD:
+		s.ReverseSearch.DeleteWordForward(s.Prompt.History)
 	case KeyCtrlY:
 		s.ReverseSearch.YankLastKill(s.Prompt.History)
 	case KeyAltY:
@@ -480,6 +488,10 @@ func keyForAction(action Action, key Key) Key {
 		return Key{Type: KeyLeft}
 	case ActionMoveRight:
 		return Key{Type: KeyRight}
+	case ActionMoveWordLeft:
+		return Key{Type: KeyAltB}
+	case ActionMoveWordRight:
+		return Key{Type: KeyAltF}
 	case ActionMoveStart:
 		return Key{Type: KeyHome}
 	case ActionMoveEnd:
@@ -494,6 +506,8 @@ func keyForAction(action Action, key Key) Key {
 		return Key{Type: KeyCtrlK}
 	case ActionDeleteWordBack:
 		return Key{Type: KeyCtrlW}
+	case ActionDeleteWordFwd:
+		return Key{Type: KeyAltD}
 	case ActionYank:
 		return Key{Type: KeyCtrlY}
 	case ActionYankPop:

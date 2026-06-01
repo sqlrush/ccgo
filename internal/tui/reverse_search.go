@@ -98,6 +98,18 @@ func (s *ReverseSearchState) MoveCursor(delta int) {
 	s.clampCursor()
 }
 
+func (s *ReverseSearchState) MoveWordBackward() {
+	runes := []rune(s.Query)
+	s.clampCursor()
+	s.Cursor = reverseSearchWordStart(runes, s.Cursor)
+}
+
+func (s *ReverseSearchState) MoveWordForward() {
+	runes := []rune(s.Query)
+	s.clampCursor()
+	s.Cursor = reverseSearchWordForward(runes, s.Cursor)
+}
+
 func (s *ReverseSearchState) MoveStart() {
 	s.Cursor = 0
 }
@@ -138,6 +150,20 @@ func (s *ReverseSearchState) DeleteWordBackward(history []string) {
 	s.Query = string(runes)
 	s.Cursor = start
 	sharedKillRing.push(killed, killRingPrepend)
+	s.refresh(history)
+}
+
+func (s *ReverseSearchState) DeleteWordForward(history []string) {
+	runes := []rune(s.Query)
+	s.clampCursor()
+	start := s.Cursor
+	end := reverseSearchWordForward(runes, start)
+	if start == end {
+		return
+	}
+	runes = append(runes[:start], runes[end:]...)
+	s.Query = string(runes)
+	s.Cursor = start
 	s.refresh(history)
 }
 
@@ -212,6 +238,26 @@ func reverseSearchWordStart(runes []rune, end int) int {
 	}
 	for i > 0 && !unicode.IsSpace(runes[i-1]) {
 		i--
+	}
+	return i
+}
+
+func reverseSearchWordForward(runes []rune, start int) int {
+	if start < 0 {
+		start = 0
+	}
+	if start > len(runes) {
+		start = len(runes)
+	}
+	i := start
+	for i < len(runes) && unicode.IsSpace(runes[i]) {
+		i++
+	}
+	for i < len(runes) && !unicode.IsSpace(runes[i]) {
+		i++
+	}
+	for i < len(runes) && unicode.IsSpace(runes[i]) {
+		i++
 	}
 	return i
 }

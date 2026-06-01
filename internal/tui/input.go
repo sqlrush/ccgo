@@ -65,8 +65,16 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyBackspace}
 	case "\x1b":
 		return Key{Type: KeyEsc}
+	case "\x1bb", "\x1bB":
+		return Key{Type: KeyAltB}
+	case "\x1bd", "\x1bD":
+		return Key{Type: KeyAltD}
+	case "\x1bf", "\x1bF":
+		return Key{Type: KeyAltF}
 	case "\x1by", "\x1bY":
 		return Key{Type: KeyAltY}
+	case "\x1b\x7f", "\x1b\b":
+		return Key{Type: KeyAltBS}
 	case "\x01":
 		return Key{Type: KeyCtrlA}
 	case "\x02":
@@ -208,6 +216,10 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		if p.Cursor < len(runes) {
 			p.Cursor++
 		}
+	case KeyAltB:
+		p.moveWordBackward()
+	case KeyAltF:
+		p.moveWordForward()
 	case KeyHome, KeyCtrlA:
 		p.Cursor = 0
 	case KeyEnd, KeyCtrlE:
@@ -216,8 +228,10 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.deleteToEnd()
 	case KeyCtrlU:
 		p.deleteToStart()
-	case KeyCtrlW:
+	case KeyCtrlW, KeyAltBS:
 		p.deleteWordBackward()
+	case KeyAltD:
+		p.deleteWordForward()
 	case KeyCtrlY:
 		p.yankLastKill()
 	case KeyAltY:
@@ -249,7 +263,7 @@ func (p *PromptState) Apply(key Key) PromptResult {
 }
 
 func isPromptKillKey(key KeyType) bool {
-	return key == KeyCtrlK || key == KeyCtrlU || key == KeyCtrlW
+	return key == KeyCtrlK || key == KeyCtrlU || key == KeyCtrlW || key == KeyAltBS
 }
 
 func isPromptYankKey(key KeyType) bool {
