@@ -367,6 +367,15 @@ func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	if screen.Dialog != nil {
 		t.Fatalf("dialog should close")
 	}
+
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}, ID: "perm_2", Kind: DialogPermission}
+	click := screen.ApplyKey(ParseKey("\x1b[<0;13;5M"))
+	if click.Type != ScreenEventDialogAction || click.Value != "Deny" || click.DialogID != "perm_2" || click.DialogKind != DialogPermission {
+		t.Fatalf("dialog mouse click = %#v", click)
+	}
+	if screen.Dialog != nil {
+		t.Fatalf("dialog should close after mouse click")
+	}
 }
 
 func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {

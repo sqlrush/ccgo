@@ -180,6 +180,52 @@ func TestAddToHistoryStoresLargePasteAndHonorsSkipEnv(t *testing.T) {
 	}
 }
 
+func TestAppendHistoryUsesStaleLockAndBufferedFlush(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "history.jsonl")
+	lockPath := path + ".lock"
+	if err := os.WriteFile(lockPath, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-staleHistoryLockAge - time.Second)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendHistory(path, LogEntry{Display: "direct", Project: "/repo", PastedContents: map[int]StoredPastedContent{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("history lock should be removed, err=%v", err)
+	}
+
+	large := strings.Repeat("queued", 300)
+	writer := &BufferedHistoryWriter{Path: path, Project: "/repo", Session: "sess"}
+	writer.Queue(HistoryEntry{Display: "queued", PastedContents: map[int]PastedContent{
+		1: {ID: 1, Type: PastedContentText, Content: large},
+	}})
+	if writer.Pending() != 1 {
+		t.Fatalf("pending = %d", writer.Pending())
+	}
+	written, err := writer.Flush()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != 1 || writer.Pending() != 0 {
+		t.Fatalf("flush written=%d pending=%d", written, writer.Pending())
+	}
+	history, err := LoadHistory(path, "/repo", "sess", MaxHistoryItems, RetrievePastedText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := displays(history); strings.Join(got, ",") != "queued,direct" {
+		t.Fatalf("history = %#v", got)
+	}
+	if history[0].PastedContents[1].Content != large {
+		t.Fatalf("queued paste = %#v", history[0].PastedContents)
+	}
+}
+
 func TestNewLogEntryUsesUnixMillis(t *testing.T) {
 	now := time.Unix(42, 123_000_000)
 	entry := NewLogEntry("/repo", "session", HistoryEntry{Display: "cmd", PastedContents: map[int]PastedContent{}}, now)

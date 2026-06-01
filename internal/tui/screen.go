@@ -158,6 +158,16 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 	if key.MouseRelease {
 		return ScreenEvent{}
 	}
+	if s.Dialog != nil && key.MouseButton == 0 {
+		if index, ok := s.dialogActionAtMouse(key.MouseX, key.MouseY); ok {
+			dialogID := s.Dialog.ID
+			dialogKind := s.Dialog.Kind
+			value := s.Dialog.Actions[index]
+			s.Dialog.Focused = index
+			s.Dialog = nil
+			return ScreenEvent{Type: ScreenEventDialogAction, Value: value, DialogID: dialogID, DialogKind: dialogKind}
+		}
+	}
 	switch key.MouseButton {
 	case 64:
 		s.Viewport.Scroll(-1)
@@ -165,6 +175,44 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 		s.Viewport.Scroll(1)
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) dialogActionAtMouse(x int, y int) (int, bool) {
+	if s.Dialog == nil || len(s.Dialog.Actions) == 0 || x <= 0 || y <= 0 {
+		return 0, false
+	}
+	dialogLines := RenderDialog(*s.Dialog, s.Width)
+	if len(dialogLines) < 3 {
+		return 0, false
+	}
+	bodyHeight := s.Height - 2
+	if bodyHeight < 0 {
+		bodyHeight = 0
+	}
+	actionIndex := len(dialogLines) - 2
+	visibleStart := 0
+	if len(dialogLines) > bodyHeight {
+		visibleStart = len(dialogLines) - bodyHeight
+	}
+	if actionIndex < visibleStart {
+		return 0, false
+	}
+	actionRow := actionIndex - visibleStart + 1
+	if y != actionRow {
+		return 0, false
+	}
+	col := 3
+	for i, action := range s.Dialog.Actions {
+		width := len([]rune(action)) + 2
+		if x >= col && x < col+width {
+			return i, true
+		}
+		col += width
+		if i < len(s.Dialog.Actions)-1 {
+			col++
+		}
+	}
+	return 0, false
 }
 
 func (s *REPLScreen) Frame() Frame {

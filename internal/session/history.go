@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ccgo/internal/contracts"
@@ -18,6 +20,8 @@ import (
 
 const MaxHistoryItems = 100
 const MaxPastedContentLength = 1024
+const defaultHistoryLockTimeout = 2 * time.Second
+const staleHistoryLockAge = 30 * time.Second
 
 const (
 	PastedContentText  = "text"
@@ -58,6 +62,14 @@ type TimestampedHistoryEntry struct {
 	Display   string
 	Timestamp int64
 	Entry     HistoryEntry
+}
+
+type BufferedHistoryWriter struct {
+	mu      sync.Mutex
+	Path    string
+	Project string
+	Session contracts.ID
+	entries []HistoryEntry
 }
 
 type Reference struct {
@@ -234,6 +246,67 @@ func AppendHistory(path string, entry LogEntry) error {
 	if err := platform.EnsureDir(filepath.Dir(path)); err != nil {
 		return err
 	}
+	return withHistoryLock(path, defaultHistoryLockTimeout, func() error {
+		return appendHistoryUnlocked(path, entry)
+	})
+}
+
+func (w *BufferedHistoryWriter) Queue(entry HistoryEntry) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.entries = append(w.entries, entry)
+}
+
+func (w *BufferedHistoryWriter) Pending() int {
+	if w == nil {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.entries)
+}
+
+func (w *BufferedHistoryWriter) Flush() (int, error) {
+	if w == nil || w.Path == "" {
+		return 0, nil
+	}
+	if err := platform.EnsureDir(filepath.Dir(w.Path)); err != nil {
+		return 0, err
+	}
+	w.mu.Lock()
+	pending := append([]HistoryEntry(nil), w.entries...)
+	w.entries = nil
+	w.mu.Unlock()
+	if len(pending) == 0 {
+		return 0, nil
+	}
+	written := 0
+	err := withHistoryLock(w.Path, defaultHistoryLockTimeout, func() error {
+		for _, entry := range pending {
+			logEntry := NewLogEntry(w.Project, w.Session, entry, time.Now())
+			if err := storePastedTextFromHistory(entry, logEntry); err != nil {
+				return err
+			}
+			if err := appendHistoryUnlocked(w.Path, logEntry); err != nil {
+				return err
+			}
+			written++
+		}
+		return nil
+	})
+	if err != nil {
+		w.mu.Lock()
+		w.entries = append(pending[written:], w.entries...)
+		w.mu.Unlock()
+		return written, err
+	}
+	return written, nil
+}
+
+func appendHistoryUnlocked(path string, entry LogEntry) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -249,22 +322,64 @@ func AppendHistory(path string, entry LogEntry) error {
 	return nil
 }
 
+func withHistoryLock(path string, timeout time.Duration, fn func() error) error {
+	lockPath := path + ".lock"
+	if timeout <= 0 {
+		timeout = defaultHistoryLockTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, _ = lock.WriteString(strconv.FormatInt(time.Now().UnixNano(), 10))
+			_ = lock.Close()
+			defer os.Remove(lockPath)
+			return fn()
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		removeStaleHistoryLock(lockPath, time.Now())
+		if time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func removeStaleHistoryLock(lockPath string, now time.Time) {
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		return
+	}
+	if now.Sub(info.ModTime()) > staleHistoryLockAge {
+		_ = os.Remove(lockPath)
+	}
+}
+
 func AddToHistory(path string, project string, sessionID contracts.ID, entry HistoryEntry) (bool, error) {
 	if IsEnvTruthy(os.Getenv("CLAUDE_CODE_SKIP_PROMPT_HISTORY")) {
 		return false, nil
 	}
 	logEntry := NewLogEntry(project, sessionID, entry, time.Now())
+	if err := storePastedTextFromHistory(entry, logEntry); err != nil {
+		return false, err
+	}
+	return true, AppendHistory(path, logEntry)
+}
+
+func storePastedTextFromHistory(entry HistoryEntry, logEntry LogEntry) error {
 	for id, stored := range logEntry.PastedContents {
 		if stored.ContentHash == "" {
 			continue
 		}
 		if content, ok := entry.PastedContents[id]; ok {
 			if err := StorePastedText(stored.ContentHash, content.Content); err != nil {
-				return false, err
+				return err
 			}
 		}
 	}
-	return true, AppendHistory(path, logEntry)
+	return nil
 }
 
 func LoadHistory(path string, project string, currentSession contracts.ID, limit int, resolver PasteResolver) ([]HistoryEntry, error) {
