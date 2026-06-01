@@ -215,9 +215,26 @@ func recallAgentCandidates(root string, query string, options RecallOptions) ([]
 
 func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
 	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
+	if raw == "" {
+		return "", nil, false
+	}
+	payload := stripMarkdownFence(raw)
+	if query, ids, ok := parseRecallAgentJSON(payload); ok {
+		return query, ids, true
+	}
+	if startsJSONValue(payload) {
+		return "", nil, false
+	}
+	if payload, ok := firstJSONValue(raw); ok {
+		if query, ids, parsed := parseRecallAgentJSON(payload); parsed {
+			return query, ids, true
+		}
+		return "", nil, false
+	}
+	return raw, nil, true
+}
+
+func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", nil, false
@@ -225,21 +242,24 @@ func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
 	var object struct {
 		Query              string   `json:"query"`
 		SearchQuery        string   `json:"search_query"`
+		SessionID          string   `json:"session_id"`
 		SessionIDs         []string `json:"session_ids"`
 		SessionIDsCamel    []string `json:"sessionIds"`
+		SelectedSessionID  string   `json:"selected_session_id"`
 		SelectedSessionIDs []string `json:"selected_session_ids"`
+		ID                 string   `json:"id"`
 		IDs                []string `json:"ids"`
 	}
 	if err := json.Unmarshal([]byte(raw), &object); err == nil {
-		ids := recallIDs(object.SessionIDs)
+		ids := recallIDs(append([]string{object.SessionID}, object.SessionIDs...))
 		if len(ids) == 0 {
 			ids = recallIDs(object.SessionIDsCamel)
 		}
 		if len(ids) == 0 {
-			ids = recallIDs(object.SelectedSessionIDs)
+			ids = recallIDs(append([]string{object.SelectedSessionID}, object.SelectedSessionIDs...))
 		}
 		if len(ids) == 0 {
-			ids = recallIDs(object.IDs)
+			ids = recallIDs(append([]string{object.ID}, object.IDs...))
 		}
 		query := strings.TrimSpace(object.Query)
 		if query == "" {
@@ -251,7 +271,42 @@ func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
 	if err := json.Unmarshal([]byte(raw), &ids); err == nil {
 		return "", recallIDs(ids), len(ids) > 0
 	}
-	return raw, nil, true
+	return "", nil, false
+}
+
+func stripMarkdownFence(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(raw, "```") {
+		return raw
+	}
+	lineEnd := strings.IndexByte(raw, '\n')
+	if lineEnd < 0 {
+		return strings.TrimSpace(strings.Trim(raw, "`"))
+	}
+	body := raw[lineEnd+1:]
+	if end := strings.LastIndex(body, "```"); end >= 0 {
+		body = body[:end]
+	}
+	return strings.TrimSpace(body)
+}
+
+func firstJSONValue(raw string) (string, bool) {
+	for index, r := range raw {
+		if r != '{' && r != '[' {
+			continue
+		}
+		var payload json.RawMessage
+		decoder := json.NewDecoder(strings.NewReader(raw[index:]))
+		if err := decoder.Decode(&payload); err == nil && len(payload) > 0 {
+			return string(payload), true
+		}
+	}
+	return "", false
+}
+
+func startsJSONValue(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	return strings.HasPrefix(raw, "{") || strings.HasPrefix(raw, "[")
 }
 
 func recallIDs(raw []string) []contracts.ID {
