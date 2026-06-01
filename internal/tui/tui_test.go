@@ -982,6 +982,34 @@ func TestDialogRuntimeAppliesToScreenAndResolvesEvents(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimePromotesQueuedPermissionAfterResolve(t *testing.T) {
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(40, 8, nil)
+	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
+	runtime.RequestPermission(PermissionRequest{ID: "new", ToolName: "Edit"})
+	runtime.ApplyToScreen(&screen, "ready")
+	if screen.Dialog == nil || screen.Dialog.ID != "new" {
+		t.Fatalf("screen dialog before resolve = %#v", screen.Dialog)
+	}
+	result := runtime.ResolveScreenEvent(&screen, ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow", DialogID: "new", DialogKind: DialogPermission}, "ready")
+	if !result.Found || result.ID != "new" || result.Status != DialogResultAllowed {
+		t.Fatalf("result = %#v", result)
+	}
+	if screen.Dialog == nil || screen.Dialog.ID != "old" || screen.Dialog.Kind != DialogPermission {
+		t.Fatalf("queued permission should be promoted to screen: %#v", screen.Dialog)
+	}
+	if !strings.Contains(screen.Status, "permissions: 1") {
+		t.Fatalf("status after promotion = %q", screen.Status)
+	}
+	result = runtime.ResolveScreenEvent(&screen, ScreenEvent{Type: ScreenEventDialogAction, Value: "Deny", DialogID: "old", DialogKind: DialogPermission}, "ready")
+	if !result.Found || result.ID != "old" || result.Status != DialogResultDenied {
+		t.Fatalf("old result = %#v", result)
+	}
+	if screen.Dialog != nil || len(runtime.Permissions) != 0 {
+		t.Fatalf("runtime after queue drain = dialog %#v permissions %#v", screen.Dialog, runtime.Permissions)
+	}
+}
+
 func TestDialogRuntimeInteractionScriptResolvesPermissionFlow(t *testing.T) {
 	runtime := NewDialogRuntime()
 	screen := NewREPLScreen(42, 8, nil)
@@ -1086,8 +1114,15 @@ func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T)
 	if !cancelled.Found || cancelled.Status != DialogResultCancelled || cancelled.ID != "new" {
 		t.Fatalf("cancelled = %#v", cancelled)
 	}
-	if _, ok := runtime.Permissions["new"]; ok || runtime.Active != nil {
+	if _, ok := runtime.Permissions["new"]; ok {
 		t.Fatalf("runtime after cancel = %#v", runtime)
+	}
+	if runtime.Active == nil || runtime.Active.ID != "old" {
+		t.Fatalf("old permission should be promoted after active cancel: %#v", runtime.Active)
+	}
+	allowed := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow", DialogID: "old", DialogKind: DialogPermission})
+	if !allowed.Found || allowed.Status != DialogResultAllowed || runtime.Active != nil || len(runtime.Permissions) != 0 {
+		t.Fatalf("runtime after promoted resolve = result %#v runtime %#v", allowed, runtime)
 	}
 }
 

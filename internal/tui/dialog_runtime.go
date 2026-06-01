@@ -115,6 +115,7 @@ func (r *DialogRuntime) CancelPermission(id string) DialogResult {
 	if r.Active != nil && r.Active.Kind == DialogPermission && r.Active.ID == id {
 		r.Active = nil
 	}
+	r.promoteNextPermission()
 	return result
 }
 
@@ -243,7 +244,21 @@ func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 		}
 	}
 	r.Active = nil
+	r.promoteNextPermission()
 	return result
+}
+
+func (r *DialogRuntime) promoteNextPermission() {
+	if r.Active != nil || len(r.Permissions) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(r.Permissions))
+	for id := range r.Permissions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	dialog := PermissionDialog(r.Permissions[ids[0]])
+	r.Active = &dialog
 }
 
 func taskStateRank(state string) int {
