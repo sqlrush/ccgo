@@ -221,6 +221,61 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 }
 
+func TestReappendSessionMetadataWritesSessionScopedTailEntries(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"custom-title","sessionId":"s1","customTitle":"Title"}`,
+		`{"type":"ai-title","sessionId":"s1","aiTitle":"AI Title"}`,
+		`{"type":"last-prompt","sessionId":"s1","lastPrompt":"last prompt text"}`,
+		`{"type":"task-summary","sessionId":"s1","summary":"running tests","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"tag","sessionId":"s1","tag":"tagged"}`,
+		`{"type":"agent-name","sessionId":"s1","agentName":"Builder"}`,
+		`{"type":"agent-color","sessionId":"s1","agentColor":"blue"}`,
+		`{"type":"agent-setting","sessionId":"s1","agentSetting":"reviewer"}`,
+		`{"type":"mode","sessionId":"s1","mode":"coordinator"}`,
+		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
+		`{"type":"pr-link","sessionId":"s1","prNumber":42,"prUrl":"https://github.com/o/r/pull/42","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"custom-title","sessionId":"other","customTitle":"Other"}`,
+	})
+	result, err := ReappendSessionMetadata(path, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Written != 8 {
+		t.Fatalf("result = %#v", result)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	tail := strings.Join(lines[len(lines)-result.Written:], "\n")
+	for _, want := range []string{
+		`"type":"custom-title"`,
+		`"customTitle":"Title"`,
+		`"type":"tag"`,
+		`"type":"agent-name"`,
+		`"type":"agent-color"`,
+		`"type":"agent-setting"`,
+		`"type":"mode"`,
+		`"type":"worktree-state"`,
+		`"type":"pr-link"`,
+	} {
+		if !strings.Contains(tail, want) {
+			t.Fatalf("tail missing %q in %s", want, tail)
+		}
+	}
+	for _, notWant := range []string{
+		`"type":"ai-title"`,
+		`"type":"last-prompt"`,
+		`"type":"task-summary"`,
+		`"customTitle":"Other"`,
+	} {
+		if strings.Contains(tail, notWant) {
+			t.Fatalf("tail unexpectedly contains %q in %s", notWant, tail)
+		}
+	}
+}
+
 func TestLoadTranscriptTailKeepsOnlyRecentMessagesAndBridgesProgress(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
