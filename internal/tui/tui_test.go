@@ -1755,6 +1755,24 @@ func TestREPLScreenVimWORDMotionsAndFirstNonBlank(t *testing.T) {
 	if screen.Prompt.Text != "  baz-qux" || screen.Prompt.Cursor != 2 {
 		t.Fatalf("after dB prompt = %#v", screen.Prompt)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "^"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n  ")) {
+		t.Fatalf("cursor after multiline ^ = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("e"))
+	for _, seq := range []string{"d", "^"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\n  o\nthree" || screen.Prompt.Cursor != len([]rune("one\n  ")) || screen.VimRegister != "tw" {
+		t.Fatalf("after multiline d^ screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimBackwardEndMotions(t *testing.T) {

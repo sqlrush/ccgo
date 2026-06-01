@@ -1245,13 +1245,29 @@ func (p *PromptState) moveWORDBackwardEnd() {
 
 func (p *PromptState) moveFirstNonBlank() {
 	runes := []rune(p.Text)
-	for i, r := range runes {
+	cursor := p.clampCursor(p.Cursor)
+	start := 0
+	for i := cursor - 1; i >= 0; i-- {
+		if runes[i] == '\n' {
+			start = i + 1
+			break
+		}
+	}
+	end := len(runes)
+	for i := start; i < len(runes); i++ {
+		if runes[i] == '\n' {
+			end = i
+			break
+		}
+	}
+	for i := start; i < end; i++ {
+		r := runes[i]
 		if !unicode.IsSpace(r) {
 			p.Cursor = i
 			return
 		}
 	}
-	p.Cursor = 0
+	p.Cursor = start
 }
 
 func (p *PromptState) deleteAll() {
