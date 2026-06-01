@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"ccgo/internal/session"
 )
 
 func TestScanDirectoryParsesFrontmatterAndFormatsManifest(t *testing.T) {
@@ -68,6 +70,50 @@ func TestGuardTeamMemoryWriteRejectsSecrets(t *testing.T) {
 	if err := GuardTeamMemoryWrite("/repo/notes.md", "token = ghp_123456789012345678901234567890123456"); err != nil {
 		t.Fatalf("non-team memory should not be blocked: %v", err)
 	}
+}
+
+func TestWriteAndLoadSessionSummary(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	updatedAt := time.Unix(100, 0).UTC()
+	written, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:            root,
+		SessionID:       "sess_1",
+		Summary:         "summary text\n",
+		UpdatedAt:       updatedAt,
+		LastMessageUUID: "msg_summary",
+		Metadata: sessionCompactMetadata(
+			"auto",
+			123,
+			4,
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written.Path != filepath.Join(root, "sess_1", SessionSummaryFilename) {
+		t.Fatalf("path = %q", written.Path)
+	}
+	loaded, err := LoadSessionSummary(written.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SessionID != "sess_1" || loaded.Summary != "summary text" || !loaded.UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("loaded = %#v", loaded)
+	}
+	if loaded.Metadata.Trigger != "auto" || loaded.Metadata.PreTokens != 123 || loaded.Metadata.MessagesSummarized != 4 {
+		t.Fatalf("metadata = %#v", loaded.Metadata)
+	}
+	headers, err := ScanDirectory(root, ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(headers) != 1 || headers[0].Type != TypeSession {
+		t.Fatalf("headers = %#v", headers)
+	}
+}
+
+func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {
+	return session.CompactMetadata{Trigger: trigger, PreTokens: preTokens, MessagesSummarized: summarized}
 }
 
 func writeFile(t *testing.T, path string, content string) {

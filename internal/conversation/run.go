@@ -10,6 +10,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -110,19 +111,38 @@ func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Messag
 		ExtraInstructions: config.ExtraInstructions,
 	}.Compact(ctx, history, compactpkg.TriggerAuto, config.TokenUsage, "")
 	if err != nil {
-		return history, result, false, err
+		compactpkg.RecordFailure(r.AutoCompact)
+		r.emit(Event{Type: EventCompact, Compact: &result, Error: err})
+		return history, result, false, nil
 	}
+	compactpkg.RecordSuccess(r.AutoCompact)
 	return result.Plan.Output, result, true, nil
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {
-	if r.SessionPath == "" {
+	if r.SessionPath != "" {
+		if err := session.AppendTranscriptMessage(r.SessionPath, compactpkg.BoundaryTranscriptMessage(plan.Boundary, plan.Metadata)); err != nil {
+			return err
+		}
+		if err := session.Append(r.SessionPath, session.EntryFromMessage(r.SessionID, plan.Summary)); err != nil {
+			return err
+		}
+	}
+	root := r.SessionMemoryRoot
+	if root == "" {
+		root = memory.DefaultSessionMemoryRoot(r.SessionPath)
+	}
+	if root == "" || r.SessionID == "" {
 		return nil
 	}
-	if err := session.AppendTranscriptMessage(r.SessionPath, compactpkg.BoundaryTranscriptMessage(plan.Boundary, plan.Metadata)); err != nil {
-		return err
-	}
-	return session.Append(r.SessionPath, session.EntryFromMessage(r.SessionID, plan.Summary))
+	_, err := memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:            root,
+		SessionID:       r.SessionID,
+		Summary:         msgs.TextContent(plan.Summary),
+		LastMessageUUID: plan.Summary.UUID,
+		Metadata:        plan.Metadata,
+	})
+	return err
 }
 
 func (r Runner) send(ctx context.Context, history []contracts.Message) (anthropic.Request, []string, *anthropic.Response, error) {

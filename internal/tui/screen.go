@@ -17,14 +17,16 @@ type ScreenEvent struct {
 }
 
 type REPLScreen struct {
-	Width    int
-	Height   int
-	Messages []Message
-	Status   string
-	Prompt   PromptState
-	Dialog   *Dialog
-	Keymap   Keymap
-	Viewport Viewport
+	Width      int
+	Height     int
+	Messages   []Message
+	Status     string
+	Prompt     PromptState
+	Dialog     *Dialog
+	Keymap     Keymap
+	Viewport   Viewport
+	VimEnabled bool
+	VimMode    VimMode
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
@@ -50,6 +52,11 @@ func (s *REPLScreen) AppendMessage(message Message) {
 }
 
 func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
+	if s.Dialog == nil {
+		if event, handled := s.applyVimKey(key); handled {
+			return event
+		}
+	}
 	action := s.Keymap.Resolve(key)
 	if s.Dialog != nil {
 		return s.applyDialogAction(action)

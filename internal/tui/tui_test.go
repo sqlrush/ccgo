@@ -120,6 +120,40 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	}
 }
 
+func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
+		{Key: "ctrl-r", Action: ActionPageUp},
+		{Key: "esc", Action: ActionNone},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageUp {
+		t.Fatalf("ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b")); action != ActionNone {
+		t.Fatalf("esc action = %q", action)
+	}
+	if _, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{{Key: "wat", Action: ActionCancel}}); err == nil {
+		t.Fatal("expected unknown key error")
+	}
+}
+
+func TestPermissionAndTaskDialogs(t *testing.T) {
+	permission := PermissionDialog(PermissionRequest{
+		ToolName:    "Edit",
+		Path:        "/tmp/a.txt",
+		Description: "Modify file contents.",
+	})
+	if permission.Title != "Permission" || !strings.Contains(permission.Body, "Tool: Edit") || len(permission.Actions) != 3 {
+		t.Fatalf("permission = %#v", permission)
+	}
+	tasks := TaskDialog([]TaskStatus{{ID: "task_1", Title: "Search", State: "running", Detail: "grep", Progress: 42}})
+	if tasks.Title != "Tasks" || !strings.Contains(tasks.Body, "Search [running] 42% - grep") {
+		t.Fatalf("tasks = %#v", tasks)
+	}
+}
+
 func TestREPLScreenSubmitsPromptAndRendersMessages(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.Status = "ready"
@@ -170,5 +204,24 @@ func TestREPLScreenViewportScrolls(t *testing.T) {
 	after := strings.Join(screen.Viewport.Visible(), "\n")
 	if before == after || !strings.Contains(after, "one") {
 		t.Fatalf("before=%q after=%q", before, after)
+	}
+}
+
+func TestREPLScreenVimNormalModeEditsPrompt(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "b", "c"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "abc" {
+		t.Fatalf("screen = %#v", screen)
+	}
+	screen.ApplyKey(ParseKey("h"))
+	screen.ApplyKey(ParseKey("x"))
+	screen.ApplyKey(ParseKey("i"))
+	screen.ApplyKey(ParseKey("Z"))
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "abZ" {
+		t.Fatalf("screen = %#v", screen)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	"ccgo/internal/memory"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -366,6 +367,93 @@ func TestRunnerAutoCompactsBeforeMainRequest(t *testing.T) {
 	}
 	if !foundBoundary {
 		t.Fatalf("transcript missing compact boundary: %#v", transcript.Order)
+	}
+	summary, err := memory.LoadSessionSummary(filepath.Join(filepath.Dir(transcriptPath), "session-memory", "sess_compact", memory.SessionSummaryFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.SessionID != "sess_compact" || !strings.Contains(summary.Summary, "summary text") || summary.Metadata.MessagesSummarized != 2 {
+		t.Fatalf("session memory summary = %#v", summary)
+	}
+}
+
+func TestRunnerAutoCompactFailureDoesNotBlockMainRequest(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{
+		{err: anthropic.APIError{StatusCode: http.StatusInternalServerError, Type: "overloaded_error", Message: "compact failed"}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	var compactErrors int
+	config := &compactpkg.AutoConfig{Enabled: true, Force: true}
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		AutoCompact: config,
+		OnEvent: func(event Event) {
+			if event.Type == EventCompact && event.Error != nil {
+				compactErrors++
+			}
+		},
+	}
+
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("new"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Compacted || result.Assistant.Content[0].Text != "done" {
+		t.Fatalf("result = %#v", result)
+	}
+	if config.ConsecutiveFailures != 1 || compactErrors != 1 {
+		t.Fatalf("failures=%d compactErrors=%d", config.ConsecutiveFailures, compactErrors)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %d, want compact attempt and main request", len(client.requests))
+	}
+}
+
+func TestRunnerAutoCompactSkipsAfterFailureLimit(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	config := &compactpkg.AutoConfig{
+		Enabled:             true,
+		TokenUsage:          10_000,
+		ConsecutiveFailures: compactpkg.DefaultMaxConsecutiveFailures,
+		Window: compactpkg.WindowConfig{
+			ContextWindow:      12_000,
+			MaxOutputTokens:    1_000,
+			AutoCompactEnabled: true,
+		},
+	}
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		AutoCompact: config,
+	}
+
+	if _, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("new")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d, want only main request", len(client.requests))
+	}
+	if config.ConsecutiveFailures != compactpkg.DefaultMaxConsecutiveFailures {
+		t.Fatalf("failure count changed = %d", config.ConsecutiveFailures)
 	}
 }
 

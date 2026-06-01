@@ -179,6 +179,10 @@ test/parity/                 # golden tests against TS/official behavior
 - 能读取旧 transcript 并恢复对话。
 - compact 前后消息链和 API 请求保持 golden。
 
+当前进度：
+
+- 已落地 JSONL/session 基础、resume/search/title 支撑、CLAUDE.md/memdir 扫描、team-memory secret guard、compact runner/boundary plan、conversation auto-compact、失败熔断和 session memory summary 初版。
+
 ### M7: TUI renderer 和交互体验
 
 产出：
@@ -191,6 +195,10 @@ test/parity/                 # golden tests against TS/official behavior
 
 - ANSI snapshot 和交互脚本覆盖主路径。
 - 窗口尺寸变化、Ctrl-C/Esc/Enter、paste/image hint、permission ask/deny/allow 都有测试。
+
+当前进度：
+
+- 已落地轻量 terminal frame renderer、PromptInput/history、keybinding resolver/config、vim insert/normal 基础、REPL screen、permission/task dialog builder、viewport/selection。
 
 ### M8: Commands、skills、plugins
 

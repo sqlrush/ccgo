@@ -77,6 +77,34 @@ func TestEstimateTokensAndShouldRun(t *testing.T) {
 	}
 }
 
+func TestAutoConfigFailureCircuitBreaker(t *testing.T) {
+	history := []contracts.Message{msgs.UserText(strings.Repeat("x", 400))}
+	config := AutoConfig{
+		Enabled:             true,
+		TokenUsage:          10_000,
+		ConsecutiveFailures: DefaultMaxConsecutiveFailures,
+		Window: WindowConfig{
+			ContextWindow:      12_000,
+			MaxOutputTokens:    1_000,
+			AutoCompactEnabled: true,
+		},
+	}
+	if ShouldRun(history, config) {
+		t.Fatal("autocompact should stop after failure limit")
+	}
+	if !ShouldRun(history, AutoConfig{Enabled: true, Force: true, ConsecutiveFailures: DefaultMaxConsecutiveFailures}) {
+		t.Fatal("forced autocompact should bypass failure limit")
+	}
+	RecordFailure(&config)
+	if config.ConsecutiveFailures != DefaultMaxConsecutiveFailures+1 {
+		t.Fatalf("failure count = %d", config.ConsecutiveFailures)
+	}
+	RecordSuccess(&config)
+	if config.ConsecutiveFailures != 0 {
+		t.Fatalf("failure count after success = %d", config.ConsecutiveFailures)
+	}
+}
+
 func TestRunnerBuildsNoToolSummaryRequestAndPlan(t *testing.T) {
 	client := &fakeCompactClient{response: &anthropic.Response{
 		ID:      "msg_summary",

@@ -15,14 +15,18 @@ type MessageClient interface {
 }
 
 type AutoConfig struct {
-	Enabled           bool
-	Force             bool
-	Window            WindowConfig
-	KeepLast          int
-	MinMessages       int
-	ExtraInstructions string
-	TokenUsage        int
+	Enabled                bool
+	Force                  bool
+	Window                 WindowConfig
+	KeepLast               int
+	MinMessages            int
+	ExtraInstructions      string
+	TokenUsage             int
+	ConsecutiveFailures    int
+	MaxConsecutiveFailures int
 }
+
+const DefaultMaxConsecutiveFailures = 3
 
 type Runner struct {
 	Client            MessageClient
@@ -43,6 +47,9 @@ func ShouldRun(history []contracts.Message, config AutoConfig) bool {
 	if !config.Enabled {
 		return false
 	}
+	if !config.Force && FailureLimitReached(config) {
+		return false
+	}
 	if config.MinMessages > 0 && len(history) < config.MinMessages {
 		return false
 	}
@@ -56,6 +63,29 @@ func ShouldRun(history []contracts.Message, config AutoConfig) bool {
 	window := config.Window
 	window.AutoCompactEnabled = true
 	return ShouldAutoCompact(usage, window)
+}
+
+func FailureLimit(config AutoConfig) int {
+	if config.MaxConsecutiveFailures > 0 {
+		return config.MaxConsecutiveFailures
+	}
+	return DefaultMaxConsecutiveFailures
+}
+
+func FailureLimitReached(config AutoConfig) bool {
+	return config.ConsecutiveFailures >= FailureLimit(config)
+}
+
+func RecordFailure(config *AutoConfig) {
+	if config != nil {
+		config.ConsecutiveFailures++
+	}
+}
+
+func RecordSuccess(config *AutoConfig) {
+	if config != nil {
+		config.ConsecutiveFailures = 0
+	}
 }
 
 func (r Runner) Compact(ctx context.Context, history []contracts.Message, trigger Trigger, preTokens int, userContext string) (Result, error) {
