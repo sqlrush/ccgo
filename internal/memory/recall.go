@@ -11,6 +11,7 @@ import (
 type RecallOptions struct {
 	Limit            int
 	ExcludeSessionID contracts.ID
+	CandidateLimit   int
 }
 
 type RecallMatch struct {
@@ -37,7 +38,7 @@ func RecallSessionSummaries(root string, query string, options RecallOptions) ([
 		matches = append(matches, RecallMatch{
 			Summary: summary,
 			Score:   score,
-			Snippet: snippet(summary.Summary, 240),
+			Snippet: matchSnippet(summary.Summary, terms, 240),
 		})
 	}
 	sort.SliceStable(matches, func(i, j int) bool {
@@ -89,4 +90,33 @@ func snippet(text string, max int) string {
 		return text
 	}
 	return strings.TrimSpace(text[:max])
+}
+
+func matchSnippet(text string, terms []string, max int) string {
+	clean := strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if len(terms) == 0 || max <= 0 || len(clean) <= max {
+		return snippet(clean, max)
+	}
+	lower := strings.ToLower(clean)
+	first := -1
+	for _, term := range terms {
+		index := strings.Index(lower, term)
+		if index >= 0 && (first < 0 || index < first) {
+			first = index
+		}
+	}
+	if first < 0 {
+		return snippet(clean, max)
+	}
+	start := first - max/3
+	if start < 0 {
+		start = 0
+	}
+	if start+max > len(clean) {
+		start = len(clean) - max
+		if start < 0 {
+			start = 0
+		}
+	}
+	return strings.TrimSpace(clean[start : start+max])
 }

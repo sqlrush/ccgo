@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"ccgo/internal/api/anthropic"
@@ -29,11 +30,12 @@ type AgentExtractResult struct {
 }
 
 type AgentRecallResult struct {
-	Query    string
-	Matches  []RecallMatch
-	Request  anthropic.Request
-	Response *anthropic.Response
-	Fallback bool
+	Query       string
+	SelectedIDs []contracts.ID
+	Matches     []RecallMatch
+	Request     anthropic.Request
+	Response    *anthropic.Response
+	Fallback    bool
 }
 
 func (a Agent) Extract(ctx context.Context, history []contracts.Message, options ExtractOptions) (AgentExtractResult, error) {
@@ -57,28 +59,49 @@ func (a Agent) Extract(ctx context.Context, history []contracts.Message, options
 
 func (a Agent) Recall(ctx context.Context, root string, query string, options RecallOptions) (AgentRecallResult, error) {
 	searchQuery := strings.TrimSpace(query)
+	var selectedIDs []contracts.ID
 	var request anthropic.Request
 	var response *anthropic.Response
 	fallback := false
 	if a.Client != nil {
-		request = a.buildRecallRequest(query)
-		var err error
-		response, err = a.Client.CreateMessage(ctx, request)
+		candidates, err := recallAgentCandidates(root, query, recallCandidateOptions(options))
 		if err != nil {
+			return AgentRecallResult{}, err
+		}
+		request = a.buildRecallRequest(query, candidates)
+		var responseErr error
+		response, responseErr = a.Client.CreateMessage(ctx, request)
+		if responseErr != nil {
 			fallback = true
-		} else if expanded := strings.TrimSpace(responseText(response)); expanded != "" {
-			searchQuery = expanded
 		} else {
-			fallback = true
+			expanded, ids, ok := parseRecallAgentResponse(responseText(response))
+			switch {
+			case ok && expanded != "":
+				searchQuery = expanded
+				selectedIDs = ids
+			case ok && len(ids) > 0:
+				selectedIDs = ids
+			case expanded != "":
+				searchQuery = expanded
+			default:
+				fallback = true
+			}
 		}
 	} else {
 		fallback = true
+	}
+	if len(selectedIDs) > 0 {
+		matches, err := recallMatchesBySessionIDs(root, selectedIDs, searchQuery, options)
+		if err != nil {
+			return AgentRecallResult{}, err
+		}
+		return AgentRecallResult{Query: searchQuery, SelectedIDs: selectedIDs, Matches: matches, Request: request, Response: response, Fallback: fallback}, nil
 	}
 	matches, err := RecallSessionSummaries(root, searchQuery, options)
 	if err != nil {
 		return AgentRecallResult{}, err
 	}
-	return AgentRecallResult{Query: searchQuery, Matches: matches, Request: request, Response: response, Fallback: fallback}, nil
+	return AgentRecallResult{Query: searchQuery, SelectedIDs: selectedIDs, Matches: matches, Request: request, Response: response, Fallback: fallback}, nil
 }
 
 func (a Agent) buildExtractRequest(history []contracts.Message, options ExtractOptions) anthropic.Request {
@@ -95,15 +118,30 @@ func (a Agent) buildExtractRequest(history []contracts.Message, options ExtractO
 	}
 }
 
-func (a Agent) buildRecallRequest(query string) anthropic.Request {
+func (a Agent) buildRecallRequest(query string, candidates []RecallMatch) anthropic.Request {
+	var b strings.Builder
+	b.WriteString("Select relevant session memories for the user request. Return a JSON object with keys query and session_ids. The query should be a concise search query. session_ids must be ordered from most to least relevant and use only candidate IDs. Return no prose.\n\nUser request:\n")
+	b.WriteString(strings.TrimSpace(query))
+	if len(candidates) > 0 {
+		b.WriteString("\n\nCandidate session summaries:\n")
+		for _, candidate := range candidates {
+			b.WriteString("- id: ")
+			b.WriteString(string(candidate.Summary.SessionID))
+			b.WriteString("\n  updated_at: ")
+			if !candidate.Summary.UpdatedAt.IsZero() {
+				b.WriteString(candidate.Summary.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"))
+			}
+			b.WriteString("\n  summary: ")
+			b.WriteString(snippet(candidate.Summary.Summary, 480))
+			b.WriteString("\n")
+		}
+	}
 	return anthropic.Request{
 		Model:     a.model(),
 		MaxTokens: a.maxTokens(),
 		Messages: []contracts.APIMessage{{
-			Role: "user",
-			Content: []contracts.ContentBlock{contracts.NewTextBlock(
-				"Rewrite this user request into a concise session-memory search query. Return plain text only.\n\n" + query,
-			)},
+			Role:    "user",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock(b.String())},
 		}},
 	}
 }
@@ -127,6 +165,125 @@ func extractLimit(options ExtractOptions) int {
 		return options.Limit
 	}
 	return 20
+}
+
+func recallCandidateOptions(options RecallOptions) RecallOptions {
+	out := options
+	if out.CandidateLimit <= 0 {
+		switch {
+		case out.Limit > 0 && out.Limit*4 > 20:
+			out.CandidateLimit = out.Limit * 4
+		default:
+			out.CandidateLimit = 20
+		}
+	}
+	out.Limit = out.CandidateLimit
+	return out
+}
+
+func recallAgentCandidates(root string, query string, options RecallOptions) ([]RecallMatch, error) {
+	summaries, err := LoadSessionSummaries(root)
+	if err != nil {
+		return nil, err
+	}
+	terms := queryTerms(query)
+	var matches []RecallMatch
+	for _, summary := range summaries {
+		if options.ExcludeSessionID != "" && summary.SessionID == options.ExcludeSessionID {
+			continue
+		}
+		matches = append(matches, RecallMatch{
+			Summary: summary,
+			Score:   recallScore(summary, terms),
+			Snippet: matchSnippet(summary.Summary, terms, 240),
+		})
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].Score != matches[j].Score {
+			return matches[i].Score > matches[j].Score
+		}
+		return matches[i].Summary.UpdatedAt.After(matches[j].Summary.UpdatedAt)
+	})
+	if options.Limit > 0 && len(matches) > options.Limit {
+		matches = matches[:options.Limit]
+	}
+	return matches, nil
+}
+
+func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, false
+	}
+	var object struct {
+		Query      string   `json:"query"`
+		SessionIDs []string `json:"session_ids"`
+		IDs        []string `json:"ids"`
+	}
+	if err := json.Unmarshal([]byte(raw), &object); err == nil {
+		ids := recallIDs(object.SessionIDs)
+		if len(ids) == 0 {
+			ids = recallIDs(object.IDs)
+		}
+		return strings.TrimSpace(object.Query), ids, strings.TrimSpace(object.Query) != "" || len(ids) > 0
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(raw), &ids); err == nil {
+		return "", recallIDs(ids), len(ids) > 0
+	}
+	return raw, nil, true
+}
+
+func recallIDs(raw []string) []contracts.ID {
+	seen := map[contracts.ID]struct{}{}
+	var ids []contracts.ID
+	for _, value := range raw {
+		id := contracts.ID(strings.TrimSpace(value))
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func recallMatchesBySessionIDs(root string, ids []contracts.ID, query string, options RecallOptions) ([]RecallMatch, error) {
+	summaries, err := LoadSessionSummaries(root)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[contracts.ID]SessionSummary{}
+	for _, summary := range summaries {
+		if options.ExcludeSessionID != "" && summary.SessionID == options.ExcludeSessionID {
+			continue
+		}
+		byID[summary.SessionID] = summary
+	}
+	terms := queryTerms(query)
+	var matches []RecallMatch
+	for _, id := range ids {
+		summary, ok := byID[id]
+		if !ok {
+			continue
+		}
+		matches = append(matches, RecallMatch{
+			Summary: summary,
+			Score:   recallScore(summary, terms),
+			Snippet: matchSnippet(summary.Summary, terms, 240),
+		})
+	}
+	if options.Limit > 0 && len(matches) > options.Limit {
+		matches = matches[:options.Limit]
+	}
+	return matches, nil
 }
 
 func transcriptForMemory(history []contracts.Message) string {
