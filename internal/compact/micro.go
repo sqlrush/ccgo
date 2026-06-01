@@ -3,7 +3,10 @@ package compact
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -17,6 +20,7 @@ type MicroOptions struct {
 	KeepLast int
 	MaxChars int
 	Cache    *MicroCache
+	CacheDir string
 }
 
 type MicroResult struct {
@@ -60,6 +64,11 @@ func (c *MicroCache) Set(result MicroResult) {
 }
 
 func MicroCompact(history []contracts.Message, options MicroOptions) MicroResult {
+	result, _ := MicroCompactStored(history, options)
+	return result
+}
+
+func MicroCompactStored(history []contracts.Message, options MicroOptions) (MicroResult, error) {
 	keepLast := options.KeepLast
 	if keepLast < 0 {
 		keepLast = 0
@@ -71,7 +80,17 @@ func MicroCompact(history []contracts.Message, options MicroOptions) MicroResult
 	digest := DigestMessages(summarized)
 	if cached, ok := options.Cache.Get(digest); ok {
 		cached.MessagesKept = keepLast
-		return cached
+		return cached, nil
+	}
+	if options.CacheDir != "" {
+		if cached, ok, err := LoadMicroResult(options.CacheDir, digest); err != nil {
+			return MicroResult{}, err
+		} else if ok {
+			cached.Cached = true
+			cached.MessagesKept = keepLast
+			options.Cache.Set(cached)
+			return cached, nil
+		}
 	}
 	maxChars := options.MaxChars
 	if maxChars <= 0 {
@@ -84,7 +103,51 @@ func MicroCompact(history []contracts.Message, options MicroOptions) MicroResult
 		MessagesKept:       keepLast,
 	}
 	options.Cache.Set(result)
-	return result
+	if options.CacheDir != "" {
+		if err := SaveMicroResult(options.CacheDir, result); err != nil {
+			return MicroResult{}, err
+		}
+	}
+	return result, nil
+}
+
+func LoadMicroResult(dir string, digest string) (MicroResult, bool, error) {
+	if dir == "" || digest == "" {
+		return MicroResult{}, false, nil
+	}
+	data, err := os.ReadFile(microResultPath(dir, digest))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return MicroResult{}, false, nil
+		}
+		return MicroResult{}, false, err
+	}
+	var result MicroResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return MicroResult{}, false, err
+	}
+	if result.Digest != digest {
+		return MicroResult{}, false, fmt.Errorf("microcompact cache digest mismatch: got %q want %q", result.Digest, digest)
+	}
+	return result, true, nil
+}
+
+func SaveMicroResult(dir string, result MicroResult) error {
+	if dir == "" || result.Digest == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(microResultPath(dir, result.Digest), append(data, '\n'), 0o600)
+}
+
+func microResultPath(dir string, digest string) string {
+	return filepath.Join(dir, digest+".json")
 }
 
 func DigestMessages(messages []contracts.Message) string {

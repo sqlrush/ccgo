@@ -229,6 +229,30 @@ func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeTaskLifecycle(t *testing.T) {
+	runtime := NewDialogRuntime()
+	running := runtime.StartTask("task_1", "Search", "starting")
+	if running.State != TaskRunning || running.Progress != 0 {
+		t.Fatalf("running = %#v", running)
+	}
+	progress := runtime.UpdateTaskProgress("task_1", "halfway", 50)
+	if progress.State != TaskRunning || progress.Detail != "halfway" || progress.Progress != 50 {
+		t.Fatalf("progress = %#v", progress)
+	}
+	done := runtime.CompleteTask("task_1", "done")
+	if done.State != TaskCompleted || done.Progress != 100 {
+		t.Fatalf("done = %#v", done)
+	}
+	failed := runtime.FailTask("task_2", "boom")
+	if failed.State != TaskFailed || failed.Title != "task_2" {
+		t.Fatalf("failed = %#v", failed)
+	}
+	cancelled := runtime.CancelTask("task_3", "stopped")
+	if cancelled.State != TaskCancelled || cancelled.Detail != "stopped" {
+		t.Fatalf("cancelled = %#v", cancelled)
+	}
+}
+
 func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
@@ -327,16 +351,19 @@ func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	permission := PermissionDialog(PermissionRequest{ID: "perm_1", ToolName: "Edit"})
-	result := RunInteractionScript(&screen, []ScriptStep{
-		{Message: &Message{Role: RoleAssistant, Text: "ready"}, SnapshotName: "initial"},
+	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Message: &Message{Role: RoleAssistant, Text: "ready"}, SnapshotName: "initial", ExpectSnapshotContains: []string{"assistant: ready"}},
 		{Key: "r"},
 		{Key: "u"},
 		{Key: "n"},
-		{Key: "\n", SnapshotName: "submitted"},
+		{Key: "\n", SnapshotName: "submitted", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "run"}},
 		{Dialog: &permission},
 		{Key: "\t"},
-		{Key: "\n", SnapshotName: "permission"},
+		{Key: "\n", SnapshotName: "permission", ExpectEvent: &ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow Session", DialogID: "perm_1", DialogKind: DialogPermission}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result.Events) != 2 {
 		t.Fatalf("events = %#v", result.Events)
 	}
@@ -348,5 +375,15 @@ func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	}
 	if len(result.Snapshots) != 3 || !strings.Contains(result.Snapshots[0].Text, "assistant: ready") {
 		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
+func TestRunInteractionScriptCheckedFailsOnExpectationMismatch(t *testing.T) {
+	screen := NewREPLScreen(30, 6, nil)
+	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Key: "\n", ExpectEvent: &ScreenEvent{Type: ScreenEventDialogAction}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "event type") {
+		t.Fatalf("err = %v", err)
 	}
 }

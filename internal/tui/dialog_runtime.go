@@ -60,6 +60,30 @@ func (r *DialogRuntime) UpsertTask(task TaskStatus) {
 	r.Tasks[task.ID] = task
 }
 
+func (r *DialogRuntime) StartTask(id string, title string, detail string) TaskStatus {
+	return r.updateTask(id, title, TaskRunning, detail, 0)
+}
+
+func (r *DialogRuntime) UpdateTaskProgress(id string, detail string, progress int) TaskStatus {
+	task := r.Tasks[id]
+	return r.updateTask(id, task.Title, task.State, detail, progress)
+}
+
+func (r *DialogRuntime) CompleteTask(id string, detail string) TaskStatus {
+	task := r.Tasks[id]
+	return r.updateTask(id, task.Title, TaskCompleted, detail, 100)
+}
+
+func (r *DialogRuntime) FailTask(id string, detail string) TaskStatus {
+	task := r.Tasks[id]
+	return r.updateTask(id, task.Title, TaskFailed, detail, task.Progress)
+}
+
+func (r *DialogRuntime) CancelTask(id string, detail string) TaskStatus {
+	task := r.Tasks[id]
+	return r.updateTask(id, task.Title, TaskCancelled, detail, task.Progress)
+}
+
 func (r *DialogRuntime) RemoveTask(id string) {
 	delete(r.Tasks, id)
 }
@@ -146,15 +170,38 @@ func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 
 func taskStateRank(state string) int {
 	switch state {
-	case "running":
+	case TaskRunning:
 		return 0
-	case "pending":
+	case TaskPending:
 		return 1
-	case "failed":
+	case TaskFailed:
 		return 2
-	case "completed", "done":
+	case TaskCancelled:
+		return 3
+	case TaskCompleted, "done":
 		return 3
 	default:
 		return 4
 	}
+}
+
+func (r *DialogRuntime) updateTask(id string, title string, state string, detail string, progress int) TaskStatus {
+	if r.Tasks == nil {
+		r.Tasks = map[string]TaskStatus{}
+	}
+	if id == "" {
+		id = title
+	}
+	if id == "" {
+		return TaskStatus{}
+	}
+	if title == "" {
+		title = id
+	}
+	task := TaskStatus{ID: id, Title: title, State: state, Detail: detail, Progress: clampPercent(progress)}
+	if task.State == "" {
+		task.State = TaskPending
+	}
+	r.Tasks[id] = task
+	return task
 }

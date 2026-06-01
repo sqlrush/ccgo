@@ -2,6 +2,7 @@ package compact
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,6 +122,36 @@ func TestMicroCompactSummarizesAndCaches(t *testing.T) {
 	}
 	cached := MicroCompact(history, MicroOptions{KeepLast: 1, MaxChars: 200, Cache: cache})
 	if !cached.Cached || cached.Digest != result.Digest || cached.Summary != result.Summary {
+		t.Fatalf("cached = %#v result = %#v", cached, result)
+	}
+}
+
+func TestMicroCompactPersistsDiskCache(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	history := []contracts.Message{
+		msgs.UserText("first message"),
+		msgs.AssistantText("second message", "sonnet", nil),
+		msgs.UserText("keep me"),
+	}
+	result, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 200, CacheDir: cacheDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Cached {
+		t.Fatalf("first result should not be cached: %#v", result)
+	}
+	loaded, ok, err := LoadMicroResult(cacheDir, result.Digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || loaded.Summary != result.Summary {
+		t.Fatalf("loaded=%#v ok=%v result=%#v", loaded, ok, result)
+	}
+	cached, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, CacheDir: cacheDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cached.Cached || cached.Summary != result.Summary || cached.MessagesKept != 1 {
 		t.Fatalf("cached = %#v result = %#v", cached, result)
 	}
 }

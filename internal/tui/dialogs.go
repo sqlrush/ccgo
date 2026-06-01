@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+const (
+	TaskPending   = "pending"
+	TaskRunning   = "running"
+	TaskFailed    = "failed"
+	TaskCompleted = "completed"
+	TaskCancelled = "cancelled"
+)
+
 type PermissionRequest struct {
 	ID          string
 	ToolName    string
