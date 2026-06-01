@@ -1143,11 +1143,12 @@ func TestDialogRuntimeInteractionScriptAppliesRuntimeMutations(t *testing.T) {
 			ExpectStatusContains: []string{"permissions: 1", "running: 1"},
 		},
 		{
-			Key:                  "\n",
-			ExpectEvent:          &ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow", DialogID: "perm_1", DialogKind: DialogPermission},
-			ExpectDialogResult:   &DialogResultExpectation{ID: "perm_1", Kind: DialogPermission, Action: "Allow", Status: DialogResultAllowed, Found: &found},
-			ExpectDialog:         &DialogExpectation{Active: false},
-			ExpectStatusContains: []string{"running: 1"},
+			Key:                     "\n",
+			ExpectEvent:             &ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow", DialogID: "perm_1", DialogKind: DialogPermission},
+			ExpectDialogResult:      &DialogResultExpectation{ID: "perm_1", Kind: DialogPermission, Action: "Allow", Status: DialogResultAllowed, Found: &found},
+			ExpectDialog:            &DialogExpectation{Active: false},
+			ExpectStatusContains:    []string{"running: 1"},
+			ExpectStatusNotContains: []string{"permissions:"},
 		},
 		{
 			UpsertTask:      &TaskStatus{ID: "task_1", Title: "Search", State: TaskCompleted, Detail: "done", Progress: 100},
@@ -1163,6 +1164,9 @@ func TestDialogRuntimeInteractionScriptAppliesRuntimeMutations(t *testing.T) {
 			ExpectTasks:  &TasksExpectation{Count: &emptyTaskCount},
 			ExpectSnapshotContains: []string{
 				"No active tasks.",
+			},
+			ExpectSnapshotNotContains: []string{
+				"Search [completed]",
 			},
 		},
 	})

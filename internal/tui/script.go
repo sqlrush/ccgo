@@ -6,28 +6,30 @@ import (
 )
 
 type ScriptStep struct {
-	Keys                   []string
-	Key                    string
-	Message                *Message
-	Dialog                 *Dialog
-	RequestPermission      *PermissionRequest
-	UpsertTask             *TaskStatus
-	RemoveTaskID           string
-	OpenTasksDialog        bool
-	ResizeWidth            int
-	ResizeHeight           int
-	SnapshotName           string
-	ExpectEvent            *ScreenEvent
-	ExpectDialogResult     *DialogResultExpectation
-	ExpectDialog           *DialogExpectation
-	ExpectPrompt           *PromptExpectation
-	ExpectVim              *VimExpectation
-	ExpectTasks            *TasksExpectation
-	ExpectReverseSearch    *ReverseSearchExpectation
-	ExpectViewport         *ViewportExpectation
-	ExpectFocused          *bool
-	ExpectStatusContains   []string
-	ExpectSnapshotContains []string
+	Keys                      []string
+	Key                       string
+	Message                   *Message
+	Dialog                    *Dialog
+	RequestPermission         *PermissionRequest
+	UpsertTask                *TaskStatus
+	RemoveTaskID              string
+	OpenTasksDialog           bool
+	ResizeWidth               int
+	ResizeHeight              int
+	SnapshotName              string
+	ExpectEvent               *ScreenEvent
+	ExpectDialogResult        *DialogResultExpectation
+	ExpectDialog              *DialogExpectation
+	ExpectPrompt              *PromptExpectation
+	ExpectVim                 *VimExpectation
+	ExpectTasks               *TasksExpectation
+	ExpectReverseSearch       *ReverseSearchExpectation
+	ExpectViewport            *ViewportExpectation
+	ExpectFocused             *bool
+	ExpectStatusContains      []string
+	ExpectStatusNotContains   []string
+	ExpectSnapshotContains    []string
+	ExpectSnapshotNotContains []string
 }
 
 type DialogExpectation struct {
@@ -219,17 +221,27 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, fmt.Errorf("script step %d status missing %q in %q", index, want, screen.Status)
 			}
 		}
+		for _, notWant := range step.ExpectStatusNotContains {
+			if strings.Contains(screen.Status, notWant) {
+				return result, dialogResults, fmt.Errorf("script step %d status unexpectedly contains %q in %q", index, notWant, screen.Status)
+			}
+		}
 		if step.SnapshotName != "" {
 			snapshot = CaptureANSISnapshot(step.SnapshotName, screen.Width, screen.Height, screen.Frame())
 			result.Snapshots = append(result.Snapshots, snapshot)
 		}
-		if len(step.ExpectSnapshotContains) > 0 {
+		if len(step.ExpectSnapshotContains) > 0 || len(step.ExpectSnapshotNotContains) > 0 {
 			if snapshot.Name == "" {
 				snapshot = CaptureANSISnapshot(step.SnapshotName, screen.Width, screen.Height, screen.Frame())
 			}
 			for _, want := range step.ExpectSnapshotContains {
 				if !strings.Contains(snapshot.Text, want) {
 					return result, dialogResults, fmt.Errorf("script step %d snapshot missing %q in %q", index, want, snapshot.Text)
+				}
+			}
+			for _, notWant := range step.ExpectSnapshotNotContains {
+				if strings.Contains(snapshot.Text, notWant) {
+					return result, dialogResults, fmt.Errorf("script step %d snapshot unexpectedly contains %q in %q", index, notWant, snapshot.Text)
 				}
 			}
 		}
