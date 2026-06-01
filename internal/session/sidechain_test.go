@@ -50,6 +50,24 @@ func TestSidechainRuntimeStartAppendFinish(t *testing.T) {
 	if err := runtime.Append(run, TranscriptMessage{Type: "assistant", UUID: "agent_msg"}); err != nil {
 		t.Fatal(err)
 	}
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].ID != "agent_one" || states[0].Status != SidechainStatusRunning || states[0].MessageCount != 2 || states[0].LastUUID != "agent_msg" {
+		t.Fatalf("running state = %#v", states)
+	}
+	resumed, ok := ResumeSidechainRunFromState(states[0])
+	if !ok || resumed.ID != run.ID || resumed.Path != run.Path || resumed.ParentUUID == nil || *resumed.ParentUUID != parent {
+		t.Fatalf("resumed from state = %#v ok=%v", resumed, ok)
+	}
+	resumed, ok, err = ResumeSidechainRun(sessionPath, sessionID, "agent/one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || resumed.ID != run.ID || resumed.Status != SidechainStatusRunning {
+		t.Fatalf("resumed = %#v ok=%v", resumed, ok)
+	}
 	summary, err := runtime.Finish(run, SidechainStatusCompleted, "agent finished", time.Unix(110, 0).UTC())
 	if err != nil {
 		t.Fatal(err)
@@ -70,5 +88,39 @@ func TestSidechainRuntimeStartAppendFinish(t *testing.T) {
 	}
 	if len(mainTranscript.Order) != 1 || mainTranscript.Messages[summary.UUID] == nil {
 		t.Fatalf("main transcript = %#v", mainTranscript.Order)
+	}
+	states, err = ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].Status != SidechainStatusCompleted || states[0].Summary != "agent finished" || states[0].MessageCount != 3 {
+		t.Fatalf("finished state = %#v", states)
+	}
+	if resumed, ok := ResumeSidechainRunFromState(states[0]); ok {
+		t.Fatalf("completed sidechain should not resume: %#v", resumed)
+	}
+	if resumed, ok, err := ResumeSidechainRun(sessionPath, sessionID, "agent/one"); err != nil || ok {
+		t.Fatalf("completed resume = %#v ok=%v err=%v", resumed, ok, err)
+	}
+}
+
+func TestLoadSidechainStateMarksOrphanTranscriptUnknown(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "orphan", TranscriptMessage{
+		Type: "assistant",
+		UUID: "msg_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].Status != SidechainStatusUnknown || states[0].MessageCount != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	if run, ok := ResumeSidechainRunFromState(states[0]); ok {
+		t.Fatalf("unknown sidechain should not resume: %#v", run)
 	}
 }

@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	SidechainStatusUnknown   = "unknown"
 	SidechainStatusRunning   = "running"
 	SidechainStatusCompleted = "completed"
 	SidechainStatusCancelled = "cancelled"

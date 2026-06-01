@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -28,6 +29,9 @@ func ParseKey(seq string) Key {
 	}
 	if text, ok := parseImageHint(seq); ok {
 		return Key{Type: KeyImageHint, Text: text}
+	}
+	if key, ok := parseSGRMouse(seq); ok {
+		return key
 	}
 	switch seq {
 	case "\r", "\n":
@@ -73,6 +77,34 @@ func ParseKey(seq string) Key {
 		}
 		return Key{Type: KeyUnknown}
 	}
+}
+
+func parseSGRMouse(seq string) (Key, bool) {
+	if !strings.HasPrefix(seq, "\x1b[<") {
+		return Key{}, false
+	}
+	final := seq[len(seq)-1]
+	if final != 'M' && final != 'm' {
+		return Key{}, false
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b[<"), string(final))
+	parts := strings.Split(body, ";")
+	if len(parts) != 3 {
+		return Key{}, false
+	}
+	button, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return Key{}, false
+	}
+	x, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return Key{}, false
+	}
+	y, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return Key{}, false
+	}
+	return Key{Type: KeyMouse, MouseButton: button, MouseX: x, MouseY: y, MouseRelease: final == 'm'}, true
 }
 
 func (p *PromptState) Apply(key Key) PromptResult {

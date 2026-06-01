@@ -54,6 +54,9 @@ func (s *REPLScreen) AppendMessage(message Message) {
 }
 
 func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
+	if key.Type == KeyMouse {
+		return s.applyMouse(key)
+	}
 	if s.Dialog == nil {
 		if event, handled := s.applyVimKey(key); handled {
 			return event
@@ -88,6 +91,19 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		case result.Interrupted:
 			return ScreenEvent{Type: ScreenEventInterrupted}
 		}
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
+	if key.MouseRelease {
+		return ScreenEvent{}
+	}
+	switch key.MouseButton {
+	case 64:
+		s.Viewport.Scroll(-1)
+	case 65:
+		s.Viewport.Scroll(1)
 	}
 	return ScreenEvent{}
 }

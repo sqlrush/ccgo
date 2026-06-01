@@ -69,6 +69,17 @@ func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	}
 }
 
+func TestParseSGRMouse(t *testing.T) {
+	press := ParseKey("\x1b[<64;10;4M")
+	if press.Type != KeyMouse || press.MouseButton != 64 || press.MouseX != 10 || press.MouseY != 4 || press.MouseRelease {
+		t.Fatalf("press = %#v", press)
+	}
+	release := ParseKey("\x1b[<0;1;2m")
+	if release.Type != KeyMouse || release.MouseButton != 0 || release.MouseX != 1 || release.MouseY != 2 || !release.MouseRelease {
+		t.Fatalf("release = %#v", release)
+	}
+}
+
 func TestRendererIncludesStatusPromptAndDialog(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "hello"
@@ -316,6 +327,16 @@ func TestREPLScreenViewportScrolls(t *testing.T) {
 	after := strings.Join(screen.Viewport.Visible(), "\n")
 	if before == after || !strings.Contains(after, "one") {
 		t.Fatalf("before=%q after=%q", before, after)
+	}
+	screen.ApplyKey(ParseKey("\x1b[<65;4;4M"))
+	scrolledDown := strings.Join(screen.Viewport.Visible(), "\n")
+	if scrolledDown == after {
+		t.Fatalf("mouse wheel down did not scroll: before=%q after=%q", after, scrolledDown)
+	}
+	screen.ApplyKey(ParseKey("\x1b[<64;4;4M"))
+	scrolledUp := strings.Join(screen.Viewport.Visible(), "\n")
+	if scrolledUp != after {
+		t.Fatalf("mouse wheel up mismatch: after=%q scrolledUp=%q", after, scrolledUp)
 	}
 }
 

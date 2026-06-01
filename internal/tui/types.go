@@ -66,13 +66,18 @@ const (
 	KeyCtrlR     KeyType = "ctrl+r"
 	KeyPaste     KeyType = "paste"
 	KeyImageHint KeyType = "image_hint"
+	KeyMouse     KeyType = "mouse"
 	KeyUnknown   KeyType = "unknown"
 )
 
 type Key struct {
-	Type KeyType
-	Rune rune
-	Text string
+	Type         KeyType
+	Rune         rune
+	Text         string
+	MouseButton  int
+	MouseX       int
+	MouseY       int
+	MouseRelease bool
 }
 
 type PromptResult struct {
