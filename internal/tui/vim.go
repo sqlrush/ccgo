@@ -185,6 +185,10 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyLeft}) })
 	case 'l':
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
+	case 'j':
+		s.Prompt.moveLogicalLine(count)
+	case 'k':
+		s.Prompt.moveLogicalLine(-count)
 	case 'w':
 		applyN(count, func() { s.Prompt.moveWordForward() })
 	case 'b':
@@ -254,7 +258,7 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		}
 		s.VimRepeatingChar = true
 		return s.applyVimCharMotion(s.VimLastCharTarget)
-	case 'h', 'l', 'w', 'W', 'e', 'E', '$', '0', 'b', 'B', '^':
+	case 'h', 'l', 'j', 'k', 'w', 'W', 'e', 'E', '$', '0', 'b', 'B', '^':
 		s.applyVimMotionOperator(operator, r, count)
 	}
 	return ScreenEvent{}
@@ -679,6 +683,14 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 	runes := []rune(p.Text)
 	start := p.clampCursor(p.Cursor)
 	cursor := *p
+	switch motion {
+	case 'j':
+		start, end, ok := p.lineMotionRange(p.currentLogicalLine() + count + 1)
+		return start, end, true, ok
+	case 'k':
+		start, end, ok := p.lineMotionRange(p.currentLogicalLine() - count + 1)
+		return start, end, true, ok
+	}
 	if operator == 'c' && (motion == 'w' || motion == 'W') {
 		for i := 0; i < count-1; i++ {
 			if motion == 'w' {
