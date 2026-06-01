@@ -296,7 +296,7 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 	if key.MouseRelease {
 		return ScreenEvent{}
 	}
-	if s.Dialog != nil && key.MouseButton == 0 {
+	if s.Dialog != nil && isPrimaryMouseAction(key.MouseButton) {
 		if index, ok := s.dialogActionAtMouse(key.MouseX, key.MouseY); ok {
 			dialogID := s.Dialog.ID
 			dialogKind := s.Dialog.Kind
@@ -306,18 +306,38 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 			return ScreenEvent{Type: ScreenEventDialogAction, Value: value, DialogID: dialogID, DialogKind: dialogKind}
 		}
 	}
-	if s.Dialog == nil && key.MouseButton == 0 {
+	if s.Dialog == nil && isPrimaryMouseAction(key.MouseButton) {
 		if line, ok := s.selectViewportAtMouse(key.MouseX, key.MouseY); ok {
 			return ScreenEvent{Type: ScreenEventViewportSelected, Value: line}
 		}
 	}
-	switch key.MouseButton {
-	case 64:
-		s.Viewport.Scroll(-1)
-	case 65:
-		s.Viewport.Scroll(1)
+	if delta := mouseWheelDelta(key.MouseButton); delta != 0 {
+		s.Viewport.Scroll(delta)
 	}
 	return ScreenEvent{}
+}
+
+const (
+	sgrMouseBaseMask  = 3
+	sgrMouseWheelMask = 64
+)
+
+func isPrimaryMouseAction(button int) bool {
+	return button&sgrMouseWheelMask == 0 && button&sgrMouseBaseMask == 0
+}
+
+func mouseWheelDelta(button int) int {
+	if button&sgrMouseWheelMask == 0 {
+		return 0
+	}
+	switch button & sgrMouseBaseMask {
+	case 0:
+		return -1
+	case 1:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (s *REPLScreen) selectViewportAtMouse(x int, y int) (string, bool) {

@@ -765,6 +765,15 @@ func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	if screen.Dialog != nil {
 		t.Fatalf("dialog should close after mouse click")
 	}
+
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}, ID: "perm_3", Kind: DialogPermission}
+	shiftClick := screen.ApplyKey(ParseKey("\x1b[<4;13;5M"))
+	if shiftClick.Type != ScreenEventDialogAction || shiftClick.Value != "Deny" || shiftClick.DialogID != "perm_3" || shiftClick.DialogKind != DialogPermission {
+		t.Fatalf("dialog shift mouse click = %#v", shiftClick)
+	}
+	if screen.Dialog != nil {
+		t.Fatalf("dialog should close after shift mouse click")
+	}
 }
 
 func TestREPLScreenRedrawEvent(t *testing.T) {
@@ -1285,6 +1294,42 @@ func TestREPLScreenViewportScrolls(t *testing.T) {
 	statusClick := screen.ApplyKey(ParseKey("\x1b[<0;1;5M"))
 	if statusClick.Type != ScreenEventNone {
 		t.Fatalf("status click should not select viewport: %#v", statusClick)
+	}
+}
+
+func TestREPLScreenMouseModifiersAndDragSelection(t *testing.T) {
+	screen := NewREPLScreen(20, 6, nil)
+	screen.SetMessages([]Message{
+		{Role: RoleSystem, Text: "one"},
+		{Role: RoleSystem, Text: "two"},
+		{Role: RoleSystem, Text: "three"},
+		{Role: RoleSystem, Text: "four"},
+		{Role: RoleSystem, Text: "five"},
+		{Role: RoleSystem, Text: "six"},
+	})
+	bottom := strings.Join(screen.Viewport.Visible(), "\n")
+	screen.ApplyKey(ParseKey("\x1b[<68;4;4M"))
+	scrolledUp := strings.Join(screen.Viewport.Visible(), "\n")
+	if scrolledUp == bottom {
+		t.Fatalf("modified mouse wheel up did not scroll: before=%q after=%q", bottom, scrolledUp)
+	}
+	screen.ApplyKey(ParseKey("\x1b[<69;4;4M"))
+	if got := strings.Join(screen.Viewport.Visible(), "\n"); got != bottom {
+		t.Fatalf("modified mouse wheel down mismatch: bottom=%q got=%q", bottom, got)
+	}
+
+	click := screen.ApplyKey(ParseKey("\x1b[<16;1;2M"))
+	if click.Type != ScreenEventViewportSelected || screen.SelectedViewportLine < 0 {
+		t.Fatalf("modified viewport click = %#v selected=%d", click, screen.SelectedViewportLine)
+	}
+	selected := screen.SelectedViewportLine
+	drag := screen.ApplyKey(ParseKey("\x1b[<32;1;3M"))
+	if drag.Type != ScreenEventViewportSelected || screen.SelectedViewportLine == selected {
+		t.Fatalf("viewport drag = %#v selected=%d previous=%d", drag, screen.SelectedViewportLine, selected)
+	}
+	motion := screen.ApplyKey(ParseKey("\x1b[<35;1;3M"))
+	if motion.Type != ScreenEventNone {
+		t.Fatalf("buttonless motion should be ignored: %#v", motion)
 	}
 }
 
