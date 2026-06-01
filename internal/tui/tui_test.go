@@ -233,6 +233,38 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 }
 
+func TestKeymapResolvesChordBindings(t *testing.T) {
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
+		{Key: "ctrl-r enter", Action: ActionPageDown},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionNone {
+		t.Fatalf("first chord action = %q", action)
+	}
+	if len(keymap.PendingChord) != 1 || keymap.PendingChord[0] != KeyCtrlR {
+		t.Fatalf("pending chord = %#v", keymap.PendingChord)
+	}
+	if action := keymap.Resolve(ParseKey("\n")); action != ActionPageDown {
+		t.Fatalf("second chord action = %q", action)
+	}
+	if len(keymap.PendingChord) != 0 {
+		t.Fatalf("pending chord after exact = %#v", keymap.PendingChord)
+	}
+
+	keymap, err = KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
+		{Key: "ctrl-r enter", Action: ActionPageDown},
+		{Key: "ctrl-r enter", Action: ActionNone},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionReverseSearch {
+		t.Fatalf("single key should win after chord removal: %q", action)
+	}
+}
+
 func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 	results := FilterHistoryForReverseSearch([]string{"deploy old", "test", "deploy new", "deploy old"}, "deploy", 10)
 	if strings.Join(results, ",") != "deploy old,deploy new" {

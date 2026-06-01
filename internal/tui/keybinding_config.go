@@ -11,21 +11,34 @@ type BindingSpec struct {
 }
 
 func KeymapFromSpecs(base Keymap, specs []BindingSpec) (Keymap, error) {
-	out := Keymap{Bindings: map[KeyType]Action{}}
+	out := Keymap{Bindings: map[KeyType]Action{}, ChordBindings: map[string]Action{}}
 	if base.Bindings == nil {
 		base = DefaultKeymap()
 	}
 	for key, action := range base.Bindings {
 		out.Bindings[key] = action
 	}
+	for chord, action := range base.ChordBindings {
+		out.ChordBindings[chord] = action
+	}
 	for _, spec := range specs {
-		key, err := ParseKeyName(spec.Key)
+		chord, err := ParseKeyChord(spec.Key)
 		if err != nil {
 			return Keymap{}, err
 		}
 		if !IsKnownAction(spec.Action) {
 			return Keymap{}, fmt.Errorf("unknown action %q", spec.Action)
 		}
+		if len(chord) > 1 {
+			key := encodeChordKey(chord)
+			if spec.Action == ActionNone {
+				delete(out.ChordBindings, key)
+				continue
+			}
+			out.ChordBindings[key] = spec.Action
+			continue
+		}
+		key := chord[0]
 		if spec.Action == ActionNone {
 			delete(out.Bindings, key)
 			continue
@@ -33,6 +46,22 @@ func KeymapFromSpecs(base Keymap, specs []BindingSpec) (Keymap, error) {
 		out.Bindings[key] = spec.Action
 	}
 	return out, nil
+}
+
+func ParseKeyChord(raw string) ([]KeyType, error) {
+	parts := strings.Fields(strings.TrimSpace(raw))
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("empty keybinding")
+	}
+	chord := make([]KeyType, 0, len(parts))
+	for _, part := range parts {
+		key, err := ParseKeyName(part)
+		if err != nil {
+			return nil, err
+		}
+		chord = append(chord, key)
+	}
+	return chord, nil
 }
 
 func ParseKeyName(raw string) (KeyType, error) {
