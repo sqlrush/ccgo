@@ -172,6 +172,14 @@ func TestPromptStateAltWordEditing(t *testing.T) {
 	if prompt.Cursor != len([]rune("alpha ")) {
 		t.Fatalf("after second alt-b prompt = %#v", prompt)
 	}
+	prompt.Apply(ParseKey("\x1b[1;5C"))
+	if prompt.Cursor != len([]rune("alpha beta ")) {
+		t.Fatalf("after ctrl-right prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x1b[1;5D"))
+	if prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after ctrl-left prompt = %#v", prompt)
+	}
 	prompt.Apply(ParseKey("\x1bf"))
 	if prompt.Cursor != len([]rune("alpha beta ")) {
 		t.Fatalf("after alt-f prompt = %#v", prompt)
@@ -267,6 +275,14 @@ func TestReverseSearchAltWordEditing(t *testing.T) {
 	screen.ApplyKey(ParseKey("\x1bb"))
 	if screen.ReverseSearch.Cursor != len([]rune("alpha beta ")) {
 		t.Fatalf("reverse search alt-b = %#v", screen.ReverseSearch)
+	}
+	screen.ApplyKey(ParseKey("\x1b[1;5C"))
+	if screen.ReverseSearch.Cursor != len([]rune("alpha beta gamma")) {
+		t.Fatalf("reverse search ctrl-right = %#v", screen.ReverseSearch)
+	}
+	screen.ApplyKey(ParseKey("\x1b[1;5D"))
+	if screen.ReverseSearch.Cursor != len([]rune("alpha beta ")) {
+		t.Fatalf("reverse search ctrl-left = %#v", screen.ReverseSearch)
 	}
 	screen.ApplyKey(ParseKey("\x1bd"))
 	if screen.ReverseSearch.Query != "alpha beta " || screen.ReverseSearch.Cursor != len([]rune("alpha beta ")) {
@@ -375,6 +391,8 @@ func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 		{seq: "\x1bOB", want: KeyDown},
 		{seq: "\x1bOC", want: KeyRight},
 		{seq: "\x1bOD", want: KeyLeft},
+		{seq: "\x1b[1;5C", want: KeyCtrlRight},
+		{seq: "\x1b[1;5D", want: KeyCtrlLeft},
 		{seq: "\x1bOH", want: KeyHome},
 		{seq: "\x1bOF", want: KeyEnd},
 		{seq: "\x1b[7~", want: KeyHome},
@@ -507,11 +525,17 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1bb")); action != ActionMoveWordLeft {
 		t.Fatalf("alt-b action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x1b[1;5D")); action != ActionMoveWordLeft {
+		t.Fatalf("ctrl-left action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x06")); action != ActionMoveRight {
 		t.Fatalf("ctrl-f action = %q", action)
 	}
 	if action := keymap.Resolve(ParseKey("\x1bf")); action != ActionMoveWordRight {
 		t.Fatalf("alt-f action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[1;5C")); action != ActionMoveWordRight {
+		t.Fatalf("ctrl-right action = %q", action)
 	}
 	if action := keymap.Resolve(ParseKey("\x07")); action != ActionExternalEditor {
 		t.Fatalf("ctrl-g action = %q", action)
@@ -590,7 +614,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "control-left", "control-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

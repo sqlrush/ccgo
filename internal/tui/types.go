@@ -62,6 +62,8 @@ const (
 	KeyDelete    KeyType = "delete"
 	KeyLeft      KeyType = "left"
 	KeyRight     KeyType = "right"
+	KeyCtrlLeft  KeyType = "ctrl+left"
+	KeyCtrlRight KeyType = "ctrl+right"
 	KeyUp        KeyType = "up"
 	KeyDown      KeyType = "down"
 	KeyPageUp    KeyType = "pageup"

@@ -264,9 +264,9 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 		s.ReverseSearch.MoveCursor(-1)
 	case KeyRight, KeyCtrlF:
 		s.ReverseSearch.MoveCursor(1)
-	case KeyAltB:
+	case KeyAltB, KeyCtrlLeft:
 		s.ReverseSearch.MoveWordBackward()
-	case KeyAltF:
+	case KeyAltF, KeyCtrlRight:
 		s.ReverseSearch.MoveWordForward()
 	case KeyHome, KeyCtrlA:
 		s.ReverseSearch.MoveStart()
