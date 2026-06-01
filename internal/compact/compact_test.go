@@ -182,6 +182,38 @@ func TestMicroCompactPersistsDiskCache(t *testing.T) {
 	}
 }
 
+func TestMicroCompactWriteThroughPersistsMemoryCache(t *testing.T) {
+	cache := NewMicroCache()
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	now := time.Unix(100, 0).UTC()
+	history := []contracts.Message{
+		msgs.UserText("first message"),
+		msgs.AssistantText("second message", "sonnet", nil),
+		msgs.UserText("keep me"),
+	}
+	memoryOnly, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 200, Cache: cache, CacheTTL: time.Hour, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if memoryOnly.Cached {
+		t.Fatalf("first result should not be cached: %#v", memoryOnly)
+	}
+	cached, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, Cache: cache, CacheDir: cacheDir, Now: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cached.Cached || cached.Summary != memoryOnly.Summary {
+		t.Fatalf("cached = %#v memoryOnly = %#v", cached, memoryOnly)
+	}
+	loaded, ok, err := LoadMicroResult(cacheDir, memoryOnly.Digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || loaded.Cached || loaded.Summary != memoryOnly.Summary || loaded.Digest != memoryOnly.Digest {
+		t.Fatalf("loaded=%#v ok=%v memoryOnly=%#v", loaded, ok, memoryOnly)
+	}
+}
+
 func TestPruneMicroCacheDeletesExpiredVersionedAndInvalidEntries(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	now := time.Unix(100, 0).UTC()

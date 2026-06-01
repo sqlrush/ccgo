@@ -126,6 +126,11 @@ func MicroCompactStored(history []contracts.Message, options MicroOptions) (Micr
 	if cached, ok := options.Cache.Get(digest); ok {
 		if MicroResultUsable(cached, version, now) {
 			cached.MessagesKept = keepLast
+			if options.CacheDir != "" {
+				if err := SaveMicroResult(options.CacheDir, storedMicroResult(cached)); err != nil {
+					return MicroResult{}, err
+				}
+			}
 			return cached, nil
 		}
 	}
@@ -163,6 +168,11 @@ func MicroCompactStored(history []contracts.Message, options MicroOptions) (Micr
 		}
 	}
 	return result, nil
+}
+
+func storedMicroResult(result MicroResult) MicroResult {
+	result.Cached = false
+	return result
 }
 
 func MicroResultUsable(result MicroResult, version string, now time.Time) bool {
