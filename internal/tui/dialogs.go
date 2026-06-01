@@ -6,6 +6,7 @@ import (
 )
 
 type PermissionRequest struct {
+	ID          string
 	ToolName    string
 	Path        string
 	Description string
@@ -39,12 +40,16 @@ func PermissionDialog(request PermissionRequest) Dialog {
 	if body == "" {
 		body = "Permission required."
 	}
-	return Dialog{Title: "Permission", Body: body, Actions: append([]string(nil), actions...)}
+	id := request.ID
+	if id == "" {
+		id = "permission"
+	}
+	return Dialog{Title: "Permission", Body: body, Actions: append([]string(nil), actions...), ID: id, Kind: DialogPermission}
 }
 
 func TaskDialog(tasks []TaskStatus) Dialog {
 	if len(tasks) == 0 {
-		return Dialog{Title: "Tasks", Body: "No active tasks.", Actions: []string{"Close"}}
+		return Dialog{Title: "Tasks", Body: "No active tasks.", Actions: []string{"Close"}, ID: "tasks", Kind: DialogTask}
 	}
 	lines := make([]string, 0, len(tasks))
 	for _, task := range tasks {
@@ -61,7 +66,7 @@ func TaskDialog(tasks []TaskStatus) Dialog {
 		}
 		lines = append(lines, line)
 	}
-	return Dialog{Title: "Tasks", Body: strings.Join(lines, "\n"), Actions: []string{"Close"}}
+	return Dialog{Title: "Tasks", Body: strings.Join(lines, "\n"), Actions: []string{"Close"}, ID: "tasks", Kind: DialogTask}
 }
 
 func clampPercent(n int) int {

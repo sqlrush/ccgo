@@ -105,6 +105,26 @@ func TestAutoConfigFailureCircuitBreaker(t *testing.T) {
 	}
 }
 
+func TestMicroCompactSummarizesAndCaches(t *testing.T) {
+	cache := NewMicroCache()
+	history := []contracts.Message{
+		msgs.UserText("first message"),
+		msgs.AssistantText("second message", "sonnet", nil),
+		msgs.UserText("keep me"),
+	}
+	result := MicroCompact(history, MicroOptions{KeepLast: 1, MaxChars: 200, Cache: cache})
+	if result.Cached || result.MessagesSummarized != 2 || result.MessagesKept != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !strings.Contains(result.Summary, "first message") || strings.Contains(result.Summary, "keep me") {
+		t.Fatalf("summary = %q", result.Summary)
+	}
+	cached := MicroCompact(history, MicroOptions{KeepLast: 1, MaxChars: 200, Cache: cache})
+	if !cached.Cached || cached.Digest != result.Digest || cached.Summary != result.Summary {
+		t.Fatalf("cached = %#v result = %#v", cached, result)
+	}
+}
+
 func TestRunnerBuildsNoToolSummaryRequestAndPlan(t *testing.T) {
 	client := &fakeCompactClient{response: &anthropic.Response{
 		ID:      "msg_summary",

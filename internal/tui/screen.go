@@ -12,8 +12,10 @@ const (
 )
 
 type ScreenEvent struct {
-	Type  ScreenEventType
-	Value string
+	Type       ScreenEventType
+	Value      string
+	DialogID   string
+	DialogKind DialogKind
 }
 
 type REPLScreen struct {
@@ -119,6 +121,8 @@ func (s *REPLScreen) applyDialogAction(action Action) ScreenEvent {
 	if s.Dialog == nil {
 		return ScreenEvent{}
 	}
+	dialogID := s.Dialog.ID
+	dialogKind := s.Dialog.Kind
 	switch action {
 	case ActionFocusNext, ActionMoveRight, ActionHistoryNext:
 		if len(s.Dialog.Actions) > 0 {
@@ -133,14 +137,14 @@ func (s *REPLScreen) applyDialogAction(action Action) ScreenEvent {
 		}
 	case ActionSubmitPrompt, ActionConfirmSelection:
 		if len(s.Dialog.Actions) == 0 {
-			return ScreenEvent{Type: ScreenEventDialogAction}
+			return ScreenEvent{Type: ScreenEventDialogAction, DialogID: dialogID, DialogKind: dialogKind}
 		}
 		value := s.Dialog.Actions[s.Dialog.Focused]
 		s.Dialog = nil
-		return ScreenEvent{Type: ScreenEventDialogAction, Value: value}
+		return ScreenEvent{Type: ScreenEventDialogAction, Value: value, DialogID: dialogID, DialogKind: dialogKind}
 	case ActionCancel, ActionInterrupt:
 		s.Dialog = nil
-		return ScreenEvent{Type: ScreenEventCancelled}
+		return ScreenEvent{Type: ScreenEventCancelled, DialogID: dialogID, DialogKind: dialogKind}
 	}
 	return ScreenEvent{}
 }

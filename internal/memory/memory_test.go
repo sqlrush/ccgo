@@ -112,6 +112,42 @@ func TestWriteAndLoadSessionSummary(t *testing.T) {
 	}
 }
 
+func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "older",
+		Summary:   "database migration notes",
+		UpdatedAt: time.Unix(100, 0).UTC(),
+		Metadata:  sessionCompactMetadata("auto", 10, 2),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "newer",
+		Summary:   "database database permissions",
+		UpdatedAt: time.Unix(200, 0).UTC(),
+		Metadata:  sessionCompactMetadata("auto", 10, 2),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	matches, err := RecallSessionSummaries(root, "database permissions", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0].Summary.SessionID != "newer" || matches[0].Score != 3 {
+		t.Fatalf("matches = %#v", matches)
+	}
+	all, err := RecallSessionSummaries(root, "", RecallOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[0].Summary.SessionID != "newer" {
+		t.Fatalf("all = %#v", all)
+	}
+}
+
 func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {
 	return session.CompactMetadata{Trigger: trigger, PreTokens: preTokens, MessagesSummarized: summarized}
 }

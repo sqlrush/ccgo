@@ -14,11 +14,21 @@ type Message struct {
 	Text string
 }
 
+type DialogKind string
+
+const (
+	DialogGeneric    DialogKind = ""
+	DialogPermission DialogKind = "permission"
+	DialogTask       DialogKind = "task"
+)
+
 type Dialog struct {
 	Title   string
 	Body    string
 	Actions []string
 	Focused int
+	ID      string
+	Kind    DialogKind
 }
 
 type Frame struct {

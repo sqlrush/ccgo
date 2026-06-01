@@ -141,15 +141,16 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 
 func TestPermissionAndTaskDialogs(t *testing.T) {
 	permission := PermissionDialog(PermissionRequest{
+		ID:          "perm_1",
 		ToolName:    "Edit",
 		Path:        "/tmp/a.txt",
 		Description: "Modify file contents.",
 	})
-	if permission.Title != "Permission" || !strings.Contains(permission.Body, "Tool: Edit") || len(permission.Actions) != 3 {
+	if permission.Title != "Permission" || permission.ID != "perm_1" || permission.Kind != DialogPermission || !strings.Contains(permission.Body, "Tool: Edit") || len(permission.Actions) != 3 {
 		t.Fatalf("permission = %#v", permission)
 	}
 	tasks := TaskDialog([]TaskStatus{{ID: "task_1", Title: "Search", State: "running", Detail: "grep", Progress: 42}})
-	if tasks.Title != "Tasks" || !strings.Contains(tasks.Body, "Search [running] 42% - grep") {
+	if tasks.Title != "Tasks" || tasks.Kind != DialogTask || !strings.Contains(tasks.Body, "Search [running] 42% - grep") {
 		t.Fatalf("tasks = %#v", tasks)
 	}
 }
@@ -176,13 +177,13 @@ func TestREPLScreenSubmitsPromptAndRendersMessages(t *testing.T) {
 
 func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
-	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}}
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}, ID: "perm_1", Kind: DialogPermission}
 	screen.ApplyKey(ParseKey("\t"))
 	if screen.Dialog.Focused != 1 {
 		t.Fatalf("focused = %d", screen.Dialog.Focused)
 	}
 	event := screen.ApplyKey(ParseKey("\n"))
-	if event.Type != ScreenEventDialogAction || event.Value != "Deny" {
+	if event.Type != ScreenEventDialogAction || event.Value != "Deny" || event.DialogID != "perm_1" || event.DialogKind != DialogPermission {
 		t.Fatalf("dialog event = %#v", event)
 	}
 	if screen.Dialog != nil {
