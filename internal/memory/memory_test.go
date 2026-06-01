@@ -276,6 +276,28 @@ func TestMemoryAgentExtractsModelFactsAndFallsBack(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsFencedFactsFromModelProse(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_fenced",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(strings.Join([]string{
+			"Facts:",
+			"```json",
+			`{"facts":[{"kind":"decision","text":"keep summaries short","source_uuid":"assistant_1"}]}`,
+			"```",
+		}, "\n"))},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Use compact summaries")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 1 || result.Facts[0].Kind != FactDecision || result.Facts[0].Text != "keep summaries short" || result.Facts[0].SourceUUID != "assistant_1" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestMemoryAgentRecallUsesModelQueryThenScoresLocalSummaries(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{Root: root, SessionID: "prior", Summary: "postgres permissions migration"}); err != nil {

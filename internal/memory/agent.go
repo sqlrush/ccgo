@@ -379,9 +379,21 @@ func transcriptForMemory(history []contracts.Message) string {
 
 func parseFacts(raw string) ([]MemoryFact, error) {
 	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
+	payload := stripMarkdownFence(raw)
+	facts, err := parseFactsJSON(payload)
+	if err == nil {
+		return facts, nil
+	}
+	if startsJSONValue(payload) {
+		return nil, err
+	}
+	if payload, ok := firstJSONValue(raw); ok {
+		return parseFactsJSON(payload)
+	}
+	return nil, err
+}
+
+func parseFactsJSON(raw string) ([]MemoryFact, error) {
 	raw = strings.TrimSpace(raw)
 	var entries []struct {
 		Kind       string `json:"kind"`
@@ -389,7 +401,25 @@ func parseFacts(raw string) ([]MemoryFact, error) {
 		SourceUUID string `json:"source_uuid"`
 	}
 	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
-		return nil, err
+		var object struct {
+			Facts []struct {
+				Kind       string `json:"kind"`
+				Text       string `json:"text"`
+				SourceUUID string `json:"source_uuid"`
+			} `json:"facts"`
+			Memory []struct {
+				Kind       string `json:"kind"`
+				Text       string `json:"text"`
+				SourceUUID string `json:"source_uuid"`
+			} `json:"memory"`
+		}
+		if objectErr := json.Unmarshal([]byte(raw), &object); objectErr != nil {
+			return nil, err
+		}
+		entries = object.Facts
+		if len(entries) == 0 {
+			entries = object.Memory
+		}
 	}
 	var facts []MemoryFact
 	for _, entry := range entries {
