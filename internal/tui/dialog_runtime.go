@@ -61,6 +61,7 @@ func (r *DialogRuntime) UpsertTask(task TaskStatus) {
 		return
 	}
 	r.Tasks[task.ID] = task
+	r.refreshActiveTaskDialog()
 }
 
 func (r *DialogRuntime) StartTask(id string, title string, detail string) TaskStatus {
@@ -89,6 +90,7 @@ func (r *DialogRuntime) CancelTask(id string, detail string) TaskStatus {
 
 func (r *DialogRuntime) RemoveTask(id string) {
 	delete(r.Tasks, id)
+	r.refreshActiveTaskDialog()
 }
 
 func (r *DialogRuntime) CancelActive() DialogResult {
@@ -261,6 +263,14 @@ func (r *DialogRuntime) promoteNextPermission() {
 	r.Active = &dialog
 }
 
+func (r *DialogRuntime) refreshActiveTaskDialog() {
+	if r.Active == nil || r.Active.Kind != DialogTask {
+		return
+	}
+	dialog := TaskDialog(r.SortedTasks())
+	r.Active = &dialog
+}
+
 func taskStateRank(state string) int {
 	switch state {
 	case TaskRunning:
@@ -318,5 +328,6 @@ func (r *DialogRuntime) updateTask(id string, title string, state string, detail
 		task.State = TaskPending
 	}
 	r.Tasks[id] = task
+	r.refreshActiveTaskDialog()
 	return task
 }

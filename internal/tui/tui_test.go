@@ -951,6 +951,32 @@ func TestDialogRuntimeTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeRefreshesActiveTaskDialog(t *testing.T) {
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(48, 8, nil)
+	runtime.StartTask("task_1", "Search", "starting")
+	runtime.OpenTasksDialog()
+	runtime.ApplyToScreen(&screen, "ready")
+	if screen.Dialog == nil || !strings.Contains(screen.Dialog.Body, "Search [running] - starting") {
+		t.Fatalf("task dialog before refresh = %#v", screen.Dialog)
+	}
+	runtime.UpdateTaskProgress("task_1", "halfway", 50)
+	runtime.ApplyToScreen(&screen, "ready")
+	if screen.Dialog == nil || !strings.Contains(screen.Dialog.Body, "Search [running] 50% - halfway") {
+		t.Fatalf("task dialog after progress = %#v", screen.Dialog)
+	}
+	runtime.CompleteTask("task_1", "done")
+	runtime.ApplyToScreen(&screen, "ready")
+	if screen.Dialog == nil || !strings.Contains(screen.Dialog.Body, "Search [completed] 100% - done") {
+		t.Fatalf("task dialog after complete = %#v", screen.Dialog)
+	}
+	runtime.RemoveTask("task_1")
+	runtime.ApplyToScreen(&screen, "ready")
+	if screen.Dialog == nil || !strings.Contains(screen.Dialog.Body, "No active tasks.") {
+		t.Fatalf("task dialog after remove = %#v", screen.Dialog)
+	}
+}
+
 func TestDialogRuntimeAppliesToScreenAndResolvesEvents(t *testing.T) {
 	runtime := NewDialogRuntime()
 	screen := NewREPLScreen(40, 8, nil)
