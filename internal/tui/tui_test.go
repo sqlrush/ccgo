@@ -669,6 +669,36 @@ func TestREPLScreenVimCountsRepeatMotionsAndOperators(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimReplaceAndUndo(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "b", "c", "d", "e", "f"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"2", "r", "Z"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ZZcdef" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after replace prompt = %#v", screen.Prompt)
+	}
+	screen.ApplyKey(ParseKey("u"))
+	if screen.Prompt.Text != "abcdef" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after undo replace prompt = %#v", screen.Prompt)
+	}
+	for _, seq := range []string{"3", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "def" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after 3x prompt = %#v", screen.Prompt)
+	}
+	screen.ApplyKey(ParseKey("u"))
+	if screen.Prompt.Text != "abcdef" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after undo delete prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()

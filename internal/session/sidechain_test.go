@@ -178,3 +178,37 @@ func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 		t.Fatal("expected append to completed sidechain to fail")
 	}
 }
+
+func TestSidechainManifestSummarizesStates(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	if _, err := manager.Start(SidechainOptions{ID: "running", StartedAt: time.Unix(300, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(SidechainOptions{ID: "done", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Finish("done", SidechainStatusCompleted, "finished work", time.Unix(200, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(SidechainOptions{ID: "failed", StartedAt: time.Unix(120, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Finish("failed", SidechainStatusFailed, "boom", time.Unix(240, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := manager.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SessionID != sessionID || manifest.Total != 3 || manifest.Running != 1 || manifest.Completed != 1 || manifest.Failed != 1 {
+		t.Fatalf("manifest counts = %#v", manifest)
+	}
+	if manifest.LatestStartedAt != time.Unix(300, 0).UTC().Format(time.RFC3339Nano) || manifest.LatestEndedAt != time.Unix(240, 0).UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("manifest times = %#v", manifest)
+	}
+	if len(manifest.Summaries) != 2 || manifest.Summaries[0].ID != "done" || manifest.Summaries[0].Summary != "finished work" || manifest.Summaries[1].Status != SidechainStatusFailed {
+		t.Fatalf("manifest summaries = %#v", manifest.Summaries)
+	}
+}

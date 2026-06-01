@@ -23,6 +23,10 @@ func (m SidechainManager) List() ([]SidechainState, error) {
 	return ListSidechainStates(m.Runtime.SessionPath, m.Runtime.SessionID)
 }
 
+func (m SidechainManager) Manifest() (SidechainManifest, error) {
+	return BuildSidechainManifest(m.Runtime.SessionPath, m.Runtime.SessionID)
+}
+
 func (m SidechainManager) Resume(sidechainID string) (SidechainRun, bool, error) {
 	return ResumeSidechainRun(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 }

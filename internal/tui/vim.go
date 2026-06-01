@@ -1,11 +1,20 @@
 package tui
 
+import "ccgo/internal/session"
+
 type VimMode string
 
 const (
 	VimInsert VimMode = "insert"
 	VimNormal VimMode = "normal"
 )
+
+type vimPromptSnapshot struct {
+	Text           string
+	Cursor         int
+	PastedContents map[int]session.PastedContent
+	NextPastedID   int
+}
 
 func (s *REPLScreen) SetVimEnabled(enabled bool) {
 	s.VimEnabled = enabled
@@ -40,6 +49,9 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 }
 
 func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
+	if s.VimPendingReplace {
+		return s.applyVimReplace(r)
+	}
 	if s.VimPendingOperator != 0 {
 		return s.applyVimOperator(r)
 	}
@@ -56,6 +68,11 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case 'i':
 		s.VimMode = VimInsert
 		s.clearVimPending()
+	case 'u':
+		s.undoVimPrompt()
+	case 'r':
+		s.VimPendingReplace = true
+		s.VimPendingCount = count
 	case 'd', 'c':
 		s.VimPendingOperator = r
 		s.VimPendingCount = count
@@ -81,12 +98,16 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case '$':
 		s.Prompt.Apply(Key{Type: KeyEnd})
 	case 'x':
+		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
 	case 'X':
+		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
 	case 'D':
+		s.recordVimUndo()
 		s.Prompt.deleteToEnd()
 	case 'C':
+		s.recordVimUndo()
 		s.Prompt.deleteToEnd()
 		s.VimMode = VimInsert
 	}
@@ -105,32 +126,45 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 	switch r {
 	case 'd', 'c':
 		if r == operator {
+			s.recordVimUndo()
 			s.Prompt.deleteAll()
 			if change {
 				s.VimMode = VimInsert
 			}
 		}
 	case 'w':
+		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.deleteWordForward() })
 		if change {
 			s.VimMode = VimInsert
 		}
 	case '$':
+		s.recordVimUndo()
 		s.Prompt.deleteToEnd()
 		if change {
 			s.VimMode = VimInsert
 		}
 	case '0':
+		s.recordVimUndo()
 		s.Prompt.deleteToStart()
 		if change {
 			s.VimMode = VimInsert
 		}
 	case 'b':
+		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.deleteWordBackward() })
 		if change {
 			s.VimMode = VimInsert
 		}
 	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimReplace(r rune) ScreenEvent {
+	count := s.takeVimOperatorCount()
+	s.clearVimPending()
+	s.recordVimUndo()
+	s.Prompt.replaceRunes(count, r)
 	return ScreenEvent{}
 }
 
@@ -158,6 +192,41 @@ func (s *REPLScreen) clearVimPending() {
 	s.VimPendingOperator = 0
 	s.VimPendingCount = 0
 	s.VimCount = 0
+	s.VimPendingReplace = false
+}
+
+func (s *REPLScreen) recordVimUndo() {
+	snapshot := vimPromptSnapshot{
+		Text:           s.Prompt.Text,
+		Cursor:         s.Prompt.Cursor,
+		PastedContents: clonePastedContents(s.Prompt.PastedContents),
+		NextPastedID:   s.Prompt.NextPastedID,
+	}
+	if len(s.VimUndoStack) > 0 {
+		last := s.VimUndoStack[len(s.VimUndoStack)-1]
+		if last.Text == snapshot.Text && last.Cursor == snapshot.Cursor {
+			return
+		}
+	}
+	s.VimUndoStack = append(s.VimUndoStack, snapshot)
+	if len(s.VimUndoStack) > 50 {
+		s.VimUndoStack = append([]vimPromptSnapshot(nil), s.VimUndoStack[len(s.VimUndoStack)-50:]...)
+	}
+}
+
+func (s *REPLScreen) undoVimPrompt() {
+	if len(s.VimUndoStack) == 0 {
+		return
+	}
+	last := s.VimUndoStack[len(s.VimUndoStack)-1]
+	s.VimUndoStack = s.VimUndoStack[:len(s.VimUndoStack)-1]
+	s.Prompt.Text = last.Text
+	s.Prompt.Cursor = last.Cursor
+	s.Prompt.replacePastedContents(last.PastedContents)
+	if s.Prompt.UsePasteReferences && last.NextPastedID > 0 {
+		s.Prompt.NextPastedID = last.NextPastedID
+	}
+	s.Prompt.resetHistoryCursor()
 }
 
 func isVimCountRune(r rune) bool {
@@ -280,6 +349,28 @@ func (p *PromptState) deleteRange(start int, end int) {
 	}
 	p.Text = string(append(runes[:start], runes[end:]...))
 	p.Cursor = start
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) replaceRunes(count int, r rune) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(p.Text)
+	if p.Cursor < 0 {
+		p.Cursor = 0
+	}
+	if p.Cursor >= len(runes) {
+		return
+	}
+	end := p.Cursor + count
+	if end > len(runes) {
+		end = len(runes)
+	}
+	for i := p.Cursor; i < end; i++ {
+		runes[i] = r
+	}
+	p.Text = string(runes)
 	p.resetHistoryCursor()
 }
 
