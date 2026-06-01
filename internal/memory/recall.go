@@ -1,8 +1,6 @@
 package memory
 
 import (
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
@@ -24,41 +22,23 @@ type RecallMatch struct {
 func RecallSessionSummaries(root string, query string, options RecallOptions) ([]RecallMatch, error) {
 	terms := queryTerms(query)
 	var matches []RecallMatch
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if entry.IsDir() || entry.Name() != SessionSummaryFilename {
-			return nil
-		}
-		summary, err := LoadSessionSummary(path)
-		if err != nil {
-			return nil
-		}
-		if summary.UpdatedAt.IsZero() {
-			if info, err := entry.Info(); err == nil {
-				summary.UpdatedAt = info.ModTime()
-			}
-		}
+	summaries, err := LoadSessionSummaries(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, summary := range summaries {
 		if options.ExcludeSessionID != "" && summary.SessionID == options.ExcludeSessionID {
-			return nil
+			continue
 		}
 		score := recallScore(summary, terms)
 		if len(terms) > 0 && score == 0 {
-			return nil
+			continue
 		}
 		matches = append(matches, RecallMatch{
 			Summary: summary,
 			Score:   score,
 			Snippet: snippet(summary.Summary, 240),
 		})
-		return nil
-	})
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
 	}
 	sort.SliceStable(matches, func(i, j int) bool {
 		if matches[i].Score != matches[j].Score {

@@ -168,6 +168,51 @@ func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	}
 }
 
+func TestCompactSessionMemoryRollsUpOlderSummaries(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+	}{
+		{id: "oldest", summary: "oldest postgres notes", updated: 100},
+		{id: "middle", summary: "middle permissions notes", updated: 200},
+		{id: "latest", summary: "latest active notes", updated: 300},
+	} {
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := CompactSessionMemory(root, SessionMemoryCompactionOptions{
+		KeepLatest: 1,
+		UpdatedAt:  time.Unix(400, 0).UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Kept) != 1 || result.Kept[0].SessionID != "latest" {
+		t.Fatalf("kept = %#v", result.Kept)
+	}
+	if len(result.Compacted) != 2 || result.Archive == nil || result.Archive.SessionID != SessionMemoryRollupID {
+		t.Fatalf("result = %#v", result)
+	}
+	if _, err := os.Stat(filepath.Join(root, "middle", SessionSummaryFilename)); !os.IsNotExist(err) {
+		t.Fatalf("middle summary should be pruned, err=%v", err)
+	}
+	matches, err := RecallSessionSummaries(root, "postgres permissions", RecallOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0].Summary.SessionID != SessionMemoryRollupID || !strings.Contains(matches[0].Summary.Summary, "[oldest") {
+		t.Fatalf("matches = %#v", matches)
+	}
+}
+
 func TestExtractFactsBuildsSessionMemorySummary(t *testing.T) {
 	toolInput := json.RawMessage(`{"file_path":"README.md"}`)
 	assistant := msgs.AssistantText("", "sonnet", nil)

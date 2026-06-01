@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 )
 
 const SessionSummaryFilename = "summary.md"
+const SessionMemoryRollupID contracts.ID = "session-memory-rollup"
 
 type SessionSummary struct {
 	SessionID       contracts.ID
@@ -30,6 +32,19 @@ type SessionSummaryOptions struct {
 	UpdatedAt       time.Time
 	LastMessageUUID contracts.ID
 	Metadata        session.CompactMetadata
+}
+
+type SessionMemoryCompactionOptions struct {
+	KeepLatest      int
+	MaxSummaryChars int
+	ArchiveID       contracts.ID
+	UpdatedAt       time.Time
+}
+
+type SessionMemoryCompactionResult struct {
+	Kept      []SessionSummary
+	Compacted []SessionSummary
+	Archive   *SessionSummary
 }
 
 func DefaultSessionMemoryRoot(sessionPath string) string {
@@ -99,6 +114,129 @@ func LoadSessionSummary(path string) (SessionSummary, error) {
 	}, nil
 }
 
+func CompactSessionMemory(root string, options SessionMemoryCompactionOptions) (SessionMemoryCompactionResult, error) {
+	if root == "" {
+		return SessionMemoryCompactionResult{}, fmt.Errorf("session memory root is required")
+	}
+	archiveID := options.ArchiveID
+	if archiveID == "" {
+		archiveID = SessionMemoryRollupID
+	}
+	summaries, err := LoadSessionSummaries(root)
+	if err != nil {
+		return SessionMemoryCompactionResult{}, err
+	}
+	var archive *SessionSummary
+	var candidates []SessionSummary
+	for _, summary := range summaries {
+		if summary.SessionID == archiveID {
+			s := summary
+			archive = &s
+			continue
+		}
+		candidates = append(candidates, summary)
+	}
+	sortSessionSummariesNewestFirst(candidates)
+	keepLatest := options.KeepLatest
+	if keepLatest < 0 {
+		keepLatest = 0
+	}
+	if keepLatest > len(candidates) {
+		keepLatest = len(candidates)
+	}
+	result := SessionMemoryCompactionResult{
+		Kept:      append([]SessionSummary(nil), candidates[:keepLatest]...),
+		Compacted: append([]SessionSummary(nil), candidates[keepLatest:]...),
+	}
+	if len(result.Compacted) == 0 {
+		if archive != nil {
+			result.Archive = archive
+		}
+		return result, nil
+	}
+	body := BuildSessionMemoryRollup(archive, result.Compacted, options.MaxSummaryChars)
+	written, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: archiveID,
+		Summary:   body,
+		UpdatedAt: sessionMemoryCompactionTime(options.UpdatedAt),
+		Metadata: session.CompactMetadata{
+			Trigger:            "session-memory-rollup",
+			MessagesSummarized: len(result.Compacted),
+		},
+	})
+	if err != nil {
+		return SessionMemoryCompactionResult{}, err
+	}
+	for _, summary := range result.Compacted {
+		if err := os.Remove(summary.Path); err != nil && !os.IsNotExist(err) {
+			return SessionMemoryCompactionResult{}, err
+		}
+		_ = os.Remove(filepath.Dir(summary.Path))
+	}
+	result.Archive = &written
+	return result, nil
+}
+
+func LoadSessionSummaries(root string) ([]SessionSummary, error) {
+	var summaries []SessionSummary
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() || entry.Name() != SessionSummaryFilename {
+			return nil
+		}
+		summary, err := LoadSessionSummary(path)
+		if err != nil {
+			return nil
+		}
+		if summary.UpdatedAt.IsZero() {
+			if info, err := entry.Info(); err == nil {
+				summary.UpdatedAt = info.ModTime()
+			}
+		}
+		summaries = append(summaries, summary)
+		return nil
+	})
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	sortSessionSummariesNewestFirst(summaries)
+	return summaries, nil
+}
+
+func BuildSessionMemoryRollup(existing *SessionSummary, summaries []SessionSummary, maxChars int) string {
+	var b strings.Builder
+	b.WriteString("Session memory rollup:")
+	if existing != nil && strings.TrimSpace(existing.Summary) != "" {
+		b.WriteString("\n")
+		b.WriteString(strings.TrimSpace(existing.Summary))
+	}
+	for _, summary := range summaries {
+		text := strings.Join(strings.Fields(summary.Summary), " ")
+		if text == "" {
+			continue
+		}
+		b.WriteString("\n")
+		b.WriteString("[")
+		b.WriteString(string(summary.SessionID))
+		if !summary.UpdatedAt.IsZero() {
+			b.WriteString(" | ")
+			b.WriteString(summary.UpdatedAt.UTC().Format(time.RFC3339))
+		}
+		b.WriteString("] ")
+		b.WriteString(text)
+		if maxChars > 0 && b.Len() >= maxChars {
+			return strings.TrimSpace(b.String()[:maxChars])
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func formatSessionSummary(summary SessionSummary) string {
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -144,4 +282,20 @@ func formatSessionSummary(summary SessionSummary) string {
 func parseInt(raw string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(raw))
 	return n
+}
+
+func sessionMemoryCompactionTime(t time.Time) time.Time {
+	if !t.IsZero() {
+		return t.UTC()
+	}
+	return time.Now().UTC()
+}
+
+func sortSessionSummariesNewestFirst(summaries []SessionSummary) {
+	sort.SliceStable(summaries, func(i, j int) bool {
+		if !summaries[i].UpdatedAt.Equal(summaries[j].UpdatedAt) {
+			return summaries[i].UpdatedAt.After(summaries[j].UpdatedAt)
+		}
+		return summaries[i].SessionID < summaries[j].SessionID
+	})
 }

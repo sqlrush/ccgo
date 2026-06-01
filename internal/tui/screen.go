@@ -22,23 +22,24 @@ type ScreenEvent struct {
 }
 
 type REPLScreen struct {
-	Width              int
-	Height             int
-	Messages           []Message
-	Status             string
-	Prompt             PromptState
-	Dialog             *Dialog
-	Keymap             Keymap
-	Viewport           Viewport
-	VimEnabled         bool
-	VimMode            VimMode
-	VimPendingOperator rune
-	VimCount           int
-	VimPendingCount    int
-	VimPendingReplace  bool
-	VimUndoStack       []vimPromptSnapshot
-	Focused            bool
-	ReverseSearch      ReverseSearchState
+	Width                int
+	Height               int
+	Messages             []Message
+	Status               string
+	Prompt               PromptState
+	Dialog               *Dialog
+	Keymap               Keymap
+	Viewport             Viewport
+	VimEnabled           bool
+	VimMode              VimMode
+	VimPendingOperator   rune
+	VimPendingCharMotion rune
+	VimCount             int
+	VimPendingCount      int
+	VimPendingReplace    bool
+	VimUndoStack         []vimPromptSnapshot
+	Focused              bool
+	ReverseSearch        ReverseSearchState
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {

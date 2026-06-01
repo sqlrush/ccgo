@@ -49,6 +49,9 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 }
 
 func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
+	if s.VimPendingCharMotion != 0 {
+		return s.applyVimCharMotion(r)
+	}
 	if s.VimPendingReplace {
 		return s.applyVimReplace(r)
 	}
@@ -72,6 +75,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.undoVimPrompt()
 	case 'r':
 		s.VimPendingReplace = true
+		s.VimPendingCount = count
+	case 'f', 't', 'F', 'T':
+		s.VimPendingCharMotion = r
 		s.VimPendingCount = count
 	case 'd', 'c':
 		s.VimPendingOperator = r
@@ -132,6 +138,10 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 				s.VimMode = VimInsert
 			}
 		}
+	case 'f', 't', 'F', 'T':
+		s.VimPendingOperator = operator
+		s.VimPendingCharMotion = r
+		s.VimPendingCount = count
 	case 'w':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.deleteWordForward() })
@@ -156,6 +166,31 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		if change {
 			s.VimMode = VimInsert
 		}
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
+	motion := s.VimPendingCharMotion
+	operator := s.VimPendingOperator
+	count := s.VimPendingCount
+	if count <= 0 {
+		count = 1
+	}
+	start := s.Prompt.Cursor
+	end, ok := s.Prompt.findCharMotion(motion, target, count)
+	s.clearVimPending()
+	if !ok {
+		return ScreenEvent{}
+	}
+	if operator == 0 {
+		s.Prompt.Cursor = end
+		return ScreenEvent{}
+	}
+	s.recordVimUndo()
+	s.Prompt.deleteCharMotionRange(start, end, motion)
+	if operator == 'c' {
+		s.VimMode = VimInsert
 	}
 	return ScreenEvent{}
 }
@@ -190,6 +225,7 @@ func (s *REPLScreen) takeVimOperatorCount() int {
 
 func (s *REPLScreen) clearVimPending() {
 	s.VimPendingOperator = 0
+	s.VimPendingCharMotion = 0
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
@@ -372,6 +408,81 @@ func (p *PromptState) replaceRunes(count int, r rune) {
 	}
 	p.Text = string(runes)
 	p.resetHistoryCursor()
+}
+
+func (p *PromptState) findCharMotion(motion rune, target rune, count int) (int, bool) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(p.Text)
+	cursor := p.Cursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	switch motion {
+	case 'f', 't':
+		match := -1
+		for i := cursor + 1; i < len(runes); i++ {
+			if runes[i] != target {
+				continue
+			}
+			count--
+			if count == 0 {
+				match = i
+				break
+			}
+		}
+		if match < 0 {
+			return cursor, false
+		}
+		if motion == 't' {
+			if match > cursor {
+				return match - 1, true
+			}
+			return cursor, true
+		}
+		return match, true
+	case 'F', 'T':
+		match := -1
+		for i := cursor - 1; i >= 0; i-- {
+			if runes[i] != target {
+				continue
+			}
+			count--
+			if count == 0 {
+				match = i
+				break
+			}
+		}
+		if match < 0 {
+			return cursor, false
+		}
+		if motion == 'T' {
+			if match < len(runes)-1 {
+				return match + 1, true
+			}
+			return cursor, true
+		}
+		return match, true
+	default:
+		return cursor, false
+	}
+}
+
+func (p *PromptState) deleteCharMotionRange(start int, end int, motion rune) {
+	switch motion {
+	case 'f':
+		p.deleteRange(start, end+1)
+	case 't':
+		p.deleteRange(start, end+1)
+	case 'F':
+		p.deleteRange(end, start+1)
+	case 'T':
+		p.deleteRange(end+1, start+1)
+	}
 }
 
 func isWordRune(r rune) bool {

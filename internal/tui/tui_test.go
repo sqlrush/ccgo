@@ -699,6 +699,46 @@ func TestREPLScreenVimReplaceAndUndo(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimFindTillMotionsAndOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "l", "p", "h", "a", ",", "b", "e", "t", "a", ",", "g", "a", "m", "m", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"f", ","} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha")) {
+		t.Fatalf("cursor after f, = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"t", "g"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha,beta")) {
+		t.Fatalf("cursor after tg = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"F", ","} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha")) {
+		t.Fatalf("cursor after F, = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"d", "f", ","} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alphagamma" || screen.Prompt.Cursor != len([]rune("alpha")) {
+		t.Fatalf("after df, prompt = %#v", screen.Prompt)
+	}
+	for _, seq := range []string{"c", "t", "m"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "alphamma" || screen.Prompt.Cursor != len([]rune("alpha")) {
+		t.Fatalf("after ctm screen = %#v", screen)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()
