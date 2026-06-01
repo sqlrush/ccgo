@@ -12,11 +12,14 @@ type SnapshotCorpus struct {
 }
 
 type SnapshotComparison struct {
-	Name         string
-	Match        bool
-	Missing      bool
-	ExpectedText string
-	ActualText   string
+	Name          string
+	Match         bool
+	Missing       bool
+	FirstDiffLine int
+	ExpectedText  string
+	ActualText    string
+	ExpectedDiff  string
+	ActualDiff    string
 }
 
 func (c SnapshotCorpus) Write(snapshot ANSISnapshot) error {
@@ -57,11 +60,15 @@ func (c SnapshotCorpus) Compare(snapshot ANSISnapshot) (SnapshotComparison, erro
 		return SnapshotComparison{}, err
 	}
 	actual := snapshot.Text
+	firstDiffLine, expectedDiff, actualDiff := snapshotTextDiff(expected, actual)
 	return SnapshotComparison{
-		Name:         snapshot.Name,
-		Match:        expected == actual,
-		ExpectedText: expected,
-		ActualText:   actual,
+		Name:          snapshot.Name,
+		Match:         expected == actual,
+		FirstDiffLine: firstDiffLine,
+		ExpectedText:  expected,
+		ActualText:    actual,
+		ExpectedDiff:  expectedDiff,
+		ActualDiff:    actualDiff,
 	}, nil
 }
 
@@ -77,4 +84,30 @@ func sanitizeSnapshotName(name string) string {
 		return "snapshot"
 	}
 	return name
+}
+
+func snapshotTextDiff(expected string, actual string) (int, string, string) {
+	if expected == actual {
+		return 0, "", ""
+	}
+	expectedLines := strings.Split(expected, "\n")
+	actualLines := strings.Split(actual, "\n")
+	max := len(expectedLines)
+	if len(actualLines) > max {
+		max = len(actualLines)
+	}
+	for i := 0; i < max; i++ {
+		expectedLine := ""
+		if i < len(expectedLines) {
+			expectedLine = expectedLines[i]
+		}
+		actualLine := ""
+		if i < len(actualLines) {
+			actualLine = actualLines[i]
+		}
+		if expectedLine != actualLine {
+			return i + 1, expectedLine, actualLine
+		}
+	}
+	return 0, "", ""
 }
