@@ -128,8 +128,12 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlK, nil
 	case "ctrl+l", "ctrl-l", "control+l", "control-l":
 		return KeyCtrlL, nil
+	case "ctrl+n", "ctrl-n", "control+n", "control-n":
+		return KeyCtrlN, nil
 	case "ctrl+o", "ctrl-o", "control+o", "control-o":
 		return KeyCtrlO, nil
+	case "ctrl+p", "ctrl-p", "control+p", "control-p":
+		return KeyCtrlP, nil
 	case "ctrl+r", "ctrl-r", "control+r", "control-r":
 		return KeyCtrlR, nil
 	case "ctrl+s", "ctrl-s", "control+s", "control-s":

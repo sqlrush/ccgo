@@ -252,9 +252,9 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 			return ScreenEvent{Type: ScreenEventReverseSelected, Value: selected}
 		}
 		s.ReverseSearch = ReverseSearchState{}
-	case KeyUp:
+	case KeyUp, KeyCtrlP:
 		s.ReverseSearch.Move(-1)
-	case KeyDown:
+	case KeyDown, KeyCtrlN:
 		s.ReverseSearch.Move(1)
 	case KeyBackspace:
 		s.ReverseSearch.Backspace(s.Prompt.History)

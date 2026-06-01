@@ -303,6 +303,28 @@ func TestReverseSearchAltWordEditing(t *testing.T) {
 	}
 }
 
+func TestReverseSearchCtrlPNNavigatesResults(t *testing.T) {
+	screen := NewREPLScreen(40, 8, []string{"alpha one", "alpha two"})
+	screen.ApplyKey(ParseKey("\x12"))
+	for _, r := range "alpha" {
+		screen.ApplyKey(Key{Type: KeyRune, Rune: r})
+	}
+	current, ok := screen.ReverseSearch.Current()
+	if !ok || current != "alpha two" {
+		t.Fatalf("initial reverse search current = %q ok=%v", current, ok)
+	}
+	screen.ApplyKey(ParseKey("\x0e"))
+	current, ok = screen.ReverseSearch.Current()
+	if !ok || current != "alpha one" {
+		t.Fatalf("ctrl-n reverse search current = %q ok=%v", current, ok)
+	}
+	screen.ApplyKey(ParseKey("\x10"))
+	current, ok = screen.ReverseSearch.Current()
+	if !ok || current != "alpha two" {
+		t.Fatalf("ctrl-p reverse search current = %q ok=%v", current, ok)
+	}
+}
+
 func TestPromptHistoryNavigationKeepsDraft(t *testing.T) {
 	prompt := NewPromptState([]string{"one", "two"})
 	prompt.Apply(ParseKey("d"))
@@ -318,6 +340,24 @@ func TestPromptHistoryNavigationKeepsDraft(t *testing.T) {
 	prompt.Apply(ParseKey("\x1b[B"))
 	if prompt.Text != "d" {
 		t.Fatalf("draft = %#v", prompt)
+	}
+}
+
+func TestPromptCtrlPNHistoryNavigationKeepsDraft(t *testing.T) {
+	prompt := NewPromptState([]string{"one", "two"})
+	prompt.Apply(ParseKey("d"))
+	prompt.Apply(ParseKey("\x10"))
+	if prompt.Text != "two" {
+		t.Fatalf("ctrl-p history prev = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x10"))
+	if prompt.Text != "one" {
+		t.Fatalf("ctrl-p history prev again = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x0e"))
+	prompt.Apply(ParseKey("\x0e"))
+	if prompt.Text != "d" {
+		t.Fatalf("ctrl-n draft = %#v", prompt)
 	}
 }
 
@@ -404,6 +444,8 @@ func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 		{seq: "\x1b[5^", want: KeyPageUp},
 		{seq: "\x1b[6^", want: KeyPageDown},
 		{seq: "\x1b[3$", want: KeyDelete},
+		{seq: "\x0e", want: KeyCtrlN},
+		{seq: "\x10", want: KeyCtrlP},
 	}
 	for _, tc := range cases {
 		if key := ParseKey(tc.seq); key.Type != tc.want {
@@ -552,8 +594,14 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x0c")); action != ActionRedraw {
 		t.Fatalf("ctrl-l action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x0e")); action != ActionHistoryNext {
+		t.Fatalf("ctrl-n action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x0f")); action != ActionToggleTranscript {
 		t.Fatalf("ctrl-o action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x10")); action != ActionHistoryPrevious {
+		t.Fatalf("ctrl-p action = %q", action)
 	}
 	if action := keymap.Resolve(ParseKey("\x13")); action != ActionStashPrompt {
 		t.Fatalf("ctrl-s action = %q", action)
@@ -614,7 +662,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "control-left", "control-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "control-left", "control-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

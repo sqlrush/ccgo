@@ -93,8 +93,12 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlK}
 	case "\x0c":
 		return Key{Type: KeyCtrlL}
+	case "\x0e":
+		return Key{Type: KeyCtrlN}
 	case "\x0f":
 		return Key{Type: KeyCtrlO}
+	case "\x10":
+		return Key{Type: KeyCtrlP}
 	case "\x12":
 		return Key{Type: KeyCtrlR}
 	case "\x13":
@@ -240,9 +244,9 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.yankLastKill()
 	case KeyAltY:
 		p.yankPop()
-	case KeyUp:
+	case KeyUp, KeyCtrlP:
 		p.historyPrev()
-	case KeyDown:
+	case KeyDown, KeyCtrlN:
 		p.historyNext()
 	case KeyEnter:
 		display := p.Text
