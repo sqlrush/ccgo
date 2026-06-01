@@ -169,7 +169,7 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.Prompt.Apply(Key{Type: KeyHome})
 		s.enterVimInsert()
 	case 'A':
-		s.Prompt.Apply(Key{Type: KeyEnd})
+		s.Prompt.moveLineEnd()
 		s.enterVimInsert()
 	case 'o':
 		s.recordVimUndo()
@@ -204,7 +204,7 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case '^':
 		s.Prompt.moveFirstNonBlank()
 	case '$':
-		s.Prompt.Apply(Key{Type: KeyEnd})
+		s.Prompt.moveLineEnd()
 	case 'x':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
@@ -775,7 +775,7 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 		case 'B':
 			cursor.moveWORDBackward()
 		case '$':
-			cursor.Apply(Key{Type: KeyEnd})
+			cursor.moveLineEnd()
 		case '0':
 			cursor.Apply(Key{Type: KeyHome})
 		case '^':
@@ -1268,6 +1268,15 @@ func (p *PromptState) moveFirstNonBlank() {
 		}
 	}
 	p.Cursor = start
+}
+
+func (p *PromptState) moveLineEnd() {
+	runes := []rune(p.Text)
+	cursor := p.clampCursor(p.Cursor)
+	for cursor < len(runes) && runes[cursor] != '\n' {
+		cursor++
+	}
+	p.Cursor = cursor
 }
 
 func (p *PromptState) deleteAll() {

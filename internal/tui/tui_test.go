@@ -1775,6 +1775,41 @@ func TestREPLScreenVimWORDMotionsAndFirstNonBlank(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimLineLocalEndMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "$"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n  two")) {
+		t.Fatalf("cursor after multiline $ = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "D"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\n\nthree" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "  two" {
+		t.Fatalf("after multiline D screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "A", "!"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n  two!\nthree" || screen.Prompt.Cursor != len([]rune("one\n  two!")) {
+		t.Fatalf("after multiline A screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimBackwardEndMotions(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
