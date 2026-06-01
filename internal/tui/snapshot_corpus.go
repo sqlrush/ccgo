@@ -72,6 +72,27 @@ func (c SnapshotCorpus) Compare(snapshot ANSISnapshot) (SnapshotComparison, erro
 	}, nil
 }
 
+func (c SnapshotCorpus) CompareAll(snapshots []ANSISnapshot) ([]SnapshotComparison, error) {
+	comparisons := make([]SnapshotComparison, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		comparison, err := c.Compare(snapshot)
+		if err != nil {
+			return nil, err
+		}
+		comparisons = append(comparisons, comparison)
+	}
+	return comparisons, nil
+}
+
+func (c SnapshotCorpus) WriteAll(snapshots []ANSISnapshot) error {
+	for _, snapshot := range snapshots {
+		if err := c.Write(snapshot); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c SnapshotCorpus) pathBase(name string) string {
 	return filepath.Join(c.Dir, sanitizeSnapshotName(name))
 }

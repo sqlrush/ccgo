@@ -1985,6 +1985,45 @@ func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	}
 }
 
+func TestSnapshotCorpusWritesAndComparesScriptSnapshots(t *testing.T) {
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Message: &Message{Role: RoleAssistant, Text: "ready"}, SnapshotName: "initial"},
+		{Keys: []string{"o", "k"}, SnapshotName: "typed"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 2 {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+	corpus := SnapshotCorpus{Dir: t.TempDir()}
+	if err := corpus.WriteAll(result.Snapshots); err != nil {
+		t.Fatal(err)
+	}
+	comparisons, err := corpus.CompareAll(result.Snapshots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comparisons) != 2 {
+		t.Fatalf("comparisons = %#v", comparisons)
+	}
+	for _, comparison := range comparisons {
+		if !comparison.Match || comparison.Missing {
+			t.Fatalf("comparison = %#v", comparison)
+		}
+	}
+	changed := append([]ANSISnapshot(nil), result.Snapshots...)
+	changed[1].Text = strings.ReplaceAll(changed[1].Text, "> ok", "> no")
+	comparisons, err = corpus.CompareAll(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !comparisons[0].Match || comparisons[1].Match || comparisons[1].FirstDiffLine == 0 {
+		t.Fatalf("changed comparisons = %#v", comparisons)
+	}
+}
+
 func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	permission := PermissionDialog(PermissionRequest{ID: "perm_1", ToolName: "Edit"})
