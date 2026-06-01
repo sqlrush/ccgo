@@ -1,6 +1,11 @@
 package tui
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
+
+const ImageHintPlaceholder = "[Image]"
 
 type PromptState struct {
 	Text         string
@@ -18,6 +23,12 @@ func NewPromptState(history []string) PromptState {
 }
 
 func ParseKey(seq string) Key {
+	if text, ok := parseBracketedPaste(seq); ok {
+		return Key{Type: KeyPaste, Text: text}
+	}
+	if text, ok := parseImageHint(seq); ok {
+		return Key{Type: KeyImageHint, Text: text}
+	}
 	switch seq {
 	case "\r", "\n":
 		return Key{Type: KeyEnter}
@@ -78,6 +89,14 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.Cursor++
 		p.Text = string(runes)
 		p.resetHistoryCursor()
+	case KeyPaste:
+		p.insertText(key.Text)
+	case KeyImageHint:
+		text := key.Text
+		if text == "" {
+			text = ImageHintPlaceholder
+		}
+		p.insertText(text)
 	case KeyBackspace:
 		if p.Cursor > 0 {
 			runes = append(runes[:p.Cursor-1], runes[p.Cursor:]...)
@@ -125,6 +144,18 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	return PromptResult{}
 }
 
+func (p *PromptState) insertText(text string) {
+	if text == "" {
+		return
+	}
+	runes := []rune(p.Text)
+	insert := []rune(text)
+	runes = append(runes[:p.Cursor], append(insert, runes[p.Cursor:]...)...)
+	p.Cursor += len(insert)
+	p.Text = string(runes)
+	p.resetHistoryCursor()
+}
+
 func (p *PromptState) resetHistoryCursor() {
 	p.HistoryIndex = len(p.History)
 	p.draft = p.Text
@@ -155,4 +186,36 @@ func (p *PromptState) historyNext() {
 		p.Text = p.History[p.HistoryIndex]
 	}
 	p.Cursor = len([]rune(p.Text))
+}
+
+func parseBracketedPaste(seq string) (string, bool) {
+	const start = "\x1b[200~"
+	const end = "\x1b[201~"
+	if strings.HasPrefix(seq, start) && strings.HasSuffix(seq, end) {
+		return strings.TrimSuffix(strings.TrimPrefix(seq, start), end), true
+	}
+	return "", false
+}
+
+func parseImageHint(seq string) (string, bool) {
+	const prefix = "\x1b]1337;File="
+	if !strings.HasPrefix(seq, prefix) {
+		return "", false
+	}
+	payload := strings.TrimPrefix(seq, prefix)
+	if before, _, ok := strings.Cut(payload, ":"); ok {
+		payload = before
+	}
+	payload = strings.TrimSuffix(payload, "\a")
+	name := ""
+	for _, field := range strings.Split(payload, ";") {
+		if raw, ok := strings.CutPrefix(field, "name="); ok {
+			name = strings.TrimSpace(raw)
+			break
+		}
+	}
+	if name == "" {
+		return ImageHintPlaceholder, true
+	}
+	return "[Image: " + name + "]", true
 }

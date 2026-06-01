@@ -6,6 +6,7 @@ import (
 )
 
 type ScriptStep struct {
+	Keys                   []string
 	Key                    string
 	Message                *Message
 	Dialog                 *Dialog
@@ -47,8 +48,12 @@ func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (Script
 			dialog := *step.Dialog
 			screen.Dialog = &dialog
 		}
+		keys := step.Keys
 		if step.Key != "" {
-			event = screen.ApplyKey(ParseKey(step.Key))
+			keys = append(keys, step.Key)
+		}
+		for _, rawKey := range keys {
+			event = screen.ApplyKey(ParseKey(rawKey))
 			if event.Type != ScreenEventNone {
 				result.Events = append(result.Events, event)
 			}

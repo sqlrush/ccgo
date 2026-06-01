@@ -42,6 +42,33 @@ func TestPromptHistoryNavigationKeepsDraft(t *testing.T) {
 	}
 }
 
+func TestPromptHandlesBracketedPasteAndImageHints(t *testing.T) {
+	prompt := NewPromptState(nil)
+	paste := ParseKey("\x1b[200~hello\nworld\x1b[201~")
+	if paste.Type != KeyPaste || paste.Text != "hello\nworld" {
+		t.Fatalf("paste key = %#v", paste)
+	}
+	prompt.Apply(paste)
+	if prompt.Text != "hello\nworld" || prompt.Cursor != len([]rune("hello\nworld")) {
+		t.Fatalf("prompt after paste = %#v", prompt)
+	}
+	image := ParseKey("\x1b]1337;File=name=chart.png;inline=1:AAAA\a")
+	if image.Type != KeyImageHint || image.Text != "[Image: chart.png]" {
+		t.Fatalf("image key = %#v", image)
+	}
+	prompt.Apply(image)
+	if !strings.Contains(prompt.Text, "[Image: chart.png]") {
+		t.Fatalf("prompt after image = %#v", prompt)
+	}
+}
+
+func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
+	key := ParseKey("\x1b]1337;File=inline=1:AAAA\a")
+	if key.Type != KeyImageHint || key.Text != ImageHintPlaceholder {
+		t.Fatalf("key = %#v", key)
+	}
+}
+
 func TestRendererIncludesStatusPromptAndDialog(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "hello"
@@ -396,9 +423,7 @@ func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	permission := PermissionDialog(PermissionRequest{ID: "perm_1", ToolName: "Edit"})
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
 		{Message: &Message{Role: RoleAssistant, Text: "ready"}, SnapshotName: "initial", ExpectSnapshotContains: []string{"assistant: ready"}},
-		{Key: "r"},
-		{Key: "u"},
-		{Key: "n"},
+		{Keys: []string{"r", "u", "n"}},
 		{Key: "\n", SnapshotName: "submitted", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "run"}},
 		{Dialog: &permission},
 		{Key: "\t"},
