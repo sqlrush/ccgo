@@ -866,6 +866,54 @@ func TestREPLScreenVimNormalModeSpecialKeys(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimWordTextObjects(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "l", "p", "h", "a", " ", "b", "e", "t", "a", " ", "g", "a", "m", "m", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	screen.ApplyKey(ParseKey("w"))
+	for _, seq := range []string{"d", "i", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha  gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after diw prompt = %#v", screen.Prompt)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "l", "p", "h", "a", " ", "b", "e", "t", "a", " ", "g", "a", "m", "m", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	screen.ApplyKey(ParseKey("w"))
+	for _, seq := range []string{"d", "a", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after daw prompt = %#v", screen.Prompt)
+	}
+}
+
+func TestREPLScreenVimWORDTextObjects(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"f", "o", "o", ".", "b", "a", "r", " ", "b", "a", "z"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"c", "i", "W"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != " baz" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after ciW screen = %#v", screen)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()

@@ -83,6 +83,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	if s.VimPendingReplace {
 		return s.applyVimReplace(r)
 	}
+	if s.VimPendingTextObject != 0 {
+		return s.applyVimTextObject(r)
+	}
 	if s.VimPendingOperator != 0 {
 		return s.applyVimOperator(r)
 	}
@@ -180,6 +183,10 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.VimPendingOperator = operator
 		s.VimPendingCharMotion = r
 		s.VimPendingCount = count
+	case 'i', 'a':
+		s.VimPendingOperator = operator
+		s.VimPendingTextObject = r
+		s.VimPendingCount = count
 	case ';', ',':
 		s.VimPendingOperator = operator
 		s.VimPendingCharMotion = s.repeatedVimCharMotion(r == ',')
@@ -244,6 +251,26 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		if change {
 			s.VimMode = VimInsert
 		}
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimTextObject(obj rune) ScreenEvent {
+	operator := s.VimPendingOperator
+	scope := s.VimPendingTextObject
+	count := s.takeVimOperatorCount()
+	s.clearVimPending()
+	if obj != 'w' && obj != 'W' {
+		return ScreenEvent{}
+	}
+	start, end, ok := s.Prompt.findTextObjectRange(scope, obj, count)
+	if !ok {
+		return ScreenEvent{}
+	}
+	s.recordVimUndo()
+	s.Prompt.deleteRange(start, end)
+	if operator == 'c' {
+		s.VimMode = VimInsert
 	}
 	return ScreenEvent{}
 }
@@ -338,6 +365,7 @@ func (s *REPLScreen) takeVimOperatorCount() int {
 func (s *REPLScreen) clearVimPending() {
 	s.VimPendingOperator = 0
 	s.VimPendingCharMotion = 0
+	s.VimPendingTextObject = 0
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
@@ -578,6 +606,88 @@ func (p *PromptState) deleteToFirstNonBlank() {
 	p.moveFirstNonBlank()
 	start := p.Cursor
 	p.deleteRange(start, end)
+}
+
+func (p *PromptState) findTextObjectRange(scope rune, obj rune, count int) (int, int, bool) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(p.Text)
+	if len(runes) == 0 {
+		return 0, 0, false
+	}
+	idx := p.Cursor
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(runes) {
+		idx = len(runes) - 1
+	}
+	isWord := isWordRune
+	if obj == 'W' {
+		isWord = func(r rune) bool { return !unicode.IsSpace(r) }
+	}
+	start, end := textObjectCoreRange(runes, idx, isWord)
+	for i := 1; i < count && end < len(runes); i++ {
+		next := end
+		for next < len(runes) && unicode.IsSpace(runes[next]) {
+			next++
+		}
+		if next >= len(runes) {
+			break
+		}
+		_, end = textObjectCoreRange(runes, next, isWord)
+	}
+	if scope == 'a' {
+		start, end = expandAroundTextObject(runes, start, end)
+	}
+	return start, end, true
+}
+
+func textObjectCoreRange(runes []rune, idx int, isWord func(rune) bool) (int, int) {
+	start := idx
+	end := idx + 1
+	switch {
+	case isWord(runes[idx]):
+		for start > 0 && isWord(runes[start-1]) {
+			start--
+		}
+		for end < len(runes) && isWord(runes[end]) {
+			end++
+		}
+	case unicode.IsSpace(runes[idx]):
+		for start > 0 && unicode.IsSpace(runes[start-1]) {
+			start--
+		}
+		for end < len(runes) && unicode.IsSpace(runes[end]) {
+			end++
+		}
+	default:
+		for start > 0 && isVimPunctuation(runes[start-1], isWord) {
+			start--
+		}
+		for end < len(runes) && isVimPunctuation(runes[end], isWord) {
+			end++
+		}
+	}
+	return start, end
+}
+
+func expandAroundTextObject(runes []rune, start int, end int) (int, int) {
+	if end < len(runes) && unicode.IsSpace(runes[end]) {
+		for end < len(runes) && unicode.IsSpace(runes[end]) {
+			end++
+		}
+		return start, end
+	}
+	for start > 0 && unicode.IsSpace(runes[start-1]) {
+		start--
+	}
+	return start, end
+}
+
+func isVimPunctuation(r rune, isWord func(rune) bool) bool {
+	return !unicode.IsSpace(r) && !isWord(r)
 }
 
 func (p *PromptState) deleteRange(start int, end int) {
