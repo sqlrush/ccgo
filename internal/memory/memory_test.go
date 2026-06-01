@@ -432,8 +432,70 @@ func TestBuildResumeContextLoadsCurrentSummaryAndRecallsRelatedSessions(t *testi
 	}
 }
 
+func TestBuildResumeContextCanUseRecallAgent(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	root := filepath.Join(dir, "session-memory")
+	writeFile(t, sessionPath, strings.Join([]string{
+		`{"type":"user","uuid":"u1","sessionId":"current","parentUuid":null,"message":{"type":"user","uuid":"u1","sessionId":"current","content":[{"type":"text","text":"continue postgres permissions"}]}}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"current","parentUuid":"u1","message":{"type":"assistant","uuid":"a1","sessionId":"current","content":[{"type":"text","text":"ok"}]}}`,
+	}, "\n")+"\n")
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "current",
+		Summary:   "current session summary",
+		UpdatedAt: time.Unix(100, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "prior",
+		Summary:   "database access policy notes",
+		UpdatedAt: time.Unix(200, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_resume_recall",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"query":"database access","session_ids":["prior"]}`)},
+	}}
+	agent := Agent{Client: client}
+	resumeContext, err := BuildResumeContext(ResumeContextOptions{
+		SessionPath: sessionPath,
+		SessionID:   "current",
+		MemoryRoot:  root,
+		RecallLimit: 2,
+		RecallAgent: &agent,
+		Context:     context.Background(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumeContext.RecallFallback || resumeContext.RecallQuery != "database access" || strings.Join(contractIDStrings(resumeContext.RecallSelectedIDs), ",") != "prior" {
+		t.Fatalf("recall metadata = %#v", resumeContext)
+	}
+	if len(resumeContext.Recalled) != 1 || resumeContext.Recalled[0].Summary.SessionID != "prior" {
+		t.Fatalf("recalled = %#v", resumeContext.Recalled)
+	}
+	if len(client.requests) != 1 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Candidate session summaries") {
+		t.Fatalf("request = %#v", client.requests)
+	}
+}
+
 func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {
 	return session.CompactMetadata{Trigger: trigger, PreTokens: preTokens, MessagesSummarized: summarized}
+}
+
+func contractIDStrings(ids []contracts.ID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, string(id))
+	}
+	return out
 }
 
 type fakeMemoryClient struct {

@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,13 +19,17 @@ type ResumeContextOptions struct {
 	Leaf        contracts.ID
 	MemoryRoot  string
 	RecallLimit int
+	RecallAgent *Agent
+	Context     context.Context
 }
 
 type ResumeContext struct {
-	Conversation   session.ResumeConversation
-	CurrentSummary *SessionSummary
-	RecallQuery    string
-	Recalled       []RecallMatch
+	Conversation      session.ResumeConversation
+	CurrentSummary    *SessionSummary
+	RecallQuery       string
+	RecallSelectedIDs []contracts.ID
+	RecallFallback    bool
+	Recalled          []RecallMatch
 }
 
 func (c ResumeContext) ContextMessages() []contracts.Message {
@@ -75,9 +80,9 @@ func BuildResumeContext(options ResumeContextOptions) (ResumeContext, error) {
 	if root == "" {
 		root = DefaultSessionMemoryRoot(options.SessionPath)
 	}
-	context := ResumeContext{Conversation: conversation}
+	resumeContext := ResumeContext{Conversation: conversation}
 	if root == "" {
-		return context, nil
+		return resumeContext, nil
 	}
 	sessionID := options.SessionID
 	if sessionID == "" {
@@ -86,23 +91,39 @@ func BuildResumeContext(options ResumeContextOptions) (ResumeContext, error) {
 	if sessionID != "" {
 		summary, ok, err := loadCurrentSessionSummary(root, sessionID)
 		if err != nil {
-			return context, err
+			return resumeContext, err
 		}
 		if ok {
-			context.CurrentSummary = &summary
+			resumeContext.CurrentSummary = &summary
 		}
 	}
 	query := resumeRecallQuery(conversation.Messages)
-	context.RecallQuery = query
-	matches, err := RecallSessionSummaries(root, query, RecallOptions{
+	resumeContext.RecallQuery = query
+	recallOptions := RecallOptions{
 		Limit:            options.RecallLimit,
 		ExcludeSessionID: sessionID,
-	})
-	if err != nil {
-		return context, err
 	}
-	context.Recalled = matches
-	return context, nil
+	if options.RecallAgent != nil {
+		ctx := options.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		result, err := options.RecallAgent.Recall(ctx, root, query, recallOptions)
+		if err != nil {
+			return resumeContext, err
+		}
+		resumeContext.RecallQuery = result.Query
+		resumeContext.RecallSelectedIDs = append([]contracts.ID(nil), result.SelectedIDs...)
+		resumeContext.RecallFallback = result.Fallback
+		resumeContext.Recalled = result.Matches
+		return resumeContext, nil
+	}
+	matches, err := RecallSessionSummaries(root, query, recallOptions)
+	if err != nil {
+		return resumeContext, err
+	}
+	resumeContext.Recalled = matches
+	return resumeContext, nil
 }
 
 func loadCurrentSessionSummary(root string, sessionID contracts.ID) (SessionSummary, bool, error) {
