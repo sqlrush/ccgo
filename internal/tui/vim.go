@@ -79,6 +79,8 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case 'f', 't', 'F', 'T':
 		s.VimPendingCharMotion = r
 		s.VimPendingCount = count
+	case ';', ',':
+		s.applyVimRepeatedCharMotion(count, r == ',')
 	case 'd', 'c':
 		s.VimPendingOperator = r
 		s.VimPendingCount = count
@@ -142,6 +144,16 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.VimPendingOperator = operator
 		s.VimPendingCharMotion = r
 		s.VimPendingCount = count
+	case ';', ',':
+		s.VimPendingOperator = operator
+		s.VimPendingCharMotion = s.repeatedVimCharMotion(r == ',')
+		s.VimPendingCount = count
+		if s.VimPendingCharMotion == 0 || s.VimLastCharTarget == 0 {
+			s.clearVimPending()
+			return ScreenEvent{}
+		}
+		s.VimRepeatingChar = true
+		return s.applyVimCharMotion(s.VimLastCharTarget)
 	case 'w':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.deleteWordForward() })
@@ -179,9 +191,14 @@ func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
 	}
 	start := s.Prompt.Cursor
 	end, ok := s.Prompt.findCharMotion(motion, target, count)
+	repeating := s.VimRepeatingChar
 	s.clearVimPending()
 	if !ok {
 		return ScreenEvent{}
+	}
+	if !repeating {
+		s.VimLastCharMotion = motion
+		s.VimLastCharTarget = target
 	}
 	if operator == 0 {
 		s.Prompt.Cursor = end
@@ -193,6 +210,35 @@ func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
 		s.VimMode = VimInsert
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimRepeatedCharMotion(count int, reverse bool) {
+	motion := s.repeatedVimCharMotion(reverse)
+	if motion == 0 || s.VimLastCharTarget == 0 {
+		return
+	}
+	s.VimPendingCharMotion = motion
+	s.VimPendingCount = count
+	s.VimRepeatingChar = true
+	s.applyVimCharMotion(s.VimLastCharTarget)
+}
+
+func (s *REPLScreen) repeatedVimCharMotion(reverse bool) rune {
+	if !reverse {
+		return s.VimLastCharMotion
+	}
+	switch s.VimLastCharMotion {
+	case 'f':
+		return 'F'
+	case 'F':
+		return 'f'
+	case 't':
+		return 'T'
+	case 'T':
+		return 't'
+	default:
+		return 0
+	}
 }
 
 func (s *REPLScreen) applyVimReplace(r rune) ScreenEvent {
@@ -229,6 +275,7 @@ func (s *REPLScreen) clearVimPending() {
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
+	s.VimRepeatingChar = false
 }
 
 func (s *REPLScreen) recordVimUndo() {

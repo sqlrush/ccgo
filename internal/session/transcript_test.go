@@ -153,7 +153,19 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
 		`{"type":"custom-title","sessionId":"s1","customTitle":"Title"}`,
+		`{"type":"ai-title","sessionId":"s1","aiTitle":"AI Title"}`,
+		`{"type":"last-prompt","sessionId":"s1","lastPrompt":"last prompt text"}`,
+		`{"type":"task-summary","sessionId":"s1","summary":"running tests","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"tag","sessionId":"s1","tag":"tagged"}`,
+		`{"type":"agent-name","sessionId":"s1","agentName":"Builder"}`,
+		`{"type":"agent-color","sessionId":"s1","agentColor":"blue"}`,
+		`{"type":"agent-setting","sessionId":"s1","agentSetting":"reviewer"}`,
+		`{"type":"pr-link","sessionId":"s1","prNumber":42,"prUrl":"https://github.com/o/r/pull/42","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"mode","sessionId":"s1","mode":"coordinator"}`,
+		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
+		`{"type":"file-history-snapshot","messageId":"a1","snapshot":{"files":[]},"isSnapshotUpdate":false}`,
+		`{"type":"attribution-snapshot","messageId":"a1","surface":"cli","fileStates":{}}`,
+		`{"type":"speculation-accept","timestamp":"2026-01-01T00:00:05Z","timeSavedMs":1200}`,
 		`{"type":"content-replacement","sessionId":"s1","replacements":[{"toolUseId":"toolu_1","replacement":"stub"}]}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
 	})
@@ -163,6 +175,18 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if transcript.Summaries["a1"] != "short" || transcript.CustomTitles["s1"] != "Title" || transcript.Tags["s1"] != "tagged" {
 		t.Fatalf("metadata = %#v %#v %#v", transcript.Summaries, transcript.CustomTitles, transcript.Tags)
+	}
+	if transcript.AITitles["s1"] != "AI Title" || transcript.LastPrompts["s1"] != "last prompt text" || transcript.TaskSummaries["s1"].Summary != "running tests" {
+		t.Fatalf("title/prompt/task metadata = %#v %#v %#v", transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
+	if transcript.AgentNames["s1"] != "Builder" || transcript.AgentColors["s1"] != "blue" || transcript.AgentSettings["s1"] != "reviewer" {
+		t.Fatalf("agent metadata = %#v %#v %#v", transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
+	}
+	if transcript.PRLinks["s1"].PRNumber != 42 || transcript.Modes["s1"] != "coordinator" || len(transcript.WorktreeStates["s1"].WorktreeSession) == 0 {
+		t.Fatalf("session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
+	}
+	if len(transcript.FileHistorySnapshots) != 1 || len(transcript.AttributionSnapshots) != 1 || len(transcript.SpeculationAccepts) != 1 {
+		t.Fatalf("raw metadata counts = %d %d %d", len(transcript.FileHistorySnapshots), len(transcript.AttributionSnapshots), len(transcript.SpeculationAccepts))
 	}
 	if got := transcript.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("content replacements = %#v", got)
@@ -176,6 +200,18 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if metadata.Summaries["a1"] != "short" || metadata.CustomTitles["s1"] != "Title" || metadata.Tags["s1"] != "tagged" {
 		t.Fatalf("metadata loader = %#v %#v %#v", metadata.Summaries, metadata.CustomTitles, metadata.Tags)
+	}
+	if metadata.AITitles["s1"] != "AI Title" || metadata.LastPrompts["s1"] != "last prompt text" || metadata.TaskSummaries["s1"].Summary != "running tests" {
+		t.Fatalf("metadata title/prompt/task = %#v %#v %#v", metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
+	}
+	if metadata.AgentNames["s1"] != "Builder" || metadata.AgentColors["s1"] != "blue" || metadata.AgentSettings["s1"] != "reviewer" {
+		t.Fatalf("metadata agent = %#v %#v %#v", metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings)
+	}
+	if metadata.PRLinks["s1"].PRRepository != "o/r" || metadata.Modes["s1"] != "coordinator" || len(metadata.WorktreeStates["s1"].WorktreeSession) == 0 {
+		t.Fatalf("metadata session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
+	}
+	if len(metadata.FileHistorySnapshots) != 1 || len(metadata.AttributionSnapshots) != 1 || len(metadata.SpeculationAccepts) != 1 {
+		t.Fatalf("metadata raw counts = %d %d %d", len(metadata.FileHistorySnapshots), len(metadata.AttributionSnapshots), len(metadata.SpeculationAccepts))
 	}
 	if got := metadata.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("metadata replacements = %#v", got)

@@ -20,8 +20,20 @@ type Transcript struct {
 	Order                   []contracts.ID
 	Summaries               map[contracts.ID]string
 	CustomTitles            map[contracts.ID]string
+	AITitles                map[contracts.ID]string
+	LastPrompts             map[contracts.ID]string
+	TaskSummaries           map[contracts.ID]TaskSummaryEntry
 	Tags                    map[contracts.ID]string
+	AgentNames              map[contracts.ID]string
+	AgentColors             map[contracts.ID]string
+	AgentSettings           map[contracts.ID]string
+	PRLinks                 map[contracts.ID]PRLinkEntry
+	Modes                   map[contracts.ID]string
+	WorktreeStates          map[contracts.ID]WorktreeStateEntry
 	ContentReplacements     map[contracts.ID][]ContentReplacementRecord
+	FileHistorySnapshots    []json.RawMessage
+	AttributionSnapshots    []json.RawMessage
+	SpeculationAccepts      []SpeculationAcceptEntry
 	ContextCollapseCommits  []ContextCollapseCommitEntry
 	ContextCollapseSnapshot *ContextCollapseSnapshotEntry
 	LeafUUIDs               map[contracts.ID]struct{}
@@ -74,6 +86,34 @@ type ContentReplacementEntry struct {
 	SessionID    contracts.ID               `json:"sessionId"`
 	AgentID      string                     `json:"agentId,omitempty"`
 	Replacements []ContentReplacementRecord `json:"replacements"`
+}
+
+type TaskSummaryEntry struct {
+	Type      string       `json:"type"`
+	SessionID contracts.ID `json:"sessionId"`
+	Summary   string       `json:"summary"`
+	Timestamp string       `json:"timestamp"`
+}
+
+type PRLinkEntry struct {
+	Type         string       `json:"type"`
+	SessionID    contracts.ID `json:"sessionId"`
+	PRNumber     int          `json:"prNumber"`
+	PRURL        string       `json:"prUrl"`
+	PRRepository string       `json:"prRepository"`
+	Timestamp    string       `json:"timestamp"`
+}
+
+type WorktreeStateEntry struct {
+	Type            string          `json:"type"`
+	SessionID       contracts.ID    `json:"sessionId"`
+	WorktreeSession json.RawMessage `json:"worktreeSession"`
+}
+
+type SpeculationAcceptEntry struct {
+	Type        string `json:"type"`
+	Timestamp   string `json:"timestamp"`
+	TimeSavedMS int    `json:"timeSavedMs"`
 }
 
 type ContextCollapseCommitEntry struct {
@@ -161,6 +201,27 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.CustomTitles[entry.SessionID] = entry.CustomTitle
 			}
+		case envelope.Type == "ai-title":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				AITitle   string       `json:"aiTitle"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.AITitles[entry.SessionID] = entry.AITitle
+			}
+		case envelope.Type == "last-prompt":
+			var entry struct {
+				SessionID  contracts.ID `json:"sessionId"`
+				LastPrompt string       `json:"lastPrompt"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.LastPrompts[entry.SessionID] = entry.LastPrompt
+			}
+		case envelope.Type == "task-summary":
+			var entry TaskSummaryEntry
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.TaskSummaries[entry.SessionID] = entry
+			}
 		case envelope.Type == "tag":
 			var entry struct {
 				SessionID contracts.ID `json:"sessionId"`
@@ -169,10 +230,61 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.Tags[entry.SessionID] = entry.Tag
 			}
+		case envelope.Type == "agent-name":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				AgentName string       `json:"agentName"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.AgentNames[entry.SessionID] = entry.AgentName
+			}
+		case envelope.Type == "agent-color":
+			var entry struct {
+				SessionID  contracts.ID `json:"sessionId"`
+				AgentColor string       `json:"agentColor"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.AgentColors[entry.SessionID] = entry.AgentColor
+			}
+		case envelope.Type == "agent-setting":
+			var entry struct {
+				SessionID    contracts.ID `json:"sessionId"`
+				AgentSetting string       `json:"agentSetting"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.AgentSettings[entry.SessionID] = entry.AgentSetting
+			}
+		case envelope.Type == "pr-link":
+			var entry PRLinkEntry
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.PRLinks[entry.SessionID] = entry
+			}
+		case envelope.Type == "mode":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				Mode      string       `json:"mode"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.Modes[entry.SessionID] = entry.Mode
+			}
+		case envelope.Type == "worktree-state":
+			var entry WorktreeStateEntry
+			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+				transcript.WorktreeStates[entry.SessionID] = entry
+			}
 		case envelope.Type == "content-replacement":
 			var entry ContentReplacementEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.ContentReplacements[entry.SessionID] = append(transcript.ContentReplacements[entry.SessionID], entry.Replacements...)
+			}
+		case envelope.Type == "file-history-snapshot":
+			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, append(json.RawMessage(nil), line...))
+		case envelope.Type == "attribution-snapshot":
+			transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, append(json.RawMessage(nil), line...))
+		case envelope.Type == "speculation-accept":
+			var entry SpeculationAcceptEntry
+			if err := json.Unmarshal(line, &entry); err == nil {
+				transcript.SpeculationAccepts = append(transcript.SpeculationAccepts, entry)
 			}
 		case envelope.Type == "marble-origami-commit":
 			var entry ContextCollapseCommitEntry
@@ -455,7 +567,16 @@ func newTranscript() Transcript {
 		Messages:            map[contracts.ID]*TranscriptMessage{},
 		Summaries:           map[contracts.ID]string{},
 		CustomTitles:        map[contracts.ID]string{},
+		AITitles:            map[contracts.ID]string{},
+		LastPrompts:         map[contracts.ID]string{},
+		TaskSummaries:       map[contracts.ID]TaskSummaryEntry{},
 		Tags:                map[contracts.ID]string{},
+		AgentNames:          map[contracts.ID]string{},
+		AgentColors:         map[contracts.ID]string{},
+		AgentSettings:       map[contracts.ID]string{},
+		PRLinks:             map[contracts.ID]PRLinkEntry{},
+		Modes:               map[contracts.ID]string{},
+		WorktreeStates:      map[contracts.ID]WorktreeStateEntry{},
 		ContentReplacements: map[contracts.ID][]ContentReplacementRecord{},
 		LeafUUIDs:           map[contracts.ID]struct{}{},
 	}

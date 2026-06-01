@@ -23,6 +23,18 @@ type TranscriptIndex struct {
 	FirstUserText           string
 	LastUserText            string
 	LastAssistantText       string
+	AITitle                 string
+	LastPrompt              string
+	TaskSummary             string
+	Tag                     string
+	AgentName               string
+	AgentColor              string
+	AgentSetting            string
+	PRNumber                int
+	PRURL                   string
+	PRRepository            string
+	Mode                    string
+	HasWorktreeState        bool
 	TextBytes               int
 	Title                   string
 	SummaryCount            int
@@ -83,6 +95,79 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 					customTitle = entry.CustomTitle
 				}
 			}
+		case "ai-title":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				AITitle   string       `json:"aiTitle"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.AITitle = entry.AITitle
+			}
+		case "last-prompt":
+			var entry struct {
+				SessionID  contracts.ID `json:"sessionId"`
+				LastPrompt string       `json:"lastPrompt"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.LastPrompt = entry.LastPrompt
+			}
+		case "task-summary":
+			var entry TaskSummaryEntry
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.TaskSummary = entry.Summary
+			}
+		case "tag":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				Tag       string       `json:"tag"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.Tag = entry.Tag
+			}
+		case "agent-name":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				AgentName string       `json:"agentName"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.AgentName = entry.AgentName
+			}
+		case "agent-color":
+			var entry struct {
+				SessionID  contracts.ID `json:"sessionId"`
+				AgentColor string       `json:"agentColor"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.AgentColor = entry.AgentColor
+			}
+		case "agent-setting":
+			var entry struct {
+				SessionID    contracts.ID `json:"sessionId"`
+				AgentSetting string       `json:"agentSetting"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.AgentSetting = entry.AgentSetting
+			}
+		case "pr-link":
+			var entry PRLinkEntry
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.PRNumber = entry.PRNumber
+				index.PRURL = entry.PRURL
+				index.PRRepository = entry.PRRepository
+			}
+		case "mode":
+			var entry struct {
+				SessionID contracts.ID `json:"sessionId"`
+				Mode      string       `json:"mode"`
+			}
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.Mode = entry.Mode
+			}
+		case "worktree-state":
+			var entry WorktreeStateEntry
+			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+				index.HasWorktreeState = len(entry.WorktreeSession) > 0 && string(entry.WorktreeSession) != "null"
+			}
 		case "content-replacement":
 			var entry ContentReplacementEntry
 			if err := json.Unmarshal(line, &entry); err == nil {
@@ -93,7 +178,7 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 	if err := scanner.Err(); err != nil {
 		return TranscriptIndex{}, err
 	}
-	index.Title = titleFromIndex(customTitle, index.FirstUserText, firstSummary)
+	index.Title = titleFromIndex(customTitle, index.AITitle, index.FirstUserText, index.LastPrompt, firstSummary)
 	return index, nil
 }
 
@@ -131,11 +216,17 @@ func (i *TranscriptIndex) addMessage(msg TranscriptMessage) {
 	}
 }
 
-func titleFromIndex(customTitle string, firstUserText string, firstSummary string) string {
+func titleFromIndex(customTitle string, aiTitle string, firstUserText string, lastPrompt string, firstSummary string) string {
 	if title := strings.TrimSpace(customTitle); title != "" {
 		return truncateLine(title, 80)
 	}
+	if title := strings.TrimSpace(aiTitle); title != "" {
+		return truncateLine(title, 80)
+	}
 	if text := strings.TrimSpace(firstUserText); text != "" {
+		return truncateLine(text, 80)
+	}
+	if text := strings.TrimSpace(lastPrompt); text != "" {
 		return truncateLine(text, 80)
 	}
 	if summary := strings.TrimSpace(firstSummary); summary != "" {

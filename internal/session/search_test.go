@@ -58,7 +58,17 @@ func TestListProjectSessionsSortsAndBuildsTitles(t *testing.T) {
 func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"ai-title","sessionId":"sess_1","aiTitle":"AI Title"}`,
 		`{"type":"custom-title","sessionId":"sess_1","customTitle":"Custom Title"}`,
+		`{"type":"last-prompt","sessionId":"sess_1","lastPrompt":"last prompt metadata"}`,
+		`{"type":"task-summary","sessionId":"sess_1","summary":"running checks","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"tag","sessionId":"sess_1","tag":"ship"}`,
+		`{"type":"agent-name","sessionId":"sess_1","agentName":"Builder"}`,
+		`{"type":"agent-color","sessionId":"sess_1","agentColor":"green"}`,
+		`{"type":"agent-setting","sessionId":"sess_1","agentSetting":"general-purpose"}`,
+		`{"type":"pr-link","sessionId":"sess_1","prNumber":7,"prUrl":"https://github.com/o/r/pull/7","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"mode","sessionId":"sess_1","mode":"coordinator"}`,
+		`{"type":"worktree-state","sessionId":"sess_1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"sess_1"}}`,
 		`{"type":"user","uuid":"u1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","content":[{"type":"text","text":"first prompt"}]}}`,
 		`{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"text","text":"done"}]}}`,
 		`{"type":"user","uuid":"u2","parentUuid":"a1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:02Z","message":{"type":"user","content":[{"type":"text","text":"last prompt"}]}}`,
@@ -79,6 +89,42 @@ func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 	}
 	if index.SummaryCount != 1 || index.ContentReplacementCount != 2 {
 		t.Fatalf("index metadata = %#v", index)
+	}
+	if index.AITitle != "AI Title" || index.LastPrompt != "last prompt metadata" || index.TaskSummary != "running checks" {
+		t.Fatalf("index title/task metadata = %#v", index)
+	}
+	if index.Tag != "ship" || index.AgentName != "Builder" || index.AgentColor != "green" || index.AgentSetting != "general-purpose" {
+		t.Fatalf("index agent metadata = %#v", index)
+	}
+	if index.PRNumber != 7 || index.PRRepository != "o/r" || index.Mode != "coordinator" || !index.HasWorktreeState {
+		t.Fatalf("index session metadata = %#v", index)
+	}
+}
+
+func TestLoadTranscriptIndexUsesAITitleAndLastPromptFallbacks(t *testing.T) {
+	aiTitlePath := writeTranscript(t, []string{
+		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"ai-title","sessionId":"sess_1","aiTitle":"Generated Title"}`,
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","message":{"type":"user","content":[{"type":"text","text":"first prompt"}]}}`,
+	})
+	aiTitle, err := LoadTranscriptIndex(aiTitlePath, "sess_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aiTitle.Title != "Generated Title" {
+		t.Fatalf("ai title index = %#v", aiTitle)
+	}
+
+	lastPromptPath := writeTranscript(t, []string{
+		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"last-prompt","sessionId":"sess_2","lastPrompt":"resume from prompt"}`,
+	})
+	lastPrompt, err := LoadTranscriptIndex(lastPromptPath, "sess_2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lastPrompt.Title != "resume from prompt" {
+		t.Fatalf("last prompt index = %#v", lastPrompt)
 	}
 }
 

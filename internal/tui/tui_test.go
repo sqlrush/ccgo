@@ -739,6 +739,38 @@ func TestREPLScreenVimFindTillMotionsAndOperators(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimRepeatsFindTillMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", ":", "b", ":", "c", ":", "d"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"f", ":", ";"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("a:b")) {
+		t.Fatalf("cursor after ; = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey(","))
+	if screen.Prompt.Cursor != len([]rune("a")) {
+		t.Fatalf("cursor after , = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"2", ";"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("a:b:c")) {
+		t.Fatalf("cursor after 2; = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"d", ","} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "a:bd" || screen.Prompt.Cursor != len([]rune("a:b")) {
+		t.Fatalf("after d, prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()
