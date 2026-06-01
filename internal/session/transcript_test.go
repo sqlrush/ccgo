@@ -421,6 +421,45 @@ func TestTranscriptLineIndexLoadsWindowWithoutFullTranscript(t *testing.T) {
 	}
 }
 
+func TestTranscriptLineIndexLoadsByteBudgetWindow(t *testing.T) {
+	lines := []string{
+		`{"type":"user","uuid":"u1","parentUuid":null}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"p1"}`,
+		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
+		`{"type":"user","uuid":"u3","parentUuid":"a2"}`,
+	}
+	path := writeTranscript(t, lines)
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := int64(len(lines[2]) + 1 + len(lines[4]) + 1 + len(lines[5]) + 1)
+	window, err := LoadTranscriptIndexedWindowBytes(path, index, "u2", budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !window.Found || window.TargetIndex != 1 || !window.HasBefore || !window.HasAfter || window.BytesRead > budget {
+		t.Fatalf("byte window metadata = %#v budget=%d", window, budget)
+	}
+	if got := tailIDs(window.Messages); strings.Join(got, ",") != "a1,u2,a2" {
+		t.Fatalf("byte window messages = %#v", got)
+	}
+	if window.Messages[0].ParentUUID == nil || *window.Messages[0].ParentUUID != "u1" {
+		t.Fatalf("byte window bridged parent = %#v", window.Messages[0].ParentUUID)
+	}
+
+	targetOnly, err := LoadTranscriptIndexedWindowBytes(path, index, "u2", int64(len(lines[4])+1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !targetOnly.Found || targetOnly.TargetIndex != 0 || strings.Join(tailIDs(targetOnly.Messages), ",") != "u2" {
+		t.Fatalf("target-only byte window = %#v ids=%#v", targetOnly, tailIDs(targetOnly.Messages))
+	}
+}
+
 func TestTranscriptLineIndexLoadsTailWithoutFullTranscript(t *testing.T) {
 	lines := []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,

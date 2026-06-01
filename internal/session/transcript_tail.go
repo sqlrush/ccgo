@@ -17,6 +17,7 @@ type TranscriptWindow struct {
 	Found       bool
 	HasBefore   bool
 	HasAfter    bool
+	BytesRead   int64
 }
 
 type TranscriptByteTail struct {

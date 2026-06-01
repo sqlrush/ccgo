@@ -78,12 +78,7 @@ func LoadTranscriptIndexedWindow(path string, index TranscriptLineIndex, target 
 	if after < 0 {
 		after = 0
 	}
-	if index.ByUUID == nil {
-		index.ByUUID = map[contracts.ID]int{}
-		for i, ref := range index.Entries {
-			index.ByUUID[ref.UUID] = i
-		}
-	}
+	ensureTranscriptLineIndexByUUID(&index)
 	targetIndex, ok := index.ByUUID[target]
 	if !ok {
 		return TranscriptWindow{TargetUUID: target, TargetIndex: -1}, nil
@@ -111,6 +106,71 @@ func LoadTranscriptIndexedWindow(path string, index TranscriptLineIndex, target 
 		Found:       true,
 		HasBefore:   start > 0,
 		HasAfter:    end < len(index.Entries),
+		Messages:    make([]TranscriptMessage, 0, end-start),
+	}
+	for _, ref := range index.Entries[start:end] {
+		window.BytesRead += int64(ref.Length)
+		msg, ok, err := readTranscriptMessageRef(f, ref)
+		if err != nil {
+			return TranscriptWindow{}, err
+		}
+		if ok {
+			window.Messages = append(window.Messages, msg)
+		}
+	}
+	return window, nil
+}
+
+func LoadTranscriptIndexedWindowBytes(path string, index TranscriptLineIndex, target contracts.ID, maxBytes int64) (TranscriptWindow, error) {
+	if target == "" || maxBytes <= 0 {
+		return TranscriptWindow{}, nil
+	}
+	ensureTranscriptLineIndexByUUID(&index)
+	targetIndex, ok := index.ByUUID[target]
+	if !ok {
+		return TranscriptWindow{TargetUUID: target, TargetIndex: -1}, nil
+	}
+	start := targetIndex
+	end := targetIndex + 1
+	bytesRead := int64(index.Entries[targetIndex].Length)
+	for {
+		grew := false
+		if start > 0 {
+			refBytes := int64(index.Entries[start-1].Length)
+			if bytesRead+refBytes <= maxBytes {
+				bytesRead += refBytes
+				start--
+				grew = true
+			}
+		}
+		if end < len(index.Entries) {
+			refBytes := int64(index.Entries[end].Length)
+			if bytesRead+refBytes <= maxBytes {
+				bytesRead += refBytes
+				end++
+				grew = true
+			}
+		}
+		if !grew {
+			break
+		}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TranscriptWindow{TargetUUID: target, TargetIndex: -1}, nil
+		}
+		return TranscriptWindow{}, err
+	}
+	defer f.Close()
+
+	window := TranscriptWindow{
+		TargetUUID:  target,
+		TargetIndex: targetIndex - start,
+		Found:       true,
+		HasBefore:   start > 0,
+		HasAfter:    end < len(index.Entries),
+		BytesRead:   bytesRead,
 		Messages:    make([]TranscriptMessage, 0, end-start),
 	}
 	for _, ref := range index.Entries[start:end] {
@@ -202,6 +262,16 @@ func LoadTranscriptIndexedTailBytes(path string, index TranscriptLineIndex, maxB
 		}
 	}
 	return tail, nil
+}
+
+func ensureTranscriptLineIndexByUUID(index *TranscriptLineIndex) {
+	if index.ByUUID != nil {
+		return
+	}
+	index.ByUUID = map[contracts.ID]int{}
+	for i, ref := range index.Entries {
+		index.ByUUID[ref.UUID] = i
+	}
 }
 
 func transcriptLineRef(line []byte, offset int64, progressBridge map[contracts.ID]*contracts.ID) (TranscriptLineRef, bool) {
