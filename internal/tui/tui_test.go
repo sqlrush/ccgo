@@ -226,3 +226,21 @@ func TestREPLScreenVimNormalModeEditsPrompt(t *testing.T) {
 		t.Fatalf("screen = %#v", screen)
 	}
 }
+
+func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
+	var lifecycle ScreenLifecycle
+	enter := lifecycle.EnterAlternate()
+	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden {
+		t.Fatalf("lifecycle after enter = %#v", lifecycle)
+	}
+	if !strings.Contains(enter, EnterAlternateScreen) || !strings.Contains(enter, HideCursor) {
+		t.Fatalf("enter = %q", enter)
+	}
+	exit := lifecycle.ExitAlternate()
+	if lifecycle.AlternateScreen || lifecycle.CursorHidden {
+		t.Fatalf("lifecycle after exit = %#v", lifecycle)
+	}
+	if !strings.Contains(exit, ShowCursor) || !strings.Contains(exit, ExitAlternateScreen) {
+		t.Fatalf("exit = %q", exit)
+	}
+}

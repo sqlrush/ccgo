@@ -125,14 +125,14 @@ M6 progress now includes:
 - `internal/compact`: effective context window calculations, auto-compact thresholds, token warning state, compact summary prompt construction, compact API runner, compact boundary/summary plan generation, and microcompact/cache primitives.
 - `internal/conversation`: optional auto-compact can now run before the main request, fail open with a consecutive-failure circuit breaker, persist compact boundary metadata to transcript, and write a session-memory summary.
 - `internal/memory`: session-memory summaries can now be loaded and recalled by query with deterministic scoring and recency ordering.
-- `internal/session`: project session listing, title inference from custom title or first user prompt, and transcript search snippets for resume/search UI.
+- `internal/session`: project session listing, title inference from custom title or first user prompt, transcript search snippets for resume/search UI, and sidechain transcript path/list/append helpers.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:
 
-- `internal/tui`: lightweight terminal frame renderer using ANSI clear/home/cursor control, message/status/prompt/dialog components, prompt input editing, prompt history navigation, default and configurable keybinding resolver, vim insert/normal basics, permission/task dialog builders with kind/id routing, REPL screen model, viewport scrolling, and selection focus model.
+- `internal/tui`: lightweight terminal frame renderer using ANSI clear/home/cursor control, message/status/prompt/dialog components, prompt input editing, prompt history navigation, default and configurable keybinding resolver, vim insert/normal basics, permission/task dialog builders with kind/id routing, alternate screen lifecycle sequences, REPL screen model, viewport scrolling, and selection focus model.
 
 Still missing for full M6/M7 parity:
 
-- M6: full official microcompact/cached microcompact behavior, richer session memory compaction and recall policy, memory extraction/recall agents, sidechain/subagent transcript layout, large transcript optimized loading, remote-history token refresh, and complete metadata entry coverage.
-- M7: custom Ink-compatible layout/reconciler parity, complete configurable keybinding/vim systems, permission/task dialogs with full runtime race/cancel behavior, alternate screen lifecycle management, mouse/paste/image hints, ANSI snapshot corpus, and scripted interaction parity tests.
+- M6: full official microcompact/cached microcompact behavior, richer session memory compaction and recall policy, memory extraction/recall agents, complete sidechain/subagent transcript runtime, large transcript optimized loading, remote-history token refresh, and complete metadata entry coverage.
+- M7: custom Ink-compatible layout/reconciler parity, complete configurable keybinding/vim systems, permission/task dialogs with full runtime race/cancel behavior, full alternate screen lifecycle management, mouse/paste/image hints, ANSI snapshot corpus, and scripted interaction parity tests.
