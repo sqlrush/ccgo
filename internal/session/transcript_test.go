@@ -307,6 +307,42 @@ func TestLoadTranscriptTailKeepsOnlyRecentMessagesAndBridgesProgress(t *testing.
 	}
 }
 
+func TestLoadTranscriptTailBytesReadsCompleteRecords(t *testing.T) {
+	lines := []string{
+		`{"type":"user","uuid":"u1","parentUuid":null}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1"}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"a1"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"p1"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
+	}
+	path := writeTranscript(t, lines)
+	budget := int64(len(strings.Join(lines[2:], "\n")) + 1)
+	tail, err := LoadTranscriptTailBytes(path, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tail.HasBefore || tail.StartOffset <= 0 || tail.BytesRead > budget {
+		t.Fatalf("tail metadata = %#v budget=%d", tail, budget)
+	}
+	if got := tailIDs(tail.Messages); strings.Join(got, ",") != "u2,a2" {
+		t.Fatalf("tail messages = %#v", got)
+	}
+	if tail.Messages[0].ParentUUID == nil || *tail.Messages[0].ParentUUID != "a1" {
+		t.Fatalf("bridged byte-tail parent = %#v", tail.Messages[0].ParentUUID)
+	}
+	if len(tail.Messages[0].Raw) == 0 {
+		t.Fatalf("byte-tail raw message should be retained")
+	}
+
+	partial, err := LoadTranscriptTailBytes(path, int64(len(lines[len(lines)-1])/2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(partial.Messages) != 0 || !partial.HasBefore {
+		t.Fatalf("partial tail = %#v", partial)
+	}
+}
+
 func TestLoadTranscriptWindowAroundUUID(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,

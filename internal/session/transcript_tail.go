@@ -1,7 +1,10 @@
 package session
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 
 	"ccgo/internal/contracts"
@@ -14,6 +17,13 @@ type TranscriptWindow struct {
 	Found       bool
 	HasBefore   bool
 	HasAfter    bool
+}
+
+type TranscriptByteTail struct {
+	Messages    []TranscriptMessage
+	StartOffset int64
+	BytesRead   int64
+	HasBefore   bool
 }
 
 func LoadTranscriptTail(path string, limit int) ([]TranscriptMessage, error) {
@@ -74,6 +84,74 @@ func LoadTranscriptTail(path string, limit int) ([]TranscriptMessage, error) {
 	out = append(out, ring[start:]...)
 	out = append(out, ring[:start]...)
 	return out, nil
+}
+
+func LoadTranscriptTailBytes(path string, maxBytes int64) (TranscriptByteTail, error) {
+	if maxBytes <= 0 {
+		return TranscriptByteTail{}, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TranscriptByteTail{}, nil
+		}
+		return TranscriptByteTail{}, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return TranscriptByteTail{}, err
+	}
+	size := info.Size()
+	start := int64(0)
+	if size > maxBytes {
+		start = size - maxBytes
+	}
+	actualStart := start
+	hasBefore := start > 0
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return TranscriptByteTail{}, err
+	}
+	reader := bufio.NewReader(f)
+	if start > 0 && !offsetStartsLine(f, start) {
+		discarded, err := reader.ReadBytes('\n')
+		actualStart += int64(len(discarded))
+		if err != nil {
+			if err == io.EOF {
+				return TranscriptByteTail{StartOffset: size, HasBefore: true}, nil
+			}
+			return TranscriptByteTail{}, err
+		}
+	}
+
+	progressBridge := map[contracts.ID]*contracts.ID{}
+	scanner := bufio.NewScanner(reader)
+	buf := make([]byte, 0, 1024*1024)
+	scanner.Buffer(buf, 50*1024*1024)
+	var messages []TranscriptMessage
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		msg, ok := transcriptMessageFromLine(line, progressBridge)
+		if ok {
+			messages = append(messages, msg)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return TranscriptByteTail{}, err
+	}
+	if actualStart > size {
+		actualStart = size
+	}
+	return TranscriptByteTail{
+		Messages:    messages,
+		StartOffset: actualStart,
+		BytesRead:   size - actualStart,
+		HasBefore:   hasBefore,
+	}, nil
 }
 
 func LoadTranscriptWindow(path string, target contracts.ID, before int, after int) (TranscriptWindow, error) {
@@ -140,6 +218,15 @@ func LoadTranscriptWindow(path string, target contracts.ID, before int, after in
 		return TranscriptWindow{}, err
 	}
 	return window, nil
+}
+
+func offsetStartsLine(f *os.File, offset int64) bool {
+	if offset <= 0 {
+		return true
+	}
+	var previous [1]byte
+	n, err := f.ReadAt(previous[:], offset-1)
+	return err == nil && n == 1 && previous[0] == '\n'
 }
 
 func transcriptMessageFromLine(line []byte, progressBridge map[contracts.ID]*contracts.ID) (TranscriptMessage, bool) {
