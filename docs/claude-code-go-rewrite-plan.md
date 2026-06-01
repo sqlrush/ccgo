@@ -181,7 +181,7 @@ test/parity/                 # golden tests against TS/official behavior
 
 当前进度：
 
-- 已落地 JSONL/session 基础、resume/search/title 支撑、sidechain transcript 路径初版、sidechain runtime start/append/finish 初版、sidechain state/list/resume 初版、transcript tail/window/metadata/index loaders、index 文本预览字段、流式 transcript 搜索、session list pagination、remote history token refresh、CLAUDE.md/memdir 扫描、team-memory secret guard、compact runner/boundary plan、conversation auto-compact、失败熔断、microcompact/cache 初版、persistent cached microcompact 初版、cache version/TTL/prune、session memory summary/recall 初版、conversation recall 注入、deterministic/model-backed memory extraction 初版和 turn-end memory extraction 落盘。
+- 已落地 JSONL/session 基础、resume/search/title 支撑、sidechain transcript 路径初版、sidechain runtime start/append/finish 初版、sidechain manager orchestration 初版、sidechain state/list/resume 初版、transcript tail/window/metadata/index loaders、index 文本预览字段、流式 transcript 搜索、session list pagination、remote history token refresh、CLAUDE.md/memdir 扫描、team-memory secret guard、compact runner/boundary plan、conversation auto-compact、失败熔断、microcompact/cache 初版、persistent cached microcompact 初版、cache version/TTL/prune、session memory summary/recall 初版、conversation recall 注入、deterministic/model-backed memory extraction 初版和 turn-end memory extraction 落盘。
 
 ### M7: TUI renderer 和交互体验
 

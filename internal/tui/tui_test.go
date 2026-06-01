@@ -405,6 +405,15 @@ func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
 	if !strings.Contains(status, "running: 1") || !strings.Contains(status, "completed: 1") {
 		t.Fatalf("status = %q", status)
 	}
+	if got := NewDialogRuntime().StatusLine(""); got != "ready" {
+		t.Fatalf("empty status = %q", got)
+	}
+	runtime.RequestPermission(PermissionRequest{ID: "perm_status", ToolName: "Edit"})
+	runtime.UpsertTask(TaskStatus{ID: "pending", State: TaskPending})
+	status = runtime.StatusLine("")
+	if !strings.Contains(status, "dialog: permission") || !strings.Contains(status, "permissions: 1") || !strings.Contains(status, "pending: 1") {
+		t.Fatalf("permission status = %q", status)
+	}
 }
 
 func TestDialogRuntimeTaskLifecycle(t *testing.T) {

@@ -124,3 +124,57 @@ func TestLoadSidechainStateMarksOrphanTranscriptUnknown(t *testing.T) {
 		t.Fatalf("unknown sidechain should not resume: %#v", run)
 	}
 }
+
+func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	parent := contracts.ID("parent_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	run, err := manager.Start(SidechainOptions{ID: "agent/one", ParentUUID: &parent, StartedAt: time.Unix(200, 0).UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{Type: "assistant", UUID: "agent_msg_1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{Type: "assistant", UUID: "agent_msg_2"}); err != nil {
+		t.Fatal(err)
+	}
+	states, err := manager.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].LastUUID != "agent_msg_2" || states[0].MessageCount != 3 {
+		t.Fatalf("states = %#v", states)
+	}
+	running, err := manager.ResumeRunning()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(running) != 1 || running[0].ID != run.ID {
+		t.Fatalf("running = %#v", running)
+	}
+	summary, err := manager.Finish("agent/one", SidechainStatusCompleted, "done", time.Unix(210, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.ParentUUID == nil || *summary.ParentUUID != "agent_msg_2" {
+		t.Fatalf("summary parent = %#v", summary.ParentUUID)
+	}
+	sidechainTranscript, err := LoadTranscript(run.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sidechainTranscript.Messages["agent_msg_1"].ParentUUID == nil || *sidechainTranscript.Messages["agent_msg_1"].ParentUUID != sidechainTranscript.Order[0] {
+		t.Fatalf("first append parent = %#v order=%#v", sidechainTranscript.Messages["agent_msg_1"].ParentUUID, sidechainTranscript.Order)
+	}
+	if sidechainTranscript.Messages["agent_msg_2"].ParentUUID == nil || *sidechainTranscript.Messages["agent_msg_2"].ParentUUID != "agent_msg_1" {
+		t.Fatalf("second append parent = %#v", sidechainTranscript.Messages["agent_msg_2"].ParentUUID)
+	}
+	if _, ok, err := manager.Resume("agent/one"); err != nil || ok {
+		t.Fatalf("completed resume ok=%v err=%v", ok, err)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{Type: "assistant", UUID: "late"}); err == nil {
+		t.Fatal("expected append to completed sidechain to fail")
+	}
+}
