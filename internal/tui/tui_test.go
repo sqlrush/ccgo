@@ -9,6 +9,12 @@ import (
 	"ccgo/internal/session"
 )
 
+func typePromptText(screen *REPLScreen, text string) {
+	for _, r := range text {
+		screen.ApplyKey(Key{Type: KeyRune, Rune: r})
+	}
+}
+
 func TestPromptStateEditsAndSubmits(t *testing.T) {
 	prompt := NewPromptState([]string{"old command"})
 	for _, seq := range []string{"h", "i", "\x1b[D", "!"} {
@@ -911,6 +917,56 @@ func TestREPLScreenVimWORDTextObjects(t *testing.T) {
 	}
 	if screen.VimMode != VimInsert || screen.Prompt.Text != " baz" || screen.Prompt.Cursor != 0 {
 		t.Fatalf("after ciW screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimBracketTextObjects(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "call(alpha, beta) end")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "f", "(", "d", "i", "("} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "call() end" || screen.Prompt.Cursor != len([]rune("call(")) {
+		t.Fatalf("after di( prompt = %#v", screen.Prompt)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "call(alpha, beta) end")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "f", "(", "d", "a", ")"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "call end" || screen.Prompt.Cursor != len([]rune("call")) {
+		t.Fatalf("after da) prompt = %#v", screen.Prompt)
+	}
+}
+
+func TestREPLScreenVimQuoteTextObjects(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, `say "hello world" now`)
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "f", "\"", "c", "i", "\""} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != `say "" now` || screen.Prompt.Cursor != len([]rune(`say "`)) {
+		t.Fatalf("after ci\" screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimBraceTextObjectAliases(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "cfg {inner} tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "f", "{", "c", "i", "B"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "cfg {} tail" || screen.Prompt.Cursor != len([]rune("cfg {")) {
+		t.Fatalf("after ciB screen = %#v", screen)
 	}
 }
 

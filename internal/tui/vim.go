@@ -261,7 +261,9 @@ func (s *REPLScreen) applyVimTextObject(obj rune) ScreenEvent {
 	count := s.takeVimOperatorCount()
 	s.clearVimPending()
 	if obj != 'w' && obj != 'W' {
-		return ScreenEvent{}
+		if _, _, ok := textObjectPair(obj); !ok {
+			return ScreenEvent{}
+		}
 	}
 	start, end, ok := s.Prompt.findTextObjectRange(scope, obj, count)
 	if !ok {
@@ -609,9 +611,6 @@ func (p *PromptState) deleteToFirstNonBlank() {
 }
 
 func (p *PromptState) findTextObjectRange(scope rune, obj rune, count int) (int, int, bool) {
-	if count <= 0 {
-		count = 1
-	}
 	runes := []rune(p.Text)
 	if len(runes) == 0 {
 		return 0, 0, false
@@ -622,6 +621,23 @@ func (p *PromptState) findTextObjectRange(scope rune, obj rune, count int) (int,
 	}
 	if idx >= len(runes) {
 		idx = len(runes) - 1
+	}
+	if obj == 'w' || obj == 'W' {
+		return findWordTextObjectRange(runes, idx, scope, obj, count)
+	}
+	open, close, ok := textObjectPair(obj)
+	if !ok {
+		return 0, 0, false
+	}
+	if open == close {
+		return findQuoteTextObjectRange(runes, idx, open, scope)
+	}
+	return findBracketTextObjectRange(runes, idx, open, close, scope)
+}
+
+func findWordTextObjectRange(runes []rune, idx int, scope rune, obj rune, count int) (int, int, bool) {
+	if count <= 0 {
+		count = 1
 	}
 	isWord := isWordRune
 	if obj == 'W' {
@@ -642,6 +658,100 @@ func (p *PromptState) findTextObjectRange(scope rune, obj rune, count int) (int,
 		start, end = expandAroundTextObject(runes, start, end)
 	}
 	return start, end, true
+}
+
+func textObjectPair(obj rune) (rune, rune, bool) {
+	switch obj {
+	case '(', ')', 'b':
+		return '(', ')', true
+	case '[', ']':
+		return '[', ']', true
+	case '{', '}', 'B':
+		return '{', '}', true
+	case '<', '>':
+		return '<', '>', true
+	case '"', '\'', '`':
+		return obj, obj, true
+	default:
+		return 0, 0, false
+	}
+}
+
+func findQuoteTextObjectRange(runes []rune, idx int, quote rune, scope rune) (int, int, bool) {
+	lineStart := 0
+	for i := idx - 1; i >= 0; i-- {
+		if runes[i] == '\n' {
+			lineStart = i + 1
+			break
+		}
+	}
+	lineEnd := len(runes)
+	for i := idx; i < len(runes); i++ {
+		if runes[i] == '\n' {
+			lineEnd = i
+			break
+		}
+	}
+	var positions []int
+	for i := lineStart; i < lineEnd; i++ {
+		if runes[i] == quote {
+			positions = append(positions, i)
+		}
+	}
+	for i := 0; i < len(positions)-1; i += 2 {
+		start := positions[i]
+		end := positions[i+1]
+		if start <= idx && idx <= end {
+			if scope == 'i' {
+				return start + 1, end, true
+			}
+			return start, end + 1, true
+		}
+	}
+	return 0, 0, false
+}
+
+func findBracketTextObjectRange(runes []rune, idx int, open rune, close rune, scope rune) (int, int, bool) {
+	depth := 0
+	start := -1
+	for i := idx; i >= 0; i-- {
+		if runes[i] == close && i != idx {
+			depth++
+			continue
+		}
+		if runes[i] != open {
+			continue
+		}
+		if depth == 0 {
+			start = i
+			break
+		}
+		depth--
+	}
+	if start == -1 {
+		return 0, 0, false
+	}
+	depth = 0
+	end := -1
+	for i := start + 1; i < len(runes); i++ {
+		switch runes[i] {
+		case open:
+			depth++
+		case close:
+			if depth == 0 {
+				end = i
+				break
+			}
+			depth--
+		}
+	}
+	if end == -1 {
+		return 0, 0, false
+	}
+	if scope == 'i' {
+		return start + 1, end, true
+	}
+	return start, end + 1, true
 }
 
 func textObjectCoreRange(runes []rune, idx int, isWord func(rune) bool) (int, int) {
