@@ -125,6 +125,19 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.LastSpawnTokens != 42 {
 		t.Fatalf("snapshot = %#v", transcript.ContextCollapseSnapshot)
 	}
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Summaries["a1"] != "short" || metadata.CustomTitles["s1"] != "Title" || metadata.Tags["s1"] != "tagged" {
+		t.Fatalf("metadata loader = %#v %#v %#v", metadata.Summaries, metadata.CustomTitles, metadata.Tags)
+	}
+	if got := metadata.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
+		t.Fatalf("metadata replacements = %#v", got)
+	}
+	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.LastSpawnTokens != 42 {
+		t.Fatalf("metadata snapshot = %#v", metadata.ContextCollapseSnapshot)
+	}
 }
 
 func TestLoadTranscriptTailKeepsOnlyRecentMessagesAndBridgesProgress(t *testing.T) {

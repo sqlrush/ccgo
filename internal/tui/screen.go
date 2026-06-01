@@ -35,10 +35,12 @@ type REPLScreen struct {
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
+	prompt := NewPromptState(history)
+	prompt.EnablePasteReferences()
 	screen := REPLScreen{
 		Width:   width,
 		Height:  height,
-		Prompt:  NewPromptState(history),
+		Prompt:  prompt,
 		Keymap:  DefaultKeymap(),
 		Focused: true,
 	}

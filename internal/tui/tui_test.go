@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"ccgo/internal/session"
 )
 
 func TestPromptStateEditsAndSubmits(t *testing.T) {
@@ -59,6 +61,40 @@ func TestPromptHandlesBracketedPasteAndImageHints(t *testing.T) {
 	prompt.Apply(image)
 	if !strings.Contains(prompt.Text, "[Image: chart.png]") {
 		t.Fatalf("prompt after image = %#v", prompt)
+	}
+}
+
+func TestPromptPasteReferencesCanStoreAndExpandPastedContent(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b[200~hello\nworld\x1b[201~"))
+	if prompt.Text != "[Pasted text #1 +1 lines]" || prompt.ExpandedText() != "hello\nworld" {
+		t.Fatalf("prompt = %#v expanded=%q", prompt, prompt.ExpandedText())
+	}
+	entry := prompt.HistoryEntry()
+	if entry.Display != "[Pasted text #1 +1 lines]" || entry.PastedContents[1].Content != "hello\nworld" {
+		t.Fatalf("history entry = %#v", entry)
+	}
+	result := prompt.Apply(ParseKey("\n"))
+	if result.Submitted != "hello\nworld" || result.Display != "[Pasted text #1 +1 lines]" || result.PastedContents[1].Type != session.PastedContentText {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(prompt.PastedContents) != 0 || prompt.NextPastedID != 1 {
+		t.Fatalf("pasted contents should reset: %#v next=%d", prompt.PastedContents, prompt.NextPastedID)
+	}
+}
+
+func TestPromptPasteReferencesSurviveDraftHistoryNavigation(t *testing.T) {
+	prompt := NewPromptState([]string{"old"})
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b[200~draft\npaste\x1b[201~"))
+	prompt.Apply(ParseKey("\x1b[A"))
+	if prompt.Text != "old" || prompt.ExpandedText() != "old" {
+		t.Fatalf("history entry = %#v expanded=%q", prompt, prompt.ExpandedText())
+	}
+	prompt.Apply(ParseKey("\x1b[B"))
+	if prompt.Text != "[Pasted text #1 +1 lines]" || prompt.ExpandedText() != "draft\npaste" {
+		t.Fatalf("draft = %#v expanded=%q", prompt, prompt.ExpandedText())
 	}
 }
 
@@ -221,6 +257,18 @@ func TestREPLScreenSubmitsPromptAndRendersMessages(t *testing.T) {
 	output := screen.Render()
 	if !strings.Contains(output, "assistant: hello from assistant") || !strings.Contains(output, "ready") {
 		t.Fatalf("output = %q", output)
+	}
+}
+
+func TestREPLScreenSubmitsExpandedPasteReferences(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.ApplyKey(ParseKey("\x1b[200~alpha\nbeta\x1b[201~"))
+	if screen.Prompt.Text != "[Pasted text #1 +1 lines]" {
+		t.Fatalf("prompt = %#v", screen.Prompt)
+	}
+	event := screen.ApplyKey(ParseKey("\n"))
+	if event.Type != ScreenEventPromptSubmitted || event.Value != "alpha\nbeta" {
+		t.Fatalf("event = %#v", event)
 	}
 }
 

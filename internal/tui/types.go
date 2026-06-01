@@ -1,5 +1,7 @@
 package tui
 
+import "ccgo/internal/session"
+
 type Role string
 
 const (
@@ -83,7 +85,9 @@ type Key struct {
 }
 
 type PromptResult struct {
-	Submitted   string
-	Cancelled   bool
-	Interrupted bool
+	Submitted      string
+	Display        string
+	PastedContents map[int]session.PastedContent
+	Cancelled      bool
+	Interrupted    bool
 }

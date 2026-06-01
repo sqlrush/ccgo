@@ -4,16 +4,22 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"ccgo/internal/session"
 )
 
 const ImageHintPlaceholder = "[Image]"
 
 type PromptState struct {
-	Text         string
-	Cursor       int
-	History      []string
-	HistoryIndex int
-	draft        string
+	Text                string
+	Cursor              int
+	History             []string
+	HistoryIndex        int
+	UsePasteReferences  bool
+	PastedContents      map[int]session.PastedContent
+	NextPastedID        int
+	draft               string
+	draftPastedContents map[int]session.PastedContent
 }
 
 func NewPromptState(history []string) PromptState {
@@ -126,7 +132,7 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.Text = string(runes)
 		p.resetHistoryCursor()
 	case KeyPaste:
-		p.insertText(key.Text)
+		p.insertPaste(key.Text)
 	case KeyImageHint:
 		text := key.Text
 		if text == "" {
@@ -163,21 +169,73 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	case KeyDown:
 		p.historyNext()
 	case KeyEnter:
-		submitted := p.Text
-		if submitted != "" {
-			p.History = append(p.History, submitted)
+		display := p.Text
+		submitted := p.ExpandedText()
+		pastedContents := clonePastedContents(p.PastedContents)
+		if display != "" {
+			p.History = append(p.History, display)
 		}
 		p.Text = ""
 		p.Cursor = 0
 		p.HistoryIndex = len(p.History)
 		p.draft = ""
-		return PromptResult{Submitted: submitted}
+		p.draftPastedContents = nil
+		p.resetPastedContents()
+		return PromptResult{Submitted: submitted, Display: display, PastedContents: pastedContents}
 	case KeyEsc:
 		return PromptResult{Cancelled: true}
 	case KeyCtrlC:
 		return PromptResult{Interrupted: true}
 	}
 	return PromptResult{}
+}
+
+func (p *PromptState) EnablePasteReferences() {
+	p.UsePasteReferences = true
+	p.resetPastedContents()
+}
+
+func (p PromptState) ExpandedText() string {
+	if len(p.PastedContents) == 0 {
+		return p.Text
+	}
+	return session.ExpandPastedTextRefs(p.Text, p.PastedContents)
+}
+
+func (p PromptState) HistoryEntry() session.HistoryEntry {
+	return session.HistoryEntry{
+		Display:        p.Text,
+		PastedContents: clonePastedContents(p.PastedContents),
+	}
+}
+
+func (p *PromptState) insertPaste(text string) {
+	if !p.UsePasteReferences || text == "" {
+		p.insertText(text)
+		return
+	}
+	if p.PastedContents == nil {
+		p.resetPastedContents()
+	}
+	id := p.NextPastedID
+	if id <= 0 {
+		id = nextPastedID(p.PastedContents)
+	}
+	p.NextPastedID = id + 1
+	p.PastedContents[id] = session.PastedContent{
+		ID:      id,
+		Type:    session.PastedContentText,
+		Content: text,
+	}
+	p.insertText(session.FormatPastedTextRef(id, session.PastedTextRefNumLines(text)))
+}
+
+func (p *PromptState) resetPastedContents() {
+	if !p.UsePasteReferences {
+		return
+	}
+	p.PastedContents = map[int]session.PastedContent{}
+	p.NextPastedID = 1
 }
 
 func (p *PromptState) insertText(text string) {
@@ -195,6 +253,7 @@ func (p *PromptState) insertText(text string) {
 func (p *PromptState) resetHistoryCursor() {
 	p.HistoryIndex = len(p.History)
 	p.draft = p.Text
+	p.draftPastedContents = clonePastedContents(p.PastedContents)
 }
 
 func (p *PromptState) historyPrev() {
@@ -203,11 +262,13 @@ func (p *PromptState) historyPrev() {
 	}
 	if p.HistoryIndex == len(p.History) {
 		p.draft = p.Text
+		p.draftPastedContents = clonePastedContents(p.PastedContents)
 	}
 	if p.HistoryIndex > 0 {
 		p.HistoryIndex--
 	}
 	p.Text = p.History[p.HistoryIndex]
+	p.replacePastedContents(nil)
 	p.Cursor = len([]rune(p.Text))
 }
 
@@ -218,10 +279,44 @@ func (p *PromptState) historyNext() {
 	p.HistoryIndex++
 	if p.HistoryIndex == len(p.History) {
 		p.Text = p.draft
+		p.replacePastedContents(p.draftPastedContents)
 	} else {
 		p.Text = p.History[p.HistoryIndex]
+		p.replacePastedContents(nil)
 	}
 	p.Cursor = len([]rune(p.Text))
+}
+
+func (p *PromptState) replacePastedContents(contents map[int]session.PastedContent) {
+	if !p.UsePasteReferences {
+		return
+	}
+	p.PastedContents = clonePastedContents(contents)
+	if p.PastedContents == nil {
+		p.PastedContents = map[int]session.PastedContent{}
+	}
+	p.NextPastedID = nextPastedID(p.PastedContents)
+}
+
+func clonePastedContents(in map[int]session.PastedContent) map[int]session.PastedContent {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[int]session.PastedContent, len(in))
+	for id, content := range in {
+		out[id] = content
+	}
+	return out
+}
+
+func nextPastedID(contents map[int]session.PastedContent) int {
+	next := 1
+	for id := range contents {
+		if id >= next {
+			next = id + 1
+		}
+	}
+	return next
 }
 
 func parseBracketedPaste(seq string) (string, bool) {
