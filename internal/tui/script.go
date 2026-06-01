@@ -33,13 +33,14 @@ func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (Script
 		var event ScreenEvent
 		var snapshot ANSISnapshot
 		if step.ResizeWidth > 0 {
-			screen.Width = step.ResizeWidth
-		}
-		if step.ResizeHeight > 0 {
-			screen.Height = step.ResizeHeight
-		}
-		if step.ResizeWidth > 0 || step.ResizeHeight > 0 {
-			screen.rebuildViewport()
+			width := step.ResizeWidth
+			height := screen.Height
+			if step.ResizeHeight > 0 {
+				height = step.ResizeHeight
+			}
+			screen.Resize(width, height)
+		} else if step.ResizeHeight > 0 {
+			screen.Resize(screen.Width, step.ResizeHeight)
 		}
 		if step.Message != nil {
 			screen.AppendMessage(*step.Message)

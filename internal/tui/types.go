@@ -67,6 +67,8 @@ const (
 	KeyPaste     KeyType = "paste"
 	KeyImageHint KeyType = "image_hint"
 	KeyMouse     KeyType = "mouse"
+	KeyFocusIn   KeyType = "focus_in"
+	KeyFocusOut  KeyType = "focus_out"
 	KeyUnknown   KeyType = "unknown"
 )
 

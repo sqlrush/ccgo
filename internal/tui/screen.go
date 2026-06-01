@@ -9,6 +9,8 @@ const (
 	ScreenEventCancelled       ScreenEventType = "cancelled"
 	ScreenEventInterrupted     ScreenEventType = "interrupted"
 	ScreenEventReverseSearch   ScreenEventType = "reverse_search"
+	ScreenEventFocusIn         ScreenEventType = "focus_in"
+	ScreenEventFocusOut        ScreenEventType = "focus_out"
 )
 
 type ScreenEvent struct {
@@ -29,14 +31,16 @@ type REPLScreen struct {
 	Viewport   Viewport
 	VimEnabled bool
 	VimMode    VimMode
+	Focused    bool
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
 	screen := REPLScreen{
-		Width:  width,
-		Height: height,
-		Prompt: NewPromptState(history),
-		Keymap: DefaultKeymap(),
+		Width:   width,
+		Height:  height,
+		Prompt:  NewPromptState(history),
+		Keymap:  DefaultKeymap(),
+		Focused: true,
 	}
 	screen.rebuildViewport()
 	return screen
@@ -54,6 +58,14 @@ func (s *REPLScreen) AppendMessage(message Message) {
 }
 
 func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
+	switch key.Type {
+	case KeyFocusIn:
+		s.Focused = true
+		return ScreenEvent{Type: ScreenEventFocusIn}
+	case KeyFocusOut:
+		s.Focused = false
+		return ScreenEvent{Type: ScreenEventFocusOut}
+	}
 	if key.Type == KeyMouse {
 		return s.applyMouse(key)
 	}
@@ -124,6 +136,16 @@ func (s *REPLScreen) Render() string {
 	return NewRenderer(s.Width, s.Height).Render(s.Frame())
 }
 
+func (s *REPLScreen) Resize(width int, height int) {
+	if width > 0 {
+		s.Width = width
+	}
+	if height > 0 {
+		s.Height = height
+	}
+	s.rebuildViewportPreservingScroll()
+}
+
 func (s *REPLScreen) rebuildViewport() {
 	bodyHeight := s.Height - 2
 	if bodyHeight < 0 {
@@ -131,6 +153,33 @@ func (s *REPLScreen) rebuildViewport() {
 	}
 	lines := RenderMessages(s.Messages, s.Width)
 	s.Viewport = NewViewport(lines, bodyHeight)
+}
+
+func (s *REPLScreen) rebuildViewportPreservingScroll() {
+	previous := s.Viewport
+	bodyHeight := s.Height - 2
+	if bodyHeight < 0 {
+		bodyHeight = 0
+	}
+	atBottom := previous.Offset >= maxViewportOffset(previous)
+	lines := RenderMessages(s.Messages, s.Width)
+	s.Viewport = Viewport{Lines: lines, Height: bodyHeight, Offset: previous.Offset}
+	if atBottom {
+		s.Viewport.ScrollToBottom()
+		return
+	}
+	s.Viewport.clamp()
+}
+
+func maxViewportOffset(viewport Viewport) int {
+	if viewport.Height <= 0 {
+		return 0
+	}
+	maxOffset := len(viewport.Lines) - viewport.Height
+	if maxOffset < 0 {
+		return 0
+	}
+	return maxOffset
 }
 
 func (s *REPLScreen) applyDialogAction(action Action) ScreenEvent {

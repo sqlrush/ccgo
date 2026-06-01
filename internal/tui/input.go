@@ -52,6 +52,10 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyTab}
 	case "\x1b[Z":
 		return Key{Type: KeyShiftTab}
+	case "\x1b[I":
+		return Key{Type: KeyFocusIn}
+	case "\x1b[O":
+		return Key{Type: KeyFocusOut}
 	case "\x1b[D":
 		return Key{Type: KeyLeft}
 	case "\x1b[C":

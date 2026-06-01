@@ -127,6 +127,30 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptTailKeepsOnlyRecentMessagesAndBridgesProgress(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","parentUuid":null}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"p1"}`,
+		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
+	})
+	tail, err := LoadTranscriptTail(path, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tailIDs(tail); strings.Join(got, ",") != "a1,u2,a2" {
+		t.Fatalf("tail = %#v", got)
+	}
+	if tail[0].ParentUUID == nil || *tail[0].ParentUUID != "u1" {
+		t.Fatalf("bridged parent = %#v", tail[0].ParentUUID)
+	}
+	if len(tail[0].Raw) == 0 {
+		t.Fatalf("tail raw message should be retained")
+	}
+}
+
 func TestRemoveTranscriptMessageByUUID(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
@@ -180,6 +204,14 @@ func writeTranscript(t *testing.T, lines []string) string {
 func chainIDs(chain []TranscriptMessage) []string {
 	out := make([]string, 0, len(chain))
 	for _, msg := range chain {
+		out = append(out, string(msg.UUID))
+	}
+	return out
+}
+
+func tailIDs(messages []TranscriptMessage) []string {
+	out := make([]string, 0, len(messages))
+	for _, msg := range messages {
 		out = append(out, string(msg.UUID))
 	}
 	return out

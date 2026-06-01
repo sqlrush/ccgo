@@ -80,6 +80,15 @@ func TestParseSGRMouse(t *testing.T) {
 	}
 }
 
+func TestParseFocusEvents(t *testing.T) {
+	if key := ParseKey("\x1b[I"); key.Type != KeyFocusIn {
+		t.Fatalf("focus in = %#v", key)
+	}
+	if key := ParseKey("\x1b[O"); key.Type != KeyFocusOut {
+		t.Fatalf("focus out = %#v", key)
+	}
+}
+
 func TestRendererIncludesStatusPromptAndDialog(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "hello"
@@ -337,6 +346,41 @@ func TestREPLScreenViewportScrolls(t *testing.T) {
 	scrolledUp := strings.Join(screen.Viewport.Visible(), "\n")
 	if scrolledUp != after {
 		t.Fatalf("mouse wheel up mismatch: after=%q scrolledUp=%q", after, scrolledUp)
+	}
+}
+
+func TestREPLScreenFocusAndResizePreservesScroll(t *testing.T) {
+	screen := NewREPLScreen(24, 6, nil)
+	screen.SetMessages([]Message{
+		{Role: RoleSystem, Text: "one"},
+		{Role: RoleSystem, Text: "two"},
+		{Role: RoleSystem, Text: "three"},
+		{Role: RoleSystem, Text: "four"},
+		{Role: RoleSystem, Text: "five"},
+		{Role: RoleSystem, Text: "six"},
+		{Role: RoleSystem, Text: "seven"},
+		{Role: RoleSystem, Text: "eight"},
+	})
+	screen.ApplyKey(ParseKey("\x1b[5~"))
+	before := strings.Join(screen.Viewport.Visible(), "\n")
+	screen.Resize(24, 7)
+	after := strings.Join(screen.Viewport.Visible(), "\n")
+	if !strings.Contains(before, "system: one") || !strings.Contains(after, "system: one") {
+		t.Fatalf("resize should preserve scrolled position: before=%q after=%q", before, after)
+	}
+	focusOut := screen.ApplyKey(ParseKey("\x1b[O"))
+	if focusOut.Type != ScreenEventFocusOut || screen.Focused {
+		t.Fatalf("focus out = %#v focused=%v", focusOut, screen.Focused)
+	}
+	focusIn := screen.ApplyKey(ParseKey("\x1b[I"))
+	if focusIn.Type != ScreenEventFocusIn || !screen.Focused {
+		t.Fatalf("focus in = %#v focused=%v", focusIn, screen.Focused)
+	}
+	screen.Viewport.ScrollToBottom()
+	screen.Resize(24, 5)
+	bottom := strings.Join(screen.Viewport.Visible(), "\n")
+	if !strings.Contains(bottom, "system: eight") {
+		t.Fatalf("bottom resize = %q", bottom)
 	}
 }
 
