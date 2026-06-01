@@ -162,7 +162,11 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 		case "content-replacement":
 			var entry ContentReplacementEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				metadata.ContentReplacements[entry.SessionID] = append(metadata.ContentReplacements[entry.SessionID], entry.Replacements...)
+				key := entry.SessionID
+				if entry.AgentID != "" {
+					key = contracts.ID(entry.AgentID)
+				}
+				metadata.ContentReplacements[key] = append(metadata.ContentReplacements[key], entry.Replacements...)
 			}
 		case "file-history-snapshot":
 			metadata.FileHistorySnapshots = append(metadata.FileHistorySnapshots, append(json.RawMessage(nil), line...))

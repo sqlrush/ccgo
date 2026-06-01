@@ -167,6 +167,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"attribution-snapshot","messageId":"a1","surface":"cli","fileStates":{}}`,
 		`{"type":"speculation-accept","timestamp":"2026-01-01T00:00:05Z","timeSavedMs":1200}`,
 		`{"type":"content-replacement","sessionId":"s1","replacements":[{"toolUseId":"toolu_1","replacement":"stub"}]}`,
+		`{"type":"content-replacement","sessionId":"s1","agentId":"agent_1","replacements":[{"toolUseId":"toolu_2","replacement":"agent stub"}]}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
 	})
 	transcript, err := LoadTranscript(path)
@@ -190,6 +191,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if got := transcript.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("content replacements = %#v", got)
+	}
+	if got := transcript.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
+		t.Fatalf("agent content replacements = %#v", got)
 	}
 	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.LastSpawnTokens != 42 {
 		t.Fatalf("snapshot = %#v", transcript.ContextCollapseSnapshot)
@@ -215,6 +219,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if got := metadata.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("metadata replacements = %#v", got)
+	}
+	if got := metadata.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
+		t.Fatalf("metadata agent replacements = %#v", got)
 	}
 	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.LastSpawnTokens != 42 {
 		t.Fatalf("metadata snapshot = %#v", metadata.ContextCollapseSnapshot)
