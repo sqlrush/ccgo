@@ -44,6 +44,14 @@ func TestPromptStateControlLineEditing(t *testing.T) {
 	if prompt.Text != "alpha beta " || prompt.Cursor != len([]rune("alpha beta ")) {
 		t.Fatalf("after ctrl-w prompt = %#v", prompt)
 	}
+	prompt.Apply(ParseKey("\x02"))
+	if prompt.Cursor != len([]rune("alpha beta")) {
+		t.Fatalf("after ctrl-b prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x06"))
+	if prompt.Cursor != len([]rune("alpha beta ")) {
+		t.Fatalf("after ctrl-f prompt = %#v", prompt)
+	}
 	prompt.Apply(ParseKey("\x01"))
 	prompt.Apply(ParseKey("\x0b"))
 	if prompt.Text != "" || prompt.Cursor != 0 {
@@ -231,6 +239,12 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x12")); action != ActionReverseSearch {
 		t.Fatalf("ctrl-r action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x02")); action != ActionMoveLeft {
+		t.Fatalf("ctrl-b action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x06")); action != ActionMoveRight {
+		t.Fatalf("ctrl-f action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x15")); action != ActionDeleteToStart {
 		t.Fatalf("ctrl-u action = %q", action)
 	}
@@ -263,7 +277,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-u", "ctrl-k", "ctrl-w"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-u", "ctrl-k", "ctrl-w"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

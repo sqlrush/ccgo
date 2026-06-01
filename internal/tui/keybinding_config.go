@@ -98,10 +98,14 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyShiftTab, nil
 	case "ctrl+a", "ctrl-a", "control+a", "control-a":
 		return KeyCtrlA, nil
+	case "ctrl+b", "ctrl-b", "control+b", "control-b":
+		return KeyCtrlB, nil
 	case "ctrl+c", "ctrl-c", "control+c", "control-c":
 		return KeyCtrlC, nil
 	case "ctrl+e", "ctrl-e", "control+e", "control-e":
 		return KeyCtrlE, nil
+	case "ctrl+f", "ctrl-f", "control+f", "control-f":
+		return KeyCtrlF, nil
 	case "ctrl+k", "ctrl-k", "control+k", "control-k":
 		return KeyCtrlK, nil
 	case "ctrl+r", "ctrl-r", "control+r", "control-r":
