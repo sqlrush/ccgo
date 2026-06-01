@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -20,6 +21,23 @@ type SnapshotComparison struct {
 	ActualText    string
 	ExpectedDiff  string
 	ActualDiff    string
+}
+
+type SnapshotCorpusReport struct {
+	Comparisons []SnapshotComparison
+	Unexpected  []string
+}
+
+func (r SnapshotCorpusReport) Passed() bool {
+	if len(r.Unexpected) > 0 {
+		return false
+	}
+	for _, comparison := range r.Comparisons {
+		if !comparison.Match || comparison.Missing {
+			return false
+		}
+	}
+	return true
 }
 
 func (c SnapshotCorpus) Write(snapshot ANSISnapshot) error {
@@ -82,6 +100,50 @@ func (c SnapshotCorpus) CompareAll(snapshots []ANSISnapshot) ([]SnapshotComparis
 		comparisons = append(comparisons, comparison)
 	}
 	return comparisons, nil
+}
+
+func (c SnapshotCorpus) CompareAllStrict(snapshots []ANSISnapshot) (SnapshotCorpusReport, error) {
+	comparisons, err := c.CompareAll(snapshots)
+	if err != nil {
+		return SnapshotCorpusReport{}, err
+	}
+	unexpected, err := c.UnexpectedBaselines(snapshots)
+	if err != nil {
+		return SnapshotCorpusReport{}, err
+	}
+	return SnapshotCorpusReport{Comparisons: comparisons, Unexpected: unexpected}, nil
+}
+
+func (c SnapshotCorpus) UnexpectedBaselines(snapshots []ANSISnapshot) ([]string, error) {
+	if c.Dir == "" {
+		return nil, fmt.Errorf("snapshot corpus dir is required")
+	}
+	entries, err := os.ReadDir(c.Dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	expected := map[string]struct{}{}
+	for _, snapshot := range snapshots {
+		if snapshot.Name == "" {
+			continue
+		}
+		expected[sanitizeSnapshotName(snapshot.Name)] = struct{}{}
+	}
+	var unexpected []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".txt")
+		if _, ok := expected[name]; !ok {
+			unexpected = append(unexpected, name)
+		}
+	}
+	sort.Strings(unexpected)
+	return unexpected, nil
 }
 
 func (c SnapshotCorpus) WriteAll(snapshots []ANSISnapshot) error {

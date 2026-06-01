@@ -2181,6 +2181,24 @@ func TestSnapshotCorpusWritesAndComparesScriptSnapshots(t *testing.T) {
 	if !comparisons[0].Match || comparisons[1].Match || comparisons[1].FirstDiffLine == 0 {
 		t.Fatalf("changed comparisons = %#v", comparisons)
 	}
+
+	report, err := corpus.CompareAllStrict(result.Snapshots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Passed() || len(report.Comparisons) != 2 {
+		t.Fatalf("strict report = %#v", report)
+	}
+	if err := os.WriteFile(filepath.Join(corpus.Dir, "stale.txt"), []byte("old baseline"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err = corpus.CompareAllStrict(result.Snapshots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Passed() || len(report.Unexpected) != 1 || report.Unexpected[0] != "stale" {
+		t.Fatalf("strict report with stale baseline = %#v", report)
+	}
 }
 
 func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
