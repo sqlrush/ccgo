@@ -86,6 +86,7 @@ const (
 	KeyCtrlU     KeyType = "ctrl+u"
 	KeyCtrlW     KeyType = "ctrl+w"
 	KeyCtrlX     KeyType = "ctrl+x"
+	KeyCtrlY     KeyType = "ctrl+y"
 	KeyPaste     KeyType = "paste"
 	KeyImageHint KeyType = "image_hint"
 	KeyMouse     KeyType = "mouse"

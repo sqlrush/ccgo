@@ -128,6 +128,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlW, nil
 	case "ctrl+x", "ctrl-x", "control+x", "control-x":
 		return KeyCtrlX, nil
+	case "ctrl+y", "ctrl-y", "control+y", "control-y":
+		return KeyCtrlY, nil
 	case "paste", "bracketed-paste":
 		return KeyPaste, nil
 	case "image-hint", "image":
@@ -166,6 +168,7 @@ func IsKnownAction(action Action) bool {
 		ActionDeleteToStart,
 		ActionDeleteToEnd,
 		ActionDeleteWordBack,
+		ActionYank,
 		ActionHistoryPrevious,
 		ActionHistoryNext,
 		ActionScrollUp,

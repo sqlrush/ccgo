@@ -473,6 +473,8 @@ func keyForAction(action Action, key Key) Key {
 		return Key{Type: KeyCtrlK}
 	case ActionDeleteWordBack:
 		return Key{Type: KeyCtrlW}
+	case ActionYank:
+		return Key{Type: KeyCtrlY}
 	case ActionHistoryPrevious:
 		return Key{Type: KeyUp}
 	case ActionHistoryNext:

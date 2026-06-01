@@ -9,6 +9,14 @@ import (
 )
 
 const ImageHintPlaceholder = "[Image]"
+const killRingMaxSize = 10
+
+type killRingDirection string
+
+const (
+	killRingAppend  killRingDirection = "append"
+	killRingPrepend killRingDirection = "prepend"
+)
 
 type PromptState struct {
 	Text                string
@@ -20,6 +28,12 @@ type PromptState struct {
 	NextPastedID        int
 	draft               string
 	draftPastedContents map[int]session.PastedContent
+	killRing            []string
+	killRingIndex       int
+	lastActionWasKill   bool
+	lastActionWasYank   bool
+	lastYankStart       int
+	lastYankLength      int
 }
 
 func NewPromptState(history []string) PromptState {
@@ -78,6 +92,8 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlW}
 	case "\x18":
 		return Key{Type: KeyCtrlX}
+	case "\x19":
+		return Key{Type: KeyCtrlY}
 	case "\t":
 		return Key{Type: KeyTab}
 	case "\x1b[Z":
@@ -142,6 +158,12 @@ func parseSGRMouse(seq string) (Key, bool) {
 }
 
 func (p *PromptState) Apply(key Key) PromptResult {
+	if !isPromptKillKey(key.Type) {
+		p.lastActionWasKill = false
+	}
+	if key.Type != KeyCtrlY {
+		p.lastActionWasYank = false
+	}
 	runes := []rune(p.Text)
 	if p.Cursor < 0 {
 		p.Cursor = 0
@@ -194,6 +216,8 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.deleteToStart()
 	case KeyCtrlW:
 		p.deleteWordBackward()
+	case KeyCtrlY:
+		p.yankLastKill()
 	case KeyUp:
 		p.historyPrev()
 	case KeyDown:
@@ -218,6 +242,10 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		return PromptResult{Interrupted: true}
 	}
 	return PromptResult{}
+}
+
+func isPromptKillKey(key KeyType) bool {
+	return key == KeyCtrlK || key == KeyCtrlU || key == KeyCtrlW
 }
 
 func (p *PromptState) EnablePasteReferences() {
@@ -278,6 +306,40 @@ func (p *PromptState) insertText(text string) {
 	p.Cursor += len(insert)
 	p.Text = string(runes)
 	p.resetHistoryCursor()
+}
+
+func (p *PromptState) pushToKillRing(text string, direction killRingDirection) {
+	if text == "" {
+		return
+	}
+	if p.lastActionWasKill && len(p.killRing) > 0 {
+		if direction == killRingPrepend {
+			p.killRing[0] = text + p.killRing[0]
+		} else {
+			p.killRing[0] += text
+		}
+	} else {
+		p.killRing = append([]string{text}, p.killRing...)
+		if len(p.killRing) > killRingMaxSize {
+			p.killRing = p.killRing[:killRingMaxSize]
+		}
+	}
+	p.killRingIndex = 0
+	p.lastActionWasKill = true
+	p.lastActionWasYank = false
+}
+
+func (p *PromptState) yankLastKill() {
+	if len(p.killRing) == 0 || p.killRing[0] == "" {
+		return
+	}
+	start := p.Cursor
+	text := p.killRing[0]
+	p.insertText(text)
+	p.killRingIndex = 0
+	p.lastYankStart = start
+	p.lastYankLength = len([]rune(text))
+	p.lastActionWasYank = true
 }
 
 func (p *PromptState) resetHistoryCursor() {

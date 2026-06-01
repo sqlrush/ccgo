@@ -79,6 +79,49 @@ func TestPromptStateControlLineEditing(t *testing.T) {
 	}
 }
 
+func TestPromptStateKillRingYank(t *testing.T) {
+	prompt := NewPromptState(nil)
+	typePromptText := func(text string) {
+		for _, r := range text {
+			prompt.Apply(Key{Type: KeyRune, Rune: r})
+		}
+	}
+
+	typePromptText("alpha beta gamma")
+	prompt.Apply(ParseKey("\x17"))
+	prompt.Apply(ParseKey("\x17"))
+	if prompt.Text != "alpha " || prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after consecutive ctrl-w prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x19"))
+	if prompt.Text != "alpha beta gamma" || prompt.Cursor != len([]rune("alpha beta gamma")) {
+		t.Fatalf("after ctrl-y prompt = %#v", prompt)
+	}
+
+	prompt.Apply(ParseKey("\x15"))
+	if prompt.Text != "" || prompt.Cursor != 0 {
+		t.Fatalf("after ctrl-u prompt = %#v", prompt)
+	}
+	typePromptText("new ")
+	prompt.Apply(ParseKey("\x19"))
+	if prompt.Text != "new alpha beta gamma" || prompt.Cursor != len([]rune("new alpha beta gamma")) {
+		t.Fatalf("after ctrl-y following ctrl-u prompt = %#v", prompt)
+	}
+
+	prompt.Apply(ParseKey("\x01"))
+	for i := 0; i < len([]rune("new ")); i++ {
+		prompt.Apply(ParseKey("\x06"))
+	}
+	prompt.Apply(ParseKey("\x0b"))
+	if prompt.Text != "new " || prompt.Cursor != len([]rune("new ")) {
+		t.Fatalf("after ctrl-k prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x19"))
+	if prompt.Text != "new alpha beta gamma" || prompt.Cursor != len([]rune("new alpha beta gamma")) {
+		t.Fatalf("after ctrl-y following ctrl-k prompt = %#v", prompt)
+	}
+}
+
 func TestPromptHistoryNavigationKeepsDraft(t *testing.T) {
 	prompt := NewPromptState([]string{"one", "two"})
 	prompt.Apply(ParseKey("d"))
@@ -298,6 +341,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x17")); action != ActionDeleteWordBack {
 		t.Fatalf("ctrl-w action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x19")); action != ActionYank {
+		t.Fatalf("ctrl-y action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("x")); action != ActionInsertRune {
 		t.Fatalf("rune action = %q", action)
 	}
@@ -336,7 +382,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

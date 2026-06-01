@@ -1233,7 +1233,9 @@ func (p *PromptState) deleteToEnd() {
 	if p.Cursor > len(runes) {
 		p.Cursor = len(runes)
 	}
+	killed := string(runes[p.Cursor:])
 	p.Text = string(runes[:p.Cursor])
+	p.pushToKillRing(killed, killRingAppend)
 	p.resetHistoryCursor()
 }
 
@@ -1245,8 +1247,10 @@ func (p *PromptState) deleteToStart() {
 	if p.Cursor > len(runes) {
 		p.Cursor = len(runes)
 	}
+	killed := string(runes[:p.Cursor])
 	p.Text = string(runes[p.Cursor:])
 	p.Cursor = 0
+	p.pushToKillRing(killed, killRingPrepend)
 	p.resetHistoryCursor()
 }
 
@@ -1261,7 +1265,9 @@ func (p *PromptState) deleteWordBackward() {
 	end := p.Cursor
 	p.moveWordBackward()
 	start := p.Cursor
+	killed := p.rangeText(start, end)
 	p.deleteRange(start, end)
+	p.pushToKillRing(killed, killRingPrepend)
 }
 
 func (p *PromptState) deleteWORDForward() {
