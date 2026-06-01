@@ -252,6 +252,53 @@ func TestMemoryAgentRecallUsesModelQueryThenScoresLocalSummaries(t *testing.T) {
 	}
 }
 
+func TestBuildResumeContextLoadsCurrentSummaryAndRecallsRelatedSessions(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	root := filepath.Join(dir, "session-memory")
+	writeFile(t, sessionPath, strings.Join([]string{
+		`{"type":"user","uuid":"u1","sessionId":"current","parentUuid":null,"message":{"type":"user","uuid":"u1","sessionId":"current","content":[{"type":"text","text":"continue postgres permissions"}]}}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"current","parentUuid":"u1","message":{"type":"assistant","uuid":"a1","sessionId":"current","content":[{"type":"text","text":"ok"}]}}`,
+	}, "\n")+"\n")
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "current",
+		Summary:   "current session summary",
+		UpdatedAt: time.Unix(100, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "prior",
+		Summary:   "postgres permissions migration notes",
+		UpdatedAt: time.Unix(200, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	context, err := BuildResumeContext(ResumeContextOptions{
+		SessionPath: sessionPath,
+		SessionID:   "current",
+		MemoryRoot:  root,
+		RecallLimit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !context.Conversation.Found || context.Conversation.Leaf != "a1" || len(context.Conversation.Messages) != 2 {
+		t.Fatalf("conversation = %#v", context.Conversation)
+	}
+	if context.CurrentSummary == nil || context.CurrentSummary.Summary != "current session summary" {
+		t.Fatalf("current summary = %#v", context.CurrentSummary)
+	}
+	if context.RecallQuery != "continue postgres permissions" {
+		t.Fatalf("query = %q", context.RecallQuery)
+	}
+	if len(context.Recalled) != 1 || context.Recalled[0].Summary.SessionID != "prior" {
+		t.Fatalf("recalled = %#v", context.Recalled)
+	}
+}
+
 func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {
 	return session.CompactMetadata{Trigger: trigger, PreTokens: preTokens, MessagesSummarized: summarized}
 }

@@ -17,6 +17,7 @@ type ScriptStep struct {
 	ExpectDialog           *DialogExpectation
 	ExpectPrompt           *PromptExpectation
 	ExpectReverseSearch    *ReverseSearchExpectation
+	ExpectViewport         *ViewportExpectation
 	ExpectStatusContains   []string
 	ExpectSnapshotContains []string
 }
@@ -33,6 +34,13 @@ type PromptExpectation struct {
 	Expanded string
 	Cursor   *int
 	Empty    bool
+}
+
+type ViewportExpectation struct {
+	Offset             *int
+	VisibleLineCount   int
+	VisibleContains    []string
+	VisibleNotContains []string
 }
 
 type ReverseSearchExpectation struct {
@@ -130,6 +138,11 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, err
 			}
 		}
+		if step.ExpectViewport != nil {
+			if err := compareViewport(index, screen.Viewport, *step.ExpectViewport); err != nil {
+				return result, dialogResults, err
+			}
+		}
 		for _, want := range step.ExpectStatusContains {
 			if !strings.Contains(screen.Status, want) {
 				return result, dialogResults, fmt.Errorf("script step %d status missing %q in %q", index, want, screen.Status)
@@ -190,6 +203,27 @@ func comparePrompt(index int, got PromptState, want PromptExpectation) error {
 	}
 	if want.Cursor != nil && got.Cursor != *want.Cursor {
 		return fmt.Errorf("script step %d prompt cursor = %d, want %d", index, got.Cursor, *want.Cursor)
+	}
+	return nil
+}
+
+func compareViewport(index int, got Viewport, want ViewportExpectation) error {
+	if want.Offset != nil && got.Offset != *want.Offset {
+		return fmt.Errorf("script step %d viewport offset = %d, want %d", index, got.Offset, *want.Offset)
+	}
+	visible := strings.Join(got.Visible(), "\n")
+	if want.VisibleLineCount > 0 && len(got.Visible()) != want.VisibleLineCount {
+		return fmt.Errorf("script step %d visible line count = %d, want %d", index, len(got.Visible()), want.VisibleLineCount)
+	}
+	for _, text := range want.VisibleContains {
+		if !strings.Contains(visible, text) {
+			return fmt.Errorf("script step %d viewport missing %q in %q", index, text, visible)
+		}
+	}
+	for _, text := range want.VisibleNotContains {
+		if strings.Contains(visible, text) {
+			return fmt.Errorf("script step %d viewport unexpectedly contains %q in %q", index, text, visible)
+		}
 	}
 	return nil
 }

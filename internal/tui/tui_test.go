@@ -821,6 +821,21 @@ func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptChecksViewport(t *testing.T) {
+	screen := NewREPLScreen(22, 6, nil)
+	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Message: &Message{Role: RoleSystem, Text: "one"}},
+		{Message: &Message{Role: RoleSystem, Text: "two"}},
+		{Message: &Message{Role: RoleSystem, Text: "three"}},
+		{Message: &Message{Role: RoleSystem, Text: "four"}},
+		{Message: &Message{Role: RoleSystem, Text: "five"}, ExpectViewport: &ViewportExpectation{VisibleContains: []string{"system: five"}, VisibleNotContains: []string{"system: one"}}},
+		{Key: "\x1b[5~", ExpectViewport: &ViewportExpectation{VisibleContains: []string{"system: one"}, VisibleLineCount: 4}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptCheckedFailsOnExpectationMismatch(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
