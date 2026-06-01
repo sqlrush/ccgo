@@ -149,6 +149,38 @@ func TestBuildResumeConversationUsesLatestLeaf(t *testing.T) {
 	}
 }
 
+func TestBuildIndexedResumeConversationUsesLineIndex(t *testing.T) {
+	lines := []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","parentUuid":null,"timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","content":[{"type":"text","text":"hello"}]}}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","parentUuid":"p1","timestamp":"2026-01-01T00:00:01Z","message":{"id":"msg_1","type":"assistant","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"user","uuid":"u2","sessionId":"s1","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z","message":{"type":"user","content":[{"type":"text","text":"latest"}]}}`,
+	}
+	path := writeTranscript(t, lines)
+	resume, err := BuildIndexedResumeConversation(path, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || resume.Leaf != "u2" || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1,u2" {
+		t.Fatalf("indexed resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+	if len(resume.Messages) != 3 || resume.Messages[2].Content[0].Text != "latest" {
+		t.Fatalf("indexed resume messages = %#v", resume.Messages)
+	}
+	if resume.Chain[1].ParentUUID == nil || *resume.Chain[1].ParentUUID != "u1" {
+		t.Fatalf("indexed resume should bridge progress parent: %#v", resume.Chain[1].ParentUUID)
+	}
+
+	budget := int64(len(lines[2]) + 1 + len(lines[3]) + 1)
+	resume, err = BuildIndexedResumeConversation(path, "u2", budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || !resume.HasBefore || resume.BytesRead > budget || strings.Join(chainIDs(resume.Chain), ",") != "a1,u2" {
+		t.Fatalf("budgeted indexed resume = %#v chain=%#v budget=%d", resume, chainIDs(resume.Chain), budget)
+	}
+}
+
 func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,

@@ -3,10 +3,13 @@ package session
 import "ccgo/internal/contracts"
 
 type ResumeConversation struct {
-	Leaf     contracts.ID
-	Found    bool
-	Messages []contracts.Message
-	Chain    []TranscriptMessage
+	Leaf          contracts.ID
+	Found         bool
+	Messages      []contracts.Message
+	Chain         []TranscriptMessage
+	BytesRead     int64
+	HasBefore     bool
+	MissingParent *contracts.ID
 }
 
 func BuildResumeConversation(path string, leaf contracts.ID) (ResumeConversation, error) {
@@ -29,6 +32,29 @@ func BuildResumeConversation(path string, leaf contracts.ID) (ResumeConversation
 		Found:    true,
 		Messages: TranscriptMessagesToContractMessages(chain),
 		Chain:    append([]TranscriptMessage(nil), chain...),
+	}, nil
+}
+
+func BuildIndexedResumeConversation(path string, leaf contracts.ID, maxBytes int64) (ResumeConversation, error) {
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		return ResumeConversation{}, err
+	}
+	chain, err := LoadTranscriptIndexedChain(path, index, leaf, maxBytes)
+	if err != nil {
+		return ResumeConversation{}, err
+	}
+	if !chain.Found {
+		return ResumeConversation{Leaf: chain.Leaf}, nil
+	}
+	return ResumeConversation{
+		Leaf:          chain.Leaf,
+		Found:         true,
+		Messages:      TranscriptMessagesToContractMessages(chain.Messages),
+		Chain:         append([]TranscriptMessage(nil), chain.Messages...),
+		BytesRead:     chain.BytesRead,
+		HasBefore:     chain.HasBefore,
+		MissingParent: cloneIDPtr(chain.MissingParent),
 	}, nil
 }
 

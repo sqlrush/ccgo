@@ -33,6 +33,15 @@ type TranscriptIndexedTail struct {
 	HasBefore  bool
 }
 
+type TranscriptIndexedChain struct {
+	Messages      []TranscriptMessage
+	Leaf          contracts.ID
+	Found         bool
+	BytesRead     int64
+	HasBefore     bool
+	MissingParent *contracts.ID
+}
+
 func BuildTranscriptLineIndex(path string) (TranscriptLineIndex, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -66,6 +75,34 @@ func BuildTranscriptLineIndex(path string) (TranscriptLineIndex, error) {
 		return TranscriptLineIndex{}, err
 	}
 	return index, nil
+}
+
+func LatestTranscriptIndexedLeaf(index TranscriptLineIndex) contracts.ID {
+	if len(index.Entries) == 0 {
+		return ""
+	}
+	parentUUIDs := map[contracts.ID]struct{}{}
+	for _, ref := range index.Entries {
+		if ref.ParentUUID != nil {
+			parentUUIDs[*ref.ParentUUID] = struct{}{}
+		}
+	}
+	for i := len(index.Entries) - 1; i >= 0; i-- {
+		ref := index.Entries[i]
+		if ref.Type != "user" && ref.Type != "assistant" {
+			continue
+		}
+		if _, hasChild := parentUUIDs[ref.UUID]; !hasChild {
+			return ref.UUID
+		}
+	}
+	for i := len(index.Entries) - 1; i >= 0; i-- {
+		ref := index.Entries[i]
+		if ref.Type == "user" || ref.Type == "assistant" {
+			return ref.UUID
+		}
+	}
+	return ""
 }
 
 func LoadTranscriptIndexedWindow(path string, index TranscriptLineIndex, target contracts.ID, before int, after int) (TranscriptWindow, error) {
@@ -183,6 +220,83 @@ func LoadTranscriptIndexedWindowBytes(path string, index TranscriptLineIndex, ta
 		}
 	}
 	return window, nil
+}
+
+func LoadTranscriptIndexedChain(path string, index TranscriptLineIndex, leaf contracts.ID, maxBytes int64) (TranscriptIndexedChain, error) {
+	ensureTranscriptLineIndexByUUID(&index)
+	if leaf == "" {
+		leaf = LatestTranscriptIndexedLeaf(index)
+	}
+	if leaf == "" {
+		return TranscriptIndexedChain{}, nil
+	}
+	entryIndex, ok := index.ByUUID[leaf]
+	if !ok {
+		return TranscriptIndexedChain{Leaf: leaf}, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TranscriptIndexedChain{Leaf: leaf}, nil
+		}
+		return TranscriptIndexedChain{}, err
+	}
+	defer f.Close()
+
+	var refs []TranscriptLineRef
+	seen := map[contracts.ID]struct{}{}
+	bytesRead := int64(0)
+	hasBefore := false
+	var missingParent *contracts.ID
+	for {
+		ref := index.Entries[entryIndex]
+		if _, ok := seen[ref.UUID]; ok {
+			hasBefore = true
+			break
+		}
+		refBytes := int64(ref.Length)
+		if maxBytes > 0 && len(refs) > 0 && bytesRead+refBytes > maxBytes {
+			hasBefore = true
+			break
+		}
+		seen[ref.UUID] = struct{}{}
+		refs = append(refs, ref)
+		bytesRead += refBytes
+		if ref.ParentUUID == nil {
+			break
+		}
+		parent := *ref.ParentUUID
+		nextIndex, ok := index.ByUUID[parent]
+		if !ok {
+			hasBefore = true
+			missingParent = cloneIDPtr(ref.ParentUUID)
+			break
+		}
+		if _, ok := seen[parent]; ok {
+			hasBefore = true
+			break
+		}
+		entryIndex = nextIndex
+	}
+
+	messages := make([]TranscriptMessage, 0, len(refs))
+	for i := len(refs) - 1; i >= 0; i-- {
+		msg, ok, err := readTranscriptMessageRef(f, refs[i])
+		if err != nil {
+			return TranscriptIndexedChain{}, err
+		}
+		if ok {
+			messages = append(messages, msg)
+		}
+	}
+	return TranscriptIndexedChain{
+		Messages:      messages,
+		Leaf:          leaf,
+		Found:         len(messages) > 0,
+		BytesRead:     bytesRead,
+		HasBefore:     hasBefore,
+		MissingParent: missingParent,
+	}, nil
 }
 
 func LoadTranscriptIndexedTail(path string, index TranscriptLineIndex, limit int) (TranscriptIndexedTail, error) {
