@@ -61,7 +61,7 @@ func (m SidechainManager) Append(sidechainID string, message TranscriptMessage) 
 		parent := state.LastUUID
 		message.ParentUUID = &parent
 	}
-	return AppendSidechainMessage(m.Runtime.SessionPath, m.Runtime.SessionID, state.ID, message)
+	return AppendSidechainMessageInSubdir(m.Runtime.SessionPath, m.Runtime.SessionID, state.ID, state.Subdir, message)
 }
 
 func (m SidechainManager) Finish(sidechainID string, status string, summary string, endedAt time.Time) (TranscriptMessage, error) {
@@ -84,9 +84,7 @@ func (m SidechainManager) Finish(sidechainID string, status string, summary stri
 }
 
 func (m SidechainManager) loadState(sidechainID string) (SidechainState, error) {
-	id := sanitizeSidechainID(sidechainID)
-	info := SidechainInfo{ID: id, Path: SidechainTranscriptPath(m.Runtime.SessionPath, m.Runtime.SessionID, id)}
-	state, err := LoadSidechainState(info)
+	state, err := FindSidechainState(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 	if err != nil {
 		return SidechainState{}, err
 	}

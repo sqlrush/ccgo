@@ -817,6 +817,41 @@ func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	}
 }
 
+func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
+	var lifecycle ScreenLifecycle
+	options := TerminalModeOptions{MouseTracking: true, FocusEvents: true, BracketedPaste: true}
+	enter := lifecycle.EnterInteractive(options)
+	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden || !lifecycle.MouseTracking || !lifecycle.FocusEvents || !lifecycle.BracketedPaste {
+		t.Fatalf("lifecycle after enter = %#v", lifecycle)
+	}
+	for _, want := range []string{EnterAlternateScreen, EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste} {
+		if !strings.Contains(enter, want) {
+			t.Fatalf("enter missing %q in %q", want, enter)
+		}
+	}
+	if again := lifecycle.EnterInteractive(options); again != "" {
+		t.Fatalf("second enter should be idempotent: %q", again)
+	}
+	reassert := lifecycle.ReassertTerminalModes(options)
+	for _, want := range []string{EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste} {
+		if !strings.Contains(reassert, want) {
+			t.Fatalf("reassert missing %q in %q", want, reassert)
+		}
+	}
+	exit := lifecycle.ExitInteractive()
+	if lifecycle.AlternateScreen || lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || lifecycle.BracketedPaste {
+		t.Fatalf("lifecycle after exit = %#v", lifecycle)
+	}
+	for _, want := range []string{DisableMouseTracking, DisableFocusEvents, DisableBracketedPaste, ShowCursor, ExitAlternateScreen} {
+		if !strings.Contains(exit, want) {
+			t.Fatalf("exit missing %q in %q", want, exit)
+		}
+	}
+	if again := lifecycle.ExitInteractive(); again != "" {
+		t.Fatalf("second exit should be idempotent: %q", again)
+	}
+}
+
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"

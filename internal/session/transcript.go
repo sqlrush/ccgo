@@ -50,6 +50,7 @@ type TranscriptMessage struct {
 	Content           any                `json:"content,omitempty"`
 	Message           *contracts.Message `json:"message,omitempty"`
 	IsSidechain       bool               `json:"isSidechain,omitempty"`
+	AgentID           string             `json:"agentId,omitempty"`
 	CompactMetadata   *CompactMetadata   `json:"compactMetadata,omitempty"`
 	SnipMetadata      *SnipMetadata      `json:"snipMetadata,omitempty"`
 	Raw               json.RawMessage    `json:"-"`
@@ -275,7 +276,11 @@ func LoadTranscript(path string) (Transcript, error) {
 		case envelope.Type == "content-replacement":
 			var entry ContentReplacementEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.ContentReplacements[entry.SessionID] = append(transcript.ContentReplacements[entry.SessionID], entry.Replacements...)
+				key := entry.SessionID
+				if entry.AgentID != "" {
+					key = contracts.ID(entry.AgentID)
+				}
+				transcript.ContentReplacements[key] = append(transcript.ContentReplacements[key], entry.Replacements...)
 			}
 		case envelope.Type == "file-history-snapshot":
 			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, append(json.RawMessage(nil), line...))

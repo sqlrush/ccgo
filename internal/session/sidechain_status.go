@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"ccgo/internal/contracts"
 )
@@ -10,6 +11,9 @@ import (
 type SidechainState struct {
 	ID           string
 	Path         string
+	MetadataPath string
+	Subdir       string
+	Legacy       bool
 	SessionID    contracts.ID
 	ParentUUID   *contracts.ID
 	Status       string
@@ -18,6 +22,7 @@ type SidechainState struct {
 	EndedAt      string
 	LastUUID     contracts.ID
 	MessageCount int
+	Metadata     SidechainMetadata
 }
 
 func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
@@ -26,10 +31,21 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		return SidechainState{}, err
 	}
 	state := SidechainState{
-		ID:     info.ID,
-		Path:   info.Path,
-		Status: SidechainStatusUnknown,
+		ID:           info.ID,
+		Path:         info.Path,
+		MetadataPath: info.MetadataPath,
+		Subdir:       info.Subdir,
+		Legacy:       info.Legacy,
+		Status:       SidechainStatusUnknown,
 	}
+	if state.MetadataPath == "" && state.Path != "" {
+		state.MetadataPath = replaceJSONLExt(state.Path, ".meta.json")
+	}
+	metadata, err := ReadSidechainMetadata(state.MetadataPath)
+	if err != nil {
+		return SidechainState{}, err
+	}
+	state.Metadata = metadata
 	started := false
 	finished := false
 	for _, id := range transcript.Order {
@@ -39,6 +55,9 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		}
 		state.MessageCount++
 		state.LastUUID = msg.UUID
+		if state.ID == "" && msg.AgentID != "" {
+			state.ID = msg.AgentID
+		}
 		if msg.SessionID != "" {
 			state.SessionID = msg.SessionID
 		}
@@ -53,6 +72,11 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			}
 			if sidechainID := stringField(msg.Content, "sidechainId"); sidechainID != "" {
 				state.ID = sidechainID
+			} else if agentID := stringField(msg.Content, "agentId"); agentID != "" {
+				state.ID = agentID
+			}
+			if agentType := stringField(msg.Content, "agentType"); agentType != "" && state.Metadata.AgentType == "" {
+				state.Metadata.AgentType = agentType
 			}
 			if status := stringField(msg.Content, "status"); status != "" {
 				state.Status = status
@@ -105,9 +129,7 @@ func ListSidechainStates(sessionPath string, sessionID contracts.ID) ([]Sidechai
 }
 
 func ResumeSidechainRun(sessionPath string, sessionID contracts.ID, sidechainID string) (SidechainRun, bool, error) {
-	id := sanitizeSidechainID(sidechainID)
-	info := SidechainInfo{ID: id, Path: SidechainTranscriptPath(sessionPath, sessionID, id)}
-	state, err := LoadSidechainState(info)
+	state, err := FindSidechainState(sessionPath, sessionID, sidechainID)
 	if err != nil {
 		return SidechainRun{}, false, err
 	}
@@ -123,14 +145,43 @@ func ResumeSidechainRunFromState(state SidechainState) (SidechainRun, bool) {
 		return SidechainRun{}, false
 	}
 	return SidechainRun{
-		ID:         state.ID,
-		SessionID:  state.SessionID,
-		Path:       state.Path,
-		ParentUUID: state.ParentUUID,
-		Status:     state.Status,
-		StartedAt:  state.StartedAt,
-		EndedAt:    state.EndedAt,
+		ID:           state.ID,
+		SessionID:    state.SessionID,
+		Path:         state.Path,
+		MetadataPath: state.MetadataPath,
+		Subdir:       state.Subdir,
+		ParentUUID:   state.ParentUUID,
+		Status:       state.Status,
+		StartedAt:    state.StartedAt,
+		EndedAt:      state.EndedAt,
+		Metadata:     state.Metadata,
 	}, true
+}
+
+func FindSidechainState(sessionPath string, sessionID contracts.ID, sidechainID string) (SidechainState, error) {
+	id := sanitizeSidechainID(sidechainID)
+	info := SidechainInfo{
+		ID:           id,
+		Path:         SidechainTranscriptPath(sessionPath, sessionID, id),
+		MetadataPath: SidechainMetadataPath(sessionPath, sessionID, id),
+	}
+	state, err := LoadSidechainState(info)
+	if err != nil {
+		return SidechainState{}, err
+	}
+	if state.MessageCount > 0 || !state.Metadata.Empty() {
+		return state, nil
+	}
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		return SidechainState{}, err
+	}
+	for _, candidate := range states {
+		if candidate.ID == id {
+			return candidate, nil
+		}
+	}
+	return state, nil
 }
 
 func stringField(value any, key string) string {
@@ -143,4 +194,11 @@ func stringField(value any, key string) string {
 	default:
 		return ""
 	}
+}
+
+func replaceJSONLExt(path string, ext string) string {
+	if path == "" {
+		return ""
+	}
+	return strings.TrimSuffix(path, ".jsonl") + ext
 }

@@ -24,12 +24,15 @@ func TestAppendAndListSidechainTranscript(t *testing.T) {
 	if len(infos) != 1 || infos[0].ID != "agent_one" {
 		t.Fatalf("infos = %#v", infos)
 	}
+	if filepath.Base(infos[0].Path) != "agent-agent_one.jsonl" || filepath.Base(filepath.Dir(infos[0].Path)) != "subagents" {
+		t.Fatalf("sidechain path = %s", infos[0].Path)
+	}
 	transcript, err := LoadTranscript(infos[0].Path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	msg := transcript.Messages["msg_1"]
-	if msg == nil || !msg.IsSidechain || msg.SessionID != sessionID {
+	if msg == nil || !msg.IsSidechain || msg.AgentID != "agent_one" || msg.SessionID != sessionID {
 		t.Fatalf("message = %#v", msg)
 	}
 }
@@ -229,6 +232,85 @@ func TestBuildSidechainResumeContext(t *testing.T) {
 	}
 	if context.CanResume || context.Summary != "finished" || context.Truncated {
 		t.Fatalf("finished context = %#v", context)
+	}
+}
+
+func TestSidechainSubagentLayoutMetadataAndConversation(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	parent := contracts.ID("parent_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	run, err := manager.Start(SidechainOptions{
+		ID:           "agent/one",
+		Subdir:       "../workflows/run:1",
+		ParentUUID:   &parent,
+		StartedAt:    time.Unix(300, 0).UTC(),
+		AgentType:    "reviewer",
+		WorktreePath: "/tmp/ccgo-agent",
+		Description:  "review the diff",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(run.Path) != "agent-agent_one.jsonl" || filepath.Base(run.MetadataPath) != "agent-agent_one.meta.json" {
+		t.Fatalf("run paths = %#v", run)
+	}
+	if run.Subdir != filepath.Join("workflows", "run_1") {
+		t.Fatalf("subdir = %q", run.Subdir)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{
+		Type: "user",
+		UUID: "agent_user",
+		Message: &contracts.Message{
+			Type:    contracts.MessageUser,
+			UUID:    "agent_user",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock("inspect")},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{
+		Type: "assistant",
+		UUID: "agent_msg",
+		Message: &contracts.Message{
+			Type:    contracts.MessageAssistant,
+			UUID:    "agent_msg",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendAgentContentReplacements(run.Path, sessionID, run.ID, []ContentReplacementRecord{{
+		Kind:        "tool_result",
+		ToolUseID:   "tool_1",
+		BlockID:     "block_1",
+		Replacement: "[content replaced]",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	states, err := manager.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].Metadata.AgentType != "reviewer" || states[0].Metadata.WorktreePath != "/tmp/ccgo-agent" || states[0].Subdir != filepath.Join("workflows", "run_1") {
+		t.Fatalf("states = %#v", states)
+	}
+	context, err := manager.ResumeContext("agent/one", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !context.CanResume || context.Metadata.AgentType != "reviewer" || context.Run.Subdir != filepath.Join("workflows", "run_1") {
+		t.Fatalf("resume context = %#v", context)
+	}
+	conversation, err := manager.Conversation("agent/one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !conversation.Found || conversation.Leaf != "agent_msg" || len(conversation.Messages) != 3 || conversation.Messages[2].Content[0].Text != "done" {
+		t.Fatalf("conversation = %#v", conversation)
+	}
+	if len(conversation.ContentReplacements) != 1 || conversation.ContentReplacements[0].Replacement != "[content replaced]" {
+		t.Fatalf("content replacements = %#v", conversation.ContentReplacements)
 	}
 }
 

@@ -166,12 +166,17 @@ func ApplyToolResultBudget(messages []contracts.Message, state *ContentReplaceme
 }
 
 func AppendContentReplacements(path string, sessionID contracts.ID, records []ContentReplacementRecord) error {
+	return AppendAgentContentReplacements(path, sessionID, "", records)
+}
+
+func AppendAgentContentReplacements(path string, sessionID contracts.ID, agentID string, records []ContentReplacementRecord) error {
 	if len(records) == 0 {
 		return nil
 	}
 	entry := ContentReplacementEntry{
 		Type:         "content-replacement",
 		SessionID:    sessionID,
+		AgentID:      agentID,
 		Replacements: records,
 	}
 	if err := platform.EnsureDir(filepath.Dir(path)); err != nil {

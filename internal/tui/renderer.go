@@ -5,12 +5,18 @@ import (
 )
 
 const (
-	EnterAlternateScreen = "\x1b[?1049h"
-	ExitAlternateScreen  = "\x1b[?1049l"
-	ClearScreen          = "\x1b[2J"
-	HomeCursor           = "\x1b[H"
-	HideCursor           = "\x1b[?25l"
-	ShowCursor           = "\x1b[?25h"
+	EnterAlternateScreen  = "\x1b[?1049h"
+	ExitAlternateScreen   = "\x1b[?1049l"
+	EnableMouseTracking   = "\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h"
+	DisableMouseTracking  = "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
+	EnableFocusEvents     = "\x1b[?1004h"
+	DisableFocusEvents    = "\x1b[?1004l"
+	EnableBracketedPaste  = "\x1b[?2004h"
+	DisableBracketedPaste = "\x1b[?2004l"
+	ClearScreen           = "\x1b[2J"
+	HomeCursor            = "\x1b[H"
+	HideCursor            = "\x1b[?25l"
+	ShowCursor            = "\x1b[?25h"
 )
 
 type Renderer struct {

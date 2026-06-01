@@ -5,6 +5,7 @@ import "ccgo/internal/contracts"
 type SidechainResumeContext struct {
 	State        SidechainState
 	Run          SidechainRun
+	Metadata     SidechainMetadata
 	CanResume    bool
 	Tail         []TranscriptMessage
 	Messages     []contracts.Message
@@ -14,9 +15,7 @@ type SidechainResumeContext struct {
 }
 
 func BuildSidechainResumeContext(sessionPath string, sessionID contracts.ID, sidechainID string, limit int) (SidechainResumeContext, error) {
-	id := sanitizeSidechainID(sidechainID)
-	info := SidechainInfo{ID: id, Path: SidechainTranscriptPath(sessionPath, sessionID, id)}
-	state, err := LoadSidechainState(info)
+	state, err := FindSidechainState(sessionPath, sessionID, sidechainID)
 	if err != nil {
 		return SidechainResumeContext{}, err
 	}
@@ -34,6 +33,7 @@ func BuildSidechainResumeContext(sessionPath string, sessionID contracts.ID, sid
 	return SidechainResumeContext{
 		State:        state,
 		Run:          run,
+		Metadata:     state.Metadata,
 		CanResume:    canResume,
 		Tail:         append([]TranscriptMessage(nil), tail...),
 		Messages:     TranscriptMessagesToContractMessages(tail),
