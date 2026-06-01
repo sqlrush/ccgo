@@ -182,6 +182,46 @@ func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	}
 }
 
+func TestSidechainManagerCancelAndFailLifecycle(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	if _, err := manager.Start(SidechainOptions{ID: "cancel-me", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := manager.Cancel("cancel-me", "user stopped agent", time.Unix(110, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Subtype != "sidechain_summary" || stringField(cancelled.Content, "status") != SidechainStatusCancelled {
+		t.Fatalf("cancelled summary = %#v", cancelled)
+	}
+	if _, ok, err := manager.Resume("cancel-me"); err != nil || ok {
+		t.Fatalf("cancelled sidechain should not resume ok=%v err=%v", ok, err)
+	}
+	if err := manager.Append("cancel-me", TranscriptMessage{Type: "assistant", UUID: "late_cancel"}); err == nil {
+		t.Fatal("expected append to cancelled sidechain to fail")
+	}
+
+	if _, err := manager.Start(SidechainOptions{ID: "fail-me", StartedAt: time.Unix(120, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := manager.Fail("fail-me", "tool error", time.Unix(130, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stringField(failed.Content, "status") != SidechainStatusFailed {
+		t.Fatalf("failed summary = %#v", failed)
+	}
+	manifest, err := manager.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Cancelled != 1 || manifest.Failed != 1 || manifest.Running != 0 || len(manifest.Summaries) != 2 {
+		t.Fatalf("manifest = %#v", manifest)
+	}
+}
+
 func TestBuildSidechainResumeContext(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

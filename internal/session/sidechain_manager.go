@@ -83,6 +83,14 @@ func (m SidechainManager) Finish(sidechainID string, status string, summary stri
 	return m.Runtime.Finish(run, status, summary, endedAt)
 }
 
+func (m SidechainManager) Cancel(sidechainID string, reason string, endedAt time.Time) (TranscriptMessage, error) {
+	return m.Finish(sidechainID, SidechainStatusCancelled, reason, endedAt)
+}
+
+func (m SidechainManager) Fail(sidechainID string, summary string, endedAt time.Time) (TranscriptMessage, error) {
+	return m.Finish(sidechainID, SidechainStatusFailed, summary, endedAt)
+}
+
 func (m SidechainManager) loadState(sidechainID string) (SidechainState, error) {
 	state, err := FindSidechainState(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 	if err != nil {
