@@ -1041,6 +1041,8 @@ func TestDialogRuntimeInteractionScriptResolvesPermissionFlow(t *testing.T) {
 	screen := NewREPLScreen(42, 8, nil)
 	runtime.StartTask("task_1", "Search", "running ripgrep")
 	runtime.RequestPermission(PermissionRequest{ID: "perm_1", ToolName: "Bash", Path: "/tmp/project"})
+	found := true
+	stale := false
 	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", []ScriptStep{
 		{
 			ExpectDialog:         &DialogExpectation{Active: true, ID: "perm_1", Kind: DialogPermission, Title: "Permission"},
@@ -1052,6 +1054,7 @@ func TestDialogRuntimeInteractionScriptResolvesPermissionFlow(t *testing.T) {
 		{
 			Keys:                 []string{"\t", "\n"},
 			ExpectEvent:          &ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow Session", DialogID: "perm_1", DialogKind: DialogPermission},
+			ExpectDialogResult:   &DialogResultExpectation{ID: "perm_1", Kind: DialogPermission, Action: "Allow Session", Status: DialogResultAllowed, Found: &found, Stale: &stale},
 			ExpectDialog:         &DialogExpectation{Active: false},
 			ExpectStatusContains: []string{"ready", "running: 1"},
 		},

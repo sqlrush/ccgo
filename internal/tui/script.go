@@ -14,6 +14,7 @@ type ScriptStep struct {
 	ResizeHeight           int
 	SnapshotName           string
 	ExpectEvent            *ScreenEvent
+	ExpectDialogResult     *DialogResultExpectation
 	ExpectDialog           *DialogExpectation
 	ExpectPrompt           *PromptExpectation
 	ExpectVim              *VimExpectation
@@ -30,6 +31,15 @@ type DialogExpectation struct {
 	ID     string
 	Kind   DialogKind
 	Title  string
+}
+
+type DialogResultExpectation struct {
+	ID     string
+	Kind   DialogKind
+	Action string
+	Status DialogResultStatus
+	Found  *bool
+	Stale  *bool
 }
 
 type PromptExpectation struct {
@@ -107,6 +117,7 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 	for index, step := range steps {
 		var event ScreenEvent
 		var snapshot ANSISnapshot
+		var dialogResult *DialogResult
 		if runtime != nil {
 			runtime.ApplyToScreen(screen, baseStatus)
 		}
@@ -138,13 +149,25 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			}
 		}
 		if runtime != nil && (event.Type == ScreenEventDialogAction || event.Type == ScreenEventCancelled) {
-			dialogResult := runtime.ResolveScreenEvent(screen, event, baseStatus)
-			if dialogResult.ID != "" || dialogResult.Found || dialogResult.Stale {
-				dialogResults = append(dialogResults, dialogResult)
+			resolved := runtime.ResolveScreenEvent(screen, event, baseStatus)
+			dialogResult = &resolved
+			if resolved.ID != "" || resolved.Found || resolved.Stale {
+				dialogResults = append(dialogResults, resolved)
 			}
 		}
 		if step.ExpectEvent != nil {
 			if err := compareEvent(index, event, *step.ExpectEvent); err != nil {
+				return result, dialogResults, err
+			}
+		}
+		if step.ExpectDialogResult != nil {
+			if runtime == nil {
+				return result, dialogResults, fmt.Errorf("script step %d dialog result expectation requires dialog runtime", index)
+			}
+			if dialogResult == nil {
+				return result, dialogResults, fmt.Errorf("script step %d dialog result missing", index)
+			}
+			if err := compareDialogResult(index, *dialogResult, *step.ExpectDialogResult); err != nil {
 				return result, dialogResults, err
 			}
 		}
@@ -205,6 +228,28 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 	}
 	return result, dialogResults, nil
+}
+
+func compareDialogResult(index int, got DialogResult, want DialogResultExpectation) error {
+	if want.ID != "" && got.ID != want.ID {
+		return fmt.Errorf("script step %d dialog result id = %q, want %q", index, got.ID, want.ID)
+	}
+	if want.Kind != "" && got.Kind != want.Kind {
+		return fmt.Errorf("script step %d dialog result kind = %q, want %q", index, got.Kind, want.Kind)
+	}
+	if want.Action != "" && got.Action != want.Action {
+		return fmt.Errorf("script step %d dialog result action = %q, want %q", index, got.Action, want.Action)
+	}
+	if want.Status != "" && got.Status != want.Status {
+		return fmt.Errorf("script step %d dialog result status = %q, want %q", index, got.Status, want.Status)
+	}
+	if want.Found != nil && got.Found != *want.Found {
+		return fmt.Errorf("script step %d dialog result found = %v, want %v", index, got.Found, *want.Found)
+	}
+	if want.Stale != nil && got.Stale != *want.Stale {
+		return fmt.Errorf("script step %d dialog result stale = %v, want %v", index, got.Stale, *want.Stale)
+	}
+	return nil
 }
 
 func compareDialog(index int, got *Dialog, want DialogExpectation) error {
