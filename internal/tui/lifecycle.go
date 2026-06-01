@@ -108,6 +108,18 @@ func (l *ScreenLifecycle) ReassertTerminalModes(options TerminalModeOptions) str
 	return seq
 }
 
+func (l *ScreenLifecycle) ReassertInteractive(options TerminalModeOptions) string {
+	seq := ""
+	if l.AlternateScreen {
+		seq += EnterAlternateScreen + ClearScreen + HomeCursor
+	}
+	if l.CursorHidden {
+		seq += HideCursor
+	}
+	seq += l.ReassertTerminalModes(options)
+	return seq
+}
+
 func (l *ScreenLifecycle) ShowCursor() string {
 	l.CursorHidden = false
 	return ShowCursor

@@ -2130,6 +2130,12 @@ func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
 			t.Fatalf("reassert missing %q in %q", want, reassert)
 		}
 	}
+	reassertInteractive := lifecycle.ReassertInteractive(options)
+	for _, want := range []string{EnterAlternateScreen, ClearScreen, HomeCursor, HideCursor, EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste} {
+		if !strings.Contains(reassertInteractive, want) {
+			t.Fatalf("interactive reassert missing %q in %q", want, reassertInteractive)
+		}
+	}
 	exit := lifecycle.ExitInteractive()
 	if lifecycle.AlternateScreen || lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || lifecycle.BracketedPaste {
 		t.Fatalf("lifecycle after exit = %#v", lifecycle)
@@ -2141,6 +2147,9 @@ func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
 	}
 	if again := lifecycle.ExitInteractive(); again != "" {
 		t.Fatalf("second exit should be idempotent: %q", again)
+	}
+	if reassert := lifecycle.ReassertInteractive(options); reassert != "" {
+		t.Fatalf("inactive interactive reassert should be empty: %q", reassert)
 	}
 }
 
