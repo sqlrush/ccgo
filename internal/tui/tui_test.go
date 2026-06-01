@@ -1810,6 +1810,37 @@ func TestREPLScreenVimLineLocalEndMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimLineLocalStartMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "$", "0"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("cursor after multiline 0 = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("$"))
+	for _, seq := range []string{"d", "0"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\n\nthree" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "  two" {
+		t.Fatalf("after multiline d0 screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "I", "!"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n  !two\nthree" || screen.Prompt.Cursor != len([]rune("one\n  !")) {
+		t.Fatalf("after multiline I screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimBackwardEndMotions(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
@@ -2035,7 +2066,7 @@ func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
 	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\ntwo")
 	screen.ApplyKey(ParseKey("\x1b"))
-	for _, seq := range []string{"0", "y", "y", "p"} {
+	for _, seq := range []string{"g", "g", "y", "y", "p"} {
 		screen.ApplyKey(ParseKey(seq))
 	}
 	if screen.Prompt.Text != "one\none\ntwo" || screen.VimRegister != "one\n" || !screen.VimRegisterLinewise || screen.Prompt.Cursor != len([]rune("one\n")) {
@@ -2123,7 +2154,7 @@ func TestREPLScreenVimEditCommands(t *testing.T) {
 	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\n  two\nthree")
 	screen.ApplyKey(ParseKey("\x1b"))
-	for _, seq := range []string{"0", "J"} {
+	for _, seq := range []string{"g", "g", "J"} {
 		screen.ApplyKey(ParseKey(seq))
 	}
 	if screen.Prompt.Text != "one two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
@@ -2134,7 +2165,7 @@ func TestREPLScreenVimEditCommands(t *testing.T) {
 	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\ntwo")
 	screen.ApplyKey(ParseKey("\x1b"))
-	for _, seq := range []string{"0", "o"} {
+	for _, seq := range []string{"g", "g", "o"} {
 		screen.ApplyKey(ParseKey(seq))
 	}
 	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n\ntwo" || screen.Prompt.Cursor != len([]rune("one\n")) {
@@ -2145,7 +2176,7 @@ func TestREPLScreenVimEditCommands(t *testing.T) {
 	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\ntwo")
 	screen.ApplyKey(ParseKey("\x1b"))
-	for _, seq := range []string{"0", ">", ">", "<", "<"} {
+	for _, seq := range []string{"g", "g", ">", ">", "<", "<"} {
 		screen.ApplyKey(ParseKey(seq))
 	}
 	if screen.Prompt.Text != "one\ntwo" || screen.Prompt.Cursor != 0 {

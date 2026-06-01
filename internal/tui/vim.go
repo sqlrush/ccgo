@@ -116,7 +116,7 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	}
 	if isVimCountRune(r) {
 		if r == '0' && s.VimCount == 0 {
-			s.Prompt.Apply(Key{Type: KeyHome})
+			s.Prompt.moveLineStart()
 			return ScreenEvent{}
 		}
 		s.VimCount = s.VimCount*10 + int(r-'0')
@@ -166,7 +166,7 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
 		s.enterVimInsert()
 	case 'I':
-		s.Prompt.Apply(Key{Type: KeyHome})
+		s.Prompt.moveFirstNonBlank()
 		s.enterVimInsert()
 	case 'A':
 		s.Prompt.moveLineEnd()
@@ -777,7 +777,7 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 		case '$':
 			cursor.moveLineEnd()
 		case '0':
-			cursor.Apply(Key{Type: KeyHome})
+			cursor.moveLineStart()
 		case '^':
 			cursor.moveFirstNonBlank()
 		default:
@@ -1275,6 +1275,15 @@ func (p *PromptState) moveLineEnd() {
 	cursor := p.clampCursor(p.Cursor)
 	for cursor < len(runes) && runes[cursor] != '\n' {
 		cursor++
+	}
+	p.Cursor = cursor
+}
+
+func (p *PromptState) moveLineStart() {
+	runes := []rune(p.Text)
+	cursor := p.clampCursor(p.Cursor)
+	for cursor > 0 && runes[cursor-1] != '\n' {
+		cursor--
 	}
 	p.Cursor = cursor
 }
