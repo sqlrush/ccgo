@@ -74,6 +74,9 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 
 		uses := ToolUses(assistant)
 		if len(uses) == 0 {
+			if err := r.maybeExtractSessionMemory(ctx, result.Messages); err != nil {
+				return result, err
+			}
 			return result, nil
 		}
 		toolMessages, toolResults := r.executeToolUses(ctx, uses, toolMetadata)
@@ -141,6 +144,38 @@ func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {
 		Summary:         msgs.TextContent(plan.Summary),
 		LastMessageUUID: plan.Summary.UUID,
 		Metadata:        plan.Metadata,
+	})
+	return err
+}
+
+func (r Runner) maybeExtractSessionMemory(ctx context.Context, messages []contracts.Message) error {
+	if !r.EnableMemoryExtraction || r.SessionID == "" || len(messages) == 0 {
+		return nil
+	}
+	root := r.SessionMemoryRoot
+	if root == "" {
+		root = memory.DefaultSessionMemoryRoot(r.SessionPath)
+	}
+	if root == "" {
+		return nil
+	}
+	result, err := (memory.Agent{
+		Client:    r.MemoryAgentClient,
+		Model:     r.model(),
+		MaxTokens: r.CompactMaxTokens,
+	}).Extract(ctx, messages, memory.ExtractOptions{Limit: r.MemoryExtractLimit})
+	if err != nil {
+		return err
+	}
+	summary := memory.BuildFactsSummary(result.Facts)
+	if summary == "" {
+		return nil
+	}
+	_, err = memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:            root,
+		SessionID:       r.SessionID,
+		Summary:         summary,
+		LastMessageUUID: messages[len(messages)-1].UUID,
 	})
 	return err
 }

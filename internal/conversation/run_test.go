@@ -511,6 +511,39 @@ func TestRunnerInjectsSessionMemoryRecallIntoRequest(t *testing.T) {
 	}
 }
 
+func TestRunnerExtractsSessionMemoryAfterTurn(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:                 client,
+		Model:                  "sonnet",
+		MaxTokens:              128,
+		SessionID:              "extract_session",
+		SessionMemoryRoot:      root,
+		EnableMemoryExtraction: true,
+		MemoryExtractLimit:     4,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("Remember use brief summaries")); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := memory.LoadSessionSummary(filepath.Join(root, "extract_session", memory.SessionSummaryFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(summary.Summary, "Extracted session memory") || !strings.Contains(summary.Summary, "use brief summaries") {
+		t.Fatalf("summary = %#v", summary)
+	}
+}
+
 func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 	client := &fakeClient{calls: []fakeCall{
 		{err: anthropic.APIError{StatusCode: http.StatusInternalServerError, Type: "overloaded_error", Message: "try later"}},

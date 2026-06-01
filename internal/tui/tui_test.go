@@ -229,6 +229,26 @@ func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
+	runtime := NewDialogRuntime()
+	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
+	runtime.RequestPermission(PermissionRequest{ID: "new", ToolName: "Edit"})
+	stale := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow", DialogID: "old", DialogKind: DialogPermission})
+	if !stale.Stale || stale.Found {
+		t.Fatalf("stale = %#v", stale)
+	}
+	if _, ok := runtime.Permissions["old"]; !ok {
+		t.Fatalf("old permission should remain pending until explicitly replaced or cancelled: %#v", runtime.Permissions)
+	}
+	cancelled := runtime.CancelActive()
+	if !cancelled.Found || cancelled.Status != DialogResultCancelled || cancelled.ID != "new" {
+		t.Fatalf("cancelled = %#v", cancelled)
+	}
+	if _, ok := runtime.Permissions["new"]; ok || runtime.Active != nil {
+		t.Fatalf("runtime after cancel = %#v", runtime)
+	}
+}
+
 func TestREPLScreenViewportScrolls(t *testing.T) {
 	screen := NewREPLScreen(20, 6, nil)
 	screen.SetMessages([]Message{

@@ -18,6 +18,7 @@ type DialogResult struct {
 	Action string
 	Status DialogResultStatus
 	Found  bool
+	Stale  bool
 }
 
 type DialogRuntime struct {
@@ -63,6 +64,13 @@ func (r *DialogRuntime) RemoveTask(id string) {
 	delete(r.Tasks, id)
 }
 
+func (r *DialogRuntime) CancelActive() DialogResult {
+	if r.Active == nil {
+		return DialogResult{}
+	}
+	return r.Resolve(ScreenEvent{Type: ScreenEventCancelled, DialogID: r.Active.ID, DialogKind: r.Active.Kind})
+}
+
 func (r *DialogRuntime) OpenTasksDialog() Dialog {
 	tasks := r.SortedTasks()
 	dialog := TaskDialog(tasks)
@@ -97,6 +105,10 @@ func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 		kind = r.Active.Kind
 	}
 	result := DialogResult{ID: id, Kind: kind, Action: event.Value}
+	if r.Active != nil && (r.Active.ID != id || r.Active.Kind != kind) {
+		result.Stale = true
+		return result
+	}
 	switch kind {
 	case DialogPermission:
 		_, ok := r.Permissions[id]

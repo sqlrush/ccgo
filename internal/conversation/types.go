@@ -6,6 +6,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	"ccgo/internal/memory"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -61,6 +62,9 @@ type Runner struct {
 	EnableSessionMemoryRecall bool
 	SessionMemoryRecallRoot   string
 	SessionMemoryRecallLimit  int
+	EnableMemoryExtraction    bool
+	MemoryAgentClient         memory.MessageClient
+	MemoryExtractLimit        int
 	OnEvent                   func(Event)
 }
 

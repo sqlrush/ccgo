@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 	"ccgo/internal/session"
@@ -197,8 +199,72 @@ func TestExtractFactsBuildsSessionMemorySummary(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsModelFactsAndFallsBack(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`[
+			{"kind":"preference","text":"use terse summaries","source_uuid":"user_1"},
+			{"kind":"unknown","text":"ignore me","source_uuid":"user_2"}
+		]`)},
+	}}
+	result, err := (Agent{Client: client, Model: "sonnet", MaxTokens: 128}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember use terse summaries")}, ExtractOptions{Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 1 || result.Facts[0].Text != "use terse summaries" || result.Request.MaxTokens != 128 {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(client.requests) != 1 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Return only JSON") {
+		t.Fatalf("request = %#v", client.requests)
+	}
+
+	fallbackClient := &fakeMemoryClient{response: &anthropic.Response{Content: []contracts.ContentBlock{contracts.NewTextBlock(`not json`)}}}
+	fallback, err := (Agent{Client: fallbackClient}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember fallback fact")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fallback.Fallback || len(fallback.Facts) != 1 || fallback.Facts[0].Text != "fallback fact" {
+		t.Fatalf("fallback = %#v", fallback)
+	}
+}
+
+func TestMemoryAgentRecallUsesModelQueryThenScoresLocalSummaries(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	if _, err := WriteSessionSummary(SessionSummaryOptions{Root: root, SessionID: "prior", Summary: "postgres permissions migration"}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_recall",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock("postgres permissions")},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "postgres permissions" || len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {
 	return session.CompactMetadata{Trigger: trigger, PreTokens: preTokens, MessagesSummarized: summarized}
+}
+
+type fakeMemoryClient struct {
+	requests []anthropic.Request
+	response *anthropic.Response
+	err      error
+}
+
+func (f *fakeMemoryClient) CreateMessage(ctx context.Context, request anthropic.Request) (*anthropic.Response, error) {
+	f.requests = append(f.requests, request)
+	return f.response, f.err
 }
 
 func writeFile(t *testing.T, path string, content string) {

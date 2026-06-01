@@ -181,7 +181,7 @@ test/parity/                 # golden tests against TS/official behavior
 
 当前进度：
 
-- 已落地 JSONL/session 基础、resume/search/title 支撑、sidechain transcript 路径初版、CLAUDE.md/memdir 扫描、team-memory secret guard、compact runner/boundary plan、conversation auto-compact、失败熔断、microcompact/cache 初版、session memory summary/recall 初版、conversation recall 注入和 deterministic memory extraction 初版。
+- 已落地 JSONL/session 基础、resume/search/title 支撑、sidechain transcript 路径初版、CLAUDE.md/memdir 扫描、team-memory secret guard、compact runner/boundary plan、conversation auto-compact、失败熔断、microcompact/cache 初版、session memory summary/recall 初版、conversation recall 注入、deterministic/model-backed memory extraction 初版和 turn-end memory extraction 落盘。
 
 ### M7: TUI renderer 和交互体验
 
@@ -198,7 +198,7 @@ test/parity/                 # golden tests against TS/official behavior
 
 当前进度：
 
-- 已落地轻量 terminal frame renderer、PromptInput/history、keybinding resolver/config、vim insert/normal 基础、REPL screen、permission/task dialog builder、dialog kind/id routing/runtime、alternate screen lifecycle 初版、ANSI snapshot 基础、scripted interaction runner 初版、viewport/selection。
+- 已落地轻量 terminal frame renderer、PromptInput/history、keybinding resolver/config、vim insert/normal 基础、REPL screen、permission/task dialog builder、dialog kind/id routing/runtime、stale dialog race guard、cancel active、alternate screen lifecycle 初版、ANSI snapshot 基础、scripted interaction runner 初版、viewport/selection。
 
 ### M8: Commands、skills、plugins
 
