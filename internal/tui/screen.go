@@ -3,15 +3,16 @@ package tui
 type ScreenEventType string
 
 const (
-	ScreenEventNone            ScreenEventType = ""
-	ScreenEventPromptSubmitted ScreenEventType = "prompt_submitted"
-	ScreenEventDialogAction    ScreenEventType = "dialog_action"
-	ScreenEventCancelled       ScreenEventType = "cancelled"
-	ScreenEventInterrupted     ScreenEventType = "interrupted"
-	ScreenEventReverseSearch   ScreenEventType = "reverse_search"
-	ScreenEventReverseSelected ScreenEventType = "reverse_search_selected"
-	ScreenEventFocusIn         ScreenEventType = "focus_in"
-	ScreenEventFocusOut        ScreenEventType = "focus_out"
+	ScreenEventNone             ScreenEventType = ""
+	ScreenEventPromptSubmitted  ScreenEventType = "prompt_submitted"
+	ScreenEventDialogAction     ScreenEventType = "dialog_action"
+	ScreenEventCancelled        ScreenEventType = "cancelled"
+	ScreenEventInterrupted      ScreenEventType = "interrupted"
+	ScreenEventReverseSearch    ScreenEventType = "reverse_search"
+	ScreenEventReverseSelected  ScreenEventType = "reverse_search_selected"
+	ScreenEventFocusIn          ScreenEventType = "focus_in"
+	ScreenEventFocusOut         ScreenEventType = "focus_out"
+	ScreenEventViewportSelected ScreenEventType = "viewport_selected"
 )
 
 type ScreenEvent struct {
@@ -43,17 +44,19 @@ type REPLScreen struct {
 	VimUndoStack         []vimPromptSnapshot
 	Focused              bool
 	ReverseSearch        ReverseSearchState
+	SelectedViewportLine int
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
 	prompt := NewPromptState(history)
 	prompt.EnablePasteReferences()
 	screen := REPLScreen{
-		Width:   width,
-		Height:  height,
-		Prompt:  prompt,
-		Keymap:  DefaultKeymap(),
-		Focused: true,
+		Width:                width,
+		Height:               height,
+		Prompt:               prompt,
+		Keymap:               DefaultKeymap(),
+		Focused:              true,
+		SelectedViewportLine: -1,
 	}
 	screen.rebuildViewport()
 	return screen
@@ -61,6 +64,7 @@ func NewREPLScreen(width int, height int, history []string) REPLScreen {
 
 func (s *REPLScreen) SetMessages(messages []Message) {
 	s.Messages = append([]Message(nil), messages...)
+	s.SelectedViewportLine = -1
 	s.rebuildViewport()
 }
 
@@ -168,6 +172,11 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 			return ScreenEvent{Type: ScreenEventDialogAction, Value: value, DialogID: dialogID, DialogKind: dialogKind}
 		}
 	}
+	if s.Dialog == nil && key.MouseButton == 0 {
+		if line, ok := s.selectViewportAtMouse(key.MouseX, key.MouseY); ok {
+			return ScreenEvent{Type: ScreenEventViewportSelected, Value: line}
+		}
+	}
 	switch key.MouseButton {
 	case 64:
 		s.Viewport.Scroll(-1)
@@ -175,6 +184,26 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 		s.Viewport.Scroll(1)
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) selectViewportAtMouse(x int, y int) (string, bool) {
+	if x <= 0 || y <= 0 {
+		return "", false
+	}
+	bodyHeight := s.Height - 2
+	if bodyHeight < 0 {
+		bodyHeight = 0
+	}
+	if y > bodyHeight {
+		return "", false
+	}
+	visible := s.Viewport.Visible()
+	index := y - 1
+	if index < 0 || index >= len(visible) {
+		return "", false
+	}
+	s.SelectedViewportLine = s.Viewport.Offset + index
+	return visible[index], true
 }
 
 func (s *REPLScreen) dialogActionAtMouse(x int, y int) (int, bool) {

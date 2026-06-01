@@ -280,6 +280,49 @@ func TestLoadTranscriptWindowAroundUUID(t *testing.T) {
 	}
 }
 
+func TestTranscriptLineIndexLoadsWindowWithoutFullTranscript(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{malformed`,
+		`{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-01-01T00:00:00Z"}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"p1","timestamp":"2026-01-01T00:00:01Z"}`,
+		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"user","uuid":"u3","parentUuid":"a2","timestamp":"2026-01-01T00:00:04Z"}`,
+	})
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Entries) != 5 || index.ByUUID["u2"] != 2 {
+		t.Fatalf("index = %#v", index)
+	}
+	if ref := index.Entries[index.ByUUID["a1"]]; ref.ParentUUID == nil || *ref.ParentUUID != "u1" || ref.Offset <= 0 || ref.Length <= 0 {
+		t.Fatalf("bridged ref = %#v", ref)
+	}
+	window, err := LoadTranscriptIndexedWindow(path, index, "u2", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !window.Found || window.TargetIndex != 1 || !window.HasBefore || !window.HasAfter {
+		t.Fatalf("indexed window metadata = %#v", window)
+	}
+	if got := tailIDs(window.Messages); strings.Join(got, ",") != "a1,u2,a2" {
+		t.Fatalf("indexed window messages = %#v", got)
+	}
+	if window.Messages[0].ParentUUID == nil || *window.Messages[0].ParentUUID != "u1" || len(window.Messages[0].Raw) == 0 {
+		t.Fatalf("indexed message = %#v", window.Messages[0])
+	}
+	missing, err := LoadTranscriptIndexedWindow(path, index, "missing", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing.Found || missing.TargetIndex != -1 {
+		t.Fatalf("missing indexed window = %#v", missing)
+	}
+}
+
 func TestRemoveTranscriptMessageByUUID(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,

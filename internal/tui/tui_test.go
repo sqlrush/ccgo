@@ -556,6 +556,14 @@ func TestREPLScreenViewportScrolls(t *testing.T) {
 	if scrolledUp != after {
 		t.Fatalf("mouse wheel up mismatch: after=%q scrolledUp=%q", after, scrolledUp)
 	}
+	click := screen.ApplyKey(ParseKey("\x1b[<0;1;2M"))
+	if click.Type != ScreenEventViewportSelected || !strings.Contains(click.Value, "system:") || screen.SelectedViewportLine < 0 {
+		t.Fatalf("viewport click = %#v selected=%d", click, screen.SelectedViewportLine)
+	}
+	statusClick := screen.ApplyKey(ParseKey("\x1b[<0;1;5M"))
+	if statusClick.Type != ScreenEventNone {
+		t.Fatalf("status click should not select viewport: %#v", statusClick)
+	}
 }
 
 func TestREPLScreenFocusAndResizePreservesScroll(t *testing.T) {
