@@ -19,13 +19,14 @@ const DefaultMicroMaxChars = 4_000
 const DefaultMicroCacheVersion = "microcompact.v1"
 
 type MicroOptions struct {
-	KeepLast     int
-	MaxChars     int
-	Cache        *MicroCache
-	CacheDir     string
-	CacheVersion string
-	CacheTTL     time.Duration
-	Now          time.Time
+	KeepLast         int
+	MaxChars         int
+	Cache            *MicroCache
+	CacheDir         string
+	CacheVersion     string
+	CacheTTL         time.Duration
+	Now              time.Time
+	FailOnCacheError bool
 }
 
 type MicroResult struct {
@@ -102,7 +103,9 @@ func MicroCompactStored(history []contracts.Message, options MicroOptions) (Micr
 	}
 	if options.CacheDir != "" {
 		if cached, ok, err := LoadMicroResult(options.CacheDir, digest); err != nil {
-			return MicroResult{}, err
+			if options.FailOnCacheError {
+				return MicroResult{}, err
+			}
 		} else if ok && MicroResultUsable(cached, version, now) {
 			cached.Cached = true
 			cached.MessagesKept = keepLast
@@ -179,7 +182,24 @@ func SaveMicroResult(dir string, result MicroResult) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(microResultPath(dir, result.Digest), append(data, '\n'), 0o600)
+	tmp, err := os.CreateTemp(dir, "."+result.Digest+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, microResultPath(dir, result.Digest))
 }
 
 func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
@@ -213,6 +233,16 @@ func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
 			if options.DeleteInvalid {
 				if removeErr := os.Remove(path); removeErr != nil {
 					return pruned, removeErr
+				}
+				pruned++
+			}
+			continue
+		}
+		digest := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if result.Digest != digest {
+			if options.DeleteInvalid {
+				if err := os.Remove(path); err != nil {
+					return pruned, err
 				}
 				pruned++
 			}

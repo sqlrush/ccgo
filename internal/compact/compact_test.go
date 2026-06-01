@@ -160,6 +160,19 @@ func TestMicroCompactPersistsDiskCache(t *testing.T) {
 	if !cached.Cached || cached.Summary != result.Summary || cached.MessagesKept != 1 {
 		t.Fatalf("cached = %#v result = %#v", cached, result)
 	}
+	if err := os.WriteFile(microResultPath(cacheDir, result.Digest), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, CacheDir: cacheDir, Now: now.Add(2 * time.Minute), FailOnCacheError: true}); err == nil {
+		t.Fatal("strict cache load should fail on corrupt cache")
+	}
+	recovered, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 30, CacheDir: cacheDir, CacheTTL: time.Hour, Now: now.Add(3 * time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Cached {
+		t.Fatalf("corrupt cache should be recomputed by default: %#v", recovered)
+	}
 	expired, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, CacheDir: cacheDir, Now: now.Add(2 * time.Hour)})
 	if err != nil {
 		t.Fatal(err)
@@ -181,6 +194,9 @@ func TestPruneMicroCacheDeletesExpiredVersionedAndInvalidEntries(t *testing.T) {
 	if err := SaveMicroResult(cacheDir, MicroResult{Digest: "fresh", Summary: "new", Version: DefaultMicroCacheVersion, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "mismatch.json"), []byte(`{"Digest":"other","Summary":"bad","Version":"microcompact.v1"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(cacheDir, "bad.json"), []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +204,7 @@ func TestPruneMicroCacheDeletesExpiredVersionedAndInvalidEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pruned != 3 {
+	if pruned != 4 {
 		t.Fatalf("pruned = %d", pruned)
 	}
 	if _, ok, err := LoadMicroResult(cacheDir, "fresh"); err != nil || !ok {
