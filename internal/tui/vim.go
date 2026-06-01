@@ -24,14 +24,14 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	if s.VimMode == VimInsert {
 		if key.Type == KeyEsc {
 			s.VimMode = VimNormal
-			s.VimPendingOperator = 0
+			s.clearVimPending()
 			return ScreenEvent{}, true
 		}
 		return ScreenEvent{}, false
 	}
 	switch key.Type {
 	case KeyEsc:
-		s.VimPendingOperator = 0
+		s.clearVimPending()
 		return ScreenEvent{}, true
 	case KeyRune:
 		return s.applyVimNormalRune(key.Rune), true
@@ -43,13 +43,24 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	if s.VimPendingOperator != 0 {
 		return s.applyVimOperator(r)
 	}
+	if isVimCountRune(r) {
+		if r == '0' && s.VimCount == 0 {
+			s.Prompt.Apply(Key{Type: KeyHome})
+			return ScreenEvent{}
+		}
+		s.VimCount = s.VimCount*10 + int(r-'0')
+		return ScreenEvent{}
+	}
+	count := s.takeVimCount()
 	switch r {
 	case 'i':
 		s.VimMode = VimInsert
+		s.clearVimPending()
 	case 'd', 'c':
 		s.VimPendingOperator = r
+		s.VimPendingCount = count
 	case 'a':
-		s.Prompt.Apply(Key{Type: KeyRight})
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
 		s.VimMode = VimInsert
 	case 'I':
 		s.Prompt.Apply(Key{Type: KeyHome})
@@ -58,23 +69,21 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.Prompt.Apply(Key{Type: KeyEnd})
 		s.VimMode = VimInsert
 	case 'h':
-		s.Prompt.Apply(Key{Type: KeyLeft})
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyLeft}) })
 	case 'l':
-		s.Prompt.Apply(Key{Type: KeyRight})
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
 	case 'w':
-		s.Prompt.moveWordForward()
+		applyN(count, func() { s.Prompt.moveWordForward() })
 	case 'b':
-		s.Prompt.moveWordBackward()
+		applyN(count, func() { s.Prompt.moveWordBackward() })
 	case 'e':
-		s.Prompt.moveWordEnd()
-	case '0':
-		s.Prompt.Apply(Key{Type: KeyHome})
+		applyN(count, func() { s.Prompt.moveWordEnd() })
 	case '$':
 		s.Prompt.Apply(Key{Type: KeyEnd})
 	case 'x':
-		s.Prompt.Apply(Key{Type: KeyDelete})
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
 	case 'X':
-		s.Prompt.Apply(Key{Type: KeyBackspace})
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
 	case 'D':
 		s.Prompt.deleteToEnd()
 	case 'C':
@@ -85,8 +94,13 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 }
 
 func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
+	if isVimCountRune(r) && (r != '0' || s.VimCount > 0) {
+		s.VimCount = s.VimCount*10 + int(r-'0')
+		return ScreenEvent{}
+	}
 	operator := s.VimPendingOperator
-	s.VimPendingOperator = 0
+	count := s.takeVimOperatorCount()
+	s.clearVimPending()
 	change := operator == 'c'
 	switch r {
 	case 'd', 'c':
@@ -97,7 +111,7 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 			}
 		}
 	case 'w':
-		s.Prompt.deleteWordForward()
+		applyN(count, func() { s.Prompt.deleteWordForward() })
 		if change {
 			s.VimMode = VimInsert
 		}
@@ -106,13 +120,57 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		if change {
 			s.VimMode = VimInsert
 		}
+	case '0':
+		s.Prompt.deleteToStart()
+		if change {
+			s.VimMode = VimInsert
+		}
 	case 'b':
-		s.Prompt.deleteWordBackward()
+		applyN(count, func() { s.Prompt.deleteWordBackward() })
 		if change {
 			s.VimMode = VimInsert
 		}
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) takeVimCount() int {
+	if s.VimCount <= 0 {
+		return 1
+	}
+	count := s.VimCount
+	s.VimCount = 0
+	return count
+}
+
+func (s *REPLScreen) takeVimOperatorCount() int {
+	count := s.VimPendingCount
+	if count <= 0 {
+		count = 1
+	}
+	if s.VimCount > 0 {
+		count *= s.VimCount
+	}
+	return count
+}
+
+func (s *REPLScreen) clearVimPending() {
+	s.VimPendingOperator = 0
+	s.VimPendingCount = 0
+	s.VimCount = 0
+}
+
+func isVimCountRune(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func applyN(count int, fn func()) {
+	if count <= 0 {
+		count = 1
+	}
+	for i := 0; i < count; i++ {
+		fn()
+	}
 }
 
 func (p *PromptState) moveWordForward() {
@@ -179,6 +237,19 @@ func (p *PromptState) deleteToEnd() {
 		p.Cursor = len(runes)
 	}
 	p.Text = string(runes[:p.Cursor])
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) deleteToStart() {
+	runes := []rune(p.Text)
+	if p.Cursor < 0 {
+		p.Cursor = 0
+	}
+	if p.Cursor > len(runes) {
+		p.Cursor = len(runes)
+	}
+	p.Text = string(runes[p.Cursor:])
+	p.Cursor = 0
 	p.resetHistoryCursor()
 }
 

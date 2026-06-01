@@ -1,20 +1,25 @@
 package session
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"sort"
 
 	"ccgo/internal/contracts"
 )
 
 type RemoteHistorySyncResult struct {
-	Considered int
-	Appended   int
-	Skipped    int
-	Duplicates int
-	LastUUID   contracts.ID
+	Considered   int
+	Appended     int
+	Skipped      int
+	Duplicates   int
+	LastUUID     contracts.ID
+	Pages        int
+	Complete     bool
+	NextBeforeID string
 }
 
 func RemoteHistoryTranscriptMessages(events []contracts.SDKEvent) []TranscriptMessage {
@@ -45,6 +50,7 @@ func AppendRemoteHistoryTranscript(path string, events []contracts.SDKEvent) (Re
 	if err != nil {
 		return result, err
 	}
+	linkRemoteMessagesToExistingTranscript(transcript, messages)
 	seen := map[contracts.ID]struct{}{}
 	for _, id := range transcript.Order {
 		seen[id] = struct{}{}
@@ -61,6 +67,30 @@ func AppendRemoteHistoryTranscript(path string, events []contracts.SDKEvent) (Re
 		result.Appended++
 		result.LastUUID = message.UUID
 	}
+	return result, nil
+}
+
+func SyncRemoteHistoryTranscript(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, provider RemoteHistoryTokenProvider, path string, options RemoteHistoryFetchOptions) (RemoteHistorySyncResult, error) {
+	var remote *RemoteHistoryEvents
+	var err error
+	if provider == nil {
+		remote, err = FetchRemoteHistory(ctx, client, authCtx, options)
+	} else {
+		remote, err = FetchRemoteHistoryWithTokenRefresh(ctx, client, authCtx, provider, options)
+	}
+	if err != nil {
+		return RemoteHistorySyncResult{}, err
+	}
+	if remote == nil {
+		return RemoteHistorySyncResult{}, nil
+	}
+	result, err := AppendRemoteHistoryTranscript(path, remote.Events)
+	if err != nil {
+		return result, err
+	}
+	result.Pages = remote.Pages
+	result.Complete = remote.Complete
+	result.NextBeforeID = remote.NextBeforeID
 	return result, nil
 }
 
@@ -111,6 +141,41 @@ func linkMissingRemoteParents(messages []TranscriptMessage) {
 		}
 		lastBySession[sessionID] = messages[i].UUID
 	}
+}
+
+func linkRemoteMessagesToExistingTranscript(transcript Transcript, messages []TranscriptMessage) {
+	lastBySession := latestTranscriptMessagesBySession(transcript)
+	for i := range messages {
+		sessionID := messages[i].SessionID
+		if messages[i].ParentUUID == nil {
+			if last, ok := lastBySession[sessionID]; ok && shouldLinkRemoteParent(last.Timestamp, messages[i].Timestamp) {
+				messages[i].ParentUUID = cloneIDPtr(&last.UUID)
+				if messages[i].Message != nil && messages[i].Message.ParentUUID == nil {
+					messages[i].Message.ParentUUID = cloneIDPtr(&last.UUID)
+				}
+			}
+		}
+		lastBySession[sessionID] = messages[i]
+	}
+}
+
+func latestTranscriptMessagesBySession(transcript Transcript) map[contracts.ID]TranscriptMessage {
+	out := map[contracts.ID]TranscriptMessage{}
+	for _, id := range transcript.Order {
+		msg := transcript.Messages[id]
+		if msg == nil {
+			continue
+		}
+		out[msg.SessionID] = *msg
+	}
+	return out
+}
+
+func shouldLinkRemoteParent(existingTimestamp string, incomingTimestamp string) bool {
+	if existingTimestamp == "" || incomingTimestamp == "" {
+		return true
+	}
+	return existingTimestamp <= incomingTimestamp
 }
 
 func remoteHistoryEventUUID(event contracts.SDKEvent) contracts.ID {

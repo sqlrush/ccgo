@@ -33,6 +33,8 @@ type REPLScreen struct {
 	VimEnabled         bool
 	VimMode            VimMode
 	VimPendingOperator rune
+	VimCount           int
+	VimPendingCount    int
 	Focused            bool
 	ReverseSearch      ReverseSearchState
 }

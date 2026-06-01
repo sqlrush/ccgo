@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -302,6 +303,38 @@ func TestAppendRemoteHistoryTranscriptDeduplicatesExistingMessages(t *testing.T)
 	}
 }
 
+func TestAppendRemoteHistoryTranscriptLinksToExistingLeaf(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","uuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hi"}]}}`,
+	})
+	events := []contracts.SDKEvent{
+		{
+			Type:      contracts.SDKEventAssistant,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageAssistant,
+				UUID:      "a1",
+				Timestamp: "2026-01-01T00:00:02Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hello")},
+			},
+		},
+	}
+	result, err := AppendRemoteHistoryTranscript(path, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Appended != 1 || result.LastUUID != "a1" {
+		t.Fatalf("result = %#v", result)
+	}
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.Messages["a1"].ParentUUID == nil || *transcript.Messages["a1"].ParentUUID != "u1" {
+		t.Fatalf("a1 parent = %#v", transcript.Messages["a1"].ParentUUID)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesGeneratesStableUUID(t *testing.T) {
 	events := []contracts.SDKEvent{
 		{
@@ -318,5 +351,42 @@ func TestRemoteHistoryTranscriptMessagesGeneratesStableUUID(t *testing.T) {
 	second := RemoteHistoryTranscriptMessages(events)
 	if len(first) != 1 || len(second) != 1 || first[0].UUID == "" || first[0].UUID != second[0].UUID {
 		t.Fatalf("uuids = %#v %#v", first, second)
+	}
+}
+
+func TestSyncRemoteHistoryTranscriptFetchesAndAppends(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":[{"type":"assistant","session_id":"s1","message":{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-01-01T00:00:02Z","content":[{"type":"text","text":"hello"}]}}],"has_more":true,"first_id":"evt_2"}`))
+		case "evt_2":
+			_, _ = w.Write([]byte(`{"data":[{"type":"user","session_id":"s1","message":{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","content":[{"type":"text","text":"hi"}]}}],"has_more":false,"first_id":"evt_1"}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "remote.jsonl")
+	authCtx := NewRemoteHistoryAuthContext("s1", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	result, err := SyncRemoteHistoryTranscript(context.Background(), server.Client(), authCtx, nil, path, RemoteHistoryFetchOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Complete || result.Pages != 2 || result.Appended != 2 || result.NextBeforeID != "" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(seen) != 2 || seen[0].Get("anchor_to_latest") != "true" || seen[1].Get("before_id") != "evt_2" {
+		t.Fatalf("queries = %#v", seen)
+	}
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(chainIDs(transcript.BuildConversationChain("a1")), ",") != "u1,a1" {
+		t.Fatalf("chain = %#v", chainIDs(transcript.BuildConversationChain("a1")))
 	}
 }

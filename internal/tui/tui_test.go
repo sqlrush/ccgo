@@ -635,6 +635,40 @@ func TestREPLScreenVimWordAndDeleteActions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimCountsRepeatMotionsAndOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"o", "n", "e", " ", "t", "w", "o", " ", "t", "h", "r", "e", "e", " ", "f", "o", "u", "r"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "3", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one two three ")) {
+		t.Fatalf("cursor after 3w = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"2", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "e two three four" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after 2x prompt = %#v", screen.Prompt)
+	}
+	for _, seq := range []string{"d", "2", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "three four" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after d2w prompt = %#v", screen.Prompt)
+	}
+	for _, seq := range []string{"2", "d", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after 2dw prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()
