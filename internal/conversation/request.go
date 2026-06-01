@@ -3,11 +3,16 @@ package conversation
 import (
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
+	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
 	"ccgo/internal/tool"
 )
 
 func (r Runner) BuildRequest(history []contracts.Message, model string) (anthropic.Request, error) {
+	history, err := r.applySessionMemoryRecall(history)
+	if err != nil {
+		return anthropic.Request{}, err
+	}
 	request := anthropic.Request{
 		Model:     model,
 		MaxTokens: r.maxTokens(),
@@ -23,6 +28,63 @@ func (r Runner) BuildRequest(history []contracts.Message, model string) (anthrop
 		}
 	}
 	return request, nil
+}
+
+func (r Runner) applySessionMemoryRecall(history []contracts.Message) ([]contracts.Message, error) {
+	if !r.EnableSessionMemoryRecall {
+		return history, nil
+	}
+	root := r.SessionMemoryRecallRoot
+	if root == "" {
+		root = r.SessionMemoryRoot
+	}
+	if root == "" {
+		root = memory.DefaultSessionMemoryRoot(r.SessionPath)
+	}
+	if root == "" {
+		return history, nil
+	}
+	query := lastUserText(history)
+	if query == "" {
+		return history, nil
+	}
+	matches, err := memory.RecallSessionSummaries(root, query, memory.RecallOptions{
+		Limit:            r.sessionMemoryRecallLimit(),
+		ExcludeSessionID: r.SessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	message := memory.RecallContextMessage(matches)
+	if message.Type == "" {
+		return history, nil
+	}
+	out := make([]contracts.Message, 0, len(history)+1)
+	out = append(out, message)
+	out = append(out, history...)
+	return out, nil
+}
+
+func (r Runner) sessionMemoryRecallLimit() int {
+	if r.SessionMemoryRecallLimit > 0 {
+		return r.SessionMemoryRecallLimit
+	}
+	return 3
+}
+
+func lastUserText(history []contracts.Message) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Type != contracts.MessageUser {
+			continue
+		}
+		if history[i].Subtype == memory.RecallContextSubtype {
+			continue
+		}
+		if text := msgs.TextContent(history[i]); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func toolPromptContext(r Runner) tool.PromptContext {

@@ -457,6 +457,60 @@ func TestRunnerAutoCompactSkipsAfterFailureLimit(t *testing.T) {
 	}
 }
 
+func TestRunnerInjectsSessionMemoryRecallIntoRequest(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	if _, err := memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:      root,
+		SessionID: "prior",
+		Summary:   "database permissions and migration notes",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:      root,
+		SessionID: "current",
+		Summary:   "database current session should be excluded",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:                    client,
+		Model:                     "sonnet",
+		MaxTokens:                 128,
+		SessionID:                 "current",
+		EnableSessionMemoryRecall: true,
+		SessionMemoryRecallRoot:   root,
+		SessionMemoryRecallLimit:  2,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("database permissions")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d", len(client.requests))
+	}
+	apiMessages := client.requests[0].Messages
+	if len(apiMessages) != 2 {
+		t.Fatalf("api messages = %#v", apiMessages)
+	}
+	recall := apiMessages[0].Content[0].Text
+	if !strings.Contains(recall, "Relevant session memory") || !strings.Contains(recall, "[prior]") || strings.Contains(recall, "[current]") {
+		t.Fatalf("recall = %q", recall)
+	}
+	if got := apiMessages[1].Content[0].Text; got != "database permissions" {
+		t.Fatalf("user message = %q", got)
+	}
+}
+
 func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 	client := &fakeClient{calls: []fakeCall{
 		{err: anthropic.APIError{StatusCode: http.StatusInternalServerError, Type: "overloaded_error", Message: "try later"}},

@@ -40,25 +40,28 @@ type Event struct {
 }
 
 type Runner struct {
-	Client            MessageClient
-	Tools             tool.Executor
-	Model             string
-	FallbackModels    []string
-	MaxTokens         int
-	MaxToolRounds     int
-	UseStreaming      bool
-	SessionID         contracts.ID
-	SessionPath       string
-	WorkingDirectory  string
-	ContentBudget     *session.ContentReplacementState
-	ContentBudgetDir  string
-	ContentBudgetMax  int
-	SkipBudgetTools   map[string]struct{}
-	AutoCompact       *compactpkg.AutoConfig
-	CompactClient     compactpkg.MessageClient
-	CompactMaxTokens  int
-	SessionMemoryRoot string
-	OnEvent           func(Event)
+	Client                    MessageClient
+	Tools                     tool.Executor
+	Model                     string
+	FallbackModels            []string
+	MaxTokens                 int
+	MaxToolRounds             int
+	UseStreaming              bool
+	SessionID                 contracts.ID
+	SessionPath               string
+	WorkingDirectory          string
+	ContentBudget             *session.ContentReplacementState
+	ContentBudgetDir          string
+	ContentBudgetMax          int
+	SkipBudgetTools           map[string]struct{}
+	AutoCompact               *compactpkg.AutoConfig
+	CompactClient             compactpkg.MessageClient
+	CompactMaxTokens          int
+	SessionMemoryRoot         string
+	EnableSessionMemoryRecall bool
+	SessionMemoryRecallRoot   string
+	SessionMemoryRecallLimit  int
+	OnEvent                   func(Event)
 }
 
 type Result struct {

@@ -178,6 +178,10 @@ func TestREPLScreenSubmitsPromptAndRendersMessages(t *testing.T) {
 func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}, ID: "perm_1", Kind: DialogPermission}
+	screen.ApplyKey(ParseKey("x"))
+	if screen.Prompt.Text != "" {
+		t.Fatalf("dialog input should not edit prompt: %#v", screen.Prompt)
+	}
 	screen.ApplyKey(ParseKey("\t"))
 	if screen.Dialog.Focused != 1 {
 		t.Fatalf("focused = %d", screen.Dialog.Focused)
@@ -188,6 +192,40 @@ func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	}
 	if screen.Dialog != nil {
 		t.Fatalf("dialog should close")
+	}
+}
+
+func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
+	runtime := NewDialogRuntime()
+	dialog := runtime.RequestPermission(PermissionRequest{ID: "perm_1", ToolName: "Write"})
+	if runtime.Active == nil || dialog.ID != "perm_1" || len(runtime.Permissions) != 1 {
+		t.Fatalf("runtime = %#v dialog = %#v", runtime, dialog)
+	}
+	result := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow Session", DialogID: "perm_1", DialogKind: DialogPermission})
+	if !result.Found || result.Status != DialogResultAllowed || result.Action != "Allow Session" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(runtime.Permissions) != 0 || runtime.Active != nil {
+		t.Fatalf("runtime after resolve = %#v", runtime)
+	}
+	missing := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow", DialogID: "perm_1", DialogKind: DialogPermission})
+	if missing.Found {
+		t.Fatalf("stale permission event should be ignored: %#v", missing)
+	}
+
+	runtime.UpsertTask(TaskStatus{ID: "b", Title: "Done", State: "completed"})
+	runtime.UpsertTask(TaskStatus{ID: "a", Title: "Run", State: "running"})
+	tasks := runtime.SortedTasks()
+	if len(tasks) != 2 || tasks[0].ID != "a" {
+		t.Fatalf("tasks = %#v", tasks)
+	}
+	taskDialog := runtime.OpenTasksDialog()
+	if taskDialog.Kind != DialogTask || !strings.Contains(taskDialog.Body, "Run [running]") {
+		t.Fatalf("task dialog = %#v", taskDialog)
+	}
+	closed := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Close", DialogID: "tasks", DialogKind: DialogTask})
+	if !closed.Found || closed.Status != DialogResultClosed {
+		t.Fatalf("closed = %#v", closed)
 	}
 }
 
@@ -242,5 +280,26 @@ func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	}
 	if !strings.Contains(exit, ShowCursor) || !strings.Contains(exit, ExitAlternateScreen) {
 		t.Fatalf("exit = %q", exit)
+	}
+}
+
+func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.Text = "run"
+	prompt.Cursor = 3
+	snapshot := CaptureANSISnapshot("main", 32, 6, Frame{
+		Messages:   []Message{{Role: RoleAssistant, Text: "hello"}},
+		Status:     "ready",
+		Prompt:     prompt,
+		ShowCursor: true,
+	})
+	if snapshot.Name != "main" || snapshot.Width != 32 || snapshot.Height != 6 {
+		t.Fatalf("snapshot = %#v", snapshot)
+	}
+	if !strings.Contains(snapshot.Output, HomeCursor) || !strings.Contains(snapshot.Output, ClearScreen) {
+		t.Fatalf("output = %q", snapshot.Output)
+	}
+	if strings.Contains(snapshot.Text, "\x1b[") || !strings.Contains(snapshot.Text, "assistant: hello") || !strings.Contains(snapshot.Text, "> run") {
+		t.Fatalf("text = %q", snapshot.Text)
 	}
 }

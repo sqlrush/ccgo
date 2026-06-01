@@ -146,6 +146,21 @@ func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	if len(all) != 2 || all[0].Summary.SessionID != "newer" {
 		t.Fatalf("all = %#v", all)
 	}
+	excluding, err := RecallSessionSummaries(root, "database", RecallOptions{ExcludeSessionID: "newer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(excluding) != 1 || excluding[0].Summary.SessionID != "older" {
+		t.Fatalf("excluding = %#v", excluding)
+	}
+	context := BuildRecallContext(matches)
+	if !strings.Contains(context, "Relevant session memory") || !strings.Contains(context, "[newer]") {
+		t.Fatalf("context = %q", context)
+	}
+	message := RecallContextMessage(matches)
+	if message.Subtype != RecallContextSubtype || !message.IsMeta || !strings.Contains(message.Content[0].Text, "permissions") {
+		t.Fatalf("message = %#v", message)
+	}
 }
 
 func sessionCompactMetadata(trigger string, preTokens int, summarized int) session.CompactMetadata {

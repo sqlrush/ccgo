@@ -6,10 +6,13 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"ccgo/internal/contracts"
 )
 
 type RecallOptions struct {
-	Limit int
+	Limit            int
+	ExcludeSessionID contracts.ID
 }
 
 type RecallMatch struct {
@@ -36,6 +39,9 @@ func RecallSessionSummaries(root string, query string, options RecallOptions) ([
 			if info, err := entry.Info(); err == nil {
 				summary.UpdatedAt = info.ModTime()
 			}
+		}
+		if options.ExcludeSessionID != "" && summary.SessionID == options.ExcludeSessionID {
+			return nil
 		}
 		score := recallScore(summary, terms)
 		if len(terms) > 0 && score == 0 {
