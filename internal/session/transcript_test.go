@@ -421,6 +421,51 @@ func TestTranscriptLineIndexLoadsWindowWithoutFullTranscript(t *testing.T) {
 	}
 }
 
+func TestTranscriptLineIndexLoadsTailWithoutFullTranscript(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","parentUuid":null}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"p1"}`,
+		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
+		`{"type":"user","uuid":"u3","parentUuid":"a2"}`,
+	})
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tail, err := LoadTranscriptIndexedTail(path, index, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tail.HasBefore || tail.StartIndex != 2 {
+		t.Fatalf("indexed tail metadata = %#v", tail)
+	}
+	if got := tailIDs(tail.Messages); strings.Join(got, ",") != "u2,a2,u3" {
+		t.Fatalf("indexed tail messages = %#v", got)
+	}
+	if tail.Messages[0].ParentUUID == nil || *tail.Messages[0].ParentUUID != "a1" || len(tail.Messages[0].Raw) == 0 {
+		t.Fatalf("indexed tail message = %#v", tail.Messages[0])
+	}
+
+	all, err := LoadTranscriptIndexedTail(path, index, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.HasBefore || all.StartIndex != 0 || strings.Join(tailIDs(all.Messages), ",") != "u1,a1,u2,a2,u3" {
+		t.Fatalf("all indexed tail = %#v ids=%#v", all, tailIDs(all.Messages))
+	}
+
+	empty, err := LoadTranscriptIndexedTail(path, index, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty.Messages) != 0 || empty.HasBefore {
+		t.Fatalf("empty indexed tail = %#v", empty)
+	}
+}
+
 func TestRemoveTranscriptMessageByUUID(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,

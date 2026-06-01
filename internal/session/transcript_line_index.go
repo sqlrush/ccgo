@@ -26,6 +26,12 @@ type TranscriptLineIndex struct {
 	ByUUID  map[contracts.ID]int
 }
 
+type TranscriptIndexedTail struct {
+	Messages   []TranscriptMessage
+	StartIndex int
+	HasBefore  bool
+}
+
 func BuildTranscriptLineIndex(path string) (TranscriptLineIndex, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -116,6 +122,40 @@ func LoadTranscriptIndexedWindow(path string, index TranscriptLineIndex, target 
 		}
 	}
 	return window, nil
+}
+
+func LoadTranscriptIndexedTail(path string, index TranscriptLineIndex, limit int) (TranscriptIndexedTail, error) {
+	if limit <= 0 {
+		return TranscriptIndexedTail{}, nil
+	}
+	start := len(index.Entries) - limit
+	if start < 0 {
+		start = 0
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TranscriptIndexedTail{}, nil
+		}
+		return TranscriptIndexedTail{}, err
+	}
+	defer f.Close()
+
+	tail := TranscriptIndexedTail{
+		StartIndex: start,
+		HasBefore:  start > 0,
+		Messages:   make([]TranscriptMessage, 0, len(index.Entries)-start),
+	}
+	for _, ref := range index.Entries[start:] {
+		msg, ok, err := readTranscriptMessageRef(f, ref)
+		if err != nil {
+			return TranscriptIndexedTail{}, err
+		}
+		if ok {
+			tail.Messages = append(tail.Messages, msg)
+		}
+	}
+	return tail, nil
 }
 
 func transcriptLineRef(line []byte, offset int64, progressBridge map[contracts.ID]*contracts.ID) (TranscriptLineRef, bool) {
