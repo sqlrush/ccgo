@@ -71,8 +71,11 @@ func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 	if index.Title != "Custom Title" || index.MessageCount != 3 || index.UserMessageCount != 2 || index.AssistantMessageCount != 1 {
 		t.Fatalf("index = %#v", index)
 	}
-	if index.FirstUUID != "u1" || index.LastUUID != "u2" || index.FirstUserText != "first prompt" || index.LastUserText != "last prompt" {
+	if index.FirstUUID != "u1" || index.LastUUID != "u2" || index.FirstUserText != "first prompt" || index.LastUserText != "last prompt" || index.LastAssistantText != "done" {
 		t.Fatalf("index messages = %#v", index)
+	}
+	if index.TextBytes != len("first prompt")+len("done")+len("last prompt") {
+		t.Fatalf("text bytes = %d", index.TextBytes)
 	}
 	if index.SummaryCount != 1 || index.ContentReplacementCount != 2 {
 		t.Fatalf("index metadata = %#v", index)

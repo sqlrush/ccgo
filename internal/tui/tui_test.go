@@ -523,6 +523,38 @@ func TestREPLScreenVimNormalModeEditsPrompt(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimWordAndDeleteActions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "l", "p", "h", "a", " ", "b", "e", "t", "a", " ", "g", "a", "m", "m", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	screen.ApplyKey(ParseKey("w"))
+	if screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("cursor after w = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("d"))
+	screen.ApplyKey(ParseKey("w"))
+	if screen.Prompt.Text != "alpha gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after dw prompt = %#v", screen.Prompt)
+	}
+	screen.ApplyKey(ParseKey("C"))
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "alpha " {
+		t.Fatalf("after C screen = %#v", screen)
+	}
+	for _, seq := range []string{"d", "e", "l", "t", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("d"))
+	screen.ApplyKey(ParseKey("d"))
+	if screen.Prompt.Text != "" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after dd prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()

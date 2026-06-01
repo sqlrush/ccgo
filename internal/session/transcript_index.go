@@ -22,6 +22,8 @@ type TranscriptIndex struct {
 	LastTimestamp           string
 	FirstUserText           string
 	LastUserText            string
+	LastAssistantText       string
+	TextBytes               int
 	Title                   string
 	SummaryCount            int
 	ContentReplacementCount int
@@ -111,6 +113,7 @@ func (i *TranscriptIndex) addMessage(msg TranscriptMessage) {
 		i.UserMessageCount++
 		text := strings.TrimSpace(textFromTranscriptMessage(&msg))
 		if text != "" {
+			i.TextBytes += len(text)
 			if i.FirstUserText == "" {
 				i.FirstUserText = text
 			}
@@ -118,6 +121,11 @@ func (i *TranscriptIndex) addMessage(msg TranscriptMessage) {
 		}
 	case "assistant":
 		i.AssistantMessageCount++
+		text := strings.TrimSpace(textFromTranscriptMessage(&msg))
+		if text != "" {
+			i.TextBytes += len(text)
+			i.LastAssistantText = text
+		}
 	case "system":
 		i.SystemMessageCount++
 	}
