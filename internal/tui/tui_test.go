@@ -471,6 +471,37 @@ func TestDialogRuntimeAppliesToScreenAndResolvesEvents(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeInteractionScriptResolvesPermissionFlow(t *testing.T) {
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(42, 8, nil)
+	runtime.StartTask("task_1", "Search", "running ripgrep")
+	runtime.RequestPermission(PermissionRequest{ID: "perm_1", ToolName: "Bash", Path: "/tmp/project"})
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", []ScriptStep{
+		{
+			ExpectDialog:         &DialogExpectation{Active: true, ID: "perm_1", Kind: DialogPermission, Title: "Permission"},
+			ExpectStatusContains: []string{"ready", "permissions: 1", "running: 1"},
+			ExpectSnapshotContains: []string{
+				"Tool: Bash",
+			},
+		},
+		{
+			Keys:                 []string{"\t", "\n"},
+			ExpectEvent:          &ScreenEvent{Type: ScreenEventDialogAction, Value: "Allow Session", DialogID: "perm_1", DialogKind: DialogPermission},
+			ExpectDialog:         &DialogExpectation{Active: false},
+			ExpectStatusContains: []string{"ready", "running: 1"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	if len(result.Events) != 1 || result.Events[0].Value != "Allow Session" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})

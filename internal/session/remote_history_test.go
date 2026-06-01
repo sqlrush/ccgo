@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"ccgo/internal/auth"
+	"ccgo/internal/contracts"
 )
 
 type testRemoteTokenProvider struct {
@@ -215,5 +216,107 @@ func TestFetchRemoteHistoryRefreshesTokenAcrossPages(t *testing.T) {
 	}
 	if got := strings.Join(tokens, ","); got != "Bearer stale,Bearer stale,Bearer fresh" {
 		t.Fatalf("tokens = %s", got)
+	}
+}
+
+func TestRemoteHistoryTranscriptMessagesSortsAndLinksMissingParents(t *testing.T) {
+	events := []contracts.SDKEvent{
+		{
+			Type:      contracts.SDKEventAssistant,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageAssistant,
+				UUID:      "a1",
+				Timestamp: "2026-01-01T00:00:02Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hello")},
+			},
+		},
+		{
+			Type:      contracts.SDKEventUser,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageUser,
+				UUID:      "u1",
+				Timestamp: "2026-01-01T00:00:01Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hi")},
+			},
+		},
+		{Type: contracts.SDKEventStatus, SessionID: "s1", Status: "ignored"},
+	}
+
+	messages := RemoteHistoryTranscriptMessages(events)
+	if len(messages) != 2 || messages[0].UUID != "u1" || messages[1].UUID != "a1" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "u1" {
+		t.Fatalf("assistant parent = %#v", messages[1].ParentUUID)
+	}
+	if messages[1].Message == events[0].Message {
+		t.Fatal("message should be cloned before materializing")
+	}
+}
+
+func TestAppendRemoteHistoryTranscriptDeduplicatesExistingMessages(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","uuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hi"}]}}`,
+	})
+	events := []contracts.SDKEvent{
+		{
+			Type:      contracts.SDKEventUser,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageUser,
+				UUID:      "u1",
+				Timestamp: "2026-01-01T00:00:01Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hi")},
+			},
+		},
+		{
+			Type:      contracts.SDKEventAssistant,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageAssistant,
+				UUID:      "a1",
+				Timestamp: "2026-01-01T00:00:02Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hello")},
+			},
+		},
+	}
+
+	result, err := AppendRemoteHistoryTranscript(path, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Considered != 2 || result.Appended != 1 || result.Duplicates != 1 || result.LastUUID != "a1" {
+		t.Fatalf("result = %#v", result)
+	}
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transcript.Order) != 2 || transcript.Order[0] != "u1" || transcript.Order[1] != "a1" {
+		t.Fatalf("order = %#v", transcript.Order)
+	}
+	if transcript.Messages["a1"].ParentUUID == nil || *transcript.Messages["a1"].ParentUUID != "u1" {
+		t.Fatalf("a1 parent = %#v", transcript.Messages["a1"].ParentUUID)
+	}
+}
+
+func TestRemoteHistoryTranscriptMessagesGeneratesStableUUID(t *testing.T) {
+	events := []contracts.SDKEvent{
+		{
+			Type:      contracts.SDKEventAssistant,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageAssistant,
+				Timestamp: "2026-01-01T00:00:02Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hello")},
+			},
+		},
+	}
+	first := RemoteHistoryTranscriptMessages(events)
+	second := RemoteHistoryTranscriptMessages(events)
+	if len(first) != 1 || len(second) != 1 || first[0].UUID == "" || first[0].UUID != second[0].UUID {
+		t.Fatalf("uuids = %#v %#v", first, second)
 	}
 }

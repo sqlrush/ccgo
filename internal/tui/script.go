@@ -14,8 +14,17 @@ type ScriptStep struct {
 	ResizeHeight           int
 	SnapshotName           string
 	ExpectEvent            *ScreenEvent
+	ExpectDialog           *DialogExpectation
 	ExpectReverseSearch    *ReverseSearchExpectation
+	ExpectStatusContains   []string
 	ExpectSnapshotContains []string
+}
+
+type DialogExpectation struct {
+	Active bool
+	ID     string
+	Kind   DialogKind
+	Title  string
 }
 
 type ReverseSearchExpectation struct {
@@ -31,16 +40,35 @@ type ScriptResult struct {
 	Snapshots []ANSISnapshot
 }
 
+type RuntimeScriptResult struct {
+	ScriptResult
+	DialogResults []DialogResult
+}
+
 func RunInteractionScript(screen *REPLScreen, steps []ScriptStep) ScriptResult {
 	result, _ := RunInteractionScriptChecked(screen, steps)
 	return result
 }
 
 func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (ScriptResult, error) {
+	result, _, err := runInteractionScriptChecked(screen, steps, nil, "")
+	return result, err
+}
+
+func RunDialogRuntimeScriptChecked(screen *REPLScreen, runtime *DialogRuntime, baseStatus string, steps []ScriptStep) (RuntimeScriptResult, error) {
+	result, dialogResults, err := runInteractionScriptChecked(screen, steps, runtime, baseStatus)
+	return RuntimeScriptResult{ScriptResult: result, DialogResults: dialogResults}, err
+}
+
+func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime *DialogRuntime, baseStatus string) (ScriptResult, []DialogResult, error) {
 	var result ScriptResult
+	var dialogResults []DialogResult
 	for index, step := range steps {
 		var event ScreenEvent
 		var snapshot ANSISnapshot
+		if runtime != nil {
+			runtime.ApplyToScreen(screen, baseStatus)
+		}
 		if step.ResizeWidth > 0 {
 			width := step.ResizeWidth
 			height := screen.Height
@@ -68,14 +96,30 @@ func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (Script
 				result.Events = append(result.Events, event)
 			}
 		}
+		if runtime != nil && (event.Type == ScreenEventDialogAction || event.Type == ScreenEventCancelled) {
+			dialogResult := runtime.ResolveScreenEvent(screen, event, baseStatus)
+			if dialogResult.ID != "" || dialogResult.Found || dialogResult.Stale {
+				dialogResults = append(dialogResults, dialogResult)
+			}
+		}
 		if step.ExpectEvent != nil {
 			if err := compareEvent(index, event, *step.ExpectEvent); err != nil {
-				return result, err
+				return result, dialogResults, err
+			}
+		}
+		if step.ExpectDialog != nil {
+			if err := compareDialog(index, screen.Dialog, *step.ExpectDialog); err != nil {
+				return result, dialogResults, err
 			}
 		}
 		if step.ExpectReverseSearch != nil {
 			if err := compareReverseSearch(index, screen.ReverseSearch, *step.ExpectReverseSearch); err != nil {
-				return result, err
+				return result, dialogResults, err
+			}
+		}
+		for _, want := range step.ExpectStatusContains {
+			if !strings.Contains(screen.Status, want) {
+				return result, dialogResults, fmt.Errorf("script step %d status missing %q in %q", index, want, screen.Status)
 			}
 		}
 		if step.SnapshotName != "" {
@@ -88,12 +132,34 @@ func RunInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep) (Script
 			}
 			for _, want := range step.ExpectSnapshotContains {
 				if !strings.Contains(snapshot.Text, want) {
-					return result, fmt.Errorf("script step %d snapshot missing %q in %q", index, want, snapshot.Text)
+					return result, dialogResults, fmt.Errorf("script step %d snapshot missing %q in %q", index, want, snapshot.Text)
 				}
 			}
 		}
 	}
-	return result, nil
+	return result, dialogResults, nil
+}
+
+func compareDialog(index int, got *Dialog, want DialogExpectation) error {
+	if !want.Active {
+		if got != nil {
+			return fmt.Errorf("script step %d dialog active = %#v, want none", index, got)
+		}
+		return nil
+	}
+	if got == nil {
+		return fmt.Errorf("script step %d dialog inactive, want active", index)
+	}
+	if want.ID != "" && got.ID != want.ID {
+		return fmt.Errorf("script step %d dialog id = %q, want %q", index, got.ID, want.ID)
+	}
+	if want.Kind != "" && got.Kind != want.Kind {
+		return fmt.Errorf("script step %d dialog kind = %q, want %q", index, got.Kind, want.Kind)
+	}
+	if want.Title != "" && got.Title != want.Title {
+		return fmt.Errorf("script step %d dialog title = %q, want %q", index, got.Title, want.Title)
+	}
+	return nil
 }
 
 func compareReverseSearch(index int, got ReverseSearchState, want ReverseSearchExpectation) error {
