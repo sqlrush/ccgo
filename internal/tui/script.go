@@ -16,6 +16,7 @@ type ScriptStep struct {
 	ExpectEvent            *ScreenEvent
 	ExpectDialog           *DialogExpectation
 	ExpectPrompt           *PromptExpectation
+	ExpectVim              *VimExpectation
 	ExpectReverseSearch    *ReverseSearchExpectation
 	ExpectViewport         *ViewportExpectation
 	ExpectFocused          *bool
@@ -35,6 +36,13 @@ type PromptExpectation struct {
 	Expanded string
 	Cursor   *int
 	Empty    bool
+}
+
+type VimExpectation struct {
+	Enabled          *bool
+	Mode             VimMode
+	Register         string
+	RegisterLinewise *bool
 }
 
 type ViewportExpectation struct {
@@ -134,6 +142,11 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, err
 			}
 		}
+		if step.ExpectVim != nil {
+			if err := compareVim(index, *screen, *step.ExpectVim); err != nil {
+				return result, dialogResults, err
+			}
+		}
 		if step.ExpectReverseSearch != nil {
 			if err := compareReverseSearch(index, screen.ReverseSearch, *step.ExpectReverseSearch); err != nil {
 				return result, dialogResults, err
@@ -188,6 +201,22 @@ func compareDialog(index int, got *Dialog, want DialogExpectation) error {
 	}
 	if want.Title != "" && got.Title != want.Title {
 		return fmt.Errorf("script step %d dialog title = %q, want %q", index, got.Title, want.Title)
+	}
+	return nil
+}
+
+func compareVim(index int, got REPLScreen, want VimExpectation) error {
+	if want.Enabled != nil && got.VimEnabled != *want.Enabled {
+		return fmt.Errorf("script step %d vim enabled = %v, want %v", index, got.VimEnabled, *want.Enabled)
+	}
+	if want.Mode != "" && got.VimMode != want.Mode {
+		return fmt.Errorf("script step %d vim mode = %q, want %q", index, got.VimMode, want.Mode)
+	}
+	if want.Register != "" && got.VimRegister != want.Register {
+		return fmt.Errorf("script step %d vim register = %q, want %q", index, got.VimRegister, want.Register)
+	}
+	if want.RegisterLinewise != nil && got.VimRegisterLinewise != *want.RegisterLinewise {
+		return fmt.Errorf("script step %d vim register linewise = %v, want %v", index, got.VimRegisterLinewise, *want.RegisterLinewise)
 	}
 	return nil
 }

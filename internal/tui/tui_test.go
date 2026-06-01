@@ -1250,6 +1250,28 @@ func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptChecksVimState(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	enabled := true
+	linewise := false
+	cursor := len([]rune("abc"))
+	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{
+			Keys:         []string{"a", "b", "c"},
+			ExpectPrompt: &PromptExpectation{Text: "abc", Cursor: &cursor},
+			ExpectVim:    &VimExpectation{Enabled: &enabled, Mode: VimInsert},
+		},
+		{
+			Keys:      []string{"\x1b", "0", "y", "l"},
+			ExpectVim: &VimExpectation{Enabled: &enabled, Mode: VimNormal, Register: "a", RegisterLinewise: &linewise},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptChecksViewport(t *testing.T) {
 	screen := NewREPLScreen(22, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
