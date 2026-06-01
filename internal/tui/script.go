@@ -13,6 +13,8 @@ type ScriptStep struct {
 	RequestPermission         *PermissionRequest
 	UpsertTask                *TaskStatus
 	RemoveTaskID              string
+	CancelAllTasks            bool
+	CancelTasksDetail         string
 	OpenTasksDialog           bool
 	ResizeWidth               int
 	ResizeHeight              int
@@ -261,7 +263,7 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 }
 
 func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error {
-	needsRuntime := step.RequestPermission != nil || step.UpsertTask != nil || step.RemoveTaskID != "" || step.OpenTasksDialog
+	needsRuntime := step.RequestPermission != nil || step.UpsertTask != nil || step.RemoveTaskID != "" || step.CancelAllTasks || step.OpenTasksDialog
 	if !needsRuntime {
 		return nil
 	}
@@ -276,6 +278,9 @@ func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error 
 	}
 	if step.RemoveTaskID != "" {
 		runtime.RemoveTask(step.RemoveTaskID)
+	}
+	if step.CancelAllTasks {
+		runtime.CancelTasks(step.CancelTasksDetail)
 	}
 	if step.OpenTasksDialog {
 		runtime.OpenTasksDialog()

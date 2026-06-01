@@ -88,6 +88,32 @@ func (r *DialogRuntime) CancelTask(id string, detail string) TaskStatus {
 	return r.updateTask(id, task.Title, TaskCancelled, detail, task.Progress)
 }
 
+func (r *DialogRuntime) CancelTasks(detail string) []TaskStatus {
+	if len(r.Tasks) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(r.Tasks))
+	for id, task := range r.Tasks {
+		if taskCanBeCancelled(task.State) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	results := make([]TaskStatus, 0, len(ids))
+	for _, id := range ids {
+		task := r.Tasks[id]
+		task.State = TaskCancelled
+		if detail != "" {
+			task.Detail = detail
+		}
+		task.Progress = clampPercent(task.Progress)
+		r.Tasks[id] = task
+		results = append(results, task)
+	}
+	r.refreshActiveTaskDialog()
+	return results
+}
+
 func (r *DialogRuntime) RemoveTask(id string) {
 	delete(r.Tasks, id)
 	r.refreshActiveTaskDialog()
@@ -308,6 +334,15 @@ func taskStateSummary(tasks []TaskStatus) []string {
 		}
 	}
 	return out
+}
+
+func taskCanBeCancelled(state string) bool {
+	switch state {
+	case "", TaskPending, TaskRunning:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *DialogRuntime) updateTask(id string, title string, state string, detail string, progress int) TaskStatus {

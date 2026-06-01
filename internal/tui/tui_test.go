@@ -960,6 +960,38 @@ func TestDialogRuntimeTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeCancelsCancelableTasksDeterministically(t *testing.T) {
+	runtime := NewDialogRuntime()
+	runtime.UpsertTask(TaskStatus{ID: "b", Title: "Build", State: TaskRunning, Detail: "compile", Progress: 25})
+	runtime.UpsertTask(TaskStatus{ID: "a", Title: "Search", State: TaskPending})
+	runtime.UpsertTask(TaskStatus{ID: "c", Title: "Done", State: TaskCompleted, Progress: 100})
+	runtime.UpsertTask(TaskStatus{ID: "d", Title: "Failed", State: TaskFailed, Detail: "boom"})
+	runtime.OpenTasksDialog()
+
+	cancelled := runtime.CancelTasks("interrupted")
+	if len(cancelled) != 2 || cancelled[0].ID != "a" || cancelled[1].ID != "b" {
+		t.Fatalf("cancelled = %#v", cancelled)
+	}
+	for _, id := range []string{"a", "b"} {
+		task := runtime.Tasks[id]
+		if task.State != TaskCancelled || task.Detail != "interrupted" {
+			t.Fatalf("task %s = %#v", id, task)
+		}
+	}
+	if runtime.Tasks["c"].State != TaskCompleted || runtime.Tasks["d"].State != TaskFailed {
+		t.Fatalf("terminal tasks should remain unchanged: %#v", runtime.Tasks)
+	}
+	if runtime.Active == nil || !strings.Contains(runtime.Active.Body, "Build [cancelled] 25% - interrupted") || !strings.Contains(runtime.Active.Body, "Search [cancelled] - interrupted") {
+		t.Fatalf("active task dialog = %#v", runtime.Active)
+	}
+	if status := runtime.StatusLine("ready"); !strings.Contains(status, "failed: 1") || !strings.Contains(status, "cancelled: 2") || !strings.Contains(status, "completed: 1") {
+		t.Fatalf("status = %q", status)
+	}
+	if got := runtime.CancelTasks("again"); len(got) != 0 {
+		t.Fatalf("second cancel should not touch terminal tasks: %#v", got)
+	}
+}
+
 func TestDialogRuntimeRefreshesActiveTaskDialog(t *testing.T) {
 	runtime := NewDialogRuntime()
 	screen := NewREPLScreen(48, 8, nil)
@@ -1183,6 +1215,48 @@ func TestDialogRuntimeInteractionScriptAppliesRuntimeMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
+func TestDialogRuntimeInteractionScriptCancelsTasks(t *testing.T) {
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(52, 9, nil)
+	taskCount := 2
+	cancelledProgress := 25
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", []ScriptStep{
+		{
+			UpsertTask: &TaskStatus{ID: "task_1", Title: "Search", State: TaskRunning, Detail: "running", Progress: 25},
+		},
+		{
+			UpsertTask: &TaskStatus{ID: "task_2", Title: "Build", State: TaskPending},
+		},
+		{
+			CancelAllTasks:    true,
+			CancelTasksDetail: "interrupted",
+			OpenTasksDialog:   true,
+			ExpectDialog:      &DialogExpectation{Active: true, ID: "tasks", Kind: DialogTask},
+			ExpectTasks: &TasksExpectation{
+				Count: &taskCount,
+				StateCounts: map[string]int{
+					TaskCancelled: 2,
+				},
+				Contains: []TaskExpectation{
+					{ID: "task_1", State: TaskCancelled, Detail: "interrupted", Progress: &cancelledProgress},
+					{ID: "task_2", State: TaskCancelled, Detail: "interrupted"},
+				},
+			},
+			ExpectStatusContains: []string{"cancelled: 2"},
+			ExpectSnapshotContains: []string{
+				"Search [cancelled] 25% - interrupted",
+				"Build [cancelled] - interrupted",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 0 {
 		t.Fatalf("dialog results = %#v", result.DialogResults)
 	}
 }
