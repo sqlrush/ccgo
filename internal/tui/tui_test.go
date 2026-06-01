@@ -257,6 +257,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x06")); action != ActionMoveRight {
 		t.Fatalf("ctrl-f action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x07")); action != ActionExternalEditor {
+		t.Fatalf("ctrl-g action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x15")); action != ActionDeleteToStart {
 		t.Fatalf("ctrl-u action = %q", action)
 	}
@@ -269,6 +272,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x0f")); action != ActionToggleTranscript {
 		t.Fatalf("ctrl-o action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x13")); action != ActionStashPrompt {
+		t.Fatalf("ctrl-s action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x14")); action != ActionToggleTodos {
 		t.Fatalf("ctrl-t action = %q", action)
 	}
@@ -277,6 +283,21 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	}
 	if action := keymap.Resolve(ParseKey("x")); action != ActionInsertRune {
 		t.Fatalf("rune action = %q", action)
+	}
+
+	keymap = DefaultKeymap()
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x05")); action != ActionExternalEditor {
+		t.Fatalf("ctrl-x ctrl-e action = %q", action)
+	}
+	keymap = DefaultKeymap()
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix before kill action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionKillAgents {
+		t.Fatalf("ctrl-x ctrl-k action = %q", action)
 	}
 }
 
@@ -298,7 +319,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-t", "ctrl-w"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -511,6 +532,27 @@ func TestREPLScreenGlobalToggleEvents(t *testing.T) {
 		event := screen.ApplyKey(ParseKey(tc.seq))
 		if event.Type != tc.want {
 			t.Fatalf("event for %q = %#v, want %s", tc.seq, event, tc.want)
+		}
+	}
+}
+
+func TestREPLScreenChatControlEvents(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	for _, tc := range []struct {
+		seqs []string
+		want ScreenEventType
+	}{
+		{seqs: []string{"\x07"}, want: ScreenEventExternalEditor},
+		{seqs: []string{"\x13"}, want: ScreenEventStashPrompt},
+		{seqs: []string{"\x18", "\x05"}, want: ScreenEventExternalEditor},
+		{seqs: []string{"\x18", "\x0b"}, want: ScreenEventKillAgents},
+	} {
+		var event ScreenEvent
+		for _, seq := range tc.seqs {
+			event = screen.ApplyKey(ParseKey(seq))
+		}
+		if event.Type != tc.want {
+			t.Fatalf("event for %#v = %#v, want %s", tc.seqs, event, tc.want)
 		}
 	}
 }

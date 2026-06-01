@@ -11,6 +11,9 @@ const (
 	ScreenEventRedraw           ScreenEventType = "redraw"
 	ScreenEventToggleTranscript ScreenEventType = "toggle_transcript"
 	ScreenEventToggleTodos      ScreenEventType = "toggle_todos"
+	ScreenEventExternalEditor   ScreenEventType = "external_editor"
+	ScreenEventStashPrompt      ScreenEventType = "stash_prompt"
+	ScreenEventKillAgents       ScreenEventType = "kill_agents"
 	ScreenEventReverseSearch    ScreenEventType = "reverse_search"
 	ScreenEventReverseSelected  ScreenEventType = "reverse_search_selected"
 	ScreenEventFocusIn          ScreenEventType = "focus_in"
@@ -114,6 +117,15 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	}
 	if action == ActionToggleTodos {
 		return ScreenEvent{Type: ScreenEventToggleTodos}
+	}
+	if action == ActionExternalEditor {
+		return ScreenEvent{Type: ScreenEventExternalEditor}
+	}
+	if action == ActionStashPrompt {
+		return ScreenEvent{Type: ScreenEventStashPrompt}
+	}
+	if action == ActionKillAgents {
+		return ScreenEvent{Type: ScreenEventKillAgents}
 	}
 	if s.Dialog != nil {
 		return s.applyDialogAction(action)

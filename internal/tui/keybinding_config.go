@@ -106,6 +106,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlE, nil
 	case "ctrl+f", "ctrl-f", "control+f", "control-f":
 		return KeyCtrlF, nil
+	case "ctrl+g", "ctrl-g", "control+g", "control-g":
+		return KeyCtrlG, nil
 	case "ctrl+k", "ctrl-k", "control+k", "control-k":
 		return KeyCtrlK, nil
 	case "ctrl+l", "ctrl-l", "control+l", "control-l":
@@ -114,12 +116,16 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlO, nil
 	case "ctrl+r", "ctrl-r", "control+r", "control-r":
 		return KeyCtrlR, nil
+	case "ctrl+s", "ctrl-s", "control+s", "control-s":
+		return KeyCtrlS, nil
 	case "ctrl+t", "ctrl-t", "control+t", "control-t":
 		return KeyCtrlT, nil
 	case "ctrl+u", "ctrl-u", "control+u", "control-u":
 		return KeyCtrlU, nil
 	case "ctrl+w", "ctrl-w", "control+w", "control-w":
 		return KeyCtrlW, nil
+	case "ctrl+x", "ctrl-x", "control+x", "control-x":
+		return KeyCtrlX, nil
 	case "paste", "bracketed-paste":
 		return KeyPaste, nil
 	case "image-hint", "image":
@@ -145,6 +151,9 @@ func IsKnownAction(action Action) bool {
 		ActionRedraw,
 		ActionToggleTranscript,
 		ActionToggleTodos,
+		ActionExternalEditor,
+		ActionStashPrompt,
+		ActionKillAgents,
 		ActionMoveLeft,
 		ActionMoveRight,
 		ActionMoveStart,

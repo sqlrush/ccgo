@@ -13,6 +13,9 @@ const (
 	ActionRedraw           Action = "redraw"
 	ActionToggleTranscript Action = "toggle_transcript"
 	ActionToggleTodos      Action = "toggle_todos"
+	ActionExternalEditor   Action = "external_editor"
+	ActionStashPrompt      Action = "stash_prompt"
+	ActionKillAgents       Action = "kill_agents"
 	ActionMoveLeft         Action = "move_left"
 	ActionMoveRight        Action = "move_right"
 	ActionMoveStart        Action = "move_start"
@@ -52,6 +55,8 @@ func DefaultKeymap() Keymap {
 		KeyCtrlL:     ActionRedraw,
 		KeyCtrlO:     ActionToggleTranscript,
 		KeyCtrlT:     ActionToggleTodos,
+		KeyCtrlG:     ActionExternalEditor,
+		KeyCtrlS:     ActionStashPrompt,
 		KeyLeft:      ActionMoveLeft,
 		KeyCtrlB:     ActionMoveLeft,
 		KeyRight:     ActionMoveRight,
@@ -72,6 +77,9 @@ func DefaultKeymap() Keymap {
 		KeyTab:       ActionFocusNext,
 		KeyShiftTab:  ActionFocusPrevious,
 		KeyCtrlR:     ActionReverseSearch,
+	}, ChordBindings: map[string]Action{
+		encodeChordKey([]KeyType{KeyCtrlX, KeyCtrlE}): ActionExternalEditor,
+		encodeChordKey([]KeyType{KeyCtrlX, KeyCtrlK}): ActionKillAgents,
 	}}
 }
 
