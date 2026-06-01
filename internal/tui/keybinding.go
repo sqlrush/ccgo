@@ -11,6 +11,8 @@ const (
 	ActionCancel           Action = "cancel"
 	ActionInterrupt        Action = "interrupt"
 	ActionRedraw           Action = "redraw"
+	ActionToggleTranscript Action = "toggle_transcript"
+	ActionToggleTodos      Action = "toggle_todos"
 	ActionMoveLeft         Action = "move_left"
 	ActionMoveRight        Action = "move_right"
 	ActionMoveStart        Action = "move_start"
@@ -48,6 +50,8 @@ func DefaultKeymap() Keymap {
 		KeyEsc:       ActionCancel,
 		KeyCtrlC:     ActionInterrupt,
 		KeyCtrlL:     ActionRedraw,
+		KeyCtrlO:     ActionToggleTranscript,
+		KeyCtrlT:     ActionToggleTodos,
 		KeyLeft:      ActionMoveLeft,
 		KeyCtrlB:     ActionMoveLeft,
 		KeyRight:     ActionMoveRight,

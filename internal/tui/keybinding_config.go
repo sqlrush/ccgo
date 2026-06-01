@@ -110,8 +110,12 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlK, nil
 	case "ctrl+l", "ctrl-l", "control+l", "control-l":
 		return KeyCtrlL, nil
+	case "ctrl+o", "ctrl-o", "control+o", "control-o":
+		return KeyCtrlO, nil
 	case "ctrl+r", "ctrl-r", "control+r", "control-r":
 		return KeyCtrlR, nil
+	case "ctrl+t", "ctrl-t", "control+t", "control-t":
+		return KeyCtrlT, nil
 	case "ctrl+u", "ctrl-u", "control+u", "control-u":
 		return KeyCtrlU, nil
 	case "ctrl+w", "ctrl-w", "control+w", "control-w":
@@ -139,6 +143,8 @@ func IsKnownAction(action Action) bool {
 		ActionCancel,
 		ActionInterrupt,
 		ActionRedraw,
+		ActionToggleTranscript,
+		ActionToggleTodos,
 		ActionMoveLeft,
 		ActionMoveRight,
 		ActionMoveStart,

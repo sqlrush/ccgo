@@ -60,8 +60,12 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlK}
 	case "\x0c":
 		return Key{Type: KeyCtrlL}
+	case "\x0f":
+		return Key{Type: KeyCtrlO}
 	case "\x12":
 		return Key{Type: KeyCtrlR}
+	case "\x14":
+		return Key{Type: KeyCtrlT}
 	case "\x15":
 		return Key{Type: KeyCtrlU}
 	case "\x17":

@@ -266,6 +266,12 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x0c")); action != ActionRedraw {
 		t.Fatalf("ctrl-l action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x0f")); action != ActionToggleTranscript {
+		t.Fatalf("ctrl-o action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x14")); action != ActionToggleTodos {
+		t.Fatalf("ctrl-t action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x17")); action != ActionDeleteWordBack {
 		t.Fatalf("ctrl-w action = %q", action)
 	}
@@ -292,7 +298,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-w"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-t", "ctrl-w"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -490,6 +496,22 @@ func TestREPLScreenRedrawEvent(t *testing.T) {
 	event = screen.ApplyKey(ParseKey("\x0c"))
 	if event.Type != ScreenEventRedraw || screen.Dialog == nil {
 		t.Fatalf("dialog redraw event = %#v dialog=%#v", event, screen.Dialog)
+	}
+}
+
+func TestREPLScreenGlobalToggleEvents(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	for _, tc := range []struct {
+		seq  string
+		want ScreenEventType
+	}{
+		{seq: "\x0f", want: ScreenEventToggleTranscript},
+		{seq: "\x14", want: ScreenEventToggleTodos},
+	} {
+		event := screen.ApplyKey(ParseKey(tc.seq))
+		if event.Type != tc.want {
+			t.Fatalf("event for %q = %#v, want %s", tc.seq, event, tc.want)
+		}
 	}
 }
 
