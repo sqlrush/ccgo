@@ -212,6 +212,30 @@ func TestPruneMicroCacheDeletesExpiredVersionedAndInvalidEntries(t *testing.T) {
 	}
 }
 
+func TestInMemoryMicroCachePrunesExpiredVersionedAndInvalidEntries(t *testing.T) {
+	cache := NewMicroCache()
+	now := time.Unix(100, 0).UTC()
+	cache.Set(MicroResult{Digest: "expired", Summary: "old", Version: DefaultMicroCacheVersion, CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour)})
+	cache.Set(MicroResult{Digest: "wrongversion", Summary: "old", Version: "other", CreatedAt: now})
+	cache.Set(MicroResult{Digest: "fresh", Summary: "new", Version: DefaultMicroCacheVersion, CreatedAt: now, ExpiresAt: now.Add(time.Hour)})
+	cache.mu.Lock()
+	cache.entries["mismatch"] = MicroResult{Digest: "other", Summary: "bad", Version: DefaultMicroCacheVersion}
+	cache.mu.Unlock()
+
+	pruned := cache.Prune(MicroPruneOptions{Now: now, DeleteInvalid: true})
+	if pruned != 3 {
+		t.Fatalf("pruned = %d", pruned)
+	}
+	if cached, ok := cache.Get("fresh"); !ok || cached.Summary != "new" || !cached.Cached {
+		t.Fatalf("fresh cached=%#v ok=%v", cached, ok)
+	}
+	for _, digest := range []string{"expired", "wrongversion", "mismatch"} {
+		if cached, ok := cache.Get(digest); ok {
+			t.Fatalf("%s should be pruned: %#v", digest, cached)
+		}
+	}
+}
+
 func TestRunnerBuildsNoToolSummaryRequestAndPlan(t *testing.T) {
 	client := &fakeCompactClient{response: &anthropic.Response{
 		ID:      "msg_summary",

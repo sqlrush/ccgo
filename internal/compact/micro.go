@@ -78,6 +78,34 @@ func (c *MicroCache) Set(result MicroResult) {
 	c.entries[result.Digest] = result
 }
 
+func (c *MicroCache) Prune(options MicroPruneOptions) int {
+	if c == nil {
+		return 0
+	}
+	now := options.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	version := microCacheVersion(options.CacheVersion)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pruned := 0
+	for digest, result := range c.entries {
+		if result.Digest != digest {
+			if options.DeleteInvalid {
+				delete(c.entries, digest)
+				pruned++
+			}
+			continue
+		}
+		if !MicroResultUsable(result, version, now) {
+			delete(c.entries, digest)
+			pruned++
+		}
+	}
+	return pruned
+}
+
 func MicroCompact(history []contracts.Message, options MicroOptions) MicroResult {
 	result, _ := MicroCompactStored(history, options)
 	return result
