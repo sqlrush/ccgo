@@ -52,8 +52,14 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlC}
 	case "\x05":
 		return Key{Type: KeyCtrlE}
+	case "\x0b":
+		return Key{Type: KeyCtrlK}
 	case "\x12":
 		return Key{Type: KeyCtrlR}
+	case "\x15":
+		return Key{Type: KeyCtrlU}
+	case "\x17":
+		return Key{Type: KeyCtrlW}
 	case "\t":
 		return Key{Type: KeyTab}
 	case "\x1b[Z":
@@ -164,6 +170,12 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.Cursor = 0
 	case KeyEnd, KeyCtrlE:
 		p.Cursor = len(runes)
+	case KeyCtrlK:
+		p.deleteToEnd()
+	case KeyCtrlU:
+		p.deleteToStart()
+	case KeyCtrlW:
+		p.deleteWordBackward()
 	case KeyUp:
 		p.historyPrev()
 	case KeyDown:

@@ -32,6 +32,31 @@ func TestPromptStateEditsAndSubmits(t *testing.T) {
 	}
 }
 
+func TestPromptStateControlLineEditing(t *testing.T) {
+	prompt := NewPromptState(nil)
+	typePromptText := func(text string) {
+		for _, r := range text {
+			prompt.Apply(Key{Type: KeyRune, Rune: r})
+		}
+	}
+	typePromptText("alpha beta gamma")
+	prompt.Apply(ParseKey("\x17"))
+	if prompt.Text != "alpha beta " || prompt.Cursor != len([]rune("alpha beta ")) {
+		t.Fatalf("after ctrl-w prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x01"))
+	prompt.Apply(ParseKey("\x0b"))
+	if prompt.Text != "" || prompt.Cursor != 0 {
+		t.Fatalf("after ctrl-k prompt = %#v", prompt)
+	}
+	typePromptText("alpha beta")
+	prompt.Apply(ParseKey("\x1b[D"))
+	prompt.Apply(ParseKey("\x15"))
+	if prompt.Text != "a" || prompt.Cursor != 0 {
+		t.Fatalf("after ctrl-u prompt = %#v", prompt)
+	}
+}
+
 func TestPromptHistoryNavigationKeepsDraft(t *testing.T) {
 	prompt := NewPromptState([]string{"one", "two"})
 	prompt.Apply(ParseKey("d"))
@@ -206,6 +231,15 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x12")); action != ActionReverseSearch {
 		t.Fatalf("ctrl-r action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x15")); action != ActionDeleteToStart {
+		t.Fatalf("ctrl-u action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionDeleteToEnd {
+		t.Fatalf("ctrl-k action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x17")); action != ActionDeleteWordBack {
+		t.Fatalf("ctrl-w action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("x")); action != ActionInsertRune {
 		t.Fatalf("rune action = %q", action)
 	}
@@ -229,7 +263,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-u", "ctrl-k", "ctrl-w"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

@@ -16,6 +16,9 @@ const (
 	ActionMoveEnd          Action = "move_end"
 	ActionDeleteBackward   Action = "delete_backward"
 	ActionDeleteForward    Action = "delete_forward"
+	ActionDeleteToStart    Action = "delete_to_start"
+	ActionDeleteToEnd      Action = "delete_to_end"
+	ActionDeleteWordBack   Action = "delete_word_backward"
 	ActionHistoryPrevious  Action = "history_previous"
 	ActionHistoryNext      Action = "history_next"
 	ActionScrollUp         Action = "scroll_up"
@@ -47,6 +50,9 @@ func DefaultKeymap() Keymap {
 		KeyCtrlE:     ActionMoveEnd,
 		KeyBackspace: ActionDeleteBackward,
 		KeyDelete:    ActionDeleteForward,
+		KeyCtrlU:     ActionDeleteToStart,
+		KeyCtrlK:     ActionDeleteToEnd,
+		KeyCtrlW:     ActionDeleteWordBack,
 		KeyUp:        ActionHistoryPrevious,
 		KeyDown:      ActionHistoryNext,
 		KeyPageUp:    ActionPageUp,

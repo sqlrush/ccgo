@@ -370,6 +370,12 @@ func keyForAction(action Action, key Key) Key {
 		return Key{Type: KeyBackspace}
 	case ActionDeleteForward:
 		return Key{Type: KeyDelete}
+	case ActionDeleteToStart:
+		return Key{Type: KeyCtrlU}
+	case ActionDeleteToEnd:
+		return Key{Type: KeyCtrlK}
+	case ActionDeleteWordBack:
+		return Key{Type: KeyCtrlW}
 	case ActionHistoryPrevious:
 		return Key{Type: KeyUp}
 	case ActionHistoryNext:
