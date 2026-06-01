@@ -337,6 +337,43 @@ func TestMemoryAgentRecallCanUseModelSelectedSessionIDs(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentRecallFallsBackWhenModelSelectsNoValidSessions(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "current",
+		Summary:   "current database notes",
+		UpdatedAt: time.Unix(300, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "prior",
+		Summary:   "postgres permissions migration notes",
+		UpdatedAt: time.Unix(200, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_recall_empty",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"query":"postgres permissions","session_ids":["missing","current"]}`)},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1, ExcludeSessionID: "current"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Fallback || result.Query != "postgres permissions" || len(result.SelectedIDs) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("matches = %#v", result.Matches)
+	}
+}
+
 func TestBuildResumeContextLoadsCurrentSummaryAndRecallsRelatedSessions(t *testing.T) {
 	dir := t.TempDir()
 	sessionPath := filepath.Join(dir, "session.jsonl")

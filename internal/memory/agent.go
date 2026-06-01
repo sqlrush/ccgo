@@ -95,7 +95,10 @@ func (a Agent) Recall(ctx context.Context, root string, query string, options Re
 		if err != nil {
 			return AgentRecallResult{}, err
 		}
-		return AgentRecallResult{Query: searchQuery, SelectedIDs: selectedIDs, Matches: matches, Request: request, Response: response, Fallback: fallback}, nil
+		if len(matches) > 0 {
+			return AgentRecallResult{Query: searchQuery, SelectedIDs: selectedIDs, Matches: matches, Request: request, Response: response, Fallback: fallback}, nil
+		}
+		fallback = true
 	}
 	matches, err := RecallSessionSummaries(root, searchQuery, options)
 	if err != nil {
