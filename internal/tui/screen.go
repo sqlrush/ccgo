@@ -44,6 +44,9 @@ type REPLScreen struct {
 	VimCount             int
 	VimPendingCount      int
 	VimPendingReplace    bool
+	VimInsertedText      string
+	VimLastChange        vimRecordedChange
+	VimReplayingChange   bool
 	VimRegister          string
 	VimRegisterLinewise  bool
 	VimUndoStack         []vimPromptSnapshot

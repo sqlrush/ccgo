@@ -1082,6 +1082,52 @@ func TestREPLScreenVimEditCommands(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimDotRepeatsChanges(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abcd")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "x", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "cd" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after x. screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abcd")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "r", "x", "l", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "xxcd" || screen.Prompt.Cursor != 1 {
+		t.Fatalf("after r/l/. screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "d", "w", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "gamma" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after dw. screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimDotRepeatsInsert(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	for _, seq := range []string{"a", "b", "\x1b", "$", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "abab" || screen.Prompt.Cursor != len([]rune("abab")) {
+		t.Fatalf("after insert dot repeat screen = %#v", screen)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()

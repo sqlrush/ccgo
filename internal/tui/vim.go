@@ -21,6 +21,19 @@ type vimPromptSnapshot struct {
 	NextPastedID   int
 }
 
+type vimRecordedChange struct {
+	Kind     string
+	Text     string
+	Operator rune
+	Motion   rune
+	Count    int
+	Target   rune
+	Scope    rune
+	Object   rune
+	Dir      rune
+	Below    bool
+}
+
 func (s *REPLScreen) SetVimEnabled(enabled bool) {
 	s.VimEnabled = enabled
 	if s.VimMode == "" {
@@ -37,10 +50,15 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	}
 	if s.VimMode == VimInsert {
 		if key.Type == KeyEsc {
+			if s.VimInsertedText != "" {
+				s.recordVimChange(vimRecordedChange{Kind: "insert", Text: s.VimInsertedText})
+			}
 			s.VimMode = VimNormal
 			s.clearVimPending()
+			s.VimInsertedText = ""
 			return ScreenEvent{}, true
 		}
+		s.trackVimInsertedText(key)
 		return ScreenEvent{}, false
 	}
 	switch key.Type {
@@ -107,10 +125,12 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	count := s.takeVimCount()
 	switch r {
 	case 'i':
-		s.VimMode = VimInsert
+		s.enterVimInsert()
 		s.clearVimPending()
 	case 'u':
 		s.undoVimPrompt()
+	case '.':
+		s.replayVimLastChange()
 	case 'r':
 		s.VimPendingReplace = true
 		s.VimPendingCount = count
@@ -130,9 +150,11 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case '~':
 		s.recordVimUndo()
 		s.Prompt.toggleCase(count)
+		s.recordVimChange(vimRecordedChange{Kind: "toggleCase", Count: count})
 	case 'J':
 		s.recordVimUndo()
 		s.Prompt.joinLines(count)
+		s.recordVimChange(vimRecordedChange{Kind: "join", Count: count})
 	case 'd', 'c', 'y':
 		s.VimPendingOperator = r
 		s.VimPendingCount = count
@@ -142,21 +164,23 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.applyVimPaste(r == 'p', count)
 	case 'a':
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
-		s.VimMode = VimInsert
+		s.enterVimInsert()
 	case 'I':
 		s.Prompt.Apply(Key{Type: KeyHome})
-		s.VimMode = VimInsert
+		s.enterVimInsert()
 	case 'A':
 		s.Prompt.Apply(Key{Type: KeyEnd})
-		s.VimMode = VimInsert
+		s.enterVimInsert()
 	case 'o':
 		s.recordVimUndo()
 		s.Prompt.openLine(true)
-		s.VimMode = VimInsert
+		s.recordVimChange(vimRecordedChange{Kind: "openLine", Below: true})
+		s.enterVimInsert()
 	case 'O':
 		s.recordVimUndo()
 		s.Prompt.openLine(false)
-		s.VimMode = VimInsert
+		s.recordVimChange(vimRecordedChange{Kind: "openLine", Below: false})
+		s.enterVimInsert()
 	case 'h':
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyLeft}) })
 	case 'l':
@@ -180,9 +204,11 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case 'x':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
+		s.recordVimChange(vimRecordedChange{Kind: "x", Count: count})
 	case 'X':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
+		s.recordVimChange(vimRecordedChange{Kind: "X", Count: count})
 	case 'D':
 		s.applyVimMotionOperator('d', '$', 1)
 	case 'C':
@@ -213,7 +239,7 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.VimPendingTextObject = r
 		s.VimPendingCount = count
 	case 'G':
-		s.applyVimLineMotionOperator(operator, vimGTargetLine(s.Prompt.lineCount(), count))
+		s.applyVimLineMotionOperator(operator, vimGTargetLine(s.Prompt.lineCount(), count), 'G', count)
 	case 'g':
 		s.VimPendingOperator = operator
 		s.VimPendingG = true
@@ -248,18 +274,18 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 			s.Prompt.goToLine(targetLine)
 			return ScreenEvent{}
 		}
-		s.applyVimLineMotionOperator(operator, targetLine)
+		s.applyVimLineMotionOperator(operator, targetLine, 'g', count)
 	case 'j':
 		if operator == 0 {
 			s.Prompt.moveLogicalLine(count)
 		} else {
-			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()+count+1)
+			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()+count+1, 'j', count)
 		}
 	case 'k':
 		if operator == 0 {
 			s.Prompt.moveLogicalLine(-count)
 		} else {
-			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()-count+1)
+			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()-count+1, 'k', count)
 		}
 	}
 	return ScreenEvent{}
@@ -274,6 +300,7 @@ func (s *REPLScreen) applyVimIndent(r rune) ScreenEvent {
 	}
 	s.recordVimUndo()
 	s.Prompt.indentLines(dir, count)
+	s.recordVimChange(vimRecordedChange{Kind: "indent", Dir: dir, Count: count})
 	return ScreenEvent{}
 }
 
@@ -292,6 +319,7 @@ func (s *REPLScreen) applyVimTextObject(obj rune) ScreenEvent {
 		return ScreenEvent{}
 	}
 	s.applyVimRangeOperator(operator, start, end, false)
+	s.recordVimChange(vimRecordedChange{Kind: "operatorTextObj", Operator: operator, Scope: scope, Object: obj, Count: count})
 	return ScreenEvent{}
 }
 
@@ -319,6 +347,7 @@ func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
 	}
 	from, to := vimCharMotionRange(start, end, motion)
 	s.applyVimRangeOperator(operator, from, to, false)
+	s.recordVimChange(vimRecordedChange{Kind: "operatorFind", Operator: operator, Motion: motion, Target: target, Count: count})
 	return ScreenEvent{}
 }
 
@@ -341,14 +370,16 @@ func (s *REPLScreen) applyVimMotionOperator(operator rune, motion rune, count in
 		return
 	}
 	s.applyVimRangeOperator(operator, start, end, linewise)
+	s.recordVimChange(vimRecordedChange{Kind: "operator", Operator: operator, Motion: motion, Count: count})
 }
 
-func (s *REPLScreen) applyVimLineMotionOperator(operator rune, targetLine int) {
+func (s *REPLScreen) applyVimLineMotionOperator(operator rune, targetLine int, motion rune, count int) {
 	start, end, ok := s.Prompt.lineMotionRange(targetLine)
 	if !ok {
 		return
 	}
 	s.applyVimRangeOperator(operator, start, end, true)
+	s.recordVimChange(vimRecordedChange{Kind: "operatorLineMotion", Operator: operator, Motion: motion, Count: count})
 }
 
 func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
@@ -366,9 +397,10 @@ func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
 		}
 		s.Prompt.deleteRange(deleteStart, end)
 		if operator == 'c' {
-			s.VimMode = VimInsert
+			s.enterVimInsert()
 		}
 	}
+	s.recordVimChange(vimRecordedChange{Kind: "lineOperator", Operator: operator, Count: count})
 }
 
 func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, linewise bool) {
@@ -387,7 +419,7 @@ func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, li
 		}
 		s.Prompt.deleteRange(deleteStart, end)
 		if operator == 'c' {
-			s.VimMode = VimInsert
+			s.enterVimInsert()
 		}
 	}
 }
@@ -449,7 +481,109 @@ func (s *REPLScreen) applyVimReplace(r rune) ScreenEvent {
 	s.clearVimPending()
 	s.recordVimUndo()
 	s.Prompt.replaceRunes(count, r)
+	s.recordVimChange(vimRecordedChange{Kind: "replace", Target: r, Count: count})
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) enterVimInsert() {
+	s.VimMode = VimInsert
+	s.VimInsertedText = ""
+}
+
+func (s *REPLScreen) trackVimInsertedText(key Key) {
+	switch key.Type {
+	case KeyRune:
+		s.VimInsertedText += string(key.Rune)
+	case KeyPaste:
+		s.VimInsertedText += key.Text
+	case KeyBackspace:
+		runes := []rune(s.VimInsertedText)
+		if len(runes) > 0 {
+			s.VimInsertedText = string(runes[:len(runes)-1])
+		}
+	}
+}
+
+func (s *REPLScreen) recordVimChange(change vimRecordedChange) {
+	if s.VimReplayingChange || change.Kind == "" {
+		return
+	}
+	if change.Count <= 0 {
+		change.Count = 1
+	}
+	s.VimLastChange = change
+}
+
+func (s *REPLScreen) replayVimLastChange() {
+	change := s.VimLastChange
+	if change.Kind == "" {
+		return
+	}
+	s.VimReplayingChange = true
+	defer func() { s.VimReplayingChange = false }()
+	switch change.Kind {
+	case "insert":
+		if change.Text == "" {
+			return
+		}
+		s.recordVimUndo()
+		s.Prompt.insertText(change.Text)
+	case "x":
+		s.recordVimUndo()
+		applyN(change.Count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
+	case "X":
+		s.recordVimUndo()
+		applyN(change.Count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
+	case "replace":
+		s.recordVimUndo()
+		s.Prompt.replaceRunes(change.Count, change.Target)
+	case "toggleCase":
+		s.recordVimUndo()
+		s.Prompt.toggleCase(change.Count)
+	case "join":
+		s.recordVimUndo()
+		s.Prompt.joinLines(change.Count)
+	case "indent":
+		s.recordVimUndo()
+		s.Prompt.indentLines(change.Dir, change.Count)
+	case "openLine":
+		s.recordVimUndo()
+		s.Prompt.openLine(change.Below)
+		s.enterVimInsert()
+	case "operator":
+		s.applyVimMotionOperator(change.Operator, change.Motion, change.Count)
+	case "operatorLineMotion":
+		switch change.Motion {
+		case 'G':
+			s.applyVimLineMotionOperator(change.Operator, vimGTargetLine(s.Prompt.lineCount(), change.Count), change.Motion, change.Count)
+		case 'g':
+			targetLine := 1
+			if change.Count > 1 {
+				targetLine = change.Count
+			}
+			s.applyVimLineMotionOperator(change.Operator, targetLine, change.Motion, change.Count)
+		case 'j':
+			s.applyVimLineMotionOperator(change.Operator, s.Prompt.currentLogicalLine()+change.Count+1, change.Motion, change.Count)
+		case 'k':
+			s.applyVimLineMotionOperator(change.Operator, s.Prompt.currentLogicalLine()-change.Count+1, change.Motion, change.Count)
+		}
+	case "lineOperator":
+		s.applyVimLineOperator(change.Operator, change.Count)
+	case "operatorFind":
+		start := s.Prompt.Cursor
+		end, ok := s.Prompt.findCharMotion(change.Motion, change.Target, change.Count)
+		if !ok {
+			return
+		}
+		from, to := vimCharMotionRange(start, end, change.Motion)
+		s.applyVimRangeOperator(change.Operator, from, to, false)
+	case "operatorTextObj":
+		start, end, ok := s.Prompt.findTextObjectRange(change.Scope, change.Object, change.Count)
+		if !ok {
+			return
+		}
+		s.applyVimRangeOperator(change.Operator, start, end, false)
+	}
 }
 
 func (s *REPLScreen) takeVimCount() int {
