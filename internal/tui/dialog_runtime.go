@@ -139,6 +139,25 @@ func (r *DialogRuntime) StatusLine(base string) string {
 	return strings.Join(parts, " | ")
 }
 
+func (r *DialogRuntime) ApplyToScreen(screen *REPLScreen, baseStatus string) {
+	if screen == nil {
+		return
+	}
+	screen.Status = r.StatusLine(baseStatus)
+	if r.Active == nil {
+		screen.Dialog = nil
+		return
+	}
+	dialog := *r.Active
+	screen.Dialog = &dialog
+}
+
+func (r *DialogRuntime) ResolveScreenEvent(screen *REPLScreen, event ScreenEvent, baseStatus string) DialogResult {
+	result := r.Resolve(event)
+	r.ApplyToScreen(screen, baseStatus)
+	return result
+}
+
 func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 	if event.Type != ScreenEventDialogAction && event.Type != ScreenEventCancelled {
 		return DialogResult{}

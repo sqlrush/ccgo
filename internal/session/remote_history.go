@@ -22,6 +22,18 @@ type RemoteHistoryPage struct {
 	HasMore bool
 }
 
+type RemoteHistoryFetchOptions struct {
+	Limit    int
+	MaxPages int
+}
+
+type RemoteHistoryEvents struct {
+	Events       []contracts.SDKEvent
+	Pages        int
+	Complete     bool
+	NextBeforeID string
+}
+
 type RemoteHistoryAuthContext struct {
 	BaseURL string
 	Headers http.Header
@@ -101,6 +113,38 @@ func FetchOlderEventsWithTokenRefresh(ctx context.Context, client *http.Client, 
 	return fetchRemoteHistoryPageWithTokenRefresh(ctx, client, authCtx, provider, OlderEventsQuery(beforeID, limit))
 }
 
+func FetchRemoteHistory(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, options RemoteHistoryFetchOptions) (*RemoteHistoryEvents, error) {
+	return fetchRemoteHistory(ctx, func(query url.Values) (*RemoteHistoryPage, error) {
+		return fetchRemoteHistoryPage(ctx, client, authCtx, query)
+	}, options)
+}
+
+func FetchRemoteHistoryWithTokenRefresh(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, provider RemoteHistoryTokenProvider, options RemoteHistoryFetchOptions) (*RemoteHistoryEvents, error) {
+	if provider == nil {
+		return FetchRemoteHistory(ctx, client, authCtx, options)
+	}
+	pageAuthCtx := authCtx
+	return fetchRemoteHistory(ctx, func(query url.Values) (*RemoteHistoryPage, error) {
+		if pageAuthCtx.Headers.Get("Authorization") == "" {
+			token, err := provider.CurrentAccessToken(ctx)
+			if err != nil {
+				return nil, err
+			}
+			pageAuthCtx = pageAuthCtx.WithAccessToken(token)
+		}
+		page, status, err := fetchRemoteHistoryPageStatus(ctx, client, pageAuthCtx, query)
+		if err != nil || status != http.StatusUnauthorized {
+			return page, err
+		}
+		token, err := provider.RefreshAccessToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		pageAuthCtx = pageAuthCtx.WithAccessToken(token)
+		return fetchRemoteHistoryPage(ctx, client, pageAuthCtx, query)
+	}, options)
+}
+
 func fetchRemoteHistoryPage(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, query url.Values) (*RemoteHistoryPage, error) {
 	page, _, err := fetchRemoteHistoryPageStatus(ctx, client, authCtx, query)
 	return page, err
@@ -126,6 +170,44 @@ func fetchRemoteHistoryPageWithTokenRefresh(ctx context.Context, client *http.Cl
 		return nil, err
 	}
 	return fetchRemoteHistoryPage(ctx, client, authCtx.WithAccessToken(token), query)
+}
+
+func fetchRemoteHistory(ctx context.Context, fetchPage func(url.Values) (*RemoteHistoryPage, error), options RemoteHistoryFetchOptions) (*RemoteHistoryEvents, error) {
+	if fetchPage == nil {
+		return &RemoteHistoryEvents{Events: []contracts.SDKEvent{}}, nil
+	}
+	limit := options.Limit
+	if limit <= 0 {
+		limit = RemoteHistoryPageSize
+	}
+	result := &RemoteHistoryEvents{Events: []contracts.SDKEvent{}}
+	query := LatestEventsQuery(limit)
+	for {
+		if ctx.Err() != nil {
+			return result, ctx.Err()
+		}
+		if options.MaxPages > 0 && result.Pages >= options.MaxPages {
+			result.Complete = false
+			return result, nil
+		}
+		page, err := fetchPage(query)
+		if err != nil {
+			return result, err
+		}
+		if page == nil {
+			result.Complete = false
+			return result, nil
+		}
+		result.Pages++
+		result.Events = append(result.Events, page.Events...)
+		result.NextBeforeID = page.FirstID
+		if !page.HasMore || page.FirstID == "" {
+			result.Complete = true
+			result.NextBeforeID = ""
+			return result, nil
+		}
+		query = OlderEventsQuery(page.FirstID, limit)
+	}
 }
 
 func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, query url.Values) (*RemoteHistoryPage, int, error) {

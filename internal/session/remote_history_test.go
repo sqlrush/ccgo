@@ -134,3 +134,86 @@ func TestFetchRemoteHistoryRefreshesTokenOnUnauthorized(t *testing.T) {
 		t.Fatalf("refreshes=%d tokens=%#v", provider.refreshes, tokens)
 	}
 }
+
+func TestFetchRemoteHistoryPagesUntilComplete(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"has_more":true,"first_id":"evt_2"}`))
+		case "evt_2":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"has_more":false,"first_id":"evt_1"}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if len(events.Events) != 2 || events.Events[0].Status != "latest" || events.Events[1].Status != "older" {
+		t.Fatalf("event order = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[0].Get("anchor_to_latest") != "true" || seen[1].Get("before_id") != "evt_2" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
+func TestFetchRemoteHistoryStopsAtMaxPages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"page"}],"has_more":true,"first_id":"evt_next"}`))
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 1, MaxPages: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events.Complete || events.Pages != 1 || events.NextBeforeID != "evt_next" || len(events.Events) != 1 {
+		t.Fatalf("events = %#v", events)
+	}
+}
+
+func TestFetchRemoteHistoryRefreshesTokenAcrossPages(t *testing.T) {
+	var tokens []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokens = append(tokens, r.Header.Get("Authorization"))
+		if r.URL.Query().Get("before_id") == "evt_2" && r.Header.Get("Authorization") == "Bearer stale" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"has_more":true,"first_id":"evt_2"}`))
+		case "evt_2":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"has_more":false,"first_id":"evt_1"}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	provider := &testRemoteTokenProvider{current: "stale", refreshed: "fresh"}
+	authCtx := NewRemoteHistoryAuthContext("s", "", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistoryWithTokenRefresh(context.Background(), server.Client(), authCtx, provider, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || len(events.Events) != 2 || provider.refreshes != 1 {
+		t.Fatalf("events = %#v refreshes=%d", events, provider.refreshes)
+	}
+	if got := strings.Join(tokens, ","); got != "Bearer stale,Bearer stale,Bearer fresh" {
+		t.Fatalf("tokens = %s", got)
+	}
+}

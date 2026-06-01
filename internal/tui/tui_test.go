@@ -440,6 +440,37 @@ func TestDialogRuntimeTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeAppliesToScreenAndResolvesEvents(t *testing.T) {
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(40, 8, nil)
+	runtime.StartTask("task_1", "Search", "running ripgrep")
+	runtime.RequestPermission(PermissionRequest{ID: "perm_1", ToolName: "Bash", Path: "/tmp/project"})
+	runtime.ApplyToScreen(&screen, "ready")
+	if screen.Dialog == nil || screen.Dialog.ID != "perm_1" || screen.Dialog.Kind != DialogPermission {
+		t.Fatalf("screen dialog = %#v", screen.Dialog)
+	}
+	if !strings.Contains(screen.Status, "ready") || !strings.Contains(screen.Status, "permissions: 1") || !strings.Contains(screen.Status, "running: 1") {
+		t.Fatalf("status = %q", screen.Status)
+	}
+	screen.ApplyKey(ParseKey("\t"))
+	event := screen.ApplyKey(ParseKey("\n"))
+	result := runtime.ResolveScreenEvent(&screen, event, "ready")
+	if !result.Found || result.Status != DialogResultAllowed || result.Action != "Allow Session" {
+		t.Fatalf("result = %#v", result)
+	}
+	if screen.Dialog != nil {
+		t.Fatalf("dialog should be cleared: %#v", screen.Dialog)
+	}
+	if strings.Contains(screen.Status, "permissions:") || !strings.Contains(screen.Status, "running: 1") {
+		t.Fatalf("status after resolve = %q", screen.Status)
+	}
+	runtime.CompleteTask("task_1", "done")
+	runtime.ApplyToScreen(&screen, "ready")
+	if !strings.Contains(screen.Status, "completed: 1") {
+		t.Fatalf("completed status = %q", screen.Status)
+	}
+}
+
 func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
