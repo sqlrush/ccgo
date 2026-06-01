@@ -213,6 +213,10 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
 		s.recordVimChange(vimRecordedChange{Kind: "X", Count: count})
+	case 's':
+		s.applyVimSubstitute(count)
+	case 'S':
+		s.applyVimLineOperator('c', count)
 	case 'D':
 		s.applyVimMotionOperator('d', '$', 1)
 	case 'C':
@@ -407,6 +411,23 @@ func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
 	s.recordVimChange(vimRecordedChange{Kind: "lineOperator", Operator: operator, Count: count})
 }
 
+func (s *REPLScreen) applyVimSubstitute(count int) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(s.Prompt.Text)
+	start := s.Prompt.clampCursor(s.Prompt.Cursor)
+	end := start + count
+	if end > len(runes) {
+		end = len(runes)
+	}
+	s.setVimRegister(s.Prompt.rangeText(start, end), false)
+	s.recordVimUndo()
+	s.Prompt.deleteRange(start, end)
+	s.recordVimChange(vimRecordedChange{Kind: "substitute", Count: count})
+	s.enterVimInsert()
+}
+
 func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, linewise bool) {
 	s.setVimRegister(s.Prompt.rangeText(start, end), linewise)
 	switch operator {
@@ -573,6 +594,8 @@ func (s *REPLScreen) replayVimLastChange() {
 		}
 	case "lineOperator":
 		s.applyVimLineOperator(change.Operator, change.Count)
+	case "substitute":
+		s.applyVimSubstitute(change.Count)
 	case "operatorFind":
 		start := s.Prompt.Cursor
 		end, ok := s.Prompt.findCharMotion(change.Motion, change.Target, change.Count)

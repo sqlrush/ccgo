@@ -1221,6 +1221,33 @@ func TestREPLScreenVimEditCommands(t *testing.T) {
 	if screen.Prompt.Text != "one\ntwo" || screen.Prompt.Cursor != 0 {
 		t.Fatalf("after >> << screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abcd")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "2", "s"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "cd" || screen.Prompt.Cursor != 0 || screen.VimRegister != "ab" || screen.VimRegisterLinewise {
+		t.Fatalf("after 2s screen = %#v", screen)
+	}
+	typePromptText(&screen, "X")
+	screen.ApplyKey(ParseKey("\x1b"))
+	if screen.Prompt.Text != "Xcd" {
+		t.Fatalf("after 2s insert screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"G", "S"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\ntwo\n" || screen.Prompt.Cursor != len([]rune("one\ntwo\n")) || screen.VimRegister != "three\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after S screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimDotRepeatsChanges(t *testing.T) {
