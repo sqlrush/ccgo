@@ -25,6 +25,7 @@ type RemoteHistoryPage struct {
 type RemoteHistoryFetchOptions struct {
 	Limit    int
 	MaxPages int
+	BeforeID string
 }
 
 type RemoteHistoryEvents struct {
@@ -182,6 +183,9 @@ func fetchRemoteHistory(ctx context.Context, fetchPage func(url.Values) (*Remote
 	}
 	result := &RemoteHistoryEvents{Events: []contracts.SDKEvent{}}
 	query := LatestEventsQuery(limit)
+	if options.BeforeID != "" {
+		query = OlderEventsQuery(options.BeforeID, limit)
+	}
 	for {
 		if ctx.Err() != nil {
 			return result, ctx.Err()

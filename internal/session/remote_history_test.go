@@ -186,6 +186,34 @@ func TestFetchRemoteHistoryStopsAtMaxPages(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryResumesFromBeforeID(t *testing.T) {
+	var seen url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.URL.Query()
+		if seen.Get("anchor_to_latest") != "" {
+			t.Fatalf("resume query should not anchor to latest: %s", seen.Encode())
+		}
+		if seen.Get("before_id") != "evt_resume" {
+			t.Fatalf("before_id = %q", seen.Get("before_id"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"has_more":false,"first_id":"evt_old"}`))
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3, BeforeID: "evt_resume"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 1 || events.NextBeforeID != "" || len(events.Events) != 1 || events.Events[0].Status != "older" {
+		t.Fatalf("events = %#v", events)
+	}
+	if seen.Get("limit") != "3" {
+		t.Fatalf("limit = %q", seen.Get("limit"))
+	}
+}
+
 func TestFetchRemoteHistoryRefreshesTokenAcrossPages(t *testing.T) {
 	var tokens []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
