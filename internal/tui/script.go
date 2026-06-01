@@ -17,6 +17,7 @@ type ScriptStep struct {
 	ExpectDialog           *DialogExpectation
 	ExpectPrompt           *PromptExpectation
 	ExpectVim              *VimExpectation
+	ExpectTasks            *TasksExpectation
 	ExpectReverseSearch    *ReverseSearchExpectation
 	ExpectViewport         *ViewportExpectation
 	ExpectFocused          *bool
@@ -43,6 +44,20 @@ type VimExpectation struct {
 	Mode             VimMode
 	Register         string
 	RegisterLinewise *bool
+}
+
+type TasksExpectation struct {
+	Count       *int
+	StateCounts map[string]int
+	Contains    []TaskExpectation
+}
+
+type TaskExpectation struct {
+	ID       string
+	Title    string
+	State    string
+	Detail   string
+	Progress *int
 }
 
 type ViewportExpectation struct {
@@ -147,6 +162,14 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, err
 			}
 		}
+		if step.ExpectTasks != nil {
+			if runtime == nil {
+				return result, dialogResults, fmt.Errorf("script step %d tasks expectation requires dialog runtime", index)
+			}
+			if err := compareTasks(index, runtime, *step.ExpectTasks); err != nil {
+				return result, dialogResults, err
+			}
+		}
 		if step.ExpectReverseSearch != nil {
 			if err := compareReverseSearch(index, screen.ReverseSearch, *step.ExpectReverseSearch); err != nil {
 				return result, dialogResults, err
@@ -219,6 +242,65 @@ func compareVim(index int, got REPLScreen, want VimExpectation) error {
 		return fmt.Errorf("script step %d vim register linewise = %v, want %v", index, got.VimRegisterLinewise, *want.RegisterLinewise)
 	}
 	return nil
+}
+
+func compareTasks(index int, runtime *DialogRuntime, want TasksExpectation) error {
+	if want.Count != nil && len(runtime.Tasks) != *want.Count {
+		return fmt.Errorf("script step %d task count = %d, want %d", index, len(runtime.Tasks), *want.Count)
+	}
+	if len(want.StateCounts) > 0 {
+		gotCounts := map[string]int{}
+		for _, task := range runtime.Tasks {
+			gotCounts[normalizedTaskState(task)]++
+		}
+		for state, count := range want.StateCounts {
+			if gotCounts[state] != count {
+				return fmt.Errorf("script step %d task state %q count = %d, want %d", index, state, gotCounts[state], count)
+			}
+		}
+	}
+	for _, expected := range want.Contains {
+		task, ok := findExpectedTask(runtime, expected)
+		if !ok {
+			return fmt.Errorf("script step %d task missing id=%q title=%q", index, expected.ID, expected.Title)
+		}
+		if expected.Title != "" && task.Title != expected.Title {
+			return fmt.Errorf("script step %d task %q title = %q, want %q", index, task.ID, task.Title, expected.Title)
+		}
+		if expected.State != "" && normalizedTaskState(task) != expected.State {
+			return fmt.Errorf("script step %d task %q state = %q, want %q", index, task.ID, normalizedTaskState(task), expected.State)
+		}
+		if expected.Detail != "" && task.Detail != expected.Detail {
+			return fmt.Errorf("script step %d task %q detail = %q, want %q", index, task.ID, task.Detail, expected.Detail)
+		}
+		if expected.Progress != nil && task.Progress != *expected.Progress {
+			return fmt.Errorf("script step %d task %q progress = %d, want %d", index, task.ID, task.Progress, *expected.Progress)
+		}
+	}
+	return nil
+}
+
+func findExpectedTask(runtime *DialogRuntime, want TaskExpectation) (TaskStatus, bool) {
+	if want.ID != "" {
+		task, ok := runtime.Tasks[want.ID]
+		return task, ok
+	}
+	if want.Title == "" {
+		return TaskStatus{}, false
+	}
+	for _, task := range runtime.Tasks {
+		if task.Title == want.Title {
+			return task, true
+		}
+	}
+	return TaskStatus{}, false
+}
+
+func normalizedTaskState(task TaskStatus) string {
+	if task.State == "" {
+		return TaskPending
+	}
+	return task.State
 }
 
 func comparePrompt(index int, got PromptState, want PromptExpectation) error {

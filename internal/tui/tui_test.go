@@ -549,6 +549,64 @@ func TestDialogRuntimeInteractionScriptResolvesPermissionFlow(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeInteractionScriptChecksTasks(t *testing.T) {
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(52, 9, nil)
+	runtime.StartTask("task_1", "Search", "starting")
+	runtime.UpdateTaskProgress("task_1", "halfway", 50)
+	runtime.CompleteTask("task_2", "summarized")
+	count := 2
+	progress := 50
+	completed := 100
+	taskChecks := &TasksExpectation{
+		Count: &count,
+		StateCounts: map[string]int{
+			TaskRunning:   1,
+			TaskCompleted: 1,
+		},
+		Contains: []TaskExpectation{
+			{ID: "task_1", Title: "Search", State: TaskRunning, Detail: "halfway", Progress: &progress},
+			{ID: "task_2", Title: "task_2", State: TaskCompleted, Detail: "summarized", Progress: &completed},
+		},
+	}
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", []ScriptStep{
+		{
+			ExpectTasks:          taskChecks,
+			ExpectStatusContains: []string{"ready", "running: 1", "completed: 1"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 0 {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	runtime.OpenTasksDialog()
+	result, err = RunDialogRuntimeScriptChecked(&screen, runtime, "ready", []ScriptStep{
+		{
+			ExpectDialog: &DialogExpectation{Active: true, ID: "tasks", Kind: DialogTask, Title: "Tasks"},
+			ExpectTasks:  taskChecks,
+			ExpectSnapshotContains: []string{
+				"Search [running] 50% - halfway",
+				"task_2 [completed] 100% - summarized",
+			},
+		},
+		{
+			Key:                  "\n",
+			ExpectEvent:          &ScreenEvent{Type: ScreenEventDialogAction, Value: "Close", DialogID: "tasks", DialogKind: DialogTask},
+			ExpectDialog:         &DialogExpectation{Active: false},
+			ExpectTasks:          taskChecks,
+			ExpectStatusContains: []string{"ready", "running: 1", "completed: 1"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultClosed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
