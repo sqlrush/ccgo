@@ -214,6 +214,18 @@ func TestViewportScrollsAndClamps(t *testing.T) {
 	if got := strings.Join(v.Visible(), ","); got != "3,4,5" {
 		t.Fatalf("paged visible = %s", got)
 	}
+	v.HalfPage(-1)
+	if got := strings.Join(v.Visible(), ","); got != "2,3,4" {
+		t.Fatalf("half-paged visible = %s", got)
+	}
+	v.ScrollToTop()
+	if got := strings.Join(v.Visible(), ","); got != "1,2,3" {
+		t.Fatalf("top visible = %s", got)
+	}
+	v.ScrollToBottom()
+	if got := strings.Join(v.Visible(), ","); got != "3,4,5" {
+		t.Fatalf("bottom visible after top = %s", got)
+	}
 }
 
 func TestSelectionMovesAndRendersFocus(t *testing.T) {
@@ -755,6 +767,51 @@ func TestREPLScreenViewportScrolls(t *testing.T) {
 	statusClick := screen.ApplyKey(ParseKey("\x1b[<0;1;5M"))
 	if statusClick.Type != ScreenEventNone {
 		t.Fatalf("status click should not select viewport: %#v", statusClick)
+	}
+}
+
+func TestREPLScreenConfiguredViewportScrollActions(t *testing.T) {
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
+		{Key: "ctrl-u", Action: ActionHalfPageUp},
+		{Key: "ctrl-k", Action: ActionHalfPageDown},
+		{Key: "ctrl-b", Action: ActionScrollToTop},
+		{Key: "ctrl-f", Action: ActionScrollToBottom},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(20, 6, nil)
+	screen.Keymap = keymap
+	screen.SetMessages([]Message{
+		{Role: RoleSystem, Text: "one"},
+		{Role: RoleSystem, Text: "two"},
+		{Role: RoleSystem, Text: "three"},
+		{Role: RoleSystem, Text: "four"},
+		{Role: RoleSystem, Text: "five"},
+		{Role: RoleSystem, Text: "six"},
+		{Role: RoleSystem, Text: "seven"},
+		{Role: RoleSystem, Text: "eight"},
+	})
+
+	bottom := maxViewportOffset(screen.Viewport)
+	if screen.Viewport.Offset != bottom {
+		t.Fatalf("initial offset = %d, want bottom %d", screen.Viewport.Offset, bottom)
+	}
+	screen.ApplyKey(ParseKey("\x15"))
+	if screen.Viewport.Offset != bottom-screen.Viewport.Height/2 {
+		t.Fatalf("half-page up offset = %d", screen.Viewport.Offset)
+	}
+	screen.ApplyKey(ParseKey("\x02"))
+	if screen.Viewport.Offset != 0 {
+		t.Fatalf("scroll to top offset = %d", screen.Viewport.Offset)
+	}
+	screen.ApplyKey(ParseKey("\x0b"))
+	if screen.Viewport.Offset != screen.Viewport.Height/2 {
+		t.Fatalf("half-page down offset = %d", screen.Viewport.Offset)
+	}
+	screen.ApplyKey(ParseKey("\x06"))
+	if screen.Viewport.Offset != bottom {
+		t.Fatalf("scroll to bottom offset = %d, want %d", screen.Viewport.Offset, bottom)
 	}
 }
 

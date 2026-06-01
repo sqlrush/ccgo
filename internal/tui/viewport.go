@@ -30,6 +30,18 @@ func (v *Viewport) Page(delta int) {
 	v.Scroll(delta * step)
 }
 
+func (v *Viewport) HalfPage(delta int) {
+	step := v.Height / 2
+	if step <= 0 {
+		step = 1
+	}
+	v.Scroll(delta * step)
+}
+
+func (v *Viewport) ScrollToTop() {
+	v.Offset = 0
+}
+
 func (v *Viewport) ScrollToBottom() {
 	v.Offset = len(v.Lines) - v.Height
 	v.clamp()

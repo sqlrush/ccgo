@@ -115,6 +115,14 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		s.Viewport.Page(-1)
 	case ActionPageDown:
 		s.Viewport.Page(1)
+	case ActionHalfPageUp:
+		s.Viewport.HalfPage(-1)
+	case ActionHalfPageDown:
+		s.Viewport.HalfPage(1)
+	case ActionScrollToTop:
+		s.Viewport.ScrollToTop()
+	case ActionScrollToBottom:
+		s.Viewport.ScrollToBottom()
 	case ActionReverseSearch:
 		s.OpenReverseSearch("")
 		return ScreenEvent{Type: ScreenEventReverseSearch}
