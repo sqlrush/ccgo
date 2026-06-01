@@ -298,6 +298,36 @@ func TestMemoryAgentExtractsFencedFactsFromModelProse(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsAlternateFactFieldNames(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_alt_fields",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"memory":[
+			{"type":"preference","content":"prefer compact diffs","sourceUuid":"user_1"},
+			{"fact_type":"request","summary":"revisit M7 input parity","source_id":"user_2"},
+			{"kind":"tool","text":"Used tool Read","uuid":"assistant_1"}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember prefer compact diffs")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 3 {
+		t.Fatalf("result = %#v", result)
+	}
+	if result.Facts[0].Kind != FactPreference || result.Facts[0].Text != "prefer compact diffs" || result.Facts[0].SourceUUID != "user_1" {
+		t.Fatalf("first fact = %#v", result.Facts[0])
+	}
+	if result.Facts[1].Kind != FactRequest || result.Facts[1].Text != "revisit M7 input parity" || result.Facts[1].SourceUUID != "user_2" {
+		t.Fatalf("second fact = %#v", result.Facts[1])
+	}
+	if result.Facts[2].Kind != FactTool || result.Facts[2].Text != "Used tool Read" || result.Facts[2].SourceUUID != "assistant_1" {
+		t.Fatalf("third fact = %#v", result.Facts[2])
+	}
+}
+
 func TestMemoryAgentRecallUsesModelQueryThenScoresLocalSummaries(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{Root: root, SessionID: "prior", Summary: "postgres permissions migration"}); err != nil {

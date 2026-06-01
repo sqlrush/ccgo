@@ -395,23 +395,11 @@ func parseFacts(raw string) ([]MemoryFact, error) {
 
 func parseFactsJSON(raw string) ([]MemoryFact, error) {
 	raw = strings.TrimSpace(raw)
-	var entries []struct {
-		Kind       string `json:"kind"`
-		Text       string `json:"text"`
-		SourceUUID string `json:"source_uuid"`
-	}
+	var entries []rawMemoryFact
 	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 		var object struct {
-			Facts []struct {
-				Kind       string `json:"kind"`
-				Text       string `json:"text"`
-				SourceUUID string `json:"source_uuid"`
-			} `json:"facts"`
-			Memory []struct {
-				Kind       string `json:"kind"`
-				Text       string `json:"text"`
-				SourceUUID string `json:"source_uuid"`
-			} `json:"memory"`
+			Facts  []rawMemoryFact `json:"facts"`
+			Memory []rawMemoryFact `json:"memory"`
 		}
 		if objectErr := json.Unmarshal([]byte(raw), &object); objectErr != nil {
 			return nil, err
@@ -423,19 +411,43 @@ func parseFactsJSON(raw string) ([]MemoryFact, error) {
 	}
 	var facts []MemoryFact
 	for _, entry := range entries {
-		kind := FactKind(strings.TrimSpace(entry.Kind))
+		kind := FactKind(strings.TrimSpace(firstNonEmpty(entry.Kind, entry.Type, entry.FactType)))
 		switch kind {
 		case FactPreference, FactRequest, FactDecision, FactTool:
 		default:
 			continue
 		}
-		text := strings.TrimSpace(entry.Text)
+		text := strings.TrimSpace(firstNonEmpty(entry.Text, entry.Content, entry.Summary))
 		if text == "" {
 			continue
 		}
-		facts = append(facts, MemoryFact{Kind: kind, Text: text, SourceUUID: contracts.ID(entry.SourceUUID)})
+		sourceUUID := firstNonEmpty(entry.SourceUUID, entry.SourceUUIDCamel, entry.SourceID, entry.UUID)
+		facts = append(facts, MemoryFact{Kind: kind, Text: text, SourceUUID: contracts.ID(sourceUUID)})
 	}
 	return facts, nil
+}
+
+type rawMemoryFact struct {
+	Kind            string `json:"kind"`
+	Type            string `json:"type"`
+	FactType        string `json:"fact_type"`
+	Text            string `json:"text"`
+	Content         string `json:"content"`
+	Summary         string `json:"summary"`
+	SourceUUID      string `json:"source_uuid"`
+	SourceUUIDCamel string `json:"sourceUuid"`
+	SourceID        string `json:"source_id"`
+	UUID            string `json:"uuid"`
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func responseText(response *anthropic.Response) string {
