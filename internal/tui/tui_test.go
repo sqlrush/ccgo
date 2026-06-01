@@ -609,6 +609,33 @@ func TestREPLScreenCtrlDDeletesForwardOrDoublePressExits(t *testing.T) {
 	}
 }
 
+func TestREPLScreenCtrlCInterruptThenDoublePressExits(t *testing.T) {
+	now := time.Unix(200, 0)
+	screen := NewREPLScreen(40, 8, nil)
+	screen.Now = func() time.Time { return now }
+	event := screen.ApplyKey(ParseKey("\x03"))
+	if event.Type != ScreenEventInterrupted {
+		t.Fatalf("first ctrl-c = %#v", event)
+	}
+	now = now.Add(DoublePressTimeout)
+	event = screen.ApplyKey(ParseKey("\x03"))
+	if event.Type != ScreenEventExit {
+		t.Fatalf("second ctrl-c = %#v", event)
+	}
+
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow"}}
+	now = now.Add(DoublePressTimeout + time.Millisecond)
+	event = screen.ApplyKey(ParseKey("\x03"))
+	if event.Type != ScreenEventExitPending || event.Value != "Ctrl-C" || screen.Dialog == nil {
+		t.Fatalf("dialog first ctrl-c = %#v dialog=%#v", event, screen.Dialog)
+	}
+	now = now.Add(time.Millisecond)
+	event = screen.ApplyKey(ParseKey("\x03"))
+	if event.Type != ScreenEventExit {
+		t.Fatalf("dialog second ctrl-c = %#v", event)
+	}
+}
+
 func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
 	runtime := NewDialogRuntime()
 	dialog := runtime.RequestPermission(PermissionRequest{ID: "perm_1", ToolName: "Write"})

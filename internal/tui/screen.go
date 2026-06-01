@@ -136,6 +136,12 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	if action == ActionKillAgents {
 		return ScreenEvent{Type: ScreenEventKillAgents}
 	}
+	if action == ActionInterrupt {
+		if s.Dialog != nil {
+			return s.applyDoublePressExit(KeyCtrlC)
+		}
+		return s.applyInterrupt()
+	}
 	if action == ActionExit {
 		if s.Dialog != nil || s.Prompt.Text == "" {
 			return s.applyDoublePressExit(KeyCtrlD)
@@ -171,8 +177,6 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		return ScreenEvent{Type: ScreenEventReverseSearch}
 	case ActionCancel:
 		return ScreenEvent{Type: ScreenEventCancelled}
-	case ActionInterrupt:
-		return ScreenEvent{Type: ScreenEventInterrupted}
 	default:
 		result := s.Prompt.Apply(keyForAction(action, key))
 		switch {
@@ -187,6 +191,18 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	return ScreenEvent{}
 }
 
+func (s *REPLScreen) applyInterrupt() ScreenEvent {
+	now := s.now()
+	if s.ExitPendingKey == KeyCtrlC && !s.ExitPendingAt.IsZero() && now.Sub(s.ExitPendingAt) <= DoublePressTimeout {
+		s.ExitPendingKey = ""
+		s.ExitPendingAt = time.Time{}
+		return ScreenEvent{Type: ScreenEventExit}
+	}
+	s.ExitPendingKey = KeyCtrlC
+	s.ExitPendingAt = now
+	return ScreenEvent{Type: ScreenEventInterrupted}
+}
+
 func (s *REPLScreen) applyDoublePressExit(key KeyType) ScreenEvent {
 	now := s.now()
 	if s.ExitPendingKey == key && !s.ExitPendingAt.IsZero() && now.Sub(s.ExitPendingAt) <= DoublePressTimeout {
@@ -196,7 +212,7 @@ func (s *REPLScreen) applyDoublePressExit(key KeyType) ScreenEvent {
 	}
 	s.ExitPendingKey = key
 	s.ExitPendingAt = now
-	return ScreenEvent{Type: ScreenEventExitPending, Value: "Ctrl-D"}
+	return ScreenEvent{Type: ScreenEventExitPending, Value: exitKeyDisplay(key)}
 }
 
 func (s *REPLScreen) now() time.Time {
@@ -204,6 +220,17 @@ func (s *REPLScreen) now() time.Time {
 		return s.Now()
 	}
 	return time.Now()
+}
+
+func exitKeyDisplay(key KeyType) string {
+	switch key {
+	case KeyCtrlC:
+		return "Ctrl-C"
+	case KeyCtrlD:
+		return "Ctrl-D"
+	default:
+		return string(key)
+	}
 }
 
 func (s *REPLScreen) OpenReverseSearch(query string) {
