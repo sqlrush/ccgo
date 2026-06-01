@@ -116,7 +116,7 @@ func (r Renderer) Render(frame Frame) string {
 
 func promptCursorColumn(frame Frame, width int) int {
 	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
-		col := len([]rune("(reverse-i-search) `")) + len([]rune(frame.ReverseSearch.Query)) + 1
+		col := len([]rune("(reverse-i-search) `")) + frame.ReverseSearch.Cursor + 1
 		if col < 1 {
 			return 1
 		}

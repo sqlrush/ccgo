@@ -18,6 +18,17 @@ const (
 	killRingPrepend killRingDirection = "prepend"
 )
 
+type killRingState struct {
+	ring              []string
+	index             int
+	lastActionWasKill bool
+	lastActionWasYank bool
+	lastYankStart     int
+	lastYankLength    int
+}
+
+var sharedKillRing killRingState
+
 type PromptState struct {
 	Text                string
 	Cursor              int
@@ -28,12 +39,6 @@ type PromptState struct {
 	NextPastedID        int
 	draft               string
 	draftPastedContents map[int]session.PastedContent
-	killRing            []string
-	killRingIndex       int
-	lastActionWasKill   bool
-	lastActionWasYank   bool
-	lastYankStart       int
-	lastYankLength      int
 }
 
 func NewPromptState(history []string) PromptState {
@@ -160,12 +165,7 @@ func parseSGRMouse(seq string) (Key, bool) {
 }
 
 func (p *PromptState) Apply(key Key) PromptResult {
-	if !isPromptKillKey(key.Type) {
-		p.lastActionWasKill = false
-	}
-	if !isPromptYankKey(key.Type) {
-		p.lastActionWasYank = false
-	}
+	sharedKillRing.trackKey(key.Type)
 	runes := []rune(p.Text)
 	if p.Cursor < 0 {
 		p.Cursor = 0
@@ -256,6 +256,10 @@ func isPromptYankKey(key KeyType) bool {
 	return key == KeyCtrlY || key == KeyAltY
 }
 
+func resetSharedKillRingForTesting() {
+	sharedKillRing = killRingState{}
+}
+
 func (p *PromptState) EnablePasteReferences() {
 	p.UsePasteReferences = true
 	p.resetPastedContents()
@@ -317,64 +321,97 @@ func (p *PromptState) insertText(text string) {
 }
 
 func (p *PromptState) pushToKillRing(text string, direction killRingDirection) {
+	sharedKillRing.push(text, direction)
+}
+
+func (r *killRingState) trackKey(key KeyType) {
+	if !isPromptKillKey(key) {
+		r.lastActionWasKill = false
+	}
+	if !isPromptYankKey(key) {
+		r.lastActionWasYank = false
+	}
+}
+
+func (r *killRingState) push(text string, direction killRingDirection) {
 	if text == "" {
 		return
 	}
-	if p.lastActionWasKill && len(p.killRing) > 0 {
+	if r.lastActionWasKill && len(r.ring) > 0 {
 		if direction == killRingPrepend {
-			p.killRing[0] = text + p.killRing[0]
+			r.ring[0] = text + r.ring[0]
 		} else {
-			p.killRing[0] += text
+			r.ring[0] += text
 		}
 	} else {
-		p.killRing = append([]string{text}, p.killRing...)
-		if len(p.killRing) > killRingMaxSize {
-			p.killRing = p.killRing[:killRingMaxSize]
+		r.ring = append([]string{text}, r.ring...)
+		if len(r.ring) > killRingMaxSize {
+			r.ring = r.ring[:killRingMaxSize]
 		}
 	}
-	p.killRingIndex = 0
-	p.lastActionWasKill = true
-	p.lastActionWasYank = false
+	r.index = 0
+	r.lastActionWasKill = true
+	r.lastActionWasYank = false
+}
+
+func (r killRingState) lastKill() string {
+	if len(r.ring) == 0 {
+		return ""
+	}
+	return r.ring[0]
+}
+
+func (r *killRingState) recordYank(start int, length int) {
+	r.index = 0
+	r.lastYankStart = start
+	r.lastYankLength = length
+	r.lastActionWasYank = true
+}
+
+func (r *killRingState) nextYankPop() (text string, start int, length int, ok bool) {
+	if !r.lastActionWasYank || len(r.ring) <= 1 {
+		return "", 0, 0, false
+	}
+	r.index = (r.index + 1) % len(r.ring)
+	return r.ring[r.index], r.lastYankStart, r.lastYankLength, true
+}
+
+func (r *killRingState) updateYankLength(length int) {
+	r.lastYankLength = length
+	r.lastActionWasYank = true
 }
 
 func (p *PromptState) yankLastKill() {
-	if len(p.killRing) == 0 || p.killRing[0] == "" {
+	text := sharedKillRing.lastKill()
+	if text == "" {
 		return
 	}
 	start := p.Cursor
-	text := p.killRing[0]
 	p.insertText(text)
-	p.killRingIndex = 0
-	p.lastYankStart = start
-	p.lastYankLength = len([]rune(text))
-	p.lastActionWasYank = true
+	sharedKillRing.recordYank(start, len([]rune(text)))
 }
 
 func (p *PromptState) yankPop() {
-	if !p.lastActionWasYank || len(p.killRing) <= 1 {
+	text, start, length, ok := sharedKillRing.nextYankPop()
+	if !ok {
 		return
 	}
 	runes := []rune(p.Text)
-	start := p.lastYankStart
 	if start < 0 {
 		start = 0
 	}
 	if start > len(runes) {
 		start = len(runes)
 	}
-	end := start + p.lastYankLength
+	end := start + length
 	if end > len(runes) {
 		end = len(runes)
 	}
-	p.killRingIndex = (p.killRingIndex + 1) % len(p.killRing)
-	text := p.killRing[p.killRingIndex]
 	insert := []rune(text)
 	runes = append(runes[:start], append(insert, runes[end:]...)...)
 	p.Text = string(runes)
 	p.Cursor = start + len(insert)
-	p.lastYankStart = start
-	p.lastYankLength = len(insert)
-	p.lastActionWasYank = true
+	sharedKillRing.updateYankLength(len(insert))
 	p.resetHistoryCursor()
 }
 

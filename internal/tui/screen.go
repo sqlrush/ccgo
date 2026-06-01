@@ -238,6 +238,7 @@ func (s *REPLScreen) OpenReverseSearch(query string) {
 }
 
 func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
+	sharedKillRing.trackKey(key.Type)
 	switch key.Type {
 	case KeyEsc, KeyCtrlC:
 		s.ReverseSearch = ReverseSearchState{}
@@ -257,6 +258,26 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 		s.ReverseSearch.Move(1)
 	case KeyBackspace:
 		s.ReverseSearch.Backspace(s.Prompt.History)
+	case KeyDelete, KeyCtrlD:
+		s.ReverseSearch.DeleteForward(s.Prompt.History)
+	case KeyLeft, KeyCtrlB:
+		s.ReverseSearch.MoveCursor(-1)
+	case KeyRight, KeyCtrlF:
+		s.ReverseSearch.MoveCursor(1)
+	case KeyHome, KeyCtrlA:
+		s.ReverseSearch.MoveStart()
+	case KeyEnd, KeyCtrlE:
+		s.ReverseSearch.MoveEnd()
+	case KeyCtrlK:
+		s.ReverseSearch.DeleteToEnd(s.Prompt.History)
+	case KeyCtrlU:
+		s.ReverseSearch.DeleteToStart(s.Prompt.History)
+	case KeyCtrlW:
+		s.ReverseSearch.DeleteWordBackward(s.Prompt.History)
+	case KeyCtrlY:
+		s.ReverseSearch.YankLastKill(s.Prompt.History)
+	case KeyAltY:
+		s.ReverseSearch.YankPop(s.Prompt.History)
 	case KeyRune:
 		s.ReverseSearch.AppendRune(s.Prompt.History, key.Rune)
 	}

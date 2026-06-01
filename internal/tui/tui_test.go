@@ -80,6 +80,9 @@ func TestPromptStateControlLineEditing(t *testing.T) {
 }
 
 func TestPromptStateKillRingYank(t *testing.T) {
+	resetSharedKillRingForTesting()
+	defer resetSharedKillRingForTesting()
+
 	prompt := NewPromptState(nil)
 	typePromptText := func(text string) {
 		for _, r := range text {
@@ -123,8 +126,11 @@ func TestPromptStateKillRingYank(t *testing.T) {
 }
 
 func TestPromptStateYankPopCyclesAndResets(t *testing.T) {
+	resetSharedKillRingForTesting()
+	defer resetSharedKillRingForTesting()
+
 	prompt := NewPromptState(nil)
-	prompt.killRing = []string{"beta", "gamma", "delta"}
+	sharedKillRing.ring = []string{"beta", "gamma", "delta"}
 
 	prompt.Apply(ParseKey("\x19"))
 	if prompt.Text != "beta" || prompt.Cursor != len([]rune("beta")) {
@@ -147,6 +153,68 @@ func TestPromptStateYankPopCyclesAndResets(t *testing.T) {
 	prompt.Apply(ParseKey("\x1by"))
 	if prompt.Text != "beta!" || prompt.Cursor != len([]rune("beta!")) {
 		t.Fatalf("alt-y after non-yank key should be ignored: %#v", prompt)
+	}
+}
+
+func TestPromptAndReverseSearchShareKillRing(t *testing.T) {
+	resetSharedKillRingForTesting()
+	defer resetSharedKillRingForTesting()
+
+	prompt := NewPromptState(nil)
+	for _, r := range "shared term" {
+		prompt.Apply(Key{Type: KeyRune, Rune: r})
+	}
+	prompt.Apply(ParseKey("\x17"))
+	if prompt.Text != "shared " {
+		t.Fatalf("prompt after ctrl-w = %#v", prompt)
+	}
+
+	screen := NewREPLScreen(40, 8, []string{"find shared term", "find other"})
+	screen.ApplyKey(ParseKey("\x12"))
+	screen.ApplyKey(ParseKey("\x19"))
+	if screen.ReverseSearch.Query != "term" || screen.ReverseSearch.Cursor != len([]rune("term")) {
+		t.Fatalf("reverse search after shared yank = %#v", screen.ReverseSearch)
+	}
+
+	screen.ApplyKey(ParseKey("\x15"))
+	if screen.ReverseSearch.Query != "" || screen.ReverseSearch.Cursor != 0 {
+		t.Fatalf("reverse search after ctrl-u = %#v", screen.ReverseSearch)
+	}
+	prompt = NewPromptState(nil)
+	prompt.Apply(ParseKey("\x19"))
+	if prompt.Text != "term" || prompt.Cursor != len([]rune("term")) {
+		t.Fatalf("prompt after reverse-search kill yank = %#v", prompt)
+	}
+}
+
+func TestReverseSearchCursorEditingAndYankPop(t *testing.T) {
+	resetSharedKillRingForTesting()
+	defer resetSharedKillRingForTesting()
+
+	screen := NewREPLScreen(40, 8, []string{"alpha beta", "alpha gamma", "alpha delta"})
+	screen.ApplyKey(ParseKey("\x12"))
+	for _, r := range "alphabet" {
+		screen.ApplyKey(Key{Type: KeyRune, Rune: r})
+	}
+	for i := 0; i < len([]rune("bet")); i++ {
+		screen.ApplyKey(ParseKey("\x1b[D"))
+	}
+	screen.ApplyKey(ParseKey(" "))
+	if screen.ReverseSearch.Query != "alpha bet" || screen.ReverseSearch.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("reverse search cursor insert = %#v", screen.ReverseSearch)
+	}
+	screen.ApplyKey(ParseKey("\x0b"))
+	if screen.ReverseSearch.Query != "alpha " {
+		t.Fatalf("reverse search ctrl-k = %#v", screen.ReverseSearch)
+	}
+	sharedKillRing.ring = []string{"beta", "gamma", "delta"}
+	screen.ApplyKey(ParseKey("\x19"))
+	if screen.ReverseSearch.Query != "alpha beta" {
+		t.Fatalf("reverse search ctrl-y = %#v", screen.ReverseSearch)
+	}
+	screen.ApplyKey(ParseKey("\x1by"))
+	if screen.ReverseSearch.Query != "alpha gamma" || screen.ReverseSearch.Cursor != len([]rune("alpha gamma")) {
+		t.Fatalf("reverse search alt-y = %#v", screen.ReverseSearch)
 	}
 }
 
