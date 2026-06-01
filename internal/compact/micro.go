@@ -9,18 +9,23 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 )
 
 const DefaultMicroMaxChars = 4_000
+const DefaultMicroCacheVersion = "microcompact.v1"
 
 type MicroOptions struct {
-	KeepLast int
-	MaxChars int
-	Cache    *MicroCache
-	CacheDir string
+	KeepLast     int
+	MaxChars     int
+	Cache        *MicroCache
+	CacheDir     string
+	CacheVersion string
+	CacheTTL     time.Duration
+	Now          time.Time
 }
 
 type MicroResult struct {
@@ -29,6 +34,15 @@ type MicroResult struct {
 	Cached             bool
 	MessagesSummarized int
 	MessagesKept       int
+	Version            string
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
+}
+
+type MicroPruneOptions struct {
+	CacheVersion  string
+	Now           time.Time
+	DeleteInvalid bool
 }
 
 type MicroCache struct {
@@ -78,14 +92,18 @@ func MicroCompactStored(history []contracts.Message, options MicroOptions) (Micr
 	}
 	summarized := history[:len(history)-keepLast]
 	digest := DigestMessages(summarized)
+	now := microNow(options)
+	version := microCacheVersion(options.CacheVersion)
 	if cached, ok := options.Cache.Get(digest); ok {
-		cached.MessagesKept = keepLast
-		return cached, nil
+		if MicroResultUsable(cached, version, now) {
+			cached.MessagesKept = keepLast
+			return cached, nil
+		}
 	}
 	if options.CacheDir != "" {
 		if cached, ok, err := LoadMicroResult(options.CacheDir, digest); err != nil {
 			return MicroResult{}, err
-		} else if ok {
+		} else if ok && MicroResultUsable(cached, version, now) {
 			cached.Cached = true
 			cached.MessagesKept = keepLast
 			options.Cache.Set(cached)
@@ -101,6 +119,11 @@ func MicroCompactStored(history []contracts.Message, options MicroOptions) (Micr
 		Digest:             digest,
 		MessagesSummarized: len(summarized),
 		MessagesKept:       keepLast,
+		Version:            version,
+		CreatedAt:          now,
+	}
+	if options.CacheTTL > 0 {
+		result.ExpiresAt = now.Add(options.CacheTTL)
 	}
 	options.Cache.Set(result)
 	if options.CacheDir != "" {
@@ -109,6 +132,19 @@ func MicroCompactStored(history []contracts.Message, options MicroOptions) (Micr
 		}
 	}
 	return result, nil
+}
+
+func MicroResultUsable(result MicroResult, version string, now time.Time) bool {
+	if result.Digest == "" {
+		return false
+	}
+	if result.Version != "" && result.Version != microCacheVersion(version) {
+		return false
+	}
+	if !result.ExpiresAt.IsZero() && !now.Before(result.ExpiresAt) {
+		return false
+	}
+	return true
 }
 
 func LoadMicroResult(dir string, digest string) (MicroResult, bool, error) {
@@ -146,8 +182,68 @@ func SaveMicroResult(dir string, result MicroResult) error {
 	return os.WriteFile(microResultPath(dir, result.Digest), append(data, '\n'), 0o600)
 }
 
+func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
+	if dir == "" {
+		return 0, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	now := options.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	version := microCacheVersion(options.CacheVersion)
+	pruned := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return pruned, err
+		}
+		var result MicroResult
+		if err := json.Unmarshal(data, &result); err != nil {
+			if options.DeleteInvalid {
+				if removeErr := os.Remove(path); removeErr != nil {
+					return pruned, removeErr
+				}
+				pruned++
+			}
+			continue
+		}
+		if !MicroResultUsable(result, version, now) {
+			if err := os.Remove(path); err != nil {
+				return pruned, err
+			}
+			pruned++
+		}
+	}
+	return pruned, nil
+}
+
 func microResultPath(dir string, digest string) string {
 	return filepath.Join(dir, digest+".json")
+}
+
+func microCacheVersion(version string) string {
+	if version != "" {
+		return version
+	}
+	return DefaultMicroCacheVersion
+}
+
+func microNow(options MicroOptions) time.Time {
+	if !options.Now.IsZero() {
+		return options.Now.UTC()
+	}
+	return time.Now().UTC()
 }
 
 func DigestMessages(messages []contracts.Message) string {

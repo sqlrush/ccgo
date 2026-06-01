@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -345,6 +347,47 @@ func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	}
 	if strings.Contains(snapshot.Text, "\x1b[") || !strings.Contains(snapshot.Text, "assistant: hello") || !strings.Contains(snapshot.Text, "> run") {
 		t.Fatalf("text = %q", snapshot.Text)
+	}
+}
+
+func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.Text = "run"
+	snapshot := CaptureANSISnapshot("main:view", 32, 6, Frame{
+		Messages:   []Message{{Role: RoleAssistant, Text: "hello"}},
+		Status:     "ready",
+		Prompt:     prompt,
+		ShowCursor: true,
+	})
+	corpus := SnapshotCorpus{Dir: t.TempDir()}
+	if err := corpus.Write(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	text, err := corpus.LoadText("main:view")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "assistant: hello") {
+		t.Fatalf("text = %q", text)
+	}
+	comparison, err := corpus.Compare(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !comparison.Match || comparison.ExpectedText != comparison.ActualText {
+		t.Fatalf("comparison = %#v", comparison)
+	}
+	changed := snapshot
+	changed.Text = strings.ReplaceAll(changed.Text, "hello", "bye")
+	comparison, err = corpus.Compare(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comparison.Match || !strings.Contains(comparison.ExpectedText, "hello") || !strings.Contains(comparison.ActualText, "bye") {
+		t.Fatalf("changed comparison = %#v", comparison)
+	}
+	if _, err := os.Stat(filepath.Join(corpus.Dir, "main_view.ansi")); err != nil {
+		t.Fatal(err)
 	}
 }
 

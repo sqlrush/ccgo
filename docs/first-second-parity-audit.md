@@ -122,7 +122,7 @@ Still missing from full M5 parity:
 M6 progress now includes:
 
 - `internal/memory`: recursive `.md` memory scanning, frontmatter parsing, newest-first capped manifests, root-to-leaf `CLAUDE.md` discovery/loading, and team-memory secret detection.
-- `internal/compact`: effective context window calculations, auto-compact thresholds, token warning state, compact summary prompt construction, compact API runner, compact boundary/summary plan generation, microcompact/cache primitives, and persistent cached microcompact storage.
+- `internal/compact`: effective context window calculations, auto-compact thresholds, token warning state, compact summary prompt construction, compact API runner, compact boundary/summary plan generation, microcompact/cache primitives, persistent cached microcompact storage, and cache version/TTL/prune handling.
 - `internal/conversation`: optional auto-compact can now run before the main request, fail open with a consecutive-failure circuit breaker, persist compact boundary metadata to transcript, write a session-memory summary, inject recalled session-memory snippets into API request context when enabled, and optionally extract turn-end memory facts into session memory.
 - `internal/memory`: session-memory summaries can now be loaded and recalled by query with deterministic scoring and recency ordering; deterministic and model-backed memory fact extraction can summarize user preferences, requests, decisions, and tool-use facts.
 - `internal/session`: project session listing, title inference from custom title or first user prompt, transcript search snippets for resume/search UI, and sidechain transcript path/list/append helpers.
@@ -130,7 +130,7 @@ M6 progress now includes:
 
 M7 progress now includes:
 
-- `internal/tui`: lightweight terminal frame renderer using ANSI clear/home/cursor control, message/status/prompt/dialog components, prompt input editing, prompt history navigation, default and configurable keybinding resolver, vim insert/normal basics, permission/task dialog builders with kind/id routing/runtime resolution, stale dialog race guards, active dialog cancellation, task lifecycle state transitions, alternate screen lifecycle sequences, ANSI snapshot capture/stripping, scripted interaction runner with assertions, REPL screen model, viewport scrolling, and selection focus model.
+- `internal/tui`: lightweight terminal frame renderer using ANSI clear/home/cursor control, message/status/prompt/dialog components, prompt input editing, prompt history navigation, default and configurable keybinding resolver, vim insert/normal basics, permission/task dialog builders with kind/id routing/runtime resolution, stale dialog race guards, active dialog cancellation, task lifecycle state transitions, alternate screen lifecycle sequences, ANSI snapshot capture/stripping, snapshot corpus write/compare, scripted interaction runner with assertions, REPL screen model, viewport scrolling, and selection focus model.
 
 Still missing for full M6/M7 parity:
 

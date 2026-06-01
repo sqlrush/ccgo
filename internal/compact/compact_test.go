@@ -2,9 +2,11 @@ package compact
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
@@ -128,17 +130,21 @@ func TestMicroCompactSummarizesAndCaches(t *testing.T) {
 
 func TestMicroCompactPersistsDiskCache(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
+	now := time.Unix(100, 0).UTC()
 	history := []contracts.Message{
 		msgs.UserText("first message"),
 		msgs.AssistantText("second message", "sonnet", nil),
 		msgs.UserText("keep me"),
 	}
-	result, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 200, CacheDir: cacheDir})
+	result, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 200, CacheDir: cacheDir, CacheTTL: time.Hour, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Cached {
 		t.Fatalf("first result should not be cached: %#v", result)
+	}
+	if result.Version != DefaultMicroCacheVersion || !result.CreatedAt.Equal(now) || !result.ExpiresAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("metadata = %#v", result)
 	}
 	loaded, ok, err := LoadMicroResult(cacheDir, result.Digest)
 	if err != nil {
@@ -147,12 +153,46 @@ func TestMicroCompactPersistsDiskCache(t *testing.T) {
 	if !ok || loaded.Summary != result.Summary {
 		t.Fatalf("loaded=%#v ok=%v result=%#v", loaded, ok, result)
 	}
-	cached, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, CacheDir: cacheDir})
+	cached, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, CacheDir: cacheDir, Now: now.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !cached.Cached || cached.Summary != result.Summary || cached.MessagesKept != 1 {
 		t.Fatalf("cached = %#v result = %#v", cached, result)
+	}
+	expired, err := MicroCompactStored(history, MicroOptions{KeepLast: 1, MaxChars: 20, CacheDir: cacheDir, Now: now.Add(2 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expired.Cached || expired.Summary == result.Summary {
+		t.Fatalf("expired cache should be recomputed with new max chars: expired=%#v result=%#v", expired, result)
+	}
+}
+
+func TestPruneMicroCacheDeletesExpiredVersionedAndInvalidEntries(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	now := time.Unix(100, 0).UTC()
+	if err := SaveMicroResult(cacheDir, MicroResult{Digest: "expired", Summary: "old", Version: DefaultMicroCacheVersion, CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveMicroResult(cacheDir, MicroResult{Digest: "wrongversion", Summary: "old", Version: "other", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveMicroResult(cacheDir, MicroResult{Digest: "fresh", Summary: "new", Version: DefaultMicroCacheVersion, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "bad.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pruned, err := PruneMicroCache(cacheDir, MicroPruneOptions{Now: now, DeleteInvalid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pruned != 3 {
+		t.Fatalf("pruned = %d", pruned)
+	}
+	if _, ok, err := LoadMicroResult(cacheDir, "fresh"); err != nil || !ok {
+		t.Fatalf("fresh ok=%v err=%v", ok, err)
 	}
 }
 
