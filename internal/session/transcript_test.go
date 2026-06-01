@@ -164,6 +164,41 @@ func TestLoadTranscriptTailKeepsOnlyRecentMessagesAndBridgesProgress(t *testing.
 	}
 }
 
+func TestLoadTranscriptWindowAroundUUID(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","parentUuid":null}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1"}`,
+		`{"type":"progress","uuid":"p1","parentUuid":"a1"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"p1"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
+		`{"type":"user","uuid":"u3","parentUuid":"a2"}`,
+	})
+	window, err := LoadTranscriptWindow(path, "u2", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !window.Found || window.TargetIndex != 1 || !window.HasBefore || !window.HasAfter {
+		t.Fatalf("window metadata = %#v", window)
+	}
+	if got := tailIDs(window.Messages); strings.Join(got, ",") != "a1,u2,a2" {
+		t.Fatalf("window messages = %#v", got)
+	}
+	if window.Messages[1].ParentUUID == nil || *window.Messages[1].ParentUUID != "a1" {
+		t.Fatalf("bridged parent = %#v", window.Messages[1].ParentUUID)
+	}
+
+	largeWindow, err := LoadTranscriptWindow(path, "a2", 2, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !largeWindow.Found || largeWindow.TargetIndex != 2 || !largeWindow.HasBefore || largeWindow.HasAfter {
+		t.Fatalf("large window = %#v", largeWindow)
+	}
+	if got := tailIDs(largeWindow.Messages); strings.Join(got, ",") != "a1,u2,a2,u3" {
+		t.Fatalf("large window messages = %#v", got)
+	}
+}
+
 func TestRemoveTranscriptMessageByUUID(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,

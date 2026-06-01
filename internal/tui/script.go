@@ -23,6 +23,7 @@ type ReverseSearchExpectation struct {
 	Query       string
 	Current     string
 	ResultCount int
+	NoResults   bool
 }
 
 type ScriptResult struct {
@@ -104,6 +105,9 @@ func compareReverseSearch(index int, got ReverseSearchState, want ReverseSearchE
 	}
 	if want.ResultCount > 0 && len(got.Results) != want.ResultCount {
 		return fmt.Errorf("script step %d reverse result count = %d, want %d", index, len(got.Results), want.ResultCount)
+	}
+	if want.NoResults && len(got.Results) != 0 {
+		return fmt.Errorf("script step %d reverse results = %#v, want none", index, got.Results)
 	}
 	if want.Current != "" {
 		current, _ := got.Current()

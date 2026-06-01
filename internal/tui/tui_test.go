@@ -269,6 +269,27 @@ func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	emptyScreen := NewREPLScreen(40, 8, []string{"deploy old", "test"})
+	_, err = RunInteractionScriptChecked(&emptyScreen, []ScriptStep{
+		{
+			Keys: []string{"\x12", "z", "z", "z"},
+			ExpectReverseSearch: &ReverseSearchExpectation{
+				Active:    true,
+				Query:     "zzz",
+				NoResults: true,
+			},
+			ExpectSnapshotContains: []string{"(reverse-i-search) `zzz': no matches"},
+		},
+		{
+			Key:                 "\x1b",
+			ExpectEvent:         &ScreenEvent{Type: ScreenEventCancelled},
+			ExpectReverseSearch: &ReverseSearchExpectation{Active: false},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPermissionAndTaskDialogs(t *testing.T) {
