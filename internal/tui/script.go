@@ -10,6 +10,10 @@ type ScriptStep struct {
 	Key                    string
 	Message                *Message
 	Dialog                 *Dialog
+	RequestPermission      *PermissionRequest
+	UpsertTask             *TaskStatus
+	RemoveTaskID           string
+	OpenTasksDialog        bool
 	ResizeWidth            int
 	ResizeHeight           int
 	SnapshotName           string
@@ -118,6 +122,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		var event ScreenEvent
 		var snapshot ANSISnapshot
 		var dialogResult *DialogResult
+		if err := applyRuntimeStep(index, runtime, step); err != nil {
+			return result, dialogResults, err
+		}
 		if runtime != nil {
 			runtime.ApplyToScreen(screen, baseStatus)
 		}
@@ -228,6 +235,29 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 	}
 	return result, dialogResults, nil
+}
+
+func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error {
+	needsRuntime := step.RequestPermission != nil || step.UpsertTask != nil || step.RemoveTaskID != "" || step.OpenTasksDialog
+	if !needsRuntime {
+		return nil
+	}
+	if runtime == nil {
+		return fmt.Errorf("script step %d runtime mutation requires dialog runtime", index)
+	}
+	if step.RequestPermission != nil {
+		runtime.RequestPermission(*step.RequestPermission)
+	}
+	if step.UpsertTask != nil {
+		runtime.UpsertTask(*step.UpsertTask)
+	}
+	if step.RemoveTaskID != "" {
+		runtime.RemoveTask(step.RemoveTaskID)
+	}
+	if step.OpenTasksDialog {
+		runtime.OpenTasksDialog()
+	}
+	return nil
 }
 
 func compareDialogResult(index int, got DialogResult, want DialogResultExpectation) error {
