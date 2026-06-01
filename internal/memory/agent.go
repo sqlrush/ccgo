@@ -223,16 +223,29 @@ func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
 		return "", nil, false
 	}
 	var object struct {
-		Query      string   `json:"query"`
-		SessionIDs []string `json:"session_ids"`
-		IDs        []string `json:"ids"`
+		Query              string   `json:"query"`
+		SearchQuery        string   `json:"search_query"`
+		SessionIDs         []string `json:"session_ids"`
+		SessionIDsCamel    []string `json:"sessionIds"`
+		SelectedSessionIDs []string `json:"selected_session_ids"`
+		IDs                []string `json:"ids"`
 	}
 	if err := json.Unmarshal([]byte(raw), &object); err == nil {
 		ids := recallIDs(object.SessionIDs)
 		if len(ids) == 0 {
+			ids = recallIDs(object.SessionIDsCamel)
+		}
+		if len(ids) == 0 {
+			ids = recallIDs(object.SelectedSessionIDs)
+		}
+		if len(ids) == 0 {
 			ids = recallIDs(object.IDs)
 		}
-		return strings.TrimSpace(object.Query), ids, strings.TrimSpace(object.Query) != "" || len(ids) > 0
+		query := strings.TrimSpace(object.Query)
+		if query == "" {
+			query = strings.TrimSpace(object.SearchQuery)
+		}
+		return query, ids, query != "" || len(ids) > 0
 	}
 	var ids []string
 	if err := json.Unmarshal([]byte(raw), &ids); err == nil {

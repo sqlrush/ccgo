@@ -337,6 +337,35 @@ func TestMemoryAgentRecallCanUseModelSelectedSessionIDs(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentRecallParsesAlternateModelResponseKeys(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "prior",
+		Summary:   "database access policy notes",
+		UpdatedAt: time.Unix(200, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_recall_camel",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"search_query":"database access","sessionIds":["prior"]}`)},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("matches = %#v", result.Matches)
+	}
+}
+
 func TestMemoryAgentRecallFallsBackWhenModelSelectsNoValidSessions(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{
