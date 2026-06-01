@@ -303,3 +303,30 @@ func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 		t.Fatalf("text = %q", snapshot.Text)
 	}
 }
+
+func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
+	screen := NewREPLScreen(30, 6, nil)
+	permission := PermissionDialog(PermissionRequest{ID: "perm_1", ToolName: "Edit"})
+	result := RunInteractionScript(&screen, []ScriptStep{
+		{Message: &Message{Role: RoleAssistant, Text: "ready"}, SnapshotName: "initial"},
+		{Key: "r"},
+		{Key: "u"},
+		{Key: "n"},
+		{Key: "\n", SnapshotName: "submitted"},
+		{Dialog: &permission},
+		{Key: "\t"},
+		{Key: "\n", SnapshotName: "permission"},
+	})
+	if len(result.Events) != 2 {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	if result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "run" {
+		t.Fatalf("submit event = %#v", result.Events[0])
+	}
+	if result.Events[1].Type != ScreenEventDialogAction || result.Events[1].DialogID != "perm_1" || result.Events[1].Value != "Allow Session" {
+		t.Fatalf("dialog event = %#v", result.Events[1])
+	}
+	if len(result.Snapshots) != 3 || !strings.Contains(result.Snapshots[0].Text, "assistant: ready") {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}

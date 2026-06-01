@@ -1,12 +1,15 @@
 package memory
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"ccgo/internal/contracts"
+	msgs "ccgo/internal/messages"
 	"ccgo/internal/session"
 )
 
@@ -160,6 +163,37 @@ func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	message := RecallContextMessage(matches)
 	if message.Subtype != RecallContextSubtype || !message.IsMeta || !strings.Contains(message.Content[0].Text, "permissions") {
 		t.Fatalf("message = %#v", message)
+	}
+}
+
+func TestExtractFactsBuildsSessionMemorySummary(t *testing.T) {
+	toolInput := json.RawMessage(`{"file_path":"README.md"}`)
+	assistant := msgs.AssistantText("", "sonnet", nil)
+	assistant.UUID = "assistant_1"
+	assistant.Content = []contracts.ContentBlock{{
+		Type:  contracts.ContentToolUse,
+		ID:    "toolu_1",
+		Name:  "Read",
+		Input: toolInput,
+	}}
+	user := msgs.UserText("Remember prefer compact diffs")
+	user.UUID = "user_1"
+	decision := msgs.AssistantText("Decision: keep the session summary short", "sonnet", nil)
+	decision.UUID = "assistant_2"
+
+	facts := ExtractFacts([]contracts.Message{user, assistant, decision, user}, ExtractOptions{Limit: 10})
+	if len(facts) != 3 {
+		t.Fatalf("facts = %#v", facts)
+	}
+	if facts[0].Kind != FactPreference || facts[0].Text != "prefer compact diffs" || facts[0].SourceUUID != "user_1" {
+		t.Fatalf("preference = %#v", facts[0])
+	}
+	if facts[1].Kind != FactTool || facts[1].Text != "Used tool Read" {
+		t.Fatalf("tool = %#v", facts[1])
+	}
+	summary := BuildFactsSummary(facts)
+	if !strings.Contains(summary, "[preference] prefer compact diffs") || !strings.Contains(summary, "[decision] keep the session summary short") {
+		t.Fatalf("summary = %q", summary)
 	}
 }
 
