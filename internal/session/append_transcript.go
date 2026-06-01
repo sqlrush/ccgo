@@ -76,6 +76,25 @@ func sessionMetadataEntries(metadata TranscriptMetadata, sessionID contracts.ID)
 			CustomTitle string       `json:"customTitle"`
 		}{Type: "custom-title", SessionID: sessionID, CustomTitle: metadata.CustomTitles[sessionID]})
 	}
+	if title := strings.TrimSpace(metadata.AITitles[sessionID]); title != "" {
+		entries = append(entries, struct {
+			Type      string       `json:"type"`
+			SessionID contracts.ID `json:"sessionId"`
+			AITitle   string       `json:"aiTitle"`
+		}{Type: "ai-title", SessionID: sessionID, AITitle: metadata.AITitles[sessionID]})
+	}
+	if prompt := strings.TrimSpace(metadata.LastPrompts[sessionID]); prompt != "" {
+		entries = append(entries, struct {
+			Type       string       `json:"type"`
+			SessionID  contracts.ID `json:"sessionId"`
+			LastPrompt string       `json:"lastPrompt"`
+		}{Type: "last-prompt", SessionID: sessionID, LastPrompt: metadata.LastPrompts[sessionID]})
+	}
+	if task, ok := metadata.TaskSummaries[sessionID]; ok && strings.TrimSpace(task.Summary) != "" {
+		task.Type = "task-summary"
+		task.SessionID = sessionID
+		entries = append(entries, task)
+	}
 	if tag, ok := metadata.Tags[sessionID]; ok {
 		entries = append(entries, struct {
 			Type      string       `json:"type"`

@@ -279,7 +279,7 @@ func TestReappendSessionMetadataWritesSessionScopedTailEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Written != 8 {
+	if result.Written != 11 {
 		t.Fatalf("result = %#v", result)
 	}
 	raw, err := os.ReadFile(path)
@@ -291,6 +291,12 @@ func TestReappendSessionMetadataWritesSessionScopedTailEntries(t *testing.T) {
 	for _, want := range []string{
 		`"type":"custom-title"`,
 		`"customTitle":"Title"`,
+		`"type":"ai-title"`,
+		`"aiTitle":"AI Title"`,
+		`"type":"last-prompt"`,
+		`"lastPrompt":"last prompt text"`,
+		`"type":"task-summary"`,
+		`"summary":"running tests"`,
 		`"type":"tag"`,
 		`"type":"agent-name"`,
 		`"type":"agent-color"`,
@@ -304,9 +310,6 @@ func TestReappendSessionMetadataWritesSessionScopedTailEntries(t *testing.T) {
 		}
 	}
 	for _, notWant := range []string{
-		`"type":"ai-title"`,
-		`"type":"last-prompt"`,
-		`"type":"task-summary"`,
 		`"customTitle":"Other"`,
 	} {
 		if strings.Contains(tail, notWant) {
