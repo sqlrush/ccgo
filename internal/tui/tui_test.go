@@ -630,12 +630,14 @@ func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 	}
 
 	scriptScreen := NewREPLScreen(40, 8, []string{"deploy old", "test", "deploy new"})
+	cursor := len([]rune("dep"))
 	_, err := RunInteractionScriptChecked(&scriptScreen, []ScriptStep{
 		{
 			Keys: []string{"\x12", "d", "e", "p"},
 			ExpectReverseSearch: &ReverseSearchExpectation{
 				Active:      true,
 				Query:       "dep",
+				Cursor:      &cursor,
 				Current:     "deploy new",
 				ResultCount: 2,
 			},
@@ -644,6 +646,22 @@ func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 		{
 			Key:         "\n",
 			ExpectEvent: &ScreenEvent{Type: ScreenEventReverseSelected, Value: "deploy new"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scriptCursorScreen := NewREPLScreen(40, 8, []string{"alpha beta"})
+	searchCursor := len([]rune("alpha "))
+	_, err = RunInteractionScriptChecked(&scriptCursorScreen, []ScriptStep{
+		{
+			Keys: []string{"\x12", "a", "l", "p", "h", "a", "b", "e", "t", "a", "\x1b[D", "\x1b[D", "\x1b[D", "\x1b[D", " "},
+			ExpectReverseSearch: &ReverseSearchExpectation{
+				Active: true,
+				Query:  "alpha beta",
+				Cursor: &searchCursor,
+			},
 		},
 	})
 	if err != nil {

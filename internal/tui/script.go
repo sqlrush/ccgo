@@ -70,6 +70,7 @@ type ViewportExpectation struct {
 type ReverseSearchExpectation struct {
 	Active      bool
 	Query       string
+	Cursor      *int
 	Current     string
 	ResultCount int
 	NoResults   bool
@@ -349,6 +350,9 @@ func compareReverseSearch(index int, got ReverseSearchState, want ReverseSearchE
 	}
 	if want.Query != "" && got.Query != want.Query {
 		return fmt.Errorf("script step %d reverse query = %q, want %q", index, got.Query, want.Query)
+	}
+	if want.Cursor != nil && got.Cursor != *want.Cursor {
+		return fmt.Errorf("script step %d reverse cursor = %d, want %d", index, got.Cursor, *want.Cursor)
 	}
 	if want.ResultCount > 0 && len(got.Results) != want.ResultCount {
 		return fmt.Errorf("script step %d reverse result count = %d, want %d", index, len(got.Results), want.ResultCount)
