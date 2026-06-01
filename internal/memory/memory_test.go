@@ -213,6 +213,81 @@ func TestCompactSessionMemoryRollsUpOlderSummaries(t *testing.T) {
 	}
 }
 
+func TestCompactSessionMemorySkipsExistingRollupSummaries(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+		trigger string
+	}{
+		{
+			id:      SessionMemoryRollupID,
+			summary: "Session memory rollup:\n[archived] default archive notes",
+			updated: 250,
+			trigger: SessionMemoryRollupTrigger,
+		},
+		{
+			id:      "legacy-rollup",
+			summary: "legacy archive notes",
+			updated: 200,
+			trigger: SessionMemoryRollupTrigger,
+		},
+		{id: "old", summary: "old normal notes", updated: 100},
+		{id: "new", summary: "new active notes", updated: 300},
+	} {
+		metadata := session.CompactMetadata{}
+		if item.trigger != "" {
+			metadata.Trigger = item.trigger
+		}
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+			Metadata:  metadata,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := CompactSessionMemory(root, SessionMemoryCompactionOptions{
+		KeepLatest: 1,
+		ArchiveID:  "custom-rollup",
+		UpdatedAt:  time.Unix(400, 0).UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Kept) != 1 || result.Kept[0].SessionID != "new" {
+		t.Fatalf("kept = %#v", result.Kept)
+	}
+	if len(result.Compacted) != 1 || result.Compacted[0].SessionID != "old" {
+		t.Fatalf("compacted = %#v", result.Compacted)
+	}
+	if result.Archive == nil || result.Archive.SessionID != "custom-rollup" {
+		t.Fatalf("archive = %#v", result.Archive)
+	}
+	body := result.Archive.Summary
+	if strings.Count(body, "Session memory rollup:") != 1 {
+		t.Fatalf("rollup title should not be nested: %q", body)
+	}
+	for _, want := range []string{"[archived] default archive notes", "legacy archive notes", "[old |"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("rollup body missing %q: %q", want, body)
+		}
+	}
+	for _, notWant := range []string{"[session-memory-rollup |", "[legacy-rollup |"} {
+		if strings.Contains(body, notWant) {
+			t.Fatalf("rollup archive was compacted as a normal summary: %q", body)
+		}
+	}
+	for _, id := range []contracts.ID{SessionMemoryRollupID, "legacy-rollup"} {
+		if _, err := os.Stat(filepath.Join(root, string(id), SessionSummaryFilename)); err != nil {
+			t.Fatalf("archive summary %s should remain: %v", id, err)
+		}
+	}
+}
+
 func TestExtractFactsBuildsSessionMemorySummary(t *testing.T) {
 	toolInput := json.RawMessage(`{"file_path":"README.md"}`)
 	assistant := msgs.AssistantText("", "sonnet", nil)

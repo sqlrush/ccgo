@@ -13,8 +13,11 @@ import (
 	"ccgo/internal/session"
 )
 
-const SessionSummaryFilename = "summary.md"
-const SessionMemoryRollupID contracts.ID = "session-memory-rollup"
+const (
+	SessionSummaryFilename                  = "summary.md"
+	SessionMemoryRollupTrigger              = "session-memory-rollup"
+	SessionMemoryRollupID      contracts.ID = SessionMemoryRollupTrigger
+)
 
 type SessionSummary struct {
 	SessionID       contracts.ID
@@ -126,16 +129,16 @@ func CompactSessionMemory(root string, options SessionMemoryCompactionOptions) (
 	if err != nil {
 		return SessionMemoryCompactionResult{}, err
 	}
-	var archive *SessionSummary
+	var archives []SessionSummary
 	var candidates []SessionSummary
 	for _, summary := range summaries {
-		if summary.SessionID == archiveID {
-			s := summary
-			archive = &s
+		if isSessionMemoryRollupArchive(summary, archiveID) {
+			archives = append(archives, summary)
 			continue
 		}
 		candidates = append(candidates, summary)
 	}
+	archive := mergeSessionMemoryArchives(archives, archiveID)
 	sortSessionSummariesNewestFirst(candidates)
 	keepLatest := options.KeepLatest
 	if keepLatest < 0 {
@@ -161,7 +164,7 @@ func CompactSessionMemory(root string, options SessionMemoryCompactionOptions) (
 		Summary:   body,
 		UpdatedAt: sessionMemoryCompactionTime(options.UpdatedAt),
 		Metadata: session.CompactMetadata{
-			Trigger:            "session-memory-rollup",
+			Trigger:            SessionMemoryRollupTrigger,
 			MessagesSummarized: len(result.Compacted),
 		},
 	})
@@ -212,9 +215,9 @@ func LoadSessionSummaries(root string) ([]SessionSummary, error) {
 func BuildSessionMemoryRollup(existing *SessionSummary, summaries []SessionSummary, maxChars int) string {
 	var b strings.Builder
 	b.WriteString("Session memory rollup:")
-	if existing != nil && strings.TrimSpace(existing.Summary) != "" {
+	if existingText := normalizeSessionMemoryRollupText(existing); existingText != "" {
 		b.WriteString("\n")
-		b.WriteString(strings.TrimSpace(existing.Summary))
+		b.WriteString(existingText)
 	}
 	for _, summary := range summaries {
 		text := strings.Join(strings.Fields(summary.Summary), " ")
@@ -235,6 +238,55 @@ func BuildSessionMemoryRollup(existing *SessionSummary, summaries []SessionSumma
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func isSessionMemoryRollupArchive(summary SessionSummary, archiveID contracts.ID) bool {
+	return summary.SessionID == archiveID || summary.Metadata.Trigger == SessionMemoryRollupTrigger
+}
+
+func mergeSessionMemoryArchives(summaries []SessionSummary, archiveID contracts.ID) *SessionSummary {
+	if len(summaries) == 0 {
+		return nil
+	}
+	archives := append([]SessionSummary(nil), summaries...)
+	sort.SliceStable(archives, func(i, j int) bool {
+		iArchiveID := archives[i].SessionID == archiveID
+		jArchiveID := archives[j].SessionID == archiveID
+		if iArchiveID != jArchiveID {
+			return iArchiveID
+		}
+		if !archives[i].UpdatedAt.Equal(archives[j].UpdatedAt) {
+			return archives[i].UpdatedAt.After(archives[j].UpdatedAt)
+		}
+		return archives[i].SessionID < archives[j].SessionID
+	})
+	merged := archives[0]
+	var parts []string
+	seen := map[string]struct{}{}
+	for _, archive := range archives {
+		text := normalizeSessionMemoryRollupText(&archive)
+		if text == "" {
+			continue
+		}
+		if _, ok := seen[text]; ok {
+			continue
+		}
+		seen[text] = struct{}{}
+		parts = append(parts, text)
+	}
+	merged.Summary = strings.Join(parts, "\n")
+	return &merged
+}
+
+func normalizeSessionMemoryRollupText(summary *SessionSummary) string {
+	if summary == nil {
+		return ""
+	}
+	text := strings.TrimSpace(summary.Summary)
+	for strings.HasPrefix(text, "Session memory rollup:") {
+		text = strings.TrimSpace(strings.TrimPrefix(text, "Session memory rollup:"))
+	}
+	return text
 }
 
 func formatSessionSummary(summary SessionSummary) string {
