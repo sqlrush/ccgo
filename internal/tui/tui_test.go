@@ -1747,6 +1747,47 @@ func TestREPLScreenVimBackwardEndMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimBackwardEndOperatorMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta.gamma delta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "w", "d", "g", "e"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha betgamma delta" || screen.Prompt.Cursor != len([]rune("alpha bet")) || screen.VimRegister != "a." {
+		t.Fatalf("after dge screen = %#v", screen)
+	}
+	for _, seq := range []string{"w", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha betgammdelta" || screen.Prompt.Cursor != len([]rune("alpha betgamm")) || screen.VimRegister != "a " {
+		t.Fatalf("after dge dot repeat screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta.gamma delta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "w", "y", "g", "e"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha beta.gamma delta" || screen.Prompt.Cursor != len([]rune("alpha bet")) || screen.VimRegister != "a." {
+		t.Fatalf("after yge screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "foo.bar baz-qux tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "W", "W", "c", "g", "E"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "foo.bar baz-qutail" || screen.Prompt.Cursor != len([]rune("foo.bar baz-qu")) || screen.VimRegister != "x " {
+		t.Fatalf("after cgE screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimNormalModeSpecialKeys(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

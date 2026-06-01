@@ -298,10 +298,14 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 	case 'e':
 		if operator == 0 {
 			applyN(count, func() { s.Prompt.moveWordBackwardEnd() })
+		} else {
+			s.applyVimBackwardEndMotionOperator(operator, r, count)
 		}
 	case 'E':
 		if operator == 0 {
 			applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
+		} else {
+			s.applyVimBackwardEndMotionOperator(operator, r, count)
 		}
 	}
 	return ScreenEvent{}
@@ -396,6 +400,15 @@ func (s *REPLScreen) applyVimLineMotionOperator(operator rune, targetLine int, m
 	}
 	s.applyVimRangeOperator(operator, start, end, true)
 	s.recordVimChange(vimRecordedChange{Kind: "operatorLineMotion", Operator: operator, Motion: motion, Count: count})
+}
+
+func (s *REPLScreen) applyVimBackwardEndMotionOperator(operator rune, motion rune, count int) {
+	start, end, ok := s.Prompt.backwardEndMotionRange(motion, count)
+	if !ok {
+		return
+	}
+	s.applyVimRangeOperator(operator, start, end, false)
+	s.recordVimChange(vimRecordedChange{Kind: "operatorBackwardEnd", Operator: operator, Motion: motion, Count: count})
 }
 
 func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
@@ -585,6 +598,8 @@ func (s *REPLScreen) replayVimLastChange() {
 		s.enterVimInsert()
 	case "operator":
 		s.applyVimMotionOperator(change.Operator, change.Motion, change.Count)
+	case "operatorBackwardEnd":
+		s.applyVimBackwardEndMotionOperator(change.Operator, change.Motion, change.Count)
 	case "operatorLineMotion":
 		switch change.Motion {
 		case 'G':
@@ -774,6 +789,27 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 		end++
 	}
 	return orderedRange(start, end, false)
+}
+
+func (p *PromptState) backwardEndMotionRange(motion rune, count int) (int, int, bool) {
+	if count <= 0 {
+		count = 1
+	}
+	start := p.clampCursor(p.Cursor)
+	cursor := *p
+	for i := 0; i < count; i++ {
+		switch motion {
+		case 'e':
+			cursor.moveWordBackwardEnd()
+		case 'E':
+			cursor.moveWORDBackwardEnd()
+		default:
+			return 0, 0, false
+		}
+	}
+	end := cursor.Cursor
+	start, end, _, ok := orderedRange(start, end, false)
+	return start, end, ok
 }
 
 func orderedRange(start int, end int, linewise bool) (int, int, bool, bool) {
