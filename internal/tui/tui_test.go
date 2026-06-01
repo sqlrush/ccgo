@@ -627,6 +627,54 @@ func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T)
 	}
 }
 
+func TestDialogRuntimeCancelsPendingPermissionByID(t *testing.T) {
+	runtime := NewDialogRuntime()
+	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
+	runtime.RequestPermission(PermissionRequest{ID: "new", ToolName: "Edit"})
+	cancelledOld := runtime.CancelPermission("old")
+	if !cancelledOld.Found || cancelledOld.Status != DialogResultCancelled || cancelledOld.ID != "old" {
+		t.Fatalf("cancelled old = %#v", cancelledOld)
+	}
+	if _, ok := runtime.Permissions["old"]; ok {
+		t.Fatalf("old permission should be removed: %#v", runtime.Permissions)
+	}
+	if runtime.Active == nil || runtime.Active.ID != "new" {
+		t.Fatalf("active permission should remain new: %#v", runtime.Active)
+	}
+	missing := runtime.CancelPermission("old")
+	if missing.Found || missing.Status != DialogResultNone {
+		t.Fatalf("missing cancel = %#v", missing)
+	}
+	cancelledActive := runtime.CancelPermission("")
+	if !cancelledActive.Found || cancelledActive.Status != DialogResultCancelled || cancelledActive.ID != "new" {
+		t.Fatalf("cancelled active = %#v", cancelledActive)
+	}
+	if runtime.Active != nil || len(runtime.Permissions) != 0 {
+		t.Fatalf("runtime after active cancel = %#v", runtime)
+	}
+}
+
+func TestDialogRuntimeCancelsAllPermissionsDeterministically(t *testing.T) {
+	runtime := NewDialogRuntime()
+	runtime.RequestPermission(PermissionRequest{ID: "b", ToolName: "Write"})
+	runtime.RequestPermission(PermissionRequest{ID: "a", ToolName: "Edit"})
+	results := runtime.CancelPermissions()
+	if len(results) != 2 || results[0].ID != "a" || results[1].ID != "b" {
+		t.Fatalf("results = %#v", results)
+	}
+	for _, result := range results {
+		if !result.Found || result.Status != DialogResultCancelled || result.Kind != DialogPermission {
+			t.Fatalf("result = %#v", result)
+		}
+	}
+	if runtime.Active != nil || len(runtime.Permissions) != 0 {
+		t.Fatalf("runtime after cancel all = %#v", runtime)
+	}
+	if got := runtime.CancelPermissions(); got != nil {
+		t.Fatalf("empty cancel all = %#v", got)
+	}
+}
+
 func TestREPLScreenViewportScrolls(t *testing.T) {
 	screen := NewREPLScreen(20, 6, nil)
 	screen.SetMessages([]Message{

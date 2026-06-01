@@ -98,6 +98,42 @@ func (r *DialogRuntime) CancelActive() DialogResult {
 	return r.Resolve(ScreenEvent{Type: ScreenEventCancelled, DialogID: r.Active.ID, DialogKind: r.Active.Kind})
 }
 
+func (r *DialogRuntime) CancelPermission(id string) DialogResult {
+	if id == "" && r.Active != nil && r.Active.Kind == DialogPermission {
+		id = r.Active.ID
+	}
+	result := DialogResult{ID: id, Kind: DialogPermission}
+	if id == "" {
+		return result
+	}
+	if _, ok := r.Permissions[id]; !ok {
+		return result
+	}
+	result.Found = true
+	result.Status = DialogResultCancelled
+	delete(r.Permissions, id)
+	if r.Active != nil && r.Active.Kind == DialogPermission && r.Active.ID == id {
+		r.Active = nil
+	}
+	return result
+}
+
+func (r *DialogRuntime) CancelPermissions() []DialogResult {
+	if len(r.Permissions) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(r.Permissions))
+	for id := range r.Permissions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	results := make([]DialogResult, 0, len(ids))
+	for _, id := range ids {
+		results = append(results, r.CancelPermission(id))
+	}
+	return results
+}
+
 func (r *DialogRuntime) OpenTasksDialog() Dialog {
 	tasks := r.SortedTasks()
 	dialog := TaskDialog(tasks)
