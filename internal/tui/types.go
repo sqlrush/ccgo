@@ -44,6 +44,13 @@ type Frame struct {
 	ShowCursor bool
 }
 
+type ReverseSearchState struct {
+	Active  bool
+	Query   string
+	Results []string
+	Focused int
+}
+
 type KeyType string
 
 const (

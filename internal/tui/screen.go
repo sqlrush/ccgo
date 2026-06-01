@@ -9,6 +9,7 @@ const (
 	ScreenEventCancelled       ScreenEventType = "cancelled"
 	ScreenEventInterrupted     ScreenEventType = "interrupted"
 	ScreenEventReverseSearch   ScreenEventType = "reverse_search"
+	ScreenEventReverseSelected ScreenEventType = "reverse_search_selected"
 	ScreenEventFocusIn         ScreenEventType = "focus_in"
 	ScreenEventFocusOut        ScreenEventType = "focus_out"
 )
@@ -21,17 +22,18 @@ type ScreenEvent struct {
 }
 
 type REPLScreen struct {
-	Width      int
-	Height     int
-	Messages   []Message
-	Status     string
-	Prompt     PromptState
-	Dialog     *Dialog
-	Keymap     Keymap
-	Viewport   Viewport
-	VimEnabled bool
-	VimMode    VimMode
-	Focused    bool
+	Width         int
+	Height        int
+	Messages      []Message
+	Status        string
+	Prompt        PromptState
+	Dialog        *Dialog
+	Keymap        Keymap
+	Viewport      Viewport
+	VimEnabled    bool
+	VimMode       VimMode
+	Focused       bool
+	ReverseSearch ReverseSearchState
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
@@ -71,6 +73,9 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	if key.Type == KeyMouse {
 		return s.applyMouse(key)
 	}
+	if s.ReverseSearch.Active {
+		return s.applyReverseSearchKey(key)
+	}
 	if s.Dialog == nil {
 		if event, handled := s.applyVimKey(key); handled {
 			return event
@@ -90,6 +95,7 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	case ActionPageDown:
 		s.Viewport.Page(1)
 	case ActionReverseSearch:
+		s.OpenReverseSearch("")
 		return ScreenEvent{Type: ScreenEventReverseSearch}
 	case ActionCancel:
 		return ScreenEvent{Type: ScreenEventCancelled}
@@ -105,6 +111,36 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		case result.Interrupted:
 			return ScreenEvent{Type: ScreenEventInterrupted}
 		}
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) OpenReverseSearch(query string) {
+	s.ReverseSearch = NewReverseSearchState(s.Prompt.History, query)
+}
+
+func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
+	switch key.Type {
+	case KeyEsc, KeyCtrlC:
+		s.ReverseSearch = ReverseSearchState{}
+		return ScreenEvent{Type: ScreenEventCancelled}
+	case KeyEnter:
+		if selected, ok := s.ReverseSearch.Current(); ok {
+			s.Prompt.Text = selected
+			s.Prompt.Cursor = len([]rune(selected))
+			s.Prompt.resetHistoryCursor()
+			s.ReverseSearch = ReverseSearchState{}
+			return ScreenEvent{Type: ScreenEventReverseSelected, Value: selected}
+		}
+		s.ReverseSearch = ReverseSearchState{}
+	case KeyUp:
+		s.ReverseSearch.Move(-1)
+	case KeyDown:
+		s.ReverseSearch.Move(1)
+	case KeyBackspace:
+		s.ReverseSearch.Backspace(s.Prompt.History)
+	case KeyRune:
+		s.ReverseSearch.AppendRune(s.Prompt.History, key.Rune)
 	}
 	return ScreenEvent{}
 }

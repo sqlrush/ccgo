@@ -45,8 +45,8 @@ func ListProjectSessions(root string) ([]SessionInfo, error) {
 		}
 		id := contracts.ID(strings.TrimSuffix(entry.Name(), ".jsonl"))
 		title := ""
-		if transcript, err := LoadTranscript(path); err == nil {
-			title = TitleFromTranscript(transcript, id)
+		if index, err := LoadTranscriptIndex(path, id); err == nil {
+			title = index.Title
 		}
 		sessions = append(sessions, SessionInfo{
 			ID:       id,

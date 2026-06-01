@@ -48,6 +48,30 @@ func TestListProjectSessionsSortsAndBuildsTitles(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"custom-title","sessionId":"sess_1","customTitle":"Custom Title"}`,
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","content":[{"type":"text","text":"first prompt"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"text","text":"done"}]}}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:02Z","message":{"type":"user","content":[{"type":"text","text":"last prompt"}]}}`,
+		`{"type":"content-replacement","sessionId":"sess_1","replacements":[{"replacement":"stub"},{"replacement":"stub2"}]}`,
+	})
+	index, err := LoadTranscriptIndex(path, "sess_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "Custom Title" || index.MessageCount != 3 || index.UserMessageCount != 2 || index.AssistantMessageCount != 1 {
+		t.Fatalf("index = %#v", index)
+	}
+	if index.FirstUUID != "u1" || index.LastUUID != "u2" || index.FirstUserText != "first prompt" || index.LastUserText != "last prompt" {
+		t.Fatalf("index messages = %#v", index)
+	}
+	if index.SummaryCount != 1 || index.ContentReplacementCount != 2 {
+		t.Fatalf("index metadata = %#v", index)
+	}
+}
+
 func TestSearchProjectSessionsFindsTranscriptText(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	root := "/repo/project"

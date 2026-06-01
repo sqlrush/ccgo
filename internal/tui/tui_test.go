@@ -224,6 +224,28 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 }
 
+func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
+	results := FilterHistoryForReverseSearch([]string{"deploy old", "test", "deploy new", "deploy old"}, "deploy", 10)
+	if strings.Join(results, ",") != "deploy old,deploy new" {
+		t.Fatalf("results = %#v", results)
+	}
+	screen := NewREPLScreen(40, 8, []string{"deploy old", "test", "deploy new"})
+	event := screen.ApplyKey(ParseKey("\x12"))
+	if event.Type != ScreenEventReverseSearch || !screen.ReverseSearch.Active {
+		t.Fatalf("event = %#v state=%#v", event, screen.ReverseSearch)
+	}
+	for _, seq := range []string{"d", "e", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.ReverseSearch.Query != "dep" || len(screen.ReverseSearch.Results) != 2 || screen.ReverseSearch.Results[0] != "deploy new" {
+		t.Fatalf("reverse state = %#v", screen.ReverseSearch)
+	}
+	selected := screen.ApplyKey(ParseKey("\n"))
+	if selected.Type != ScreenEventReverseSelected || selected.Value != "deploy new" || screen.Prompt.Text != "deploy new" || screen.ReverseSearch.Active {
+		t.Fatalf("selected = %#v prompt=%#v state=%#v", selected, screen.Prompt, screen.ReverseSearch)
+	}
+}
+
 func TestPermissionAndTaskDialogs(t *testing.T) {
 	permission := PermissionDialog(PermissionRequest{
 		ID:          "perm_1",
