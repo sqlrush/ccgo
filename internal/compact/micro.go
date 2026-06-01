@@ -317,15 +317,38 @@ func microNow(options MicroOptions) time.Time {
 func DigestMessages(messages []contracts.Message) string {
 	hash := sha256.New()
 	for _, message := range messages {
-		fmt.Fprintf(hash, "%s\x00%s\x00%s\x00", message.Type, message.UUID, message.Subtype)
+		parentUUID := ""
+		if message.ParentUUID != nil {
+			parentUUID = string(*message.ParentUUID)
+		}
+		fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%s\x00", message.ID, message.Type, message.UUID, parentUUID, message.SessionID, message.IsMeta, message.Subtype)
+		fmt.Fprintf(hash, "%s\x00", message.Model)
 		for _, block := range message.Content {
-			fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%s\x00%s\x00", block.Type, block.ID, block.Name, block.ToolUseID, block.Text)
+			fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%s\x00", block.Type, block.ID, block.Name, block.ToolUseID, block.Text, block.IsError, block.CacheReference)
 			if block.Input != nil {
 				hash.Write(block.Input)
 			}
+			writeDigestJSON(hash, block.Content)
+			writeDigestJSON(hash, block.CacheControl)
+			writeDigestJSON(hash, block.Edits)
 		}
 	}
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+func writeDigestJSON(hash interface{ Write([]byte) (int, error) }, value any) {
+	if value == nil {
+		hash.Write([]byte("\x00"))
+		return
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		hash.Write([]byte(fmt.Sprintf("%T", value)))
+		hash.Write([]byte("\x00"))
+		return
+	}
+	hash.Write(data)
+	hash.Write([]byte("\x00"))
 }
 
 func summarizeMessages(messages []contracts.Message, maxChars int) string {

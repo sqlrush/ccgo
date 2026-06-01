@@ -128,6 +128,53 @@ func TestMicroCompactSummarizesAndCaches(t *testing.T) {
 	}
 }
 
+func TestDigestMessagesIncludesMetadataAndRichContent(t *testing.T) {
+	parent := contracts.ID("parent_1")
+	base := contracts.Message{
+		ID:         "msg_1",
+		Type:       contracts.MessageAssistant,
+		UUID:       "uuid_1",
+		ParentUUID: &parent,
+		SessionID:  "session_1",
+		Model:      "sonnet",
+		Content: []contracts.ContentBlock{{
+			Type:    contracts.ContentToolResult,
+			ID:      "result_1",
+			Content: map[string]any{"stdout": "one"},
+		}},
+	}
+	same := base
+	if DigestMessages([]contracts.Message{base}) != DigestMessages([]contracts.Message{same}) {
+		t.Fatal("identical messages should have identical digest")
+	}
+	differentParent := base
+	otherParent := contracts.ID("parent_2")
+	differentParent.ParentUUID = &otherParent
+	if DigestMessages([]contracts.Message{base}) == DigestMessages([]contracts.Message{differentParent}) {
+		t.Fatal("parent uuid should affect digest")
+	}
+	differentModel := base
+	differentModel.Model = "opus"
+	if DigestMessages([]contracts.Message{base}) == DigestMessages([]contracts.Message{differentModel}) {
+		t.Fatal("model should affect digest")
+	}
+	differentContent := base
+	differentContent.Content = []contracts.ContentBlock{{
+		Type:    contracts.ContentToolResult,
+		ID:      "result_1",
+		Content: map[string]any{"stdout": "two"},
+	}}
+	if DigestMessages([]contracts.Message{base}) == DigestMessages([]contracts.Message{differentContent}) {
+		t.Fatal("rich content should affect digest")
+	}
+	differentCacheReference := base
+	differentCacheReference.Content = []contracts.ContentBlock{base.Content[0]}
+	differentCacheReference.Content[0].CacheReference = "cache_ref_1"
+	if DigestMessages([]contracts.Message{base}) == DigestMessages([]contracts.Message{differentCacheReference}) {
+		t.Fatal("cache metadata should affect digest")
+	}
+}
+
 func TestMicroCompactPersistsDiskCache(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	now := time.Unix(100, 0).UTC()
