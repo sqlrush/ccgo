@@ -73,6 +73,7 @@ const (
 	KeyCtrlA     KeyType = "ctrl+a"
 	KeyCtrlB     KeyType = "ctrl+b"
 	KeyCtrlC     KeyType = "ctrl+c"
+	KeyCtrlD     KeyType = "ctrl+d"
 	KeyCtrlE     KeyType = "ctrl+e"
 	KeyCtrlF     KeyType = "ctrl+f"
 	KeyCtrlG     KeyType = "ctrl+g"

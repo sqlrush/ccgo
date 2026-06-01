@@ -1,5 +1,9 @@
 package tui
 
+import "time"
+
+const DoublePressTimeout = 800 * time.Millisecond
+
 type ScreenEventType string
 
 const (
@@ -8,6 +12,8 @@ const (
 	ScreenEventDialogAction     ScreenEventType = "dialog_action"
 	ScreenEventCancelled        ScreenEventType = "cancelled"
 	ScreenEventInterrupted      ScreenEventType = "interrupted"
+	ScreenEventExitPending      ScreenEventType = "exit_pending"
+	ScreenEventExit             ScreenEventType = "exit"
 	ScreenEventRedraw           ScreenEventType = "redraw"
 	ScreenEventToggleTranscript ScreenEventType = "toggle_transcript"
 	ScreenEventToggleTodos      ScreenEventType = "toggle_todos"
@@ -59,6 +65,9 @@ type REPLScreen struct {
 	Focused              bool
 	ReverseSearch        ReverseSearchState
 	SelectedViewportLine int
+	ExitPendingKey       KeyType
+	ExitPendingAt        time.Time
+	Now                  func() time.Time
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
@@ -127,6 +136,16 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	if action == ActionKillAgents {
 		return ScreenEvent{Type: ScreenEventKillAgents}
 	}
+	if action == ActionExit {
+		if s.Dialog != nil || s.Prompt.Text == "" {
+			return s.applyDoublePressExit(KeyCtrlD)
+		}
+		result := s.Prompt.Apply(Key{Type: KeyCtrlD})
+		if result.Cancelled {
+			return ScreenEvent{Type: ScreenEventCancelled}
+		}
+		return ScreenEvent{}
+	}
 	if s.Dialog != nil {
 		return s.applyDialogAction(action)
 	}
@@ -166,6 +185,25 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		}
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyDoublePressExit(key KeyType) ScreenEvent {
+	now := s.now()
+	if s.ExitPendingKey == key && !s.ExitPendingAt.IsZero() && now.Sub(s.ExitPendingAt) <= DoublePressTimeout {
+		s.ExitPendingKey = ""
+		s.ExitPendingAt = time.Time{}
+		return ScreenEvent{Type: ScreenEventExit}
+	}
+	s.ExitPendingKey = key
+	s.ExitPendingAt = now
+	return ScreenEvent{Type: ScreenEventExitPending, Value: "Ctrl-D"}
+}
+
+func (s *REPLScreen) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
 }
 
 func (s *REPLScreen) OpenReverseSearch(query string) {
@@ -416,6 +454,8 @@ func keyForAction(action Action, key Key) Key {
 		return Key{Type: KeyEsc}
 	case ActionInterrupt:
 		return Key{Type: KeyCtrlC}
+	case ActionExit:
+		return Key{Type: KeyCtrlD}
 	default:
 		return key
 	}

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/session"
 )
@@ -58,6 +59,19 @@ func TestPromptStateControlLineEditing(t *testing.T) {
 		t.Fatalf("after ctrl-k prompt = %#v", prompt)
 	}
 	typePromptText("alpha beta")
+	prompt.Apply(ParseKey("\x01"))
+	for i := 0; i < len([]rune("alpha ")); i++ {
+		prompt.Apply(ParseKey("\x06"))
+	}
+	prompt.Apply(ParseKey("\x04"))
+	if prompt.Text != "alpha eta" || prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after ctrl-d prompt = %#v", prompt)
+	}
+	prompt.Apply(ParseKey("\x0b"))
+	if prompt.Text != "alpha " || prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after ctrl-k after ctrl-d prompt = %#v", prompt)
+	}
+	typePromptText("beta")
 	prompt.Apply(ParseKey("\x1b[D"))
 	prompt.Apply(ParseKey("\x15"))
 	if prompt.Text != "a" || prompt.Cursor != 0 {
@@ -260,6 +274,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x07")); action != ActionExternalEditor {
 		t.Fatalf("ctrl-g action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x04")); action != ActionExit {
+		t.Fatalf("ctrl-d action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x15")); action != ActionDeleteToStart {
 		t.Fatalf("ctrl-u action = %q", action)
 	}
@@ -319,7 +336,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-o", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -554,6 +571,41 @@ func TestREPLScreenChatControlEvents(t *testing.T) {
 		if event.Type != tc.want {
 			t.Fatalf("event for %#v = %#v, want %s", tc.seqs, event, tc.want)
 		}
+	}
+}
+
+func TestREPLScreenCtrlDDeletesForwardOrDoublePressExits(t *testing.T) {
+	now := time.Unix(100, 0)
+	screen := NewREPLScreen(40, 8, nil)
+	screen.Now = func() time.Time { return now }
+	typePromptText(&screen, "abc")
+	screen.ApplyKey(ParseKey("\x1b[D"))
+	event := screen.ApplyKey(ParseKey("\x04"))
+	if event.Type != ScreenEventNone || screen.Prompt.Text != "ab" || screen.Prompt.Cursor != 2 {
+		t.Fatalf("ctrl-d delete event=%#v prompt=%#v", event, screen.Prompt)
+	}
+
+	screen.Prompt.Text = ""
+	screen.Prompt.Cursor = 0
+	event = screen.ApplyKey(ParseKey("\x04"))
+	if event.Type != ScreenEventExitPending || event.Value != "Ctrl-D" {
+		t.Fatalf("first ctrl-d = %#v", event)
+	}
+	now = now.Add(DoublePressTimeout)
+	event = screen.ApplyKey(ParseKey("\x04"))
+	if event.Type != ScreenEventExit {
+		t.Fatalf("second ctrl-d = %#v", event)
+	}
+
+	now = now.Add(DoublePressTimeout + time.Millisecond)
+	event = screen.ApplyKey(ParseKey("\x04"))
+	if event.Type != ScreenEventExitPending {
+		t.Fatalf("expired first ctrl-d = %#v", event)
+	}
+	now = now.Add(DoublePressTimeout + time.Millisecond)
+	event = screen.ApplyKey(ParseKey("\x04"))
+	if event.Type != ScreenEventExitPending {
+		t.Fatalf("expired second ctrl-d should re-arm = %#v", event)
 	}
 }
 

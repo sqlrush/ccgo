@@ -10,6 +10,7 @@ const (
 	ActionSubmitPrompt     Action = "submit_prompt"
 	ActionCancel           Action = "cancel"
 	ActionInterrupt        Action = "interrupt"
+	ActionExit             Action = "exit"
 	ActionRedraw           Action = "redraw"
 	ActionToggleTranscript Action = "toggle_transcript"
 	ActionToggleTodos      Action = "toggle_todos"
@@ -52,6 +53,7 @@ func DefaultKeymap() Keymap {
 		KeyEnter:     ActionSubmitPrompt,
 		KeyEsc:       ActionCancel,
 		KeyCtrlC:     ActionInterrupt,
+		KeyCtrlD:     ActionExit,
 		KeyCtrlL:     ActionRedraw,
 		KeyCtrlO:     ActionToggleTranscript,
 		KeyCtrlT:     ActionToggleTodos,

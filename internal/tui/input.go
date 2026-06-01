@@ -52,6 +52,8 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlB}
 	case "\x03":
 		return Key{Type: KeyCtrlC}
+	case "\x04":
+		return Key{Type: KeyCtrlD}
 	case "\x05":
 		return Key{Type: KeyCtrlE}
 	case "\x06":
@@ -168,7 +170,7 @@ func (p *PromptState) Apply(key Key) PromptResult {
 			p.Text = string(runes)
 			p.resetHistoryCursor()
 		}
-	case KeyDelete:
+	case KeyDelete, KeyCtrlD:
 		if p.Cursor < len(runes) {
 			runes = append(runes[:p.Cursor], runes[p.Cursor+1:]...)
 			p.Text = string(runes)
