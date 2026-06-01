@@ -797,12 +797,23 @@ func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	if !strings.Contains(enter, EnterAlternateScreen) || !strings.Contains(enter, HideCursor) {
 		t.Fatalf("enter = %q", enter)
 	}
+	if again := lifecycle.EnterAlternate(); again != "" {
+		t.Fatalf("second enter should be idempotent: %q", again)
+	}
 	exit := lifecycle.ExitAlternate()
 	if lifecycle.AlternateScreen || lifecycle.CursorHidden {
 		t.Fatalf("lifecycle after exit = %#v", lifecycle)
 	}
 	if !strings.Contains(exit, ShowCursor) || !strings.Contains(exit, ExitAlternateScreen) {
 		t.Fatalf("exit = %q", exit)
+	}
+	if again := lifecycle.ExitAlternate(); again != "" {
+		t.Fatalf("second exit should be idempotent: %q", again)
+	}
+	lifecycle.EnterAlternate()
+	reset := lifecycle.Reset()
+	if lifecycle.AlternateScreen || lifecycle.CursorHidden || !strings.Contains(reset, ExitAlternateScreen) {
+		t.Fatalf("reset = %q lifecycle=%#v", reset, lifecycle)
 	}
 }
 

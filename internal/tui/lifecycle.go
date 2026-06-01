@@ -6,15 +6,39 @@ type ScreenLifecycle struct {
 }
 
 func (l *ScreenLifecycle) EnterAlternate() string {
+	if l.AlternateScreen && l.CursorHidden {
+		return ""
+	}
+	seq := ""
+	if !l.AlternateScreen {
+		seq += EnterAlternateScreen + ClearScreen + HomeCursor
+	}
+	if !l.CursorHidden {
+		seq += HideCursor
+	}
 	l.AlternateScreen = true
 	l.CursorHidden = true
-	return EnterAlternateScreen + HideCursor + ClearScreen + HomeCursor
+	return seq
 }
 
 func (l *ScreenLifecycle) ExitAlternate() string {
+	if !l.AlternateScreen && !l.CursorHidden {
+		return ""
+	}
+	seq := ""
+	if l.CursorHidden {
+		seq += ShowCursor
+	}
+	if l.AlternateScreen {
+		seq += ExitAlternateScreen
+	}
 	l.CursorHidden = false
 	l.AlternateScreen = false
-	return ShowCursor + ExitAlternateScreen
+	return seq
+}
+
+func (l *ScreenLifecycle) Reset() string {
+	return l.ExitAlternate()
 }
 
 func (l *ScreenLifecycle) ShowCursor() string {

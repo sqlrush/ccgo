@@ -179,6 +179,59 @@ func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	}
 }
 
+func TestBuildSidechainResumeContext(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	parent := contracts.ID("parent_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	run, err := manager.Start(SidechainOptions{ID: "agent/one", ParentUUID: &parent, StartedAt: time.Unix(200, 0).UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{
+		Type: "user",
+		UUID: "agent_user",
+		Message: &contracts.Message{
+			Type:    contracts.MessageUser,
+			UUID:    "agent_user",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock("inspect")},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Append("agent/one", TranscriptMessage{
+		Type: "assistant",
+		UUID: "agent_msg",
+		Message: &contracts.Message{
+			Type:    contracts.MessageAssistant,
+			UUID:    "agent_msg",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	context, err := manager.ResumeContext("agent/one", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !context.CanResume || context.Run.ID != run.ID || context.State.LastUUID != "agent_msg" || !context.Truncated {
+		t.Fatalf("context = %#v", context)
+	}
+	if len(context.Tail) != 2 || context.Tail[0].UUID != "agent_user" || len(context.Messages) != 2 || context.Messages[1].Content[0].Text != "done" {
+		t.Fatalf("context tail/messages = %#v %#v", context.Tail, context.Messages)
+	}
+	if _, err := manager.Finish("agent/one", SidechainStatusCompleted, "finished", time.Unix(210, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	context, err = BuildSidechainResumeContext(sessionPath, sessionID, "agent/one", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if context.CanResume || context.Summary != "finished" || context.Truncated {
+		t.Fatalf("finished context = %#v", context)
+	}
+}
+
 func TestSidechainManifestSummarizesStates(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")
