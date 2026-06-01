@@ -36,6 +36,8 @@ type REPLScreen struct {
 	VimPendingOperator   rune
 	VimPendingCharMotion rune
 	VimPendingTextObject rune
+	VimPendingG          bool
+	VimPendingIndent     rune
 	VimLastCharMotion    rune
 	VimLastCharTarget    rune
 	VimRepeatingChar     bool

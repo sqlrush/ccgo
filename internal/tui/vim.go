@@ -87,6 +87,12 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	if s.VimPendingTextObject != 0 {
 		return s.applyVimTextObject(r)
 	}
+	if s.VimPendingG {
+		return s.applyVimG(r)
+	}
+	if s.VimPendingIndent != 0 {
+		return s.applyVimIndent(r)
+	}
 	if s.VimPendingOperator != 0 {
 		return s.applyVimOperator(r)
 	}
@@ -113,6 +119,20 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case ';', ',':
 		s.applyVimRepeatedCharMotion(count, r == ',')
+	case 'g':
+		s.VimPendingG = true
+		s.VimPendingCount = count
+	case 'G':
+		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
+	case '>', '<':
+		s.VimPendingIndent = r
+		s.VimPendingCount = count
+	case '~':
+		s.recordVimUndo()
+		s.Prompt.toggleCase(count)
+	case 'J':
+		s.recordVimUndo()
+		s.Prompt.joinLines(count)
 	case 'd', 'c', 'y':
 		s.VimPendingOperator = r
 		s.VimPendingCount = count
@@ -128,6 +148,14 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.VimMode = VimInsert
 	case 'A':
 		s.Prompt.Apply(Key{Type: KeyEnd})
+		s.VimMode = VimInsert
+	case 'o':
+		s.recordVimUndo()
+		s.Prompt.openLine(true)
+		s.VimMode = VimInsert
+	case 'O':
+		s.recordVimUndo()
+		s.Prompt.openLine(false)
 		s.VimMode = VimInsert
 	case 'h':
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyLeft}) })
@@ -156,12 +184,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
 	case 'D':
-		s.recordVimUndo()
-		s.Prompt.deleteToEnd()
+		s.applyVimMotionOperator('d', '$', 1)
 	case 'C':
-		s.recordVimUndo()
-		s.Prompt.deleteToEnd()
-		s.VimMode = VimInsert
+		s.applyVimMotionOperator('c', '$', 1)
 	}
 	return ScreenEvent{}
 }
@@ -187,6 +212,12 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.VimPendingOperator = operator
 		s.VimPendingTextObject = r
 		s.VimPendingCount = count
+	case 'G':
+		s.applyVimLineMotionOperator(operator, vimGTargetLine(s.Prompt.lineCount(), count))
+	case 'g':
+		s.VimPendingOperator = operator
+		s.VimPendingG = true
+		s.VimPendingCount = count
 	case ';', ',':
 		s.VimPendingOperator = operator
 		s.VimPendingCharMotion = s.repeatedVimCharMotion(r == ',')
@@ -200,6 +231,49 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 	case 'h', 'l', 'w', 'W', 'e', 'E', '$', '0', 'b', 'B', '^':
 		s.applyVimMotionOperator(operator, r, count)
 	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
+	operator := s.VimPendingOperator
+	count := s.VimPendingCount
+	s.clearVimPending()
+	switch r {
+	case 'g':
+		targetLine := 1
+		if count > 1 {
+			targetLine = count
+		}
+		if operator == 0 {
+			s.Prompt.goToLine(targetLine)
+			return ScreenEvent{}
+		}
+		s.applyVimLineMotionOperator(operator, targetLine)
+	case 'j':
+		if operator == 0 {
+			s.Prompt.moveLogicalLine(count)
+		} else {
+			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()+count+1)
+		}
+	case 'k':
+		if operator == 0 {
+			s.Prompt.moveLogicalLine(-count)
+		} else {
+			s.applyVimLineMotionOperator(operator, s.Prompt.currentLogicalLine()-count+1)
+		}
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimIndent(r rune) ScreenEvent {
+	dir := s.VimPendingIndent
+	count := s.VimPendingCount
+	s.clearVimPending()
+	if r != dir {
+		return ScreenEvent{}
+	}
+	s.recordVimUndo()
+	s.Prompt.indentLines(dir, count)
 	return ScreenEvent{}
 }
 
@@ -269,6 +343,14 @@ func (s *REPLScreen) applyVimMotionOperator(operator rune, motion rune, count in
 	s.applyVimRangeOperator(operator, start, end, linewise)
 }
 
+func (s *REPLScreen) applyVimLineMotionOperator(operator rune, targetLine int) {
+	start, end, ok := s.Prompt.lineMotionRange(targetLine)
+	if !ok {
+		return
+	}
+	s.applyVimRangeOperator(operator, start, end, true)
+}
+
 func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
 	start, end := s.Prompt.lineRange(count)
 	s.setVimRegister(s.Prompt.rangeText(start, end), true)
@@ -296,7 +378,14 @@ func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, li
 		s.Prompt.Cursor = s.Prompt.clampCursor(start)
 	case 'd', 'c':
 		s.recordVimUndo()
-		s.Prompt.deleteRange(start, end)
+		deleteStart := start
+		if linewise && operator == 'd' {
+			runes := []rune(s.Prompt.Text)
+			if end == len(runes) && deleteStart > 0 && runes[deleteStart-1] == '\n' {
+				deleteStart--
+			}
+		}
+		s.Prompt.deleteRange(deleteStart, end)
 		if operator == 'c' {
 			s.VimMode = VimInsert
 		}
@@ -387,6 +476,8 @@ func (s *REPLScreen) clearVimPending() {
 	s.VimPendingOperator = 0
 	s.VimPendingCharMotion = 0
 	s.VimPendingTextObject = 0
+	s.VimPendingG = false
+	s.VimPendingIndent = 0
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
@@ -438,6 +529,13 @@ func applyN(count int, fn func()) {
 	for i := 0; i < count; i++ {
 		fn()
 	}
+}
+
+func vimGTargetLine(lineCount int, count int) int {
+	if count <= 1 {
+		return lineCount
+	}
+	return count
 }
 
 func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int) (int, int, bool, bool) {
@@ -511,6 +609,10 @@ func orderedRange(start int, end int, linewise bool) (int, int, bool, bool) {
 	return start, end, linewise, true
 }
 
+func (p *PromptState) lineCount() int {
+	return len(strings.Split(p.Text, "\n"))
+}
+
 func (p *PromptState) clampCursor(cursor int) int {
 	runes := []rune(p.Text)
 	if cursor < 0 {
@@ -534,6 +636,46 @@ func (p *PromptState) rangeText(start int, end int) string {
 		start, end = end, start
 	}
 	return string(runes[start:end])
+}
+
+func (p *PromptState) goToLine(line int) {
+	lines := strings.Split(p.Text, "\n")
+	if line < 1 {
+		line = 1
+	}
+	if line > len(lines) {
+		line = len(lines)
+	}
+	p.Cursor = lineStartOffset(lines, line-1)
+}
+
+func (p *PromptState) lineMotionRange(targetLine int) (int, int, bool) {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 {
+		return 0, 0, false
+	}
+	current := p.currentLogicalLine()
+	if targetLine < 1 {
+		targetLine = 1
+	}
+	if targetLine > len(lines) {
+		targetLine = len(lines)
+	}
+	target := targetLine - 1
+	startLine := current
+	endLine := target
+	if endLine < startLine {
+		startLine, endLine = endLine, startLine
+	}
+	start := lineStartOffset(lines, startLine)
+	end := len([]rune(p.Text))
+	if endLine+1 < len(lines) {
+		end = lineStartOffset(lines, endLine+1)
+	}
+	if start == end {
+		return 0, 0, false
+	}
+	return start, end, true
 }
 
 func (p *PromptState) lineRange(count int) (int, int) {
@@ -572,6 +714,125 @@ func (p *PromptState) currentLogicalLine() int {
 		}
 	}
 	return line
+}
+
+func (p *PromptState) moveLogicalLine(delta int) {
+	line := p.currentLogicalLine() + delta + 1
+	p.goToLine(line)
+}
+
+func (p *PromptState) toggleCase(count int) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(p.Text)
+	cursor := p.clampCursor(p.Cursor)
+	for i := 0; i < count && cursor+i < len(runes); i++ {
+		idx := cursor + i
+		r := runes[idx]
+		switch {
+		case unicode.IsUpper(r):
+			runes[idx] = unicode.ToLower(r)
+		case unicode.IsLower(r):
+			runes[idx] = unicode.ToUpper(r)
+		default:
+			runes[idx] = unicode.ToUpper(r)
+		}
+	}
+	p.Text = string(runes)
+	if cursor+count <= len(runes) {
+		p.Cursor = cursor + count
+	} else {
+		p.Cursor = len(runes)
+	}
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) joinLines(count int) {
+	if count <= 0 {
+		count = 1
+	}
+	lines := strings.Split(p.Text, "\n")
+	current := p.currentLogicalLine()
+	if current >= len(lines)-1 {
+		return
+	}
+	linesToJoin := count
+	if linesToJoin > len(lines)-current-1 {
+		linesToJoin = len(lines) - current - 1
+	}
+	joined := lines[current]
+	cursorPos := len([]rune(joined))
+	for i := 1; i <= linesToJoin; i++ {
+		next := strings.TrimLeftFunc(lines[current+i], unicode.IsSpace)
+		if next == "" {
+			continue
+		}
+		if joined != "" && !strings.HasSuffix(joined, " ") {
+			joined += " "
+		}
+		joined += next
+	}
+	newLines := make([]string, 0, len(lines)-linesToJoin)
+	newLines = append(newLines, lines[:current]...)
+	newLines = append(newLines, joined)
+	newLines = append(newLines, lines[current+linesToJoin+1:]...)
+	p.Text = strings.Join(newLines, "\n")
+	p.Cursor = lineStartOffset(newLines, current) + cursorPos
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) indentLines(dir rune, count int) {
+	if count <= 0 {
+		count = 1
+	}
+	lines := strings.Split(p.Text, "\n")
+	current := p.currentLogicalLine()
+	linesToAffect := count
+	if linesToAffect > len(lines)-current {
+		linesToAffect = len(lines) - current
+	}
+	for i := 0; i < linesToAffect; i++ {
+		idx := current + i
+		line := lines[idx]
+		if dir == '>' {
+			lines[idx] = "  " + line
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "  "):
+			lines[idx] = line[2:]
+		case strings.HasPrefix(line, "\t"):
+			lines[idx] = line[1:]
+		default:
+			removed := 0
+			runes := []rune(line)
+			cut := 0
+			for cut < len(runes) && removed < 2 && unicode.IsSpace(runes[cut]) {
+				cut++
+				removed++
+			}
+			lines[idx] = string(runes[cut:])
+		}
+	}
+	p.Text = strings.Join(lines, "\n")
+	p.Cursor = lineStartOffset(lines, current) + firstNonBlankOffset(lines[current])
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) openLine(below bool) {
+	lines := strings.Split(p.Text, "\n")
+	insertLine := p.currentLogicalLine()
+	if below {
+		insertLine++
+	}
+	newLines := make([]string, 0, len(lines)+1)
+	newLines = append(newLines, lines[:insertLine]...)
+	newLines = append(newLines, "")
+	newLines = append(newLines, lines[insertLine:]...)
+	p.Text = strings.Join(newLines, "\n")
+	p.Cursor = lineStartOffset(newLines, insertLine)
+	p.resetHistoryCursor()
 }
 
 func (p *PromptState) pasteCharacterwise(content string, after bool, count int) {
@@ -624,6 +885,15 @@ func lineStartOffset(lines []string, lineIndex int) int {
 		offset += len([]rune(lines[i]))
 	}
 	return offset + lineIndex
+}
+
+func firstNonBlankOffset(line string) int {
+	for i, r := range []rune(line) {
+		if !unicode.IsSpace(r) {
+			return i
+		}
+	}
+	return 0
 }
 
 func (p *PromptState) moveWordForward() {

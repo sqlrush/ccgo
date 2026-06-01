@@ -1007,6 +1007,81 @@ func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimGLineNavigationAndOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("G"))
+	if screen.Prompt.Cursor != len([]rune("one\ntwo\n")) {
+		t.Fatalf("cursor after G = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"g", "g"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != 0 {
+		t.Fatalf("cursor after gg = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"2", "g", "g"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("cursor after 2gg = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"d", "G"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one" || screen.VimRegister != "two\nthree\n" {
+		t.Fatalf("after dG screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimEditCommands(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abC")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "2", "~"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ABC" || screen.Prompt.Cursor != 2 {
+		t.Fatalf("after 2~ screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "J"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
+		t.Fatalf("after J screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "o"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n\ntwo" || screen.Prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("after o screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", ">", ">", "<", "<"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\ntwo" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after >> << screen = %#v", screen)
+	}
+}
+
 func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 	var lifecycle ScreenLifecycle
 	enter := lifecycle.EnterAlternate()
