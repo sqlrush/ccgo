@@ -422,7 +422,7 @@ func TestTranscriptLineIndexLoadsWindowWithoutFullTranscript(t *testing.T) {
 }
 
 func TestTranscriptLineIndexLoadsTailWithoutFullTranscript(t *testing.T) {
-	path := writeTranscript(t, []string{
+	lines := []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
 		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
 		`{"type":"assistant","uuid":"a1","parentUuid":"p1"}`,
@@ -430,7 +430,8 @@ func TestTranscriptLineIndexLoadsTailWithoutFullTranscript(t *testing.T) {
 		`{"type":"user","uuid":"u2","parentUuid":"a1"}`,
 		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
 		`{"type":"user","uuid":"u3","parentUuid":"a2"}`,
-	})
+	}
+	path := writeTranscript(t, lines)
 	index, err := BuildTranscriptLineIndex(path)
 	if err != nil {
 		t.Fatal(err)
@@ -463,6 +464,29 @@ func TestTranscriptLineIndexLoadsTailWithoutFullTranscript(t *testing.T) {
 	}
 	if len(empty.Messages) != 0 || empty.HasBefore {
 		t.Fatalf("empty indexed tail = %#v", empty)
+	}
+
+	budget := int64(len(lines[5]) + 1 + len(lines[6]) + 1)
+	byteTail, err := LoadTranscriptIndexedTailBytes(path, index, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !byteTail.HasBefore || byteTail.StartIndex != 3 || byteTail.BytesRead > budget {
+		t.Fatalf("indexed byte tail metadata = %#v budget=%d", byteTail, budget)
+	}
+	if got := tailIDs(byteTail.Messages); strings.Join(got, ",") != "a2,u3" {
+		t.Fatalf("indexed byte tail messages = %#v", got)
+	}
+	if byteTail.Messages[0].ParentUUID == nil || *byteTail.Messages[0].ParentUUID != "u2" {
+		t.Fatalf("indexed byte tail parent = %#v", byteTail.Messages[0].ParentUUID)
+	}
+
+	tooSmall, err := LoadTranscriptIndexedTailBytes(path, index, int64(len(lines[6])/2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tooSmall.Messages) != 0 || tooSmall.BytesRead != 0 || !tooSmall.HasBefore {
+		t.Fatalf("too-small indexed byte tail = %#v", tooSmall)
 	}
 }
 

@@ -29,6 +29,7 @@ type TranscriptLineIndex struct {
 type TranscriptIndexedTail struct {
 	Messages   []TranscriptMessage
 	StartIndex int
+	BytesRead  int64
 	HasBefore  bool
 }
 
@@ -143,6 +144,51 @@ func LoadTranscriptIndexedTail(path string, index TranscriptLineIndex, limit int
 
 	tail := TranscriptIndexedTail{
 		StartIndex: start,
+		HasBefore:  start > 0,
+		Messages:   make([]TranscriptMessage, 0, len(index.Entries)-start),
+	}
+	for _, ref := range index.Entries[start:] {
+		tail.BytesRead += int64(ref.Length)
+		msg, ok, err := readTranscriptMessageRef(f, ref)
+		if err != nil {
+			return TranscriptIndexedTail{}, err
+		}
+		if ok {
+			tail.Messages = append(tail.Messages, msg)
+		}
+	}
+	return tail, nil
+}
+
+func LoadTranscriptIndexedTailBytes(path string, index TranscriptLineIndex, maxBytes int64) (TranscriptIndexedTail, error) {
+	if maxBytes <= 0 {
+		return TranscriptIndexedTail{}, nil
+	}
+	start := len(index.Entries)
+	bytesRead := int64(0)
+	for start > 0 {
+		refBytes := int64(index.Entries[start-1].Length)
+		if refBytes <= 0 || bytesRead+refBytes > maxBytes {
+			break
+		}
+		bytesRead += refBytes
+		start--
+	}
+	if start == len(index.Entries) {
+		return TranscriptIndexedTail{StartIndex: start, HasBefore: start > 0}, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TranscriptIndexedTail{}, nil
+		}
+		return TranscriptIndexedTail{}, err
+	}
+	defer f.Close()
+
+	tail := TranscriptIndexedTail{
+		StartIndex: start,
+		BytesRead:  bytesRead,
 		HasBefore:  start > 0,
 		Messages:   make([]TranscriptMessage, 0, len(index.Entries)-start),
 	}
