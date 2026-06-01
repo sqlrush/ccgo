@@ -25,6 +25,7 @@ type Frame struct {
 	Width      int
 	Height     int
 	Messages   []Message
+	BodyLines  []string
 	Status     string
 	Prompt     PromptState
 	Dialog     *Dialog
@@ -42,12 +43,17 @@ const (
 	KeyRight     KeyType = "right"
 	KeyUp        KeyType = "up"
 	KeyDown      KeyType = "down"
+	KeyPageUp    KeyType = "pageup"
+	KeyPageDown  KeyType = "pagedown"
 	KeyHome      KeyType = "home"
 	KeyEnd       KeyType = "end"
+	KeyTab       KeyType = "tab"
+	KeyShiftTab  KeyType = "shift+tab"
 	KeyEsc       KeyType = "esc"
 	KeyCtrlA     KeyType = "ctrl+a"
 	KeyCtrlE     KeyType = "ctrl+e"
 	KeyCtrlC     KeyType = "ctrl+c"
+	KeyCtrlR     KeyType = "ctrl+r"
 	KeyUnknown   KeyType = "unknown"
 )
 

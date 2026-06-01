@@ -109,3 +109,66 @@ func TestSelectionMovesAndRendersFocus(t *testing.T) {
 		t.Fatalf("clamped current = %q", current)
 	}
 }
+
+func TestKeymapResolvesDefaultActions(t *testing.T) {
+	keymap := DefaultKeymap()
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionReverseSearch {
+		t.Fatalf("ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("x")); action != ActionInsertRune {
+		t.Fatalf("rune action = %q", action)
+	}
+}
+
+func TestREPLScreenSubmitsPromptAndRendersMessages(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.Status = "ready"
+	screen.AppendMessage(Message{Role: RoleAssistant, Text: "hello from assistant"})
+	for _, seq := range []string{"r", "u", "n"} {
+		event := screen.ApplyKey(ParseKey(seq))
+		if event.Type != ScreenEventNone {
+			t.Fatalf("unexpected event = %#v", event)
+		}
+	}
+	event := screen.ApplyKey(ParseKey("\n"))
+	if event.Type != ScreenEventPromptSubmitted || event.Value != "run" {
+		t.Fatalf("submit event = %#v", event)
+	}
+	output := screen.Render()
+	if !strings.Contains(output, "assistant: hello from assistant") || !strings.Contains(output, "ready") {
+		t.Fatalf("output = %q", output)
+	}
+}
+
+func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}}
+	screen.ApplyKey(ParseKey("\t"))
+	if screen.Dialog.Focused != 1 {
+		t.Fatalf("focused = %d", screen.Dialog.Focused)
+	}
+	event := screen.ApplyKey(ParseKey("\n"))
+	if event.Type != ScreenEventDialogAction || event.Value != "Deny" {
+		t.Fatalf("dialog event = %#v", event)
+	}
+	if screen.Dialog != nil {
+		t.Fatalf("dialog should close")
+	}
+}
+
+func TestREPLScreenViewportScrolls(t *testing.T) {
+	screen := NewREPLScreen(20, 6, nil)
+	screen.SetMessages([]Message{
+		{Role: RoleSystem, Text: "one"},
+		{Role: RoleSystem, Text: "two"},
+		{Role: RoleSystem, Text: "three"},
+		{Role: RoleSystem, Text: "four"},
+		{Role: RoleSystem, Text: "five"},
+	})
+	before := strings.Join(screen.Viewport.Visible(), "\n")
+	screen.ApplyKey(ParseKey("\x1b[5~"))
+	after := strings.Join(screen.Viewport.Visible(), "\n")
+	if before == after || !strings.Contains(after, "one") {
+		t.Fatalf("before=%q after=%q", before, after)
+	}
+}

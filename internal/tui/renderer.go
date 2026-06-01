@@ -52,7 +52,10 @@ func (r Renderer) Render(frame Frame) string {
 		bodyHeight = 0
 	}
 
-	body := RenderMessages(frame.Messages, width)
+	body := append([]string(nil), frame.BodyLines...)
+	if len(body) == 0 {
+		body = RenderMessages(frame.Messages, width)
+	}
 	if frame.Dialog != nil {
 		dialog := RenderDialog(*frame.Dialog, width)
 		top := bodyHeight - len(dialog)

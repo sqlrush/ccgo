@@ -122,15 +122,16 @@ Still missing from full M5 parity:
 M6 progress now includes:
 
 - `internal/memory`: recursive `.md` memory scanning, frontmatter parsing, newest-first capped manifests, root-to-leaf `CLAUDE.md` discovery/loading, and team-memory secret detection.
-- `internal/compact`: effective context window calculations, auto-compact thresholds, token warning state, compact summary prompt construction, and compact boundary/summary plan generation.
+- `internal/compact`: effective context window calculations, auto-compact thresholds, token warning state, compact summary prompt construction, compact API runner, and compact boundary/summary plan generation.
+- `internal/conversation`: optional auto-compact can now run before the main request and persist compact boundary metadata to transcript.
 - `internal/session`: project session listing, title inference from custom title or first user prompt, and transcript search snippets for resume/search UI.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:
 
-- `internal/tui`: lightweight terminal frame renderer using ANSI clear/home/cursor control, message/status/prompt/dialog components, prompt input editing, prompt history navigation, viewport scrolling, and selection focus model.
+- `internal/tui`: lightweight terminal frame renderer using ANSI clear/home/cursor control, message/status/prompt/dialog components, prompt input editing, prompt history navigation, default keybinding resolver, REPL screen model, viewport scrolling, and selection focus model.
 
 Still missing for full M6/M7 parity:
 
-- M6: compact API summarization runner, auto-compact query-loop integration, microcompact/cached microcompact, session memory compaction, memory extraction/recall agents, sidechain/subagent transcript layout, large transcript optimized loading, remote-history token refresh, and complete metadata entry coverage.
-- M7: full REPL screen, custom Ink-compatible layout/reconciler parity, complete keybinding/vim systems, permission/task dialogs with race/cancel behavior, alternate screen lifecycle management, mouse/paste/image hints, ANSI snapshot corpus, and scripted interaction parity tests.
+- M6: microcompact/cached microcompact, session memory compaction, memory extraction/recall agents, compact failure circuit breaker, sidechain/subagent transcript layout, large transcript optimized loading, remote-history token refresh, and complete metadata entry coverage.
+- M7: custom Ink-compatible layout/reconciler parity, complete configurable keybinding/vim systems, permission/task dialogs with race/cancel behavior, alternate screen lifecycle management, mouse/paste/image hints, ANSI snapshot corpus, and scripted interaction parity tests.

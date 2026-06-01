@@ -1,0 +1,120 @@
+package compact
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"ccgo/internal/api/anthropic"
+	"ccgo/internal/contracts"
+	msgs "ccgo/internal/messages"
+)
+
+type MessageClient interface {
+	CreateMessage(context.Context, anthropic.Request) (*anthropic.Response, error)
+}
+
+type AutoConfig struct {
+	Enabled           bool
+	Force             bool
+	Window            WindowConfig
+	KeepLast          int
+	MinMessages       int
+	ExtraInstructions string
+	TokenUsage        int
+}
+
+type Runner struct {
+	Client            MessageClient
+	Model             string
+	MaxTokens         int
+	KeepLast          int
+	ExtraInstructions string
+}
+
+type Result struct {
+	Plan     Plan
+	Response *anthropic.Response
+	Request  anthropic.Request
+	Usage    contracts.Usage
+}
+
+func ShouldRun(history []contracts.Message, config AutoConfig) bool {
+	if !config.Enabled {
+		return false
+	}
+	if config.MinMessages > 0 && len(history) < config.MinMessages {
+		return false
+	}
+	if config.Force {
+		return true
+	}
+	usage := config.TokenUsage
+	if usage <= 0 {
+		usage = EstimateTokens(history)
+	}
+	window := config.Window
+	window.AutoCompactEnabled = true
+	return ShouldAutoCompact(usage, window)
+}
+
+func (r Runner) Compact(ctx context.Context, history []contracts.Message, trigger Trigger, preTokens int, userContext string) (Result, error) {
+	if r.Client == nil {
+		return Result{}, fmt.Errorf("compact runner missing client")
+	}
+	request := r.BuildRequest(history)
+	response, err := r.Client.CreateMessage(ctx, request)
+	if err != nil {
+		return Result{Request: request}, err
+	}
+	summary := strings.TrimSpace(responseText(response))
+	plan := BuildPlan(history, PlanOptions{
+		Trigger:        trigger,
+		PreTokens:      preTokens,
+		UserContext:    userContext,
+		KeepLast:       r.KeepLast,
+		Summary:        summary,
+		PreserveRecent: true,
+	})
+	return Result{
+		Plan:     plan,
+		Response: response,
+		Request:  request,
+		Usage:    response.Usage,
+	}, nil
+}
+
+func (r Runner) BuildRequest(history []contracts.Message) anthropic.Request {
+	model := r.Model
+	if model == "" {
+		model = "sonnet"
+	}
+	maxTokens := r.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = MaxOutputTokensForSummary
+	}
+	mode := PromptFull
+	if r.KeepLast > 0 {
+		mode = PromptPartial
+	}
+	messages := append([]contracts.Message(nil), history...)
+	messages = append(messages, SummaryRequestMessage(mode, r.ExtraInstructions))
+	return anthropic.Request{
+		Model:     model,
+		MaxTokens: maxTokens,
+		Messages:  msgs.NormalizeForAPI(messages),
+	}
+}
+
+func responseText(response *anthropic.Response) string {
+	if response == nil {
+		return ""
+	}
+	var parts []string
+	for _, block := range response.Content {
+		if block.Type == contracts.ContentText && block.Text != "" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}

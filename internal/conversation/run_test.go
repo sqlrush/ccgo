@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"ccgo/internal/api/anthropic"
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
@@ -284,6 +285,90 @@ func TestRunnerPreservesToolMetadataAcrossRounds(t *testing.T) {
 	}
 }
 
+func TestRunnerAutoCompactsBeforeMainRequest(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_summary",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("summary text")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	var events []EventType
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_compact",
+		SessionPath: transcriptPath,
+		AutoCompact: &compactpkg.AutoConfig{
+			Enabled:  true,
+			Force:    true,
+			KeepLast: 1,
+		},
+		OnEvent: func(event Event) {
+			events = append(events, event.Type)
+		},
+	}
+	history := []contracts.Message{
+		messages.UserText("old one"),
+		messages.AssistantText("old two", "sonnet", nil),
+	}
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("new request"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Compacted || result.Compact == nil {
+		t.Fatalf("result did not compact: %#v", result)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(client.requests))
+	}
+	compactPrompt := client.requests[0].Messages[len(client.requests[0].Messages)-1]
+	if !strings.Contains(compactPrompt.Content[0].Text, "Do NOT call any tools") {
+		t.Fatalf("compact prompt = %#v", compactPrompt)
+	}
+	mainReq := client.requests[1]
+	if len(mainReq.Messages) != 2 {
+		t.Fatalf("main request messages = %#v", mainReq.Messages)
+	}
+	if got := mainReq.Messages[0].Content[0].Text; !strings.Contains(got, "summary text") {
+		t.Fatalf("main summary = %q", got)
+	}
+	if got := mainReq.Messages[1].Content[0].Text; got != "new request" {
+		t.Fatalf("kept recent message = %q", got)
+	}
+	if !containsEvent(events, EventCompact) {
+		t.Fatalf("events = %#v", events)
+	}
+	transcript, err := session.LoadTranscript(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundBoundary := false
+	for _, id := range transcript.Order {
+		msg := transcript.Messages[id]
+		if msg != nil && msg.IsCompactBoundary() && msg.CompactMetadata != nil && msg.CompactMetadata.MessagesSummarized == 2 {
+			foundBoundary = true
+			break
+		}
+	}
+	if !foundBoundary {
+		t.Fatalf("transcript missing compact boundary: %#v", transcript.Order)
+	}
+}
+
 func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 	client := &fakeClient{calls: []fakeCall{
 		{err: anthropic.APIError{StatusCode: http.StatusInternalServerError, Type: "overloaded_error", Message: "try later"}},
@@ -312,6 +397,15 @@ func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 	if len(client.requests) != 2 || client.requests[0].Model != "sonnet" || client.requests[1].Model != "haiku" {
 		t.Fatalf("requests = %#v", client.requests)
 	}
+}
+
+func containsEvent(events []EventType, target EventType) bool {
+	for _, event := range events {
+		if event == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildRequestIncludesToolDefinitions(t *testing.T) {

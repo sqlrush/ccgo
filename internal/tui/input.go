@@ -31,6 +31,12 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlC}
 	case "\x05":
 		return Key{Type: KeyCtrlE}
+	case "\x12":
+		return Key{Type: KeyCtrlR}
+	case "\t":
+		return Key{Type: KeyTab}
+	case "\x1b[Z":
+		return Key{Type: KeyShiftTab}
 	case "\x1b[D":
 		return Key{Type: KeyLeft}
 	case "\x1b[C":
@@ -45,6 +51,10 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyEnd}
 	case "\x1b[3~":
 		return Key{Type: KeyDelete}
+	case "\x1b[5~":
+		return Key{Type: KeyPageUp}
+	case "\x1b[6~":
+		return Key{Type: KeyPageDown}
 	default:
 		r, size := utf8.DecodeRuneInString(seq)
 		if r != utf8.RuneError && size == len(seq) && r >= 0x20 {

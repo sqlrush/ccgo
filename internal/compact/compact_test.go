@@ -1,9 +1,11 @@
 package compact
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 )
@@ -60,4 +62,63 @@ func TestBuildPlanCreatesBoundarySummaryAndPreservesRecentMessages(t *testing.T)
 	if transcriptBoundary.CompactMetadata == nil || transcriptBoundary.CompactMetadata.MessagesSummarized != 2 {
 		t.Fatalf("transcript boundary = %#v", transcriptBoundary)
 	}
+}
+
+func TestEstimateTokensAndShouldRun(t *testing.T) {
+	history := []contracts.Message{msgs.UserText(strings.Repeat("x", 400))}
+	if got := EstimateTokens(history); got < 90 || got > 110 {
+		t.Fatalf("estimate = %d", got)
+	}
+	if !ShouldRun(history, AutoConfig{Enabled: true, Force: true}) {
+		t.Fatal("forced autocompact should run")
+	}
+	if ShouldRun(history, AutoConfig{Enabled: false, Force: true}) {
+		t.Fatal("disabled autocompact should not run")
+	}
+}
+
+func TestRunnerBuildsNoToolSummaryRequestAndPlan(t *testing.T) {
+	client := &fakeCompactClient{response: &anthropic.Response{
+		ID:      "msg_summary",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock("summary text")},
+		Usage:   contracts.Usage{InputTokens: 10, OutputTokens: 2},
+	}}
+	history := []contracts.Message{msgs.UserText("one"), msgs.AssistantText("two", "sonnet", nil), msgs.UserText("three")}
+	result, err := (Runner{
+		Client:            client,
+		Model:             "sonnet",
+		MaxTokens:         100,
+		KeepLast:          1,
+		ExtraInstructions: "Focus on code.",
+	}).Compact(context.Background(), history, TriggerAuto, 42, "user context")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.request.Tools) != 0 {
+		t.Fatalf("compact request should not include tools: %#v", client.request.Tools)
+	}
+	last := client.request.Messages[len(client.request.Messages)-1]
+	if last.Role != "user" || !strings.Contains(last.Content[0].Text, "Do NOT call any tools") || !strings.Contains(last.Content[0].Text, "Focus on code.") {
+		t.Fatalf("compact prompt = %#v", last)
+	}
+	if result.Plan.Metadata.Trigger != string(TriggerAuto) || result.Plan.Metadata.PreTokens != 42 || result.Plan.Metadata.MessagesSummarized != 2 {
+		t.Fatalf("plan metadata = %#v", result.Plan.Metadata)
+	}
+	if text := msgs.TextContent(result.Plan.Summary); !strings.Contains(text, "summary text") {
+		t.Fatalf("summary = %q", text)
+	}
+}
+
+type fakeCompactClient struct {
+	request  anthropic.Request
+	response *anthropic.Response
+	err      error
+}
+
+func (f *fakeCompactClient) CreateMessage(ctx context.Context, req anthropic.Request) (*anthropic.Response, error) {
+	f.request = req
+	return f.response, f.err
 }

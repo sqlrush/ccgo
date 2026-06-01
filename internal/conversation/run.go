@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"ccgo/internal/api/anthropic"
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 	"ccgo/internal/session"
@@ -34,6 +35,18 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 	r.emit(Event{Type: EventUserMessage, Message: &user})
 
 	result := Result{Messages: []contracts.Message{user}}
+	if compactedHistory, compactResult, ok, err := r.maybeAutoCompact(ctx, history); err != nil {
+		return result, err
+	} else if ok {
+		history = compactedHistory
+		result.Compacted = true
+		result.Compact = &compactResult
+		result.Messages = append(result.Messages, compactResult.Plan.Boundary, compactResult.Plan.Summary)
+		if err := r.appendCompactTranscript(compactResult.Plan); err != nil {
+			return result, err
+		}
+		r.emit(Event{Type: EventCompact, Compact: &compactResult})
+	}
 	toolMetadata := map[string]any{}
 	for round := 0; ; round++ {
 		if round >= r.maxToolRounds() {
@@ -72,6 +85,44 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
 	}
+}
+
+func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Message) ([]contracts.Message, compactpkg.Result, bool, error) {
+	if r.AutoCompact == nil {
+		return history, compactpkg.Result{}, false, nil
+	}
+	config := *r.AutoCompact
+	if config.TokenUsage <= 0 {
+		config.TokenUsage = compactpkg.EstimateTokens(history)
+	}
+	if !compactpkg.ShouldRun(history, config) {
+		return history, compactpkg.Result{}, false, nil
+	}
+	client := r.CompactClient
+	if client == nil {
+		client = r.Client
+	}
+	result, err := compactpkg.Runner{
+		Client:            client,
+		Model:             r.model(),
+		MaxTokens:         r.CompactMaxTokens,
+		KeepLast:          config.KeepLast,
+		ExtraInstructions: config.ExtraInstructions,
+	}.Compact(ctx, history, compactpkg.TriggerAuto, config.TokenUsage, "")
+	if err != nil {
+		return history, result, false, err
+	}
+	return result.Plan.Output, result, true, nil
+}
+
+func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {
+	if r.SessionPath == "" {
+		return nil
+	}
+	if err := session.AppendTranscriptMessage(r.SessionPath, compactpkg.BoundaryTranscriptMessage(plan.Boundary, plan.Metadata)); err != nil {
+		return err
+	}
+	return session.Append(r.SessionPath, session.EntryFromMessage(r.SessionID, plan.Summary))
 }
 
 func (r Runner) send(ctx context.Context, history []contracts.Message) (anthropic.Request, []string, *anthropic.Response, error) {

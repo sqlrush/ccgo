@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"ccgo/internal/api/anthropic"
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -25,6 +26,7 @@ const (
 	EventToolUse          EventType = "tool_use"
 	EventToolResult       EventType = "tool_result"
 	EventRetry            EventType = "retry"
+	EventCompact          EventType = "compact"
 )
 
 type Event struct {
@@ -32,6 +34,7 @@ type Event struct {
 	Message    *contracts.Message
 	ToolUse    *contracts.ToolUse
 	ToolResult *contracts.ToolResult
+	Compact    *compactpkg.Result
 	Model      string
 	Error      error
 }
@@ -51,6 +54,9 @@ type Runner struct {
 	ContentBudgetDir string
 	ContentBudgetMax int
 	SkipBudgetTools  map[string]struct{}
+	AutoCompact      *compactpkg.AutoConfig
+	CompactClient    compactpkg.MessageClient
+	CompactMaxTokens int
 	OnEvent          func(Event)
 }
 
@@ -62,6 +68,8 @@ type Result struct {
 	Usage         contracts.Usage
 	FinalRequest  anthropic.Request
 	ModelsAttempt []string
+	Compacted     bool
+	Compact       *compactpkg.Result
 }
 
 func (r Runner) maxTokens() int {
