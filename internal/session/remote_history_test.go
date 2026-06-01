@@ -5,10 +5,26 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"ccgo/internal/auth"
 )
+
+type testRemoteTokenProvider struct {
+	current   string
+	refreshed string
+	refreshes int
+}
+
+func (p *testRemoteTokenProvider) CurrentAccessToken(context.Context) (string, error) {
+	return p.current, nil
+}
+
+func (p *testRemoteTokenProvider) RefreshAccessToken(context.Context) (string, error) {
+	p.refreshes++
+	return p.refreshed, nil
+}
 
 func TestRemoteHistoryAuthContextAndQueries(t *testing.T) {
 	ctx := NewRemoteHistoryAuthContext("session/1", "token", "org", auth.OAuthConfig{BaseAPIURL: "https://example.test/"})
@@ -86,5 +102,35 @@ func TestFetchRemoteHistoryNonOKReturnsNil(t *testing.T) {
 	}
 	if page != nil {
 		t.Fatalf("page = %#v", page)
+	}
+}
+
+func TestFetchRemoteHistoryRefreshesTokenOnUnauthorized(t *testing.T) {
+	var tokens []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokens = append(tokens, r.Header.Get("Authorization"))
+		if len(tokens) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer fresh" {
+			t.Fatalf("Authorization after refresh = %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"ok"}],"has_more":false,"first_id":"evt_2"}`))
+	}))
+	defer server.Close()
+
+	provider := &testRemoteTokenProvider{current: "stale", refreshed: "fresh"}
+	authCtx := NewRemoteHistoryAuthContext("s", "", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	page, err := FetchLatestEventsWithTokenRefresh(context.Background(), server.Client(), authCtx, provider, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page == nil || page.FirstID != "evt_2" || len(page.Events) != 1 {
+		t.Fatalf("page = %#v", page)
+	}
+	if provider.refreshes != 1 || strings.Join(tokens, ",") != "Bearer stale,Bearer fresh" {
+		t.Fatalf("refreshes=%d tokens=%#v", provider.refreshes, tokens)
 	}
 }

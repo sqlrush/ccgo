@@ -209,6 +209,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
 		{Key: "ctrl-r", Action: ActionPageUp},
 		{Key: "esc", Action: ActionNone},
+		{Key: "focus-in", Action: ActionReverseSearch},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,6 +219,14 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 	if action := keymap.Resolve(ParseKey("\x1b")); action != ActionNone {
 		t.Fatalf("esc action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
+		t.Fatalf("focus-in action = %q", action)
+	}
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out"} {
+		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
+			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
+		}
 	}
 	if _, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{{Key: "wat", Action: ActionCancel}}); err == nil {
 		t.Fatal("expected unknown key error")

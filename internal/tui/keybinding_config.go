@@ -75,6 +75,16 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlE, nil
 	case "ctrl+r", "ctrl-r", "control+r", "control-r":
 		return KeyCtrlR, nil
+	case "paste", "bracketed-paste":
+		return KeyPaste, nil
+	case "image-hint", "image":
+		return KeyImageHint, nil
+	case "mouse":
+		return KeyMouse, nil
+	case "focus-in", "focusin":
+		return KeyFocusIn, nil
+	case "focus-out", "focusout", "blur":
+		return KeyFocusOut, nil
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
 	}

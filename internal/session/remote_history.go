@@ -27,6 +27,11 @@ type RemoteHistoryAuthContext struct {
 	Headers http.Header
 }
 
+type RemoteHistoryTokenProvider interface {
+	CurrentAccessToken(context.Context) (string, error)
+	RefreshAccessToken(context.Context) (string, error)
+}
+
 type sessionEventsResponse struct {
 	Data    []contracts.SDKEvent `json:"data"`
 	HasMore bool                 `json:"has_more"`
@@ -48,6 +53,16 @@ func NewRemoteHistoryAuthContext(sessionID string, accessToken string, orgUUID s
 		headers.Set("x-organization-uuid", orgUUID)
 	}
 	return RemoteHistoryAuthContext{BaseURL: base, Headers: headers}
+}
+
+func (c RemoteHistoryAuthContext) WithAccessToken(accessToken string) RemoteHistoryAuthContext {
+	headers := cloneHeader(c.Headers)
+	if accessToken == "" {
+		headers.Del("Authorization")
+	} else {
+		headers.Set("Authorization", "Bearer "+accessToken)
+	}
+	return RemoteHistoryAuthContext{BaseURL: c.BaseURL, Headers: headers}
 }
 
 func LatestEventsQuery(limit int) url.Values {
@@ -78,18 +93,53 @@ func FetchOlderEvents(ctx context.Context, client *http.Client, authCtx RemoteHi
 	return fetchRemoteHistoryPage(ctx, client, authCtx, OlderEventsQuery(beforeID, limit))
 }
 
+func FetchLatestEventsWithTokenRefresh(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, provider RemoteHistoryTokenProvider, limit int) (*RemoteHistoryPage, error) {
+	return fetchRemoteHistoryPageWithTokenRefresh(ctx, client, authCtx, provider, LatestEventsQuery(limit))
+}
+
+func FetchOlderEventsWithTokenRefresh(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, provider RemoteHistoryTokenProvider, beforeID string, limit int) (*RemoteHistoryPage, error) {
+	return fetchRemoteHistoryPageWithTokenRefresh(ctx, client, authCtx, provider, OlderEventsQuery(beforeID, limit))
+}
+
 func fetchRemoteHistoryPage(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, query url.Values) (*RemoteHistoryPage, error) {
+	page, _, err := fetchRemoteHistoryPageStatus(ctx, client, authCtx, query)
+	return page, err
+}
+
+func fetchRemoteHistoryPageWithTokenRefresh(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, provider RemoteHistoryTokenProvider, query url.Values) (*RemoteHistoryPage, error) {
+	if provider == nil {
+		return fetchRemoteHistoryPage(ctx, client, authCtx, query)
+	}
+	if authCtx.Headers.Get("Authorization") == "" {
+		token, err := provider.CurrentAccessToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		authCtx = authCtx.WithAccessToken(token)
+	}
+	page, status, err := fetchRemoteHistoryPageStatus(ctx, client, authCtx, query)
+	if err != nil || status != http.StatusUnauthorized {
+		return page, err
+	}
+	token, err := provider.RefreshAccessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return fetchRemoteHistoryPage(ctx, client, authCtx.WithAccessToken(token), query)
+}
+
+func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, authCtx RemoteHistoryAuthContext, query url.Values) (*RemoteHistoryPage, int, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
 	endpoint, err := url.Parse(authCtx.BaseURL)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	endpoint.RawQuery = query.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for key, values := range authCtx.Headers {
 		for _, value := range values {
@@ -99,17 +149,17 @@ func fetchRemoteHistoryPage(ctx context.Context, client *http.Client, authCtx Re
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, 0, ctx.Err()
 		}
-		return nil, nil
+		return nil, 0, nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil
+		return nil, resp.StatusCode, nil
 	}
 	var decoded sessionEventsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
 	events := decoded.Data
 	if events == nil {
@@ -119,5 +169,13 @@ func fetchRemoteHistoryPage(ctx context.Context, client *http.Client, authCtx Re
 		Events:  events,
 		FirstID: decoded.FirstID,
 		HasMore: decoded.HasMore,
-	}, nil
+	}, resp.StatusCode, nil
+}
+
+func cloneHeader(header http.Header) http.Header {
+	out := http.Header{}
+	for key, values := range header {
+		out[key] = append([]string(nil), values...)
+	}
+	return out
 }
