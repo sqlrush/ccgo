@@ -3278,9 +3278,7 @@ func TestRunInteractionScriptAcceptsStringContainsAliases(t *testing.T) {
 			"expect_prompt": {
 				"text": "[Pasted text #1 +1 lines]",
 				"expanded": "alpha\nbeta",
-				"pastedContents": [
-					{"id": 1, "type": "text", "contentContains": "beta"}
-				]
+				"pastedContents": {"id": 1, "type": "text", "contentContains": "beta"}
 			},
 			"expectViewport": {
 				"visibleContains": "system: alpha ready",

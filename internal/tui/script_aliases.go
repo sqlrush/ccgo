@@ -645,6 +645,7 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeObjectFieldsToArray(data, "pasted_contents", "pastedContents")
 	type alias PromptExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
