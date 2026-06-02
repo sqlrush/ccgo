@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"strings"
 
 	"ccgo/internal/contracts"
 )
@@ -10,6 +11,11 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	type TranscriptMessageJSON TranscriptMessage
 	var aux struct {
 		*TranscriptMessageJSON
+		EntryType              string           `json:"entryType"`
+		EntryTypeSnake         string           `json:"entry_type"`
+		MessageType            string           `json:"messageType"`
+		MessageTypeSnake       string           `json:"message_type"`
+		Role                   string           `json:"role"`
 		ID                     contracts.ID     `json:"id"`
 		MessageID              contracts.ID     `json:"messageId"`
 		MessageIDSnake         contracts.ID     `json:"message_id"`
@@ -30,6 +36,9 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		SessionUUID            contracts.ID     `json:"sessionUuid"`
 		SessionUUIDUpper       contracts.ID     `json:"sessionUUID"`
 		SessionUUIDSnake       contracts.ID     `json:"session_uuid"`
+		CreatedAt              string           `json:"createdAt"`
+		CreatedAtSnake         string           `json:"created_at"`
+		Time                   string           `json:"time"`
 		IsSidechainSnake       *bool            `json:"is_sidechain"`
 		AgentIDSnake           string           `json:"agent_id"`
 		CompactMetadataSnake   *CompactMetadata `json:"compact_metadata"`
@@ -41,6 +50,9 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*m = TranscriptMessage(base)
+	if m.Type == "" {
+		m.Type = firstTranscriptType(aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+	}
 	if m.UUID == "" {
 		m.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
 	}
@@ -72,6 +84,9 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	if m.SessionID == "" {
 		m.SessionID = aux.SessionUUIDSnake
 	}
+	if m.Timestamp == "" {
+		m.Timestamp = firstTranscriptString(aux.CreatedAt, aux.CreatedAtSnake, aux.Time)
+	}
 	if aux.IsSidechainSnake != nil {
 		m.IsSidechain = *aux.IsSidechainSnake
 	}
@@ -91,6 +106,11 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 	type TranscriptEnvelopeJSON transcriptEnvelope
 	var aux struct {
 		*TranscriptEnvelopeJSON
+		EntryType              string        `json:"entryType"`
+		EntryTypeSnake         string        `json:"entry_type"`
+		MessageType            string        `json:"messageType"`
+		MessageTypeSnake       string        `json:"message_type"`
+		Role                   string        `json:"role"`
 		ID                     contracts.ID  `json:"id"`
 		MessageID              contracts.ID  `json:"messageId"`
 		MessageIDSnake         contracts.ID  `json:"message_id"`
@@ -113,6 +133,9 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = transcriptEnvelope(base)
+	if e.Type == "" {
+		e.Type = firstTranscriptType(aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+	}
 	if e.UUID == "" {
 		e.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
 	}
@@ -130,6 +153,26 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 		)
 	}
 	return nil
+}
+
+func firstTranscriptType(values ...string) string {
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		switch normalized {
+		case "user", "assistant", "attachment", "system":
+			return normalized
+		}
+	}
+	return ""
+}
+
+func firstTranscriptString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func firstTranscriptID(values ...contracts.ID) contracts.ID {

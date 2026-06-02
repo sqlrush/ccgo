@@ -109,6 +109,37 @@ func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsTypeAndTimestampAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"role":"user","id":"u1","session_id":"sess_1","created_at":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
+		`{"entry_type":"assistant","id":"a1","parent_id":"u1","session_id":"sess_1","createdAt":"2026-01-01T00:00:01Z","message":{"type":"assistant","session_id":"sess_1","content":[{"type":"text","text":"done"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil || assistant.Type != "assistant" || assistant.Timestamp != "2026-01-01T00:00:01Z" || assistant.ParentUUID == nil || *assistant.ParentUUID != "u1" {
+		t.Fatalf("type/timestamp alias assistant = %#v", assistant)
+	}
+	if user := transcript.Messages["u1"]; user == nil || user.Type != "user" || user.Timestamp != "2026-01-01T00:00:00Z" {
+		t.Fatalf("type/timestamp alias user = %#v", user)
+	}
+
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := index.Entries[index.ByUUID["a1"]]
+	if ref.Type != "assistant" || ref.Timestamp != "2026-01-01T00:00:01Z" || ref.ParentUUID == nil || *ref.ParentUUID != "u1" {
+		t.Fatalf("type/timestamp alias line ref = %#v", ref)
+	}
+	if leaf := LatestTranscriptIndexedLeaf(index); leaf != "a1" {
+		t.Fatalf("type alias indexed leaf = %q", leaf)
+	}
+}
+
 func TestLoadTranscriptAcceptsSessionUUIDAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"custom-title","session_uuid":"sess_uuid","customTitle":"UUID Title"}`,
