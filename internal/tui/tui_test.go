@@ -1226,6 +1226,46 @@ func TestReverseSearchFiltersNewestFirstAndSelects(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsReverseSearchAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"keys": ["ctrl-r", "d", "e", "p"],
+			"expectReverseSearch": {
+				"isActive": true,
+				"search": "dep",
+				"cursorIndex": 3,
+				"currentResult": "deploy new",
+				"matchCount": 2
+			}
+		},
+		{
+			"key": "\u001b",
+			"expectReverseSearch": {"visible": false}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, []string{"deploy old", "test", "deploy new"})
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+
+	noMatchSteps, err := ParseInteractionScript([]byte(`[
+		{
+			"keys": ["ctrl-r", "z", "z", "z"],
+			"expectReverseSearch": {"open": true, "term": "zzz", "noMatches": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	noMatchScreen := NewREPLScreen(40, 8, []string{"deploy old", "test"})
+	if _, err := RunInteractionScriptChecked(&noMatchScreen, noMatchSteps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPermissionAndTaskDialogs(t *testing.T) {
 	permission := PermissionDialog(PermissionRequest{
 		ID:          "perm_1",
