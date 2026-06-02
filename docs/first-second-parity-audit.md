@@ -149,6 +149,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script task expectations now accept a single `contains` object as well as an array for expected task matches.
 - `internal/tui`: interaction script message steps now accept chat/transcript-style `type`/`speaker` role aliases and `content`/`body`/`message` text aliases.
 - `internal/tui`: interaction script image steps now accept filename aliases such as `fileName`/`file_name`/`name`, media-type aliases such as `mimeType`/`mime_type`/`contentType`, and content aliases such as `data`/`base64`.
+- `internal/tui`: interaction script permission request steps now accept request/permission/tool-use ID aliases, path aliases, description aliases, action-list aliases, and single-string `actions`.
 
 Still missing for full M6/M7 parity:
 

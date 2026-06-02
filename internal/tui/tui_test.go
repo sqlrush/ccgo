@@ -3462,6 +3462,42 @@ func TestRunDialogRuntimeScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsPermissionRequestAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {
+				"permissionId": "perm_alias",
+				"tool": "Write",
+				"filePath": "/tmp/a.txt",
+				"prompt": "Need write access.",
+				"actions": "Approve"
+			},
+			"expectDialog": {"active": true, "id": "perm_alias", "kind": "permission"},
+			"expectSnapshotContains": ["Tool: Write", "Path: /tmp/a.txt", "Need write access.", "Approve"]
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "dialog_action", "value": "Approve", "dialogId": "perm_alias", "dialogKind": "permission"},
+			"expectDialogResult": {"id": "perm_alias", "kind": "permission", "action": "Approve", "status": "allowed", "found": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_alias" || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	if len(runtime.Permissions) != 0 || runtime.Active != nil {
+		t.Fatalf("runtime = %#v", runtime)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
 		{

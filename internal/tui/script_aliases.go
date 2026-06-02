@@ -655,6 +655,7 @@ func (message *Message) UnmarshalJSON(data []byte) error {
 }
 
 func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
+	data = normalizeStringFieldsToArray(data, "Actions", "actions")
 	type alias PermissionRequest
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -662,22 +663,24 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 	}
 	*request = PermissionRequest(raw)
 
-	var fields struct {
-		ToolName      *string `json:"tool_name"`
-		ToolNameCamel *string `json:"toolName"`
-		Tool          *string `json:"tool"`
-	}
+	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if fields.ToolName != nil {
-		request.ToolName = *fields.ToolName
+	if request.ID == "" {
+		request.ID = stringJSONField(fields, "request_id", "requestId", "permission_id", "permissionId", "tool_use_id", "toolUseId", "toolUseID")
 	}
-	if fields.ToolNameCamel != nil {
-		request.ToolName = *fields.ToolNameCamel
+	if request.ToolName == "" {
+		request.ToolName = stringJSONField(fields, "tool_name", "toolName", "tool", "name")
 	}
-	if fields.Tool != nil {
-		request.ToolName = *fields.Tool
+	if request.Path == "" {
+		request.Path = stringJSONField(fields, "file_path", "filePath", "target_path", "targetPath", "working_directory", "workingDirectory", "cwd")
+	}
+	if request.Description == "" {
+		request.Description = stringJSONField(fields, "prompt", "message", "reason", "summary")
+	}
+	if len(request.Actions) == 0 {
+		request.Actions = stringListJSONField(fields, "options", "choices", "allowed_actions", "allowedActions")
 	}
 	return nil
 }
@@ -694,6 +697,20 @@ func stringJSONField(fields map[string]json.RawMessage, names ...string) string 
 		}
 	}
 	return ""
+}
+
+func stringListJSONField(fields map[string]json.RawMessage, names ...string) []string {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value stringList
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return stringListValue(&value)
+		}
+	}
+	return nil
 }
 
 func roleJSONField(fields map[string]json.RawMessage, names ...string) (Role, bool) {
