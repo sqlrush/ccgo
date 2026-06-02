@@ -1303,8 +1303,15 @@ func (p *PromptState) deleteToEnd() {
 	if p.Cursor > len(runes) {
 		p.Cursor = len(runes)
 	}
-	killed := string(runes[p.Cursor:])
-	p.Text = string(runes[:p.Cursor])
+	end := p.Cursor
+	for end < len(runes) && runes[end] != '\n' {
+		end++
+	}
+	if end == p.Cursor && end < len(runes) && runes[end] == '\n' {
+		end++
+	}
+	killed := string(runes[p.Cursor:end])
+	p.Text = string(runes[:p.Cursor]) + string(runes[end:])
 	p.pushToKillRing(killed, killRingAppend)
 	p.resetHistoryCursor()
 }
@@ -1317,9 +1324,13 @@ func (p *PromptState) deleteToStart() {
 	if p.Cursor > len(runes) {
 		p.Cursor = len(runes)
 	}
-	killed := string(runes[:p.Cursor])
-	p.Text = string(runes[p.Cursor:])
-	p.Cursor = 0
+	start := p.Cursor
+	for start > 0 && runes[start-1] != '\n' {
+		start--
+	}
+	killed := string(runes[start:p.Cursor])
+	p.Text = string(runes[:start]) + string(runes[p.Cursor:])
+	p.Cursor = start
 	p.pushToKillRing(killed, killRingPrepend)
 	p.resetHistoryCursor()
 }

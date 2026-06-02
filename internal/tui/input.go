@@ -233,9 +233,9 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	case KeyAltF, KeyCtrlRight:
 		p.moveWordForward()
 	case KeyHome, KeyCtrlA:
-		p.Cursor = 0
+		p.moveLineStart()
 	case KeyEnd, KeyCtrlE:
-		p.Cursor = len(runes)
+		p.moveLineEnd()
 	case KeyCtrlK:
 		p.deleteToEnd()
 	case KeyCtrlU:

@@ -79,6 +79,38 @@ func TestPromptStateControlLineEditing(t *testing.T) {
 	}
 }
 
+func TestPromptStateMultilineControlLineEditing(t *testing.T) {
+	prompt := NewPromptState(nil)
+	text := "one\ntwo three\nfour"
+	prompt.Text = text
+	prompt.Cursor = len([]rune("one\ntwo th"))
+	prompt.Apply(ParseKey("\x01"))
+	if prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("ctrl-a cursor = %d", prompt.Cursor)
+	}
+
+	prompt.Text = text
+	prompt.Cursor = len([]rune("one\ntwo th"))
+	prompt.Apply(ParseKey("\x05"))
+	if prompt.Cursor != len([]rune("one\ntwo three")) {
+		t.Fatalf("ctrl-e cursor = %d", prompt.Cursor)
+	}
+
+	prompt.Text = text
+	prompt.Cursor = len([]rune("one\ntwo "))
+	prompt.Apply(ParseKey("\x0b"))
+	if prompt.Text != "one\ntwo \nfour" || prompt.Cursor != len([]rune("one\ntwo ")) {
+		t.Fatalf("ctrl-k prompt = %#v", prompt)
+	}
+
+	prompt.Text = text
+	prompt.Cursor = len([]rune("one\ntwo "))
+	prompt.Apply(ParseKey("\x15"))
+	if prompt.Text != "one\nthree\nfour" || prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("ctrl-u prompt = %#v", prompt)
+	}
+}
+
 func TestPromptStateKillRingYank(t *testing.T) {
 	resetSharedKillRingForTesting()
 	defer resetSharedKillRingForTesting()
