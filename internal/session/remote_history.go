@@ -46,10 +46,16 @@ type RemoteHistoryTokenProvider interface {
 }
 
 type sessionEventsResponse struct {
-	Data    []contracts.SDKEvent `json:"data"`
-	HasMore bool                 `json:"has_more"`
-	FirstID string               `json:"first_id"`
-	LastID  string               `json:"last_id"`
+	Data              []contracts.SDKEvent `json:"data"`
+	Events            []contracts.SDKEvent `json:"events"`
+	HasMore           bool                 `json:"has_more"`
+	HasMoreCamel      bool                 `json:"hasMore"`
+	FirstID           string               `json:"first_id"`
+	FirstIDCamel      string               `json:"firstId"`
+	NextBeforeID      string               `json:"next_before_id"`
+	NextBeforeIDCamel string               `json:"nextBeforeId"`
+	LastID            string               `json:"last_id"`
+	LastIDCamel       string               `json:"lastId"`
 }
 
 func NewRemoteHistoryAuthContext(sessionID string, accessToken string, orgUUID string, config auth.OAuthConfig) RemoteHistoryAuthContext {
@@ -249,12 +255,15 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	}
 	events := decoded.Data
 	if events == nil {
+		events = decoded.Events
+	}
+	if events == nil {
 		events = []contracts.SDKEvent{}
 	}
 	return &RemoteHistoryPage{
 		Events:  events,
-		FirstID: decoded.FirstID,
-		HasMore: decoded.HasMore,
+		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel),
+		HasMore: decoded.HasMore || decoded.HasMoreCamel,
 	}, resp.StatusCode, nil
 }
 
@@ -264,4 +273,14 @@ func cloneHeader(header http.Header) http.Header {
 		out[key] = append([]string(nil), values...)
 	}
 	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
