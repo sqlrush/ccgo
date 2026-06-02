@@ -363,6 +363,49 @@ func TestAppendRemoteHistoryTranscriptLinksToExistingLeaf(t *testing.T) {
 	}
 }
 
+func TestAppendRemoteHistoryTranscriptSkipsDuplicateParentLinking(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","uuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:02Z","message":{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hello"}]}}`,
+	})
+	events := []contracts.SDKEvent{
+		{
+			Type:      contracts.SDKEventUser,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageUser,
+				UUID:      "u1",
+				Timestamp: "2026-01-01T00:00:01Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("hi")},
+			},
+		},
+		{
+			Type:      contracts.SDKEventAssistant,
+			SessionID: "s1",
+			Message: &contracts.Message{
+				Type:      contracts.MessageAssistant,
+				UUID:      "a2",
+				Timestamp: "2026-01-01T00:00:03Z",
+				Content:   []contracts.ContentBlock{contracts.NewTextBlock("next")},
+			},
+		},
+	}
+	result, err := AppendRemoteHistoryTranscript(path, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Appended != 1 || result.Duplicates != 1 || result.LastUUID != "a2" {
+		t.Fatalf("result = %#v", result)
+	}
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.Messages["a2"].ParentUUID == nil || *transcript.Messages["a2"].ParentUUID != "a1" {
+		t.Fatalf("a2 parent = %#v", transcript.Messages["a2"].ParentUUID)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesGeneratesStableUUID(t *testing.T) {
 	events := []contracts.SDKEvent{
 		{

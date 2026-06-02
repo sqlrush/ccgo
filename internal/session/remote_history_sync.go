@@ -23,6 +23,10 @@ type RemoteHistorySyncResult struct {
 }
 
 func RemoteHistoryTranscriptMessages(events []contracts.SDKEvent) []TranscriptMessage {
+	return remoteHistoryTranscriptMessages(events, nil)
+}
+
+func remoteHistoryTranscriptMessages(events []contracts.SDKEvent, existing map[contracts.ID]struct{}) []TranscriptMessage {
 	messages := make([]TranscriptMessage, 0, len(events))
 	for _, event := range events {
 		message := remoteEventTranscriptMessage(event)
@@ -39,22 +43,23 @@ func RemoteHistoryTranscriptMessages(events []contracts.SDKEvent) []TranscriptMe
 		}
 		return left < right
 	})
-	linkMissingRemoteParents(messages)
+	linkMissingRemoteParents(messages, existing)
 	return messages
 }
 
 func AppendRemoteHistoryTranscript(path string, events []contracts.SDKEvent) (RemoteHistorySyncResult, error) {
-	messages := RemoteHistoryTranscriptMessages(events)
-	result := RemoteHistorySyncResult{Considered: len(events), Skipped: len(events) - len(messages)}
+	result := RemoteHistorySyncResult{Considered: len(events)}
 	transcript, err := LoadTranscript(path)
 	if err != nil {
 		return result, err
 	}
-	linkRemoteMessagesToExistingTranscript(transcript, messages)
 	seen := map[contracts.ID]struct{}{}
 	for _, id := range transcript.Order {
 		seen[id] = struct{}{}
 	}
+	messages := remoteHistoryTranscriptMessages(events, seen)
+	result.Skipped = len(events) - len(messages)
+	linkRemoteMessagesToExistingTranscript(transcript, messages, seen)
 	for _, message := range messages {
 		if _, ok := seen[message.UUID]; ok {
 			result.Duplicates++
@@ -127,7 +132,7 @@ func remoteEventTranscriptMessage(event contracts.SDKEvent) TranscriptMessage {
 	}
 }
 
-func linkMissingRemoteParents(messages []TranscriptMessage) {
+func linkMissingRemoteParents(messages []TranscriptMessage, existing map[contracts.ID]struct{}) {
 	lastBySession := map[contracts.ID]contracts.ID{}
 	for i := range messages {
 		sessionID := messages[i].SessionID
@@ -139,14 +144,20 @@ func linkMissingRemoteParents(messages []TranscriptMessage) {
 				}
 			}
 		}
+		if _, duplicate := existing[messages[i].UUID]; duplicate {
+			continue
+		}
 		lastBySession[sessionID] = messages[i].UUID
 	}
 }
 
-func linkRemoteMessagesToExistingTranscript(transcript Transcript, messages []TranscriptMessage) {
+func linkRemoteMessagesToExistingTranscript(transcript Transcript, messages []TranscriptMessage, existing map[contracts.ID]struct{}) {
 	lastBySession := latestTranscriptMessagesBySession(transcript)
 	for i := range messages {
 		sessionID := messages[i].SessionID
+		if _, duplicate := existing[messages[i].UUID]; duplicate {
+			continue
+		}
 		if messages[i].ParentUUID == nil {
 			if last, ok := lastBySession[sessionID]; ok && shouldLinkRemoteParent(last.Timestamp, messages[i].Timestamp) {
 				messages[i].ParentUUID = cloneIDPtr(&last.UUID)
