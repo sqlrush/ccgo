@@ -3139,6 +3139,41 @@ func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptChecksDialogResultCounts(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {"id": "perm_1", "tool_name": "Bash"},
+			"expect_no_dialog_result": true,
+			"expect_dialog_result_count": 0,
+			"expectTotalDialogResultCount": 0,
+			"expect_dialog": {"active": true, "id": "perm_1", "kind": "permission"}
+		},
+		{
+			"key": "enter",
+			"expectDialogResultCount": 1,
+			"expect_total_dialog_result_count": 1,
+			"expect_dialog_result": {"id": "perm_1", "status": "allowed", "found": true}
+		},
+		{
+			"request_permission": {"id": "perm_2", "tool_name": "Read"},
+			"expectNoDialogResult": true,
+			"expect_total_dialog_result_count": 1
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_1" {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestParseInteractionScriptAcceptsJSONArrayJSONLAndFile(t *testing.T) {
 	arraySteps, err := ParseInteractionScript([]byte(`[
 		{"text": "go", "expect_prompt": {"text": "go"}},

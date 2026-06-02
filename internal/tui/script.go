@@ -6,45 +6,48 @@ import (
 )
 
 type ScriptStep struct {
-	Keys                      []string
-	Key                       string
-	Text                      string
-	Paste                     string
-	Image                     *ScriptImage
-	Message                   *Message
-	Dialog                    *Dialog
-	Keybindings               []BindingSpec
-	RequestPermission         *PermissionRequest
-	UpsertTask                *TaskStatus
-	RemoveTaskID              string
-	CancelActiveDialog        bool
-	CancelPermissionID        string
-	CancelAllPermissions      bool
-	CancelAllTasks            bool
-	CancelTasksDetail         string
-	OpenTasksDialog           bool
-	ResizeWidth               int
-	ResizeHeight              int
-	SnapshotName              string
-	ExpectEvent               *ScreenEvent
-	ExpectEvents              []ScreenEvent
-	ExpectNoEvent             bool
-	ExpectEventCount          *int
-	ExpectTotalEventCount     *int
-	ExpectDialogResult        *DialogResultExpectation
-	ExpectDialogResults       []DialogResultExpectation
-	ExpectDialog              *DialogExpectation
-	ExpectPrompt              *PromptExpectation
-	ExpectVim                 *VimExpectation
-	ExpectTasks               *TasksExpectation
-	ExpectReverseSearch       *ReverseSearchExpectation
-	ExpectViewport            *ViewportExpectation
-	ExpectScreen              *ScreenExpectation
-	ExpectFocused             *bool
-	ExpectStatusContains      []string
-	ExpectStatusNotContains   []string
-	ExpectSnapshotContains    []string
-	ExpectSnapshotNotContains []string
+	Keys                         []string
+	Key                          string
+	Text                         string
+	Paste                        string
+	Image                        *ScriptImage
+	Message                      *Message
+	Dialog                       *Dialog
+	Keybindings                  []BindingSpec
+	RequestPermission            *PermissionRequest
+	UpsertTask                   *TaskStatus
+	RemoveTaskID                 string
+	CancelActiveDialog           bool
+	CancelPermissionID           string
+	CancelAllPermissions         bool
+	CancelAllTasks               bool
+	CancelTasksDetail            string
+	OpenTasksDialog              bool
+	ResizeWidth                  int
+	ResizeHeight                 int
+	SnapshotName                 string
+	ExpectEvent                  *ScreenEvent
+	ExpectEvents                 []ScreenEvent
+	ExpectNoEvent                bool
+	ExpectEventCount             *int
+	ExpectTotalEventCount        *int
+	ExpectDialogResult           *DialogResultExpectation
+	ExpectDialogResults          []DialogResultExpectation
+	ExpectNoDialogResult         bool
+	ExpectDialogResultCount      *int
+	ExpectTotalDialogResultCount *int
+	ExpectDialog                 *DialogExpectation
+	ExpectPrompt                 *PromptExpectation
+	ExpectVim                    *VimExpectation
+	ExpectTasks                  *TasksExpectation
+	ExpectReverseSearch          *ReverseSearchExpectation
+	ExpectViewport               *ViewportExpectation
+	ExpectScreen                 *ScreenExpectation
+	ExpectFocused                *bool
+	ExpectStatusContains         []string
+	ExpectStatusNotContains      []string
+	ExpectSnapshotContains       []string
+	ExpectSnapshotNotContains    []string
 }
 
 type ScriptImage struct {
@@ -260,6 +263,15 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			if err := compareDialogResults(index, stepDialogResults, step.ExpectDialogResults); err != nil {
 				return result, dialogResults, err
 			}
+		}
+		if step.ExpectNoDialogResult && len(stepDialogResults) > 0 {
+			return result, dialogResults, fmt.Errorf("script step %d dialog result count = %d, want none", index, len(stepDialogResults))
+		}
+		if step.ExpectDialogResultCount != nil && len(stepDialogResults) != *step.ExpectDialogResultCount {
+			return result, dialogResults, fmt.Errorf("script step %d dialog result count = %d, want %d", index, len(stepDialogResults), *step.ExpectDialogResultCount)
+		}
+		if step.ExpectTotalDialogResultCount != nil && len(dialogResults) != *step.ExpectTotalDialogResultCount {
+			return result, dialogResults, fmt.Errorf("script step %d total dialog result count = %d, want %d", index, len(dialogResults), *step.ExpectTotalDialogResultCount)
 		}
 		if step.ExpectDialog != nil {
 			if err := compareDialog(index, screen.Dialog, *step.ExpectDialog); err != nil {

@@ -57,6 +57,13 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectDialogResultCamel   *DialogResultExpectation  `json:"expectDialogResult"`
 		ExpectDialogResults       []DialogResultExpectation `json:"expect_dialog_results"`
 		ExpectDialogResultsCamel  []DialogResultExpectation `json:"expectDialogResults"`
+		ExpectNoDialogResult      *bool                     `json:"expect_no_dialog_result"`
+		ExpectNoDialogResultCamel *bool                     `json:"expectNoDialogResult"`
+		ExpectNoDialogResults     *bool                     `json:"expect_no_dialog_results"`
+		ExpectDialogResultCount   *int                      `json:"expect_dialog_result_count"`
+		ExpectDialogCountCamel    *int                      `json:"expectDialogResultCount"`
+		ExpectTotalDialogCount    *int                      `json:"expect_total_dialog_result_count"`
+		ExpectTotalDialogCamel    *int                      `json:"expectTotalDialogResultCount"`
 		ExpectDialog              *DialogExpectation        `json:"expect_dialog"`
 		ExpectDialogCamel         *DialogExpectation        `json:"expectDialog"`
 		ExpectPrompt              *PromptExpectation        `json:"expect_prompt"`
@@ -222,6 +229,27 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.ExpectDialogResultsCamel != nil {
 		step.ExpectDialogResults = fields.ExpectDialogResultsCamel
+	}
+	if fields.ExpectNoDialogResult != nil {
+		step.ExpectNoDialogResult = *fields.ExpectNoDialogResult
+	}
+	if fields.ExpectNoDialogResultCamel != nil {
+		step.ExpectNoDialogResult = *fields.ExpectNoDialogResultCamel
+	}
+	if fields.ExpectNoDialogResults != nil {
+		step.ExpectNoDialogResult = *fields.ExpectNoDialogResults
+	}
+	if fields.ExpectDialogResultCount != nil {
+		step.ExpectDialogResultCount = fields.ExpectDialogResultCount
+	}
+	if fields.ExpectDialogCountCamel != nil {
+		step.ExpectDialogResultCount = fields.ExpectDialogCountCamel
+	}
+	if fields.ExpectTotalDialogCount != nil {
+		step.ExpectTotalDialogResultCount = fields.ExpectTotalDialogCount
+	}
+	if fields.ExpectTotalDialogCamel != nil {
+		step.ExpectTotalDialogResultCount = fields.ExpectTotalDialogCamel
 	}
 	if fields.ExpectDialog != nil {
 		step.ExpectDialog = fields.ExpectDialog
