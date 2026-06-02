@@ -2953,6 +2953,60 @@ func TestRunDialogRuntimeScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsJSONArrayJSONLAndFile(t *testing.T) {
+	arraySteps, err := ParseInteractionScript([]byte(`[
+		{"text": "go", "expect_prompt": {"text": "go"}},
+		{"key": "enter", "expect_event": {"type": "prompt_submitted", "value": "go"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, arraySteps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Value != "go" {
+		t.Fatalf("array events = %#v", result.Events)
+	}
+
+	jsonl := []byte(`
+{"text":"deploy","expect_prompt":{"text":"deploy"}}
+{"key":"enter","expect_event":{"type":"prompt_submitted","value":"deploy"}}
+`)
+	jsonlSteps, err := ParseInteractionScript(jsonl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen = NewREPLScreen(30, 6, nil)
+	result, err = RunInteractionScriptChecked(&screen, jsonlSteps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Value != "deploy" {
+		t.Fatalf("jsonl events = %#v", result.Events)
+	}
+
+	path := filepath.Join(t.TempDir(), "script.jsonl")
+	if err := os.WriteFile(path, jsonl, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileSteps, err := LoadInteractionScript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fileSteps) != len(jsonlSteps) || fileSteps[0].Text != "deploy" {
+		t.Fatalf("file steps = %#v", fileSteps)
+	}
+}
+
+func TestParseInteractionScriptReportsJSONLLineNumber(t *testing.T) {
+	_, err := ParseInteractionScript([]byte("{\"text\":\"ok\"}\n{bad}\n"))
+	if err == nil || !strings.Contains(err.Error(), "line 2") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRunInteractionScriptChecksEventSequences(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{{
