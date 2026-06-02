@@ -239,22 +239,44 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 	if raw == "" {
 		return "", nil, false
 	}
+	var scalar string
+	if err := json.Unmarshal([]byte(raw), &scalar); err == nil {
+		scalar = strings.TrimSpace(scalar)
+		if scalar == "" {
+			return "", nil, false
+		}
+		if len(strings.Fields(scalar)) == 1 {
+			return "", recallIDs([]string{scalar}), true
+		}
+		return scalar, nil, true
+	}
 	var object struct {
-		Query              string            `json:"query"`
-		SearchQuery        string            `json:"search_query"`
-		SessionID          string            `json:"session_id"`
-		SessionIDs         []string          `json:"session_ids"`
-		SessionIDsCamel    []string          `json:"sessionIds"`
-		SelectedSessionID  string            `json:"selected_session_id"`
-		SelectedSessionIDs []string          `json:"selected_session_ids"`
-		SelectedIDs        []string          `json:"selected_ids"`
-		RelevantSessionIDs []string          `json:"relevant_session_ids"`
-		ID                 string            `json:"id"`
-		IDs                []string          `json:"ids"`
-		Matches            []json.RawMessage `json:"matches"`
-		Memories           []json.RawMessage `json:"memories"`
-		Sessions           []json.RawMessage `json:"sessions"`
-		SelectedSessions   []json.RawMessage `json:"selected_sessions"`
+		Query                   string            `json:"query"`
+		SearchQuery             string            `json:"search_query"`
+		SessionID               string            `json:"session_id"`
+		SessionIDs              []string          `json:"session_ids"`
+		SessionIDsCamel         []string          `json:"sessionIds"`
+		SelectedSessionID       string            `json:"selected_session_id"`
+		SelectedSessionIDs      []string          `json:"selected_session_ids"`
+		SelectedSessionIDsCamel []string          `json:"selectedSessionIds"`
+		SelectedIDs             []string          `json:"selected_ids"`
+		RelevantSessionIDs      []string          `json:"relevant_session_ids"`
+		RelevantSessionIDsCamel []string          `json:"relevantSessionIds"`
+		ID                      string            `json:"id"`
+		IDs                     []string          `json:"ids"`
+		Matches                 []json.RawMessage `json:"matches"`
+		Memories                []json.RawMessage `json:"memories"`
+		Sessions                []json.RawMessage `json:"sessions"`
+		SelectedSessions        []json.RawMessage `json:"selected_sessions"`
+		SelectedMemories        []json.RawMessage `json:"selected_memories"`
+		SelectedMemoriesCamel   []json.RawMessage `json:"selectedMemories"`
+		Selection               json.RawMessage   `json:"selection"`
+		Selected                json.RawMessage   `json:"selected"`
+		Result                  json.RawMessage   `json:"result"`
+		Response                json.RawMessage   `json:"response"`
+		Recall                  json.RawMessage   `json:"recall"`
+		MemoryRecall            json.RawMessage   `json:"memory_recall"`
+		MemoryRecallCamel       json.RawMessage   `json:"memoryRecall"`
 	}
 	if err := json.Unmarshal([]byte(raw), &object); err == nil {
 		ids := recallIDs(append([]string{object.SessionID}, object.SessionIDs...))
@@ -265,17 +287,26 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			ids = recallIDs(append([]string{object.SelectedSessionID}, object.SelectedSessionIDs...))
 		}
 		if len(ids) == 0 {
+			ids = recallIDs(object.SelectedSessionIDsCamel)
+		}
+		if len(ids) == 0 {
 			ids = recallIDs(append(object.SelectedIDs, object.RelevantSessionIDs...))
+		}
+		if len(ids) == 0 {
+			ids = recallIDs(object.RelevantSessionIDsCamel)
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append([]string{object.ID}, object.IDs...))
 		}
 		if len(ids) == 0 {
-			ids = recallIDsFromRawItems(object.Matches, object.Memories, object.Sessions, object.SelectedSessions)
+			ids = recallIDsFromRawItems(object.Matches, object.Memories, object.Sessions, object.SelectedSessions, object.SelectedMemories, object.SelectedMemoriesCamel)
 		}
 		query := strings.TrimSpace(object.Query)
 		if query == "" {
 			query = strings.TrimSpace(object.SearchQuery)
+		}
+		if len(ids) == 0 {
+			query, ids = recallSelectionFromNestedPayloads(query, object.Selection, object.Selected, object.Result, object.Response, object.Recall, object.MemoryRecall, object.MemoryRecallCamel)
 		}
 		return query, ids, query != "" || len(ids) > 0
 	}
@@ -289,6 +320,26 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		return "", parsedIDs, len(parsedIDs) > 0
 	}
 	return "", nil, false
+}
+
+func recallSelectionFromNestedPayloads(fallbackQuery string, payloads ...json.RawMessage) (string, []contracts.ID) {
+	query := fallbackQuery
+	for _, payload := range payloads {
+		if len(payload) == 0 {
+			continue
+		}
+		nestedQuery, nestedIDs, ok := parseRecallAgentJSON(string(payload))
+		if !ok {
+			continue
+		}
+		if nestedQuery != "" {
+			query = nestedQuery
+		}
+		if len(nestedIDs) > 0 {
+			return query, nestedIDs
+		}
+	}
+	return query, nil
 }
 
 func recallIDsFromRawItems(groups ...[]json.RawMessage) []contracts.ID {
@@ -307,9 +358,18 @@ func recallIDsFromRawItems(groups ...[]json.RawMessage) []contracts.ID {
 				SelectedSession string `json:"selected_session"`
 				ID              string `json:"id"`
 				UUID            string `json:"uuid"`
+				Session         json.RawMessage
+				Memory          json.RawMessage
+				Summary         json.RawMessage
+				Candidate       json.RawMessage
 			}
 			if err := json.Unmarshal(item, &object); err == nil {
 				raw = append(raw, object.SessionID, object.SessionIDCamel, object.SelectedID, object.SelectedSession, object.ID, object.UUID)
+				for _, nested := range []json.RawMessage{object.Session, object.Memory, object.Summary, object.Candidate} {
+					for _, id := range recallIDsFromRawItems([]json.RawMessage{nested}) {
+						raw = append(raw, string(id))
+					}
+				}
 			}
 		}
 	}

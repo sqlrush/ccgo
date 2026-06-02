@@ -591,6 +591,64 @@ func TestMemoryAgentRecallParsesNestedModelSelections(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentRecallParsesWrappedSelectionsAndScalarID(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+	}{
+		{id: "prior", summary: "database access policy notes", updated: 200},
+		{id: "other", summary: "credential rotation notes", updated: 100},
+	} {
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_recall_wrapped",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"selection":{
+				"search_query":"database access",
+				"selected_memories":[
+					{"session":{"id":"prior"}},
+					{"memory":{"sessionId":"other"}}
+				]
+			}
+		}`)},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior,other" {
+		t.Fatalf("wrapped result = %#v", result)
+	}
+	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "prior" || result.Matches[1].Summary.SessionID != "other" {
+		t.Fatalf("wrapped matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`"other"`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credential rotation?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other" {
+		t.Fatalf("scalar result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("scalar matches = %#v", result.Matches)
+	}
+}
+
 func TestMemoryAgentRecallExtractsFencedJSONFromModelProse(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{
