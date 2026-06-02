@@ -69,6 +69,7 @@ func ParseKeyChord(raw string) ([]KeyType, error) {
 func ParseKeyName(raw string) (KeyType, error) {
 	name := strings.ToLower(strings.TrimSpace(raw))
 	name = strings.ReplaceAll(name, "_", "-")
+	compact := strings.NewReplacer("-", "", "+", "").Replace(name)
 	switch name {
 	case "enter", "return":
 		return KeyEnter, nil
@@ -166,6 +167,68 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyFocusIn, nil
 	case "focus-out", "focusout", "blur":
 		return KeyFocusOut, nil
+	}
+	switch compact {
+	case "shiftenter", "shiftreturn":
+		return KeyShiftEnter, nil
+	case "shifttab":
+		return KeyShiftTab, nil
+	case "altb", "metab", "optionb":
+		return KeyAltB, nil
+	case "altd", "metad", "optiond":
+		return KeyAltD, nil
+	case "altf", "metaf", "optionf":
+		return KeyAltF, nil
+	case "alty", "metay", "optiony":
+		return KeyAltY, nil
+	case "altbackspace", "metabackspace", "optionbackspace":
+		return KeyAltBS, nil
+	case "altleft", "metaleft", "optionleft":
+		return KeyAltLeft, nil
+	case "altright", "metaright", "optionright":
+		return KeyAltRight, nil
+	case "ctrlleft", "controlleft":
+		return KeyCtrlLeft, nil
+	case "ctrlright", "controlright":
+		return KeyCtrlRight, nil
+	case "ctrla", "controla":
+		return KeyCtrlA, nil
+	case "ctrlb", "controlb":
+		return KeyCtrlB, nil
+	case "ctrlc", "controlc":
+		return KeyCtrlC, nil
+	case "ctrld", "controld":
+		return KeyCtrlD, nil
+	case "ctrle", "controle":
+		return KeyCtrlE, nil
+	case "ctrlf", "controlf":
+		return KeyCtrlF, nil
+	case "ctrlg", "controlg":
+		return KeyCtrlG, nil
+	case "ctrlk", "controlk":
+		return KeyCtrlK, nil
+	case "ctrll", "controll":
+		return KeyCtrlL, nil
+	case "ctrln", "controln":
+		return KeyCtrlN, nil
+	case "ctrlo", "controlo":
+		return KeyCtrlO, nil
+	case "ctrlp", "controlp":
+		return KeyCtrlP, nil
+	case "ctrlr", "controlr":
+		return KeyCtrlR, nil
+	case "ctrls", "controls":
+		return KeyCtrlS, nil
+	case "ctrlt", "controlt":
+		return KeyCtrlT, nil
+	case "ctrlu", "controlu":
+		return KeyCtrlU, nil
+	case "ctrlw", "controlw":
+		return KeyCtrlW, nil
+	case "ctrlx", "controlx":
+		return KeyCtrlX, nil
+	case "ctrly", "controly":
+		return KeyCtrlY, nil
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
 	}
