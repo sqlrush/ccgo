@@ -1,6 +1,10 @@
 package tui
 
-import "time"
+import (
+	"time"
+
+	"ccgo/internal/session"
+)
 
 const DoublePressTimeout = 800 * time.Millisecond
 
@@ -72,6 +76,15 @@ type REPLScreen struct {
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {
 	prompt := NewPromptState(history)
+	return newREPLScreenWithPrompt(width, height, prompt)
+}
+
+func NewREPLScreenFromHistoryEntries(width int, height int, history []session.HistoryEntry) REPLScreen {
+	prompt := NewPromptStateFromEntries(history)
+	return newREPLScreenWithPrompt(width, height, prompt)
+}
+
+func newREPLScreenWithPrompt(width int, height int, prompt PromptState) REPLScreen {
 	prompt.EnablePasteReferences()
 	screen := REPLScreen{
 		Width:                width,

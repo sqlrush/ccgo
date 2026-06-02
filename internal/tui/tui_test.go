@@ -491,6 +491,19 @@ func TestPromptHistoryRestoresPastedContentEntries(t *testing.T) {
 	}
 }
 
+func TestREPLScreenRestoresPastedHistoryEntries(t *testing.T) {
+	screen := NewREPLScreenFromHistoryEntries(40, 8, []session.HistoryEntry{{
+		Display: "run [Pasted text #1]",
+		PastedContents: map[int]session.PastedContent{
+			1: {ID: 1, Type: session.PastedContentText, Content: "expanded command"},
+		},
+	}})
+	screen.ApplyKey(ParseKey("\x1b[A"))
+	if screen.Prompt.Text != "run [Pasted text #1]" || screen.Prompt.ExpandedText() != "run expanded command" {
+		t.Fatalf("prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+}
+
 func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	key := ParseKey("\x1b]1337;File=inline=1:AAAA\a")
 	if key.Type != KeyImageHint || key.Text != ImageHintPlaceholder {
