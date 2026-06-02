@@ -118,6 +118,39 @@ func TestWriteAndLoadSessionSummary(t *testing.T) {
 	}
 }
 
+func TestLoadSessionSummaryAcceptsFrontmatterFieldAliases(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, SessionSummaryFilename)
+	if err := os.WriteFile(path, []byte(`---
+type: session
+sessionId: sess_alias
+updatedAt: 2026-01-02T03:04:05Z
+lastMessageUuid: msg_alias
+compactTrigger: auto
+messagesSummarized: 7
+preTokens: 456
+userContext: resume work
+---
+legacy summary text
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadSessionSummary(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SessionID != "sess_alias" || loaded.LastMessageUUID != "msg_alias" || loaded.Summary != "legacy summary text" {
+		t.Fatalf("loaded = %#v", loaded)
+	}
+	if !loaded.UpdatedAt.Equal(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)) {
+		t.Fatalf("updated at = %s", loaded.UpdatedAt.Format(time.RFC3339))
+	}
+	if loaded.Metadata.Trigger != "auto" || loaded.Metadata.MessagesSummarized != 7 || loaded.Metadata.PreTokens != 456 || loaded.Metadata.UserContext != "resume work" {
+		t.Fatalf("metadata = %#v", loaded.Metadata)
+	}
+}
+
 func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{

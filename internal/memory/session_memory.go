@@ -100,19 +100,19 @@ func LoadSessionSummary(path string) (SessionSummary, error) {
 		return SessionSummary{}, err
 	}
 	frontmatter, body := ParseFrontmatter(string(data))
-	updatedAt, _ := time.Parse(time.RFC3339, frontmatter["updated_at"])
+	updatedAt, _ := time.Parse(time.RFC3339, firstFrontmatterField(frontmatter, "updated_at", "updatedAt", "updated", "timestamp", "created_at", "createdAt"))
 	metadata := session.CompactMetadata{
-		Trigger:            frontmatter["compact_trigger"],
-		UserContext:        frontmatter["user_context"],
-		MessagesSummarized: parseInt(frontmatter["messages_summarized"]),
-		PreTokens:          parseInt(frontmatter["pre_tokens"]),
+		Trigger:            firstFrontmatterField(frontmatter, "compact_trigger", "compactTrigger", "trigger"),
+		UserContext:        firstFrontmatterField(frontmatter, "user_context", "userContext"),
+		MessagesSummarized: parseInt(firstFrontmatterField(frontmatter, "messages_summarized", "messagesSummarized", "message_count", "messageCount")),
+		PreTokens:          parseInt(firstFrontmatterField(frontmatter, "pre_tokens", "preTokens", "token_count", "tokenCount")),
 	}
 	return SessionSummary{
-		SessionID:       contracts.ID(frontmatter["session_id"]),
+		SessionID:       contracts.ID(firstFrontmatterField(frontmatter, "session_id", "sessionId", "sessionID", "id")),
 		Path:            path,
 		Summary:         strings.TrimSpace(body),
 		UpdatedAt:       updatedAt,
-		LastMessageUUID: contracts.ID(frontmatter["last_message_uuid"]),
+		LastMessageUUID: contracts.ID(firstFrontmatterField(frontmatter, "last_message_uuid", "lastMessageUuid", "lastMessageUUID", "last_message_id", "lastMessageId")),
 		Metadata:        metadata,
 	}, nil
 }
@@ -362,6 +362,15 @@ func formatSessionSummary(summary SessionSummary) string {
 func parseInt(raw string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(raw))
 	return n
+}
+
+func firstFrontmatterField(fields map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(fields[key]); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func sessionMemoryCompactionTime(t time.Time) time.Time {
