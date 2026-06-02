@@ -8,6 +8,7 @@ import (
 type ScriptStep struct {
 	Keys                      []string
 	Key                       string
+	Text                      string
 	Message                   *Message
 	Dialog                    *Dialog
 	RequestPermission         *PermissionRequest
@@ -158,6 +159,14 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		keys := step.Keys
 		if step.Key != "" {
 			keys = append(keys, step.Key)
+		}
+		if step.Text != "" {
+			for _, r := range step.Text {
+				event = screen.ApplyKey(Key{Type: KeyRune, Rune: r})
+				if event.Type != ScreenEventNone {
+					result.Events = append(result.Events, event)
+				}
+			}
 		}
 		for _, rawKey := range keys {
 			event = screen.ApplyKey(parseScriptKey(rawKey))

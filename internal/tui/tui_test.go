@@ -2818,6 +2818,19 @@ func TestRunInteractionScriptAcceptsNamedKeys(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptTypesTextField(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Text: "run task", Key: "enter", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "run task"}, ExpectPrompt: &PromptExpectation{Empty: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "run task" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
