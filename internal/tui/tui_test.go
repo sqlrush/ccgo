@@ -599,6 +599,37 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 	}
 }
 
+func TestParseCSIuKeySequences(t *testing.T) {
+	cases := []struct {
+		seq  string
+		want KeyType
+		rune rune
+	}{
+		{seq: "\x1b[97;5u", want: KeyCtrlA},
+		{seq: "\x1b[65;5u", want: KeyCtrlA},
+		{seq: "\x1b[117;6u", want: KeyCtrlU},
+		{seq: "\x1b[104;5u", want: KeyBackspace},
+		{seq: "\x1b[105;5u", want: KeyTab},
+		{seq: "\x1b[106;5u", want: KeyEnter},
+		{seq: "\x1b[109;5u", want: KeyEnter},
+		{seq: "\x1b[91;5u", want: KeyEsc},
+		{seq: "\x1b[63;5u", want: KeyBackspace},
+		{seq: "\x1b[98;3u", want: KeyAltB},
+		{seq: "\x1b[68;3u", want: KeyAltD},
+		{seq: "\x1b[127;3u", want: KeyAltBS},
+		{seq: "\x1b[13;2u", want: KeyShiftEnter},
+		{seq: "\x1b[9;2u", want: KeyShiftTab},
+		{seq: "\x1b[90;2u", want: KeyRune, rune: 'Z'},
+		{seq: "\x1b[97;3u", want: KeyUnknown},
+	}
+	for _, tc := range cases {
+		key := ParseKey(tc.seq)
+		if key.Type != tc.want || key.Rune != tc.rune {
+			t.Fatalf("ParseKey(%q) = %#v, want type=%q rune=%q", tc.seq, key, tc.want, tc.rune)
+		}
+	}
+}
+
 func TestParseMouseSequences(t *testing.T) {
 	press := ParseKey("\x1b[<64;10;4M")
 	if press.Type != KeyMouse || press.MouseButton != 64 || press.MouseX != 10 || press.MouseY != 4 || press.MouseRelease {

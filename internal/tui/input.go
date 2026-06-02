@@ -82,6 +82,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseLegacyMouse(seq); ok {
 		return key
 	}
+	if key, ok := parseCSIuKey(seq); ok {
+		return key
+	}
 	if key, ok := parseModifiedNavigationKey(seq); ok {
 		return key
 	}
@@ -211,6 +214,151 @@ func isModifiedNavigationCSI(seq, prefix, suffix string) bool {
 		return false
 	}
 	return modifier[0] >= '2' && modifier[0] <= '9'
+}
+
+func parseCSIuKey(seq string) (Key, bool) {
+	if !strings.HasPrefix(seq, "\x1b[") || !strings.HasSuffix(seq, "u") {
+		return Key{}, false
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "u")
+	parts := strings.Split(body, ";")
+	if len(parts) < 2 {
+		return Key{}, false
+	}
+	codepoint, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return Key{}, false
+	}
+	modifier, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return Key{}, false
+	}
+	if modifier < 2 {
+		return Key{}, false
+	}
+	shift := modifier == 2 || modifier == 4 || modifier == 6 || modifier == 8
+	alt := modifier == 3 || modifier == 4 || modifier == 7 || modifier == 8
+	ctrl := modifier >= 5 && modifier <= 8
+
+	if ctrl {
+		if key, ok := ctrlCSIuKey(codepoint); ok {
+			return key, true
+		}
+		return Key{}, false
+	}
+	if alt {
+		if key, ok := altCSIuKey(codepoint); ok {
+			return key, true
+		}
+		return Key{}, false
+	}
+	if shift {
+		if key, ok := shiftCSIuKey(codepoint); ok {
+			return key, true
+		}
+	}
+	if r := rune(codepoint); r >= 0x20 {
+		return Key{Type: KeyRune, Rune: r}, true
+	}
+	return Key{}, false
+}
+
+func ctrlCSIuKey(codepoint int) (Key, bool) {
+	switch asciiLower(codepoint) {
+	case 'a':
+		return Key{Type: KeyCtrlA}, true
+	case 'b':
+		return Key{Type: KeyCtrlB}, true
+	case 'c':
+		return Key{Type: KeyCtrlC}, true
+	case 'd':
+		return Key{Type: KeyCtrlD}, true
+	case 'e':
+		return Key{Type: KeyCtrlE}, true
+	case 'f':
+		return Key{Type: KeyCtrlF}, true
+	case 'g':
+		return Key{Type: KeyCtrlG}, true
+	case 'h':
+		return Key{Type: KeyBackspace}, true
+	case 'i':
+		return Key{Type: KeyTab}, true
+	case 'j', 'm':
+		return Key{Type: KeyEnter}, true
+	case 'k':
+		return Key{Type: KeyCtrlK}, true
+	case 'l':
+		return Key{Type: KeyCtrlL}, true
+	case 'n':
+		return Key{Type: KeyCtrlN}, true
+	case 'o':
+		return Key{Type: KeyCtrlO}, true
+	case 'p':
+		return Key{Type: KeyCtrlP}, true
+	case 'r':
+		return Key{Type: KeyCtrlR}, true
+	case 's':
+		return Key{Type: KeyCtrlS}, true
+	case 't':
+		return Key{Type: KeyCtrlT}, true
+	case 'u':
+		return Key{Type: KeyCtrlU}, true
+	case 'w':
+		return Key{Type: KeyCtrlW}, true
+	case 'x':
+		return Key{Type: KeyCtrlX}, true
+	case 'y':
+		return Key{Type: KeyCtrlY}, true
+	}
+	switch codepoint {
+	case 27, '[':
+		return Key{Type: KeyEsc}, true
+	case 8, 127, '?':
+		return Key{Type: KeyBackspace}, true
+	case 9:
+		return Key{Type: KeyTab}, true
+	case 10, 13:
+		return Key{Type: KeyEnter}, true
+	default:
+		return Key{}, false
+	}
+}
+
+func altCSIuKey(codepoint int) (Key, bool) {
+	switch asciiLower(codepoint) {
+	case 'b':
+		return Key{Type: KeyAltB}, true
+	case 'd':
+		return Key{Type: KeyAltD}, true
+	case 'f':
+		return Key{Type: KeyAltF}, true
+	case 'y':
+		return Key{Type: KeyAltY}, true
+	}
+	switch codepoint {
+	case 8, 127:
+		return Key{Type: KeyAltBS}, true
+	default:
+		return Key{}, false
+	}
+}
+
+func shiftCSIuKey(codepoint int) (Key, bool) {
+	switch codepoint {
+	case 9:
+		return Key{Type: KeyShiftTab}, true
+	case 10, 13:
+		return Key{Type: KeyShiftEnter}, true
+	default:
+		return Key{}, false
+	}
+}
+
+func asciiLower(codepoint int) int {
+	if codepoint >= 'A' && codepoint <= 'Z' {
+		return codepoint + ('a' - 'A')
+	}
+	return codepoint
 }
 
 func parseSGRMouse(seq string) (Key, bool) {
