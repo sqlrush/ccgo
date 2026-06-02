@@ -38,6 +38,35 @@ type ContentBlock struct {
 	Edits          []CacheEdit      `json:"edits,omitempty"`
 }
 
+func (b *ContentBlock) UnmarshalJSON(data []byte) error {
+	type contentBlockJSON ContentBlock
+	var base contentBlockJSON
+	if err := json.Unmarshal(data, &base); err != nil {
+		return err
+	}
+	*b = ContentBlock(base)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if b.ToolUseID == "" {
+		b.ToolUseID = stringJSONField(fields, "toolUseId", "toolUseID")
+	}
+	if _, hasCanonical := fields["is_error"]; !hasCanonical {
+		if value, ok := boolJSONField(fields, "isError"); ok {
+			b.IsError = value
+		}
+	}
+	if b.CacheControl == nil {
+		b.CacheControl = cacheControlJSONField(fields, "cacheControl")
+	}
+	if b.CacheReference == "" {
+		b.CacheReference = stringJSONField(fields, "cacheReference")
+	}
+	return nil
+}
+
 type CacheControl struct {
 	Type  string `json:"type"`
 	Scope string `json:"scope,omitempty"`
@@ -47,6 +76,66 @@ type CacheControl struct {
 type CacheEdit struct {
 	Type           string `json:"type"`
 	CacheReference string `json:"cache_reference"`
+}
+
+func (e *CacheEdit) UnmarshalJSON(data []byte) error {
+	type cacheEditJSON CacheEdit
+	var base cacheEditJSON
+	if err := json.Unmarshal(data, &base); err != nil {
+		return err
+	}
+	*e = CacheEdit(base)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if e.CacheReference == "" {
+		e.CacheReference = stringJSONField(fields, "cacheReference")
+	}
+	return nil
+}
+
+func stringJSONField(fields map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return ""
+}
+
+func boolJSONField(fields map[string]json.RawMessage, names ...string) (bool, bool) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value bool
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+	}
+	return false, false
+}
+
+func cacheControlJSONField(fields map[string]json.RawMessage, names ...string) *CacheControl {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value *CacheControl
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return nil
 }
 
 type Message struct {

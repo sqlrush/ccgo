@@ -399,6 +399,37 @@ func TestBuildResumeConversationConvertsTranscriptChain(t *testing.T) {
 	}
 }
 
+func TestBuildResumeConversationAcceptsContentBlockFieldAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","cacheControl":{"type":"ephemeral","ttl":"5m"}},{"type":"cache_edits","cacheReference":"cache_ref_1","edits":[{"type":"clear","cacheReference":"cache_ref_0"}]}]}}`,
+		`{"type":"user","uuid":"tr1","sessionId":"s1","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z","content":[{"type":"tool_result","toolUseId":"toolu_1","isError":true,"content":"denied"}]}`,
+	})
+	resume, err := BuildResumeConversation(path, "tr1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "a1,tr1" {
+		t.Fatalf("resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+	if len(resume.Messages) != 2 {
+		t.Fatalf("messages = %#v", resume.Messages)
+	}
+	assistant := resume.Messages[0]
+	if len(assistant.Content) != 2 {
+		t.Fatalf("assistant content = %#v", assistant.Content)
+	}
+	if assistant.Content[0].CacheControl == nil || assistant.Content[0].CacheControl.Type != "ephemeral" || assistant.Content[0].CacheControl.TTL != "5m" {
+		t.Fatalf("cacheControl alias = %#v", assistant.Content[0].CacheControl)
+	}
+	if assistant.Content[1].CacheReference != "cache_ref_1" || len(assistant.Content[1].Edits) != 1 || assistant.Content[1].Edits[0].CacheReference != "cache_ref_0" {
+		t.Fatalf("cacheReference aliases = %#v", assistant.Content[1])
+	}
+	user := resume.Messages[1]
+	if len(user.Content) != 1 || user.Content[0].ToolUseID != "toolu_1" || !user.Content[0].IsError {
+		t.Fatalf("tool result aliases = %#v", user.Content)
+	}
+}
+
 func TestBuildResumeConversationUsesLatestLeaf(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null,"message":{"type":"user","content":[{"type":"text","text":"first"}]}}`,
