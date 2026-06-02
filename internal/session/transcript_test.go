@@ -220,6 +220,71 @@ func TestLoadTranscriptAppliesSnipRemovalAndRelinks(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAppliesTombstonesAndRelinks(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-01-01T00:00:00Z"}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-01-01T00:00:01Z"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z"}`,
+		`{"type":"tombstone","targetUuid":"a1","parentUuid":"u1","sessionId":"s1","reason":"deleted","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"tombstone","deleted_uuid":"ghost","parent_uuid":"u2","session_uuid":"s2","deleted_reason":"alias deleted"}`,
+		`{"type":"tombstone","uuid":"legacy","parent_uuid":"u2","sessionId":"s3","reason":"legacy fallback"}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := transcript.Messages["a1"]; ok {
+		t.Fatalf("tombstoned message still present")
+	}
+	if got := transcript.Messages["u2"].ParentUUID; got == nil || *got != "u1" {
+		t.Fatalf("u2 parent = %#v", got)
+	}
+	chain := transcript.BuildConversationChain("u2")
+	if got := chainIDs(chain); strings.Join(got, ",") != "u1,u2" {
+		t.Fatalf("chain = %#v", got)
+	}
+	if entry := transcript.Tombstones["a1"]; entry.SessionID != "s1" || entry.Reason != "deleted" || entry.ParentUUID == nil || *entry.ParentUUID != "u1" {
+		t.Fatalf("tombstone entry = %#v", entry)
+	}
+	if entry := transcript.Tombstones["ghost"]; entry.SessionID != "s2" || entry.Reason != "alias deleted" || entry.ParentUUID == nil || *entry.ParentUUID != "u2" {
+		t.Fatalf("aliased tombstone entry = %#v", entry)
+	}
+	if entry := transcript.Tombstones["legacy"]; entry.SessionID != "s3" || entry.Reason != "legacy fallback" || entry.TargetUUID != "legacy" {
+		t.Fatalf("legacy tombstone entry = %#v", entry)
+	}
+
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Tombstones["a1"].Reason != "deleted" || metadata.Tombstones["ghost"].SessionID != "s2" || metadata.Tombstones["legacy"].TargetUUID != "legacy" {
+		t.Fatalf("metadata tombstones = %#v", metadata.Tombstones)
+	}
+}
+
+func TestLoadTranscriptTombstoneRelinkHandlesDeletedParentCycle(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"assistant","uuid":"a1","parentUuid":"a2"}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"a1"}`,
+		`{"type":"user","uuid":"u1","parentUuid":"a1"}`,
+		`{"type":"tombstone","targetUuid":"a1"}`,
+		`{"type":"tombstone","targetUuid":"a2"}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.Messages["u1"].ParentUUID != nil {
+		t.Fatalf("cyclic deleted parent should relink to nil, got %#v", transcript.Messages["u1"].ParentUUID)
+	}
+	chain := transcript.BuildConversationChain("u1")
+	if got := chainIDs(chain); strings.Join(got, ",") != "u1" {
+		t.Fatalf("chain = %#v", got)
+	}
+}
+
 func TestBuildConversationChainRecoversOrphanedParallelToolResults(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","content":[{"type":"text","text":"run both"}]}}`,

@@ -23,6 +23,7 @@ type TranscriptMetadata struct {
 	Modes                   map[contracts.ID]string
 	WorktreeStates          map[contracts.ID]WorktreeStateEntry
 	ContentReplacements     map[contracts.ID][]ContentReplacementRecord
+	Tombstones              map[contracts.ID]TombstoneEntry
 	FileHistorySnapshots    []json.RawMessage
 	AttributionSnapshots    []json.RawMessage
 	SpeculationAccepts      []SpeculationAcceptEntry
@@ -45,6 +46,7 @@ func NewTranscriptMetadata() TranscriptMetadata {
 		Modes:               map[contracts.ID]string{},
 		WorktreeStates:      map[contracts.ID]WorktreeStateEntry{},
 		ContentReplacements: map[contracts.ID][]ContentReplacementRecord{},
+		Tombstones:          map[contracts.ID]TombstoneEntry{},
 	}
 }
 
@@ -127,6 +129,10 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 					key = contracts.ID(entry.AgentID)
 				}
 				metadata.ContentReplacements[key] = append(metadata.ContentReplacements[key], entry.Replacements...)
+			}
+		case "tombstone":
+			if entry, ok := parseTombstoneMetadata(line); ok && entry.TargetUUID != "" {
+				metadata.Tombstones[entry.TargetUUID] = entry
 			}
 		case "file-history-snapshot":
 			metadata.FileHistorySnapshots = append(metadata.FileHistorySnapshots, append(json.RawMessage(nil), line...))

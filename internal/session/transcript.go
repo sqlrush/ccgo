@@ -32,6 +32,7 @@ type Transcript struct {
 	Modes                   map[contracts.ID]string
 	WorktreeStates          map[contracts.ID]WorktreeStateEntry
 	ContentReplacements     map[contracts.ID][]ContentReplacementRecord
+	Tombstones              map[contracts.ID]TombstoneEntry
 	FileHistorySnapshots    []json.RawMessage
 	AttributionSnapshots    []json.RawMessage
 	SpeculationAccepts      []SpeculationAcceptEntry
@@ -110,6 +111,16 @@ type WorktreeStateEntry struct {
 	Type            string          `json:"type"`
 	SessionID       contracts.ID    `json:"sessionId"`
 	WorktreeSession json.RawMessage `json:"worktreeSession"`
+}
+
+type TombstoneEntry struct {
+	Type       string        `json:"type"`
+	UUID       contracts.ID  `json:"uuid,omitempty"`
+	TargetUUID contracts.ID  `json:"targetUuid,omitempty"`
+	ParentUUID *contracts.ID `json:"parentUuid,omitempty"`
+	SessionID  contracts.ID  `json:"sessionId,omitempty"`
+	Timestamp  string        `json:"timestamp,omitempty"`
+	Reason     string        `json:"reason,omitempty"`
 }
 
 type SpeculationAcceptEntry struct {
@@ -244,6 +255,10 @@ func LoadTranscript(path string) (Transcript, error) {
 				}
 				transcript.ContentReplacements[key] = append(transcript.ContentReplacements[key], entry.Replacements...)
 			}
+		case metadataType == "tombstone":
+			if entry, ok := parseTombstoneMetadata(line); ok && entry.TargetUUID != "" {
+				transcript.Tombstones[entry.TargetUUID] = entry
+			}
 		case metadataType == "file-history-snapshot":
 			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, append(json.RawMessage(nil), line...))
 		case metadataType == "attribution-snapshot":
@@ -266,6 +281,7 @@ func LoadTranscript(path string) (Transcript, error) {
 		return Transcript{}, err
 	}
 
+	transcript.applyTombstones()
 	transcript.applyPreservedSegmentRelinks()
 	transcript.applySnipRemovals()
 	transcript.computeLeafUUIDs()
@@ -542,6 +558,7 @@ func newTranscript() Transcript {
 		Modes:               map[contracts.ID]string{},
 		WorktreeStates:      map[contracts.ID]WorktreeStateEntry{},
 		ContentReplacements: map[contracts.ID][]ContentReplacementRecord{},
+		Tombstones:          map[contracts.ID]TombstoneEntry{},
 		LeafUUIDs:           map[contracts.ID]struct{}{},
 	}
 }
@@ -642,20 +659,51 @@ func (t *Transcript) applySnipRemovals() {
 	if len(toDelete) == 0 {
 		return
 	}
+	t.deleteAndRelinkMessages(toDelete, nil)
+}
+
+func (t *Transcript) applyTombstones() {
+	if len(t.Tombstones) == 0 {
+		return
+	}
+	toDelete := map[contracts.ID]struct{}{}
+	fallbackParents := map[contracts.ID]*contracts.ID{}
+	for id, entry := range t.Tombstones {
+		if id == "" {
+			continue
+		}
+		toDelete[id] = struct{}{}
+		fallbackParents[id] = cloneIDPtr(entry.ParentUUID)
+	}
+	t.deleteAndRelinkMessages(toDelete, fallbackParents)
+}
+
+func (t *Transcript) deleteAndRelinkMessages(toDelete map[contracts.ID]struct{}, fallbackParents map[contracts.ID]*contracts.ID) {
+	if len(toDelete) == 0 {
+		return
+	}
 	deletedParent := map[contracts.ID]*contracts.ID{}
 	for id := range toDelete {
 		if msg := t.Messages[id]; msg != nil {
 			deletedParent[id] = cloneIDPtr(msg.ParentUUID)
+		} else if fallbackParents != nil {
+			deletedParent[id] = cloneIDPtr(fallbackParents[id])
 		}
 		t.deleteMessage(id)
 	}
 	resolve := func(start contracts.ID) *contracts.ID {
 		var path []contracts.ID
+		seen := map[contracts.ID]struct{}{}
 		cur := &start
 		for cur != nil {
 			if _, ok := toDelete[*cur]; !ok {
 				break
 			}
+			if _, ok := seen[*cur]; ok {
+				cur = nil
+				break
+			}
+			seen[*cur] = struct{}{}
 			path = append(path, *cur)
 			next, ok := deletedParent[*cur]
 			if !ok {

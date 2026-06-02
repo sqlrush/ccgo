@@ -161,6 +161,35 @@ func parseContentReplacementMetadata(line []byte) (ContentReplacementEntry, bool
 	return entry, true
 }
 
+func parseTombstoneMetadata(line []byte) (TombstoneEntry, bool) {
+	var entry TombstoneEntry
+	if err := json.Unmarshal(line, &entry); err != nil {
+		return TombstoneEntry{}, false
+	}
+	fields, err := parseTranscriptMetadataFields(line)
+	if err != nil {
+		return TombstoneEntry{}, false
+	}
+	if entry.TargetUUID == "" {
+		entry.TargetUUID = fields.idValue("targetUuid", "targetUUID", "target_uuid", "deletedUuid", "deletedUUID", "deleted_uuid", "messageUuid", "messageUUID", "message_uuid")
+	}
+	if entry.TargetUUID == "" {
+		entry.TargetUUID = entry.UUID
+	}
+	if entry.ParentUUID == nil {
+		if parent := fields.idValue("parentUuid", "parentUUID", "parent_uuid"); parent != "" {
+			entry.ParentUUID = &parent
+		}
+	}
+	if entry.SessionID == "" {
+		entry.SessionID = fields.sessionIDValue()
+	}
+	if entry.Reason == "" {
+		entry.Reason = fields.stringValue("deletedReason", "deleted_reason")
+	}
+	return entry, true
+}
+
 func parseSpeculationAcceptMetadata(line []byte) (SpeculationAcceptEntry, bool) {
 	var entry SpeculationAcceptEntry
 	if err := json.Unmarshal(line, &entry); err != nil {
