@@ -73,6 +73,70 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsSessionUUIDAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"custom-title","session_uuid":"sess_uuid","customTitle":"UUID Title"}`,
+		`{"type":"ai-title","sessionUuid":"sess_uuid","aiTitle":"UUID AI Title"}`,
+		`{"type":"last-prompt","sessionUUID":"sess_uuid","lastPrompt":"uuid last prompt"}`,
+		`{"type":"task-summary","session_uuid":"sess_uuid","summary":"uuid task","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"tag","sessionUuid":"sess_uuid","tag":"uuid-tag"}`,
+		`{"type":"agent-name","sessionUUID":"sess_uuid","agentName":"UUID Agent"}`,
+		`{"type":"agent-color","session_uuid":"sess_uuid","agentColor":"blue"}`,
+		`{"type":"agent-setting","sessionUuid":"sess_uuid","agentSetting":"builder"}`,
+		`{"type":"pr-link","sessionUUID":"sess_uuid","prNumber":9,"prUrl":"https://github.com/o/r/pull/9","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"mode","session_uuid":"sess_uuid","mode":"worker"}`,
+		`{"type":"worktree-state","sessionUuid":"sess_uuid","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"sess_uuid"}}`,
+		`{"type":"content-replacement","sessionUUID":"sess_uuid","replacements":[{"replacement":"uuid stub"}]}`,
+		`{"type":"marble-origami-commit","session_uuid":"sess_uuid","collapseId":"collapse_1","summaryUuid":"sum_1","summary":"short","firstArchivedUuid":"u0","lastArchivedUuid":"a0"}`,
+		`{"type":"marble-origami-snapshot","sessionUUID":"sess_uuid","armed":true,"lastSpawnTokens":32}`,
+		`{"type":"user","uuid":"u1","sessionUuid":"sess_uuid","message":{"type":"user","sessionUUID":"sess_uuid","content":[{"type":"text","text":"uuid prompt text"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := transcript.Messages["u1"]
+	if msg == nil {
+		t.Fatal("session uuid message missing")
+	}
+	if msg.SessionID != "sess_uuid" || msg.Message == nil || msg.Message.SessionID != "sess_uuid" {
+		t.Fatalf("session uuid message aliases = %#v nested=%#v", msg, msg.Message)
+	}
+	if transcript.CustomTitles["sess_uuid"] != "UUID Title" || transcript.AITitles["sess_uuid"] != "UUID AI Title" || transcript.LastPrompts["sess_uuid"] != "uuid last prompt" {
+		t.Fatalf("session uuid title metadata = %#v %#v %#v", transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts)
+	}
+	if transcript.TaskSummaries["sess_uuid"].Summary != "uuid task" || transcript.Tags["sess_uuid"] != "uuid-tag" {
+		t.Fatalf("session uuid task/tag metadata = %#v %#v", transcript.TaskSummaries, transcript.Tags)
+	}
+	if transcript.AgentNames["sess_uuid"] != "UUID Agent" || transcript.AgentColors["sess_uuid"] != "blue" || transcript.AgentSettings["sess_uuid"] != "builder" {
+		t.Fatalf("session uuid agent metadata = %#v %#v %#v", transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
+	}
+	if transcript.PRLinks["sess_uuid"].PRNumber != 9 || transcript.Modes["sess_uuid"] != "worker" || len(transcript.WorktreeStates["sess_uuid"].WorktreeSession) == 0 {
+		t.Fatalf("session uuid pr/mode/worktree metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
+	}
+	if len(transcript.ContentReplacements["sess_uuid"]) != 1 || transcript.ContentReplacements["sess_uuid"][0].Replacement != "uuid stub" {
+		t.Fatalf("session uuid content replacements = %#v", transcript.ContentReplacements)
+	}
+	if len(transcript.ContextCollapseCommits) != 1 || transcript.ContextCollapseCommits[0].SessionID != "sess_uuid" || transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "sess_uuid" {
+		t.Fatalf("session uuid collapse metadata = %#v snapshot=%#v", transcript.ContextCollapseCommits, transcript.ContextCollapseSnapshot)
+	}
+
+	index, err := LoadTranscriptIndex(path, "sess_uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "UUID Title" || index.AITitle != "UUID AI Title" || index.LastPrompt != "uuid last prompt" || index.TaskSummary != "uuid task" {
+		t.Fatalf("session uuid index title metadata = %#v", index)
+	}
+	if index.Tag != "uuid-tag" || index.AgentName != "UUID Agent" || index.AgentColor != "blue" || index.AgentSetting != "builder" {
+		t.Fatalf("session uuid index agent metadata = %#v", index)
+	}
+	if index.PRNumber != 9 || index.Mode != "worker" || !index.HasWorktreeState || index.ContentReplacementCount != 1 || index.FirstUserText != "uuid prompt text" {
+		t.Fatalf("session uuid index = %#v", index)
+	}
+}
+
 func TestLoadTranscriptPrunesBeforeCompactBoundary(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,

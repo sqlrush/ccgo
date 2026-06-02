@@ -13,6 +13,9 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		ParentUUIDSnake        *contracts.ID    `json:"parent_uuid"`
 		LogicalParentUUIDSnake *contracts.ID    `json:"logical_parent_uuid"`
 		SessionIDSnake         contracts.ID     `json:"session_id"`
+		SessionUUID            contracts.ID     `json:"sessionUuid"`
+		SessionUUIDUpper       contracts.ID     `json:"sessionUUID"`
+		SessionUUIDSnake       contracts.ID     `json:"session_uuid"`
 		IsSidechainSnake       *bool            `json:"is_sidechain"`
 		AgentIDSnake           string           `json:"agent_id"`
 		CompactMetadataSnake   *CompactMetadata `json:"compact_metadata"`
@@ -32,6 +35,15 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	}
 	if m.SessionID == "" {
 		m.SessionID = aux.SessionIDSnake
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionUUID
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionUUIDUpper
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionUUIDSnake
 	}
 	if aux.IsSidechainSnake != nil {
 		m.IsSidechain = *aux.IsSidechainSnake

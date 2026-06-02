@@ -35,6 +35,10 @@ func (f transcriptMetadataFields) idValue(keys ...string) contracts.ID {
 	return contracts.ID(f.stringValue(keys...))
 }
 
+func (f transcriptMetadataFields) sessionIDValue() contracts.ID {
+	return f.idValue("sessionId", "session_id", "sessionUuid", "sessionUUID", "session_uuid")
+}
+
 func (f transcriptMetadataFields) intValue(keys ...string) int {
 	for _, key := range keys {
 		raw, ok := f[key]
@@ -78,7 +82,7 @@ func parseSessionStringMetadata(line []byte, valueKeys ...string) (contracts.ID,
 	if err != nil {
 		return "", "", false
 	}
-	sessionID := fields.idValue("sessionId", "session_id")
+	sessionID := fields.sessionIDValue()
 	return sessionID, fields.stringValue(valueKeys...), true
 }
 
@@ -92,7 +96,7 @@ func parseTaskSummaryMetadata(line []byte) (TaskSummaryEntry, bool) {
 		return TaskSummaryEntry{}, false
 	}
 	if entry.SessionID == "" {
-		entry.SessionID = fields.idValue("session_id")
+		entry.SessionID = fields.sessionIDValue()
 	}
 	return entry, true
 }
@@ -107,7 +111,7 @@ func parsePRLinkMetadata(line []byte) (PRLinkEntry, bool) {
 		return PRLinkEntry{}, false
 	}
 	if entry.SessionID == "" {
-		entry.SessionID = fields.idValue("session_id")
+		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.PRNumber == 0 {
 		entry.PRNumber = fields.intValue("pr_number")
@@ -131,7 +135,7 @@ func parseWorktreeStateMetadata(line []byte) (WorktreeStateEntry, bool) {
 		return WorktreeStateEntry{}, false
 	}
 	if entry.SessionID == "" {
-		entry.SessionID = fields.idValue("session_id")
+		entry.SessionID = fields.sessionIDValue()
 	}
 	if len(entry.WorktreeSession) == 0 {
 		entry.WorktreeSession = fields.rawValue("worktree_session")
@@ -149,7 +153,7 @@ func parseContentReplacementMetadata(line []byte) (ContentReplacementEntry, bool
 		return ContentReplacementEntry{}, false
 	}
 	if entry.SessionID == "" {
-		entry.SessionID = fields.idValue("session_id")
+		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.AgentID == "" {
 		entry.AgentID = fields.stringValue("agent_id")
@@ -182,7 +186,7 @@ func parseContextCollapseCommitMetadata(line []byte) (ContextCollapseCommitEntry
 		return ContextCollapseCommitEntry{}, false
 	}
 	if entry.SessionID == "" {
-		entry.SessionID = fields.idValue("session_id")
+		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.CollapseID == "" {
 		entry.CollapseID = fields.stringValue("collapse_id")
@@ -212,7 +216,7 @@ func parseContextCollapseSnapshotMetadata(line []byte) (ContextCollapseSnapshotE
 		return ContextCollapseSnapshotEntry{}, false
 	}
 	if entry.SessionID == "" {
-		entry.SessionID = fields.idValue("session_id")
+		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.LastSpawnTokens == 0 {
 		entry.LastSpawnTokens = fields.intValue("last_spawn_tokens")

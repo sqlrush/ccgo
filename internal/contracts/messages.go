@@ -68,9 +68,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	type MessageJSON Message
 	var aux struct {
 		*MessageJSON
-		ParentUUIDSnake *ID   `json:"parent_uuid"`
-		SessionIDSnake  ID    `json:"session_id"`
-		IsMetaSnake     *bool `json:"is_meta"`
+		ParentUUIDSnake  *ID   `json:"parent_uuid"`
+		SessionIDSnake   ID    `json:"session_id"`
+		SessionUUID      ID    `json:"sessionUuid"`
+		SessionUUIDUpper ID    `json:"sessionUUID"`
+		SessionUUIDSnake ID    `json:"session_uuid"`
+		IsMetaSnake      *bool `json:"is_meta"`
 	}
 	base := MessageJSON{}
 	aux.MessageJSON = &base
@@ -83,6 +86,15 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	if m.SessionID == "" {
 		m.SessionID = aux.SessionIDSnake
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionUUID
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionUUIDUpper
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionUUIDSnake
 	}
 	if aux.IsMetaSnake != nil {
 		m.IsMeta = *aux.IsMetaSnake
