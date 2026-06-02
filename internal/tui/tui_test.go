@@ -1820,7 +1820,7 @@ func TestDialogRuntimeInteractionScriptCancelsPermissions(t *testing.T) {
 		{"request_permission":{"id":"new","tool_name":"Edit"}},
 		{
 			"cancel_permission_id":"old",
-			"expect_dialog_results":[{"id":"old","kind":"permission","status":"cancelled","found":true}],
+			"expect_dialog_results":{"id":"old","kind":"permission","status":"cancelled","found":true},
 			"expect_dialog":{"active":true,"id":"new","kind":"permission"},
 			"expect_status_contains":["permissions: 1"]
 		},
@@ -3321,7 +3321,7 @@ func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
 
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
-		{"keybindings":[{"keys":"ctrl-r","command":"submitPrompt"}]},
+		{"keybindings":{"keys":"ctrl-r","command":"submitPrompt"}},
 		{"text":"send me","key":"ctrl-r","expect_event":{"type":"prompt_submitted","value":"send me"},"expect_prompt":{"empty":true}}
 	]`))
 	if err != nil {
@@ -3731,12 +3731,19 @@ func TestRunInteractionScriptChecksJSONEventCounts(t *testing.T) {
 			"expect_prompt": {"empty": true}
 		},
 		{
-			"keys": ["a", "enter", "b", "enter"],
+			"keys": ["a", "enter"],
+			"expect_event_count": 1,
+			"expectTotalEventCount": 2,
+			"expectEvents": {"type": "prompt_submitted", "value": "a"},
+			"expect_prompt": {"empty": true}
+		},
+		{
+			"keys": ["b", "enter", "c", "enter"],
 			"expect_event_count": 2,
-			"expectTotalEventCount": 3,
+			"expectTotalEventCount": 4,
 			"expect_events": [
-				{"type": "prompt_submitted", "value": "a"},
-				{"type": "prompt_submitted", "value": "b"}
+				{"type": "prompt_submitted", "value": "b"},
+				{"type": "prompt_submitted", "value": "c"}
 			],
 			"expect_prompt": {"empty": true}
 		}
@@ -3749,7 +3756,7 @@ func TestRunInteractionScriptChecksJSONEventCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 3 || result.Events[0].Value != "draft" || result.Events[2].Value != "b" {
+	if len(result.Events) != 4 || result.Events[0].Value != "draft" || result.Events[3].Value != "c" {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }

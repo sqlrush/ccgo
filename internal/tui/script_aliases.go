@@ -427,7 +427,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 }
 
 func normalizeScriptStepJSON(data []byte) []byte {
-	return normalizeStringFieldsToArray(data,
+	data = normalizeStringFieldsToArray(data,
 		"keys",
 		"expect_status_contains",
 		"expectStatusContains",
@@ -437,6 +437,17 @@ func normalizeScriptStepJSON(data []byte) []byte {
 		"expectSnapshotContains",
 		"expect_snapshot_not_contains",
 		"expectSnapshotNotContains",
+	)
+	return normalizeObjectFieldsToArray(data,
+		"keybindings",
+		"key_bindings",
+		"keyBindings",
+		"keybinding_specs",
+		"keybindingSpecs",
+		"expect_events",
+		"expectEvents",
+		"expect_dialog_results",
+		"expectDialogResults",
 	)
 }
 
