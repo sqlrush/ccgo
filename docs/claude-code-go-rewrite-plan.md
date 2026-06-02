@@ -210,6 +210,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script 批量消息注入接受 `messages`、`append_messages`/`appendMessages`、`transcript_messages`/`transcriptMessages` 字段，且这些字段可用单对象或对象数组，复用 chat/transcript role/text 别名。
 - 本轮补充：interaction script direct `dialog` step 接受 `dialogId`/`dialogKind`、`heading`/`header`、`content`/`text`/`message`、`options`/`choices`/`buttons`、`focusedIndex`/`selectedIndex` 等字段别名，且 actions/options 可用单字符串。
 - 本轮补充：interaction script loader 接受 `scriptSteps`/`script_steps`、`interactionSteps`/`interaction_steps` wrapper 字段，并支持一层 `scenario`/`test`/`case`/`fixture`/`interaction` 嵌套对象。
+- 本轮补充：ANSI snapshot corpus 比对支持 `.ansi` only baseline fallback，strict stale-baseline 检查同时覆盖 `.txt` 和 `.ansi`。
 
 ### M8: Commands、skills、plugins
 

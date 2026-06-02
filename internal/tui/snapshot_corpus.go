@@ -60,7 +60,14 @@ func (c SnapshotCorpus) Write(snapshot ANSISnapshot) error {
 func (c SnapshotCorpus) LoadText(name string) (string, error) {
 	data, err := os.ReadFile(c.pathBase(name) + ".txt")
 	if err != nil {
-		return "", err
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		ansiData, ansiErr := os.ReadFile(c.pathBase(name) + ".ansi")
+		if ansiErr != nil {
+			return "", err
+		}
+		return StripANSI(string(ansiData)), nil
 	}
 	return string(data), nil
 }
@@ -132,15 +139,27 @@ func (c SnapshotCorpus) UnexpectedBaselines(snapshots []ANSISnapshot) ([]string,
 		}
 		expected[sanitizeSnapshotName(snapshot.Name)] = struct{}{}
 	}
-	var unexpected []string
+	unexpectedSet := map[string]struct{}{}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+		if entry.IsDir() {
 			continue
 		}
-		name := strings.TrimSuffix(entry.Name(), ".txt")
-		if _, ok := expected[name]; !ok {
-			unexpected = append(unexpected, name)
+		name := ""
+		switch {
+		case strings.HasSuffix(entry.Name(), ".txt"):
+			name = strings.TrimSuffix(entry.Name(), ".txt")
+		case strings.HasSuffix(entry.Name(), ".ansi"):
+			name = strings.TrimSuffix(entry.Name(), ".ansi")
+		default:
+			continue
 		}
+		if _, ok := expected[name]; !ok {
+			unexpectedSet[name] = struct{}{}
+		}
+	}
+	var unexpected []string
+	for name := range unexpectedSet {
+		unexpected = append(unexpected, name)
 	}
 	sort.Strings(unexpected)
 	return unexpected, nil

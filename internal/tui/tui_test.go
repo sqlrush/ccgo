@@ -3114,6 +3114,34 @@ func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	}
 }
 
+func TestSnapshotCorpusComparesANSIOnlyBaselines(t *testing.T) {
+	snapshot := CaptureANSISnapshot("ansi-only", 32, 6, Frame{
+		Messages: []Message{{Role: RoleAssistant, Text: "ready"}},
+		Prompt:   NewPromptState(nil),
+	})
+	corpus := SnapshotCorpus{Dir: t.TempDir()}
+	if err := os.WriteFile(filepath.Join(corpus.Dir, "ansi-only.ansi"), []byte(snapshot.Output), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	comparison, err := corpus.Compare(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !comparison.Match || comparison.Missing {
+		t.Fatalf("comparison = %#v", comparison)
+	}
+	if err := os.WriteFile(filepath.Join(corpus.Dir, "stale-ansi.ansi"), []byte(snapshot.Output), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := corpus.CompareAllStrict([]ANSISnapshot{snapshot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Passed() || len(report.Unexpected) != 1 || report.Unexpected[0] != "stale-ansi" {
+		t.Fatalf("strict report = %#v", report)
+	}
+}
+
 func TestSnapshotCorpusWritesAndComparesScriptSnapshots(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
