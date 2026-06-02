@@ -9,6 +9,8 @@ type ScriptStep struct {
 	Keys                      []string
 	Key                       string
 	Text                      string
+	Paste                     string
+	Image                     *ScriptImage
 	Message                   *Message
 	Dialog                    *Dialog
 	RequestPermission         *PermissionRequest
@@ -34,6 +36,12 @@ type ScriptStep struct {
 	ExpectStatusNotContains   []string
 	ExpectSnapshotContains    []string
 	ExpectSnapshotNotContains []string
+}
+
+type ScriptImage struct {
+	Filename  string
+	MediaType string
+	Content   string
 }
 
 type DialogExpectation struct {
@@ -168,6 +176,18 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				}
 			}
 		}
+		if step.Paste != "" {
+			event = screen.ApplyKey(Key{Type: KeyPaste, Text: step.Paste})
+			if event.Type != ScreenEventNone {
+				result.Events = append(result.Events, event)
+			}
+		}
+		if step.Image != nil {
+			event = screen.ApplyKey(scriptImageKey(*step.Image))
+			if event.Type != ScreenEventNone {
+				result.Events = append(result.Events, event)
+			}
+		}
 		for _, rawKey := range keys {
 			event = screen.ApplyKey(parseScriptKey(rawKey))
 			if event.Type != ScreenEventNone {
@@ -277,6 +297,20 @@ func parseScriptKey(raw string) Key {
 		return Key{Type: keyType}
 	}
 	return ParseKey(raw)
+}
+
+func scriptImageKey(image ScriptImage) Key {
+	text := ImageHintPlaceholder
+	if image.Filename != "" {
+		text = "[Image: " + image.Filename + "]"
+	}
+	return Key{
+		Type:      KeyImageHint,
+		Text:      text,
+		Content:   image.Content,
+		MediaType: image.MediaType,
+		Filename:  image.Filename,
+	}
 }
 
 func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error {

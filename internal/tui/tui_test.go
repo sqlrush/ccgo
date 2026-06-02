@@ -2853,6 +2853,21 @@ func TestRunInteractionScriptTypesTextField(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsPasteAndImageFields(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Paste: "alpha\nbeta", ExpectPrompt: &PromptExpectation{Text: "[Pasted text #1 +1 lines]", Expanded: "alpha\nbeta"}},
+		{Image: &ScriptImage{Filename: "chart.png", MediaType: "image/png", Content: "AAAA"}, ExpectPrompt: &PromptExpectation{Text: "[Pasted text #1 +1 lines][Image #2]", Expanded: "alpha\nbeta[Image #2]"}},
+		{Key: "enter", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "alpha\nbeta[Image #2]"}, ExpectPrompt: &PromptExpectation{Empty: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "alpha\nbeta[Image #2]" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
