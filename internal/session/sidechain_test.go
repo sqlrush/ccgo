@@ -1,6 +1,7 @@
 package session
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -174,6 +175,29 @@ func TestLoadSidechainStateAcceptsContentFieldAliases(t *testing.T) {
 	state := states[0]
 	if state.ID != "agent_snake" || state.Status != SidechainStatusFailed || state.Summary != "tool failed" || state.Metadata.AgentType != "reviewer" {
 		t.Fatalf("state = %#v", state)
+	}
+}
+
+func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "legacy", TranscriptMessage{
+		Type: "assistant",
+		UUID: "msg_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metadataPath := SidechainMetadataPath(sessionPath, sessionID, "legacy")
+	if err := os.WriteFile(metadataPath, []byte(`{"agent_type":"reviewer","working_directory":"/tmp/agent-worktree","desc":"legacy sidechain metadata"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.AgentType != "reviewer" || state.Metadata.WorktreePath != "/tmp/agent-worktree" || state.Metadata.Description != "legacy sidechain metadata" {
+		t.Fatalf("metadata = %#v", state.Metadata)
 	}
 }
 

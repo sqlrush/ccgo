@@ -12,6 +12,30 @@ type SidechainMetadata struct {
 	Description  string `json:"description,omitempty"`
 }
 
+func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
+	type sidechainMetadataJSON SidechainMetadata
+	var canonical sidechainMetadataJSON
+	if err := json.Unmarshal(data, &canonical); err != nil {
+		return err
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	metadata := SidechainMetadata(canonical)
+	if metadata.AgentType == "" {
+		metadata.AgentType = firstStringField(fields, "agent_type", "agentKind", "agent_kind", "agent")
+	}
+	if metadata.WorktreePath == "" {
+		metadata.WorktreePath = firstStringField(fields, "worktree_path", "worktree", "worktreeDir", "worktree_dir", "workingDirectory", "working_directory", "cwd")
+	}
+	if metadata.Description == "" {
+		metadata.Description = firstStringField(fields, "description_text", "descriptionText", "desc", "summary")
+	}
+	*m = metadata
+	return nil
+}
+
 func (m SidechainMetadata) Empty() bool {
 	return m.AgentType == "" && m.WorktreePath == "" && m.Description == ""
 }
