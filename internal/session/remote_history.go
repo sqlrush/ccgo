@@ -1,8 +1,10 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -66,6 +68,237 @@ type sessionEventsResponse struct {
 	CursorCamel       string               `json:"pageCursor"`
 	LastID            string               `json:"last_id"`
 	LastIDCamel       string               `json:"lastId"`
+}
+
+func (r *sessionEventsResponse) UnmarshalJSON(data []byte) error {
+	*r = sessionEventsResponse{}
+	return r.mergeJSON(data)
+}
+
+func (r *sessionEventsResponse) mergeJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	if data[0] == '[' {
+		var events []contracts.SDKEvent
+		if err := json.Unmarshal(data, &events); err != nil {
+			return err
+		}
+		if r.Data == nil {
+			r.Data = events
+		}
+		return nil
+	}
+	if data[0] != '{' {
+		return fmt.Errorf("remote history response must be an object or event array")
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if err := r.mergeScalarFields(raw); err != nil {
+		return err
+	}
+	for _, spec := range []struct {
+		name   string
+		target *[]contracts.SDKEvent
+	}{
+		{name: "data", target: &r.Data},
+		{name: "events", target: &r.Events},
+		{name: "items", target: &r.Items},
+		{name: "results", target: &r.Results},
+	} {
+		value, ok := raw[spec.name]
+		if !ok {
+			continue
+		}
+		if err := r.mergeEventListField(spec.name, spec.target, value); err != nil {
+			return err
+		}
+	}
+	for _, name := range []string{"page", "pagination", "page_info", "pageInfo", "meta", "metadata"} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		if err := r.mergeWrappedFields(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage) error {
+	if err := setBoolField(raw, "has_more", &r.HasMore); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "hasMore", &r.HasMoreCamel); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "has_next", &r.HasNext); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "hasNext", &r.HasNextCamel); err != nil {
+		return err
+	}
+	for _, spec := range []struct {
+		name   string
+		target *string
+	}{
+		{name: "first_id", target: &r.FirstID},
+		{name: "firstId", target: &r.FirstIDCamel},
+		{name: "next_before_id", target: &r.NextBeforeID},
+		{name: "nextBeforeId", target: &r.NextBeforeIDCamel},
+		{name: "next_cursor", target: &r.NextCursor},
+		{name: "nextCursor", target: &r.NextCursorCamel},
+		{name: "before_id", target: &r.BeforeID},
+		{name: "beforeId", target: &r.BeforeIDCamel},
+		{name: "cursor", target: &r.Cursor},
+		{name: "pageCursor", target: &r.CursorCamel},
+		{name: "last_id", target: &r.LastID},
+		{name: "lastId", target: &r.LastIDCamel},
+	} {
+		if err := setStringField(raw, spec.name, spec.target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *sessionEventsResponse) mergeEventListField(name string, target *[]contracts.SDKEvent, data json.RawMessage) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	if data[0] == '[' {
+		var events []contracts.SDKEvent
+		if err := json.Unmarshal(data, &events); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		if *target == nil {
+			*target = events
+		}
+		return nil
+	}
+	if data[0] == '{' {
+		var nested sessionEventsResponse
+		if err := nested.mergeJSON(data); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		if *target == nil {
+			*target = firstEventList(nested.Data, nested.Events, nested.Items, nested.Results)
+		}
+		r.mergePageFields(nested)
+		return nil
+	}
+	return fmt.Errorf("%s must be an event array or object wrapper", name)
+}
+
+func (r *sessionEventsResponse) mergeWrappedFields(name string, data json.RawMessage) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	if data[0] != '{' {
+		return fmt.Errorf("%s must be an object wrapper", name)
+	}
+	var nested sessionEventsResponse
+	if err := nested.mergeJSON(data); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	r.mergeFrom(nested)
+	return nil
+}
+
+func (r *sessionEventsResponse) mergeFrom(other sessionEventsResponse) {
+	if r.Data == nil {
+		r.Data = other.Data
+	}
+	if r.Events == nil {
+		r.Events = other.Events
+	}
+	if r.Items == nil {
+		r.Items = other.Items
+	}
+	if r.Results == nil {
+		r.Results = other.Results
+	}
+	r.mergePageFields(other)
+}
+
+func (r *sessionEventsResponse) mergePageFields(other sessionEventsResponse) {
+	r.HasMore = r.HasMore || other.HasMore
+	r.HasMoreCamel = r.HasMoreCamel || other.HasMoreCamel
+	r.HasNext = r.HasNext || other.HasNext
+	r.HasNextCamel = r.HasNextCamel || other.HasNextCamel
+	setIfEmpty(&r.FirstID, other.FirstID)
+	setIfEmpty(&r.FirstIDCamel, other.FirstIDCamel)
+	setIfEmpty(&r.NextBeforeID, other.NextBeforeID)
+	setIfEmpty(&r.NextBeforeIDCamel, other.NextBeforeIDCamel)
+	setIfEmpty(&r.NextCursor, other.NextCursor)
+	setIfEmpty(&r.NextCursorCamel, other.NextCursorCamel)
+	setIfEmpty(&r.BeforeID, other.BeforeID)
+	setIfEmpty(&r.BeforeIDCamel, other.BeforeIDCamel)
+	setIfEmpty(&r.Cursor, other.Cursor)
+	setIfEmpty(&r.CursorCamel, other.CursorCamel)
+	setIfEmpty(&r.LastID, other.LastID)
+	setIfEmpty(&r.LastIDCamel, other.LastIDCamel)
+}
+
+func setBoolField(raw map[string]json.RawMessage, name string, target *bool) error {
+	data, ok := raw[name]
+	if !ok {
+		return nil
+	}
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	var value bool
+	if err := json.Unmarshal(data, &value); err == nil {
+		*target = value
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(data, &text); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "true":
+		*target = true
+	case "false":
+		*target = false
+	default:
+		return fmt.Errorf("%s must be a boolean", name)
+	}
+	return nil
+}
+
+func setStringField(raw map[string]json.RawMessage, name string, target *string) error {
+	if *target != "" {
+		return nil
+	}
+	data, ok := raw[name]
+	if !ok {
+		return nil
+	}
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	*target = value
+	return nil
+}
+
+func setIfEmpty(target *string, value string) {
+	if *target == "" {
+		*target = value
+	}
 }
 
 func NewRemoteHistoryAuthContext(sessionID string, accessToken string, orgUUID string, config auth.OAuthConfig) RemoteHistoryAuthContext {

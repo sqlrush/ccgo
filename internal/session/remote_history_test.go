@@ -233,6 +233,55 @@ func TestFetchRemoteHistoryAcceptsCursorPageFields(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsWrappedDataPageFields(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":{"events":[{"type":"status","session_id":"s","status":"latest"}],"has_more":true,"next_before_id":"evt_wrapped"}}`))
+		case "evt_wrapped":
+			_, _ = w.Write([]byte(`{"data":{"items":[{"type":"status","session_id":"s","status":"older"}]},"pagination":{"hasNext":"false","cursor":"ignored_when_complete"}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if len(events.Events) != 2 || events.Events[0].Status != "latest" || events.Events[1].Status != "older" {
+		t.Fatalf("event order = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_wrapped" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
+func TestFetchRemoteHistoryAcceptsBareEventArray(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"type":"status","session_id":"s","status":"bare"}]`))
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	page, err := FetchLatestEvents(context.Background(), server.Client(), authCtx, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page == nil || page.HasMore || page.FirstID != "" || len(page.Events) != 1 || page.Events[0].Status != "bare" {
+		t.Fatalf("page = %#v", page)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsEventListAliases(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
