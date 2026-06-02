@@ -14,6 +14,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		RequestPermission         *PermissionRequest        `json:"request_permission"`
 		UpsertTask                *TaskStatus               `json:"upsert_task"`
 		RemoveTaskID              *string                   `json:"remove_task_id"`
+		CancelActiveDialog        *bool                     `json:"cancel_active_dialog"`
+		CancelActive              *bool                     `json:"cancel_active"`
+		CancelPermissionID        *string                   `json:"cancel_permission_id"`
+		CancelPermissionIDAlt     *string                   `json:"cancelPermissionId"`
+		CancelAllPermissions      *bool                     `json:"cancel_all_permissions"`
 		CancelAllTasks            *bool                     `json:"cancel_all_tasks"`
 		CancelTasksDetail         *string                   `json:"cancel_tasks_detail"`
 		OpenTasksDialog           *bool                     `json:"open_tasks_dialog"`
@@ -23,6 +28,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectEvent               *ScreenEvent              `json:"expect_event"`
 		ExpectEvents              []ScreenEvent             `json:"expect_events"`
 		ExpectDialogResult        *DialogResultExpectation  `json:"expect_dialog_result"`
+		ExpectDialogResults       []DialogResultExpectation `json:"expect_dialog_results"`
 		ExpectDialog              *DialogExpectation        `json:"expect_dialog"`
 		ExpectPrompt              *PromptExpectation        `json:"expect_prompt"`
 		ExpectVim                 *VimExpectation           `json:"expect_vim"`
@@ -47,6 +53,21 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.RemoveTaskID != nil {
 		step.RemoveTaskID = *fields.RemoveTaskID
+	}
+	if fields.CancelActiveDialog != nil {
+		step.CancelActiveDialog = *fields.CancelActiveDialog
+	}
+	if fields.CancelActive != nil {
+		step.CancelActiveDialog = *fields.CancelActive
+	}
+	if fields.CancelPermissionID != nil {
+		step.CancelPermissionID = *fields.CancelPermissionID
+	}
+	if fields.CancelPermissionIDAlt != nil {
+		step.CancelPermissionID = *fields.CancelPermissionIDAlt
+	}
+	if fields.CancelAllPermissions != nil {
+		step.CancelAllPermissions = *fields.CancelAllPermissions
 	}
 	if fields.CancelAllTasks != nil {
 		step.CancelAllTasks = *fields.CancelAllTasks
@@ -74,6 +95,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.ExpectDialogResult != nil {
 		step.ExpectDialogResult = fields.ExpectDialogResult
+	}
+	if fields.ExpectDialogResults != nil {
+		step.ExpectDialogResults = fields.ExpectDialogResults
 	}
 	if fields.ExpectDialog != nil {
 		step.ExpectDialog = fields.ExpectDialog

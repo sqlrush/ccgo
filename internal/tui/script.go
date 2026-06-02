@@ -16,6 +16,9 @@ type ScriptStep struct {
 	RequestPermission         *PermissionRequest
 	UpsertTask                *TaskStatus
 	RemoveTaskID              string
+	CancelActiveDialog        bool
+	CancelPermissionID        string
+	CancelAllPermissions      bool
 	CancelAllTasks            bool
 	CancelTasksDetail         string
 	OpenTasksDialog           bool
@@ -25,6 +28,7 @@ type ScriptStep struct {
 	ExpectEvent               *ScreenEvent
 	ExpectEvents              []ScreenEvent
 	ExpectDialogResult        *DialogResultExpectation
+	ExpectDialogResults       []DialogResultExpectation
 	ExpectDialog              *DialogExpectation
 	ExpectPrompt              *PromptExpectation
 	ExpectVim                 *VimExpectation
@@ -141,6 +145,7 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 	for index, step := range steps {
 		var event ScreenEvent
 		var stepEvents []ScreenEvent
+		var stepDialogResults []DialogResult
 		var snapshot ANSISnapshot
 		var dialogResult *DialogResult
 		recordEvent := func(next ScreenEvent) {
@@ -151,8 +156,15 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			result.Events = append(result.Events, next)
 			stepEvents = append(stepEvents, next)
 		}
-		if err := applyRuntimeStep(index, runtime, step); err != nil {
+		runtimeResults, err := applyRuntimeStep(index, runtime, step)
+		if err != nil {
 			return result, dialogResults, err
+		}
+		if len(runtimeResults) > 0 {
+			dialogResults = append(dialogResults, runtimeResults...)
+			stepDialogResults = append(stepDialogResults, runtimeResults...)
+			last := runtimeResults[len(runtimeResults)-1]
+			dialogResult = &last
 		}
 		if runtime != nil {
 			runtime.ApplyToScreen(screen, baseStatus)
@@ -197,6 +209,7 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			dialogResult = &resolved
 			if resolved.ID != "" || resolved.Found || resolved.Stale {
 				dialogResults = append(dialogResults, resolved)
+				stepDialogResults = append(stepDialogResults, resolved)
 			}
 		}
 		if step.ExpectEvent != nil {
@@ -217,6 +230,14 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, fmt.Errorf("script step %d dialog result missing", index)
 			}
 			if err := compareDialogResult(index, *dialogResult, *step.ExpectDialogResult); err != nil {
+				return result, dialogResults, err
+			}
+		}
+		if len(step.ExpectDialogResults) > 0 {
+			if runtime == nil {
+				return result, dialogResults, fmt.Errorf("script step %d dialog result expectations require dialog runtime", index)
+			}
+			if err := compareDialogResults(index, stepDialogResults, step.ExpectDialogResults); err != nil {
 				return result, dialogResults, err
 			}
 		}
@@ -316,14 +337,15 @@ func scriptImageKey(image ScriptImage) Key {
 	}
 }
 
-func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error {
-	needsRuntime := step.RequestPermission != nil || step.UpsertTask != nil || step.RemoveTaskID != "" || step.CancelAllTasks || step.OpenTasksDialog
+func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) ([]DialogResult, error) {
+	needsRuntime := step.RequestPermission != nil || step.UpsertTask != nil || step.RemoveTaskID != "" || step.CancelActiveDialog || step.CancelPermissionID != "" || step.CancelAllPermissions || step.CancelAllTasks || step.OpenTasksDialog
 	if !needsRuntime {
-		return nil
+		return nil, nil
 	}
 	if runtime == nil {
-		return fmt.Errorf("script step %d runtime mutation requires dialog runtime", index)
+		return nil, fmt.Errorf("script step %d runtime mutation requires dialog runtime", index)
 	}
+	var dialogResults []DialogResult
 	if step.RequestPermission != nil {
 		runtime.RequestPermission(*step.RequestPermission)
 	}
@@ -336,10 +358,28 @@ func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error 
 	if step.CancelAllTasks {
 		runtime.CancelTasks(step.CancelTasksDetail)
 	}
+	if step.CancelPermissionID != "" {
+		appendDialogResult(&dialogResults, runtime.CancelPermission(step.CancelPermissionID))
+	}
+	if step.CancelAllPermissions {
+		for _, result := range runtime.CancelPermissions() {
+			appendDialogResult(&dialogResults, result)
+		}
+	}
+	if step.CancelActiveDialog {
+		appendDialogResult(&dialogResults, runtime.CancelActive())
+	}
 	if step.OpenTasksDialog {
 		runtime.OpenTasksDialog()
 	}
-	return nil
+	return dialogResults, nil
+}
+
+func appendDialogResult(results *[]DialogResult, result DialogResult) {
+	if result.ID == "" && !result.Found && !result.Stale {
+		return
+	}
+	*results = append(*results, result)
 }
 
 func compareDialogResult(index int, got DialogResult, want DialogResultExpectation) error {
@@ -360,6 +400,18 @@ func compareDialogResult(index int, got DialogResult, want DialogResultExpectati
 	}
 	if want.Stale != nil && got.Stale != *want.Stale {
 		return fmt.Errorf("script step %d dialog result stale = %v, want %v", index, got.Stale, *want.Stale)
+	}
+	return nil
+}
+
+func compareDialogResults(index int, got []DialogResult, want []DialogResultExpectation) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("script step %d dialog result count = %d, want %d", index, len(got), len(want))
+	}
+	for resultIndex, expected := range want {
+		if err := compareDialogResult(index, got[resultIndex], expected); err != nil {
+			return fmt.Errorf("script step %d dialog result %d mismatch: %w", index, resultIndex, err)
+		}
 	}
 	return nil
 }

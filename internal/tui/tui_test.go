@@ -1632,6 +1632,56 @@ func TestDialogRuntimeInteractionScriptCancelsTasks(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeInteractionScriptCancelsPermissions(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"request_permission":{"id":"old","tool_name":"Write"}},
+		{"request_permission":{"id":"new","tool_name":"Edit"}},
+		{
+			"cancel_permission_id":"old",
+			"expect_dialog_results":[{"id":"old","kind":"permission","status":"cancelled","found":true}],
+			"expect_dialog":{"active":true,"id":"new","kind":"permission"},
+			"expect_status_contains":["permissions: 1"]
+		},
+		{
+			"cancel_active_dialog":true,
+			"expect_dialog_result":{"id":"new","kind":"permission","status":"cancelled","found":true},
+			"expect_dialog":{"active":false},
+			"expect_status_not_contains":["permissions:"]
+		},
+		{"request_permission":{"id":"b","tool_name":"Bash"}},
+		{"request_permission":{"id":"a","tool_name":"Read"}},
+		{
+			"cancel_all_permissions":true,
+			"expect_dialog_results":[
+				{"id":"a","kind":"permission","status":"cancelled","found":true},
+				{"id":"b","kind":"permission","status":"cancelled","found":true}
+			],
+			"expect_dialog":{"active":false},
+			"expect_status_not_contains":["permissions:"]
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewDialogRuntime()
+	screen := NewREPLScreen(52, 9, nil)
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 4 {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	for index, want := range []string{"old", "new", "a", "b"} {
+		if result.DialogResults[index].ID != want || result.DialogResults[index].Status != DialogResultCancelled {
+			t.Fatalf("dialog result %d = %#v", index, result.DialogResults[index])
+		}
+	}
+	if runtime.Active != nil || len(runtime.Permissions) != 0 {
+		t.Fatalf("runtime after scripted cancellation = %#v", runtime)
+	}
+}
+
 func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
