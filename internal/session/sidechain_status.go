@@ -70,15 +70,15 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			if state.StartedAt == "" {
 				state.StartedAt = msg.Timestamp
 			}
-			if sidechainID := stringField(msg.Content, "sidechainId"); sidechainID != "" {
+			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechain_id"); sidechainID != "" {
 				state.ID = sidechainID
-			} else if agentID := stringField(msg.Content, "agentId"); agentID != "" {
+			} else if agentID := firstStringField(msg.Content, "agentId", "agent_id"); agentID != "" {
 				state.ID = agentID
 			}
-			if agentType := stringField(msg.Content, "agentType"); agentType != "" && state.Metadata.AgentType == "" {
+			if agentType := firstStringField(msg.Content, "agentType", "agent_type"); agentType != "" && state.Metadata.AgentType == "" {
 				state.Metadata.AgentType = agentType
 			}
-			if status := stringField(msg.Content, "status"); status != "" {
+			if status := firstStringField(msg.Content, "status", "state"); status != "" {
 				state.Status = status
 			} else {
 				state.Status = SidechainStatusRunning
@@ -87,12 +87,12 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		if msg.Subtype == "sidechain_summary" {
 			finished = true
 			state.EndedAt = msg.Timestamp
-			if status := stringField(msg.Content, "status"); status != "" {
+			if status := firstStringField(msg.Content, "status", "state"); status != "" {
 				state.Status = status
 			} else {
 				state.Status = SidechainStatusCompleted
 			}
-			state.Summary = stringField(msg.Content, "summary")
+			state.Summary = firstStringField(msg.Content, "summary", "summary_text", "summaryText")
 		}
 	}
 	if state.Status == SidechainStatusUnknown {
@@ -185,15 +185,27 @@ func FindSidechainState(sessionPath string, sessionID contracts.ID, sidechainID 
 }
 
 func stringField(value any, key string) string {
+	return firstStringField(value, key)
+}
+
+func firstStringField(value any, keys ...string) string {
 	switch fields := value.(type) {
 	case map[string]any:
-		raw, _ := fields[key].(string)
-		return raw
+		for _, key := range keys {
+			raw, _ := fields[key].(string)
+			if raw != "" {
+				return raw
+			}
+		}
 	case map[string]string:
-		return fields[key]
+		for _, key := range keys {
+			if raw := fields[key]; raw != "" {
+				return raw
+			}
+		}
 	default:
-		return ""
 	}
+	return ""
 }
 
 func replaceJSONLExt(path string, ext string) string {

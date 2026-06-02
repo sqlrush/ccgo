@@ -135,6 +135,48 @@ func TestLoadSidechainStateMarksOrphanTranscriptUnknown(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsContentFieldAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "legacy", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "sidechain_start",
+		Content: map[string]any{
+			"sidechain_id": "agent_snake",
+			"agent_type":   "reviewer",
+			"state":        SidechainStatusRunning,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "legacy", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "sidechain_summary",
+		Content: map[string]any{
+			"state":        SidechainStatusFailed,
+			"summary_text": "tool failed",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "agent_snake" || state.Status != SidechainStatusFailed || state.Summary != "tool failed" || state.Metadata.AgentType != "reviewer" {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
 func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")
