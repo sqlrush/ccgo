@@ -32,7 +32,7 @@ func (l *ScreenLifecycle) EnterAlternate() string {
 
 func (l *ScreenLifecycle) EnterInteractive(options TerminalModeOptions) string {
 	seq := l.EnterAlternate()
-	seq += l.EnableTerminalModes(options)
+	seq += l.SetTerminalModes(options)
 	return seq
 }
 
@@ -74,6 +74,24 @@ func (l *ScreenLifecycle) EnableTerminalModes(options TerminalModeOptions) strin
 		seq += EnableMouseTracking
 		l.MouseTracking = true
 	}
+	return seq
+}
+
+func (l *ScreenLifecycle) SetTerminalModes(options TerminalModeOptions) string {
+	seq := ""
+	if !options.MouseTracking && l.MouseTracking {
+		seq += DisableMouseTracking
+		l.MouseTracking = false
+	}
+	if !options.FocusEvents && l.FocusEvents {
+		seq += DisableFocusEvents
+		l.FocusEvents = false
+	}
+	if !options.BracketedPaste && l.BracketedPaste {
+		seq += DisableBracketedPaste
+		l.BracketedPaste = false
+	}
+	seq += l.EnableTerminalModes(options)
 	return seq
 }
 

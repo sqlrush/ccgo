@@ -2484,6 +2484,40 @@ func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
 	}
 }
 
+func TestScreenLifecycleReconcilesTerminalModes(t *testing.T) {
+	var lifecycle ScreenLifecycle
+	all := TerminalModeOptions{MouseTracking: true, FocusEvents: true, BracketedPaste: true}
+	_ = lifecycle.EnterInteractive(all)
+
+	pasteOnly := TerminalModeOptions{BracketedPaste: true}
+	update := lifecycle.EnterInteractive(pasteOnly)
+	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || !lifecycle.BracketedPaste {
+		t.Fatalf("lifecycle after paste-only update = %#v", lifecycle)
+	}
+	for _, want := range []string{DisableMouseTracking, DisableFocusEvents} {
+		if !strings.Contains(update, want) {
+			t.Fatalf("update missing %q in %q", want, update)
+		}
+	}
+	for _, notWant := range []string{DisableBracketedPaste, EnableBracketedPaste, EnterAlternateScreen} {
+		if strings.Contains(update, notWant) {
+			t.Fatalf("update unexpectedly contains %q in %q", notWant, update)
+		}
+	}
+	if again := lifecycle.EnterInteractive(pasteOnly); again != "" {
+		t.Fatalf("same mode update should be idempotent: %q", again)
+	}
+
+	mouseAndPaste := TerminalModeOptions{MouseTracking: true, BracketedPaste: true}
+	update = lifecycle.EnterInteractive(mouseAndPaste)
+	if !lifecycle.MouseTracking || lifecycle.FocusEvents || !lifecycle.BracketedPaste {
+		t.Fatalf("lifecycle after mouse update = %#v", lifecycle)
+	}
+	if !strings.Contains(update, EnableMouseTracking) || strings.Contains(update, EnableBracketedPaste) {
+		t.Fatalf("mouse update = %q", update)
+	}
+}
+
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"
