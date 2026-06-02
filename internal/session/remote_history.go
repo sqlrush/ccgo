@@ -262,7 +262,7 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	}
 	return &RemoteHistoryPage{
 		Events:  events,
-		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel),
+		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.LastID, decoded.LastIDCamel),
 		HasMore: decoded.HasMore || decoded.HasMoreCamel,
 	}, resp.StatusCode, nil
 }

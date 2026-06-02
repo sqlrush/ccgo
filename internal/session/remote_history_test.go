@@ -176,7 +176,7 @@ func TestFetchRemoteHistoryAcceptsCamelCasePageFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			_, _ = w.Write([]byte(`{"events":[{"type":"status","sessionId":"s","status":"latest"}],"hasMore":true,"firstId":"evt_2"}`))
+			_, _ = w.Write([]byte(`{"events":[{"type":"status","sessionId":"s","status":"latest"}],"hasMore":true,"lastId":"evt_2"}`))
 		case "evt_2":
 			_, _ = w.Write([]byte(`{"events":[{"type":"status","sessionId":"s","status":"older"}],"hasMore":false,"nextBeforeId":"evt_1"}`))
 		default:
