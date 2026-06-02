@@ -128,6 +128,17 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		{name: "history", target: &r.History},
 		{name: "nodes", target: &r.Nodes},
 		{name: "edges", target: &r.Edges},
+		{name: "event_list", target: &r.Events},
+		{name: "eventList", target: &r.Events},
+		{name: "session_events", target: &r.Events},
+		{name: "sessionEvents", target: &r.Events},
+		{name: "connection", target: &r.Events},
+		{name: "event_connection", target: &r.Events},
+		{name: "eventConnection", target: &r.Events},
+		{name: "events_connection", target: &r.Events},
+		{name: "eventsConnection", target: &r.Events},
+		{name: "session_events_connection", target: &r.Events},
+		{name: "sessionEventsConnection", target: &r.Events},
 	} {
 		value, ok := raw[spec.name]
 		if !ok {
