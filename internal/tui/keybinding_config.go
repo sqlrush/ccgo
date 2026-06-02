@@ -26,24 +26,25 @@ func KeymapFromSpecs(base Keymap, specs []BindingSpec) (Keymap, error) {
 		if err != nil {
 			return Keymap{}, err
 		}
-		if !IsKnownAction(spec.Action) {
-			return Keymap{}, fmt.Errorf("unknown action %q", spec.Action)
+		action, err := ParseActionName(string(spec.Action))
+		if err != nil {
+			return Keymap{}, err
 		}
 		if len(chord) > 1 {
 			key := encodeChordKey(chord)
-			if spec.Action == ActionNone {
+			if action == ActionNone {
 				delete(out.ChordBindings, key)
 				continue
 			}
-			out.ChordBindings[key] = spec.Action
+			out.ChordBindings[key] = action
 			continue
 		}
 		key := chord[0]
-		if spec.Action == ActionNone {
+		if action == ActionNone {
 			delete(out.Bindings, key)
 			continue
 		}
-		out.Bindings[key] = spec.Action
+		out.Bindings[key] = action
 	}
 	return out, nil
 }
@@ -163,6 +164,44 @@ func ParseKeyName(raw string) (KeyType, error) {
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
 	}
+}
+
+func ParseActionName(raw string) (Action, error) {
+	name := strings.ToLower(strings.TrimSpace(raw))
+	name = strings.ReplaceAll(name, "-", "_")
+	switch name {
+	case "", "none", "noop", "no_op", "null", "unbind", "unbound":
+		return ActionNone, nil
+	case "submit", "submit_prompt":
+		return ActionSubmitPrompt, nil
+	case "newline", "insert_newline":
+		return ActionInsertNewline, nil
+	case "delete_word_back", "delete_word_backward":
+		return ActionDeleteWordBack, nil
+	case "delete_word_fwd", "delete_word_forward":
+		return ActionDeleteWordFwd, nil
+	case "history_prev", "history_previous", "previous_history":
+		return ActionHistoryPrevious, nil
+	case "history_next", "next_history":
+		return ActionHistoryNext, nil
+	case "pageup", "page_up":
+		return ActionPageUp, nil
+	case "pagedown", "page_down":
+		return ActionPageDown, nil
+	case "scroll_top", "scroll_to_top", "top":
+		return ActionScrollToTop, nil
+	case "scroll_bottom", "scroll_to_bottom", "bottom":
+		return ActionScrollToBottom, nil
+	case "confirm", "confirm_selection":
+		return ActionConfirmSelection, nil
+	case "reverse_search", "history_search", "search_history":
+		return ActionReverseSearch, nil
+	}
+	action := Action(name)
+	if !IsKnownAction(action) {
+		return ActionNone, fmt.Errorf("unknown action %q", raw)
+	}
+	return action, nil
 }
 
 func IsKnownAction(action Action) bool {

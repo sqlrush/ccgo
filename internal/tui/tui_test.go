@@ -685,8 +685,10 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
 		{Key: "ctrl-r", Action: ActionPageUp},
-		{Key: "esc", Action: ActionNone},
+		{Key: "esc", Action: Action("none")},
 		{Key: "focus-in", Action: ActionReverseSearch},
+		{Key: "shift-enter", Action: Action("insert-newline")},
+		{Key: "ctrl-n", Action: Action("history-prev")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -700,6 +702,26 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x1b[13;2u")); action != ActionInsertNewline {
+		t.Fatalf("shift-enter action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0e")); action != ActionHistoryPrevious {
+		t.Fatalf("ctrl-n alias action = %q", action)
+	}
+	for _, tc := range []struct {
+		name string
+		want Action
+	}{
+		{name: "page-down", want: ActionPageDown},
+		{name: "delete-word-fwd", want: ActionDeleteWordFwd},
+		{name: "search-history", want: ActionReverseSearch},
+		{name: "unbound", want: ActionNone},
+	} {
+		action, err := ParseActionName(tc.name)
+		if err != nil || action != tc.want {
+			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
+		}
+	}
 	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "control-left", "control-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
@@ -707,6 +729,9 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 	if _, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{{Key: "wat", Action: ActionCancel}}); err == nil {
 		t.Fatal("expected unknown key error")
+	}
+	if _, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{{Key: "enter", Action: Action("wat")}}); err == nil {
+		t.Fatal("expected unknown action error")
 	}
 }
 
