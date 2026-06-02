@@ -3292,6 +3292,38 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsPromptFieldAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"input": "abc",
+			"expectPrompt": {"value": "abc", "cursorIndex": 3, "isEmpty": false}
+		},
+		{
+			"paste_text": "one\ntwo",
+			"expectPrompt": {
+				"input": "abc[Pasted text #1 +1 lines]",
+				"expandedText": "abcone\ntwo",
+				"pastedContentCount": 1
+			}
+		},
+		{
+			"key": "enter",
+			"expectPrompt": {"blank": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Value != "abcone\ntwo" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsStringContainsAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

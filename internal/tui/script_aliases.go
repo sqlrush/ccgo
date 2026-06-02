@@ -872,6 +872,20 @@ func boolPtrJSONField(fields map[string]json.RawMessage, names ...string) *bool 
 	return nil
 }
 
+func intPtrJSONField(fields map[string]json.RawMessage, names ...string) *int {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value int
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return &value
+		}
+	}
+	return nil
+}
+
 func roleJSONField(fields map[string]json.RawMessage, names ...string) (Role, bool) {
 	for _, name := range names {
 		raw, ok := fields[name]
@@ -906,6 +920,22 @@ func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
+	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
+	if expect.Text == "" {
+		expect.Text = stringJSONField(fieldMap, "value", "input", "content", "message", "prompt", "prompt_text", "promptText", "input_text", "inputText")
+	}
+	if expect.Expanded == "" {
+		expect.Expanded = stringJSONField(fieldMap, "expanded_text", "expandedText", "expanded_prompt", "expandedPrompt", "expanded_value", "expandedValue", "full_text", "fullText")
+	}
+	if expect.Cursor == nil {
+		expect.Cursor = intPtrJSONField(fieldMap, "cursor_index", "cursorIndex", "cursor_position", "cursorPosition", "caret", "position")
+	}
+	if empty := boolPtrJSONField(fieldMap, "is_empty", "isEmpty", "empty_prompt", "emptyPrompt", "blank"); empty != nil {
+		expect.Empty = *empty
 	}
 	if fields.PastedContentCount != nil {
 		expect.PastedContentCount = fields.PastedContentCount
