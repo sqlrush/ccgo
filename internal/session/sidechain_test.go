@@ -178,6 +178,49 @@ func TestLoadSidechainStateAcceptsContentFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "legacy", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_start",
+		Content: map[string]any{
+			"subagent_id":    "subagent_42",
+			"subagentType":   "explorer",
+			"lifecycleState": "active",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "legacy", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "agent_finish",
+		Content: map[string]any{
+			"agentID":      "subagent_42",
+			"outcome":      "success",
+			"finalSummary": "found the issue",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "subagent_42" || state.Status != SidechainStatusCompleted || state.Summary != "found the issue" || state.Metadata.AgentType != "explorer" {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
 func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

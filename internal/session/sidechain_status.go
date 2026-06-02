@@ -65,34 +65,35 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			parent := *msg.ParentUUID
 			state.ParentUUID = &parent
 		}
-		if msg.Subtype == "sidechain_start" {
+		if isSidechainStartSubtype(msg.Subtype) {
 			started = true
 			if state.StartedAt == "" {
 				state.StartedAt = msg.Timestamp
 			}
-			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechain_id"); sidechainID != "" {
+			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechainID", "sidechain_id", "subagentId", "subagentID", "subagent_id", "agentId", "agentID", "agent_id", "id"); sidechainID != "" {
 				state.ID = sidechainID
-			} else if agentID := firstStringField(msg.Content, "agentId", "agent_id"); agentID != "" {
-				state.ID = agentID
 			}
-			if agentType := firstStringField(msg.Content, "agentType", "agent_type"); agentType != "" && state.Metadata.AgentType == "" {
+			if agentType := firstStringField(msg.Content, "agentType", "agent_type", "subagentType", "subagent_type", "agentKind", "agent_kind", "agent"); agentType != "" && state.Metadata.AgentType == "" {
 				state.Metadata.AgentType = agentType
 			}
-			if status := firstStringField(msg.Content, "status", "state"); status != "" {
+			if status := sidechainStatusField(msg.Content, "status", "state", "phase", "lifecycle", "lifecycle_state", "lifecycleState"); status != "" {
 				state.Status = status
 			} else {
 				state.Status = SidechainStatusRunning
 			}
 		}
-		if msg.Subtype == "sidechain_summary" {
+		if isSidechainSummarySubtype(msg.Subtype) {
 			finished = true
 			state.EndedAt = msg.Timestamp
-			if status := firstStringField(msg.Content, "status", "state"); status != "" {
+			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechainID", "sidechain_id", "subagentId", "subagentID", "subagent_id", "agentId", "agentID", "agent_id", "id"); sidechainID != "" {
+				state.ID = sidechainID
+			}
+			if status := sidechainStatusField(msg.Content, "status", "state", "result", "outcome", "phase", "lifecycle", "lifecycle_state", "lifecycleState"); status != "" {
 				state.Status = status
 			} else {
 				state.Status = SidechainStatusCompleted
 			}
-			state.Summary = firstStringField(msg.Content, "summary", "summary_text", "summaryText")
+			state.Summary = firstStringField(msg.Content, "summary", "summary_text", "summaryText", "finalSummary", "final_summary", "resultSummary", "result_summary", "message", "text")
 		}
 	}
 	if state.Status == SidechainStatusUnknown {
@@ -107,6 +108,45 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		return SidechainState{}, fmt.Errorf("sidechain state missing id for %s", info.Path)
 	}
 	return state, nil
+}
+
+func isSidechainStartSubtype(subtype string) bool {
+	switch strings.TrimSpace(subtype) {
+	case "sidechain_start", "sidechainStart", "subagent_start", "subagentStart", "agent_start", "agentStart", "task_start", "taskStart":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSidechainSummarySubtype(subtype string) bool {
+	switch strings.TrimSpace(subtype) {
+	case "sidechain_summary", "sidechainSummary", "sidechain_end", "sidechainEnd", "sidechain_finish", "sidechainFinish", "subagent_summary", "subagentSummary", "subagent_end", "subagentEnd", "subagent_finish", "subagentFinish", "agent_summary", "agentSummary", "agent_end", "agentEnd", "agent_finish", "agentFinish", "task_summary", "taskSummary", "task_end", "taskEnd", "task_finish", "taskFinish":
+		return true
+	default:
+		return false
+	}
+}
+
+func sidechainStatusField(value any, keys ...string) string {
+	return normalizeSidechainStatus(firstStringField(value, keys...))
+}
+
+func normalizeSidechainStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "":
+		return ""
+	case SidechainStatusRunning, "started", "active", "in_progress", "in-progress", "pending":
+		return SidechainStatusRunning
+	case SidechainStatusCompleted, "complete", "completed_successfully", "success", "succeeded", "done", "ok":
+		return SidechainStatusCompleted
+	case SidechainStatusCancelled, "canceled", "cancel", "cancelled_by_user", "canceled_by_user", "aborted", "stopped":
+		return SidechainStatusCancelled
+	case SidechainStatusFailed, "failure", "error", "errored", "failed_error":
+		return SidechainStatusFailed
+	default:
+		return strings.TrimSpace(status)
+	}
 }
 
 func ListSidechainStates(sessionPath string, sessionID contracts.ID) ([]SidechainState, error) {
