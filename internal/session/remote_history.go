@@ -52,10 +52,18 @@ type sessionEventsResponse struct {
 	Results           []contracts.SDKEvent `json:"results"`
 	HasMore           bool                 `json:"has_more"`
 	HasMoreCamel      bool                 `json:"hasMore"`
+	HasNext           bool                 `json:"has_next"`
+	HasNextCamel      bool                 `json:"hasNext"`
 	FirstID           string               `json:"first_id"`
 	FirstIDCamel      string               `json:"firstId"`
 	NextBeforeID      string               `json:"next_before_id"`
 	NextBeforeIDCamel string               `json:"nextBeforeId"`
+	NextCursor        string               `json:"next_cursor"`
+	NextCursorCamel   string               `json:"nextCursor"`
+	BeforeID          string               `json:"before_id"`
+	BeforeIDCamel     string               `json:"beforeId"`
+	Cursor            string               `json:"cursor"`
+	CursorCamel       string               `json:"pageCursor"`
 	LastID            string               `json:"last_id"`
 	LastIDCamel       string               `json:"lastId"`
 }
@@ -261,8 +269,8 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	}
 	return &RemoteHistoryPage{
 		Events:  events,
-		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.LastID, decoded.LastIDCamel),
-		HasMore: decoded.HasMore || decoded.HasMoreCamel,
+		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.NextCursor, decoded.NextCursorCamel, decoded.BeforeID, decoded.BeforeIDCamel, decoded.Cursor, decoded.CursorCamel, decoded.LastID, decoded.LastIDCamel),
+		HasMore: decoded.HasMore || decoded.HasMoreCamel || decoded.HasNext || decoded.HasNextCamel,
 	}, resp.StatusCode, nil
 }
 
