@@ -782,6 +782,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 		{Key: "focus-in", Action: ActionReverseSearch},
 		{Key: "shift-enter", Action: Action("insert-newline")},
 		{Key: "ctrl-n", Action: Action("history-prev")},
+		{Key: "ctrl-o", Action: Action("toggleTranscript")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -801,6 +802,9 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x0e")); action != ActionHistoryPrevious {
 		t.Fatalf("ctrl-n alias action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x0f")); action != ActionToggleTranscript {
+		t.Fatalf("ctrl-o camelCase action = %q", action)
+	}
 	for _, tc := range []struct {
 		name string
 		want Action
@@ -808,6 +812,16 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 		{name: "page-down", want: ActionPageDown},
 		{name: "delete-word-fwd", want: ActionDeleteWordFwd},
 		{name: "search-history", want: ActionReverseSearch},
+		{name: "submitPrompt", want: ActionSubmitPrompt},
+		{name: "insertNewline", want: ActionInsertNewline},
+		{name: "deleteWordBackward", want: ActionDeleteWordBack},
+		{name: "deleteWordForward", want: ActionDeleteWordFwd},
+		{name: "historyPrevious", want: ActionHistoryPrevious},
+		{name: "historyNext", want: ActionHistoryNext},
+		{name: "scrollToTop", want: ActionScrollToTop},
+		{name: "scrollToBottom", want: ActionScrollToBottom},
+		{name: "confirmSelection", want: ActionConfirmSelection},
+		{name: "reverseSearch", want: ActionReverseSearch},
 		{name: "unbound", want: ActionNone},
 	} {
 		action, err := ParseActionName(tc.name)

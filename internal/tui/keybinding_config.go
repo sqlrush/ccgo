@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 type BindingSpec struct {
@@ -171,8 +172,7 @@ func ParseKeyName(raw string) (KeyType, error) {
 }
 
 func ParseActionName(raw string) (Action, error) {
-	name := strings.ToLower(strings.TrimSpace(raw))
-	name = strings.ReplaceAll(name, "-", "_")
+	name := normalizeActionName(raw)
 	switch name {
 	case "", "none", "noop", "no_op", "null", "unbind", "unbound":
 		return ActionNone, nil
@@ -206,6 +206,35 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionNone, fmt.Errorf("unknown action %q", raw)
 	}
 	return action, nil
+}
+
+func normalizeActionName(raw string) string {
+	var b strings.Builder
+	lastSeparator := false
+	previousLowerOrDigit := false
+	for _, r := range strings.TrimSpace(raw) {
+		switch r {
+		case '-', '_', ' ', '\t', '\n', '.', '/', ':':
+			if b.Len() > 0 && !lastSeparator {
+				b.WriteByte('_')
+				lastSeparator = true
+			}
+			previousLowerOrDigit = false
+			continue
+		}
+		if unicode.IsUpper(r) {
+			if b.Len() > 0 && !lastSeparator && previousLowerOrDigit {
+				b.WriteByte('_')
+			}
+			r = unicode.ToLower(r)
+		} else {
+			r = unicode.ToLower(r)
+		}
+		b.WriteRune(r)
+		lastSeparator = false
+		previousLowerOrDigit = unicode.IsLower(r) || unicode.IsDigit(r)
+	}
+	return strings.Trim(b.String(), "_")
 }
 
 func IsKnownAction(action Action) bool {
