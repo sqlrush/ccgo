@@ -120,6 +120,33 @@ func TestAppendAndLoadPromptHistory(t *testing.T) {
 	}
 }
 
+func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"display":"run [Pasted text #1] [Image #2]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","media_type":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png"}},"timestamp":100,"project":"/repo","session_id":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, func(hash string) (string, bool) {
+		if hash != "hash_1" {
+			return "", false
+		}
+		return "expanded paste", true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Display != "run [Pasted text #1] [Image #2]" {
+		t.Fatalf("history = %#v", history)
+	}
+	if got := history[0].PastedContents[1]; got.Content != "expanded paste" || got.MediaType != "text/plain" {
+		t.Fatalf("text paste alias = %#v", got)
+	}
+	if got := history[0].PastedContents[2]; got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "chart.png" {
+		t.Fatalf("image paste alias = %#v", got)
+	}
+}
+
 func TestLoadTimestampedHistoryDedupesNewestFirst(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
 	project := "/repo"
