@@ -3353,6 +3353,46 @@ func TestRunInteractionScriptChecksEventSequences(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptChecksJSONEventCounts(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"text": "draft",
+			"expect_no_event": true,
+			"expect_event_count": 0,
+			"expectTotalEventCount": 0,
+			"expect_prompt": {"text": "draft"}
+		},
+		{
+			"key": "enter",
+			"expectEventCount": 1,
+			"expect_total_event_count": 1,
+			"expect_event": {"type": "prompt_submitted", "value": "draft"},
+			"expect_prompt": {"empty": true}
+		},
+		{
+			"keys": ["a", "enter", "b", "enter"],
+			"expect_event_count": 2,
+			"expectTotalEventCount": 3,
+			"expect_events": [
+				{"type": "prompt_submitted", "value": "a"},
+				{"type": "prompt_submitted", "value": "b"}
+			],
+			"expect_prompt": {"empty": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 3 || result.Events[0].Value != "draft" || result.Events[2].Value != "b" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{

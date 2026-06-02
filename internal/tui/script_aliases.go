@@ -47,6 +47,12 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectEventCamel          *ScreenEvent              `json:"expectEvent"`
 		ExpectEvents              []ScreenEvent             `json:"expect_events"`
 		ExpectEventsCamel         []ScreenEvent             `json:"expectEvents"`
+		ExpectNoEvent             *bool                     `json:"expect_no_event"`
+		ExpectNoEventCamel        *bool                     `json:"expectNoEvent"`
+		ExpectEventCount          *int                      `json:"expect_event_count"`
+		ExpectEventCountCamel     *int                      `json:"expectEventCount"`
+		ExpectTotalEventCount     *int                      `json:"expect_total_event_count"`
+		ExpectTotalEventCamel     *int                      `json:"expectTotalEventCount"`
 		ExpectDialogResult        *DialogResultExpectation  `json:"expect_dialog_result"`
 		ExpectDialogResultCamel   *DialogResultExpectation  `json:"expectDialogResult"`
 		ExpectDialogResults       []DialogResultExpectation `json:"expect_dialog_results"`
@@ -186,6 +192,24 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.ExpectEventsCamel != nil {
 		step.ExpectEvents = fields.ExpectEventsCamel
+	}
+	if fields.ExpectNoEvent != nil {
+		step.ExpectNoEvent = *fields.ExpectNoEvent
+	}
+	if fields.ExpectNoEventCamel != nil {
+		step.ExpectNoEvent = *fields.ExpectNoEventCamel
+	}
+	if fields.ExpectEventCount != nil {
+		step.ExpectEventCount = fields.ExpectEventCount
+	}
+	if fields.ExpectEventCountCamel != nil {
+		step.ExpectEventCount = fields.ExpectEventCountCamel
+	}
+	if fields.ExpectTotalEventCount != nil {
+		step.ExpectTotalEventCount = fields.ExpectTotalEventCount
+	}
+	if fields.ExpectTotalEventCamel != nil {
+		step.ExpectTotalEventCount = fields.ExpectTotalEventCamel
 	}
 	if fields.ExpectDialogResult != nil {
 		step.ExpectDialogResult = fields.ExpectDialogResult

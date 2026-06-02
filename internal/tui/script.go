@@ -28,6 +28,9 @@ type ScriptStep struct {
 	SnapshotName              string
 	ExpectEvent               *ScreenEvent
 	ExpectEvents              []ScreenEvent
+	ExpectNoEvent             bool
+	ExpectEventCount          *int
+	ExpectTotalEventCount     *int
 	ExpectDialogResult        *DialogResultExpectation
 	ExpectDialogResults       []DialogResultExpectation
 	ExpectDialog              *DialogExpectation
@@ -224,6 +227,15 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			if err := compareEvent(index, event, *step.ExpectEvent); err != nil {
 				return result, dialogResults, err
 			}
+		}
+		if step.ExpectNoEvent && len(stepEvents) > 0 {
+			return result, dialogResults, fmt.Errorf("script step %d event count = %d, want none", index, len(stepEvents))
+		}
+		if step.ExpectEventCount != nil && len(stepEvents) != *step.ExpectEventCount {
+			return result, dialogResults, fmt.Errorf("script step %d event count = %d, want %d", index, len(stepEvents), *step.ExpectEventCount)
+		}
+		if step.ExpectTotalEventCount != nil && len(result.Events) != *step.ExpectTotalEventCount {
+			return result, dialogResults, fmt.Errorf("script step %d total event count = %d, want %d", index, len(result.Events), *step.ExpectTotalEventCount)
 		}
 		if len(step.ExpectEvents) > 0 {
 			if err := compareEvents(index, stepEvents, step.ExpectEvents); err != nil {
