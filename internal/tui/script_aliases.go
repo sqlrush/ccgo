@@ -535,14 +535,18 @@ func (image *ScriptImage) UnmarshalJSON(data []byte) error {
 	}
 	*image = ScriptImage(raw)
 
-	var fields struct {
-		MediaType *string `json:"media_type"`
-	}
+	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if fields.MediaType != nil {
-		image.MediaType = *fields.MediaType
+	if image.Filename == "" {
+		image.Filename = stringJSONField(fields, "file_name", "fileName", "name")
+	}
+	if image.MediaType == "" {
+		image.MediaType = stringJSONField(fields, "media_type", "mime_type", "mimeType", "content_type", "contentType")
+	}
+	if image.Content == "" {
+		image.Content = stringJSONField(fields, "data", "base64", "base64Content", "contentBase64")
 	}
 	return nil
 }

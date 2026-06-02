@@ -3216,6 +3216,36 @@ func TestRunInteractionScriptAcceptsPasteAndImageFields(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsImageFieldAliases(t *testing.T) {
+	var steps []ScriptStep
+	if err := json.Unmarshal([]byte(`[
+		{
+			"image": {"fileName": "chart.png", "mimeType": "image/png", "data": "AAAA"},
+			"expect_prompt": {
+				"text": "[Image #1]",
+				"pastedContentCount": 1,
+				"nextPastedID": 2,
+				"pastedContents": {"id": 1, "type": "image", "mediaType": "image/png", "filename": "chart.png", "content": "AAAA"}
+			}
+		},
+		{
+			"image": {"name": "diagram.webp", "mime_type": "image/webp", "base64": "BBBB"},
+			"expect_prompt": {
+				"text": "[Image #1][Image #2]",
+				"pastedContentCount": 2,
+				"nextPastedID": 3,
+				"pastedContents": {"id": 2, "type": "image", "media_type": "image/webp", "filename": "diagram.webp", "content": "BBBB"}
+			}
+		}
+	]`), &steps); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[
