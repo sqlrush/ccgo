@@ -64,6 +64,32 @@ type Message struct {
 	Raw        map[string]any `json:"raw,omitempty"`
 }
 
+func (m *Message) UnmarshalJSON(data []byte) error {
+	type MessageJSON Message
+	var aux struct {
+		*MessageJSON
+		ParentUUIDSnake *ID   `json:"parent_uuid"`
+		SessionIDSnake  ID    `json:"session_id"`
+		IsMetaSnake     *bool `json:"is_meta"`
+	}
+	base := MessageJSON{}
+	aux.MessageJSON = &base
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*m = Message(base)
+	if m.ParentUUID == nil {
+		m.ParentUUID = aux.ParentUUIDSnake
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionIDSnake
+	}
+	if aux.IsMetaSnake != nil {
+		m.IsMeta = *aux.IsMetaSnake
+	}
+	return nil
+}
+
 type APIMessage struct {
 	Role    string         `json:"role"`
 	Content []ContentBlock `json:"content"`

@@ -31,6 +31,48 @@ func TestLoadTranscriptBridgesLegacyProgressEntries(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"progress","uuid":"p1","parent_uuid":"u1"}`,
+		`{"type":"assistant","uuid":"a1","parent_uuid":"p1","logical_parent_uuid":"u1","session_id":"sess_1","is_sidechain":true,"agent_id":"agent_alias","timestamp":"2026-01-01T00:00:01Z","message":{"id":"msg_1","type":"assistant","parent_uuid":"u1","session_id":"sess_1","is_meta":true,"content":[{"type":"text","text":"done"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := transcript.Messages["a1"]
+	if msg == nil || msg.ParentUUID == nil || *msg.ParentUUID != "u1" || msg.LogicalParentUUID == nil || *msg.LogicalParentUUID != "u1" {
+		t.Fatalf("aliased parents = %#v", msg)
+	}
+	if msg.SessionID != "sess_1" || !msg.IsSidechain || msg.AgentID != "agent_alias" {
+		t.Fatalf("aliased transcript message fields = %#v", msg)
+	}
+	if msg.Message == nil || msg.Message.ParentUUID == nil || *msg.Message.ParentUUID != "u1" || msg.Message.SessionID != "sess_1" || !msg.Message.IsMeta {
+		t.Fatalf("aliased nested message = %#v", msg.Message)
+	}
+	chain := transcript.BuildConversationChain("a1")
+	if got := chainIDs(chain); strings.Join(got, ",") != "u1,a1" {
+		t.Fatalf("aliased chain = %#v", got)
+	}
+
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref := index.Entries[index.ByUUID["a1"]]; ref.SessionID != "sess_1" || ref.ParentUUID == nil || *ref.ParentUUID != "u1" {
+		t.Fatalf("aliased line ref = %#v", ref)
+	}
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1" || resume.Messages[1].SessionID != "sess_1" {
+		t.Fatalf("aliased indexed resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+}
+
 func TestLoadTranscriptPrunesBeforeCompactBoundary(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
@@ -57,6 +99,36 @@ func TestLoadTranscriptPrunesBeforeCompactBoundary(t *testing.T) {
 	chain := transcript.BuildConversationChain("a2")
 	if got := chainIDs(chain); strings.Join(got, ",") != "cb1,u2,a2" {
 		t.Fatalf("chain = %#v", got)
+	}
+}
+
+func TestLoadTranscriptAcceptsCompactAndSnipMetadataAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","parentUuid":null}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1"}`,
+		`{"type":"user","uuid":"u2","parentUuid":"a1"}`,
+		`{"type":"system","uuid":"s1","parent_uuid":"u2","compact_metadata":{"trigger":"manual","pre_tokens":100,"user_context":"ctx","messages_summarized":2,"preserved_segment":{"head_uuid":"u1","tail_uuid":"a1","anchor_uuid":"root"}},"snip_metadata":{"removed_uuids":["a1"]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	system := transcript.Messages["s1"]
+	if system == nil || system.ParentUUID == nil || *system.ParentUUID != "u2" {
+		t.Fatalf("system parent = %#v", system)
+	}
+	if system.CompactMetadata == nil || system.CompactMetadata.PreTokens != 100 || system.CompactMetadata.UserContext != "ctx" || system.CompactMetadata.MessagesSummarized != 2 {
+		t.Fatalf("compact metadata = %#v", system.CompactMetadata)
+	}
+	if seg := system.CompactMetadata.PreservedSegment; seg == nil || seg.HeadUUID != "u1" || seg.TailUUID != "a1" || seg.AnchorUUID != "root" {
+		t.Fatalf("preserved segment = %#v", system.CompactMetadata.PreservedSegment)
+	}
+	if _, ok := transcript.Messages["a1"]; ok {
+		t.Fatalf("snipped message still present")
+	}
+	if transcript.Messages["u2"].ParentUUID == nil || *transcript.Messages["u2"].ParentUUID != "u1" {
+		t.Fatalf("snip relink parent = %#v", transcript.Messages["u2"].ParentUUID)
 	}
 }
 
