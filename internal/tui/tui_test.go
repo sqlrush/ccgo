@@ -3017,6 +3017,29 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"keybindings":[{"keys":"ctrl-r","command":"submitPrompt"}]},
+		{"text":"send me","key":"ctrl-r","expect_event":{"type":"prompt_submitted","value":"send me"},"expect_prompt":{"empty":true}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "send me" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+
+	_, err = RunInteractionScriptChecked(&screen, []ScriptStep{{Keybindings: []BindingSpec{{Key: "wat", Action: ActionSubmitPrompt}}}})
+	if err == nil || !strings.Contains(err.Error(), "script step 0 keybindings") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsJSONFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

@@ -12,6 +12,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 
 	var fields struct {
 		RequestPermission         *PermissionRequest        `json:"request_permission"`
+		Keybindings               []BindingSpec             `json:"keybindings"`
+		KeyBindings               []BindingSpec             `json:"key_bindings"`
+		KeybindingSpecs           []BindingSpec             `json:"keybinding_specs"`
 		UpsertTask                *TaskStatus               `json:"upsert_task"`
 		RemoveTaskID              *string                   `json:"remove_task_id"`
 		CancelActiveDialog        *bool                     `json:"cancel_active_dialog"`
@@ -47,6 +50,15 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.RequestPermission != nil {
 		step.RequestPermission = fields.RequestPermission
+	}
+	if fields.Keybindings != nil {
+		step.Keybindings = fields.Keybindings
+	}
+	if fields.KeyBindings != nil {
+		step.Keybindings = fields.KeyBindings
+	}
+	if fields.KeybindingSpecs != nil {
+		step.Keybindings = fields.KeybindingSpecs
 	}
 	if fields.UpsertTask != nil {
 		step.UpsertTask = fields.UpsertTask

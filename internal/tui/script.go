@@ -13,6 +13,7 @@ type ScriptStep struct {
 	Image                     *ScriptImage
 	Message                   *Message
 	Dialog                    *Dialog
+	Keybindings               []BindingSpec
 	RequestPermission         *PermissionRequest
 	UpsertTask                *TaskStatus
 	RemoveTaskID              string
@@ -168,6 +169,13 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 		if runtime != nil {
 			runtime.ApplyToScreen(screen, baseStatus)
+		}
+		if len(step.Keybindings) > 0 {
+			keymap, err := KeymapFromSpecs(screen.Keymap, step.Keybindings)
+			if err != nil {
+				return result, dialogResults, fmt.Errorf("script step %d keybindings: %w", index, err)
+			}
+			screen.Keymap = keymap
 		}
 		if step.ResizeWidth > 0 {
 			width := step.ResizeWidth
