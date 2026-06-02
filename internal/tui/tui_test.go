@@ -463,6 +463,34 @@ func TestPromptPasteReferencesSurviveDraftHistoryNavigation(t *testing.T) {
 	}
 }
 
+func TestPromptHistoryRestoresPastedContentEntries(t *testing.T) {
+	prompt := NewPromptStateFromEntries([]session.HistoryEntry{{
+		Display: "use [Pasted text #1]",
+		PastedContents: map[int]session.PastedContent{
+			1: {ID: 1, Type: session.PastedContentText, Content: "expanded paste"},
+		},
+	}})
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b[A"))
+	if prompt.Text != "use [Pasted text #1]" || prompt.ExpandedText() != "use expanded paste" {
+		t.Fatalf("history prompt = %#v expanded=%q", prompt, prompt.ExpandedText())
+	}
+	prompt.Apply(ParseKey("\x1b[B"))
+	if prompt.Text != "" || prompt.ExpandedText() != "" || len(prompt.PastedContents) != 0 {
+		t.Fatalf("draft prompt = %#v expanded=%q", prompt, prompt.ExpandedText())
+	}
+
+	prompt.Apply(ParseKey("\x1b[200~submitted\npaste\x1b[201~"))
+	result := prompt.Apply(ParseKey("\n"))
+	if result.Submitted != "submitted\npaste" {
+		t.Fatalf("submitted = %#v", result)
+	}
+	prompt.Apply(ParseKey("\x1b[A"))
+	if prompt.Text != "[Pasted text #1 +1 lines]" || prompt.ExpandedText() != "submitted\npaste" {
+		t.Fatalf("submitted history = %#v expanded=%q", prompt, prompt.ExpandedText())
+	}
+}
+
 func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	key := ParseKey("\x1b]1337;File=inline=1:AAAA\a")
 	if key.Type != KeyImageHint || key.Text != ImageHintPlaceholder {

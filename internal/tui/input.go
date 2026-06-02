@@ -33,6 +33,7 @@ type PromptState struct {
 	Text                string
 	Cursor              int
 	History             []string
+	HistoryEntries      []session.HistoryEntry
 	HistoryIndex        int
 	UsePasteReferences  bool
 	PastedContents      map[int]session.PastedContent
@@ -42,9 +43,23 @@ type PromptState struct {
 }
 
 func NewPromptState(history []string) PromptState {
+	entries := make([]session.HistoryEntry, 0, len(history))
+	for _, display := range history {
+		entries = append(entries, session.HistoryEntry{Display: display})
+	}
+	return NewPromptStateFromEntries(entries)
+}
+
+func NewPromptStateFromEntries(entries []session.HistoryEntry) PromptState {
+	historyEntries := cloneHistoryEntries(entries)
+	history := make([]string, 0, len(historyEntries))
+	for _, entry := range historyEntries {
+		history = append(history, entry.Display)
+	}
 	return PromptState{
-		History:      append([]string(nil), history...),
-		HistoryIndex: len(history),
+		History:        history,
+		HistoryEntries: historyEntries,
+		HistoryIndex:   len(historyEntries),
 	}
 }
 
@@ -262,10 +277,14 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		pastedContents := clonePastedContents(p.PastedContents)
 		if display != "" {
 			p.History = append(p.History, display)
+			p.HistoryEntries = append(p.HistoryEntries, session.HistoryEntry{
+				Display:        display,
+				PastedContents: clonePastedContents(pastedContents),
+			})
 		}
 		p.Text = ""
 		p.Cursor = 0
-		p.HistoryIndex = len(p.History)
+		p.HistoryIndex = p.historyLength()
 		p.draft = ""
 		p.draftPastedContents = nil
 		p.resetPastedContents()
@@ -446,40 +465,61 @@ func (p *PromptState) yankPop() {
 }
 
 func (p *PromptState) resetHistoryCursor() {
-	p.HistoryIndex = len(p.History)
+	p.HistoryIndex = p.historyLength()
 	p.draft = p.Text
 	p.draftPastedContents = clonePastedContents(p.PastedContents)
 }
 
 func (p *PromptState) historyPrev() {
-	if len(p.History) == 0 {
+	historyLen := p.historyLength()
+	if historyLen == 0 {
 		return
 	}
-	if p.HistoryIndex == len(p.History) {
+	if p.HistoryIndex == historyLen {
 		p.draft = p.Text
 		p.draftPastedContents = clonePastedContents(p.PastedContents)
 	}
 	if p.HistoryIndex > 0 {
 		p.HistoryIndex--
 	}
-	p.Text = p.History[p.HistoryIndex]
-	p.replacePastedContents(nil)
+	entry := p.historyEntryAt(p.HistoryIndex)
+	p.Text = entry.Display
+	p.replacePastedContents(entry.PastedContents)
 	p.Cursor = len([]rune(p.Text))
 }
 
 func (p *PromptState) historyNext() {
-	if p.HistoryIndex >= len(p.History) {
+	historyLen := p.historyLength()
+	if p.HistoryIndex >= historyLen {
 		return
 	}
 	p.HistoryIndex++
-	if p.HistoryIndex == len(p.History) {
+	if p.HistoryIndex == historyLen {
 		p.Text = p.draft
 		p.replacePastedContents(p.draftPastedContents)
 	} else {
-		p.Text = p.History[p.HistoryIndex]
-		p.replacePastedContents(nil)
+		entry := p.historyEntryAt(p.HistoryIndex)
+		p.Text = entry.Display
+		p.replacePastedContents(entry.PastedContents)
 	}
 	p.Cursor = len([]rune(p.Text))
+}
+
+func (p PromptState) historyLength() int {
+	if len(p.HistoryEntries) > len(p.History) {
+		return len(p.HistoryEntries)
+	}
+	return len(p.History)
+}
+
+func (p PromptState) historyEntryAt(index int) session.HistoryEntry {
+	if index >= 0 && index < len(p.HistoryEntries) {
+		return cloneHistoryEntry(p.HistoryEntries[index])
+	}
+	if index >= 0 && index < len(p.History) {
+		return session.HistoryEntry{Display: p.History[index]}
+	}
+	return session.HistoryEntry{}
 }
 
 func (p *PromptState) replacePastedContents(contents map[int]session.PastedContent) {
@@ -502,6 +542,24 @@ func clonePastedContents(in map[int]session.PastedContent) map[int]session.Paste
 		out[id] = content
 	}
 	return out
+}
+
+func cloneHistoryEntries(in []session.HistoryEntry) []session.HistoryEntry {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]session.HistoryEntry, 0, len(in))
+	for _, entry := range in {
+		out = append(out, cloneHistoryEntry(entry))
+	}
+	return out
+}
+
+func cloneHistoryEntry(entry session.HistoryEntry) session.HistoryEntry {
+	return session.HistoryEntry{
+		Display:        entry.Display,
+		PastedContents: clonePastedContents(entry.PastedContents),
+	}
 }
 
 func nextPastedID(contents map[int]session.PastedContent) int {
