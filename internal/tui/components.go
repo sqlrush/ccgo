@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+type promptLayout struct {
+	Lines      []string
+	CursorLine int
+	CursorCol  int
+}
+
 func RenderMessages(messages []Message, width int) []string {
 	var lines []string
 	for _, message := range messages {
@@ -34,29 +40,96 @@ func RenderStatusLine(status string, width int) string {
 }
 
 func RenderPromptLine(prompt PromptState, width int) string {
-	lines := RenderPromptLines(prompt, width)
-	if len(lines) == 0 {
+	layout := layoutPrompt(prompt, width)
+	if len(layout.Lines) == 0 {
 		return padOrTrim("> ", width)
 	}
-	return lines[0]
+	return layout.Lines[0]
 }
 
 func RenderPromptLines(prompt PromptState, width int) []string {
+	return layoutPrompt(prompt, width).Lines
+}
+
+func layoutPrompt(prompt PromptState, width int) promptLayout {
 	prefix := "> "
 	continuation := "  "
 	rawLines := strings.Split(prompt.Text, "\n")
 	if len(rawLines) == 0 {
 		rawLines = []string{""}
 	}
-	lines := make([]string, 0, len(rawLines))
+	cursorLine, cursorCol := promptCursorLogicalPosition(prompt)
+	layout := promptLayout{}
 	for index, line := range rawLines {
 		linePrefix := continuation
 		if index == 0 {
 			linePrefix = prefix
 		}
-		lines = append(lines, padOrTrim(linePrefix+line, width))
+		contentWidth := width - len([]rune(linePrefix))
+		if contentWidth < 1 {
+			contentWidth = 1
+		}
+		chunks := promptLineChunks(line, contentWidth)
+		chunkStart := 0
+		for chunkIndex, chunk := range chunks {
+			chunkPrefix := linePrefix
+			if chunkIndex > 0 {
+				chunkPrefix = continuation
+			}
+			chunkEnd := chunkStart + len([]rune(chunk))
+			if index == cursorLine {
+				lastChunk := chunkIndex == len(chunks)-1
+				if cursorCol >= chunkStart && (cursorCol < chunkEnd || (lastChunk && cursorCol == chunkEnd)) {
+					layout.CursorLine = len(layout.Lines)
+					layout.CursorCol = len([]rune(chunkPrefix)) + cursorCol - chunkStart
+				}
+			}
+			layout.Lines = append(layout.Lines, padOrTrim(chunkPrefix+chunk, width))
+			chunkStart = chunkEnd
+		}
 	}
-	return lines
+	return layout
+}
+
+func promptLineChunks(line string, width int) []string {
+	if width <= 0 {
+		return []string{""}
+	}
+	runes := []rune(line)
+	if len(runes) == 0 {
+		return []string{""}
+	}
+	var chunks []string
+	for start := 0; start < len(runes); start += width {
+		end := start + width
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[start:end]))
+	}
+	return chunks
+}
+
+func promptCursorLogicalPosition(prompt PromptState) (int, int) {
+	runes := []rune(prompt.Text)
+	cursor := prompt.Cursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	line := 0
+	col := 0
+	for i := 0; i < cursor; i++ {
+		if runes[i] == '\n' {
+			line++
+			col = 0
+			continue
+		}
+		col++
+	}
+	return line, col
 }
 
 func RenderReverseSearchLine(state ReverseSearchState, width int) string {

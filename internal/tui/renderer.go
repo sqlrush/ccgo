@@ -136,8 +136,9 @@ func promptCursorPosition(frame Frame, width int, height int, promptLineCount in
 	if promptLineCount <= 0 {
 		return height, 1
 	}
-	line, col := promptCursorLogicalPosition(frame.Prompt)
-	line -= hiddenPromptLines
+	layout := layoutPrompt(frame.Prompt, width)
+	line := layout.CursorLine - hiddenPromptLines
+	col := layout.CursorCol
 	if line < 0 {
 		line = 0
 		col = 0
@@ -149,29 +150,7 @@ func promptCursorPosition(frame Frame, width int, height int, promptLineCount in
 	if row < 1 {
 		row = 1
 	}
-	return row, 3 + col
-}
-
-func promptCursorLogicalPosition(prompt PromptState) (int, int) {
-	runes := []rune(prompt.Text)
-	cursor := prompt.Cursor
-	if cursor < 0 {
-		cursor = 0
-	}
-	if cursor > len(runes) {
-		cursor = len(runes)
-	}
-	line := 0
-	col := 0
-	for i := 0; i < cursor; i++ {
-		if runes[i] == '\n' {
-			line++
-			col = 0
-			continue
-		}
-		col++
-	}
-	return line, col
+	return row, col + 1
 }
 
 func RenderOnce(width int, height int, frame Frame) string {

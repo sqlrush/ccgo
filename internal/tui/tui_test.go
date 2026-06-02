@@ -2473,6 +2473,24 @@ func TestRendererRendersMultilinePromptAndCursor(t *testing.T) {
 	}
 }
 
+func TestRendererWrapsLongPromptAndCursor(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.Text = "abcdefghijk"
+	prompt.Cursor = len([]rune("abcdefghij"))
+	output := RenderOnce(10, 5, Frame{
+		Status:     "ready",
+		Prompt:     prompt,
+		ShowCursor: true,
+	})
+	visible := StripANSI(output)
+	if !strings.Contains(visible, "> abcdefgh") || !strings.Contains(visible, "  ijk") {
+		t.Fatalf("visible prompt = %q", visible)
+	}
+	if !strings.Contains(output, "\x1b[5;5H") {
+		t.Fatalf("cursor output = %q", output)
+	}
+}
+
 func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"
