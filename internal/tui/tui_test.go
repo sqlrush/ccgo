@@ -2967,10 +2967,42 @@ func TestRunInteractionScriptTypesTextField(t *testing.T) {
 
 func TestRunInteractionScriptAcceptsPasteAndImageFields(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
+	one := 1
+	two := 2
+	nextOne := 1
+	nextTwo := 2
+	nextThree := 3
+	zero := 0
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
-		{Paste: "alpha\nbeta", ExpectPrompt: &PromptExpectation{Text: "[Pasted text #1 +1 lines]", Expanded: "alpha\nbeta"}},
-		{Image: &ScriptImage{Filename: "chart.png", MediaType: "image/png", Content: "AAAA"}, ExpectPrompt: &PromptExpectation{Text: "[Pasted text #1 +1 lines][Image #2]", Expanded: "alpha\nbeta[Image #2]"}},
-		{Key: "enter", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "alpha\nbeta[Image #2]"}, ExpectPrompt: &PromptExpectation{Empty: true}},
+		{Paste: "alpha\nbeta", ExpectPrompt: &PromptExpectation{
+			Text:               "[Pasted text #1 +1 lines]",
+			Expanded:           "alpha\nbeta",
+			PastedContentCount: &one,
+			NextPastedID:       &nextTwo,
+			PastedContents: []PastedContentExpectation{{
+				ID:      1,
+				Type:    session.PastedContentText,
+				Content: "alpha\nbeta",
+			}},
+		}},
+		{Image: &ScriptImage{Filename: "chart.png", MediaType: "image/png", Content: "AAAA"}, ExpectPrompt: &PromptExpectation{
+			Text:               "[Pasted text #1 +1 lines][Image #2]",
+			Expanded:           "alpha\nbeta[Image #2]",
+			PastedContentCount: &two,
+			NextPastedID:       &nextThree,
+			PastedContents: []PastedContentExpectation{{
+				ID:        2,
+				Type:      session.PastedContentImage,
+				Content:   "AAAA",
+				MediaType: "image/png",
+				Filename:  "chart.png",
+			}},
+		}},
+		{Key: "enter", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: "alpha\nbeta[Image #2]"}, ExpectPrompt: &PromptExpectation{
+			Empty:              true,
+			PastedContentCount: &zero,
+			NextPastedID:       &nextOne,
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2989,7 +3021,16 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 			"paste": "alpha\nbeta",
 			"image": {"filename": "chart.png", "media_type": "image/png", "content": "AAAA"},
 			"snapshot_name": "json-aliases",
-			"expect_prompt": {"text": "[Pasted text #1 +1 lines][Image #2]", "expanded": "alpha\nbeta[Image #2]"},
+			"expect_prompt": {
+				"text": "[Pasted text #1 +1 lines][Image #2]",
+				"expanded": "alpha\nbeta[Image #2]",
+				"pasted_content_count": 2,
+				"nextPastedID": 3,
+				"pasted_contents": [
+					{"id": 1, "type": "text", "content_contains": ["alpha", "beta"]},
+					{"id": 2, "type": "image", "media_type": "image/png", "filename": "chart.png"}
+				]
+			},
 			"expect_screen": {"width": 40, "height": 8},
 			"expect_status_contains": ["json ready"],
 			"expect_snapshot_contains": ["[Image #2]"],
@@ -2998,7 +3039,7 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 		{
 			"key": "enter",
 			"expect_event": {"type": "prompt_submitted", "value": "alpha\nbeta[Image #2]"},
-			"expect_prompt": {"empty": true}
+			"expect_prompt": {"empty": true, "pastedContentCount": 0, "next_pasted_id": 1}
 		}
 	]`), &steps); err != nil {
 		t.Fatal(err)

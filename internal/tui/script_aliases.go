@@ -406,6 +406,82 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
+	type alias PromptExpectation
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*expect = PromptExpectation(raw)
+
+	var fields struct {
+		PastedContentCount      *int                       `json:"pasted_content_count"`
+		PastedContentCountCamel *int                       `json:"pastedContentCount"`
+		PastedContents          []PastedContentExpectation `json:"pasted_contents"`
+		PastedContentsCamel     []PastedContentExpectation `json:"pastedContents"`
+		NextPastedID            *int                       `json:"next_pasted_id"`
+		NextPastedIDAlt         *int                       `json:"nextPastedId"`
+		NextPastedIDUpper       *int                       `json:"nextPastedID"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if fields.PastedContentCount != nil {
+		expect.PastedContentCount = fields.PastedContentCount
+	}
+	if fields.PastedContentCountCamel != nil {
+		expect.PastedContentCount = fields.PastedContentCountCamel
+	}
+	if fields.PastedContents != nil {
+		expect.PastedContents = fields.PastedContents
+	}
+	if fields.PastedContentsCamel != nil {
+		expect.PastedContents = fields.PastedContentsCamel
+	}
+	if fields.NextPastedID != nil {
+		expect.NextPastedID = fields.NextPastedID
+	}
+	if fields.NextPastedIDAlt != nil {
+		expect.NextPastedID = fields.NextPastedIDAlt
+	}
+	if fields.NextPastedIDUpper != nil {
+		expect.NextPastedID = fields.NextPastedIDUpper
+	}
+	return nil
+}
+
+func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
+	type alias PastedContentExpectation
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*expect = PastedContentExpectation(raw)
+
+	var fields struct {
+		ContentContains      []string `json:"content_contains"`
+		ContentContainsCamel []string `json:"contentContains"`
+		MediaType            *string  `json:"media_type"`
+		MediaTypeCamel       *string  `json:"mediaType"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if fields.ContentContains != nil {
+		expect.ContentContains = fields.ContentContains
+	}
+	if fields.ContentContainsCamel != nil {
+		expect.ContentContains = fields.ContentContainsCamel
+	}
+	if fields.MediaType != nil {
+		expect.MediaType = *fields.MediaType
+	}
+	if fields.MediaTypeCamel != nil {
+		expect.MediaType = *fields.MediaTypeCamel
+	}
+	return nil
+}
+
 func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	type alias TaskStatus
 	var raw alias

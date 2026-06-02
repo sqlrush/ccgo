@@ -73,10 +73,22 @@ type DialogResultExpectation struct {
 }
 
 type PromptExpectation struct {
-	Text     string
-	Expanded string
-	Cursor   *int
-	Empty    bool
+	Text               string
+	Expanded           string
+	Cursor             *int
+	Empty              bool
+	PastedContentCount *int
+	PastedContents     []PastedContentExpectation
+	NextPastedID       *int
+}
+
+type PastedContentExpectation struct {
+	ID              int
+	Type            string
+	Content         string
+	ContentContains []string
+	MediaType       string
+	Filename        string
 }
 
 type VimExpectation struct {
@@ -550,9 +562,7 @@ func comparePrompt(index int, got PromptState, want PromptExpectation) error {
 		if got.Text != "" {
 			return fmt.Errorf("script step %d prompt text = %q, want empty", index, got.Text)
 		}
-		return nil
-	}
-	if want.Text != "" && got.Text != want.Text {
+	} else if want.Text != "" && got.Text != want.Text {
 		return fmt.Errorf("script step %d prompt text = %q, want %q", index, got.Text, want.Text)
 	}
 	if want.Expanded != "" && got.ExpandedText() != want.Expanded {
@@ -560,6 +570,45 @@ func comparePrompt(index int, got PromptState, want PromptExpectation) error {
 	}
 	if want.Cursor != nil && got.Cursor != *want.Cursor {
 		return fmt.Errorf("script step %d prompt cursor = %d, want %d", index, got.Cursor, *want.Cursor)
+	}
+	if want.PastedContentCount != nil && len(got.PastedContents) != *want.PastedContentCount {
+		return fmt.Errorf("script step %d pasted content count = %d, want %d", index, len(got.PastedContents), *want.PastedContentCount)
+	}
+	if want.NextPastedID != nil && got.NextPastedID != *want.NextPastedID {
+		return fmt.Errorf("script step %d next pasted id = %d, want %d", index, got.NextPastedID, *want.NextPastedID)
+	}
+	for _, expected := range want.PastedContents {
+		if err := comparePastedContent(index, got, expected); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func comparePastedContent(index int, got PromptState, want PastedContentExpectation) error {
+	content, ok := got.PastedContents[want.ID]
+	if want.ID == 0 {
+		return fmt.Errorf("script step %d pasted content id is required", index)
+	}
+	if !ok {
+		return fmt.Errorf("script step %d pasted content %d missing", index, want.ID)
+	}
+	if want.Type != "" && content.Type != want.Type {
+		return fmt.Errorf("script step %d pasted content %d type = %q, want %q", index, want.ID, content.Type, want.Type)
+	}
+	if want.Content != "" && content.Content != want.Content {
+		return fmt.Errorf("script step %d pasted content %d content = %q, want %q", index, want.ID, content.Content, want.Content)
+	}
+	for _, fragment := range want.ContentContains {
+		if !strings.Contains(content.Content, fragment) {
+			return fmt.Errorf("script step %d pasted content %d missing %q in %q", index, want.ID, fragment, content.Content)
+		}
+	}
+	if want.MediaType != "" && content.MediaType != want.MediaType {
+		return fmt.Errorf("script step %d pasted content %d media type = %q, want %q", index, want.ID, content.MediaType, want.MediaType)
+	}
+	if want.Filename != "" && content.Filename != want.Filename {
+		return fmt.Errorf("script step %d pasted content %d filename = %q, want %q", index, want.ID, content.Filename, want.Filename)
 	}
 	return nil
 }
