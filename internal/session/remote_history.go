@@ -372,6 +372,7 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 	}
 	events := make([]contracts.SDKEvent, 0, len(rawEdges))
 	for index, edge := range rawEdges {
+		cursor := remoteHistoryStringField(edge, "cursor")
 		rawEvent := firstRawField(edge, "node", "event", "record", "item")
 		if rawEvent == nil {
 			rawEvent = edgeJSON(edge)
@@ -379,6 +380,9 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 		var event contracts.SDKEvent
 		if err := json.Unmarshal(rawEvent, &event); err != nil {
 			return nil, fmt.Errorf("%s[%d]: %w", name, index, err)
+		}
+		if event.ID == "" {
+			event.ID = contracts.ID(cursor)
 		}
 		events = append(events, event)
 	}
@@ -393,6 +397,20 @@ func firstRawField(raw map[string]json.RawMessage, names ...string) json.RawMess
 		}
 	}
 	return nil
+}
+
+func remoteHistoryStringField(raw map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		value, ok := raw[name]
+		if !ok || len(bytes.TrimSpace(value)) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(value, &text); err == nil {
+			return text
+		}
+	}
+	return ""
 }
 
 func edgeJSON(edge map[string]json.RawMessage) json.RawMessage {

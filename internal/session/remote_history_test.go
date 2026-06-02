@@ -381,6 +381,38 @@ func TestFetchRemoteHistoryAcceptsConnectionWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryUsesEdgeCursorWhenNodeIDMissing(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"edge_cursor","node":{"type":"status","session_id":"s","status":"latest"}}],"pageInfo":{"hasNextPage":true}}}`))
+		case "edge_cursor":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"older_cursor","node":{"type":"status","session_id":"s","status":"older"}}],"pageInfo":{"hasNextPage":false}}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "edge_cursor" || events.Events[0].Status != "latest" || events.Events[1].ID != "older_cursor" || events.Events[1].Status != "older" {
+		t.Fatalf("edge cursor events = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "edge_cursor" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryStopsAtMaxPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
