@@ -437,49 +437,106 @@ func parseFacts(raw string) ([]MemoryFact, error) {
 
 func parseFactsJSON(raw string) ([]MemoryFact, error) {
 	raw = strings.TrimSpace(raw)
-	var entries []rawMemoryFact
-	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
-		var object struct {
-			Facts  []rawMemoryFact `json:"facts"`
-			Memory []rawMemoryFact `json:"memory"`
-		}
-		if objectErr := json.Unmarshal([]byte(raw), &object); objectErr != nil {
-			return nil, err
-		}
-		entries = object.Facts
-		if len(entries) == 0 {
-			entries = object.Memory
-		}
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return nil, err
 	}
+	entries := collectRawMemoryFacts(value)
 	var facts []MemoryFact
 	for _, entry := range entries {
-		kind := FactKind(strings.TrimSpace(firstNonEmpty(entry.Kind, entry.Type, entry.FactType)))
+		kind := FactKind(strings.TrimSpace(firstNonEmpty(entry.Kind, entry.Type, entry.FactType, entry.Category, entry.Label)))
 		switch kind {
 		case FactPreference, FactRequest, FactDecision, FactTool:
 		default:
 			continue
 		}
-		text := strings.TrimSpace(firstNonEmpty(entry.Text, entry.Content, entry.Summary))
+		text := strings.TrimSpace(firstNonEmpty(entry.Text, entry.Content, entry.Summary, entry.Value, entry.Detail))
 		if text == "" {
 			continue
 		}
-		sourceUUID := firstNonEmpty(entry.SourceUUID, entry.SourceUUIDCamel, entry.SourceID, entry.UUID)
+		sourceUUID := firstNonEmpty(entry.SourceUUID, entry.SourceUUIDCamel, entry.SourceID, entry.Source, entry.MessageUUID, entry.MessageUUIDCamel, entry.SourceMessageID, entry.SourceMessageIDCamel, entry.UUID)
 		facts = append(facts, MemoryFact{Kind: kind, Text: text, SourceUUID: contracts.ID(sourceUUID)})
 	}
 	return facts, nil
 }
 
+func collectRawMemoryFacts(value any) []rawMemoryFact {
+	switch typed := value.(type) {
+	case []any:
+		var entries []rawMemoryFact
+		for _, item := range typed {
+			entries = append(entries, collectRawMemoryFacts(item)...)
+		}
+		return entries
+	case map[string]any:
+		var entries []rawMemoryFact
+		if fact, ok := rawMemoryFactFromMap(typed); ok {
+			entries = append(entries, fact)
+		}
+		for _, key := range []string{
+			"facts",
+			"memory",
+			"memories",
+			"memory_facts",
+			"memoryFacts",
+			"extracted_facts",
+			"extractedFacts",
+			"extracted_memory",
+			"extractedMemory",
+			"session_memory",
+			"sessionMemory",
+			"items",
+			"entries",
+			"results",
+		} {
+			if child, ok := typed[key]; ok {
+				entries = append(entries, collectRawMemoryFacts(child)...)
+			}
+		}
+		return entries
+	default:
+		return nil
+	}
+}
+
+func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return rawMemoryFact{}, false
+	}
+	var fact rawMemoryFact
+	if err := json.Unmarshal(encoded, &fact); err != nil {
+		return rawMemoryFact{}, false
+	}
+	if firstNonEmpty(fact.Kind, fact.Type, fact.FactType, fact.Category, fact.Label) == "" {
+		return rawMemoryFact{}, false
+	}
+	if firstNonEmpty(fact.Text, fact.Content, fact.Summary, fact.Value, fact.Detail) == "" {
+		return rawMemoryFact{}, false
+	}
+	return fact, true
+}
+
 type rawMemoryFact struct {
-	Kind            string `json:"kind"`
-	Type            string `json:"type"`
-	FactType        string `json:"fact_type"`
-	Text            string `json:"text"`
-	Content         string `json:"content"`
-	Summary         string `json:"summary"`
-	SourceUUID      string `json:"source_uuid"`
-	SourceUUIDCamel string `json:"sourceUuid"`
-	SourceID        string `json:"source_id"`
-	UUID            string `json:"uuid"`
+	Kind                 string `json:"kind"`
+	Type                 string `json:"type"`
+	FactType             string `json:"fact_type"`
+	Category             string `json:"category"`
+	Label                string `json:"label"`
+	Text                 string `json:"text"`
+	Content              string `json:"content"`
+	Summary              string `json:"summary"`
+	Value                string `json:"value"`
+	Detail               string `json:"detail"`
+	SourceUUID           string `json:"source_uuid"`
+	SourceUUIDCamel      string `json:"sourceUuid"`
+	SourceID             string `json:"source_id"`
+	Source               string `json:"source"`
+	MessageUUID          string `json:"message_uuid"`
+	MessageUUIDCamel     string `json:"messageUuid"`
+	SourceMessageID      string `json:"source_message_id"`
+	SourceMessageIDCamel string `json:"sourceMessageId"`
+	UUID                 string `json:"uuid"`
 }
 
 func firstNonEmpty(values ...string) string {

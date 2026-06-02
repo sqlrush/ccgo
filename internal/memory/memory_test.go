@@ -403,6 +403,51 @@ func TestMemoryAgentExtractsAlternateFactFieldNames(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsNestedFactResponseShapes(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_nested_fields",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"extracted_memory":{"facts":[
+				{"category":"preference","value":"prefer line-local edits","sourceMessageId":"user_1"}
+			]},
+			"results":[
+				{"label":"decision","detail":"render multiline prompt footer","source":"assistant_1"}
+			],
+			"memories":[
+				{"type":"request","content":"continue M6 parsing","messageUuid":"user_2"}
+			]
+		}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember line-local edits")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 3 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer line-local edits", "user_1") {
+		t.Fatalf("preference fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "render multiline prompt footer", "assistant_1") {
+		t.Fatalf("decision fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactRequest, "continue M6 parsing", "user_2") {
+		t.Fatalf("request fact missing = %#v", result.Facts)
+	}
+}
+
+func hasMemoryFact(facts []MemoryFact, kind FactKind, text string, source contracts.ID) bool {
+	for _, fact := range facts {
+		if fact.Kind == kind && fact.Text == text && fact.SourceUUID == source {
+			return true
+		}
+	}
+	return false
+}
+
 func TestMemoryAgentRecallUsesModelQueryThenScoresLocalSummaries(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{Root: root, SessionID: "prior", Summary: "postgres permissions migration"}); err != nil {
