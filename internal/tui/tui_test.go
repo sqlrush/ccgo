@@ -3203,6 +3203,79 @@ func TestRunDialogRuntimeScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptFileWithSnapshotCorpus(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "script.json")
+	script := []byte(`{"steps":[
+		{"message":{"role":"assistant","text":"ready"},"snapshot_name":"initial"},
+		{"text":"go","snapshot_name":"typed"}
+	]}`)
+	if err := os.WriteFile(path, script, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baselineScreen := NewREPLScreen(40, 8, nil)
+	baseline, err := RunInteractionScriptFileChecked(&baselineScreen, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corpus := SnapshotCorpus{Dir: filepath.Join(dir, "snapshots")}
+	if err := corpus.WriteAll(baseline.Snapshots); err != nil {
+		t.Fatal(err)
+	}
+
+	screen := NewREPLScreen(40, 8, nil)
+	result, report, err := RunInteractionScriptFileWithSnapshotCorpus(&screen, path, corpus, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 2 || !report.Passed() || len(report.Comparisons) != 2 {
+		t.Fatalf("result=%#v report=%#v", result.Snapshots, report)
+	}
+
+	if err := os.WriteFile(filepath.Join(corpus.Dir, "stale.txt"), []byte("old baseline"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	screen = NewREPLScreen(40, 8, nil)
+	_, report, err = RunInteractionScriptFileWithSnapshotCorpus(&screen, path, corpus, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Passed() || len(report.Unexpected) != 1 || report.Unexpected[0] != "stale" {
+		t.Fatalf("strict report = %#v", report)
+	}
+}
+
+func TestRunDialogRuntimeScriptFileWithSnapshotCorpus(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "runtime-script.json")
+	script := []byte(`{"steps":[
+		{"request_permission":{"id":"perm_1","tool_name":"Bash"},"snapshot_name":"permission","expect_dialog":{"active":true,"id":"perm_1","kind":"permission"}}
+	]}`)
+	if err := os.WriteFile(path, script, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baselineScreen := NewREPLScreen(40, 8, nil)
+	baselineRuntime := NewDialogRuntime()
+	baseline, err := RunDialogRuntimeScriptFileChecked(&baselineScreen, baselineRuntime, "ready", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corpus := SnapshotCorpus{Dir: filepath.Join(dir, "runtime-snapshots")}
+	if err := corpus.WriteAll(baseline.Snapshots); err != nil {
+		t.Fatal(err)
+	}
+
+	screen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	result, report, err := RunDialogRuntimeScriptFileWithSnapshotCorpus(&screen, runtime, "ready", path, corpus, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 1 || !report.Passed() || len(report.Comparisons) != 1 {
+		t.Fatalf("result=%#v report=%#v", result.Snapshots, report)
+	}
+}
+
 func TestParseInteractionScriptReportsJSONLLineNumber(t *testing.T) {
 	_, err := ParseInteractionScript([]byte("{\"text\":\"ok\"}\n{bad}\n"))
 	if err == nil || !strings.Contains(err.Error(), "line 2") {

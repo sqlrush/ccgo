@@ -95,3 +95,34 @@ func RunDialogRuntimeScriptFileChecked(screen *REPLScreen, runtime *DialogRuntim
 	}
 	return RunDialogRuntimeScriptChecked(screen, runtime, baseStatus, steps)
 }
+
+// RunInteractionScriptFileWithSnapshotCorpus runs a script file and compares captured snapshots against a corpus.
+func RunInteractionScriptFileWithSnapshotCorpus(screen *REPLScreen, path string, corpus SnapshotCorpus, strict bool) (ScriptResult, SnapshotCorpusReport, error) {
+	result, err := RunInteractionScriptFileChecked(screen, path)
+	if err != nil {
+		return result, SnapshotCorpusReport{}, err
+	}
+	report, err := compareScriptSnapshots(corpus, result.Snapshots, strict)
+	return result, report, err
+}
+
+// RunDialogRuntimeScriptFileWithSnapshotCorpus runs a runtime script file and compares captured snapshots against a corpus.
+func RunDialogRuntimeScriptFileWithSnapshotCorpus(screen *REPLScreen, runtime *DialogRuntime, baseStatus string, path string, corpus SnapshotCorpus, strict bool) (RuntimeScriptResult, SnapshotCorpusReport, error) {
+	result, err := RunDialogRuntimeScriptFileChecked(screen, runtime, baseStatus, path)
+	if err != nil {
+		return result, SnapshotCorpusReport{}, err
+	}
+	report, err := compareScriptSnapshots(corpus, result.Snapshots, strict)
+	return result, report, err
+}
+
+func compareScriptSnapshots(corpus SnapshotCorpus, snapshots []ANSISnapshot, strict bool) (SnapshotCorpusReport, error) {
+	if strict {
+		return corpus.CompareAllStrict(snapshots)
+	}
+	comparisons, err := corpus.CompareAll(snapshots)
+	if err != nil {
+		return SnapshotCorpusReport{}, err
+	}
+	return SnapshotCorpusReport{Comparisons: comparisons}, nil
+}
