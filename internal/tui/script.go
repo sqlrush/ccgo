@@ -65,10 +65,18 @@ type ScriptMouse struct {
 }
 
 type DialogExpectation struct {
-	Active bool
-	ID     string
-	Kind   DialogKind
-	Title  string
+	Active            bool
+	ID                string
+	Kind              DialogKind
+	Title             string
+	Body              string
+	BodyContains      []string
+	BodyNotContains   []string
+	Actions           []string
+	ActionContains    []string
+	ActionNotContains []string
+	ActionCount       *int
+	Focused           *int
 }
 
 type DialogResultExpectation struct {
@@ -241,6 +249,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		for _, rawKey := range keys {
 			recordEvent(screen.ApplyKey(parseScriptKey(rawKey)))
 		}
+		if runtime != nil && event.Type != ScreenEventDialogAction && event.Type != ScreenEventCancelled {
+			syncRuntimeActiveDialog(runtime, screen)
+		}
 		if runtime != nil && (event.Type == ScreenEventDialogAction || event.Type == ScreenEventCancelled) {
 			resolved := runtime.ResolveScreenEvent(screen, event, baseStatus)
 			dialogResult = &resolved
@@ -368,6 +379,17 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 	}
 	return result, dialogResults, nil
+}
+
+func syncRuntimeActiveDialog(runtime *DialogRuntime, screen *REPLScreen) {
+	if runtime == nil || screen == nil || runtime.Active == nil || screen.Dialog == nil {
+		return
+	}
+	if runtime.Active.ID != screen.Dialog.ID || runtime.Active.Kind != screen.Dialog.Kind {
+		return
+	}
+	dialog := *screen.Dialog
+	runtime.Active = &dialog
 }
 
 func parseScriptKey(raw string) Key {
@@ -500,7 +522,60 @@ func compareDialog(index int, got *Dialog, want DialogExpectation) error {
 	if want.Title != "" && got.Title != want.Title {
 		return fmt.Errorf("script step %d dialog title = %q, want %q", index, got.Title, want.Title)
 	}
+	if want.Body != "" && got.Body != want.Body {
+		return fmt.Errorf("script step %d dialog body = %q, want %q", index, got.Body, want.Body)
+	}
+	for _, text := range want.BodyContains {
+		if !strings.Contains(got.Body, text) {
+			return fmt.Errorf("script step %d dialog body missing %q in %q", index, text, got.Body)
+		}
+	}
+	for _, text := range want.BodyNotContains {
+		if strings.Contains(got.Body, text) {
+			return fmt.Errorf("script step %d dialog body unexpectedly contains %q in %q", index, text, got.Body)
+		}
+	}
+	if len(want.Actions) > 0 && !sameStringList(got.Actions, want.Actions) {
+		return fmt.Errorf("script step %d dialog actions = %#v, want %#v", index, got.Actions, want.Actions)
+	}
+	for _, action := range want.ActionContains {
+		if !stringListContains(got.Actions, action) {
+			return fmt.Errorf("script step %d dialog actions missing %q in %#v", index, action, got.Actions)
+		}
+	}
+	for _, action := range want.ActionNotContains {
+		if stringListContains(got.Actions, action) {
+			return fmt.Errorf("script step %d dialog actions unexpectedly contain %q in %#v", index, action, got.Actions)
+		}
+	}
+	if want.ActionCount != nil && len(got.Actions) != *want.ActionCount {
+		return fmt.Errorf("script step %d dialog action count = %d, want %d", index, len(got.Actions), *want.ActionCount)
+	}
+	if want.Focused != nil && got.Focused != *want.Focused {
+		return fmt.Errorf("script step %d dialog focused = %d, want %d", index, got.Focused, *want.Focused)
+	}
 	return nil
+}
+
+func sameStringList(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func stringListContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func compareVim(index int, got REPLScreen, want VimExpectation) error {

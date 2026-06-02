@@ -3498,6 +3498,53 @@ func TestRunDialogRuntimeScriptAcceptsPermissionRequestAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptChecksDialogDetails(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {"id": "perm_1", "tool_name": "Bash", "path": "/tmp/a", "description": "Run command", "actions": ["Allow", "Deny"]},
+			"expect_dialog": {
+				"active": true,
+				"id": "perm_1",
+				"kind": "permission",
+				"title": "Permission",
+				"body_contains": ["Tool: Bash", "Path: /tmp/a", "Run command"],
+				"bodyNotContains": "No active tasks",
+				"actions": ["Allow", "Deny"],
+				"actionCount": 2,
+				"actionContains": "Allow",
+				"action_not_contains": "Allow Session",
+				"focusedIndex": 0
+			}
+		},
+		{
+			"key": "tab",
+			"expectDialog": {
+				"active": true,
+				"id": "perm_1",
+				"actionContains": ["Deny"],
+				"focused": 1
+			}
+		},
+		{
+			"key": "enter",
+			"expectDialogResult": {"id": "perm_1", "kind": "permission", "action": "Deny", "status": "denied", "found": true},
+			"expectDialog": {"active": false}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultDenied {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
 		{

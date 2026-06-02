@@ -631,6 +631,94 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeStringFieldsToArray(data,
+		"actions",
+		"Actions",
+		"body_contains",
+		"bodyContains",
+		"body_not_contains",
+		"bodyNotContains",
+		"action_contains",
+		"actionContains",
+		"action_not_contains",
+		"actionNotContains",
+	)
+	type alias DialogExpectation
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*expect = DialogExpectation(raw)
+
+	var fields struct {
+		BodyContains        *stringList `json:"body_contains"`
+		BodyContainsCamel   *stringList `json:"bodyContains"`
+		BodyNotContains     *stringList `json:"body_not_contains"`
+		BodyNotCamel        *stringList `json:"bodyNotContains"`
+		Actions             *stringList `json:"actions"`
+		ActionContains      *stringList `json:"action_contains"`
+		ActionContainsCamel *stringList `json:"actionContains"`
+		ActionNotContains   *stringList `json:"action_not_contains"`
+		ActionNotCamel      *stringList `json:"actionNotContains"`
+		ActionCount         *int        `json:"action_count"`
+		ActionCountCamel    *int        `json:"actionCount"`
+		ActionsCount        *int        `json:"actions_count"`
+		ActionsCountCamel   *int        `json:"actionsCount"`
+		FocusedIndex        *int        `json:"focused_index"`
+		FocusedIndexCamel   *int        `json:"focusedIndex"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if fields.BodyContains != nil {
+		expect.BodyContains = stringListValue(fields.BodyContains)
+	}
+	if fields.BodyContainsCamel != nil {
+		expect.BodyContains = stringListValue(fields.BodyContainsCamel)
+	}
+	if fields.BodyNotContains != nil {
+		expect.BodyNotContains = stringListValue(fields.BodyNotContains)
+	}
+	if fields.BodyNotCamel != nil {
+		expect.BodyNotContains = stringListValue(fields.BodyNotCamel)
+	}
+	if fields.Actions != nil {
+		expect.Actions = stringListValue(fields.Actions)
+	}
+	if fields.ActionContains != nil {
+		expect.ActionContains = stringListValue(fields.ActionContains)
+	}
+	if fields.ActionContainsCamel != nil {
+		expect.ActionContains = stringListValue(fields.ActionContainsCamel)
+	}
+	if fields.ActionNotContains != nil {
+		expect.ActionNotContains = stringListValue(fields.ActionNotContains)
+	}
+	if fields.ActionNotCamel != nil {
+		expect.ActionNotContains = stringListValue(fields.ActionNotCamel)
+	}
+	if fields.ActionCount != nil {
+		expect.ActionCount = fields.ActionCount
+	}
+	if fields.ActionCountCamel != nil {
+		expect.ActionCount = fields.ActionCountCamel
+	}
+	if fields.ActionsCount != nil {
+		expect.ActionCount = fields.ActionsCount
+	}
+	if fields.ActionsCountCamel != nil {
+		expect.ActionCount = fields.ActionsCountCamel
+	}
+	if fields.FocusedIndex != nil {
+		expect.Focused = fields.FocusedIndex
+	}
+	if fields.FocusedIndexCamel != nil {
+		expect.Focused = fields.FocusedIndexCamel
+	}
+	return nil
+}
+
 func (message *Message) UnmarshalJSON(data []byte) error {
 	type alias Message
 	var raw alias
