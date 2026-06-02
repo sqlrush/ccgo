@@ -534,6 +534,26 @@ func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	}
 }
 
+func TestParseImageHintAcceptsSTTerminatorAndBase64Name(t *testing.T) {
+	key := ParseKey("\x1b]1337;File=name=Y2hhcnQucG5n;type=image/png;inline=1:AAAA\x1b\\")
+	if key.Type != KeyImageHint || key.Text != "[Image: chart.png]" || key.Filename != "chart.png" || key.MediaType != "image/png" || key.Content != "AAAA" {
+		t.Fatalf("key = %#v", key)
+	}
+
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(key)
+	image := prompt.PastedContents[1]
+	if prompt.Text != "[Image #1]" || image.Type != session.PastedContentImage || image.Filename != "chart.png" || image.Content != "AAAA" {
+		t.Fatalf("prompt = %#v image=%#v", prompt, image)
+	}
+
+	rawName := ParseKey("\x1b]1337;File=name=AAAA;inline=1:data\a")
+	if rawName.Type != KeyImageHint || rawName.Filename != "AAAA" || rawName.Text != "[Image: AAAA]" {
+		t.Fatalf("raw name = %#v", rawName)
+	}
+}
+
 func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 	cases := []struct {
 		seq  string

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/base64"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -817,13 +818,13 @@ func parseImageHint(seq string) (imageHint, bool) {
 	if !strings.HasPrefix(seq, prefix) {
 		return imageHint{}, false
 	}
-	payload := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), "\a")
+	payload := stripOSCTerminator(strings.TrimPrefix(seq, prefix))
 	metadata, content, _ := strings.Cut(payload, ":")
 	name := ""
 	mediaType := ""
 	for _, field := range strings.Split(metadata, ";") {
 		if raw, ok := strings.CutPrefix(field, "name="); ok {
-			name = strings.TrimSpace(raw)
+			name = decodeImageName(raw)
 			continue
 		}
 		if raw, ok := strings.CutPrefix(field, "type="); ok {
@@ -844,4 +845,49 @@ func parseImageHint(seq string) (imageHint, bool) {
 	}
 	display = "[Image: " + name + "]"
 	return imageHint{Display: display, Content: content, MediaType: mediaType, Filename: name}, true
+}
+
+func stripOSCTerminator(payload string) string {
+	if strings.HasSuffix(payload, "\a") {
+		return strings.TrimSuffix(payload, "\a")
+	}
+	if strings.HasSuffix(payload, "\x1b\\") {
+		return strings.TrimSuffix(payload, "\x1b\\")
+	}
+	return payload
+}
+
+func decodeImageName(raw string) string {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return ""
+	}
+	for _, encoding := range []*base64.Encoding{
+		base64.StdEncoding,
+		base64.RawStdEncoding,
+		base64.URLEncoding,
+		base64.RawURLEncoding,
+	} {
+		decoded, err := encoding.DecodeString(name)
+		if err != nil || len(decoded) == 0 || !utf8.Valid(decoded) {
+			continue
+		}
+		decodedName := strings.TrimSpace(string(decoded))
+		if isPrintableImageName(decodedName) {
+			return decodedName
+		}
+	}
+	return name
+}
+
+func isPrintableImageName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
