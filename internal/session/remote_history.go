@@ -52,6 +52,9 @@ type sessionEventsResponse struct {
 	Events            []contracts.SDKEvent `json:"events"`
 	Items             []contracts.SDKEvent `json:"items"`
 	Results           []contracts.SDKEvent `json:"results"`
+	Records           []contracts.SDKEvent `json:"records"`
+	Rows              []contracts.SDKEvent `json:"rows"`
+	Entries           []contracts.SDKEvent `json:"entries"`
 	HasMore           bool                 `json:"has_more"`
 	HasMoreCamel      bool                 `json:"hasMore"`
 	HasNext           bool                 `json:"has_next"`
@@ -108,6 +111,9 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		{name: "events", target: &r.Events},
 		{name: "items", target: &r.Items},
 		{name: "results", target: &r.Results},
+		{name: "records", target: &r.Records},
+		{name: "rows", target: &r.Rows},
+		{name: "entries", target: &r.Entries},
 	} {
 		value, ok := raw[spec.name]
 		if !ok {
@@ -117,7 +123,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 			return err
 		}
 	}
-	for _, name := range []string{"page", "pagination", "page_info", "pageInfo", "meta", "metadata"} {
+	for _, name := range []string{"page", "pagination", "page_info", "pageInfo", "paging", "links", "meta", "metadata"} {
 		value, ok := raw[name]
 		if !ok {
 			continue
@@ -187,7 +193,7 @@ func (r *sessionEventsResponse) mergeEventListField(name string, target *[]contr
 			return fmt.Errorf("%s: %w", name, err)
 		}
 		if *target == nil {
-			*target = firstEventList(nested.Data, nested.Events, nested.Items, nested.Results)
+			*target = firstEventList(nested.Data, nested.Events, nested.Items, nested.Results, nested.Records, nested.Rows, nested.Entries)
 		}
 		r.mergePageFields(nested)
 		return nil
@@ -223,6 +229,15 @@ func (r *sessionEventsResponse) mergeFrom(other sessionEventsResponse) {
 	}
 	if r.Results == nil {
 		r.Results = other.Results
+	}
+	if r.Records == nil {
+		r.Records = other.Records
+	}
+	if r.Rows == nil {
+		r.Rows = other.Rows
+	}
+	if r.Entries == nil {
+		r.Entries = other.Entries
 	}
 	r.mergePageFields(other)
 }
@@ -496,15 +511,28 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, resp.StatusCode, err
 	}
-	events := firstEventList(decoded.Data, decoded.Events, decoded.Items, decoded.Results)
+	events := firstEventList(decoded.Data, decoded.Events, decoded.Items, decoded.Results, decoded.Records, decoded.Rows, decoded.Entries)
 	if events == nil {
 		events = []contracts.SDKEvent{}
 	}
+	firstID := firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.NextCursor, decoded.NextCursorCamel, decoded.BeforeID, decoded.BeforeIDCamel, decoded.Cursor, decoded.CursorCamel, decoded.LastID, decoded.LastIDCamel)
+	if firstID == "" {
+		firstID = firstRemoteHistoryEventID(events)
+	}
 	return &RemoteHistoryPage{
 		Events:  events,
-		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.NextCursor, decoded.NextCursorCamel, decoded.BeforeID, decoded.BeforeIDCamel, decoded.Cursor, decoded.CursorCamel, decoded.LastID, decoded.LastIDCamel),
+		FirstID: firstID,
 		HasMore: decoded.HasMore || decoded.HasMoreCamel || decoded.HasNext || decoded.HasNextCamel,
 	}, resp.StatusCode, nil
+}
+
+func firstRemoteHistoryEventID(events []contracts.SDKEvent) string {
+	for _, event := range events {
+		if id := strings.TrimSpace(string(event.ID)); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 func firstEventList(values ...[]contracts.SDKEvent) []contracts.SDKEvent {

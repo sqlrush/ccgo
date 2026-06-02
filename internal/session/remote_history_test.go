@@ -314,6 +314,38 @@ func TestFetchRemoteHistoryAcceptsEventListAliases(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsRecordAliasesAndEventIDCursor(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"records":[{"type":"status","event_id":"evt_2","sessionUuid":"s","status":"latest"}],"links":{"has_next":true}}`))
+		case "evt_2":
+			_, _ = w.Write([]byte(`{"entries":[{"type":"status","eventId":"evt_1","sessionUUID":"s","status":"older"}],"paging":{"hasNext":false}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_2" || events.Events[0].SessionID != "s" || events.Events[1].ID != "evt_1" || events.Events[1].Status != "older" {
+		t.Fatalf("event aliases = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_2" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryStopsAtMaxPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

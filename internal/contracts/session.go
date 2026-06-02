@@ -38,3 +38,37 @@ type SDKEvent struct {
 	Error           string         `json:"error,omitempty"`
 	Meta            map[string]any `json:"meta,omitempty"`
 }
+
+func (e *SDKEvent) UnmarshalJSON(data []byte) error {
+	type SDKEventJSON SDKEvent
+	var aux struct {
+		*SDKEventJSON
+		EventIDSnake     ID `json:"event_id"`
+		EventIDCamel     ID `json:"eventId"`
+		SessionUUID      ID `json:"sessionUuid"`
+		SessionUUIDUpper ID `json:"sessionUUID"`
+		SessionUUIDSnake ID `json:"session_uuid"`
+	}
+	base := SDKEventJSON{}
+	aux.SDKEventJSON = &base
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*e = SDKEvent(base)
+	if e.ID == "" {
+		e.ID = aux.EventIDSnake
+	}
+	if e.ID == "" {
+		e.ID = aux.EventIDCamel
+	}
+	if e.SessionID == "" {
+		e.SessionID = aux.SessionUUID
+	}
+	if e.SessionID == "" {
+		e.SessionID = aux.SessionUUIDUpper
+	}
+	if e.SessionID == "" {
+		e.SessionID = aux.SessionUUIDSnake
+	}
+	return nil
+}
