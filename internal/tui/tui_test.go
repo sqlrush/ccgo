@@ -806,6 +806,9 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 		{Key: "shift-enter", Action: Action("insert-newline")},
 		{Key: "ctrl-n", Action: Action("history-prev")},
 		{Key: "ctrl-o", Action: Action("toggleTranscript")},
+		{Key: "ctrl-h", Action: ActionDeleteWordBack},
+		{Key: "ctrl-i", Action: ActionPageDown},
+		{Key: "ctrl-m", Action: ActionSubmitPrompt},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -827,6 +830,15 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 	if action := keymap.Resolve(ParseKey("\x0f")); action != ActionToggleTranscript {
 		t.Fatalf("ctrl-o camelCase action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\b")); action != ActionDeleteWordBack {
+		t.Fatalf("ctrl-h terminal alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\t")); action != ActionPageDown {
+		t.Fatalf("ctrl-i terminal alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\n")); action != ActionSubmitPrompt {
+		t.Fatalf("ctrl-m terminal alias action = %q", action)
 	}
 	for _, tc := range []struct {
 		name string
@@ -852,7 +864,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
 		}
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "altB", "metaD", "optionF", "altY", "altBackspace", "altLeft", "optionRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "control-left", "control-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "altB", "metaD", "optionF", "altY", "altBackspace", "altLeft", "optionRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "ctrlH", "controlI", "ctrlM", "ctrl-left", "ctrl-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "control-left", "control-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -3078,6 +3090,24 @@ func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	_, err = RunInteractionScriptChecked(&screen, []ScriptStep{{Keybindings: []BindingSpec{{Key: "wat", Action: ActionSubmitPrompt}}}})
 	if err == nil || !strings.Contains(err.Error(), "script step 0 keybindings") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunInteractionScriptAcceptsTerminalControlKeyAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"text":"az","key":"ctrl-h","expect_prompt":{"text":"a"}},
+		{"text":"b","key":"control-m","expect_event":{"type":"prompt_submitted","value":"ab"},"expect_prompt":{"empty":true}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ab" {
+		t.Fatalf("events = %#v", result.Events)
 	}
 }
 
