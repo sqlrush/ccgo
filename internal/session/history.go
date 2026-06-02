@@ -169,6 +169,12 @@ func PrepareStoredPastedContents(pastedContents map[int]PastedContent) map[int]S
 	stored := map[int]StoredPastedContent{}
 	for id, content := range pastedContents {
 		if content.Type == PastedContentImage {
+			stored[id] = StoredPastedContent{
+				ID:        content.ID,
+				Type:      content.Type,
+				MediaType: content.MediaType,
+				Filename:  content.Filename,
+			}
 			continue
 		}
 		if len(content.Content) <= MaxPastedContentLength {
@@ -208,6 +214,15 @@ func NewLogEntry(project string, sessionID contracts.ID, entry HistoryEntry, now
 func LogEntryToHistoryEntry(entry LogEntry, resolver PasteResolver) HistoryEntry {
 	pastedContents := map[int]PastedContent{}
 	for id, stored := range entry.PastedContents {
+		if stored.Type == PastedContentImage {
+			pastedContents[id] = PastedContent{
+				ID:        stored.ID,
+				Type:      stored.Type,
+				MediaType: stored.MediaType,
+				Filename:  stored.Filename,
+			}
+			continue
+		}
 		if stored.Content != "" {
 			pastedContents[id] = PastedContent{
 				ID:        stored.ID,

@@ -112,6 +112,9 @@ type Key struct {
 	Type         KeyType
 	Rune         rune
 	Text         string
+	Content      string
+	MediaType    string
+	Filename     string
 	MouseButton  int
 	MouseX       int
 	MouseY       int

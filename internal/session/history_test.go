@@ -48,7 +48,7 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	stored := PrepareStoredPastedContents(map[int]PastedContent{
 		1: {ID: 1, Type: PastedContentText, Content: "small", MediaType: "text/plain"},
 		2: {ID: 2, Type: PastedContentText, Content: large},
-		3: {ID: 3, Type: PastedContentImage, Content: "base64"},
+		3: {ID: 3, Type: PastedContentImage, Content: "base64", MediaType: "image/png", Filename: "chart.png"},
 	})
 	if stored[1].Content != "small" || stored[1].ContentHash != "" {
 		t.Fatalf("small stored = %#v", stored[1])
@@ -56,8 +56,8 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	if stored[2].Content != "" || stored[2].ContentHash != HashPastedText(large) {
 		t.Fatalf("large stored = %#v", stored[2])
 	}
-	if _, ok := stored[3]; ok {
-		t.Fatalf("image content should not be stored in prompt history: %#v", stored[3])
+	if stored[3].Type != PastedContentImage || stored[3].Content != "" || stored[3].ContentHash != "" || stored[3].MediaType != "image/png" || stored[3].Filename != "chart.png" {
+		t.Fatalf("image metadata should be stored without content: %#v", stored[3])
 	}
 
 	entry := LogEntryToHistoryEntry(LogEntry{
@@ -65,6 +65,7 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 		PastedContents: map[int]StoredPastedContent{
 			1: stored[1],
 			2: stored[2],
+			3: stored[3],
 		},
 	}, func(hash string) (string, bool) {
 		if hash != HashPastedText(large) {
@@ -74,6 +75,9 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	})
 	if entry.PastedContents[1].Content != "small" || entry.PastedContents[2].Content != large {
 		t.Fatalf("resolved entry = %#v", entry)
+	}
+	if entry.PastedContents[3].Type != PastedContentImage || entry.PastedContents[3].Content != "" || entry.PastedContents[3].Filename != "chart.png" {
+		t.Fatalf("resolved image entry = %#v", entry.PastedContents[3])
 	}
 }
 

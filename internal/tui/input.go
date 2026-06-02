@@ -67,8 +67,14 @@ func ParseKey(seq string) Key {
 	if text, ok := parseBracketedPaste(seq); ok {
 		return Key{Type: KeyPaste, Text: text}
 	}
-	if text, ok := parseImageHint(seq); ok {
-		return Key{Type: KeyImageHint, Text: text}
+	if image, ok := parseImageHint(seq); ok {
+		return Key{
+			Type:      KeyImageHint,
+			Text:      image.Display,
+			Content:   image.Content,
+			MediaType: image.MediaType,
+			Filename:  image.Filename,
+		}
 	}
 	if key, ok := parseSGRMouse(seq); ok {
 		return key
@@ -252,11 +258,7 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	case KeyPaste:
 		p.insertPaste(key.Text)
 	case KeyImageHint:
-		text := key.Text
-		if text == "" {
-			text = ImageHintPlaceholder
-		}
-		p.insertText(text)
+		p.insertImageHint(key)
 	case KeyBackspace:
 		if p.Cursor > 0 {
 			runes = append(runes[:p.Cursor-1], runes[p.Cursor:]...)
@@ -378,6 +380,33 @@ func (p *PromptState) insertPaste(text string) {
 		Content: text,
 	}
 	p.insertText(session.FormatPastedTextRef(id, session.PastedTextRefNumLines(text)))
+}
+
+func (p *PromptState) insertImageHint(key Key) {
+	text := key.Text
+	if text == "" {
+		text = ImageHintPlaceholder
+	}
+	if !p.UsePasteReferences {
+		p.insertText(text)
+		return
+	}
+	if p.PastedContents == nil {
+		p.resetPastedContents()
+	}
+	id := p.NextPastedID
+	if id <= 0 {
+		id = nextPastedID(p.PastedContents)
+	}
+	p.NextPastedID = id + 1
+	p.PastedContents[id] = session.PastedContent{
+		ID:        id,
+		Type:      session.PastedContentImage,
+		Content:   key.Content,
+		MediaType: key.MediaType,
+		Filename:  key.Filename,
+	}
+	p.insertText(session.FormatImageRef(id))
 }
 
 func (p *PromptState) resetPastedContents() {
@@ -612,25 +641,43 @@ func parseBracketedPaste(seq string) (string, bool) {
 	return "", false
 }
 
-func parseImageHint(seq string) (string, bool) {
+type imageHint struct {
+	Display   string
+	Content   string
+	MediaType string
+	Filename  string
+}
+
+func parseImageHint(seq string) (imageHint, bool) {
 	const prefix = "\x1b]1337;File="
 	if !strings.HasPrefix(seq, prefix) {
-		return "", false
+		return imageHint{}, false
 	}
-	payload := strings.TrimPrefix(seq, prefix)
-	if before, _, ok := strings.Cut(payload, ":"); ok {
-		payload = before
-	}
-	payload = strings.TrimSuffix(payload, "\a")
+	payload := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), "\a")
+	metadata, content, _ := strings.Cut(payload, ":")
 	name := ""
-	for _, field := range strings.Split(payload, ";") {
+	mediaType := ""
+	for _, field := range strings.Split(metadata, ";") {
 		if raw, ok := strings.CutPrefix(field, "name="); ok {
 			name = strings.TrimSpace(raw)
-			break
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "type="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "mediaType="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "mime="); ok {
+			mediaType = strings.TrimSpace(raw)
 		}
 	}
+	display := ImageHintPlaceholder
 	if name == "" {
-		return ImageHintPlaceholder, true
+		return imageHint{Display: display, Content: content, MediaType: mediaType}, true
 	}
-	return "[Image: " + name + "]", true
+	display = "[Image: " + name + "]"
+	return imageHint{Display: display, Content: content, MediaType: mediaType, Filename: name}, true
 }

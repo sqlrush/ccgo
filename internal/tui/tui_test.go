@@ -449,6 +449,27 @@ func TestPromptPasteReferencesCanStoreAndExpandPastedContent(t *testing.T) {
 	}
 }
 
+func TestPromptPasteReferencesCanStoreImageHints(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=name=chart.png;type=image/png;inline=1:AAAA\a"))
+	if prompt.Text != "[Image #1]" || prompt.ExpandedText() != "[Image #1]" {
+		t.Fatalf("prompt = %#v expanded=%q", prompt, prompt.ExpandedText())
+	}
+	image := prompt.PastedContents[1]
+	if image.Type != session.PastedContentImage || image.Filename != "chart.png" || image.MediaType != "image/png" || image.Content != "AAAA" {
+		t.Fatalf("image content = %#v", image)
+	}
+	entry := prompt.HistoryEntry()
+	if entry.Display != "[Image #1]" || entry.PastedContents[1].Filename != "chart.png" {
+		t.Fatalf("history entry = %#v", entry)
+	}
+	result := prompt.Apply(ParseKey("\n"))
+	if result.Submitted != "[Image #1]" || result.Display != "[Image #1]" || result.PastedContents[1].Type != session.PastedContentImage {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestPromptPasteReferencesSurviveDraftHistoryNavigation(t *testing.T) {
 	prompt := NewPromptState([]string{"old"})
 	prompt.EnablePasteReferences()
@@ -465,14 +486,15 @@ func TestPromptPasteReferencesSurviveDraftHistoryNavigation(t *testing.T) {
 
 func TestPromptHistoryRestoresPastedContentEntries(t *testing.T) {
 	prompt := NewPromptStateFromEntries([]session.HistoryEntry{{
-		Display: "use [Pasted text #1]",
+		Display: "use [Pasted text #1] [Image #2]",
 		PastedContents: map[int]session.PastedContent{
 			1: {ID: 1, Type: session.PastedContentText, Content: "expanded paste"},
+			2: {ID: 2, Type: session.PastedContentImage, Filename: "chart.png", MediaType: "image/png"},
 		},
 	}})
 	prompt.EnablePasteReferences()
 	prompt.Apply(ParseKey("\x1b[A"))
-	if prompt.Text != "use [Pasted text #1]" || prompt.ExpandedText() != "use expanded paste" {
+	if prompt.Text != "use [Pasted text #1] [Image #2]" || prompt.ExpandedText() != "use expanded paste [Image #2]" || prompt.PastedContents[2].Filename != "chart.png" {
 		t.Fatalf("history prompt = %#v expanded=%q", prompt, prompt.ExpandedText())
 	}
 	prompt.Apply(ParseKey("\x1b[B"))
