@@ -522,6 +522,36 @@ func TestMemoryAgentExtractsNestedFactSourceObjects(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsStructuredFactText(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_structured_text",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"facts":[
+			{"kind":"preference","content":[{"type":"text","text":"prefer structured memory text"},{"type":"text","text":"when models return content blocks"}],"source_uuid":"user_1"},
+			{"type":"decision","text":{"value":"keep nested text object parsing"},"messageUuid":"assistant_1"},
+			{"category":"tool","detail":{"content":"Used tool Search"},"sourceId":"assistant_2"}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember structured text")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 3 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer structured memory text\nwhen models return content blocks", "user_1") {
+		t.Fatalf("structured content fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "keep nested text object parsing", "assistant_1") {
+		t.Fatalf("nested text fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactTool, "Used tool Search", "assistant_2") {
+		t.Fatalf("nested detail fact missing = %#v", result.Facts)
+	}
+}
+
 func hasMemoryFact(facts []MemoryFact, kind FactKind, text string, source contracts.ID) bool {
 	for _, fact := range facts {
 		if fact.Kind == kind && fact.Text == text && fact.SourceUUID == source {

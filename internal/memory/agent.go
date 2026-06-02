@@ -616,7 +616,7 @@ func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
 
 func stringMapField(value map[string]any, keys ...string) string {
 	for _, key := range keys {
-		if text := stringFromValue(value[key]); text != "" {
+		if text := textFromValue(value[key]); text != "" {
 			return text
 		}
 	}
@@ -624,7 +624,7 @@ func stringMapField(value map[string]any, keys ...string) string {
 }
 
 func nestedIDFromValue(value any) string {
-	if text := stringFromValue(value); text != "" {
+	if text := directStringValue(value); text != "" {
 		return text
 	}
 	object, ok := value.(map[string]any)
@@ -634,7 +634,27 @@ func nestedIDFromValue(value any) string {
 	return stringMapField(object, "source_uuid", "sourceUuid", "source_id", "sourceId", "message_uuid", "messageUuid", "message_id", "messageId", "uuid", "id")
 }
 
-func stringFromValue(value any) string {
+func textFromValue(value any) string {
+	if text := directStringValue(value); text != "" {
+		return text
+	}
+	switch typed := value.(type) {
+	case []any:
+		var parts []string
+		for _, item := range typed {
+			if text := textFromValue(item); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		return stringMapField(typed, "text", "content", "summary", "value", "detail")
+	default:
+		return ""
+	}
+}
+
+func directStringValue(value any) string {
 	text, ok := value.(string)
 	if !ok {
 		return ""
