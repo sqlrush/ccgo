@@ -96,6 +96,10 @@ type sessionEventsResponse struct {
 	CursorCamel          string               `json:"pageCursor"`
 	LastID               string               `json:"last_id"`
 	LastIDCamel          string               `json:"lastId"`
+	NextLink             string
+	PreviousLink         string
+	PrevLink             string
+	OlderLink            string
 }
 
 func (r *sessionEventsResponse) UnmarshalJSON(data []byte) error {
@@ -248,6 +252,19 @@ func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage
 			return err
 		}
 	}
+	for _, spec := range []struct {
+		names  []string
+		target *string
+	}{
+		{names: []string{"next", "next_link", "nextLink", "next_url", "nextUrl", "next_href", "nextHref"}, target: &r.NextLink},
+		{names: []string{"previous", "previous_link", "previousLink", "previous_url", "previousUrl", "previous_href", "previousHref"}, target: &r.PreviousLink},
+		{names: []string{"prev", "prev_link", "prevLink", "prev_url", "prevUrl", "prev_href", "prevHref"}, target: &r.PrevLink},
+		{names: []string{"older", "older_link", "olderLink", "older_url", "olderUrl", "older_href", "olderHref"}, target: &r.OlderLink},
+	} {
+		if err := setLinkField(raw, spec.names, spec.target); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -371,6 +388,10 @@ func (r *sessionEventsResponse) mergePageFields(other sessionEventsResponse) {
 	setIfEmpty(&r.CursorCamel, other.CursorCamel)
 	setIfEmpty(&r.LastID, other.LastID)
 	setIfEmpty(&r.LastIDCamel, other.LastIDCamel)
+	setIfEmpty(&r.NextLink, other.NextLink)
+	setIfEmpty(&r.PreviousLink, other.PreviousLink)
+	setIfEmpty(&r.PrevLink, other.PrevLink)
+	setIfEmpty(&r.OlderLink, other.OlderLink)
 }
 
 func setBoolField(raw map[string]json.RawMessage, name string, target *bool) error {
@@ -419,6 +440,37 @@ func setStringField(raw map[string]json.RawMessage, name string, target *string)
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	*target = value
+	return nil
+}
+
+func setLinkField(raw map[string]json.RawMessage, names []string, target *string) error {
+	if *target != "" {
+		return nil
+	}
+	for _, name := range names {
+		data, ok := raw[name]
+		if !ok {
+			continue
+		}
+		data = bytes.TrimSpace(data)
+		if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(data, &value); err == nil {
+			*target = value
+			return nil
+		}
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(data, &object); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		value = remoteHistoryStringField(object, "href", "url", "uri", "link")
+		if value != "" {
+			*target = value
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -723,6 +775,7 @@ func responseNextBeforeID(decoded sessionEventsResponse, events []contracts.SDKE
 		decoded.CursorCamel,
 		decoded.LastID,
 		decoded.LastIDCamel,
+		responseLinkBeforeID(decoded),
 	)
 	if firstID != "" {
 		return firstID
@@ -743,7 +796,57 @@ func responseHasMore(decoded sessionEventsResponse) bool {
 		decoded.HasPreviousPageCamel ||
 		decoded.HasOlder ||
 		decoded.HasOlderCamel ||
-		decoded.More
+		decoded.More ||
+		responseLinkBeforeID(decoded) != ""
+}
+
+func responseLinkBeforeID(decoded sessionEventsResponse) string {
+	for _, link := range []string{decoded.PreviousLink, decoded.PrevLink, decoded.OlderLink, decoded.NextLink} {
+		if cursor := remoteHistoryLinkCursor(link); cursor != "" {
+			return cursor
+		}
+	}
+	return ""
+}
+
+func remoteHistoryLinkCursor(link string) string {
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return ""
+	}
+	parsed, err := url.Parse(link)
+	if err == nil {
+		query := parsed.Query()
+		if cursor := firstNonEmpty(
+			query.Get("before_id"),
+			query.Get("beforeId"),
+			query.Get("next_before_id"),
+			query.Get("nextBeforeId"),
+			query.Get("cursor"),
+			query.Get("pageCursor"),
+			query.Get("previous_cursor"),
+			query.Get("previousCursor"),
+			query.Get("prev_cursor"),
+			query.Get("prevCursor"),
+			query.Get("before_cursor"),
+			query.Get("beforeCursor"),
+			query.Get("older_cursor"),
+			query.Get("olderCursor"),
+			query.Get("start_cursor"),
+			query.Get("startCursor"),
+			query.Get("end_cursor"),
+			query.Get("endCursor"),
+		); cursor != "" {
+			return cursor
+		}
+		if parsed.Scheme != "" || parsed.Host != "" || strings.Contains(link, "/") {
+			return ""
+		}
+	}
+	if strings.ContainsAny(link, "?=&/") {
+		return ""
+	}
+	return link
 }
 
 func firstRemoteHistoryEventID(events []contracts.SDKEvent) string {
