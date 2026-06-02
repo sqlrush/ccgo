@@ -285,6 +285,47 @@ func TestRemoteHistoryTranscriptMessagesSortsAndLinksMissingParents(t *testing.T
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesUsesEventFallbackFields(t *testing.T) {
+	parent := contracts.ID("evt_u1")
+	events := []contracts.SDKEvent{
+		{
+			Type:            contracts.SDKEventAssistant,
+			ID:              "evt_a1",
+			SessionIDCamel:  "s1",
+			ParentUUIDCamel: &parent,
+			Timestamp:       "2026-01-01T00:00:02Z",
+			Message: &contracts.Message{
+				Type:    contracts.MessageAssistant,
+				Content: []contracts.ContentBlock{contracts.NewTextBlock("hello")},
+			},
+		},
+		{
+			Type:           contracts.SDKEventUser,
+			UUID:           "evt_u1",
+			SessionIDCamel: "s1",
+			Timestamp:      "2026-01-01T00:00:01Z",
+			Message: &contracts.Message{
+				Type:    contracts.MessageUser,
+				Content: []contracts.ContentBlock{contracts.NewTextBlock("hi")},
+			},
+		},
+	}
+
+	messages := RemoteHistoryTranscriptMessages(events)
+	if len(messages) != 2 || messages[0].UUID != "evt_u1" || messages[1].UUID != "evt_a1" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].SessionID != "s1" || messages[0].Timestamp != "2026-01-01T00:00:01Z" {
+		t.Fatalf("user fallback fields = %#v", messages[0])
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "evt_u1" {
+		t.Fatalf("assistant parent = %#v", messages[1].ParentUUID)
+	}
+	if messages[1].Message == nil || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_u1" || messages[1].Message.SessionID != "s1" || messages[1].Message.Timestamp != "2026-01-01T00:00:02Z" {
+		t.Fatalf("assistant message fallback fields = %#v", messages[1].Message)
+	}
+}
+
 func TestAppendRemoteHistoryTranscriptDeduplicatesExistingMessages(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","uuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hi"}]}}`,

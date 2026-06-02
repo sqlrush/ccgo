@@ -24,11 +24,17 @@ const (
 )
 
 type SDKEvent struct {
-	Type      SDKEventType   `json:"type"`
-	SessionID ID             `json:"session_id,omitempty"`
-	Message   *Message       `json:"message,omitempty"`
-	Status    string         `json:"status,omitempty"`
-	Result    any            `json:"result,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	Meta      map[string]any `json:"meta,omitempty"`
+	ID              ID             `json:"id,omitempty"`
+	UUID            ID             `json:"uuid,omitempty"`
+	Type            SDKEventType   `json:"type"`
+	SessionID       ID             `json:"session_id,omitempty"`
+	SessionIDCamel  ID             `json:"sessionId,omitempty"`
+	ParentUUID      *ID            `json:"parent_uuid,omitempty"`
+	ParentUUIDCamel *ID            `json:"parentUuid,omitempty"`
+	Timestamp       string         `json:"timestamp,omitempty"`
+	Message         *Message       `json:"message,omitempty"`
+	Status          string         `json:"status,omitempty"`
+	Result          any            `json:"result,omitempty"`
+	Error           string         `json:"error,omitempty"`
+	Meta            map[string]any `json:"meta,omitempty"`
 }

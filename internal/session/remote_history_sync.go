@@ -114,12 +114,22 @@ func remoteEventTranscriptMessage(event contracts.SDKEvent) TranscriptMessage {
 	if message.UUID == "" {
 		if message.ID != "" {
 			message.UUID = contracts.ID(message.ID)
+		} else if event.UUID != "" {
+			message.UUID = event.UUID
+		} else if event.ID != "" {
+			message.UUID = event.ID
 		} else {
 			message.UUID = remoteHistoryEventUUID(event)
 		}
 	}
 	if message.SessionID == "" {
-		message.SessionID = event.SessionID
+		message.SessionID = remoteEventSessionID(event)
+	}
+	if message.ParentUUID == nil {
+		message.ParentUUID = remoteEventParentUUID(event)
+	}
+	if message.Timestamp == "" {
+		message.Timestamp = event.Timestamp
 	}
 	return TranscriptMessage{
 		Type:       entryType,
@@ -130,6 +140,20 @@ func remoteEventTranscriptMessage(event contracts.SDKEvent) TranscriptMessage {
 		Subtype:    message.Subtype,
 		Message:    message,
 	}
+}
+
+func remoteEventSessionID(event contracts.SDKEvent) contracts.ID {
+	if event.SessionID != "" {
+		return event.SessionID
+	}
+	return event.SessionIDCamel
+}
+
+func remoteEventParentUUID(event contracts.SDKEvent) *contracts.ID {
+	if event.ParentUUID != nil {
+		return cloneIDPtr(event.ParentUUID)
+	}
+	return cloneIDPtr(event.ParentUUIDCamel)
 }
 
 func linkMissingRemoteParents(messages []TranscriptMessage, existing map[contracts.ID]struct{}) {
