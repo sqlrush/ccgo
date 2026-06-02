@@ -3701,6 +3701,36 @@ func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsTaskExpectationAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"upsertTask": {"taskId": "task_1", "name": "Build", "status": "running", "statusText": "go test", "progressPercent": 40},
+			"expectTasks": {
+				"taskCount": 1,
+				"statusCounts": {"running": 1},
+				"contains": {"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 40}
+			}
+		},
+		{
+			"cancelAllTasks": true,
+			"cancelTasksDetail": "stopped",
+			"expectTasks": {
+				"total": 1,
+				"countsByState": {"cancelled": 1},
+				"contains": {"id": "task_1", "state": "cancelled", "detail": "stopped"}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(50, 9, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"input": "go", "expectPrompt": {"text": "go"}},

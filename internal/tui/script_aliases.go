@@ -886,6 +886,20 @@ func intPtrJSONField(fields map[string]json.RawMessage, names ...string) *int {
 	return nil
 }
 
+func intMapJSONField(fields map[string]json.RawMessage, names ...string) map[string]int {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value map[string]int
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return nil
+}
+
 func roleJSONField(fields map[string]json.RawMessage, names ...string) (Role, bool) {
 	for _, name := range names {
 		raw, ok := fields[name]
@@ -1108,11 +1122,21 @@ func (expect *TasksExpectation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
+	if expect.Count == nil {
+		expect.Count = intPtrJSONField(fieldMap, "task_count", "taskCount", "total", "size", "length")
+	}
 	if fields.StateCounts != nil {
 		expect.StateCounts = fields.StateCounts
 	}
 	if fields.StateCountsCamel != nil {
 		expect.StateCounts = fields.StateCountsCamel
+	}
+	if len(expect.StateCounts) == 0 {
+		expect.StateCounts = intMapJSONField(fieldMap, "status_counts", "statusCounts", "counts", "counts_by_state", "countsByState", "by_state", "byState")
 	}
 	return nil
 }
