@@ -34,9 +34,29 @@ func RenderStatusLine(status string, width int) string {
 }
 
 func RenderPromptLine(prompt PromptState, width int) string {
+	lines := RenderPromptLines(prompt, width)
+	if len(lines) == 0 {
+		return padOrTrim("> ", width)
+	}
+	return lines[0]
+}
+
+func RenderPromptLines(prompt PromptState, width int) []string {
 	prefix := "> "
-	line := prefix + prompt.Text
-	return padOrTrim(line, width)
+	continuation := "  "
+	rawLines := strings.Split(prompt.Text, "\n")
+	if len(rawLines) == 0 {
+		rawLines = []string{""}
+	}
+	lines := make([]string, 0, len(rawLines))
+	for index, line := range rawLines {
+		linePrefix := continuation
+		if index == 0 {
+			linePrefix = prefix
+		}
+		lines = append(lines, padOrTrim(linePrefix+line, width))
+	}
+	return lines
 }
 
 func RenderReverseSearchLine(state ReverseSearchState, width int) string {

@@ -50,10 +50,18 @@ func (r Renderer) Render(frame Frame) string {
 		height = 24
 	}
 
-	bodyHeight := height - 2
-	if frame.Dialog != nil {
-		bodyHeight = height - 2
+	promptLines := footerPromptLines(frame, width)
+	hiddenPromptLines := 0
+	maxPromptLines := height - 1
+	if maxPromptLines < 0 {
+		maxPromptLines = 0
 	}
+	if len(promptLines) > maxPromptLines {
+		hiddenPromptLines = len(promptLines) - maxPromptLines
+		promptLines = promptLines[hiddenPromptLines:]
+	}
+
+	bodyHeight := height - 1 - len(promptLines)
 	if bodyHeight < 0 {
 		bodyHeight = 0
 	}
@@ -85,11 +93,7 @@ func (r Renderer) Render(frame Frame) string {
 		lines = append(lines, padOrTrim(line, width))
 	}
 	lines = append(lines, RenderStatusLine(frame.Status, width))
-	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
-		lines = append(lines, RenderReverseSearchLine(*frame.ReverseSearch, width))
-	} else {
-		lines = append(lines, RenderPromptLine(frame.Prompt, width))
-	}
+	lines = append(lines, promptLines...)
 
 	var out strings.Builder
 	out.WriteString(HomeCursor)
@@ -101,12 +105,12 @@ func (r Renderer) Render(frame Frame) string {
 	}
 	out.WriteString(strings.Join(lines, "\r\n"))
 	if frame.ShowCursor {
-		cursorCol := promptCursorColumn(frame, width)
+		cursorRow, cursorCol := promptCursorPosition(frame, width, height, len(promptLines), hiddenPromptLines)
 		if cursorCol > width {
 			cursorCol = width
 		}
 		out.WriteString("\x1b[")
-		out.WriteString(itoa(height))
+		out.WriteString(itoa(cursorRow))
 		out.WriteString(";")
 		out.WriteString(itoa(cursorCol))
 		out.WriteString("H")
@@ -114,15 +118,60 @@ func (r Renderer) Render(frame Frame) string {
 	return out.String()
 }
 
-func promptCursorColumn(frame Frame, width int) int {
+func footerPromptLines(frame Frame, width int) []string {
+	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
+		return []string{RenderReverseSearchLine(*frame.ReverseSearch, width)}
+	}
+	return RenderPromptLines(frame.Prompt, width)
+}
+
+func promptCursorPosition(frame Frame, width int, height int, promptLineCount int, hiddenPromptLines int) (int, int) {
 	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
 		col := len([]rune("(reverse-i-search) `")) + frame.ReverseSearch.Cursor + 1
 		if col < 1 {
-			return 1
+			return height, 1
 		}
-		return col
+		return height, col
 	}
-	return 3 + frame.Prompt.Cursor
+	if promptLineCount <= 0 {
+		return height, 1
+	}
+	line, col := promptCursorLogicalPosition(frame.Prompt)
+	line -= hiddenPromptLines
+	if line < 0 {
+		line = 0
+		col = 0
+	}
+	if line >= promptLineCount {
+		line = promptLineCount - 1
+	}
+	row := height - promptLineCount + line + 1
+	if row < 1 {
+		row = 1
+	}
+	return row, 3 + col
+}
+
+func promptCursorLogicalPosition(prompt PromptState) (int, int) {
+	runes := []rune(prompt.Text)
+	cursor := prompt.Cursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	line := 0
+	col := 0
+	for i := 0; i < cursor; i++ {
+		if runes[i] == '\n' {
+			line++
+			col = 0
+			continue
+		}
+		col++
+	}
+	return line, col
 }
 
 func RenderOnce(width int, height int, frame Frame) string {

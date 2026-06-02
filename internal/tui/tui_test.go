@@ -2454,6 +2454,25 @@ func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	}
 }
 
+func TestRendererRendersMultilinePromptAndCursor(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.Text = "first\nsecond"
+	prompt.Cursor = len([]rune("first\nsec"))
+	output := RenderOnce(24, 6, Frame{
+		Messages:   []Message{{Role: RoleAssistant, Text: "hello"}},
+		Status:     "ready",
+		Prompt:     prompt,
+		ShowCursor: true,
+	})
+	visible := StripANSI(output)
+	if !strings.Contains(visible, "> first") || !strings.Contains(visible, "  second") {
+		t.Fatalf("visible prompt = %q", visible)
+	}
+	if !strings.Contains(output, "\x1b[6;6H") {
+		t.Fatalf("cursor output = %q", output)
+	}
+}
+
 func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"
