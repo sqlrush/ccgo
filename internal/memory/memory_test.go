@@ -632,12 +632,20 @@ func TestMemoryAgentRecallParsesAlternateModelResponseKeys(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "other",
+		Summary:   "credential rotation notes",
+		UpdatedAt: time.Unix(100, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:      "msg_recall_camel",
 		Type:    "message",
 		Role:    "assistant",
 		Model:   "sonnet",
-		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"search_query":"database access","sessionIds":["prior"]}`)},
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"searchQuery":"database access","selectedIds":["prior"]}`)},
 	}}
 	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
 	if err != nil {
@@ -648,6 +656,18 @@ func TestMemoryAgentRecallParsesAlternateModelResponseKeys(t *testing.T) {
 	}
 	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
 		t.Fatalf("matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{"expandedQuery":"credential rotation","memoryIds":["other"]}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credential rotation?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential rotation" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other" {
+		t.Fatalf("memory id alias result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("memory id alias matches = %#v", result.Matches)
 	}
 }
 
