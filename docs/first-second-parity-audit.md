@@ -155,6 +155,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script message steps now accept chat/transcript-style `type`/`speaker` role aliases and `content`/`body`/`message` text aliases.
 - `internal/tui`: interaction script message injection now accepts `messages`, `append_messages`/`appendMessages`, and `transcript_messages`/`transcriptMessages` object or object-array aliases.
 - `internal/tui`: interaction script image steps now accept filename aliases such as `fileName`/`file_name`/`name`, media-type aliases such as `mimeType`/`mime_type`/`contentType`, and content aliases such as `data`/`base64`.
+- `internal/tui`: interaction script direct dialog steps now accept ID, kind, title/body, action-list, and focused-index aliases aligned with dialog expectations.
 - `internal/tui`: interaction script permission request steps now accept request/permission/tool-use ID aliases, path aliases, description aliases, action-list aliases, and single-string `actions`.
 - `internal/tui`: interaction script prompt expectations now accept text, expanded text, cursor, and empty aliases such as `value`/`input`/`content`/`message`, `expandedText`/`fullText`, `cursorIndex`/`cursorPosition`, and `isEmpty`/`blank`.
 - `internal/tui`: interaction script Vim expectations now accept enabled, mode, register, and linewise aliases such as `vimEnabled`/`isEnabled`, `vimMode`/`modeName`/`currentMode`, `vimRegister`/`registerValue`/`yankRegister`, and `registerLinewise`/`linewise`.

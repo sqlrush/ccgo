@@ -1005,6 +1005,48 @@ func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (dialog *Dialog) UnmarshalJSON(data []byte) error {
+	data = normalizeStringFieldsToArray(data,
+		"actions",
+		"Actions",
+		"options",
+		"choices",
+		"buttons",
+	)
+	type alias Dialog
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*dialog = Dialog(raw)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if dialog.Title == "" {
+		dialog.Title = stringJSONField(fields, "heading", "header", "label", "name")
+	}
+	if dialog.Body == "" {
+		dialog.Body = stringJSONField(fields, "content", "text", "message", "description")
+	}
+	if len(dialog.Actions) == 0 {
+		dialog.Actions = stringListJSONField(fields, "options", "choices", "buttons")
+	}
+	if focused := intPtrJSONField(fields, "focused_index", "focusedIndex", "selected_index", "selectedIndex", "focus", "selected"); focused != nil {
+		dialog.Focused = *focused
+	}
+	if dialog.ID == "" {
+		dialog.ID = stringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID")
+	}
+	if dialog.Kind == "" {
+		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
+			dialog.Kind = DialogKind(dialogKind)
+		}
+	}
+	return nil
+}
+
 func (message *Message) UnmarshalJSON(data []byte) error {
 	type alias Message
 	var raw alias

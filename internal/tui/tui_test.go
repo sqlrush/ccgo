@@ -3794,6 +3794,45 @@ func TestRunDialogRuntimeScriptAcceptsDialogFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsDialogStepAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"dialog": {
+				"dialogId": "custom",
+				"dialogKind": "permission",
+				"heading": "Custom",
+				"content": "Choose carefully.",
+				"options": "Proceed",
+				"focusedIndex": 0
+			},
+			"expectDialog": {
+				"visible": true,
+				"dialogId": "custom",
+				"dialogKind": "permission",
+				"heading": "Custom",
+				"content": "Choose carefully.",
+				"actions": "Proceed",
+				"focusedIndex": 0
+			}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "dialog_action", "value": "Proceed", "dialogId": "custom", "dialogKind": "permission"}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].DialogID != "custom" || result.Events[0].Value != "Proceed" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
 		{
