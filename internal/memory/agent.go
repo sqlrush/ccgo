@@ -504,10 +504,8 @@ func parseFactsJSON(raw string) ([]MemoryFact, error) {
 	entries := collectRawMemoryFacts(value)
 	var facts []MemoryFact
 	for _, entry := range entries {
-		kind := FactKind(strings.TrimSpace(firstNonEmpty(entry.Kind, entry.Type, entry.FactType, entry.Category, entry.Label)))
-		switch kind {
-		case FactPreference, FactRequest, FactDecision, FactTool:
-		default:
+		kind, ok := normalizeFactKind(firstNonEmpty(entry.Kind, entry.Type, entry.FactType, entry.Category, entry.Label))
+		if !ok {
 			continue
 		}
 		text := strings.TrimSpace(firstNonEmpty(entry.Text, entry.Content, entry.Summary, entry.Value, entry.Detail))
@@ -518,6 +516,23 @@ func parseFactsJSON(raw string) ([]MemoryFact, error) {
 		facts = append(facts, MemoryFact{Kind: kind, Text: text, SourceUUID: contracts.ID(sourceUUID)})
 	}
 	return facts, nil
+}
+
+func normalizeFactKind(raw string) (FactKind, bool) {
+	name := strings.ToLower(strings.TrimSpace(raw))
+	name = strings.NewReplacer("-", "_", " ", "_").Replace(name)
+	switch name {
+	case "preference", "pref", "user_preference", "memory_preference":
+		return FactPreference, true
+	case "request", "user_request", "ask", "todo", "task":
+		return FactRequest, true
+	case "decision", "decided", "choice", "resolution":
+		return FactDecision, true
+	case "tool", "tool_use", "tool_result", "tool_call":
+		return FactTool, true
+	default:
+		return "", false
+	}
 }
 
 func collectRawMemoryFacts(value any) []rawMemoryFact {

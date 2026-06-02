@@ -418,6 +418,40 @@ func TestMemoryAgentExtractsAlternateFactFieldNames(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsFactKindAliases(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_kind_aliases",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"facts":[
+			{"kind":"Preference","text":"prefer concise updates","source_uuid":"user_1"},
+			{"type":"user_request","content":"continue M6 memory parity","source_id":"user_2"},
+			{"category":"tool-use","summary":"Used tool Bash","uuid":"assistant_1"},
+			{"label":"resolution","detail":"keep recall parser permissive","messageUuid":"assistant_2"}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember concise updates")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 4 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer concise updates", "user_1") {
+		t.Fatalf("preference alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactRequest, "continue M6 memory parity", "user_2") {
+		t.Fatalf("request alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactTool, "Used tool Bash", "assistant_1") {
+		t.Fatalf("tool alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "keep recall parser permissive", "assistant_2") {
+		t.Fatalf("decision alias missing = %#v", result.Facts)
+	}
+}
+
 func TestMemoryAgentExtractsNestedFactResponseShapes(t *testing.T) {
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_memory_nested_fields",
