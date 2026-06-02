@@ -10,7 +10,21 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	type TranscriptMessageJSON TranscriptMessage
 	var aux struct {
 		*TranscriptMessageJSON
+		ID                     contracts.ID     `json:"id"`
+		MessageID              contracts.ID     `json:"messageId"`
+		MessageIDSnake         contracts.ID     `json:"message_id"`
+		MessageUUID            contracts.ID     `json:"messageUuid"`
+		MessageUUIDUpper       contracts.ID     `json:"messageUUID"`
+		MessageUUIDSnake       contracts.ID     `json:"message_uuid"`
 		ParentUUIDSnake        *contracts.ID    `json:"parent_uuid"`
+		ParentID               *contracts.ID    `json:"parentId"`
+		ParentIDSnake          *contracts.ID    `json:"parent_id"`
+		ParentMessageID        *contracts.ID    `json:"parentMessageId"`
+		ParentMessageIDUpper   *contracts.ID    `json:"parentMessageID"`
+		ParentMessageIDSnake   *contracts.ID    `json:"parent_message_id"`
+		ParentMessageUUID      *contracts.ID    `json:"parentMessageUuid"`
+		ParentMessageUUIDUpper *contracts.ID    `json:"parentMessageUUID"`
+		ParentMessageUUIDSnake *contracts.ID    `json:"parent_message_uuid"`
 		LogicalParentUUIDSnake *contracts.ID    `json:"logical_parent_uuid"`
 		SessionIDSnake         contracts.ID     `json:"session_id"`
 		SessionUUID            contracts.ID     `json:"sessionUuid"`
@@ -27,8 +41,21 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*m = TranscriptMessage(base)
+	if m.UUID == "" {
+		m.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
+	}
 	if m.ParentUUID == nil {
-		m.ParentUUID = cloneIDPtr(aux.ParentUUIDSnake)
+		m.ParentUUID = firstTranscriptIDPtr(
+			aux.ParentUUIDSnake,
+			aux.ParentMessageUUID,
+			aux.ParentMessageUUIDUpper,
+			aux.ParentMessageUUIDSnake,
+			aux.ParentMessageID,
+			aux.ParentMessageIDUpper,
+			aux.ParentMessageIDSnake,
+			aux.ParentID,
+			aux.ParentIDSnake,
+		)
 	}
 	if m.LogicalParentUUID == nil {
 		m.LogicalParentUUID = cloneIDPtr(aux.LogicalParentUUIDSnake)
@@ -64,7 +91,21 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 	type TranscriptEnvelopeJSON transcriptEnvelope
 	var aux struct {
 		*TranscriptEnvelopeJSON
-		ParentUUIDSnake *contracts.ID `json:"parent_uuid"`
+		ID                     contracts.ID  `json:"id"`
+		MessageID              contracts.ID  `json:"messageId"`
+		MessageIDSnake         contracts.ID  `json:"message_id"`
+		MessageUUID            contracts.ID  `json:"messageUuid"`
+		MessageUUIDUpper       contracts.ID  `json:"messageUUID"`
+		MessageUUIDSnake       contracts.ID  `json:"message_uuid"`
+		ParentUUIDSnake        *contracts.ID `json:"parent_uuid"`
+		ParentID               *contracts.ID `json:"parentId"`
+		ParentIDSnake          *contracts.ID `json:"parent_id"`
+		ParentMessageID        *contracts.ID `json:"parentMessageId"`
+		ParentMessageIDUpper   *contracts.ID `json:"parentMessageID"`
+		ParentMessageIDSnake   *contracts.ID `json:"parent_message_id"`
+		ParentMessageUUID      *contracts.ID `json:"parentMessageUuid"`
+		ParentMessageUUIDUpper *contracts.ID `json:"parentMessageUUID"`
+		ParentMessageUUIDSnake *contracts.ID `json:"parent_message_uuid"`
 	}
 	base := TranscriptEnvelopeJSON{}
 	aux.TranscriptEnvelopeJSON = &base
@@ -72,8 +113,39 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = transcriptEnvelope(base)
+	if e.UUID == "" {
+		e.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
+	}
 	if e.ParentUUID == nil {
-		e.ParentUUID = cloneIDPtr(aux.ParentUUIDSnake)
+		e.ParentUUID = firstTranscriptIDPtr(
+			aux.ParentUUIDSnake,
+			aux.ParentMessageUUID,
+			aux.ParentMessageUUIDUpper,
+			aux.ParentMessageUUIDSnake,
+			aux.ParentMessageID,
+			aux.ParentMessageIDUpper,
+			aux.ParentMessageIDSnake,
+			aux.ParentID,
+			aux.ParentIDSnake,
+		)
+	}
+	return nil
+}
+
+func firstTranscriptID(values ...contracts.ID) contracts.ID {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstTranscriptIDPtr(values ...*contracts.ID) *contracts.ID {
+	for _, value := range values {
+		if value != nil && *value != "" {
+			return cloneIDPtr(value)
+		}
 	}
 	return nil
 }

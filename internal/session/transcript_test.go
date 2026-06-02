@@ -73,6 +73,42 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","messageUuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"progress","messageId":"p1","parentMessageUuid":"u1"}`,
+		`{"type":"assistant","message_id":"a1","parentMessageID":"p1","session_id":"sess_1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","session_id":"sess_1","content":[{"type":"text","text":"done"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil || assistant.ParentUUID == nil || *assistant.ParentUUID != "u1" {
+		t.Fatalf("aliased assistant parent = %#v", assistant)
+	}
+	chain := transcript.BuildConversationChain("a1")
+	if got := chainIDs(chain); strings.Join(got, ",") != "u1,a1" {
+		t.Fatalf("aliased uuid chain = %#v", got)
+	}
+
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref := index.Entries[index.ByUUID["a1"]]; ref.SessionID != "sess_1" || ref.ParentUUID == nil || *ref.ParentUUID != "u1" {
+		t.Fatalf("aliased uuid line ref = %#v", ref)
+	}
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1" || resume.Messages[1].UUID != "a1" {
+		t.Fatalf("aliased uuid indexed resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+}
+
 func TestLoadTranscriptAcceptsSessionUUIDAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"custom-title","session_uuid":"sess_uuid","customTitle":"UUID Title"}`,
