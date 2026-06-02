@@ -71,11 +71,11 @@ func ParseKeyName(raw string) (KeyType, error) {
 	name = strings.ReplaceAll(name, "_", "-")
 	compact := strings.NewReplacer("-", "", "+", "").Replace(name)
 	switch name {
-	case "enter", "return", "ctrl+m", "ctrl-m", "control+m", "control-m":
+	case "enter", "return", "ctrl+j", "ctrl-j", "control+j", "control-j", "ctrl+m", "ctrl-m", "control+m", "control-m":
 		return KeyEnter, nil
 	case "shift+enter", "shift-enter", "shift+return", "shift-return":
 		return KeyShiftEnter, nil
-	case "esc", "escape":
+	case "esc", "escape", "ctrl+[", "ctrl-[", "control+[", "control-[":
 		return KeyEsc, nil
 	case "alt+b", "alt-b", "meta+b", "meta-b", "option+b", "option-b":
 		return KeyAltB, nil
@@ -87,7 +87,7 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyAltY, nil
 	case "alt+backspace", "alt-backspace", "meta+backspace", "meta-backspace", "option+backspace", "option-backspace":
 		return KeyAltBS, nil
-	case "backspace", "bs", "ctrl+h", "ctrl-h", "control+h", "control-h":
+	case "backspace", "bs", "ctrl+?", "ctrl-?", "control+?", "control-?", "ctrl+h", "ctrl-h", "control+h", "control-h":
 		return KeyBackspace, nil
 	case "delete", "del":
 		return KeyDelete, nil
@@ -169,8 +169,10 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyFocusOut, nil
 	}
 	switch compact {
-	case "ctrlm", "controlm":
+	case "ctrlj", "controlj", "ctrlm", "controlm":
 		return KeyEnter, nil
+	case "ctrl[", "control[":
+		return KeyEsc, nil
 	case "shiftenter", "shiftreturn":
 		return KeyShiftEnter, nil
 	case "shifttab":
@@ -185,7 +187,7 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyAltY, nil
 	case "altbackspace", "metabackspace", "optionbackspace":
 		return KeyAltBS, nil
-	case "ctrlh", "controlh":
+	case "ctrl?", "control?", "ctrlh", "controlh":
 		return KeyBackspace, nil
 	case "ctrli", "controli":
 		return KeyTab, nil

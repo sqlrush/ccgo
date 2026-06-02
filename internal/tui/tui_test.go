@@ -877,6 +877,31 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 }
 
+func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
+		{Key: "controlJ", Action: ActionSubmitPrompt},
+		{Key: "control[", Action: ActionCancel},
+		{Key: "control?", Action: ActionDeleteWordBack},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\n")); action != ActionSubmitPrompt {
+		t.Fatalf("ctrl-j alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b")); action != ActionCancel {
+		t.Fatalf("ctrl-[ alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x7f")); action != ActionDeleteWordBack {
+		t.Fatalf("ctrl-? alias action = %q", action)
+	}
+	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "ctrl-[", "control-[", "ctrl[", "control[", "ctrl-?", "control-?", "ctrl?", "control?"} {
+		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
+			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
+		}
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
 	specs, err := ParseKeyBindingSpecs([]byte(`[
 		{"keys": "ctrl-r", "command": "pageDown"},
@@ -3096,7 +3121,10 @@ func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 func TestRunInteractionScriptAcceptsTerminalControlKeyAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"text":"az","key":"ctrl-h","expect_prompt":{"text":"a"}},
-		{"text":"b","key":"control-m","expect_event":{"type":"prompt_submitted","value":"ab"},"expect_prompt":{"empty":true}}
+		{"text":"b","key":"control-m","expect_event":{"type":"prompt_submitted","value":"ab"},"expect_prompt":{"empty":true}},
+		{"text":"line","key":"control-j","expect_event":{"type":"prompt_submitted","value":"line"},"expect_prompt":{"empty":true}},
+		{"text":"cancel me","key":"ctrl-[","expect_event":{"type":"cancelled"},"expect_prompt":{"text":"cancel me"}},
+		{"text":"x","key":"ctrl-?","expect_prompt":{"text":"cancel me"}}
 	]`))
 	if err != nil {
 		t.Fatal(err)
@@ -3106,7 +3134,10 @@ func TestRunInteractionScriptAcceptsTerminalControlKeyAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ab" {
+	if len(result.Events) != 3 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ab" ||
+		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "line" ||
+		result.Events[2].Type != ScreenEventCancelled {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }
