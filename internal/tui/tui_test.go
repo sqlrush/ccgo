@@ -4051,6 +4051,36 @@ func TestRunInteractionScriptChecksViewport(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsScreenViewportAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"expectScreen": {"columns": 22, "rows": 6}},
+		{"message": {"role": "system", "text": "one"}},
+		{"message": {"role": "system", "text": "two"}},
+		{"message": {"role": "system", "text": "three"}},
+		{"message": {"role": "system", "text": "four"}},
+		{
+			"message": {"role": "system", "text": "five"},
+			"expectViewport": {"scrollOffset": 1, "visibleRows": 4, "visibleContains": "system: five"}
+		},
+		{
+			"key": "\u001b[5~",
+			"expectViewport": {"scroll_offset": 0, "lineCount": 4, "visibleNotContains": "system: five"}
+		},
+		{
+			"resizeWidth": 30,
+			"resizeHeight": 7,
+			"expectScreen": {"screenWidth": 30, "screenHeight": 7}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(22, 6, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptChecksFocusState(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	focused := true

@@ -1175,8 +1175,20 @@ func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
+	if expect.Offset == nil {
+		expect.Offset = intPtrJSONField(fieldMap, "scroll_offset", "scrollOffset", "viewport_offset", "viewportOffset", "top", "start_line", "startLine")
+	}
 	if fields.VisibleLineCount != nil {
 		expect.VisibleLineCount = *fields.VisibleLineCount
+	}
+	if expect.VisibleLineCount == 0 {
+		if visibleLineCount := intPtrJSONField(fieldMap, "line_count", "lineCount", "visible_rows", "visibleRows", "visible_lines", "visibleLines", "rows"); visibleLineCount != nil {
+			expect.VisibleLineCount = *visibleLineCount
+		}
 	}
 	if fields.VisibleContains != nil {
 		expect.VisibleContains = stringListValue(fields.VisibleContains)
@@ -1189,6 +1201,31 @@ func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
 	}
 	if fields.VisibleNotContainsCamel != nil {
 		expect.VisibleNotContains = stringListValue(fields.VisibleNotContainsCamel)
+	}
+	return nil
+}
+
+func (expect *ScreenExpectation) UnmarshalJSON(data []byte) error {
+	type alias ScreenExpectation
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*expect = ScreenExpectation(raw)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if expect.Width == 0 {
+		if width := intPtrJSONField(fields, "screen_width", "screenWidth", "columns", "cols", "column_count", "columnCount"); width != nil {
+			expect.Width = *width
+		}
+	}
+	if expect.Height == 0 {
+		if height := intPtrJSONField(fields, "screen_height", "screenHeight", "rows", "lines", "row_count", "rowCount", "line_count", "lineCount"); height != nil {
+			expect.Height = *height
+		}
 	}
 	return nil
 }
