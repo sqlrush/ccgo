@@ -865,6 +865,67 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
+	specs, err := ParseKeyBindingSpecs([]byte(`[
+		{"keys": "ctrl-r", "command": "pageDown"},
+		{"key_sequence": "ctrl-x ctrl-k", "action_name": "none"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
+		t.Fatalf("ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionNone {
+		t.Fatalf("removed ctrl-x ctrl-k action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionDeleteToEnd {
+		t.Fatalf("ctrl-k after cleared chord action = %q", action)
+	}
+
+	specs, err = ParseKeyBindingSpecs([]byte(`{"esc":"none","focus-out":"reverseSearch"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keymap, err = KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b")); action != ActionNone {
+		t.Fatalf("esc map action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[O")); action != ActionReverseSearch {
+		t.Fatalf("focus-out map action = %q", action)
+	}
+
+	wrapper := []byte(`{"keybindings":[{"keySequence":"shiftEnter","actionName":"insertNewline"}]}`)
+	specs, err = ParseKeyBindingSpecs(wrapper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Key != "shiftEnter" || specs[0].Action != Action("insertNewline") {
+		t.Fatalf("wrapper specs = %#v", specs)
+	}
+	path := filepath.Join(t.TempDir(), "keybindings.json")
+	if err := os.WriteFile(path, wrapper, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadKeyBindingSpecs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].Key != "shiftEnter" {
+		t.Fatalf("loaded specs = %#v", loaded)
+	}
+}
+
 func TestKeymapResolvesChordBindings(t *testing.T) {
 	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
 		{Key: "ctrl-r enter", Action: ActionPageDown},
