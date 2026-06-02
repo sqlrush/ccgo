@@ -142,7 +142,7 @@ M7 progress now includes:
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, string-array key sequences/chords, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.
-- `internal/tui`: interaction scripts now accept structured `mouse`/`mouse_event` steps with button/x/y/release aliases and dispatch them through the normal screen event path.
+- `internal/tui`: interaction scripts now accept structured `mouse`/`mouse_event` steps with expanded button aliases such as `buttonMask`/`btn`/`code`, coordinate aliases such as `mouseX`/`clientX`/`screenX` and Y/row/line variants, release aliases such as `mouseUp`/`isRelease`/`mouseRelease`/`releaseEvent`, and dispatch them through the normal screen event path.
 - `internal/tui`: interaction script JSON now accepts string `keys` plus `input`/`input_text`/`keys_text`/`raw_key`/`paste_text` aliases for text entry, raw key sequences, and pasted text.
 - `internal/tui`: interaction script contains assertions now accept a single string as well as string arrays for status, snapshot, viewport, and pasted-content checks, including camelCase viewport aliases.
 - `internal/tui`: interaction script `keybindings`, `expectEvents`, and `expectDialogResults` fields now accept a single object as well as object arrays.

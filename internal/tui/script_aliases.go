@@ -559,42 +559,21 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	}
 	*mouse = ScriptMouse(raw)
 
-	var fields struct {
-		ButtonCode       *int  `json:"button_code"`
-		ButtonCodeCamel  *int  `json:"buttonCode"`
-		MouseButton      *int  `json:"mouse_button"`
-		MouseButtonCamel *int  `json:"mouseButton"`
-		Column           *int  `json:"column"`
-		Col              *int  `json:"col"`
-		Row              *int  `json:"row"`
-		Released         *bool `json:"released"`
-	}
+	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if fields.ButtonCode != nil {
-		mouse.Button = *fields.ButtonCode
+	if button := intPtrJSONField(fields, "button_code", "buttonCode", "button_mask", "buttonMask", "mouse_button", "mouseButton", "button", "btn", "code", "mask"); button != nil {
+		mouse.Button = *button
 	}
-	if fields.ButtonCodeCamel != nil {
-		mouse.Button = *fields.ButtonCodeCamel
+	if x := intPtrJSONField(fields, "column", "col", "mouse_x", "mouseX", "client_x", "clientX", "screen_x", "screenX"); x != nil {
+		mouse.X = *x
 	}
-	if fields.MouseButton != nil {
-		mouse.Button = *fields.MouseButton
+	if y := intPtrJSONField(fields, "row", "line", "mouse_y", "mouseY", "client_y", "clientY", "screen_y", "screenY"); y != nil {
+		mouse.Y = *y
 	}
-	if fields.MouseButtonCamel != nil {
-		mouse.Button = *fields.MouseButtonCamel
-	}
-	if fields.Column != nil {
-		mouse.X = *fields.Column
-	}
-	if fields.Col != nil {
-		mouse.X = *fields.Col
-	}
-	if fields.Row != nil {
-		mouse.Y = *fields.Row
-	}
-	if fields.Released != nil {
-		mouse.Release = *fields.Released
+	if release := boolPtrJSONField(fields, "released", "is_release", "isRelease", "mouse_release", "mouseRelease", "mouse_up", "mouseUp", "up", "release_event", "releaseEvent", "released_event", "releasedEvent"); release != nil {
+		mouse.Release = *release
 	}
 	return nil
 }

@@ -3196,6 +3196,29 @@ func TestRunInteractionScriptAcceptsStructuredMouse(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsMouseFieldAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_1","kind":"permission"}},
+		{"mouse_event":{"buttonMask":0,"clientX":13,"clientY":5,"isRelease":false},"expectEvent":{"event":"dialog_action","payload":"Deny","dialogId":"perm_1","dialogKind":"permission"}},
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_2","kind":"permission"}},
+		{"mouse":{"btn":0,"mouse_x":13,"mouse_y":5,"mouseUp":true},"expectNoEvent":true,"expectDialog":{"visible":true,"dialogId":"perm_2"}},
+		{"mouse":{"code":0,"screenX":13,"screenY":5,"releaseEvent":false},"expectEvent":{"type":"dialog_action","value":"Deny","dialog_id":"perm_2","dialog_kind":"permission"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventDialogAction || result.Events[0].Value != "Deny" || result.Events[0].DialogID != "perm_1" ||
+		result.Events[1].Type != ScreenEventDialogAction || result.Events[1].Value != "Deny" || result.Events[1].DialogID != "perm_2" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptTypesTextField(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
