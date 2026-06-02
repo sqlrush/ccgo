@@ -189,95 +189,55 @@ func LoadTranscript(path string) (Transcript, error) {
 				transcript.ContextCollapseSnapshot = nil
 			}
 		case metadataType == "summary":
-			var entry struct {
-				LeafUUID contracts.ID `json:"leafUuid"`
-				Summary  string       `json:"summary"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.LeafUUID != "" {
-				transcript.Summaries[entry.LeafUUID] = entry.Summary
+			if leafUUID, summary, ok := parseSummaryMetadata(line); ok && leafUUID != "" {
+				transcript.Summaries[leafUUID] = summary
 			}
 		case metadataType == "custom-title":
-			var entry struct {
-				SessionID   contracts.ID `json:"sessionId"`
-				CustomTitle string       `json:"customTitle"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.CustomTitles[entry.SessionID] = entry.CustomTitle
+			if sessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title"); ok && sessionID != "" {
+				transcript.CustomTitles[sessionID] = title
 			}
 		case metadataType == "ai-title":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				AITitle   string       `json:"aiTitle"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.AITitles[entry.SessionID] = entry.AITitle
+			if sessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title"); ok && sessionID != "" {
+				transcript.AITitles[sessionID] = title
 			}
 		case metadataType == "last-prompt":
-			var entry struct {
-				SessionID  contracts.ID `json:"sessionId"`
-				LastPrompt string       `json:"lastPrompt"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.LastPrompts[entry.SessionID] = entry.LastPrompt
+			if sessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt"); ok && sessionID != "" {
+				transcript.LastPrompts[sessionID] = prompt
 			}
 		case metadataType == "task-summary":
-			var entry TaskSummaryEntry
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+			if entry, ok := parseTaskSummaryMetadata(line); ok && entry.SessionID != "" {
 				transcript.TaskSummaries[entry.SessionID] = entry
 			}
 		case metadataType == "tag":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				Tag       string       `json:"tag"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.Tags[entry.SessionID] = entry.Tag
+			if sessionID, tag, ok := parseSessionStringMetadata(line, "tag"); ok && sessionID != "" {
+				transcript.Tags[sessionID] = tag
 			}
 		case metadataType == "agent-name":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				AgentName string       `json:"agentName"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.AgentNames[entry.SessionID] = entry.AgentName
+			if sessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name"); ok && sessionID != "" {
+				transcript.AgentNames[sessionID] = name
 			}
 		case metadataType == "agent-color":
-			var entry struct {
-				SessionID  contracts.ID `json:"sessionId"`
-				AgentColor string       `json:"agentColor"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.AgentColors[entry.SessionID] = entry.AgentColor
+			if sessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color"); ok && sessionID != "" {
+				transcript.AgentColors[sessionID] = color
 			}
 		case metadataType == "agent-setting":
-			var entry struct {
-				SessionID    contracts.ID `json:"sessionId"`
-				AgentSetting string       `json:"agentSetting"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.AgentSettings[entry.SessionID] = entry.AgentSetting
+			if sessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting"); ok && sessionID != "" {
+				transcript.AgentSettings[sessionID] = setting
 			}
 		case metadataType == "pr-link":
-			var entry PRLinkEntry
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+			if entry, ok := parsePRLinkMetadata(line); ok && entry.SessionID != "" {
 				transcript.PRLinks[entry.SessionID] = entry
 			}
 		case metadataType == "mode":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				Mode      string       `json:"mode"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
-				transcript.Modes[entry.SessionID] = entry.Mode
+			if sessionID, mode, ok := parseSessionStringMetadata(line, "mode"); ok && sessionID != "" {
+				transcript.Modes[sessionID] = mode
 			}
 		case metadataType == "worktree-state":
-			var entry WorktreeStateEntry
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+			if entry, ok := parseWorktreeStateMetadata(line); ok && entry.SessionID != "" {
 				transcript.WorktreeStates[entry.SessionID] = entry
 			}
 		case metadataType == "content-replacement":
-			var entry ContentReplacementEntry
-			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
+			if entry, ok := parseContentReplacementMetadata(line); ok && entry.SessionID != "" {
 				key := entry.SessionID
 				if entry.AgentID != "" {
 					key = contracts.ID(entry.AgentID)
@@ -289,18 +249,15 @@ func LoadTranscript(path string) (Transcript, error) {
 		case metadataType == "attribution-snapshot":
 			transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, append(json.RawMessage(nil), line...))
 		case metadataType == "speculation-accept":
-			var entry SpeculationAcceptEntry
-			if err := json.Unmarshal(line, &entry); err == nil {
+			if entry, ok := parseSpeculationAcceptMetadata(line); ok {
 				transcript.SpeculationAccepts = append(transcript.SpeculationAccepts, entry)
 			}
 		case metadataType == "marble-origami-commit":
-			var entry ContextCollapseCommitEntry
-			if err := json.Unmarshal(line, &entry); err == nil {
+			if entry, ok := parseContextCollapseCommitMetadata(line); ok {
 				transcript.ContextCollapseCommits = append(transcript.ContextCollapseCommits, entry)
 			}
 		case metadataType == "marble-origami-snapshot":
-			var entry ContextCollapseSnapshotEntry
-			if err := json.Unmarshal(line, &entry); err == nil {
+			if entry, ok := parseContextCollapseSnapshotMetadata(line); ok {
 				transcript.ContextCollapseSnapshot = &entry
 			}
 		}

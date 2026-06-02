@@ -184,25 +184,41 @@ func TestBuildIndexedResumeConversationUsesLineIndex(t *testing.T) {
 func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
+		`{"type":"summary","leaf_uuid":"a2","summary":"snake short"}`,
 		`{"type":"custom-title","sessionId":"s1","customTitle":"Title"}`,
+		`{"type":"custom_title","session_id":"s3","custom_title":"Snake Title"}`,
 		`{"type":"ai-title","sessionId":"s1","aiTitle":"AI Title"}`,
 		`{"type":"ai_title","sessionId":"s2","aiTitle":"Alias AI Title"}`,
+		`{"type":"ai-title","session_id":"s3","ai_title":"Snake AI Title"}`,
 		`{"type":"last-prompt","sessionId":"s1","lastPrompt":"last prompt text"}`,
+		`{"type":"last_prompt","session_id":"s3","last_prompt":"snake prompt"}`,
 		`{"type":"task-summary","sessionId":"s1","summary":"running tests","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"task_summary","session_id":"s3","summary":"snake task","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"tag","sessionId":"s1","tag":"tagged"}`,
+		`{"type":"tag","session_id":"s3","tag":"snake-tag"}`,
 		`{"type":"agent-name","sessionId":"s1","agentName":"Builder"}`,
+		`{"type":"agent_name","session_id":"s3","agent_name":"Snake Builder"}`,
 		`{"type":"agent-color","sessionId":"s1","agentColor":"blue"}`,
+		`{"type":"agent_color","session_id":"s3","agent_color":"violet"}`,
 		`{"type":"agent-setting","sessionId":"s1","agentSetting":"reviewer"}`,
+		`{"type":"agent_setting","session_id":"s3","agent_setting":"planner"}`,
 		`{"type":"pr-link","sessionId":"s1","prNumber":42,"prUrl":"https://github.com/o/r/pull/42","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"pr_link","session_id":"s3","pr_number":43,"pr_url":"https://github.com/o/r/pull/43","pr_repository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
 		`{"type":"mode","sessionId":"s1","mode":"coordinator"}`,
+		`{"type":"mode","session_id":"s3","mode":"worker"}`,
 		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
+		`{"type":"worktree_state","session_id":"s3","worktree_session":{"worktreePath":"/tmp/wt2","sessionId":"s3"}}`,
 		`{"type":"file-history-snapshot","messageId":"a1","snapshot":{"files":[]},"isSnapshotUpdate":false}`,
 		`{"type":"attribution-snapshot","messageId":"a1","surface":"cli","fileStates":{}}`,
 		`{"type":"speculation-accept","timestamp":"2026-01-01T00:00:05Z","timeSavedMs":1200}`,
+		`{"type":"speculation_accept","timestamp":"2026-01-01T00:00:05Z","time_saved_ms":3400}`,
 		`{"type":"content-replacement","sessionId":"s1","replacements":[{"toolUseId":"toolu_1","replacement":"stub"}]}`,
 		`{"type":"content_replacement","sessionId":"s2","replacements":[{"toolUseId":"toolu_3","replacement":"alias stub"}]}`,
 		`{"type":"content-replacement","sessionId":"s1","agentId":"agent_1","replacements":[{"toolUseId":"toolu_2","replacement":"agent stub"}]}`,
+		`{"type":"content_replacement","session_id":"s3","agent_id":"agent_2","replacements":[{"toolUseId":"toolu_4","replacement":"snake agent stub"}]}`,
+		`{"type":"marble_origami_commit","session_id":"s3","collapse_id":"c1","summary_uuid":"sum1","summary_content":"collapsed","summary":"short","first_archived_uuid":"u1","last_archived_uuid":"a1"}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
+		`{"type":"marble_origami_snapshot","session_id":"s3","armed":true,"last_spawn_tokens":64}`,
 	})
 	transcript, err := LoadTranscript(path)
 	if err != nil {
@@ -217,13 +233,22 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if transcript.AITitles["s2"] != "Alias AI Title" {
 		t.Fatalf("alias ai title = %#v", transcript.AITitles)
 	}
+	if transcript.Summaries["a2"] != "snake short" || transcript.CustomTitles["s3"] != "Snake Title" || transcript.AITitles["s3"] != "Snake AI Title" || transcript.LastPrompts["s3"] != "snake prompt" || transcript.TaskSummaries["s3"].Summary != "snake task" {
+		t.Fatalf("snake metadata = %#v %#v %#v %#v %#v", transcript.Summaries, transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
 	if transcript.AgentNames["s1"] != "Builder" || transcript.AgentColors["s1"] != "blue" || transcript.AgentSettings["s1"] != "reviewer" {
 		t.Fatalf("agent metadata = %#v %#v %#v", transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
+	}
+	if transcript.Tags["s3"] != "snake-tag" || transcript.AgentNames["s3"] != "Snake Builder" || transcript.AgentColors["s3"] != "violet" || transcript.AgentSettings["s3"] != "planner" {
+		t.Fatalf("snake agent metadata = %#v %#v %#v %#v", transcript.Tags, transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
 	}
 	if transcript.PRLinks["s1"].PRNumber != 42 || transcript.Modes["s1"] != "coordinator" || len(transcript.WorktreeStates["s1"].WorktreeSession) == 0 {
 		t.Fatalf("session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
 	}
-	if len(transcript.FileHistorySnapshots) != 1 || len(transcript.AttributionSnapshots) != 1 || len(transcript.SpeculationAccepts) != 1 {
+	if transcript.PRLinks["s3"].PRNumber != 43 || transcript.Modes["s3"] != "worker" || len(transcript.WorktreeStates["s3"].WorktreeSession) == 0 {
+		t.Fatalf("snake session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
+	}
+	if len(transcript.FileHistorySnapshots) != 1 || len(transcript.AttributionSnapshots) != 1 || len(transcript.SpeculationAccepts) != 2 || transcript.SpeculationAccepts[1].TimeSavedMS != 3400 {
 		t.Fatalf("raw metadata counts = %d %d %d", len(transcript.FileHistorySnapshots), len(transcript.AttributionSnapshots), len(transcript.SpeculationAccepts))
 	}
 	if got := transcript.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
@@ -235,7 +260,13 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := transcript.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
 		t.Fatalf("agent content replacements = %#v", got)
 	}
-	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.LastSpawnTokens != 42 {
+	if got := transcript.ContentReplacements["agent_2"]; len(got) != 1 || got[0].Replacement != "snake agent stub" {
+		t.Fatalf("snake agent content replacements = %#v", got)
+	}
+	if len(transcript.ContextCollapseCommits) != 1 || transcript.ContextCollapseCommits[0].CollapseID != "c1" || transcript.ContextCollapseCommits[0].SummaryUUID != "sum1" {
+		t.Fatalf("collapse commit = %#v", transcript.ContextCollapseCommits)
+	}
+	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "s3" || transcript.ContextCollapseSnapshot.LastSpawnTokens != 64 {
 		t.Fatalf("snapshot = %#v", transcript.ContextCollapseSnapshot)
 	}
 	metadata, err := LoadTranscriptMetadata(path)
@@ -251,13 +282,22 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if metadata.AITitles["s2"] != "Alias AI Title" {
 		t.Fatalf("metadata alias ai title = %#v", metadata.AITitles)
 	}
+	if metadata.Summaries["a2"] != "snake short" || metadata.CustomTitles["s3"] != "Snake Title" || metadata.AITitles["s3"] != "Snake AI Title" || metadata.LastPrompts["s3"] != "snake prompt" || metadata.TaskSummaries["s3"].Summary != "snake task" {
+		t.Fatalf("metadata snake fields = %#v %#v %#v %#v %#v", metadata.Summaries, metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
+	}
 	if metadata.AgentNames["s1"] != "Builder" || metadata.AgentColors["s1"] != "blue" || metadata.AgentSettings["s1"] != "reviewer" {
 		t.Fatalf("metadata agent = %#v %#v %#v", metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings)
+	}
+	if metadata.Tags["s3"] != "snake-tag" || metadata.AgentNames["s3"] != "Snake Builder" || metadata.AgentColors["s3"] != "violet" || metadata.AgentSettings["s3"] != "planner" {
+		t.Fatalf("metadata snake agent = %#v %#v %#v %#v", metadata.Tags, metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings)
 	}
 	if metadata.PRLinks["s1"].PRRepository != "o/r" || metadata.Modes["s1"] != "coordinator" || len(metadata.WorktreeStates["s1"].WorktreeSession) == 0 {
 		t.Fatalf("metadata session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
 	}
-	if len(metadata.FileHistorySnapshots) != 1 || len(metadata.AttributionSnapshots) != 1 || len(metadata.SpeculationAccepts) != 1 {
+	if metadata.PRLinks["s3"].PRNumber != 43 || metadata.Modes["s3"] != "worker" || len(metadata.WorktreeStates["s3"].WorktreeSession) == 0 {
+		t.Fatalf("metadata snake session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
+	}
+	if len(metadata.FileHistorySnapshots) != 1 || len(metadata.AttributionSnapshots) != 1 || len(metadata.SpeculationAccepts) != 2 || metadata.SpeculationAccepts[1].TimeSavedMS != 3400 {
 		t.Fatalf("metadata raw counts = %d %d %d", len(metadata.FileHistorySnapshots), len(metadata.AttributionSnapshots), len(metadata.SpeculationAccepts))
 	}
 	if got := metadata.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
@@ -269,7 +309,13 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := metadata.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
 		t.Fatalf("metadata agent replacements = %#v", got)
 	}
-	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.LastSpawnTokens != 42 {
+	if got := metadata.ContentReplacements["agent_2"]; len(got) != 1 || got[0].Replacement != "snake agent stub" {
+		t.Fatalf("metadata snake agent replacements = %#v", got)
+	}
+	if len(metadata.ContextCollapseCommits) != 1 || metadata.ContextCollapseCommits[0].CollapseID != "c1" || metadata.ContextCollapseCommits[0].SummaryUUID != "sum1" {
+		t.Fatalf("metadata collapse commit = %#v", metadata.ContextCollapseCommits)
+	}
+	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.SessionID != "s3" || metadata.ContextCollapseSnapshot.LastSpawnTokens != 64 {
 		t.Fatalf("metadata snapshot = %#v", metadata.ContextCollapseSnapshot)
 	}
 }

@@ -101,6 +101,40 @@ func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptIndexAcceptsMetadataAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"summary","leaf_uuid":"a1","summary":"summary alias"}`,
+		`{"type":"custom_title","session_id":"sess_1","custom_title":"Custom Alias"}`,
+		`{"type":"ai_title","session_id":"sess_1","ai_title":"AI Alias"}`,
+		`{"type":"last_prompt","session_id":"sess_1","last_prompt":"last prompt alias"}`,
+		`{"type":"task_summary","session_id":"sess_1","summary":"task alias","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"tag","session_id":"sess_1","tag":"alias-tag"}`,
+		`{"type":"agent_name","session_id":"sess_1","agent_name":"Alias Builder"}`,
+		`{"type":"agent_color","session_id":"sess_1","agent_color":"orange"}`,
+		`{"type":"agent_setting","session_id":"sess_1","agent_setting":"reviewer"}`,
+		`{"type":"pr_link","session_id":"sess_1","pr_number":8,"pr_url":"https://github.com/o/r/pull/8","pr_repository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"mode","session_id":"sess_1","mode":"worker"}`,
+		`{"type":"worktree_state","session_id":"sess_1","worktree_session":{"worktreePath":"/tmp/wt","sessionId":"sess_1"}}`,
+		`{"type":"content_replacement","session_id":"sess_1","replacements":[{"replacement":"stub"}]}`,
+	})
+	index, err := LoadTranscriptIndex(path, "sess_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "Custom Alias" || index.SummaryCount != 1 || index.ContentReplacementCount != 1 {
+		t.Fatalf("alias index = %#v", index)
+	}
+	if index.AITitle != "AI Alias" || index.LastPrompt != "last prompt alias" || index.TaskSummary != "task alias" {
+		t.Fatalf("alias index title/task metadata = %#v", index)
+	}
+	if index.Tag != "alias-tag" || index.AgentName != "Alias Builder" || index.AgentColor != "orange" || index.AgentSetting != "reviewer" {
+		t.Fatalf("alias index agent metadata = %#v", index)
+	}
+	if index.PRNumber != 8 || index.PRRepository != "o/r" || index.PRURL == "" || index.Mode != "worker" || !index.HasWorktreeState {
+		t.Fatalf("alias index session metadata = %#v", index)
+	}
+}
+
 func TestLoadTranscriptIndexUsesAITitleAndLastPromptFallbacks(t *testing.T) {
 	aiTitlePath := writeTranscript(t, []string{
 		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,

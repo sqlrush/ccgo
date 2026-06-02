@@ -74,103 +74,64 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 			index.addMessage(msg)
 			continue
 		}
-		switch envelope.Type {
+		switch normalizeTranscriptMetadataType(envelope.Type) {
 		case "summary":
-			var entry struct {
-				Summary string `json:"summary"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil {
+			if _, summary, ok := parseSummaryMetadata(line); ok {
 				index.SummaryCount++
-				if firstSummary == "" && strings.TrimSpace(entry.Summary) != "" {
-					firstSummary = entry.Summary
+				if firstSummary == "" && strings.TrimSpace(summary) != "" {
+					firstSummary = summary
 				}
 			}
 		case "custom-title":
-			var entry struct {
-				SessionID   contracts.ID `json:"sessionId"`
-				CustomTitle string       `json:"customTitle"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && strings.TrimSpace(entry.CustomTitle) != "" {
-				if sessionID == "" || entry.SessionID == sessionID {
-					customTitle = entry.CustomTitle
+			if entrySessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title"); ok && strings.TrimSpace(title) != "" {
+				if sessionID == "" || entrySessionID == sessionID {
+					customTitle = title
 				}
 			}
 		case "ai-title":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				AITitle   string       `json:"aiTitle"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.AITitle = entry.AITitle
+			if entrySessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.AITitle = title
 			}
 		case "last-prompt":
-			var entry struct {
-				SessionID  contracts.ID `json:"sessionId"`
-				LastPrompt string       `json:"lastPrompt"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.LastPrompt = entry.LastPrompt
+			if entrySessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.LastPrompt = prompt
 			}
 		case "task-summary":
-			var entry TaskSummaryEntry
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+			if entry, ok := parseTaskSummaryMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
 				index.TaskSummary = entry.Summary
 			}
 		case "tag":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				Tag       string       `json:"tag"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.Tag = entry.Tag
+			if entrySessionID, tag, ok := parseSessionStringMetadata(line, "tag"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.Tag = tag
 			}
 		case "agent-name":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				AgentName string       `json:"agentName"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.AgentName = entry.AgentName
+			if entrySessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.AgentName = name
 			}
 		case "agent-color":
-			var entry struct {
-				SessionID  contracts.ID `json:"sessionId"`
-				AgentColor string       `json:"agentColor"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.AgentColor = entry.AgentColor
+			if entrySessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.AgentColor = color
 			}
 		case "agent-setting":
-			var entry struct {
-				SessionID    contracts.ID `json:"sessionId"`
-				AgentSetting string       `json:"agentSetting"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.AgentSetting = entry.AgentSetting
+			if entrySessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.AgentSetting = setting
 			}
 		case "pr-link":
-			var entry PRLinkEntry
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+			if entry, ok := parsePRLinkMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
 				index.PRNumber = entry.PRNumber
 				index.PRURL = entry.PRURL
 				index.PRRepository = entry.PRRepository
 			}
 		case "mode":
-			var entry struct {
-				SessionID contracts.ID `json:"sessionId"`
-				Mode      string       `json:"mode"`
-			}
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
-				index.Mode = entry.Mode
+			if entrySessionID, mode, ok := parseSessionStringMetadata(line, "mode"); ok && (sessionID == "" || entrySessionID == sessionID) {
+				index.Mode = mode
 			}
 		case "worktree-state":
-			var entry WorktreeStateEntry
-			if err := json.Unmarshal(line, &entry); err == nil && (sessionID == "" || entry.SessionID == sessionID) {
+			if entry, ok := parseWorktreeStateMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
 				index.HasWorktreeState = len(entry.WorktreeSession) > 0 && string(entry.WorktreeSession) != "null"
 			}
 		case "content-replacement":
-			var entry ContentReplacementEntry
-			if err := json.Unmarshal(line, &entry); err == nil {
+			if entry, ok := parseContentReplacementMetadata(line); ok {
 				index.ContentReplacementCount += len(entry.Replacements)
 			}
 		}
