@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2865,6 +2866,90 @@ func TestRunInteractionScriptAcceptsPasteAndImageFields(t *testing.T) {
 	}
 	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "alpha\nbeta[Image #2]" {
 		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
+	var steps []ScriptStep
+	if err := json.Unmarshal([]byte(`[
+		{
+			"resize_width": 40,
+			"resize_height": 8,
+			"paste": "alpha\nbeta",
+			"image": {"filename": "chart.png", "media_type": "image/png", "content": "AAAA"},
+			"snapshot_name": "json-aliases",
+			"expect_prompt": {"text": "[Pasted text #1 +1 lines][Image #2]", "expanded": "alpha\nbeta[Image #2]"},
+			"expect_screen": {"width": 40, "height": 8},
+			"expect_status_contains": ["json ready"],
+			"expect_snapshot_contains": ["[Image #2]"],
+			"expect_snapshot_not_contains": ["not present"]
+		},
+		{
+			"key": "enter",
+			"expect_event": {"type": "prompt_submitted", "value": "alpha\nbeta[Image #2]"},
+			"expect_prompt": {"empty": true}
+		}
+	]`), &steps); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(20, 4, nil)
+	screen.Status = "json ready"
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "json-aliases" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "alpha\nbeta[Image #2]" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunDialogRuntimeScriptAcceptsJSONFieldAliases(t *testing.T) {
+	var steps []ScriptStep
+	if err := json.Unmarshal([]byte(`[
+		{
+			"request_permission": {"id": "perm_1", "tool_name": "Bash", "path": "/tmp/a", "description": "Run command", "actions": ["Allow", "Deny"]},
+			"expect_dialog": {"active": true, "id": "perm_1", "kind": "permission", "title": "Permission"},
+			"expect_status_contains": ["permissions: 1"]
+		},
+		{
+			"key": "enter",
+			"expect_event": {"type": "dialog_action", "value": "Allow", "dialog_id": "perm_1", "dialog_kind": "permission"},
+			"expect_dialog_result": {"id": "perm_1", "kind": "permission", "action": "Allow", "status": "allowed", "found": true},
+			"expect_status_not_contains": ["permissions: 1"]
+		},
+		{
+			"upsert_task": {"id": "task_1", "title": "Build", "state": "running", "detail": "go test", "progress": 40},
+			"open_tasks_dialog": true,
+			"snapshot_name": "tasks",
+			"expect_dialog": {"active": true, "id": "tasks", "kind": "task"},
+			"expect_tasks": {"count": 1, "state_counts": {"running": 1}, "contains": [{"id": "task_1", "title": "Build", "state": "running", "detail": "go test", "progress": 40}]},
+			"expect_snapshot_contains": ["Build [running] 40% - go test"]
+		},
+		{
+			"cancel_all_tasks": true,
+			"cancel_tasks_detail": "stopped",
+			"snapshot_name": "tasks-cancelled",
+			"expect_tasks": {"count": 1, "state_counts": {"cancelled": 1}, "contains": [{"id": "task_1", "state": "cancelled", "detail": "stopped", "progress": 40}]},
+			"expect_status_contains": ["cancelled: 1"],
+			"expect_snapshot_contains": ["Build [cancelled] 40% - stopped"]
+		}
+	]`), &steps); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(50, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	if len(result.Snapshots) != 2 {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
 	}
 }
 
