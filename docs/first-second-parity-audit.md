@@ -134,6 +134,7 @@ M6 progress now includes:
 - `internal/session`: remote-history parsing now also accepts `eventList`/`event_list`, `sessionEvents`/`session_events`, and connection aliases such as `connection`, `eventConnection`, and `sessionEventsConnection`.
 - `internal/session`: remote-history pageInfo parsing now accepts previous/older pagination signals such as `hasPrevious`/`hasPreviousPage`, `hasOlder`/`more`, and before-id cursors such as `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor`.
 - `internal/session`: remote-history link pagination now accepts `links.next`/`links.previous`/`links.prev`/`links.older` string URLs or `{href,url,uri,link}` objects and extracts before/cursor query parameters for continuation.
+- `internal/session`: remote-history pagination now also accepts HTTP `Link` header URLs with `previous`/`prev`/`older`/`next` rels as continuation cursor fallbacks.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:

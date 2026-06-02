@@ -742,10 +742,19 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	if events == nil {
 		events = []contracts.SDKEvent{}
 	}
+	headerBeforeID := remoteHistoryLinkHeaderCursor(resp.Header.Values("Link"))
+	firstID := responseNextBeforeID(decoded, events)
+	hasMore := responseHasMore(decoded)
+	if headerBeforeID != "" {
+		if firstID == "" {
+			firstID = headerBeforeID
+		}
+		hasMore = true
+	}
 	return &RemoteHistoryPage{
 		Events:  events,
-		FirstID: responseNextBeforeID(decoded, events),
-		HasMore: responseHasMore(decoded),
+		FirstID: firstID,
+		HasMore: hasMore,
 	}, resp.StatusCode, nil
 }
 
@@ -847,6 +856,57 @@ func remoteHistoryLinkCursor(link string) string {
 		return ""
 	}
 	return link
+}
+
+func remoteHistoryLinkHeaderCursor(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	cursors := map[string]string{}
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			link, rel := remoteHistoryLinkHeaderPart(part)
+			cursor := remoteHistoryLinkCursor(link)
+			if cursor == "" {
+				continue
+			}
+			for _, name := range strings.Fields(strings.ToLower(rel)) {
+				if name == "previous" || name == "prev" || name == "older" || name == "next" {
+					if cursors[name] == "" {
+						cursors[name] = cursor
+					}
+				}
+			}
+		}
+	}
+	return firstNonEmpty(cursors["previous"], cursors["prev"], cursors["older"], cursors["next"])
+}
+
+func remoteHistoryLinkHeaderPart(part string) (string, string) {
+	part = strings.TrimSpace(part)
+	if part == "" {
+		return "", ""
+	}
+	link := part
+	rest := ""
+	if strings.HasPrefix(part, "<") {
+		if end := strings.Index(part, ">"); end >= 0 {
+			link = part[1:end]
+			rest = part[end+1:]
+		}
+	} else if fields := strings.SplitN(part, ";", 2); len(fields) == 2 {
+		link = fields[0]
+		rest = fields[1]
+	}
+	rel := ""
+	for _, token := range strings.Split(rest, ";") {
+		name, value, ok := strings.Cut(token, "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(name), "rel") {
+			continue
+		}
+		rel = strings.Trim(strings.TrimSpace(value), `"'`)
+	}
+	return strings.TrimSpace(link), rel
 }
 
 func firstRemoteHistoryEventID(events []contracts.SDKEvent) string {
