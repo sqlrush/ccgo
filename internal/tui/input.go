@@ -127,6 +127,10 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyLeft}
 	case "\x1b[C", "\x1bOC", "\x1b[c":
 		return Key{Type: KeyRight}
+	case "\x1b[1;3D", "\x1b[1;9D":
+		return Key{Type: KeyAltLeft}
+	case "\x1b[1;3C", "\x1b[1;9C":
+		return Key{Type: KeyAltRight}
 	case "\x1b[1;5D":
 		return Key{Type: KeyCtrlLeft}
 	case "\x1b[1;5C":
@@ -228,9 +232,9 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		if p.Cursor < len(runes) {
 			p.Cursor++
 		}
-	case KeyAltB, KeyCtrlLeft:
+	case KeyAltB, KeyAltLeft, KeyCtrlLeft:
 		p.moveWordBackward()
-	case KeyAltF, KeyCtrlRight:
+	case KeyAltF, KeyAltRight, KeyCtrlRight:
 		p.moveWordForward()
 	case KeyHome, KeyCtrlA:
 		p.moveLineStart()

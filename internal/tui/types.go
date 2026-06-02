@@ -74,6 +74,8 @@ const (
 	KeyTab        KeyType = "tab"
 	KeyShiftTab   KeyType = "shift+tab"
 	KeyEsc        KeyType = "esc"
+	KeyAltLeft    KeyType = "alt+left"
+	KeyAltRight   KeyType = "alt+right"
 	KeyAltB       KeyType = "alt+b"
 	KeyAltD       KeyType = "alt+d"
 	KeyAltF       KeyType = "alt+f"

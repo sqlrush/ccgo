@@ -93,6 +93,10 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyLeft, nil
 	case "right":
 		return KeyRight, nil
+	case "alt+left", "alt-left", "meta+left", "meta-left", "option+left", "option-left":
+		return KeyAltLeft, nil
+	case "alt+right", "alt-right", "meta+right", "meta-right", "option+right", "option-right":
+		return KeyAltRight, nil
 	case "ctrl+left", "ctrl-left", "control+left", "control-left":
 		return KeyCtrlLeft, nil
 	case "ctrl+right", "ctrl-right", "control+right", "control-right":
