@@ -478,6 +478,44 @@ func normalizeStringFieldToArray(raw json.RawMessage) (json.RawMessage, bool) {
 	return normalized, true
 }
 
+func normalizeObjectFieldsToArray(data []byte, names ...string) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	changed := false
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if normalized, ok := normalizeObjectFieldToArray(raw); ok {
+			fields[name] = normalized
+			changed = true
+		}
+	}
+	if !changed {
+		return data
+	}
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return normalized
+}
+
+func normalizeObjectFieldToArray(raw json.RawMessage) (json.RawMessage, bool) {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return raw, false
+	}
+	normalized := make([]byte, 0, len(raw)+2)
+	normalized = append(normalized, '[')
+	normalized = append(normalized, raw...)
+	normalized = append(normalized, ']')
+	return normalized, true
+}
+
 func (image *ScriptImage) UnmarshalJSON(data []byte) error {
 	type alias ScriptImage
 	var raw alias
@@ -760,6 +798,7 @@ func (expect *VimExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *TasksExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeObjectFieldsToArray(data, "contains")
 	type alias TasksExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {

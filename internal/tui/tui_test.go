@@ -3387,7 +3387,7 @@ func TestRunDialogRuntimeScriptAcceptsJSONFieldAliases(t *testing.T) {
 			"open_tasks_dialog": true,
 			"snapshot_name": "tasks",
 			"expect_dialog": {"active": true, "id": "tasks", "kind": "task"},
-			"expect_tasks": {"count": 1, "state_counts": {"running": 1}, "contains": [{"id": "task_1", "title": "Build", "state": "running", "detail": "go test", "progress": 40}]},
+			"expect_tasks": {"count": 1, "state_counts": {"running": 1}, "contains": {"id": "task_1", "title": "Build", "state": "running", "detail": "go test", "progress": 40}},
 			"expect_snapshot_contains": ["Build [running] 40% - go test"]
 		},
 		{
@@ -3433,7 +3433,7 @@ func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 			"openTasksDialog": true,
 			"snapshotName": "tasks",
 			"expectDialog": {"active": true, "id": "tasks", "kind": "task"},
-			"expectTasks": {"count": 1, "stateCounts": {"running": 1}, "contains": [{"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 40}]},
+			"expectTasks": {"count": 1, "stateCounts": {"running": 1}, "contains": {"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 40}},
 			"expectSnapshotContains": ["Build [running] 40% - go test"]
 		},
 		{
