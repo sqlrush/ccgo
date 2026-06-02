@@ -136,6 +136,7 @@ M7 progress now includes:
 - `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.
 - `internal/tui`: interaction scripts now accept structured `mouse`/`mouse_event` steps with button/x/y/release aliases and dispatch them through the normal screen event path.
+- `internal/tui`: interaction script JSON now accepts string `keys` plus `input`/`input_text`/`keys_text`/`raw_key`/`paste_text` aliases for text entry, raw key sequences, and pasted text.
 
 Still missing for full M6/M7 parity:
 

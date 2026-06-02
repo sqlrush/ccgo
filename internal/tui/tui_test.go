@@ -3178,6 +3178,26 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
+	var steps []ScriptStep
+	if err := json.Unmarshal([]byte(`[
+		{"keys":"a","expect_prompt":{"text":"a"}},
+		{"keys_text":"bc","expect_prompt":{"text":"abc"}},
+		{"paste_text":"clip\nboard","expect_prompt":{"text":"abc[Pasted text #1 +1 lines]","expanded":"abcclip\nboard"}},
+		{"inputText":" done","raw_key":"enter","expect_event":{"type":"prompt_submitted","value":"abcclip\nboard done"},"expect_prompt":{"empty":true}}
+	]`), &steps); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "abcclip\nboard done" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keybindings":[{"keys":"ctrl-r","command":"submitPrompt"}]},

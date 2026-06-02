@@ -3,6 +3,7 @@ package tui
 import "encoding/json"
 
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
+	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -13,6 +14,22 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	var fields struct {
 		RequestPermission         *PermissionRequest        `json:"request_permission"`
 		RequestPermissionCamel    *PermissionRequest        `json:"requestPermission"`
+		RawKey                    *string                   `json:"raw_key"`
+		RawKeyCamel               *string                   `json:"rawKey"`
+		KeySequence               *string                   `json:"key_sequence"`
+		KeySequenceCamel          *string                   `json:"keySequence"`
+		Input                     *string                   `json:"input"`
+		InputText                 *string                   `json:"input_text"`
+		InputTextCamel            *string                   `json:"inputText"`
+		TextInput                 *string                   `json:"text_input"`
+		TextInputCamel            *string                   `json:"textInput"`
+		KeysText                  *string                   `json:"keys_text"`
+		KeysTextCamel             *string                   `json:"keysText"`
+		PasteText                 *string                   `json:"paste_text"`
+		PasteTextCamel            *string                   `json:"pasteText"`
+		PastedText                *string                   `json:"pasted_text"`
+		PastedTextCamel           *string                   `json:"pastedText"`
+		Clipboard                 *string                   `json:"clipboard"`
 		Mouse                     *ScriptMouse              `json:"mouse"`
 		MouseEvent                *ScriptMouse              `json:"mouse_event"`
 		MouseEventCamel           *ScriptMouse              `json:"mouseEvent"`
@@ -100,6 +117,54 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.RequestPermissionCamel != nil {
 		step.RequestPermission = fields.RequestPermissionCamel
+	}
+	if fields.RawKey != nil {
+		step.Key = *fields.RawKey
+	}
+	if fields.RawKeyCamel != nil {
+		step.Key = *fields.RawKeyCamel
+	}
+	if fields.KeySequence != nil {
+		step.Key = *fields.KeySequence
+	}
+	if fields.KeySequenceCamel != nil {
+		step.Key = *fields.KeySequenceCamel
+	}
+	if fields.Input != nil {
+		step.Text = *fields.Input
+	}
+	if fields.InputText != nil {
+		step.Text = *fields.InputText
+	}
+	if fields.InputTextCamel != nil {
+		step.Text = *fields.InputTextCamel
+	}
+	if fields.TextInput != nil {
+		step.Text = *fields.TextInput
+	}
+	if fields.TextInputCamel != nil {
+		step.Text = *fields.TextInputCamel
+	}
+	if fields.KeysText != nil {
+		step.Text = *fields.KeysText
+	}
+	if fields.KeysTextCamel != nil {
+		step.Text = *fields.KeysTextCamel
+	}
+	if fields.PasteText != nil {
+		step.Paste = *fields.PasteText
+	}
+	if fields.PasteTextCamel != nil {
+		step.Paste = *fields.PasteTextCamel
+	}
+	if fields.PastedText != nil {
+		step.Paste = *fields.PastedText
+	}
+	if fields.PastedTextCamel != nil {
+		step.Paste = *fields.PastedTextCamel
+	}
+	if fields.Clipboard != nil {
+		step.Paste = *fields.Clipboard
 	}
 	if fields.Mouse != nil {
 		step.Mouse = fields.Mouse
@@ -336,6 +401,35 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectSnapshotNotContains = fields.ExpectSnapshotNotCamel
 	}
 	return nil
+}
+
+func normalizeScriptStepJSON(data []byte) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	if raw, ok := fields["keys"]; ok {
+		if normalized, changed := normalizeStringFieldToArray(raw); changed {
+			fields["keys"] = normalized
+		}
+	}
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return normalized
+}
+
+func normalizeStringFieldToArray(raw json.RawMessage) (json.RawMessage, bool) {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return raw, false
+	}
+	normalized, err := json.Marshal([]string{value})
+	if err != nil {
+		return raw, false
+	}
+	return normalized, true
 }
 
 func (image *ScriptImage) UnmarshalJSON(data []byte) error {
