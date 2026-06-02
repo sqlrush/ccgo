@@ -73,6 +73,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseSGRMouse(seq); ok {
 		return key
 	}
+	if key, ok := parseModifiedNavigationKey(seq); ok {
+		return key
+	}
 	switch seq {
 	case "\r", "\n":
 		return Key{Type: KeyEnter}
@@ -154,9 +157,9 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyUp}
 	case "\x1b[B", "\x1bOB", "\x1b[b":
 		return Key{Type: KeyDown}
-	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^", "\x1b[1;3H", "\x1b[1;5H", "\x1b[1;9H":
+	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^":
 		return Key{Type: KeyHome}
-	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^", "\x1b[1;3F", "\x1b[1;5F", "\x1b[1;9F":
+	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^":
 		return Key{Type: KeyEnd}
 	case "\x1b[3~", "\x1b[3$", "\x1b[3^":
 		return Key{Type: KeyDelete}
@@ -171,6 +174,34 @@ func ParseKey(seq string) Key {
 		}
 		return Key{Type: KeyUnknown}
 	}
+}
+
+func parseModifiedNavigationKey(seq string) (Key, bool) {
+	switch {
+	case isModifiedNavigationCSI(seq, "\x1b[1;", "H"):
+		return Key{Type: KeyHome}, true
+	case isModifiedNavigationCSI(seq, "\x1b[1;", "F"):
+		return Key{Type: KeyEnd}, true
+	case isModifiedNavigationCSI(seq, "\x1b[3;", "~"):
+		return Key{Type: KeyDelete}, true
+	case isModifiedNavigationCSI(seq, "\x1b[5;", "~"):
+		return Key{Type: KeyPageUp}, true
+	case isModifiedNavigationCSI(seq, "\x1b[6;", "~"):
+		return Key{Type: KeyPageDown}, true
+	default:
+		return Key{}, false
+	}
+}
+
+func isModifiedNavigationCSI(seq, prefix, suffix string) bool {
+	if !strings.HasPrefix(seq, prefix) || !strings.HasSuffix(seq, suffix) {
+		return false
+	}
+	modifier := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), suffix)
+	if len(modifier) != 1 {
+		return false
+	}
+	return modifier[0] >= '2' && modifier[0] <= '9'
 }
 
 func parseSGRMouse(seq string) (Key, bool) {
