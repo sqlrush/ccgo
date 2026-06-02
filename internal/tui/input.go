@@ -154,9 +154,9 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyUp}
 	case "\x1b[B", "\x1bOB", "\x1b[b":
 		return Key{Type: KeyDown}
-	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^":
+	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^", "\x1b[1;3H", "\x1b[1;5H", "\x1b[1;9H":
 		return Key{Type: KeyHome}
-	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^":
+	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^", "\x1b[1;3F", "\x1b[1;5F", "\x1b[1;9F":
 		return Key{Type: KeyEnd}
 	case "\x1b[3~", "\x1b[3$", "\x1b[3^":
 		return Key{Type: KeyDelete}
