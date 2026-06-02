@@ -976,7 +976,15 @@ func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
-	data = normalizeStringFieldsToArray(data, "content_contains", "contentContains")
+	data = normalizeStringFieldsToArray(data,
+		"content_contains",
+		"contentContains",
+		"contains",
+		"text_contains",
+		"textContains",
+		"value_contains",
+		"valueContains",
+	)
 	type alias PastedContentExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -987,11 +995,31 @@ func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 	var fields struct {
 		ContentContains      *stringList `json:"content_contains"`
 		ContentContainsCamel *stringList `json:"contentContains"`
+		Contains             *stringList `json:"contains"`
+		TextContains         *stringList `json:"text_contains"`
+		TextContainsCamel    *stringList `json:"textContains"`
+		ValueContains        *stringList `json:"value_contains"`
+		ValueContainsCamel   *stringList `json:"valueContains"`
 		MediaType            *string     `json:"media_type"`
 		MediaTypeCamel       *string     `json:"mediaType"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
+	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
+	if expect.ID == 0 {
+		if id := intPtrJSONField(fieldMap, "pasted_id", "pastedId", "pastedID", "pasted_content_id", "pastedContentId", "pastedContentID", "content_id", "contentId", "contentID"); id != nil {
+			expect.ID = *id
+		}
+	}
+	if expect.Type == "" {
+		expect.Type = stringJSONField(fieldMap, "kind", "content_kind", "contentKind", "item_type", "itemType", "pasted_type", "pastedType")
+	}
+	if expect.Content == "" {
+		expect.Content = stringJSONField(fieldMap, "value", "text", "body", "message", "data", "base64")
 	}
 	if fields.ContentContains != nil {
 		expect.ContentContains = stringListValue(fields.ContentContains)
@@ -999,11 +1027,32 @@ func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 	if fields.ContentContainsCamel != nil {
 		expect.ContentContains = stringListValue(fields.ContentContainsCamel)
 	}
+	if fields.Contains != nil {
+		expect.ContentContains = stringListValue(fields.Contains)
+	}
+	if fields.TextContains != nil {
+		expect.ContentContains = stringListValue(fields.TextContains)
+	}
+	if fields.TextContainsCamel != nil {
+		expect.ContentContains = stringListValue(fields.TextContainsCamel)
+	}
+	if fields.ValueContains != nil {
+		expect.ContentContains = stringListValue(fields.ValueContains)
+	}
+	if fields.ValueContainsCamel != nil {
+		expect.ContentContains = stringListValue(fields.ValueContainsCamel)
+	}
 	if fields.MediaType != nil {
 		expect.MediaType = *fields.MediaType
 	}
 	if fields.MediaTypeCamel != nil {
 		expect.MediaType = *fields.MediaTypeCamel
+	}
+	if expect.MediaType == "" {
+		expect.MediaType = stringJSONField(fieldMap, "mime_type", "mimeType", "content_type", "contentType", "media", "mime", "file_type", "fileType")
+	}
+	if expect.Filename == "" {
+		expect.Filename = stringJSONField(fieldMap, "file_name", "fileName", "name", "path")
 	}
 	return nil
 }
