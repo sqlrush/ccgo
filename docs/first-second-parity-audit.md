@@ -136,7 +136,7 @@ M7 progress now includes:
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
-- `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, and `null`/`false` unbind entries.
+- `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, string-array key sequences/chords, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.
 - `internal/tui`: interaction scripts now accept structured `mouse`/`mouse_event` steps with button/x/y/release aliases and dispatch them through the normal screen event path.
 - `internal/tui`: interaction script JSON now accepts string `keys` plus `input`/`input_text`/`keys_text`/`raw_key`/`paste_text` aliases for text entry, raw key sequences, and pasted text.

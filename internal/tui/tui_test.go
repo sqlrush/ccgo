@@ -1075,6 +1075,39 @@ func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsArrayKeySequences(t *testing.T) {
+	specs, err := ParseKeyBindingSpecs([]byte(`[
+		{"keys": ["ctrl-x", "ctrl-k"], "command": "pageDown"},
+		{"shortcut": ["ctrl-r"], "command": false},
+		{"key": ["ctrl-x", "ctrl-y"], "action_name": "reverseSearch"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 3 || specs[0].Key != "ctrl-x ctrl-k" || specs[1].Key != "ctrl-r" || specs[1].Action != ActionNone || specs[2].Key != "ctrl-x ctrl-y" {
+		t.Fatalf("specs = %#v", specs)
+	}
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionNone {
+		t.Fatalf("ctrl-r unbound action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionPageDown {
+		t.Fatalf("ctrl-x ctrl-k action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix for second chord = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x19")); action != ActionReverseSearch {
+		t.Fatalf("ctrl-x ctrl-y action = %q", action)
+	}
+}
+
 func TestKeymapResolvesChordBindings(t *testing.T) {
 	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
 		{Key: "ctrl-r enter", Action: ActionPageDown},

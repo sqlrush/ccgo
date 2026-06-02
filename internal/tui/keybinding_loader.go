@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 )
 
 // LoadKeyBindingSpecs reads keybinding specs from a JSON array, object map, or wrapper object.
@@ -141,73 +142,84 @@ func parseKeyBindingMapEntry(key string, data json.RawMessage) (BindingSpec, err
 }
 
 func (spec *BindingSpec) UnmarshalJSON(data []byte) error {
-	type alias BindingSpec
-	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	*spec = BindingSpec(raw)
-
-	var fields struct {
-		Keys           *string `json:"keys"`
-		KeySequence    *string `json:"key_sequence"`
-		KeySequenceAlt *string `json:"keySequence"`
-		Shortcut       *string `json:"shortcut"`
-		ShortcutKey    *string `json:"shortcut_key"`
-		ShortcutKeyAlt *string `json:"shortcutKey"`
-		Sequence       *string `json:"sequence"`
-		Command        *Action `json:"command"`
-		ActionName     *Action `json:"action_name"`
-		ActionNameAlt  *Action `json:"actionName"`
-		CommandName    *Action `json:"command_name"`
-		CommandNameAlt *Action `json:"commandName"`
-		CommandID      *Action `json:"command_id"`
-		CommandIDAlt   *Action `json:"commandId"`
-	}
+	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if fields.Keys != nil {
-		spec.Key = *fields.Keys
+	*spec = BindingSpec{}
+
+	key, ok, err := bindingKeyField(fields, "Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "sequence")
+	if err != nil {
+		return err
 	}
-	if fields.KeySequence != nil {
-		spec.Key = *fields.KeySequence
+	if ok {
+		spec.Key = key
 	}
-	if fields.KeySequenceAlt != nil {
-		spec.Key = *fields.KeySequenceAlt
+
+	action, ok, err := bindingActionField(fields, "Action", "action", "command", "action_name", "actionName", "command_name", "commandName", "command_id", "commandId")
+	if err != nil {
+		return err
 	}
-	if fields.Shortcut != nil {
-		spec.Key = *fields.Shortcut
-	}
-	if fields.ShortcutKey != nil {
-		spec.Key = *fields.ShortcutKey
-	}
-	if fields.ShortcutKeyAlt != nil {
-		spec.Key = *fields.ShortcutKeyAlt
-	}
-	if fields.Sequence != nil {
-		spec.Key = *fields.Sequence
-	}
-	if fields.Command != nil {
-		spec.Action = *fields.Command
-	}
-	if fields.ActionName != nil {
-		spec.Action = *fields.ActionName
-	}
-	if fields.ActionNameAlt != nil {
-		spec.Action = *fields.ActionNameAlt
-	}
-	if fields.CommandName != nil {
-		spec.Action = *fields.CommandName
-	}
-	if fields.CommandNameAlt != nil {
-		spec.Action = *fields.CommandNameAlt
-	}
-	if fields.CommandID != nil {
-		spec.Action = *fields.CommandID
-	}
-	if fields.CommandIDAlt != nil {
-		spec.Action = *fields.CommandIDAlt
+	if ok {
+		spec.Action = action
 	}
 	return nil
+}
+
+func bindingKeyField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
+	for _, name := range names {
+		data, ok := fields[name]
+		if !ok {
+			continue
+		}
+		data = bytes.TrimSpace(data)
+		if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+			return "", true, nil
+		}
+		if data[0] == '"' {
+			var key string
+			if err := json.Unmarshal(data, &key); err != nil {
+				return "", false, fmt.Errorf("%s: %w", name, err)
+			}
+			return key, true, nil
+		}
+		if data[0] == '[' {
+			var keys []string
+			if err := json.Unmarshal(data, &keys); err != nil {
+				return "", false, fmt.Errorf("%s: %w", name, err)
+			}
+			return strings.Join(keys, " "), true, nil
+		}
+		return "", false, fmt.Errorf("%s must be a string, string array, or null", name)
+	}
+	return "", false, nil
+}
+
+func bindingActionField(fields map[string]json.RawMessage, names ...string) (Action, bool, error) {
+	for _, name := range names {
+		data, ok := fields[name]
+		if !ok {
+			continue
+		}
+		data = bytes.TrimSpace(data)
+		if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+			return ActionNone, true, nil
+		}
+		if data[0] == '"' {
+			var action Action
+			if err := json.Unmarshal(data, &action); err != nil {
+				return "", false, fmt.Errorf("%s: %w", name, err)
+			}
+			return action, true, nil
+		}
+		var enabled bool
+		if err := json.Unmarshal(data, &enabled); err == nil {
+			if !enabled {
+				return ActionNone, true, nil
+			}
+			return "", false, fmt.Errorf("%s boolean true must use an action name", name)
+		}
+		return "", false, fmt.Errorf("%s must be an action string, null, or false", name)
+	}
+	return "", false, nil
 }
