@@ -10,7 +10,7 @@ import (
 
 const maxInteractionScriptLineBytes = 4 * 1024 * 1024
 
-// LoadInteractionScript reads an interaction script from a JSON array or JSONL file.
+// LoadInteractionScript reads an interaction script from a JSON array, wrapper object, or JSONL file.
 func LoadInteractionScript(path string) ([]ScriptStep, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -19,7 +19,7 @@ func LoadInteractionScript(path string) ([]ScriptStep, error) {
 	return ParseInteractionScript(data)
 }
 
-// ParseInteractionScript parses an interaction script encoded as a JSON array or newline-delimited JSON objects.
+// ParseInteractionScript parses an interaction script encoded as a JSON array, wrapper object, or newline-delimited JSON objects.
 func ParseInteractionScript(data []byte) ([]ScriptStep, error) {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
@@ -31,6 +31,12 @@ func ParseInteractionScript(data []byte) ([]ScriptStep, error) {
 			return nil, fmt.Errorf("parse interaction script array: %w", err)
 		}
 		return steps, nil
+	}
+	if data[0] == '{' {
+		steps, ok, err := parseInteractionScriptObject(data)
+		if ok || err != nil {
+			return steps, err
+		}
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -53,4 +59,39 @@ func ParseInteractionScript(data []byte) ([]ScriptStep, error) {
 		return nil, fmt.Errorf("parse interaction script line %d: %w", lineNumber+1, err)
 	}
 	return steps, nil
+}
+
+func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, false, nil
+	}
+	for _, name := range []string{"steps", "script", "interaction_script", "interactionScript"} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		var steps []ScriptStep
+		if err := json.Unmarshal(value, &steps); err != nil {
+			return nil, true, fmt.Errorf("parse interaction script object %q: %w", name, err)
+		}
+		return steps, true, nil
+	}
+	return nil, false, nil
+}
+
+func RunInteractionScriptFileChecked(screen *REPLScreen, path string) (ScriptResult, error) {
+	steps, err := LoadInteractionScript(path)
+	if err != nil {
+		return ScriptResult{}, err
+	}
+	return RunInteractionScriptChecked(screen, steps)
+}
+
+func RunDialogRuntimeScriptFileChecked(screen *REPLScreen, runtime *DialogRuntime, baseStatus string, path string) (RuntimeScriptResult, error) {
+	steps, err := LoadInteractionScript(path)
+	if err != nil {
+		return RuntimeScriptResult{}, err
+	}
+	return RunDialogRuntimeScriptChecked(screen, runtime, baseStatus, steps)
 }

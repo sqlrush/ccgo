@@ -3134,6 +3134,75 @@ func TestParseInteractionScriptAcceptsJSONArrayJSONLAndFile(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsWrapperObjects(t *testing.T) {
+	for name, script := range map[string]string{
+		"steps":              `{"name":"basic","steps":[{"text":"go"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"go"}}]}`,
+		"script":             `{"script":[{"text":"run"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"run"}}]}`,
+		"interaction_script": `{"interaction_script":[{"text":"ship"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"ship"}}]}`,
+		"interactionScript":  `{"interactionScript":[{"text":"test"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"test"}}]}`,
+	} {
+		steps, err := ParseInteractionScript([]byte(script))
+		if err != nil {
+			t.Fatalf("%s err = %v", name, err)
+		}
+		screen := NewREPLScreen(30, 6, nil)
+		result, err := RunInteractionScriptChecked(&screen, steps)
+		if err != nil {
+			t.Fatalf("%s run err = %v", name, err)
+		}
+		if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted {
+			t.Fatalf("%s events = %#v", name, result.Events)
+		}
+	}
+
+	_, err := ParseInteractionScript([]byte(`{"steps":{"text":"not an array"}}`))
+	if err == nil || !strings.Contains(err.Error(), `object "steps"`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunInteractionScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "script.json")
+	script := []byte(`{"interactionScript":[
+		{"message":{"role":"assistant","text":"ready"},"snapshot_name":"initial","expect_snapshot_contains":["assistant: ready"]},
+		{"text":"go","key":"enter","expect_event":{"type":"prompt_submitted","value":"go"},"expect_prompt":{"empty":true}}
+	]}`)
+	if err := os.WriteFile(path, script, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptFileChecked(&screen, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Value != "go" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "initial" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
+func TestRunDialogRuntimeScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime-script.json")
+	script := []byte(`{"steps":[
+		{"request_permission":{"id":"perm_1","tool_name":"Bash"},"expect_dialog":{"active":true,"id":"perm_1","kind":"permission"}},
+		{"key":"enter","expect_dialog_result":{"id":"perm_1","status":"allowed","found":true}}
+	]}`)
+	if err := os.WriteFile(path, script, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptFileChecked(&screen, runtime, "ready", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_1" || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestParseInteractionScriptReportsJSONLLineNumber(t *testing.T) {
 	_, err := ParseInteractionScript([]byte("{\"text\":\"ok\"}\n{bad}\n"))
 	if err == nil || !strings.Contains(err.Error(), "line 2") {
