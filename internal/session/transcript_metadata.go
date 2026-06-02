@@ -71,7 +71,7 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 		if err := json.Unmarshal(line, &envelope); err != nil {
 			continue
 		}
-		switch envelope.Type {
+		switch normalizeTranscriptMetadataType(envelope.Type) {
 		case "summary":
 			var entry struct {
 				LeafUUID contracts.ID `json:"leafUuid"`

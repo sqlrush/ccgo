@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"ccgo/internal/contracts"
@@ -169,6 +170,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
 			continue
 		}
+		metadataType := normalizeTranscriptMetadataType(envelope.Type)
 		switch {
 		case isTranscriptType(envelope.Type):
 			var msg TranscriptMessage
@@ -186,7 +188,7 @@ func LoadTranscript(path string) (Transcript, error) {
 				transcript.ContextCollapseCommits = nil
 				transcript.ContextCollapseSnapshot = nil
 			}
-		case envelope.Type == "summary":
+		case metadataType == "summary":
 			var entry struct {
 				LeafUUID contracts.ID `json:"leafUuid"`
 				Summary  string       `json:"summary"`
@@ -194,7 +196,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.LeafUUID != "" {
 				transcript.Summaries[entry.LeafUUID] = entry.Summary
 			}
-		case envelope.Type == "custom-title":
+		case metadataType == "custom-title":
 			var entry struct {
 				SessionID   contracts.ID `json:"sessionId"`
 				CustomTitle string       `json:"customTitle"`
@@ -202,7 +204,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.CustomTitles[entry.SessionID] = entry.CustomTitle
 			}
-		case envelope.Type == "ai-title":
+		case metadataType == "ai-title":
 			var entry struct {
 				SessionID contracts.ID `json:"sessionId"`
 				AITitle   string       `json:"aiTitle"`
@@ -210,7 +212,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.AITitles[entry.SessionID] = entry.AITitle
 			}
-		case envelope.Type == "last-prompt":
+		case metadataType == "last-prompt":
 			var entry struct {
 				SessionID  contracts.ID `json:"sessionId"`
 				LastPrompt string       `json:"lastPrompt"`
@@ -218,12 +220,12 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.LastPrompts[entry.SessionID] = entry.LastPrompt
 			}
-		case envelope.Type == "task-summary":
+		case metadataType == "task-summary":
 			var entry TaskSummaryEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.TaskSummaries[entry.SessionID] = entry
 			}
-		case envelope.Type == "tag":
+		case metadataType == "tag":
 			var entry struct {
 				SessionID contracts.ID `json:"sessionId"`
 				Tag       string       `json:"tag"`
@@ -231,7 +233,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.Tags[entry.SessionID] = entry.Tag
 			}
-		case envelope.Type == "agent-name":
+		case metadataType == "agent-name":
 			var entry struct {
 				SessionID contracts.ID `json:"sessionId"`
 				AgentName string       `json:"agentName"`
@@ -239,7 +241,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.AgentNames[entry.SessionID] = entry.AgentName
 			}
-		case envelope.Type == "agent-color":
+		case metadataType == "agent-color":
 			var entry struct {
 				SessionID  contracts.ID `json:"sessionId"`
 				AgentColor string       `json:"agentColor"`
@@ -247,7 +249,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.AgentColors[entry.SessionID] = entry.AgentColor
 			}
-		case envelope.Type == "agent-setting":
+		case metadataType == "agent-setting":
 			var entry struct {
 				SessionID    contracts.ID `json:"sessionId"`
 				AgentSetting string       `json:"agentSetting"`
@@ -255,12 +257,12 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.AgentSettings[entry.SessionID] = entry.AgentSetting
 			}
-		case envelope.Type == "pr-link":
+		case metadataType == "pr-link":
 			var entry PRLinkEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.PRLinks[entry.SessionID] = entry
 			}
-		case envelope.Type == "mode":
+		case metadataType == "mode":
 			var entry struct {
 				SessionID contracts.ID `json:"sessionId"`
 				Mode      string       `json:"mode"`
@@ -268,12 +270,12 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.Modes[entry.SessionID] = entry.Mode
 			}
-		case envelope.Type == "worktree-state":
+		case metadataType == "worktree-state":
 			var entry WorktreeStateEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				transcript.WorktreeStates[entry.SessionID] = entry
 			}
-		case envelope.Type == "content-replacement":
+		case metadataType == "content-replacement":
 			var entry ContentReplacementEntry
 			if err := json.Unmarshal(line, &entry); err == nil && entry.SessionID != "" {
 				key := entry.SessionID
@@ -282,21 +284,21 @@ func LoadTranscript(path string) (Transcript, error) {
 				}
 				transcript.ContentReplacements[key] = append(transcript.ContentReplacements[key], entry.Replacements...)
 			}
-		case envelope.Type == "file-history-snapshot":
+		case metadataType == "file-history-snapshot":
 			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, append(json.RawMessage(nil), line...))
-		case envelope.Type == "attribution-snapshot":
+		case metadataType == "attribution-snapshot":
 			transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, append(json.RawMessage(nil), line...))
-		case envelope.Type == "speculation-accept":
+		case metadataType == "speculation-accept":
 			var entry SpeculationAcceptEntry
 			if err := json.Unmarshal(line, &entry); err == nil {
 				transcript.SpeculationAccepts = append(transcript.SpeculationAccepts, entry)
 			}
-		case envelope.Type == "marble-origami-commit":
+		case metadataType == "marble-origami-commit":
 			var entry ContextCollapseCommitEntry
 			if err := json.Unmarshal(line, &entry); err == nil {
 				transcript.ContextCollapseCommits = append(transcript.ContextCollapseCommits, entry)
 			}
-		case envelope.Type == "marble-origami-snapshot":
+		case metadataType == "marble-origami-snapshot":
 			var entry ContextCollapseSnapshotEntry
 			if err := json.Unmarshal(line, &entry); err == nil {
 				transcript.ContextCollapseSnapshot = &entry
@@ -762,6 +764,10 @@ func isTranscriptType(entryType string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeTranscriptMetadataType(entryType string) string {
+	return strings.ReplaceAll(entryType, "_", "-")
 }
 
 func resolveProgressParent(bridge map[contracts.ID]*contracts.ID, parent *contracts.ID) *contracts.ID {

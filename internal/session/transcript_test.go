@@ -186,6 +186,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
 		`{"type":"custom-title","sessionId":"s1","customTitle":"Title"}`,
 		`{"type":"ai-title","sessionId":"s1","aiTitle":"AI Title"}`,
+		`{"type":"ai_title","sessionId":"s2","aiTitle":"Alias AI Title"}`,
 		`{"type":"last-prompt","sessionId":"s1","lastPrompt":"last prompt text"}`,
 		`{"type":"task-summary","sessionId":"s1","summary":"running tests","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"tag","sessionId":"s1","tag":"tagged"}`,
@@ -199,6 +200,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"attribution-snapshot","messageId":"a1","surface":"cli","fileStates":{}}`,
 		`{"type":"speculation-accept","timestamp":"2026-01-01T00:00:05Z","timeSavedMs":1200}`,
 		`{"type":"content-replacement","sessionId":"s1","replacements":[{"toolUseId":"toolu_1","replacement":"stub"}]}`,
+		`{"type":"content_replacement","sessionId":"s2","replacements":[{"toolUseId":"toolu_3","replacement":"alias stub"}]}`,
 		`{"type":"content-replacement","sessionId":"s1","agentId":"agent_1","replacements":[{"toolUseId":"toolu_2","replacement":"agent stub"}]}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
 	})
@@ -212,6 +214,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if transcript.AITitles["s1"] != "AI Title" || transcript.LastPrompts["s1"] != "last prompt text" || transcript.TaskSummaries["s1"].Summary != "running tests" {
 		t.Fatalf("title/prompt/task metadata = %#v %#v %#v", transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
 	}
+	if transcript.AITitles["s2"] != "Alias AI Title" {
+		t.Fatalf("alias ai title = %#v", transcript.AITitles)
+	}
 	if transcript.AgentNames["s1"] != "Builder" || transcript.AgentColors["s1"] != "blue" || transcript.AgentSettings["s1"] != "reviewer" {
 		t.Fatalf("agent metadata = %#v %#v %#v", transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
 	}
@@ -223,6 +228,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if got := transcript.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("content replacements = %#v", got)
+	}
+	if got := transcript.ContentReplacements["s2"]; len(got) != 1 || got[0].Replacement != "alias stub" {
+		t.Fatalf("alias content replacements = %#v", got)
 	}
 	if got := transcript.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
 		t.Fatalf("agent content replacements = %#v", got)
@@ -240,6 +248,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if metadata.AITitles["s1"] != "AI Title" || metadata.LastPrompts["s1"] != "last prompt text" || metadata.TaskSummaries["s1"].Summary != "running tests" {
 		t.Fatalf("metadata title/prompt/task = %#v %#v %#v", metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
 	}
+	if metadata.AITitles["s2"] != "Alias AI Title" {
+		t.Fatalf("metadata alias ai title = %#v", metadata.AITitles)
+	}
 	if metadata.AgentNames["s1"] != "Builder" || metadata.AgentColors["s1"] != "blue" || metadata.AgentSettings["s1"] != "reviewer" {
 		t.Fatalf("metadata agent = %#v %#v %#v", metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings)
 	}
@@ -251,6 +262,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if got := metadata.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("metadata replacements = %#v", got)
+	}
+	if got := metadata.ContentReplacements["s2"]; len(got) != 1 || got[0].Replacement != "alias stub" {
+		t.Fatalf("metadata alias replacements = %#v", got)
 	}
 	if got := metadata.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
 		t.Fatalf("metadata agent replacements = %#v", got)
