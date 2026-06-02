@@ -3526,6 +3526,45 @@ func TestRunInteractionScriptAcceptsMessageContentAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"messages": {"type": "system", "content": "single object"},
+			"snapshot": "single",
+			"expectSnapshotContains": "system: single object"
+		},
+		{
+			"appendMessages": [
+				{"speaker": "assistant", "body": "batched assistant"},
+				{"type": "user", "message": "batched user"}
+			],
+			"snapshot": "batch",
+			"expectSnapshotContains": ["assistant: batched assistant", "user: batched user"]
+		},
+		{
+			"transcript_messages": [
+				{"role": "tool", "text": "tool output"}
+			],
+			"snapshot": "transcript",
+			"expectSnapshotContains": "tool: tool output"
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(60, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 3 {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+	if len(screen.Messages) != 4 {
+		t.Fatalf("messages = %#v", screen.Messages)
+	}
+}
+
 func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

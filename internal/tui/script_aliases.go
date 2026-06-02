@@ -131,6 +131,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		PastedText                *string                   `json:"pasted_text"`
 		PastedTextCamel           *string                   `json:"pastedText"`
 		Clipboard                 *string                   `json:"clipboard"`
+		Messages                  []Message                 `json:"messages"`
+		AppendMessages            []Message                 `json:"append_messages"`
+		AppendMessagesCamel       []Message                 `json:"appendMessages"`
+		TranscriptMessages        []Message                 `json:"transcript_messages"`
+		TranscriptMessagesCamel   []Message                 `json:"transcriptMessages"`
 		Mouse                     *ScriptMouse              `json:"mouse"`
 		MouseEvent                *ScriptMouse              `json:"mouse_event"`
 		MouseEventCamel           *ScriptMouse              `json:"mouseEvent"`
@@ -302,6 +307,21 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.Clipboard != nil {
 		step.Paste = *fields.Clipboard
+	}
+	if fields.Messages != nil {
+		step.Messages = fields.Messages
+	}
+	if fields.AppendMessages != nil {
+		step.Messages = fields.AppendMessages
+	}
+	if fields.AppendMessagesCamel != nil {
+		step.Messages = fields.AppendMessagesCamel
+	}
+	if fields.TranscriptMessages != nil {
+		step.Messages = fields.TranscriptMessages
+	}
+	if fields.TranscriptMessagesCamel != nil {
+		step.Messages = fields.TranscriptMessagesCamel
 	}
 	if fields.Mouse != nil {
 		step.Mouse = fields.Mouse
@@ -669,6 +689,11 @@ func normalizeScriptStepJSON(data []byte) []byte {
 		"keyBindings",
 		"keybinding_specs",
 		"keybindingSpecs",
+		"messages",
+		"append_messages",
+		"appendMessages",
+		"transcript_messages",
+		"transcriptMessages",
 		"expect_events",
 		"expectEvents",
 		"expect_dialog_results",

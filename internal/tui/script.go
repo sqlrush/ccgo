@@ -13,6 +13,7 @@ type ScriptStep struct {
 	Image                        *ScriptImage
 	Mouse                        *ScriptMouse
 	Message                      *Message
+	Messages                     []Message
 	Dialog                       *Dialog
 	Keybindings                  []BindingSpec
 	RequestPermission            *PermissionRequest
@@ -223,6 +224,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 		if step.Message != nil {
 			screen.AppendMessage(*step.Message)
+		}
+		for _, message := range step.Messages {
+			screen.AppendMessage(message)
 		}
 		if step.Dialog != nil {
 			dialog := *step.Dialog
