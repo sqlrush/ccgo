@@ -287,7 +287,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"content-replacement","sessionId":"s1","replacements":[{"toolUseId":"toolu_1","replacement":"stub"}]}`,
 		`{"type":"content_replacement","sessionId":"s2","replacements":[{"toolUseId":"toolu_3","replacement":"alias stub"}]}`,
 		`{"type":"content-replacement","sessionId":"s1","agentId":"agent_1","replacements":[{"toolUseId":"toolu_2","replacement":"agent stub"}]}`,
-		`{"type":"content_replacement","session_id":"s3","agent_id":"agent_2","replacements":[{"toolUseId":"toolu_4","replacement":"snake agent stub"}]}`,
+		`{"type":"content_replacement","session_id":"s3","agent_id":"agent_2","replacements":[{"tool_use_id":"toolu_4","block_id":"block_4","original_hash":"hash_4","replacement":"snake agent stub"}]}`,
 		`{"type":"marble_origami_commit","session_id":"s3","collapse_id":"c1","summary_uuid":"sum1","summary_content":"collapsed","summary":"short","first_archived_uuid":"u1","last_archived_uuid":"a1"}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
 		`{"type":"marble_origami_snapshot","session_id":"s3","armed":true,"last_spawn_tokens":64}`,
@@ -332,7 +332,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := transcript.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
 		t.Fatalf("agent content replacements = %#v", got)
 	}
-	if got := transcript.ContentReplacements["agent_2"]; len(got) != 1 || got[0].Replacement != "snake agent stub" {
+	if got := transcript.ContentReplacements["agent_2"]; len(got) != 1 || got[0].ToolUseID != "toolu_4" || got[0].BlockID != "block_4" || got[0].OriginalHash != "hash_4" || got[0].Replacement != "snake agent stub" {
 		t.Fatalf("snake agent content replacements = %#v", got)
 	}
 	if len(transcript.ContextCollapseCommits) != 1 || transcript.ContextCollapseCommits[0].CollapseID != "c1" || transcript.ContextCollapseCommits[0].SummaryUUID != "sum1" {
@@ -381,7 +381,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := metadata.ContentReplacements["agent_1"]; len(got) != 1 || got[0].Replacement != "agent stub" {
 		t.Fatalf("metadata agent replacements = %#v", got)
 	}
-	if got := metadata.ContentReplacements["agent_2"]; len(got) != 1 || got[0].Replacement != "snake agent stub" {
+	if got := metadata.ContentReplacements["agent_2"]; len(got) != 1 || got[0].ToolUseID != "toolu_4" || got[0].BlockID != "block_4" || got[0].OriginalHash != "hash_4" || got[0].Replacement != "snake agent stub" {
 		t.Fatalf("metadata snake agent replacements = %#v", got)
 	}
 	if len(metadata.ContextCollapseCommits) != 1 || metadata.ContextCollapseCommits[0].CollapseID != "c1" || metadata.ContextCollapseCommits[0].SummaryUUID != "sum1" {

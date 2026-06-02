@@ -139,3 +139,29 @@ func (m *SnipMetadata) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+func (r *ContentReplacementRecord) UnmarshalJSON(data []byte) error {
+	type ContentReplacementRecordJSON ContentReplacementRecord
+	var aux struct {
+		*ContentReplacementRecordJSON
+		ToolUseIDSnake    string `json:"tool_use_id"`
+		BlockIDSnake      string `json:"block_id"`
+		OriginalHashSnake string `json:"original_hash"`
+	}
+	base := ContentReplacementRecordJSON{}
+	aux.ContentReplacementRecordJSON = &base
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*r = ContentReplacementRecord(base)
+	if r.ToolUseID == "" {
+		r.ToolUseID = aux.ToolUseIDSnake
+	}
+	if r.BlockID == "" {
+		r.BlockID = aux.BlockIDSnake
+	}
+	if r.OriginalHash == "" {
+		r.OriginalHash = aux.OriginalHashSnake
+	}
+	return nil
+}
