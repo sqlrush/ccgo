@@ -599,7 +599,7 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 	}
 }
 
-func TestParseSGRMouse(t *testing.T) {
+func TestParseMouseSequences(t *testing.T) {
 	press := ParseKey("\x1b[<64;10;4M")
 	if press.Type != KeyMouse || press.MouseButton != 64 || press.MouseX != 10 || press.MouseY != 4 || press.MouseRelease {
 		t.Fatalf("press = %#v", press)
@@ -607,6 +607,18 @@ func TestParseSGRMouse(t *testing.T) {
 	release := ParseKey("\x1b[<0;1;2m")
 	if release.Type != KeyMouse || release.MouseButton != 0 || release.MouseX != 1 || release.MouseY != 2 || !release.MouseRelease {
 		t.Fatalf("release = %#v", release)
+	}
+	legacyPress := ParseKey("\x1b[M !!")
+	if legacyPress.Type != KeyMouse || legacyPress.MouseButton != 0 || legacyPress.MouseX != 1 || legacyPress.MouseY != 1 || legacyPress.MouseRelease {
+		t.Fatalf("legacy press = %#v", legacyPress)
+	}
+	legacyRelease := ParseKey("\x1b[M#%&")
+	if legacyRelease.Type != KeyMouse || legacyRelease.MouseButton != 3 || legacyRelease.MouseX != 5 || legacyRelease.MouseY != 6 || !legacyRelease.MouseRelease {
+		t.Fatalf("legacy release = %#v", legacyRelease)
+	}
+	legacyWheel := ParseKey("\x1b[M`*$")
+	if legacyWheel.Type != KeyMouse || legacyWheel.MouseButton != 64 || legacyWheel.MouseX != 10 || legacyWheel.MouseY != 4 || legacyWheel.MouseRelease {
+		t.Fatalf("legacy wheel = %#v", legacyWheel)
 	}
 }
 

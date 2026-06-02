@@ -79,6 +79,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseSGRMouse(seq); ok {
 		return key
 	}
+	if key, ok := parseLegacyMouse(seq); ok {
+		return key
+	}
 	if key, ok := parseModifiedNavigationKey(seq); ok {
 		return key
 	}
@@ -236,6 +239,19 @@ func parseSGRMouse(seq string) (Key, bool) {
 		return Key{}, false
 	}
 	return Key{Type: KeyMouse, MouseButton: button, MouseX: x, MouseY: y, MouseRelease: final == 'm'}, true
+}
+
+func parseLegacyMouse(seq string) (Key, bool) {
+	if !strings.HasPrefix(seq, "\x1b[M") || len(seq) != 6 {
+		return Key{}, false
+	}
+	button := int(seq[3]) - 32
+	x := int(seq[4]) - 32
+	y := int(seq[5]) - 32
+	if button < 0 || x < 1 || y < 1 {
+		return Key{}, false
+	}
+	return Key{Type: KeyMouse, MouseButton: button, MouseX: x, MouseY: y, MouseRelease: button&3 == 3}, true
 }
 
 func (p *PromptState) Apply(key Key) PromptResult {
