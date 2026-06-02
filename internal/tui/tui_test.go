@@ -4045,8 +4045,12 @@ func TestParseInteractionScriptAcceptsWrapperObjects(t *testing.T) {
 	for name, script := range map[string]string{
 		"steps":              `{"name":"basic","steps":[{"text":"go"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"go"}}]}`,
 		"script":             `{"script":[{"text":"run"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"run"}}]}`,
+		"scriptSteps":        `{"scriptSteps":[{"text":"lint"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"lint"}}]}`,
 		"interaction_script": `{"interaction_script":[{"text":"ship"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"ship"}}]}`,
 		"interactionScript":  `{"interactionScript":[{"text":"test"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"test"}}]}`,
+		"interactionSteps":   `{"interactionSteps":[{"text":"build"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"build"}}]}`,
+		"scenario":           `{"scenario":{"steps":[{"text":"review"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"review"}}]}}`,
+		"fixture":            `{"fixture":{"script_steps":[{"text":"verify"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"verify"}}]}}`,
 	} {
 		steps, err := ParseInteractionScript([]byte(script))
 		if err != nil {

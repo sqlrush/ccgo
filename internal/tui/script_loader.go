@@ -66,18 +66,57 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, false, nil
 	}
-	for _, name := range []string{"steps", "script", "interaction_script", "interactionScript"} {
+	for _, name := range []string{"steps", "script", "script_steps", "scriptSteps", "interaction_script", "interactionScript", "interaction_steps", "interactionSteps"} {
 		value, ok := raw[name]
 		if !ok {
 			continue
 		}
-		var steps []ScriptStep
-		if err := json.Unmarshal(value, &steps); err != nil {
+		steps, err := parseInteractionScriptStepsValue(value)
+		if err != nil {
 			return nil, true, fmt.Errorf("parse interaction script object %q: %w", name, err)
 		}
 		return steps, true, nil
 	}
+	for _, name := range []string{"scenario", "test", "case", "fixture", "interaction"} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		steps, ok, err := parseInteractionScriptNestedObject(value)
+		if ok || err != nil {
+			if err != nil {
+				return nil, true, fmt.Errorf("parse interaction script object %q: %w", name, err)
+			}
+			return steps, true, nil
+		}
+	}
 	return nil, false, nil
+}
+
+func parseInteractionScriptStepsValue(value json.RawMessage) ([]ScriptStep, error) {
+	value = bytes.TrimSpace(value)
+	if len(value) > 0 && value[0] == '{' {
+		steps, ok, err := parseInteractionScriptObject(value)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return steps, nil
+		}
+	}
+	var steps []ScriptStep
+	if err := json.Unmarshal(value, &steps); err != nil {
+		return nil, err
+	}
+	return steps, nil
+}
+
+func parseInteractionScriptNestedObject(value json.RawMessage) ([]ScriptStep, bool, error) {
+	value = bytes.TrimSpace(value)
+	if len(value) == 0 || value[0] != '{' {
+		return nil, false, nil
+	}
+	return parseInteractionScriptObject(value)
 }
 
 func RunInteractionScriptFileChecked(screen *REPLScreen, path string) (ScriptResult, error) {

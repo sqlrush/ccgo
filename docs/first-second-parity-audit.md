@@ -168,6 +168,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script dialog expectations now support body contains/not-contains, exact actions, action contains/not-contains, action count, and focused action assertions, with runtime-aware scripts preserving dialog focused action across steps.
 - `internal/tui`: interaction script dialog expectations now accept active, ID, kind, title, and body aliases such as `isActive`/`visible`, `dialogId`/`dialogID`, `dialogKind`, `heading`/`header`, and `content`/`text`/`message`.
 - `internal/tui`: interaction script event and dialog-result expectations now accept aliases such as `eventType`/`event`/`name`, `payload`/`text`/`message`, `dialogId`/`dialogID`/`dialogKind`, `actionValue`/`resultStatus`, and found/stale aliases.
+- `internal/tui`: interaction script loading now accepts `scriptSteps`/`script_steps`, `interactionSteps`/`interaction_steps`, and nested `scenario`/`test`/`case`/`fixture`/`interaction` wrapper objects.
 
 Still missing for full M6/M7 parity:
 
