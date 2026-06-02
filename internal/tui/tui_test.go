@@ -4076,6 +4076,32 @@ func TestRunInteractionScriptChecksVimState(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsVimAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"input": "abc",
+			"expectVim": {"vimEnabled": true, "modeName": "insert"}
+		},
+		{
+			"keys": ["\u001b", "0", "y", "l"],
+			"expectVim": {
+				"isEnabled": true,
+				"currentMode": "normal",
+				"vimRegister": "a",
+				"linewise": false
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptChecksViewport(t *testing.T) {
 	screen := NewREPLScreen(22, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{

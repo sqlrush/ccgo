@@ -1059,13 +1059,35 @@ func (expect *VimExpectation) UnmarshalJSON(data []byte) error {
 	*expect = VimExpectation(raw)
 
 	var fields struct {
-		RegisterLinewise *bool `json:"register_linewise"`
+		RegisterLinewise      *bool `json:"register_linewise"`
+		RegisterLinewiseCamel *bool `json:"registerLinewise"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
+	if expect.Enabled == nil {
+		expect.Enabled = boolPtrJSONField(fieldMap, "vim_enabled", "vimEnabled", "is_enabled", "isEnabled", "enabled", "active")
+	}
+	if expect.Mode == "" {
+		if mode := stringJSONField(fieldMap, "vim_mode", "vimMode", "mode_name", "modeName", "current_mode", "currentMode", "state"); mode != "" {
+			expect.Mode = VimMode(mode)
+		}
+	}
+	if expect.Register == "" {
+		expect.Register = stringJSONField(fieldMap, "vim_register", "vimRegister", "register_value", "registerValue", "yank_register", "yankRegister")
+	}
 	if fields.RegisterLinewise != nil {
 		expect.RegisterLinewise = fields.RegisterLinewise
+	}
+	if fields.RegisterLinewiseCamel != nil {
+		expect.RegisterLinewise = fields.RegisterLinewiseCamel
+	}
+	if expect.RegisterLinewise == nil {
+		expect.RegisterLinewise = boolPtrJSONField(fieldMap, "linewise", "is_linewise", "isLinewise", "register_line_wise", "registerLineWise")
 	}
 	return nil
 }
