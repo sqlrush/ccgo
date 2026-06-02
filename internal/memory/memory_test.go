@@ -722,6 +722,24 @@ func TestMemoryAgentRecallParsesNestedModelSelections(t *testing.T) {
 	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "other" || result.Matches[1].Summary.SessionID != "prior" {
 		t.Fatalf("top-level matches = %#v", result.Matches)
 	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"rewritten_query":"credential rotation",
+		"candidateMemories":[
+			{"selectedSession":{"sessionUuid":"other"}},
+			{"candidate":{"summaryId":"prior"}}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credential rotation?", RecallOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential rotation" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other,prior" {
+		t.Fatalf("candidate alias result = %#v", result)
+	}
+	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "other" || result.Matches[1].Summary.SessionID != "prior" {
+		t.Fatalf("candidate alias matches = %#v", result.Matches)
+	}
 }
 
 func TestMemoryAgentRecallParsesWrappedSelectionsAndScalarID(t *testing.T) {

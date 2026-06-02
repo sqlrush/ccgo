@@ -284,8 +284,19 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		Memories                []json.RawMessage `json:"memories"`
 		Sessions                []json.RawMessage `json:"sessions"`
 		SelectedSessions        []json.RawMessage `json:"selected_sessions"`
+		SelectedSessionsCamel   []json.RawMessage `json:"selectedSessions"`
 		SelectedMemories        []json.RawMessage `json:"selected_memories"`
 		SelectedMemoriesCamel   []json.RawMessage `json:"selectedMemories"`
+		RelevantSessions        []json.RawMessage `json:"relevant_sessions"`
+		RelevantSessionsCamel   []json.RawMessage `json:"relevantSessions"`
+		RelevantMemories        []json.RawMessage `json:"relevant_memories"`
+		RelevantMemoriesCamel   []json.RawMessage `json:"relevantMemories"`
+		CandidateSessions       []json.RawMessage `json:"candidate_sessions"`
+		CandidateSessionsCamel  []json.RawMessage `json:"candidateSessions"`
+		CandidateMemories       []json.RawMessage `json:"candidate_memories"`
+		CandidateMemoriesCamel  []json.RawMessage `json:"candidateMemories"`
+		Candidates              []json.RawMessage `json:"candidates"`
+		Results                 []json.RawMessage `json:"results"`
 		Selection               json.RawMessage   `json:"selection"`
 		Selected                json.RawMessage   `json:"selected"`
 		Result                  json.RawMessage   `json:"result"`
@@ -327,7 +338,25 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			ids = recallIDs(append([]string{object.ID}, object.IDs...))
 		}
 		if len(ids) == 0 {
-			ids = recallIDsFromRawItems(object.Matches, object.Memories, object.Sessions, object.SelectedSessions, object.SelectedMemories, object.SelectedMemoriesCamel)
+			ids = recallIDsFromRawItems(
+				object.Matches,
+				object.Memories,
+				object.Sessions,
+				object.SelectedSessions,
+				object.SelectedSessionsCamel,
+				object.SelectedMemories,
+				object.SelectedMemoriesCamel,
+				object.RelevantSessions,
+				object.RelevantSessionsCamel,
+				object.RelevantMemories,
+				object.RelevantMemoriesCamel,
+				object.CandidateSessions,
+				object.CandidateSessionsCamel,
+				object.CandidateMemories,
+				object.CandidateMemoriesCamel,
+				object.Candidates,
+				object.Results,
+			)
 		}
 		query := strings.TrimSpace(object.Query)
 		if query == "" {
@@ -389,41 +418,124 @@ func recallIDsFromRawItems(groups ...[]json.RawMessage) []contracts.ID {
 	var raw []string
 	for _, group := range groups {
 		for _, item := range group {
-			var id string
-			if err := json.Unmarshal(item, &id); err == nil {
-				raw = append(raw, id)
-				continue
-			}
-			var object struct {
-				SessionID        string `json:"session_id"`
-				SessionIDCamel   string `json:"sessionId"`
-				SelectedID       string `json:"selected_id"`
-				SelectedIDCamel  string `json:"selectedId"`
-				SelectedSession  string `json:"selected_session"`
-				RelevantID       string `json:"relevant_id"`
-				RelevantIDCamel  string `json:"relevantId"`
-				MemoryID         string `json:"memory_id"`
-				MemoryIDCamel    string `json:"memoryId"`
-				CandidateID      string `json:"candidate_id"`
-				CandidateIDCamel string `json:"candidateId"`
-				ID               string `json:"id"`
-				UUID             string `json:"uuid"`
-				Session          json.RawMessage
-				Memory           json.RawMessage
-				Summary          json.RawMessage
-				Candidate        json.RawMessage
-			}
-			if err := json.Unmarshal(item, &object); err == nil {
-				raw = append(raw, object.SessionID, object.SessionIDCamel, object.SelectedID, object.SelectedIDCamel, object.SelectedSession, object.RelevantID, object.RelevantIDCamel, object.MemoryID, object.MemoryIDCamel, object.CandidateID, object.CandidateIDCamel, object.ID, object.UUID)
-				for _, nested := range []json.RawMessage{object.Session, object.Memory, object.Summary, object.Candidate} {
-					for _, id := range recallIDsFromRawItems([]json.RawMessage{nested}) {
-						raw = append(raw, string(id))
-					}
-				}
-			}
+			raw = appendRecallIDsFromRawValue(raw, item)
 		}
 	}
 	return recallIDs(raw)
+}
+
+func appendRecallIDsFromRawValue(raw []string, value json.RawMessage) []string {
+	if len(value) == 0 || string(value) == "null" {
+		return raw
+	}
+	var id string
+	if err := json.Unmarshal(value, &id); err == nil {
+		return append(raw, id)
+	}
+	var ids []string
+	if err := json.Unmarshal(value, &ids); err == nil {
+		return append(raw, ids...)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(value, &items); err == nil {
+		for _, item := range items {
+			raw = appendRecallIDsFromRawValue(raw, item)
+		}
+		return raw
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(value, &object); err != nil {
+		return raw
+	}
+	for _, key := range recallItemIDKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendRecallIDsFromRawValue(raw, nested)
+		}
+	}
+	for _, key := range recallNestedItemKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendRecallIDsFromRawValue(raw, nested)
+		}
+	}
+	return raw
+}
+
+var recallItemIDKeys = []string{
+	"session_id",
+	"sessionId",
+	"sessionID",
+	"session_uuid",
+	"sessionUuid",
+	"sessionUUID",
+	"selected_id",
+	"selectedId",
+	"selectedID",
+	"selected_session_id",
+	"selectedSessionId",
+	"selectedSessionID",
+	"selected_session",
+	"selectedSession",
+	"relevant_id",
+	"relevantId",
+	"relevantID",
+	"relevant_session_id",
+	"relevantSessionId",
+	"relevantSessionID",
+	"relevant_session",
+	"relevantSession",
+	"memory_id",
+	"memoryId",
+	"memoryID",
+	"memory_uuid",
+	"memoryUuid",
+	"memoryUUID",
+	"selected_memory_id",
+	"selectedMemoryId",
+	"selectedMemoryID",
+	"selected_memory",
+	"selectedMemory",
+	"relevant_memory_id",
+	"relevantMemoryId",
+	"relevantMemoryID",
+	"relevant_memory",
+	"relevantMemory",
+	"candidate_id",
+	"candidateId",
+	"candidateID",
+	"candidate_session_id",
+	"candidateSessionId",
+	"candidateSessionID",
+	"candidate_session",
+	"candidateSession",
+	"candidate_memory_id",
+	"candidateMemoryId",
+	"candidateMemoryID",
+	"candidate_memory",
+	"candidateMemory",
+	"summary_id",
+	"summaryId",
+	"summaryID",
+	"id",
+	"uuid",
+}
+
+var recallNestedItemKeys = []string{
+	"session",
+	"memory",
+	"summary",
+	"candidate",
+	"selected_session",
+	"selectedSession",
+	"selected_memory",
+	"selectedMemory",
+	"relevant_session",
+	"relevantSession",
+	"relevant_memory",
+	"relevantMemory",
+	"candidate_session",
+	"candidateSession",
+	"candidate_memory",
+	"candidateMemory",
 }
 
 func stripMarkdownFence(raw string) string {
