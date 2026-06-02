@@ -82,8 +82,15 @@ func TestSidechainRuntimeStartAppendFinish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sidechainTranscript.Order) != 3 || sidechainTranscript.Messages["agent_msg"].ParentUUID == nil || *sidechainTranscript.Messages["agent_msg"].ParentUUID != parent {
+	if len(sidechainTranscript.Order) != 3 {
 		t.Fatalf("sidechain transcript = %#v", sidechainTranscript.Order)
+	}
+	startUUID := sidechainTranscript.Order[0]
+	if sidechainTranscript.Messages["agent_msg"].ParentUUID == nil || *sidechainTranscript.Messages["agent_msg"].ParentUUID != startUUID {
+		t.Fatalf("agent message parent = %#v start=%s", sidechainTranscript.Messages["agent_msg"].ParentUUID, startUUID)
+	}
+	if sidechainTranscript.Messages[summary.UUID].ParentUUID == nil || *sidechainTranscript.Messages[summary.UUID].ParentUUID != "agent_msg" {
+		t.Fatalf("summary parent = %#v", sidechainTranscript.Messages[summary.UUID].ParentUUID)
 	}
 	mainTranscript, err := LoadTranscript(sessionPath)
 	if err != nil {

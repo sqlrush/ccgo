@@ -99,8 +99,17 @@ func (r SidechainRuntime) Append(run SidechainRun, message TranscriptMessage) er
 	if run.ID == "" {
 		return os.ErrInvalid
 	}
+	path := r.sidechainPath(run)
 	if message.ParentUUID == nil {
-		message.ParentUUID = run.ParentUUID
+		parent, err := latestTranscriptUUID(path)
+		if err != nil {
+			return err
+		}
+		if parent != "" {
+			message.ParentUUID = &parent
+		} else {
+			message.ParentUUID = run.ParentUUID
+		}
 	}
 	return AppendSidechainMessageInSubdir(r.SessionPath, r.SessionID, run.ID, run.Subdir, message)
 }
@@ -115,10 +124,16 @@ func (r SidechainRuntime) Finish(run SidechainRun, status string, summary string
 	if endedAt.IsZero() {
 		endedAt = time.Now().UTC()
 	}
+	parent := run.ParentUUID
+	if latest, err := latestTranscriptUUID(r.sidechainPath(run)); err != nil {
+		return TranscriptMessage{}, err
+	} else if latest != "" {
+		parent = &latest
+	}
 	message := TranscriptMessage{
 		Type:        "system",
 		UUID:        contracts.NewID(),
-		ParentUUID:  run.ParentUUID,
+		ParentUUID:  parent,
 		SessionID:   r.SessionID,
 		Timestamp:   endedAt.UTC().Format(time.RFC3339Nano),
 		Subtype:     "sidechain_summary",
@@ -138,4 +153,25 @@ func (r SidechainRuntime) Finish(run SidechainRun, status string, summary string
 		return TranscriptMessage{}, err
 	}
 	return message, nil
+}
+
+func (r SidechainRuntime) sidechainPath(run SidechainRun) string {
+	if run.Path != "" {
+		return run.Path
+	}
+	return SidechainTranscriptPathWithSubdir(r.SessionPath, r.SessionID, run.ID, run.Subdir)
+}
+
+func latestTranscriptUUID(path string) (contracts.ID, error) {
+	if path == "" {
+		return "", nil
+	}
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		return "", err
+	}
+	if len(transcript.Order) == 0 {
+		return "", nil
+	}
+	return transcript.Order[len(transcript.Order)-1], nil
 }
