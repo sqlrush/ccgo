@@ -13,6 +13,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	var fields struct {
 		RequestPermission         *PermissionRequest        `json:"request_permission"`
 		RequestPermissionCamel    *PermissionRequest        `json:"requestPermission"`
+		Mouse                     *ScriptMouse              `json:"mouse"`
+		MouseEvent                *ScriptMouse              `json:"mouse_event"`
+		MouseEventCamel           *ScriptMouse              `json:"mouseEvent"`
 		Keybindings               []BindingSpec             `json:"keybindings"`
 		KeyBindings               []BindingSpec             `json:"key_bindings"`
 		KeyBindingsCamel          []BindingSpec             `json:"keyBindings"`
@@ -97,6 +100,15 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.RequestPermissionCamel != nil {
 		step.RequestPermission = fields.RequestPermissionCamel
+	}
+	if fields.Mouse != nil {
+		step.Mouse = fields.Mouse
+	}
+	if fields.MouseEvent != nil {
+		step.Mouse = fields.MouseEvent
+	}
+	if fields.MouseEventCamel != nil {
+		step.Mouse = fields.MouseEventCamel
 	}
 	if fields.Keybindings != nil {
 		step.Keybindings = fields.Keybindings
@@ -342,6 +354,54 @@ func (image *ScriptImage) UnmarshalJSON(data []byte) error {
 	}
 	if fields.MediaType != nil {
 		image.MediaType = *fields.MediaType
+	}
+	return nil
+}
+
+func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
+	type alias ScriptMouse
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*mouse = ScriptMouse(raw)
+
+	var fields struct {
+		ButtonCode       *int  `json:"button_code"`
+		ButtonCodeCamel  *int  `json:"buttonCode"`
+		MouseButton      *int  `json:"mouse_button"`
+		MouseButtonCamel *int  `json:"mouseButton"`
+		Column           *int  `json:"column"`
+		Col              *int  `json:"col"`
+		Row              *int  `json:"row"`
+		Released         *bool `json:"released"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if fields.ButtonCode != nil {
+		mouse.Button = *fields.ButtonCode
+	}
+	if fields.ButtonCodeCamel != nil {
+		mouse.Button = *fields.ButtonCodeCamel
+	}
+	if fields.MouseButton != nil {
+		mouse.Button = *fields.MouseButton
+	}
+	if fields.MouseButtonCamel != nil {
+		mouse.Button = *fields.MouseButtonCamel
+	}
+	if fields.Column != nil {
+		mouse.X = *fields.Column
+	}
+	if fields.Col != nil {
+		mouse.X = *fields.Col
+	}
+	if fields.Row != nil {
+		mouse.Y = *fields.Row
+	}
+	if fields.Released != nil {
+		mouse.Release = *fields.Released
 	}
 	return nil
 }

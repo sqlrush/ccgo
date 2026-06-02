@@ -11,6 +11,7 @@ type ScriptStep struct {
 	Text                         string
 	Paste                        string
 	Image                        *ScriptImage
+	Mouse                        *ScriptMouse
 	Message                      *Message
 	Dialog                       *Dialog
 	Keybindings                  []BindingSpec
@@ -54,6 +55,13 @@ type ScriptImage struct {
 	Filename  string
 	MediaType string
 	Content   string
+}
+
+type ScriptMouse struct {
+	Button  int
+	X       int
+	Y       int
+	Release bool
 }
 
 type DialogExpectation struct {
@@ -227,6 +235,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		if step.Image != nil {
 			recordEvent(screen.ApplyKey(scriptImageKey(*step.Image)))
 		}
+		if step.Mouse != nil {
+			recordEvent(screen.ApplyKey(scriptMouseKey(*step.Mouse)))
+		}
 		for _, rawKey := range keys {
 			recordEvent(screen.ApplyKey(parseScriptKey(rawKey)))
 		}
@@ -378,6 +389,16 @@ func scriptImageKey(image ScriptImage) Key {
 		Content:   image.Content,
 		MediaType: image.MediaType,
 		Filename:  image.Filename,
+	}
+}
+
+func scriptMouseKey(mouse ScriptMouse) Key {
+	return Key{
+		Type:         KeyMouse,
+		MouseButton:  mouse.Button,
+		MouseX:       mouse.X,
+		MouseY:       mouse.Y,
+		MouseRelease: mouse.Release,
 	}
 }
 

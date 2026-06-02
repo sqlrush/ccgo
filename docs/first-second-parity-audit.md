@@ -135,6 +135,7 @@ M7 progress now includes:
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.
+- `internal/tui`: interaction scripts now accept structured `mouse`/`mouse_event` steps with button/x/y/release aliases and dispatch them through the normal screen event path.
 
 Still missing for full M6/M7 parity:
 
