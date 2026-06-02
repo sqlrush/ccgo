@@ -25,6 +25,84 @@ func stringListValue(list *stringList) []string {
 	return []string(*list)
 }
 
+type scriptSize struct {
+	Width  int
+	Height int
+}
+
+func (size *scriptSize) UnmarshalJSON(data []byte) error {
+	var pair []int
+	if err := json.Unmarshal(data, &pair); err == nil {
+		if len(pair) > 0 {
+			size.Width = pair[0]
+		}
+		if len(pair) > 1 {
+			size.Height = pair[1]
+		}
+		return nil
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if width := intPtrJSONField(fields, "width", "w", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth", "resize_width", "resizeWidth"); width != nil {
+		size.Width = *width
+	}
+	if height := intPtrJSONField(fields, "height", "h", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight", "resize_height", "resizeHeight"); height != nil {
+		size.Height = *height
+	}
+	return nil
+}
+
+func scriptSizeJSONField(fields map[string]json.RawMessage, names ...string) *scriptSize {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var size scriptSize
+		if err := json.Unmarshal(raw, &size); err == nil {
+			return &size
+		}
+	}
+	return nil
+}
+
+func scriptFocusKey(focused bool) string {
+	if focused {
+		return "focus-in"
+	}
+	return "focus-out"
+}
+
+func permissionRequestJSONField(fields map[string]json.RawMessage, names ...string) *PermissionRequest {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var request PermissionRequest
+		if err := json.Unmarshal(raw, &request); err == nil {
+			return &request
+		}
+	}
+	return nil
+}
+
+func taskStatusJSONField(fields map[string]json.RawMessage, names ...string) *TaskStatus {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var task TaskStatus
+		if err := json.Unmarshal(raw, &task); err == nil {
+			return &task
+		}
+	}
+	return nil
+}
+
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
@@ -66,26 +144,55 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		RemoveTaskID              *string                   `json:"remove_task_id"`
 		RemoveTaskIDCamel         *string                   `json:"removeTaskId"`
 		RemoveTaskIDUpperCamel    *string                   `json:"removeTaskID"`
+		RemoveTask                *string                   `json:"remove_task"`
+		RemoveTaskCamel           *string                   `json:"removeTask"`
+		DeleteTask                *string                   `json:"delete_task"`
+		DeleteTaskCamel           *string                   `json:"deleteTask"`
 		CancelActiveDialog        *bool                     `json:"cancel_active_dialog"`
 		CancelActiveDialogCamel   *bool                     `json:"cancelActiveDialog"`
 		CancelActive              *bool                     `json:"cancel_active"`
+		CancelActiveCamel         *bool                     `json:"cancelActive"`
+		CancelDialog              *bool                     `json:"cancel_dialog"`
+		CancelDialogCamel         *bool                     `json:"cancelDialog"`
+		CloseDialog               *bool                     `json:"close_dialog"`
+		CloseDialogCamel          *bool                     `json:"closeDialog"`
 		CancelPermissionID        *string                   `json:"cancel_permission_id"`
 		CancelPermissionIDAlt     *string                   `json:"cancelPermissionId"`
 		CancelPermissionIDUpper   *string                   `json:"cancelPermissionID"`
+		CancelPermission          *string                   `json:"cancel_permission"`
+		CancelPermissionCamel     *string                   `json:"cancelPermission"`
 		CancelAllPermissions      *bool                     `json:"cancel_all_permissions"`
 		CancelAllPermissionsCamel *bool                     `json:"cancelAllPermissions"`
+		CancelPermissions         *bool                     `json:"cancel_permissions"`
+		CancelPermissionsCamel    *bool                     `json:"cancelPermissions"`
 		CancelAllTasks            *bool                     `json:"cancel_all_tasks"`
 		CancelAllTasksCamel       *bool                     `json:"cancelAllTasks"`
+		CancelTasks               *bool                     `json:"cancel_tasks"`
+		CancelTasksCamel          *bool                     `json:"cancelTasks"`
 		CancelTasksDetail         *string                   `json:"cancel_tasks_detail"`
 		CancelTasksDetailCamel    *string                   `json:"cancelTasksDetail"`
+		CancelReason              *string                   `json:"cancel_reason"`
+		CancelReasonCamel         *string                   `json:"cancelReason"`
 		OpenTasksDialog           *bool                     `json:"open_tasks_dialog"`
 		OpenTasksDialogCamel      *bool                     `json:"openTasksDialog"`
+		OpenTasks                 *bool                     `json:"open_tasks"`
+		OpenTasksCamel            *bool                     `json:"openTasks"`
+		ShowTasks                 *bool                     `json:"show_tasks"`
+		ShowTasksCamel            *bool                     `json:"showTasks"`
 		ResizeWidth               *int                      `json:"resize_width"`
 		ResizeWidthCamel          *int                      `json:"resizeWidth"`
 		ResizeHeight              *int                      `json:"resize_height"`
 		ResizeHeightCamel         *int                      `json:"resizeHeight"`
 		SnapshotName              *string                   `json:"snapshot_name"`
 		SnapshotNameCamel         *string                   `json:"snapshotName"`
+		Focus                     *bool                     `json:"focus"`
+		Focused                   *bool                     `json:"focused"`
+		FocusIn                   *bool                     `json:"focus_in"`
+		FocusInCamel              *bool                     `json:"focusIn"`
+		FocusOut                  *bool                     `json:"focus_out"`
+		FocusOutCamel             *bool                     `json:"focusOut"`
+		Blur                      *bool                     `json:"blur"`
+		Blurred                   *bool                     `json:"blurred"`
 		ExpectEvent               *ScreenEvent              `json:"expect_event"`
 		ExpectEventCamel          *ScreenEvent              `json:"expectEvent"`
 		ExpectEvents              []ScreenEvent             `json:"expect_events"`
@@ -135,11 +242,18 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
 	if fields.RequestPermission != nil {
 		step.RequestPermission = fields.RequestPermission
 	}
 	if fields.RequestPermissionCamel != nil {
 		step.RequestPermission = fields.RequestPermissionCamel
+	}
+	if request := permissionRequestJSONField(fieldMap, "permission", "permission_request", "permissionRequest", "request"); request != nil {
+		step.RequestPermission = request
 	}
 	if fields.RawKey != nil {
 		step.Key = *fields.RawKey
@@ -219,6 +333,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.UpsertTaskCamel != nil {
 		step.UpsertTask = fields.UpsertTaskCamel
 	}
+	if task := taskStatusJSONField(fieldMap, "task", "task_status", "taskStatus"); task != nil {
+		step.UpsertTask = task
+	}
 	if fields.RemoveTaskID != nil {
 		step.RemoveTaskID = *fields.RemoveTaskID
 	}
@@ -227,6 +344,18 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.RemoveTaskIDUpperCamel != nil {
 		step.RemoveTaskID = *fields.RemoveTaskIDUpperCamel
+	}
+	if fields.RemoveTask != nil {
+		step.RemoveTaskID = *fields.RemoveTask
+	}
+	if fields.RemoveTaskCamel != nil {
+		step.RemoveTaskID = *fields.RemoveTaskCamel
+	}
+	if fields.DeleteTask != nil {
+		step.RemoveTaskID = *fields.DeleteTask
+	}
+	if fields.DeleteTaskCamel != nil {
+		step.RemoveTaskID = *fields.DeleteTaskCamel
 	}
 	if fields.CancelActiveDialog != nil {
 		step.CancelActiveDialog = *fields.CancelActiveDialog
@@ -237,6 +366,21 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.CancelActive != nil {
 		step.CancelActiveDialog = *fields.CancelActive
 	}
+	if fields.CancelActiveCamel != nil {
+		step.CancelActiveDialog = *fields.CancelActiveCamel
+	}
+	if fields.CancelDialog != nil {
+		step.CancelActiveDialog = *fields.CancelDialog
+	}
+	if fields.CancelDialogCamel != nil {
+		step.CancelActiveDialog = *fields.CancelDialogCamel
+	}
+	if fields.CloseDialog != nil {
+		step.CancelActiveDialog = *fields.CloseDialog
+	}
+	if fields.CloseDialogCamel != nil {
+		step.CancelActiveDialog = *fields.CloseDialogCamel
+	}
 	if fields.CancelPermissionID != nil {
 		step.CancelPermissionID = *fields.CancelPermissionID
 	}
@@ -246,11 +390,23 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.CancelPermissionIDUpper != nil {
 		step.CancelPermissionID = *fields.CancelPermissionIDUpper
 	}
+	if fields.CancelPermission != nil {
+		step.CancelPermissionID = *fields.CancelPermission
+	}
+	if fields.CancelPermissionCamel != nil {
+		step.CancelPermissionID = *fields.CancelPermissionCamel
+	}
 	if fields.CancelAllPermissions != nil {
 		step.CancelAllPermissions = *fields.CancelAllPermissions
 	}
 	if fields.CancelAllPermissionsCamel != nil {
 		step.CancelAllPermissions = *fields.CancelAllPermissionsCamel
+	}
+	if fields.CancelPermissions != nil {
+		step.CancelAllPermissions = *fields.CancelPermissions
+	}
+	if fields.CancelPermissionsCamel != nil {
+		step.CancelAllPermissions = *fields.CancelPermissionsCamel
 	}
 	if fields.CancelAllTasks != nil {
 		step.CancelAllTasks = *fields.CancelAllTasks
@@ -258,17 +414,41 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.CancelAllTasksCamel != nil {
 		step.CancelAllTasks = *fields.CancelAllTasksCamel
 	}
+	if fields.CancelTasks != nil {
+		step.CancelAllTasks = *fields.CancelTasks
+	}
+	if fields.CancelTasksCamel != nil {
+		step.CancelAllTasks = *fields.CancelTasksCamel
+	}
 	if fields.CancelTasksDetail != nil {
 		step.CancelTasksDetail = *fields.CancelTasksDetail
 	}
 	if fields.CancelTasksDetailCamel != nil {
 		step.CancelTasksDetail = *fields.CancelTasksDetailCamel
 	}
+	if fields.CancelReason != nil {
+		step.CancelTasksDetail = *fields.CancelReason
+	}
+	if fields.CancelReasonCamel != nil {
+		step.CancelTasksDetail = *fields.CancelReasonCamel
+	}
 	if fields.OpenTasksDialog != nil {
 		step.OpenTasksDialog = *fields.OpenTasksDialog
 	}
 	if fields.OpenTasksDialogCamel != nil {
 		step.OpenTasksDialog = *fields.OpenTasksDialogCamel
+	}
+	if fields.OpenTasks != nil {
+		step.OpenTasksDialog = *fields.OpenTasks
+	}
+	if fields.OpenTasksCamel != nil {
+		step.OpenTasksDialog = *fields.OpenTasksCamel
+	}
+	if fields.ShowTasks != nil {
+		step.OpenTasksDialog = *fields.ShowTasks
+	}
+	if fields.ShowTasksCamel != nil {
+		step.OpenTasksDialog = *fields.ShowTasksCamel
 	}
 	if fields.ResizeWidth != nil {
 		step.ResizeWidth = *fields.ResizeWidth
@@ -282,11 +462,56 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ResizeHeightCamel != nil {
 		step.ResizeHeight = *fields.ResizeHeightCamel
 	}
+	if size := scriptSizeJSONField(fieldMap, "resize", "resize_to", "resizeTo", "screen_size", "screenSize", "terminal_size", "terminalSize", "size"); size != nil {
+		if size.Width > 0 {
+			step.ResizeWidth = size.Width
+		}
+		if size.Height > 0 {
+			step.ResizeHeight = size.Height
+		}
+	}
+	if step.ResizeWidth <= 0 {
+		if width := intPtrJSONField(fieldMap, "width", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth"); width != nil {
+			step.ResizeWidth = *width
+		}
+	}
+	if step.ResizeHeight <= 0 {
+		if height := intPtrJSONField(fieldMap, "height", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight"); height != nil {
+			step.ResizeHeight = *height
+		}
+	}
 	if fields.SnapshotName != nil {
 		step.SnapshotName = *fields.SnapshotName
 	}
 	if fields.SnapshotNameCamel != nil {
 		step.SnapshotName = *fields.SnapshotNameCamel
+	}
+	if step.SnapshotName == "" {
+		step.SnapshotName = stringJSONField(fieldMap, "snapshot", "snapshot_id", "snapshotId", "snapshot_label", "snapshotLabel", "capture_name", "captureName", "baseline_name", "baselineName")
+	}
+	if fields.Focus != nil {
+		step.Keys = append(step.Keys, scriptFocusKey(*fields.Focus))
+	}
+	if fields.Focused != nil {
+		step.Keys = append(step.Keys, scriptFocusKey(*fields.Focused))
+	}
+	if fields.FocusIn != nil && *fields.FocusIn {
+		step.Keys = append(step.Keys, "focus-in")
+	}
+	if fields.FocusInCamel != nil && *fields.FocusInCamel {
+		step.Keys = append(step.Keys, "focus-in")
+	}
+	if fields.FocusOut != nil && *fields.FocusOut {
+		step.Keys = append(step.Keys, "focus-out")
+	}
+	if fields.FocusOutCamel != nil && *fields.FocusOutCamel {
+		step.Keys = append(step.Keys, "focus-out")
+	}
+	if fields.Blur != nil && *fields.Blur {
+		step.Keys = append(step.Keys, "focus-out")
+	}
+	if fields.Blurred != nil {
+		step.Keys = append(step.Keys, scriptFocusKey(!*fields.Blurred))
 	}
 	if fields.ExpectEvent != nil {
 		step.ExpectEvent = fields.ExpectEvent

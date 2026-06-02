@@ -1904,6 +1904,54 @@ func TestDialogRuntimeInteractionScriptCancelsPermissions(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeInteractionScriptAcceptsMutationAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"permission": {"requestId": "perm_1", "tool": "Bash", "path": "/tmp/project", "choices": ["Allow", "Deny"]},
+			"expectDialog": {"visible": true, "dialogId": "perm_1", "dialogKind": "permission"},
+			"expectStatusContains": "permissions: 1"
+		},
+		{
+			"cancelPermission": "perm_1",
+			"expectDialogResult": {"dialogId": "perm_1", "resultStatus": "cancelled", "exists": true},
+			"expectDialog": {"visible": false},
+			"expectStatusNotContains": "permissions: 1"
+		},
+		{
+			"taskStatus": {"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 20}
+		},
+		{
+			"showTasks": true,
+			"expectDialog": {"visible": true, "dialogId": "tasks", "dialogKind": "task"},
+			"expectTasks": {"taskCount": 1, "statusCounts": {"running": 1}, "contains": {"taskId": "task_1", "status": "running", "statusText": "go test", "progressPercent": 20}},
+			"expectSnapshotContains": "Build [running] 20% - go test"
+		},
+		{
+			"cancelTasks": true,
+			"cancelReason": "interrupted",
+			"expectTasks": {"taskCount": 1, "statusCounts": {"cancelled": 1}, "contains": {"taskId": "task_1", "status": "cancelled", "statusText": "interrupted", "progressPercent": 20}},
+			"expectStatusContains": "cancelled: 1"
+		},
+		{
+			"removeTask": "task_1",
+			"expectTasks": {"taskCount": 0},
+			"expectSnapshotContains": "No active tasks."
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_1" || result.DialogResults[0].Status != DialogResultCancelled {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestDialogRuntimeIgnoresStalePermissionEventsAndCancelsActive(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.RequestPermission(PermissionRequest{ID: "old", ToolName: "Write"})
@@ -4232,6 +4280,30 @@ func TestRunInteractionScriptAcceptsScreenViewportAliases(t *testing.T) {
 	screen := NewREPLScreen(22, 6, nil)
 	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunInteractionScriptAcceptsStepStateAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"request": "label-only", "task": "label-only", "resize": {"columns": 42, "rows": 8}, "expectScreen": {"width": 42, "height": 8}},
+		{"terminalSize": [44, 9], "expectScreen": {"width": 44, "height": 9}},
+		{"blur": true, "expectEvent": {"type": "focus_out"}, "expectFocused": false},
+		{"focus": true, "expectEvent": {"type": "focus_in"}, "expectFocused": true},
+		{"message": {"role": "assistant", "text": "ready"}, "snapshot": "ready-state", "expectSnapshotContains": "assistant: ready"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 || result.Events[0].Type != ScreenEventFocusOut || result.Events[1].Type != ScreenEventFocusIn {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "ready-state" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
 	}
 }
 
