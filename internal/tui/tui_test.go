@@ -961,6 +961,55 @@ func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
 	if len(loaded) != 1 || loaded[0].Key != "shiftEnter" {
 		t.Fatalf("loaded specs = %#v", loaded)
 	}
+
+	specs, err = ParseKeyBindingSpecs([]byte(`{
+		"ctrl-r": {"commandName": "pageDown"},
+		"ctrl-x ctrl-k": null,
+		"ctrl-j": {"commandId": "submitPrompt"}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keymap, err = KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
+		t.Fatalf("object map ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("object map ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionNone {
+		t.Fatalf("object map removed ctrl-x ctrl-k action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\n")); action != ActionSubmitPrompt {
+		t.Fatalf("object map ctrl-j action = %q", action)
+	}
+
+	specs, err = ParseKeyBindingSpecs([]byte(`{
+		"shortcuts": {
+			"ctrl-[": false,
+			"shift-enter": {"command_id": "insert-newline"},
+			"ctrl-w": {"shortcutKey": "ctrl-w", "actionName": "deleteWordBackward"}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keymap, err = KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b")); action != ActionNone {
+		t.Fatalf("shortcut map ctrl-[ action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[13;2u")); action != ActionInsertNewline {
+		t.Fatalf("shortcut map shift-enter action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x17")); action != ActionDeleteWordBack {
+		t.Fatalf("shortcutKey override action = %q", action)
+	}
 }
 
 func TestKeymapResolvesChordBindings(t *testing.T) {
