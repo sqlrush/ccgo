@@ -3545,6 +3545,38 @@ func TestRunDialogRuntimeScriptChecksDialogDetails(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsDialogFieldAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {"permissionId": "perm_alias", "tool": "Bash", "prompt": "Need approval."},
+			"expectDialog": {
+				"isActive": true,
+				"dialogId": "perm_alias",
+				"dialogKind": "permission",
+				"heading": "Permission",
+				"content": "Tool: Bash\nNeed approval.",
+				"actionContains": "Allow"
+			}
+		},
+		{
+			"key": "enter",
+			"expectDialog": {"visible": false}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_alias" || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
 		{

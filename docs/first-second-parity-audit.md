@@ -152,6 +152,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script image steps now accept filename aliases such as `fileName`/`file_name`/`name`, media-type aliases such as `mimeType`/`mime_type`/`contentType`, and content aliases such as `data`/`base64`.
 - `internal/tui`: interaction script permission request steps now accept request/permission/tool-use ID aliases, path aliases, description aliases, action-list aliases, and single-string `actions`.
 - `internal/tui`: interaction script dialog expectations now support body contains/not-contains, exact actions, action contains/not-contains, action count, and focused action assertions, with runtime-aware scripts preserving dialog focused action across steps.
+- `internal/tui`: interaction script dialog expectations now accept active, ID, kind, title, and body aliases such as `isActive`/`visible`, `dialogId`/`dialogID`, `dialogKind`, `heading`/`header`, and `content`/`text`/`message`.
 - `internal/tui`: interaction script event and dialog-result expectations now accept aliases such as `eventType`/`event`/`name`, `payload`/`text`/`message`, `dialogId`/`dialogID`/`dialogKind`, `actionValue`/`resultStatus`, and found/stale aliases.
 
 Still missing for full M6/M7 parity:

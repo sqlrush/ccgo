@@ -707,6 +707,27 @@ func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
+		return err
+	}
+	if active := boolPtrJSONField(fieldMap, "is_active", "isActive", "visible", "exists", "present"); active != nil {
+		expect.Active = *active
+	}
+	if expect.ID == "" {
+		expect.ID = stringJSONField(fieldMap, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID")
+	}
+	if expect.Kind == "" {
+		if dialogKind := stringJSONField(fieldMap, "dialog_kind", "dialogKind"); dialogKind != "" {
+			expect.Kind = DialogKind(dialogKind)
+		}
+	}
+	if expect.Title == "" {
+		expect.Title = stringJSONField(fieldMap, "heading", "header", "label", "name")
+	}
+	if expect.Body == "" {
+		expect.Body = stringJSONField(fieldMap, "content", "text", "message", "description")
+	}
 	if fields.BodyContains != nil {
 		expect.BodyContains = stringListValue(fields.BodyContains)
 	}
