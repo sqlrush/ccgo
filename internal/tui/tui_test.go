@@ -3262,6 +3262,45 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsStringContainsAliases(t *testing.T) {
+	var steps []ScriptStep
+	if err := json.Unmarshal([]byte(`[
+		{
+			"resizeWidth": 40,
+			"resizeHeight": 8,
+			"message": {"role": "system", "text": "alpha ready"},
+			"pasteText": "alpha\nbeta",
+			"snapshotName": "string-contains",
+			"expect_status_contains": "ready",
+			"expectStatusNotContains": "blocked",
+			"expect_snapshot_contains": "[Pasted text #1 +1 lines]",
+			"expectSnapshotNotContains": "missing marker",
+			"expect_prompt": {
+				"text": "[Pasted text #1 +1 lines]",
+				"expanded": "alpha\nbeta",
+				"pastedContents": [
+					{"id": 1, "type": "text", "contentContains": "beta"}
+				]
+			},
+			"expectViewport": {
+				"visibleContains": "system: alpha ready",
+				"visibleNotContains": "not visible"
+			}
+		}
+	]`), &steps); err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(20, 4, nil)
+	screen.Status = "ready"
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "string-contains" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
 func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

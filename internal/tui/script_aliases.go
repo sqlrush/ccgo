@@ -2,6 +2,29 @@ package tui
 
 import "encoding/json"
 
+type stringList []string
+
+func (list *stringList) UnmarshalJSON(data []byte) error {
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		*list = []string{single}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(data, &many); err != nil {
+		return err
+	}
+	*list = many
+	return nil
+}
+
+func stringListValue(list *stringList) []string {
+	if list == nil {
+		return nil
+	}
+	return []string(*list)
+}
+
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
@@ -100,14 +123,14 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectScreenCamel         *ScreenExpectation        `json:"expectScreen"`
 		ExpectFocused             *bool                     `json:"expect_focused"`
 		ExpectFocusedCamel        *bool                     `json:"expectFocused"`
-		ExpectStatusContains      []string                  `json:"expect_status_contains"`
-		ExpectStatusContainsCamel []string                  `json:"expectStatusContains"`
-		ExpectStatusNotContains   []string                  `json:"expect_status_not_contains"`
-		ExpectStatusNotCamel      []string                  `json:"expectStatusNotContains"`
-		ExpectSnapshotContains    []string                  `json:"expect_snapshot_contains"`
-		ExpectSnapshotCamel       []string                  `json:"expectSnapshotContains"`
-		ExpectSnapshotNotContains []string                  `json:"expect_snapshot_not_contains"`
-		ExpectSnapshotNotCamel    []string                  `json:"expectSnapshotNotContains"`
+		ExpectStatusContains      *stringList               `json:"expect_status_contains"`
+		ExpectStatusContainsCamel *stringList               `json:"expectStatusContains"`
+		ExpectStatusNotContains   *stringList               `json:"expect_status_not_contains"`
+		ExpectStatusNotCamel      *stringList               `json:"expectStatusNotContains"`
+		ExpectSnapshotContains    *stringList               `json:"expect_snapshot_contains"`
+		ExpectSnapshotCamel       *stringList               `json:"expectSnapshotContains"`
+		ExpectSnapshotNotContains *stringList               `json:"expect_snapshot_not_contains"`
+		ExpectSnapshotNotCamel    *stringList               `json:"expectSnapshotNotContains"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -377,41 +400,64 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectFocused = fields.ExpectFocusedCamel
 	}
 	if fields.ExpectStatusContains != nil {
-		step.ExpectStatusContains = fields.ExpectStatusContains
+		step.ExpectStatusContains = stringListValue(fields.ExpectStatusContains)
 	}
 	if fields.ExpectStatusContainsCamel != nil {
-		step.ExpectStatusContains = fields.ExpectStatusContainsCamel
+		step.ExpectStatusContains = stringListValue(fields.ExpectStatusContainsCamel)
 	}
 	if fields.ExpectStatusNotContains != nil {
-		step.ExpectStatusNotContains = fields.ExpectStatusNotContains
+		step.ExpectStatusNotContains = stringListValue(fields.ExpectStatusNotContains)
 	}
 	if fields.ExpectStatusNotCamel != nil {
-		step.ExpectStatusNotContains = fields.ExpectStatusNotCamel
+		step.ExpectStatusNotContains = stringListValue(fields.ExpectStatusNotCamel)
 	}
 	if fields.ExpectSnapshotContains != nil {
-		step.ExpectSnapshotContains = fields.ExpectSnapshotContains
+		step.ExpectSnapshotContains = stringListValue(fields.ExpectSnapshotContains)
 	}
 	if fields.ExpectSnapshotCamel != nil {
-		step.ExpectSnapshotContains = fields.ExpectSnapshotCamel
+		step.ExpectSnapshotContains = stringListValue(fields.ExpectSnapshotCamel)
 	}
 	if fields.ExpectSnapshotNotContains != nil {
-		step.ExpectSnapshotNotContains = fields.ExpectSnapshotNotContains
+		step.ExpectSnapshotNotContains = stringListValue(fields.ExpectSnapshotNotContains)
 	}
 	if fields.ExpectSnapshotNotCamel != nil {
-		step.ExpectSnapshotNotContains = fields.ExpectSnapshotNotCamel
+		step.ExpectSnapshotNotContains = stringListValue(fields.ExpectSnapshotNotCamel)
 	}
 	return nil
 }
 
 func normalizeScriptStepJSON(data []byte) []byte {
+	return normalizeStringFieldsToArray(data,
+		"keys",
+		"expect_status_contains",
+		"expectStatusContains",
+		"expect_status_not_contains",
+		"expectStatusNotContains",
+		"expect_snapshot_contains",
+		"expectSnapshotContains",
+		"expect_snapshot_not_contains",
+		"expectSnapshotNotContains",
+	)
+}
+
+func normalizeStringFieldsToArray(data []byte, names ...string) []byte {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return data
 	}
-	if raw, ok := fields["keys"]; ok {
-		if normalized, changed := normalizeStringFieldToArray(raw); changed {
-			fields["keys"] = normalized
+	changed := false
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
 		}
+		if normalized, ok := normalizeStringFieldToArray(raw); ok {
+			fields[name] = normalized
+			changed = true
+		}
+	}
+	if !changed {
+		return data
 	}
 	normalized, err := json.Marshal(fields)
 	if err != nil {
@@ -605,6 +651,7 @@ func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeStringFieldsToArray(data, "content_contains", "contentContains")
 	type alias PastedContentExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -613,19 +660,19 @@ func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 	*expect = PastedContentExpectation(raw)
 
 	var fields struct {
-		ContentContains      []string `json:"content_contains"`
-		ContentContainsCamel []string `json:"contentContains"`
-		MediaType            *string  `json:"media_type"`
-		MediaTypeCamel       *string  `json:"mediaType"`
+		ContentContains      *stringList `json:"content_contains"`
+		ContentContainsCamel *stringList `json:"contentContains"`
+		MediaType            *string     `json:"media_type"`
+		MediaTypeCamel       *string     `json:"mediaType"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
 	if fields.ContentContains != nil {
-		expect.ContentContains = fields.ContentContains
+		expect.ContentContains = stringListValue(fields.ContentContains)
 	}
 	if fields.ContentContainsCamel != nil {
-		expect.ContentContains = fields.ContentContainsCamel
+		expect.ContentContains = stringListValue(fields.ContentContainsCamel)
 	}
 	if fields.MediaType != nil {
 		expect.MediaType = *fields.MediaType
@@ -793,6 +840,12 @@ func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeStringFieldsToArray(data,
+		"visible_contains",
+		"visibleContains",
+		"visible_not_contains",
+		"visibleNotContains",
+	)
 	type alias ViewportExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -801,9 +854,11 @@ func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
 	*expect = ViewportExpectation(raw)
 
 	var fields struct {
-		VisibleLineCount   *int     `json:"visible_line_count"`
-		VisibleContains    []string `json:"visible_contains"`
-		VisibleNotContains []string `json:"visible_not_contains"`
+		VisibleLineCount        *int        `json:"visible_line_count"`
+		VisibleContains         *stringList `json:"visible_contains"`
+		VisibleContainsCamel    *stringList `json:"visibleContains"`
+		VisibleNotContains      *stringList `json:"visible_not_contains"`
+		VisibleNotContainsCamel *stringList `json:"visibleNotContains"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -812,10 +867,16 @@ func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
 		expect.VisibleLineCount = *fields.VisibleLineCount
 	}
 	if fields.VisibleContains != nil {
-		expect.VisibleContains = fields.VisibleContains
+		expect.VisibleContains = stringListValue(fields.VisibleContains)
+	}
+	if fields.VisibleContainsCamel != nil {
+		expect.VisibleContains = stringListValue(fields.VisibleContainsCamel)
 	}
 	if fields.VisibleNotContains != nil {
-		expect.VisibleNotContains = fields.VisibleNotContains
+		expect.VisibleNotContains = stringListValue(fields.VisibleNotContains)
+	}
+	if fields.VisibleNotContainsCamel != nil {
+		expect.VisibleNotContains = stringListValue(fields.VisibleNotContainsCamel)
 	}
 	return nil
 }
