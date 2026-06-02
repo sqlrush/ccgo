@@ -3087,6 +3087,58 @@ func TestRunDialogRuntimeScriptAcceptsJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
+		{
+			"requestPermission": {"id": "perm_1", "toolName": "Bash", "path": "/tmp/a"},
+			"expectDialog": {"active": true, "id": "perm_1", "kind": "permission"},
+			"expectStatusContains": ["permissions: 1"]
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "dialog_action", "value": "Allow", "dialogId": "perm_1", "dialogKind": "permission"},
+			"expectDialogResult": {"id": "perm_1", "status": "allowed", "found": true},
+			"expectStatusNotContains": ["permissions: 1"]
+		},
+		{
+			"upsertTask": {"taskId": "task_1", "name": "Build", "status": "running", "statusText": "go test", "progressPercent": 40},
+			"openTasksDialog": true,
+			"snapshotName": "tasks",
+			"expectDialog": {"active": true, "id": "tasks", "kind": "task"},
+			"expectTasks": {"count": 1, "stateCounts": {"running": 1}, "contains": [{"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 40}]},
+			"expectSnapshotContains": ["Build [running] 40% - go test"]
+		},
+		{
+			"cancelAllTasks": true,
+			"cancelTasksDetail": "stopped",
+			"expectTasks": {"count": 1, "stateCounts": {"cancelled": 1}, "contains": [{"task_id": "task_1", "state": "cancelled", "detail": "stopped", "progress_percent": 40}]},
+			"expectStatusContains": ["cancelled: 1"]
+		},
+		{
+			"removeTaskId": "task_1",
+			"expectTasks": {"count": 0}
+		}
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(50, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_1" || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	if len(runtime.Tasks) != 0 {
+		t.Fatalf("tasks = %#v", runtime.Tasks)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "tasks" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
 func TestParseInteractionScriptAcceptsJSONArrayJSONLAndFile(t *testing.T) {
 	arraySteps, err := ParseInteractionScript([]byte(`[
 		{"text": "go", "expect_prompt": {"text": "go"}},
