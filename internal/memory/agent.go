@@ -512,7 +512,7 @@ func parseFactsJSON(raw string) ([]MemoryFact, error) {
 		if text == "" {
 			continue
 		}
-		sourceUUID := firstNonEmpty(entry.SourceUUID, entry.SourceUUIDCamel, entry.SourceID, entry.Source, entry.MessageUUID, entry.MessageUUIDCamel, entry.SourceMessageID, entry.SourceMessageIDCamel, entry.UUID)
+		sourceUUID := firstNonEmpty(entry.SourceUUID, entry.SourceUUIDCamel, entry.SourceID, entry.SourceIDCamel, entry.Source, entry.MessageUUID, entry.MessageUUIDCamel, entry.MessageID, entry.MessageIDCamel, entry.SourceMessageID, entry.SourceMessageIDCamel, entry.UUID)
 		facts = append(facts, MemoryFact{Kind: kind, Text: text, SourceUUID: contracts.ID(sourceUUID)})
 	}
 	return facts, nil
@@ -575,13 +575,35 @@ func collectRawMemoryFacts(value any) []rawMemoryFact {
 }
 
 func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return rawMemoryFact{}, false
+	fact := rawMemoryFact{
+		Kind:                 stringMapField(value, "kind"),
+		Type:                 stringMapField(value, "type"),
+		FactType:             stringMapField(value, "fact_type", "factType"),
+		Category:             stringMapField(value, "category"),
+		Label:                stringMapField(value, "label"),
+		Text:                 stringMapField(value, "text"),
+		Content:              stringMapField(value, "content"),
+		Summary:              stringMapField(value, "summary"),
+		Value:                stringMapField(value, "value"),
+		Detail:               stringMapField(value, "detail"),
+		SourceUUID:           stringMapField(value, "source_uuid"),
+		SourceUUIDCamel:      stringMapField(value, "sourceUuid"),
+		SourceID:             stringMapField(value, "source_id"),
+		SourceIDCamel:        stringMapField(value, "sourceId"),
+		Source:               nestedIDFromValue(value["source"]),
+		MessageUUID:          stringMapField(value, "message_uuid"),
+		MessageUUIDCamel:     stringMapField(value, "messageUuid"),
+		MessageID:            stringMapField(value, "message_id"),
+		MessageIDCamel:       stringMapField(value, "messageId"),
+		SourceMessageID:      stringMapField(value, "source_message_id"),
+		SourceMessageIDCamel: stringMapField(value, "sourceMessageId"),
+		UUID:                 stringMapField(value, "uuid"),
 	}
-	var fact rawMemoryFact
-	if err := json.Unmarshal(encoded, &fact); err != nil {
-		return rawMemoryFact{}, false
+	if fact.MessageUUID == "" {
+		fact.MessageUUID = nestedIDFromValue(value["message"])
+	}
+	if fact.SourceMessageID == "" {
+		fact.SourceMessageID = nestedIDFromValue(value["source_message"])
 	}
 	if firstNonEmpty(fact.Kind, fact.Type, fact.FactType, fact.Category, fact.Label) == "" {
 		return rawMemoryFact{}, false
@@ -590,6 +612,34 @@ func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
 		return rawMemoryFact{}, false
 	}
 	return fact, true
+}
+
+func stringMapField(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text := stringFromValue(value[key]); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func nestedIDFromValue(value any) string {
+	if text := stringFromValue(value); text != "" {
+		return text
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return stringMapField(object, "source_uuid", "sourceUuid", "source_id", "sourceId", "message_uuid", "messageUuid", "message_id", "messageId", "uuid", "id")
+}
+
+func stringFromValue(value any) string {
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
 }
 
 type rawMemoryFact struct {
@@ -606,9 +656,12 @@ type rawMemoryFact struct {
 	SourceUUID           string `json:"source_uuid"`
 	SourceUUIDCamel      string `json:"sourceUuid"`
 	SourceID             string `json:"source_id"`
+	SourceIDCamel        string `json:"sourceId"`
 	Source               string `json:"source"`
 	MessageUUID          string `json:"message_uuid"`
 	MessageUUIDCamel     string `json:"messageUuid"`
+	MessageID            string `json:"message_id"`
+	MessageIDCamel       string `json:"messageId"`
 	SourceMessageID      string `json:"source_message_id"`
 	SourceMessageIDCamel string `json:"sourceMessageId"`
 	UUID                 string `json:"uuid"`

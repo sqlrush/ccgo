@@ -488,6 +488,40 @@ func TestMemoryAgentExtractsNestedFactResponseShapes(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsNestedFactSourceObjects(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_nested_sources",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"facts":[
+			{"kind":"preference","text":"prefer nested source ids","source":{"uuid":"user_1"}},
+			{"type":"decision","content":"keep nested message ids","message":{"id":"assistant_1"}},
+			{"factType":"request","summary":"support camel source ids","sourceId":"user_2"},
+			{"category":"tool","detail":"read source message object","source_message":{"messageUuid":"assistant_2"}}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember nested sources")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 4 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer nested source ids", "user_1") {
+		t.Fatalf("nested source fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "keep nested message ids", "assistant_1") {
+		t.Fatalf("nested message fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactRequest, "support camel source ids", "user_2") {
+		t.Fatalf("camel source id fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactTool, "read source message object", "assistant_2") {
+		t.Fatalf("nested source message fact missing = %#v", result.Facts)
+	}
+}
+
 func hasMemoryFact(facts []MemoryFact, kind FactKind, text string, source contracts.ID) bool {
 	for _, fact := range facts {
 		if fact.Kind == kind && fact.Text == text && fact.SourceUUID == source {
