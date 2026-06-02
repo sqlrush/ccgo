@@ -346,6 +346,41 @@ func TestFetchRemoteHistoryAcceptsRecordAliasesAndEventIDCursor(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsConnectionWrappers(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"edge_cursor","node":{"type":"status","eventId":"evt_edge","sessionUUID":"s","status":"latest"}}],"pageInfo":{"hasNextPage":"true","endCursor":"evt_edge"}}}`))
+		case "evt_edge":
+			_, _ = w.Write([]byte(`{"messages":{"nodes":[{"type":"status","event_id":"evt_old","session_uuid":"s","status":"older"}],"page_info":{"has_next_page":false,"start_cursor":"ignored_when_complete"}}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_edge" || events.Events[0].SessionID != "s" || events.Events[0].Status != "latest" {
+		t.Fatalf("latest event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_old" || events.Events[1].SessionID != "s" || events.Events[1].Status != "older" {
+		t.Fatalf("older event = %#v", events.Events[1])
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_edge" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryStopsAtMaxPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
