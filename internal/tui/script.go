@@ -23,6 +23,7 @@ type ScriptStep struct {
 	ResizeHeight              int
 	SnapshotName              string
 	ExpectEvent               *ScreenEvent
+	ExpectEvents              []ScreenEvent
 	ExpectDialogResult        *DialogResultExpectation
 	ExpectDialog              *DialogExpectation
 	ExpectPrompt              *PromptExpectation
@@ -139,8 +140,17 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 	var dialogResults []DialogResult
 	for index, step := range steps {
 		var event ScreenEvent
+		var stepEvents []ScreenEvent
 		var snapshot ANSISnapshot
 		var dialogResult *DialogResult
+		recordEvent := func(next ScreenEvent) {
+			event = next
+			if next.Type == ScreenEventNone {
+				return
+			}
+			result.Events = append(result.Events, next)
+			stepEvents = append(stepEvents, next)
+		}
 		if err := applyRuntimeStep(index, runtime, step); err != nil {
 			return result, dialogResults, err
 		}
@@ -170,29 +180,17 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 		if step.Text != "" {
 			for _, r := range step.Text {
-				event = screen.ApplyKey(Key{Type: KeyRune, Rune: r})
-				if event.Type != ScreenEventNone {
-					result.Events = append(result.Events, event)
-				}
+				recordEvent(screen.ApplyKey(Key{Type: KeyRune, Rune: r}))
 			}
 		}
 		if step.Paste != "" {
-			event = screen.ApplyKey(Key{Type: KeyPaste, Text: step.Paste})
-			if event.Type != ScreenEventNone {
-				result.Events = append(result.Events, event)
-			}
+			recordEvent(screen.ApplyKey(Key{Type: KeyPaste, Text: step.Paste}))
 		}
 		if step.Image != nil {
-			event = screen.ApplyKey(scriptImageKey(*step.Image))
-			if event.Type != ScreenEventNone {
-				result.Events = append(result.Events, event)
-			}
+			recordEvent(screen.ApplyKey(scriptImageKey(*step.Image)))
 		}
 		for _, rawKey := range keys {
-			event = screen.ApplyKey(parseScriptKey(rawKey))
-			if event.Type != ScreenEventNone {
-				result.Events = append(result.Events, event)
-			}
+			recordEvent(screen.ApplyKey(parseScriptKey(rawKey)))
 		}
 		if runtime != nil && (event.Type == ScreenEventDialogAction || event.Type == ScreenEventCancelled) {
 			resolved := runtime.ResolveScreenEvent(screen, event, baseStatus)
@@ -203,6 +201,11 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 		if step.ExpectEvent != nil {
 			if err := compareEvent(index, event, *step.ExpectEvent); err != nil {
+				return result, dialogResults, err
+			}
+		}
+		if len(step.ExpectEvents) > 0 {
+			if err := compareEvents(index, stepEvents, step.ExpectEvents); err != nil {
 				return result, dialogResults, err
 			}
 		}
@@ -545,6 +548,18 @@ func compareEvent(index int, got ScreenEvent, want ScreenEvent) error {
 	}
 	if want.DialogKind != "" && got.DialogKind != want.DialogKind {
 		return fmt.Errorf("script step %d dialog kind = %q, want %q", index, got.DialogKind, want.DialogKind)
+	}
+	return nil
+}
+
+func compareEvents(index int, got []ScreenEvent, want []ScreenEvent) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("script step %d event count = %d, want %d", index, len(got), len(want))
+	}
+	for eventIndex, expected := range want {
+		if err := compareEvent(index, got[eventIndex], expected); err != nil {
+			return fmt.Errorf("script step %d event %d mismatch: %w", index, eventIndex, err)
+		}
 	}
 	return nil
 }
