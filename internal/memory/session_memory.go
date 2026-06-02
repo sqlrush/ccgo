@@ -233,11 +233,39 @@ func BuildSessionMemoryRollup(existing *SessionSummary, summaries []SessionSumma
 		}
 		b.WriteString("] ")
 		b.WriteString(text)
-		if maxChars > 0 && b.Len() >= maxChars {
-			return strings.TrimSpace(b.String()[:maxChars])
+		if exceedsRuneLimit(b.String(), maxChars) {
+			return truncateRunes(b.String(), maxChars)
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func exceedsRuneLimit(text string, maxChars int) bool {
+	if maxChars <= 0 {
+		return false
+	}
+	count := 0
+	for range text {
+		count++
+		if count > maxChars {
+			return true
+		}
+	}
+	return false
+}
+
+func truncateRunes(text string, maxChars int) string {
+	if maxChars <= 0 {
+		return strings.TrimSpace(text)
+	}
+	count := 0
+	for index := range text {
+		if count == maxChars {
+			return strings.TrimSpace(text[:index])
+		}
+		count++
+	}
+	return strings.TrimSpace(text)
 }
 
 func isSessionMemoryRollupArchive(summary SessionSummary, archiveID contracts.ID) bool {

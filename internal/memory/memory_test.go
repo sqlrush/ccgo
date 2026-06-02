@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
@@ -285,6 +286,20 @@ func TestCompactSessionMemorySkipsExistingRollupSummaries(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, string(id), SessionSummaryFilename)); err != nil {
 			t.Fatalf("archive summary %s should remain: %v", id, err)
 		}
+	}
+}
+
+func TestBuildSessionMemoryRollupTruncatesAtRuneBoundary(t *testing.T) {
+	body := BuildSessionMemoryRollup(nil, []SessionSummary{{
+		SessionID: "unicode",
+		Summary:   "权限权限权限 compact memory",
+		UpdatedAt: time.Unix(100, 0).UTC(),
+	}}, 61)
+	if !utf8.ValidString(body) {
+		t.Fatalf("rollup should remain valid UTF-8: %q", body)
+	}
+	if len([]rune(body)) > 61 {
+		t.Fatalf("rollup length = %d, want <= 61: %q", len([]rune(body)), body)
 	}
 }
 
