@@ -48,6 +48,8 @@ type RemoteHistoryTokenProvider interface {
 type sessionEventsResponse struct {
 	Data              []contracts.SDKEvent `json:"data"`
 	Events            []contracts.SDKEvent `json:"events"`
+	Items             []contracts.SDKEvent `json:"items"`
+	Results           []contracts.SDKEvent `json:"results"`
 	HasMore           bool                 `json:"has_more"`
 	HasMoreCamel      bool                 `json:"hasMore"`
 	FirstID           string               `json:"first_id"`
@@ -253,10 +255,7 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, resp.StatusCode, err
 	}
-	events := decoded.Data
-	if events == nil {
-		events = decoded.Events
-	}
+	events := firstEventList(decoded.Data, decoded.Events, decoded.Items, decoded.Results)
 	if events == nil {
 		events = []contracts.SDKEvent{}
 	}
@@ -265,6 +264,15 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 		FirstID: firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.LastID, decoded.LastIDCamel),
 		HasMore: decoded.HasMore || decoded.HasMoreCamel,
 	}, resp.StatusCode, nil
+}
+
+func firstEventList(values ...[]contracts.SDKEvent) []contracts.SDKEvent {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func cloneHeader(header http.Header) http.Header {
