@@ -607,26 +607,62 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 	}
 	*event = ScreenEvent(raw)
 
-	var fields struct {
-		DialogID        *string     `json:"dialog_id"`
-		DialogIDCamel   *string     `json:"dialogId"`
-		DialogKind      *DialogKind `json:"dialog_kind"`
-		DialogKindCamel *DialogKind `json:"dialogKind"`
-	}
+	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if fields.DialogID != nil {
-		event.DialogID = *fields.DialogID
+	if event.Type == "" {
+		if eventType := stringJSONField(fields, "event_type", "eventType", "event", "name"); eventType != "" {
+			event.Type = ScreenEventType(eventType)
+		}
 	}
-	if fields.DialogIDCamel != nil {
-		event.DialogID = *fields.DialogIDCamel
+	if event.Value == "" {
+		event.Value = stringJSONField(fields, "payload", "text", "message", "data")
 	}
-	if fields.DialogKind != nil {
-		event.DialogKind = *fields.DialogKind
+	if event.DialogID == "" {
+		event.DialogID = stringJSONField(fields, "dialog_id", "dialogId", "dialogID")
 	}
-	if fields.DialogKindCamel != nil {
-		event.DialogKind = *fields.DialogKindCamel
+	if event.DialogKind == "" {
+		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
+			event.DialogKind = DialogKind(dialogKind)
+		}
+	}
+	return nil
+}
+
+func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
+	type alias DialogResultExpectation
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*expect = DialogResultExpectation(raw)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if expect.ID == "" {
+		expect.ID = stringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID")
+	}
+	if expect.Kind == "" {
+		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
+			expect.Kind = DialogKind(dialogKind)
+		}
+	}
+	if expect.Action == "" {
+		expect.Action = stringJSONField(fields, "value", "action_value", "actionValue", "selected_action", "selectedAction")
+	}
+	if expect.Status == "" {
+		if status := stringJSONField(fields, "result_status", "resultStatus", "state"); status != "" {
+			expect.Status = DialogResultStatus(status)
+		}
+	}
+	if expect.Found == nil {
+		expect.Found = boolPtrJSONField(fields, "exists", "matched")
+	}
+	if expect.Stale == nil {
+		expect.Stale = boolPtrJSONField(fields, "is_stale", "isStale")
 	}
 	return nil
 }
@@ -796,6 +832,20 @@ func stringListJSONField(fields map[string]json.RawMessage, names ...string) []s
 		var value stringList
 		if err := json.Unmarshal(raw, &value); err == nil {
 			return stringListValue(&value)
+		}
+	}
+	return nil
+}
+
+func boolPtrJSONField(fields map[string]json.RawMessage, names ...string) *bool {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value bool
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return &value
 		}
 	}
 	return nil

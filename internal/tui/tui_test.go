@@ -3597,6 +3597,50 @@ func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"input": "go", "expectPrompt": {"text": "go"}},
+		{"key": "enter", "expectEvents": {"event": "prompt_submitted", "text": "go"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "go" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunDialogRuntimeScriptAcceptsEventAndResultAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {"id": "perm_1", "tool_name": "Bash"},
+			"expectDialog": {"active": true, "id": "perm_1", "kind": "permission"}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"eventType": "dialog_action", "payload": "Allow", "dialogID": "perm_1", "dialogKind": "permission"},
+			"expectDialogResult": {"dialogId": "perm_1", "dialogKind": "permission", "actionValue": "Allow", "resultStatus": "allowed", "exists": true, "isStale": false}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(42, 8, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptChecksDialogResultCounts(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
