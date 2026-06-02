@@ -627,6 +627,29 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (message *Message) UnmarshalJSON(data []byte) error {
+	type alias Message
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*message = Message(raw)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if message.Role == "" {
+		if role, ok := roleJSONField(fields, "type", "speaker"); ok {
+			message.Role = role
+		}
+	}
+	if message.Text == "" {
+		message.Text = stringJSONField(fields, "content", "body", "message")
+	}
+	return nil
+}
+
 func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 	type alias PermissionRequest
 	var raw alias
@@ -653,6 +676,34 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 		request.ToolName = *fields.Tool
 	}
 	return nil
+}
+
+func stringJSONField(fields map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return ""
+}
+
+func roleJSONField(fields map[string]json.RawMessage, names ...string) (Role, bool) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value Role
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+	}
+	return "", false
 }
 
 func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {

@@ -3299,6 +3299,25 @@ func TestRunInteractionScriptAcceptsStringContainsAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsMessageContentAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"message": {"type": "assistant", "content": "content text"}, "snapshotName": "content", "expectSnapshotContains": "assistant: content text"},
+		{"message": {"speaker": "system", "body": "body text"}, "snapshotName": "body", "expectSnapshotContains": "system: body text"},
+		{"message": {"type": "user", "message": "message text"}, "snapshotName": "message", "expectSnapshotContains": "user: message text"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 3 {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
 func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

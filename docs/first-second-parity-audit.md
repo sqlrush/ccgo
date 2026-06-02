@@ -147,6 +147,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script `keybindings`, `expectEvents`, and `expectDialogResults` fields now accept a single object as well as object arrays.
 - `internal/tui`: prompt pasted-content expectations now accept a single `pastedContents` object as well as an array.
 - `internal/tui`: interaction script task expectations now accept a single `contains` object as well as an array for expected task matches.
+- `internal/tui`: interaction script message steps now accept chat/transcript-style `type`/`speaker` role aliases and `content`/`body`/`message` text aliases.
 
 Still missing for full M6/M7 parity:
 
