@@ -48,39 +48,54 @@ type RemoteHistoryTokenProvider interface {
 }
 
 type sessionEventsResponse struct {
-	Data              []contracts.SDKEvent `json:"data"`
-	Events            []contracts.SDKEvent `json:"events"`
-	Items             []contracts.SDKEvent `json:"items"`
-	Results           []contracts.SDKEvent `json:"results"`
-	Records           []contracts.SDKEvent `json:"records"`
-	Rows              []contracts.SDKEvent `json:"rows"`
-	Entries           []contracts.SDKEvent `json:"entries"`
-	Messages          []contracts.SDKEvent `json:"messages"`
-	History           []contracts.SDKEvent `json:"history"`
-	Nodes             []contracts.SDKEvent `json:"nodes"`
-	Edges             []contracts.SDKEvent `json:"edges"`
-	HasMore           bool                 `json:"has_more"`
-	HasMoreCamel      bool                 `json:"hasMore"`
-	HasNext           bool                 `json:"has_next"`
-	HasNextCamel      bool                 `json:"hasNext"`
-	HasNextPage       bool                 `json:"has_next_page"`
-	HasNextPageCamel  bool                 `json:"hasNextPage"`
-	FirstID           string               `json:"first_id"`
-	FirstIDCamel      string               `json:"firstId"`
-	NextBeforeID      string               `json:"next_before_id"`
-	NextBeforeIDCamel string               `json:"nextBeforeId"`
-	NextCursor        string               `json:"next_cursor"`
-	NextCursorCamel   string               `json:"nextCursor"`
-	EndCursor         string               `json:"end_cursor"`
-	EndCursorCamel    string               `json:"endCursor"`
-	StartCursor       string               `json:"start_cursor"`
-	StartCursorCamel  string               `json:"startCursor"`
-	BeforeID          string               `json:"before_id"`
-	BeforeIDCamel     string               `json:"beforeId"`
-	Cursor            string               `json:"cursor"`
-	CursorCamel       string               `json:"pageCursor"`
-	LastID            string               `json:"last_id"`
-	LastIDCamel       string               `json:"lastId"`
+	Data                 []contracts.SDKEvent `json:"data"`
+	Events               []contracts.SDKEvent `json:"events"`
+	Items                []contracts.SDKEvent `json:"items"`
+	Results              []contracts.SDKEvent `json:"results"`
+	Records              []contracts.SDKEvent `json:"records"`
+	Rows                 []contracts.SDKEvent `json:"rows"`
+	Entries              []contracts.SDKEvent `json:"entries"`
+	Messages             []contracts.SDKEvent `json:"messages"`
+	History              []contracts.SDKEvent `json:"history"`
+	Nodes                []contracts.SDKEvent `json:"nodes"`
+	Edges                []contracts.SDKEvent `json:"edges"`
+	HasMore              bool                 `json:"has_more"`
+	HasMoreCamel         bool                 `json:"hasMore"`
+	HasNext              bool                 `json:"has_next"`
+	HasNextCamel         bool                 `json:"hasNext"`
+	HasNextPage          bool                 `json:"has_next_page"`
+	HasNextPageCamel     bool                 `json:"hasNextPage"`
+	HasPrevious          bool                 `json:"has_previous"`
+	HasPreviousCamel     bool                 `json:"hasPrevious"`
+	HasPreviousPage      bool                 `json:"has_previous_page"`
+	HasPreviousPageCamel bool                 `json:"hasPreviousPage"`
+	HasOlder             bool                 `json:"has_older"`
+	HasOlderCamel        bool                 `json:"hasOlder"`
+	More                 bool                 `json:"more"`
+	FirstID              string               `json:"first_id"`
+	FirstIDCamel         string               `json:"firstId"`
+	NextBeforeID         string               `json:"next_before_id"`
+	NextBeforeIDCamel    string               `json:"nextBeforeId"`
+	NextCursor           string               `json:"next_cursor"`
+	NextCursorCamel      string               `json:"nextCursor"`
+	EndCursor            string               `json:"end_cursor"`
+	EndCursorCamel       string               `json:"endCursor"`
+	StartCursor          string               `json:"start_cursor"`
+	StartCursorCamel     string               `json:"startCursor"`
+	PreviousCursor       string               `json:"previous_cursor"`
+	PreviousCursorCamel  string               `json:"previousCursor"`
+	PrevCursor           string               `json:"prev_cursor"`
+	PrevCursorCamel      string               `json:"prevCursor"`
+	BeforeCursor         string               `json:"before_cursor"`
+	BeforeCursorCamel    string               `json:"beforeCursor"`
+	OlderCursor          string               `json:"older_cursor"`
+	OlderCursorCamel     string               `json:"olderCursor"`
+	BeforeID             string               `json:"before_id"`
+	BeforeIDCamel        string               `json:"beforeId"`
+	Cursor               string               `json:"cursor"`
+	CursorCamel          string               `json:"pageCursor"`
+	LastID               string               `json:"last_id"`
+	LastIDCamel          string               `json:"lastId"`
 }
 
 func (r *sessionEventsResponse) UnmarshalJSON(data []byte) error {
@@ -179,6 +194,27 @@ func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage
 	if err := setBoolField(raw, "hasNextPage", &r.HasNextPageCamel); err != nil {
 		return err
 	}
+	if err := setBoolField(raw, "has_previous", &r.HasPrevious); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "hasPrevious", &r.HasPreviousCamel); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "has_previous_page", &r.HasPreviousPage); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "hasPreviousPage", &r.HasPreviousPageCamel); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "has_older", &r.HasOlder); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "hasOlder", &r.HasOlderCamel); err != nil {
+		return err
+	}
+	if err := setBoolField(raw, "more", &r.More); err != nil {
+		return err
+	}
 	for _, spec := range []struct {
 		name   string
 		target *string
@@ -193,6 +229,14 @@ func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage
 		{name: "endCursor", target: &r.EndCursorCamel},
 		{name: "start_cursor", target: &r.StartCursor},
 		{name: "startCursor", target: &r.StartCursorCamel},
+		{name: "previous_cursor", target: &r.PreviousCursor},
+		{name: "previousCursor", target: &r.PreviousCursorCamel},
+		{name: "prev_cursor", target: &r.PrevCursor},
+		{name: "prevCursor", target: &r.PrevCursorCamel},
+		{name: "before_cursor", target: &r.BeforeCursor},
+		{name: "beforeCursor", target: &r.BeforeCursorCamel},
+		{name: "older_cursor", target: &r.OlderCursor},
+		{name: "olderCursor", target: &r.OlderCursorCamel},
 		{name: "before_id", target: &r.BeforeID},
 		{name: "beforeId", target: &r.BeforeIDCamel},
 		{name: "cursor", target: &r.Cursor},
@@ -296,6 +340,13 @@ func (r *sessionEventsResponse) mergePageFields(other sessionEventsResponse) {
 	r.HasNextCamel = r.HasNextCamel || other.HasNextCamel
 	r.HasNextPage = r.HasNextPage || other.HasNextPage
 	r.HasNextPageCamel = r.HasNextPageCamel || other.HasNextPageCamel
+	r.HasPrevious = r.HasPrevious || other.HasPrevious
+	r.HasPreviousCamel = r.HasPreviousCamel || other.HasPreviousCamel
+	r.HasPreviousPage = r.HasPreviousPage || other.HasPreviousPage
+	r.HasPreviousPageCamel = r.HasPreviousPageCamel || other.HasPreviousPageCamel
+	r.HasOlder = r.HasOlder || other.HasOlder
+	r.HasOlderCamel = r.HasOlderCamel || other.HasOlderCamel
+	r.More = r.More || other.More
 	setIfEmpty(&r.FirstID, other.FirstID)
 	setIfEmpty(&r.FirstIDCamel, other.FirstIDCamel)
 	setIfEmpty(&r.NextBeforeID, other.NextBeforeID)
@@ -306,6 +357,14 @@ func (r *sessionEventsResponse) mergePageFields(other sessionEventsResponse) {
 	setIfEmpty(&r.EndCursorCamel, other.EndCursorCamel)
 	setIfEmpty(&r.StartCursor, other.StartCursor)
 	setIfEmpty(&r.StartCursorCamel, other.StartCursorCamel)
+	setIfEmpty(&r.PreviousCursor, other.PreviousCursor)
+	setIfEmpty(&r.PreviousCursorCamel, other.PreviousCursorCamel)
+	setIfEmpty(&r.PrevCursor, other.PrevCursor)
+	setIfEmpty(&r.PrevCursorCamel, other.PrevCursorCamel)
+	setIfEmpty(&r.BeforeCursor, other.BeforeCursor)
+	setIfEmpty(&r.BeforeCursorCamel, other.BeforeCursorCamel)
+	setIfEmpty(&r.OlderCursor, other.OlderCursor)
+	setIfEmpty(&r.OlderCursorCamel, other.OlderCursorCamel)
 	setIfEmpty(&r.BeforeID, other.BeforeID)
 	setIfEmpty(&r.BeforeIDCamel, other.BeforeIDCamel)
 	setIfEmpty(&r.Cursor, other.Cursor)
@@ -631,15 +690,60 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 	if events == nil {
 		events = []contracts.SDKEvent{}
 	}
-	firstID := firstNonEmpty(decoded.FirstID, decoded.FirstIDCamel, decoded.NextBeforeID, decoded.NextBeforeIDCamel, decoded.NextCursor, decoded.NextCursorCamel, decoded.EndCursor, decoded.EndCursorCamel, decoded.StartCursor, decoded.StartCursorCamel, decoded.BeforeID, decoded.BeforeIDCamel, decoded.Cursor, decoded.CursorCamel, decoded.LastID, decoded.LastIDCamel)
-	if firstID == "" {
-		firstID = firstRemoteHistoryEventID(events)
-	}
 	return &RemoteHistoryPage{
 		Events:  events,
-		FirstID: firstID,
-		HasMore: decoded.HasMore || decoded.HasMoreCamel || decoded.HasNext || decoded.HasNextCamel || decoded.HasNextPage || decoded.HasNextPageCamel,
+		FirstID: responseNextBeforeID(decoded, events),
+		HasMore: responseHasMore(decoded),
 	}, resp.StatusCode, nil
+}
+
+func responseNextBeforeID(decoded sessionEventsResponse, events []contracts.SDKEvent) string {
+	firstID := firstNonEmpty(
+		decoded.FirstID,
+		decoded.FirstIDCamel,
+		decoded.NextBeforeID,
+		decoded.NextBeforeIDCamel,
+		decoded.NextCursor,
+		decoded.NextCursorCamel,
+		decoded.EndCursor,
+		decoded.EndCursorCamel,
+		decoded.StartCursor,
+		decoded.StartCursorCamel,
+		decoded.PreviousCursor,
+		decoded.PreviousCursorCamel,
+		decoded.PrevCursor,
+		decoded.PrevCursorCamel,
+		decoded.BeforeCursor,
+		decoded.BeforeCursorCamel,
+		decoded.OlderCursor,
+		decoded.OlderCursorCamel,
+		decoded.BeforeID,
+		decoded.BeforeIDCamel,
+		decoded.Cursor,
+		decoded.CursorCamel,
+		decoded.LastID,
+		decoded.LastIDCamel,
+	)
+	if firstID != "" {
+		return firstID
+	}
+	return firstRemoteHistoryEventID(events)
+}
+
+func responseHasMore(decoded sessionEventsResponse) bool {
+	return decoded.HasMore ||
+		decoded.HasMoreCamel ||
+		decoded.HasNext ||
+		decoded.HasNextCamel ||
+		decoded.HasNextPage ||
+		decoded.HasNextPageCamel ||
+		decoded.HasPrevious ||
+		decoded.HasPreviousCamel ||
+		decoded.HasPreviousPage ||
+		decoded.HasPreviousPageCamel ||
+		decoded.HasOlder ||
+		decoded.HasOlderCamel ||
+		decoded.More
 }
 
 func firstRemoteHistoryEventID(events []contracts.SDKEvent) string {

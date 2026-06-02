@@ -413,6 +413,40 @@ func TestFetchRemoteHistoryUsesEdgeCursorWhenNodeIDMissing(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsPreviousPageCursors(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"edge_latest","node":{"type":"status","session_id":"s","status":"latest"}}],"pageInfo":{"hasPreviousPage":true,"startCursor":"edge_latest"}}}`))
+		case "edge_latest":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"edge_older","node":{"type":"status","session_id":"s","status":"older"}}],"pageInfo":{"has_previous_page":true,"previousCursor":"edge_older"}}}`))
+		case "edge_older":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"edge_oldest","node":{"type":"status","session_id":"s","status":"oldest"}}],"pageInfo":{"hasOlder":false,"olderCursor":"ignored_when_complete"}}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 3 || len(events.Events) != 3 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].Status != "latest" || events.Events[1].Status != "older" || events.Events[2].Status != "oldest" {
+		t.Fatalf("events = %#v", events.Events)
+	}
+	if len(seen) != 3 || seen[1].Get("before_id") != "edge_latest" || seen[2].Get("before_id") != "edge_older" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsConnectionAliasWrappers(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

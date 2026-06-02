@@ -132,6 +132,7 @@ M6 progress now includes:
 - `internal/session`: remote-history parsing now also accepts connection-style `history`/`messages` wrappers with `nodes`/`edges[].node` event lists and `pageInfo`/`page_info` `hasNextPage`/`endCursor`/`startCursor` pagination aliases.
 - `internal/session`: remote-history connection edges now use `edges[].cursor` as the event cursor when the nested node lacks an event ID, preserving pagination even when pageInfo omits a cursor.
 - `internal/session`: remote-history parsing now also accepts `eventList`/`event_list`, `sessionEvents`/`session_events`, and connection aliases such as `connection`, `eventConnection`, and `sessionEventsConnection`.
+- `internal/session`: remote-history pageInfo parsing now accepts previous/older pagination signals such as `hasPrevious`/`hasPreviousPage`, `hasOlder`/`more`, and before-id cursors such as `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor`.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:
