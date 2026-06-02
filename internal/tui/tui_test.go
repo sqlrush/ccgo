@@ -446,6 +446,9 @@ func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 		{seq: "\x1b[3$", want: KeyDelete},
 		{seq: "\x0e", want: KeyCtrlN},
 		{seq: "\x10", want: KeyCtrlP},
+		{seq: "\x1b[13;2u", want: KeyShiftEnter},
+		{seq: "\x1b[13;2~", want: KeyShiftEnter},
+		{seq: "\x1b[27;2;13~", want: KeyShiftEnter},
 	}
 	for _, tc := range cases {
 		if key := ParseKey(tc.seq); key.Type != tc.want {
@@ -603,6 +606,9 @@ func TestKeymapResolvesDefaultActions(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x10")); action != ActionHistoryPrevious {
 		t.Fatalf("ctrl-p action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x1b[13;2u")); action != ActionInsertNewline {
+		t.Fatalf("shift-enter action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x13")); action != ActionStashPrompt {
 		t.Fatalf("ctrl-s action = %q", action)
 	}
@@ -662,7 +668,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[I")); action != ActionReverseSearch {
 		t.Fatalf("focus-in action = %q", action)
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "control-left", "control-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-left", "ctrl-right", "control-left", "control-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -835,6 +841,23 @@ func TestREPLScreenSubmitsExpandedPasteReferences(t *testing.T) {
 	event := screen.ApplyKey(ParseKey("\n"))
 	if event.Type != ScreenEventPromptSubmitted || event.Value != "alpha\nbeta" {
 		t.Fatalf("event = %#v", event)
+	}
+}
+
+func TestREPLScreenShiftEnterInsertsMultilinePrompt(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.ApplyKey(ParseKey("a"))
+	event := screen.ApplyKey(ParseKey("\x1b[13;2u"))
+	if event.Type != ScreenEventNone {
+		t.Fatalf("shift-enter event = %#v", event)
+	}
+	screen.ApplyKey(ParseKey("b"))
+	if screen.Prompt.Text != "a\nb" || screen.Prompt.Cursor != len([]rune("a\nb")) {
+		t.Fatalf("prompt = %#v", screen.Prompt)
+	}
+	event = screen.ApplyKey(ParseKey("\n"))
+	if event.Type != ScreenEventPromptSubmitted || event.Value != "a\nb" {
+		t.Fatalf("submit event = %#v", event)
 	}
 }
 

@@ -502,6 +502,8 @@ func keyForAction(action Action, key Key) Key {
 	switch action {
 	case ActionInsertRune:
 		return key
+	case ActionInsertNewline:
+		return Key{Type: KeyShiftEnter}
 	case ActionSubmitPrompt:
 		return Key{Type: KeyEnter}
 	case ActionMoveLeft:

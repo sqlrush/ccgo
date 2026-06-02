@@ -61,6 +61,8 @@ func ParseKey(seq string) Key {
 	switch seq {
 	case "\r", "\n":
 		return Key{Type: KeyEnter}
+	case "\x1b[13;2u", "\x1b[13;2~", "\x1b[27;2;13~":
+		return Key{Type: KeyShiftEnter}
 	case "\x7f", "\b":
 		return Key{Type: KeyBackspace}
 	case "\x1b":
@@ -195,6 +197,8 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.Cursor++
 		p.Text = string(runes)
 		p.resetHistoryCursor()
+	case KeyShiftEnter:
+		p.insertText("\n")
 	case KeyPaste:
 		p.insertPaste(key.Text)
 	case KeyImageHint:

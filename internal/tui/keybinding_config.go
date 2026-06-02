@@ -70,6 +70,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 	switch name {
 	case "enter", "return":
 		return KeyEnter, nil
+	case "shift+enter", "shift-enter", "shift+return", "shift-return":
+		return KeyShiftEnter, nil
 	case "esc", "escape":
 		return KeyEsc, nil
 	case "alt+b", "alt-b", "meta+b", "meta-b", "option+b", "option-b":
@@ -167,6 +169,7 @@ func IsKnownAction(action Action) bool {
 	switch action {
 	case ActionNone,
 		ActionInsertRune,
+		ActionInsertNewline,
 		ActionSubmitPrompt,
 		ActionCancel,
 		ActionInterrupt,
