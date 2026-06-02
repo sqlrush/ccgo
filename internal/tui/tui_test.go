@@ -2681,6 +2681,28 @@ func TestRunInteractionScriptCapturesEventsAndSnapshots(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsNamedKeys(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	text := "alpha beta gamma"
+	cursorEnd := len([]rune(text))
+	cursorGamma := len([]rune("alpha beta "))
+	cursorBeta := len([]rune("alpha "))
+	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
+		{Keys: []string{"a", "l", "p", "h", "a", " ", "b", "e", "t", "a", " ", "g", "a", "m", "m", "a"}, ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorEnd}},
+		{Key: "ctrl-left", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorGamma}},
+		{Key: "alt-left", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorBeta}},
+		{Key: "alt-right", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorGamma}},
+		{Key: "ctrl-right", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorEnd}},
+		{Key: "enter", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: text}, ExpectPrompt: &PromptExpectation{Empty: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != text {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptChecksPromptExpandedPaste(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{

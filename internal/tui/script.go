@@ -160,7 +160,7 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			keys = append(keys, step.Key)
 		}
 		for _, rawKey := range keys {
-			event = screen.ApplyKey(ParseKey(rawKey))
+			event = screen.ApplyKey(parseScriptKey(rawKey))
 			if event.Type != ScreenEventNone {
 				result.Events = append(result.Events, event)
 			}
@@ -260,6 +260,14 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 		}
 	}
 	return result, dialogResults, nil
+}
+
+func parseScriptKey(raw string) Key {
+	keyType, err := ParseKeyName(raw)
+	if err == nil {
+		return Key{Type: keyType}
+	}
+	return ParseKey(raw)
 }
 
 func applyRuntimeStep(index int, runtime *DialogRuntime, step ScriptStep) error {
