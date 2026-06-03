@@ -14,7 +14,23 @@ const (
 	OSCStringTerminator = "\x1b\\"
 	OSCSetTitleAndIcon  = "0"
 	OSCHyperlink        = "8"
+	OSCITerm2           = "9"
 	OSCTabStatus        = "21337"
+
+	ITerm2Progress              = "4"
+	ITerm2ProgressClear         = "0"
+	ITerm2ProgressSet           = "1"
+	ITerm2ProgressError         = "2"
+	ITerm2ProgressIndeterminate = "3"
+)
+
+type TerminalProgressState string
+
+const (
+	TerminalProgressRunning       TerminalProgressState = "running"
+	TerminalProgressCompleted     TerminalProgressState = "completed"
+	TerminalProgressError         TerminalProgressState = "error"
+	TerminalProgressIndeterminate TerminalProgressState = "indeterminate"
 )
 
 type RGBColor struct {
@@ -72,6 +88,25 @@ func TerminalHyperlinkSequence(url string, params map[string]string) string {
 
 func EndTerminalHyperlinkSequence() string {
 	return OSCSequence(OSCHyperlink, "", "")
+}
+
+func TerminalProgressSequence(state TerminalProgressState, percentage int) string {
+	switch state {
+	case "", TerminalProgressCompleted:
+		return ClearTerminalProgressSequence()
+	case TerminalProgressRunning:
+		return OSCSequence(OSCITerm2, ITerm2Progress, ITerm2ProgressSet, strconv.Itoa(clampPercent(percentage)))
+	case TerminalProgressError:
+		return OSCSequence(OSCITerm2, ITerm2Progress, ITerm2ProgressError, strconv.Itoa(clampPercent(percentage)))
+	case TerminalProgressIndeterminate:
+		return OSCSequence(OSCITerm2, ITerm2Progress, ITerm2ProgressIndeterminate, "")
+	default:
+		return ""
+	}
+}
+
+func ClearTerminalProgressSequence() string {
+	return OSCSequence(OSCITerm2, ITerm2Progress, ITerm2ProgressClear, "")
 }
 
 func TabStatusSequence(fields TabStatusFields) string {

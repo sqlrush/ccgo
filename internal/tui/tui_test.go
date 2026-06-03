@@ -3419,6 +3419,39 @@ func TestTerminalHyperlinkSequence(t *testing.T) {
 	}
 }
 
+func TestTerminalProgressSequence(t *testing.T) {
+	running := TerminalProgressSequence(TerminalProgressRunning, 133)
+	wantRunning := OSCPrefix + OSCITerm2 + ";" + ITerm2Progress + ";" + ITerm2ProgressSet + ";100" + OSCTerminator
+	if running != wantRunning {
+		t.Fatalf("running = %q, want %q", running, wantRunning)
+	}
+
+	failed := TerminalProgressSequence(TerminalProgressError, -5)
+	wantFailed := OSCPrefix + OSCITerm2 + ";" + ITerm2Progress + ";" + ITerm2ProgressError + ";0" + OSCTerminator
+	if failed != wantFailed {
+		t.Fatalf("failed = %q, want %q", failed, wantFailed)
+	}
+
+	indeterminate := TerminalProgressSequence(TerminalProgressIndeterminate, 42)
+	wantIndeterminate := OSCPrefix + OSCITerm2 + ";" + ITerm2Progress + ";" + ITerm2ProgressIndeterminate + ";" + OSCTerminator
+	if indeterminate != wantIndeterminate {
+		t.Fatalf("indeterminate = %q, want %q", indeterminate, wantIndeterminate)
+	}
+
+	clear := ClearTerminalProgressSequence()
+	if completed := TerminalProgressSequence(TerminalProgressCompleted, 100); completed != clear {
+		t.Fatalf("completed = %q, want %q", completed, clear)
+	}
+	wantClear := OSCPrefix + OSCITerm2 + ";" + ITerm2Progress + ";" + ITerm2ProgressClear + ";" + OSCTerminator
+	if clear != wantClear {
+		t.Fatalf("clear = %q, want %q", clear, wantClear)
+	}
+
+	if unknown := TerminalProgressSequence(TerminalProgressState("paused"), 50); unknown != "" {
+		t.Fatalf("unknown = %q", unknown)
+	}
+}
+
 func TestTabStatusSequenceEscapesFields(t *testing.T) {
 	status := "Working; path\\ok\x1b[31m hidden\x1b[0m"
 	orange := RGBColor{R: 255, G: 149, B: 0}
