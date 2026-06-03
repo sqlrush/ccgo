@@ -53,6 +53,52 @@ func TestTerminalVisibleTextUsesParserAndPreservesRawBell(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesStringControlActions(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" +
+		"\x1bPtmux;" + EnterAlternateScreen + OSCStringTerminator +
+		"b" +
+		"\x1b_payload" + OSCTerminator +
+		"c" +
+		"\x1b^pm" + OSCStringTerminator +
+		"d" +
+		"\x1bXsos" + OSCTerminator +
+		"e"
+	actions := parser.Feed(input)
+	if len(actions) != 9 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	want := []struct {
+		index      int
+		kind       TerminalSequenceType
+		payload    string
+		terminator string
+	}{
+		{index: 1, kind: TerminalSequenceDCS, payload: "tmux;" + EnterAlternateScreen, terminator: OSCStringTerminator},
+		{index: 3, kind: TerminalSequenceAPC, payload: "payload", terminator: OSCTerminator},
+		{index: 5, kind: TerminalSequencePM, payload: "pm", terminator: OSCStringTerminator},
+		{index: 7, kind: TerminalSequenceSOS, payload: "sos", terminator: OSCTerminator},
+	}
+	for _, tc := range want {
+		action := actions[tc.index]
+		if action.Type != TerminalActionStringControl || action.String.Type != tc.kind || !action.String.Complete || action.String.Payload != tc.payload || action.String.Terminator != tc.terminator {
+			t.Fatalf("string control %d = %#v", tc.index, action)
+		}
+	}
+	if got := TerminalVisibleText(input); got != "abcde" {
+		t.Fatalf("visible = %q", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\x1bPpartial"); len(actions) != 0 {
+		t.Fatalf("partial feed actions = %#v", actions)
+	}
+	actions = parser.Flush()
+	if len(actions) != 1 || actions[0].Type != TerminalActionStringControl || actions[0].String.Type != TerminalSequenceDCS || actions[0].String.Complete || actions[0].String.Payload != "partial" {
+		t.Fatalf("partial flush actions = %#v", actions)
+	}
+}
+
 func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("e\u0301 \u2764\ufe0f \U0001f44b\U0001f3fd \U0001f469\u200d\U0001f4bb \U0001f1fa\U0001f1f8 \U0001f3f4\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f")

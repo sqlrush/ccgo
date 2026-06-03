@@ -12,6 +12,10 @@ func TestIdentifyTerminalSequence(t *testing.T) {
 		{sequence: TerminalTitleSequence("Claude"), want: TerminalSequenceOSC},
 		{sequence: ESCSaveCursor, want: TerminalSequenceESC},
 		{sequence: "\x1bOA", want: TerminalSequenceSS3},
+		{sequence: "\x1bPpayload" + OSCStringTerminator, want: TerminalSequenceDCS},
+		{sequence: "\x1b_payload" + OSCTerminator, want: TerminalSequenceAPC},
+		{sequence: "\x1b^payload" + OSCStringTerminator, want: TerminalSequencePM},
+		{sequence: "\x1bXpayload" + OSCTerminator, want: TerminalSequenceSOS},
 	}
 	for _, tc := range cases {
 		if got := IdentifyTerminalSequence(tc.sequence); got != tc.want {
@@ -43,6 +47,23 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	ss3, ok := ParseTerminalSequence("\x1bOA")
 	if !ok || ss3.Type != TerminalSequenceUnknown || ss3.Sequence != "\x1bOA" {
 		t.Fatalf("ss3 dispatch = %#v ok=%v", ss3, ok)
+	}
+
+	dcs, ok := ParseTerminalSequence("\x1bPtmux;" + EnterAlternateScreen + OSCStringTerminator)
+	if !ok || dcs.Type != TerminalSequenceDCS || dcs.StringControl.Type != TerminalSequenceDCS || !dcs.StringControl.Complete || dcs.StringControl.Terminator != OSCStringTerminator || dcs.StringControl.Payload != "tmux;"+EnterAlternateScreen {
+		t.Fatalf("dcs dispatch = %#v ok=%v", dcs, ok)
+	}
+	apc, ok := ParseTerminalSequence("\x1b_payload" + OSCTerminator)
+	if !ok || apc.Type != TerminalSequenceAPC || apc.StringControl.Type != TerminalSequenceAPC || !apc.StringControl.Complete || apc.StringControl.Terminator != OSCTerminator || apc.StringControl.Payload != "payload" {
+		t.Fatalf("apc dispatch = %#v ok=%v", apc, ok)
+	}
+	pm, ok := ParseTerminalSequence("\x1b^partial")
+	if !ok || pm.Type != TerminalSequencePM || pm.StringControl.Type != TerminalSequencePM || pm.StringControl.Complete || pm.StringControl.Payload != "partial" {
+		t.Fatalf("pm dispatch = %#v ok=%v", pm, ok)
+	}
+	sos, ok := ParseTerminalSequence("\x1bXsos" + OSCTerminator)
+	if !ok || sos.Type != TerminalSequenceSOS || sos.StringControl.Type != TerminalSequenceSOS || !sos.StringControl.Complete || sos.StringControl.Payload != "sos" {
+		t.Fatalf("sos dispatch = %#v ok=%v", sos, ok)
 	}
 
 	unknown, ok := ParseTerminalSequence("\x1b?")

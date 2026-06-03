@@ -8,17 +8,18 @@ import (
 type TerminalActionType string
 
 const (
-	TerminalActionText      TerminalActionType = "text"
-	TerminalActionCursor    TerminalActionType = "cursor"
-	TerminalActionErase     TerminalActionType = "erase"
-	TerminalActionScroll    TerminalActionType = "scroll"
-	TerminalActionMode      TerminalActionType = "mode"
-	TerminalActionLink      TerminalActionType = "link"
-	TerminalActionTitle     TerminalActionType = "title"
-	TerminalActionTabStatus TerminalActionType = "tabStatus"
-	TerminalActionBell      TerminalActionType = "bell"
-	TerminalActionReset     TerminalActionType = "reset"
-	TerminalActionUnknown   TerminalActionType = "unknown"
+	TerminalActionText          TerminalActionType = "text"
+	TerminalActionCursor        TerminalActionType = "cursor"
+	TerminalActionErase         TerminalActionType = "erase"
+	TerminalActionScroll        TerminalActionType = "scroll"
+	TerminalActionMode          TerminalActionType = "mode"
+	TerminalActionLink          TerminalActionType = "link"
+	TerminalActionTitle         TerminalActionType = "title"
+	TerminalActionTabStatus     TerminalActionType = "tabStatus"
+	TerminalActionBell          TerminalActionType = "bell"
+	TerminalActionReset         TerminalActionType = "reset"
+	TerminalActionStringControl TerminalActionType = "stringControl"
+	TerminalActionUnknown       TerminalActionType = "unknown"
 )
 
 type TerminalGrapheme struct {
@@ -35,6 +36,7 @@ type TerminalAction struct {
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
 	OSC       OSCAction
+	String    TerminalStringControlAction
 	Sequence  string
 }
 
@@ -225,6 +227,8 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 		default:
 			return TerminalAction{Type: TerminalActionUnknown, Sequence: action.ESC.Sequence}, true
 		}
+	case TerminalSequenceDCS, TerminalSequenceAPC, TerminalSequencePM, TerminalSequenceSOS:
+		return TerminalAction{Type: TerminalActionStringControl, String: action.StringControl}, true
 	default:
 		return TerminalAction{Type: TerminalActionUnknown, Sequence: action.Sequence}, true
 	}
