@@ -130,6 +130,21 @@ func EraseLineSequence() string {
 	return EraseLine
 }
 
+func EraseLinesSequence(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	var out strings.Builder
+	for i := 0; i < n; i++ {
+		out.WriteString(EraseLine)
+		if i < n-1 {
+			out.WriteString(CursorUp(1))
+		}
+	}
+	out.WriteString(CursorLeft)
+	return out.String()
+}
+
 func EraseToEndOfScreen() string {
 	return CSISequence("J")
 }
