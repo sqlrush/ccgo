@@ -1080,6 +1080,36 @@ func TestRenderMessagesWrapsANSIByVisibleWidth(t *testing.T) {
 	}
 }
 
+func TestRenderMessagesWrapsWideGraphemesByVisibleWidth(t *testing.T) {
+	lines := RenderMessages([]Message{{
+		Role: RoleAssistant,
+		Text: "界界界😀a",
+	}}, 15)
+	if len(lines) < 3 {
+		t.Fatalf("lines = %#v", lines)
+	}
+	for _, line := range lines {
+		if width := TerminalVisibleWidth(line); width > 15 {
+			t.Fatalf("line width = %d line=%q lines=%#v", width, line, lines)
+		}
+	}
+	visible := strings.Join(lines, "\n")
+	if !strings.Contains(visible, "assistant: 界界") || !strings.Contains(visible, "          界😀") {
+		t.Fatalf("wide wrapped lines = %#v", lines)
+	}
+}
+
+func TestPadOrTrimUsesGraphemeVisibleWidth(t *testing.T) {
+	padded := padOrTrim("界a", 4)
+	if padded != "界a " || TerminalVisibleWidth(padded) != 4 {
+		t.Fatalf("padded = %q width=%d", padded, TerminalVisibleWidth(padded))
+	}
+	trimmed := padOrTrim("界界a", 4)
+	if trimmed != "界界" || TerminalVisibleWidth(trimmed) != 4 {
+		t.Fatalf("trimmed = %q width=%d", trimmed, TerminalVisibleWidth(trimmed))
+	}
+}
+
 func TestViewportScrollsAndClamps(t *testing.T) {
 	v := NewViewport([]string{"1", "2", "3", "4", "5"}, 3)
 	if got := strings.Join(v.Visible(), ","); got != "3,4,5" {

@@ -6,23 +6,23 @@ func wrapLine(line string, width int) []string {
 	if width <= 0 {
 		return []string{""}
 	}
-	runes := []rune(line)
-	if len(runes) == 0 {
+	graphemes := terminalGraphemes(line)
+	if len(graphemes) == 0 {
 		return []string{""}
 	}
 	var out []string
-	for len(runes) > width {
-		split := width
-		for i := width; i > 0; i-- {
-			if runes[i-1] == ' ' || runes[i-1] == '\t' {
-				split = i
-				break
-			}
+	for terminalGraphemesWidth(graphemes) > width {
+		split, breakAt := visibleWrapSplit(graphemes, width)
+		if split <= 0 {
+			split = 1
 		}
-		out = append(out, strings.TrimRight(string(runes[:split]), " \t"))
-		runes = []rune(strings.TrimLeft(string(runes[split:]), " \t"))
+		if breakAt > 0 {
+			split = breakAt
+		}
+		out = append(out, strings.TrimRight(graphemesString(graphemes[:split]), " \t"))
+		graphemes = trimLeftSpaceGraphemes(graphemes[split:])
 	}
-	out = append(out, string(runes))
+	out = append(out, graphemesString(graphemes))
 	return out
 }
 
@@ -44,14 +44,85 @@ func padOrTrim(line string, width int) string {
 	if strings.ContainsRune(line, rune(terminalESC)) {
 		return padOrTrimANSI(line, width)
 	}
-	runes := []rune(line)
-	if len(runes) > width {
-		return string(runes[:width])
+	visible := terminalGraphemesWidth(terminalGraphemes(line))
+	if visible > width {
+		return trimPlainVisibleWidth(line, width)
 	}
-	if len(runes) < width {
-		return line + strings.Repeat(" ", width-len(runes))
+	if visible < width {
+		return line + strings.Repeat(" ", width-visible)
 	}
 	return line
+}
+
+func visibleWrapSplit(graphemes []TerminalGrapheme, width int) (int, int) {
+	visible := 0
+	breakAt := 0
+	for i, grapheme := range graphemes {
+		if visible > 0 && visible+grapheme.Width > width {
+			return i, breakAt
+		}
+		visible += grapheme.Width
+		if isWrapBreakGrapheme(grapheme.Value) {
+			breakAt = i + 1
+		}
+		if visible >= width {
+			return i + 1, breakAt
+		}
+	}
+	return len(graphemes), breakAt
+}
+
+func isWrapBreakGrapheme(value string) bool {
+	return value == " " || value == "\t"
+}
+
+func trimLeftSpaceGraphemes(graphemes []TerminalGrapheme) []TerminalGrapheme {
+	for len(graphemes) > 0 && isWrapBreakGrapheme(graphemes[0].Value) {
+		graphemes = graphemes[1:]
+	}
+	return graphemes
+}
+
+func graphemesString(graphemes []TerminalGrapheme) string {
+	var out strings.Builder
+	for _, grapheme := range graphemes {
+		out.WriteString(grapheme.Value)
+	}
+	return out.String()
+}
+
+func terminalGraphemesWidth(graphemes []TerminalGrapheme) int {
+	width := 0
+	for _, grapheme := range graphemes {
+		if grapheme.Value == "\n" || grapheme.Value == "\r" {
+			continue
+		}
+		width += grapheme.Width
+	}
+	return width
+}
+
+func trimPlainVisibleWidth(line string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	graphemes := terminalGraphemes(line)
+	var out strings.Builder
+	visible := 0
+	for _, grapheme := range graphemes {
+		if grapheme.Value == "\n" || grapheme.Value == "\r" {
+			continue
+		}
+		if visible > 0 && visible+grapheme.Width > width {
+			break
+		}
+		out.WriteString(grapheme.Value)
+		visible += grapheme.Width
+		if visible >= width {
+			break
+		}
+	}
+	return out.String()
 }
 
 func padOrTrimANSI(line string, width int) string {
