@@ -262,22 +262,30 @@ func exitKeyDisplay(key KeyType) string {
 }
 
 func (s *REPLScreen) OpenReverseSearch(query string) {
-	s.ReverseSearch = NewReverseSearchState(s.Prompt.History, query)
+	s.ReverseSearch = NewReverseSearchStateFromEntries(s.reverseSearchHistoryEntries(), query)
 }
 
 func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 	sharedKillRing.trackKey(key.Type)
+	history := s.reverseSearchHistoryEntries()
 	switch key.Type {
 	case KeyEsc, KeyCtrlC:
 		s.ReverseSearch = ReverseSearchState{}
 		return ScreenEvent{Type: ScreenEventCancelled}
 	case KeyEnter:
-		if selected, ok := s.ReverseSearch.Current(); ok {
+		if entry, ok := s.ReverseSearch.CurrentEntry(); ok {
+			selected := entry.Display
 			s.Prompt.Text = selected
+			s.Prompt.replacePastedContents(entry.PastedContents)
 			s.Prompt.Cursor = len([]rune(selected))
 			s.Prompt.resetHistoryCursor()
 			s.ReverseSearch = ReverseSearchState{}
-			return ScreenEvent{Type: ScreenEventReverseSelected, Value: selected}
+			return ScreenEvent{
+				Type:           ScreenEventReverseSelected,
+				Value:          selected,
+				Display:        selected,
+				PastedContents: clonePastedContents(entry.PastedContents),
+			}
 		}
 		s.ReverseSearch = ReverseSearchState{}
 	case KeyUp, KeyCtrlP:
@@ -285,9 +293,9 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 	case KeyDown, KeyCtrlN:
 		s.ReverseSearch.Move(1)
 	case KeyBackspace:
-		s.ReverseSearch.Backspace(s.Prompt.History)
+		s.ReverseSearch.Backspace(history)
 	case KeyDelete, KeyCtrlD:
-		s.ReverseSearch.DeleteForward(s.Prompt.History)
+		s.ReverseSearch.DeleteForward(history)
 	case KeyLeft, KeyCtrlB:
 		s.ReverseSearch.MoveCursor(-1)
 	case KeyRight, KeyCtrlF:
@@ -301,23 +309,32 @@ func (s *REPLScreen) applyReverseSearchKey(key Key) ScreenEvent {
 	case KeyEnd, KeyCtrlE:
 		s.ReverseSearch.MoveEnd()
 	case KeyCtrlK:
-		s.ReverseSearch.DeleteToEnd(s.Prompt.History)
+		s.ReverseSearch.DeleteToEnd(history)
 	case KeyCtrlU:
-		s.ReverseSearch.DeleteToStart(s.Prompt.History)
+		s.ReverseSearch.DeleteToStart(history)
 	case KeyCtrlW:
-		s.ReverseSearch.DeleteWordBackward(s.Prompt.History)
+		s.ReverseSearch.DeleteWordBackward(history)
 	case KeyAltBS:
-		s.ReverseSearch.DeleteWordBackward(s.Prompt.History)
+		s.ReverseSearch.DeleteWordBackward(history)
 	case KeyAltD:
-		s.ReverseSearch.DeleteWordForward(s.Prompt.History)
+		s.ReverseSearch.DeleteWordForward(history)
 	case KeyCtrlY:
-		s.ReverseSearch.YankLastKill(s.Prompt.History)
+		s.ReverseSearch.YankLastKill(history)
 	case KeyAltY:
-		s.ReverseSearch.YankPop(s.Prompt.History)
+		s.ReverseSearch.YankPop(history)
 	case KeyRune:
-		s.ReverseSearch.AppendRune(s.Prompt.History, key.Rune)
+		s.ReverseSearch.AppendRune(history, key.Rune)
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) reverseSearchHistoryEntries() []session.HistoryEntry {
+	historyLen := s.Prompt.historyLength()
+	entries := make([]session.HistoryEntry, 0, historyLen)
+	for i := 0; i < historyLen; i++ {
+		entries = append(entries, s.Prompt.historyEntryAt(i))
+	}
+	return entries
 }
 
 func (s *REPLScreen) applyMouse(key Key) ScreenEvent {

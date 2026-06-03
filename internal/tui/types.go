@@ -47,11 +47,12 @@ type Frame struct {
 }
 
 type ReverseSearchState struct {
-	Active  bool
-	Query   string
-	Cursor  int
-	Results []string
-	Focused int
+	Active        bool
+	Query         string
+	Cursor        int
+	Results       []string
+	ResultEntries []session.HistoryEntry
+	Focused       int
 }
 
 type KeyType string

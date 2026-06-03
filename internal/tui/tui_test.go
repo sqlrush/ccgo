@@ -733,6 +733,50 @@ func TestREPLScreenRestoresPastedHistoryEntries(t *testing.T) {
 	}
 }
 
+func TestReverseSearchRestoresPastedContentEntries(t *testing.T) {
+	screen := NewREPLScreenFromHistoryEntries(40, 8, []session.HistoryEntry{
+		{
+			Display: "older [Pasted text #1]",
+			PastedContents: map[int]session.PastedContent{
+				1: {ID: 1, Type: session.PastedContentText, Content: "older paste"},
+			},
+		},
+		{
+			Display: "run [Pasted text #1] [Image #2]",
+			PastedContents: map[int]session.PastedContent{
+				1: {ID: 1, Type: session.PastedContentText, Content: "expanded command"},
+				2: {ID: 2, Type: session.PastedContentImage, Filename: "chart.png", MediaType: "image/png", Content: "AAAA"},
+			},
+		},
+	})
+
+	screen.ApplyKey(ParseKey("\x12"))
+	for _, seq := range []string{"r", "u", "n"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	selected := screen.ApplyKey(ParseKey("\n"))
+	if selected.Type != ScreenEventReverseSelected || selected.Value != "run [Pasted text #1] [Image #2]" {
+		t.Fatalf("selected = %#v", selected)
+	}
+	if screen.Prompt.Text != "run [Pasted text #1] [Image #2]" || screen.Prompt.ExpandedText() != "run expanded command [Image #2]" {
+		t.Fatalf("prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+	if screen.Prompt.NextPastedID != 3 || screen.Prompt.PastedContents[2].Filename != "chart.png" {
+		t.Fatalf("pasted contents = %#v next=%d", screen.Prompt.PastedContents, screen.Prompt.NextPastedID)
+	}
+	if selected.PastedContents[1].Content != "expanded command" || selected.PastedContents[2].Filename != "chart.png" {
+		t.Fatalf("event pasted contents = %#v", selected.PastedContents)
+	}
+
+	submitted := screen.ApplyKey(ParseKey("\n"))
+	if submitted.Type != ScreenEventPromptSubmitted || submitted.Value != "run expanded command [Image #2]" {
+		t.Fatalf("submitted = %#v", submitted)
+	}
+	if submitted.Display != "run [Pasted text #1] [Image #2]" || submitted.PastedContents[2].Filename != "chart.png" {
+		t.Fatalf("submitted pasted contents = %#v", submitted)
+	}
+}
+
 func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	key := ParseKey("\x1b]1337;File=inline=1:AAAA\a")
 	if key.Type != KeyImageHint || key.Text != ImageHintPlaceholder {

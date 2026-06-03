@@ -3,25 +3,37 @@ package tui
 import (
 	"strings"
 	"unicode"
+
+	"ccgo/internal/session"
 )
 
 const DefaultReverseSearchLimit = 20
 
 func NewReverseSearchState(history []string, query string) ReverseSearchState {
+	return NewReverseSearchStateFromEntries(reverseSearchEntriesFromStrings(history), query)
+}
+
+func NewReverseSearchStateFromEntries(history []session.HistoryEntry, query string) ReverseSearchState {
 	state := ReverseSearchState{Active: true, Query: query, Cursor: len([]rune(query))}
-	state.Results = FilterHistoryForReverseSearch(history, query, DefaultReverseSearchLimit)
+	state.ResultEntries = FilterHistoryEntriesForReverseSearch(history, query, DefaultReverseSearchLimit)
+	state.Results = reverseSearchEntryDisplays(state.ResultEntries)
 	return state
 }
 
 func FilterHistoryForReverseSearch(history []string, query string, limit int) []string {
+	return reverseSearchEntryDisplays(FilterHistoryEntriesForReverseSearch(reverseSearchEntriesFromStrings(history), query, limit))
+}
+
+func FilterHistoryEntriesForReverseSearch(history []session.HistoryEntry, query string, limit int) []session.HistoryEntry {
 	if limit <= 0 {
 		limit = DefaultReverseSearchLimit
 	}
 	query = strings.ToLower(strings.TrimSpace(query))
 	seen := map[string]struct{}{}
-	out := make([]string, 0, limit)
+	out := make([]session.HistoryEntry, 0, limit)
 	for i := len(history) - 1; i >= 0; i-- {
-		item := strings.TrimSpace(history[i])
+		entry := cloneHistoryEntry(history[i])
+		item := strings.TrimSpace(entry.Display)
 		if item == "" {
 			continue
 		}
@@ -32,7 +44,8 @@ func FilterHistoryForReverseSearch(history []string, query string, limit int) []
 			continue
 		}
 		seen[item] = struct{}{}
-		out = append(out, item)
+		entry.Display = item
+		out = append(out, entry)
 		if len(out) >= limit {
 			break
 		}
@@ -45,6 +58,19 @@ func (s *ReverseSearchState) Current() (string, bool) {
 		return "", false
 	}
 	return s.Results[s.Focused], true
+}
+
+func (s *ReverseSearchState) CurrentEntry() (session.HistoryEntry, bool) {
+	if !s.Active || s.Focused < 0 {
+		return session.HistoryEntry{}, false
+	}
+	if s.Focused < len(s.ResultEntries) {
+		return cloneHistoryEntry(s.ResultEntries[s.Focused]), true
+	}
+	if selected, ok := s.Current(); ok {
+		return session.HistoryEntry{Display: selected}, true
+	}
+	return session.HistoryEntry{}, false
 }
 
 func (s *ReverseSearchState) Move(delta int) {
@@ -61,7 +87,7 @@ func (s *ReverseSearchState) Move(delta int) {
 	}
 }
 
-func (s *ReverseSearchState) AppendRune(history []string, r rune) {
+func (s *ReverseSearchState) AppendRune(history []session.HistoryEntry, r rune) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	runes = append(runes[:s.Cursor], append([]rune{r}, runes[s.Cursor:]...)...)
@@ -70,7 +96,7 @@ func (s *ReverseSearchState) AppendRune(history []string, r rune) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) Backspace(history []string) {
+func (s *ReverseSearchState) Backspace(history []session.HistoryEntry) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	if s.Cursor == 0 {
@@ -82,7 +108,7 @@ func (s *ReverseSearchState) Backspace(history []string) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) DeleteForward(history []string) {
+func (s *ReverseSearchState) DeleteForward(history []session.HistoryEntry) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	if s.Cursor >= len(runes) {
@@ -118,7 +144,7 @@ func (s *ReverseSearchState) MoveEnd() {
 	s.Cursor = len([]rune(s.Query))
 }
 
-func (s *ReverseSearchState) DeleteToEnd(history []string) {
+func (s *ReverseSearchState) DeleteToEnd(history []session.HistoryEntry) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	killed := string(runes[s.Cursor:])
@@ -127,7 +153,7 @@ func (s *ReverseSearchState) DeleteToEnd(history []string) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) DeleteToStart(history []string) {
+func (s *ReverseSearchState) DeleteToStart(history []session.HistoryEntry) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	killed := string(runes[:s.Cursor])
@@ -137,7 +163,7 @@ func (s *ReverseSearchState) DeleteToStart(history []string) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) DeleteWordBackward(history []string) {
+func (s *ReverseSearchState) DeleteWordBackward(history []session.HistoryEntry) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	end := s.Cursor
@@ -153,7 +179,7 @@ func (s *ReverseSearchState) DeleteWordBackward(history []string) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) DeleteWordForward(history []string) {
+func (s *ReverseSearchState) DeleteWordForward(history []session.HistoryEntry) {
 	runes := []rune(s.Query)
 	s.clampCursor()
 	start := s.Cursor
@@ -167,7 +193,7 @@ func (s *ReverseSearchState) DeleteWordForward(history []string) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) YankLastKill(history []string) {
+func (s *ReverseSearchState) YankLastKill(history []session.HistoryEntry) {
 	text := sharedKillRing.lastKill()
 	if text == "" {
 		return
@@ -183,7 +209,7 @@ func (s *ReverseSearchState) YankLastKill(history []string) {
 	s.refresh(history)
 }
 
-func (s *ReverseSearchState) YankPop(history []string) {
+func (s *ReverseSearchState) YankPop(history []session.HistoryEntry) {
 	text, start, length, ok := sharedKillRing.nextYankPop()
 	if !ok {
 		return
@@ -217,8 +243,9 @@ func (s *ReverseSearchState) clampCursor() {
 	}
 }
 
-func (s *ReverseSearchState) refresh(history []string) {
-	s.Results = FilterHistoryForReverseSearch(history, s.Query, DefaultReverseSearchLimit)
+func (s *ReverseSearchState) refresh(history []session.HistoryEntry) {
+	s.ResultEntries = FilterHistoryEntriesForReverseSearch(history, s.Query, DefaultReverseSearchLimit)
+	s.Results = reverseSearchEntryDisplays(s.ResultEntries)
 	if s.Focused >= len(s.Results) {
 		s.Focused = len(s.Results) - 1
 	}
@@ -226,6 +253,22 @@ func (s *ReverseSearchState) refresh(history []string) {
 		s.Focused = 0
 	}
 	s.clampCursor()
+}
+
+func reverseSearchEntriesFromStrings(history []string) []session.HistoryEntry {
+	entries := make([]session.HistoryEntry, 0, len(history))
+	for _, display := range history {
+		entries = append(entries, session.HistoryEntry{Display: display})
+	}
+	return entries
+}
+
+func reverseSearchEntryDisplays(entries []session.HistoryEntry) []string {
+	displays := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		displays = append(displays, entry.Display)
+	}
+	return displays
 }
 
 func reverseSearchWordStart(runes []rune, end int) int {
