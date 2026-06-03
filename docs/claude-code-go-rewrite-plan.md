@@ -188,6 +188,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：full transcript `TitleFromTranscript` 的标题优先级和 indexed/lite 路径对齐，按 custom title、AI title、首个用户 prompt、last-prompt、summary 顺序兜底。
 - 本轮补充：transcript message/index/session list 读取 `cwd` 作为 project path，兼容 `projectPath`/`project_path`/`workingDirectory`/`working_directory` 等别名，并让 session search 可以按项目路径命中，贴近官方 lite metadata 的 projectPath 恢复行为。
 - 本轮补充：TranscriptMessage 结构化读取官方 SerializedMessage 元数据 `userType`、`entrypoint`、`version`、`slug`，并兼容 user/entrypoint/version/slug 的 snake/camel/旧字段别名，减少旧 transcript 只能靠 raw JSON 保留元数据的情况。
+- 本轮补充：model-backed session memory recall prompt 现在显式写入 requested limit 和 excluded current session id，减少模型返回超量或当前 session 后再 fallback 的概率。
 - 本轮补充：remote history connection/pageInfo 解析接受 `hasPrevious`/`hasPreviousPage`、`hasOlder`/`more` 继续分页标记，以及 `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor` before-id cursor 别名，覆盖 GraphQL 向更旧事件翻页的响应形态。
 - 本轮补充：transcript resume 的嵌套 content block 接受 `toolUseId`/`toolUseID`、`isError`、`cacheControl`、`cacheReference` 字段别名，并保留 cache edit 的 `cacheReference`。
 - 本轮补充：lightweight transcript metadata loader 在 `system`/`compact_boundary` 后清空旧 `marble-origami-commit`/`marble-origami-snapshot` 状态，和 full loader/官方 sessionStorage compact-boundary 语义一致。

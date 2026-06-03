@@ -1108,6 +1108,9 @@ func TestMemoryAgentRecallCanUseModelSelectedSessionIDs(t *testing.T) {
 	if len(client.requests) != 1 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Candidate session summaries") || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "older") {
 		t.Fatalf("request = %#v", client.requests)
 	}
+	if !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Return at most 2 session_ids.") {
+		t.Fatalf("request missing recall limit = %q", client.requests[0].Messages[0].Content[0].Text)
+	}
 }
 
 func TestMemoryAgentRecallParsesAlternateModelResponseKeys(t *testing.T) {
@@ -1356,6 +1359,9 @@ func TestMemoryAgentRecallFallsBackWhenModelSelectsNoValidSessions(t *testing.T)
 	}
 	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
 		t.Fatalf("matches = %#v", result.Matches)
+	}
+	if len(client.requests) != 1 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Do not select excluded current session id: current") {
+		t.Fatalf("request missing exclude session = %#v", client.requests)
 	}
 }
 

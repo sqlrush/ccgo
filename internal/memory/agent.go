@@ -85,7 +85,7 @@ func (a Agent) Recall(ctx context.Context, root string, query string, options Re
 		if err != nil {
 			return AgentRecallResult{}, err
 		}
-		request = a.buildRecallRequest(query, candidates)
+		request = a.buildRecallRequest(query, candidates, options)
 		var responseErr error
 		response, responseErr = a.Client.CreateMessage(ctx, request)
 		if responseErr != nil {
@@ -200,10 +200,19 @@ func (a Agent) buildExtractRequest(history []contracts.Message, options ExtractO
 	}
 }
 
-func (a Agent) buildRecallRequest(query string, candidates []RecallMatch) anthropic.Request {
+func (a Agent) buildRecallRequest(query string, candidates []RecallMatch, options RecallOptions) anthropic.Request {
 	var b strings.Builder
 	b.WriteString("Select relevant session memories for the user request. Return a JSON object with keys query and session_ids. The query should be a concise search query. session_ids must be ordered from most to least relevant and use only candidate IDs. Return no prose.\n\nUser request:\n")
 	b.WriteString(strings.TrimSpace(query))
+	if options.Limit > 0 {
+		b.WriteString("\n\nReturn at most ")
+		b.WriteString(fmt.Sprint(options.Limit))
+		b.WriteString(" session_ids.")
+	}
+	if options.ExcludeSessionID != "" {
+		b.WriteString("\nDo not select excluded current session id: ")
+		b.WriteString(string(options.ExcludeSessionID))
+	}
 	if len(candidates) > 0 {
 		b.WriteString("\n\nCandidate session summaries:\n")
 		for _, candidate := range candidates {
