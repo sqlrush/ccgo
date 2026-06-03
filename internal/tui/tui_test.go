@@ -3264,12 +3264,12 @@ func TestScreenLifecycleAlternateScreenSequences(t *testing.T) {
 
 func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
 	var lifecycle ScreenLifecycle
-	options := TerminalModeOptions{MouseTracking: true, FocusEvents: true, BracketedPaste: true}
+	options := TerminalModeOptions{MouseTracking: true, FocusEvents: true, BracketedPaste: true, ExtendedKeys: true}
 	enter := lifecycle.EnterInteractive(options)
-	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden || !lifecycle.MouseTracking || !lifecycle.FocusEvents || !lifecycle.BracketedPaste {
+	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden || !lifecycle.MouseTracking || !lifecycle.FocusEvents || !lifecycle.BracketedPaste || !lifecycle.ExtendedKeys {
 		t.Fatalf("lifecycle after enter = %#v", lifecycle)
 	}
-	for _, want := range []string{EnterAlternateScreen, EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste} {
+	for _, want := range []string{EnterAlternateScreen, EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste, EnableExtendedKeys} {
 		if !strings.Contains(enter, want) {
 			t.Fatalf("enter missing %q in %q", want, enter)
 		}
@@ -3278,22 +3278,22 @@ func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
 		t.Fatalf("second enter should be idempotent: %q", again)
 	}
 	reassert := lifecycle.ReassertTerminalModes(options)
-	for _, want := range []string{EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste} {
+	for _, want := range []string{EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste, ReassertExtendedKeys} {
 		if !strings.Contains(reassert, want) {
 			t.Fatalf("reassert missing %q in %q", want, reassert)
 		}
 	}
 	reassertInteractive := lifecycle.ReassertInteractive(options)
-	for _, want := range []string{EnterAlternateScreen, ClearScreen, HomeCursor, HideCursor, EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste} {
+	for _, want := range []string{EnterAlternateScreen, ClearScreen, HomeCursor, HideCursor, EnableMouseTracking, EnableFocusEvents, EnableBracketedPaste, ReassertExtendedKeys} {
 		if !strings.Contains(reassertInteractive, want) {
 			t.Fatalf("interactive reassert missing %q in %q", want, reassertInteractive)
 		}
 	}
 	exit := lifecycle.ExitInteractive()
-	if lifecycle.AlternateScreen || lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || lifecycle.BracketedPaste {
+	if lifecycle.AlternateScreen || lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || lifecycle.BracketedPaste || lifecycle.ExtendedKeys {
 		t.Fatalf("lifecycle after exit = %#v", lifecycle)
 	}
-	for _, want := range []string{DisableMouseTracking, DisableFocusEvents, DisableBracketedPaste, ShowCursor, ExitAlternateScreen} {
+	for _, want := range []string{DisableMouseTracking, DisableFocusEvents, DisableBracketedPaste, DisableExtendedKeys, ShowCursor, ExitAlternateScreen} {
 		if !strings.Contains(exit, want) {
 			t.Fatalf("exit missing %q in %q", want, exit)
 		}
@@ -3308,15 +3308,15 @@ func TestScreenLifecycleInteractiveTerminalModes(t *testing.T) {
 
 func TestScreenLifecycleReconcilesTerminalModes(t *testing.T) {
 	var lifecycle ScreenLifecycle
-	all := TerminalModeOptions{MouseTracking: true, FocusEvents: true, BracketedPaste: true}
+	all := TerminalModeOptions{MouseTracking: true, FocusEvents: true, BracketedPaste: true, ExtendedKeys: true}
 	_ = lifecycle.EnterInteractive(all)
 
 	pasteOnly := TerminalModeOptions{BracketedPaste: true}
 	update := lifecycle.EnterInteractive(pasteOnly)
-	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || !lifecycle.BracketedPaste {
+	if !lifecycle.AlternateScreen || !lifecycle.CursorHidden || lifecycle.MouseTracking || lifecycle.FocusEvents || !lifecycle.BracketedPaste || lifecycle.ExtendedKeys {
 		t.Fatalf("lifecycle after paste-only update = %#v", lifecycle)
 	}
-	for _, want := range []string{DisableMouseTracking, DisableFocusEvents} {
+	for _, want := range []string{DisableMouseTracking, DisableFocusEvents, DisableExtendedKeys} {
 		if !strings.Contains(update, want) {
 			t.Fatalf("update missing %q in %q", want, update)
 		}
@@ -3332,7 +3332,7 @@ func TestScreenLifecycleReconcilesTerminalModes(t *testing.T) {
 
 	mouseAndPaste := TerminalModeOptions{MouseTracking: true, BracketedPaste: true}
 	update = lifecycle.EnterInteractive(mouseAndPaste)
-	if !lifecycle.MouseTracking || lifecycle.FocusEvents || !lifecycle.BracketedPaste {
+	if !lifecycle.MouseTracking || lifecycle.FocusEvents || !lifecycle.BracketedPaste || lifecycle.ExtendedKeys {
 		t.Fatalf("lifecycle after mouse update = %#v", lifecycle)
 	}
 	if !strings.Contains(update, EnableMouseTracking) || strings.Contains(update, EnableBracketedPaste) {

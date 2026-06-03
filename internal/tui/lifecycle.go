@@ -6,12 +6,14 @@ type ScreenLifecycle struct {
 	MouseTracking   bool
 	FocusEvents     bool
 	BracketedPaste  bool
+	ExtendedKeys    bool
 }
 
 type TerminalModeOptions struct {
 	MouseTracking  bool
 	FocusEvents    bool
 	BracketedPaste bool
+	ExtendedKeys   bool
 }
 
 func (l *ScreenLifecycle) EnterAlternate() string {
@@ -70,6 +72,10 @@ func (l *ScreenLifecycle) EnableTerminalModes(options TerminalModeOptions) strin
 		seq += EnableFocusEvents
 		l.FocusEvents = true
 	}
+	if options.ExtendedKeys && !l.ExtendedKeys {
+		seq += EnableExtendedKeys
+		l.ExtendedKeys = true
+	}
 	if options.MouseTracking && !l.MouseTracking {
 		seq += EnableMouseTracking
 		l.MouseTracking = true
@@ -86,6 +92,10 @@ func (l *ScreenLifecycle) SetTerminalModes(options TerminalModeOptions) string {
 	if !options.FocusEvents && l.FocusEvents {
 		seq += DisableFocusEvents
 		l.FocusEvents = false
+	}
+	if !options.ExtendedKeys && l.ExtendedKeys {
+		seq += DisableExtendedKeys
+		l.ExtendedKeys = false
 	}
 	if !options.BracketedPaste && l.BracketedPaste {
 		seq += DisableBracketedPaste
@@ -105,6 +115,10 @@ func (l *ScreenLifecycle) DisableTerminalModes() string {
 		seq += DisableFocusEvents
 		l.FocusEvents = false
 	}
+	if l.ExtendedKeys {
+		seq += DisableExtendedKeys
+		l.ExtendedKeys = false
+	}
 	if l.BracketedPaste {
 		seq += DisableBracketedPaste
 		l.BracketedPaste = false
@@ -119,6 +133,9 @@ func (l *ScreenLifecycle) ReassertTerminalModes(options TerminalModeOptions) str
 	}
 	if options.FocusEvents && l.FocusEvents {
 		seq += EnableFocusEvents
+	}
+	if options.ExtendedKeys && l.ExtendedKeys {
+		seq += ReassertExtendedKeys
 	}
 	if options.MouseTracking && l.MouseTracking {
 		seq += EnableMouseTracking
