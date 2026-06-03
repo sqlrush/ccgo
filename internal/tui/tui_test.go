@@ -3408,6 +3408,27 @@ func TestOSCSequenceCanUseStringTerminator(t *testing.T) {
 	}
 }
 
+func TestParseOSCColor(t *testing.T) {
+	hex, ok := ParseOSCColor("#5f87ff")
+	if !ok || *hex != (RGBColor{R: 95, G: 135, B: 255}) {
+		t.Fatalf("hex = %#v ok=%v", hex, ok)
+	}
+
+	short, ok := ParseOSCColor("rgb:f/0/8")
+	if !ok || *short != (RGBColor{R: 255, G: 0, B: 136}) {
+		t.Fatalf("short = %#v ok=%v", short, ok)
+	}
+
+	long, ok := ParseOSCColor("rgb:7fff/8000/ffff")
+	if !ok || *long != (RGBColor{R: 127, G: 128, B: 255}) {
+		t.Fatalf("long = %#v ok=%v", long, ok)
+	}
+
+	if invalid, ok := ParseOSCColor("rgb:fffff/0/0"); ok || invalid != nil {
+		t.Fatalf("invalid = %#v ok=%v", invalid, ok)
+	}
+}
+
 func TestTerminalHyperlinkSequence(t *testing.T) {
 	url := "https://example.com/docs?x=1;y=2"
 	link := TerminalHyperlinkSequence(url, nil)

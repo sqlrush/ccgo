@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,11 @@ const (
 	TerminalProgressCompleted     TerminalProgressState = "completed"
 	TerminalProgressError         TerminalProgressState = "error"
 	TerminalProgressIndeterminate TerminalProgressState = "indeterminate"
+)
+
+var (
+	oscHexColorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$`)
+	oscRGBColorPattern = regexp.MustCompile(`^rgb:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})$`)
 )
 
 type RGBColor struct {
@@ -197,6 +203,65 @@ func tabStatusColor(color *RGBColor) string {
 		return ""
 	}
 	return fmt.Sprintf("#%02x%02x%02x", clampByte(color.R), clampByte(color.G), clampByte(color.B))
+}
+
+func ParseOSCColor(spec string) (*RGBColor, bool) {
+	if match := oscHexColorPattern.FindStringSubmatch(spec); match != nil {
+		color, err := parseHexColorParts(match[1], match[2], match[3])
+		if err != nil {
+			return nil, false
+		}
+		return &color, true
+	}
+	if match := oscRGBColorPattern.FindStringSubmatch(spec); match != nil {
+		color, err := parseScaledRGBColorParts(match[1], match[2], match[3])
+		if err != nil {
+			return nil, false
+		}
+		return &color, true
+	}
+	return nil, false
+}
+
+func parseHexColorParts(red string, green string, blue string) (RGBColor, error) {
+	r, err := strconv.ParseInt(red, 16, 0)
+	if err != nil {
+		return RGBColor{}, err
+	}
+	g, err := strconv.ParseInt(green, 16, 0)
+	if err != nil {
+		return RGBColor{}, err
+	}
+	b, err := strconv.ParseInt(blue, 16, 0)
+	if err != nil {
+		return RGBColor{}, err
+	}
+	return RGBColor{R: int(r), G: int(g), B: int(b)}, nil
+}
+
+func parseScaledRGBColorParts(red string, green string, blue string) (RGBColor, error) {
+	r, err := scaleOSCColorPart(red)
+	if err != nil {
+		return RGBColor{}, err
+	}
+	g, err := scaleOSCColorPart(green)
+	if err != nil {
+		return RGBColor{}, err
+	}
+	b, err := scaleOSCColorPart(blue)
+	if err != nil {
+		return RGBColor{}, err
+	}
+	return RGBColor{R: r, G: g, B: b}, nil
+}
+
+func scaleOSCColorPart(part string) (int, error) {
+	value, err := strconv.ParseInt(part, 16, 0)
+	if err != nil {
+		return 0, err
+	}
+	maxValue := (1 << (4 * len(part))) - 1
+	return int((value*255 + int64(maxValue)/2) / int64(maxValue)), nil
 }
 
 func clampByte(value int) int {
