@@ -12,6 +12,10 @@ const (
 	CursorRestore     = "\x1b[u"
 	EraseLine         = "\x1b[2K"
 	ResetScrollRegion = "\x1b[r"
+	PasteStart        = "\x1b[200~"
+	PasteEnd          = "\x1b[201~"
+	FocusInSequence   = "\x1b[I"
+	FocusOutSequence  = "\x1b[O"
 )
 
 type CursorStyle string

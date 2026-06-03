@@ -174,6 +174,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI helpers now generate cursor movement/position and erase sequences with official zero-move and horizontal-first cursorMove semantics.
 - `internal/tui`: terminal CSI helpers now generate scroll up/down and scroll-region sequences with official zero-scroll behavior.
 - `internal/tui`: terminal CSI helpers now generate DECSCUSR cursor-style sequences for block, underline, and bar cursors with blinking variants.
+- `internal/tui`: terminal CSI helpers now expose bracketed-paste and focus input marker constants aligned with the existing key parser.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.

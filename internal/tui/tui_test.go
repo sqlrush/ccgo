@@ -3381,6 +3381,15 @@ func TestCSISequenceHelpers(t *testing.T) {
 	if seq := SetCursorStyleSequence(CursorStyle("unknown"), true); seq != "\x1b[0 q" {
 		t.Fatalf("unknown cursor style = %q", seq)
 	}
+	if seq := PasteStart + PasteEnd + FocusInSequence + FocusOutSequence; seq != "\x1b[200~\x1b[201~\x1b[I\x1b[O" {
+		t.Fatalf("input markers = %q", seq)
+	}
+	if key := ParseKey(FocusInSequence); key.Type != KeyFocusIn {
+		t.Fatalf("focus in key = %#v", key)
+	}
+	if key := ParseKey(FocusOutSequence); key.Type != KeyFocusOut {
+		t.Fatalf("focus out key = %#v", key)
+	}
 }
 
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
