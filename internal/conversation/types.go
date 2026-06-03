@@ -27,17 +27,25 @@ const (
 	EventToolUse          EventType = "tool_use"
 	EventToolResult       EventType = "tool_result"
 	EventRetry            EventType = "retry"
+	EventTokenWarning     EventType = "token_warning"
 	EventCompact          EventType = "compact"
 )
 
+type TokenWarning struct {
+	TokenUsage int
+	Window     compactpkg.WindowConfig
+	State      compactpkg.WarningState
+}
+
 type Event struct {
-	Type       EventType
-	Message    *contracts.Message
-	ToolUse    *contracts.ToolUse
-	ToolResult *contracts.ToolResult
-	Compact    *compactpkg.Result
-	Model      string
-	Error      error
+	Type         EventType
+	Message      *contracts.Message
+	ToolUse      *contracts.ToolUse
+	ToolResult   *contracts.ToolResult
+	TokenWarning *TokenWarning
+	Compact      *compactpkg.Result
+	Model        string
+	Error        error
 }
 
 type Runner struct {

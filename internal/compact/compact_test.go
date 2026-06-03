@@ -108,6 +108,21 @@ func TestAutoConfigFailureCircuitBreaker(t *testing.T) {
 	}
 }
 
+func TestShouldRunAppliesWindowEnvOverride(t *testing.T) {
+	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "50")
+	config := AutoConfig{
+		Enabled:    true,
+		TokenUsage: 95_000,
+		Window: WindowConfig{
+			ContextWindow:   200_000,
+			MaxOutputTokens: 20_000,
+		},
+	}
+	if !ShouldRun(nil, config) {
+		t.Fatal("autocompact should use environment threshold override")
+	}
+}
+
 func TestMicroCompactSummarizesAndCaches(t *testing.T) {
 	cache := NewMicroCache()
 	history := []contracts.Message{

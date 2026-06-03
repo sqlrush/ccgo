@@ -35,6 +35,7 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		return Result{}, err
 	}
 	r.emit(Event{Type: EventUserMessage, Message: &user})
+	r.maybeEmitTokenWarning(history)
 	relevantMemoryPrefetch := r.startRelevantMemoryPrefetch(ctx, history)
 	if relevantMemoryPrefetch != nil {
 		defer relevantMemoryPrefetch.cancel()
@@ -164,6 +165,29 @@ func (r Runner) toolMetadata() map[string]any {
 		}
 	}
 	return metadata
+}
+
+func (r Runner) maybeEmitTokenWarning(history []contracts.Message) {
+	if r.AutoCompact == nil {
+		return
+	}
+	config := *r.AutoCompact
+	tokenUsage := config.TokenUsage
+	if tokenUsage <= 0 {
+		tokenUsage = compactpkg.EstimateTokens(history)
+	}
+	window := compactpkg.WindowConfigFromEnv(config.Window)
+	window.AutoCompactEnabled = config.Enabled
+	state := compactpkg.CalculateWarningState(tokenUsage, window)
+	if !state.IsAboveWarningThreshold && !state.IsAboveErrorThreshold && !state.IsAboveAutoCompactThreshold && !state.IsAtBlockingLimit {
+		return
+	}
+	warning := TokenWarning{
+		TokenUsage: tokenUsage,
+		Window:     window,
+		State:      state,
+	}
+	r.emit(Event{Type: EventTokenWarning, TokenWarning: &warning})
 }
 
 func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Message) ([]contracts.Message, compactpkg.Result, bool, error) {

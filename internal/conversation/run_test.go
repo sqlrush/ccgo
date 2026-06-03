@@ -379,6 +379,67 @@ func TestRunnerAutoCompactsBeforeMainRequest(t *testing.T) {
 	}
 }
 
+func TestRunnerEmitsTokenWarningBeforeMainRequest(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	var events []EventType
+	var warnings []TokenWarning
+	runner := Runner{
+		Client:    client,
+		Model:     "sonnet",
+		MaxTokens: 128,
+		AutoCompact: &compactpkg.AutoConfig{
+			Enabled:    true,
+			TokenUsage: 160_000,
+			Window: compactpkg.WindowConfig{
+				ContextWindow:   200_000,
+				MaxOutputTokens: 20_000,
+			},
+		},
+		OnEvent: func(event Event) {
+			events = append(events, event.Type)
+			if event.Type == EventTokenWarning {
+				if event.TokenWarning == nil {
+					t.Fatal("token warning event missing payload")
+				}
+				warnings = append(warnings, *event.TokenWarning)
+			}
+		},
+	}
+
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("new"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Compacted {
+		t.Fatalf("warning-only turn should not compact: %#v", result)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d, want only main request", len(client.requests))
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %#v events = %#v", warnings, events)
+	}
+	warning := warnings[0]
+	if warning.TokenUsage != 160_000 || warning.State.PercentLeft != 4 {
+		t.Fatalf("warning payload = %#v", warning)
+	}
+	if !warning.State.IsAboveWarningThreshold || warning.State.IsAboveAutoCompactThreshold || !warning.Window.AutoCompactEnabled {
+		t.Fatalf("warning state = %#v window = %#v", warning.State, warning.Window)
+	}
+	if len(events) < 2 || events[0] != EventUserMessage || events[1] != EventTokenWarning {
+		t.Fatalf("events = %#v", events)
+	}
+}
+
 func TestRunnerAutoCompactFailureDoesNotBlockMainRequest(t *testing.T) {
 	client := &fakeClient{calls: []fakeCall{
 		{err: anthropic.APIError{StatusCode: http.StatusInternalServerError, Type: "overloaded_error", Message: "compact failed"}},

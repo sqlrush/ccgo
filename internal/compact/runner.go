@@ -60,7 +60,7 @@ func ShouldRun(history []contracts.Message, config AutoConfig) bool {
 	if usage <= 0 {
 		usage = EstimateTokens(history)
 	}
-	window := config.Window
+	window := WindowConfigFromEnv(config.Window)
 	window.AutoCompactEnabled = true
 	return ShouldAutoCompact(usage, window)
 }
