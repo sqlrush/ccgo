@@ -163,6 +163,7 @@ M7 progress now includes:
 - `internal/tui`: terminal OSC helpers now generate OSC 8 hyperlink start/end sequences with official URL-derived id parameters and explicit param overrides.
 - `internal/tui`: terminal OSC helpers now generate OSC 9;4 progress clear/set/error/indeterminate sequences with official 0..100 percentage clamping.
 - `internal/tui`: terminal OSC helpers now generate iTerm2, Kitty, and Ghostty notification sequences plus raw BEL notifications for caller-managed emission.
+- `internal/tui`: terminal OSC helpers now generate OSC 52 clipboard sequences using clipboard selection `c` and UTF-8 base64 payloads; native clipboard and tmux buffer runtime remain future work.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.

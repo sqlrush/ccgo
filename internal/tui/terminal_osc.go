@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/base64"
 	"fmt"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ const (
 	OSCSetTitleAndIcon  = "0"
 	OSCHyperlink        = "8"
 	OSCITerm2           = "9"
+	OSCClipboard        = "52"
 	OSCKitty            = "99"
 	OSCGhostty          = "777"
 	OSCTabStatus        = "21337"
@@ -90,6 +92,10 @@ func TerminalHyperlinkSequence(url string, params map[string]string) string {
 
 func EndTerminalHyperlinkSequence() string {
 	return OSCSequence(OSCHyperlink, "", "")
+}
+
+func TerminalClipboardSequence(text string) string {
+	return OSCSequence(OSCClipboard, "c", base64.StdEncoding.EncodeToString([]byte(text)))
 }
 
 func TerminalProgressSequence(state TerminalProgressState, percentage int) string {

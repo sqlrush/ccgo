@@ -290,6 +290,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：terminal OSC helper 增加 iTerm2、Kitty、Ghostty notification 序列和 raw BEL helper，调用方可按环境选择是否 wrap multiplexer。
 
+本轮补充：terminal OSC helper 增加 OSC 52 clipboard 序列生成，固定 clipboard selection `c` 并按 UTF-8 base64 编码 payload；native clipboard/tmux buffer runtime 仍未接入。
+
 ### M8: Commands, Skills, Plugins
 
 目标：还原 slash commands、skills 和 plugin 系统。

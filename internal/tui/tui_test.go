@@ -3420,6 +3420,14 @@ func TestTerminalHyperlinkSequence(t *testing.T) {
 	}
 }
 
+func TestTerminalClipboardSequence(t *testing.T) {
+	seq := TerminalClipboardSequence("copy me")
+	want := OSCPrefix + OSCClipboard + ";c;Y29weSBtZQ==" + OSCTerminator
+	if seq != want {
+		t.Fatalf("clipboard = %q, want %q", seq, want)
+	}
+}
+
 func TestTerminalProgressSequence(t *testing.T) {
 	running := TerminalProgressSequence(TerminalProgressRunning, 133)
 	wantRunning := OSCPrefix + OSCITerm2 + ";" + ITerm2Progress + ";" + ITerm2ProgressSet + ";100" + OSCTerminator
