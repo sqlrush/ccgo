@@ -51,6 +51,14 @@ func NewTerminalTokenizer(options TerminalTokenizerOptions) *TerminalTokenizer {
 	return &TerminalTokenizer{state: terminalTokenizerGround, x10Mouse: options.X10Mouse}
 }
 
+func NewTerminalOutputTokenizer() *TerminalTokenizer {
+	return NewTerminalTokenizer(TerminalTokenizerOptions{})
+}
+
+func NewTerminalInputTokenizer() *TerminalTokenizer {
+	return NewTerminalTokenizer(TerminalTokenizerOptions{X10Mouse: true})
+}
+
 func (t *TerminalTokenizer) Feed(input string) []TerminalToken {
 	if t.state == "" {
 		t.state = terminalTokenizerGround

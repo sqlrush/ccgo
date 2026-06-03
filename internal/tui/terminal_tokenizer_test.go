@@ -125,3 +125,22 @@ func TestTerminalTokenizerX10MouseOption(t *testing.T) {
 		t.Fatalf("completed x10 tokens=%#v buffer=%q", tokens, withMouse.Buffer())
 	}
 }
+
+func TestTerminalInputAndOutputTokenizerConstructors(t *testing.T) {
+	output := NewTerminalOutputTokenizer()
+	outputTokens := output.Feed("\x1b[M`rK")
+	wantOutput := []TerminalToken{
+		{Type: TerminalTokenSequence, Value: "\x1b[M"},
+		{Type: TerminalTokenText, Value: "`rK"},
+	}
+	if !reflect.DeepEqual(outputTokens, wantOutput) {
+		t.Fatalf("output tokenizer tokens = %#v", outputTokens)
+	}
+
+	input := NewTerminalInputTokenizer()
+	inputTokens := input.Feed("\x1b[M`rK")
+	wantInput := []TerminalToken{{Type: TerminalTokenSequence, Value: "\x1b[M`rK"}}
+	if !reflect.DeepEqual(inputTokens, wantInput) {
+		t.Fatalf("input tokenizer tokens = %#v", inputTokens)
+	}
+}
