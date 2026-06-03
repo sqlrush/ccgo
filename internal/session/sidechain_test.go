@@ -244,6 +244,29 @@ func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsExtendedMetadataAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "subagent_7", TranscriptMessage{
+		Type: "assistant",
+		UUID: "msg_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metadataPath := SidechainMetadataPath(sessionPath, sessionID, "subagent_7")
+	if err := os.WriteFile(metadataPath, []byte(`{"subagentType":"planner","workspacePath":"/tmp/planner-worktree","taskDescription":"plan the migration"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "subagent_7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.AgentType != "planner" || state.Metadata.WorktreePath != "/tmp/planner-worktree" || state.Metadata.Description != "plan the migration" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

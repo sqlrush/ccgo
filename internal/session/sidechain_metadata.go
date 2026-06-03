@@ -24,13 +24,13 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 	}
 	metadata := SidechainMetadata(canonical)
 	if metadata.AgentType == "" {
-		metadata.AgentType = firstStringField(fields, "agent_type", "agentKind", "agent_kind", "agent")
+		metadata.AgentType = firstStringField(fields, "agent_type", "agentKind", "agent_kind", "agent", "type", "subagentType", "subagent_type", "agentName", "agent_name", "name")
 	}
 	if metadata.WorktreePath == "" {
-		metadata.WorktreePath = firstStringField(fields, "worktree_path", "worktree", "worktreeDir", "worktree_dir", "workingDirectory", "working_directory", "cwd")
+		metadata.WorktreePath = firstStringField(fields, "worktree_path", "worktree", "worktreeDir", "worktree_dir", "workingDirectory", "working_directory", "cwd", "workspacePath", "workspace_path", "workspace", "path", "directory")
 	}
 	if metadata.Description == "" {
-		metadata.Description = firstStringField(fields, "description_text", "descriptionText", "desc", "summary")
+		metadata.Description = firstStringField(fields, "description_text", "descriptionText", "desc", "summary", "task", "taskDescription", "task_description", "prompt", "input", "command", "title")
 	}
 	*m = metadata
 	return nil
