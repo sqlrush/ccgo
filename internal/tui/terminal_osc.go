@@ -64,6 +64,29 @@ type TerminalHyperlink struct {
 	End    bool
 }
 
+type OSCActionType string
+
+const (
+	OSCActionTitle     OSCActionType = "title"
+	OSCActionLink      OSCActionType = "link"
+	OSCActionTabStatus OSCActionType = "tabStatus"
+	OSCActionUnknown   OSCActionType = "unknown"
+)
+
+type TerminalTitleAction struct {
+	Type  string
+	Title string
+	Name  string
+}
+
+type OSCAction struct {
+	Type      OSCActionType
+	Title     TerminalTitleAction
+	Hyperlink TerminalHyperlink
+	TabStatus TabStatusFields
+	Sequence  string
+}
+
 func OSCSequence(parts ...string) string {
 	return OSCSequenceWithTerminator(OSCTerminator, parts...)
 }
@@ -89,6 +112,40 @@ func TerminalTitleSequence(title string) string {
 
 func ClearTerminalTitleSequence() string {
 	return OSCSequence(OSCSetTitleAndIcon, "")
+}
+
+func ParseOSCContent(content string) OSCAction {
+	command, data, ok := strings.Cut(content, ";")
+	if !ok {
+		data = ""
+	}
+	commandNumber, err := strconv.Atoi(command)
+	if err != nil {
+		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
+	}
+	switch strconv.Itoa(commandNumber) {
+	case OSCSetTitleAndIcon:
+		return OSCAction{
+			Type:  OSCActionTitle,
+			Title: TerminalTitleAction{Type: "both", Title: data},
+		}
+	case "1":
+		return OSCAction{
+			Type:  OSCActionTitle,
+			Title: TerminalTitleAction{Type: "iconName", Name: data},
+		}
+	case "2":
+		return OSCAction{
+			Type:  OSCActionTitle,
+			Title: TerminalTitleAction{Type: "windowTitle", Title: data},
+		}
+	case OSCHyperlink:
+		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
+	case OSCTabStatus:
+		return OSCAction{Type: OSCActionTabStatus, TabStatus: ParseTabStatusPayload(data)}
+	default:
+		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
+	}
 }
 
 func TerminalHyperlinkSequence(url string, params map[string]string) string {

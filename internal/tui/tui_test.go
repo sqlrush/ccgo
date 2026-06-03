@@ -3408,6 +3408,31 @@ func TestOSCSequenceCanUseStringTerminator(t *testing.T) {
 	}
 }
 
+func TestParseOSCContent(t *testing.T) {
+	title := ParseOSCContent("0;Claude")
+	if title.Type != OSCActionTitle || title.Title.Type != "both" || title.Title.Title != "Claude" {
+		t.Fatalf("title = %#v", title)
+	}
+
+	link := ParseOSCContent("8;id=f6ehdo;https://example.com/docs?x=1;y=2")
+	if link.Type != OSCActionLink || link.Hyperlink.URL != "https://example.com/docs?x=1;y=2" || link.Hyperlink.Params["id"] != "f6ehdo" {
+		t.Fatalf("link = %#v", link)
+	}
+
+	tab := ParseOSCContent(`21337;status=Ready\; go;indicator=#000001`)
+	if tab.Type != OSCActionTabStatus || tab.TabStatus.Status == nil || *tab.TabStatus.Status != "Ready; go" {
+		t.Fatalf("tab = %#v", tab)
+	}
+	if tab.TabStatus.Indicator == nil || *tab.TabStatus.Indicator != (RGBColor{R: 0, G: 0, B: 1}) {
+		t.Fatalf("tab indicator = %#v", tab.TabStatus.Indicator)
+	}
+
+	unknown := ParseOSCContent("999;noop")
+	if unknown.Type != OSCActionUnknown || unknown.Sequence != OSCPrefix+"999;noop" {
+		t.Fatalf("unknown = %#v", unknown)
+	}
+}
+
 func TestParseOSCColor(t *testing.T) {
 	hex, ok := ParseOSCColor("#5f87ff")
 	if !ok || *hex != (RGBColor{R: 95, G: 135, B: 255}) {
