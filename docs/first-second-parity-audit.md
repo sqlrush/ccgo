@@ -185,6 +185,7 @@ M7 progress now includes:
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts base/unmodified sequences such as `CSI 97u` and `CSI 13;1u`, mapping printable runes plus Enter, Tab, Esc, and Backspace instead of treating ordinary extended-key reports as unknown.
+- `internal/tui`: terminal CSI parsing now emits report actions for DA/device attributes queries such as `CSI c`, `CSI >c`, and `CSI =c`, preserving the private marker and code through the terminal parser dispatcher.
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/session`: prompt history writing now skips image pasted-content records like official `history.ts`, while the reader still accepts older image metadata entries.
 - `internal/session`: paste-cache now has a best-effort cutoff-mtime cleanup helper for old `.txt` paste files, matching official `cleanupOldPastes` behavior.

@@ -96,6 +96,8 @@ M7 补充：terminal CSI-u/kitty keyboard parser 现在接受 codepoint alternat
 
 M7 补充：terminal CSI-u/kitty keyboard parser 现在也接受无修饰/base 序列（如 `CSI 97u`、`CSI 13;1u`），映射 printable rune、Enter、Tab、Esc 和 Backspace，避免启用 extended keyboard 后普通按键掉入 unknown。
 
+M7 补充：terminal CSI parser 现在把 DA/device attributes (`CSI c`、`CSI >c`、`CSI =c`) 解析成 report action，保留 primary/secondary/tertiary private marker 和 code，避免终端能力查询序列落入 generic unknown。
+
 M7 补充：prompt history 写入现在按官方 `history.ts` 过滤 image pasted content，不再把 image base64/filename/mediaType 写入 `history.jsonl`；历史读取仍兼容旧 image metadata。
 
 M7 补充：paste-cache 现在提供按 cutoff mtime 清理旧 `.txt` paste 文件的 best-effort 入口，忽略不存在的 cache 目录、非 `.txt` 文件和单文件清理错误，贴近官方 `cleanupOldPastes` 行为。
@@ -291,6 +293,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 本轮补充：terminal lifecycle 增加可选 extended-key mode，按官方 `CSI >1u`/`CSI >4;2m` 启用 kitty keyboard protocol 和 modifyOtherKeys，退出时重置 modifyOtherKeys 并 pop kitty stack，reassert 时先 pop 再 push，避免长期会话 stack 泄漏。
 
 本轮补充：terminal CSI-u/kitty keyboard parser 接受无 modifier 字段或 modifier `1` 的 base key 序列，覆盖 printable rune、Enter、Tab、Esc 和 Backspace，避免 extended-key 模式下普通键序列被解析成 unknown。
+
+本轮补充：terminal CSI parser 把 DA/device attributes (`CSI c`、`CSI >c`、`CSI =c`) 归入 report action，并在 terminal parser dispatcher 中作为 `TerminalActionReport` 暴露。
 
 本轮补充：renderer/snapshot 增加 opt-in DEC 2026 synchronized output 包裹入口，可用官方 BSU/ESU (`CSI ?2026h`/`CSI ?2026l`) 生成整帧 ANSI fixture，同时默认渲染保持不变。
 

@@ -43,6 +43,7 @@ const (
 	CSICommandBackwardTab      byte = 'Z'
 	CSICommandScrollUp         byte = 'S'
 	CSICommandScrollDown       byte = 'T'
+	CSICommandDeviceAttributes byte = 'c'
 	CSICommandVerticalPosition byte = 'd'
 	CSICommandHorizontalVPos   byte = 'f'
 	CSICommandSetMode          byte = 'h'
@@ -166,6 +167,7 @@ type CSIReportActionType string
 const (
 	CSIReportActionDeviceStatus   CSIReportActionType = "deviceStatus"
 	CSIReportActionCursorPosition CSIReportActionType = "cursorPosition"
+	CSIReportActionDeviceAttrs    CSIReportActionType = "deviceAttributes"
 	CSIReportActionUnknown        CSIReportActionType = "unknown"
 )
 
@@ -314,6 +316,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionColumn, Column: p0}}, true
 	case CSICommandCursorPosition, CSICommandHorizontalVPos:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionPosition, Row: p0, Column: p1}}, true
+	case CSICommandDeviceAttributes:
+		return csiDeviceAttributes(csiParamDefault(params, 0, 0), privateMode), true
 	case CSICommandVerticalPosition:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRow, Row: p0}}, true
 	case CSICommandEraseDisplay:
@@ -416,6 +420,13 @@ func csiReport(code int, privateMode byte) CSIAction {
 	return CSIAction{
 		Type:   CSIActionReport,
 		Report: CSIReportAction{Type: actionType, Code: code, PrivateMode: privateMode},
+	}
+}
+
+func csiDeviceAttributes(code int, privateMode byte) CSIAction {
+	return CSIAction{
+		Type:   CSIActionReport,
+		Report: CSIReportAction{Type: CSIReportActionDeviceAttrs, Code: code, PrivateMode: privateMode},
 	}
 }
 
