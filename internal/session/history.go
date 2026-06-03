@@ -165,6 +165,30 @@ func RetrievePastedText(hash string) (string, bool) {
 	return string(data), true
 }
 
+func CleanupOldPastes(cutoff time.Time) int {
+	entries, err := os.ReadDir(PasteStoreDir())
+	if err != nil {
+		return 0
+	}
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+			continue
+		}
+		path := filepath.Join(PasteStoreDir(), entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if err := os.Remove(path); err == nil {
+				removed++
+			}
+		}
+	}
+	return removed
+}
+
 func PrepareStoredPastedContents(pastedContents map[int]PastedContent) map[int]StoredPastedContent {
 	stored := map[int]StoredPastedContent{}
 	for id, content := range pastedContents {

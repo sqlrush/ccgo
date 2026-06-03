@@ -245,6 +245,42 @@ func TestAddToHistorySkipsImagePastedContent(t *testing.T) {
 	}
 }
 
+func TestCleanupOldPastesRemovesOnlyOldTextFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	if removed := CleanupOldPastes(time.Now()); removed != 0 {
+		t.Fatalf("missing paste-cache removed = %d", removed)
+	}
+
+	if err := StorePastedText("oldpaste", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := StorePastedText("newpaste", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(PasteStoreDir(), "keep.bin"), []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(PastePath("oldpaste"), oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	removed := CleanupOldPastes(time.Now().Add(-24 * time.Hour))
+	if removed != 1 {
+		t.Fatalf("removed = %d", removed)
+	}
+	if _, ok := RetrievePastedText("oldpaste"); ok {
+		t.Fatal("old paste was not removed")
+	}
+	if got, ok := RetrievePastedText("newpaste"); !ok || got != "new" {
+		t.Fatalf("new paste ok=%v got=%q", ok, got)
+	}
+	if _, err := os.Stat(filepath.Join(PasteStoreDir(), "keep.bin")); err != nil {
+		t.Fatalf("non txt paste-cache file should remain: %v", err)
+	}
+}
+
 func TestAppendHistoryUsesStaleLockAndBufferedFlush(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
