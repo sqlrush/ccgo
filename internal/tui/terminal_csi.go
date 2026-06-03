@@ -49,6 +49,7 @@ const (
 	CSICommandVerticalPosition byte = 'd'
 	CSICommandCursorDownAlt    byte = 'e'
 	CSICommandHorizontalVPos   byte = 'f'
+	CSICommandTabClear         byte = 'g'
 	CSICommandSetMode          byte = 'h'
 	CSICommandResetMode        byte = 'l'
 	CSICommandSGR              byte = 'm'
@@ -120,6 +121,7 @@ const (
 	CSICursorActionPrevLine CSICursorActionType = "prevLine"
 	CSICursorActionTab      CSICursorActionType = "tab"
 	CSICursorActionBackTab  CSICursorActionType = "backTab"
+	CSICursorActionTabClear CSICursorActionType = "tabClear"
 )
 
 type CSICursorAction struct {
@@ -335,6 +337,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiCursorMove(CSICursorDown, p0), true
 	case CSICommandVerticalPosition:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRow, Row: p0}}, true
+	case CSICommandTabClear:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabClear, Count: csiParamDefault(params, 0, 0)}}, true
 	case CSICommandEraseDisplay:
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionDisplay, Region: csiEraseDisplayRegion(csiParamDefault(params, 0, 0))}}, true
 	case CSICommandEraseLine:

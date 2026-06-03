@@ -3496,6 +3496,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(3, "F"), want: CSICursorAction{Type: CSICursorActionPrevLine, Count: 3}},
 		{seq: CSISequence(2, "I"), want: CSICursorAction{Type: CSICursorActionTab, Count: 2}},
 		{seq: CSISequence(4, "Z"), want: CSICursorAction{Type: CSICursorActionBackTab, Count: 4}},
+		{seq: CSISequence("g"), want: CSICursorAction{Type: CSICursorActionTabClear, Count: 0}},
+		{seq: CSISequence(3, "g"), want: CSICursorAction{Type: CSICursorActionTabClear, Count: 3}},
 		{seq: CSISequence(12, "G"), want: CSICursorAction{Type: CSICursorActionColumn, Column: 12}},
 		{seq: CSISequence(14, "`"), want: CSICursorAction{Type: CSICursorActionColumn, Column: 14}},
 		{seq: CSISequence("2:7H"), want: CSICursorAction{Type: CSICursorActionPosition, Row: 2, Column: 7}},
