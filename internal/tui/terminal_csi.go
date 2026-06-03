@@ -165,6 +165,7 @@ const (
 	CSIModeActionBracketedPaste  CSIModeActionType = "bracketedPaste"
 	CSIModeActionMouseTracking   CSIModeActionType = "mouseTracking"
 	CSIModeActionFocusEvents     CSIModeActionType = "focusEvents"
+	CSIModeActionSynchronized    CSIModeActionType = "synchronizedOutput"
 )
 
 type CSIMouseTrackingMode string
@@ -412,6 +413,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return csiMouseModeAction(CSIMouseTrackingSGR, enabled), true
 	case DECModeFocusEvents:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: enabled}}, true
+	case DECModeSynchronizedUpdate:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionSynchronized, Enabled: enabled}}, true
 	default:
 		return CSIAction{}, false
 	}

@@ -3550,6 +3550,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: "\x1b[?1006h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingSGR}},
 		{seq: "\x1b[?1006l", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: false, MouseMode: CSIMouseTrackingOff}},
 		{seq: EnableFocusEvents, want: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: true}},
+		{seq: BeginSynchronizedOutput, want: CSIModeAction{Type: CSIModeActionSynchronized, Enabled: true}},
+		{seq: EndSynchronizedOutput, want: CSIModeAction{Type: CSIModeActionSynchronized, Enabled: false}},
 	}
 	for _, tc := range modeCases {
 		action, ok := ParseCSISequence(tc.seq)
