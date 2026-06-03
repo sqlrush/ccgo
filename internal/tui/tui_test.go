@@ -3509,6 +3509,54 @@ func TestParseCSISequenceActions(t *testing.T) {
 	}
 }
 
+func TestParseESCSequenceActions(t *testing.T) {
+	if !IsESCFinal('0') || !IsESCFinal('~') || IsESCFinal('/') || IsESCFinal(0x7f) {
+		t.Fatalf("ESC final range mismatch")
+	}
+	if action, ok := ParseESCSequence("x"); ok || action.Type != "" {
+		t.Fatalf("non-esc parsed = %#v", action)
+	}
+	if action, ok := ParseESCSequence(CSISequence("H")); ok || action.Type != "" {
+		t.Fatalf("csi parsed as esc = %#v", action)
+	}
+	if action, ok := ParseESCContent(""); ok || action.Type != "" {
+		t.Fatalf("empty esc content parsed = %#v", action)
+	}
+	if action, ok := ParseESCContent("H"); ok || action.Type != "" {
+		t.Fatalf("HTS should be ignored = %#v", action)
+	}
+	if action, ok := ParseESCSequence("\x1b(B"); ok || action.Type != "" {
+		t.Fatalf("charset selection should be ignored = %#v", action)
+	}
+
+	reset, ok := ParseESCSequence(ESCResetSequence)
+	if !ok || reset.Type != ESCActionReset {
+		t.Fatalf("reset action = %#v", reset)
+	}
+
+	cursorCases := []struct {
+		seq  string
+		want CSICursorAction
+	}{
+		{seq: ESCSaveCursor, want: CSICursorAction{Type: CSICursorActionSave}},
+		{seq: ESCRestoreCursor, want: CSICursorAction{Type: CSICursorActionRestore}},
+		{seq: ESCIndex, want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorDown, Count: 1}},
+		{seq: ESCReverseIndex, want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorUp, Count: 1}},
+		{seq: ESCNextLine, want: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}},
+	}
+	for _, tc := range cursorCases {
+		action, ok := ParseESCSequence(tc.seq)
+		if !ok || action.Type != ESCActionCursor || !reflect.DeepEqual(action.Cursor, tc.want) {
+			t.Fatalf("esc cursor action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
+	unknown, ok := ParseESCContent("]not-osc")
+	if !ok || unknown.Type != ESCActionUnknown || unknown.Sequence != "\x1b]not-osc" {
+		t.Fatalf("unknown esc action = %#v", unknown)
+	}
+}
+
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"
