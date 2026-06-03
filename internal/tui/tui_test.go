@@ -627,6 +627,7 @@ func TestParseCSIuKeySequences(t *testing.T) {
 	}{
 		{seq: "\x1b[97;5u", want: KeyCtrlA},
 		{seq: "\x1b[65;5u", want: KeyCtrlA},
+		{seq: "\x1b[97:65;5:1u", want: KeyCtrlA},
 		{seq: "\x1b[117;6u", want: KeyCtrlU},
 		{seq: "\x1b[104;5u", want: KeyBackspace},
 		{seq: "\x1b[105;5u", want: KeyTab},
@@ -635,11 +636,14 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[91;5u", want: KeyEsc},
 		{seq: "\x1b[63;5u", want: KeyBackspace},
 		{seq: "\x1b[98;3u", want: KeyAltB},
+		{seq: "\x1b[98:66;3:1u", want: KeyAltB},
 		{seq: "\x1b[68;3u", want: KeyAltD},
 		{seq: "\x1b[127;3u", want: KeyAltBS},
 		{seq: "\x1b[13;2u", want: KeyShiftEnter},
+		{seq: "\x1b[13;2:1u", want: KeyShiftEnter},
 		{seq: "\x1b[9;2u", want: KeyShiftTab},
 		{seq: "\x1b[90;2u", want: KeyRune, rune: 'Z'},
+		{seq: "\x1b[90:122;2:1u", want: KeyRune, rune: 'Z'},
 		{seq: "\x1b[97;3u", want: KeyUnknown},
 	}
 	for _, tc := range cases {

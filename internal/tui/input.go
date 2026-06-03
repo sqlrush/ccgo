@@ -226,12 +226,12 @@ func parseCSIuKey(seq string) (Key, bool) {
 	if len(parts) < 2 {
 		return Key{}, false
 	}
-	codepoint, err := strconv.Atoi(parts[0])
-	if err != nil {
+	codepoint, ok := parseCSIuNumber(parts[0])
+	if !ok {
 		return Key{}, false
 	}
-	modifier, err := strconv.Atoi(parts[1])
-	if err != nil {
+	modifier, ok := parseCSIuNumber(parts[1])
+	if !ok {
 		return Key{}, false
 	}
 	if modifier < 2 {
@@ -262,6 +262,15 @@ func parseCSIuKey(seq string) (Key, bool) {
 		return Key{Type: KeyRune, Rune: r}, true
 	}
 	return Key{}, false
+}
+
+func parseCSIuNumber(field string) (int, bool) {
+	value, _, _ := strings.Cut(field, ":")
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
 }
 
 func ctrlCSIuKey(codepoint int) (Key, bool) {
