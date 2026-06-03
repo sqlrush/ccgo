@@ -3354,6 +3354,15 @@ func TestCSISequenceHelpers(t *testing.T) {
 	if seq := CSISequence(); seq != CSIPrefix {
 		t.Fatalf("csi prefix = %q", seq)
 	}
+	if !IsCSIParam('0') || !IsCSIParam('?') || IsCSIParam('/') || IsCSIParam('@') {
+		t.Fatalf("CSI param range mismatch")
+	}
+	if !IsCSIIntermediate(' ') || !IsCSIIntermediate('/') || IsCSIIntermediate('0') {
+		t.Fatalf("CSI intermediate range mismatch")
+	}
+	if !IsCSIFinal('@') || !IsCSIFinal('~') || IsCSIFinal('?') || IsCSIFinal(0x7f) {
+		t.Fatalf("CSI final range mismatch")
+	}
 	if seq := CSISequence("H"); seq != HomeCursor {
 		t.Fatalf("csi home = %q", seq)
 	}

@@ -316,6 +316,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：terminal CSI helper 增加 `EraseLinesSequence(n)`，按官方 `eraseLines` 语义逐行 `CSI 2K`、行间上移并以 `CSI G` 回到列 1，`n<=0` 返回空串。
 
+本轮补充：terminal CSI helper 增加官方 CSI param/intermediate/final byte range 常量和判定函数，为后续更完整 CSI parser/action tests 提供基础。
+
 ### M8: Commands, Skills, Plugins
 
 目标：还原 slash commands、skills 和 plugin 系统。

@@ -16,6 +16,13 @@ const (
 	PasteEnd          = "\x1b[201~"
 	FocusInSequence   = "\x1b[I"
 	FocusOutSequence  = "\x1b[O"
+
+	CSIParamStart        = 0x30
+	CSIParamEnd          = 0x3f
+	CSIIntermediateStart = 0x20
+	CSIIntermediateEnd   = 0x2f
+	CSIFinalStart        = 0x40
+	CSIFinalEnd          = 0x7e
 )
 
 type CursorStyle string
@@ -38,6 +45,18 @@ func CSISequence(args ...any) string {
 		params = append(params, fmt.Sprint(arg))
 	}
 	return CSIPrefix + strings.Join(params, ";") + fmt.Sprint(args[len(args)-1])
+}
+
+func IsCSIParam(b byte) bool {
+	return b >= CSIParamStart && b <= CSIParamEnd
+}
+
+func IsCSIIntermediate(b byte) bool {
+	return b >= CSIIntermediateStart && b <= CSIIntermediateEnd
+}
+
+func IsCSIFinal(b byte) bool {
+	return b >= CSIFinalStart && b <= CSIFinalEnd
 }
 
 func CursorUp(n int) string {
