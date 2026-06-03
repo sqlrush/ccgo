@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -569,6 +570,63 @@ func TestRunnerInjectsRelevantMemoryFromConfiguredDirIntoRequest(t *testing.T) {
 	}
 	if len(request.Messages) != 1 {
 		t.Fatalf("single-word messages = %#v", request.Messages)
+	}
+}
+
+func TestRunnerPassesRelevantMemoryDirToFileTools(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "old.md")
+	if err := os.WriteFile(path, []byte("---\ndescription: stale memory\n---\nold memory fact\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mtime := time.Now().Add(-3 * 24 * time.Hour)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := tool.NewRegistry(filetools.BuiltinTools()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_read",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_read_memory",
+				Name:  "Read",
+				Input: json.RawMessage(`{"file_path":` + strconv.Quote(path) + `}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:            client,
+		Tools:             tool.NewExecutor(registry),
+		Model:             "sonnet",
+		MaxTokens:         128,
+		RelevantMemoryDir: dir,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("read stale memory"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	content := result.ToolResults[0].Content.(string)
+	if !strings.HasPrefix(content, "<system-reminder>This memory is 3 days old.") || !strings.Contains(content, "old memory fact") {
+		t.Fatalf("content = %q", content)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -48,7 +49,7 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		}
 		r.emit(Event{Type: EventCompact, Compact: &compactResult})
 	}
-	toolMetadata := map[string]any{}
+	toolMetadata := r.toolMetadata()
 	for round := 0; ; round++ {
 		if round >= r.maxToolRounds() {
 			return result, fmt.Errorf("maximum tool rounds exceeded: %d", r.maxToolRounds())
@@ -89,6 +90,16 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
 	}
+}
+
+func (r Runner) toolMetadata() map[string]any {
+	metadata := map[string]any{}
+	if r.RelevantMemoryDir != "" {
+		metadata[tool.MetadataInternalPathContextKey] = permissions.InternalPathContext{
+			AutoMemoryDir: r.RelevantMemoryDir,
+		}
+	}
+	return metadata
 }
 
 func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Message) ([]contracts.Message, compactpkg.Result, bool, error) {
