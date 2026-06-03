@@ -1,5 +1,7 @@
 package tui
 
+import "strings"
+
 type NamedColor string
 
 const (
@@ -387,4 +389,99 @@ func ParseSGRSequence(sequence string, style TextStyle) (TextStyle, bool) {
 		return style, false
 	}
 	return ApplySGR(action.SGRParams, style), true
+}
+
+func TextStyleSGRSequence(style TextStyle) string {
+	params := textStyleSGRParams(style)
+	if len(params) == 0 {
+		return ""
+	}
+	return CSISequence(strings.Join(params, ";") + "m")
+}
+
+func textStyleSGRParams(style TextStyle) []string {
+	if TextStylesEqual(style, DefaultTextStyle()) {
+		return nil
+	}
+	params := []string{"0"}
+	if style.Bold {
+		params = append(params, "1")
+	}
+	if style.Dim {
+		params = append(params, "2")
+	}
+	if style.Italic {
+		params = append(params, "3")
+	}
+	switch style.Underline {
+	case UnderlineSingle:
+		params = append(params, "4")
+	case UnderlineDouble:
+		params = append(params, "21")
+	case UnderlineCurly:
+		params = append(params, "4:3")
+	case UnderlineDotted:
+		params = append(params, "4:4")
+	case UnderlineDashed:
+		params = append(params, "4:5")
+	}
+	if style.Blink {
+		params = append(params, "5")
+	}
+	if style.Inverse {
+		params = append(params, "7")
+	}
+	if style.Hidden {
+		params = append(params, "8")
+	}
+	if style.Strikethrough {
+		params = append(params, "9")
+	}
+	if style.Overline {
+		params = append(params, "53")
+	}
+	params = append(params, terminalColorSGRParams(style.Foreground, 30, 90, 38)...)
+	params = append(params, terminalColorSGRParams(style.Background, 40, 100, 48)...)
+	params = append(params, terminalUnderlineColorSGRParams(style.UnderlineColor)...)
+	return params
+}
+
+func terminalColorSGRParams(color TerminalColor, base int, brightBase int, extended int) []string {
+	switch color.Type {
+	case TerminalColorNamed:
+		if index, ok := namedTerminalColorIndex(color.Name); ok {
+			if index >= 8 {
+				return []string{itoa(brightBase + index - 8)}
+			}
+			return []string{itoa(base + index)}
+		}
+	case TerminalColorIndexed:
+		return []string{itoa(extended), "5", itoa(color.Index)}
+	case TerminalColorRGB:
+		return []string{itoa(extended), "2", itoa(color.RGB.R), itoa(color.RGB.G), itoa(color.RGB.B)}
+	}
+	return nil
+}
+
+func terminalUnderlineColorSGRParams(color TerminalColor) []string {
+	switch color.Type {
+	case TerminalColorNamed:
+		if index, ok := namedTerminalColorIndex(color.Name); ok {
+			return []string{"58", "5", itoa(index)}
+		}
+	case TerminalColorIndexed:
+		return []string{"58", "5", itoa(color.Index)}
+	case TerminalColorRGB:
+		return []string{"58", "2", itoa(color.RGB.R), itoa(color.RGB.G), itoa(color.RGB.B)}
+	}
+	return nil
+}
+
+func namedTerminalColorIndex(color NamedColor) (int, bool) {
+	for index, named := range sgrNamedColors {
+		if named == color {
+			return index, true
+		}
+	}
+	return 0, false
 }

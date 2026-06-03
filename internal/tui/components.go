@@ -20,7 +20,7 @@ func RenderMessages(messages []Message, width int) []string {
 			bodyWidth = width
 			prefix = ""
 		}
-		wrapped := wrapText(message.Text, bodyWidth)
+		wrapped := renderMessageBodyLines(message.Text, bodyWidth)
 		for i, line := range wrapped {
 			if i == 0 {
 				lines = append(lines, prefix+line)
@@ -30,6 +30,79 @@ func RenderMessages(messages []Message, width int) []string {
 		}
 	}
 	return lines
+}
+
+func renderMessageBodyLines(text string, width int) []string {
+	if strings.ContainsRune(text, rune(terminalESC)) {
+		return wrapANSIText(text, width)
+	}
+	return wrapText(text, width)
+}
+
+func wrapANSIText(text string, width int) []string {
+	if width <= 0 {
+		return []string{""}
+	}
+	parser := NewTerminalParser()
+	actions := parser.Feed(text)
+	actions = append(actions, parser.Flush()...)
+	var lines []string
+	var line strings.Builder
+	current := DefaultTextStyle()
+	lineWidth := 0
+	wroteAny := false
+	endedWithBreak := false
+	finishLine := func() {
+		if !TextStylesEqual(current, DefaultTextStyle()) {
+			line.WriteString(CSISequence("0m"))
+			current = DefaultTextStyle()
+		}
+		lines = append(lines, line.String())
+		line.Reset()
+		lineWidth = 0
+		wroteAny = true
+	}
+	for _, action := range actions {
+		switch action.Type {
+		case TerminalActionText:
+			for _, grapheme := range action.Graphemes {
+				if grapheme.Value == "\n" {
+					finishLine()
+					endedWithBreak = true
+					continue
+				}
+				if lineWidth > 0 && lineWidth+grapheme.Width > width {
+					finishLine()
+				}
+				endedWithBreak = false
+				writeTextStyleTransition(&line, &current, action.Style)
+				line.WriteString(grapheme.Value)
+				lineWidth += grapheme.Width
+				wroteAny = true
+			}
+		case TerminalActionBell:
+			line.WriteByte(terminalBEL)
+			wroteAny = true
+			endedWithBreak = false
+		}
+	}
+	if !wroteAny || line.Len() > 0 || endedWithBreak {
+		finishLine()
+	}
+	return lines
+}
+
+func writeTextStyleTransition(out *strings.Builder, current *TextStyle, next TextStyle) {
+	if TextStylesEqual(*current, next) {
+		return
+	}
+	if TextStylesEqual(next, DefaultTextStyle()) {
+		out.WriteString(CSISequence("0m"))
+		*current = next
+		return
+	}
+	out.WriteString(TextStyleSGRSequence(next))
+	*current = next
 }
 
 func RenderStatusLine(status string, width int) string {

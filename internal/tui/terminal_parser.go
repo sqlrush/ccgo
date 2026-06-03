@@ -96,6 +96,13 @@ func TerminalVisibleText(input string) string {
 	return TerminalActionsVisibleText(actions)
 }
 
+func TerminalVisibleWidth(input string) int {
+	parser := NewTerminalParser()
+	actions := parser.Feed(input)
+	actions = append(actions, parser.Flush()...)
+	return TerminalActionsVisibleWidth(actions)
+}
+
 func TerminalActionsVisibleText(actions []TerminalAction) string {
 	var out strings.Builder
 	for _, action := range actions {
@@ -109,6 +116,22 @@ func TerminalActionsVisibleText(actions []TerminalAction) string {
 		}
 	}
 	return out.String()
+}
+
+func TerminalActionsVisibleWidth(actions []TerminalAction) int {
+	width := 0
+	for _, action := range actions {
+		if action.Type != TerminalActionText {
+			continue
+		}
+		for _, grapheme := range action.Graphemes {
+			if grapheme.Value == "\n" || grapheme.Value == "\r" {
+				continue
+			}
+			width += grapheme.Width
+		}
+	}
+	return width
 }
 
 func (p *TerminalParser) processTokens(tokens []TerminalToken) []TerminalAction {

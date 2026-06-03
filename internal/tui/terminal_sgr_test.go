@@ -77,3 +77,14 @@ func TestParseSGRSequenceAppliesCSIAction(t *testing.T) {
 		t.Fatalf("non-sgr sequence should not apply = %#v ok=%v", style, ok)
 	}
 }
+
+func TestTextStyleSGRSequenceRendersFullStyle(t *testing.T) {
+	style := ApplySGR("1;3;4:5;9;53;38;5;42;48;2;1;2;3;58;2;4;5;6", DefaultTextStyle())
+	seq := TextStyleSGRSequence(style)
+	if seq != "\x1b[0;1;3;4:5;9;53;38;5;42;48;2;1;2;3;58;2;4;5;6m" {
+		t.Fatalf("seq = %q", seq)
+	}
+	if TextStyleSGRSequence(DefaultTextStyle()) != "" {
+		t.Fatalf("default style should not emit sgr")
+	}
+}

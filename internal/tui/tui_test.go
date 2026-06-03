@@ -1057,6 +1057,29 @@ func TestRenderMessagesWrapsWithRolePrefix(t *testing.T) {
 	}
 }
 
+func TestRenderMessagesWrapsANSIByVisibleWidth(t *testing.T) {
+	lines := RenderMessages([]Message{{
+		Role: RoleAssistant,
+		Text: "plain " + CSISequence(31, "m") + "red words" + CSISequence("m") + " tail",
+	}}, 24)
+	if len(lines) < 2 {
+		t.Fatalf("lines = %#v", lines)
+	}
+	for _, line := range lines {
+		if width := TerminalVisibleWidth(line); width > 24 {
+			t.Fatalf("line width = %d line=%q lines=%#v", width, line, lines)
+		}
+	}
+	output := strings.Join(lines, "\n")
+	if !strings.Contains(output, "\x1b[0;31m") || !strings.Contains(output, "\x1b[0m") {
+		t.Fatalf("styled output = %q", output)
+	}
+	visible := StripANSI(output)
+	if !strings.Contains(visible, "assistant: plain red") || strings.Contains(visible, "\x1b") {
+		t.Fatalf("visible = %q", visible)
+	}
+}
+
 func TestViewportScrollsAndClamps(t *testing.T) {
 	v := NewViewport([]string{"1", "2", "3", "4", "5"}, 3)
 	if got := strings.Join(v.Visible(), ","); got != "3,4,5" {
