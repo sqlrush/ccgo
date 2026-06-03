@@ -3,7 +3,10 @@ package memory
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"ccgo/internal/contracts"
 )
@@ -11,7 +14,20 @@ import (
 const (
 	RelevantMemoriesAttachmentType = "relevant_memories"
 	RelevantMemoriesSubtype        = "relevant_memories"
+	MaxRelevantMemoryLines         = 200
+	MaxRelevantMemoryBytes         = 4096
 )
+
+type RelevantMemorySelection struct {
+	Path    string
+	MtimeMs int64
+}
+
+type RelevantMemorySurfaceOptions struct {
+	Now      time.Time
+	MaxLines int
+	MaxBytes int
+}
 
 type RelevantMemory struct {
 	Path    string `json:"path"`
@@ -49,6 +65,41 @@ func NewRelevantMemory(path string, content string, mtime time.Time, now time.Ti
 		MtimeMs: mtime.UnixMilli(),
 		Header:  RelevantMemoryHeader(path, mtime, now),
 	}
+}
+
+func ReadMemoriesForSurfacing(selected []RelevantMemorySelection, options RelevantMemorySurfaceOptions) []RelevantMemory {
+	if len(selected) == 0 {
+		return nil
+	}
+	maxLines := options.MaxLines
+	if maxLines <= 0 {
+		maxLines = MaxRelevantMemoryLines
+	}
+	maxBytes := options.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = MaxRelevantMemoryBytes
+	}
+	memories := make([]RelevantMemory, 0, len(selected))
+	for _, item := range selected {
+		if item.Path == "" {
+			continue
+		}
+		content, lineCount, truncatedByLines, truncatedByBytes, mtime, err := readRelevantMemoryFile(item, maxLines, maxBytes)
+		if err != nil {
+			continue
+		}
+		memory := NewRelevantMemory(item.Path, content, mtime, options.Now)
+		if truncatedByLines || truncatedByBytes {
+			reason := fmt.Sprintf("first %d lines", maxLines)
+			if truncatedByBytes {
+				reason = fmt.Sprintf("%d byte limit", maxBytes)
+			}
+			memory.Content += fmt.Sprintf("\n\n> This memory file was truncated (%s). Use the Read tool to view the complete file at: %s", reason, item.Path)
+			memory.Limit = &lineCount
+		}
+		memories = append(memories, memory)
+	}
+	return memories
 }
 
 func RelevantMemoryHeader(path string, mtime time.Time, now time.Time) string {
@@ -143,4 +194,62 @@ func relevantMemoriesFromPayload(value any) []RelevantMemory {
 type relevantMemoriesAttachmentPayload struct {
 	Type     string           `json:"type"`
 	Memories []RelevantMemory `json:"memories"`
+}
+
+func readRelevantMemoryFile(item RelevantMemorySelection, maxLines int, maxBytes int) (string, int, bool, bool, time.Time, error) {
+	data, err := os.ReadFile(item.Path)
+	if err != nil {
+		return "", 0, false, false, time.Time{}, err
+	}
+	mtime := time.UnixMilli(item.MtimeMs)
+	if item.MtimeMs == 0 {
+		if info, err := os.Stat(item.Path); err == nil {
+			mtime = info.ModTime()
+		}
+	}
+	truncatedByBytes := false
+	if maxBytes > 0 && len(data) > maxBytes {
+		data = data[:maxBytes]
+		truncatedByBytes = true
+		for len(data) > 0 && !utf8.Valid(data) {
+			data = data[:len(data)-1]
+		}
+	}
+	content := normalizeMemoryFileContent(string(data))
+	selected, lineCount, truncatedByLines := firstMemoryLines(content, maxLines)
+	return selected, lineCount, truncatedByLines, truncatedByBytes, mtime, nil
+}
+
+func normalizeMemoryFileContent(content string) string {
+	content = strings.TrimPrefix(content, "\ufeff")
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	return strings.ReplaceAll(content, "\r", "\n")
+}
+
+func firstMemoryLines(content string, maxLines int) (string, int, bool) {
+	if maxLines <= 0 {
+		return "", 0, content != ""
+	}
+	lines := 0
+	for i, r := range content {
+		if r != '\n' {
+			continue
+		}
+		lines++
+		if lines == maxLines {
+			return content[:i+1], lines, i+1 < len(content)
+		}
+	}
+	return content, countMemoryLines(content), false
+}
+
+func countMemoryLines(content string) int {
+	if content == "" {
+		return 0
+	}
+	lines := strings.Count(content, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		lines++
+	}
+	return lines
 }

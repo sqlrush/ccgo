@@ -154,6 +154,44 @@ func TestRelevantMemoryAttachmentRenderFallsBackToHeaderFromMtime(t *testing.T) 
 	}
 }
 
+func TestReadMemoriesForSurfacingTruncatesAndSkipsUnreadableFiles(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	linePath := filepath.Join(dir, "lines.md")
+	var lines strings.Builder
+	for i := 1; i <= 205; i++ {
+		lines.WriteString("line\n")
+	}
+	writeFile(t, linePath, lines.String())
+	bytePath := filepath.Join(dir, "bytes.md")
+	writeFile(t, bytePath, strings.Repeat("a", MaxRelevantMemoryBytes+10))
+	mtime := now.Add(-3 * 24 * time.Hour)
+	if err := os.Chtimes(linePath, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(bytePath, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+
+	memories := ReadMemoriesForSurfacing([]RelevantMemorySelection{
+		{Path: linePath, MtimeMs: mtime.UnixMilli()},
+		{Path: filepath.Join(dir, "missing.md"), MtimeMs: mtime.UnixMilli()},
+		{Path: bytePath, MtimeMs: mtime.UnixMilli()},
+	}, RelevantMemorySurfaceOptions{Now: now})
+	if len(memories) != 2 {
+		t.Fatalf("memories = %#v", memories)
+	}
+	if memories[0].Limit == nil || *memories[0].Limit != MaxRelevantMemoryLines || !strings.Contains(memories[0].Content, "first 200 lines") {
+		t.Fatalf("line-truncated memory = %#v", memories[0])
+	}
+	if strings.Count(memories[0].Content, "line\n") != MaxRelevantMemoryLines {
+		t.Fatalf("line content = %q", memories[0].Content)
+	}
+	if memories[1].Limit == nil || !strings.Contains(memories[1].Content, "4096 byte limit") || !strings.Contains(memories[1].Header, "This memory is 3 days old.") {
+		t.Fatalf("byte-truncated memory = %#v", memories[1])
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")
