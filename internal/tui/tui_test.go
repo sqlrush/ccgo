@@ -3547,6 +3547,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(3, "P"), want: CSIEditAction{Type: CSIEditActionDeleteChars, Count: 3}},
 		{seq: CSISequence(4, "L"), want: CSIEditAction{Type: CSIEditActionInsertLines, Count: 4}},
 		{seq: CSISequence(5, "M"), want: CSIEditAction{Type: CSIEditActionDeleteLines, Count: 5}},
+		{seq: CSISequence("b"), want: CSIEditAction{Type: CSIEditActionRepeatChars, Count: 1}},
+		{seq: CSISequence(4, "b"), want: CSIEditAction{Type: CSIEditActionRepeatChars, Count: 4}},
 	}
 	for _, tc := range editCases {
 		action, ok := ParseCSISequence(tc.seq)

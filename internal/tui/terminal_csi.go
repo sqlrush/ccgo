@@ -45,6 +45,7 @@ const (
 	CSICommandScrollDown       byte = 'T'
 	CSICommandCursorColumnAlt  byte = '`'
 	CSICommandCursorForwardAlt byte = 'a'
+	CSICommandRepeatPreceding  byte = 'b'
 	CSICommandDeviceAttributes byte = 'c'
 	CSICommandVerticalPosition byte = 'd'
 	CSICommandCursorDownAlt    byte = 'e'
@@ -164,6 +165,7 @@ const (
 	CSIEditActionDeleteChars CSIEditActionType = "deleteChars"
 	CSIEditActionInsertLines CSIEditActionType = "insertLines"
 	CSIEditActionDeleteLines CSIEditActionType = "deleteLines"
+	CSIEditActionRepeatChars CSIEditActionType = "repeatChars"
 )
 
 type CSIEditAction struct {
@@ -315,6 +317,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiCursorMove(CSICursorForward, p0), true
 	case CSICommandCursorForwardAlt:
 		return csiCursorMove(CSICursorForward, p0), true
+	case CSICommandRepeatPreceding:
+		return csiEdit(CSIEditActionRepeatChars, p0), true
 	case CSICommandCursorBack:
 		return csiCursorMove(CSICursorBack, p0), true
 	case CSICommandCursorNextLine:
