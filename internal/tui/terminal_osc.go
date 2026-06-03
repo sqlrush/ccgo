@@ -181,6 +181,76 @@ func ClearTabStatusSequence() string {
 	return OSCSequence(OSCTabStatus, "indicator=;status=;status-color=")
 }
 
+func ParseTabStatusPayload(payload string) TabStatusFields {
+	var fields TabStatusFields
+	for _, pair := range splitTabStatusPairs(payload) {
+		key, value := pair[0], pair[1]
+		switch key {
+		case "indicator":
+			if color, ok := ParseOSCColor(value); ok {
+				fields.Indicator = color
+				fields.ClearIndicator = false
+			} else {
+				fields.Indicator = nil
+				fields.ClearIndicator = true
+			}
+		case "status":
+			if value == "" {
+				fields.Status = nil
+				fields.ClearStatus = true
+			} else {
+				fields.Status = &value
+				fields.ClearStatus = false
+			}
+		case "status-color":
+			if color, ok := ParseOSCColor(value); ok {
+				fields.StatusColor = color
+				fields.ClearStatusColor = false
+			} else {
+				fields.StatusColor = nil
+				fields.ClearStatusColor = true
+			}
+		}
+	}
+	return fields
+}
+
+func splitTabStatusPairs(payload string) [][2]string {
+	var pairs [][2]string
+	var key strings.Builder
+	var value strings.Builder
+	inValue := false
+	escaped := false
+	for _, r := range payload {
+		switch {
+		case escaped:
+			if inValue {
+				value.WriteRune(r)
+			} else {
+				key.WriteRune(r)
+			}
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case r == ';':
+			pairs = append(pairs, [2]string{key.String(), value.String()})
+			key.Reset()
+			value.Reset()
+			inValue = false
+		case r == '=' && !inValue:
+			inValue = true
+		case inValue:
+			value.WriteRune(r)
+		default:
+			key.WriteRune(r)
+		}
+	}
+	if key.Len() > 0 || inValue {
+		pairs = append(pairs, [2]string{key.String(), value.String()})
+	}
+	return pairs
+}
+
 func WrapForTerminalMultiplexer(sequence string, multiplexer string) string {
 	switch strings.ToLower(strings.TrimSpace(multiplexer)) {
 	case "tmux":

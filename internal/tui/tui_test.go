@@ -3551,6 +3551,30 @@ func TestTabStatusSequenceEscapesFields(t *testing.T) {
 	}
 }
 
+func TestParseTabStatusPayload(t *testing.T) {
+	fields := ParseTabStatusPayload(`indicator=#ff9500;status=Working\; path\\ok;ignored=value;status-color=rgb:f/0/8`)
+	if fields.Indicator == nil || *fields.Indicator != (RGBColor{R: 255, G: 149, B: 0}) || fields.ClearIndicator {
+		t.Fatalf("indicator = %#v clear=%v", fields.Indicator, fields.ClearIndicator)
+	}
+	if fields.Status == nil || *fields.Status != `Working; path\ok` || fields.ClearStatus {
+		t.Fatalf("status = %#v clear=%v", fields.Status, fields.ClearStatus)
+	}
+	if fields.StatusColor == nil || *fields.StatusColor != (RGBColor{R: 255, G: 0, B: 136}) || fields.ClearStatusColor {
+		t.Fatalf("status color = %#v clear=%v", fields.StatusColor, fields.ClearStatusColor)
+	}
+
+	clear := ParseTabStatusPayload("indicator=;status;status-color=not-a-color")
+	if clear.Indicator != nil || !clear.ClearIndicator {
+		t.Fatalf("clear indicator = %#v clear=%v", clear.Indicator, clear.ClearIndicator)
+	}
+	if clear.Status != nil || !clear.ClearStatus {
+		t.Fatalf("clear status = %#v clear=%v", clear.Status, clear.ClearStatus)
+	}
+	if clear.StatusColor != nil || !clear.ClearStatusColor {
+		t.Fatalf("clear status color = %#v clear=%v", clear.StatusColor, clear.ClearStatusColor)
+	}
+}
+
 func TestWrapForTerminalMultiplexer(t *testing.T) {
 	seq := TerminalTitleSequence("Claude")
 	tmux := WrapForTerminalMultiplexer(seq, "tmux")
