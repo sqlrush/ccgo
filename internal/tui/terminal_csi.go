@@ -228,7 +228,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	}
 	final := inner[len(inner)-1]
 	if !IsCSIFinal(final) {
-		return CSIAction{}, false
+		return CSIAction{Type: CSIActionUnknown, Sequence: sequence}, true
 	}
 	beforeFinal := inner[:len(inner)-1]
 	privateMode := byte(0)

@@ -171,4 +171,14 @@ func TestTerminalParserBuffersIncompleteSequences(t *testing.T) {
 	if len(actions) != 0 {
 		t.Fatalf("flush actions = %#v", actions)
 	}
+
+	parser = NewTerminalParser()
+	actions = parser.Feed("\x1b[?")
+	if len(actions) != 0 {
+		t.Fatalf("incomplete csi feed actions = %#v", actions)
+	}
+	actions = parser.Flush()
+	if len(actions) != 1 || actions[0].Type != TerminalActionUnknown || actions[0].Sequence != "\x1b[?" {
+		t.Fatalf("incomplete csi flush actions = %#v", actions)
+	}
 }

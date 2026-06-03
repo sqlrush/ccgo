@@ -3411,8 +3411,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 	if action, ok := ParseCSISequence("x"); ok || action.Type != "" {
 		t.Fatalf("non-csi parsed = %#v", action)
 	}
-	if action, ok := ParseCSISequence(CSIPrefix + "31"); ok || action.Type != "" {
-		t.Fatalf("incomplete csi parsed = %#v", action)
+	if action, ok := ParseCSISequence(CSIPrefix + "31"); !ok || action.Type != CSIActionUnknown || action.Sequence != CSIPrefix+"31" {
+		t.Fatalf("incomplete csi action = %#v ok=%v", action, ok)
 	}
 
 	sgr, ok := ParseCSISequence(CSISequence(31, 1, "m"))
