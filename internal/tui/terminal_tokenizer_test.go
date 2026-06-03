@@ -1,0 +1,127 @@
+package tui
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestTerminalTokenizerFeedsTextAndSequencesAcrossChunks(t *testing.T) {
+	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	tokens := tokenizer.Feed("hi \x1b[")
+	want := []TerminalToken{{Type: TerminalTokenText, Value: "hi "}}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "\x1b[" {
+		t.Fatalf("first feed tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+
+	tokens = tokenizer.Feed("31mred")
+	want = []TerminalToken{
+		{Type: TerminalTokenSequence, Value: "\x1b[31m"},
+		{Type: TerminalTokenText, Value: "red"},
+	}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "" {
+		t.Fatalf("second feed tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+}
+
+func TestTerminalTokenizerFlushesIncompleteSequences(t *testing.T) {
+	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	if tokens := tokenizer.Feed("a\x1b[?"); !reflect.DeepEqual(tokens, []TerminalToken{{Type: TerminalTokenText, Value: "a"}}) {
+		t.Fatalf("feed tokens = %#v", tokens)
+	}
+	if tokenizer.Buffer() != "\x1b[?" {
+		t.Fatalf("buffer = %q", tokenizer.Buffer())
+	}
+	tokens := tokenizer.Flush()
+	want := []TerminalToken{{Type: TerminalTokenSequence, Value: "\x1b[?"}}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "" {
+		t.Fatalf("flush tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+
+	tokenizer.Feed("\x1b[")
+	tokenizer.Reset()
+	if tokenizer.Buffer() != "" {
+		t.Fatalf("reset buffer = %q", tokenizer.Buffer())
+	}
+	if tokens := tokenizer.Feed("x"); !reflect.DeepEqual(tokens, []TerminalToken{{Type: TerminalTokenText, Value: "x"}}) {
+		t.Fatalf("tokens after reset = %#v", tokens)
+	}
+}
+
+func TestTerminalTokenizerHandlesOSCAndStringControls(t *testing.T) {
+	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	input := "a" + TerminalTitleSequence("Claude") + "b" + OSCSequenceWithStringTerminator(OSCSetTitleAndIcon, "ST") + "c"
+	tokens := tokenizer.Feed(input)
+	want := []TerminalToken{
+		{Type: TerminalTokenText, Value: "a"},
+		{Type: TerminalTokenSequence, Value: TerminalTitleSequence("Claude")},
+		{Type: TerminalTokenText, Value: "b"},
+		{Type: TerminalTokenSequence, Value: OSCSequenceWithStringTerminator(OSCSetTitleAndIcon, "ST")},
+		{Type: TerminalTokenText, Value: "c"},
+	}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("osc tokens = %#v", tokens)
+	}
+
+	dcs := "\x1bPpayload\x1b\\"
+	apc := "\x1b_payload\x07"
+	tokens = tokenizer.Feed(dcs + "x" + apc)
+	want = []TerminalToken{
+		{Type: TerminalTokenSequence, Value: dcs},
+		{Type: TerminalTokenText, Value: "x"},
+		{Type: TerminalTokenSequence, Value: apc},
+	}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("string-control tokens = %#v", tokens)
+	}
+}
+
+func TestTerminalTokenizerHandlesESCIntermediateSS3AndInvalidSequences(t *testing.T) {
+	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	tokens := tokenizer.Feed("\x1b(B\x1bOA\x1b[31x")
+	want := []TerminalToken{
+		{Type: TerminalTokenSequence, Value: "\x1b(B"},
+		{Type: TerminalTokenSequence, Value: "\x1bOA"},
+		{Type: TerminalTokenSequence, Value: "\x1b[31x"},
+	}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("sequence tokens = %#v", tokens)
+	}
+
+	tokens = tokenizer.Feed("a\x1b[31\x00b")
+	want = []TerminalToken{
+		{Type: TerminalTokenText, Value: "a"},
+		{Type: TerminalTokenText, Value: "\x1b[31\x00b"},
+	}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("invalid csi tokens = %#v", tokens)
+	}
+}
+
+func TestTerminalTokenizerX10MouseOption(t *testing.T) {
+	withoutMouse := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	tokens := withoutMouse.Feed("\x1b[M`rK")
+	want := []TerminalToken{
+		{Type: TerminalTokenSequence, Value: "\x1b[M"},
+		{Type: TerminalTokenText, Value: "`rK"},
+	}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("without x10 mouse tokens = %#v", tokens)
+	}
+
+	withMouse := NewTerminalTokenizer(TerminalTokenizerOptions{X10Mouse: true})
+	tokens = withMouse.Feed("\x1b[M`rK")
+	want = []TerminalToken{{Type: TerminalTokenSequence, Value: "\x1b[M`rK"}}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("with x10 mouse tokens = %#v", tokens)
+	}
+
+	tokens = withMouse.Feed("\x1b[M`")
+	if len(tokens) != 0 || withMouse.Buffer() != "\x1b[M`" {
+		t.Fatalf("incomplete x10 tokens=%#v buffer=%q", tokens, withMouse.Buffer())
+	}
+	tokens = withMouse.Feed("rK")
+	want = []TerminalToken{{Type: TerminalTokenSequence, Value: "\x1b[M`rK"}}
+	if !reflect.DeepEqual(tokens, want) || withMouse.Buffer() != "" {
+		t.Fatalf("completed x10 tokens=%#v buffer=%q", tokens, withMouse.Buffer())
+	}
+}
