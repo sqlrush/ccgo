@@ -76,11 +76,13 @@ func ParseKey(seq string) Key {
 	}
 	if image, ok := parseImageHint(seq); ok {
 		return Key{
-			Type:      KeyImageHint,
-			Text:      image.Display,
-			Content:   image.Content,
-			MediaType: image.MediaType,
-			Filename:  image.Filename,
+			Type:       KeyImageHint,
+			Text:       image.Display,
+			Content:    image.Content,
+			MediaType:  image.MediaType,
+			Filename:   image.Filename,
+			Dimensions: cloneImageDimensions(image.Dimensions),
+			SourcePath: image.SourcePath,
 		}
 	}
 	if key, ok := parseSGRMouse(seq); ok {
@@ -1006,10 +1008,12 @@ func parseBracketedPaste(seq string) (string, bool) {
 }
 
 type imageHint struct {
-	Display   string
-	Content   string
-	MediaType string
-	Filename  string
+	Display    string
+	Content    string
+	MediaType  string
+	Filename   string
+	Dimensions *session.ImageDimensions
+	SourcePath string
 }
 
 func parseImageHint(seq string) (imageHint, bool) {
@@ -1021,6 +1025,8 @@ func parseImageHint(seq string) (imageHint, bool) {
 	metadata, content, _ := strings.Cut(payload, ":")
 	name := ""
 	mediaType := ""
+	sourcePath := ""
+	dimensions := session.ImageDimensions{}
 	for _, field := range strings.Split(metadata, ";") {
 		if raw, ok := strings.CutPrefix(field, "name="); ok {
 			name = decodeImageName(raw)
@@ -1034,16 +1040,85 @@ func parseImageHint(seq string) (imageHint, bool) {
 			mediaType = strings.TrimSpace(raw)
 			continue
 		}
+		if raw, ok := strings.CutPrefix(field, "media_type="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
 		if raw, ok := strings.CutPrefix(field, "mime="); ok {
 			mediaType = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "mime_type="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "sourcePath="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "source_path="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "path="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "filePath="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "file_path="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "width="); ok {
+			dimensions.OriginalWidth = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "height="); ok {
+			dimensions.OriginalHeight = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "originalWidth="); ok {
+			dimensions.OriginalWidth = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "original_width="); ok {
+			dimensions.OriginalWidth = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "originalHeight="); ok {
+			dimensions.OriginalHeight = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "original_height="); ok {
+			dimensions.OriginalHeight = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "displayWidth="); ok {
+			dimensions.DisplayWidth = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "display_width="); ok {
+			dimensions.DisplayWidth = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "displayHeight="); ok {
+			dimensions.DisplayHeight = parseImageDimension(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "display_height="); ok {
+			dimensions.DisplayHeight = parseImageDimension(raw)
 		}
 	}
+	dimensionPtr := normalizedImageDimensions(dimensions)
 	display := ImageHintPlaceholder
 	if name == "" {
-		return imageHint{Display: display, Content: content, MediaType: mediaType}, true
+		return imageHint{Display: display, Content: content, MediaType: mediaType, Dimensions: dimensionPtr, SourcePath: sourcePath}, true
 	}
 	display = "[Image: " + name + "]"
-	return imageHint{Display: display, Content: content, MediaType: mediaType, Filename: name}, true
+	return imageHint{Display: display, Content: content, MediaType: mediaType, Filename: name, Dimensions: dimensionPtr, SourcePath: sourcePath}, true
 }
 
 func stripOSCTerminator(payload string) string {
@@ -1054,6 +1129,33 @@ func stripOSCTerminator(payload string) string {
 		return strings.TrimSuffix(payload, "\x1b\\")
 	}
 	return payload
+}
+
+func parseImageDimension(raw string) int {
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return value
+}
+
+func normalizedImageDimensions(dimensions session.ImageDimensions) *session.ImageDimensions {
+	if dimensions.OriginalWidth <= 0 && dimensions.OriginalHeight <= 0 && dimensions.DisplayWidth <= 0 && dimensions.DisplayHeight <= 0 {
+		return nil
+	}
+	if dimensions.DisplayWidth <= 0 {
+		dimensions.DisplayWidth = dimensions.OriginalWidth
+	}
+	if dimensions.DisplayHeight <= 0 {
+		dimensions.DisplayHeight = dimensions.OriginalHeight
+	}
+	if dimensions.OriginalWidth <= 0 {
+		dimensions.OriginalWidth = dimensions.DisplayWidth
+	}
+	if dimensions.OriginalHeight <= 0 {
+		dimensions.OriginalHeight = dimensions.DisplayHeight
+	}
+	return &dimensions
 }
 
 func decodeImageName(raw string) string {

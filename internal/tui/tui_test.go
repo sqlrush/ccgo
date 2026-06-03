@@ -869,16 +869,19 @@ func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 }
 
 func TestParseImageHintAcceptsSTTerminatorAndBase64Name(t *testing.T) {
-	key := ParseKey("\x1b]1337;File=name=Y2hhcnQucG5n;type=image/png;inline=1:AAAA\x1b\\")
-	if key.Type != KeyImageHint || key.Text != "[Image: chart.png]" || key.Filename != "chart.png" || key.MediaType != "image/png" || key.Content != "AAAA" {
+	key := ParseKey("\x1b]1337;File=name=Y2hhcnQucG5n;type=image/png;width=4000;height=2000;display_width=1000;display_height=500;sourcePath=/tmp/chart.png;inline=1:AAAA\x1b\\")
+	if key.Type != KeyImageHint || key.Text != "[Image: chart.png]" || key.Filename != "chart.png" || key.MediaType != "image/png" || key.Content != "AAAA" || key.SourcePath != "/tmp/chart.png" {
 		t.Fatalf("key = %#v", key)
+	}
+	if key.Dimensions == nil || key.Dimensions.OriginalWidth != 4000 || key.Dimensions.OriginalHeight != 2000 || key.Dimensions.DisplayWidth != 1000 || key.Dimensions.DisplayHeight != 500 {
+		t.Fatalf("dimensions = %#v", key.Dimensions)
 	}
 
 	prompt := NewPromptState(nil)
 	prompt.EnablePasteReferences()
 	prompt.Apply(key)
 	image := prompt.PastedContents[1]
-	if prompt.Text != "[Image #1]" || image.Type != session.PastedContentImage || image.Filename != "chart.png" || image.Content != "AAAA" {
+	if prompt.Text != "[Image #1]" || image.Type != session.PastedContentImage || image.Filename != "chart.png" || image.Content != "AAAA" || image.SourcePath != "/tmp/chart.png" || image.Dimensions == nil || image.Dimensions.DisplayWidth != 1000 {
 		t.Fatalf("prompt = %#v image=%#v", prompt, image)
 	}
 

@@ -240,6 +240,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PromptInput/REPL screen 可显式启用 image-cache session，image hint paste 会在插入 `[Image #N]` 时同步缓存路径并写入图片文件，补齐官方 PromptInput 侧的 `cacheImagePath`/`storeImage` 接入点。
 - 本轮补充：prompt submit event 保留 display 和 pasted-content metadata，session 层提供 `PromptMessages` 将 text paste 展开、image paste 转成 Anthropic image source block，并为已缓存图片追加 source-path meta message。
 - 本轮补充：pasted image metadata 保留 `dimensions` 和 `sourcePath`，支持 source/dimension 字段别名，并按官方 `createImageMetadataText` 格式生成 source path、原始/显示尺寸和坐标换算倍率 meta text。
+- 本轮补充：image hint parser 现在从 iTerm2 OSC File metadata 解析 `width`/`height`、original/display dimension 别名和 `sourcePath`/`source_path`/`path`，并把这些字段传入 prompt pasted image metadata。
 - 本轮补充：PromptInput paste 按官方路径清理 ANSI/CR/tab，并用 `PASTE_THRESHOLD=800` 和 `min(rows-10, 2)` 行阈值决定正常高度短 paste 内联、小窗口/长 paste 折叠为 pasted-content ref。
 - 本轮补充：PromptInput 编辑后会移除未被 `[Image #N]` 引用的 image pasted-content，session `PromptMessages` 也会在请求构造前过滤 orphan image，避免删除的图片继续作为 image block/meta 发送。
 - 本轮补充：image paste pill 支持官方 lazy-space 语义，连续图片自动分隔，图片后直接输入非空白字符时补一个空格，显式空格/换行不会重复补空格。
