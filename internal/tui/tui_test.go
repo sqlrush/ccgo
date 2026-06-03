@@ -3375,6 +3375,12 @@ func TestCSISequenceHelpers(t *testing.T) {
 	if seq := ScrollUp(0) + ScrollDown(0); seq != "" {
 		t.Fatalf("zero scroll = %q", seq)
 	}
+	if seq := SetCursorStyleSequence(CursorStyleBlock, false) + SetCursorStyleSequence(CursorStyleUnderline, true) + SetCursorStyleSequence(CursorStyleBar, false); seq != "\x1b[2 q\x1b[3 q\x1b[6 q" {
+		t.Fatalf("cursor styles = %q", seq)
+	}
+	if seq := SetCursorStyleSequence(CursorStyle("unknown"), true); seq != "\x1b[0 q" {
+		t.Fatalf("unknown cursor style = %q", seq)
+	}
 }
 
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {

@@ -14,6 +14,14 @@ const (
 	ResetScrollRegion = "\x1b[r"
 )
 
+type CursorStyle string
+
+const (
+	CursorStyleBlock     CursorStyle = "block"
+	CursorStyleUnderline CursorStyle = "underline"
+	CursorStyleBar       CursorStyle = "bar"
+)
+
 func CSISequence(args ...any) string {
 	if len(args) == 0 {
 		return CSIPrefix
@@ -77,6 +85,33 @@ func CursorMove(x int, y int) string {
 		out.WriteString(CursorDown(y))
 	}
 	return out.String()
+}
+
+func SetCursorStyleSequence(style CursorStyle, blinking bool) string {
+	code := 0
+	switch style {
+	case CursorStyleBlock:
+		if blinking {
+			code = 1
+		} else {
+			code = 2
+		}
+	case CursorStyleUnderline:
+		if blinking {
+			code = 3
+		} else {
+			code = 4
+		}
+	case CursorStyleBar:
+		if blinking {
+			code = 5
+		} else {
+			code = 6
+		}
+	default:
+		code = 0
+	}
+	return CSISequence(fmt.Sprintf("%d q", code))
 }
 
 func EraseToEndOfLine() string {
