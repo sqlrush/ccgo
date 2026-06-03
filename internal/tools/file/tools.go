@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
+	"ccgo/internal/permissions"
 	"ccgo/internal/tool"
 )
 
@@ -148,6 +150,14 @@ func validateRead(ctx tool.Context, raw json.RawMessage) error {
 	return nil
 }
 
+func memoryFreshnessPrefix(ctx tool.Context, path string, info os.FileInfo) string {
+	internal := tool.InternalPathContextFromMetadata(ctx.Metadata)
+	if !permissions.CheckReadableInternalPath(path, permissions.InternalPathContext{AutoMemoryDir: internal.AutoMemoryDir}).Allowed {
+		return ""
+	}
+	return memory.MemoryFreshnessNote(info.ModTime(), time.Time{})
+}
+
 func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeRead(raw)
 	if err != nil {
@@ -210,7 +220,7 @@ func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		return contracts.ToolResult{Content: fmt.Sprintf("<system-reminder>Warning: the file exists but is shorter than the provided offset (%d). The file has %d lines.</system-reminder>", offset, totalLines)}, nil
 	}
 	return contracts.ToolResult{
-		Content: addLineNumbers(selected, offset),
+		Content: memoryFreshnessPrefix(ctx, path, info) + addLineNumbers(selected, offset),
 		StructuredContent: map[string]any{
 			"type": "text",
 			"file": map[string]any{

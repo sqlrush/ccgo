@@ -146,12 +146,28 @@ func (d EnginePermissionDecider) DecideTool(t Tool, raw json.RawMessage, ctx Con
 		ReadOnly:         t.IsReadOnly(raw),
 		WritesFiles:      !t.IsReadOnly(raw) && !t.IsDestructive(raw),
 		Destructive:      t.IsDestructive(raw),
+		InternalPaths:    InternalPathContextFromMetadata(ctx.Metadata),
 	}
 	return d.Engine.Decide(req), nil
 }
 
 func NewEnginePermissionDecider(engine permissions.Engine) EnginePermissionDecider {
 	return EnginePermissionDecider{Engine: engine}
+}
+
+func InternalPathContextFromMetadata(metadata map[string]any) permissions.InternalPathContext {
+	if metadata == nil {
+		return permissions.InternalPathContext{}
+	}
+	switch value := metadata[MetadataInternalPathContextKey].(type) {
+	case permissions.InternalPathContext:
+		return value
+	case *permissions.InternalPathContext:
+		if value != nil {
+			return *value
+		}
+	}
+	return permissions.InternalPathContext{}
 }
 
 func firstInputString(raw json.RawMessage, keys ...string) string {

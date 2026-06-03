@@ -65,6 +65,8 @@ func NopProgressSink() ProgressSink {
 }
 
 const (
+	MetadataInternalPathContextKey = "ccgo.permissions.internal_paths"
+
 	HookPreToolUse       = "PreToolUse"
 	HookPostToolUse      = "PostToolUse"
 	HookPermissionDenied = "PermissionDenied"

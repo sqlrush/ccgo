@@ -144,6 +144,7 @@ M6 progress now includes:
 - `internal/session`: transcript message loading now preserves structured SerializedMessage metadata such as `userType`, `entrypoint`, `version`, and `slug`, including common alias spellings.
 - `internal/session`: lightweight transcript metadata loading now clears stale context-collapse commit/snapshot state after compact-boundary messages, matching the full loader and official sessionStorage restore semantics.
 - `internal/memory`: memory age/freshness helpers now match official stale-memory guidance, and document loading can prefix old memory files with a system-reminder that they are point-in-time observations.
+- `internal/tools/file`: `Read` now prefixes old auto-memory file reads with the same freshness system-reminder when internal auto-memory directory metadata is available.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:

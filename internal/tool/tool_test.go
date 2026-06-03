@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -179,6 +181,49 @@ func TestExecutorReturnsPermissionError(t *testing.T) {
 	}
 	if permissionErr.Decision.Behavior != contracts.PermissionDeny {
 		t.Fatalf("behavior = %q", permissionErr.Decision.Behavior)
+	}
+}
+
+func TestEnginePermissionDeciderUsesInternalPathsFromMetadata(t *testing.T) {
+	dir := t.TempDir()
+	autoMemoryDir := filepath.Join(dir, "memory")
+	if err := os.MkdirAll(autoMemoryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDontAsk})
+	decider := NewEnginePermissionDecider(engine)
+	writeTool := FuncTool{DefinitionValue: contracts.ToolDefinition{Name: "Write"}}
+	metadata := map[string]any{
+		MetadataInternalPathContextKey: permissions.InternalPathContext{AutoMemoryDir: autoMemoryDir},
+	}
+	internal := InternalPathContextFromMetadata(metadata)
+	if internal.AutoMemoryDir != autoMemoryDir {
+		t.Fatalf("internal paths = %#v", internal)
+	}
+	check := permissions.CheckEditableInternalPath(filepath.Join(autoMemoryDir, "fact.md"), internal)
+	if !check.Allowed || !strings.Contains(check.Reason, "auto memory") {
+		t.Fatalf("internal path check = %#v", check)
+	}
+	direct := engine.Decide(permissions.Request{
+		ToolName:         "Write",
+		Path:             filepath.Join(autoMemoryDir, "fact.md"),
+		WorkingDirectory: dir,
+		WritesFiles:      true,
+		InternalPaths:    internal,
+	})
+	if direct.Behavior != contracts.PermissionAllow || !strings.Contains(direct.Message, "auto memory") {
+		t.Fatalf("direct decision = %#v", direct)
+	}
+
+	decision, err := decider.DecideTool(writeTool, json.RawMessage(fmt.Sprintf(`{"file_path":%q}`, filepath.Join(autoMemoryDir, "fact.md"))), Context{
+		WorkingDirectory: dir,
+		Metadata:         metadata,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Behavior != contracts.PermissionAllow || !strings.Contains(decision.Message, "auto memory") {
+		t.Fatalf("decision = %#v", decision)
 	}
 }
 

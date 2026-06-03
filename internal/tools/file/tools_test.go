@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/permissions"
 	"ccgo/internal/tool"
 )
 
@@ -78,6 +79,60 @@ func TestReadToolLineNumbersAndDedup(t *testing.T) {
 	}
 	if result.Content != fileUnchangedStub {
 		t.Fatalf("dedup content = %#v", result.Content)
+	}
+}
+
+func TestReadToolPrefixesAutoMemoryFreshnessNote(t *testing.T) {
+	dir := t.TempDir()
+	autoMemoryDir := filepath.Join(dir, "memory")
+	if err := os.MkdirAll(autoMemoryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(autoMemoryDir, "old.md")
+	if err := os.WriteFile(path, []byte("memory fact\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mtime := time.Now().Add(-3 * 24 * time.Hour)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	ctx := fileToolContext(dir)
+	ctx.Metadata[tool.MetadataInternalPathContextKey] = permissions.InternalPathContext{AutoMemoryDir: autoMemoryDir}
+	executor := fileExecutor(t)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_memory",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"memory/old.md"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := result.Content.(string)
+	if !strings.HasPrefix(content, "<system-reminder>This memory is 3 days old.") || !strings.Contains(content, "1\tmemory fact") {
+		t.Fatalf("content = %#v", content)
+	}
+	if file := result.StructuredContent["file"].(map[string]any); file["content"] != "memory fact\n" {
+		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+
+	regularPath := filepath.Join(dir, "regular.md")
+	if err := os.WriteFile(regularPath, []byte("regular\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(regularPath, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	regular, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_regular",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"regular.md"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(regular.Content.(string), "This memory is") {
+		t.Fatalf("regular content = %#v", regular.Content)
 	}
 }
 
