@@ -3455,6 +3455,19 @@ func TestTerminalHyperlinkSequence(t *testing.T) {
 	}
 }
 
+func TestParseHyperlinkPayload(t *testing.T) {
+	link := ParseHyperlinkPayload("id=f6ehdo:rel=noopener;https://example.com/docs?x=1;y=2")
+	wantParams := map[string]string{"id": "f6ehdo", "rel": "noopener"}
+	if link.End || link.URL != "https://example.com/docs?x=1;y=2" || !reflect.DeepEqual(link.Params, wantParams) {
+		t.Fatalf("link = %#v", link)
+	}
+
+	end := ParseHyperlinkPayload(";")
+	if !end.End || end.URL != "" || end.Params != nil {
+		t.Fatalf("end = %#v", end)
+	}
+}
+
 func TestTerminalClipboardSequence(t *testing.T) {
 	seq := TerminalClipboardSequence("copy me")
 	want := OSCPrefix + OSCClipboard + ";c;Y29weSBtZQ==" + OSCTerminator

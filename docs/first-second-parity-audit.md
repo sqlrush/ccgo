@@ -167,6 +167,7 @@ M7 progress now includes:
 - `internal/tui`: terminal OSC helpers now support explicit ST (`ESC \\`) terminators for Kitty-style no-BEL OSC output while preserving BEL as the default.
 - `internal/tui`: terminal OSC helpers now parse `#RRGGBB` and XParseColor-style `rgb:R/G/B` colors, scaling 1-4 digit hex components to 8-bit RGB like the official parser.
 - `internal/tui`: terminal OSC helpers now parse OSC 21337 tab-status payloads with escaped separators, clear/null semantics, unknown-key ignore behavior, and parsed indicator/status colors.
+- `internal/tui`: terminal OSC helpers now parse OSC 8 hyperlink payloads, including params, semicolon-containing URLs, and empty-URL link-end sequences.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.

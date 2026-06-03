@@ -58,6 +58,12 @@ type TabStatusFields struct {
 	ClearStatusColor bool
 }
 
+type TerminalHyperlink struct {
+	URL    string
+	Params map[string]string
+	End    bool
+}
+
 func OSCSequence(parts ...string) string {
 	return OSCSequenceWithTerminator(OSCTerminator, parts...)
 }
@@ -109,6 +115,29 @@ func TerminalHyperlinkSequence(url string, params map[string]string) string {
 
 func EndTerminalHyperlinkSequence() string {
 	return OSCSequence(OSCHyperlink, "", "")
+}
+
+func ParseHyperlinkPayload(payload string) TerminalHyperlink {
+	paramsText, url, ok := strings.Cut(payload, ";")
+	if !ok {
+		url = ""
+	}
+	if url == "" {
+		return TerminalHyperlink{End: true}
+	}
+	params := map[string]string{}
+	if paramsText != "" {
+		for _, pair := range strings.Split(paramsText, ":") {
+			key, value, ok := strings.Cut(pair, "=")
+			if ok {
+				params[key] = value
+			}
+		}
+	}
+	if len(params) == 0 {
+		params = nil
+	}
+	return TerminalHyperlink{URL: url, Params: params}
 }
 
 func TerminalClipboardSequence(text string) string {
