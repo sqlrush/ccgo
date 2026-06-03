@@ -3393,6 +3393,32 @@ func TestTerminalTitleSequenceStripsANSIControls(t *testing.T) {
 	}
 }
 
+func TestTerminalHyperlinkSequence(t *testing.T) {
+	url := "https://example.com/docs?x=1;y=2"
+	link := TerminalHyperlinkSequence(url, nil)
+	want := OSCPrefix + OSCHyperlink + ";id=f6ehdo;" + url + OSCTerminator
+	if link != want {
+		t.Fatalf("link = %q, want %q", link, want)
+	}
+
+	custom := TerminalHyperlinkSequence(url, map[string]string{"id": "custom", "rel": "noopener"})
+	wantCustom := OSCPrefix + OSCHyperlink + ";id=custom:rel=noopener;" + url + OSCTerminator
+	if custom != wantCustom {
+		t.Fatalf("custom link = %q, want %q", custom, wantCustom)
+	}
+
+	end := EndTerminalHyperlinkSequence()
+	wantEnd := OSCPrefix + OSCHyperlink + ";;" + OSCTerminator
+	if end != wantEnd {
+		t.Fatalf("end = %q, want %q", end, wantEnd)
+	}
+
+	visible := StripANSI(link + "docs" + end)
+	if visible != "docs" {
+		t.Fatalf("visible = %q", visible)
+	}
+}
+
 func TestTabStatusSequenceEscapesFields(t *testing.T) {
 	status := "Working; path\\ok\x1b[31m hidden\x1b[0m"
 	orange := RGBColor{R: 255, G: 149, B: 0}

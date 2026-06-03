@@ -2,7 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
+	"unicode/utf16"
 )
 
 const (
@@ -10,6 +13,7 @@ const (
 	OSCTerminator       = "\x07"
 	OSCStringTerminator = "\x1b\\"
 	OSCSetTitleAndIcon  = "0"
+	OSCHyperlink        = "8"
 	OSCTabStatus        = "21337"
 )
 
@@ -42,6 +46,32 @@ func TerminalTitleSequence(title string) string {
 
 func ClearTerminalTitleSequence() string {
 	return OSCSequence(OSCSetTitleAndIcon, "")
+}
+
+func TerminalHyperlinkSequence(url string, params map[string]string) string {
+	if url == "" {
+		return EndTerminalHyperlinkSequence()
+	}
+	merged := map[string]string{"id": osc8ID(url)}
+	for key, value := range params {
+		merged[key] = value
+	}
+	keys := make([]string, 0, len(merged)-1)
+	for key := range merged {
+		if key != "id" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	pairs := []string{"id=" + merged["id"]}
+	for _, key := range keys {
+		pairs = append(pairs, key+"="+merged[key])
+	}
+	return OSCSequence(OSCHyperlink, strings.Join(pairs, ":"), url)
+}
+
+func EndTerminalHyperlinkSequence() string {
+	return OSCSequence(OSCHyperlink, "", "")
 }
 
 func TabStatusSequence(fields TabStatusFields) string {
@@ -98,6 +128,14 @@ func clampByte(value int) int {
 		return 255
 	}
 	return value
+}
+
+func osc8ID(url string) string {
+	var hash uint32
+	for _, unit := range utf16.Encode([]rune(url)) {
+		hash = hash*31 + uint32(unit)
+	}
+	return strconv.FormatUint(uint64(hash), 36)
 }
 
 func escapeTabStatusText(text string) string {
