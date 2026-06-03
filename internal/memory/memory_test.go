@@ -249,6 +249,35 @@ func TestRelevantMemoryPrefetchPlanUsesLastNonMetaUserAndSessionCap(t *testing.T
 	}
 }
 
+func TestSelectRelevantMemoryCandidatesFiltersAndCaps(t *testing.T) {
+	results := [][]RelevantMemorySelection{{
+		{Path: "/repo/mem/read.md"},
+		{Path: "/repo/mem/surfaced.md"},
+		{Path: "/repo/mem/one.md"},
+	}, {
+		{Path: "/repo/mem/two.md"},
+		{Path: "/repo/mem/three.md"},
+		{Path: "/repo/mem/four.md"},
+		{Path: "/repo/mem/five.md"},
+		{Path: "/repo/mem/six.md"},
+	}}
+	selected := SelectRelevantMemoryCandidates(results, map[string]RelevantMemoryReadState{
+		"/repo/mem/read.md": {},
+	}, map[string]struct{}{
+		"/repo/mem/surfaced.md": {},
+	}, 0)
+	if len(selected) != MaxRelevantMemoryAttachments {
+		t.Fatalf("selected = %#v", selected)
+	}
+	got := make([]string, 0, len(selected))
+	for _, item := range selected {
+		got = append(got, item.Path)
+	}
+	if strings.Join(got, ",") != "/repo/mem/one.md,/repo/mem/two.md,/repo/mem/three.md,/repo/mem/four.md,/repo/mem/five.md" {
+		t.Fatalf("paths = %#v", got)
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")

@@ -17,6 +17,7 @@ const (
 	MaxRelevantMemoryLines         = 200
 	MaxRelevantMemoryBytes         = 4096
 	MaxRelevantMemorySessionBytes  = 60 * 1024
+	MaxRelevantMemoryAttachments   = 5
 )
 
 type RelevantMemorySelection struct {
@@ -184,6 +185,35 @@ func RelevantMemoryPrefetchPlanForMessages(messages []contracts.Message, maxSess
 		return RelevantMemoryPrefetchPlan{}, false
 	}
 	return RelevantMemoryPrefetchPlan{Input: input, Surfaced: surfaced}, true
+}
+
+func SelectRelevantMemoryCandidates(results [][]RelevantMemorySelection, state map[string]RelevantMemoryReadState, surfaced map[string]struct{}, limit int) []RelevantMemorySelection {
+	if limit <= 0 {
+		limit = MaxRelevantMemoryAttachments
+	}
+	selected := make([]RelevantMemorySelection, 0, limit)
+	for _, group := range results {
+		for _, item := range group {
+			if item.Path == "" {
+				continue
+			}
+			if state != nil {
+				if _, ok := state[item.Path]; ok {
+					continue
+				}
+			}
+			if surfaced != nil {
+				if _, ok := surfaced[item.Path]; ok {
+					continue
+				}
+			}
+			selected = append(selected, item)
+			if len(selected) >= limit {
+				return selected
+			}
+		}
+	}
+	return selected
 }
 
 func FilterDuplicateRelevantMemoryAttachments(messages []contracts.Message, state map[string]RelevantMemoryReadState) []contracts.Message {
