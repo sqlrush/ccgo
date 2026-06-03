@@ -53,11 +53,22 @@ type TabStatusFields struct {
 }
 
 func OSCSequence(parts ...string) string {
+	return OSCSequenceWithTerminator(OSCTerminator, parts...)
+}
+
+func OSCSequenceWithTerminator(terminator string, parts ...string) string {
+	if terminator == "" {
+		terminator = OSCTerminator
+	}
 	clean := make([]string, 0, len(parts))
 	for _, part := range parts {
 		clean = append(clean, sanitizeOSCPayload(part))
 	}
-	return OSCPrefix + strings.Join(clean, ";") + OSCTerminator
+	return OSCPrefix + strings.Join(clean, ";") + terminator
+}
+
+func OSCSequenceWithStringTerminator(parts ...string) string {
+	return OSCSequenceWithTerminator(OSCStringTerminator, parts...)
 }
 
 func TerminalTitleSequence(title string) string {

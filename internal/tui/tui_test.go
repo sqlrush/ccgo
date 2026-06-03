@@ -3394,6 +3394,20 @@ func TestTerminalTitleSequenceStripsANSIControls(t *testing.T) {
 	}
 }
 
+func TestOSCSequenceCanUseStringTerminator(t *testing.T) {
+	st := OSCSequenceWithStringTerminator(OSCSetTitleAndIcon, "Claude")
+	wantST := OSCPrefix + OSCSetTitleAndIcon + ";Claude" + OSCStringTerminator
+	if st != wantST {
+		t.Fatalf("st = %q, want %q", st, wantST)
+	}
+
+	fallback := OSCSequenceWithTerminator("", OSCSetTitleAndIcon, "Claude")
+	wantFallback := OSCPrefix + OSCSetTitleAndIcon + ";Claude" + OSCTerminator
+	if fallback != wantFallback {
+		t.Fatalf("fallback = %q, want %q", fallback, wantFallback)
+	}
+}
+
 func TestTerminalHyperlinkSequence(t *testing.T) {
 	url := "https://example.com/docs?x=1;y=2"
 	link := TerminalHyperlinkSequence(url, nil)
