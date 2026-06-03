@@ -38,6 +38,8 @@ type TerminalAction struct {
 type TerminalParser struct {
 	tokenizer *TerminalTokenizer
 	style     TextStyle
+	inLink    bool
+	linkURL   string
 }
 
 func NewTerminalParser() *TerminalParser {
@@ -68,10 +70,20 @@ func (p *TerminalParser) Reset() {
 		p.tokenizer.Reset()
 	}
 	p.style = DefaultTextStyle()
+	p.inLink = false
+	p.linkURL = ""
 }
 
 func (p *TerminalParser) Style() TextStyle {
 	return p.style
+}
+
+func (p *TerminalParser) InLink() bool {
+	return p.inLink
+}
+
+func (p *TerminalParser) LinkURL() string {
+	return p.linkURL
 }
 
 func (p *TerminalParser) processTokens(tokens []TerminalToken) []TerminalAction {
@@ -140,6 +152,13 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 	case TerminalSequenceOSC:
 		switch action.OSC.Type {
 		case OSCActionLink:
+			if action.OSC.Hyperlink.End {
+				p.inLink = false
+				p.linkURL = ""
+			} else {
+				p.inLink = true
+				p.linkURL = action.OSC.Hyperlink.URL
+			}
 			return TerminalAction{Type: TerminalActionLink, OSC: action.OSC}, true
 		case OSCActionTitle:
 			return TerminalAction{Type: TerminalActionTitle, OSC: action.OSC}, true

@@ -81,6 +81,38 @@ func TestTerminalParserDispatchesSequenceActions(t *testing.T) {
 	}
 }
 
+func TestTerminalParserTracksHyperlinkState(t *testing.T) {
+	parser := NewTerminalParser()
+	start := TerminalHyperlinkSequence("https://example.com/docs", nil)
+	actions := parser.Feed(start + "docs")
+	if len(actions) != 2 {
+		t.Fatalf("start actions = %#v", actions)
+	}
+	if actions[0].Type != TerminalActionLink || actions[0].OSC.Hyperlink.URL != "https://example.com/docs" {
+		t.Fatalf("link start action = %#v", actions[0])
+	}
+	if !parser.InLink() || parser.LinkURL() != "https://example.com/docs" {
+		t.Fatalf("parser link state = inLink %v url %q", parser.InLink(), parser.LinkURL())
+	}
+	if actions[1].Type != TerminalActionText || actions[1].Graphemes[0].Value != "d" {
+		t.Fatalf("link text action = %#v", actions[1])
+	}
+
+	actions = parser.Feed(EndTerminalHyperlinkSequence())
+	if len(actions) != 1 || actions[0].Type != TerminalActionLink || !actions[0].OSC.Hyperlink.End {
+		t.Fatalf("link end actions = %#v", actions)
+	}
+	if parser.InLink() || parser.LinkURL() != "" {
+		t.Fatalf("parser link end state = inLink %v url %q", parser.InLink(), parser.LinkURL())
+	}
+
+	parser.Feed(start)
+	parser.Reset()
+	if parser.InLink() || parser.LinkURL() != "" {
+		t.Fatalf("parser reset link state = inLink %v url %q", parser.InLink(), parser.LinkURL())
+	}
+}
+
 func TestTerminalParserResetClearsStyle(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed(CSISequence(1, "m") + "bold" + ESCResetSequence + "plain")
