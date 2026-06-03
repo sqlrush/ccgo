@@ -3393,6 +3393,53 @@ func TestTerminalTitleSequenceStripsANSIControls(t *testing.T) {
 	}
 }
 
+func TestTabStatusSequenceEscapesFields(t *testing.T) {
+	status := "Working; path\\ok\x1b[31m hidden\x1b[0m"
+	orange := RGBColor{R: 255, G: 149, B: 0}
+	blue := RGBColor{R: 95, G: 135, B: 255}
+	seq := TabStatusSequence(TabStatusFields{
+		Indicator:   &orange,
+		Status:      &status,
+		StatusColor: &blue,
+	})
+	want := OSCPrefix + OSCTabStatus + ";indicator=#ff9500;status=Working\\; path\\\\ok hidden;status-color=#5f87ff" + OSCTerminator
+	if seq != want {
+		t.Fatalf("tab status = %q, want %q", seq, want)
+	}
+
+	clear := ClearTabStatusSequence()
+	wantClear := OSCPrefix + OSCTabStatus + ";indicator=;status=;status-color=" + OSCTerminator
+	if clear != wantClear {
+		t.Fatalf("clear = %q, want %q", clear, wantClear)
+	}
+
+	reset := TabStatusSequence(TabStatusFields{ClearStatus: true})
+	wantReset := OSCPrefix + OSCTabStatus + ";status=" + OSCTerminator
+	if reset != wantReset {
+		t.Fatalf("reset = %q, want %q", reset, wantReset)
+	}
+}
+
+func TestWrapForTerminalMultiplexer(t *testing.T) {
+	seq := TerminalTitleSequence("Claude")
+	tmux := WrapForTerminalMultiplexer(seq, "tmux")
+	wantTmux := "\x1bPtmux;\x1b\x1b]0;Claude\x07\x1b\\"
+	if tmux != wantTmux {
+		t.Fatalf("tmux = %q, want %q", tmux, wantTmux)
+	}
+
+	screen := WrapForTerminalMultiplexer(seq, "screen")
+	wantScreen := "\x1bP" + seq + OSCStringTerminator
+	if screen != wantScreen {
+		t.Fatalf("screen = %q, want %q", screen, wantScreen)
+	}
+
+	plain := WrapForTerminalMultiplexer(seq, "")
+	if plain != seq {
+		t.Fatalf("plain = %q, want %q", plain, seq)
+	}
+}
+
 func TestRendererRendersMultilinePromptAndCursor(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "first\nsecond"

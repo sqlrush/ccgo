@@ -159,6 +159,7 @@ M7 progress now includes:
 - `internal/tui`: terminal lifecycle can now manage extended-key reporting with Kitty keyboard protocol plus xterm modifyOtherKeys, including disable ordering and pop-before-push reassertion to avoid Kitty stack leaks.
 - `internal/tui`: renderer and ANSI snapshots now have an opt-in DEC 2026 synchronized-output wrapper for official BSU/ESU frame fixtures without changing default rendering.
 - `internal/tui`: terminal OSC helpers can generate sanitized OSC 0 title/icon sequences, and ANSI stripping now skips OSC/DCS-style payloads so invisible terminal controls do not leak into visible snapshot text.
+- `internal/tui`: terminal OSC helpers now cover OSC 21337 tab-status generation/clear sequences and tmux/screen passthrough wrapping with official status-text escaping.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
