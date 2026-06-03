@@ -56,6 +56,7 @@ const (
 	CSICommandCursorStyle      byte = 'q'
 	CSICommandScrollRegion     byte = 'r'
 	CSICommandSaveCursor       byte = 's'
+	CSICommandWindowReport     byte = 't'
 	CSICommandRestoreCursor    byte = 'u'
 	CSICommandTerminalParams   byte = 'x'
 
@@ -175,6 +176,7 @@ const (
 	CSIReportActionCursorPosition CSIReportActionType = "cursorPosition"
 	CSIReportActionDeviceAttrs    CSIReportActionType = "deviceAttributes"
 	CSIReportActionTerminalParams CSIReportActionType = "terminalParameters"
+	CSIReportActionWindow         CSIReportActionType = "window"
 	CSIReportActionUnknown        CSIReportActionType = "unknown"
 )
 
@@ -359,6 +361,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: p0, Bottom: p1}}, true
 	case CSICommandSaveCursor:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionSave}}, true
+	case CSICommandWindowReport:
+		return csiWindowReport(csiParamDefault(params, 0, 0), privateMode), true
 	case CSICommandRestoreCursor:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRestore}}, true
 	case CSICommandCursorStyle:
@@ -449,6 +453,13 @@ func csiTerminalParameters(code int, privateMode byte) CSIAction {
 	return CSIAction{
 		Type:   CSIActionReport,
 		Report: CSIReportAction{Type: CSIReportActionTerminalParams, Code: code, PrivateMode: privateMode},
+	}
+}
+
+func csiWindowReport(code int, privateMode byte) CSIAction {
+	return CSIAction{
+		Type:   CSIActionReport,
+		Report: CSIReportAction{Type: CSIReportActionWindow, Code: code, PrivateMode: privateMode},
 	}
 }
 

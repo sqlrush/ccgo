@@ -189,6 +189,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parsing now accepts ECMA/xterm cursor alias final bytes `CSI a`, `CSI e`, and `CSI \`` as cursor-forward, cursor-down, and cursor-column actions.
 - `internal/tui`: terminal CSI parsing now accepts DEC private mode `?1047h/l` alternate-screen buffer and `?1048h/l` save/restore cursor variants using the existing mode/cursor action surface.
 - `internal/tui`: terminal CSI parsing now emits report actions for DECREQTPARM terminal-parameters queries such as `CSI x`, preserving code and private marker fields.
+- `internal/tui`: terminal CSI parsing now emits report actions for xterm window manipulation/report queries such as `CSI 14t` and `CSI 18t`, preserving code and private marker fields.
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/session`: prompt history writing now skips image pasted-content records like official `history.ts`, while the reader still accepts older image metadata entries.
 - `internal/session`: paste-cache now has a best-effort cutoff-mtime cleanup helper for old `.txt` paste files, matching official `cleanupOldPastes` behavior.
