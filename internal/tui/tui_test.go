@@ -3974,6 +3974,27 @@ func TestRendererWrapsWidePromptAndCursorByVisibleWidth(t *testing.T) {
 	}
 }
 
+func TestRendererPositionsWideReverseSearchCursorByVisibleWidth(t *testing.T) {
+	state := ReverseSearchState{
+		Active:  true,
+		Query:   "界界a",
+		Cursor:  len([]rune("界界")),
+		Results: []string{"界界abc"},
+	}
+	output := RenderOnce(40, 4, Frame{
+		Status:        "ready",
+		ReverseSearch: &state,
+		ShowCursor:    true,
+	})
+	visible := StripANSI(output)
+	if !strings.Contains(visible, "(reverse-i-search) `界界a': 界界abc") {
+		t.Fatalf("visible reverse search = %q", visible)
+	}
+	if !strings.Contains(output, "\x1b[4;25H") {
+		t.Fatalf("cursor output = %q", output)
+	}
+}
+
 func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"

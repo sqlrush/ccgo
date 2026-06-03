@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const reverseSearchPromptPrefix = "(reverse-i-search) `"
+
 type promptLayout struct {
 	Lines      []string
 	CursorLine int
@@ -253,7 +255,7 @@ func RenderReverseSearchLine(state ReverseSearchState, width int) string {
 	if !ok {
 		current = "no matches"
 	}
-	line := "(reverse-i-search) `" + state.Query + "': " + current
+	line := reverseSearchPromptPrefix + state.Query + "': " + current
 	return padOrTrim(line, width)
 }
 

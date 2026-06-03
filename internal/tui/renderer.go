@@ -158,7 +158,7 @@ func footerPromptLines(frame Frame, width int) []string {
 
 func promptCursorPosition(frame Frame, width int, height int, promptLineCount int, hiddenPromptLines int) (int, int) {
 	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
-		col := len([]rune("(reverse-i-search) `")) + frame.ReverseSearch.Cursor + 1
+		col := reverseSearchCursorColumn(*frame.ReverseSearch) + 1
 		if col < 1 {
 			return height, 1
 		}
@@ -182,6 +182,30 @@ func promptCursorPosition(frame Frame, width int, height int, promptLineCount in
 		row = 1
 	}
 	return row, col + 1
+}
+
+func reverseSearchCursorColumn(state ReverseSearchState) int {
+	return TerminalVisibleWidth(reverseSearchPromptPrefix) + visibleWidthBeforeRuneIndex(state.Query, state.Cursor)
+}
+
+func visibleWidthBeforeRuneIndex(text string, cursor int) int {
+	if cursor <= 0 {
+		return 0
+	}
+	col := 0
+	runeIndex := 0
+	for _, grapheme := range terminalGraphemes(text) {
+		nextRuneIndex := runeIndex + len([]rune(grapheme.Value))
+		if cursor <= runeIndex {
+			return col
+		}
+		if cursor < nextRuneIndex {
+			return col + grapheme.Width
+		}
+		col += grapheme.Width
+		runeIndex = nextRuneIndex
+	}
+	return col
 }
 
 func RenderOnce(width int, height int, frame Frame) string {
