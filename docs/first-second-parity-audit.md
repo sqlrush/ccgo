@@ -164,6 +164,7 @@ M7 progress now includes:
 - `internal/tui`: image paste pills now follow the official lazy-space behavior for consecutive image pastes and image-then-text input without adding duplicate spaces before explicit whitespace/newlines.
 - `internal/tui`: REPL messages now preserve `imagePasteIds`, and prompt state advances `NextPastedID` from existing user-message image ids and pasted refs so resumed screens do not reuse paste IDs.
 - `internal/tui`: reverse-search now matches full history entries and restores text/image pasted-content metadata on selection, so the next submit still carries display text and image metadata.
+- `internal/tui`: REPL message restore can now rebuild prompt text and image pasted contents from user-message content blocks, `imagePasteIds`, and pasted-content metadata.
 - `internal/tui`: prompt submitted events now retain display text and pasted-content metadata, so downstream runtime code can build text/image content-block messages instead of receiving only the expanded prompt string.
 - `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, string-array key sequences/chords, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.

@@ -557,6 +557,15 @@ func (p *PromptState) SeedNextPastedIDFromMessages(messages []Message) {
 				next = id + 1
 			}
 		}
+		for id, content := range restoredMessagePastedContents(message) {
+			contentID := id
+			if content.ID > 0 {
+				contentID = content.ID
+			}
+			if contentID >= next {
+				next = contentID + 1
+			}
+		}
 		for _, ref := range session.ParseReferences(message.Text) {
 			if ref.ID >= next {
 				next = ref.ID + 1

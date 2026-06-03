@@ -1,6 +1,9 @@
 package tui
 
-import "ccgo/internal/session"
+import (
+	"ccgo/internal/contracts"
+	"ccgo/internal/session"
+)
 
 type Role string
 
@@ -12,9 +15,11 @@ const (
 )
 
 type Message struct {
-	Role          Role
-	Text          string
-	ImagePasteIDs []int
+	Role           Role
+	Text           string
+	ContentBlocks  []contracts.ContentBlock
+	ImagePasteIDs  []int
+	PastedContents map[int]session.PastedContent
 }
 
 type DialogKind string

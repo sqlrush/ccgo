@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/session"
 )
 
@@ -49,6 +50,71 @@ func intListValue(list *intList) []int {
 		return nil
 	}
 	return []int(*list)
+}
+
+func contentBlocksJSONField(fields map[string]json.RawMessage, names ...string) []contracts.ContentBlock {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var blocks []contracts.ContentBlock
+		if err := json.Unmarshal(raw, &blocks); err == nil {
+			return blocks
+		}
+		var block contracts.ContentBlock
+		if err := json.Unmarshal(raw, &block); err == nil && block.Type != "" {
+			return []contracts.ContentBlock{block}
+		}
+	}
+	return nil
+}
+
+func pastedContentsJSONField(fields map[string]json.RawMessage, names ...string) map[int]session.PastedContent {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var byID map[int]session.PastedContent
+		if err := json.Unmarshal(raw, &byID); err == nil && len(byID) > 0 {
+			return normalizePastedContentIDs(byID)
+		}
+		var list []session.PastedContent
+		if err := json.Unmarshal(raw, &list); err == nil && len(list) > 0 {
+			return pastedContentListMap(list)
+		}
+		var single session.PastedContent
+		if err := json.Unmarshal(raw, &single); err == nil && single.ID > 0 {
+			return pastedContentListMap([]session.PastedContent{single})
+		}
+	}
+	return nil
+}
+
+func normalizePastedContentIDs(contents map[int]session.PastedContent) map[int]session.PastedContent {
+	out := make(map[int]session.PastedContent, len(contents))
+	for id, content := range contents {
+		if content.ID == 0 {
+			content.ID = id
+		}
+		out[id] = content
+	}
+	return out
+}
+
+func pastedContentListMap(contents []session.PastedContent) map[int]session.PastedContent {
+	out := make(map[int]session.PastedContent, len(contents))
+	for _, content := range contents {
+		if content.ID <= 0 {
+			continue
+		}
+		out[content.ID] = content
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 type scriptSize struct {
@@ -1099,6 +1165,9 @@ func (message *Message) UnmarshalJSON(data []byte) error {
 	if message.Text == "" {
 		message.Text = stringJSONField(fields, "content", "body", "message")
 	}
+	if len(message.ContentBlocks) == 0 {
+		message.ContentBlocks = contentBlocksJSONField(fields, "content", "contentBlocks", "content_blocks", "blocks", "messageContent", "message_content")
+	}
 	if len(message.ImagePasteIDs) == 0 {
 		message.ImagePasteIDs = intListJSONField(
 			fields,
@@ -1112,6 +1181,9 @@ func (message *Message) UnmarshalJSON(data []byte) error {
 			"pastedImageIDs",
 			"pasted_image_ids",
 		)
+	}
+	if len(message.PastedContents) == 0 {
+		message.PastedContents = pastedContentsJSONField(fields, "pastedContents", "pasted_contents", "pastes", "pasteContents", "paste_contents")
 	}
 	return nil
 }

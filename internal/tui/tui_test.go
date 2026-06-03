@@ -777,6 +777,61 @@ func TestReverseSearchRestoresPastedContentEntries(t *testing.T) {
 	}
 }
 
+func TestREPLScreenRestoreMessageAtRestoresPastedContent(t *testing.T) {
+	screen := NewREPLScreen(50, 8, nil)
+	screen.SetMessages([]Message{
+		{Role: RoleAssistant, Text: "before"},
+		{
+			Role: RoleUser,
+			Text: "retry [Pasted text #3] [Image #7]",
+			ContentBlocks: []contracts.ContentBlock{
+				contracts.NewBase64ImageBlock("image/jpeg", "BBBB"),
+			},
+			ImagePasteIDs: []int{7},
+			PastedContents: map[int]session.PastedContent{
+				3: {ID: 3, Type: session.PastedContentText, Content: "expanded retry"},
+			},
+		},
+		{Role: RoleAssistant, Text: "after"},
+	})
+
+	if !screen.RestoreMessageAt(1) {
+		t.Fatal("RestoreMessageAt returned false")
+	}
+	if len(screen.Messages) != 1 || screen.Messages[0].Text != "before" {
+		t.Fatalf("messages after restore = %#v", screen.Messages)
+	}
+	if screen.Prompt.Text != "retry [Pasted text #3] [Image #7]" || screen.Prompt.ExpandedText() != "retry expanded retry [Image #7]" {
+		t.Fatalf("prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+	if screen.Prompt.NextPastedID != 8 || screen.Prompt.PastedContents[7].Content != "BBBB" || screen.Prompt.PastedContents[7].MediaType != "image/jpeg" {
+		t.Fatalf("pasted contents = %#v next=%d", screen.Prompt.PastedContents, screen.Prompt.NextPastedID)
+	}
+	submitted := screen.ApplyKey(ParseKey("\n"))
+	if submitted.Type != ScreenEventPromptSubmitted || submitted.Value != "retry expanded retry [Image #7]" || submitted.PastedContents[7].Content != "BBBB" {
+		t.Fatalf("submitted = %#v", submitted)
+	}
+}
+
+func TestREPLScreenRestoreMessageAtBuildsDisplayFromBlocks(t *testing.T) {
+	screen := NewREPLScreen(50, 8, nil)
+	screen.SetMessages([]Message{{
+		Role: RoleUser,
+		ContentBlocks: []contracts.ContentBlock{
+			contracts.NewTextBlock("look"),
+			contracts.NewBase64ImageBlock("image/png", "AAAA"),
+		},
+		ImagePasteIDs: []int{5},
+	}})
+
+	if !screen.RestoreMessageAt(0) {
+		t.Fatal("RestoreMessageAt returned false")
+	}
+	if screen.Prompt.Text != "look [Image #5]" || screen.Prompt.PastedContents[5].Content != "AAAA" || screen.Prompt.NextPastedID != 6 {
+		t.Fatalf("prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestParseImageHintUsesGenericPlaceholder(t *testing.T) {
 	key := ParseKey("\x1b]1337;File=inline=1:AAAA\a")
 	if key.Type != KeyImageHint || key.Text != ImageHintPlaceholder {
@@ -3826,11 +3881,20 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 		{
 			"transcript_messages": [
 				{"role": "tool", "text": "tool output"},
-				{"role": "user", "text": "image history", "imagePasteIds": [9]}
+				{"role": "user", "text": "image history", "imagePasteIds": [9]},
+				{
+					"role": "user",
+					"content": [
+						{"type": "text", "text": "block user"},
+						{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"}}
+					],
+					"imagePasteIds": [11],
+					"pasted_contents": {"12": {"id": 12, "type": "text", "content": "memo"}}
+				}
 			],
 			"snapshot": "transcript",
 			"expectSnapshotContains": "tool: tool output",
-			"expectPrompt": {"nextPastedID": 10}
+			"expectPrompt": {"nextPastedID": 13}
 		}
 	]`))
 	if err != nil {
@@ -3844,11 +3908,14 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 	if len(result.Snapshots) != 3 {
 		t.Fatalf("snapshots = %#v", result.Snapshots)
 	}
-	if len(screen.Messages) != 5 {
+	if len(screen.Messages) != 6 {
 		t.Fatalf("messages = %#v", screen.Messages)
 	}
 	if got := screen.Messages[4].ImagePasteIDs; len(got) != 1 || got[0] != 9 {
 		t.Fatalf("image paste ids = %#v", got)
+	}
+	if got := screen.Messages[5]; len(got.ContentBlocks) != 2 || got.ImagePasteIDs[0] != 11 || got.PastedContents[12].Content != "memo" {
+		t.Fatalf("content block message = %#v", got)
 	}
 }
 
