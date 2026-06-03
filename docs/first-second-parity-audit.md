@@ -177,6 +177,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI helpers now expose bracketed-paste and focus input marker constants aligned with the existing key parser.
 - `internal/tui`: terminal CSI helpers now generate official `eraseLines(n)`-style multi-line erase sequences ending at column 1.
 - `internal/tui`: terminal CSI helpers now expose official CSI param/intermediate/final byte-range classifiers for parser parity.
+- `internal/tui`: terminal CSI parser now emits structured edit actions for insert/delete chars and insert/delete lines, plus forward/back tab cursor actions; output `CSI M` is parsed as delete-lines while input tokenization still keeps X10 mouse payload handling separate.
 - `internal/tui`: terminal sequence dispatcher and parser now classify DCS/APC/PM/SOS string-control sequences as `stringControl` actions with payload, terminator, and incomplete-flush state while keeping visible text extraction free of those invisible payloads.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.

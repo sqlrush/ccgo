@@ -3483,6 +3483,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(5, "D"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorBack, Count: 5}},
 		{seq: CSISequence(2, "E"), want: CSICursorAction{Type: CSICursorActionNextLine, Count: 2}},
 		{seq: CSISequence(3, "F"), want: CSICursorAction{Type: CSICursorActionPrevLine, Count: 3}},
+		{seq: CSISequence(2, "I"), want: CSICursorAction{Type: CSICursorActionTab, Count: 2}},
+		{seq: CSISequence(4, "Z"), want: CSICursorAction{Type: CSICursorActionBackTab, Count: 4}},
 		{seq: CSISequence(12, "G"), want: CSICursorAction{Type: CSICursorActionColumn, Column: 12}},
 		{seq: CSISequence("2:7H"), want: CSICursorAction{Type: CSICursorActionPosition, Row: 2, Column: 7}},
 		{seq: CSISequence(9, "d"), want: CSICursorAction{Type: CSICursorActionRow, Row: 9}},
@@ -3518,6 +3520,22 @@ func TestParseCSISequenceActions(t *testing.T) {
 		action, ok := ParseCSISequence(tc.seq)
 		if !ok || action.Type != CSIActionErase || !reflect.DeepEqual(action.Erase, tc.want) {
 			t.Fatalf("erase action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
+	editCases := []struct {
+		seq  string
+		want CSIEditAction
+	}{
+		{seq: CSISequence(2, "@"), want: CSIEditAction{Type: CSIEditActionInsertChars, Count: 2}},
+		{seq: CSISequence(3, "P"), want: CSIEditAction{Type: CSIEditActionDeleteChars, Count: 3}},
+		{seq: CSISequence(4, "L"), want: CSIEditAction{Type: CSIEditActionInsertLines, Count: 4}},
+		{seq: CSISequence(5, "M"), want: CSIEditAction{Type: CSIEditActionDeleteLines, Count: 5}},
+	}
+	for _, tc := range editCases {
+		action, ok := ParseCSISequence(tc.seq)
+		if !ok || action.Type != CSIActionEdit || action.Edit != tc.want {
+			t.Fatalf("edit action for %q = %#v, want %#v", tc.seq, action, tc.want)
 		}
 	}
 

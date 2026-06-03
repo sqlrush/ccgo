@@ -79,6 +79,7 @@ type CSIActionType string
 const (
 	CSIActionCursor  CSIActionType = "cursor"
 	CSIActionErase   CSIActionType = "erase"
+	CSIActionEdit    CSIActionType = "edit"
 	CSIActionScroll  CSIActionType = "scroll"
 	CSIActionMode    CSIActionType = "mode"
 	CSIActionSGR     CSIActionType = "sgr"
@@ -108,6 +109,8 @@ const (
 	CSICursorActionStyle    CSICursorActionType = "style"
 	CSICursorActionNextLine CSICursorActionType = "nextLine"
 	CSICursorActionPrevLine CSICursorActionType = "prevLine"
+	CSICursorActionTab      CSICursorActionType = "tab"
+	CSICursorActionBackTab  CSICursorActionType = "backTab"
 )
 
 type CSICursorAction struct {
@@ -141,6 +144,20 @@ type CSIEraseAction struct {
 	Type   CSIEraseActionType
 	Region CSIEraseRegion
 	Count  int
+}
+
+type CSIEditActionType string
+
+const (
+	CSIEditActionInsertChars CSIEditActionType = "insertChars"
+	CSIEditActionDeleteChars CSIEditActionType = "deleteChars"
+	CSIEditActionInsertLines CSIEditActionType = "insertLines"
+	CSIEditActionDeleteLines CSIEditActionType = "deleteLines"
+)
+
+type CSIEditAction struct {
+	Type  CSIEditActionType
+	Count int
 }
 
 type CSIScrollActionType string
@@ -188,6 +205,7 @@ type CSIAction struct {
 	Type      CSIActionType
 	Cursor    CSICursorAction
 	Erase     CSIEraseAction
+	Edit      CSIEditAction
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
 	SGRParams string
@@ -272,6 +290,10 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionNextLine, Count: p0}}, true
 	case CSICommandCursorPrevLine:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionPrevLine, Count: p0}}, true
+	case CSICommandCursorTab:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTab, Count: p0}}, true
+	case CSICommandBackwardTab:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionBackTab, Count: p0}}, true
 	case CSICommandCursorColumn:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionColumn, Column: p0}}, true
 	case CSICommandCursorPosition, CSICommandHorizontalVPos:
@@ -284,6 +306,14 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionLine, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0))}}, true
 	case CSICommandEraseCharacters:
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionChars, Count: p0}}, true
+	case CSICommandInsertCharacters:
+		return csiEdit(CSIEditActionInsertChars, p0), true
+	case CSICommandDeleteCharacters:
+		return csiEdit(CSIEditActionDeleteChars, p0), true
+	case CSICommandInsertLines:
+		return csiEdit(CSIEditActionInsertLines, p0), true
+	case CSICommandDeleteLines:
+		return csiEdit(CSIEditActionDeleteLines, p0), true
 	case CSICommandScrollUp:
 		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionUp, Count: p0}}, true
 	case CSICommandScrollDown:
@@ -345,6 +375,13 @@ func csiCursorMove(direction CSICursorDirection, count int) CSIAction {
 	return CSIAction{
 		Type:   CSIActionCursor,
 		Cursor: CSICursorAction{Type: CSICursorActionMove, Direction: direction, Count: count},
+	}
+}
+
+func csiEdit(actionType CSIEditActionType, count int) CSIAction {
+	return CSIAction{
+		Type: CSIActionEdit,
+		Edit: CSIEditAction{Type: actionType, Count: count},
 	}
 }
 
