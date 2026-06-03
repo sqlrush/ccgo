@@ -33,10 +33,12 @@ const (
 )
 
 type ScreenEvent struct {
-	Type       ScreenEventType
-	Value      string
-	DialogID   string
-	DialogKind DialogKind
+	Type           ScreenEventType
+	Value          string
+	Display        string
+	PastedContents map[int]session.PastedContent
+	DialogID       string
+	DialogKind     DialogKind
 }
 
 type REPLScreen struct {
@@ -199,7 +201,12 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		result := s.Prompt.Apply(keyForAction(action, key))
 		switch {
 		case result.Submitted != "":
-			return ScreenEvent{Type: ScreenEventPromptSubmitted, Value: result.Submitted}
+			return ScreenEvent{
+				Type:           ScreenEventPromptSubmitted,
+				Value:          result.Submitted,
+				Display:        result.Display,
+				PastedContents: clonePastedContents(result.PastedContents),
+			}
 		case result.Cancelled:
 			return ScreenEvent{Type: ScreenEventCancelled}
 		case result.Interrupted:

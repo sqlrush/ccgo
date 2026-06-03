@@ -27,6 +27,7 @@ const (
 type ContentBlock struct {
 	Type           ContentBlockType `json:"type"`
 	Text           string           `json:"text,omitempty"`
+	Source         any              `json:"source,omitempty"`
 	ID             string           `json:"id,omitempty"`
 	Name           string           `json:"name,omitempty"`
 	Input          json.RawMessage  `json:"input,omitempty"`
@@ -76,6 +77,12 @@ type CacheControl struct {
 type CacheEdit struct {
 	Type           string `json:"type"`
 	CacheReference string `json:"cache_reference"`
+}
+
+type ImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type,omitempty"`
+	Data      string `json:"data,omitempty"`
 }
 
 func (e *CacheEdit) UnmarshalJSON(data []byte) error {
@@ -223,4 +230,18 @@ type CacheCreationUsage struct {
 
 func NewTextBlock(text string) ContentBlock {
 	return ContentBlock{Type: ContentText, Text: text}
+}
+
+func NewBase64ImageBlock(mediaType string, data string) ContentBlock {
+	if mediaType == "" {
+		mediaType = "image/png"
+	}
+	return ContentBlock{
+		Type: ContentImage,
+		Source: ImageSource{
+			Type:      "base64",
+			MediaType: mediaType,
+			Data:      data,
+		},
+	}
 }

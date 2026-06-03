@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/session"
 )
 
@@ -526,6 +527,35 @@ func TestREPLScreenImageCacheSessionAppliesToPrompt(t *testing.T) {
 	}
 	if screen.Prompt.Text != "[Image #1]" {
 		t.Fatalf("prompt = %#v", screen.Prompt)
+	}
+}
+
+func TestREPLScreenSubmitEventCarriesPastedContentsForMessages(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	session.ClearStoredImagePaths()
+	defer session.ClearStoredImagePaths()
+
+	screen := NewREPLScreen(40, 8, nil)
+	screen.EnableImageCache("session-1")
+	screen.ApplyKey(ParseKey("\x1b[200~alpha\nbeta\x1b[201~"))
+	screen.ApplyKey(ParseKey("\x1b]1337;File=name=chart.png;type=image/png;inline=1:AAAA\a"))
+	event := screen.ApplyKey(ParseKey("\n"))
+	if event.Type != ScreenEventPromptSubmitted || event.Value != "alpha\nbeta[Image #2]" || event.Display != "[Pasted text #1 +1 lines][Image #2]" {
+		t.Fatalf("event = %#v", event)
+	}
+	if len(event.PastedContents) != 2 || event.PastedContents[2].Type != session.PastedContentImage {
+		t.Fatalf("event pasted contents = %#v", event.PastedContents)
+	}
+	messages := event.PromptMessages()
+	if len(messages) != 2 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].Content[0].Text != "alpha\nbeta[Image #2]" || messages[0].Content[1].Type != contracts.ContentImage {
+		t.Fatalf("prompt message = %#v", messages[0])
+	}
+	if !messages[1].IsMeta || !strings.Contains(messages[1].Content[0].Text, filepath.Join("image-cache", "session-1", "2.png")) {
+		t.Fatalf("metadata message = %#v", messages[1])
 	}
 }
 
