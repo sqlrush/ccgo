@@ -3350,6 +3350,27 @@ func TestClearTerminalSequences(t *testing.T) {
 	}
 }
 
+func TestCSISequenceHelpers(t *testing.T) {
+	if seq := CSISequence(); seq != CSIPrefix {
+		t.Fatalf("csi prefix = %q", seq)
+	}
+	if seq := CSISequence("H"); seq != HomeCursor {
+		t.Fatalf("csi home = %q", seq)
+	}
+	if seq := CursorPosition(3, 4); seq != "\x1b[3;4H" {
+		t.Fatalf("cursor position = %q", seq)
+	}
+	if seq := CursorMove(-2, 3); seq != "\x1b[2D\x1b[3B" {
+		t.Fatalf("cursor move = %q", seq)
+	}
+	if seq := CursorUp(0) + CursorForward(0); seq != "" {
+		t.Fatalf("zero cursor move = %q", seq)
+	}
+	if seq := EraseToStartOfLine() + EraseLineSequence() + EraseScreenSequence(); seq != "\x1b[1K"+EraseLine+ClearScreen {
+		t.Fatalf("erase helpers = %q", seq)
+	}
+}
+
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"
