@@ -10,6 +10,10 @@ import (
 )
 
 func PromptMessage(display string, pastedContents map[int]PastedContent) contracts.Message {
+	return promptMessage(display, FilterPromptPastedContents(display, pastedContents))
+}
+
+func promptMessage(display string, pastedContents map[int]PastedContent) contracts.Message {
 	text := ExpandPastedTextRefs(display, pastedContents)
 	imageBlocks := promptImageContentBlocks(pastedContents)
 	blocks := []contracts.ContentBlock{}
@@ -29,8 +33,9 @@ func PromptMessage(display string, pastedContents map[int]PastedContent) contrac
 }
 
 func PromptMessages(display string, pastedContents map[int]PastedContent) []contracts.Message {
-	user := PromptMessage(display, pastedContents)
-	metadataBlocks := promptImageMetadataBlocks(pastedContents)
+	filtered := FilterPromptPastedContents(display, pastedContents)
+	user := promptMessage(display, filtered)
+	metadataBlocks := promptImageMetadataBlocks(filtered)
 	if len(metadataBlocks) == 0 {
 		return []contracts.Message{user}
 	}
@@ -40,6 +45,52 @@ func PromptMessages(display string, pastedContents map[int]PastedContent) []cont
 		IsMeta:  true,
 		Content: metadataBlocks,
 	}}
+}
+
+func FilterPromptPastedContents(display string, pastedContents map[int]PastedContent) map[int]PastedContent {
+	if len(pastedContents) == 0 {
+		return pastedContents
+	}
+	referencedIDs := referencedPastedIDs(display)
+	var filtered map[int]PastedContent
+	for id, content := range pastedContents {
+		if content.Type == PastedContentImage && !referencedIDs[pastedContentID(id, content)] {
+			if filtered == nil {
+				filtered = make(map[int]PastedContent, len(pastedContents)-1)
+				for previousID, previousContent := range pastedContents {
+					if previousID == id {
+						continue
+					}
+					filtered[previousID] = previousContent
+				}
+				continue
+			}
+			delete(filtered, id)
+			continue
+		}
+		if filtered != nil {
+			filtered[id] = content
+		}
+	}
+	if filtered == nil {
+		return pastedContents
+	}
+	return filtered
+}
+
+func referencedPastedIDs(display string) map[int]bool {
+	ids := map[int]bool{}
+	for _, ref := range ParseReferences(display) {
+		ids[ref.ID] = true
+	}
+	return ids
+}
+
+func pastedContentID(mapID int, content PastedContent) int {
+	if content.ID > 0 {
+		return content.ID
+	}
+	return mapID
 }
 
 func promptImageContentBlocks(pastedContents map[int]PastedContent) []contracts.ContentBlock {

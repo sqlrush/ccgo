@@ -485,7 +485,8 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	case KeyEnter:
 		display := p.Text
 		submitted := p.ExpandedText()
-		pastedContents := clonePastedContents(p.PastedContents)
+		p.pruneOrphanImages()
+		pastedContents := clonePastedContents(session.FilterPromptPastedContents(display, p.PastedContents))
 		if display != "" {
 			p.History = append(p.History, display)
 			p.HistoryEntries = append(p.HistoryEntries, session.HistoryEntry{
@@ -543,7 +544,7 @@ func (p PromptState) ExpandedText() string {
 func (p PromptState) HistoryEntry() session.HistoryEntry {
 	return session.HistoryEntry{
 		Display:        p.Text,
-		PastedContents: clonePastedContents(p.PastedContents),
+		PastedContents: clonePastedContents(session.FilterPromptPastedContents(p.Text, p.PastedContents)),
 	}
 }
 
@@ -776,9 +777,20 @@ func (p *PromptState) yankPop() {
 }
 
 func (p *PromptState) resetHistoryCursor() {
+	p.pruneOrphanImages()
 	p.HistoryIndex = p.historyLength()
 	p.draft = p.Text
 	p.draftPastedContents = clonePastedContents(p.PastedContents)
+}
+
+func (p *PromptState) pruneOrphanImages() {
+	if !p.UsePasteReferences || len(p.PastedContents) == 0 {
+		return
+	}
+	p.PastedContents = session.FilterPromptPastedContents(p.Text, p.PastedContents)
+	if p.PastedContents == nil {
+		p.PastedContents = map[int]session.PastedContent{}
+	}
 }
 
 func (p *PromptState) historyPrev() {

@@ -82,6 +82,33 @@ func TestPromptMessagesUsesImageDimensionsMetadata(t *testing.T) {
 	}
 }
 
+func TestPromptMessagesFiltersUnreferencedImages(t *testing.T) {
+	messages := PromptMessages("look", map[int]PastedContent{
+		1: {ID: 1, Type: PastedContentImage, Content: "AAAA", MediaType: "image/png", SourcePath: "/tmp/orphan.png"},
+	})
+	if len(messages) != 1 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if got := promptMessageText(messages[0]); got != "look" || len(messages[0].Content) != 1 {
+		t.Fatalf("message = %#v text=%q", messages[0], got)
+	}
+
+	messages = PromptMessages("look [Image #2]", map[int]PastedContent{
+		1: {ID: 1, Type: PastedContentImage, Content: "AAAA", MediaType: "image/png", SourcePath: "/tmp/orphan.png"},
+		2: {ID: 2, Type: PastedContentImage, Content: "BBBB", MediaType: "image/jpeg"},
+	})
+	if len(messages) != 1 {
+		t.Fatalf("referenced messages = %#v", messages)
+	}
+	if len(messages[0].Content) != 2 || messages[0].Content[1].Type != contracts.ContentImage {
+		t.Fatalf("referenced message = %#v", messages[0])
+	}
+	source, ok := messages[0].Content[1].Source.(contracts.ImageSource)
+	if !ok || source.Data != "BBBB" {
+		t.Fatalf("referenced image source = %#v", messages[0].Content[1].Source)
+	}
+}
+
 func TestPromptMessagesTextOnly(t *testing.T) {
 	messages := PromptMessages("run [Pasted text #1]", map[int]PastedContent{
 		1: {ID: 1, Type: PastedContentText, Content: "expanded"},

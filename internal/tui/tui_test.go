@@ -515,6 +515,26 @@ func TestPromptPasteReferencesCanStoreImageHints(t *testing.T) {
 	}
 }
 
+func TestPromptPrunesOrphanImagePastedContent(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=name=chart.png;type=image/png;inline=1:AAAA\a"))
+	prompt.Apply(ParseKey("\x15"))
+	if prompt.Text != "" || len(prompt.PastedContents) != 0 || prompt.NextPastedID != 2 {
+		t.Fatalf("after ctrl-u prompt = %#v", prompt)
+	}
+
+	prompt.Apply(ParseKey("\x1b]1337;File=name=next.png;type=image/png;inline=1:BBBB\a"))
+	if prompt.Text != "[Image #2]" || len(prompt.PastedContents) != 1 || prompt.PastedContents[2].Content != "BBBB" {
+		t.Fatalf("next image prompt = %#v", prompt)
+	}
+
+	result := prompt.Apply(ParseKey("\n"))
+	if len(result.PastedContents) != 1 || result.PastedContents[2].Content != "BBBB" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestPromptImageHintWritesImageCacheWhenEnabled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
