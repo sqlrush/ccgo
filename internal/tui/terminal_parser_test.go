@@ -108,6 +108,20 @@ func TestTerminalParserDispatchesSequenceActions(t *testing.T) {
 	}
 }
 
+func TestTerminalParserUsesOutputTokenizerForCSIM(t *testing.T) {
+	parser := NewTerminalParser()
+	actions := parser.Feed("\x1b[M`rK")
+	if len(actions) != 2 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[0].Type != TerminalActionUnknown || actions[0].Sequence != "\x1b[M" {
+		t.Fatalf("csi m action = %#v", actions[0])
+	}
+	if actions[1].Type != TerminalActionText || len(actions[1].Graphemes) != 3 {
+		t.Fatalf("payload text = %#v", actions[1])
+	}
+}
+
 func TestTerminalParserTracksHyperlinkState(t *testing.T) {
 	parser := NewTerminalParser()
 	start := TerminalHyperlinkSequence("https://example.com/docs", nil)

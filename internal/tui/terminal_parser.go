@@ -44,28 +44,28 @@ type TerminalParser struct {
 
 func NewTerminalParser() *TerminalParser {
 	return &TerminalParser{
-		tokenizer: NewTerminalTokenizer(TerminalTokenizerOptions{}),
+		tokenizer: NewTerminalOutputTokenizer(),
 		style:     DefaultTextStyle(),
 	}
 }
 
 func (p *TerminalParser) Feed(input string) []TerminalAction {
 	if p.tokenizer == nil {
-		p.tokenizer = NewTerminalTokenizer(TerminalTokenizerOptions{})
+		p.tokenizer = NewTerminalOutputTokenizer()
 	}
 	return p.processTokens(p.tokenizer.Feed(input))
 }
 
 func (p *TerminalParser) Flush() []TerminalAction {
 	if p.tokenizer == nil {
-		p.tokenizer = NewTerminalTokenizer(TerminalTokenizerOptions{})
+		p.tokenizer = NewTerminalOutputTokenizer()
 	}
 	return p.processTokens(p.tokenizer.Flush())
 }
 
 func (p *TerminalParser) Reset() {
 	if p.tokenizer == nil {
-		p.tokenizer = NewTerminalTokenizer(TerminalTokenizerOptions{})
+		p.tokenizer = NewTerminalOutputTokenizer()
 	} else {
 		p.tokenizer.Reset()
 	}
