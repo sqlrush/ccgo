@@ -136,7 +136,7 @@ func (a Agent) SelectRelevantMemories(ctx context.Context, root string, query st
 		if err != nil {
 			return AgentRelevantMemoryResult{}, err
 		}
-		request = a.buildRelevantMemorySelectorRequest(searchQuery, candidates)
+		request = a.buildRelevantMemorySelectorRequest(searchQuery, candidates, options)
 		var responseErr error
 		response, responseErr = a.Client.CreateMessage(ctx, request)
 		if responseErr != nil {
@@ -228,10 +228,27 @@ func (a Agent) buildRecallRequest(query string, candidates []RecallMatch) anthro
 	}
 }
 
-func (a Agent) buildRelevantMemorySelectorRequest(query string, candidates []relevantMemoryCandidate) anthropic.Request {
+func (a Agent) buildRelevantMemorySelectorRequest(query string, candidates []relevantMemoryCandidate, options RelevantMemorySelectorOptions) anthropic.Request {
 	var b strings.Builder
 	b.WriteString("Select relevant memory files for the user request. Return a JSON object with keys query and memory_paths. The query should be a concise search query. memory_paths must be ordered from most to least relevant and use only candidate ids or paths. Return no prose.\n\nUser request:\n")
 	b.WriteString(strings.TrimSpace(query))
+	if len(options.RecentTools) > 0 {
+		b.WriteString("\n\nRecent successful tools in this turn:\n")
+		for _, toolName := range limitStrings(options.RecentTools, 12) {
+			b.WriteString("- ")
+			b.WriteString(toolName)
+			b.WriteString("\n")
+		}
+		b.WriteString("Prefer memories that add durable context beyond these tool names/results.\n")
+	}
+	if len(options.Surfaced) > 0 {
+		b.WriteString("\n\nAlready surfaced memory paths to avoid selecting again:\n")
+		for _, path := range limitedSortedMapKeys(options.Surfaced, 12) {
+			b.WriteString("- ")
+			b.WriteString(path)
+			b.WriteString("\n")
+		}
+	}
 	if len(candidates) > 0 {
 		b.WriteString("\n\nCandidate memory files:\n")
 		for _, candidate := range candidates {
@@ -275,6 +292,24 @@ func (a Agent) maxTokens() int {
 		return a.MaxTokens
 	}
 	return 512
+}
+
+func limitStrings(values []string, limit int) []string {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func limitedSortedMapKeys(values map[string]struct{}, limit int) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		if strings.TrimSpace(key) != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return limitStrings(keys, limit)
 }
 
 func extractLimit(options ExtractOptions) int {

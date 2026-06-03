@@ -200,6 +200,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：transcript resume fallback 转换 attachment message 时保留 raw attachment payload，恢复后的 `relevant_memories` attachment 仍可进入 conversation request 的 system-reminder 展开路径。
 - 本轮补充：memory 层增加可取消 `PrefetchRelevantMemories` runtime，复用现有 gating/selector/surfacing 逻辑返回 plan、selection 和 attachments；conversation `RunTurn` 会在用户消息进入后启动 relevant memory prefetch，并在第一轮 model request 消费结果，预取文件系统错误 fail-open 且不阻断主请求。
 - 本轮补充：relevant memory prefetch 接入 model-backed sideQuery selector：当 `MemoryAgentClient` 可用时，先向模型提供候选 memory manifest，请模型返回 `memory_paths`/`memoryPaths`/`filePath`/`matches`/嵌套 selection 等路径别名，按模型顺序读取附件；模型错误或无效路径会 fail-open 回落 deterministic selector。完整官方 prompt/telemetry parity 仍继续推进。
+- 本轮补充：model-backed relevant memory selector prompt 现在包含 recent successful tools 和 already-surfaced memory paths 的有界上下文，模型侧选择与 deterministic prefilter 的 tool/surfaced 约束更一致。
 
 ### M7: TUI renderer 和交互体验
 

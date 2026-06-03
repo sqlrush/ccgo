@@ -378,7 +378,11 @@ func TestMemoryAgentSelectRelevantMemoriesUsesModelPaths(t *testing.T) {
 		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"query":"database access","memory_paths":["ops","db.md"]}`)},
 	}}
 
-	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 2})
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{
+		Limit:       2,
+		RecentTools: []string{"Read", "Bash"},
+		Surfaced:    map[string]struct{}{"/repo/.claude/memory/old.md": {}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,6 +394,13 @@ func TestMemoryAgentSelectRelevantMemoriesUsesModelPaths(t *testing.T) {
 	}
 	if len(client.requests) != 1 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Candidate memory files") || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "id: db.md") {
 		t.Fatalf("request = %#v", client.requests)
+	}
+	requestText := client.requests[0].Messages[0].Content[0].Text
+	if !strings.Contains(requestText, "Recent successful tools in this turn") || !strings.Contains(requestText, "- Read") || !strings.Contains(requestText, "- Bash") {
+		t.Fatalf("request missing recent tools = %q", requestText)
+	}
+	if !strings.Contains(requestText, "Already surfaced memory paths") || !strings.Contains(requestText, "/repo/.claude/memory/old.md") {
+		t.Fatalf("request missing surfaced paths = %q", requestText)
 	}
 }
 
