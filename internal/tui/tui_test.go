@@ -1092,6 +1092,27 @@ func TestRenderMessagesWrapsANSIByVisibleWidth(t *testing.T) {
 	}
 }
 
+func TestRenderMessagesExpandsCSIRepeatByVisibleWidth(t *testing.T) {
+	body := "ab" + CSISequence(5, "b") + " tail"
+	lines := renderMessageBodyLines(body, 6)
+	if len(lines) != 2 {
+		t.Fatalf("lines = %#v", lines)
+	}
+	for _, line := range lines {
+		if width := TerminalVisibleWidth(line); width > 6 {
+			t.Fatalf("line width = %d line=%q lines=%#v", width, line, lines)
+		}
+	}
+	if got := StripANSI(strings.Join(lines, "")); got != "abbbbbb tail" {
+		t.Fatalf("visible = %q lines=%#v", got, lines)
+	}
+
+	trimmed := padOrTrim(body, 4)
+	if got := StripANSI(trimmed); got != "abbb" || TerminalVisibleWidth(trimmed) != 4 {
+		t.Fatalf("trimmed = %q visible=%q width=%d", trimmed, got, TerminalVisibleWidth(trimmed))
+	}
+}
+
 func TestRenderMessagesWrapsWideGraphemesByVisibleWidth(t *testing.T) {
 	lines := RenderMessages([]Message{{
 		Role: RoleAssistant,

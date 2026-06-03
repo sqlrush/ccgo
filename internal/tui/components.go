@@ -61,6 +61,9 @@ func wrapANSIText(text string, width int) []string {
 	lineWidth := 0
 	wroteAny := false
 	endedWithBreak := false
+	var last TerminalGrapheme
+	lastStyle := DefaultTextStyle()
+	hasLast := false
 	finishLine := func() {
 		if !TextStylesEqual(current, DefaultTextStyle()) {
 			line.WriteString(CSISequence("0m"))
@@ -71,6 +74,23 @@ func wrapANSIText(text string, width int) []string {
 		lineWidth = 0
 		wroteAny = true
 	}
+	writeGrapheme := func(grapheme TerminalGrapheme, style TextStyle) {
+		if lineWidth > 0 && lineWidth+grapheme.Width > width {
+			finishLine()
+		}
+		endedWithBreak = false
+		writeTextStyleTransition(&line, &current, style)
+		line.WriteString(grapheme.Value)
+		lineWidth += grapheme.Width
+		wroteAny = true
+		if isRepeatableTerminalGrapheme(grapheme) {
+			last = grapheme
+			lastStyle = style
+			hasLast = true
+		} else {
+			hasLast = false
+		}
+	}
 	for _, action := range actions {
 		switch action.Type {
 		case TerminalActionText:
@@ -78,21 +98,24 @@ func wrapANSIText(text string, width int) []string {
 				if grapheme.Value == "\n" {
 					finishLine()
 					endedWithBreak = true
+					hasLast = false
 					continue
 				}
-				if lineWidth > 0 && lineWidth+grapheme.Width > width {
-					finishLine()
-				}
-				endedWithBreak = false
-				writeTextStyleTransition(&line, &current, action.Style)
-				line.WriteString(grapheme.Value)
-				lineWidth += grapheme.Width
-				wroteAny = true
+				writeGrapheme(grapheme, action.Style)
 			}
 		case TerminalActionBell:
 			line.WriteByte(terminalBEL)
 			wroteAny = true
 			endedWithBreak = false
+			hasLast = false
+		case TerminalActionEdit:
+			if action.Edit.Type == CSIEditActionRepeatChars && hasLast && action.Edit.Count > 0 {
+				repeat := last
+				style := lastStyle
+				for i := 0; i < action.Edit.Count; i++ {
+					writeGrapheme(repeat, style)
+				}
+			}
 		}
 	}
 	if !wroteAny || line.Len() > 0 || endedWithBreak {

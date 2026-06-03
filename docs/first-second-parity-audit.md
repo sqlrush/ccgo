@@ -191,7 +191,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parsing now emits report actions for DECREQTPARM terminal-parameters queries such as `CSI x`, preserving code and private marker fields.
 - `internal/tui`: terminal CSI parsing now emits report actions for xterm window manipulation/report queries such as `CSI 14t` and `CSI 18t`, preserving code and private marker fields.
 - `internal/tui`: terminal CSI parsing now emits cursor actions for TBC tab-clear sequences such as `CSI g` and `CSI 3g`, preserving the clear-current/all code.
-- `internal/tui`: terminal CSI parsing now emits edit actions for REP repeat-preceding-character sequences such as `CSI b` and `CSI 4b`, and the visible-text/snapshot pipeline expands the previous repeatable grapheme by the requested count.
+- `internal/tui`: terminal CSI parsing now emits edit actions for REP repeat-preceding-character sequences such as `CSI b` and `CSI 4b`, and the visible-text/snapshot plus ANSI message wrapping/trim paths expand the previous repeatable grapheme by the requested count.
 - `internal/tui`: terminal CSI parsing now emits reset actions for DECSTR soft reset `CSI !p`, and the terminal parser clears SGR/link state through the existing reset path.
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/session`: prompt history writing now skips image pasted-content records like official `history.ts`, while the reader still accepts older image metadata entries.

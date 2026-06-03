@@ -146,33 +146,56 @@ func trimANSIVisibleWidth(line string, width int) string {
 	var out strings.Builder
 	current := DefaultTextStyle()
 	visible := 0
+	var last TerminalGrapheme
+	lastStyle := DefaultTextStyle()
+	hasLast := false
+	finish := func() string {
+		if !TextStylesEqual(current, DefaultTextStyle()) {
+			out.WriteString(CSISequence("0m"))
+		}
+		return out.String()
+	}
+	writeGrapheme := func(grapheme TerminalGrapheme, style TextStyle) bool {
+		if grapheme.Value == "\n" || grapheme.Value == "\r" {
+			hasLast = false
+			return true
+		}
+		if visible > 0 && visible+grapheme.Width > width {
+			return false
+		}
+		writeTextStyleTransition(&out, &current, style)
+		out.WriteString(grapheme.Value)
+		visible += grapheme.Width
+		if isRepeatableTerminalGrapheme(grapheme) {
+			last = grapheme
+			lastStyle = style
+			hasLast = true
+		} else {
+			hasLast = false
+		}
+		return visible < width
+	}
 	for _, action := range actions {
-		if action.Type != TerminalActionText {
-			continue
-		}
-		for _, grapheme := range action.Graphemes {
-			if grapheme.Value == "\n" || grapheme.Value == "\r" {
-				continue
-			}
-			if visible > 0 && visible+grapheme.Width > width {
-				if !TextStylesEqual(current, DefaultTextStyle()) {
-					out.WriteString(CSISequence("0m"))
+		switch action.Type {
+		case TerminalActionText:
+			for _, grapheme := range action.Graphemes {
+				if !writeGrapheme(grapheme, action.Style) {
+					return finish()
 				}
-				return out.String()
 			}
-			writeTextStyleTransition(&out, &current, action.Style)
-			out.WriteString(grapheme.Value)
-			visible += grapheme.Width
-			if visible >= width {
-				if !TextStylesEqual(current, DefaultTextStyle()) {
-					out.WriteString(CSISequence("0m"))
+		case TerminalActionBell:
+			hasLast = false
+		case TerminalActionEdit:
+			if action.Edit.Type == CSIEditActionRepeatChars && hasLast && action.Edit.Count > 0 {
+				repeat := last
+				style := lastStyle
+				for i := 0; i < action.Edit.Count; i++ {
+					if !writeGrapheme(repeat, style) {
+						return finish()
+					}
 				}
-				return out.String()
 			}
 		}
 	}
-	if !TextStylesEqual(current, DefaultTextStyle()) {
-		out.WriteString(CSISequence("0m"))
-	}
-	return out.String()
+	return finish()
 }
