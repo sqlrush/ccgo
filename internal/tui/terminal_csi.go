@@ -174,6 +174,7 @@ const (
 	CSIMouseTrackingNormal CSIMouseTrackingMode = "normal"
 	CSIMouseTrackingButton CSIMouseTrackingMode = "button"
 	CSIMouseTrackingAny    CSIMouseTrackingMode = "any"
+	CSIMouseTrackingSGR    CSIMouseTrackingMode = "sgr"
 )
 
 type CSIModeAction struct {
@@ -407,6 +408,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return csiMouseModeAction(CSIMouseTrackingButton, enabled), true
 	case DECModeMouseAny:
 		return csiMouseModeAction(CSIMouseTrackingAny, enabled), true
+	case DECModeMouseSGR:
+		return csiMouseModeAction(CSIMouseTrackingSGR, enabled), true
 	case DECModeFocusEvents:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: enabled}}, true
 	default:

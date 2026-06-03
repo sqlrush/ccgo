@@ -3547,6 +3547,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: "\x1b[?1000h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingNormal}},
 		{seq: "\x1b[?1002h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingButton}},
 		{seq: "\x1b[?1003l", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: false, MouseMode: CSIMouseTrackingOff}},
+		{seq: "\x1b[?1006h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingSGR}},
+		{seq: "\x1b[?1006l", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: false, MouseMode: CSIMouseTrackingOff}},
 		{seq: EnableFocusEvents, want: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: true}},
 	}
 	for _, tc := range modeCases {
@@ -3554,11 +3556,6 @@ func TestParseCSISequenceActions(t *testing.T) {
 		if !ok || action.Type != CSIActionMode || !reflect.DeepEqual(action.Mode, tc.want) {
 			t.Fatalf("mode action for %q = %#v, want %#v", tc.seq, action, tc.want)
 		}
-	}
-
-	unknown, ok := ParseCSISequence("\x1b[?1006h")
-	if !ok || unknown.Type != CSIActionUnknown || unknown.Sequence != "\x1b[?1006h" {
-		t.Fatalf("unknown csi action = %#v", unknown)
 	}
 }
 
