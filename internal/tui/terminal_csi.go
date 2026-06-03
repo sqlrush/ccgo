@@ -6,11 +6,12 @@ import (
 )
 
 const (
-	CSIPrefix     = "\x1b["
-	CursorLeft    = "\x1b[G"
-	CursorSave    = "\x1b[s"
-	CursorRestore = "\x1b[u"
-	EraseLine     = "\x1b[2K"
+	CSIPrefix         = "\x1b["
+	CursorLeft        = "\x1b[G"
+	CursorSave        = "\x1b[s"
+	CursorRestore     = "\x1b[u"
+	EraseLine         = "\x1b[2K"
+	ResetScrollRegion = "\x1b[r"
 )
 
 func CSISequence(args ...any) string {
@@ -100,4 +101,22 @@ func EraseToStartOfScreen() string {
 
 func EraseScreenSequence() string {
 	return ClearScreen
+}
+
+func ScrollUp(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return CSISequence(n, "S")
+}
+
+func ScrollDown(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return CSISequence(n, "T")
+}
+
+func SetScrollRegion(top int, bottom int) string {
+	return CSISequence(top, bottom, "r")
 }

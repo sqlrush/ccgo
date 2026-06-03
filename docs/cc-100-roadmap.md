@@ -308,6 +308,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：terminal CSI helper 增加通用 `CSISequence`、cursor up/down/forward/back/position/move 和 line/screen erase 序列，按官方 helper 的零移动返回空串与 horizontal-first cursorMove 行为生成 ANSI。
 
+本轮补充：terminal CSI helper 增加 scroll up/down、set scroll region 和 reset scroll region 序列，scroll 零值返回空串，便于后续补齐官方 viewport/scroll-region 输出路径。
+
 ### M8: Commands, Skills, Plugins
 
 目标：还原 slash commands、skills 和 plugin 系统。

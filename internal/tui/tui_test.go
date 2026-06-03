@@ -3369,6 +3369,12 @@ func TestCSISequenceHelpers(t *testing.T) {
 	if seq := EraseToStartOfLine() + EraseLineSequence() + EraseScreenSequence(); seq != "\x1b[1K"+EraseLine+ClearScreen {
 		t.Fatalf("erase helpers = %q", seq)
 	}
+	if seq := ScrollUp(2) + ScrollDown(3) + SetScrollRegion(4, 10) + ResetScrollRegion; seq != "\x1b[2S\x1b[3T\x1b[4;10r\x1b[r" {
+		t.Fatalf("scroll helpers = %q", seq)
+	}
+	if seq := ScrollUp(0) + ScrollDown(0); seq != "" {
+		t.Fatalf("zero scroll = %q", seq)
+	}
 }
 
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
