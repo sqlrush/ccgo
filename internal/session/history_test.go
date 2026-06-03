@@ -354,6 +354,79 @@ func TestBufferedHistoryWriterRemovesLastPendingEntry(t *testing.T) {
 	}
 }
 
+func TestBufferedHistoryWriterRemoveLastSkipsPendingEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	writer := &BufferedHistoryWriter{Path: path, Project: "/repo", Session: "sess"}
+
+	writer.Queue(HistoryEntry{Display: "keep", PastedContents: map[int]PastedContent{}})
+	writer.Queue(HistoryEntry{Display: "drop", PastedContents: map[int]PastedContent{}})
+	if !writer.RemoveLast() || writer.Pending() != 1 {
+		t.Fatalf("remove last pending failed, pending=%d", writer.Pending())
+	}
+	history, err := writer.LoadHistory(MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := displays(history); strings.Join(got, ",") != "keep" {
+		t.Fatalf("history = %#v", got)
+	}
+}
+
+func TestBufferedHistoryWriterRemoveLastSkipsFlushedEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	writer := &BufferedHistoryWriter{Path: path, Project: "/repo", Session: "sess"}
+
+	writer.Queue(HistoryEntry{Display: "drop", PastedContents: map[int]PastedContent{}})
+	written, err := writer.Flush()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != 1 {
+		t.Fatalf("written = %d", written)
+	}
+	if !writer.RemoveLast() {
+		t.Fatal("flushed entry was not marked skipped")
+	}
+	history, err := writer.LoadHistory(MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 0 {
+		t.Fatalf("writer history = %#v", displays(history))
+	}
+
+	history, err = LoadHistory(path, "/repo", "sess", MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := displays(history); strings.Join(got, ",") != "drop" {
+		t.Fatalf("plain history = %#v", got)
+	}
+}
+
+func TestBufferedHistoryWriterRemoveLastSkipsTimestampedHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	writer := &BufferedHistoryWriter{Path: path, Project: "/repo", Session: "sess"}
+
+	if err := AppendHistory(path, LogEntry{Display: "same", PastedContents: map[int]StoredPastedContent{}, Timestamp: 100, Project: "/repo", SessionID: "sess"}); err != nil {
+		t.Fatal(err)
+	}
+	writer.Queue(HistoryEntry{Display: "same", PastedContents: map[int]PastedContent{}})
+	if _, err := writer.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if !writer.RemoveLast() {
+		t.Fatal("flushed entry was not marked skipped")
+	}
+	history, err := writer.LoadTimestampedHistory(MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Display != "same" || history[0].Timestamp != 100 {
+		t.Fatalf("timestamped history = %#v", history)
+	}
+}
+
 func TestNewLogEntryUsesUnixMillis(t *testing.T) {
 	now := time.Unix(42, 123_000_000)
 	entry := NewLogEntry("/repo", "session", HistoryEntry{Display: "cmd", PastedContents: map[int]PastedContent{}}, now)

@@ -64,12 +64,19 @@ type TimestampedHistoryEntry struct {
 	Entry     HistoryEntry
 }
 
+type bufferedHistoryEntry struct {
+	entry    HistoryEntry
+	logEntry *LogEntry
+}
+
 type BufferedHistoryWriter struct {
-	mu      sync.Mutex
-	Path    string
-	Project string
-	Session contracts.ID
-	entries []HistoryEntry
+	mu                sync.Mutex
+	Path              string
+	Project           string
+	Session           contracts.ID
+	entries           []bufferedHistoryEntry
+	lastAddedEntry    *LogEntry
+	skippedTimestamps map[int64]struct{}
 }
 
 type Reference struct {
@@ -288,9 +295,12 @@ func (w *BufferedHistoryWriter) Queue(entry HistoryEntry) {
 	if w == nil {
 		return
 	}
+	logEntry := NewLogEntry(w.Project, w.Session, entry, time.Now())
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.entries = append(w.entries, entry)
+	buffered := bufferedHistoryEntry{entry: entry, logEntry: &logEntry}
+	w.entries = append(w.entries, buffered)
+	w.lastAddedEntry = buffered.logEntry
 }
 
 func (w *BufferedHistoryWriter) Pending() int {
@@ -311,7 +321,32 @@ func (w *BufferedHistoryWriter) RemoveLastPending() bool {
 	if len(w.entries) == 0 {
 		return false
 	}
+	removed := w.entries[len(w.entries)-1].logEntry
 	w.entries = w.entries[:len(w.entries)-1]
+	if w.lastAddedEntry == removed {
+		w.lastAddedEntry = nil
+	}
+	return true
+}
+
+func (w *BufferedHistoryWriter) RemoveLast() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.lastAddedEntry == nil {
+		return false
+	}
+	entry := w.lastAddedEntry
+	w.lastAddedEntry = nil
+	if w.removePendingLogEntryLocked(entry) {
+		return true
+	}
+	if w.skippedTimestamps == nil {
+		w.skippedTimestamps = map[int64]struct{}{}
+	}
+	w.skippedTimestamps[entry.Timestamp] = struct{}{}
 	return true
 }
 
@@ -323,7 +358,7 @@ func (w *BufferedHistoryWriter) Flush() (int, error) {
 		return 0, err
 	}
 	w.mu.Lock()
-	pending := append([]HistoryEntry(nil), w.entries...)
+	pending := append([]bufferedHistoryEntry(nil), w.entries...)
 	w.entries = nil
 	w.mu.Unlock()
 	if len(pending) == 0 {
@@ -331,9 +366,12 @@ func (w *BufferedHistoryWriter) Flush() (int, error) {
 	}
 	written := 0
 	err := withHistoryLock(w.Path, defaultHistoryLockTimeout, func() error {
-		for _, entry := range pending {
-			logEntry := NewLogEntry(w.Project, w.Session, entry, time.Now())
-			if err := storePastedTextFromHistory(entry, logEntry); err != nil {
+		for _, pendingEntry := range pending {
+			if pendingEntry.logEntry == nil {
+				continue
+			}
+			logEntry := *pendingEntry.logEntry
+			if err := storePastedTextFromHistory(pendingEntry.entry, logEntry); err != nil {
 				return err
 			}
 			if err := appendHistoryUnlocked(w.Path, logEntry); err != nil {
@@ -350,6 +388,51 @@ func (w *BufferedHistoryWriter) Flush() (int, error) {
 		return written, err
 	}
 	return written, nil
+}
+
+func (w *BufferedHistoryWriter) LoadHistory(limit int, resolver PasteResolver) ([]HistoryEntry, error) {
+	if w == nil {
+		return nil, nil
+	}
+	pending, skipped := w.readState()
+	return loadHistory(w.Path, w.Project, w.Session, limit, resolver, pending, skipped)
+}
+
+func (w *BufferedHistoryWriter) LoadTimestampedHistory(limit int, resolver PasteResolver) ([]TimestampedHistoryEntry, error) {
+	if w == nil {
+		return nil, nil
+	}
+	pending, skipped := w.readState()
+	return loadTimestampedHistory(w.Path, w.Project, w.Session, limit, resolver, pending, skipped)
+}
+
+func (w *BufferedHistoryWriter) removePendingLogEntryLocked(entry *LogEntry) bool {
+	for i := len(w.entries) - 1; i >= 0; i-- {
+		if w.entries[i].logEntry != entry {
+			continue
+		}
+		copy(w.entries[i:], w.entries[i+1:])
+		w.entries = w.entries[:len(w.entries)-1]
+		return true
+	}
+	return false
+}
+
+func (w *BufferedHistoryWriter) readState() ([]LogEntry, map[int64]struct{}) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	pending := make([]LogEntry, 0, len(w.entries))
+	for i := len(w.entries) - 1; i >= 0; i-- {
+		if w.entries[i].logEntry == nil {
+			continue
+		}
+		pending = append(pending, *w.entries[i].logEntry)
+	}
+	skipped := make(map[int64]struct{}, len(w.skippedTimestamps))
+	for timestamp := range w.skippedTimestamps {
+		skipped[timestamp] = struct{}{}
+	}
+	return pending, skipped
 }
 
 func appendHistoryUnlocked(path string, entry LogEntry) error {
@@ -429,6 +512,14 @@ func storePastedTextFromHistory(entry HistoryEntry, logEntry LogEntry) error {
 }
 
 func LoadHistory(path string, project string, currentSession contracts.ID, limit int, resolver PasteResolver) ([]HistoryEntry, error) {
+	return loadHistory(path, project, currentSession, limit, resolver, nil, nil)
+}
+
+func LoadHistoryWithSkippedTimestamps(path string, project string, currentSession contracts.ID, limit int, resolver PasteResolver, skipped map[int64]struct{}) ([]HistoryEntry, error) {
+	return loadHistory(path, project, currentSession, limit, resolver, nil, skipped)
+}
+
+func loadHistory(path string, project string, currentSession contracts.ID, limit int, resolver PasteResolver, pending []LogEntry, skipped map[int64]struct{}) ([]HistoryEntry, error) {
 	if limit <= 0 {
 		limit = MaxHistoryItems
 	}
@@ -438,17 +529,30 @@ func LoadHistory(path string, project string, currentSession contracts.ID, limit
 	}
 	current := make([]HistoryEntry, 0, limit)
 	other := make([]HistoryEntry, 0, limit)
-	for _, entry := range entries {
+	add := func(entry LogEntry, fromDisk bool) bool {
 		if entry.Project != project {
-			continue
+			return false
+		}
+		if fromDisk && shouldSkipHistoryEntry(entry, currentSession, skipped) {
+			return false
 		}
 		if entry.SessionID == currentSession {
 			current = append(current, LogEntryToHistoryEntry(entry, resolver))
 		} else {
 			other = append(other, LogEntryToHistoryEntry(entry, resolver))
 		}
-		if len(current)+len(other) >= limit {
+		return len(current)+len(other) >= limit
+	}
+	for _, entry := range pending {
+		if add(entry, false) {
 			break
+		}
+	}
+	if len(current)+len(other) < limit {
+		for _, entry := range entries {
+			if add(entry, true) {
+				break
+			}
 		}
 	}
 	out := append([]HistoryEntry{}, current...)
@@ -462,6 +566,14 @@ func LoadHistory(path string, project string, currentSession contracts.ID, limit
 }
 
 func LoadTimestampedHistory(path string, project string, limit int, resolver PasteResolver) ([]TimestampedHistoryEntry, error) {
+	return loadTimestampedHistory(path, project, "", limit, resolver, nil, nil)
+}
+
+func LoadTimestampedHistoryWithSkippedTimestamps(path string, project string, currentSession contracts.ID, limit int, resolver PasteResolver, skipped map[int64]struct{}) ([]TimestampedHistoryEntry, error) {
+	return loadTimestampedHistory(path, project, currentSession, limit, resolver, nil, skipped)
+}
+
+func loadTimestampedHistory(path string, project string, currentSession contracts.ID, limit int, resolver PasteResolver, pending []LogEntry, skipped map[int64]struct{}) ([]TimestampedHistoryEntry, error) {
 	if limit <= 0 {
 		limit = MaxHistoryItems
 	}
@@ -471,12 +583,15 @@ func LoadTimestampedHistory(path string, project string, limit int, resolver Pas
 	}
 	seen := map[string]struct{}{}
 	out := make([]TimestampedHistoryEntry, 0, limit)
-	for _, entry := range entries {
+	add := func(entry LogEntry, fromDisk bool) bool {
 		if entry.Project != project {
-			continue
+			return false
+		}
+		if fromDisk && shouldSkipHistoryEntry(entry, currentSession, skipped) {
+			return false
 		}
 		if _, ok := seen[entry.Display]; ok {
-			continue
+			return false
 		}
 		seen[entry.Display] = struct{}{}
 		out = append(out, TimestampedHistoryEntry{
@@ -484,11 +599,29 @@ func LoadTimestampedHistory(path string, project string, limit int, resolver Pas
 			Timestamp: entry.Timestamp,
 			Entry:     LogEntryToHistoryEntry(entry, resolver),
 		})
-		if len(out) >= limit {
+		return len(out) >= limit
+	}
+	for _, entry := range pending {
+		if add(entry, false) {
 			break
 		}
 	}
+	if len(out) < limit {
+		for _, entry := range entries {
+			if add(entry, true) {
+				break
+			}
+		}
+	}
 	return out, nil
+}
+
+func shouldSkipHistoryEntry(entry LogEntry, currentSession contracts.ID, skipped map[int64]struct{}) bool {
+	if len(skipped) == 0 || entry.SessionID != currentSession {
+		return false
+	}
+	_, ok := skipped[entry.Timestamp]
+	return ok
 }
 
 func WithoutTimestamp(entries []LogEntry, timestamp int64) []LogEntry {
