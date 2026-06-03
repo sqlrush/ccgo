@@ -212,6 +212,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script direct `dialog` step 接受 `dialogId`/`dialogKind`、`heading`/`header`、`content`/`text`/`message`、`options`/`choices`/`buttons`、`focusedIndex`/`selectedIndex` 等字段别名，且 actions/options 可用单字符串。
 - 本轮补充：interaction script loader 接受 `scriptSteps`/`script_steps`、`interactionSteps`/`interaction_steps` wrapper 字段，并支持一层 `scenario`/`test`/`case`/`fixture`/`interaction` 嵌套对象。
 - 本轮补充：ANSI snapshot corpus 比对支持 `.ansi` only baseline fallback，strict stale-baseline 检查同时覆盖 `.txt` 和 `.ansi`。
+- 本轮补充：interaction script JSONL loader 单行上限提升到 50MiB，和 transcript/session 大记录读取容忍度对齐，覆盖大型 paste、image metadata 或 snapshot fixture 脚本行。
 
 ### M8: Commands、skills、plugins
 

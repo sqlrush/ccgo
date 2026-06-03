@@ -170,6 +170,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script dialog expectations now accept active, ID, kind, title, and body aliases such as `isActive`/`visible`, `dialogId`/`dialogID`, `dialogKind`, `heading`/`header`, and `content`/`text`/`message`.
 - `internal/tui`: interaction script event and dialog-result expectations now accept aliases such as `eventType`/`event`/`name`, `payload`/`text`/`message`, `dialogId`/`dialogID`/`dialogKind`, `actionValue`/`resultStatus`, and found/stale aliases.
 - `internal/tui`: interaction script loading now accepts `scriptSteps`/`script_steps`, `interactionSteps`/`interaction_steps`, and nested `scenario`/`test`/`case`/`fixture`/`interaction` wrapper objects.
+- `internal/tui`: interaction script JSONL loading now allows 50MiB records so large paste/image/snapshot fixture lines do not hit scanner token limits.
 - `internal/tui`: snapshot corpus comparison now accepts `.ansi`-only baselines by stripping ANSI text on load, and strict unexpected-baseline checks include both `.txt` and `.ansi`.
 
 Still missing for full M6/M7 parity:

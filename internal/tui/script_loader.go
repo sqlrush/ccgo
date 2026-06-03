@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-const maxInteractionScriptLineBytes = 4 * 1024 * 1024
+const maxInteractionScriptLineBytes = 50 * 1024 * 1024
 
 // LoadInteractionScript reads an interaction script from a JSON array, wrapper object, or JSONL file.
 func LoadInteractionScript(path string) ([]ScriptStep, error) {

@@ -4069,6 +4069,21 @@ func TestParseInteractionScriptAcceptsJSONArrayJSONLAndFile(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsLargeJSONLLine(t *testing.T) {
+	largeText := strings.Repeat("x", 4*1024*1024+1024)
+	data, err := json.Marshal(ScriptStep{Text: largeText})
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps, err := ParseInteractionScript(append(data, '\n'))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 1 || len(steps[0].Text) != len(largeText) {
+		t.Fatalf("steps = %d text bytes = %d", len(steps), len(steps[0].Text))
+	}
+}
+
 func TestParseInteractionScriptAcceptsWrapperObjects(t *testing.T) {
 	for name, script := range map[string]string{
 		"steps":              `{"name":"basic","steps":[{"text":"go"},{"key":"enter","expect_event":{"type":"prompt_submitted","value":"go"}}]}`,
