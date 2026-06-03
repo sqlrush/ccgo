@@ -100,6 +100,60 @@ func TestReadDocumentsCanPrefixMemoryFreshnessNote(t *testing.T) {
 	}
 }
 
+func TestRelevantMemoryAttachmentHeaderRenderAndScan(t *testing.T) {
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	stale := NewRelevantMemory("/repo/.claude/memory/old.md", "old fact", now.Add(-3*24*time.Hour), now)
+	fresh := NewRelevantMemory("/repo/.claude/memory/today.md", "today fact", now, now)
+	if !strings.HasPrefix(stale.Header, "This memory is 3 days old.") || !strings.Contains(stale.Header, "\n\nMemory: /repo/.claude/memory/old.md:") {
+		t.Fatalf("stale header = %q", stale.Header)
+	}
+	if fresh.Header != "Memory (saved today): /repo/.claude/memory/today.md:" {
+		t.Fatalf("fresh header = %q", fresh.Header)
+	}
+
+	attachment := RelevantMemoriesAttachmentMessage([]RelevantMemory{stale, fresh})
+	if attachment.Type != contracts.MessageAttachment || attachment.Subtype != RelevantMemoriesSubtype {
+		t.Fatalf("attachment = %#v", attachment)
+	}
+	rendered := RenderRelevantMemoriesAttachment(attachment, now)
+	if len(rendered) != 2 {
+		t.Fatalf("rendered = %#v", rendered)
+	}
+	text := rendered[0].Content[0].Text
+	if !rendered[0].IsMeta || rendered[0].Type != contracts.MessageUser || !strings.HasPrefix(text, "<system-reminder>\nThis memory is 3 days old.") || !strings.Contains(text, "\n\nold fact\n</system-reminder>") {
+		t.Fatalf("rendered stale message = %#v", rendered[0])
+	}
+
+	surfaced := CollectSurfacedMemories([]contracts.Message{attachment, msgs.UserText("ignore")})
+	if len(surfaced.Paths) != 2 || surfaced.TotalBytes != len("old fact")+len("today fact") {
+		t.Fatalf("surfaced = %#v", surfaced)
+	}
+	if _, ok := surfaced.Paths[stale.Path]; !ok {
+		t.Fatalf("missing stale path: %#v", surfaced.Paths)
+	}
+}
+
+func TestRelevantMemoryAttachmentRenderFallsBackToHeaderFromMtime(t *testing.T) {
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	message := contracts.Message{
+		Type: contracts.MessageAttachment,
+		Raw: map[string]any{
+			"attachment": map[string]any{
+				"type": RelevantMemoriesAttachmentType,
+				"memories": []map[string]any{{
+					"path":     "/repo/.claude/memory/legacy.md",
+					"content":  "legacy fact",
+					"mtime_ms": now.Add(-2 * 24 * time.Hour).UnixMilli(),
+				}},
+			},
+		},
+	}
+	rendered := RenderRelevantMemoriesAttachment(message, now)
+	if len(rendered) != 1 || !strings.Contains(rendered[0].Content[0].Text, "This memory is 2 days old.") || !strings.Contains(rendered[0].Content[0].Text, "Memory: /repo/.claude/memory/legacy.md:") {
+		t.Fatalf("rendered = %#v", rendered)
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")
