@@ -161,6 +161,7 @@ M7 progress now includes:
 - `internal/tui`: PromptInput/REPL screen can enable a session-scoped image-cache so image hint paste caches the image path and writes the base64 image file while inserting the `[Image #N]` prompt reference.
 - `internal/tui`: PromptInput paste now strips ANSI, normalizes carriage returns, expands tabs, and uses the official 800-character plus `min(rows-10, 2)` visible-line threshold to decide whether pasted text stays inline or becomes a pasted-content reference.
 - `internal/session`/`internal/tui`: orphan image pasted-content entries are now pruned after prompt edits and filtered again during prompt-message construction, so deleted image pills do not leak into Anthropic image blocks or image metadata.
+- `internal/tui`: image paste pills now follow the official lazy-space behavior for consecutive image pastes and image-then-text input without adding duplicate spaces before explicit whitespace/newlines.
 - `internal/tui`: prompt submitted events now retain display text and pasted-content metadata, so downstream runtime code can build text/image content-block messages instead of receiving only the expanded prompt string.
 - `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, string-array key sequences/chords, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.

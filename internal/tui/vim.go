@@ -15,10 +15,11 @@ const (
 )
 
 type vimPromptSnapshot struct {
-	Text           string
-	Cursor         int
-	PastedContents map[int]session.PastedContent
-	NextPastedID   int
+	Text                   string
+	Cursor                 int
+	PastedContents         map[int]session.PastedContent
+	NextPastedID           int
+	PendingSpaceAfterImage bool
 }
 
 type vimRecordedChange struct {
@@ -670,10 +671,11 @@ func (s *REPLScreen) clearVimPending() {
 
 func (s *REPLScreen) recordVimUndo() {
 	snapshot := vimPromptSnapshot{
-		Text:           s.Prompt.Text,
-		Cursor:         s.Prompt.Cursor,
-		PastedContents: clonePastedContents(s.Prompt.PastedContents),
-		NextPastedID:   s.Prompt.NextPastedID,
+		Text:                   s.Prompt.Text,
+		Cursor:                 s.Prompt.Cursor,
+		PastedContents:         clonePastedContents(s.Prompt.PastedContents),
+		NextPastedID:           s.Prompt.NextPastedID,
+		PendingSpaceAfterImage: s.Prompt.pendingSpaceAfterImage,
 	}
 	if len(s.VimUndoStack) > 0 {
 		last := s.VimUndoStack[len(s.VimUndoStack)-1]
@@ -699,6 +701,7 @@ func (s *REPLScreen) undoVimPrompt() {
 	if s.Prompt.UsePasteReferences && last.NextPastedID > 0 {
 		s.Prompt.NextPastedID = last.NextPastedID
 	}
+	s.Prompt.pendingSpaceAfterImage = last.PendingSpaceAfterImage
 	s.Prompt.resetHistoryCursor()
 }
 

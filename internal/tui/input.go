@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"ccgo/internal/contracts"
@@ -33,18 +34,19 @@ type killRingState struct {
 var sharedKillRing killRingState
 
 type PromptState struct {
-	Text                string
-	Cursor              int
-	History             []string
-	HistoryEntries      []session.HistoryEntry
-	HistoryIndex        int
-	UsePasteReferences  bool
-	MaxInlinePasteLines int
-	ImageCacheSessionID contracts.ID
-	PastedContents      map[int]session.PastedContent
-	NextPastedID        int
-	draft               string
-	draftPastedContents map[int]session.PastedContent
+	Text                   string
+	Cursor                 int
+	History                []string
+	HistoryEntries         []session.HistoryEntry
+	HistoryIndex           int
+	UsePasteReferences     bool
+	MaxInlinePasteLines    int
+	ImageCacheSessionID    contracts.ID
+	PastedContents         map[int]session.PastedContent
+	NextPastedID           int
+	pendingSpaceAfterImage bool
+	draft                  string
+	draftPastedContents    map[int]session.PastedContent
 }
 
 func NewPromptState(history []string) PromptState {
@@ -427,11 +429,22 @@ func (p *PromptState) Apply(key Key) PromptResult {
 	}
 	switch key.Type {
 	case KeyRune:
+		prefix := []rune{}
+		if p.pendingSpaceAfterImage {
+			p.pendingSpaceAfterImage = false
+			if !unicode.IsSpace(key.Rune) {
+				prefix = []rune{' '}
+			}
+		}
 		runes = append(runes[:p.Cursor], append([]rune{key.Rune}, runes[p.Cursor:]...)...)
-		p.Cursor++
+		if len(prefix) > 0 {
+			runes = append(runes[:p.Cursor], append(prefix, runes[p.Cursor:]...)...)
+		}
+		p.Cursor += len(prefix) + 1
 		p.Text = string(runes)
 		p.resetHistoryCursor()
 	case KeyShiftEnter:
+		p.pendingSpaceAfterImage = false
 		p.insertText("\n")
 	case KeyPaste:
 		p.insertPaste(key.Text)
@@ -499,6 +512,7 @@ func (p *PromptState) Apply(key Key) PromptResult {
 		p.HistoryIndex = p.historyLength()
 		p.draft = ""
 		p.draftPastedContents = nil
+		p.pendingSpaceAfterImage = false
 		p.resetPastedContents()
 		return PromptResult{Submitted: submitted, Display: display, PastedContents: pastedContents}
 	case KeyEsc:
@@ -549,6 +563,7 @@ func (p PromptState) HistoryEntry() session.HistoryEntry {
 }
 
 func (p *PromptState) insertPaste(text string) {
+	p.pendingSpaceAfterImage = false
 	text = cleanPastedText(text)
 	if !p.UsePasteReferences || !p.shouldReferencePaste(text) {
 		p.insertText(text)
@@ -658,7 +673,13 @@ func (p *PromptState) insertImageHint(key Key) {
 			session.StoreImage(p.ImageCacheSessionID, content)
 		}
 	}
-	p.insertText(session.FormatImageRef(id))
+	prefix := ""
+	if p.pendingSpaceAfterImage {
+		prefix = " "
+	}
+	p.pendingSpaceAfterImage = false
+	p.insertText(prefix + session.FormatImageRef(id))
+	p.pendingSpaceAfterImage = true
 }
 
 func (p *PromptState) resetPastedContents() {
@@ -667,6 +688,7 @@ func (p *PromptState) resetPastedContents() {
 	}
 	p.PastedContents = map[int]session.PastedContent{}
 	p.NextPastedID = 1
+	p.pendingSpaceAfterImage = false
 }
 
 func (p *PromptState) insertText(text string) {
@@ -791,6 +813,9 @@ func (p *PromptState) pruneOrphanImages() {
 	if p.PastedContents == nil {
 		p.PastedContents = map[int]session.PastedContent{}
 	}
+	if !hasImagePastedContent(p.PastedContents) {
+		p.pendingSpaceAfterImage = false
+	}
 }
 
 func (p *PromptState) historyPrev() {
@@ -854,6 +879,7 @@ func (p *PromptState) replacePastedContents(contents map[int]session.PastedConte
 		p.PastedContents = map[int]session.PastedContent{}
 	}
 	p.NextPastedID = nextPastedID(p.PastedContents)
+	p.pendingSpaceAfterImage = false
 }
 
 func clonePastedContents(in map[int]session.PastedContent) map[int]session.PastedContent {
@@ -874,6 +900,15 @@ func cloneImageDimensions(dimensions *session.ImageDimensions) *session.ImageDim
 	}
 	cloned := *dimensions
 	return &cloned
+}
+
+func hasImagePastedContent(contents map[int]session.PastedContent) bool {
+	for _, content := range contents {
+		if content.Type == session.PastedContentImage {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneHistoryEntries(in []session.HistoryEntry) []session.HistoryEntry {

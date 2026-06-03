@@ -535,6 +535,42 @@ func TestPromptPrunesOrphanImagePastedContent(t *testing.T) {
 	}
 }
 
+func TestPromptImageHintLazySpacing(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=name=one.png;type=image/png;inline=1:AAAA\a"))
+	prompt.Apply(ParseKey("x"))
+	if prompt.Text != "[Image #1] x" {
+		t.Fatalf("image then text = %#v", prompt)
+	}
+
+	prompt = NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=name=one.png;type=image/png;inline=1:AAAA\a"))
+	prompt.Apply(ParseKey(" "))
+	prompt.Apply(ParseKey("x"))
+	if prompt.Text != "[Image #1] x" {
+		t.Fatalf("image then explicit space = %#v", prompt)
+	}
+
+	prompt = NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=name=one.png;type=image/png;inline=1:AAAA\a"))
+	prompt.Apply(ParseKey("\x1b]1337;File=name=two.png;type=image/png;inline=1:BBBB\a"))
+	if prompt.Text != "[Image #1] [Image #2]" {
+		t.Fatalf("consecutive images = %#v", prompt)
+	}
+
+	prompt = NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=name=one.png;type=image/png;inline=1:AAAA\a"))
+	prompt.Apply(ParseKey("\x1b[13;2u"))
+	prompt.Apply(ParseKey("x"))
+	if prompt.Text != "[Image #1]\nx" {
+		t.Fatalf("image then shift-enter = %#v", prompt)
+	}
+}
+
 func TestPromptImageHintWritesImageCacheWhenEnabled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
@@ -3525,7 +3561,7 @@ func TestRunInteractionScriptAcceptsImageFieldAliases(t *testing.T) {
 		{
 			"image": {"name": "diagram.webp", "mime_type": "image/webp", "base64": "BBBB"},
 			"expect_prompt": {
-				"text": "[Image #1][Image #2]",
+				"text": "[Image #1] [Image #2]",
 				"pastedContentCount": 2,
 				"nextPastedID": 3,
 				"pastedContents": {"id": 2, "type": "image", "media_type": "image/webp", "filename": "diagram.webp", "content": "BBBB"}
