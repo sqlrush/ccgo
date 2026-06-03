@@ -96,13 +96,18 @@ func FormatManifest(headers []Header) string {
 }
 
 func ReadDocuments(headers []Header, maxBytes int64) ([]Document, error) {
+	return ReadDocumentsWithOptions(headers, ReadOptions{MaxBytes: maxBytes})
+}
+
+func ReadDocumentsWithOptions(headers []Header, options ReadOptions) ([]Document, error) {
 	var docs []Document
+	now := options.Now
 	for _, header := range headers {
 		info, err := os.Stat(header.Path)
 		if err != nil || info.IsDir() {
 			continue
 		}
-		if maxBytes > 0 && info.Size() > maxBytes {
+		if options.MaxBytes > 0 && info.Size() > options.MaxBytes {
 			continue
 		}
 		data, err := os.ReadFile(header.Path)
@@ -112,6 +117,9 @@ func ReadDocuments(headers []Header, maxBytes int64) ([]Document, error) {
 		_, body := ParseFrontmatter(string(data))
 		if body == "" && len(data) > 0 {
 			body = string(data)
+		}
+		if options.IncludeFreshnessNote {
+			body = MemoryFreshnessNote(header.Mtime, now) + body
 		}
 		docs = append(docs, Document{Header: header, Content: body})
 	}

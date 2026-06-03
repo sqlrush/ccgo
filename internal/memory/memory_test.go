@@ -44,6 +44,62 @@ func TestScanDirectoryParsesFrontmatterAndFormatsManifest(t *testing.T) {
 	}
 }
 
+func TestMemoryFreshnessHelpersMatchOfficialAgeText(t *testing.T) {
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	if got := MemoryAge(now.Add(-time.Hour), now); got != "today" {
+		t.Fatalf("today age = %q", got)
+	}
+	if got := MemoryAge(now.Add(-25*time.Hour), now); got != "yesterday" {
+		t.Fatalf("yesterday age = %q", got)
+	}
+	if got := MemoryAge(now.Add(-3*24*time.Hour), now); got != "3 days ago" {
+		t.Fatalf("old age = %q", got)
+	}
+	if got := MemoryAge(now.Add(time.Hour), now); got != "today" {
+		t.Fatalf("future age = %q", got)
+	}
+	if got := MemoryFreshnessText(now.Add(-25*time.Hour), now); got != "" {
+		t.Fatalf("fresh text = %q", got)
+	}
+	note := MemoryFreshnessNote(now.Add(-3*24*time.Hour), now)
+	if !strings.HasPrefix(note, "<system-reminder>This memory is 3 days old.") || !strings.HasSuffix(note, "</system-reminder>\n") {
+		t.Fatalf("note = %q", note)
+	}
+}
+
+func TestReadDocumentsCanPrefixMemoryFreshnessNote(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stale.md")
+	writeFile(t, path, "---\ndescription: Stale\n---\nbody\n")
+	mtime := time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	headers, err := ScanDirectory(dir, ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plain, err := ReadDocuments(headers, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plain[0].Content, "system-reminder") {
+		t.Fatalf("plain content = %q", plain[0].Content)
+	}
+
+	docs, err := ReadDocumentsWithOptions(headers, ReadOptions{
+		IncludeFreshnessNote: true,
+		Now:                  time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(docs[0].Content, "<system-reminder>This memory is 4 days old.") || !strings.HasSuffix(docs[0].Content, "body\n") {
+		t.Fatalf("content = %q", docs[0].Content)
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")

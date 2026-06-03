@@ -31,6 +31,12 @@ type ScanOptions struct {
 	IncludeMemoryDotFile bool
 }
 
+type ReadOptions struct {
+	MaxBytes             int64
+	IncludeFreshnessNote bool
+	Now                  time.Time
+}
+
 func ParseType(raw string) Type {
 	switch Type(raw) {
 	case TypeProject, TypeUser, TypeTeam, TypeAuto, TypeSession:
