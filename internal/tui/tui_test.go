@@ -3765,6 +3765,7 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 			"resize_height": 8,
 			"paste": "alpha\nbeta",
 			"image": {"filename": "chart.png", "media_type": "image/png", "content": "AAAA"},
+			"status_line": "json ready",
 			"snapshot_name": "json-aliases",
 			"expect_prompt": {
 				"text": "[Pasted text #1 +1 lines][Image #2]",
@@ -3790,7 +3791,6 @@ func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	screen := NewREPLScreen(20, 4, nil)
-	screen.Status = "json ready"
 	result, err := RunInteractionScriptChecked(&screen, steps)
 	if err != nil {
 		t.Fatal(err)
@@ -4218,14 +4218,16 @@ func TestRunInteractionScriptAcceptsDialogStepAliases(t *testing.T) {
 func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
 		{
+			"baseStatus": "runtime ready",
 			"requestPermission": {"id": "perm_1", "toolName": "Bash", "path": "/tmp/a"},
 			"expectDialog": {"active": true, "id": "perm_1", "kind": "permission"},
-			"expectStatusContains": ["permissions: 1"]
+			"expectStatusContains": ["runtime ready", "permissions: 1"]
 		},
 		{
 			"key": "enter",
 			"expectEvent": {"type": "dialog_action", "value": "Allow", "dialogId": "perm_1", "dialogKind": "permission"},
 			"expectDialogResult": {"id": "perm_1", "status": "allowed", "found": true},
+			"expectStatusContains": ["runtime ready"],
 			"expectStatusNotContains": ["permissions: 1"]
 		},
 		{

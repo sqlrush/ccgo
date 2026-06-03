@@ -17,6 +17,7 @@ type ScriptStep struct {
 	Message                      *Message
 	Messages                     []Message
 	Dialog                       *Dialog
+	Status                       string
 	Keybindings                  []BindingSpec
 	RequestPermission            *PermissionRequest
 	UpsertTask                   *TaskStatus
@@ -207,6 +208,10 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			stepDialogResults = append(stepDialogResults, runtimeResults...)
 			last := runtimeResults[len(runtimeResults)-1]
 			dialogResult = &last
+		}
+		if step.Status != "" {
+			baseStatus = step.Status
+			screen.Status = step.Status
 		}
 		if runtime != nil {
 			runtime.ApplyToScreen(screen, baseStatus)

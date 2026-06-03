@@ -228,6 +228,13 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		AppendMessagesCamel       []Message                 `json:"appendMessages"`
 		TranscriptMessages        []Message                 `json:"transcript_messages"`
 		TranscriptMessagesCamel   []Message                 `json:"transcriptMessages"`
+		Status                    *string                   `json:"status"`
+		SetStatus                 *string                   `json:"set_status"`
+		SetStatusCamel            *string                   `json:"setStatus"`
+		StatusLine                *string                   `json:"status_line"`
+		StatusLineCamel           *string                   `json:"statusLine"`
+		BaseStatus                *string                   `json:"base_status"`
+		BaseStatusCamel           *string                   `json:"baseStatus"`
 		Mouse                     *ScriptMouse              `json:"mouse"`
 		MouseEvent                *ScriptMouse              `json:"mouse_event"`
 		MouseEventCamel           *ScriptMouse              `json:"mouseEvent"`
@@ -414,6 +421,27 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.TranscriptMessagesCamel != nil {
 		step.Messages = fields.TranscriptMessagesCamel
+	}
+	if fields.Status != nil {
+		step.Status = *fields.Status
+	}
+	if fields.SetStatus != nil {
+		step.Status = *fields.SetStatus
+	}
+	if fields.SetStatusCamel != nil {
+		step.Status = *fields.SetStatusCamel
+	}
+	if fields.StatusLine != nil {
+		step.Status = *fields.StatusLine
+	}
+	if fields.StatusLineCamel != nil {
+		step.Status = *fields.StatusLineCamel
+	}
+	if fields.BaseStatus != nil {
+		step.Status = *fields.BaseStatus
+	}
+	if fields.BaseStatusCamel != nil {
+		step.Status = *fields.BaseStatusCamel
 	}
 	if fields.Mouse != nil {
 		step.Mouse = fields.Mouse
