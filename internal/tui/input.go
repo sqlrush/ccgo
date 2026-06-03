@@ -229,19 +229,22 @@ func parseCSIuKey(seq string) (Key, bool) {
 	}
 	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "u")
 	parts := strings.Split(body, ";")
-	if len(parts) < 2 {
-		return Key{}, false
-	}
 	codepoint, ok := parseCSIuNumber(parts[0])
 	if !ok {
 		return Key{}, false
 	}
-	modifier, ok := parseCSIuNumber(parts[1])
-	if !ok {
+	modifier := 1
+	if len(parts) >= 2 {
+		modifier, ok = parseCSIuNumber(parts[1])
+		if !ok {
+			return Key{}, false
+		}
+	}
+	if modifier < 1 {
 		return Key{}, false
 	}
-	if modifier < 2 {
-		return Key{}, false
+	if modifier == 1 {
+		return baseCSIuKey(codepoint)
 	}
 	shift := modifier == 2 || modifier == 4 || modifier == 6 || modifier == 8
 	alt := modifier == 3 || modifier == 4 || modifier == 7 || modifier == 8
@@ -268,6 +271,25 @@ func parseCSIuKey(seq string) (Key, bool) {
 		return Key{Type: KeyRune, Rune: r}, true
 	}
 	return Key{}, false
+}
+
+func baseCSIuKey(codepoint int) (Key, bool) {
+	switch codepoint {
+	case 8, 127:
+		return Key{Type: KeyBackspace}, true
+	case 9:
+		return Key{Type: KeyTab}, true
+	case 10, 13:
+		return Key{Type: KeyEnter}, true
+	case 27:
+		return Key{Type: KeyEsc}, true
+	default:
+		r := rune(codepoint)
+		if r >= 0x20 {
+			return Key{Type: KeyRune, Rune: r}, true
+		}
+		return Key{}, false
+	}
 }
 
 func parseCSIuNumber(field string) (int, bool) {

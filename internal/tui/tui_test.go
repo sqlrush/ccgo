@@ -959,6 +959,15 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		want KeyType
 		rune rune
 	}{
+		{seq: "\x1b[97u", want: KeyRune, rune: 'a'},
+		{seq: "\x1b[97;1u", want: KeyRune, rune: 'a'},
+		{seq: "\x1b[97:65;1:1u", want: KeyRune, rune: 'a'},
+		{seq: "\x1b[32u", want: KeyRune, rune: ' '},
+		{seq: "\x1b[13u", want: KeyEnter},
+		{seq: "\x1b[13;1u", want: KeyEnter},
+		{seq: "\x1b[9u", want: KeyTab},
+		{seq: "\x1b[27u", want: KeyEsc},
+		{seq: "\x1b[127u", want: KeyBackspace},
 		{seq: "\x1b[97;5u", want: KeyCtrlA},
 		{seq: "\x1b[65;5u", want: KeyCtrlA},
 		{seq: "\x1b[97:65;5:1u", want: KeyCtrlA},
