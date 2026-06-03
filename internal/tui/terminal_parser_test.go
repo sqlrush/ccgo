@@ -53,6 +53,19 @@ func TestTerminalVisibleTextUsesParserAndPreservesRawBell(t *testing.T) {
 	}
 }
 
+func TestTerminalVisibleTextExpandsRepeatPrecedingCharacter(t *testing.T) {
+	input := "ab" + CSISequence(3, "b") + "界" + CSISequence(2, "b") + "\n" + CSISequence(4, "b") + "z"
+	if got := TerminalVisibleText(input); got != "abbbb界界界\nz" {
+		t.Fatalf("visible = %q", got)
+	}
+	if got := TerminalVisibleWidth(input); got != 12 {
+		t.Fatalf("width = %d", got)
+	}
+	if got := StripANSI(CSISequence(2, "b") + "x" + CSISequence("b")); got != "xx" {
+		t.Fatalf("strip = %q", got)
+	}
+}
+
 func TestTerminalParserDispatchesStringControlActions(t *testing.T) {
 	parser := NewTerminalParser()
 	input := "a" +

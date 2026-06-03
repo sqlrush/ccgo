@@ -108,7 +108,7 @@ M7 补充：terminal CSI parser 现在把 xterm window manipulation/report (`CSI
 
 M7 补充：terminal CSI parser 现在把 TBC tab-clear (`CSI g`/`CSI 3g`) 解析成 cursor action，保留 clear-current/all code，避免制表位清理序列落入 generic unknown。
 
-M7 补充：terminal CSI parser 现在把 REP repeat-preceding-character (`CSI b`/`CSI 4b`) 解析成 edit action，保留重复次数，为后续 ANSI renderer 展开 REP 留出结构化动作。
+M7 补充：terminal CSI parser 现在把 REP repeat-preceding-character (`CSI b`/`CSI 4b`) 解析成 edit action，visible-text/snapshot pipeline 会按重复次数展开前一个可重复 grapheme。
 
 M7 补充：terminal CSI parser 现在把 DECSTR soft reset (`CSI !p`) 解析成 reset action，terminal parser 会复用现有 reset 流程清理 SGR/link 状态，避免软复位序列落入 generic unknown。
 
@@ -322,7 +322,7 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
 
-本轮补充：terminal CSI parser 把 REP repeat-preceding-character (`CSI b`) 归入 edit action，保留重复次数。
+本轮补充：terminal CSI parser 把 REP repeat-preceding-character (`CSI b`) 归入 edit action，visible-text/snapshot pipeline 会按重复次数展开前一个可重复 grapheme。
 
 本轮补充：terminal CSI parser 把 DECSTR soft reset (`CSI !p`) 归入 reset action，并在 terminal parser 中清理 SGR/link 状态。
 

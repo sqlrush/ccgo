@@ -111,14 +111,27 @@ func TerminalVisibleWidth(input string) int {
 
 func TerminalActionsVisibleText(actions []TerminalAction) string {
 	var out strings.Builder
+	var last TerminalGrapheme
+	hasLast := false
 	for _, action := range actions {
 		switch action.Type {
 		case TerminalActionText:
 			for _, grapheme := range action.Graphemes {
 				out.WriteString(grapheme.Value)
+				if isRepeatableTerminalGrapheme(grapheme) {
+					last = grapheme
+					hasLast = true
+				} else {
+					hasLast = false
+				}
 			}
 		case TerminalActionBell:
 			out.WriteByte(terminalBEL)
+			hasLast = false
+		case TerminalActionEdit:
+			if action.Edit.Type == CSIEditActionRepeatChars && hasLast && action.Edit.Count > 0 {
+				out.WriteString(strings.Repeat(last.Value, action.Edit.Count))
+			}
 		}
 	}
 	return out.String()
@@ -126,18 +139,39 @@ func TerminalActionsVisibleText(actions []TerminalAction) string {
 
 func TerminalActionsVisibleWidth(actions []TerminalAction) int {
 	width := 0
+	var last TerminalGrapheme
+	hasLast := false
 	for _, action := range actions {
-		if action.Type != TerminalActionText {
-			continue
-		}
-		for _, grapheme := range action.Graphemes {
-			if grapheme.Value == "\n" || grapheme.Value == "\r" {
-				continue
+		switch action.Type {
+		case TerminalActionText:
+			for _, grapheme := range action.Graphemes {
+				if grapheme.Value != "\n" && grapheme.Value != "\r" {
+					width += grapheme.Width
+				}
+				if isRepeatableTerminalGrapheme(grapheme) {
+					last = grapheme
+					hasLast = true
+				} else {
+					hasLast = false
+				}
 			}
-			width += grapheme.Width
+		case TerminalActionBell:
+			hasLast = false
+		case TerminalActionEdit:
+			if action.Edit.Type == CSIEditActionRepeatChars && hasLast && action.Edit.Count > 0 {
+				width += last.Width * action.Edit.Count
+			}
 		}
 	}
 	return width
+}
+
+func isRepeatableTerminalGrapheme(grapheme TerminalGrapheme) bool {
+	if grapheme.Value == "" {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(grapheme.Value)
+	return r >= 0x20 && r != 0x7f
 }
 
 func (p *TerminalParser) processTokens(tokens []TerminalToken) []TerminalAction {
