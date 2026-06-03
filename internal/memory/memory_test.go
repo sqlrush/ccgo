@@ -358,6 +358,108 @@ func TestPrefetchRelevantMemoriesHonorsCanceledContext(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentSelectRelevantMemoriesUsesModelPaths(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	opsPath := filepath.Join(dir, "ops.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	if err := os.Chtimes(dbPath, time.Unix(100, 0), time.Unix(100, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(opsPath, time.Unix(200, 0), time.Unix(200, 0)); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_memory_select",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"query":"database access","memory_paths":["ops","db.md"]}`)},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "ops,db.md" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Selected) != 2 || result.Selected[0].Path != opsPath || result.Selected[1].Path != dbPath {
+		t.Fatalf("selected = %#v", result.Selected)
+	}
+	if len(client.requests) != 1 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "Candidate memory files") || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "id: db.md") {
+		t.Fatalf("request = %#v", client.requests)
+	}
+}
+
+func TestMemoryAgentSelectRelevantMemoriesParsesNestedAliasesAndFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	otherPath := filepath.Join(dir, "other.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, otherPath, "---\ndescription: unrelated notes\n---\nother rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_memory_nested",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock("Selected memory:\n```json\n{\"expandedQuery\":\"database access\",\"files\":[{\"filePath\":\"other.md\"}]}\n```")},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "other.md" {
+		t.Fatalf("nested result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != otherPath {
+		t.Fatalf("nested selected = %#v", result.Selected)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{"query":"database permissions","memory_paths":["missing.md"]}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Fallback || strings.Join(result.SelectedIDs, ",") != "missing.md" {
+		t.Fatalf("fallback result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != dbPath {
+		t.Fatalf("fallback selected = %#v", result.Selected)
+	}
+}
+
+func TestPrefetchRelevantMemoriesCanUseMemoryAgentSelector(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	modelPath := filepath.Join(dir, "model.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, modelPath, "---\ndescription: model selected memory\n---\nmodel rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_prefetch_select",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"memoryPaths":["model.md"]}`)},
+	}}
+	agent := Agent{Client: client}
+
+	result, err := PrefetchRelevantMemories(context.Background(), []contracts.Message{
+		msgs.UserText("database permissions"),
+	}, RelevantMemoryPrefetchOptions{Root: dir, Agent: &agent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Agent == nil || result.Agent.Fallback || len(result.Memories) != 1 || result.Memories[0].Path != modelPath || !strings.Contains(result.Memories[0].Content, "model rules") {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != modelPath || result.Selected[0].Path == dbPath {
+		t.Fatalf("selected = %#v", result.Selected)
+	}
+}
+
 func TestCollectRecentSuccessfulToolsUsesCurrentHumanTurnWindow(t *testing.T) {
 	assistantTools := func(blocks ...contracts.ContentBlock) contracts.Message {
 		return contracts.Message{Type: contracts.MessageAssistant, Content: blocks}

@@ -193,12 +193,13 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：lightweight transcript metadata loader 在 `system`/`compact_boundary` 后清空旧 `marble-origami-commit`/`marble-origami-snapshot` 状态，和 full loader/官方 sessionStorage compact-boundary 语义一致。
 - 本轮补充：memory 层补齐官方 `memoryAge`/freshness note 语义，`ReadDocumentsWithOptions` 可为超过 1 天的 memory 文档前缀 system-reminder，提示模型把 memory 当作 point-in-time observation 并核对当前代码。
 - 本轮补充：Read tool 在 metadata 提供 auto-memory 目录时，会为读取旧 auto-memory 文件的 tool result 前缀 freshness system-reminder，和官方 FileReadTool 的 memory freshness prefix 对齐。
-- 本轮补充：memory 层补齐官方 `relevant_memories` attachment 基础，包含 stable memory header、system-reminder 渲染、surfaced path/byte 扫描、按 200 行/4096 bytes 读取并附截断提示的 surfacing reader、mark-after-filter 的 duplicate memory attachment 过滤、最后非 meta user prompt/单词 prompt/60KB session cap 的 prefetch gating、多目录结果排除 read-state/surfaced 后取前 5 个候选的选择逻辑，以及 recent successful tools 窗口收集并排除 pending/failed/同名失败工具；完整异步 selector/prefetch runtime 后续继续推进。
+- 本轮补充：memory 层补齐官方 `relevant_memories` attachment 基础，包含 stable memory header、system-reminder 渲染、surfaced path/byte 扫描、按 200 行/4096 bytes 读取并附截断提示的 surfacing reader、mark-after-filter 的 duplicate memory attachment 过滤、最后非 meta user prompt/单词 prompt/60KB session cap 的 prefetch gating、多目录结果排除 read-state/surfaced 后取前 5 个候选的选择逻辑，以及 recent successful tools 窗口收集并排除 pending/failed/同名失败工具。
 - 本轮补充：conversation `BuildRequest` 会把 history 里的 `relevant_memories` attachment 展开为 user/meta system-reminder 后再 NormalizeForAPI，补齐 official messages.ts attachment 渲染路径的基础 runtime 接线。
-- 本轮补充：Runner 增加显式 `RelevantMemoryDir` runtime：配置后会扫描 memory dir、用 deterministic selector 选出相关 md memory、读取为 `relevant_memories` attachment 并注入 request；默认关闭，完整官方 async sideQuery selector/prefetch 仍未宣称完成。
+- 本轮补充：Runner 增加显式 `RelevantMemoryDir` runtime：配置后会扫描 memory dir、默认用 deterministic selector 选出相关 md memory，若配置 `MemoryAgentClient` 则优先用 model-backed selector，读取为 `relevant_memories` attachment 并注入 request；默认关闭。
 - 本轮补充：Runner 会把 `RelevantMemoryDir` 放入 tool metadata 的 internal auto-memory path context，使 Read tool 的 stale-memory freshness prefix 和 permission internal-path policy 与同一配置对齐。
 - 本轮补充：transcript resume fallback 转换 attachment message 时保留 raw attachment payload，恢复后的 `relevant_memories` attachment 仍可进入 conversation request 的 system-reminder 展开路径。
-- 本轮补充：memory 层增加可取消 `PrefetchRelevantMemories` runtime，复用现有 gating/selector/surfacing 逻辑返回 plan、selection 和 attachments；conversation `RunTurn` 会在用户消息进入后启动 relevant memory prefetch，并在第一轮 model request 消费结果，预取文件系统错误 fail-open 且不阻断主请求。完整官方 model sideQuery selector 仍继续推进。
+- 本轮补充：memory 层增加可取消 `PrefetchRelevantMemories` runtime，复用现有 gating/selector/surfacing 逻辑返回 plan、selection 和 attachments；conversation `RunTurn` 会在用户消息进入后启动 relevant memory prefetch，并在第一轮 model request 消费结果，预取文件系统错误 fail-open 且不阻断主请求。
+- 本轮补充：relevant memory prefetch 接入 model-backed sideQuery selector：当 `MemoryAgentClient` 可用时，先向模型提供候选 memory manifest，请模型返回 `memory_paths`/`memoryPaths`/`filePath`/`matches`/嵌套 selection 等路径别名，按模型顺序读取附件；模型错误或无效路径会 fail-open 回落 deterministic selector。完整官方 prompt/telemetry parity 仍继续推进。
 
 ### M7: TUI renderer 和交互体验
 

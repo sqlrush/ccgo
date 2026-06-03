@@ -72,12 +72,14 @@ type RelevantMemoryPrefetchOptions struct {
 	Limit           int
 	MaxSessionBytes int
 	Now             time.Time
+	Agent           *Agent
 }
 
 type RelevantMemoryPrefetchResult struct {
 	Plan     RelevantMemoryPrefetchPlan
 	Selected []RelevantMemorySelection
 	Memories []RelevantMemory
+	Agent    *AgentRelevantMemoryResult
 }
 
 type RelevantMemoryReadState struct {
@@ -279,24 +281,41 @@ func PrefetchRelevantMemories(ctx context.Context, messages []contracts.Message,
 	if err := ctx.Err(); err != nil {
 		return RelevantMemoryPrefetchResult{Plan: plan}, err
 	}
-	selected, err := FindRelevantMemorySelections(
-		options.Root,
-		plan.Input,
-		CollectRecentSuccessfulTools(messages),
-		plan.Surfaced.Paths,
-		options.Limit,
-	)
-	if err != nil {
-		return RelevantMemoryPrefetchResult{Plan: plan}, err
+	recentTools := CollectRecentSuccessfulTools(messages)
+	var selected []RelevantMemorySelection
+	var agentResult *AgentRelevantMemoryResult
+	if options.Agent != nil {
+		result, err := options.Agent.SelectRelevantMemories(ctx, options.Root, plan.Input, RelevantMemorySelectorOptions{
+			Limit:       options.Limit,
+			RecentTools: recentTools,
+			Surfaced:    plan.Surfaced.Paths,
+		})
+		if err != nil {
+			return RelevantMemoryPrefetchResult{Plan: plan}, err
+		}
+		agentResult = &result
+		selected = result.Selected
+	} else {
+		var err error
+		selected, err = FindRelevantMemorySelections(
+			options.Root,
+			plan.Input,
+			recentTools,
+			plan.Surfaced.Paths,
+			options.Limit,
+		)
+		if err != nil {
+			return RelevantMemoryPrefetchResult{Plan: plan}, err
+		}
 	}
 	if err := ctx.Err(); err != nil {
-		return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected}, err
+		return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Agent: agentResult}, err
 	}
 	memories := ReadMemoriesForSurfacing(selected, RelevantMemorySurfaceOptions{Now: options.Now})
 	if err := ctx.Err(); err != nil {
-		return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Memories: memories}, err
+		return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Memories: memories, Agent: agentResult}, err
 	}
-	return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Memories: memories}, nil
+	return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Memories: memories, Agent: agentResult}, nil
 }
 
 func SelectRelevantMemoryCandidates(results [][]RelevantMemorySelection, state map[string]RelevantMemoryReadState, surfaced map[string]struct{}, limit int) []RelevantMemorySelection {

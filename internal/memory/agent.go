@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -36,6 +37,22 @@ type AgentRecallResult struct {
 	Request     anthropic.Request
 	Response    *anthropic.Response
 	Fallback    bool
+}
+
+type AgentRelevantMemoryResult struct {
+	Query       string
+	SelectedIDs []string
+	Selected    []RelevantMemorySelection
+	Request     anthropic.Request
+	Response    *anthropic.Response
+	Fallback    bool
+}
+
+type RelevantMemorySelectorOptions struct {
+	Limit          int
+	CandidateLimit int
+	RecentTools    []string
+	Surfaced       map[string]struct{}
 }
 
 func (a Agent) Extract(ctx context.Context, history []contracts.Message, options ExtractOptions) (AgentExtractResult, error) {
@@ -107,6 +124,68 @@ func (a Agent) Recall(ctx context.Context, root string, query string, options Re
 	return AgentRecallResult{Query: searchQuery, SelectedIDs: selectedIDs, Matches: matches, Request: request, Response: response, Fallback: fallback}, nil
 }
 
+func (a Agent) SelectRelevantMemories(ctx context.Context, root string, query string, options RelevantMemorySelectorOptions) (AgentRelevantMemoryResult, error) {
+	searchQuery := strings.TrimSpace(query)
+	var selectedIDs []string
+	var selected []RelevantMemorySelection
+	var request anthropic.Request
+	var response *anthropic.Response
+	fallback := false
+	if a.Client != nil {
+		candidates, err := relevantMemoryAgentCandidates(root, searchQuery, options)
+		if err != nil {
+			return AgentRelevantMemoryResult{}, err
+		}
+		request = a.buildRelevantMemorySelectorRequest(searchQuery, candidates)
+		var responseErr error
+		response, responseErr = a.Client.CreateMessage(ctx, request)
+		if responseErr != nil {
+			fallback = true
+		} else {
+			expanded, ids, ok := parseRelevantMemoryAgentResponse(responseText(response))
+			switch {
+			case ok && expanded != "":
+				searchQuery = expanded
+				selectedIDs = ids
+			case ok && len(ids) > 0:
+				selectedIDs = ids
+			case expanded != "":
+				searchQuery = expanded
+			default:
+				fallback = true
+			}
+			if len(selectedIDs) > 0 {
+				selected = relevantMemorySelectionsByIDs(candidates, selectedIDs, options.Surfaced, options.Limit)
+				if len(selected) > 0 {
+					return AgentRelevantMemoryResult{
+						Query:       searchQuery,
+						SelectedIDs: selectedIDs,
+						Selected:    selected,
+						Request:     request,
+						Response:    response,
+						Fallback:    fallback,
+					}, nil
+				}
+				fallback = true
+			}
+		}
+	} else {
+		fallback = true
+	}
+	selected, err := FindRelevantMemorySelections(root, searchQuery, options.RecentTools, options.Surfaced, options.Limit)
+	if err != nil {
+		return AgentRelevantMemoryResult{}, err
+	}
+	return AgentRelevantMemoryResult{
+		Query:       searchQuery,
+		SelectedIDs: selectedIDs,
+		Selected:    selected,
+		Request:     request,
+		Response:    response,
+		Fallback:    fallback,
+	}, nil
+}
+
 func (a Agent) buildExtractRequest(history []contracts.Message, options ExtractOptions) anthropic.Request {
 	return anthropic.Request{
 		Model:     a.model(),
@@ -136,6 +215,41 @@ func (a Agent) buildRecallRequest(query string, candidates []RecallMatch) anthro
 			}
 			b.WriteString("\n  summary: ")
 			b.WriteString(snippet(candidate.Summary.Summary, 480))
+			b.WriteString("\n")
+		}
+	}
+	return anthropic.Request{
+		Model:     a.model(),
+		MaxTokens: a.maxTokens(),
+		Messages: []contracts.APIMessage{{
+			Role:    "user",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock(b.String())},
+		}},
+	}
+}
+
+func (a Agent) buildRelevantMemorySelectorRequest(query string, candidates []relevantMemoryCandidate) anthropic.Request {
+	var b strings.Builder
+	b.WriteString("Select relevant memory files for the user request. Return a JSON object with keys query and memory_paths. The query should be a concise search query. memory_paths must be ordered from most to least relevant and use only candidate ids or paths. Return no prose.\n\nUser request:\n")
+	b.WriteString(strings.TrimSpace(query))
+	if len(candidates) > 0 {
+		b.WriteString("\n\nCandidate memory files:\n")
+		for _, candidate := range candidates {
+			header := candidate.Header
+			b.WriteString("- id: ")
+			b.WriteString(header.Filename)
+			b.WriteString("\n  path: ")
+			b.WriteString(header.Path)
+			b.WriteString("\n  saved_at: ")
+			if !header.Mtime.IsZero() {
+				b.WriteString(header.Mtime.UTC().Format("2006-01-02T15:04:05Z"))
+			}
+			if header.Type != "" {
+				b.WriteString("\n  type: ")
+				b.WriteString(string(header.Type))
+			}
+			b.WriteString("\n  description: ")
+			b.WriteString(snippet(header.Description, 360))
 			b.WriteString("\n")
 		}
 	}
@@ -213,6 +327,55 @@ func recallAgentCandidates(root string, query string, options RecallOptions) ([]
 	return matches, nil
 }
 
+type relevantMemoryCandidate struct {
+	Header Header
+	Score  int
+}
+
+func relevantMemoryAgentCandidates(root string, query string, options RelevantMemorySelectorOptions) ([]relevantMemoryCandidate, error) {
+	headers, err := ScanDirectory(root, ScanOptions{})
+	if err != nil {
+		return nil, err
+	}
+	terms := queryTerms(query)
+	candidates := make([]relevantMemoryCandidate, 0, len(headers))
+	for _, header := range headers {
+		if options.Surfaced != nil {
+			if _, ok := options.Surfaced[header.Path]; ok {
+				continue
+			}
+		}
+		haystack := strings.ToLower(header.Filename + " " + header.Description)
+		if suppressRecentToolReference(haystack, options.RecentTools) {
+			continue
+		}
+		score := 0
+		for _, term := range terms {
+			score += strings.Count(haystack, term)
+		}
+		candidates = append(candidates, relevantMemoryCandidate{Header: header, Score: score})
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].Score != candidates[j].Score {
+			return candidates[i].Score > candidates[j].Score
+		}
+		return candidates[i].Header.Mtime.After(candidates[j].Header.Mtime)
+	})
+	limit := options.CandidateLimit
+	if limit <= 0 {
+		switch {
+		case options.Limit > 0 && options.Limit*4 > 20:
+			limit = options.Limit * 4
+		default:
+			limit = 20
+		}
+	}
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+	return candidates, nil
+}
+
 func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -227,6 +390,27 @@ func parseRecallAgentResponse(raw string) (string, []contracts.ID, bool) {
 	}
 	if payload, ok := firstJSONValue(raw); ok {
 		if query, ids, parsed := parseRecallAgentJSON(payload); parsed {
+			return query, ids, true
+		}
+		return "", nil, false
+	}
+	return raw, nil, true
+}
+
+func parseRelevantMemoryAgentResponse(raw string) (string, []string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, false
+	}
+	payload := stripMarkdownFence(raw)
+	if query, ids, ok := parseRelevantMemoryAgentJSON(payload); ok {
+		return query, ids, true
+	}
+	if startsJSONValue(payload) {
+		return "", nil, false
+	}
+	if payload, ok := firstJSONValue(raw); ok {
+		if query, ids, parsed := parseRelevantMemoryAgentJSON(payload); parsed {
 			return query, ids, true
 		}
 		return "", nil, false
@@ -394,6 +578,233 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 	return "", nil, false
 }
 
+func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, false
+	}
+	var scalar string
+	if err := json.Unmarshal([]byte(raw), &scalar); err == nil {
+		scalar = strings.TrimSpace(scalar)
+		if scalar == "" {
+			return "", nil, false
+		}
+		if relevantMemoryLooksLikeID(scalar) {
+			return "", relevantMemoryIDs([]string{scalar}), true
+		}
+		return scalar, nil, true
+	}
+	var rawObject map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &rawObject); err == nil {
+		query := relevantMemoryQueryFromRawObject(rawObject)
+		ids := relevantMemoryIDsFromRawObject(rawObject)
+		if len(ids) == 0 {
+			query, ids = relevantMemorySelectionFromNestedPayloads(query, rawObjectValues(rawObject,
+				"selected",
+				"selection",
+				"result",
+				"response",
+				"memory_selection",
+				"memorySelection",
+				"relevant_memory_selection",
+				"relevantMemorySelection",
+			)...)
+		}
+		if query != "" || len(ids) > 0 {
+			return query, ids, true
+		}
+	}
+	var object struct {
+		Query                        string            `json:"query"`
+		SearchQuery                  string            `json:"search_query"`
+		SearchQueryCamel             string            `json:"searchQuery"`
+		RewrittenQuery               string            `json:"rewritten_query"`
+		RewrittenQueryCamel          string            `json:"rewrittenQuery"`
+		ExpandedQuery                string            `json:"expanded_query"`
+		ExpandedQueryCamel           string            `json:"expandedQuery"`
+		MemoryPath                   string            `json:"memory_path"`
+		MemoryPathCamel              string            `json:"memoryPath"`
+		MemoryPaths                  []string          `json:"memory_paths"`
+		MemoryPathsCamel             []string          `json:"memoryPaths"`
+		SelectedMemoryPath           string            `json:"selected_memory_path"`
+		SelectedMemoryPathCamel      string            `json:"selectedMemoryPath"`
+		SelectedMemoryPaths          []string          `json:"selected_memory_paths"`
+		SelectedMemoryPathsCamel     []string          `json:"selectedMemoryPaths"`
+		RelevantMemoryPath           string            `json:"relevant_memory_path"`
+		RelevantMemoryPathCamel      string            `json:"relevantMemoryPath"`
+		RelevantMemoryPaths          []string          `json:"relevant_memory_paths"`
+		RelevantMemoryPathsCamel     []string          `json:"relevantMemoryPaths"`
+		FilePath                     string            `json:"file_path"`
+		FilePathCamel                string            `json:"filePath"`
+		FilePaths                    []string          `json:"file_paths"`
+		FilePathsCamel               []string          `json:"filePaths"`
+		Path                         string            `json:"path"`
+		Paths                        []string          `json:"paths"`
+		File                         string            `json:"file"`
+		Files                        []string          `json:"files"`
+		ID                           string            `json:"id"`
+		IDs                          []string          `json:"ids"`
+		MemoryID                     string            `json:"memory_id"`
+		MemoryIDCamel                string            `json:"memoryId"`
+		MemoryIDs                    []string          `json:"memory_ids"`
+		MemoryIDsCamel               []string          `json:"memoryIds"`
+		SelectedID                   string            `json:"selected_id"`
+		SelectedIDCamel              string            `json:"selectedId"`
+		SelectedIDs                  []string          `json:"selected_ids"`
+		SelectedIDsCamel             []string          `json:"selectedIds"`
+		RelevantIDs                  []string          `json:"relevant_ids"`
+		RelevantIDsCamel             []string          `json:"relevantIds"`
+		Matches                      []json.RawMessage `json:"matches"`
+		Memories                     []json.RawMessage `json:"memories"`
+		FilesList                    []json.RawMessage `json:"files_list"`
+		FilesListCamel               []json.RawMessage `json:"filesList"`
+		Selected                     json.RawMessage   `json:"selected"`
+		Selection                    json.RawMessage   `json:"selection"`
+		Result                       json.RawMessage   `json:"result"`
+		Response                     json.RawMessage   `json:"response"`
+		MemorySelection              json.RawMessage   `json:"memory_selection"`
+		MemorySelectionCamel         json.RawMessage   `json:"memorySelection"`
+		RelevantMemorySelection      json.RawMessage   `json:"relevant_memory_selection"`
+		RelevantMemorySelectionCamel json.RawMessage   `json:"relevantMemorySelection"`
+	}
+	if err := json.Unmarshal([]byte(raw), &object); err == nil {
+		ids := relevantMemoryIDs(append([]string{
+			object.MemoryPath,
+			object.MemoryPathCamel,
+			object.SelectedMemoryPath,
+			object.SelectedMemoryPathCamel,
+			object.RelevantMemoryPath,
+			object.RelevantMemoryPathCamel,
+			object.FilePath,
+			object.FilePathCamel,
+			object.Path,
+			object.File,
+			object.ID,
+			object.MemoryID,
+			object.MemoryIDCamel,
+			object.SelectedID,
+			object.SelectedIDCamel,
+		}, appendManyStringSlices(
+			object.MemoryPaths,
+			object.MemoryPathsCamel,
+			object.SelectedMemoryPaths,
+			object.SelectedMemoryPathsCamel,
+			object.RelevantMemoryPaths,
+			object.RelevantMemoryPathsCamel,
+			object.FilePaths,
+			object.FilePathsCamel,
+			object.Paths,
+			object.Files,
+			object.IDs,
+			object.MemoryIDs,
+			object.MemoryIDsCamel,
+			object.SelectedIDs,
+			object.SelectedIDsCamel,
+			object.RelevantIDs,
+			object.RelevantIDsCamel,
+		)...))
+		if len(ids) == 0 {
+			ids = relevantMemoryIDsFromRawItems(
+				object.Matches,
+				object.Memories,
+				object.FilesList,
+				object.FilesListCamel,
+			)
+		}
+		query := strings.TrimSpace(object.Query)
+		if query == "" {
+			query = strings.TrimSpace(object.SearchQuery)
+		}
+		if query == "" {
+			query = strings.TrimSpace(object.SearchQueryCamel)
+		}
+		if query == "" {
+			query = strings.TrimSpace(object.RewrittenQuery)
+		}
+		if query == "" {
+			query = strings.TrimSpace(object.RewrittenQueryCamel)
+		}
+		if query == "" {
+			query = strings.TrimSpace(object.ExpandedQuery)
+		}
+		if query == "" {
+			query = strings.TrimSpace(object.ExpandedQueryCamel)
+		}
+		if len(ids) == 0 {
+			query, ids = relevantMemorySelectionFromNestedPayloads(query,
+				object.Selected,
+				object.Selection,
+				object.Result,
+				object.Response,
+				object.MemorySelection,
+				object.MemorySelectionCamel,
+				object.RelevantMemorySelection,
+				object.RelevantMemorySelectionCamel,
+			)
+		}
+		return query, ids, query != "" || len(ids) > 0
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(raw), &ids); err == nil {
+		parsed := relevantMemoryIDs(ids)
+		return "", parsed, len(parsed) > 0
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &items); err == nil {
+		parsed := relevantMemoryIDsFromRawItems(items)
+		return "", parsed, len(parsed) > 0
+	}
+	return "", nil, false
+}
+
+func relevantMemoryQueryFromRawObject(object map[string]json.RawMessage) string {
+	for _, key := range []string{
+		"query",
+		"search_query",
+		"searchQuery",
+		"rewritten_query",
+		"rewrittenQuery",
+		"expanded_query",
+		"expandedQuery",
+	} {
+		if value := stringFromRawJSON(object[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func relevantMemoryIDsFromRawObject(object map[string]json.RawMessage) []string {
+	var raw []string
+	for _, key := range relevantMemoryItemIDKeys {
+		if value, ok := object[key]; ok {
+			raw = appendRelevantMemoryIDsFromRawValue(raw, value)
+		}
+	}
+	return relevantMemoryIDs(raw)
+}
+
+func rawObjectValues(object map[string]json.RawMessage, keys ...string) []json.RawMessage {
+	var values []json.RawMessage
+	for _, key := range keys {
+		if value, ok := object[key]; ok && len(value) > 0 {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func stringFromRawJSON(value json.RawMessage) string {
+	if len(value) == 0 || string(value) == "null" {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err == nil {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
 func recallSelectionFromNestedPayloads(fallbackQuery string, payloads ...json.RawMessage) (string, []contracts.ID) {
 	query := fallbackQuery
 	for _, payload := range payloads {
@@ -401,6 +812,26 @@ func recallSelectionFromNestedPayloads(fallbackQuery string, payloads ...json.Ra
 			continue
 		}
 		nestedQuery, nestedIDs, ok := parseRecallAgentJSON(string(payload))
+		if !ok {
+			continue
+		}
+		if nestedQuery != "" {
+			query = nestedQuery
+		}
+		if len(nestedIDs) > 0 {
+			return query, nestedIDs
+		}
+	}
+	return query, nil
+}
+
+func relevantMemorySelectionFromNestedPayloads(fallbackQuery string, payloads ...json.RawMessage) (string, []string) {
+	query := fallbackQuery
+	for _, payload := range payloads {
+		if len(payload) == 0 {
+			continue
+		}
+		nestedQuery, nestedIDs, ok := parseRelevantMemoryAgentJSON(string(payload))
 		if !ok {
 			continue
 		}
@@ -422,6 +853,16 @@ func recallIDsFromRawItems(groups ...[]json.RawMessage) []contracts.ID {
 		}
 	}
 	return recallIDs(raw)
+}
+
+func relevantMemoryIDsFromRawItems(groups ...[]json.RawMessage) []string {
+	var raw []string
+	for _, group := range groups {
+		for _, item := range group {
+			raw = appendRelevantMemoryIDsFromRawValue(raw, item)
+		}
+	}
+	return relevantMemoryIDs(raw)
 }
 
 func appendRecallIDsFromRawValue(raw []string, value json.RawMessage) []string {
@@ -455,6 +896,42 @@ func appendRecallIDsFromRawValue(raw []string, value json.RawMessage) []string {
 	for _, key := range recallNestedItemKeys {
 		if nested, ok := object[key]; ok {
 			raw = appendRecallIDsFromRawValue(raw, nested)
+		}
+	}
+	return raw
+}
+
+func appendRelevantMemoryIDsFromRawValue(raw []string, value json.RawMessage) []string {
+	if len(value) == 0 || string(value) == "null" {
+		return raw
+	}
+	var id string
+	if err := json.Unmarshal(value, &id); err == nil {
+		return append(raw, id)
+	}
+	var ids []string
+	if err := json.Unmarshal(value, &ids); err == nil {
+		return append(raw, ids...)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(value, &items); err == nil {
+		for _, item := range items {
+			raw = appendRelevantMemoryIDsFromRawValue(raw, item)
+		}
+		return raw
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(value, &object); err != nil {
+		return raw
+	}
+	for _, key := range relevantMemoryItemIDKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendRelevantMemoryIDsFromRawValue(raw, nested)
+		}
+	}
+	for _, key := range relevantMemoryNestedItemKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendRelevantMemoryIDsFromRawValue(raw, nested)
 		}
 	}
 	return raw
@@ -519,6 +996,41 @@ var recallItemIDKeys = []string{
 	"uuid",
 }
 
+var relevantMemoryItemIDKeys = []string{
+	"memory_path",
+	"memoryPath",
+	"memory_paths",
+	"memoryPaths",
+	"selected_memory_path",
+	"selectedMemoryPath",
+	"selected_memory_paths",
+	"selectedMemoryPaths",
+	"relevant_memory_path",
+	"relevantMemoryPath",
+	"relevant_memory_paths",
+	"relevantMemoryPaths",
+	"file_path",
+	"filePath",
+	"file_paths",
+	"filePaths",
+	"path",
+	"paths",
+	"file",
+	"files",
+	"id",
+	"ids",
+	"uuid",
+	"memory_id",
+	"memoryId",
+	"memoryID",
+	"selected_id",
+	"selectedId",
+	"selectedID",
+	"relevant_id",
+	"relevantId",
+	"relevantID",
+}
+
 var recallNestedItemKeys = []string{
 	"session",
 	"memory",
@@ -534,6 +1046,20 @@ var recallNestedItemKeys = []string{
 	"relevantMemory",
 	"candidate_session",
 	"candidateSession",
+	"candidate_memory",
+	"candidateMemory",
+}
+
+var relevantMemoryNestedItemKeys = []string{
+	"memory",
+	"file",
+	"candidate",
+	"selected",
+	"selection",
+	"selected_memory",
+	"selectedMemory",
+	"relevant_memory",
+	"relevantMemory",
 	"candidate_memory",
 	"candidateMemory",
 }
@@ -590,6 +1116,38 @@ func recallIDs(raw []string) []contracts.ID {
 	return ids
 }
 
+func relevantMemoryIDs(raw []string) []string {
+	seen := map[string]struct{}{}
+	var ids []string
+	for _, value := range raw {
+		id := strings.TrimSpace(value)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func appendManyStringSlices(groups ...[]string) []string {
+	var out []string
+	for _, group := range groups {
+		out = append(out, group...)
+	}
+	return out
+}
+
+func relevantMemoryLooksLikeID(value string) bool {
+	return len(strings.Fields(value)) == 1 ||
+		strings.Contains(value, "/") ||
+		strings.Contains(value, "\\") ||
+		strings.HasSuffix(strings.ToLower(value), ".md")
+}
+
 func recallMatchesBySessionIDs(root string, ids []contracts.ID, query string, options RecallOptions) ([]RecallMatch, error) {
 	summaries, err := LoadSessionSummaries(root)
 	if err != nil {
@@ -619,6 +1177,60 @@ func recallMatchesBySessionIDs(root string, ids []contracts.ID, query string, op
 		matches = matches[:options.Limit]
 	}
 	return matches, nil
+}
+
+func relevantMemorySelectionsByIDs(candidates []relevantMemoryCandidate, ids []string, surfaced map[string]struct{}, limit int) []RelevantMemorySelection {
+	if limit <= 0 {
+		limit = MaxRelevantMemoryAttachments
+	}
+	lookup := map[string]RelevantMemorySelection{}
+	for _, candidate := range candidates {
+		header := candidate.Header
+		if header.Path == "" {
+			continue
+		}
+		if surfaced != nil {
+			if _, ok := surfaced[header.Path]; ok {
+				continue
+			}
+		}
+		selection := RelevantMemorySelection{Path: header.Path, MtimeMs: header.Mtime.UnixMilli()}
+		base := filepath.Base(header.Path)
+		keys := []string{
+			header.Filename,
+			header.Path,
+			filepath.ToSlash(header.Path),
+			base,
+			strings.TrimSuffix(base, filepath.Ext(base)),
+			strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename)),
+		}
+		for _, key := range keys {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			if _, ok := lookup[key]; !ok {
+				lookup[key] = selection
+			}
+		}
+	}
+	selected := make([]RelevantMemorySelection, 0, limit)
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		selection, ok := lookup[strings.TrimSpace(id)]
+		if !ok {
+			continue
+		}
+		if _, ok := seen[selection.Path]; ok {
+			continue
+		}
+		seen[selection.Path] = struct{}{}
+		selected = append(selected, selection)
+		if len(selected) >= limit {
+			break
+		}
+	}
+	return selected
 }
 
 func transcriptForMemory(history []contracts.Message) string {

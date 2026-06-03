@@ -118,10 +118,19 @@ func (r Runner) startRelevantMemoryPrefetch(ctx context.Context, history []contr
 	prefetchCtx, cancel := context.WithCancel(ctx)
 	done := make(chan relevantMemoryPrefetchOutcome, 1)
 	historySnapshot := append([]contracts.Message(nil), history...)
+	var agent *memory.Agent
+	if r.MemoryAgentClient != nil {
+		agent = &memory.Agent{
+			Client:    r.MemoryAgentClient,
+			Model:     r.model(),
+			MaxTokens: r.CompactMaxTokens,
+		}
+	}
 	go func() {
 		result, err := memory.PrefetchRelevantMemories(prefetchCtx, historySnapshot, memory.RelevantMemoryPrefetchOptions{
 			Root:  r.RelevantMemoryDir,
 			Limit: r.relevantMemoryLimit(),
+			Agent: agent,
 		})
 		done <- relevantMemoryPrefetchOutcome{result: result, err: err}
 	}()

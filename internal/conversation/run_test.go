@@ -618,6 +618,58 @@ func TestRunnerPrefetchesRelevantMemoryIntoFirstRequest(t *testing.T) {
 	}
 }
 
+func TestRunnerRelevantMemoryPrefetchUsesMemoryAgentSelector(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	modelPath := filepath.Join(dir, "model.md")
+	if err := os.WriteFile(dbPath, []byte("---\ndescription: database permissions migration\n---\ndeterministic memory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modelPath, []byte("---\ndescription: model selected memory\n---\nmodel selected memory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mainClient := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	memoryClient := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:      "msg_memory_select",
+			Type:    "message",
+			Role:    "assistant",
+			Model:   "sonnet",
+			Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"memory_paths":["model.md"]}`)},
+		}},
+	}}
+	runner := Runner{
+		Client:            mainClient,
+		Model:             "sonnet",
+		MaxTokens:         128,
+		RelevantMemoryDir: dir,
+		MemoryAgentClient: memoryClient,
+	}
+
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("database permissions")); err != nil {
+		t.Fatal(err)
+	}
+	if len(memoryClient.requests) != 1 || !strings.Contains(memoryClient.requests[0].Messages[0].Content[0].Text, "Candidate memory files") {
+		t.Fatalf("memory selector requests = %#v", memoryClient.requests)
+	}
+	if len(mainClient.requests) != 1 || len(mainClient.requests[0].Messages) != 2 {
+		t.Fatalf("main request = %#v", mainClient.requests)
+	}
+	memoryText := mainClient.requests[0].Messages[1].Content[0].Text
+	if !strings.Contains(memoryText, "/model.md:") || !strings.Contains(memoryText, "model selected memory") || strings.Contains(memoryText, "deterministic memory") {
+		t.Fatalf("memory text = %q", memoryText)
+	}
+}
+
 func TestRunnerRelevantMemoryPrefetchFailsOpen(t *testing.T) {
 	client := &fakeClient{calls: []fakeCall{
 		{response: &anthropic.Response{
