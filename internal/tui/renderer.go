@@ -5,30 +5,36 @@ import (
 )
 
 const (
-	EnterAlternateScreen   = "\x1b[?1049h"
-	ExitAlternateScreen    = "\x1b[?1049l"
-	EnableMouseTracking    = "\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h"
-	DisableMouseTracking   = "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
-	EnableFocusEvents      = "\x1b[?1004h"
-	DisableFocusEvents     = "\x1b[?1004l"
-	EnableBracketedPaste   = "\x1b[?2004h"
-	DisableBracketedPaste  = "\x1b[?2004l"
-	EnableKittyKeyboard    = "\x1b[>1u"
-	DisableKittyKeyboard   = "\x1b[<u"
-	EnableModifyOtherKeys  = "\x1b[>4;2m"
-	DisableModifyOtherKeys = "\x1b[>4m"
-	EnableExtendedKeys     = EnableKittyKeyboard + EnableModifyOtherKeys
-	DisableExtendedKeys    = DisableModifyOtherKeys + DisableKittyKeyboard
-	ReassertExtendedKeys   = DisableKittyKeyboard + EnableKittyKeyboard + EnableModifyOtherKeys
-	ClearScreen            = "\x1b[2J"
-	HomeCursor             = "\x1b[H"
-	HideCursor             = "\x1b[?25l"
-	ShowCursor             = "\x1b[?25h"
+	EnterAlternateScreen    = "\x1b[?1049h"
+	ExitAlternateScreen     = "\x1b[?1049l"
+	EnableMouseTracking     = "\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h"
+	DisableMouseTracking    = "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
+	EnableFocusEvents       = "\x1b[?1004h"
+	DisableFocusEvents      = "\x1b[?1004l"
+	EnableBracketedPaste    = "\x1b[?2004h"
+	DisableBracketedPaste   = "\x1b[?2004l"
+	BeginSynchronizedOutput = "\x1b[?2026h"
+	EndSynchronizedOutput   = "\x1b[?2026l"
+	EnableKittyKeyboard     = "\x1b[>1u"
+	DisableKittyKeyboard    = "\x1b[<u"
+	EnableModifyOtherKeys   = "\x1b[>4;2m"
+	DisableModifyOtherKeys  = "\x1b[>4m"
+	EnableExtendedKeys      = EnableKittyKeyboard + EnableModifyOtherKeys
+	DisableExtendedKeys     = DisableModifyOtherKeys + DisableKittyKeyboard
+	ReassertExtendedKeys    = DisableKittyKeyboard + EnableKittyKeyboard + EnableModifyOtherKeys
+	ClearScreen             = "\x1b[2J"
+	HomeCursor              = "\x1b[H"
+	HideCursor              = "\x1b[?25l"
+	ShowCursor              = "\x1b[?25h"
 )
 
 type Renderer struct {
 	Width  int
 	Height int
+}
+
+type RenderOptions struct {
+	SynchronizedOutput bool
 }
 
 func NewRenderer(width int, height int) Renderer {
@@ -125,6 +131,14 @@ func (r Renderer) Render(frame Frame) string {
 	return out.String()
 }
 
+func (r Renderer) RenderWithOptions(frame Frame, options RenderOptions) string {
+	output := r.Render(frame)
+	if options.SynchronizedOutput && output != "" {
+		return BeginSynchronizedOutput + output + EndSynchronizedOutput
+	}
+	return output
+}
+
 func footerPromptLines(frame Frame, width int) []string {
 	if frame.ReverseSearch != nil && frame.ReverseSearch.Active {
 		return []string{RenderReverseSearchLine(*frame.ReverseSearch, width)}
@@ -162,6 +176,10 @@ func promptCursorPosition(frame Frame, width int, height int, promptLineCount in
 
 func RenderOnce(width int, height int, frame Frame) string {
 	return NewRenderer(width, height).Render(frame)
+}
+
+func RenderOnceWithOptions(width int, height int, frame Frame, options RenderOptions) string {
+	return NewRenderer(width, height).RenderWithOptions(frame, options)
 }
 
 func itoa(v int) string {

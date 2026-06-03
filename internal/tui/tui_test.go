@@ -3361,6 +3361,25 @@ func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	}
 }
 
+func TestCaptureANSISnapshotCanUseSynchronizedOutput(t *testing.T) {
+	snapshot := CaptureANSISnapshotWithOptions("sync", 32, 6, Frame{
+		Messages: []Message{{Role: RoleAssistant, Text: "hello"}},
+		Status:   "ready",
+		Prompt:   NewPromptState(nil),
+	}, RenderOptions{SynchronizedOutput: true})
+	if !strings.HasPrefix(snapshot.Output, BeginSynchronizedOutput) || !strings.HasSuffix(snapshot.Output, EndSynchronizedOutput) {
+		t.Fatalf("output = %q", snapshot.Output)
+	}
+	if strings.Contains(snapshot.Text, "\x1b[") || !strings.Contains(snapshot.Text, "assistant: hello") {
+		t.Fatalf("text = %q", snapshot.Text)
+	}
+
+	plain := RenderOnceWithOptions(32, 6, Frame{Status: "ready"}, RenderOptions{})
+	if strings.Contains(plain, BeginSynchronizedOutput) || strings.Contains(plain, EndSynchronizedOutput) {
+		t.Fatalf("plain output = %q", plain)
+	}
+}
+
 func TestRendererRendersMultilinePromptAndCursor(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "first\nsecond"

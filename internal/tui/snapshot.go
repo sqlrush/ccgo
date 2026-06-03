@@ -11,7 +11,11 @@ type ANSISnapshot struct {
 }
 
 func CaptureANSISnapshot(name string, width int, height int, frame Frame) ANSISnapshot {
-	output := RenderOnce(width, height, frame)
+	return CaptureANSISnapshotWithOptions(name, width, height, frame, RenderOptions{})
+}
+
+func CaptureANSISnapshotWithOptions(name string, width int, height int, frame Frame, options RenderOptions) ANSISnapshot {
+	output := RenderOnceWithOptions(width, height, frame, options)
 	return ANSISnapshot{
 		Name:   name,
 		Width:  width,
