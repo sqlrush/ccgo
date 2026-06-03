@@ -216,6 +216,64 @@ func SelectRelevantMemoryCandidates(results [][]RelevantMemorySelection, state m
 	return selected
 }
 
+func CollectRecentSuccessfulTools(messages []contracts.Message) []string {
+	lastUser := lastHumanTurnIndex(messages)
+	if lastUser < 0 {
+		return nil
+	}
+	useIDToName := map[string]string{}
+	var useOrder []string
+	resultByUseID := map[string]bool{}
+	for i := len(messages) - 1; i >= 0; i-- {
+		message := messages[i]
+		if isHumanTurnMessage(message) && i != lastUser {
+			break
+		}
+		switch message.Type {
+		case contracts.MessageAssistant:
+			for _, block := range message.Content {
+				if block.Type == contracts.ContentToolUse && block.ID != "" && block.Name != "" {
+					if _, ok := useIDToName[block.ID]; !ok {
+						useOrder = append(useOrder, block.ID)
+					}
+					useIDToName[block.ID] = block.Name
+				}
+			}
+		case contracts.MessageUser:
+			for _, block := range message.Content {
+				if block.Type == contracts.ContentToolResult && block.ToolUseID != "" {
+					resultByUseID[block.ToolUseID] = block.IsError
+				}
+			}
+		}
+	}
+	failed := map[string]struct{}{}
+	var succeeded []string
+	seenSucceeded := map[string]struct{}{}
+	for _, id := range useOrder {
+		name := useIDToName[id]
+		errored, ok := resultByUseID[id]
+		if !ok {
+			continue
+		}
+		if errored {
+			failed[name] = struct{}{}
+			continue
+		}
+		if _, ok := seenSucceeded[name]; !ok {
+			succeeded = append(succeeded, name)
+			seenSucceeded[name] = struct{}{}
+		}
+	}
+	out := succeeded[:0]
+	for _, name := range succeeded {
+		if _, ok := failed[name]; !ok {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func FilterDuplicateRelevantMemoryAttachments(messages []contracts.Message, state map[string]RelevantMemoryReadState) []contracts.Message {
 	if len(messages) == 0 {
 		return nil
@@ -260,6 +318,28 @@ func FilterDuplicateRelevantMemories(memories []RelevantMemory, state map[string
 		}
 	}
 	return filtered
+}
+
+func lastHumanTurnIndex(messages []contracts.Message) int {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if isHumanTurnMessage(messages[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
+func isHumanTurnMessage(message contracts.Message) bool {
+	return message.Type == contracts.MessageUser && !message.IsMeta && !hasToolResultBlock(message)
+}
+
+func hasToolResultBlock(message contracts.Message) bool {
+	for _, block := range message.Content {
+		if block.Type == contracts.ContentToolResult {
+			return true
+		}
+	}
+	return false
 }
 
 func lastNonMetaUserText(messages []contracts.Message) string {

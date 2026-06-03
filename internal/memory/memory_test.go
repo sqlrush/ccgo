@@ -278,6 +278,34 @@ func TestSelectRelevantMemoryCandidatesFiltersAndCaps(t *testing.T) {
 	}
 }
 
+func TestCollectRecentSuccessfulToolsUsesCurrentHumanTurnWindow(t *testing.T) {
+	assistantTools := func(blocks ...contracts.ContentBlock) contracts.Message {
+		return contracts.Message{Type: contracts.MessageAssistant, Content: blocks}
+	}
+	tools := CollectRecentSuccessfulTools([]contracts.Message{
+		msgs.UserText("previous request"),
+		assistantTools(contracts.ContentBlock{Type: contracts.ContentToolUse, ID: "old", Name: "OldTool"}),
+		msgs.ToolResult("old", "ok", false),
+		assistantTools(
+			contracts.ContentBlock{Type: contracts.ContentToolUse, ID: "read_ok", Name: "Read"},
+			contracts.ContentBlock{Type: contracts.ContentToolUse, ID: "bash_fail", Name: "Bash"},
+		),
+		msgs.ToolResult("read_ok", "ok", false),
+		msgs.ToolResult("bash_fail", "nope", true),
+		assistantTools(
+			contracts.ContentBlock{Type: contracts.ContentToolUse, ID: "edit_ok", Name: "Edit"},
+			contracts.ContentBlock{Type: contracts.ContentToolUse, ID: "read_fail", Name: "Read"},
+			contracts.ContentBlock{Type: contracts.ContentToolUse, ID: "pending", Name: "Pending"},
+		),
+		msgs.ToolResult("edit_ok", "ok", false),
+		msgs.ToolResult("read_fail", "nope", true),
+		msgs.UserText("find database memory"),
+	})
+	if strings.Join(tools, ",") != "Edit,OldTool" {
+		t.Fatalf("tools = %#v", tools)
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")
