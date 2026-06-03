@@ -327,6 +327,33 @@ func TestAppendHistoryUsesStaleLockAndBufferedFlush(t *testing.T) {
 	}
 }
 
+func TestBufferedHistoryWriterRemovesLastPendingEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	writer := &BufferedHistoryWriter{Path: path, Project: "/repo", Session: "sess"}
+	if writer.RemoveLastPending() {
+		t.Fatal("empty writer removed an entry")
+	}
+	writer.Queue(HistoryEntry{Display: "keep", PastedContents: map[int]PastedContent{}})
+	writer.Queue(HistoryEntry{Display: "drop", PastedContents: map[int]PastedContent{}})
+	if !writer.RemoveLastPending() || writer.Pending() != 1 {
+		t.Fatalf("remove pending failed, pending=%d", writer.Pending())
+	}
+	written, err := writer.Flush()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != 1 {
+		t.Fatalf("written = %d", written)
+	}
+	history, err := LoadHistory(path, "/repo", "sess", MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := displays(history); strings.Join(got, ",") != "keep" {
+		t.Fatalf("history = %#v", got)
+	}
+}
+
 func TestNewLogEntryUsesUnixMillis(t *testing.T) {
 	now := time.Unix(42, 123_000_000)
 	entry := NewLogEntry("/repo", "session", HistoryEntry{Display: "cmd", PastedContents: map[int]PastedContent{}}, now)

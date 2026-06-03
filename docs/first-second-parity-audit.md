@@ -154,6 +154,7 @@ M7 progress now includes:
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/session`: prompt history writing now skips image pasted-content records like official `history.ts`, while the reader still accepts older image metadata entries.
 - `internal/session`: paste-cache now has a best-effort cutoff-mtime cleanup helper for old `.txt` paste files, matching official `cleanupOldPastes` behavior.
+- `internal/session`: buffered prompt-history writing now supports removing the latest pending entry before flush, matching the fast path of official `removeLastFromHistory`.
 - `internal/tui`: keybinding JSON loading now accepts wrapper object maps, `shortcuts`/`shortcutBindings`, object action fields such as `commandName`/`commandId`, string-array key sequences/chords, and `null`/`false` unbind entries.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.
 - `internal/tui`: interaction scripts now accept structured `mouse`/`mouse_event` steps with expanded button aliases such as `buttonMask`/`btn`/`code`, coordinate aliases such as `mouseX`/`clientX`/`screenX` and Y/row/line variants, release aliases such as `mouseUp`/`isRelease`/`mouseRelease`/`releaseEvent`, and dispatch them through the normal screen event path.

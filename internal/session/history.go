@@ -302,6 +302,19 @@ func (w *BufferedHistoryWriter) Pending() int {
 	return len(w.entries)
 }
 
+func (w *BufferedHistoryWriter) RemoveLastPending() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.entries) == 0 {
+		return false
+	}
+	w.entries = w.entries[:len(w.entries)-1]
+	return true
+}
+
 func (w *BufferedHistoryWriter) Flush() (int, error) {
 	if w == nil || w.Path == "" {
 		return 0, nil
