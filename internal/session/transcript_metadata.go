@@ -77,6 +77,16 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 		if err := json.Unmarshal(line, &envelope); err != nil {
 			continue
 		}
+		if isTranscriptType(envelope.Type) {
+			if envelope.Type == "system" {
+				var msg TranscriptMessage
+				if err := json.Unmarshal(line, &msg); err == nil && msg.IsCompactBoundary() {
+					metadata.ContextCollapseCommits = nil
+					metadata.ContextCollapseSnapshot = nil
+				}
+			}
+			continue
+		}
 		switch normalizeTranscriptMetadataType(envelope.Type) {
 		case "summary":
 			if leafUUID, summary, ok := parseSummaryMetadata(line); ok && leafUUID != "" {

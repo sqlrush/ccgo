@@ -253,6 +253,26 @@ func TestLoadTranscriptPrunesBeforeCompactBoundary(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptMetadataDropsCollapseStateAtCompactBoundary(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"marble-origami-commit","sessionId":"s1","collapseId":"old","summaryUuid":"old_sum","summary":"old","firstArchivedUuid":"u1","lastArchivedUuid":"a1"}`,
+		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":12}`,
+		`{"type":"system","subtype":"compact_boundary","uuid":"cb1","parentUuid":null,"compactMetadata":{"trigger":"manual","preTokens":100}}`,
+		`{"type":"marble-origami-commit","sessionId":"s1","collapseId":"new","summaryUuid":"new_sum","summary":"new","firstArchivedUuid":"u2","lastArchivedUuid":"a2"}`,
+		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":false,"lastSpawnTokens":24}`,
+	})
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.ContextCollapseCommits) != 1 || metadata.ContextCollapseCommits[0].CollapseID != "new" {
+		t.Fatalf("collapse commits = %#v", metadata.ContextCollapseCommits)
+	}
+	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.LastSpawnTokens != 24 {
+		t.Fatalf("collapse snapshot = %#v", metadata.ContextCollapseSnapshot)
+	}
+}
+
 func TestLoadTranscriptAcceptsCompactAndSnipMetadataAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
