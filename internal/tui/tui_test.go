@@ -3380,6 +3380,19 @@ func TestCaptureANSISnapshotCanUseSynchronizedOutput(t *testing.T) {
 	}
 }
 
+func TestTerminalTitleSequenceStripsANSIControls(t *testing.T) {
+	title := TerminalTitleSequence("Claude \x1b[31mCode\x1b[0m\x1b]0;hidden\x07")
+	if title != OSCPrefix+OSCSetTitleAndIcon+";Claude Code"+OSCTerminator {
+		t.Fatalf("title = %q", title)
+	}
+	if visible := StripANSI("a\x1b]0;hidden\x07b\x1bPignored\x1b\\c"); visible != "abc" {
+		t.Fatalf("visible = %q", visible)
+	}
+	if unsafe := OSCSequence("0", "a\x07b\x1b\\c\x1bd"); unsafe != OSCPrefix+"0;abcd"+OSCTerminator {
+		t.Fatalf("unsafe = %q", unsafe)
+	}
+}
+
 func TestRendererRendersMultilinePromptAndCursor(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "first\nsecond"

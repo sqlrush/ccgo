@@ -36,7 +36,8 @@ func StripANSI(input string) string {
 		if i >= len(input) {
 			break
 		}
-		if input[i] == '[' {
+		switch input[i] {
+		case '[':
 			for i+1 < len(input) {
 				i++
 				b := input[i]
@@ -44,7 +45,17 @@ func StripANSI(input string) string {
 					break
 				}
 			}
-			continue
+		case ']', 'P', '_', '^', 'X':
+			for i+1 < len(input) {
+				i++
+				if input[i] == '\x07' {
+					break
+				}
+				if input[i] == '\x1b' && i+1 < len(input) && input[i+1] == '\\' {
+					i++
+					break
+				}
+			}
 		}
 	}
 	return out.String()
