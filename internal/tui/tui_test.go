@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -3449,6 +3450,34 @@ func TestTerminalProgressSequence(t *testing.T) {
 
 	if unknown := TerminalProgressSequence(TerminalProgressState("paused"), 50); unknown != "" {
 		t.Fatalf("unknown = %q", unknown)
+	}
+}
+
+func TestTerminalNotificationSequences(t *testing.T) {
+	iterm := ITerm2NotificationSequence("Build complete", "Claude")
+	wantITerm := OSCPrefix + OSCITerm2 + ";\n\nClaude:\nBuild complete" + OSCTerminator
+	if iterm != wantITerm {
+		t.Fatalf("iterm = %q, want %q", iterm, wantITerm)
+	}
+
+	kitty := KittyNotificationSequences("Build complete", "Claude", 7)
+	wantKitty := []string{
+		OSCPrefix + OSCKitty + ";i=7:d=0:p=title;Claude" + OSCTerminator,
+		OSCPrefix + OSCKitty + ";i=7:p=body;Build complete" + OSCTerminator,
+		OSCPrefix + OSCKitty + ";i=7:d=1:a=focus;" + OSCTerminator,
+	}
+	if !reflect.DeepEqual(kitty, wantKitty) {
+		t.Fatalf("kitty = %#v, want %#v", kitty, wantKitty)
+	}
+
+	ghostty := GhosttyNotificationSequence("Build complete", "Claude")
+	wantGhostty := OSCPrefix + OSCGhostty + ";notify;Claude;Build complete" + OSCTerminator
+	if ghostty != wantGhostty {
+		t.Fatalf("ghostty = %q, want %q", ghostty, wantGhostty)
+	}
+
+	if bell := TerminalBellSequence(); bell != OSCTerminator {
+		t.Fatalf("bell = %q", bell)
 	}
 }
 

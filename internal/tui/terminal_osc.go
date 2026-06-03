@@ -15,6 +15,8 @@ const (
 	OSCSetTitleAndIcon  = "0"
 	OSCHyperlink        = "8"
 	OSCITerm2           = "9"
+	OSCKitty            = "99"
+	OSCGhostty          = "777"
 	OSCTabStatus        = "21337"
 
 	ITerm2Progress              = "4"
@@ -107,6 +109,31 @@ func TerminalProgressSequence(state TerminalProgressState, percentage int) strin
 
 func ClearTerminalProgressSequence() string {
 	return OSCSequence(OSCITerm2, ITerm2Progress, ITerm2ProgressClear, "")
+}
+
+func ITerm2NotificationSequence(message string, title string) string {
+	display := message
+	if title != "" {
+		display = title + ":\n" + message
+	}
+	return OSCSequence(OSCITerm2, "\n\n"+display)
+}
+
+func KittyNotificationSequences(message string, title string, id int) []string {
+	idValue := strconv.Itoa(id)
+	return []string{
+		OSCSequence(OSCKitty, "i="+idValue+":d=0:p=title", title),
+		OSCSequence(OSCKitty, "i="+idValue+":p=body", message),
+		OSCSequence(OSCKitty, "i="+idValue+":d=1:a=focus", ""),
+	}
+}
+
+func GhosttyNotificationSequence(message string, title string) string {
+	return OSCSequence(OSCGhostty, "notify", title, message)
+}
+
+func TerminalBellSequence() string {
+	return OSCTerminator
 }
 
 func TabStatusSequence(fields TabStatusFields) string {
