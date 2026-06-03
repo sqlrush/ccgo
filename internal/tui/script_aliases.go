@@ -7,6 +7,7 @@ import (
 )
 
 type stringList []string
+type intList []int
 
 func (list *stringList) UnmarshalJSON(data []byte) error {
 	var single string
@@ -27,6 +28,27 @@ func stringListValue(list *stringList) []string {
 		return nil
 	}
 	return []string(*list)
+}
+
+func (list *intList) UnmarshalJSON(data []byte) error {
+	var single int
+	if err := json.Unmarshal(data, &single); err == nil {
+		*list = []int{single}
+		return nil
+	}
+	var many []int
+	if err := json.Unmarshal(data, &many); err != nil {
+		return err
+	}
+	*list = many
+	return nil
+}
+
+func intListValue(list *intList) []int {
+	if list == nil {
+		return nil
+	}
+	return []int(*list)
 }
 
 type scriptSize struct {
@@ -1077,6 +1099,20 @@ func (message *Message) UnmarshalJSON(data []byte) error {
 	if message.Text == "" {
 		message.Text = stringJSONField(fields, "content", "body", "message")
 	}
+	if len(message.ImagePasteIDs) == 0 {
+		message.ImagePasteIDs = intListJSONField(
+			fields,
+			"imagePasteIds",
+			"imagePasteIDs",
+			"image_paste_ids",
+			"imageIds",
+			"imageIDs",
+			"image_ids",
+			"pastedImageIds",
+			"pastedImageIDs",
+			"pasted_image_ids",
+		)
+	}
 	return nil
 }
 
@@ -1134,6 +1170,20 @@ func stringListJSONField(fields map[string]json.RawMessage, names ...string) []s
 		var value stringList
 		if err := json.Unmarshal(raw, &value); err == nil {
 			return stringListValue(&value)
+		}
+	}
+	return nil
+}
+
+func intListJSONField(fields map[string]json.RawMessage, names ...string) []int {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value intList
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return intListValue(&value)
 		}
 	}
 	return nil

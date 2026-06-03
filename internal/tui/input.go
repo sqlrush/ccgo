@@ -540,6 +540,32 @@ func (p *PromptState) EnablePasteReferences() {
 	p.resetPastedContents()
 }
 
+func (p *PromptState) SeedNextPastedIDFromMessages(messages []Message) {
+	if !p.UsePasteReferences {
+		return
+	}
+	next := p.NextPastedID
+	if next <= 0 {
+		next = 1
+	}
+	for _, message := range messages {
+		if message.Role != RoleUser {
+			continue
+		}
+		for _, id := range message.ImagePasteIDs {
+			if id >= next {
+				next = id + 1
+			}
+		}
+		for _, ref := range session.ParseReferences(message.Text) {
+			if ref.ID >= next {
+				next = ref.ID + 1
+			}
+		}
+	}
+	p.NextPastedID = next
+}
+
 func (p *PromptState) SetPasteReferenceRows(rows int) {
 	p.MaxInlinePasteLines = maxInlinePasteLines(rows)
 }

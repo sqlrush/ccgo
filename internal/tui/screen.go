@@ -108,12 +108,14 @@ func (s *REPLScreen) EnableImageCache(sessionID contracts.ID) {
 
 func (s *REPLScreen) SetMessages(messages []Message) {
 	s.Messages = append([]Message(nil), messages...)
+	s.Prompt.SeedNextPastedIDFromMessages(s.Messages)
 	s.SelectedViewportLine = -1
 	s.rebuildViewport()
 }
 
 func (s *REPLScreen) AppendMessage(message Message) {
 	s.Messages = append(s.Messages, message)
+	s.Prompt.SeedNextPastedIDFromMessages([]Message{message})
 	s.rebuildViewport()
 	s.Viewport.ScrollToBottom()
 }

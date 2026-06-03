@@ -571,6 +571,25 @@ func TestPromptImageHintLazySpacing(t *testing.T) {
 	}
 }
 
+func TestREPLScreenSeedsNextPastedIDFromMessages(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetMessages([]Message{
+		{Role: RoleAssistant, Text: "[Image #99]", ImagePasteIDs: []int{99}},
+		{Role: RoleUser, Text: "old [Pasted text #3]", ImagePasteIDs: []int{7}},
+	})
+	screen.ApplyKey(ParseKey("\x1b]1337;File=name=next.png;type=image/png;inline=1:BBBB\a"))
+	if screen.Prompt.Text != "[Image #8]" || screen.Prompt.NextPastedID != 9 {
+		t.Fatalf("prompt = %#v", screen.Prompt)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.AppendMessage(Message{Role: RoleUser, Text: "old [Image #4]"})
+	screen.ApplyKey(ParseKey("\x1b]1337;File=name=next.png;type=image/png;inline=1:BBBB\a"))
+	if screen.Prompt.Text != "[Image #5]" || screen.Prompt.NextPastedID != 6 {
+		t.Fatalf("append-seeded prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestPromptImageHintWritesImageCacheWhenEnabled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
@@ -3762,10 +3781,12 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 		},
 		{
 			"transcript_messages": [
-				{"role": "tool", "text": "tool output"}
+				{"role": "tool", "text": "tool output"},
+				{"role": "user", "text": "image history", "imagePasteIds": [9]}
 			],
 			"snapshot": "transcript",
-			"expectSnapshotContains": "tool: tool output"
+			"expectSnapshotContains": "tool: tool output",
+			"expectPrompt": {"nextPastedID": 10}
 		}
 	]`))
 	if err != nil {
@@ -3779,8 +3800,11 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 	if len(result.Snapshots) != 3 {
 		t.Fatalf("snapshots = %#v", result.Snapshots)
 	}
-	if len(screen.Messages) != 4 {
+	if len(screen.Messages) != 5 {
 		t.Fatalf("messages = %#v", screen.Messages)
+	}
+	if got := screen.Messages[4].ImagePasteIDs; len(got) != 1 || got[0] != 9 {
+		t.Fatalf("image paste ids = %#v", got)
 	}
 }
 

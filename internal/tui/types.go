@@ -12,8 +12,9 @@ const (
 )
 
 type Message struct {
-	Role Role
-	Text string
+	Role          Role
+	Text          string
+	ImagePasteIDs []int
 }
 
 type DialogKind string
