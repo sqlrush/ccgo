@@ -34,6 +34,7 @@ type TranscriptIndex struct {
 	PRURL                   string
 	PRRepository            string
 	Mode                    string
+	GitBranch               string
 	HasWorktreeState        bool
 	TextBytes               int
 	Title                   string
@@ -154,6 +155,9 @@ func (i *TranscriptIndex) addMessage(msg TranscriptMessage) {
 	}
 	i.LastUUID = msg.UUID
 	i.LastTimestamp = msg.Timestamp
+	if branch := strings.TrimSpace(msg.GitBranch); branch != "" {
+		i.GitBranch = branch
+	}
 	switch msg.Type {
 	case "user":
 		i.UserMessageCount++

@@ -12,11 +12,12 @@ import (
 )
 
 type SessionInfo struct {
-	ID       contracts.ID
-	Path     string
-	Title    string
-	Modified time.Time
-	Size     int64
+	ID        contracts.ID
+	Path      string
+	Title     string
+	GitBranch string
+	Modified  time.Time
+	Size      int64
 }
 
 type SearchResult struct {
@@ -53,15 +54,18 @@ func ListProjectSessions(root string) ([]SessionInfo, error) {
 		}
 		id := contracts.ID(strings.TrimSuffix(entry.Name(), ".jsonl"))
 		title := ""
+		gitBranch := ""
 		if index, err := LoadTranscriptIndex(path, id); err == nil {
 			title = index.Title
+			gitBranch = index.GitBranch
 		}
 		sessions = append(sessions, SessionInfo{
-			ID:       id,
-			Path:     path,
-			Title:    title,
-			Modified: info.ModTime(),
-			Size:     info.Size(),
+			ID:        id,
+			Path:      path,
+			Title:     title,
+			GitBranch: gitBranch,
+			Modified:  info.ModTime(),
+			Size:      info.Size(),
 		})
 	}
 	sort.SliceStable(sessions, func(i, j int) bool {
@@ -113,7 +117,7 @@ func SearchProjectSessions(root string, query string, limit int) ([]SearchResult
 		if err != nil {
 			continue
 		}
-		if query != "" && len(matches) == 0 && !strings.Contains(strings.ToLower(info.Title), query) {
+		if query != "" && len(matches) == 0 && !sessionInfoMatches(info, query) {
 			continue
 		}
 		results = append(results, SearchResult{SessionInfo: info, Matches: matches})
@@ -122,6 +126,11 @@ func SearchProjectSessions(root string, query string, limit int) ([]SearchResult
 		}
 	}
 	return results, nil
+}
+
+func sessionInfoMatches(info SessionInfo, query string) bool {
+	return strings.Contains(strings.ToLower(info.Title), query) ||
+		strings.Contains(strings.ToLower(info.GitBranch), query)
 }
 
 func SearchTranscriptFile(path string, query string, maxMatches int) ([]string, error) {
