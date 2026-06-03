@@ -16,6 +16,7 @@ const (
 	RelevantMemoriesSubtype        = "relevant_memories"
 	MaxRelevantMemoryLines         = 200
 	MaxRelevantMemoryBytes         = 4096
+	MaxRelevantMemorySessionBytes  = 60 * 1024
 )
 
 type RelevantMemorySelection struct {
@@ -56,6 +57,11 @@ func (m *RelevantMemory) UnmarshalJSON(data []byte) error {
 type SurfacedMemories struct {
 	Paths      map[string]struct{}
 	TotalBytes int
+}
+
+type RelevantMemoryPrefetchPlan struct {
+	Input    string
+	Surfaced SurfacedMemories
 }
 
 type RelevantMemoryReadState struct {
@@ -165,6 +171,21 @@ func CollectSurfacedMemories(messages []contracts.Message) SurfacedMemories {
 	return out
 }
 
+func RelevantMemoryPrefetchPlanForMessages(messages []contracts.Message, maxSessionBytes int) (RelevantMemoryPrefetchPlan, bool) {
+	if maxSessionBytes <= 0 {
+		maxSessionBytes = MaxRelevantMemorySessionBytes
+	}
+	input := lastNonMetaUserText(messages)
+	if input == "" || !strings.ContainsAny(strings.TrimSpace(input), " \t\r\n") {
+		return RelevantMemoryPrefetchPlan{}, false
+	}
+	surfaced := CollectSurfacedMemories(messages)
+	if surfaced.TotalBytes >= maxSessionBytes {
+		return RelevantMemoryPrefetchPlan{}, false
+	}
+	return RelevantMemoryPrefetchPlan{Input: input, Surfaced: surfaced}, true
+}
+
 func FilterDuplicateRelevantMemoryAttachments(messages []contracts.Message, state map[string]RelevantMemoryReadState) []contracts.Message {
 	if len(messages) == 0 {
 		return nil
@@ -209,6 +230,25 @@ func FilterDuplicateRelevantMemories(memories []RelevantMemory, state map[string
 		}
 	}
 	return filtered
+}
+
+func lastNonMetaUserText(messages []contracts.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Type != contracts.MessageUser || messages[i].IsMeta {
+			continue
+		}
+		var parts []string
+		for _, block := range messages[i].Content {
+			if block.Type == contracts.ContentText && block.Text != "" {
+				parts = append(parts, block.Text)
+			}
+		}
+		text := strings.TrimSpace(strings.Join(parts, "\n"))
+		if text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func RelevantMemoriesFromAttachmentMessage(message contracts.Message) []RelevantMemory {

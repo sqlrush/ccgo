@@ -219,6 +219,36 @@ func TestFilterDuplicateRelevantMemoryAttachmentsMarksSurvivors(t *testing.T) {
 	}
 }
 
+func TestRelevantMemoryPrefetchPlanUsesLastNonMetaUserAndSessionCap(t *testing.T) {
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	memory := NewRelevantMemory("/repo/mem/a.md", "alpha", now, now)
+	meta := msgs.UserText("ignore meta prompt")
+	meta.IsMeta = true
+	plan, ok := RelevantMemoryPrefetchPlanForMessages([]contracts.Message{
+		msgs.UserText("singleword"),
+		RelevantMemoriesAttachmentMessage([]RelevantMemory{memory}),
+		meta,
+		msgs.UserText("find database memory"),
+	}, 0)
+	if !ok || plan.Input != "find database memory" || plan.Surfaced.TotalBytes != len("alpha") {
+		t.Fatalf("plan=%#v ok=%v", plan, ok)
+	}
+	if _, ok := plan.Surfaced.Paths[memory.Path]; !ok {
+		t.Fatalf("surfaced paths = %#v", plan.Surfaced.Paths)
+	}
+
+	if _, ok := RelevantMemoryPrefetchPlanForMessages([]contracts.Message{msgs.UserText("singleword")}, 0); ok {
+		t.Fatal("single-word prompt should not prefetch")
+	}
+	large := NewRelevantMemory("/repo/mem/large.md", strings.Repeat("x", MaxRelevantMemorySessionBytes), now, now)
+	if _, ok := RelevantMemoryPrefetchPlanForMessages([]contracts.Message{
+		RelevantMemoriesAttachmentMessage([]RelevantMemory{large}),
+		msgs.UserText("find database memory"),
+	}, 0); ok {
+		t.Fatal("session byte cap should stop prefetch")
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")
