@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
@@ -508,6 +509,30 @@ func TestRunnerInjectsSessionMemoryRecallIntoRequest(t *testing.T) {
 	}
 	if got := apiMessages[1].Content[0].Text; got != "database permissions" {
 		t.Fatalf("user message = %q", got)
+	}
+}
+
+func TestRunnerExpandsRelevantMemoryAttachmentsIntoRequest(t *testing.T) {
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	mem := memory.NewRelevantMemory("/repo/.claude/memory/db.md", "database memory", now, now)
+	runner := Runner{Model: "sonnet", MaxTokens: 128}
+
+	request, err := runner.BuildRequest([]contracts.Message{
+		memory.RelevantMemoriesAttachmentMessage([]memory.RelevantMemory{mem}),
+		messages.UserText("continue database work"),
+	}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Messages) != 2 {
+		t.Fatalf("messages = %#v", request.Messages)
+	}
+	first := request.Messages[0]
+	if first.Role != "user" || len(first.Content) != 1 || !strings.HasPrefix(first.Content[0].Text, "<system-reminder>\nMemory (saved today): /repo/.claude/memory/db.md:") || !strings.Contains(first.Content[0].Text, "database memory\n</system-reminder>") {
+		t.Fatalf("first message = %#v", first)
+	}
+	if got := request.Messages[1].Content[0].Text; got != "continue database work" {
+		t.Fatalf("user text = %q", got)
 	}
 }
 

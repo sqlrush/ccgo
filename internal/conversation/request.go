@@ -1,6 +1,8 @@
 package conversation
 
 import (
+	"time"
+
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
@@ -13,6 +15,7 @@ func (r Runner) BuildRequest(history []contracts.Message, model string) (anthrop
 	if err != nil {
 		return anthropic.Request{}, err
 	}
+	history = memory.ExpandRelevantMemoryAttachments(history, time.Time{})
 	request := anthropic.Request{
 		Model:     model,
 		MaxTokens: r.maxTokens(),

@@ -158,6 +158,22 @@ func RenderRelevantMemoriesAttachment(message contracts.Message, now time.Time) 
 	return out
 }
 
+func ExpandRelevantMemoryAttachments(messages []contracts.Message, now time.Time) []contracts.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]contracts.Message, 0, len(messages))
+	for _, message := range messages {
+		rendered := RenderRelevantMemoriesAttachment(message, now)
+		if len(rendered) == 0 {
+			out = append(out, message)
+			continue
+		}
+		out = append(out, rendered...)
+	}
+	return out
+}
+
 func CollectSurfacedMemories(messages []contracts.Message) SurfacedMemories {
 	out := SurfacedMemories{Paths: map[string]struct{}{}}
 	for _, message := range messages {
