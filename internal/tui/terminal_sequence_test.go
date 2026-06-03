@@ -30,6 +30,10 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	if !ok || osc.Type != TerminalSequenceOSC || osc.OSC.Type != OSCActionTitle || osc.OSC.Title.Title != "Claude" {
 		t.Fatalf("osc dispatch = %#v ok=%v", osc, ok)
 	}
+	partialOSC, ok := ParseTerminalSequence(OSCPrefix + OSCSetTitleAndIcon + ";Partial")
+	if !ok || partialOSC.Type != TerminalSequenceOSC || partialOSC.OSC.Type != OSCActionTitle || partialOSC.OSC.Title.Title != "Partial" {
+		t.Fatalf("partial osc dispatch = %#v ok=%v", partialOSC, ok)
+	}
 
 	esc, ok := ParseTerminalSequence(ESCIndex)
 	if !ok || esc.Type != TerminalSequenceESC || esc.ESC.Type != ESCActionCursor || esc.ESC.Cursor.Type != CSICursorActionMove || esc.ESC.Cursor.Direction != CSICursorDown {

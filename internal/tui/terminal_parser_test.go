@@ -181,4 +181,14 @@ func TestTerminalParserBuffersIncompleteSequences(t *testing.T) {
 	if len(actions) != 1 || actions[0].Type != TerminalActionUnknown || actions[0].Sequence != "\x1b[?" {
 		t.Fatalf("incomplete csi flush actions = %#v", actions)
 	}
+
+	parser = NewTerminalParser()
+	actions = parser.Feed(OSCPrefix + OSCSetTitleAndIcon + ";Partial")
+	if len(actions) != 0 {
+		t.Fatalf("incomplete osc feed actions = %#v", actions)
+	}
+	actions = parser.Flush()
+	if len(actions) != 1 || actions[0].Type != TerminalActionTitle || actions[0].OSC.Title.Title != "Partial" {
+		t.Fatalf("incomplete osc flush actions = %#v", actions)
+	}
 }

@@ -336,6 +336,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：terminal CSI parser 现在对 tokenizer flush 出来的非 final-byte incomplete CSI 返回 unknown action，而不是丢弃，贴近官方 `parseCSI` 对 flushed partial sequence 的 fallback 行为。
 
+本轮补充：terminal sequence dispatcher 对 tokenizer flush 出来的 OSC partial sequence 使用 `ParseOSCContent` fallback，允许无 BEL/ST terminator 的 title/link/tab-status content 按官方 parser 语义产出 action。
+
 ### M8: Commands, Skills, Plugins
 
 目标：还原 slash commands、skills 和 plugin 系统。

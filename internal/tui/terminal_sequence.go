@@ -1,5 +1,7 @@
 package tui
 
+import "strings"
+
 type TerminalSequenceType string
 
 const (
@@ -45,7 +47,10 @@ func ParseTerminalSequence(sequence string) (TerminalSequenceAction, bool) {
 	case TerminalSequenceOSC:
 		action, ok := ParseOSCSequence(sequence)
 		if !ok {
-			return TerminalSequenceAction{}, false
+			if !strings.HasPrefix(sequence, OSCPrefix) {
+				return TerminalSequenceAction{}, false
+			}
+			action = ParseOSCContent(strings.TrimPrefix(sequence, OSCPrefix))
 		}
 		return TerminalSequenceAction{Type: TerminalSequenceOSC, OSC: action}, true
 	case TerminalSequenceESC:
