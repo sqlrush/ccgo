@@ -215,6 +215,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Buffered prompt history writer 支持撤销最近 pending entry，覆盖官方 `removeLastFromHistory` 在异步 flush 前直接从 pending buffer 移除的 fast path。
 - 本轮补充：Buffered prompt history writer 支持撤销已 flush entry 的 slow path：最近 entry 已落盘时记录 timestamp，并让同一 writer 的 up-arrow/ctrl-r 历史读取按当前 session 跳过该 entry。
 - 本轮补充：image-cache 增加 session-scoped 图片路径缓存、base64 图片落盘、批量 image 存储、内存路径查询和旧 session cache 清理，贴近官方 `imageStore.ts` 的存取/清理基础。
+- 本轮补充：PromptInput/REPL screen 可显式启用 image-cache session，image hint paste 会在插入 `[Image #N]` 时同步缓存路径并写入图片文件，补齐官方 PromptInput 侧的 `cacheImagePath`/`storeImage` 接入点。
 - 本轮补充：remote history REST/link 风格分页接受 `links.next`/`links.previous`/`links.prev`/`links.older` 的字符串 URL 或 `{href,url,uri,link}` 对象，并从 `before_id`、`beforeId`、`cursor`、`pageCursor`、`previousCursor`、`prevCursor`、`beforeCursor`、`olderCursor`、`startCursor`、`endCursor` 等 query 参数提取续抓 before-id。
 - 本轮补充：remote history HTTP `Link` header 分页接受 `rel="previous"`/`prev`/`older`/`next` URL，并从同一组 before/cursor query 参数提取续抓 before-id。
 - 本轮补充：sidechain/subagent state loader 接受 `subagent_start`/`agent_start`/`task_start` 和 `sidechain_end`/`subagent_finish`/`agent_finish`/`task_summary` 等 subtype 别名，并归一化 `active`/`success`/`canceled`/`error` 等状态别名。

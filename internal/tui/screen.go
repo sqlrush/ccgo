@@ -3,6 +3,7 @@ package tui
 import (
 	"time"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/session"
 )
 
@@ -96,6 +97,10 @@ func newREPLScreenWithPrompt(width int, height int, prompt PromptState) REPLScre
 	}
 	screen.rebuildViewport()
 	return screen
+}
+
+func (s *REPLScreen) EnableImageCache(sessionID contracts.ID) {
+	s.Prompt.EnableImageCache(sessionID)
 }
 
 func (s *REPLScreen) SetMessages(messages []Message) {

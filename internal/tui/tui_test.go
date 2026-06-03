@@ -471,6 +471,64 @@ func TestPromptPasteReferencesCanStoreImageHints(t *testing.T) {
 	}
 }
 
+func TestPromptImageHintWritesImageCacheWhenEnabled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	session.ClearStoredImagePaths()
+	defer session.ClearStoredImagePaths()
+
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.EnableImageCache("session-1")
+	prompt.Apply(ParseKey("\x1b]1337;File=name=chart.png;type=image/png;inline=1:aW1hZ2U=\a"))
+
+	path, ok := session.GetStoredImagePath(1)
+	if !ok {
+		t.Fatal("image path was not cached")
+	}
+	want := filepath.Join(dir, "image-cache", "session-1", "1.png")
+	if path != want {
+		t.Fatalf("image path = %q, want %q", path, want)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "image" {
+		t.Fatalf("image data = %q", data)
+	}
+}
+
+func TestREPLScreenImageCacheSessionAppliesToPrompt(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	session.ClearStoredImagePaths()
+	defer session.ClearStoredImagePaths()
+
+	screen := NewREPLScreen(40, 8, nil)
+	screen.EnableImageCache("session-1")
+	screen.ApplyKey(ParseKey("\x1b]1337;File=name=diagram.webp;type=image/webp;inline=1:d2VicA==\a"))
+
+	path, ok := session.GetStoredImagePath(1)
+	if !ok {
+		t.Fatal("image path was not cached")
+	}
+	want := filepath.Join(dir, "image-cache", "session-1", "1.webp")
+	if path != want {
+		t.Fatalf("image path = %q, want %q", path, want)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "webp" {
+		t.Fatalf("image data = %q", data)
+	}
+	if screen.Prompt.Text != "[Image #1]" {
+		t.Fatalf("prompt = %#v", screen.Prompt)
+	}
+}
+
 func TestPromptPasteReferencesSurviveDraftHistoryNavigation(t *testing.T) {
 	prompt := NewPromptState([]string{"old"})
 	prompt.EnablePasteReferences()

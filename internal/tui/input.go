@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/session"
 )
 
@@ -37,6 +38,7 @@ type PromptState struct {
 	HistoryEntries      []session.HistoryEntry
 	HistoryIndex        int
 	UsePasteReferences  bool
+	ImageCacheSessionID contracts.ID
 	PastedContents      map[int]session.PastedContent
 	NextPastedID        int
 	draft               string
@@ -521,6 +523,10 @@ func (p *PromptState) EnablePasteReferences() {
 	p.resetPastedContents()
 }
 
+func (p *PromptState) EnableImageCache(sessionID contracts.ID) {
+	p.ImageCacheSessionID = sessionID
+}
+
 func (p PromptState) ExpandedText() string {
 	if len(p.PastedContents) == 0 {
 		return p.Text
@@ -573,12 +579,19 @@ func (p *PromptState) insertImageHint(key Key) {
 		id = nextPastedID(p.PastedContents)
 	}
 	p.NextPastedID = id + 1
-	p.PastedContents[id] = session.PastedContent{
+	content := session.PastedContent{
 		ID:        id,
 		Type:      session.PastedContentImage,
 		Content:   key.Content,
 		MediaType: key.MediaType,
 		Filename:  key.Filename,
+	}
+	p.PastedContents[id] = content
+	if p.ImageCacheSessionID != "" {
+		session.CacheImagePath(p.ImageCacheSessionID, content)
+		if content.Content != "" {
+			session.StoreImage(p.ImageCacheSessionID, content)
+		}
 	}
 	p.insertText(session.FormatImageRef(id))
 }
