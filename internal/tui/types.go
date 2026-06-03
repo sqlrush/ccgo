@@ -137,3 +137,9 @@ type PromptResult struct {
 	Cancelled      bool
 	Interrupted    bool
 }
+
+type PromptStash struct {
+	Text           string
+	Cursor         int
+	PastedContents map[int]session.PastedContent
+}

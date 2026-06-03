@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"ccgo/internal/contracts"
@@ -71,6 +72,7 @@ type REPLScreen struct {
 	VimUndoStack         []vimPromptSnapshot
 	Focused              bool
 	ReverseSearch        ReverseSearchState
+	StashedPrompt        *PromptStash
 	SelectedViewportLine int
 	ExitPendingKey       KeyType
 	ExitPendingAt        time.Time
@@ -154,7 +156,7 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		return ScreenEvent{Type: ScreenEventExternalEditor}
 	}
 	if action == ActionStashPrompt {
-		return ScreenEvent{Type: ScreenEventStashPrompt}
+		return s.applyStashPrompt()
 	}
 	if action == ActionKillAgents {
 		return ScreenEvent{Type: ScreenEventKillAgents}
@@ -217,6 +219,50 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 		}
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyStashPrompt() ScreenEvent {
+	if strings.TrimSpace(s.Prompt.Text) == "" {
+		if s.StashedPrompt == nil {
+			return ScreenEvent{Type: ScreenEventStashPrompt}
+		}
+		stash := s.StashedPrompt
+		s.Prompt.Text = stash.Text
+		s.Prompt.Cursor = stash.Cursor
+		if s.Prompt.Cursor < 0 {
+			s.Prompt.Cursor = 0
+		}
+		if s.Prompt.Cursor > len([]rune(s.Prompt.Text)) {
+			s.Prompt.Cursor = len([]rune(s.Prompt.Text))
+		}
+		s.Prompt.replacePastedContents(stash.PastedContents)
+		s.Prompt.resetHistoryCursor()
+		s.StashedPrompt = nil
+		return ScreenEvent{
+			Type:           ScreenEventStashPrompt,
+			Value:          s.Prompt.ExpandedText(),
+			Display:        s.Prompt.Text,
+			PastedContents: clonePastedContents(s.Prompt.PastedContents),
+		}
+	}
+
+	stash := PromptStash{
+		Text:           s.Prompt.Text,
+		Cursor:         s.Prompt.Cursor,
+		PastedContents: clonePastedContents(s.Prompt.PastedContents),
+	}
+	event := ScreenEvent{
+		Type:           ScreenEventStashPrompt,
+		Value:          s.Prompt.ExpandedText(),
+		Display:        s.Prompt.Text,
+		PastedContents: clonePastedContents(s.Prompt.PastedContents),
+	}
+	s.StashedPrompt = &stash
+	s.Prompt.Text = ""
+	s.Prompt.Cursor = 0
+	s.Prompt.resetPastedContents()
+	s.Prompt.resetHistoryCursor()
+	return event
 }
 
 func (s *REPLScreen) applyInterrupt() ScreenEvent {

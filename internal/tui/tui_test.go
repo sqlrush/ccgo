@@ -677,6 +677,34 @@ func TestREPLScreenSubmitEventCarriesPastedContentsForMessages(t *testing.T) {
 	}
 }
 
+func TestREPLScreenStashesAndRestoresPromptWithPastedContents(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.ApplyKey(ParseKey("\x1b[200~alpha\nbeta\x1b[201~"))
+	screen.ApplyKey(ParseKey("\x1b]1337;File=name=Y2hhcnQucG5n;type=image/png;inline=1:AAAA\a"))
+
+	stashed := screen.ApplyKey(ParseKey("\x13"))
+	if stashed.Type != ScreenEventStashPrompt || stashed.Value != "alpha\nbeta[Image #2]" || stashed.Display != "[Pasted text #1 +1 lines][Image #2]" {
+		t.Fatalf("stashed event = %#v", stashed)
+	}
+	if stashed.PastedContents[1].Content != "alpha\nbeta" || stashed.PastedContents[2].Filename != "chart.png" {
+		t.Fatalf("stashed pasted contents = %#v", stashed.PastedContents)
+	}
+	if screen.Prompt.Text != "" || len(screen.Prompt.PastedContents) != 0 || screen.Prompt.NextPastedID != 1 || screen.StashedPrompt == nil {
+		t.Fatalf("after stash prompt=%#v stash=%#v", screen.Prompt, screen.StashedPrompt)
+	}
+
+	restored := screen.ApplyKey(ParseKey("\x13"))
+	if restored.Type != ScreenEventStashPrompt || restored.Value != "alpha\nbeta[Image #2]" || restored.Display != "[Pasted text #1 +1 lines][Image #2]" {
+		t.Fatalf("restored event = %#v", restored)
+	}
+	if screen.Prompt.Text != "[Pasted text #1 +1 lines][Image #2]" || screen.Prompt.ExpandedText() != "alpha\nbeta[Image #2]" {
+		t.Fatalf("restored prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+	if screen.Prompt.NextPastedID != 3 || screen.Prompt.PastedContents[2].Filename != "chart.png" || screen.StashedPrompt != nil {
+		t.Fatalf("restored pasted contents = %#v next=%d stash=%#v", screen.Prompt.PastedContents, screen.Prompt.NextPastedID, screen.StashedPrompt)
+	}
+}
+
 func TestPromptPasteReferencesSurviveDraftHistoryNavigation(t *testing.T) {
 	prompt := NewPromptState([]string{"old"})
 	prompt.EnablePasteReferences()
