@@ -150,8 +150,8 @@ func TestTerminalParserAppliesSGRToFollowingText(t *testing.T) {
 
 func TestTerminalParserDispatchesSequenceActions(t *testing.T) {
 	parser := NewTerminalParser()
-	actions := parser.Feed(CursorPosition(2, 3) + EraseLine + CSISequence(2, "@") + ScrollUp(2) + EnableBracketedPaste + TerminalTitleSequence("Claude") + ESCIndex + "\x1bOA")
-	if len(actions) != 8 {
+	actions := parser.Feed(CursorPosition(2, 3) + EraseLine + CSISequence(2, "@") + CSISequence(6, "n") + ScrollUp(2) + EnableBracketedPaste + TerminalTitleSequence("Claude") + ESCIndex + "\x1bOA")
+	if len(actions) != 9 {
 		t.Fatalf("actions = %#v", actions)
 	}
 	if actions[0].Type != TerminalActionCursor || actions[0].Cursor.Type != CSICursorActionPosition || actions[0].Cursor.Row != 2 || actions[0].Cursor.Column != 3 {
@@ -163,20 +163,23 @@ func TestTerminalParserDispatchesSequenceActions(t *testing.T) {
 	if actions[2].Type != TerminalActionEdit || actions[2].Edit.Type != CSIEditActionInsertChars || actions[2].Edit.Count != 2 {
 		t.Fatalf("edit action = %#v", actions[2])
 	}
-	if actions[3].Type != TerminalActionScroll || actions[3].Scroll.Type != CSIScrollActionUp || actions[3].Scroll.Count != 2 {
-		t.Fatalf("scroll action = %#v", actions[3])
+	if actions[3].Type != TerminalActionReport || actions[3].Report.Type != CSIReportActionCursorPosition || actions[3].Report.Code != 6 {
+		t.Fatalf("report action = %#v", actions[3])
 	}
-	if actions[4].Type != TerminalActionMode || actions[4].Mode.Type != CSIModeActionBracketedPaste || !actions[4].Mode.Enabled {
-		t.Fatalf("mode action = %#v", actions[4])
+	if actions[4].Type != TerminalActionScroll || actions[4].Scroll.Type != CSIScrollActionUp || actions[4].Scroll.Count != 2 {
+		t.Fatalf("scroll action = %#v", actions[4])
 	}
-	if actions[5].Type != TerminalActionTitle || actions[5].OSC.Title.Title != "Claude" {
-		t.Fatalf("title action = %#v", actions[5])
+	if actions[5].Type != TerminalActionMode || actions[5].Mode.Type != CSIModeActionBracketedPaste || !actions[5].Mode.Enabled {
+		t.Fatalf("mode action = %#v", actions[5])
 	}
-	if actions[6].Type != TerminalActionCursor || actions[6].Cursor.Type != CSICursorActionMove || actions[6].Cursor.Direction != CSICursorDown {
-		t.Fatalf("esc cursor action = %#v", actions[6])
+	if actions[6].Type != TerminalActionTitle || actions[6].OSC.Title.Title != "Claude" {
+		t.Fatalf("title action = %#v", actions[6])
 	}
-	if actions[7].Type != TerminalActionUnknown || actions[7].Sequence != "\x1bOA" {
-		t.Fatalf("unknown action = %#v", actions[7])
+	if actions[7].Type != TerminalActionCursor || actions[7].Cursor.Type != CSICursorActionMove || actions[7].Cursor.Direction != CSICursorDown {
+		t.Fatalf("esc cursor action = %#v", actions[7])
+	}
+	if actions[8].Type != TerminalActionUnknown || actions[8].Sequence != "\x1bOA" {
+		t.Fatalf("unknown action = %#v", actions[8])
 	}
 }
 

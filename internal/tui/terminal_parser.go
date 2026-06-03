@@ -12,6 +12,7 @@ const (
 	TerminalActionCursor        TerminalActionType = "cursor"
 	TerminalActionErase         TerminalActionType = "erase"
 	TerminalActionEdit          TerminalActionType = "edit"
+	TerminalActionReport        TerminalActionType = "report"
 	TerminalActionScroll        TerminalActionType = "scroll"
 	TerminalActionMode          TerminalActionType = "mode"
 	TerminalActionLink          TerminalActionType = "link"
@@ -35,6 +36,7 @@ type TerminalAction struct {
 	Cursor    CSICursorAction
 	Erase     CSIEraseAction
 	Edit      CSIEditAction
+	Report    CSIReportAction
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
 	OSC       OSCAction
@@ -196,6 +198,8 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 			return TerminalAction{Type: TerminalActionErase, Erase: action.CSI.Erase}, true
 		case CSIActionEdit:
 			return TerminalAction{Type: TerminalActionEdit, Edit: action.CSI.Edit}, true
+		case CSIActionReport:
+			return TerminalAction{Type: TerminalActionReport, Report: action.CSI.Report}, true
 		case CSIActionScroll:
 			return TerminalAction{Type: TerminalActionScroll, Scroll: action.CSI.Scroll}, true
 		case CSIActionMode:

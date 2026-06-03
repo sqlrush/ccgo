@@ -3539,6 +3539,21 @@ func TestParseCSISequenceActions(t *testing.T) {
 		}
 	}
 
+	reportCases := []struct {
+		seq  string
+		want CSIReportAction
+	}{
+		{seq: CSISequence(5, "n"), want: CSIReportAction{Type: CSIReportActionDeviceStatus, Code: 5}},
+		{seq: CSISequence(6, "n"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Code: 6}},
+		{seq: CSISequence("?25n"), want: CSIReportAction{Type: CSIReportActionUnknown, Code: 25, PrivateMode: '?'}},
+	}
+	for _, tc := range reportCases {
+		action, ok := ParseCSISequence(tc.seq)
+		if !ok || action.Type != CSIActionReport || action.Report != tc.want {
+			t.Fatalf("report action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
 	scrollCases := []struct {
 		seq  string
 		want CSIScrollAction

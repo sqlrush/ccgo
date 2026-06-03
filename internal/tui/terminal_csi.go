@@ -80,6 +80,7 @@ const (
 	CSIActionCursor  CSIActionType = "cursor"
 	CSIActionErase   CSIActionType = "erase"
 	CSIActionEdit    CSIActionType = "edit"
+	CSIActionReport  CSIActionType = "report"
 	CSIActionScroll  CSIActionType = "scroll"
 	CSIActionMode    CSIActionType = "mode"
 	CSIActionSGR     CSIActionType = "sgr"
@@ -160,6 +161,20 @@ type CSIEditAction struct {
 	Count int
 }
 
+type CSIReportActionType string
+
+const (
+	CSIReportActionDeviceStatus   CSIReportActionType = "deviceStatus"
+	CSIReportActionCursorPosition CSIReportActionType = "cursorPosition"
+	CSIReportActionUnknown        CSIReportActionType = "unknown"
+)
+
+type CSIReportAction struct {
+	Type        CSIReportActionType
+	Code        int
+	PrivateMode byte
+}
+
 type CSIScrollActionType string
 
 const (
@@ -206,6 +221,7 @@ type CSIAction struct {
 	Cursor    CSICursorAction
 	Erase     CSIEraseAction
 	Edit      CSIEditAction
+	Report    CSIReportAction
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
 	SGRParams string
@@ -314,6 +330,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiEdit(CSIEditActionInsertLines, p0), true
 	case CSICommandDeleteLines:
 		return csiEdit(CSIEditActionDeleteLines, p0), true
+	case CSICommandDSR:
+		return csiReport(p0, privateMode), true
 	case CSICommandScrollUp:
 		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionUp, Count: p0}}, true
 	case CSICommandScrollDown:
@@ -382,6 +400,22 @@ func csiEdit(actionType CSIEditActionType, count int) CSIAction {
 	return CSIAction{
 		Type: CSIActionEdit,
 		Edit: CSIEditAction{Type: actionType, Count: count},
+	}
+}
+
+func csiReport(code int, privateMode byte) CSIAction {
+	actionType := CSIReportActionUnknown
+	if privateMode == 0 {
+		switch code {
+		case 5:
+			actionType = CSIReportActionDeviceStatus
+		case 6:
+			actionType = CSIReportActionCursorPosition
+		}
+	}
+	return CSIAction{
+		Type:   CSIActionReport,
+		Report: CSIReportAction{Type: actionType, Code: code, PrivateMode: privateMode},
 	}
 }
 
