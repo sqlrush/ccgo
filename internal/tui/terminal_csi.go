@@ -43,8 +43,11 @@ const (
 	CSICommandBackwardTab      byte = 'Z'
 	CSICommandScrollUp         byte = 'S'
 	CSICommandScrollDown       byte = 'T'
+	CSICommandCursorColumnAlt  byte = '`'
+	CSICommandCursorForwardAlt byte = 'a'
 	CSICommandDeviceAttributes byte = 'c'
 	CSICommandVerticalPosition byte = 'd'
+	CSICommandCursorDownAlt    byte = 'e'
 	CSICommandHorizontalVPos   byte = 'f'
 	CSICommandSetMode          byte = 'h'
 	CSICommandResetMode        byte = 'l'
@@ -302,6 +305,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiCursorMove(CSICursorDown, p0), true
 	case CSICommandCursorForward:
 		return csiCursorMove(CSICursorForward, p0), true
+	case CSICommandCursorForwardAlt:
+		return csiCursorMove(CSICursorForward, p0), true
 	case CSICommandCursorBack:
 		return csiCursorMove(CSICursorBack, p0), true
 	case CSICommandCursorNextLine:
@@ -314,10 +319,14 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionBackTab, Count: p0}}, true
 	case CSICommandCursorColumn:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionColumn, Column: p0}}, true
+	case CSICommandCursorColumnAlt:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionColumn, Column: p0}}, true
 	case CSICommandCursorPosition, CSICommandHorizontalVPos:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionPosition, Row: p0, Column: p1}}, true
 	case CSICommandDeviceAttributes:
 		return csiDeviceAttributes(csiParamDefault(params, 0, 0), privateMode), true
+	case CSICommandCursorDownAlt:
+		return csiCursorMove(CSICursorDown, p0), true
 	case CSICommandVerticalPosition:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRow, Row: p0}}, true
 	case CSICommandEraseDisplay:
