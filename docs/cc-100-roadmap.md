@@ -276,6 +276,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：remote history HTTP `Link` header 分页接受 `previous`/`prev`/`older`/`next` rel URL，并以 body cursor 优先、header cursor fallback 的方式继续抓取。
 
+本轮补充：transcript metadata loader 现在接受 `sessionID` 和 `session` 作为 session-scoped metadata ID 别名，并容忍 `prNumber`、`timeSavedMs`、`lastSpawnTokens` 等计数字段使用数字字符串。
+
 本轮补充：sidechain/subagent state loader 接受 legacy/fork 命名的 start/finish subtype、ID/type/summary 字段别名和常见状态别名，提升旧 subagent transcript resume/list 的恢复率。
 
 本轮补充：conversation runner 现在会在用户消息入队后计算 compact token warning state，并在触发 warning/error/auto-compact/blocking 阈值时发出 `token_warning` event；warning state 接入 blocking-limit override，auto-compact threshold 判断接入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，使 runtime warning 和自动压缩使用同一套 window 输入。

@@ -3,6 +3,8 @@ package session
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
+	"strings"
 
 	"ccgo/internal/contracts"
 )
@@ -36,7 +38,7 @@ func (f transcriptMetadataFields) idValue(keys ...string) contracts.ID {
 }
 
 func (f transcriptMetadataFields) sessionIDValue() contracts.ID {
-	return f.idValue("sessionId", "session_id", "sessionUuid", "sessionUUID", "session_uuid")
+	return f.idValue("sessionId", "sessionID", "session_id", "session", "sessionUuid", "sessionUUID", "session_uuid")
 }
 
 func (f transcriptMetadataFields) intValue(keys ...string) int {
@@ -48,6 +50,13 @@ func (f transcriptMetadataFields) intValue(keys ...string) int {
 		var value int
 		if err := json.Unmarshal(raw, &value); err == nil {
 			return value
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			value, err := strconv.Atoi(strings.TrimSpace(text))
+			if err == nil {
+				return value
+			}
 		}
 	}
 	return 0
@@ -102,25 +111,23 @@ func parseTaskSummaryMetadata(line []byte) (TaskSummaryEntry, bool) {
 }
 
 func parsePRLinkMetadata(line []byte) (PRLinkEntry, bool) {
-	var entry PRLinkEntry
-	if err := json.Unmarshal(line, &entry); err != nil {
-		return PRLinkEntry{}, false
-	}
 	fields, err := parseTranscriptMetadataFields(line)
 	if err != nil {
 		return PRLinkEntry{}, false
 	}
+	var entry PRLinkEntry
+	_ = json.Unmarshal(line, &entry)
 	if entry.SessionID == "" {
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.PRNumber == 0 {
-		entry.PRNumber = fields.intValue("pr_number")
+		entry.PRNumber = fields.intValue("prNumber", "pr_number", "number")
 	}
 	if entry.PRURL == "" {
-		entry.PRURL = fields.stringValue("pr_url")
+		entry.PRURL = fields.stringValue("prUrl", "prURL", "pr_url", "url")
 	}
 	if entry.PRRepository == "" {
-		entry.PRRepository = fields.stringValue("pr_repository")
+		entry.PRRepository = fields.stringValue("prRepository", "pr_repository", "repository", "repo")
 	}
 	return entry, true
 }
@@ -199,16 +206,17 @@ func parseTombstoneMetadata(line []byte) (TombstoneEntry, bool) {
 }
 
 func parseSpeculationAcceptMetadata(line []byte) (SpeculationAcceptEntry, bool) {
-	var entry SpeculationAcceptEntry
-	if err := json.Unmarshal(line, &entry); err != nil {
-		return SpeculationAcceptEntry{}, false
-	}
 	fields, err := parseTranscriptMetadataFields(line)
 	if err != nil {
 		return SpeculationAcceptEntry{}, false
 	}
+	var entry SpeculationAcceptEntry
+	_ = json.Unmarshal(line, &entry)
 	if entry.TimeSavedMS == 0 {
-		entry.TimeSavedMS = fields.intValue("time_saved_ms")
+		entry.TimeSavedMS = fields.intValue("timeSavedMs", "timeSavedMS", "time_saved_ms", "timeSaved", "time_saved")
+	}
+	if entry.Timestamp == "" {
+		entry.Timestamp = fields.stringValue("timestamp", "createdAt", "created_at", "time")
 	}
 	return entry, true
 }
@@ -244,19 +252,17 @@ func parseContextCollapseCommitMetadata(line []byte) (ContextCollapseCommitEntry
 }
 
 func parseContextCollapseSnapshotMetadata(line []byte) (ContextCollapseSnapshotEntry, bool) {
-	var entry ContextCollapseSnapshotEntry
-	if err := json.Unmarshal(line, &entry); err != nil {
-		return ContextCollapseSnapshotEntry{}, false
-	}
 	fields, err := parseTranscriptMetadataFields(line)
 	if err != nil {
 		return ContextCollapseSnapshotEntry{}, false
 	}
+	var entry ContextCollapseSnapshotEntry
+	_ = json.Unmarshal(line, &entry)
 	if entry.SessionID == "" {
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.LastSpawnTokens == 0 {
-		entry.LastSpawnTokens = fields.intValue("last_spawn_tokens")
+		entry.LastSpawnTokens = fields.intValue("lastSpawnTokens", "last_spawn_tokens")
 	}
 	return entry, true
 }

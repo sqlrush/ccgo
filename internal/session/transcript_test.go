@@ -689,6 +689,38 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"pr-link","sessionID":"s4","prNumber":"44","prUrl":"https://github.com/o/r/pull/44","prRepository":"o/r"}`,
+		`{"type":"speculation-accept","createdAt":"2026-01-01T00:00:05Z","timeSavedMs":"5600"}`,
+		`{"type":"marble-origami-snapshot","sessionID":"s4","armed":true,"lastSpawnTokens":"96"}`,
+	})
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.PRLinks["s4"].PRNumber != 44 || transcript.PRLinks["s4"].PRRepository != "o/r" {
+		t.Fatalf("transcript pr link = %#v", transcript.PRLinks)
+	}
+	if len(transcript.SpeculationAccepts) != 1 || transcript.SpeculationAccepts[0].TimeSavedMS != 5600 || transcript.SpeculationAccepts[0].Timestamp != "2026-01-01T00:00:05Z" {
+		t.Fatalf("transcript speculation = %#v", transcript.SpeculationAccepts)
+	}
+	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "s4" || transcript.ContextCollapseSnapshot.LastSpawnTokens != 96 {
+		t.Fatalf("transcript snapshot = %#v", transcript.ContextCollapseSnapshot)
+	}
+
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.PRLinks["s4"].PRNumber != 44 || metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.LastSpawnTokens != 96 {
+		t.Fatalf("metadata = %#v snapshot=%#v", metadata.PRLinks, metadata.ContextCollapseSnapshot)
+	}
+	if len(metadata.SpeculationAccepts) != 1 || metadata.SpeculationAccepts[0].TimeSavedMS != 5600 {
+		t.Fatalf("metadata speculation = %#v", metadata.SpeculationAccepts)
+	}
+}
+
 func TestReappendSessionMetadataWritesSessionScopedTailEntries(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"custom-title","sessionId":"s1","customTitle":"Title"}`,
