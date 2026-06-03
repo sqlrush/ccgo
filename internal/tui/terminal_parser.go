@@ -259,7 +259,7 @@ func nextTerminalGrapheme(text string) (string, int) {
 		if r == utf8.RuneError && nextSize == 0 {
 			break
 		}
-		if isTerminalCombiningMark(r) || isTerminalVariationSelector(r) || isTerminalEmojiModifier(r) {
+		if isTerminalCombiningMark(r) || isTerminalVariationSelector(r) || isTerminalEmojiModifier(r) || isTerminalEmojiTag(r) {
 			end += nextSize
 			previousWasZWJ = false
 			continue
@@ -341,6 +341,10 @@ func isTerminalVariationSelector(r rune) bool {
 
 func isTerminalEmojiModifier(r rune) bool {
 	return r >= 0x1f3fb && r <= 0x1f3ff
+}
+
+func isTerminalEmojiTag(r rune) bool {
+	return (r >= 0xe0020 && r <= 0xe007e) || r == 0xe007f
 }
 
 func isTerminalRegionalIndicator(r rune) bool {
