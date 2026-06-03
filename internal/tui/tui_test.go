@@ -3481,6 +3481,10 @@ func TestParseCSISequenceActions(t *testing.T) {
 	if !ok || sgr.Type != CSIActionSGR || sgr.SGRParams != "31;1" {
 		t.Fatalf("sgr action = %#v", sgr)
 	}
+	reset, ok := ParseCSISequence(CSISequence("!p"))
+	if !ok || reset.Type != CSIActionReset {
+		t.Fatalf("soft reset action = %#v ok=%v", reset, ok)
+	}
 
 	cursorCases := []struct {
 		seq  string

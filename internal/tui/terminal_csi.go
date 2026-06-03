@@ -55,6 +55,7 @@ const (
 	CSICommandResetMode        byte = 'l'
 	CSICommandSGR              byte = 'm'
 	CSICommandDSR              byte = 'n'
+	CSICommandSoftReset        byte = 'p'
 	CSICommandCursorStyle      byte = 'q'
 	CSICommandScrollRegion     byte = 'r'
 	CSICommandSaveCursor       byte = 's'
@@ -94,6 +95,7 @@ const (
 	CSIActionScroll  CSIActionType = "scroll"
 	CSIActionMode    CSIActionType = "mode"
 	CSIActionSGR     CSIActionType = "sgr"
+	CSIActionReset   CSIActionType = "reset"
 	CSIActionUnknown CSIActionType = "unknown"
 )
 
@@ -359,6 +361,10 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiEdit(CSIEditActionDeleteLines, p0), true
 	case CSICommandDSR:
 		return csiReport(p0, privateMode), true
+	case CSICommandSoftReset:
+		if intermediate == "!" && privateMode == 0 && len(params) == 0 {
+			return CSIAction{Type: CSIActionReset}, true
+		}
 	case CSICommandTerminalParams:
 		return csiTerminalParameters(csiParamDefault(params, 0, 0), privateMode), true
 	case CSICommandScrollUp:

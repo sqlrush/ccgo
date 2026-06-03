@@ -204,6 +204,9 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 			return TerminalAction{Type: TerminalActionScroll, Scroll: action.CSI.Scroll}, true
 		case CSIActionMode:
 			return TerminalAction{Type: TerminalActionMode, Mode: action.CSI.Mode}, true
+		case CSIActionReset:
+			p.Reset()
+			return TerminalAction{Type: TerminalActionReset}, true
 		default:
 			return TerminalAction{Type: TerminalActionUnknown, Sequence: action.CSI.Sequence}, true
 		}

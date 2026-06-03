@@ -247,6 +247,21 @@ func TestTerminalParserResetClearsStyle(t *testing.T) {
 	if actions[2].Type != TerminalActionText || !TextStylesEqual(actions[2].Style, DefaultTextStyle()) {
 		t.Fatalf("plain text = %#v", actions[2])
 	}
+
+	parser = NewTerminalParser()
+	actions = parser.Feed(TerminalHyperlinkSequence("https://example.com", nil) + CSISequence(31, "m") + "red" + CSISequence("!p") + "plain")
+	if len(actions) != 4 {
+		t.Fatalf("soft reset actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionText || actions[1].Style.Foreground != namedTerminalColor(NamedColorRed) {
+		t.Fatalf("red text before soft reset = %#v", actions[1])
+	}
+	if actions[2].Type != TerminalActionReset {
+		t.Fatalf("soft reset action = %#v", actions[2])
+	}
+	if actions[3].Type != TerminalActionText || !TextStylesEqual(actions[3].Style, DefaultTextStyle()) || parser.InLink() {
+		t.Fatalf("plain text after soft reset = %#v inLink=%v", actions[3], parser.InLink())
+	}
 }
 
 func TestTerminalParserBuffersIncompleteSequences(t *testing.T) {
