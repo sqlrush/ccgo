@@ -32,6 +32,27 @@ func TestTerminalParserTextBellAndGraphemeWidths(t *testing.T) {
 	}
 }
 
+func TestTerminalVisibleTextUsesParserAndPreservesRawBell(t *testing.T) {
+	input := "a" +
+		CSISequence(31, "m") + "red" + CSISequence("m") +
+		OSCPrefix + OSCSetTitleAndIcon + ";hidden" + OSCStringTerminator +
+		"b" +
+		"\x1bPignored\x1b\\" +
+		"c" +
+		"\x1b_ignored\x07" +
+		"d" +
+		"\x1b^pm\x1b\\" +
+		"e" +
+		"\x1bXsos\x07" +
+		"f\x07"
+	if got := TerminalVisibleText(input); got != "aredbcdef\x07" {
+		t.Fatalf("visible = %q", got)
+	}
+	if got := TerminalVisibleText("x" + OSCPrefix + OSCSetTitleAndIcon + ";partial"); got != "x" {
+		t.Fatalf("partial visible = %q", got)
+	}
+}
+
 func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("e\u0301 \u2764\ufe0f \U0001f44b\U0001f3fd \U0001f469\u200d\U0001f4bb \U0001f1fa\U0001f1f8")

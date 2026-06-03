@@ -1,6 +1,9 @@
 package tui
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 type TerminalActionType string
 
@@ -84,6 +87,28 @@ func (p *TerminalParser) InLink() bool {
 
 func (p *TerminalParser) LinkURL() string {
 	return p.linkURL
+}
+
+func TerminalVisibleText(input string) string {
+	parser := NewTerminalParser()
+	actions := parser.Feed(input)
+	actions = append(actions, parser.Flush()...)
+	return TerminalActionsVisibleText(actions)
+}
+
+func TerminalActionsVisibleText(actions []TerminalAction) string {
+	var out strings.Builder
+	for _, action := range actions {
+		switch action.Type {
+		case TerminalActionText:
+			for _, grapheme := range action.Graphemes {
+				out.WriteString(grapheme.Value)
+			}
+		case TerminalActionBell:
+			out.WriteByte(terminalBEL)
+		}
+	}
+	return out.String()
 }
 
 func (p *TerminalParser) processTokens(tokens []TerminalToken) []TerminalAction {
