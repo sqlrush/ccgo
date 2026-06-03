@@ -148,6 +148,7 @@ M6 progress now includes:
 - `internal/conversation`: request building now expands `relevant_memories` attachment messages into user/meta system-reminders before Anthropic API normalization.
 - `internal/conversation`: runners can now opt into a configured relevant-memory directory, deterministically select matching memory files, surface them as `relevant_memories`, and inject them into the next request while leaving default behavior unchanged.
 - `internal/conversation`: configured relevant-memory directories are now propagated to tool metadata as internal auto-memory paths so file-tool freshness and permission checks share the same context.
+- `internal/session`: transcript resume now preserves raw attachment payloads for fallback attachment messages, keeping resumed `relevant_memories` expandable in request construction.
 - `internal/tools/file`: `Read` now prefixes old auto-memory file reads with the same freshness system-reminder when internal auto-memory directory metadata is available.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 

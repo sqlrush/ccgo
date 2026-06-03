@@ -73,6 +73,28 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestContractMessageFromTranscriptPreservesAttachmentRawPayload(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"attachment","uuid":"att1","subtype":"relevant_memories","attachment":{"type":"relevant_memories","memories":[{"path":"/repo/memory.md","content":"memory body","mtimeMs":123}]}}`,
+	})
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	converted, ok := ContractMessageFromTranscript(*transcript.Messages["att1"])
+	if !ok {
+		t.Fatal("attachment did not convert")
+	}
+	attachment, ok := converted.Raw["attachment"].(map[string]any)
+	if !ok || attachment["type"] != "relevant_memories" {
+		t.Fatalf("raw attachment = %#v", converted.Raw)
+	}
+	memories, ok := attachment["memories"].([]any)
+	if !ok || len(memories) != 1 {
+		t.Fatalf("memories = %#v", attachment["memories"])
+	}
+}
+
 func TestLoadTranscriptAcceptsSerializedMessageMetadata(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","sessionId":"sess_1","userType":"external","entrypoint":"cli","version":"1.2.3","slug":"plan-alpha","message":{"type":"user","content":[{"type":"text","text":"hi"}]}}`,

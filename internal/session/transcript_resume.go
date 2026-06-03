@@ -1,6 +1,10 @@
 package session
 
-import "ccgo/internal/contracts"
+import (
+	"encoding/json"
+
+	"ccgo/internal/contracts"
+)
 
 type ResumeConversation struct {
 	Leaf          contracts.ID
@@ -102,6 +106,10 @@ func ContractMessageFromTranscript(message TranscriptMessage) (contracts.Message
 			content = []contracts.ContentBlock{contracts.NewTextBlock(text)}
 		}
 	}
+	raw := map[string]any(nil)
+	if messageType == contracts.MessageAttachment {
+		raw = transcriptRawMap(message.Raw)
+	}
 	return contracts.Message{
 		Type:       messageType,
 		UUID:       message.UUID,
@@ -110,7 +118,19 @@ func ContractMessageFromTranscript(message TranscriptMessage) (contracts.Message
 		Timestamp:  message.Timestamp,
 		Subtype:    message.Subtype,
 		Content:    content,
+		Raw:        raw,
 	}, true
+}
+
+func transcriptRawMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil || len(fields) == 0 {
+		return nil
+	}
+	return fields
 }
 
 func latestConversationLeaf(transcript Transcript) contracts.ID {
