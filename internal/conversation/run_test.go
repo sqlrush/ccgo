@@ -536,6 +536,42 @@ func TestRunnerExpandsRelevantMemoryAttachmentsIntoRequest(t *testing.T) {
 	}
 }
 
+func TestRunnerInjectsRelevantMemoryFromConfiguredDirIntoRequest(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "db.md")
+	if err := os.WriteFile(path, []byte("---\ndescription: database permissions migration\n---\nremember database permission rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := os.Chtimes(path, now, now); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{Model: "sonnet", MaxTokens: 128, RelevantMemoryDir: dir}
+
+	request, err := runner.BuildRequest([]contracts.Message{messages.UserText("database permissions")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Messages) != 2 {
+		t.Fatalf("messages = %#v", request.Messages)
+	}
+	if got := request.Messages[0].Content[0].Text; got != "database permissions" {
+		t.Fatalf("user message = %q", got)
+	}
+	memoryText := request.Messages[1].Content[0].Text
+	if !strings.HasPrefix(memoryText, "<system-reminder>\nMemory (saved today): ") || !strings.Contains(memoryText, "/db.md:") || !strings.Contains(memoryText, "remember database permission rules\n\n</system-reminder>") {
+		t.Fatalf("memory text = %q", memoryText)
+	}
+
+	request, err = runner.BuildRequest([]contracts.Message{messages.UserText("database")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Messages) != 1 {
+		t.Fatalf("single-word messages = %#v", request.Messages)
+	}
+}
+
 func TestRunnerExtractsSessionMemoryAfterTurn(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	client := &fakeClient{calls: []fakeCall{

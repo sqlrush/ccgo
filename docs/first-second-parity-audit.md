@@ -146,6 +146,7 @@ M6 progress now includes:
 - `internal/memory`: memory age/freshness helpers now match official stale-memory guidance, and document loading can prefix old memory files with a system-reminder that they are point-in-time observations.
 - `internal/memory`: relevant-memory attachment primitives now match the official `relevant_memories` shape for stable headers, system-reminder rendering, surfaced path/byte scanning, 200-line/4096-byte surfacing reads with truncation notices, mark-after-filter duplicate attachment handling, last-non-meta-user/single-word/session-byte-cap prefetch gating, top-5 candidate filtering after read-state/surfaced de-dup, and recent successful tools collection excluding pending/failed/same-name-failed tools.
 - `internal/conversation`: request building now expands `relevant_memories` attachment messages into user/meta system-reminders before Anthropic API normalization.
+- `internal/conversation`: runners can now opt into a configured relevant-memory directory, deterministically select matching memory files, surface them as `relevant_memories`, and inject them into the next request while leaving default behavior unchanged.
 - `internal/tools/file`: `Read` now prefixes old auto-memory file reads with the same freshness system-reminder when internal auto-memory directory metadata is available.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 

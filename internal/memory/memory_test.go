@@ -278,6 +278,45 @@ func TestSelectRelevantMemoryCandidatesFiltersAndCaps(t *testing.T) {
 	}
 }
 
+func TestFindRelevantMemorySelectionsScoresAndSuppressesRecentToolReferences(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "db.md"), "---\ndescription: database permissions migration\n---\nbody\n")
+	writeFile(t, filepath.Join(dir, "old-db.md"), "---\ndescription: database migration notes\n---\nbody\n")
+	writeFile(t, filepath.Join(dir, "bash-reference.md"), "---\ndescription: Bash API usage reference\n---\nbody\n")
+	writeFile(t, filepath.Join(dir, "bash-warning.md"), "---\ndescription: Bash warning about permission errors\n---\nbody\n")
+	writeFile(t, filepath.Join(dir, "MEMORY.md"), "---\ndescription: database permissions root manifest\n---\nbody\n")
+	if err := os.Chtimes(filepath.Join(dir, "db.md"), time.Unix(30, 0), time.Unix(30, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(dir, "old-db.md"), time.Unix(20, 0), time.Unix(20, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(dir, "bash-reference.md"), time.Unix(40, 0), time.Unix(40, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(dir, "bash-warning.md"), time.Unix(10, 0), time.Unix(10, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	selected, err := FindRelevantMemorySelections(dir, "database permissions", nil, map[string]struct{}{
+		filepath.Join(dir, "old-db.md"): {},
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 1 || selected[0].Path != filepath.Join(dir, "db.md") {
+		t.Fatalf("selected = %#v", selected)
+	}
+
+	selected, err = FindRelevantMemorySelections(dir, "bash api warning", []string{"Bash"}, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 1 || selected[0].Path != filepath.Join(dir, "bash-warning.md") {
+		t.Fatalf("recent-tool selected = %#v", selected)
+	}
+}
+
 func TestCollectRecentSuccessfulToolsUsesCurrentHumanTurnWindow(t *testing.T) {
 	assistantTools := func(blocks ...contracts.ContentBlock) contracts.Message {
 		return contracts.Message{Type: contracts.MessageAssistant, Content: blocks}

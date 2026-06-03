@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -113,6 +114,53 @@ func ReadMemoriesForSurfacing(selected []RelevantMemorySelection, options Releva
 		memories = append(memories, memory)
 	}
 	return memories
+}
+
+func FindRelevantMemorySelections(root string, query string, recentTools []string, surfaced map[string]struct{}, limit int) ([]RelevantMemorySelection, error) {
+	headers, err := ScanDirectory(root, ScanOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if len(headers) == 0 {
+		return nil, nil
+	}
+	terms := queryTerms(query)
+	if len(terms) == 0 {
+		return nil, nil
+	}
+	type scoredSelection struct {
+		selection RelevantMemorySelection
+		score     int
+		mtime     time.Time
+	}
+	var scored []scoredSelection
+	for _, header := range headers {
+		if surfaced != nil {
+			if _, ok := surfaced[header.Path]; ok {
+				continue
+			}
+		}
+		score := relevantMemoryScore(header, terms, recentTools)
+		if score <= 0 {
+			continue
+		}
+		scored = append(scored, scoredSelection{
+			selection: RelevantMemorySelection{Path: header.Path, MtimeMs: header.Mtime.UnixMilli()},
+			score:     score,
+			mtime:     header.Mtime,
+		})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].mtime.After(scored[j].mtime)
+	})
+	results := make([][]RelevantMemorySelection, 1)
+	for _, item := range scored {
+		results[0] = append(results[0], item.selection)
+	}
+	return SelectRelevantMemoryCandidates(results, nil, surfaced, limit), nil
 }
 
 func RelevantMemoryHeader(path string, mtime time.Time, now time.Time) string {
@@ -422,6 +470,47 @@ func relevantMemoriesFromPayload(value any) []RelevantMemory {
 type relevantMemoriesAttachmentPayload struct {
 	Type     string           `json:"type"`
 	Memories []RelevantMemory `json:"memories"`
+}
+
+func relevantMemoryScore(header Header, terms []string, recentTools []string) int {
+	haystack := strings.ToLower(header.Filename + " " + header.Description)
+	if suppressRecentToolReference(haystack, recentTools) {
+		return 0
+	}
+	score := 0
+	for _, term := range terms {
+		score += strings.Count(haystack, term)
+	}
+	return score
+}
+
+func suppressRecentToolReference(haystack string, recentTools []string) bool {
+	if len(recentTools) == 0 {
+		return false
+	}
+	hasReferenceWord := strings.Contains(haystack, "reference") ||
+		strings.Contains(haystack, "docs") ||
+		strings.Contains(haystack, "documentation") ||
+		strings.Contains(haystack, "api") ||
+		strings.Contains(haystack, "usage")
+	if !hasReferenceWord {
+		return false
+	}
+	hasWarningWord := strings.Contains(haystack, "warning") ||
+		strings.Contains(haystack, "gotcha") ||
+		strings.Contains(haystack, "issue") ||
+		strings.Contains(haystack, "bug") ||
+		strings.Contains(haystack, "error")
+	if hasWarningWord {
+		return false
+	}
+	for _, tool := range recentTools {
+		tool = strings.ToLower(strings.TrimSpace(tool))
+		if tool != "" && strings.Contains(haystack, tool) {
+			return true
+		}
+	}
+	return false
 }
 
 func readRelevantMemoryFile(item RelevantMemorySelection, maxLines int, maxBytes int) (string, int, bool, bool, time.Time, error) {

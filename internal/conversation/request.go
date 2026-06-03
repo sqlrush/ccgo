@@ -15,6 +15,10 @@ func (r Runner) BuildRequest(history []contracts.Message, model string) (anthrop
 	if err != nil {
 		return anthropic.Request{}, err
 	}
+	history, err = r.applyRelevantMemoryAttachments(history)
+	if err != nil {
+		return anthropic.Request{}, err
+	}
 	history = memory.ExpandRelevantMemoryAttachments(history, time.Time{})
 	request := anthropic.Request{
 		Model:     model,
@@ -31,6 +35,34 @@ func (r Runner) BuildRequest(history []contracts.Message, model string) (anthrop
 		}
 	}
 	return request, nil
+}
+
+func (r Runner) applyRelevantMemoryAttachments(history []contracts.Message) ([]contracts.Message, error) {
+	if r.RelevantMemoryDir == "" {
+		return history, nil
+	}
+	plan, ok := memory.RelevantMemoryPrefetchPlanForMessages(history, 0)
+	if !ok {
+		return history, nil
+	}
+	selected, err := memory.FindRelevantMemorySelections(
+		r.RelevantMemoryDir,
+		plan.Input,
+		memory.CollectRecentSuccessfulTools(history),
+		plan.Surfaced.Paths,
+		r.relevantMemoryLimit(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	memories := memory.ReadMemoriesForSurfacing(selected, memory.RelevantMemorySurfaceOptions{})
+	if len(memories) == 0 {
+		return history, nil
+	}
+	out := make([]contracts.Message, 0, len(history)+1)
+	out = append(out, history...)
+	out = append(out, memory.RelevantMemoriesAttachmentMessage(memories))
+	return out, nil
 }
 
 func (r Runner) applySessionMemoryRecall(history []contracts.Message) ([]contracts.Message, error) {
@@ -73,6 +105,13 @@ func (r Runner) sessionMemoryRecallLimit() int {
 		return r.SessionMemoryRecallLimit
 	}
 	return 3
+}
+
+func (r Runner) relevantMemoryLimit() int {
+	if r.RelevantMemoryLimit > 0 {
+		return r.RelevantMemoryLimit
+	}
+	return memory.MaxRelevantMemoryAttachments
 }
 
 func lastUserText(history []contracts.Message) string {
