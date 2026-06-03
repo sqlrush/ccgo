@@ -143,6 +143,14 @@ func parseWorktreeStateMetadata(line []byte) (WorktreeStateEntry, bool) {
 	return entry, true
 }
 
+func parseSnapshotMessageID(line []byte) contracts.ID {
+	fields, err := parseTranscriptMetadataFields(line)
+	if err != nil {
+		return ""
+	}
+	return fields.idValue("messageId", "messageID", "message_id", "messageUuid", "messageUUID", "message_uuid", "uuid", "id")
+}
+
 func parseContentReplacementMetadata(line []byte) (ContentReplacementEntry, bool) {
 	var entry ContentReplacementEntry
 	if err := json.Unmarshal(line, &entry); err != nil {

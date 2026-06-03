@@ -35,6 +35,8 @@ type Transcript struct {
 	Tombstones              map[contracts.ID]TombstoneEntry
 	FileHistorySnapshots    []json.RawMessage
 	AttributionSnapshots    []json.RawMessage
+	FileHistoryByMessageID  map[contracts.ID]json.RawMessage
+	AttributionByMessageID  map[contracts.ID]json.RawMessage
 	SpeculationAccepts      []SpeculationAcceptEntry
 	ContextCollapseCommits  []ContextCollapseCommitEntry
 	ContextCollapseSnapshot *ContextCollapseSnapshotEntry
@@ -260,9 +262,17 @@ func LoadTranscript(path string) (Transcript, error) {
 				transcript.Tombstones[entry.TargetUUID] = entry
 			}
 		case metadataType == "file-history-snapshot":
-			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, append(json.RawMessage(nil), line...))
+			snapshot := append(json.RawMessage(nil), line...)
+			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, snapshot)
+			if messageID := parseSnapshotMessageID(line); messageID != "" {
+				transcript.FileHistoryByMessageID[messageID] = snapshot
+			}
 		case metadataType == "attribution-snapshot":
-			transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, append(json.RawMessage(nil), line...))
+			snapshot := append(json.RawMessage(nil), line...)
+			transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, snapshot)
+			if messageID := parseSnapshotMessageID(line); messageID != "" {
+				transcript.AttributionByMessageID[messageID] = snapshot
+			}
 		case metadataType == "speculation-accept":
 			if entry, ok := parseSpeculationAcceptMetadata(line); ok {
 				transcript.SpeculationAccepts = append(transcript.SpeculationAccepts, entry)
@@ -544,22 +554,24 @@ func RemoveTranscriptMessageByUUIDWithLimit(path string, target contracts.ID, ma
 
 func newTranscript() Transcript {
 	return Transcript{
-		Messages:            map[contracts.ID]*TranscriptMessage{},
-		Summaries:           map[contracts.ID]string{},
-		CustomTitles:        map[contracts.ID]string{},
-		AITitles:            map[contracts.ID]string{},
-		LastPrompts:         map[contracts.ID]string{},
-		TaskSummaries:       map[contracts.ID]TaskSummaryEntry{},
-		Tags:                map[contracts.ID]string{},
-		AgentNames:          map[contracts.ID]string{},
-		AgentColors:         map[contracts.ID]string{},
-		AgentSettings:       map[contracts.ID]string{},
-		PRLinks:             map[contracts.ID]PRLinkEntry{},
-		Modes:               map[contracts.ID]string{},
-		WorktreeStates:      map[contracts.ID]WorktreeStateEntry{},
-		ContentReplacements: map[contracts.ID][]ContentReplacementRecord{},
-		Tombstones:          map[contracts.ID]TombstoneEntry{},
-		LeafUUIDs:           map[contracts.ID]struct{}{},
+		Messages:               map[contracts.ID]*TranscriptMessage{},
+		Summaries:              map[contracts.ID]string{},
+		CustomTitles:           map[contracts.ID]string{},
+		AITitles:               map[contracts.ID]string{},
+		LastPrompts:            map[contracts.ID]string{},
+		TaskSummaries:          map[contracts.ID]TaskSummaryEntry{},
+		Tags:                   map[contracts.ID]string{},
+		AgentNames:             map[contracts.ID]string{},
+		AgentColors:            map[contracts.ID]string{},
+		AgentSettings:          map[contracts.ID]string{},
+		PRLinks:                map[contracts.ID]PRLinkEntry{},
+		Modes:                  map[contracts.ID]string{},
+		WorktreeStates:         map[contracts.ID]WorktreeStateEntry{},
+		ContentReplacements:    map[contracts.ID][]ContentReplacementRecord{},
+		Tombstones:             map[contracts.ID]TombstoneEntry{},
+		FileHistoryByMessageID: map[contracts.ID]json.RawMessage{},
+		AttributionByMessageID: map[contracts.ID]json.RawMessage{},
+		LeafUUIDs:              map[contracts.ID]struct{}{},
 	}
 }
 

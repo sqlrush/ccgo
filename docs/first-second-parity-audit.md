@@ -137,6 +137,7 @@ M6 progress now includes:
 - `internal/session`: remote-history pagination now also accepts HTTP `Link` header URLs with `previous`/`prev`/`older`/`next` rels as continuation cursor fallbacks.
 - `internal/session`: sidechain state loading now accepts legacy subagent/agent/task start and finish subtype aliases, broader sidechain/subagent ID and type fields, summary aliases, and common running/completed/cancelled/failed status aliases.
 - `internal/session`: sidechain agent metadata sidecar loading now accepts broader agent type, workspace/worktree path, and task-description field aliases such as `subagentType`, `agentName`, `workspacePath`, `taskDescription`, `prompt`, and `title`.
+- `internal/session`: transcript metadata loading now indexes file-history and attribution snapshots by message ID, with aliases such as `message_id`, `messageUuid`, and `id`, while preserving raw snapshot lists.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:

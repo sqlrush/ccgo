@@ -26,6 +26,8 @@ type TranscriptMetadata struct {
 	Tombstones              map[contracts.ID]TombstoneEntry
 	FileHistorySnapshots    []json.RawMessage
 	AttributionSnapshots    []json.RawMessage
+	FileHistoryByMessageID  map[contracts.ID]json.RawMessage
+	AttributionByMessageID  map[contracts.ID]json.RawMessage
 	SpeculationAccepts      []SpeculationAcceptEntry
 	ContextCollapseCommits  []ContextCollapseCommitEntry
 	ContextCollapseSnapshot *ContextCollapseSnapshotEntry
@@ -33,20 +35,22 @@ type TranscriptMetadata struct {
 
 func NewTranscriptMetadata() TranscriptMetadata {
 	return TranscriptMetadata{
-		Summaries:           map[contracts.ID]string{},
-		CustomTitles:        map[contracts.ID]string{},
-		AITitles:            map[contracts.ID]string{},
-		LastPrompts:         map[contracts.ID]string{},
-		TaskSummaries:       map[contracts.ID]TaskSummaryEntry{},
-		Tags:                map[contracts.ID]string{},
-		AgentNames:          map[contracts.ID]string{},
-		AgentColors:         map[contracts.ID]string{},
-		AgentSettings:       map[contracts.ID]string{},
-		PRLinks:             map[contracts.ID]PRLinkEntry{},
-		Modes:               map[contracts.ID]string{},
-		WorktreeStates:      map[contracts.ID]WorktreeStateEntry{},
-		ContentReplacements: map[contracts.ID][]ContentReplacementRecord{},
-		Tombstones:          map[contracts.ID]TombstoneEntry{},
+		Summaries:              map[contracts.ID]string{},
+		CustomTitles:           map[contracts.ID]string{},
+		AITitles:               map[contracts.ID]string{},
+		LastPrompts:            map[contracts.ID]string{},
+		TaskSummaries:          map[contracts.ID]TaskSummaryEntry{},
+		Tags:                   map[contracts.ID]string{},
+		AgentNames:             map[contracts.ID]string{},
+		AgentColors:            map[contracts.ID]string{},
+		AgentSettings:          map[contracts.ID]string{},
+		PRLinks:                map[contracts.ID]PRLinkEntry{},
+		Modes:                  map[contracts.ID]string{},
+		WorktreeStates:         map[contracts.ID]WorktreeStateEntry{},
+		ContentReplacements:    map[contracts.ID][]ContentReplacementRecord{},
+		Tombstones:             map[contracts.ID]TombstoneEntry{},
+		FileHistoryByMessageID: map[contracts.ID]json.RawMessage{},
+		AttributionByMessageID: map[contracts.ID]json.RawMessage{},
 	}
 }
 
@@ -135,9 +139,17 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 				metadata.Tombstones[entry.TargetUUID] = entry
 			}
 		case "file-history-snapshot":
-			metadata.FileHistorySnapshots = append(metadata.FileHistorySnapshots, append(json.RawMessage(nil), line...))
+			snapshot := append(json.RawMessage(nil), line...)
+			metadata.FileHistorySnapshots = append(metadata.FileHistorySnapshots, snapshot)
+			if messageID := parseSnapshotMessageID(line); messageID != "" {
+				metadata.FileHistoryByMessageID[messageID] = snapshot
+			}
 		case "attribution-snapshot":
-			metadata.AttributionSnapshots = append(metadata.AttributionSnapshots, append(json.RawMessage(nil), line...))
+			snapshot := append(json.RawMessage(nil), line...)
+			metadata.AttributionSnapshots = append(metadata.AttributionSnapshots, snapshot)
+			if messageID := parseSnapshotMessageID(line); messageID != "" {
+				metadata.AttributionByMessageID[messageID] = snapshot
+			}
 		case "speculation-accept":
 			if entry, ok := parseSpeculationAcceptMetadata(line); ok {
 				metadata.SpeculationAccepts = append(metadata.SpeculationAccepts, entry)

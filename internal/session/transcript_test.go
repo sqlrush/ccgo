@@ -508,7 +508,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
 		`{"type":"worktree_state","session_id":"s3","worktree_session":{"worktreePath":"/tmp/wt2","sessionId":"s3"}}`,
 		`{"type":"file-history-snapshot","messageId":"a1","snapshot":{"files":[]},"isSnapshotUpdate":false}`,
+		`{"type":"file_history_snapshot","message_id":"a2","snapshot":{"files":["alias"]},"is_snapshot_update":true}`,
 		`{"type":"attribution-snapshot","messageId":"a1","surface":"cli","fileStates":{}}`,
+		`{"type":"attribution_snapshot","messageUUID":"a2","surface":"ide","fileStates":{}}`,
 		`{"type":"speculation-accept","timestamp":"2026-01-01T00:00:05Z","timeSavedMs":1200}`,
 		`{"type":"speculation_accept","timestamp":"2026-01-01T00:00:05Z","time_saved_ms":3400}`,
 		`{"type":"content-replacement","sessionId":"s1","replacements":[{"toolUseId":"toolu_1","replacement":"stub"}]}`,
@@ -547,8 +549,11 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if transcript.PRLinks["s3"].PRNumber != 43 || transcript.Modes["s3"] != "worker" || len(transcript.WorktreeStates["s3"].WorktreeSession) == 0 {
 		t.Fatalf("snake session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
 	}
-	if len(transcript.FileHistorySnapshots) != 1 || len(transcript.AttributionSnapshots) != 1 || len(transcript.SpeculationAccepts) != 2 || transcript.SpeculationAccepts[1].TimeSavedMS != 3400 {
+	if len(transcript.FileHistorySnapshots) != 2 || len(transcript.AttributionSnapshots) != 2 || len(transcript.SpeculationAccepts) != 2 || transcript.SpeculationAccepts[1].TimeSavedMS != 3400 {
 		t.Fatalf("raw metadata counts = %d %d %d", len(transcript.FileHistorySnapshots), len(transcript.AttributionSnapshots), len(transcript.SpeculationAccepts))
+	}
+	if len(transcript.FileHistoryByMessageID["a1"]) == 0 || len(transcript.FileHistoryByMessageID["a2"]) == 0 || len(transcript.AttributionByMessageID["a1"]) == 0 || len(transcript.AttributionByMessageID["a2"]) == 0 {
+		t.Fatalf("snapshot maps = %#v %#v", transcript.FileHistoryByMessageID, transcript.AttributionByMessageID)
 	}
 	if got := transcript.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("content replacements = %#v", got)
@@ -596,8 +601,11 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if metadata.PRLinks["s3"].PRNumber != 43 || metadata.Modes["s3"] != "worker" || len(metadata.WorktreeStates["s3"].WorktreeSession) == 0 {
 		t.Fatalf("metadata snake session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
 	}
-	if len(metadata.FileHistorySnapshots) != 1 || len(metadata.AttributionSnapshots) != 1 || len(metadata.SpeculationAccepts) != 2 || metadata.SpeculationAccepts[1].TimeSavedMS != 3400 {
+	if len(metadata.FileHistorySnapshots) != 2 || len(metadata.AttributionSnapshots) != 2 || len(metadata.SpeculationAccepts) != 2 || metadata.SpeculationAccepts[1].TimeSavedMS != 3400 {
 		t.Fatalf("metadata raw counts = %d %d %d", len(metadata.FileHistorySnapshots), len(metadata.AttributionSnapshots), len(metadata.SpeculationAccepts))
+	}
+	if len(metadata.FileHistoryByMessageID["a1"]) == 0 || len(metadata.FileHistoryByMessageID["a2"]) == 0 || len(metadata.AttributionByMessageID["a1"]) == 0 || len(metadata.AttributionByMessageID["a2"]) == 0 {
+		t.Fatalf("metadata snapshot maps = %#v %#v", metadata.FileHistoryByMessageID, metadata.AttributionByMessageID)
 	}
 	if got := metadata.ContentReplacements["s1"]; len(got) != 1 || got[0].Replacement != "stub" {
 		t.Fatalf("metadata replacements = %#v", got)
