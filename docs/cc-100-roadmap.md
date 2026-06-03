@@ -256,6 +256,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 本轮补充：conversation runner 现在会在用户消息入队后计算 compact token warning state，并在触发 warning/error/auto-compact/blocking 阈值时发出 `token_warning` event；warning state 接入 blocking-limit override，auto-compact threshold 判断接入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，使 runtime warning 和自动压缩使用同一套 window 输入。
 
+本轮补充：microcompact disk cache loader 现在读取 Go 默认、camelCase 和 snake_case 字段别名，并容忍计数字段的数字字符串，提升 cached microcompact 文件在不同实现/版本间的恢复率。
+
 ### M7: TUI Renderer And Interaction
 
 目标：还原交互式 Claude Code 体验。

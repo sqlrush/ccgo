@@ -244,6 +244,40 @@ func TestMicroCompactPersistsDiskCache(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsFieldAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := "alias"
+	data := `{
+		"summary": "cached summary",
+		"digest": "alias",
+		"cached": true,
+		"messagesSummarized": "7",
+		"messages_kept": 2,
+		"version": "microcompact.v1",
+		"createdAt": "1970-01-01T00:01:40Z",
+		"expires_at": "1970-01-01T01:01:40Z"
+	}`
+	if err := os.WriteFile(microResultPath(cacheDir, digest), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := LoadMicroResult(cacheDir, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected aliased cache result")
+	}
+	if result.Summary != "cached summary" || result.Digest != digest || !result.Cached || result.MessagesSummarized != 7 || result.MessagesKept != 2 || result.Version != DefaultMicroCacheVersion {
+		t.Fatalf("result = %#v", result)
+	}
+	if !result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+		t.Fatalf("result times = %#v", result)
+	}
+}
+
 func TestMicroCompactWriteThroughPersistsMemoryCache(t *testing.T) {
 	cache := NewMicroCache()
 	cacheDir := filepath.Join(t.TempDir(), "micro")

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,56 @@ type MicroResult struct {
 	Version            string
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
+}
+
+func (r *MicroResult) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	var result MicroResult
+	if value, ok, err := microStringJSONField(fields, "Summary", "summary"); err != nil {
+		return err
+	} else if ok {
+		result.Summary = value
+	}
+	if value, ok, err := microStringJSONField(fields, "Digest", "digest"); err != nil {
+		return err
+	} else if ok {
+		result.Digest = value
+	}
+	if value, ok, err := microBoolJSONField(fields, "Cached", "cached"); err != nil {
+		return err
+	} else if ok {
+		result.Cached = value
+	}
+	if value, ok, err := microIntJSONField(fields, "MessagesSummarized", "messagesSummarized", "messages_summarized"); err != nil {
+		return err
+	} else if ok {
+		result.MessagesSummarized = value
+	}
+	if value, ok, err := microIntJSONField(fields, "MessagesKept", "messagesKept", "messages_kept"); err != nil {
+		return err
+	} else if ok {
+		result.MessagesKept = value
+	}
+	if value, ok, err := microStringJSONField(fields, "Version", "version"); err != nil {
+		return err
+	} else if ok {
+		result.Version = value
+	}
+	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at"); err != nil {
+		return err
+	} else if ok {
+		result.CreatedAt = value
+	}
+	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at"); err != nil {
+		return err
+	} else if ok {
+		result.ExpiresAt = value
+	}
+	*r = result
+	return nil
 }
 
 type MicroPruneOptions struct {
@@ -294,6 +345,74 @@ func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
 		}
 	}
 	return pruned, nil
+}
+
+func microStringJSONField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok || string(raw) == "null" {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return "", false, err
+		}
+		return value, true, nil
+	}
+	return "", false, nil
+}
+
+func microBoolJSONField(fields map[string]json.RawMessage, names ...string) (bool, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok || string(raw) == "null" {
+			continue
+		}
+		var value bool
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return false, false, err
+		}
+		return value, true, nil
+	}
+	return false, false, nil
+}
+
+func microIntJSONField(fields map[string]json.RawMessage, names ...string) (int, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok || string(raw) == "null" {
+			continue
+		}
+		var value int
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true, nil
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return 0, false, err
+		}
+		parsed, err := strconv.Atoi(text)
+		if err != nil {
+			return 0, false, err
+		}
+		return parsed, true, nil
+	}
+	return 0, false, nil
+}
+
+func microTimeJSONField(fields map[string]json.RawMessage, names ...string) (time.Time, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok || string(raw) == "null" {
+			continue
+		}
+		var value time.Time
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return time.Time{}, false, err
+		}
+		return value, true, nil
+	}
+	return time.Time{}, false, nil
 }
 
 func microResultPath(dir string, digest string) string {
