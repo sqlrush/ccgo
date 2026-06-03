@@ -185,19 +185,73 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 func terminalGraphemes(text string) []TerminalGrapheme {
 	graphemes := []TerminalGrapheme{}
 	for len(text) > 0 {
-		r, size := utf8.DecodeRuneInString(text)
-		if r == utf8.RuneError && size == 0 {
+		value, size := nextTerminalGrapheme(text)
+		if size == 0 {
 			break
 		}
-		value := text[:size]
 		text = text[size:]
-		graphemes = append(graphemes, TerminalGrapheme{Value: value, Width: terminalGraphemeWidth(r)})
+		graphemes = append(graphemes, TerminalGrapheme{Value: value, Width: terminalGraphemeStringWidth(value)})
 	}
 	return graphemes
 }
 
-func terminalGraphemeWidth(r rune) int {
-	if isTerminalEmoji(r) || isTerminalEastAsianWide(r) {
+func nextTerminalGrapheme(text string) (string, int) {
+	first, size := utf8.DecodeRuneInString(text)
+	if first == utf8.RuneError && size == 0 {
+		return "", 0
+	}
+	end := size
+	previousWasZWJ := false
+	regionalCount := 0
+	if isTerminalRegionalIndicator(first) {
+		regionalCount = 1
+	}
+	for end < len(text) {
+		r, nextSize := utf8.DecodeRuneInString(text[end:])
+		if r == utf8.RuneError && nextSize == 0 {
+			break
+		}
+		if isTerminalCombiningMark(r) || isTerminalVariationSelector(r) || isTerminalEmojiModifier(r) {
+			end += nextSize
+			previousWasZWJ = false
+			continue
+		}
+		if r == 0x200d {
+			end += nextSize
+			previousWasZWJ = true
+			continue
+		}
+		if previousWasZWJ {
+			end += nextSize
+			previousWasZWJ = false
+			continue
+		}
+		if regionalCount == 1 && isTerminalRegionalIndicator(r) {
+			end += nextSize
+			regionalCount++
+			continue
+		}
+		break
+	}
+	return text[:end], end
+}
+
+func terminalGraphemeStringWidth(grapheme string) int {
+	count := 0
+	var first rune
+	for _, r := range grapheme {
+		if count == 0 {
+			first = r
+		}
+		count++
+		if count > 1 {
+			return 2
+		}
+	}
+	if count == 0 {
+		return 1
+	}
+	if isTerminalEmoji(first) || isTerminalEastAsianWide(first) {
 		return 2
 	}
 	return 1
@@ -222,4 +276,25 @@ func isTerminalEastAsianWide(r rune) bool {
 		(r >= 0xffe0 && r <= 0xffe6) ||
 		(r >= 0x20000 && r <= 0x2fffd) ||
 		(r >= 0x30000 && r <= 0x3fffd)
+}
+
+func isTerminalCombiningMark(r rune) bool {
+	return (r >= 0x0300 && r <= 0x036f) ||
+		(r >= 0x1ab0 && r <= 0x1aff) ||
+		(r >= 0x1dc0 && r <= 0x1dff) ||
+		(r >= 0x20d0 && r <= 0x20ff) ||
+		(r >= 0xfe20 && r <= 0xfe2f)
+}
+
+func isTerminalVariationSelector(r rune) bool {
+	return (r >= 0xfe00 && r <= 0xfe0f) ||
+		(r >= 0xe0100 && r <= 0xe01ef)
+}
+
+func isTerminalEmojiModifier(r rune) bool {
+	return r >= 0x1f3fb && r <= 0x1f3ff
+}
+
+func isTerminalRegionalIndicator(r rune) bool {
+	return r >= 0x1f1e0 && r <= 0x1f1ff
 }

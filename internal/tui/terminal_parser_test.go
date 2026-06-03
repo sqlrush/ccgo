@@ -32,6 +32,33 @@ func TestTerminalParserTextBellAndGraphemeWidths(t *testing.T) {
 	}
 }
 
+func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
+	parser := NewTerminalParser()
+	actions := parser.Feed("e\u0301 \u2764\ufe0f \U0001f44b\U0001f3fd \U0001f469\u200d\U0001f4bb \U0001f1fa\U0001f1f8")
+	if len(actions) != 1 || actions[0].Type != TerminalActionText {
+		t.Fatalf("actions = %#v", actions)
+	}
+	want := []TerminalGrapheme{
+		{Value: "e\u0301", Width: 2},
+		{Value: " ", Width: 1},
+		{Value: "\u2764\ufe0f", Width: 2},
+		{Value: " ", Width: 1},
+		{Value: "\U0001f44b\U0001f3fd", Width: 2},
+		{Value: " ", Width: 1},
+		{Value: "\U0001f469\u200d\U0001f4bb", Width: 2},
+		{Value: " ", Width: 1},
+		{Value: "\U0001f1fa\U0001f1f8", Width: 2},
+	}
+	if len(actions[0].Graphemes) != len(want) {
+		t.Fatalf("graphemes = %#v", actions[0].Graphemes)
+	}
+	for i, got := range actions[0].Graphemes {
+		if got != want[i] {
+			t.Fatalf("grapheme %d = %#v, want %#v", i, got, want[i])
+		}
+	}
+}
+
 func TestTerminalParserAppliesSGRToFollowingText(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("plain" + CSISequence(31, "m") + "red" + CSISequence("m") + "normal")
