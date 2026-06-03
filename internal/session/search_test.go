@@ -172,6 +172,45 @@ func TestLoadTranscriptIndexUsesAITitleAndLastPromptFallbacks(t *testing.T) {
 	}
 }
 
+func TestTitleFromTranscriptUsesIndexTitleFallbacks(t *testing.T) {
+	aiTitlePath := writeTranscript(t, []string{
+		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"ai-title","sessionId":"sess_1","aiTitle":"Generated Title"}`,
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","message":{"type":"user","content":[{"type":"text","text":"first prompt"}]}}`,
+	})
+	transcript, err := LoadTranscript(aiTitlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if title := TitleFromTranscript(transcript, "sess_1"); title != "Generated Title" {
+		t.Fatalf("ai title fallback = %q", title)
+	}
+
+	lastPromptPath := writeTranscript(t, []string{
+		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"last-prompt","sessionId":"sess_2","lastPrompt":"resume from prompt"}`,
+	})
+	transcript, err = LoadTranscript(lastPromptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if title := TitleFromTranscript(transcript, "sess_2"); title != "resume from prompt" {
+		t.Fatalf("last prompt fallback = %q", title)
+	}
+
+	summaryPath := writeTranscript(t, []string{
+		`{"type":"summary","leafUuid":"a1","summary":"summary title"}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"sess_3","message":{"type":"assistant","content":[{"type":"text","text":"done"}]}}`,
+	})
+	transcript, err = LoadTranscript(summaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if title := TitleFromTranscript(transcript, "sess_3"); title != "summary title" {
+		t.Fatalf("summary fallback = %q", title)
+	}
+}
+
 func TestSearchTranscriptFileStreamsMatches(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{malformed`,

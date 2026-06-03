@@ -202,9 +202,10 @@ func SearchTranscript(transcript Transcript, query string, maxMatches int) []str
 }
 
 func TitleFromTranscript(transcript Transcript, sessionID contracts.ID) string {
-	if title := strings.TrimSpace(transcript.CustomTitles[sessionID]); title != "" {
-		return title
-	}
+	customTitle := transcript.CustomTitles[sessionID]
+	aiTitle := transcript.AITitles[sessionID]
+	lastPrompt := transcript.LastPrompts[sessionID]
+	firstUserText := ""
 	for _, id := range transcript.Order {
 		msg := transcript.Messages[id]
 		if msg == nil || msg.Type != "user" {
@@ -212,15 +213,26 @@ func TitleFromTranscript(transcript Transcript, sessionID contracts.ID) string {
 		}
 		text := strings.TrimSpace(textFromTranscriptMessage(msg))
 		if text != "" {
-			return truncateLine(text, 80)
+			firstUserText = text
+			break
+		}
+	}
+	firstSummary := firstSummaryFromTranscript(transcript)
+	return titleFromIndex(customTitle, aiTitle, firstUserText, lastPrompt, firstSummary)
+}
+
+func firstSummaryFromTranscript(transcript Transcript) string {
+	for _, id := range transcript.Order {
+		if summary := strings.TrimSpace(transcript.Summaries[id]); summary != "" {
+			return summary
 		}
 	}
 	for _, summary := range transcript.Summaries {
 		if strings.TrimSpace(summary) != "" {
-			return truncateLine(summary, 80)
+			return summary
 		}
 	}
-	return "Untitled session"
+	return ""
 }
 
 func textFromTranscriptMessage(msg *TranscriptMessage) string {
