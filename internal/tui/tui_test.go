@@ -3956,6 +3956,24 @@ func TestRendererWrapsLongPromptAndCursor(t *testing.T) {
 	}
 }
 
+func TestRendererWrapsWidePromptAndCursorByVisibleWidth(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.Text = "界界界a"
+	prompt.Cursor = len([]rune("界界"))
+	output := RenderOnce(8, 4, Frame{
+		Status:     "ready",
+		Prompt:     prompt,
+		ShowCursor: true,
+	})
+	visible := StripANSI(output)
+	if !strings.Contains(visible, "> 界界界") || !strings.Contains(visible, "  a") {
+		t.Fatalf("visible prompt = %q", visible)
+	}
+	if !strings.Contains(output, "\x1b[3;7H") {
+		t.Fatalf("cursor output = %q", output)
+	}
+}
+
 func TestSnapshotCorpusWritesAndComparesVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"

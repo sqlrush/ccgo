@@ -11,6 +11,13 @@ type promptLayout struct {
 	CursorCol  int
 }
 
+type promptLineChunk struct {
+	Text      string
+	StartRune int
+	EndRune   int
+	Graphemes []TerminalGrapheme
+}
+
 func RenderMessages(messages []Message, width int) []string {
 	var lines []string
 	for _, message := range messages {
@@ -138,49 +145,85 @@ func layoutPrompt(prompt PromptState, width int) promptLayout {
 		if index == 0 {
 			linePrefix = prefix
 		}
-		contentWidth := width - len([]rune(linePrefix))
+		contentWidth := width - TerminalVisibleWidth(linePrefix)
 		if contentWidth < 1 {
 			contentWidth = 1
 		}
 		chunks := promptLineChunks(line, contentWidth)
-		chunkStart := 0
 		for chunkIndex, chunk := range chunks {
 			chunkPrefix := linePrefix
 			if chunkIndex > 0 {
 				chunkPrefix = continuation
 			}
-			chunkEnd := chunkStart + len([]rune(chunk))
 			if index == cursorLine {
 				lastChunk := chunkIndex == len(chunks)-1
-				if cursorCol >= chunkStart && (cursorCol < chunkEnd || (lastChunk && cursorCol == chunkEnd)) {
+				if cursorCol >= chunk.StartRune && (cursorCol < chunk.EndRune || (lastChunk && cursorCol == chunk.EndRune)) {
 					layout.CursorLine = len(layout.Lines)
-					layout.CursorCol = len([]rune(chunkPrefix)) + cursorCol - chunkStart
+					layout.CursorCol = TerminalVisibleWidth(chunkPrefix) + promptChunkCursorColumn(chunk, cursorCol)
 				}
 			}
-			layout.Lines = append(layout.Lines, padOrTrim(chunkPrefix+chunk, width))
-			chunkStart = chunkEnd
+			layout.Lines = append(layout.Lines, padOrTrim(chunkPrefix+chunk.Text, width))
 		}
 	}
 	return layout
 }
 
-func promptLineChunks(line string, width int) []string {
+func promptLineChunks(line string, width int) []promptLineChunk {
 	if width <= 0 {
-		return []string{""}
+		return []promptLineChunk{{}}
 	}
-	runes := []rune(line)
-	if len(runes) == 0 {
-		return []string{""}
+	graphemes := terminalGraphemes(line)
+	if len(graphemes) == 0 {
+		return []promptLineChunk{{}}
 	}
-	var chunks []string
-	for start := 0; start < len(runes); start += width {
-		end := start + width
-		if end > len(runes) {
-			end = len(runes)
+	var chunks []promptLineChunk
+	startRune := 0
+	endRune := 0
+	visible := 0
+	current := []TerminalGrapheme{}
+	for _, grapheme := range graphemes {
+		graphemeRunes := len([]rune(grapheme.Value))
+		if len(current) > 0 && visible+grapheme.Width > width {
+			chunks = append(chunks, promptLineChunk{
+				Text:      graphemesString(current),
+				StartRune: startRune,
+				EndRune:   endRune,
+				Graphemes: append([]TerminalGrapheme(nil), current...),
+			})
+			startRune = endRune
+			current = current[:0]
+			visible = 0
 		}
-		chunks = append(chunks, string(runes[start:end]))
+		current = append(current, grapheme)
+		visible += grapheme.Width
+		endRune += graphemeRunes
+	}
+	if len(current) > 0 {
+		chunks = append(chunks, promptLineChunk{
+			Text:      graphemesString(current),
+			StartRune: startRune,
+			EndRune:   endRune,
+			Graphemes: append([]TerminalGrapheme(nil), current...),
+		})
 	}
 	return chunks
+}
+
+func promptChunkCursorColumn(chunk promptLineChunk, cursorCol int) int {
+	col := 0
+	runeIndex := chunk.StartRune
+	for _, grapheme := range chunk.Graphemes {
+		nextRuneIndex := runeIndex + len([]rune(grapheme.Value))
+		if cursorCol <= runeIndex {
+			return col
+		}
+		if cursorCol < nextRuneIndex {
+			return col + grapheme.Width
+		}
+		col += grapheme.Width
+		runeIndex = nextRuneIndex
+	}
+	return col
 }
 
 func promptCursorLogicalPosition(prompt PromptState) (int, int) {
