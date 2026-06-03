@@ -12,12 +12,13 @@ import (
 )
 
 type SessionInfo struct {
-	ID        contracts.ID
-	Path      string
-	Title     string
-	GitBranch string
-	Modified  time.Time
-	Size      int64
+	ID          contracts.ID
+	Path        string
+	Title       string
+	ProjectPath string
+	GitBranch   string
+	Modified    time.Time
+	Size        int64
 }
 
 type SearchResult struct {
@@ -54,18 +55,21 @@ func ListProjectSessions(root string) ([]SessionInfo, error) {
 		}
 		id := contracts.ID(strings.TrimSuffix(entry.Name(), ".jsonl"))
 		title := ""
+		projectPath := ""
 		gitBranch := ""
 		if index, err := LoadTranscriptIndex(path, id); err == nil {
 			title = index.Title
+			projectPath = index.ProjectPath
 			gitBranch = index.GitBranch
 		}
 		sessions = append(sessions, SessionInfo{
-			ID:        id,
-			Path:      path,
-			Title:     title,
-			GitBranch: gitBranch,
-			Modified:  info.ModTime(),
-			Size:      info.Size(),
+			ID:          id,
+			Path:        path,
+			Title:       title,
+			ProjectPath: projectPath,
+			GitBranch:   gitBranch,
+			Modified:    info.ModTime(),
+			Size:        info.Size(),
 		})
 	}
 	sort.SliceStable(sessions, func(i, j int) bool {
@@ -130,6 +134,7 @@ func SearchProjectSessions(root string, query string, limit int) ([]SearchResult
 
 func sessionInfoMatches(info SessionInfo, query string) bool {
 	return strings.Contains(strings.ToLower(info.Title), query) ||
+		strings.Contains(strings.ToLower(info.ProjectPath), query) ||
 		strings.Contains(strings.ToLower(info.GitBranch), query)
 }
 

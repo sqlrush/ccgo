@@ -140,6 +140,7 @@ M6 progress now includes:
 - `internal/session`: transcript metadata loading now indexes file-history and attribution snapshots by message ID, with aliases such as `message_id`, `messageUuid`, and `id`, while preserving raw snapshot lists.
 - `internal/session`: transcript indexes and session search now recover message `gitBranch` values, accept `git_branch`/`branch` aliases, and can match sessions by branch name.
 - `internal/session`: full transcript title derivation now matches indexed/lite fallback order: custom title, AI title, first user prompt, last-prompt metadata, then summary.
+- `internal/session`: transcript indexes and session search now recover message `cwd` as project path, accept project/working-directory aliases, and can match sessions by project path.
 - `internal/tools/file`: `Write`/`Edit` now call the memory secret guard for team-memory paths.
 
 M7 progress now includes:

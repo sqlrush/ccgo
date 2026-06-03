@@ -41,6 +41,11 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		Time                   string           `json:"time"`
 		IsSidechainSnake       *bool            `json:"is_sidechain"`
 		AgentIDSnake           string           `json:"agent_id"`
+		CWDSnake               string           `json:"cwd_path"`
+		WorkingDirectory       string           `json:"workingDirectory"`
+		WorkingDirectorySnake  string           `json:"working_directory"`
+		ProjectPath            string           `json:"projectPath"`
+		ProjectPathSnake       string           `json:"project_path"`
 		GitBranchSnake         string           `json:"git_branch"`
 		Branch                 string           `json:"branch"`
 		CompactMetadataSnake   *CompactMetadata `json:"compact_metadata"`
@@ -94,6 +99,9 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	}
 	if m.AgentID == "" {
 		m.AgentID = aux.AgentIDSnake
+	}
+	if m.CWD == "" {
+		m.CWD = firstTranscriptString(aux.CWDSnake, aux.WorkingDirectory, aux.WorkingDirectorySnake, aux.ProjectPath, aux.ProjectPathSnake)
 	}
 	if m.GitBranch == "" {
 		m.GitBranch = firstTranscriptString(aux.GitBranchSnake, aux.Branch)

@@ -24,7 +24,7 @@ func TestListProjectSessionsSortsAndBuildsTitles(t *testing.T) {
 	})
 	writeRawSession(t, second, []string{
 		`{"type":"custom-title","sessionId":"sess_2","customTitle":"Custom Title"}`,
-		`{"type":"user","uuid":"u2","sessionId":"sess_2","gitBranch":"feature/session-index","message":{"type":"user","content":[{"type":"text","text":"second prompt"}]}}`,
+		`{"type":"user","uuid":"u2","sessionId":"sess_2","cwd":"/repo/project","gitBranch":"feature/session-index","message":{"type":"user","content":[{"type":"text","text":"second prompt"}]}}`,
 	})
 	if err := os.Chtimes(first, time.Unix(10, 0), time.Unix(10, 0)); err != nil {
 		t.Fatal(err)
@@ -45,6 +45,9 @@ func TestListProjectSessionsSortsAndBuildsTitles(t *testing.T) {
 	}
 	if sessions[0].GitBranch != "feature/session-index" {
 		t.Fatalf("first session branch = %#v", sessions[0])
+	}
+	if sessions[0].ProjectPath != "/repo/project" {
+		t.Fatalf("first session project path = %#v", sessions[0])
 	}
 	if sessions[1].Title != "first title from prompt" {
 		t.Fatalf("second title = %#v", sessions[1])
@@ -72,7 +75,7 @@ func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 		`{"type":"pr-link","sessionId":"sess_1","prNumber":7,"prUrl":"https://github.com/o/r/pull/7","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
 		`{"type":"mode","sessionId":"sess_1","mode":"coordinator"}`,
 		`{"type":"worktree-state","sessionId":"sess_1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"sess_1"}}`,
-		`{"type":"user","uuid":"u1","sessionId":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","content":[{"type":"text","text":"first prompt"}]}}`,
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","cwd":"/repo/project","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","content":[{"type":"text","text":"first prompt"}]}}`,
 		`{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"sess_1","gitBranch":"main","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"text","text":"done"}]}}`,
 		`{"type":"user","uuid":"u2","parentUuid":"a1","sessionId":"sess_1","gitBranch":"feature/m6-index","timestamp":"2026-01-01T00:00:02Z","message":{"type":"user","content":[{"type":"text","text":"last prompt"}]}}`,
 		`{"type":"content-replacement","sessionId":"sess_1","replacements":[{"replacement":"stub"},{"replacement":"stub2"}]}`,
@@ -105,6 +108,9 @@ func TestLoadTranscriptIndexSummarizesWithoutFullTranscript(t *testing.T) {
 	if index.GitBranch != "feature/m6-index" {
 		t.Fatalf("index branch = %#v", index)
 	}
+	if index.ProjectPath != "/repo/project" {
+		t.Fatalf("index project path = %#v", index)
+	}
 }
 
 func TestLoadTranscriptIndexAcceptsMetadataAliases(t *testing.T) {
@@ -121,7 +127,7 @@ func TestLoadTranscriptIndexAcceptsMetadataAliases(t *testing.T) {
 		`{"type":"pr_link","session_id":"sess_1","pr_number":8,"pr_url":"https://github.com/o/r/pull/8","pr_repository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
 		`{"type":"mode","session_id":"sess_1","mode":"worker"}`,
 		`{"type":"worktree_state","session_id":"sess_1","worktree_session":{"worktreePath":"/tmp/wt","sessionId":"sess_1"}}`,
-		`{"type":"user","message_id":"u_alias","session_id":"sess_1","git_branch":"feature/alias-branch","message":{"type":"user","content":[{"type":"text","text":"alias prompt"}]}}`,
+		`{"type":"user","message_id":"u_alias","session_id":"sess_1","project_path":"/repo/alias","git_branch":"feature/alias-branch","message":{"type":"user","content":[{"type":"text","text":"alias prompt"}]}}`,
 		`{"type":"content_replacement","session_id":"sess_1","replacements":[{"replacement":"stub"}]}`,
 	})
 	index, err := LoadTranscriptIndex(path, "sess_1")
@@ -142,6 +148,9 @@ func TestLoadTranscriptIndexAcceptsMetadataAliases(t *testing.T) {
 	}
 	if index.GitBranch != "feature/alias-branch" {
 		t.Fatalf("alias index branch = %#v", index)
+	}
+	if index.ProjectPath != "/repo/alias" {
+		t.Fatalf("alias index project path = %#v", index)
 	}
 }
 
@@ -278,6 +287,32 @@ func TestSearchProjectSessionsFindsGitBranch(t *testing.T) {
 	}
 	if len(results[0].Matches) != 0 {
 		t.Fatalf("branch search should not require text matches: %#v", results[0].Matches)
+	}
+}
+
+func TestSearchProjectSessionsFindsProjectPath(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	root := "/repo/project"
+	dir := ProjectDir(root)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeRawSession(t, filepath.Join(dir, "sess_1.jsonl"), []string{
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","cwd":"/workspaces/customer-app","message":{"type":"user","content":[{"type":"text","text":"ordinary prompt"}]}}`,
+	})
+	writeRawSession(t, filepath.Join(dir, "sess_2.jsonl"), []string{
+		`{"type":"user","uuid":"u2","sessionId":"sess_2","cwd":"/workspaces/other","message":{"type":"user","content":[{"type":"text","text":"unrelated"}]}}`,
+	})
+
+	results, err := SearchProjectSessions(root, "customer-app", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].ID != contracts.ID("sess_1") || results[0].ProjectPath != "/workspaces/customer-app" {
+		t.Fatalf("project path results = %#v", results)
+	}
+	if len(results[0].Matches) != 0 {
+		t.Fatalf("project path search should not require text matches: %#v", results[0].Matches)
 	}
 }
 

@@ -55,6 +55,7 @@ type TranscriptMessage struct {
 	Message           *contracts.Message `json:"message,omitempty"`
 	IsSidechain       bool               `json:"isSidechain,omitempty"`
 	AgentID           string             `json:"agentId,omitempty"`
+	CWD               string             `json:"cwd,omitempty"`
 	GitBranch         string             `json:"gitBranch,omitempty"`
 	CompactMetadata   *CompactMetadata   `json:"compactMetadata,omitempty"`
 	SnipMetadata      *SnipMetadata      `json:"snipMetadata,omitempty"`

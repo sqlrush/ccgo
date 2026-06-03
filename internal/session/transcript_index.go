@@ -34,6 +34,7 @@ type TranscriptIndex struct {
 	PRURL                   string
 	PRRepository            string
 	Mode                    string
+	ProjectPath             string
 	GitBranch               string
 	HasWorktreeState        bool
 	TextBytes               int
@@ -155,6 +156,9 @@ func (i *TranscriptIndex) addMessage(msg TranscriptMessage) {
 	}
 	i.LastUUID = msg.UUID
 	i.LastTimestamp = msg.Timestamp
+	if i.ProjectPath == "" {
+		i.ProjectPath = strings.TrimSpace(msg.CWD)
+	}
 	if branch := strings.TrimSpace(msg.GitBranch); branch != "" {
 		i.GitBranch = branch
 	}
