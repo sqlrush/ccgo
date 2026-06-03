@@ -198,6 +198,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Runner 增加显式 `RelevantMemoryDir` runtime：配置后会扫描 memory dir、用 deterministic selector 选出相关 md memory、读取为 `relevant_memories` attachment 并注入 request；默认关闭，完整官方 async sideQuery selector/prefetch 仍未宣称完成。
 - 本轮补充：Runner 会把 `RelevantMemoryDir` 放入 tool metadata 的 internal auto-memory path context，使 Read tool 的 stale-memory freshness prefix 和 permission internal-path policy 与同一配置对齐。
 - 本轮补充：transcript resume fallback 转换 attachment message 时保留 raw attachment payload，恢复后的 `relevant_memories` attachment 仍可进入 conversation request 的 system-reminder 展开路径。
+- 本轮补充：memory 层增加可取消 `PrefetchRelevantMemories` runtime，复用现有 gating/selector/surfacing 逻辑返回 plan、selection 和 attachments；conversation `RunTurn` 会在用户消息进入后启动 relevant memory prefetch，并在第一轮 model request 消费结果，预取文件系统错误 fail-open 且不阻断主请求。完整官方 model sideQuery selector 仍继续推进。
 
 ### M7: TUI renderer 和交互体验
 

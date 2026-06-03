@@ -11,13 +11,26 @@ import (
 )
 
 func (r Runner) BuildRequest(history []contracts.Message, model string) (anthropic.Request, error) {
+	return r.buildRequest(history, model, relevantMemoryRequestContext{})
+}
+
+type relevantMemoryRequestContext struct {
+	Prefetch *memory.RelevantMemoryPrefetchResult
+	SkipSync bool
+}
+
+func (r Runner) buildRequest(history []contracts.Message, model string, relevantMemory relevantMemoryRequestContext) (anthropic.Request, error) {
 	history, err := r.applySessionMemoryRecall(history)
 	if err != nil {
 		return anthropic.Request{}, err
 	}
-	history, err = r.applyRelevantMemoryAttachments(history)
-	if err != nil {
-		return anthropic.Request{}, err
+	if relevantMemory.Prefetch != nil {
+		history = appendRelevantMemoryPrefetch(history, *relevantMemory.Prefetch)
+	} else if !relevantMemory.SkipSync {
+		history, err = r.applyRelevantMemoryAttachments(history)
+		if err != nil {
+			return anthropic.Request{}, err
+		}
 	}
 	history = memory.ExpandRelevantMemoryAttachments(history, time.Time{})
 	request := anthropic.Request{
@@ -35,6 +48,16 @@ func (r Runner) BuildRequest(history []contracts.Message, model string) (anthrop
 		}
 	}
 	return request, nil
+}
+
+func appendRelevantMemoryPrefetch(history []contracts.Message, result memory.RelevantMemoryPrefetchResult) []contracts.Message {
+	if len(result.Memories) == 0 {
+		return history
+	}
+	out := make([]contracts.Message, 0, len(history)+1)
+	out = append(out, history...)
+	out = append(out, memory.RelevantMemoriesAttachmentMessage(result.Memories))
+	return out
 }
 
 func (r Runner) applyRelevantMemoryAttachments(history []contracts.Message) ([]contracts.Message, error) {

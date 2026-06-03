@@ -573,6 +573,80 @@ func TestRunnerInjectsRelevantMemoryFromConfiguredDirIntoRequest(t *testing.T) {
 	}
 }
 
+func TestRunnerPrefetchesRelevantMemoryIntoFirstRequest(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "db.md")
+	if err := os.WriteFile(path, []byte("---\ndescription: database permissions migration\n---\nremember database permission rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := os.Chtimes(path, now, now); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:            client,
+		Model:             "sonnet",
+		MaxTokens:         128,
+		RelevantMemoryDir: dir,
+	}
+
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("database permissions")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d", len(client.requests))
+	}
+	request := client.requests[0]
+	if len(request.Messages) != 2 {
+		t.Fatalf("messages = %#v", request.Messages)
+	}
+	if got := request.Messages[0].Content[0].Text; got != "database permissions" {
+		t.Fatalf("user message = %q", got)
+	}
+	if memoryText := request.Messages[1].Content[0].Text; !strings.Contains(memoryText, "/db.md:") || !strings.Contains(memoryText, "remember database permission rules") {
+		t.Fatalf("memory text = %q", memoryText)
+	}
+}
+
+func TestRunnerRelevantMemoryPrefetchFailsOpen(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:            client,
+		Model:             "sonnet",
+		MaxTokens:         128,
+		RelevantMemoryDir: "\x00",
+	}
+
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("database permissions")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d", len(client.requests))
+	}
+	if len(client.requests[0].Messages) != 1 || client.requests[0].Messages[0].Content[0].Text != "database permissions" {
+		t.Fatalf("messages = %#v", client.requests[0].Messages)
+	}
+}
+
 func TestRunnerPassesRelevantMemoryDirToFileTools(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "old.md")

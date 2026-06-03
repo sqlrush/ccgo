@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -64,6 +65,19 @@ type SurfacedMemories struct {
 type RelevantMemoryPrefetchPlan struct {
 	Input    string
 	Surfaced SurfacedMemories
+}
+
+type RelevantMemoryPrefetchOptions struct {
+	Root            string
+	Limit           int
+	MaxSessionBytes int
+	Now             time.Time
+}
+
+type RelevantMemoryPrefetchResult struct {
+	Plan     RelevantMemoryPrefetchPlan
+	Selected []RelevantMemorySelection
+	Memories []RelevantMemory
 }
 
 type RelevantMemoryReadState struct {
@@ -249,6 +263,40 @@ func RelevantMemoryPrefetchPlanForMessages(messages []contracts.Message, maxSess
 		return RelevantMemoryPrefetchPlan{}, false
 	}
 	return RelevantMemoryPrefetchPlan{Input: input, Surfaced: surfaced}, true
+}
+
+func PrefetchRelevantMemories(ctx context.Context, messages []contracts.Message, options RelevantMemoryPrefetchOptions) (RelevantMemoryPrefetchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(options.Root) == "" {
+		return RelevantMemoryPrefetchResult{}, nil
+	}
+	plan, ok := RelevantMemoryPrefetchPlanForMessages(messages, options.MaxSessionBytes)
+	if !ok {
+		return RelevantMemoryPrefetchResult{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return RelevantMemoryPrefetchResult{Plan: plan}, err
+	}
+	selected, err := FindRelevantMemorySelections(
+		options.Root,
+		plan.Input,
+		CollectRecentSuccessfulTools(messages),
+		plan.Surfaced.Paths,
+		options.Limit,
+	)
+	if err != nil {
+		return RelevantMemoryPrefetchResult{Plan: plan}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected}, err
+	}
+	memories := ReadMemoriesForSurfacing(selected, RelevantMemorySurfaceOptions{Now: options.Now})
+	if err := ctx.Err(); err != nil {
+		return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Memories: memories}, err
+	}
+	return RelevantMemoryPrefetchResult{Plan: plan, Selected: selected, Memories: memories}, nil
 }
 
 func SelectRelevantMemoryCandidates(results [][]RelevantMemorySelection, state map[string]RelevantMemoryReadState, surfaced map[string]struct{}, limit int) []RelevantMemorySelection {

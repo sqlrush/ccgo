@@ -317,6 +317,47 @@ func TestFindRelevantMemorySelectionsScoresAndSuppressesRecentToolReferences(t *
 	}
 }
 
+func TestPrefetchRelevantMemoriesSelectsAndReads(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "db.md")
+	writeFile(t, path, "---\ndescription: database permissions migration\n---\nremember database permissions\n")
+	mtime := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := PrefetchRelevantMemories(context.Background(), []contracts.Message{
+		msgs.UserText("find database permissions"),
+	}, RelevantMemoryPrefetchOptions{
+		Root:  dir,
+		Limit: 1,
+		Now:   time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Plan.Input != "find database permissions" {
+		t.Fatalf("plan = %#v", result.Plan)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != path {
+		t.Fatalf("selected = %#v", result.Selected)
+	}
+	if len(result.Memories) != 1 || result.Memories[0].Path != path || !strings.Contains(result.Memories[0].Content, "remember database permissions") {
+		t.Fatalf("memories = %#v", result.Memories)
+	}
+}
+
+func TestPrefetchRelevantMemoriesHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := PrefetchRelevantMemories(ctx, []contracts.Message{
+		msgs.UserText("find database permissions"),
+	}, RelevantMemoryPrefetchOptions{Root: t.TempDir()})
+	if err != context.Canceled {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestCollectRecentSuccessfulToolsUsesCurrentHumanTurnWindow(t *testing.T) {
 	assistantTools := func(blocks ...contracts.ContentBlock) contracts.Message {
 		return contracts.Message{Type: contracts.MessageAssistant, Content: blocks}

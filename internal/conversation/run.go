@@ -35,6 +35,10 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		return Result{}, err
 	}
 	r.emit(Event{Type: EventUserMessage, Message: &user})
+	relevantMemoryPrefetch := r.startRelevantMemoryPrefetch(ctx, history)
+	if relevantMemoryPrefetch != nil {
+		defer relevantMemoryPrefetch.cancel()
+	}
 
 	result := Result{Messages: []contracts.Message{user}}
 	if compactedHistory, compactResult, ok, err := r.maybeAutoCompact(ctx, history); err != nil {
@@ -54,8 +58,13 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		if round >= r.maxToolRounds() {
 			return result, fmt.Errorf("maximum tool rounds exceeded: %d", r.maxToolRounds())
 		}
+		var roundRelevantMemoryPrefetch *relevantMemoryPrefetchTask
+		if round == 0 {
+			roundRelevantMemoryPrefetch = relevantMemoryPrefetch
+			relevantMemoryPrefetch = nil
+		}
 
-		request, attempts, response, err := r.send(ctx, history)
+		request, attempts, response, err := r.send(ctx, history, roundRelevantMemoryPrefetch)
 		result.FinalRequest = request
 		result.ModelsAttempt = append(result.ModelsAttempt, attempts...)
 		if err != nil {
@@ -89,6 +98,52 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			}
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
+	}
+}
+
+type relevantMemoryPrefetchTask struct {
+	cancel func()
+	done   <-chan relevantMemoryPrefetchOutcome
+}
+
+type relevantMemoryPrefetchOutcome struct {
+	result memory.RelevantMemoryPrefetchResult
+	err    error
+}
+
+func (r Runner) startRelevantMemoryPrefetch(ctx context.Context, history []contracts.Message) *relevantMemoryPrefetchTask {
+	if r.RelevantMemoryDir == "" {
+		return nil
+	}
+	prefetchCtx, cancel := context.WithCancel(ctx)
+	done := make(chan relevantMemoryPrefetchOutcome, 1)
+	historySnapshot := append([]contracts.Message(nil), history...)
+	go func() {
+		result, err := memory.PrefetchRelevantMemories(prefetchCtx, historySnapshot, memory.RelevantMemoryPrefetchOptions{
+			Root:  r.RelevantMemoryDir,
+			Limit: r.relevantMemoryLimit(),
+		})
+		done <- relevantMemoryPrefetchOutcome{result: result, err: err}
+	}()
+	return &relevantMemoryPrefetchTask{cancel: cancel, done: done}
+}
+
+func (t *relevantMemoryPrefetchTask) requestContext(ctx context.Context) (relevantMemoryRequestContext, error) {
+	if t == nil {
+		return relevantMemoryRequestContext{}, nil
+	}
+	select {
+	case outcome := <-t.done:
+		if outcome.err != nil {
+			if errors.Is(outcome.err, context.Canceled) || errors.Is(outcome.err, context.DeadlineExceeded) {
+				return relevantMemoryRequestContext{}, outcome.err
+			}
+			return relevantMemoryRequestContext{SkipSync: true}, nil
+		}
+		return relevantMemoryRequestContext{Prefetch: &outcome.result, SkipSync: true}, nil
+	case <-ctx.Done():
+		t.cancel()
+		return relevantMemoryRequestContext{}, ctx.Err()
 	}
 }
 
@@ -191,17 +246,21 @@ func (r Runner) maybeExtractSessionMemory(ctx context.Context, messages []contra
 	return err
 }
 
-func (r Runner) send(ctx context.Context, history []contracts.Message) (anthropic.Request, []string, *anthropic.Response, error) {
+func (r Runner) send(ctx context.Context, history []contracts.Message, relevantMemoryPrefetch *relevantMemoryPrefetchTask) (anthropic.Request, []string, *anthropic.Response, error) {
 	models := append([]string{r.model()}, r.FallbackModels...)
 	var attempts []string
 	var lastRequest anthropic.Request
 	var lastErr error
+	relevantMemory, err := relevantMemoryPrefetch.requestContext(ctx)
+	if err != nil {
+		return anthropic.Request{}, attempts, nil, err
+	}
 	for i, model := range models {
 		historyForRequest, err := r.applyToolResultBudget(history)
 		if err != nil {
 			return anthropic.Request{}, attempts, nil, err
 		}
-		request, err := r.BuildRequest(historyForRequest, model)
+		request, err := r.buildRequest(historyForRequest, model, relevantMemory)
 		if err != nil {
 			return anthropic.Request{}, attempts, nil, err
 		}
