@@ -64,11 +64,15 @@ func TestTerminalTokenizerHandlesOSCAndStringControls(t *testing.T) {
 
 	dcs := "\x1bPpayload\x1b\\"
 	apc := "\x1b_payload\x07"
-	tokens = tokenizer.Feed(dcs + "x" + apc)
+	pm := "\x1b^private\x07"
+	sos := "\x1bXstart\x1b\\"
+	tokens = tokenizer.Feed(dcs + "x" + apc + pm + sos)
 	want = []TerminalToken{
 		{Type: TerminalTokenSequence, Value: dcs},
 		{Type: TerminalTokenText, Value: "x"},
 		{Type: TerminalTokenSequence, Value: apc},
+		{Type: TerminalTokenSequence, Value: pm},
+		{Type: TerminalTokenSequence, Value: sos},
 	}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Fatalf("string-control tokens = %#v", tokens)

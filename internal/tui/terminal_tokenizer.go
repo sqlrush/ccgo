@@ -8,6 +8,8 @@ const (
 	escTypeOSC = byte(']')
 	escTypeDCS = byte('P')
 	escTypeAPC = byte('_')
+	escTypePM  = byte('^')
+	escTypeSOS = byte('X')
 	escTypeSS3 = byte('O')
 	escTypeST  = byte('\\')
 )
@@ -35,6 +37,8 @@ const (
 	terminalTokenizerOSC                TerminalTokenizerState = "osc"
 	terminalTokenizerDCS                TerminalTokenizerState = "dcs"
 	terminalTokenizerAPC                TerminalTokenizerState = "apc"
+	terminalTokenizerPM                 TerminalTokenizerState = "pm"
+	terminalTokenizerSOS                TerminalTokenizerState = "sos"
 )
 
 type TerminalTokenizerOptions struct {
@@ -142,6 +146,12 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 			case code == escTypeAPC:
 				state = terminalTokenizerAPC
 				i++
+			case code == escTypePM:
+				state = terminalTokenizerPM
+				i++
+			case code == escTypeSOS:
+				state = terminalTokenizerSOS
+				i++
 			case code == escTypeSS3:
 				state = terminalTokenizerSS3
 				i++
@@ -205,7 +215,7 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 			} else {
 				i++
 			}
-		case terminalTokenizerDCS, terminalTokenizerAPC:
+		case terminalTokenizerDCS, terminalTokenizerAPC, terminalTokenizerPM, terminalTokenizerSOS:
 			if code == terminalBEL {
 				i++
 				emitSequence(data[seqStart:i])
