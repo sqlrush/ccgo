@@ -46,6 +46,21 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		WorkingDirectorySnake  string           `json:"working_directory"`
 		ProjectPath            string           `json:"projectPath"`
 		ProjectPathSnake       string           `json:"project_path"`
+		UserTypeSnake          string           `json:"user_type"`
+		UserKind               string           `json:"userKind"`
+		UserKindSnake          string           `json:"user_kind"`
+		EntryPoint             string           `json:"entryPoint"`
+		EntryPointSnake        string           `json:"entry_point"`
+		Client                 string           `json:"client"`
+		Source                 string           `json:"source"`
+		AppVersion             string           `json:"appVersion"`
+		AppVersionSnake        string           `json:"app_version"`
+		ClaudeCodeVersion      string           `json:"claudeCodeVersion"`
+		ClaudeCodeVersionSnake string           `json:"claude_code_version"`
+		SessionSlug            string           `json:"sessionSlug"`
+		SessionSlugSnake       string           `json:"session_slug"`
+		PlanSlug               string           `json:"planSlug"`
+		PlanSlugSnake          string           `json:"plan_slug"`
 		GitBranchSnake         string           `json:"git_branch"`
 		Branch                 string           `json:"branch"`
 		CompactMetadataSnake   *CompactMetadata `json:"compact_metadata"`
@@ -102,6 +117,18 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	}
 	if m.CWD == "" {
 		m.CWD = firstTranscriptString(aux.CWDSnake, aux.WorkingDirectory, aux.WorkingDirectorySnake, aux.ProjectPath, aux.ProjectPathSnake)
+	}
+	if m.UserType == "" {
+		m.UserType = firstTranscriptString(aux.UserTypeSnake, aux.UserKind, aux.UserKindSnake)
+	}
+	if m.Entrypoint == "" {
+		m.Entrypoint = firstTranscriptString(aux.EntryPoint, aux.EntryPointSnake, aux.Client, aux.Source)
+	}
+	if m.Version == "" {
+		m.Version = firstTranscriptString(aux.AppVersion, aux.AppVersionSnake, aux.ClaudeCodeVersion, aux.ClaudeCodeVersionSnake)
+	}
+	if m.Slug == "" {
+		m.Slug = firstTranscriptString(aux.SessionSlug, aux.SessionSlugSnake, aux.PlanSlug, aux.PlanSlugSnake)
 	}
 	if m.GitBranch == "" {
 		m.GitBranch = firstTranscriptString(aux.GitBranchSnake, aux.Branch)

@@ -73,6 +73,26 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsSerializedMessageMetadata(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionId":"sess_1","userType":"external","entrypoint":"cli","version":"1.2.3","slug":"plan-alpha","message":{"type":"user","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","session_id":"sess_1","user_kind":"member","entry_point":"sdk-ts","claude_code_version":"1.2.4","plan_slug":"plan-beta","message":{"type":"assistant","content":[{"type":"text","text":"done"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := transcript.Messages["u1"]
+	if user == nil || user.UserType != "external" || user.Entrypoint != "cli" || user.Version != "1.2.3" || user.Slug != "plan-alpha" {
+		t.Fatalf("serialized user metadata = %#v", user)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil || assistant.UserType != "member" || assistant.Entrypoint != "sdk-ts" || assistant.Version != "1.2.4" || assistant.Slug != "plan-beta" {
+		t.Fatalf("serialized assistant metadata = %#v", assistant)
+	}
+}
+
 func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","messageUuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,

@@ -56,6 +56,10 @@ type TranscriptMessage struct {
 	IsSidechain       bool               `json:"isSidechain,omitempty"`
 	AgentID           string             `json:"agentId,omitempty"`
 	CWD               string             `json:"cwd,omitempty"`
+	UserType          string             `json:"userType,omitempty"`
+	Entrypoint        string             `json:"entrypoint,omitempty"`
+	Version           string             `json:"version,omitempty"`
+	Slug              string             `json:"slug,omitempty"`
 	GitBranch         string             `json:"gitBranch,omitempty"`
 	CompactMetadata   *CompactMetadata   `json:"compactMetadata,omitempty"`
 	SnipMetadata      *SnipMetadata      `json:"snipMetadata,omitempty"`
