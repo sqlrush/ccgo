@@ -3433,6 +3433,23 @@ func TestParseOSCContent(t *testing.T) {
 	}
 }
 
+func TestParseOSCSequence(t *testing.T) {
+	action, ok := ParseOSCSequence(TerminalTitleSequence("Claude"))
+	if !ok || action.Type != OSCActionTitle || action.Title.Title != "Claude" {
+		t.Fatalf("bel action = %#v ok=%v", action, ok)
+	}
+
+	stSequence := OSCSequenceWithStringTerminator(OSCSetTitleAndIcon, "Claude")
+	stAction, ok := ParseOSCSequence(stSequence)
+	if !ok || stAction.Type != OSCActionTitle || stAction.Title.Title != "Claude" {
+		t.Fatalf("st action = %#v ok=%v", stAction, ok)
+	}
+
+	if action, ok := ParseOSCSequence(OSCPrefix + OSCSetTitleAndIcon + ";Claude"); ok || action.Type != "" {
+		t.Fatalf("unterminated action = %#v ok=%v", action, ok)
+	}
+}
+
 func TestParseOSCColor(t *testing.T) {
 	hex, ok := ParseOSCColor("#5f87ff")
 	if !ok || *hex != (RGBColor{R: 95, G: 135, B: 255}) {
