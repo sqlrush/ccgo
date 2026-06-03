@@ -23,7 +23,9 @@ const (
 	DisableExtendedKeys     = DisableModifyOtherKeys + DisableKittyKeyboard
 	ReassertExtendedKeys    = DisableKittyKeyboard + EnableKittyKeyboard + EnableModifyOtherKeys
 	ClearScreen             = "\x1b[2J"
+	ClearScrollback         = "\x1b[3J"
 	HomeCursor              = "\x1b[H"
+	LegacyWindowsHomeCursor = "\x1b[0f"
 	HideCursor              = "\x1b[?25l"
 	ShowCursor              = "\x1b[?25h"
 )
@@ -35,6 +37,14 @@ type Renderer struct {
 
 type RenderOptions struct {
 	SynchronizedOutput bool
+}
+
+func ClearTerminalSequence() string {
+	return ClearScreen + ClearScrollback + HomeCursor
+}
+
+func ClearLegacyWindowsTerminalSequence() string {
+	return ClearScreen + LegacyWindowsHomeCursor
 }
 
 func NewRenderer(width int, height int) Renderer {

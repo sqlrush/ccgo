@@ -170,6 +170,7 @@ M7 progress now includes:
 - `internal/tui`: terminal OSC helpers now parse OSC 8 hyperlink payloads, including params, semicolon-containing URLs, and empty-URL link-end sequences.
 - `internal/tui`: terminal OSC helpers now expose a lightweight `ParseOSCContent` covering title, hyperlink, tab-status, and unknown action branches.
 - `internal/tui`: terminal OSC helpers now parse complete BEL- or ST-terminated OSC sequences into `ParseOSCContent` actions.
+- `internal/tui`: terminal renderer constants now include clear-scrollback and legacy Windows cursor-home helpers for official clear-terminal sequence parity without platform auto-detection.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.

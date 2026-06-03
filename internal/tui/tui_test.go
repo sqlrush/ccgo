@@ -3341,6 +3341,15 @@ func TestScreenLifecycleReconcilesTerminalModes(t *testing.T) {
 	}
 }
 
+func TestClearTerminalSequences(t *testing.T) {
+	if seq := ClearTerminalSequence(); seq != ClearScreen+ClearScrollback+HomeCursor {
+		t.Fatalf("clear terminal = %q", seq)
+	}
+	if seq := ClearLegacyWindowsTerminalSequence(); seq != ClearScreen+LegacyWindowsHomeCursor {
+		t.Fatalf("legacy clear terminal = %q", seq)
+	}
+}
+
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"
