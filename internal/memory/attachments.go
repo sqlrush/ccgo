@@ -58,6 +58,12 @@ type SurfacedMemories struct {
 	TotalBytes int
 }
 
+type RelevantMemoryReadState struct {
+	Content string
+	MtimeMs int64
+	Limit   *int
+}
+
 func NewRelevantMemory(path string, content string, mtime time.Time, now time.Time) RelevantMemory {
 	return RelevantMemory{
 		Path:    path,
@@ -159,6 +165,52 @@ func CollectSurfacedMemories(messages []contracts.Message) SurfacedMemories {
 	return out
 }
 
+func FilterDuplicateRelevantMemoryAttachments(messages []contracts.Message, state map[string]RelevantMemoryReadState) []contracts.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]contracts.Message, 0, len(messages))
+	for _, message := range messages {
+		memories := RelevantMemoriesFromAttachmentMessage(message)
+		if len(memories) == 0 {
+			out = append(out, message)
+			continue
+		}
+		filtered := FilterDuplicateRelevantMemories(memories, state)
+		if len(filtered) == 0 {
+			continue
+		}
+		out = append(out, withRelevantMemories(message, filtered))
+	}
+	return out
+}
+
+func FilterDuplicateRelevantMemories(memories []RelevantMemory, state map[string]RelevantMemoryReadState) []RelevantMemory {
+	if len(memories) == 0 {
+		return nil
+	}
+	filtered := make([]RelevantMemory, 0, len(memories))
+	for _, item := range memories {
+		if item.Path == "" {
+			continue
+		}
+		if state != nil {
+			if _, ok := state[item.Path]; ok {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
+		if state != nil {
+			state[item.Path] = RelevantMemoryReadState{
+				Content: item.Content,
+				MtimeMs: item.MtimeMs,
+				Limit:   item.Limit,
+			}
+		}
+	}
+	return filtered
+}
+
 func RelevantMemoriesFromAttachmentMessage(message contracts.Message) []RelevantMemory {
 	if message.Type != contracts.MessageAttachment {
 		return nil
@@ -167,6 +219,16 @@ func RelevantMemoriesFromAttachmentMessage(message contracts.Message) []Relevant
 		return relevantMemoriesFromPayload(attachment)
 	}
 	return relevantMemoriesFromPayload(message.Raw)
+}
+
+func withRelevantMemories(message contracts.Message, memories []RelevantMemory) contracts.Message {
+	if message.Raw == nil {
+		message.Raw = map[string]any{}
+	}
+	message.Type = contracts.MessageAttachment
+	message.Subtype = RelevantMemoriesSubtype
+	message.Raw["attachment"] = relevantMemoriesAttachmentPayload{Type: RelevantMemoriesAttachmentType, Memories: memories}
+	return message
 }
 
 func wrapSystemReminder(content string) string {

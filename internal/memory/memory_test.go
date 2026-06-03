@@ -192,6 +192,33 @@ func TestReadMemoriesForSurfacingTruncatesAndSkipsUnreadableFiles(t *testing.T) 
 	}
 }
 
+func TestFilterDuplicateRelevantMemoryAttachmentsMarksSurvivors(t *testing.T) {
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	first := NewRelevantMemory("/repo/mem/a.md", "alpha", now, now)
+	second := NewRelevantMemory("/repo/mem/b.md", "beta", now, now)
+	attachment := RelevantMemoriesAttachmentMessage([]RelevantMemory{first, second})
+	state := map[string]RelevantMemoryReadState{
+		first.Path: {Content: first.Content, MtimeMs: first.MtimeMs},
+	}
+
+	filtered := FilterDuplicateRelevantMemoryAttachments([]contracts.Message{msgs.UserText("keep"), attachment}, state)
+	if len(filtered) != 2 || filtered[0].Type != contracts.MessageUser {
+		t.Fatalf("filtered = %#v", filtered)
+	}
+	memories := RelevantMemoriesFromAttachmentMessage(filtered[1])
+	if len(memories) != 1 || memories[0].Path != second.Path {
+		t.Fatalf("memories = %#v", memories)
+	}
+	if got, ok := state[second.Path]; !ok || got.Content != "beta" || got.MtimeMs != second.MtimeMs {
+		t.Fatalf("state = %#v", state)
+	}
+
+	filteredAgain := FilterDuplicateRelevantMemoryAttachments([]contracts.Message{filtered[1]}, state)
+	if len(filteredAgain) != 0 {
+		t.Fatalf("filtered again = %#v", filteredAgain)
+	}
+}
+
 func TestDiscoverClaudeFilesReturnsRootToLeaf(t *testing.T) {
 	root := t.TempDir()
 	child := filepath.Join(root, "sub", "project")
