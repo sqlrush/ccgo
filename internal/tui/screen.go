@@ -89,6 +89,7 @@ func NewREPLScreenFromHistoryEntries(width int, height int, history []session.Hi
 
 func newREPLScreenWithPrompt(width int, height int, prompt PromptState) REPLScreen {
 	prompt.EnablePasteReferences()
+	prompt.SetPasteReferenceRows(height)
 	screen := REPLScreen{
 		Width:                width,
 		Height:               height,
@@ -451,6 +452,7 @@ func (s *REPLScreen) Resize(width int, height int) {
 	}
 	if height > 0 {
 		s.Height = height
+		s.Prompt.SetPasteReferenceRows(height)
 	}
 	s.rebuildViewportPreservingScroll()
 }

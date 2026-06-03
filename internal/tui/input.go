@@ -12,6 +12,7 @@ import (
 
 const ImageHintPlaceholder = "[Image]"
 const killRingMaxSize = 10
+const pasteReferenceThreshold = 800
 
 type killRingDirection string
 
@@ -38,6 +39,7 @@ type PromptState struct {
 	HistoryEntries      []session.HistoryEntry
 	HistoryIndex        int
 	UsePasteReferences  bool
+	MaxInlinePasteLines int
 	ImageCacheSessionID contracts.ID
 	PastedContents      map[int]session.PastedContent
 	NextPastedID        int
@@ -523,6 +525,10 @@ func (p *PromptState) EnablePasteReferences() {
 	p.resetPastedContents()
 }
 
+func (p *PromptState) SetPasteReferenceRows(rows int) {
+	p.MaxInlinePasteLines = maxInlinePasteLines(rows)
+}
+
 func (p *PromptState) EnableImageCache(sessionID contracts.ID) {
 	p.ImageCacheSessionID = sessionID
 }
@@ -542,7 +548,8 @@ func (p PromptState) HistoryEntry() session.HistoryEntry {
 }
 
 func (p *PromptState) insertPaste(text string) {
-	if !p.UsePasteReferences || text == "" {
+	text = cleanPastedText(text)
+	if !p.UsePasteReferences || !p.shouldReferencePaste(text) {
 		p.insertText(text)
 		return
 	}
@@ -560,6 +567,61 @@ func (p *PromptState) insertPaste(text string) {
 		Content: text,
 	}
 	p.insertText(session.FormatPastedTextRef(id, session.PastedTextRefNumLines(text)))
+}
+
+func (p PromptState) shouldReferencePaste(text string) bool {
+	return len(text) > pasteReferenceThreshold || session.PastedTextRefNumLines(text) > p.MaxInlinePasteLines
+}
+
+func maxInlinePasteLines(rows int) int {
+	maxLines := rows - 10
+	if maxLines > 2 {
+		return 2
+	}
+	return maxLines
+}
+
+func cleanPastedText(text string) string {
+	text = stripPromptANSI(text)
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = strings.ReplaceAll(text, "\t", "    ")
+	return text
+}
+
+func stripPromptANSI(input string) string {
+	var out strings.Builder
+	for i := 0; i < len(input); i++ {
+		if input[i] != '\x1b' {
+			out.WriteByte(input[i])
+			continue
+		}
+		i++
+		if i >= len(input) {
+			break
+		}
+		switch input[i] {
+		case '[':
+			for i+1 < len(input) {
+				i++
+				b := input[i]
+				if b >= '@' && b <= '~' {
+					break
+				}
+			}
+		case ']':
+			for i+1 < len(input) {
+				i++
+				if input[i] == '\a' {
+					break
+				}
+				if input[i] == '\x1b' && i+1 < len(input) && input[i+1] == '\\' {
+					i++
+					break
+				}
+			}
+		}
+	}
+	return out.String()
 }
 
 func (p *PromptState) insertImageHint(key Key) {

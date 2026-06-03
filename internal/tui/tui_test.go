@@ -431,6 +431,14 @@ func TestPromptHandlesBracketedPasteAndImageHints(t *testing.T) {
 	}
 }
 
+func TestPromptPasteCleansANSIAndWhitespace(t *testing.T) {
+	prompt := NewPromptState(nil)
+	prompt.Apply(ParseKey("\x1b[200~\x1b[31malpha\x1b[0m\tbeta\r\nomega\x1b[201~"))
+	if prompt.Text != "alpha    beta\n\nomega" {
+		t.Fatalf("prompt = %#v", prompt)
+	}
+}
+
 func TestPromptPasteReferencesCanStoreAndExpandPastedContent(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.EnablePasteReferences()
@@ -448,6 +456,41 @@ func TestPromptPasteReferencesCanStoreAndExpandPastedContent(t *testing.T) {
 	}
 	if len(prompt.PastedContents) != 0 || prompt.NextPastedID != 1 {
 		t.Fatalf("pasted contents should reset: %#v next=%d", prompt.PastedContents, prompt.NextPastedID)
+	}
+}
+
+func TestREPLScreenInlinesShortPasteAtNormalHeight(t *testing.T) {
+	screen := NewREPLScreen(40, 24, nil)
+	screen.ApplyKey(ParseKey("\x1b[200~alpha\nbeta\x1b[201~"))
+	if screen.Prompt.Text != "alpha\nbeta" || screen.Prompt.ExpandedText() != "alpha\nbeta" {
+		t.Fatalf("prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+	if len(screen.Prompt.PastedContents) != 0 || screen.Prompt.NextPastedID != 1 {
+		t.Fatalf("pasted contents = %#v next=%d", screen.Prompt.PastedContents, screen.Prompt.NextPastedID)
+	}
+}
+
+func TestREPLScreenReferencesPasteAtSmallHeightOrLargePaste(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.ApplyKey(ParseKey("\x1b[200~short\x1b[201~"))
+	if screen.Prompt.Text != "[Pasted text #1]" || screen.Prompt.ExpandedText() != "short" {
+		t.Fatalf("small-height prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+
+	screen = NewREPLScreen(40, 24, nil)
+	large := strings.Repeat("x", pasteReferenceThreshold+1)
+	screen.ApplyKey(Key{Type: KeyPaste, Text: large})
+	if screen.Prompt.Text != "[Pasted text #1]" || screen.Prompt.ExpandedText() != large {
+		t.Fatalf("large prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
+	}
+}
+
+func TestREPLScreenResizeUpdatesPasteReferenceRows(t *testing.T) {
+	screen := NewREPLScreen(40, 24, nil)
+	screen.Resize(40, 8)
+	screen.ApplyKey(ParseKey("\x1b[200~short\x1b[201~"))
+	if screen.Prompt.Text != "[Pasted text #1]" || screen.Prompt.ExpandedText() != "short" {
+		t.Fatalf("prompt = %#v expanded=%q", screen.Prompt, screen.Prompt.ExpandedText())
 	}
 }
 
