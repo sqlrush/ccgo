@@ -56,8 +56,8 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	if stored[2].Content != "" || stored[2].ContentHash != HashPastedText(large) {
 		t.Fatalf("large stored = %#v", stored[2])
 	}
-	if stored[3].Type != PastedContentImage || stored[3].Content != "" || stored[3].ContentHash != "" || stored[3].MediaType != "image/png" || stored[3].Filename != "chart.png" {
-		t.Fatalf("image metadata should be stored without content: %#v", stored[3])
+	if _, ok := stored[3]; ok {
+		t.Fatalf("image metadata should not be stored in prompt history: %#v", stored[3])
 	}
 
 	entry := LogEntryToHistoryEntry(LogEntry{
@@ -65,7 +65,7 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 		PastedContents: map[int]StoredPastedContent{
 			1: stored[1],
 			2: stored[2],
-			3: stored[3],
+			3: {ID: 3, Type: PastedContentImage, MediaType: "image/png", Filename: "chart.png"},
 		},
 	}, func(hash string) (string, bool) {
 		if hash != HashPastedText(large) {
@@ -207,6 +207,40 @@ func TestAddToHistoryStoresLargePasteAndHonorsSkipEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(history) != 1 || history[0].PastedContents[1].Content != large {
+		t.Fatalf("history = %#v", history)
+	}
+}
+
+func TestAddToHistorySkipsImagePastedContent(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "history.jsonl")
+
+	written, err := AddToHistory(path, "/repo", "session", HistoryEntry{
+		Display: "cmd [Image #1]",
+		PastedContents: map[int]PastedContent{
+			1: {ID: 1, Type: PastedContentImage, Content: "base64", MediaType: "image/png", Filename: "chart.png"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !written {
+		t.Fatal("history was not written")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(data)
+	if strings.Contains(raw, `"type":"image"`) || strings.Contains(raw, "chart.png") || strings.Contains(raw, "base64") {
+		t.Fatalf("history should not store image pasted content: %s", raw)
+	}
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, RetrievePastedText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Display != "cmd [Image #1]" || len(history[0].PastedContents) != 0 {
 		t.Fatalf("history = %#v", history)
 	}
 }

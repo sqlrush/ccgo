@@ -169,12 +169,6 @@ func PrepareStoredPastedContents(pastedContents map[int]PastedContent) map[int]S
 	stored := map[int]StoredPastedContent{}
 	for id, content := range pastedContents {
 		if content.Type == PastedContentImage {
-			stored[id] = StoredPastedContent{
-				ID:        content.ID,
-				Type:      content.Type,
-				MediaType: content.MediaType,
-				Filename:  content.Filename,
-			}
 			continue
 		}
 		if len(content.Content) <= MaxPastedContentLength {
