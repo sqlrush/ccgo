@@ -580,11 +580,13 @@ func (p *PromptState) insertImageHint(key Key) {
 	}
 	p.NextPastedID = id + 1
 	content := session.PastedContent{
-		ID:        id,
-		Type:      session.PastedContentImage,
-		Content:   key.Content,
-		MediaType: key.MediaType,
-		Filename:  key.Filename,
+		ID:         id,
+		Type:       session.PastedContentImage,
+		Content:    key.Content,
+		MediaType:  key.MediaType,
+		Filename:   key.Filename,
+		Dimensions: cloneImageDimensions(key.Dimensions),
+		SourcePath: key.SourcePath,
 	}
 	p.PastedContents[id] = content
 	if p.ImageCacheSessionID != "" {
@@ -786,9 +788,18 @@ func clonePastedContents(in map[int]session.PastedContent) map[int]session.Paste
 	}
 	out := make(map[int]session.PastedContent, len(in))
 	for id, content := range in {
+		content.Dimensions = cloneImageDimensions(content.Dimensions)
 		out[id] = content
 	}
 	return out
+}
+
+func cloneImageDimensions(dimensions *session.ImageDimensions) *session.ImageDimensions {
+	if dimensions == nil {
+		return nil
+	}
+	cloned := *dimensions
+	return &cloned
 }
 
 func cloneHistoryEntries(in []session.HistoryEntry) []session.HistoryEntry {

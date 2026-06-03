@@ -1,6 +1,8 @@
 package session
 
 import (
+	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -61,13 +63,59 @@ func promptImageMetadataBlocks(pastedContents map[int]PastedContent) []contracts
 		if content.Type != PastedContentImage {
 			continue
 		}
-		path, ok := GetStoredImagePath(id)
-		if !ok || path == "" {
+		sourcePath := imageSourcePath(id, content)
+		text := ImageMetadataText(content.Dimensions, sourcePath)
+		if text == "" {
 			continue
 		}
-		blocks = append(blocks, contracts.NewTextBlock("[Image source: "+path+"]"))
+		blocks = append(blocks, contracts.NewTextBlock(text))
 	}
 	return blocks
+}
+
+func ImageMetadataText(dimensions *ImageDimensions, sourcePath string) string {
+	if dimensions == nil ||
+		dimensions.OriginalWidth <= 0 ||
+		dimensions.OriginalHeight <= 0 ||
+		dimensions.DisplayWidth <= 0 ||
+		dimensions.DisplayHeight <= 0 {
+		if sourcePath != "" {
+			return "[Image source: " + sourcePath + "]"
+		}
+		return ""
+	}
+	wasResized := dimensions.OriginalWidth != dimensions.DisplayWidth || dimensions.OriginalHeight != dimensions.DisplayHeight
+	if !wasResized && sourcePath == "" {
+		return ""
+	}
+	parts := []string{}
+	if sourcePath != "" {
+		parts = append(parts, "source: "+sourcePath)
+	}
+	if wasResized {
+		scaleFactor := float64(dimensions.OriginalWidth) / float64(dimensions.DisplayWidth)
+		scaleFactor = math.Round(scaleFactor*100) / 100
+		parts = append(parts, fmt.Sprintf(
+			"original %dx%d, displayed at %dx%d. Multiply coordinates by %.2f to map to original image.",
+			dimensions.OriginalWidth,
+			dimensions.OriginalHeight,
+			dimensions.DisplayWidth,
+			dimensions.DisplayHeight,
+			scaleFactor,
+		))
+	}
+	return "[Image: " + strings.Join(parts, ", ") + "]"
+}
+
+func imageSourcePath(id int, content PastedContent) string {
+	if content.SourcePath != "" {
+		return content.SourcePath
+	}
+	path, ok := GetStoredImagePath(id)
+	if !ok {
+		return ""
+	}
+	return path
 }
 
 func sortedPastedIDs(pastedContents map[int]PastedContent) []int {

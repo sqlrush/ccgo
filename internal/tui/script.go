@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"ccgo/internal/session"
 )
 
 type ScriptStep struct {
@@ -53,9 +55,11 @@ type ScriptStep struct {
 }
 
 type ScriptImage struct {
-	Filename  string
-	MediaType string
-	Content   string
+	Filename   string
+	MediaType  string
+	Content    string
+	Dimensions *session.ImageDimensions
+	SourcePath string
 }
 
 type ScriptMouse struct {
@@ -106,6 +110,8 @@ type PastedContentExpectation struct {
 	ContentContains []string
 	MediaType       string
 	Filename        string
+	Dimensions      *session.ImageDimensions
+	SourcePath      string
 }
 
 type VimExpectation struct {
@@ -410,11 +416,13 @@ func scriptImageKey(image ScriptImage) Key {
 		text = "[Image: " + image.Filename + "]"
 	}
 	return Key{
-		Type:      KeyImageHint,
-		Text:      text,
-		Content:   image.Content,
-		MediaType: image.MediaType,
-		Filename:  image.Filename,
+		Type:       KeyImageHint,
+		Text:       text,
+		Content:    image.Content,
+		MediaType:  image.MediaType,
+		Filename:   image.Filename,
+		Dimensions: cloneImageDimensions(image.Dimensions),
+		SourcePath: image.SourcePath,
 	}
 }
 
@@ -709,6 +717,14 @@ func comparePastedContent(index int, got PromptState, want PastedContentExpectat
 	}
 	if want.Filename != "" && content.Filename != want.Filename {
 		return fmt.Errorf("script step %d pasted content %d filename = %q, want %q", index, want.ID, content.Filename, want.Filename)
+	}
+	if want.SourcePath != "" && content.SourcePath != want.SourcePath {
+		return fmt.Errorf("script step %d pasted content %d source path = %q, want %q", index, want.ID, content.SourcePath, want.SourcePath)
+	}
+	if want.Dimensions != nil {
+		if content.Dimensions == nil || *content.Dimensions != *want.Dimensions {
+			return fmt.Errorf("script step %d pasted content %d dimensions = %#v, want %#v", index, want.ID, content.Dimensions, want.Dimensions)
+		}
 	}
 	return nil
 }

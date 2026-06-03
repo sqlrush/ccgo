@@ -1,6 +1,10 @@
 package tui
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"ccgo/internal/session"
+)
 
 type stringList []string
 
@@ -798,6 +802,12 @@ func (image *ScriptImage) UnmarshalJSON(data []byte) error {
 	if image.Content == "" {
 		image.Content = stringJSONField(fields, "data", "base64", "base64Content", "contentBase64")
 	}
+	if image.SourcePath == "" {
+		image.SourcePath = stringJSONField(fields, "source_path", "sourcePath", "path", "filePath", "file_path")
+	}
+	if image.Dimensions == nil {
+		image.Dimensions = imageDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions")
+	}
 	return nil
 }
 
@@ -1157,6 +1167,20 @@ func intPtrJSONField(fields map[string]json.RawMessage, names ...string) *int {
 	return nil
 }
 
+func imageDimensionsJSONField(fields map[string]json.RawMessage, names ...string) *session.ImageDimensions {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value session.ImageDimensions
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return &value
+		}
+	}
+	return nil
+}
+
 func intMapJSONField(fields map[string]json.RawMessage, names ...string) map[string]int {
 	for _, name := range names {
 		raw, ok := fields[name]
@@ -1291,6 +1315,12 @@ func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 	}
 	if expect.Content == "" {
 		expect.Content = stringJSONField(fieldMap, "value", "text", "body", "message", "data", "base64")
+	}
+	if expect.SourcePath == "" {
+		expect.SourcePath = stringJSONField(fieldMap, "source_path", "sourcePath", "path", "filePath", "file_path")
+	}
+	if expect.Dimensions == nil {
+		expect.Dimensions = imageDimensionsJSONField(fieldMap, "dimensions", "imageDimensions", "image_dimensions")
 	}
 	if fields.ContentContains != nil {
 		expect.ContentContains = stringListValue(fields.ContentContains)

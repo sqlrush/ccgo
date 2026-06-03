@@ -29,20 +29,31 @@ const (
 )
 
 type PastedContent struct {
-	ID        int    `json:"id"`
-	Type      string `json:"type"`
-	Content   string `json:"content,omitempty"`
-	MediaType string `json:"mediaType,omitempty"`
-	Filename  string `json:"filename,omitempty"`
+	ID         int              `json:"id"`
+	Type       string           `json:"type"`
+	Content    string           `json:"content,omitempty"`
+	MediaType  string           `json:"mediaType,omitempty"`
+	Filename   string           `json:"filename,omitempty"`
+	Dimensions *ImageDimensions `json:"dimensions,omitempty"`
+	SourcePath string           `json:"sourcePath,omitempty"`
 }
 
 type StoredPastedContent struct {
-	ID          int    `json:"id"`
-	Type        string `json:"type"`
-	Content     string `json:"content,omitempty"`
-	ContentHash string `json:"contentHash,omitempty"`
-	MediaType   string `json:"mediaType,omitempty"`
-	Filename    string `json:"filename,omitempty"`
+	ID          int              `json:"id"`
+	Type        string           `json:"type"`
+	Content     string           `json:"content,omitempty"`
+	ContentHash string           `json:"contentHash,omitempty"`
+	MediaType   string           `json:"mediaType,omitempty"`
+	Filename    string           `json:"filename,omitempty"`
+	Dimensions  *ImageDimensions `json:"dimensions,omitempty"`
+	SourcePath  string           `json:"sourcePath,omitempty"`
+}
+
+type ImageDimensions struct {
+	OriginalWidth  int `json:"originalWidth,omitempty"`
+	OriginalHeight int `json:"originalHeight,omitempty"`
+	DisplayWidth   int `json:"displayWidth,omitempty"`
+	DisplayHeight  int `json:"displayHeight,omitempty"`
 }
 
 type HistoryEntry struct {
@@ -241,10 +252,12 @@ func LogEntryToHistoryEntry(entry LogEntry, resolver PasteResolver) HistoryEntry
 	for id, stored := range entry.PastedContents {
 		if stored.Type == PastedContentImage {
 			pastedContents[id] = PastedContent{
-				ID:        stored.ID,
-				Type:      stored.Type,
-				MediaType: stored.MediaType,
-				Filename:  stored.Filename,
+				ID:         stored.ID,
+				Type:       stored.Type,
+				MediaType:  stored.MediaType,
+				Filename:   stored.Filename,
+				Dimensions: stored.Dimensions,
+				SourcePath: stored.SourcePath,
 			}
 			continue
 		}

@@ -3451,12 +3451,12 @@ func TestRunInteractionScriptAcceptsImageFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[
 		{
-			"image": {"fileName": "chart.png", "mimeType": "image/png", "data": "AAAA"},
+			"image": {"fileName": "chart.png", "mimeType": "image/png", "data": "AAAA", "sourcePath": "/tmp/chart.png", "dimensions": {"originalWidth": 4000, "originalHeight": 2000, "displayWidth": 1000, "displayHeight": 500}},
 			"expect_prompt": {
 				"text": "[Image #1]",
 				"pastedContentCount": 1,
 				"nextPastedID": 2,
-				"pastedContents": {"id": 1, "type": "image", "mediaType": "image/png", "filename": "chart.png", "content": "AAAA"}
+				"pastedContents": {"id": 1, "type": "image", "mediaType": "image/png", "filename": "chart.png", "content": "AAAA", "sourcePath": "/tmp/chart.png", "dimensions": {"originalWidth": 4000, "originalHeight": 2000, "displayWidth": 1000, "displayHeight": 500}}
 			}
 		},
 		{

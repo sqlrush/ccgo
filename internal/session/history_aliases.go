@@ -6,11 +6,50 @@ import (
 	"ccgo/internal/contracts"
 )
 
+func (d *ImageDimensions) UnmarshalJSON(data []byte) error {
+	type ImageDimensionsJSON ImageDimensions
+	var aux struct {
+		*ImageDimensionsJSON
+		OriginalWidthSnake  int `json:"original_width"`
+		OriginalHeightSnake int `json:"original_height"`
+		DisplayWidthSnake   int `json:"display_width"`
+		DisplayHeightSnake  int `json:"display_height"`
+		Width               int `json:"width"`
+		Height              int `json:"height"`
+	}
+	base := ImageDimensionsJSON{}
+	aux.ImageDimensionsJSON = &base
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*d = ImageDimensions(base)
+	if d.OriginalWidth == 0 {
+		d.OriginalWidth = aux.OriginalWidthSnake
+	}
+	if d.OriginalHeight == 0 {
+		d.OriginalHeight = aux.OriginalHeightSnake
+	}
+	if d.DisplayWidth == 0 {
+		d.DisplayWidth = aux.DisplayWidthSnake
+	}
+	if d.DisplayHeight == 0 {
+		d.DisplayHeight = aux.DisplayHeightSnake
+	}
+	if d.OriginalWidth == 0 {
+		d.OriginalWidth = aux.Width
+	}
+	if d.OriginalHeight == 0 {
+		d.OriginalHeight = aux.Height
+	}
+	return nil
+}
+
 func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	type PastedContentJSON PastedContent
 	var aux struct {
 		*PastedContentJSON
-		MediaTypeSnake string `json:"media_type"`
+		MediaTypeSnake  string `json:"media_type"`
+		SourcePathSnake string `json:"source_path"`
 	}
 	base := PastedContentJSON{}
 	aux.PastedContentJSON = &base
@@ -21,6 +60,9 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	if c.MediaType == "" {
 		c.MediaType = aux.MediaTypeSnake
 	}
+	if c.SourcePath == "" {
+		c.SourcePath = aux.SourcePathSnake
+	}
 	return nil
 }
 
@@ -30,6 +72,7 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 		*StoredPastedContentJSON
 		ContentHashSnake string `json:"content_hash"`
 		MediaTypeSnake   string `json:"media_type"`
+		SourcePathSnake  string `json:"source_path"`
 	}
 	base := StoredPastedContentJSON{}
 	aux.StoredPastedContentJSON = &base
@@ -42,6 +85,9 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 	}
 	if c.MediaType == "" {
 		c.MediaType = aux.MediaTypeSnake
+	}
+	if c.SourcePath == "" {
+		c.SourcePath = aux.SourcePathSnake
 	}
 	return nil
 }

@@ -122,7 +122,7 @@ func TestAppendAndLoadPromptHistory(t *testing.T) {
 
 func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	line := `{"display":"run [Pasted text #1] [Image #2]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","media_type":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png"}},"timestamp":100,"project":"/repo","session_id":"session"}`
+	line := `{"display":"run [Pasted text #1] [Image #2]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","media_type":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png","source_path":"/tmp/chart.png","dimensions":{"original_width":4000,"original_height":2000,"display_width":1000,"display_height":500}}},"timestamp":100,"project":"/repo","session_id":"session"}`
 	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	if got := history[0].PastedContents[1]; got.Content != "expanded paste" || got.MediaType != "text/plain" {
 		t.Fatalf("text paste alias = %#v", got)
 	}
-	if got := history[0].PastedContents[2]; got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "chart.png" {
+	if got := history[0].PastedContents[2]; got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.DisplayWidth != 1000 {
 		t.Fatalf("image paste alias = %#v", got)
 	}
 }

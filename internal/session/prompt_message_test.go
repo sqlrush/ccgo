@@ -58,6 +58,30 @@ func TestPromptMessagesBuildsImageBlocksAndMetadata(t *testing.T) {
 	}
 }
 
+func TestPromptMessagesUsesImageDimensionsMetadata(t *testing.T) {
+	messages := PromptMessages("[Image #1]", map[int]PastedContent{
+		1: {
+			ID:         1,
+			Type:       PastedContentImage,
+			Content:    "AAAA",
+			MediaType:  "image/png",
+			SourcePath: "/tmp/source.png",
+			Dimensions: &ImageDimensions{
+				OriginalWidth:  4000,
+				OriginalHeight: 2000,
+				DisplayWidth:   1000,
+				DisplayHeight:  500,
+			},
+		},
+	})
+	if len(messages) != 2 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if got := promptMessageText(messages[1]); !strings.Contains(got, "source: /tmp/source.png") || !strings.Contains(got, "Multiply coordinates by 4.00") {
+		t.Fatalf("metadata = %q", got)
+	}
+}
+
 func TestPromptMessagesTextOnly(t *testing.T) {
 	messages := PromptMessages("run [Pasted text #1]", map[int]PastedContent{
 		1: {ID: 1, Type: PastedContentText, Content: "expanded"},
@@ -67,6 +91,26 @@ func TestPromptMessagesTextOnly(t *testing.T) {
 	}
 	if promptMessageText(messages[0]) != "run expanded" {
 		t.Fatalf("text = %q", promptMessageText(messages[0]))
+	}
+}
+
+func TestImageMetadataTextUsesDimensionsAndSourcePath(t *testing.T) {
+	got := ImageMetadataText(&ImageDimensions{
+		OriginalWidth:  4000,
+		OriginalHeight: 2000,
+		DisplayWidth:   1000,
+		DisplayHeight:  500,
+	}, "/tmp/chart.png")
+	want := "[Image: source: /tmp/chart.png, original 4000x2000, displayed at 1000x500. Multiply coordinates by 4.00 to map to original image.]"
+	if got != want {
+		t.Fatalf("metadata = %q, want %q", got, want)
+	}
+
+	if got := ImageMetadataText(&ImageDimensions{OriginalWidth: 10, OriginalHeight: 10, DisplayWidth: 10, DisplayHeight: 10}, ""); got != "" {
+		t.Fatalf("unresized metadata = %q", got)
+	}
+	if got := ImageMetadataText(&ImageDimensions{}, "/tmp/source.png"); got != "[Image source: /tmp/source.png]" {
+		t.Fatalf("source-only metadata = %q", got)
 	}
 }
 

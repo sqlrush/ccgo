@@ -115,6 +115,8 @@ type Key struct {
 	Content      string
 	MediaType    string
 	Filename     string
+	Dimensions   *session.ImageDimensions
+	SourcePath   string
 	MouseButton  int
 	MouseX       int
 	MouseY       int
