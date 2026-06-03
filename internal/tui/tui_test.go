@@ -3407,6 +3407,108 @@ func TestCSISequenceHelpers(t *testing.T) {
 	}
 }
 
+func TestParseCSISequenceActions(t *testing.T) {
+	if action, ok := ParseCSISequence("x"); ok || action.Type != "" {
+		t.Fatalf("non-csi parsed = %#v", action)
+	}
+	if action, ok := ParseCSISequence(CSIPrefix + "31"); ok || action.Type != "" {
+		t.Fatalf("incomplete csi parsed = %#v", action)
+	}
+
+	sgr, ok := ParseCSISequence(CSISequence(31, 1, "m"))
+	if !ok || sgr.Type != CSIActionSGR || sgr.SGRParams != "31;1" {
+		t.Fatalf("sgr action = %#v", sgr)
+	}
+
+	cursorCases := []struct {
+		seq  string
+		want CSICursorAction
+	}{
+		{seq: CSISequence("A"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorUp, Count: 1}},
+		{seq: CSISequence(0, "B"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorDown, Count: 0}},
+		{seq: CSISequence(4, "C"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorForward, Count: 4}},
+		{seq: CSISequence(5, "D"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorBack, Count: 5}},
+		{seq: CSISequence(2, "E"), want: CSICursorAction{Type: CSICursorActionNextLine, Count: 2}},
+		{seq: CSISequence(3, "F"), want: CSICursorAction{Type: CSICursorActionPrevLine, Count: 3}},
+		{seq: CSISequence(12, "G"), want: CSICursorAction{Type: CSICursorActionColumn, Column: 12}},
+		{seq: CSISequence("2:7H"), want: CSICursorAction{Type: CSICursorActionPosition, Row: 2, Column: 7}},
+		{seq: CSISequence(9, "d"), want: CSICursorAction{Type: CSICursorActionRow, Row: 9}},
+		{seq: CSISequence(4, 8, "f"), want: CSICursorAction{Type: CSICursorActionPosition, Row: 4, Column: 8}},
+		{seq: CursorSave, want: CSICursorAction{Type: CSICursorActionSave}},
+		{seq: CursorRestore, want: CSICursorAction{Type: CSICursorActionRestore}},
+		{seq: CSISequence("4 q"), want: CSICursorAction{Type: CSICursorActionStyle, Style: CursorStyleUnderline, Blinking: false}},
+		{seq: CSISequence("99 q"), want: CSICursorAction{Type: CSICursorActionStyle, Style: CursorStyleBlock, Blinking: true}},
+		{seq: ShowCursor, want: CSICursorAction{Type: CSICursorActionShow}},
+		{seq: HideCursor, want: CSICursorAction{Type: CSICursorActionHide}},
+	}
+	for _, tc := range cursorCases {
+		action, ok := ParseCSISequence(tc.seq)
+		if !ok || action.Type != CSIActionCursor || !reflect.DeepEqual(action.Cursor, tc.want) {
+			t.Fatalf("cursor action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
+	eraseCases := []struct {
+		seq  string
+		want CSIEraseAction
+	}{
+		{seq: CSISequence("J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseToEnd}},
+		{seq: CSISequence(1, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseToStart}},
+		{seq: CSISequence(2, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseAll}},
+		{seq: CSISequence(3, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseScrollback}},
+		{seq: CSISequence(9, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseToEnd}},
+		{seq: CSISequence("K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseToEnd}},
+		{seq: CSISequence(2, "K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseAll}},
+		{seq: CSISequence(6, "X"), want: CSIEraseAction{Type: CSIEraseActionChars, Count: 6}},
+	}
+	for _, tc := range eraseCases {
+		action, ok := ParseCSISequence(tc.seq)
+		if !ok || action.Type != CSIActionErase || !reflect.DeepEqual(action.Erase, tc.want) {
+			t.Fatalf("erase action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
+	scrollCases := []struct {
+		seq  string
+		want CSIScrollAction
+	}{
+		{seq: CSISequence(2, "S"), want: CSIScrollAction{Type: CSIScrollActionUp, Count: 2}},
+		{seq: CSISequence(3, "T"), want: CSIScrollAction{Type: CSIScrollActionDown, Count: 3}},
+		{seq: CSISequence(4, 10, "r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 4, Bottom: 10}},
+		{seq: ResetScrollRegion, want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1, Bottom: 1}},
+	}
+	for _, tc := range scrollCases {
+		action, ok := ParseCSISequence(tc.seq)
+		if !ok || action.Type != CSIActionScroll || !reflect.DeepEqual(action.Scroll, tc.want) {
+			t.Fatalf("scroll action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
+	modeCases := []struct {
+		seq  string
+		want CSIModeAction
+	}{
+		{seq: EnterAlternateScreen, want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},
+		{seq: "\x1b[?47l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
+		{seq: EnableBracketedPaste, want: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: true}},
+		{seq: "\x1b[?1000h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingNormal}},
+		{seq: "\x1b[?1002h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingButton}},
+		{seq: "\x1b[?1003l", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: false, MouseMode: CSIMouseTrackingOff}},
+		{seq: EnableFocusEvents, want: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: true}},
+	}
+	for _, tc := range modeCases {
+		action, ok := ParseCSISequence(tc.seq)
+		if !ok || action.Type != CSIActionMode || !reflect.DeepEqual(action.Mode, tc.want) {
+			t.Fatalf("mode action for %q = %#v, want %#v", tc.seq, action, tc.want)
+		}
+	}
+
+	unknown, ok := ParseCSISequence("\x1b[?1006h")
+	if !ok || unknown.Type != CSIActionUnknown || unknown.Sequence != "\x1b[?1006h" {
+		t.Fatalf("unknown csi action = %#v", unknown)
+	}
+}
+
 func TestCaptureANSISnapshotPreservesOutputAndVisibleText(t *testing.T) {
 	prompt := NewPromptState(nil)
 	prompt.Text = "run"

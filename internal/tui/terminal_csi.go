@@ -23,6 +23,47 @@ const (
 	CSIIntermediateEnd   = 0x2f
 	CSIFinalStart        = 0x40
 	CSIFinalEnd          = 0x7e
+
+	CSICommandInsertCharacters byte = '@'
+	CSICommandCursorUp         byte = 'A'
+	CSICommandCursorDown       byte = 'B'
+	CSICommandCursorForward    byte = 'C'
+	CSICommandCursorBack       byte = 'D'
+	CSICommandCursorNextLine   byte = 'E'
+	CSICommandCursorPrevLine   byte = 'F'
+	CSICommandCursorColumn     byte = 'G'
+	CSICommandCursorPosition   byte = 'H'
+	CSICommandCursorTab        byte = 'I'
+	CSICommandEraseDisplay     byte = 'J'
+	CSICommandEraseLine        byte = 'K'
+	CSICommandInsertLines      byte = 'L'
+	CSICommandDeleteLines      byte = 'M'
+	CSICommandDeleteCharacters byte = 'P'
+	CSICommandEraseCharacters  byte = 'X'
+	CSICommandBackwardTab      byte = 'Z'
+	CSICommandScrollUp         byte = 'S'
+	CSICommandScrollDown       byte = 'T'
+	CSICommandVerticalPosition byte = 'd'
+	CSICommandHorizontalVPos   byte = 'f'
+	CSICommandSetMode          byte = 'h'
+	CSICommandResetMode        byte = 'l'
+	CSICommandSGR              byte = 'm'
+	CSICommandDSR              byte = 'n'
+	CSICommandCursorStyle      byte = 'q'
+	CSICommandScrollRegion     byte = 'r'
+	CSICommandSaveCursor       byte = 's'
+	CSICommandRestoreCursor    byte = 'u'
+
+	DECModeCursorVisible      = 25
+	DECModeAltScreen          = 47
+	DECModeAltScreenClear     = 1049
+	DECModeMouseNormal        = 1000
+	DECModeMouseButton        = 1002
+	DECModeMouseAny           = 1003
+	DECModeMouseSGR           = 1006
+	DECModeFocusEvents        = 1004
+	DECModeBracketedPaste     = 2004
+	DECModeSynchronizedUpdate = 2026
 )
 
 type CursorStyle string
@@ -32,6 +73,124 @@ const (
 	CursorStyleUnderline CursorStyle = "underline"
 	CursorStyleBar       CursorStyle = "bar"
 )
+
+type CSIActionType string
+
+const (
+	CSIActionCursor  CSIActionType = "cursor"
+	CSIActionErase   CSIActionType = "erase"
+	CSIActionScroll  CSIActionType = "scroll"
+	CSIActionMode    CSIActionType = "mode"
+	CSIActionSGR     CSIActionType = "sgr"
+	CSIActionUnknown CSIActionType = "unknown"
+)
+
+type CSICursorDirection string
+
+const (
+	CSICursorUp      CSICursorDirection = "up"
+	CSICursorDown    CSICursorDirection = "down"
+	CSICursorForward CSICursorDirection = "forward"
+	CSICursorBack    CSICursorDirection = "back"
+)
+
+type CSICursorActionType string
+
+const (
+	CSICursorActionMove     CSICursorActionType = "move"
+	CSICursorActionPosition CSICursorActionType = "position"
+	CSICursorActionColumn   CSICursorActionType = "column"
+	CSICursorActionRow      CSICursorActionType = "row"
+	CSICursorActionSave     CSICursorActionType = "save"
+	CSICursorActionRestore  CSICursorActionType = "restore"
+	CSICursorActionShow     CSICursorActionType = "show"
+	CSICursorActionHide     CSICursorActionType = "hide"
+	CSICursorActionStyle    CSICursorActionType = "style"
+	CSICursorActionNextLine CSICursorActionType = "nextLine"
+	CSICursorActionPrevLine CSICursorActionType = "prevLine"
+)
+
+type CSICursorAction struct {
+	Type      CSICursorActionType
+	Direction CSICursorDirection
+	Count     int
+	Row       int
+	Column    int
+	Style     CursorStyle
+	Blinking  bool
+}
+
+type CSIEraseActionType string
+
+const (
+	CSIEraseActionDisplay CSIEraseActionType = "display"
+	CSIEraseActionLine    CSIEraseActionType = "line"
+	CSIEraseActionChars   CSIEraseActionType = "chars"
+)
+
+type CSIEraseRegion string
+
+const (
+	CSIEraseToEnd      CSIEraseRegion = "toEnd"
+	CSIEraseToStart    CSIEraseRegion = "toStart"
+	CSIEraseAll        CSIEraseRegion = "all"
+	CSIEraseScrollback CSIEraseRegion = "scrollback"
+)
+
+type CSIEraseAction struct {
+	Type   CSIEraseActionType
+	Region CSIEraseRegion
+	Count  int
+}
+
+type CSIScrollActionType string
+
+const (
+	CSIScrollActionUp        CSIScrollActionType = "up"
+	CSIScrollActionDown      CSIScrollActionType = "down"
+	CSIScrollActionSetRegion CSIScrollActionType = "setRegion"
+)
+
+type CSIScrollAction struct {
+	Type   CSIScrollActionType
+	Count  int
+	Top    int
+	Bottom int
+}
+
+type CSIModeActionType string
+
+const (
+	CSIModeActionAlternateScreen CSIModeActionType = "alternateScreen"
+	CSIModeActionBracketedPaste  CSIModeActionType = "bracketedPaste"
+	CSIModeActionMouseTracking   CSIModeActionType = "mouseTracking"
+	CSIModeActionFocusEvents     CSIModeActionType = "focusEvents"
+)
+
+type CSIMouseTrackingMode string
+
+const (
+	CSIMouseTrackingOff    CSIMouseTrackingMode = "off"
+	CSIMouseTrackingNormal CSIMouseTrackingMode = "normal"
+	CSIMouseTrackingButton CSIMouseTrackingMode = "button"
+	CSIMouseTrackingAny    CSIMouseTrackingMode = "any"
+)
+
+type CSIModeAction struct {
+	Type      CSIModeActionType
+	Enabled   bool
+	MouseMode CSIMouseTrackingMode
+}
+
+type CSIAction struct {
+	Type      CSIActionType
+	Cursor    CSICursorAction
+	Erase     CSIEraseAction
+	Scroll    CSIScrollAction
+	Mode      CSIModeAction
+	SGRParams string
+	Sequence  string
+}
 
 func CSISequence(args ...any) string {
 	if len(args) == 0 {
@@ -57,6 +216,212 @@ func IsCSIIntermediate(b byte) bool {
 
 func IsCSIFinal(b byte) bool {
 	return b >= CSIFinalStart && b <= CSIFinalEnd
+}
+
+func ParseCSISequence(sequence string) (CSIAction, bool) {
+	if !strings.HasPrefix(sequence, CSIPrefix) {
+		return CSIAction{}, false
+	}
+	inner := strings.TrimPrefix(sequence, CSIPrefix)
+	if len(inner) == 0 {
+		return CSIAction{}, false
+	}
+	final := inner[len(inner)-1]
+	if !IsCSIFinal(final) {
+		return CSIAction{}, false
+	}
+	beforeFinal := inner[:len(inner)-1]
+	privateMode := byte(0)
+	paramStr := beforeFinal
+	if len(beforeFinal) > 0 {
+		switch beforeFinal[0] {
+		case '?', '>', '=':
+			privateMode = beforeFinal[0]
+			paramStr = beforeFinal[1:]
+		}
+	}
+	intermediate := ""
+	for len(paramStr) > 0 {
+		b := paramStr[len(paramStr)-1]
+		if (b >= '0' && b <= '9') || b == ';' || b == ':' {
+			break
+		}
+		intermediate = string(b) + intermediate
+		paramStr = paramStr[:len(paramStr)-1]
+	}
+	params := parseCSIParams(paramStr)
+	p0 := csiParamDefault(params, 0, 1)
+	p1 := csiParamDefault(params, 1, 1)
+
+	if final == CSICommandSGR && privateMode == 0 {
+		return CSIAction{Type: CSIActionSGR, SGRParams: paramStr}, true
+	}
+
+	switch final {
+	case CSICommandCursorUp:
+		return csiCursorMove(CSICursorUp, p0), true
+	case CSICommandCursorDown:
+		return csiCursorMove(CSICursorDown, p0), true
+	case CSICommandCursorForward:
+		return csiCursorMove(CSICursorForward, p0), true
+	case CSICommandCursorBack:
+		return csiCursorMove(CSICursorBack, p0), true
+	case CSICommandCursorNextLine:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionNextLine, Count: p0}}, true
+	case CSICommandCursorPrevLine:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionPrevLine, Count: p0}}, true
+	case CSICommandCursorColumn:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionColumn, Column: p0}}, true
+	case CSICommandCursorPosition, CSICommandHorizontalVPos:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionPosition, Row: p0, Column: p1}}, true
+	case CSICommandVerticalPosition:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRow, Row: p0}}, true
+	case CSICommandEraseDisplay:
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionDisplay, Region: csiEraseDisplayRegion(csiParamDefault(params, 0, 0))}}, true
+	case CSICommandEraseLine:
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionLine, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0))}}, true
+	case CSICommandEraseCharacters:
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionChars, Count: p0}}, true
+	case CSICommandScrollUp:
+		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionUp, Count: p0}}, true
+	case CSICommandScrollDown:
+		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionDown, Count: p0}}, true
+	case CSICommandScrollRegion:
+		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: p0, Bottom: p1}}, true
+	case CSICommandSaveCursor:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionSave}}, true
+	case CSICommandRestoreCursor:
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRestore}}, true
+	case CSICommandCursorStyle:
+		if intermediate == " " {
+			style, blinking := csiCursorStyle(p0)
+			return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionStyle, Style: style, Blinking: blinking}}, true
+		}
+	}
+
+	if privateMode == '?' && (final == CSICommandSetMode || final == CSICommandResetMode) {
+		if action, ok := csiPrivateModeAction(p0, final == CSICommandSetMode); ok {
+			return action, true
+		}
+	}
+
+	return CSIAction{Type: CSIActionUnknown, Sequence: sequence}, true
+}
+
+func parseCSIParams(paramStr string) []int {
+	if paramStr == "" {
+		return nil
+	}
+	fields := strings.Split(strings.ReplaceAll(paramStr, ":", ";"), ";")
+	params := make([]int, 0, len(fields))
+	for _, field := range fields {
+		if field == "" {
+			params = append(params, 0)
+			continue
+		}
+		value := 0
+		for _, r := range field {
+			if r < '0' || r > '9' {
+				value = 0
+				break
+			}
+			value = value*10 + int(r-'0')
+		}
+		params = append(params, value)
+	}
+	return params
+}
+
+func csiParamDefault(params []int, index int, defaultValue int) int {
+	if index >= len(params) {
+		return defaultValue
+	}
+	return params[index]
+}
+
+func csiCursorMove(direction CSICursorDirection, count int) CSIAction {
+	return CSIAction{
+		Type:   CSIActionCursor,
+		Cursor: CSICursorAction{Type: CSICursorActionMove, Direction: direction, Count: count},
+	}
+}
+
+func csiEraseDisplayRegion(index int) CSIEraseRegion {
+	switch index {
+	case 1:
+		return CSIEraseToStart
+	case 2:
+		return CSIEraseAll
+	case 3:
+		return CSIEraseScrollback
+	default:
+		return CSIEraseToEnd
+	}
+}
+
+func csiEraseLineRegion(index int) CSIEraseRegion {
+	switch index {
+	case 1:
+		return CSIEraseToStart
+	case 2:
+		return CSIEraseAll
+	default:
+		return CSIEraseToEnd
+	}
+}
+
+func csiCursorStyle(index int) (CursorStyle, bool) {
+	switch index {
+	case 0, 1:
+		return CursorStyleBlock, true
+	case 2:
+		return CursorStyleBlock, false
+	case 3:
+		return CursorStyleUnderline, true
+	case 4:
+		return CursorStyleUnderline, false
+	case 5:
+		return CursorStyleBar, true
+	case 6:
+		return CursorStyleBar, false
+	default:
+		return CursorStyleBlock, true
+	}
+}
+
+func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
+	switch mode {
+	case DECModeCursorVisible:
+		cursorType := CSICursorActionHide
+		if enabled {
+			cursorType = CSICursorActionShow
+		}
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: cursorType}}, true
+	case DECModeAltScreen, DECModeAltScreenClear:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: enabled}}, true
+	case DECModeBracketedPaste:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: enabled}}, true
+	case DECModeMouseNormal:
+		return csiMouseModeAction(CSIMouseTrackingNormal, enabled), true
+	case DECModeMouseButton:
+		return csiMouseModeAction(CSIMouseTrackingButton, enabled), true
+	case DECModeMouseAny:
+		return csiMouseModeAction(CSIMouseTrackingAny, enabled), true
+	case DECModeFocusEvents:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: enabled}}, true
+	default:
+		return CSIAction{}, false
+	}
+}
+
+func csiMouseModeAction(mode CSIMouseTrackingMode, enabled bool) CSIAction {
+	if !enabled {
+		mode = CSIMouseTrackingOff
+	}
+	return CSIAction{
+		Type: CSIActionMode,
+		Mode: CSIModeAction{Type: CSIModeActionMouseTracking, MouseMode: mode, Enabled: enabled},
+	}
 }
 
 func CursorUp(n int) string {
