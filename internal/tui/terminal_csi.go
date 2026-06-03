@@ -60,6 +60,8 @@ const (
 
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
+	DECModeAltScreenBuffer    = 1047
+	DECModeSaveRestoreCursor  = 1048
 	DECModeAltScreenClear     = 1049
 	DECModeMouseNormal        = 1000
 	DECModeMouseButton        = 1002
@@ -490,8 +492,14 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 			cursorType = CSICursorActionShow
 		}
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: cursorType}}, true
-	case DECModeAltScreen, DECModeAltScreenClear:
+	case DECModeAltScreen, DECModeAltScreenBuffer, DECModeAltScreenClear:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: enabled}}, true
+	case DECModeSaveRestoreCursor:
+		cursorType := CSICursorActionRestore
+		if enabled {
+			cursorType = CSICursorActionSave
+		}
+		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: cursorType}}, true
 	case DECModeBracketedPaste:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: enabled}}, true
 	case DECModeMouseNormal:

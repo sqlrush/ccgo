@@ -3503,6 +3503,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(4, 8, "f"), want: CSICursorAction{Type: CSICursorActionPosition, Row: 4, Column: 8}},
 		{seq: CursorSave, want: CSICursorAction{Type: CSICursorActionSave}},
 		{seq: CursorRestore, want: CSICursorAction{Type: CSICursorActionRestore}},
+		{seq: CSISequence("?1048h"), want: CSICursorAction{Type: CSICursorActionSave}},
+		{seq: CSISequence("?1048l"), want: CSICursorAction{Type: CSICursorActionRestore}},
 		{seq: CSISequence("4 q"), want: CSICursorAction{Type: CSICursorActionStyle, Style: CursorStyleUnderline, Blinking: false}},
 		{seq: CSISequence("99 q"), want: CSICursorAction{Type: CSICursorActionStyle, Style: CursorStyleBlock, Blinking: true}},
 		{seq: ShowCursor, want: CSICursorAction{Type: CSICursorActionShow}},
@@ -3591,6 +3593,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 	}{
 		{seq: EnterAlternateScreen, want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},
 		{seq: "\x1b[?47l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
+		{seq: "\x1b[?1047h", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},
+		{seq: "\x1b[?1047l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
 		{seq: EnableBracketedPaste, want: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: true}},
 		{seq: "\x1b[?1000h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingNormal}},
 		{seq: "\x1b[?1002h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingButton}},
