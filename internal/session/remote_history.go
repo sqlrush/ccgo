@@ -381,7 +381,7 @@ func (r *sessionEventsResponse) mergeLinksField(data json.RawMessage) error {
 		return fmt.Errorf("links: %w", err)
 	}
 	for _, link := range links {
-		href := remoteHistoryStringField(link, "href", "url", "uri", "link")
+		href := firstNonEmpty(remoteHistoryStringField(link, "href", "url", "uri", "link"), remoteHistoryCursorField(link))
 		if href == "" {
 			continue
 		}
@@ -575,6 +575,9 @@ func setLinkField(raw map[string]json.RawMessage, names []string, target *string
 			return fmt.Errorf("%s: %w", name, err)
 		}
 		value = remoteHistoryStringField(object, "href", "url", "uri", "link")
+		if value == "" {
+			value = remoteHistoryCursorField(object)
+		}
 		if value != "" {
 			*target = value
 			return nil
@@ -728,6 +731,28 @@ func remoteHistoryStringField(raw map[string]json.RawMessage, names ...string) s
 		}
 	}
 	return ""
+}
+
+func remoteHistoryCursorField(raw map[string]json.RawMessage) string {
+	return firstNonEmpty(
+		remoteHistoryStringField(raw, "before_id", "beforeId"),
+		remoteHistoryStringField(raw, "next_before_id", "nextBeforeId"),
+		remoteHistoryStringField(raw, "cursor", "pageCursor"),
+		remoteHistoryStringField(raw, "next_page_token", "nextPageToken"),
+		remoteHistoryStringField(raw, "next_token", "nextToken"),
+		remoteHistoryStringField(raw, "page_token", "pageToken"),
+		remoteHistoryStringField(raw, "continuation_token", "continuationToken"),
+		remoteHistoryStringField(raw, "next_key", "nextKey"),
+		remoteHistoryStringField(raw, "last_evaluated_key", "lastEvaluatedKey"),
+		remoteHistoryStringField(raw, "last_key", "lastKey"),
+		remoteHistoryStringField(raw, "$skiptoken", "$skipToken", "skiptoken", "skipToken"),
+		remoteHistoryStringField(raw, "previous_cursor", "previousCursor"),
+		remoteHistoryStringField(raw, "prev_cursor", "prevCursor"),
+		remoteHistoryStringField(raw, "before_cursor", "beforeCursor"),
+		remoteHistoryStringField(raw, "older_cursor", "olderCursor"),
+		remoteHistoryStringField(raw, "start_cursor", "startCursor"),
+		remoteHistoryStringField(raw, "end_cursor", "endCursor"),
+	)
 }
 
 func remoteHistoryRelTokens(raw map[string]json.RawMessage) []string {
