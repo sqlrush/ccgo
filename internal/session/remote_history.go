@@ -170,7 +170,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 	for _, name := range []string{
 		"page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
 		"session", "project_session", "projectSession", "conversation", "remote_history", "remoteHistory",
-		"event_page", "eventPage", "session_history", "sessionHistory",
+		"event_page", "eventPage", "session_history", "sessionHistory", "_embedded", "embedded",
 	} {
 		value, ok := raw[name]
 		if !ok {
