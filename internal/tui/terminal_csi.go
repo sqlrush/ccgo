@@ -67,6 +67,8 @@ const (
 	CSICommandRestoreCursor    byte = 'u'
 	CSICommandTerminalParams   byte = 'x'
 	CSICommandModeStatus       byte = 'y'
+	CSICommandInsertColumns    byte = '}'
+	CSICommandDeleteColumns    byte = '~'
 
 	CSIModeInsert   = 4
 	CSIModeLineFeed = 20
@@ -201,6 +203,8 @@ const (
 	CSIEditActionInsertLines CSIEditActionType = "insertLines"
 	CSIEditActionDeleteLines CSIEditActionType = "deleteLines"
 	CSIEditActionRepeatChars CSIEditActionType = "repeatChars"
+	CSIEditActionInsertCols  CSIEditActionType = "insertColumns"
+	CSIEditActionDeleteCols  CSIEditActionType = "deleteColumns"
 )
 
 type CSIEditAction struct {
@@ -380,6 +384,14 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 			return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionLeft, Count: p0}}, true
 		case CSICommandCursorUp:
 			return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionRight, Count: p0}}, true
+		}
+	}
+	if intermediate == "'" && privateMode == 0 {
+		switch final {
+		case CSICommandInsertColumns:
+			return csiEdit(CSIEditActionInsertCols, p0), true
+		case CSICommandDeleteColumns:
+			return csiEdit(CSIEditActionDeleteCols, p0), true
 		}
 	}
 

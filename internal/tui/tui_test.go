@@ -3782,6 +3782,9 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(5, "M"), want: CSIEditAction{Type: CSIEditActionDeleteLines, Count: 5}},
 		{seq: CSISequence("b"), want: CSIEditAction{Type: CSIEditActionRepeatChars, Count: 1}},
 		{seq: CSISequence(4, "b"), want: CSIEditAction{Type: CSIEditActionRepeatChars, Count: 4}},
+		{seq: CSISequence("'}"), want: CSIEditAction{Type: CSIEditActionInsertCols, Count: 1}},
+		{seq: CSISequence("3'}"), want: CSIEditAction{Type: CSIEditActionInsertCols, Count: 3}},
+		{seq: CSISequence("2'~"), want: CSIEditAction{Type: CSIEditActionDeleteCols, Count: 2}},
 	}
 	for _, tc := range editCases {
 		action, ok := ParseCSISequence(tc.seq)
@@ -3941,6 +3944,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions = parser.Feed(CSISequence(2, "O"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionErase || actions[0].Erase.Type != CSIEraseActionArea || actions[0].Erase.Region != CSIEraseAll {
 		t.Fatalf("terminal parser area erase actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence("3'}") + CSISequence("2'~"))
+	if len(actions) != 2 || actions[0].Type != TerminalActionEdit || actions[0].Edit.Type != CSIEditActionInsertCols || actions[0].Edit.Count != 3 || actions[1].Type != TerminalActionEdit || actions[1].Edit.Type != CSIEditActionDeleteCols || actions[1].Edit.Count != 2 {
+		t.Fatalf("terminal parser column edit actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence("?25$p"))
