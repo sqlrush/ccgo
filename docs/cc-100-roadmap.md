@@ -170,6 +170,8 @@ M7 补充：terminal CSI parser 现在把 DEC `?8h/l` auto-repeat mode 解析成
 
 M7 补充：terminal CSI parser 现在把 DEC `?12h/l` cursor blink mode 解析成结构化 `cursorBlink` mode action，补齐 cursor visibility/style 相邻的终端状态序列。
 
+M7 补充：terminal CSI parser 现在把 DEC `?44h/l` margin bell mode 解析成结构化 `marginBell` mode action，补齐 wrap/margin 相邻的响铃状态序列。
+
 M7 补充：terminal CSI parser 现在把 xterm/DEC `?45h/l` reverse-wraparound mode 解析成结构化 `reverseWrap` mode action，补齐 auto-wrap 相邻的 wrap 状态序列。
 
 M7 补充：terminal CSI parser 现在把 DEC `?66h/l` application keypad mode 解析成结构化 `applicationKeypad` mode action，补齐 application cursor mode 相邻的输入状态序列。

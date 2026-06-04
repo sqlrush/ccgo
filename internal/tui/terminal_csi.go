@@ -76,6 +76,7 @@ const (
 	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
 	DECModeAllowColumnSwitch  = 40
+	DECModeMarginBell         = 44
 	DECModeReverseWrap        = 45
 	DECModeAltScreen          = 47
 	DECModeApplicationKeypad  = 66
@@ -242,6 +243,7 @@ const (
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
 	CSIModeActionAutoRepeat        CSIModeActionType = "autoRepeat"
+	CSIModeActionMarginBell        CSIModeActionType = "marginBell"
 	CSIModeActionReverseWrap       CSIModeActionType = "reverseWrap"
 	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
 	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
@@ -593,6 +595,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: enabled}}, true
 	case DECModeAutoRepeat:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoRepeat, Enabled: enabled}}, true
+	case DECModeMarginBell:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionMarginBell, Enabled: enabled}}, true
 	case DECModeReverseWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseWrap, Enabled: enabled}}, true
 	case DECModeMouseX10:
