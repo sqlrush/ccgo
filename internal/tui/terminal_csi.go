@@ -74,6 +74,7 @@ const (
 	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
+	DECModeReverseWrap        = 45
 	DECModeApplicationKeypad  = 66
 	DECModeAltScreenBuffer    = 1047
 	DECModeSaveRestoreCursor  = 1048
@@ -234,6 +235,7 @@ const (
 	CSIModeActionReverseVideo      CSIModeActionType = "reverseVideo"
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
+	CSIModeActionReverseWrap       CSIModeActionType = "reverseWrap"
 	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
 	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
@@ -577,6 +579,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionOrigin, Enabled: enabled}}, true
 	case DECModeAutoWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: enabled}}, true
+	case DECModeReverseWrap:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseWrap, Enabled: enabled}}, true
 	case DECModeCursorBlink:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionCursorBlink, Enabled: enabled}}, true
 	case DECModeCursorVisible:
