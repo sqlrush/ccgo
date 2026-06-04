@@ -222,6 +222,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes DEC cursor blink mode (`?12h/l`) as a structured `cursorBlink` mode action.
 - `internal/tui`: terminal CSI parser now recognizes DEC margin bell mode (`?44h/l`) as a structured `marginBell` mode action.
 - `internal/tui`: terminal CSI parser now recognizes xterm/DEC reverse-wraparound mode (`?45h/l`) as a structured `reverseWrap` mode action.
+- `internal/tui`: terminal CSI parser now recognizes DEC logging mode (`?46h/l`) as a structured `logging` mode action.
 - `internal/tui`: terminal CSI parser now recognizes DEC application keypad mode (`?66h/l`) as a structured `applicationKeypad` mode action.
 - `internal/tui`: terminal CSI parser now recognizes DEC backarrow key mode (`?67h/l`) as a structured `backarrowKey` mode action.
 - `internal/tui`: terminal CSI parser now recognizes DEC left/right margin mode (`?69h/l`) as a structured `leftRightMarginMode` action.

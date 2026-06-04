@@ -78,6 +78,7 @@ const (
 	DECModeAllowColumnSwitch  = 40
 	DECModeMarginBell         = 44
 	DECModeReverseWrap        = 45
+	DECModeLogging            = 46
 	DECModeAltScreen          = 47
 	DECModeApplicationKeypad  = 66
 	DECModeBackarrowKey       = 67
@@ -246,6 +247,7 @@ const (
 	CSIModeActionAutoRepeat        CSIModeActionType = "autoRepeat"
 	CSIModeActionMarginBell        CSIModeActionType = "marginBell"
 	CSIModeActionReverseWrap       CSIModeActionType = "reverseWrap"
+	CSIModeActionLogging           CSIModeActionType = "logging"
 	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
 	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
 	CSIModeActionBackarrowKey      CSIModeActionType = "backarrowKey"
@@ -601,6 +603,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionMarginBell, Enabled: enabled}}, true
 	case DECModeReverseWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseWrap, Enabled: enabled}}, true
+	case DECModeLogging:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionLogging, Enabled: enabled}}, true
 	case DECModeMouseX10:
 		return csiMouseModeAction(CSIMouseTrackingX10, enabled), true
 	case DECModeCursorBlink:
