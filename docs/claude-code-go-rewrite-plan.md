@@ -241,6 +241,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 把 DECREQTPARM terminal-parameters (`CSI x`) 归入 report action，保留 code/private marker。
 - 本轮补充：terminal CSI parser 把 xterm window manipulation/report (`CSI t`) 归入 report action，覆盖常见 `CSI 14t`/`CSI 18t` 窗口/文本区尺寸查询。
 - 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
+- 本轮补充：terminal ESC parser 把 HTS horizontal-tab-set (`ESC H`) 归入 cursor/tab-set action，和 CSI tab-clear 控制序列形成闭环。
 - 本轮补充：terminal CSI parser 把 REP repeat-preceding-character (`CSI b`) 归入 edit action，visible-text/snapshot pipeline 和 ANSI message wrapping/trim 会按重复次数展开前一个可重复 grapheme。
 - 本轮补充：terminal CSI parser 按 ANSI 默认参数解析 scroll-region (`CSI r`/`CSI ;10r`)，缺失 top 默认为 1，缺失 bottom 保持 0 表示 reset/full-height，避免 reset scroll region 被误判为单行区域。
 - 本轮补充：terminal CSI parser 把 DECSTR soft reset (`CSI !p`) 归入 reset action，并在 terminal parser 中清理 SGR/link 状态。

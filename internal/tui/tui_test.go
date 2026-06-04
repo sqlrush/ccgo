@@ -3665,9 +3665,6 @@ func TestParseESCSequenceActions(t *testing.T) {
 	if action, ok := ParseESCContent(""); ok || action.Type != "" {
 		t.Fatalf("empty esc content parsed = %#v", action)
 	}
-	if action, ok := ParseESCContent("H"); ok || action.Type != "" {
-		t.Fatalf("HTS should be ignored = %#v", action)
-	}
 	if action, ok := ParseESCSequence("\x1b(B"); ok || action.Type != "" {
 		t.Fatalf("charset selection should be ignored = %#v", action)
 	}
@@ -3686,6 +3683,7 @@ func TestParseESCSequenceActions(t *testing.T) {
 		{seq: ESCIndex, want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorDown, Count: 1}},
 		{seq: ESCReverseIndex, want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorUp, Count: 1}},
 		{seq: ESCNextLine, want: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}},
+		{seq: ESCTabSet, want: CSICursorAction{Type: CSICursorActionTabSet}},
 	}
 	for _, tc := range cursorCases {
 		action, ok := ParseESCSequence(tc.seq)

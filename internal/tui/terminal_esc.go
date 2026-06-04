@@ -10,6 +10,7 @@ const (
 	ESCIndex              = "\x1bD"
 	ESCReverseIndex       = "\x1bM"
 	ESCNextLine           = "\x1bE"
+	ESCTabSet             = "\x1bH"
 	ESCFinalStart         = 0x30
 	ESCFinalEnd           = 0x7e
 	ESCCharsetSelectLeft  = '('
@@ -59,7 +60,7 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 	case 'E':
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}}, true
 	case 'H':
-		return ESCAction{}, false
+		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabSet}}, true
 	case ESCCharsetSelectLeft, ESCCharsetSelectRight:
 		if len(chars) >= 2 {
 			return ESCAction{}, false

@@ -124,6 +124,7 @@ const (
 	CSICursorActionPrevLine CSICursorActionType = "prevLine"
 	CSICursorActionTab      CSICursorActionType = "tab"
 	CSICursorActionBackTab  CSICursorActionType = "backTab"
+	CSICursorActionTabSet   CSICursorActionType = "tabSet"
 	CSICursorActionTabClear CSICursorActionType = "tabClear"
 )
 
