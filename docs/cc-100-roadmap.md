@@ -154,6 +154,8 @@ M7 补充：terminal sequence dispatcher 现在把 SS3 application cursor (`ESC 
 
 M7 补充：terminal CSI parser 现在把 DEC `?1h/l` application cursor mode 解析成独立 mode action，和 SS3 application cursor key 解析闭环。
 
+M7 补充：terminal CSI parser 现在把 DEC `?5h/l` reverse video/screen mode 解析成结构化 `reverseVideo` mode action，继续减少终端显示状态序列的 unknown fallback。
+
 M7 补充：terminal CSI parser 现在把普通 `CSI 4h/l` insert/replace mode 解析成 `insertMode` action，避免 ECMA mode set/reset 序列落入 unknown。
 
 M7 补充：terminal CSI parser 现在把普通 `CSI 20h/l` line-feed/new-line mode 解析成 `lineFeedMode` action，继续覆盖 ECMA mode set/reset 序列。

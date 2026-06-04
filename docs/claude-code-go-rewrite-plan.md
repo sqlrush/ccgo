@@ -260,6 +260,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal ESC parser 把 HTS horizontal-tab-set (`ESC H`) 归入 cursor/tab-set action，和 CSI tab-clear 控制序列形成闭环。
 - 本轮补充：terminal sequence dispatcher 把 SS3 application cursor (`ESC OA`/`OB`/`OC`/`OD`) 归入结构化 cursor move action，避免 application cursor mode 序列落入 unknown。
 - 本轮补充：terminal CSI parser 把 DEC `?1h/l` application cursor mode 解析成独立 mode action，和 SS3 application cursor key 解析闭环。
+- 本轮补充：terminal CSI parser 把 DEC `?5h/l` reverse video/screen mode 解析成结构化 `reverseVideo` mode action，继续减少终端显示状态序列的 unknown fallback。
 - 本轮补充：terminal CSI parser 把普通 `CSI 4h/l` insert/replace mode 解析成 `insertMode` action，避免 ECMA mode set/reset 序列落入 unknown。
 - 本轮补充：terminal CSI parser 把普通 `CSI 20h/l` line-feed/new-line mode 解析成 `lineFeedMode` action，继续覆盖 ECMA mode set/reset 序列。
 - 本轮补充：terminal CSI parser 把 DEC `?6h/l` origin mode 和 `?7h/l` auto-wrap mode 解析成结构化 mode action，继续减少终端状态序列的 unknown fallback。

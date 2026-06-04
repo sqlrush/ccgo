@@ -211,6 +211,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes DEC highlight, UTF-8, and urxvt numeric mouse modes (`?1001h/l`, `?1005h/l`, `?1015h/l`) as mouse-tracking mode actions.
 - `internal/tui`: terminal CSI parser now recognizes xterm alternate scroll mode (`?1007h/l`) as a structured mode action instead of an unknown sequence.
 - `internal/tui`: terminal CSI parser now recognizes DEC application cursor mode (`?1h/l`) as a structured mode action, pairing with SS3 application cursor key parsing.
+- `internal/tui`: terminal CSI parser now recognizes DEC reverse video/screen mode (`?5h/l`) as a structured `reverseVideo` mode action.
 - `internal/tui`: terminal CSI parser now recognizes ordinary ECMA insert/replace mode (`CSI 4h/l`) as a structured `insertMode` action.
 - `internal/tui`: terminal CSI parser now recognizes ordinary ECMA line-feed/new-line mode (`CSI 20h/l`) as a structured `lineFeedMode` action.
 - `internal/tui`: terminal CSI parser now recognizes DEC origin mode (`?6h/l`) and auto-wrap mode (`?7h/l`) as structured mode actions.
