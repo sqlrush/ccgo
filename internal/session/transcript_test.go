@@ -616,6 +616,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"agent_setting","session_id":"s3","agent_setting":"planner"}`,
 		`{"type":"pr-link","sessionId":"s1","prNumber":42,"prUrl":"https://github.com/o/r/pull/42","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
 		`{"type":"pr_link","session_id":"s3","pr_number":43,"pr_url":"https://github.com/o/r/pull/43","pr_repository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
+		`{"type":"pr-link","sessionID":"s5","pullRequestNumber":"45","pullRequestURL":"https://github.com/o/r/pull/45","repoFullName":"o/r"}`,
 		`{"type":"mode","sessionId":"s1","mode":"coordinator"}`,
 		`{"type":"mode","session_id":"s3","mode":"worker"}`,
 		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
@@ -664,6 +665,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if transcript.PRLinks["s3"].PRNumber != 43 || transcript.Modes["s3"] != "worker" || len(transcript.WorktreeStates["s3"].WorktreeSession) == 0 {
 		t.Fatalf("snake session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
+	}
+	if transcript.PRLinks["s5"].PRNumber != 45 || transcript.PRLinks["s5"].PRURL != "https://github.com/o/r/pull/45" || transcript.PRLinks["s5"].PRRepository != "o/r" {
+		t.Fatalf("pr link aliases = %#v", transcript.PRLinks["s5"])
 	}
 	if !strings.Contains(string(transcript.WorktreeStates["s4"].WorktreeSession), "/tmp/wt4") {
 		t.Fatalf("worktree state alias = %#v", transcript.WorktreeStates["s4"])
@@ -722,6 +726,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if metadata.PRLinks["s3"].PRNumber != 43 || metadata.Modes["s3"] != "worker" || len(metadata.WorktreeStates["s3"].WorktreeSession) == 0 {
 		t.Fatalf("metadata snake session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
+	}
+	if metadata.PRLinks["s5"].PRNumber != 45 || metadata.PRLinks["s5"].PRURL != "https://github.com/o/r/pull/45" || metadata.PRLinks["s5"].PRRepository != "o/r" {
+		t.Fatalf("metadata pr link aliases = %#v", metadata.PRLinks["s5"])
 	}
 	if !strings.Contains(string(metadata.WorktreeStates["s4"].WorktreeSession), "/tmp/wt4") {
 		t.Fatalf("metadata worktree state alias = %#v", metadata.WorktreeStates["s4"])

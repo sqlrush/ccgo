@@ -136,6 +136,7 @@ M6 progress now includes:
 - `internal/session`: tombstone metadata target/parent loading now accepts target/deleted/message ID aliases and parent ID/message ID aliases, preserving tombstone delete/relink replay across older field spellings.
 - `internal/session`: transcript metadata loading now accepts broader ID aliases for summary leaves, content-replacement agent/tool/block IDs, and context-collapse commit IDs across the full loader and lightweight metadata loader.
 - `internal/session`: worktree-state metadata now accepts additional wrapper aliases such as `worktreeState`, `worktree`, and `workspace` in both full and lightweight metadata loaders.
+- `internal/session`: PR link metadata now accepts pull-request number/URL and repository full-name aliases in both full and lightweight metadata loaders.
 - `internal/session`: remote-history parsing now also accepts connection-style `history`/`messages` wrappers with `nodes`/`edges[].node` event lists and `pageInfo`/`page_info` `hasNextPage`/`endCursor`/`startCursor` pagination aliases.
 - `internal/session`: remote-history connection edges now use `edges[].cursor` as the event cursor when the nested node lacks an event ID, preserving pagination even when pageInfo omits a cursor.
 - `internal/session`: remote-history parsing now also accepts `eventList`/`event_list`, `sessionEvents`/`session_events`, and connection aliases such as `connection`, `eventConnection`, and `sessionEventsConnection`.

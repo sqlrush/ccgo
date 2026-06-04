@@ -127,13 +127,13 @@ func parsePRLinkMetadata(line []byte) (PRLinkEntry, bool) {
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.PRNumber == 0 {
-		entry.PRNumber = fields.intValue("prNumber", "pr_number", "number")
+		entry.PRNumber = fields.intValue("prNumber", "pr_number", "pullRequestNumber", "pullRequestID", "pull_request_number", "pull_request_id", "number")
 	}
 	if entry.PRURL == "" {
-		entry.PRURL = fields.stringValue("prUrl", "prURL", "pr_url", "url")
+		entry.PRURL = fields.stringValue("prUrl", "prURL", "pr_url", "pullRequestUrl", "pullRequestURL", "pull_request_url", "url", "href")
 	}
 	if entry.PRRepository == "" {
-		entry.PRRepository = fields.stringValue("prRepository", "pr_repository", "repository", "repo")
+		entry.PRRepository = fields.stringValue("prRepository", "pr_repository", "repositoryFullName", "repository_full_name", "repoFullName", "repo_full_name", "repository", "repo")
 	}
 	return entry, true
 }
