@@ -74,7 +74,7 @@ M6 补充：contract `ID` JSON 读取现在接受 JSON number/null，remote hist
 
 M6 补充：remote history response parser 现在会递归解包 `data.session.events`、`data.projectSession.eventConnection`、`conversation`、`remoteHistory` 等 GraphQL/session wrapper，继续复用 `nodes`/`edges[].node` 和 `pageInfo` pagination 解析。
 
-M6 补充：remote history REST/link 风格分页现在接受 `links.next`/`links.previous`/`links.prev`/`links.older` 的字符串 URL 或 `{href,url,uri,link}` 对象，并从 `before_id`、`beforeId`、`cursor`、`pageCursor`、`previousCursor`、`prevCursor`、`beforeCursor`、`olderCursor`、`startCursor`、`endCursor` 等 query 参数提取下一页 before-id。
+M6 补充：remote history REST/link 风格分页现在接受 `links`/`_links` 的 `next`/`previous`/`prev`/`older` 字符串 URL 或 `{href,url,uri,link}` 对象，并从 `before_id`、`beforeId`、`cursor`、`pageCursor`、`previousCursor`、`prevCursor`、`beforeCursor`、`olderCursor`、`startCursor`、`endCursor` 等 query 参数提取下一页 before-id。
 
 M6 补充：remote history REST/link 风格分页现在也接受 RFC/JSON:API 风格的 `links` 数组，按 `rel`/`relation`/`name`/`type` 中的 `previous`/`prev`/`older`/`next` 选择续抓 URL，并从同一组 before/cursor query 参数提取 before-id。
 

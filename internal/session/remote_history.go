@@ -168,7 +168,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		}
 	}
 	for _, name := range []string{
-		"page", "pagination", "page_info", "pageInfo", "paging", "links", "meta", "metadata",
+		"page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
 		"session", "project_session", "projectSession", "conversation", "remote_history", "remoteHistory",
 		"event_page", "eventPage", "session_history", "sessionHistory",
 	} {
@@ -176,7 +176,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		if !ok {
 			continue
 		}
-		if name == "links" {
+		if name == "links" || name == "_links" {
 			if err := r.mergeLinksField(value); err != nil {
 				return err
 			}

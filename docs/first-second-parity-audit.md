@@ -150,7 +150,7 @@ M6 progress now includes:
 - `internal/session`: remote-history pagination now accepts token aliases such as `nextPageToken`, `nextToken`, `pageToken`, and `continuationToken` in response fields and link query parameters.
 - `internal/contracts`: ID JSON decoding now accepts JSON numbers/null so remote-history event, message, session, and parent ID aliases can preserve numeric IDs as strings during transcript materialization.
 - `internal/session`: remote-history response parsing now recursively unwraps GraphQL/session containers such as `data.session.events`, `data.projectSession.eventConnection`, `conversation`, and `remoteHistory` before applying `nodes`/`edges[].node` event-list and `pageInfo` pagination parsing.
-- `internal/session`: remote-history link pagination now accepts `links.next`/`links.previous`/`links.prev`/`links.older` string URLs or `{href,url,uri,link}` objects and extracts before/cursor query parameters for continuation.
+- `internal/session`: remote-history link pagination now accepts `links`/`_links` `next`/`previous`/`prev`/`older` string URLs or `{href,url,uri,link}` objects and extracts before/cursor query parameters for continuation.
 - `internal/session`: remote-history link pagination now also accepts RFC/JSON:API-style `links` arrays with `rel` values such as `previous`, `prev`, `older`, and `next`.
 - `internal/session`: remote-history pagination now also accepts HTTP `Link` header URLs with `previous`/`prev`/`older`/`next` rels as continuation cursor fallbacks.
 - `internal/session`: sidechain state loading now accepts legacy subagent/agent/task start and finish subtype aliases, broader sidechain/subagent ID and type fields, summary aliases, and common running/completed/cancelled/failed status aliases.
