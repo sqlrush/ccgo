@@ -63,7 +63,8 @@ const (
 	CSICommandRestoreCursor    byte = 'u'
 	CSICommandTerminalParams   byte = 'x'
 
-	CSIModeInsert = 4
+	CSIModeInsert   = 4
+	CSIModeLineFeed = 20
 
 	DECModeApplicationCursor  = 1
 	DECModeOrigin             = 6
@@ -224,6 +225,7 @@ const (
 	CSIModeActionAlternateScreen   CSIModeActionType = "alternateScreen"
 	CSIModeActionBracketedPaste    CSIModeActionType = "bracketedPaste"
 	CSIModeActionInsert            CSIModeActionType = "insertMode"
+	CSIModeActionLineFeed          CSIModeActionType = "lineFeedMode"
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
@@ -608,6 +610,8 @@ func csiModeAction(mode int, enabled bool) (CSIAction, bool) {
 	switch mode {
 	case CSIModeInsert:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionInsert, Enabled: enabled}}, true
+	case CSIModeLineFeed:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionLineFeed, Enabled: enabled}}, true
 	default:
 		return CSIAction{}, false
 	}
