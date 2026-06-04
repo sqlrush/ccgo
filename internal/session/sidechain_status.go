@@ -238,20 +238,31 @@ func sidechainStatusField(value any, keys ...string) string {
 }
 
 func normalizeSidechainStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
+	status = strings.TrimSpace(status)
+	switch normalizeSidechainStatusAlias(status) {
 	case "":
 		return ""
-	case SidechainStatusRunning, "started", "active", "in_progress", "in-progress", "pending":
+	case SidechainStatusRunning, "started", "active", "inprogress", "pending", "queued":
 		return SidechainStatusRunning
-	case SidechainStatusCompleted, "complete", "completed_successfully", "success", "succeeded", "done", "ok":
+	case SidechainStatusCompleted, "complete", "completedsuccessfully", "success", "successful", "succeeded", "done", "ok":
 		return SidechainStatusCompleted
-	case SidechainStatusCancelled, "canceled", "cancel", "cancelled_by_user", "canceled_by_user", "aborted", "stopped":
+	case SidechainStatusCancelled, "canceled", "cancel", "cancelledbyuser", "canceledbyuser", "usercancelled", "usercanceled", "aborted", "stopped":
 		return SidechainStatusCancelled
-	case SidechainStatusFailed, "failure", "error", "errored", "failed_error":
+	case SidechainStatusFailed, "failure", "error", "errored", "failederror", "failedwitherror", "timeout", "timedout":
 		return SidechainStatusFailed
 	default:
-		return strings.TrimSpace(status)
+		return status
 	}
+}
+
+func normalizeSidechainStatusAlias(status string) string {
+	var builder strings.Builder
+	for _, r := range strings.TrimSpace(status) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return builder.String()
 }
 
 func ListSidechainStates(sessionPath string, sessionID contracts.ID) ([]SidechainState, error) {

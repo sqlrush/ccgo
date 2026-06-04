@@ -187,6 +187,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：sidechain/subagent lifecycle content 读取现在也接受 JSON:API/resource-style 的 `resource`/`attributes`/`properties` wrapper；外层 resource `id` 可作为 sidechain ID fallback，内层 metadata、status/outcome 和 summary 仍会参与 state/list/resume 恢复。
 - 本轮补充：sidechain/subagent lifecycle 的 ID 等 string-like 字段接受 JSON number 和 Go 数字标量，numeric subagent ID 会保留为字符串并可用于 state/list/resume 查找。
 - 本轮补充：sidechain/subagent lifecycle subtype 现在接受 `subagent_started`、`agentStarted`、`task_failed`、`sidechainCompleted` 等相邻事件名，并从 `taskID`/`workerId`/`runId`、`agentName`/`kind`、`resultText`/`finalMessage` 等字段恢复 state/list/resume 信息；`*_failed`/`*_cancelled` subtype 无显式 status 时会归一到 failed/cancelled。
+- 本轮补充：sidechain/subagent lifecycle status 归一化现在接受 compact/camel aliases，包括 `inProgress`、`completedSuccessfully`、`cancelledByUser`/`canceledByUser`、`failedError`/`failedWithError` 和 `timedOut`，并继续写回 canonical running/completed/cancelled/failed 状态。
 - 本轮补充：transcript metadata loader 为 file-history snapshot 和 attribution snapshot 建立 `messageId` 索引，并接受 `message_id`/`messageUuid`/`id` 等字段别名，保留 raw list 的同时支持按消息恢复 snapshot。
 - 本轮补充：transcript message/index/session list 读取 `gitBranch`，兼容 `git_branch`/`branch` 别名，并让 session search 可以按分支名命中，贴近官方 lite metadata 的 branch 展示和检索行为。
 - 本轮补充：full transcript `TitleFromTranscript` 的标题优先级和 indexed/lite 路径对齐，按 custom title、AI title、首个用户 prompt、last-prompt、summary 顺序兜底。

@@ -189,7 +189,7 @@ func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
 		Content: map[string]any{
 			"subagent_id":    "subagent_42",
 			"subagentType":   "explorer",
-			"lifecycleState": "active",
+			"lifecycleState": "inProgress",
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
 		Subtype:   "agent_finish",
 		Content: map[string]any{
 			"agentID":      "subagent_42",
-			"outcome":      "success",
+			"outcome":      "completedSuccessfully",
 			"finalSummary": "found the issue",
 		},
 	}); err != nil {
@@ -218,6 +218,26 @@ func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
 	state := states[0]
 	if state.ID != "subagent_42" || state.Status != SidechainStatusCompleted || state.Summary != "found the issue" || state.Metadata.AgentType != "explorer" {
 		t.Fatalf("state = %#v", state)
+	}
+}
+
+func TestNormalizeSidechainStatusAcceptsCompactAliases(t *testing.T) {
+	cases := map[string]string{
+		"inProgress":            SidechainStatusRunning,
+		"in-progress":           SidechainStatusRunning,
+		"completedSuccessfully": SidechainStatusCompleted,
+		"successful":            SidechainStatusCompleted,
+		"cancelledByUser":       SidechainStatusCancelled,
+		"canceledByUser":        SidechainStatusCancelled,
+		"failedError":           SidechainStatusFailed,
+		"failed_with_error":     SidechainStatusFailed,
+		"timedOut":              SidechainStatusFailed,
+		"custom_state":          "custom_state",
+	}
+	for input, want := range cases {
+		if got := normalizeSidechainStatus(input); got != want {
+			t.Fatalf("normalizeSidechainStatus(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
@@ -631,7 +651,7 @@ func TestSidechainFinishNormalizesStatusAliases(t *testing.T) {
 	if _, err := manager.Start(SidechainOptions{ID: "alias-success", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
 		t.Fatal(err)
 	}
-	summary, err := manager.Finish("alias-success", "success", "done", time.Unix(110, 0).UTC())
+	summary, err := manager.Finish("alias-success", "completedSuccessfully", "done", time.Unix(110, 0).UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +669,7 @@ func TestSidechainFinishNormalizesStatusAliases(t *testing.T) {
 	if _, err := manager.Start(SidechainOptions{ID: "alias-error", StartedAt: time.Unix(120, 0).UTC()}); err != nil {
 		t.Fatal(err)
 	}
-	failed, err := manager.Finish("alias-error", "error", "boom", time.Unix(130, 0).UTC())
+	failed, err := manager.Finish("alias-error", "failedError", "boom", time.Unix(130, 0).UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
