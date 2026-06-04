@@ -71,7 +71,9 @@ const (
 	DECModeMouseNormal        = 1000
 	DECModeMouseButton        = 1002
 	DECModeMouseAny           = 1003
+	DECModeMouseUTF8          = 1005
 	DECModeMouseSGR           = 1006
+	DECModeMouseURXVT         = 1015
 	DECModeFocusEvents        = 1004
 	DECModeBracketedPaste     = 2004
 	DECModeSynchronizedUpdate = 2026
@@ -225,7 +227,9 @@ const (
 	CSIMouseTrackingNormal CSIMouseTrackingMode = "normal"
 	CSIMouseTrackingButton CSIMouseTrackingMode = "button"
 	CSIMouseTrackingAny    CSIMouseTrackingMode = "any"
+	CSIMouseTrackingUTF8   CSIMouseTrackingMode = "utf8"
 	CSIMouseTrackingSGR    CSIMouseTrackingMode = "sgr"
+	CSIMouseTrackingURXVT  CSIMouseTrackingMode = "urxvt"
 )
 
 type CSIModeAction struct {
@@ -557,8 +561,12 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return csiMouseModeAction(CSIMouseTrackingButton, enabled), true
 	case DECModeMouseAny:
 		return csiMouseModeAction(CSIMouseTrackingAny, enabled), true
+	case DECModeMouseUTF8:
+		return csiMouseModeAction(CSIMouseTrackingUTF8, enabled), true
 	case DECModeMouseSGR:
 		return csiMouseModeAction(CSIMouseTrackingSGR, enabled), true
+	case DECModeMouseURXVT:
+		return csiMouseModeAction(CSIMouseTrackingURXVT, enabled), true
 	case DECModeFocusEvents:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: enabled}}, true
 	case DECModeSynchronizedUpdate:

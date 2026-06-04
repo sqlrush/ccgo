@@ -424,6 +424,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：terminal CSI parser 现在把 DEC `?1006h/l` SGR mouse mode 解析成 mouseTracking action，和 lifecycle 发出的 SGR mouse enable/disable 序列闭环。
 
+本轮补充：terminal CSI parser 现在也把 DEC `?1005h/l` UTF-8 mouse mode 和 `?1015h/l` urxvt numeric mouse mode 解析成 mouseTracking action，和输入侧 numeric mouse 兼容面闭环。
+
 本轮补充：terminal CSI parser 现在把 DEC `?2026h/l` synchronized output mode 解析成 mode action，和 renderer/snapshot 的 BSU/ESU 包裹路径闭环。
 
 本轮补充：terminal ESC helper 增加官方 ESC final-byte 判定和 `ParseESCSequence`/`ParseESCContent`，覆盖 RIS reset、DECSC/DECRC save/restore、IND/RI/NEL cursor action、HTS/charset ignored 分支和 unknown sequence fallback。

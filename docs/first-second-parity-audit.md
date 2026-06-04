@@ -202,6 +202,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now emits structured edit actions for insert/delete chars and insert/delete lines, plus forward/back tab cursor actions; output `CSI M` is parsed as delete-lines while input tokenization still keeps X10 mouse payload handling separate.
 - `internal/tui`: terminal CSI parser now emits report actions for DSR `CSI n`, including device-status, cursor-position, and private-mode unknown reports.
 - `internal/tui`: terminal sequence dispatcher and parser now classify DCS/APC/PM/SOS string-control sequences as `stringControl` actions with payload, terminator, and incomplete-flush state while keeping visible text extraction free of those invisible payloads.
+- `internal/tui`: terminal CSI parser now recognizes DEC UTF-8 and urxvt numeric mouse modes (`?1005h/l`, `?1015h/l`) as mouse-tracking mode actions.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
