@@ -1011,19 +1011,19 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 				}
 			}
 		}
-	case "mouse", "mouse-event":
+	case "mouse", "mouseevent", "mouse-event":
 		if step.Mouse == nil {
 			step.Mouse = scriptMouseJSONField(fields, "value", "mouse", "event", "payload", "data")
 		}
-	case "image", "paste-image":
+	case "image", "pasteimage", "paste-image", "imagepaste", "image-paste":
 		if step.Image == nil {
 			step.Image = scriptImageJSONField(fields, "value", "image", "payload", "data")
 		}
-	case "focus", "focus-in":
+	case "focus", "focusin", "focus-in":
 		if !scriptStepHasFocusKey(step) {
 			step.Keys = append(step.Keys, "focus-in")
 		}
-	case "blur", "focus-out":
+	case "blur", "focusout", "focus-out":
 		if !scriptStepHasFocusKey(step) {
 			step.Keys = append(step.Keys, "focus-out")
 		}

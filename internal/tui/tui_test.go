@@ -5333,6 +5333,39 @@ func TestRunInteractionScriptAcceptsCompactActionDiscriminatorAliases(t *testing
 	}
 }
 
+func TestRunInteractionScriptAcceptsCompactEventActionAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"action":"focusOut","expectEvent":{"type":"focus_out"},"expectFocused":false},
+		{"type":"focusIn","expectEvent":{"type":"focus_in"},"expectFocused":true},
+		{"name":"pasteImage","payload":{"fileName":"chart.png","mimeType":"image/png","data":"AAAA"},"expectPrompt":{"text":"[Image #1]","pastedContentCount":1}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventFocusOut ||
+		result.Events[1].Type != ScreenEventFocusIn {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestParseInteractionScriptAcceptsCompactMouseActionAlias(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"action":"mouseEvent","payload":{"buttonMask":0,"clientX":13,"clientY":5,"isRelease":false}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 1 || steps[0].Mouse == nil || steps[0].Mouse.Button != 0 || steps[0].Mouse.X != 13 || steps[0].Mouse.Y != 5 || steps[0].Mouse.Release {
+		t.Fatalf("steps = %#v", steps)
+	}
+}
+
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keybindings":{"keys":"ctrl-r","command":"submitPrompt"}},
