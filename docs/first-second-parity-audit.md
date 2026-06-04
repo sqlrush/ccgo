@@ -211,6 +211,7 @@ M7 progress now includes:
 - `internal/tui`: image paste pills now follow the official lazy-space behavior for consecutive image pastes and image-then-text input without adding duplicate spaces before explicit whitespace/newlines.
 - `internal/tui`: REPL messages now preserve `imagePasteIds`, and prompt state advances `NextPastedID` from existing user-message image ids and pasted refs so resumed screens do not reuse paste IDs.
 - `internal/tui`: reverse-search now matches full history entries and restores text/image pasted-content metadata on selection, so the next submit still carries display text and image metadata.
+- `internal/session`: prompt-history pasted-content loading now accepts `mimeType`/`mime_type`/`contentType`, `fileName`/`file_name`/`name`, and `filePath`/`file_path`/`path` metadata aliases so restored image/text paste metadata matches the image hint/parser compatibility surface.
 - `internal/tui`: REPL message restore can now rebuild prompt text and image pasted contents from user-message content blocks, `imagePasteIds`, and pasted-content metadata.
 - `internal/tui`: Ctrl-S prompt stash now preserves and restores prompt text, cursor position, and pasted-content metadata.
 - `internal/tui`: prompt submitted events now retain display text and pasted-content metadata, so downstream runtime code can build text/image content-block messages instead of receiving only the expanded prompt string.

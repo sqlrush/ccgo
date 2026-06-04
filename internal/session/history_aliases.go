@@ -48,8 +48,18 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	type PastedContentJSON PastedContent
 	var aux struct {
 		*PastedContentJSON
-		MediaTypeSnake  string `json:"media_type"`
-		SourcePathSnake string `json:"source_path"`
+		MediaTypeSnake   string `json:"media_type"`
+		MimeType         string `json:"mimeType"`
+		MimeTypeSnake    string `json:"mime_type"`
+		ContentType      string `json:"contentType"`
+		ContentTypeSnake string `json:"content_type"`
+		FileName         string `json:"fileName"`
+		FileNameSnake    string `json:"file_name"`
+		Name             string `json:"name"`
+		SourcePathSnake  string `json:"source_path"`
+		FilePath         string `json:"filePath"`
+		FilePathSnake    string `json:"file_path"`
+		Path             string `json:"path"`
 	}
 	base := PastedContentJSON{}
 	aux.PastedContentJSON = &base
@@ -58,10 +68,13 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	}
 	*c = PastedContent(base)
 	if c.MediaType == "" {
-		c.MediaType = aux.MediaTypeSnake
+		c.MediaType = firstHistoryString(aux.MediaTypeSnake, aux.MimeType, aux.MimeTypeSnake, aux.ContentType, aux.ContentTypeSnake)
+	}
+	if c.Filename == "" {
+		c.Filename = firstHistoryString(aux.FileName, aux.FileNameSnake, aux.Name)
 	}
 	if c.SourcePath == "" {
-		c.SourcePath = aux.SourcePathSnake
+		c.SourcePath = firstHistoryString(aux.SourcePathSnake, aux.FilePath, aux.FilePathSnake, aux.Path)
 	}
 	return nil
 }
@@ -72,7 +85,17 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 		*StoredPastedContentJSON
 		ContentHashSnake string `json:"content_hash"`
 		MediaTypeSnake   string `json:"media_type"`
+		MimeType         string `json:"mimeType"`
+		MimeTypeSnake    string `json:"mime_type"`
+		ContentType      string `json:"contentType"`
+		ContentTypeSnake string `json:"content_type"`
+		FileName         string `json:"fileName"`
+		FileNameSnake    string `json:"file_name"`
+		Name             string `json:"name"`
 		SourcePathSnake  string `json:"source_path"`
+		FilePath         string `json:"filePath"`
+		FilePathSnake    string `json:"file_path"`
+		Path             string `json:"path"`
 	}
 	base := StoredPastedContentJSON{}
 	aux.StoredPastedContentJSON = &base
@@ -84,12 +107,24 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 		c.ContentHash = aux.ContentHashSnake
 	}
 	if c.MediaType == "" {
-		c.MediaType = aux.MediaTypeSnake
+		c.MediaType = firstHistoryString(aux.MediaTypeSnake, aux.MimeType, aux.MimeTypeSnake, aux.ContentType, aux.ContentTypeSnake)
+	}
+	if c.Filename == "" {
+		c.Filename = firstHistoryString(aux.FileName, aux.FileNameSnake, aux.Name)
 	}
 	if c.SourcePath == "" {
-		c.SourcePath = aux.SourcePathSnake
+		c.SourcePath = firstHistoryString(aux.SourcePathSnake, aux.FilePath, aux.FilePathSnake, aux.Path)
 	}
 	return nil
+}
+
+func firstHistoryString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (e *HistoryEntry) UnmarshalJSON(data []byte) error {

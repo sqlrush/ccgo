@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,7 +123,7 @@ func TestAppendAndLoadPromptHistory(t *testing.T) {
 
 func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	line := `{"display":"run [Pasted text #1] [Image #2]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","media_type":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png","source_path":"/tmp/chart.png","dimensions":{"original_width":4000,"original_height":2000,"display_width":1000,"display_height":500}}},"timestamp":100,"project":"/repo","session_id":"session"}`
+	line := `{"display":"run [Pasted text #1] [Image #2] [Image #3]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","contentType":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png","source_path":"/tmp/chart.png","dimensions":{"original_width":4000,"original_height":2000,"display_width":1000,"display_height":500}},"3":{"id":3,"type":"image","mime_type":"image/jpeg","fileName":"photo.jpg","file_path":"/tmp/photo.jpg","dimensions":{"width":3000,"height":1500}}},"timestamp":100,"project":"/repo","session_id":"session"}`
 	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +137,7 @@ func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(history) != 1 || history[0].Display != "run [Pasted text #1] [Image #2]" {
+	if len(history) != 1 || history[0].Display != "run [Pasted text #1] [Image #2] [Image #3]" {
 		t.Fatalf("history = %#v", history)
 	}
 	if got := history[0].PastedContents[1]; got.Content != "expanded paste" || got.MediaType != "text/plain" {
@@ -144,6 +145,21 @@ func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	}
 	if got := history[0].PastedContents[2]; got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.DisplayWidth != 1000 {
 		t.Fatalf("image paste alias = %#v", got)
+	}
+	if got := history[0].PastedContents[3]; got.Type != PastedContentImage || got.MediaType != "image/jpeg" || got.Filename != "photo.jpg" || got.SourcePath != "/tmp/photo.jpg" || got.Dimensions == nil || got.Dimensions.OriginalWidth != 3000 {
+		t.Fatalf("image paste alternate aliases = %#v", got)
+	}
+}
+
+func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
+	var entry HistoryEntry
+	err := json.Unmarshal([]byte(`{"display":"restore [Image #1]","pasted_contents":{"1":{"id":1,"type":"image","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}}}}`), &entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := entry.PastedContents[1]
+	if got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 {
+		t.Fatalf("pasted content aliases = %#v", got)
 	}
 }
 

@@ -146,6 +146,8 @@ M7 补充：REPL message restore 现在可从用户消息的 content blocks、`i
 
 M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 pasted-content metadata，空 prompt 时可 unstash，贴近官方 `chat:stash` 行为。
 
+M7 补充：prompt history pasted-content 读取现在接受 `mimeType`/`mime_type`/`contentType`、`fileName`/`file_name`/`name`、`filePath`/`file_path`/`path` 等 text/image metadata 别名，历史恢复路径和 image hint/parser metadata 兼容面保持一致。
+
 当前状态不是 100% 还原，而是“核心地基 + 运行时框架 + 第一批具体工具”的可编译阶段。
 
 ## Milestones
