@@ -129,6 +129,7 @@ func TestLoadTranscriptIndexAcceptsMetadataAliases(t *testing.T) {
 		`{"type":"worktree_state","session_id":"sess_1","worktree_session":{"worktreePath":"/tmp/wt","sessionId":"sess_1"}}`,
 		`{"type":"user","message_id":"u_alias","session_id":"sess_1","project_path":"/repo/alias","git_branch":"feature/alias-branch","message":{"type":"user","content":[{"type":"text","text":"alias prompt"}]}}`,
 		`{"type":"content_replacement","session_id":"sess_1","replacements":[{"replacement":"stub"}]}`,
+		`{"type":"content_replacement","session_id":"other","replacements":[{"replacement":"other stub"}]}`,
 	})
 	index, err := LoadTranscriptIndex(path, "sess_1")
 	if err != nil {

@@ -133,7 +133,7 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 				index.HasWorktreeState = len(entry.WorktreeSession) > 0 && string(entry.WorktreeSession) != "null"
 			}
 		case "content-replacement":
-			if entry, ok := parseContentReplacementMetadata(line); ok {
+			if entry, ok := parseContentReplacementMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
 				index.ContentReplacementCount += len(entry.Replacements)
 			}
 		}
