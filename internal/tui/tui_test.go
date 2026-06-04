@@ -5356,6 +5356,30 @@ func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsKeybindingCollectionAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"keymap":{"ctrl-r":"submitPrompt"}},
+		{"text":"first","key":"ctrl-r","expectEvent":{"type":"prompt_submitted","value":"first"},"expectPrompt":{"empty":true}},
+		{"keyboardShortcuts":{"bindings":[{"shortcut":"ctrl-w","commandName":"submitPrompt"}]}},
+		{"text":"second","key":"ctrl-w","expectEvent":{"type":"prompt_submitted","value":"second"},"expectPrompt":{"empty":true}},
+		{"hotkeys":{"ctrl-x ctrl-k":false}},
+		{"keys":"ctrl-x ctrl-k","expectNoEvent":true}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "first" ||
+		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "second" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsTerminalControlKeyAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"text":"az","key":"ctrl-h","expect_prompt":{"text":"a"}},

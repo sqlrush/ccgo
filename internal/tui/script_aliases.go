@@ -197,8 +197,77 @@ func taskStatusJSONField(fields map[string]json.RawMessage, names ...string) *Ta
 	return nil
 }
 
+func scriptKeybindingsJSONField(fields map[string]json.RawMessage) ([]BindingSpec, bool, error) {
+	names := []string{
+		"bindings",
+		"keybindings",
+		"key_bindings",
+		"keyBindings",
+		"keyboardBindings",
+		"keyboardShortcuts",
+		"keyboard_shortcuts",
+		"keybinding_specs",
+		"keybindingSpecs",
+		"keymap",
+		"keyMap",
+		"keymaps",
+		"keyMaps",
+		"shortcutBindings",
+		"hotkeys",
+		"hotKeys",
+		"hot_keys",
+		"userKeybindings",
+		"userKeyBindings",
+		"user_keybindings",
+		"customKeybindings",
+		"customKeyBindings",
+		"custom_keybindings",
+	}
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		specs, err := parseScriptKeybindingSpecs(raw)
+		return specs, true, err
+	}
+	return nil, false, nil
+}
+
+func parseScriptKeybindingSpecs(data json.RawMessage) ([]BindingSpec, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil, nil
+	}
+	if len(data) > 0 && data[0] == '{' && isBindingSpecObject(data) {
+		var spec BindingSpec
+		if err := json.Unmarshal(data, &spec); err != nil {
+			return nil, err
+		}
+		return []BindingSpec{spec}, nil
+	}
+	return ParseKeyBindingSpecs(data)
+}
+
+func isBindingSpecObject(data json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false
+	}
+	for _, name := range []string{
+		"Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "sequence",
+		"Action", "action", "command", "action_name", "actionName", "command_name", "commandName", "command_id", "commandId",
+	} {
+		if _, ok := fields[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = unwrapScriptStepJSON(data)
+	rawStepData := data
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
 	var raw alias
@@ -367,6 +436,10 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
+	rawFieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(rawStepData, &rawFieldMap); err != nil {
+		return err
+	}
 	if fields.RequestPermission != nil {
 		step.RequestPermission = fields.RequestPermission
 	}
@@ -525,6 +598,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.KeybindingSpecsCamel != nil {
 		step.Keybindings = fields.KeybindingSpecsCamel
+	}
+	if specs, ok, err := scriptKeybindingsJSONField(rawFieldMap); err != nil {
+		return err
+	} else if ok {
+		step.Keybindings = specs
 	}
 	if fields.UpsertTask != nil {
 		step.UpsertTask = fields.UpsertTask
