@@ -246,6 +246,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes DEC left/right margin mode (`?69h/l`) as a structured `leftRightMarginMode` action.
 - `internal/tui`: terminal CSI parsing now distinguishes parameterized `CSI Pl;Pr s` left/right horizontal margin regions from bare `CSI s` save-cursor semantics.
 - `internal/tui`: terminal CSI parsing now recognizes intermediate-space `CSI Ps SP @` / `CSI Ps SP A` scroll-left/right sequences instead of misclassifying them as insert-characters or cursor-up.
+- `internal/tui`: terminal CSI parsing now marks DEC selective erase `CSI ? Ps J` / `CSI ? Ps K` separately from ordinary ED/EL erase actions.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: keybinding config now accepts page navigation aliases such as `pgup`, `pg-up`, `prior`, `pgdn`, `pg-down`, and `next`.
 - `internal/tui`: keybinding config and named-key script input now accept DOM-style arrow key aliases such as `arrowLeft`, `arrowRight`, `arrowUp`, `arrowDown`, and modifier-arrow variants.

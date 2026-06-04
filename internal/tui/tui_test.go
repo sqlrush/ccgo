@@ -3755,7 +3755,9 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(2, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseAll}},
 		{seq: CSISequence(3, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseScrollback}},
 		{seq: CSISequence(9, "J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseToEnd}},
+		{seq: CSISequence("?2J"), want: CSIEraseAction{Type: CSIEraseActionDisplay, Region: CSIEraseAll, Selective: true}},
 		{seq: CSISequence("K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseToEnd}},
+		{seq: CSISequence("?K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseToEnd, Selective: true}},
 		{seq: CSISequence(2, "K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseAll}},
 		{seq: CSISequence(6, "X"), want: CSIEraseAction{Type: CSIEraseActionChars, Count: 6}},
 	}
@@ -3921,6 +3923,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions := parser.Feed(CSISequence("?1000;1006;2004h"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionMode || len(actions[0].Modes) != 3 || actions[0].Mode != actions[0].Modes[0] {
 		t.Fatalf("terminal parser multi mode actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence("?K"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionErase || actions[0].Erase.Type != CSIEraseActionLine || !actions[0].Erase.Selective {
+		t.Fatalf("terminal parser selective erase actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence(5, 40, "s"))

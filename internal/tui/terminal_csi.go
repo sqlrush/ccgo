@@ -180,9 +180,10 @@ const (
 )
 
 type CSIEraseAction struct {
-	Type   CSIEraseActionType
-	Region CSIEraseRegion
-	Count  int
+	Type      CSIEraseActionType
+	Region    CSIEraseRegion
+	Count     int
+	Selective bool
 }
 
 type CSIEditActionType string
@@ -408,9 +409,9 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandTabClear:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabClear, Count: csiParamDefault(params, 0, 0)}}, true
 	case CSICommandEraseDisplay:
-		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionDisplay, Region: csiEraseDisplayRegion(csiParamDefault(params, 0, 0))}}, true
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionDisplay, Region: csiEraseDisplayRegion(csiParamDefault(params, 0, 0)), Selective: privateMode == '?'}}, true
 	case CSICommandEraseLine:
-		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionLine, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0))}}, true
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionLine, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0)), Selective: privateMode == '?'}}, true
 	case CSICommandEraseCharacters:
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionChars, Count: p0}}, true
 	case CSICommandInsertCharacters:
