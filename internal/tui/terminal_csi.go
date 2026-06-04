@@ -38,6 +38,8 @@ const (
 	CSICommandEraseLine        byte = 'K'
 	CSICommandInsertLines      byte = 'L'
 	CSICommandDeleteLines      byte = 'M'
+	CSICommandEraseField       byte = 'N'
+	CSICommandEraseArea        byte = 'O'
 	CSICommandDeleteCharacters byte = 'P'
 	CSICommandEraseCharacters  byte = 'X'
 	CSICommandBackwardTab      byte = 'Z'
@@ -167,6 +169,8 @@ type CSIEraseActionType string
 const (
 	CSIEraseActionDisplay CSIEraseActionType = "display"
 	CSIEraseActionLine    CSIEraseActionType = "line"
+	CSIEraseActionField   CSIEraseActionType = "field"
+	CSIEraseActionArea    CSIEraseActionType = "area"
 	CSIEraseActionChars   CSIEraseActionType = "chars"
 )
 
@@ -412,6 +416,10 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionDisplay, Region: csiEraseDisplayRegion(csiParamDefault(params, 0, 0)), Selective: privateMode == '?'}}, true
 	case CSICommandEraseLine:
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionLine, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0)), Selective: privateMode == '?'}}, true
+	case CSICommandEraseField:
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionField, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0))}}, true
+	case CSICommandEraseArea:
+		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionArea, Region: csiEraseLineRegion(csiParamDefault(params, 0, 0))}}, true
 	case CSICommandEraseCharacters:
 		return CSIAction{Type: CSIActionErase, Erase: CSIEraseAction{Type: CSIEraseActionChars, Count: p0}}, true
 	case CSICommandInsertCharacters:

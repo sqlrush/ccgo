@@ -3759,6 +3759,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence("K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseToEnd}},
 		{seq: CSISequence("?K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseToEnd, Selective: true}},
 		{seq: CSISequence(2, "K"), want: CSIEraseAction{Type: CSIEraseActionLine, Region: CSIEraseAll}},
+		{seq: CSISequence("N"), want: CSIEraseAction{Type: CSIEraseActionField, Region: CSIEraseToEnd}},
+		{seq: CSISequence(1, "O"), want: CSIEraseAction{Type: CSIEraseActionArea, Region: CSIEraseToStart}},
 		{seq: CSISequence(6, "X"), want: CSIEraseAction{Type: CSIEraseActionChars, Count: 6}},
 	}
 	for _, tc := range eraseCases {
@@ -3928,6 +3930,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions = parser.Feed(CSISequence("?K"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionErase || actions[0].Erase.Type != CSIEraseActionLine || !actions[0].Erase.Selective {
 		t.Fatalf("terminal parser selective erase actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence(2, "O"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionErase || actions[0].Erase.Type != CSIEraseActionArea || actions[0].Erase.Region != CSIEraseAll {
+		t.Fatalf("terminal parser area erase actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence(5, 40, "s"))
