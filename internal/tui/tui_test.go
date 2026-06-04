@@ -610,6 +610,9 @@ func TestPromptImageHintWritesImageCacheWhenEnabled(t *testing.T) {
 	if path != want {
 		t.Fatalf("image path = %q, want %q", path, want)
 	}
+	if image := prompt.PastedContents[1]; image.SourcePath != want {
+		t.Fatalf("image source path = %q, want %q", image.SourcePath, want)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

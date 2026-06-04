@@ -758,13 +758,16 @@ func (p *PromptState) insertImageHint(key Key) {
 		Dimensions: cloneImageDimensions(key.Dimensions),
 		SourcePath: key.SourcePath,
 	}
-	p.PastedContents[id] = content
 	if p.ImageCacheSessionID != "" {
-		session.CacheImagePath(p.ImageCacheSessionID, content)
 		if content.Content != "" {
-			session.StoreImage(p.ImageCacheSessionID, content)
+			if path, ok := session.StoreImage(p.ImageCacheSessionID, content); ok && content.SourcePath == "" {
+				content.SourcePath = path
+			}
+		} else if path, ok := session.CacheImagePath(p.ImageCacheSessionID, content); ok && content.SourcePath == "" {
+			content.SourcePath = path
 		}
 	}
+	p.PastedContents[id] = content
 	prefix := ""
 	if p.pendingSpaceAfterImage {
 		prefix = " "
