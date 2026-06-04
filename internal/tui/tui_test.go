@@ -4874,6 +4874,27 @@ func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsKeysStringSequences(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"keys":"ship it","expect_prompt":{"text":"ship it","cursor":7}},
+		{"keys":[" now","enter"],"expect_event":{"type":"prompt_submitted","value":"ship it now"},"expect_prompt":{"empty":true}},
+		{"keys":"ctrl-x ctrl-k","expect_event":{"type":"kill_agents"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ship it now" ||
+		result.Events[1].Type != ScreenEventKillAgents {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keybindings":{"keys":"ctrl-r","command":"submitPrompt"}},

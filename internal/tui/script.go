@@ -262,7 +262,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 			recordEvent(screen.ApplyKey(scriptMouseKey(*step.Mouse)))
 		}
 		for _, rawKey := range keys {
-			recordEvent(screen.ApplyKey(parseScriptKey(rawKey)))
+			for _, key := range parseScriptKeys(rawKey) {
+				recordEvent(screen.ApplyKey(key))
+			}
 		}
 		if runtime != nil && event.Type != ScreenEventDialogAction && event.Type != ScreenEventCancelled {
 			syncRuntimeActiveDialog(runtime, screen)
@@ -413,6 +415,39 @@ func parseScriptKey(raw string) Key {
 		return Key{Type: keyType}
 	}
 	return ParseKey(raw)
+}
+
+func parseScriptKeys(raw string) []Key {
+	if key := parseScriptKey(raw); key.Type != KeyUnknown {
+		return []Key{key}
+	}
+	if chord, err := ParseKeyChord(raw); err == nil && len(chord) > 0 {
+		keys := make([]Key, 0, len(chord))
+		for _, keyType := range chord {
+			keys = append(keys, Key{Type: keyType})
+		}
+		return keys
+	}
+	if !isPrintableScriptText(raw) {
+		return []Key{{Type: KeyUnknown}}
+	}
+	keys := make([]Key, 0, len([]rune(raw)))
+	for _, r := range raw {
+		keys = append(keys, Key{Type: KeyRune, Rune: r})
+	}
+	return keys
+}
+
+func isPrintableScriptText(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	for _, r := range raw {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func scriptImageKey(image ScriptImage) Key {
