@@ -256,6 +256,7 @@ M7 progress now includes:
 - `internal/tui`: keybinding config and named-key script input now accept DOM-style arrow key aliases such as `arrowLeft`, `arrowRight`, `arrowUp`, `arrowDown`, and modifier-arrow variants.
 - `internal/tui`: keybinding action parsing now accepts broader editor/global-style aliases such as `cursorLeft`, `lineStart`, `deletePreviousChar`, `killLine`, `pasteKillRing`, `clearScreen`, `openExternalEditor`, `toggleTasks`, `cancelAgents`, `focusPrev`, `acceptSelection`, and `search`.
 - `internal/tui`: keybinding config and named-key script input now accept short modifier aliases such as `c-left`, `cA`, `m-b`, `a-right`, `optF`, `s-tab`, and `sEnter`.
+- `internal/tui`: keybinding config and named-key script input now accept Shift-Tab terminfo aliases such as `backtab`, `back-tab`, and `btab`, mapping them to the existing focus-previous key surface.
 - `internal/tui`: scripted interaction `keys` entries now accept printable text chunks and whitespace-separated named key sequences such as `ctrl-x ctrl-k`.
 - `internal/tui`: scripted interaction key input now accepts press-style aliases such as `press`, `keyPress`, `keypress`, `shortcutKey`, `presses`, `keyPresses`, and `shortcuts`.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.

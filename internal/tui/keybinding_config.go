@@ -120,7 +120,7 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyEnd, nil
 	case "tab", "ctrl+i", "ctrl-i", "control+i", "control-i":
 		return KeyTab, nil
-	case "shift+tab", "shift-tab":
+	case "shift+tab", "shift-tab", "backtab", "back-tab", "btab":
 		return KeyShiftTab, nil
 	case "ctrl+a", "ctrl-a", "control+a", "control-a":
 		return KeyCtrlA, nil
@@ -178,7 +178,7 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyEsc, nil
 	case "shiftenter", "shiftreturn":
 		return KeyShiftEnter, nil
-	case "shifttab":
+	case "shifttab", "backtab", "btab":
 		return KeyShiftTab, nil
 	case "altb", "metab", "optionb":
 		return KeyAltB, nil
