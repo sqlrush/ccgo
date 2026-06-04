@@ -272,6 +272,46 @@ func TestLoadSidechainStateAcceptsWrappedLifecycleContent(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsNumericLifecycleIDs(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "numeric-fallback", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_start",
+		Content: map[string]any{
+			"payload": map[string]any{
+				"subagentID":    42,
+				"subagentType":  "coder",
+				"workspacePath": "/tmp/coder-worktree",
+				"status":        "started",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "42" || state.Status != SidechainStatusRunning || state.Metadata.AgentType != "coder" || state.Metadata.WorktreePath != "/tmp/coder-worktree" {
+		t.Fatalf("state = %#v", state)
+	}
+	run, ok, err := ResumeSidechainRun(sessionPath, sessionID, "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || run.ID != "42" || run.Path != state.Path || run.Status != SidechainStatusRunning {
+		t.Fatalf("run = %#v ok=%v state=%#v", run, ok, state)
+	}
+}
+
 func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

@@ -1,8 +1,11 @@
 package session
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -246,9 +249,10 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 	switch fields := value.(type) {
 	case map[string]any:
 		for _, key := range keys {
-			raw, _ := fields[key].(string)
-			if raw != "" {
-				return raw
+			if raw, ok := fields[key]; ok {
+				if value := scalarStringField(raw); value != "" {
+					return value
+				}
 			}
 		}
 		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "entry", "item", "event", "metadata", "details"} {
@@ -267,6 +271,48 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 	default:
 	}
 	return ""
+}
+
+func scalarStringField(value any) string {
+	switch raw := value.(type) {
+	case string:
+		return raw
+	case json.Number:
+		return raw.String()
+	case int:
+		return strconv.Itoa(raw)
+	case int8:
+		return strconv.FormatInt(int64(raw), 10)
+	case int16:
+		return strconv.FormatInt(int64(raw), 10)
+	case int32:
+		return strconv.FormatInt(int64(raw), 10)
+	case int64:
+		return strconv.FormatInt(raw, 10)
+	case uint:
+		return strconv.FormatUint(uint64(raw), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(raw), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(raw), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(raw), 10)
+	case uint64:
+		return strconv.FormatUint(raw, 10)
+	case float32:
+		return formatScalarFloat(float64(raw), 32)
+	case float64:
+		return formatScalarFloat(raw, 64)
+	default:
+		return ""
+	}
+}
+
+func formatScalarFloat(value float64, bitSize int) string {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return ""
+	}
+	return strconv.FormatFloat(value, 'f', -1, bitSize)
 }
 
 func replaceJSONLExt(path string, ext string) string {
