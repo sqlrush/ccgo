@@ -47,42 +47,42 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var result MicroResult
-	if value, ok, err := microStringJSONField(fields, "Summary", "summary"); err != nil {
+	if value, ok, err := microStringJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "content", "text", "value", "output"); err != nil {
 		return err
 	} else if ok {
 		result.Summary = value
 	}
-	if value, ok, err := microStringJSONField(fields, "Digest", "digest"); err != nil {
+	if value, ok, err := microStringJSONField(fields, "Digest", "digest", "cacheKey", "cache_key", "key", "hash"); err != nil {
 		return err
 	} else if ok {
 		result.Digest = value
 	}
-	if value, ok, err := microBoolJSONField(fields, "Cached", "cached"); err != nil {
+	if value, ok, err := microBoolJSONField(fields, "Cached", "cached", "isCached", "is_cached", "fromCache", "from_cache", "cacheHit", "cache_hit"); err != nil {
 		return err
 	} else if ok {
 		result.Cached = value
 	}
-	if value, ok, err := microIntJSONField(fields, "MessagesSummarized", "messagesSummarized", "messages_summarized"); err != nil {
+	if value, ok, err := microIntJSONField(fields, "MessagesSummarized", "messagesSummarized", "messages_summarized", "summarized", "summarizedMessages", "summarized_messages", "messageCount", "message_count", "inputMessages", "input_messages"); err != nil {
 		return err
 	} else if ok {
 		result.MessagesSummarized = value
 	}
-	if value, ok, err := microIntJSONField(fields, "MessagesKept", "messagesKept", "messages_kept"); err != nil {
+	if value, ok, err := microIntJSONField(fields, "MessagesKept", "messagesKept", "messages_kept", "kept", "keptMessages", "kept_messages", "retained", "retainedMessages", "retained_messages"); err != nil {
 		return err
 	} else if ok {
 		result.MessagesKept = value
 	}
-	if value, ok, err := microStringJSONField(fields, "Version", "version"); err != nil {
+	if value, ok, err := microStringJSONField(fields, "Version", "version", "cacheVersion", "cache_version", "schemaVersion", "schema_version"); err != nil {
 		return err
 	} else if ok {
 		result.Version = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
+	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "created", "createdMs", "created_ms", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
 		return err
 	} else if ok {
 		result.CreatedAt = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
+	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expires", "expiresMs", "expires_ms", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
 		return err
 	} else if ok {
 		result.ExpiresAt = value

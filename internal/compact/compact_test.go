@@ -278,6 +278,40 @@ func TestLoadMicroResultAcceptsFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsAdjacentCacheFieldAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := "adjacent"
+	data := `{
+		"content": "adjacent summary",
+		"cacheKey": "adjacent",
+		"cacheHit": true,
+		"summarizedMessages": "5",
+		"retained_messages": 1,
+		"cacheVersion": "microcompact.v1",
+		"created": 100,
+		"expiresMs": "3700000"
+	}`
+	if err := os.WriteFile(microResultPath(cacheDir, digest), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := LoadMicroResult(cacheDir, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected adjacent cache result")
+	}
+	if result.Summary != "adjacent summary" || result.Digest != digest || !result.Cached || result.MessagesSummarized != 5 || result.MessagesKept != 1 || result.Version != DefaultMicroCacheVersion {
+		t.Fatalf("result = %#v", result)
+	}
+	if !result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+		t.Fatalf("result times = %#v", result)
+	}
+}
+
 func TestLoadMicroResultAcceptsNumericTimeAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
