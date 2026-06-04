@@ -5599,6 +5599,62 @@ func TestRunDialogRuntimeScriptAcceptsPermissionRequestAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsAdjacentPermissionPayloadAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action": "requestPermission",
+			"payload": {
+				"requestID": 9001,
+				"operation": "NotebookEdit",
+				"resourcePath": "/tmp/notebook.ipynb",
+				"body": "Need notebook edit.",
+				"allowedActions": "Approve"
+			},
+			"expectDialog": {
+				"active": true,
+				"permissionID": 9001,
+				"dialogKind": "permission",
+				"actions": "Approve",
+				"bodyContains": ["Tool: NotebookEdit", "Path: /tmp/notebook.ipynb", "Need notebook edit."]
+			},
+			"expectStatusContains": ["permissions: 1"]
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"eventType": "dialog_action", "payload": "Approve", "permissionID": 9001, "dialogKind": "permission"},
+			"expectDialogResult": {"requestID": 9001, "state": "approved", "found": true},
+			"expectStatusNotContains": ["permissions: 1"]
+		},
+		{
+			"action": "request-permission",
+			"operationID": "cancel_me",
+			"commandName": "Bash",
+			"target": "/tmp/project",
+			"reasonText": "Need shell.",
+			"buttons": ["Allow", "Abort"],
+			"expectDialog": {"active": true, "toolUseID": "cancel_me", "bodyContains": ["Tool: Bash", "Path: /tmp/project", "Need shell."]}
+		},
+		{
+			"action": "cancel-permission",
+			"toolUseID": "cancel_me",
+			"expectDialogResult": {"operationID": "cancel_me", "state": "cancelled", "exists": true},
+			"expectDialog": {"visible": false}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(58, 10, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 2 || result.DialogResults[0].ID != "9001" || result.DialogResults[0].Status != DialogResultAllowed || result.DialogResults[1].ID != "cancel_me" || result.DialogResults[1].Status != DialogResultCancelled {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptNormalizesPermissionActionAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

@@ -1038,7 +1038,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		step.CancelActiveDialog = scriptActionBoolField(fields, true)
 	case "cancelpermission", "cancel-permission":
 		if step.CancelPermissionID == "" {
-			step.CancelPermissionID = scriptActionIDField(fields, "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "id")
+			step.CancelPermissionID = scriptActionIDField(fields, "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
 		}
 	case "cancelpermissions", "cancel-permissions", "cancelallpermissions", "cancel-all-permissions":
 		step.CancelAllPermissions = scriptActionBoolField(fields, true)
@@ -1430,7 +1430,7 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 		event.Value = stringJSONField(fields, "payload", "text", "message", "data")
 	}
 	if event.DialogID == "" {
-		event.DialogID = stringJSONField(fields, "dialog_id", "dialogId", "dialogID")
+		event.DialogID = scalarStringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
 	}
 	if event.DialogKind == "" {
 		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
@@ -1453,7 +1453,7 @@ func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if expect.ID == "" {
-		expect.ID = stringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID")
+		expect.ID = scalarStringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
 	}
 	if expect.Kind == "" {
 		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
@@ -1525,7 +1525,7 @@ func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
 		expect.Active = *active
 	}
 	if expect.ID == "" {
-		expect.ID = stringJSONField(fieldMap, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID")
+		expect.ID = scalarStringJSONField(fieldMap, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
 	}
 	if expect.Kind == "" {
 		if dialogKind := stringJSONField(fieldMap, "dialog_kind", "dialogKind"); dialogKind != "" {
@@ -1618,7 +1618,7 @@ func (dialog *Dialog) UnmarshalJSON(data []byte) error {
 		dialog.Focused = *focused
 	}
 	if dialog.ID == "" {
-		dialog.ID = stringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID")
+		dialog.ID = scalarStringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
 	}
 	if dialog.Kind == "" {
 		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
@@ -1707,19 +1707,19 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if request.ID == "" {
-		request.ID = stringJSONField(fields, "request_id", "requestId", "permission_id", "permissionId", "tool_use_id", "toolUseId", "toolUseID")
+		request.ID = scalarStringJSONField(fields, "request_id", "requestId", "requestID", "permission_id", "permissionId", "permissionID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
 	}
 	if request.ToolName == "" {
-		request.ToolName = stringJSONField(fields, "tool_name", "toolName", "tool", "name")
+		request.ToolName = stringJSONField(fields, "tool_name", "toolName", "tool", "name", "operation", "command", "command_name", "commandName", "tool_title", "toolTitle")
 	}
 	if request.Path == "" {
-		request.Path = stringJSONField(fields, "file_path", "filePath", "target_path", "targetPath", "working_directory", "workingDirectory", "cwd")
+		request.Path = stringJSONField(fields, "file_path", "filePath", "target_path", "targetPath", "resource_path", "resourcePath", "working_directory", "workingDirectory", "cwd", "path", "target", "resource", "uri", "url", "file", "filename")
 	}
 	if request.Description == "" {
-		request.Description = stringJSONField(fields, "prompt", "message", "reason", "summary")
+		request.Description = stringJSONField(fields, "prompt", "message", "reason", "reason_text", "reasonText", "summary", "description", "details", "body", "text", "content")
 	}
 	if len(request.Actions) == 0 {
-		request.Actions = stringListJSONField(fields, "options", "choices", "allowed_actions", "allowedActions")
+		request.Actions = stringListJSONField(fields, "options", "choices", "allowed_actions", "allowedActions", "available_actions", "availableActions", "action_choices", "actionChoices", "buttons", "actions_list", "actionsList")
 	}
 	return nil
 }
