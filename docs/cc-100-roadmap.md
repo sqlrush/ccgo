@@ -478,6 +478,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：microcompact disk cache loader 现在也接受 `cacheEntry`/`cache_entry`、`micro_compact`/`micro_compact_result` wrapper，以及 `summaryMarkdown`/`resultSummary`/`compressedText`、`cacheDigest`/`digestHash`/`fingerprint`、`summarizedCount`/`retainedCount`、`formatVersion` 和 `ttlMilliseconds`/`expiresInMilliseconds`/`maxAgeMilliseconds` 等相邻实现字段别名。
 
+本轮补充：microcompact disk cache loader 现在会从 `metadata`/`meta`/`cacheInfo`/`cacheDetails`/`cacheEntry`/`entry`/`record`/`cache` 等 sidecar object 中补缺失的 digest、version、cache-hit、timestamp、TTL 和 count aliases；主 summary payload 字段仍保持优先。
+
 本轮补充：contract content block 解码现在接受文本块字段别名 `body`/`message`/`value`/`output`/`contentText`/`content_text`，并在 `text`/`thinking` block 中从字符串 `content` 回填文本，transcript resume 可恢复这些嵌套文本块格式。
 
 本轮补充：contract image source 解码现在接受 `mediaType`/`mimeType`/`contentType`、`base64`/`payload` 等 source 字段别名，并支持顶层 image block 直接携带媒体类型和 base64 数据，transcript resume 会保留为规范 `ImageSource`。

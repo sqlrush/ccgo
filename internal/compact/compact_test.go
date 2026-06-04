@@ -443,6 +443,58 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsMetadataCacheAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest string
+		body   string
+		want   string
+	}{
+		{
+			digest: "metadata-cache",
+			body: `"result":{"summary":"metadata summary","summarizedCount":"4","retainedCount":1},"metadata":{
+				"cacheKey":"metadata-cache",
+				"cacheVersion":"microcompact.v1",
+				"cacheHit":"yes",
+				"cachedAt":100,
+				"ttlMs":"3600000"
+			}`,
+			want: "metadata summary",
+		},
+		{
+			digest: "cache-info",
+			body: `"summary":"cache info summary","cacheInfo":{
+				"digest":"cache-info",
+				"version":"microcompact.v1",
+				"fromCache":1,
+				"createdAt":"1970-01-01T00:01:40Z",
+				"expiresIn":3600
+			}`,
+			want: "cache info summary",
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte("{"+tc.body+"}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion || !result.Cached {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+		if !result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+			t.Fatalf("%s times = %#v", tc.digest, result)
+		}
+	}
+}
+
 func TestLoadMicroResultUsesFilenameDigestFallback(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {

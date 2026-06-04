@@ -55,11 +55,17 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 		if err := microResultApplyFieldAliases(&result, fields, false, false); err != nil {
 			return err
 		}
+		if err := microResultApplyNestedFieldAliases(&result, fields); err != nil {
+			return err
+		}
 		*r = result
 		return nil
 	}
 	var result MicroResult
 	if err := microResultApplyFieldAliases(&result, fields, true, true); err != nil {
+		return err
+	}
+	if err := microResultApplyNestedFieldAliases(&result, fields); err != nil {
 		return err
 	}
 	*r = result
@@ -136,6 +142,35 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 			return err
 		} else if ok && value > 0 {
 			result.ExpiresAt = result.CreatedAt.Add(value)
+		}
+	}
+	return nil
+}
+
+func microResultApplyNestedFieldAliases(result *MicroResult, fields map[string]json.RawMessage) error {
+	for _, name := range []string{
+		"metadata", "meta",
+		"cacheMetadata", "cache_metadata", "cacheMeta", "cache_meta",
+		"microMetadata", "micro_metadata", "microcompactMetadata", "microCompactMetadata", "microcompact_metadata",
+		"microResultMetadata", "micro_result_metadata",
+		"attributes", "attrs", "info",
+		"cacheInfo", "cache_info", "cacheDetails", "cache_details",
+		"cacheEntry", "cache_entry", "entry", "record", "cache",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '{' {
+			continue
+		}
+		nested := map[string]json.RawMessage{}
+		if err := json.Unmarshal(trimmed, &nested); err != nil {
+			return err
+		}
+		if err := microResultApplyFieldAliases(result, nested, false, false); err != nil {
+			return err
 		}
 	}
 	return nil
