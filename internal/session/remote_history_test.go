@@ -920,6 +920,38 @@ func TestFetchRemoteHistoryAcceptsGenericResponseWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsSingleObjectEventPages(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":{"eventType":"status","eventId":"evt_single","session_id":"s","status":"single"},"hasNext":true,"nextCursor":"evt_single"}`))
+		case "evt_single":
+			_, _ = w.Write([]byte(`{"result":{"type":"status","id":"evt_result","session_id":"s","status":"result"},"more":false}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_single" || events.Events[0].Status != "single" || events.Events[1].ID != "evt_result" || events.Events[1].Status != "result" {
+		t.Fatalf("events = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_single" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryUsesEdgeCursorWhenNodeIDMissing(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

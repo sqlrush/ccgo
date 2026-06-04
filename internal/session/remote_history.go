@@ -336,6 +336,17 @@ func (r *sessionEventsResponse) mergeEventListField(name string, target *[]contr
 		return nil
 	}
 	if data[0] == '{' {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(data, &fields); err == nil && remoteHistoryLooksLikeSingleEvent(fields) {
+			event, err := decodeRemoteHistoryEventElement(name, 0, data)
+			if err != nil {
+				return err
+			}
+			if *target == nil {
+				*target = []contracts.SDKEvent{event}
+			}
+			return nil
+		}
 		var nested sessionEventsResponse
 		if err := nested.mergeJSON(data); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
@@ -700,6 +711,31 @@ func remoteHistoryHasDirectEventFields(fields map[string]json.RawMessage) bool {
 		return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) && trimmed[0] != '{'
 	}
 	return false
+}
+
+func remoteHistoryLooksLikeSingleEvent(fields map[string]json.RawMessage) bool {
+	if remoteHistoryRecognizedEventType(fields) != "" {
+		return true
+	}
+	status := remoteHistoryStringField(fields, "status")
+	if status == "" {
+		return false
+	}
+	return firstNonEmpty(
+		remoteHistoryStringField(fields, "id", "event_id", "eventId", "uuid"),
+		remoteHistoryStringField(fields, "session_id", "sessionId", "sessionID", "session_uuid", "sessionUuid", "sessionUUID"),
+		remoteHistoryStringField(fields, "timestamp", "created_at", "createdAt", "time", "datetime", "dateTime"),
+	) != ""
+}
+
+func remoteHistoryRecognizedEventType(fields map[string]json.RawMessage) string {
+	for _, name := range []string{"type", "event_type", "eventType", "event", "name", "kind", "role", "messageType", "message_type"} {
+		switch strings.ToLower(strings.TrimSpace(remoteHistoryStringField(fields, name))) {
+		case "system", "assistant", "user", "result", "error", "status":
+			return name
+		}
+	}
+	return ""
 }
 
 func firstObjectRawField(raw map[string]json.RawMessage, names ...string) json.RawMessage {
