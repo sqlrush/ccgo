@@ -69,7 +69,10 @@ func ParseKeyChord(raw string) ([]KeyType, error) {
 func ParseKeyName(raw string) (KeyType, error) {
 	name := strings.ToLower(strings.TrimSpace(raw))
 	name = strings.ReplaceAll(name, "_", "-")
+	name = expandDelimitedShortKeyModifierAlias(name)
 	compact := strings.NewReplacer("-", "", "+", "").Replace(name)
+	compact = expandCompactShortKeyModifierAlias(compact)
+	compact = expandCompactModifierArrowAlias(compact)
 	switch name {
 	case "enter", "return", "ctrl+j", "ctrl-j", "control+j", "control-j", "ctrl+m", "ctrl-m", "control+m", "control-m":
 		return KeyEnter, nil
@@ -239,6 +242,98 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlY, nil
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
+	}
+}
+
+func expandDelimitedShortKeyModifierAlias(name string) string {
+	for _, alias := range []struct {
+		from string
+		to   string
+	}{
+		{from: "c+", to: "ctrl+"},
+		{from: "c-", to: "ctrl-"},
+		{from: "m+", to: "meta+"},
+		{from: "m-", to: "meta-"},
+		{from: "a+", to: "alt+"},
+		{from: "a-", to: "alt-"},
+		{from: "opt+", to: "option+"},
+		{from: "opt-", to: "option-"},
+		{from: "s+", to: "shift+"},
+		{from: "s-", to: "shift-"},
+	} {
+		if strings.HasPrefix(name, alias.from) {
+			return alias.to + strings.TrimPrefix(name, alias.from)
+		}
+	}
+	return name
+}
+
+func expandCompactShortKeyModifierAlias(compact string) string {
+	if suffix, ok := strings.CutPrefix(compact, "opt"); ok && compactAltKeySuffix(suffix) {
+		return "option" + compactNavigationKeySuffix(suffix)
+	}
+	if suffix, ok := strings.CutPrefix(compact, "c"); ok && compactCtrlKeySuffix(suffix) {
+		return "ctrl" + compactNavigationKeySuffix(suffix)
+	}
+	if suffix, ok := strings.CutPrefix(compact, "m"); ok && compactAltKeySuffix(suffix) {
+		return "meta" + compactNavigationKeySuffix(suffix)
+	}
+	if suffix, ok := strings.CutPrefix(compact, "a"); ok && compactAltKeySuffix(suffix) {
+		return "alt" + compactNavigationKeySuffix(suffix)
+	}
+	if suffix, ok := strings.CutPrefix(compact, "s"); ok && compactShiftKeySuffix(suffix) {
+		return "shift" + suffix
+	}
+	return compact
+}
+
+func expandCompactModifierArrowAlias(compact string) string {
+	for _, prefix := range []string{"ctrl", "control", "alt", "meta", "option"} {
+		if suffix, ok := strings.CutPrefix(compact, prefix); ok {
+			navigation := compactNavigationKeySuffix(suffix)
+			if navigation != suffix {
+				return prefix + navigation
+			}
+		}
+	}
+	return compact
+}
+
+func compactNavigationKeySuffix(suffix string) string {
+	switch suffix {
+	case "arrowleft":
+		return "left"
+	case "arrowright":
+		return "right"
+	default:
+		return suffix
+	}
+}
+
+func compactCtrlKeySuffix(suffix string) bool {
+	switch suffix {
+	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "w", "x", "y", "[", "?", "left", "right", "arrowleft", "arrowright":
+		return true
+	default:
+		return false
+	}
+}
+
+func compactAltKeySuffix(suffix string) bool {
+	switch suffix {
+	case "b", "d", "f", "y", "backspace", "left", "right", "arrowleft", "arrowright":
+		return true
+	default:
+		return false
+	}
+}
+
+func compactShiftKeySuffix(suffix string) bool {
+	switch suffix {
+	case "enter", "return", "tab":
+		return true
+	default:
+		return false
 	}
 }
 

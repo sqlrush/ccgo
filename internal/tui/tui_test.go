@@ -1398,7 +1398,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
 		}
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "altY", "altBackspace", "altLeft", "optionRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "ctrlH", "controlI", "ctrlM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -1413,9 +1413,11 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 
 func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
-		{Key: "controlJ", Action: ActionSubmitPrompt},
-		{Key: "control[", Action: ActionCancel},
-		{Key: "control?", Action: ActionDeleteWordBack},
+		{Key: "cJ", Action: ActionSubmitPrompt},
+		{Key: "c-[", Action: ActionCancel},
+		{Key: "c?", Action: ActionDeleteWordBack},
+		{Key: "mB", Action: ActionMoveStart},
+		{Key: "sTab", Action: ActionMoveEnd},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1429,7 +1431,13 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x7f")); action != ActionDeleteWordBack {
 		t.Fatalf("ctrl-? alias action = %q", action)
 	}
-	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "ctrl-[", "control-[", "ctrl[", "control[", "ctrl-?", "control-?", "ctrl?", "control?"} {
+	if action := keymap.Resolve(ParseKey("\x1bb")); action != ActionMoveStart {
+		t.Fatalf("meta-b alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[Z")); action != ActionMoveEnd {
+		t.Fatalf("shift-tab alias action = %q", action)
+	}
+	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -4432,10 +4440,10 @@ func TestRunInteractionScriptAcceptsNamedKeys(t *testing.T) {
 	cursorBeta := len([]rune("alpha "))
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
 		{Keys: []string{"a", "l", "p", "h", "a", " ", "b", "e", "t", "a", " ", "g", "a", "m", "m", "a"}, ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorEnd}},
-		{Key: "ctrl-left", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorGamma}},
-		{Key: "alt-left", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorBeta}},
-		{Key: "alt-right", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorGamma}},
-		{Key: "ctrl-right", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorEnd}},
+		{Key: "c-left", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorGamma}},
+		{Key: "m-left", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorBeta}},
+		{Key: "a-right", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorGamma}},
+		{Key: "c-right", ExpectPrompt: &PromptExpectation{Text: text, Cursor: &cursorEnd}},
 		{Key: "enter", ExpectEvent: &ScreenEvent{Type: ScreenEventPromptSubmitted, Value: text}, ExpectPrompt: &PromptExpectation{Empty: true}},
 	})
 	if err != nil {
