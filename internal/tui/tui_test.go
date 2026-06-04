@@ -1997,6 +1997,33 @@ func TestDialogRuntimeResolvesPermissionAndTasks(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeNormalizesPermissionActionAliases(t *testing.T) {
+	runtime := NewDialogRuntime()
+	runtime.RequestPermission(PermissionRequest{ID: "perm_reject", ToolName: "Write", Actions: []string{"Approve", "Reject"}})
+	rejected := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Reject", DialogID: "perm_reject", DialogKind: DialogPermission})
+	if !rejected.Found || rejected.Status != DialogResultDenied || rejected.Action != "Reject" {
+		t.Fatalf("rejected = %#v", rejected)
+	}
+
+	runtime.RequestPermission(PermissionRequest{ID: "perm_lower", ToolName: "Edit", Actions: []string{"approve", "deny"}})
+	denied := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "deny", DialogID: "perm_lower", DialogKind: DialogPermission})
+	if !denied.Found || denied.Status != DialogResultDenied || denied.Action != "deny" {
+		t.Fatalf("denied = %#v", denied)
+	}
+
+	runtime.RequestPermission(PermissionRequest{ID: "perm_approve", ToolName: "Read", Actions: []string{"Approve"}})
+	approved := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Approve", DialogID: "perm_approve", DialogKind: DialogPermission})
+	if !approved.Found || approved.Status != DialogResultAllowed || approved.Action != "Approve" {
+		t.Fatalf("approved = %#v", approved)
+	}
+
+	runtime.RequestPermission(PermissionRequest{ID: "perm_cancel", ToolName: "Bash", Actions: []string{"Run", "Cancel"}})
+	cancelled := runtime.Resolve(ScreenEvent{Type: ScreenEventDialogAction, Value: "Cancel", DialogID: "perm_cancel", DialogKind: DialogPermission})
+	if !cancelled.Found || cancelled.Status != DialogResultCancelled || cancelled.Action != "Cancel" {
+		t.Fatalf("cancelled = %#v", cancelled)
+	}
+}
+
 func TestDialogRuntimeTaskLifecycle(t *testing.T) {
 	runtime := NewDialogRuntime()
 	running := runtime.StartTask("task_1", "Search", "starting")
@@ -4963,6 +4990,40 @@ func TestRunDialogRuntimeScriptAcceptsPermissionRequestAliases(t *testing.T) {
 	}
 	if len(runtime.Permissions) != 0 || runtime.Active != nil {
 		t.Fatalf("runtime = %#v", runtime)
+	}
+}
+
+func TestRunDialogRuntimeScriptNormalizesPermissionActionAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"requestPermission": {
+				"id": "perm_alias",
+				"toolName": "Write",
+				"actions": ["Approve", "Reject"]
+			},
+			"expectDialog": {"active": true, "id": "perm_alias", "kind": "permission", "focusedIndex": 0}
+		},
+		{
+			"key": "tab",
+			"expectDialog": {"active": true, "id": "perm_alias", "focusedIndex": 1}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "dialog_action", "value": "Reject", "dialogId": "perm_alias", "dialogKind": "permission"},
+			"expectDialogResult": {"id": "perm_alias", "kind": "permission", "action": "Reject", "status": "rejected", "found": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_alias" || result.DialogResults[0].Status != DialogResultDenied {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
 	}
 }
 

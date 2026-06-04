@@ -496,8 +496,8 @@ func compareDialogResult(index int, got DialogResult, want DialogResultExpectati
 	if want.Action != "" && got.Action != want.Action {
 		return fmt.Errorf("script step %d dialog result action = %q, want %q", index, got.Action, want.Action)
 	}
-	if want.Status != "" && got.Status != want.Status {
-		return fmt.Errorf("script step %d dialog result status = %q, want %q", index, got.Status, want.Status)
+	if want.Status != "" && normalizeDialogResultStatus(got.Status) != normalizeDialogResultStatus(want.Status) {
+		return fmt.Errorf("script step %d dialog result status = %q, want %q", index, normalizeDialogResultStatus(got.Status), normalizeDialogResultStatus(want.Status))
 	}
 	if want.Found != nil && got.Found != *want.Found {
 		return fmt.Errorf("script step %d dialog result found = %v, want %v", index, got.Found, *want.Found)

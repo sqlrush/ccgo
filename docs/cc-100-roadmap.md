@@ -134,6 +134,8 @@ M7 补充：keybinding resolver/config 和脚本 named-key 输入已覆盖 `ctrl
 
 M7 补充：task runtime 现在会在状态行、任务面板排序/渲染、批量取消和 scripted task expectation 前把 `active`/`in_progress`、`success`/`done`、`error`、`canceled` 等 task state 别名归一为 canonical 状态。
 
+M7 补充：permission runtime 现在会把 `Reject`/`deny`/`decline`/`disallow`/`no` 等 permission action 归一为 denied 结果，把 `Cancel`/`abort` 归一为 cancelled 结果，并让 scripted dialog-result status 断言接受 `rejected`/`approved` 等状态别名。
+
 M7 补充：keybinding config 的 page navigation key name 现在接受 `pgup`/`pg-up`/`prior` 和 `pgdn`/`pg-down`/`next`，覆盖常见终端键名/配置别名。
 
 M7 补充：keybinding config 和脚本 named-key 输入现在接受 DOM-style arrow key aliases，包括 `arrowLeft`/`arrowRight`/`arrowUp`/`arrowDown` 以及 ctrl/alt/meta/option arrow variants。

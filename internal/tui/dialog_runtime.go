@@ -258,10 +258,8 @@ func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 		switch {
 		case event.Type == ScreenEventCancelled:
 			result.Status = DialogResultCancelled
-		case event.Value == "Deny":
-			result.Status = DialogResultDenied
 		default:
-			result.Status = DialogResultAllowed
+			result.Status = permissionActionStatus(event.Value)
 		}
 		delete(r.Permissions, id)
 	case DialogTask:
@@ -282,6 +280,34 @@ func (r *DialogRuntime) Resolve(event ScreenEvent) DialogResult {
 	r.Active = nil
 	r.promoteNextPermission()
 	return result
+}
+
+func permissionActionStatus(action string) DialogResultStatus {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "deny", "denied", "reject", "rejected", "decline", "declined", "disallow", "block", "no":
+		return DialogResultDenied
+	case "cancel", "cancelled", "canceled", "abort", "aborted", "stop", "stopped":
+		return DialogResultCancelled
+	default:
+		return DialogResultAllowed
+	}
+}
+
+func normalizeDialogResultStatus(status DialogResultStatus) DialogResultStatus {
+	switch strings.ToLower(strings.TrimSpace(string(status))) {
+	case "":
+		return DialogResultNone
+	case string(DialogResultAllowed), "allow", "approve", "approved", "accepted", "accept", "yes", "ok", "success":
+		return DialogResultAllowed
+	case string(DialogResultDenied), "deny", "reject", "rejected", "decline", "declined", "disallow", "blocked", "block", "no":
+		return DialogResultDenied
+	case string(DialogResultCancelled), "canceled", "cancel", "aborted", "interrupted", "stopped":
+		return DialogResultCancelled
+	case string(DialogResultClosed), "close", "dismissed", "dismiss":
+		return DialogResultClosed
+	default:
+		return DialogResultStatus(strings.TrimSpace(string(status)))
+	}
 }
 
 func (r *DialogRuntime) promoteNextPermission() {
