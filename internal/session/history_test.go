@@ -158,6 +158,34 @@ func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadPromptHistoryAcceptsProjectAndTimestampAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	lines := []string{
+		`{"display":"project path","pasted_contents":{},"createdAt":"1970-01-01T00:00:01Z","projectPath":"/repo","sessionUUID":"session"}`,
+		`{"display":"cwd path","pasted_contents":{},"unixTimestamp":"2000","cwd":"/repo","sessionID":"other"}`,
+		`{"display":"wrong project","pasted_contents":{},"timestamp":3000,"workingDirectory":"/else","sessionID":"session"}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := displays(history); strings.Join(got, ",") != "project path,cwd path" {
+		t.Fatalf("history = %#v", got)
+	}
+
+	timestamped, err := LoadTimestampedHistory(path, "/repo", MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(timestamped) != 2 || timestamped[0].Display != "cwd path" || timestamped[0].Timestamp != 2000 || timestamped[1].Display != "project path" || timestamped[1].Timestamp != 1000 {
+		t.Fatalf("timestamped history = %#v", timestamped)
+	}
+}
+
 func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 	var entry HistoryEntry
 	err := json.Unmarshal([]byte(`{"display":"restore [Image #1] [Pasted text #2]","pasted_contents":{"1":{"pastedContentId":"1","kind":"inputImage","base64":"AAAA","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}},"2":{"attachmentID":"2","pastedType":"pasted-text","value":"memo","contentType":"text/plain"}}}`), &entry)

@@ -472,6 +472,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：prompt/history pasted-content 引用解析现在接受大小写差异和 `pasted image`/`input-image`/`input_text` 等占位符别名，文本展开、图片引用过滤和 next pasted ID seed 共用同一识别面。
 
+本轮补充：prompt history `LogEntry` 读取现在接受 `projectPath`/`cwd`/`workingDirectory`/`workspacePath` 等 project 别名，以及 `createdAt`/`unixTimestamp` 等 timestamp 别名；RFC3339 时间会归一为毫秒时间戳，避免旧 history 因字段名不同被 project/session 过滤漏掉。
+
 本轮补充：snapshot corpus 支持 `.ansi` only baselines，方便复用真实终端输出 corpus，而不必预先生成 `.txt` companion 文件。
 
 本轮补充：terminal lifecycle 增加可选 extended-key mode，按官方 `CSI >1u`/`CSI >4;2m` 启用 kitty keyboard protocol 和 modifyOtherKeys，退出时重置 modifyOtherKeys 并 pop kitty stack，reassert 时先 pop 再 push，避免长期会话 stack 泄漏。

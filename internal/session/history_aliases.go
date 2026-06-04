@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"ccgo/internal/contracts"
 )
@@ -192,7 +193,7 @@ func historyIDJSONField(fields map[string]json.RawMessage, names ...string) cont
 	return ""
 }
 
-func historyInt64JSONField(fields map[string]json.RawMessage, names ...string) int64 {
+func historyTimestampJSONField(fields map[string]json.RawMessage, names ...string) int64 {
 	for _, name := range names {
 		raw, ok := fields[name]
 		if !ok {
@@ -204,9 +205,18 @@ func historyInt64JSONField(fields map[string]json.RawMessage, names ...string) i
 		}
 		var text string
 		if err := json.Unmarshal(raw, &text); err == nil {
-			parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+			trimmed := strings.TrimSpace(text)
+			parsed, err := strconv.ParseInt(trimmed, 10, 64)
 			if err == nil {
 				return parsed
+			}
+			when, err := time.Parse(time.RFC3339Nano, trimmed)
+			if err == nil {
+				return when.UnixMilli()
+			}
+			when, err = time.Parse(time.RFC3339, trimmed)
+			if err == nil {
+				return when.UnixMilli()
 			}
 		}
 	}
@@ -327,8 +337,8 @@ func (e *LogEntry) UnmarshalJSON(data []byte) error {
 	*e = LogEntry{
 		Display:        historyStringJSONField(fields, "display"),
 		PastedContents: historyStoredPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
-		Timestamp:      historyInt64JSONField(fields, "timestamp"),
-		Project:        historyStringJSONField(fields, "project"),
+		Timestamp:      historyTimestampJSONField(fields, "timestamp", "createdAt", "created_at", "time", "unixTimestamp", "unix_timestamp"),
+		Project:        historyStringJSONField(fields, "project", "projectPath", "project_path", "cwd", "cwdPath", "cwd_path", "workingDirectory", "working_directory", "workspacePath", "workspace_path", "workspace"),
 		SessionID: firstHistoryID(
 			historyIDJSONField(fields, "sessionId"),
 			historyIDJSONField(fields, "sessionID"),
