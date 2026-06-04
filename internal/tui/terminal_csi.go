@@ -69,6 +69,7 @@ const (
 	DECModeApplicationCursor  = 1
 	DECModeOrigin             = 6
 	DECModeAutoWrap           = 7
+	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
 	DECModeAltScreenBuffer    = 1047
@@ -228,6 +229,7 @@ const (
 	CSIModeActionLineFeed          CSIModeActionType = "lineFeedMode"
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
+	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
 	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
 	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
@@ -565,6 +567,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionOrigin, Enabled: enabled}}, true
 	case DECModeAutoWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: enabled}}, true
+	case DECModeCursorBlink:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionCursorBlink, Enabled: enabled}}, true
 	case DECModeCursorVisible:
 		cursorType := CSICursorActionHide
 		if enabled {

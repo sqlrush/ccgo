@@ -213,6 +213,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes ordinary ECMA insert/replace mode (`CSI 4h/l`) as a structured `insertMode` action.
 - `internal/tui`: terminal CSI parser now recognizes ordinary ECMA line-feed/new-line mode (`CSI 20h/l`) as a structured `lineFeedMode` action.
 - `internal/tui`: terminal CSI parser now recognizes DEC origin mode (`?6h/l`) and auto-wrap mode (`?7h/l`) as structured mode actions.
+- `internal/tui`: terminal CSI parser now recognizes DEC cursor blink mode (`?12h/l`) as a structured `cursorBlink` mode action.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: keybinding config now accepts page navigation aliases such as `pgup`, `pg-up`, `prior`, `pgdn`, `pg-down`, and `next`.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.

@@ -3652,6 +3652,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: "\x1b[?6l", want: CSIModeAction{Type: CSIModeActionOrigin, Enabled: false}},
 		{seq: "\x1b[?7h", want: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: true}},
 		{seq: "\x1b[?7l", want: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: false}},
+		{seq: "\x1b[?12h", want: CSIModeAction{Type: CSIModeActionCursorBlink, Enabled: true}},
+		{seq: "\x1b[?12l", want: CSIModeAction{Type: CSIModeActionCursorBlink, Enabled: false}},
 		{seq: EnterAlternateScreen, want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},
 		{seq: "\x1b[?47l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
 		{seq: "\x1b[?1047h", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},

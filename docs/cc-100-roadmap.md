@@ -154,6 +154,8 @@ M7 补充：terminal CSI parser 现在把普通 `CSI 20h/l` line-feed/new-line m
 
 M7 补充：terminal CSI parser 现在把 DEC `?6h/l` origin mode 和 `?7h/l` auto-wrap mode 解析成结构化 mode action，继续减少终端状态序列的 unknown fallback。
 
+M7 补充：terminal CSI parser 现在把 DEC `?12h/l` cursor blink mode 解析成结构化 `cursorBlink` mode action，补齐 cursor visibility/style 相邻的终端状态序列。
+
 M7 补充：terminal CSI parser 现在把 REP repeat-preceding-character (`CSI b`/`CSI 4b`) 解析成 edit action，visible-text/snapshot pipeline 和 ANSI message wrapping/trim 会按重复次数展开前一个可重复 grapheme。
 
 M7 补充：terminal CSI parser 现在按 ANSI 默认参数解析 scroll-region (`CSI r`/`CSI ;10r`)，缺失 top 默认为 1，缺失 bottom 保持为 0 表示 reset/full-height，避免把 reset 误判为单行区域。
