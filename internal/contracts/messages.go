@@ -94,6 +94,12 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	if b.CacheReference == "" {
 		b.CacheReference = stringJSONField(fields, "cacheReference")
 	}
+	if b.Text == "" {
+		b.Text = contentBlockTextJSONField(fields, b.Type)
+	}
+	if b.Type == "" && b.Text != "" {
+		b.Type = ContentText
+	}
 	return nil
 }
 
@@ -186,6 +192,19 @@ func cacheControlJSONField(fields map[string]json.RawMessage, names ...string) *
 		}
 	}
 	return nil
+}
+
+func contentBlockTextJSONField(fields map[string]json.RawMessage, blockType ContentBlockType) string {
+	if blockType != "" && blockType != ContentText && blockType != ContentThinking {
+		return ""
+	}
+	if text := stringJSONField(fields, "body", "message", "value", "output", "contentText", "content_text"); text != "" {
+		return text
+	}
+	if blockType == ContentText || blockType == ContentThinking {
+		return stringJSONField(fields, "content")
+	}
+	return ""
 }
 
 type Message struct {

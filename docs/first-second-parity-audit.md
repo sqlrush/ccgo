@@ -307,6 +307,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script loading now accepts `scriptSteps`/`script_steps`, `interactionSteps`/`interaction_steps`, and nested `scenario`/`test`/`case`/`fixture`/`interaction` wrapper objects.
 - `internal/tui`: interaction script JSONL loading now allows 50MiB records so large paste/image/snapshot fixture lines do not hit scanner token limits.
 - `internal/tui`: snapshot corpus comparison now accepts `.ansi`-only baselines by stripping ANSI text on load, and strict unexpected-baseline checks include both `.txt` and `.ansi`.
+- `internal/contracts`/`internal/session`: content block decoding now accepts text aliases such as `body`/`message`/`value`/`output`/`contentText`/`content_text` and string `content` for `text`/`thinking` blocks, so transcript resume preserves these nested block variants.
 
 Still missing for full M6/M7 parity:
 

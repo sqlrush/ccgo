@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"ccgo/internal/contracts"
 )
 
 func TestLoadTranscriptBridgesLegacyProgressEntries(t *testing.T) {
@@ -568,6 +570,25 @@ func TestBuildResumeConversationAcceptsContentBlockFieldAliases(t *testing.T) {
 	user := resume.Messages[1]
 	if len(user.Content) != 1 || user.Content[0].ToolUseID != "9001" || !user.Content[0].IsError {
 		t.Fatalf("tool result aliases = %#v", user.Content)
+	}
+}
+
+func TestBuildResumeConversationAcceptsTextContentBlockAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","content":[{"type":"text","body":"hello"},{"type":"thinking","content":"reasoning"}]}`,
+	})
+	resume, err := BuildResumeConversation(path, "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || len(resume.Messages) != 1 {
+		t.Fatalf("resume = %#v", resume)
+	}
+	content := resume.Messages[0].Content
+	if len(content) != 2 ||
+		content[0].Type != contracts.ContentText || content[0].Text != "hello" ||
+		content[1].Type != contracts.ContentThinking || content[1].Text != "reasoning" {
+		t.Fatalf("content = %#v", content)
 	}
 }
 
