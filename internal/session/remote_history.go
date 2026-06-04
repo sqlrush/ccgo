@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -347,6 +348,16 @@ func (r *sessionEventsResponse) mergeEventListField(name string, target *[]contr
 			}
 			return nil
 		}
+		events, ok, err := decodeRemoteHistoryEventMap(name, data)
+		if err != nil {
+			return err
+		}
+		if ok {
+			if *target == nil {
+				*target = events
+			}
+			return nil
+		}
 		var nested sessionEventsResponse
 		if err := nested.mergeJSON(data); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
@@ -640,6 +651,64 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 		events = append(events, event)
 	}
 	return events, nil
+}
+
+func decodeRemoteHistoryEventMap(name string, data json.RawMessage) ([]contracts.SDKEvent, bool, error) {
+	var rawEvents map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawEvents); err != nil {
+		return nil, false, fmt.Errorf("%s: %w", name, err)
+	}
+	keys := make([]string, 0, len(rawEvents))
+	for key, rawEvent := range rawEvents {
+		if remoteHistoryEventMapReservedKey(key) {
+			continue
+		}
+		rawEvent = bytes.TrimSpace(rawEvent)
+		if len(rawEvent) == 0 || bytes.Equal(rawEvent, []byte("null")) || rawEvent[0] != '{' {
+			continue
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(rawEvent, &fields); err != nil {
+			return nil, false, fmt.Errorf("%s.%s: %w", name, key, err)
+		}
+		if !remoteHistoryHasDirectEventFields(fields) && remoteHistoryWrappedEventRaw(fields) == nil && !remoteHistoryLooksLikeSingleEvent(fields) {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	if len(keys) == 0 {
+		return nil, false, nil
+	}
+	sort.Strings(keys)
+	events := make([]contracts.SDKEvent, 0, len(keys))
+	for index, key := range keys {
+		event, err := decodeRemoteHistoryEventElement(name, index, rawEvents[key])
+		if err != nil {
+			return nil, false, err
+		}
+		if event.ID == "" {
+			event.ID = contracts.ID(key)
+		}
+		events = append(events, event)
+	}
+	return events, true, nil
+}
+
+func remoteHistoryEventMapReservedKey(key string) bool {
+	switch key {
+	case "page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
+		"has_more", "hasMore", "has_next", "hasNext", "has_next_page", "hasNextPage",
+		"has_previous", "hasPrevious", "has_previous_page", "hasPreviousPage", "has_older", "hasOlder", "more",
+		"first_id", "firstId", "next_before_id", "nextBeforeId", "next_cursor", "nextCursor",
+		"next_page_token", "nextPageToken", "next_token", "nextToken", "page_token", "pageToken",
+		"continuation_token", "continuationToken", "before_id", "beforeId", "cursor", "pageCursor",
+		"last_id", "lastId", "start_cursor", "startCursor", "end_cursor", "endCursor",
+		"previous_cursor", "previousCursor", "prev_cursor", "prevCursor", "before_cursor", "beforeCursor",
+		"older_cursor", "olderCursor":
+		return true
+	default:
+		return false
+	}
 }
 
 func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessage) (contracts.SDKEvent, error) {
