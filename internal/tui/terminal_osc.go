@@ -67,10 +67,13 @@ type TerminalHyperlink struct {
 type OSCActionType string
 
 const (
-	OSCActionTitle     OSCActionType = "title"
-	OSCActionLink      OSCActionType = "link"
-	OSCActionTabStatus OSCActionType = "tabStatus"
-	OSCActionUnknown   OSCActionType = "unknown"
+	OSCActionTitle        OSCActionType = "title"
+	OSCActionLink         OSCActionType = "link"
+	OSCActionTabStatus    OSCActionType = "tabStatus"
+	OSCActionClipboard    OSCActionType = "clipboard"
+	OSCActionProgress     OSCActionType = "progress"
+	OSCActionNotification OSCActionType = "notification"
+	OSCActionUnknown      OSCActionType = "unknown"
 )
 
 type TerminalTitleAction struct {
@@ -79,12 +82,40 @@ type TerminalTitleAction struct {
 	Name  string
 }
 
+type TerminalClipboardAction struct {
+	Selection string
+	Text      string
+	Base64    string
+	Clear     bool
+	Valid     bool
+}
+
+type TerminalProgressAction struct {
+	State      TerminalProgressState
+	Percent    int
+	Clear      bool
+	Known      bool
+	RawCommand string
+}
+
+type TerminalNotificationAction struct {
+	Provider string
+	ID       string
+	Part     string
+	Action   string
+	Title    string
+	Message  string
+}
+
 type OSCAction struct {
-	Type      OSCActionType
-	Title     TerminalTitleAction
-	Hyperlink TerminalHyperlink
-	TabStatus TabStatusFields
-	Sequence  string
+	Type         OSCActionType
+	Title        TerminalTitleAction
+	Hyperlink    TerminalHyperlink
+	TabStatus    TabStatusFields
+	Clipboard    TerminalClipboardAction
+	Progress     TerminalProgressAction
+	Notification TerminalNotificationAction
+	Sequence     string
 }
 
 func OSCSequence(parts ...string) string {
@@ -157,6 +188,26 @@ func ParseOSCContent(content string) OSCAction {
 		}
 	case OSCHyperlink:
 		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
+	case OSCClipboard:
+		return OSCAction{Type: OSCActionClipboard, Clipboard: ParseClipboardPayload(data)}
+	case OSCITerm2:
+		if progress, ok := ParseITerm2ProgressPayload(data); ok {
+			return OSCAction{Type: OSCActionProgress, Progress: progress}
+		}
+		if notification, ok := ParseITerm2NotificationPayload(data); ok {
+			return OSCAction{Type: OSCActionNotification, Notification: notification}
+		}
+		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
+	case OSCKitty:
+		if notification, ok := ParseKittyNotificationPayload(data); ok {
+			return OSCAction{Type: OSCActionNotification, Notification: notification}
+		}
+		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
+	case OSCGhostty:
+		if notification, ok := ParseGhosttyNotificationPayload(data); ok {
+			return OSCAction{Type: OSCActionNotification, Notification: notification}
+		}
+		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
 	case OSCTabStatus:
 		return OSCAction{Type: OSCActionTabStatus, TabStatus: ParseTabStatusPayload(data)}
 	default:
@@ -211,6 +262,125 @@ func ParseHyperlinkPayload(payload string) TerminalHyperlink {
 		params = nil
 	}
 	return TerminalHyperlink{URL: url, Params: params}
+}
+
+func ParseClipboardPayload(payload string) TerminalClipboardAction {
+	selection, encoded, ok := strings.Cut(payload, ";")
+	if !ok {
+		selection = payload
+		encoded = ""
+	}
+	action := TerminalClipboardAction{Selection: selection, Base64: encoded}
+	if encoded == "" {
+		action.Clear = true
+		action.Valid = true
+		return action
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return action
+	}
+	action.Text = string(decoded)
+	action.Valid = true
+	return action
+}
+
+func ParseITerm2ProgressPayload(payload string) (TerminalProgressAction, bool) {
+	parts := strings.Split(payload, ";")
+	if len(parts) < 2 || parts[0] != ITerm2Progress {
+		return TerminalProgressAction{}, false
+	}
+	progress := TerminalProgressAction{RawCommand: parts[1]}
+	switch parts[1] {
+	case ITerm2ProgressClear:
+		progress.State = TerminalProgressCompleted
+		progress.Clear = true
+		progress.Known = true
+	case ITerm2ProgressSet:
+		progress.State = TerminalProgressRunning
+		progress.Percent = parseOSCPercent(parts)
+		progress.Known = true
+	case ITerm2ProgressError:
+		progress.State = TerminalProgressError
+		progress.Percent = parseOSCPercent(parts)
+		progress.Known = true
+	case ITerm2ProgressIndeterminate:
+		progress.State = TerminalProgressIndeterminate
+		progress.Known = true
+	default:
+		return progress, true
+	}
+	return progress, true
+}
+
+func ParseITerm2NotificationPayload(payload string) (TerminalNotificationAction, bool) {
+	if !strings.HasPrefix(payload, "\n\n") {
+		return TerminalNotificationAction{}, false
+	}
+	text := strings.TrimPrefix(payload, "\n\n")
+	notification := TerminalNotificationAction{Provider: "iterm2", Message: text}
+	if title, message, ok := strings.Cut(text, ":\n"); ok {
+		notification.Title = title
+		notification.Message = message
+	}
+	return notification, true
+}
+
+func ParseKittyNotificationPayload(payload string) (TerminalNotificationAction, bool) {
+	fieldsText, value, _ := strings.Cut(payload, ";")
+	fields := parseColonFields(fieldsText)
+	part := fields["p"]
+	action := fields["a"]
+	if part == "" && action == "" {
+		return TerminalNotificationAction{}, false
+	}
+	notification := TerminalNotificationAction{
+		Provider: "kitty",
+		ID:       fields["i"],
+		Part:     part,
+		Action:   action,
+	}
+	switch part {
+	case "title":
+		notification.Title = value
+	case "body":
+		notification.Message = value
+	}
+	return notification, true
+}
+
+func ParseGhosttyNotificationPayload(payload string) (TerminalNotificationAction, bool) {
+	parts := strings.SplitN(payload, ";", 3)
+	if len(parts) < 2 || parts[0] != "notify" {
+		return TerminalNotificationAction{}, false
+	}
+	notification := TerminalNotificationAction{Provider: "ghostty", Title: parts[1]}
+	if len(parts) == 3 {
+		notification.Message = parts[2]
+	}
+	return notification, true
+}
+
+func parseOSCPercent(parts []string) int {
+	if len(parts) < 3 {
+		return 0
+	}
+	percent, err := strconv.Atoi(strings.TrimSpace(parts[2]))
+	if err != nil {
+		return 0
+	}
+	return clampPercent(percent)
+}
+
+func parseColonFields(value string) map[string]string {
+	fields := map[string]string{}
+	for _, part := range strings.Split(value, ":") {
+		key, fieldValue, ok := strings.Cut(part, "=")
+		if ok && key != "" {
+			fields[key] = fieldValue
+		}
+	}
+	return fields
 }
 
 func TerminalClipboardSequence(text string) string {

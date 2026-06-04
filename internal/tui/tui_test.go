@@ -3785,6 +3785,31 @@ func TestParseOSCContent(t *testing.T) {
 		t.Fatalf("tab indicator = %#v", tab.TabStatus.Indicator)
 	}
 
+	clipboard := ParseOSCContent("52;c;Y29weSBtZQ==")
+	if clipboard.Type != OSCActionClipboard || !clipboard.Clipboard.Valid || clipboard.Clipboard.Selection != "c" || clipboard.Clipboard.Text != "copy me" {
+		t.Fatalf("clipboard = %#v", clipboard)
+	}
+
+	progress := ParseOSCContent("9;4;1;101")
+	if progress.Type != OSCActionProgress || progress.Progress.State != TerminalProgressRunning || progress.Progress.Percent != 100 {
+		t.Fatalf("progress = %#v", progress)
+	}
+
+	iterm := ParseOSCContent("9;\n\nClaude:\nBuild complete")
+	if iterm.Type != OSCActionNotification || iterm.Notification.Provider != "iterm2" || iterm.Notification.Title != "Claude" || iterm.Notification.Message != "Build complete" {
+		t.Fatalf("iterm notification = %#v", iterm)
+	}
+
+	kitty := ParseOSCContent("99;i=7:p=body;Build complete")
+	if kitty.Type != OSCActionNotification || kitty.Notification.Provider != "kitty" || kitty.Notification.ID != "7" || kitty.Notification.Part != "body" || kitty.Notification.Message != "Build complete" {
+		t.Fatalf("kitty notification = %#v", kitty)
+	}
+
+	ghostty := ParseOSCContent("777;notify;Claude;Build complete")
+	if ghostty.Type != OSCActionNotification || ghostty.Notification.Provider != "ghostty" || ghostty.Notification.Title != "Claude" || ghostty.Notification.Message != "Build complete" {
+		t.Fatalf("ghostty notification = %#v", ghostty)
+	}
+
 	unknown := ParseOSCContent("999;noop")
 	if unknown.Type != OSCActionUnknown || unknown.Sequence != OSCPrefix+"999;noop" {
 		t.Fatalf("unknown = %#v", unknown)

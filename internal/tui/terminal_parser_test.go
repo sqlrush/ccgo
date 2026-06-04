@@ -245,6 +245,33 @@ func TestTerminalParserTracksHyperlinkState(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" +
+		TerminalClipboardSequence("copy me") +
+		"b" +
+		TerminalProgressSequence(TerminalProgressRunning, 40) +
+		"c" +
+		GhosttyNotificationSequence("Build complete", "Claude") +
+		"d"
+	actions := parser.Feed(input)
+	if len(actions) != 7 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionClipboard || actions[1].OSC.Clipboard.Text != "copy me" {
+		t.Fatalf("clipboard action = %#v", actions[1])
+	}
+	if actions[3].Type != TerminalActionProgress || actions[3].OSC.Progress.State != TerminalProgressRunning || actions[3].OSC.Progress.Percent != 40 {
+		t.Fatalf("progress action = %#v", actions[3])
+	}
+	if actions[5].Type != TerminalActionNotification || actions[5].OSC.Notification.Provider != "ghostty" || actions[5].OSC.Notification.Title != "Claude" || actions[5].OSC.Notification.Message != "Build complete" {
+		t.Fatalf("notification action = %#v", actions[5])
+	}
+	if got := TerminalVisibleText(input); got != "abcd" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
 func TestTerminalParserResetClearsStyle(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed(CSISequence(1, "m") + "bold" + ESCResetSequence + "plain")
