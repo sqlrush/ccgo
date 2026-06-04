@@ -71,6 +71,7 @@ const (
 	DECModeReverseVideo       = 5
 	DECModeOrigin             = 6
 	DECModeAutoWrap           = 7
+	DECModeMouseX10           = 9
 	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
@@ -248,6 +249,7 @@ type CSIMouseTrackingMode string
 
 const (
 	CSIMouseTrackingOff       CSIMouseTrackingMode = "off"
+	CSIMouseTrackingX10       CSIMouseTrackingMode = "x10"
 	CSIMouseTrackingNormal    CSIMouseTrackingMode = "normal"
 	CSIMouseTrackingHighlight CSIMouseTrackingMode = "highlight"
 	CSIMouseTrackingButton    CSIMouseTrackingMode = "button"
@@ -581,6 +583,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: enabled}}, true
 	case DECModeReverseWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseWrap, Enabled: enabled}}, true
+	case DECModeMouseX10:
+		return csiMouseModeAction(CSIMouseTrackingX10, enabled), true
 	case DECModeCursorBlink:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionCursorBlink, Enabled: enabled}}, true
 	case DECModeCursorVisible:
