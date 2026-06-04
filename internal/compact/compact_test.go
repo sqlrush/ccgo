@@ -413,6 +413,18 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 			want:   "value summary",
 		},
 		{
+			digest:      "resource-attributes",
+			body:        `"id":"resource-attributes","type":"microcompact-cache","attributes":{"summaryMarkdown":"attributes summary","version":"microcompact.v1","createdAt":100,"ttlSeconds":3600}`,
+			want:        "attributes summary",
+			wantExpires: true,
+		},
+		{
+			digest:      "resource-properties",
+			body:        `"resource":{"id":"resource-properties","type":"microcompact-cache","properties":{"compressedText":"properties summary","cacheVersion":"microcompact.v1","cachedAt":100,"ttlMs":"3600000"}}`,
+			want:        "properties summary",
+			wantExpires: true,
+		},
+		{
 			digest:      "wrapped-envelope",
 			body:        `"data":{"summary":"envelope summary"},"digest":"wrapped-envelope","version":"microcompact.v1","createdAt":100,"ttlSeconds":3600`,
 			want:        "envelope summary",

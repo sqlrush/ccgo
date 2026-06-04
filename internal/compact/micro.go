@@ -55,6 +55,13 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 		if err := microResultApplyFieldAliases(&result, fields, false, false); err != nil {
 			return err
 		}
+		if result.Digest == "" {
+			if value, ok, err := microStringJSONField(fields, "id", "cacheId", "cacheID", "cache_id", "resourceId", "resourceID", "resource_id"); err != nil {
+				return err
+			} else if ok {
+				result.Digest = value
+			}
+		}
 		if err := microResultApplyNestedFieldAliases(&result, fields); err != nil {
 			return err
 		}
@@ -153,7 +160,7 @@ func microResultApplyNestedFieldAliases(result *MicroResult, fields map[string]j
 		"cacheMetadata", "cache_metadata", "cacheMeta", "cache_meta",
 		"microMetadata", "micro_metadata", "microcompactMetadata", "microCompactMetadata", "microcompact_metadata",
 		"microResultMetadata", "micro_result_metadata",
-		"attributes", "attrs", "info",
+		"attributes", "properties", "attrs", "info",
 		"cacheInfo", "cache_info", "cacheDetails", "cache_details",
 		"cacheEntry", "cache_entry", "entry", "record", "cache",
 	} {
@@ -181,9 +188,9 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 		return nil, false
 	}
 	for _, name := range []string{
-		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "record", "item", "payload", "response", "body",
+		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "record", "item", "resource", "payload", "response", "body",
 		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
-		"value",
+		"attributes", "properties", "value",
 	} {
 		raw, ok := fields[name]
 		if !ok {
