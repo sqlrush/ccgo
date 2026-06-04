@@ -1199,19 +1199,41 @@ func (message *Message) UnmarshalJSON(data []byte) error {
 	if len(message.ImagePasteIDs) == 0 {
 		message.ImagePasteIDs = intListJSONField(
 			fields,
+			"imagePasteId",
+			"imagePasteID",
+			"image_paste_id",
 			"imagePasteIds",
 			"imagePasteIDs",
 			"image_paste_ids",
+			"imageId",
+			"imageID",
+			"image_id",
 			"imageIds",
 			"imageIDs",
 			"image_ids",
+			"pastedImageId",
+			"pastedImageID",
+			"pasted_image_id",
 			"pastedImageIds",
 			"pastedImageIDs",
 			"pasted_image_ids",
 		)
 	}
 	if len(message.PastedContents) == 0 {
-		message.PastedContents = pastedContentsJSONField(fields, "pastedContents", "pasted_contents", "pastes", "pasteContents", "paste_contents")
+		message.PastedContents = pastedContentsJSONField(
+			fields,
+			"pastedContents",
+			"pasted_contents",
+			"pastedContent",
+			"pasted_content",
+			"pastes",
+			"pasteContents",
+			"paste_contents",
+			"pasteContent",
+			"paste_content",
+			"attachments",
+			"attachment",
+		)
 	}
 	return nil
 }

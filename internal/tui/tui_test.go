@@ -4675,6 +4675,7 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 			"transcript_messages": [
 				{"role": "tool", "text": "tool output"},
 				{"role": "user", "text": "image history", "imagePasteIds": [9]},
+				{"role": "user", "text": "single image history", "imagePasteId": 10},
 				{
 					"role": "user",
 					"content": [
@@ -4683,11 +4684,20 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 					],
 					"imagePasteIds": [11],
 					"pasted_contents": {"12": {"id": 12, "type": "text", "content": "memo"}}
+				},
+				{
+					"role": "user",
+					"text": "attached [Pasted text #13] [Image #14]",
+					"attachments": [
+						{"id": 13, "kind": "text", "value": "attached memo"},
+						{"id": 14, "pastedType": "image", "data": "BBBB", "contentType": "image/png", "fileName": "attached.png"}
+					],
+					"pastedImageId": 14
 				}
 			],
 			"snapshot": "transcript",
 			"expectSnapshotContains": "tool: tool output",
-			"expectPrompt": {"nextPastedID": 13}
+			"expectPrompt": {"nextPastedID": 15}
 		}
 	]`))
 	if err != nil {
@@ -4701,14 +4711,20 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 	if len(result.Snapshots) != 3 {
 		t.Fatalf("snapshots = %#v", result.Snapshots)
 	}
-	if len(screen.Messages) != 6 {
+	if len(screen.Messages) != 8 {
 		t.Fatalf("messages = %#v", screen.Messages)
 	}
 	if got := screen.Messages[4].ImagePasteIDs; len(got) != 1 || got[0] != 9 {
 		t.Fatalf("image paste ids = %#v", got)
 	}
-	if got := screen.Messages[5]; len(got.ContentBlocks) != 2 || got.ImagePasteIDs[0] != 11 || got.PastedContents[12].Content != "memo" {
+	if got := screen.Messages[5].ImagePasteIDs; len(got) != 1 || got[0] != 10 {
+		t.Fatalf("single image paste id = %#v", got)
+	}
+	if got := screen.Messages[6]; len(got.ContentBlocks) != 2 || got.ImagePasteIDs[0] != 11 || got.PastedContents[12].Content != "memo" {
 		t.Fatalf("content block message = %#v", got)
+	}
+	if got := screen.Messages[7]; len(got.ImagePasteIDs) != 1 || got.ImagePasteIDs[0] != 14 || got.PastedContents[13].Content != "attached memo" || got.PastedContents[14].Filename != "attached.png" {
+		t.Fatalf("attachment message = %#v", got)
 	}
 }
 

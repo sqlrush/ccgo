@@ -48,6 +48,12 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	type PastedContentJSON PastedContent
 	var aux struct {
 		*PastedContentJSON
+		Kind             string `json:"kind"`
+		PastedType       string `json:"pastedType"`
+		PastedTypeSnake  string `json:"pasted_type"`
+		Value            string `json:"value"`
+		Data             string `json:"data"`
+		Base64           string `json:"base64"`
 		MediaTypeSnake   string `json:"media_type"`
 		MimeType         string `json:"mimeType"`
 		MimeTypeSnake    string `json:"mime_type"`
@@ -67,6 +73,12 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = PastedContent(base)
+	if c.Type == "" {
+		c.Type = firstHistoryString(aux.Kind, aux.PastedType, aux.PastedTypeSnake)
+	}
+	if c.Content == "" {
+		c.Content = firstHistoryString(aux.Value, aux.Data, aux.Base64)
+	}
 	if c.MediaType == "" {
 		c.MediaType = firstHistoryString(aux.MediaTypeSnake, aux.MimeType, aux.MimeTypeSnake, aux.ContentType, aux.ContentTypeSnake)
 	}

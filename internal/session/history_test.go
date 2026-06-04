@@ -153,12 +153,12 @@ func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 
 func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 	var entry HistoryEntry
-	err := json.Unmarshal([]byte(`{"display":"restore [Image #1]","pasted_contents":{"1":{"id":1,"type":"image","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}}}}`), &entry)
+	err := json.Unmarshal([]byte(`{"display":"restore [Image #1]","pasted_contents":{"1":{"id":1,"kind":"image","base64":"AAAA","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}}}}`), &entry)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := entry.PastedContents[1]
-	if got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 {
+	if got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 {
 		t.Fatalf("pasted content aliases = %#v", got)
 	}
 }
