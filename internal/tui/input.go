@@ -277,9 +277,7 @@ func parseCSIuKey(seq string) (Key, bool) {
 	if modifier == 1 {
 		return baseCSIuKey(codepoint)
 	}
-	shift := modifier == 2 || modifier == 4 || modifier == 6 || modifier == 8
-	alt := modifier == 3 || modifier == 4 || modifier == 7 || modifier == 8
-	ctrl := modifier >= 5 && modifier <= 8
+	shift, alt, ctrl := csiModifierState(modifier)
 
 	if ctrl {
 		if key, ok := ctrlCSIuKey(codepoint); ok {
@@ -302,6 +300,14 @@ func parseCSIuKey(seq string) (Key, bool) {
 		return Key{Type: KeyRune, Rune: r}, true
 	}
 	return Key{}, false
+}
+
+func csiModifierState(modifier int) (shift bool, alt bool, ctrl bool) {
+	flags := modifier - 1
+	shift = flags&1 != 0
+	alt = flags&2 != 0 || flags&8 != 0
+	ctrl = flags&4 != 0
+	return shift, alt, ctrl
 }
 
 func baseCSIuKey(codepoint int) (Key, bool) {
