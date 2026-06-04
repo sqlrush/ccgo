@@ -94,7 +94,21 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		}
 		return steps, true, nil
 	}
-	for _, name := range []string{"scenario", "test", "case", "fixture", "interaction"} {
+	for _, name := range []string{
+		"scenario",
+		"test",
+		"case",
+		"fixture",
+		"interaction",
+		"data",
+		"payload",
+		"body",
+		"result",
+		"response",
+		"recording",
+		"session",
+		"run",
+	} {
 		value, ok := raw[name]
 		if !ok {
 			continue

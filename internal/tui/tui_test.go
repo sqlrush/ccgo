@@ -5586,6 +5586,42 @@ func TestParseInteractionScriptAcceptsRecordArrayWrappers(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsNestedRecordArrayWrappers(t *testing.T) {
+	for name, script := range map[string]string{
+		"data_records": `{"data":{"records":[
+			{"step":{"action":"type","value":"go"}},
+			{"step":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"go"}}}
+		]}}`,
+		"payload_events": `{"payload":{"events":[
+			{"record":{"action":"type","value":"run"}},
+			{"record":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"run"}}}
+		]}}`,
+		"result_timeline": `{"result":{"timeline":[
+			{"action":"type","value":"ship"},
+			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"ship"}}
+		]}}`,
+		"response_fixture": `{"response":{"fixture":{"steps":[
+			{"action":"type","value":"test"},
+			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"test"}}
+		]}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps, err := ParseInteractionScript([]byte(script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			screen := NewREPLScreen(30, 6, nil)
+			result, err := RunInteractionScriptChecked(&screen, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted {
+				t.Fatalf("events = %#v", result.Events)
+			}
+		})
+	}
+}
+
 func TestRunInteractionScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script.json")
 	script := []byte(`{"interactionScript":[
