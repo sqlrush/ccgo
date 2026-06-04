@@ -67,6 +67,7 @@ const (
 	CSIModeLineFeed = 20
 
 	DECModeApplicationCursor  = 1
+	DECModeColumn             = 3
 	DECModeReverseVideo       = 5
 	DECModeOrigin             = 6
 	DECModeAutoWrap           = 7
@@ -229,6 +230,7 @@ const (
 	CSIModeActionBracketedPaste    CSIModeActionType = "bracketedPaste"
 	CSIModeActionInsert            CSIModeActionType = "insertMode"
 	CSIModeActionLineFeed          CSIModeActionType = "lineFeedMode"
+	CSIModeActionColumn            CSIModeActionType = "columnMode"
 	CSIModeActionReverseVideo      CSIModeActionType = "reverseVideo"
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
@@ -567,6 +569,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 	switch mode {
 	case DECModeApplicationCursor:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationCursor, Enabled: enabled}}, true
+	case DECModeColumn:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionColumn, Enabled: enabled}}, true
 	case DECModeReverseVideo:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseVideo, Enabled: enabled}}, true
 	case DECModeOrigin:
