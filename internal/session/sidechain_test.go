@@ -355,6 +355,58 @@ func TestLoadSidechainStateAcceptsWrappedLifecycleContent(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsResourceLifecycleAttributes(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "resource-fallback", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "sidechain_start",
+		Content: map[string]any{
+			"id":   "resource_agent",
+			"type": "sidechain-lifecycle",
+			"attributes": map[string]any{
+				"agentName":       "architect",
+				"workspacePath":   "/tmp/architect-worktree",
+				"taskDescription": "design the refactor",
+				"lifecycleState":  "active",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "resource-fallback", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "sidechainCompleted",
+		Content: map[string]any{
+			"properties": map[string]any{
+				"outcome":      "success",
+				"finalMessage": "resource lifecycle complete",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "resource_agent" || state.Status != SidechainStatusCompleted || state.Summary != "resource lifecycle complete" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.AgentType != "architect" || state.Metadata.WorktreePath != "/tmp/architect-worktree" || state.Metadata.Description != "design the refactor" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsNumericLifecycleIDs(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

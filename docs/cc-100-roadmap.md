@@ -42,6 +42,8 @@ M6 补充：microcompact disk cache loader 的 `cached`/`fromCache`/`cacheHit`/`
 
 M6 补充：sidechain/subagent lifecycle state loader 现在接受 `subagent_started`、`agentStarted`、`task_failed`、`sidechainCompleted` 等相邻 subtype aliases，支持 `taskID`/`workerId`/`runId`、`agentName`/`kind`、`resultText`/`finalMessage` 等字段，并在 failed/cancelled subtype 没有显式 status 时自动归一状态。
 
+M6 补充：sidechain/subagent lifecycle content 读取现在接受 JSON:API/resource-style `resource`/`attributes`/`properties` wrapper，外层 resource `id` 可作为 sidechain ID fallback，内层 agent metadata、status/outcome 和 summary 字段仍能恢复到 state/list/resume。
+
 M6 补充：transcript resume 的嵌套 content block 现在接受 `toolUseId`/`toolUseID`、`isError`、`cacheControl`、`cacheReference` 字段别名，并保留 cache edit 的 `cacheReference`。
 
 M6 补充：transcript resume 的 nested content block `id`/`tool_use_id`/`toolUseId` 现在接受 JSON number，并保留为字符串 tool-use ID。

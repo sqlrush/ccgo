@@ -350,7 +350,7 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 				}
 			}
 		}
-		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "entry", "item", "event", "metadata", "details"} {
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "entry", "item", "event", "resource", "attributes", "properties", "metadata", "details", "value", "output"} {
 			if raw, ok := fields[key]; ok {
 				if value := firstStringFieldDepth(raw, keys, depth+1); value != "" {
 					return value
