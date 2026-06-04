@@ -108,6 +108,36 @@ func TestFetchRemoteHistoryNonOKReturnsNil(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsEmptyTerminalPages(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		serve func(http.ResponseWriter)
+	}{
+		{name: "no-content", serve: func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusNoContent)
+		}},
+		{name: "empty-ok", serve: func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "application/json")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				tc.serve(w)
+			}))
+			defer server.Close()
+
+			authCtx := NewRemoteHistoryAuthContext("s", "", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+			events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !events.Complete || events.Pages != 1 || len(events.Events) != 0 || events.NextBeforeID != "" {
+				t.Fatalf("events = %#v", events)
+			}
+		})
+	}
+}
+
 func TestFetchRemoteHistoryRefreshesTokenOnUnauthorized(t *testing.T) {
 	var tokens []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

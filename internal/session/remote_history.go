@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -857,11 +858,17 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 		return nil, 0, nil
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent {
+		return &RemoteHistoryPage{Events: []contracts.SDKEvent{}}, resp.StatusCode, nil
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.StatusCode, nil
 	}
 	var decoded sessionEventsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		if err == io.EOF {
+			return &RemoteHistoryPage{Events: []contracts.SDKEvent{}}, resp.StatusCode, nil
+		}
 		return nil, resp.StatusCode, err
 	}
 	events := responseEventList(decoded)

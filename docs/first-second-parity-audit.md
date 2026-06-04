@@ -151,6 +151,7 @@ M6 progress now includes:
 - `internal/session`: remote-history pagination cursor/id parsing now accepts JSON numbers and preserves them as string cursors for page fields and `edges[].cursor`.
 - `internal/session`: remote-history pagination now accepts token aliases such as `nextPageToken`, `nextToken`, `pageToken`, and `continuationToken` in response fields and link query parameters.
 - `internal/session`: remote-history pagination now also accepts OData next-link fields such as `@odata.nextLink`, `odata.nextLink`, and `__next`, extracting `$skiptoken`/`skipToken` link query values as continuation cursors.
+- `internal/session`: remote-history fetch now treats HTTP 204 and 200 responses with empty bodies as empty terminal pages instead of incomplete fetches or JSON EOF errors.
 - `internal/contracts`: ID JSON decoding now accepts JSON numbers/null so remote-history event, message, session, and parent ID aliases can preserve numeric IDs as strings during transcript materialization.
 - `internal/session`: remote-history response parsing now recursively unwraps GraphQL/session/HAL containers such as `data.session.events`, `data.projectSession.eventConnection`, `conversation`, `remoteHistory`, and `_embedded` before applying `nodes`/`edges[].node` event-list and `pageInfo` pagination parsing.
 - `internal/session`: remote-history link pagination now accepts `links`/`_links` `next`/`previous`/`prev`/`older` string URLs or `{href,url,uri,link}` objects and extracts before/cursor query parameters for continuation.
