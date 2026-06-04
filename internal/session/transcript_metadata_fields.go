@@ -186,13 +186,25 @@ func parseTombstoneMetadata(line []byte) (TombstoneEntry, bool) {
 		return TombstoneEntry{}, false
 	}
 	if entry.TargetUUID == "" {
-		entry.TargetUUID = fields.idValue("targetUuid", "targetUUID", "target_uuid", "deletedUuid", "deletedUUID", "deleted_uuid", "messageUuid", "messageUUID", "message_uuid")
+		entry.TargetUUID = fields.idValue(
+			"targetUuid", "targetUUID", "target_uuid",
+			"targetId", "targetID", "target_id",
+			"deletedUuid", "deletedUUID", "deleted_uuid",
+			"deletedId", "deletedID", "deleted_id",
+			"messageUuid", "messageUUID", "message_uuid",
+			"messageId", "messageID", "message_id",
+		)
 	}
 	if entry.TargetUUID == "" {
 		entry.TargetUUID = entry.UUID
 	}
 	if entry.ParentUUID == nil {
-		if parent := fields.idValue("parentUuid", "parentUUID", "parent_uuid"); parent != "" {
+		if parent := fields.idValue(
+			"parentUuid", "parentUUID", "parent_uuid",
+			"parentId", "parentID", "parent_id",
+			"parentMessageUuid", "parentMessageUUID", "parent_message_uuid",
+			"parentMessageId", "parentMessageID", "parent_message_id",
+		); parent != "" {
 			entry.ParentUUID = &parent
 		}
 	}

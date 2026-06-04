@@ -403,6 +403,7 @@ func TestLoadTranscriptAppliesTombstonesAndRelinks(t *testing.T) {
 		`{"type":"tombstone","targetUuid":"a1","parentUuid":"u1","sessionId":"s1","reason":"deleted","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"tombstone","deleted_uuid":"ghost","parent_uuid":"u2","session_uuid":"s2","deleted_reason":"alias deleted"}`,
 		`{"type":"tombstone","uuid":"legacy","parent_uuid":"u2","sessionId":"s3","reason":"legacy fallback"}`,
+		`{"type":"tombstone","targetID":"old","parentMessageID":"u1","sessionID":"s4","deletedReason":"id alias deleted"}`,
 	})
 
 	transcript, err := LoadTranscript(path)
@@ -428,12 +429,15 @@ func TestLoadTranscriptAppliesTombstonesAndRelinks(t *testing.T) {
 	if entry := transcript.Tombstones["legacy"]; entry.SessionID != "s3" || entry.Reason != "legacy fallback" || entry.TargetUUID != "legacy" {
 		t.Fatalf("legacy tombstone entry = %#v", entry)
 	}
+	if entry := transcript.Tombstones["old"]; entry.SessionID != "s4" || entry.Reason != "id alias deleted" || entry.ParentUUID == nil || *entry.ParentUUID != "u1" {
+		t.Fatalf("id aliased tombstone entry = %#v", entry)
+	}
 
 	metadata, err := LoadTranscriptMetadata(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Tombstones["a1"].Reason != "deleted" || metadata.Tombstones["ghost"].SessionID != "s2" || metadata.Tombstones["legacy"].TargetUUID != "legacy" {
+	if metadata.Tombstones["a1"].Reason != "deleted" || metadata.Tombstones["ghost"].SessionID != "s2" || metadata.Tombstones["legacy"].TargetUUID != "legacy" || metadata.Tombstones["old"].ParentUUID == nil || *metadata.Tombstones["old"].ParentUUID != "u1" {
 		t.Fatalf("metadata tombstones = %#v", metadata.Tombstones)
 	}
 }
