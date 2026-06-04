@@ -3806,6 +3806,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(5, "n"), want: CSIReportAction{Type: CSIReportActionDeviceStatus, Code: 5}},
 		{seq: CSISequence(6, "n"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Code: 6}},
 		{seq: CSISequence("?25n"), want: CSIReportAction{Type: CSIReportActionUnknown, Code: 25, PrivateMode: '?'}},
+		{seq: CSISequence("4$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 4}},
+		{seq: CSISequence("?25$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 25, PrivateMode: '?'}},
 	}
 	for _, tc := range reportCases {
 		action, ok := ParseCSISequence(tc.seq)
@@ -3937,6 +3939,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions = parser.Feed(CSISequence(2, "O"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionErase || actions[0].Erase.Type != CSIEraseActionArea || actions[0].Erase.Region != CSIEraseAll {
 		t.Fatalf("terminal parser area erase actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence("?25$p"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionModeRequest || actions[0].Report.Code != 25 || actions[0].Report.PrivateMode != '?' {
+		t.Fatalf("terminal parser mode request actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence(4, "j") + CSISequence(2, "k"))

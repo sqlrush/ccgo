@@ -263,6 +263,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parsing now accepts ECMA HPB/VPB final bytes `CSI Ps j` / `CSI Ps k` as cursor-back and cursor-up actions.
 - `internal/tui`: terminal CSI parsing now accepts DEC private mode `?1046h/l` alternate-screen switching, `?1047h/l` alternate-screen buffer, and `?1048h/l` save/restore cursor variants using distinct mode/cursor action surfaces.
 - `internal/tui`: terminal CSI parsing now emits report actions for DECREQTPARM terminal-parameters queries such as `CSI x`, preserving code and private marker fields.
+- `internal/tui`: terminal CSI parsing now emits report actions for DECRQM mode requests such as `CSI 4$p` and `CSI ?25$p`, preserving mode code and private marker fields.
 - `internal/tui`: terminal CSI parsing now emits report actions for xterm window manipulation/report queries such as `CSI 14t` and `CSI 18t`, preserving code and private marker fields.
 - `internal/tui`: terminal CSI parsing now emits cursor actions for TBC tab-clear sequences such as `CSI g` and `CSI 3g`, preserving the clear-current/all code.
 - `internal/tui`: terminal CSI parsing now emits edit actions for REP repeat-preceding-character sequences such as `CSI b` and `CSI 4b`, and the visible-text/snapshot plus ANSI message wrapping/trim paths expand the previous repeatable grapheme by the requested count.

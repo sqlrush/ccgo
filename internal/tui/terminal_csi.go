@@ -215,6 +215,7 @@ const (
 	CSIReportActionDeviceAttrs    CSIReportActionType = "deviceAttributes"
 	CSIReportActionTerminalParams CSIReportActionType = "terminalParameters"
 	CSIReportActionWindow         CSIReportActionType = "window"
+	CSIReportActionModeRequest    CSIReportActionType = "modeRequest"
 	CSIReportActionUnknown        CSIReportActionType = "unknown"
 )
 
@@ -442,6 +443,9 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		if intermediate == "!" && privateMode == 0 && len(params) == 0 {
 			return CSIAction{Type: CSIActionReset}, true
 		}
+		if intermediate == "$" {
+			return csiModeRequest(csiParamDefault(params, 0, 0), privateMode), true
+		}
 	case CSICommandTerminalParams:
 		return csiTerminalParameters(csiParamDefault(params, 0, 0), privateMode), true
 	case CSICommandScrollUp:
@@ -565,6 +569,13 @@ func csiWindowReport(code int, privateMode byte) CSIAction {
 	return CSIAction{
 		Type:   CSIActionReport,
 		Report: CSIReportAction{Type: CSIReportActionWindow, Code: code, PrivateMode: privateMode},
+	}
+}
+
+func csiModeRequest(code int, privateMode byte) CSIAction {
+	return CSIAction{
+		Type:   CSIActionReport,
+		Report: CSIReportAction{Type: CSIReportActionModeRequest, Code: code, PrivateMode: privateMode},
 	}
 }
 
