@@ -77,12 +77,12 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 	} else if ok {
 		result.Version = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at"); err != nil {
+	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
 		return err
 	} else if ok {
 		result.CreatedAt = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at"); err != nil {
+	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
 		return err
 	} else if ok {
 		result.ExpiresAt = value
@@ -406,13 +406,86 @@ func microTimeJSONField(fields map[string]json.RawMessage, names ...string) (tim
 		if !ok || string(raw) == "null" {
 			continue
 		}
-		var value time.Time
-		if err := json.Unmarshal(raw, &value); err != nil {
+		value, err := microParseJSONTime(raw, name)
+		if err != nil {
 			return time.Time{}, false, err
 		}
 		return value, true, nil
 	}
 	return time.Time{}, false, nil
+}
+
+func microParseJSONTime(raw json.RawMessage, field string) (time.Time, error) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return time.Time{}, fmt.Errorf("empty time field %q", field)
+		}
+		if parsed, err := time.Parse(time.RFC3339Nano, text); err == nil {
+			return parsed.UTC(), nil
+		}
+		return microTimeFromNumberString(text, field)
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err == nil {
+		return microTimeFromNumber(number, field)
+	}
+	var value time.Time
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return time.Time{}, err
+	}
+	return value.UTC(), nil
+}
+
+func microTimeFromNumberString(text string, field string) (time.Time, error) {
+	number := json.Number(text)
+	if _, err := number.Int64(); err == nil {
+		return microTimeFromNumber(number, field)
+	}
+	if _, err := number.Float64(); err == nil {
+		return microTimeFromNumber(number, field)
+	}
+	return time.Time{}, fmt.Errorf("invalid time field %q: %q", field, text)
+}
+
+func microTimeFromNumber(number json.Number, field string) (time.Time, error) {
+	if strings.ContainsAny(number.String(), ".eE") {
+		value, err := number.Float64()
+		if err != nil {
+			return time.Time{}, err
+		}
+		return microTimeFromFloat(value, field), nil
+	}
+	value, err := number.Int64()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return microTimeFromInt(value, field), nil
+}
+
+func microTimeFromFloat(value float64, field string) time.Time {
+	if microTimeFieldIsMillis(field) || value >= 1e12 || value <= -1e12 {
+		millis := int64(value)
+		return time.UnixMilli(millis).UTC()
+	}
+	seconds := int64(value)
+	nanos := int64((value - float64(seconds)) * 1_000_000_000)
+	return time.Unix(seconds, nanos).UTC()
+}
+
+func microTimeFromInt(value int64, field string) time.Time {
+	if microTimeFieldIsMillis(field) || value >= 1_000_000_000_000 || value <= -1_000_000_000_000 {
+		return time.UnixMilli(value).UTC()
+	}
+	return time.Unix(value, 0).UTC()
+}
+
+func microTimeFieldIsMillis(field string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(field, "_", ""))
+	return strings.Contains(normalized, "ms") || strings.Contains(normalized, "millis")
 }
 
 func microResultPath(dir string, digest string) string {

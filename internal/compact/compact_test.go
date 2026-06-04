@@ -278,6 +278,52 @@ func TestLoadMicroResultAcceptsFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsNumericTimeAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest  string
+		payload string
+	}{
+		{
+			digest: "numeric-seconds",
+			payload: `{
+				"summary": "seconds cache",
+				"digest": "numeric-seconds",
+				"version": "microcompact.v1",
+				"createdAt": 100,
+				"expiresAt": 3700
+			}`,
+		},
+		{
+			digest: "numeric-millis",
+			payload: `{
+				"summary": "millis cache",
+				"digest": "numeric-millis",
+				"version": "microcompact.v1",
+				"createdAtMs": 100000,
+				"expires_at_ms": "3700000"
+			}`,
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if !result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+			t.Fatalf("%s times = %#v", tc.digest, result)
+		}
+	}
+}
+
 func TestMicroCompactWriteThroughPersistsMemoryCache(t *testing.T) {
 	cache := NewMicroCache()
 	cacheDir := filepath.Join(t.TempDir(), "micro")
