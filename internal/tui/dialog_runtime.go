@@ -60,6 +60,14 @@ func (r *DialogRuntime) UpsertTask(task TaskStatus) {
 	if task.ID == "" {
 		return
 	}
+	if task.Title == "" {
+		task.Title = task.ID
+	}
+	task.State = normalizeTaskState(task.State)
+	if task.State == "" {
+		task.State = TaskPending
+	}
+	task.Progress = clampPercent(task.Progress)
 	r.Tasks[task.ID] = task
 	r.refreshActiveTaskDialog()
 }
@@ -298,7 +306,7 @@ func (r *DialogRuntime) refreshActiveTaskDialog() {
 }
 
 func taskStateRank(state string) int {
-	switch state {
+	switch normalizeTaskState(state) {
 	case TaskRunning:
 		return 0
 	case TaskPending:
@@ -320,7 +328,7 @@ func taskStateSummary(tasks []TaskStatus) []string {
 	}
 	counts := map[string]int{}
 	for _, task := range tasks {
-		state := task.State
+		state := normalizeTaskState(task.State)
 		if state == "" {
 			state = TaskPending
 		}
@@ -337,7 +345,7 @@ func taskStateSummary(tasks []TaskStatus) []string {
 }
 
 func taskCanBeCancelled(state string) bool {
-	switch state {
+	switch normalizeTaskState(state) {
 	case "", TaskPending, TaskRunning:
 		return true
 	default:
@@ -358,11 +366,30 @@ func (r *DialogRuntime) updateTask(id string, title string, state string, detail
 	if title == "" {
 		title = id
 	}
-	task := TaskStatus{ID: id, Title: title, State: state, Detail: detail, Progress: clampPercent(progress)}
+	task := TaskStatus{ID: id, Title: title, State: normalizeTaskState(state), Detail: detail, Progress: clampPercent(progress)}
 	if task.State == "" {
 		task.State = TaskPending
 	}
 	r.Tasks[id] = task
 	r.refreshActiveTaskDialog()
 	return task
+}
+
+func normalizeTaskState(state string) string {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "":
+		return ""
+	case TaskPending, "queued", "queue", "waiting", "scheduled", "todo":
+		return TaskPending
+	case TaskRunning, "active", "started", "in_progress", "in-progress", "working", "processing":
+		return TaskRunning
+	case TaskCompleted, "complete", "done", "success", "succeeded", "ok":
+		return TaskCompleted
+	case TaskCancelled, "canceled", "cancel", "aborted", "stopped", "interrupted":
+		return TaskCancelled
+	case TaskFailed, "failure", "error", "errored", "failed_error":
+		return TaskFailed
+	default:
+		return strings.TrimSpace(state)
+	}
 }

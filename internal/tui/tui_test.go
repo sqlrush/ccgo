@@ -2021,6 +2021,38 @@ func TestDialogRuntimeTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestDialogRuntimeNormalizesTaskStateAliases(t *testing.T) {
+	runtime := NewDialogRuntime()
+	runtime.UpsertTask(TaskStatus{ID: "active", State: "in_progress", Progress: 120})
+	runtime.UpsertTask(TaskStatus{ID: "queued", State: "queued"})
+	runtime.UpsertTask(TaskStatus{ID: "success", State: "success"})
+	runtime.UpsertTask(TaskStatus{ID: "error", State: "error"})
+	runtime.UpsertTask(TaskStatus{ID: "canceled", State: "canceled"})
+
+	if runtime.Tasks["active"].State != TaskRunning || runtime.Tasks["active"].Progress != 100 || runtime.Tasks["active"].Title != "active" {
+		t.Fatalf("active task = %#v", runtime.Tasks["active"])
+	}
+	if runtime.Tasks["queued"].State != TaskPending || runtime.Tasks["success"].State != TaskCompleted || runtime.Tasks["error"].State != TaskFailed || runtime.Tasks["canceled"].State != TaskCancelled {
+		t.Fatalf("tasks = %#v", runtime.Tasks)
+	}
+	if status := runtime.StatusLine(""); !strings.Contains(status, "running: 1") || !strings.Contains(status, "pending: 1") || !strings.Contains(status, "failed: 1") || !strings.Contains(status, "cancelled: 1") || !strings.Contains(status, "completed: 1") {
+		t.Fatalf("status = %q", status)
+	}
+
+	dialog := TaskDialog([]TaskStatus{{ID: "done", State: "success"}})
+	if !strings.Contains(dialog.Body, "done [completed]") {
+		t.Fatalf("task dialog = %#v", dialog)
+	}
+
+	cancelled := runtime.CancelTasks("stop")
+	if len(cancelled) != 2 || cancelled[0].ID != "active" || cancelled[1].ID != "queued" {
+		t.Fatalf("cancelled = %#v", cancelled)
+	}
+	if runtime.Tasks["success"].State != TaskCompleted || runtime.Tasks["error"].State != TaskFailed || runtime.Tasks["canceled"].State != TaskCancelled {
+		t.Fatalf("terminal tasks changed = %#v", runtime.Tasks)
+	}
+}
+
 func TestDialogRuntimeCancelsCancelableTasksDeterministically(t *testing.T) {
 	runtime := NewDialogRuntime()
 	runtime.UpsertTask(TaskStatus{ID: "b", Title: "Build", State: TaskRunning, Detail: "compile", Progress: 25})
@@ -5124,6 +5156,41 @@ func TestRunDialogRuntimeScriptAcceptsTaskExpectationAliases(t *testing.T) {
 				"countsByState": {"cancelled": 1},
 				"contains": {"id": "task_1", "state": "cancelled", "detail": "stopped"}
 			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(50, 9, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunDialogRuntimeScriptNormalizesTaskStateAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"upsertTask": {"taskId": "task_1", "name": "Build", "status": "active", "statusText": "go test", "progressPercent": 40},
+			"openTasksDialog": true,
+			"snapshotName": "tasks",
+			"expectTasks": {
+				"taskCount": 1,
+				"statusCounts": {"in_progress": 1},
+				"contains": {"taskId": "task_1", "taskTitle": "Build", "status": "started", "statusText": "go test", "progressPercent": 40}
+			},
+			"expectStatusContains": ["running: 1"],
+			"expectSnapshotContains": ["Build [running] 40% - go test"]
+		},
+		{
+			"cancelAllTasks": true,
+			"cancelTasksDetail": "stopped",
+			"expectTasks": {
+				"total": 1,
+				"countsByState": {"canceled": 1},
+				"contains": {"id": "task_1", "state": "canceled", "detail": "stopped"}
+			},
+			"expectStatusContains": ["cancelled: 1"]
 		}
 	]`))
 	if err != nil {

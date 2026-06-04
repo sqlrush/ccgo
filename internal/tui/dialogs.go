@@ -65,7 +65,11 @@ func TaskDialog(tasks []TaskStatus) Dialog {
 		if title == "" {
 			title = task.ID
 		}
-		line := fmt.Sprintf("%s [%s]", title, task.State)
+		state := normalizeTaskState(task.State)
+		if state == "" {
+			state = TaskPending
+		}
+		line := fmt.Sprintf("%s [%s]", title, state)
 		if task.Progress > 0 {
 			line = fmt.Sprintf("%s %d%%", line, clampPercent(task.Progress))
 		}

@@ -621,8 +621,12 @@ func compareTasks(index int, runtime *DialogRuntime, want TasksExpectation) erro
 			gotCounts[normalizedTaskState(task)]++
 		}
 		for state, count := range want.StateCounts {
-			if gotCounts[state] != count {
-				return fmt.Errorf("script step %d task state %q count = %d, want %d", index, state, gotCounts[state], count)
+			normalized := normalizeTaskState(state)
+			if normalized == "" {
+				normalized = TaskPending
+			}
+			if gotCounts[normalized] != count {
+				return fmt.Errorf("script step %d task state %q count = %d, want %d", index, normalized, gotCounts[normalized], count)
 			}
 		}
 	}
@@ -634,8 +638,8 @@ func compareTasks(index int, runtime *DialogRuntime, want TasksExpectation) erro
 		if expected.Title != "" && task.Title != expected.Title {
 			return fmt.Errorf("script step %d task %q title = %q, want %q", index, task.ID, task.Title, expected.Title)
 		}
-		if expected.State != "" && normalizedTaskState(task) != expected.State {
-			return fmt.Errorf("script step %d task %q state = %q, want %q", index, task.ID, normalizedTaskState(task), expected.State)
+		if expected.State != "" && normalizedTaskState(task) != normalizeTaskState(expected.State) {
+			return fmt.Errorf("script step %d task %q state = %q, want %q", index, task.ID, normalizedTaskState(task), normalizeTaskState(expected.State))
 		}
 		if expected.Detail != "" && task.Detail != expected.Detail {
 			return fmt.Errorf("script step %d task %q detail = %q, want %q", index, task.ID, task.Detail, expected.Detail)
@@ -664,10 +668,11 @@ func findExpectedTask(runtime *DialogRuntime, want TaskExpectation) (TaskStatus,
 }
 
 func normalizedTaskState(task TaskStatus) string {
-	if task.State == "" {
+	state := normalizeTaskState(task.State)
+	if state == "" {
 		return TaskPending
 	}
-	return task.State
+	return state
 }
 
 func comparePrompt(index int, got PromptState, want PromptExpectation) error {
