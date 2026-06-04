@@ -75,8 +75,9 @@ const (
 	DECModeMouseX10           = 9
 	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
-	DECModeAltScreen          = 47
+	DECModeAllowColumnSwitch  = 40
 	DECModeReverseWrap        = 45
+	DECModeAltScreen          = 47
 	DECModeApplicationKeypad  = 66
 	DECModeBackarrowKey       = 67
 	DECModeAltScreenBuffer    = 1047
@@ -235,6 +236,7 @@ const (
 	CSIModeActionInsert            CSIModeActionType = "insertMode"
 	CSIModeActionLineFeed          CSIModeActionType = "lineFeedMode"
 	CSIModeActionColumn            CSIModeActionType = "columnMode"
+	CSIModeActionAllowColumnSwitch CSIModeActionType = "allowColumnSwitch"
 	CSIModeActionReverseVideo      CSIModeActionType = "reverseVideo"
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
@@ -579,6 +581,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationCursor, Enabled: enabled}}, true
 	case DECModeColumn:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionColumn, Enabled: enabled}}, true
+	case DECModeAllowColumnSwitch:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAllowColumnSwitch, Enabled: enabled}}, true
 	case DECModeReverseVideo:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseVideo, Enabled: enabled}}, true
 	case DECModeOrigin:
