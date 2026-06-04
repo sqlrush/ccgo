@@ -241,9 +241,9 @@ func TestFetchRemoteHistoryAcceptsWrappedDataPageFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			_, _ = w.Write([]byte(`{"data":{"events":[{"type":"status","session_id":"s","status":"latest"}],"has_more":true,"next_before_id":"evt_wrapped"}}`))
+			_, _ = w.Write([]byte(`{"data":{"events":[{"type":"status","session_id":"s","status":"latest"}],"has_more":1,"next_before_id":"evt_wrapped"}}`))
 		case "evt_wrapped":
-			_, _ = w.Write([]byte(`{"data":{"items":[{"type":"status","session_id":"s","status":"older"}]},"pagination":{"hasNext":"false","cursor":"ignored_when_complete"}}`))
+			_, _ = w.Write([]byte(`{"data":{"items":[{"type":"status","session_id":"s","status":"older"}]},"pagination":{"hasNext":"0","cursor":"ignored_when_complete"}}`))
 		default:
 			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
 		}

@@ -412,14 +412,19 @@ func setBoolField(raw map[string]json.RawMessage, name string, target *bool) err
 		*target = value
 		return nil
 	}
+	var number int
+	if err := json.Unmarshal(data, &number); err == nil {
+		*target = number != 0
+		return nil
+	}
 	var text string
 	if err := json.Unmarshal(data, &text); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	switch strings.ToLower(strings.TrimSpace(text)) {
-	case "true":
+	case "1", "t", "true", "yes", "y", "on":
 		*target = true
-	case "false":
+	case "0", "f", "false", "no", "n", "off":
 		*target = false
 	default:
 		return fmt.Errorf("%s must be a boolean", name)

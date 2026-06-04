@@ -145,6 +145,7 @@ M6 progress now includes:
 - `internal/session`: remote-history connection edges now use `edges[].cursor` as the event cursor when the nested node lacks an event ID, preserving pagination even when pageInfo omits a cursor.
 - `internal/session`: remote-history parsing now also accepts `eventList`/`event_list`, `sessionEvents`/`session_events`, and connection aliases such as `connection`, `eventConnection`, and `sessionEventsConnection`.
 - `internal/session`: remote-history pageInfo parsing now accepts previous/older pagination signals such as `hasPrevious`/`hasPreviousPage`, `hasOlder`/`more`, and before-id cursors such as `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor`.
+- `internal/session`: remote-history pagination bool parsing now accepts numeric and yes/no-style bool values in addition to JSON bools and true/false strings.
 - `internal/session`: remote-history response parsing now recursively unwraps GraphQL/session containers such as `data.session.events`, `data.projectSession.eventConnection`, `conversation`, and `remoteHistory` before applying `nodes`/`edges[].node` event-list and `pageInfo` pagination parsing.
 - `internal/session`: remote-history link pagination now accepts `links.next`/`links.previous`/`links.prev`/`links.older` string URLs or `{href,url,uri,link}` objects and extracts before/cursor query parameters for continuation.
 - `internal/session`: remote-history pagination now also accepts HTTP `Link` header URLs with `previous`/`prev`/`older`/`next` rels as continuation cursor fallbacks.
