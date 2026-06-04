@@ -445,11 +445,15 @@ func setStringField(raw map[string]json.RawMessage, name string, target *string)
 		return nil
 	}
 	var value string
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+	if err := json.Unmarshal(data, &value); err == nil {
+		*target = value
+		return nil
 	}
-	*target = value
-	return nil
+	if value, ok := jsonNumberString(data); ok {
+		*target = value
+		return nil
+	}
+	return fmt.Errorf("%s must be a string", name)
 }
 
 func setLinkField(raw map[string]json.RawMessage, names []string, target *string) error {
@@ -540,8 +544,21 @@ func remoteHistoryStringField(raw map[string]json.RawMessage, names ...string) s
 		if err := json.Unmarshal(value, &text); err == nil {
 			return text
 		}
+		if text, ok := jsonNumberString(value); ok {
+			return text
+		}
 	}
 	return ""
+}
+
+func jsonNumberString(data []byte) (string, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err != nil {
+		return "", false
+	}
+	return number.String(), true
 }
 
 func edgeJSON(edge map[string]json.RawMessage) json.RawMessage {
