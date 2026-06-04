@@ -59,15 +59,18 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*c = PastedContent{
-		ID:         historyIntJSONField(fields, historyIDFieldNames()...),
-		Type:       canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")),
-		Content:    historyStringJSONField(fields, "content", "value", "data", "base64"),
-		MediaType:  historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"),
-		Filename:   historyStringJSONField(fields, "filename", "fileName", "file_name", "name"),
-		Dimensions: historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"),
-		SourcePath: historyStringJSONField(fields, "sourcePath", "source_path", "filePath", "file_path", "path"),
+	if nested, ok := historyWrappedPayloadJSON(fields, historyPastedContentWrapperFieldNames(), historyPastedContentValueFieldNames(), nil); ok {
+		var content PastedContent
+		if err := json.Unmarshal(nested, &content); err != nil {
+			return err
+		}
+		historyApplyPastedContentFields(&content, fields, false)
+		*c = content
+		return nil
 	}
+	var content PastedContent
+	historyApplyPastedContentFields(&content, fields, true)
+	*c = content
 	return nil
 }
 
@@ -76,17 +79,70 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*c = StoredPastedContent{
-		ID:          historyIntJSONField(fields, historyIDFieldNames()...),
-		Type:        canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")),
-		Content:     historyStringJSONField(fields, "content", "value", "data", "base64"),
-		ContentHash: historyStringJSONField(fields, "contentHash", "content_hash", "hash", "contentDigest", "content_digest"),
-		MediaType:   historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"),
-		Filename:    historyStringJSONField(fields, "filename", "fileName", "file_name", "name"),
-		Dimensions:  historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"),
-		SourcePath:  historyStringJSONField(fields, "sourcePath", "source_path", "filePath", "file_path", "path"),
+	if nested, ok := historyWrappedPayloadJSON(fields, historyPastedContentWrapperFieldNames(), historyPastedContentValueFieldNames(), nil); ok {
+		var content StoredPastedContent
+		if err := json.Unmarshal(nested, &content); err != nil {
+			return err
+		}
+		historyApplyStoredPastedContentFields(&content, fields, false)
+		*c = content
+		return nil
 	}
+	var content StoredPastedContent
+	historyApplyStoredPastedContentFields(&content, fields, true)
+	*c = content
 	return nil
+}
+
+func historyApplyPastedContentFields(content *PastedContent, fields map[string]json.RawMessage, overwrite bool) {
+	if value := historyIntJSONField(fields, historyIDFieldNames()...); value > 0 && (overwrite || content.ID == 0) {
+		content.ID = value
+	}
+	if value := canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")); value != "" && (overwrite || content.Type == "") {
+		content.Type = value
+	}
+	if value := historyStringJSONField(fields, "content", "value", "data", "base64"); value != "" && (overwrite || content.Content == "") {
+		content.Content = value
+	}
+	if value := historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"); value != "" && (overwrite || content.MediaType == "") {
+		content.MediaType = value
+	}
+	if value := historyStringJSONField(fields, "filename", "fileName", "file_name", "name"); value != "" && (overwrite || content.Filename == "") {
+		content.Filename = value
+	}
+	if value := historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"); value != nil && (overwrite || content.Dimensions == nil) {
+		content.Dimensions = value
+	}
+	if value := historyStringJSONField(fields, "sourcePath", "source_path", "filePath", "file_path", "path"); value != "" && (overwrite || content.SourcePath == "") {
+		content.SourcePath = value
+	}
+}
+
+func historyApplyStoredPastedContentFields(content *StoredPastedContent, fields map[string]json.RawMessage, overwrite bool) {
+	if value := historyIntJSONField(fields, historyIDFieldNames()...); value > 0 && (overwrite || content.ID == 0) {
+		content.ID = value
+	}
+	if value := canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")); value != "" && (overwrite || content.Type == "") {
+		content.Type = value
+	}
+	if value := historyStringJSONField(fields, "content", "value", "data", "base64"); value != "" && (overwrite || content.Content == "") {
+		content.Content = value
+	}
+	if value := historyStringJSONField(fields, "contentHash", "content_hash", "hash", "contentDigest", "content_digest"); value != "" && (overwrite || content.ContentHash == "") {
+		content.ContentHash = value
+	}
+	if value := historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"); value != "" && (overwrite || content.MediaType == "") {
+		content.MediaType = value
+	}
+	if value := historyStringJSONField(fields, "filename", "fileName", "file_name", "name"); value != "" && (overwrite || content.Filename == "") {
+		content.Filename = value
+	}
+	if value := historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"); value != nil && (overwrite || content.Dimensions == nil) {
+		content.Dimensions = value
+	}
+	if value := historyStringJSONField(fields, "sourcePath", "source_path", "filePath", "file_path", "path"); value != "" && (overwrite || content.SourcePath == "") {
+		content.SourcePath = value
+	}
 }
 
 func canonicalPastedContentType(value string) string {
@@ -338,10 +394,18 @@ func (e *HistoryEntry) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*e = HistoryEntry{
-		Display:        historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"),
-		PastedContents: historyPastedContentsJSONField(fields, historyPastedContentContainerFieldNames()...),
+	if nested, ok := historyWrappedPayloadJSON(fields, historyEntryWrapperFieldNames(), historyEntryValueFieldNames(), historyPastedContentContainerFieldNames()); ok {
+		var entry HistoryEntry
+		if err := json.Unmarshal(nested, &entry); err != nil {
+			return err
+		}
+		historyApplyEntryFields(&entry, fields, false)
+		*e = entry
+		return nil
 	}
+	var entry HistoryEntry
+	historyApplyEntryFields(&entry, fields, true)
+	*e = entry
 	return nil
 }
 
@@ -350,22 +414,118 @@ func (e *LogEntry) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*e = LogEntry{
-		Display:        historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"),
-		PastedContents: historyStoredPastedContentsJSONField(fields, historyPastedContentContainerFieldNames()...),
-		Timestamp:      historyTimestampJSONField(fields, "timestamp", "createdAt", "created_at", "time", "unixTimestamp", "unix_timestamp"),
-		Project:        historyStringJSONField(fields, "project", "projectPath", "project_path", "cwd", "cwdPath", "cwd_path", "workingDirectory", "working_directory", "workspacePath", "workspace_path", "workspace"),
-		SessionID: firstHistoryID(
-			historyIDJSONField(fields, "sessionId"),
-			historyIDJSONField(fields, "sessionID"),
-			historyIDJSONField(fields, "session_id"),
-			historyIDJSONField(fields, "session"),
-			historyIDJSONField(fields, "sessionUuid"),
-			historyIDJSONField(fields, "sessionUUID"),
-			historyIDJSONField(fields, "session_uuid"),
-		),
+	if nested, ok := historyWrappedPayloadJSON(fields, historyEntryWrapperFieldNames(), historyEntryValueFieldNames(), historyPastedContentContainerFieldNames()); ok {
+		var entry LogEntry
+		if err := json.Unmarshal(nested, &entry); err != nil {
+			return err
+		}
+		historyApplyLogEntryFields(&entry, fields, false)
+		*e = entry
+		return nil
 	}
+	var entry LogEntry
+	historyApplyLogEntryFields(&entry, fields, true)
+	*e = entry
 	return nil
+}
+
+func historyApplyEntryFields(entry *HistoryEntry, fields map[string]json.RawMessage, overwrite bool) {
+	if value := historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"); value != "" && (overwrite || entry.Display == "") {
+		entry.Display = value
+	}
+	if value := historyPastedContentsJSONField(fields, historyPastedContentContainerFieldNames()...); value != nil && (overwrite || len(entry.PastedContents) == 0) {
+		entry.PastedContents = value
+	}
+}
+
+func historyApplyLogEntryFields(entry *LogEntry, fields map[string]json.RawMessage, overwrite bool) {
+	if value := historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"); value != "" && (overwrite || entry.Display == "") {
+		entry.Display = value
+	}
+	if value := historyStoredPastedContentsJSONField(fields, historyPastedContentContainerFieldNames()...); value != nil && (overwrite || len(entry.PastedContents) == 0) {
+		entry.PastedContents = value
+	}
+	if value := historyTimestampJSONField(fields, "timestamp", "createdAt", "created_at", "time", "unixTimestamp", "unix_timestamp"); value != 0 && (overwrite || entry.Timestamp == 0) {
+		entry.Timestamp = value
+	}
+	if value := historyStringJSONField(fields, "project", "projectPath", "project_path", "cwd", "cwdPath", "cwd_path", "workingDirectory", "working_directory", "workspacePath", "workspace_path", "workspace"); value != "" && (overwrite || entry.Project == "") {
+		entry.Project = value
+	}
+	if value := firstHistoryID(
+		historyIDJSONField(fields, "sessionId"),
+		historyIDJSONField(fields, "sessionID"),
+		historyIDJSONField(fields, "session_id"),
+		historyIDJSONField(fields, "session"),
+		historyIDJSONField(fields, "sessionUuid"),
+		historyIDJSONField(fields, "sessionUUID"),
+		historyIDJSONField(fields, "session_uuid"),
+	); value != "" && (overwrite || entry.SessionID == "") {
+		entry.SessionID = value
+	}
+}
+
+func historyEntryWrapperFieldNames() []string {
+	return []string{"entry", "record", "item", "payload", "body", "data", "result", "value", "historyEntry", "history_entry", "logEntry", "log_entry"}
+}
+
+func historyEntryValueFieldNames() []string {
+	return []string{"display", "prompt", "text", "input", "content", "value"}
+}
+
+func historyPastedContentWrapperFieldNames() []string {
+	return []string{"pastedContent", "pasted_content", "storedPastedContent", "stored_pasted_content", "attachment", "paste", "entry", "record", "item", "payload", "body", "data", "result", "value"}
+}
+
+func historyPastedContentValueFieldNames() []string {
+	return []string{"content", "value", "data", "base64"}
+}
+
+func historyWrappedPayloadJSON(fields map[string]json.RawMessage, wrappers []string, scalarDirect []string, containerDirect []string) (json.RawMessage, bool) {
+	if historyHasScalarPayload(fields, scalarDirect) || historyHasContainerPayload(fields, containerDirect) {
+		return nil, false
+	}
+	for _, name := range wrappers {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) > 0 && trimmed[0] == '{' {
+			return raw, true
+		}
+	}
+	return nil, false
+}
+
+func historyHasScalarPayload(fields map[string]json.RawMessage, names []string) bool {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+			continue
+		}
+		if trimmed[0] != '{' {
+			return true
+		}
+	}
+	return false
+}
+
+func historyHasContainerPayload(fields map[string]json.RawMessage, names []string) bool {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstHistoryID(values ...contracts.ID) contracts.ID {

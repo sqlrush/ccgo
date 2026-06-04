@@ -482,7 +482,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：prompt history 与 interaction script 的 pasted-content ID 现在接受 `pastedContentId`/`attachmentID`/`contentID`/`imageID` 等别名，并容忍数字字符串，数组和单对象 attachment fixture 可保留原始 pasted-content ID。
 
-本轮补充：prompt history 的 `pastedContents`/`pasted_contents` 现在除 map 外也接受 pasted-content 数组和单对象，runtime history 与 stored history 都会按内容内 ID/ID 别名重建 map。
+本轮补充：prompt history 的 `HistoryEntry`/`LogEntry` 以及 `pastedContents`/`pasted_contents` item 现在接受 `entry`/`record`/`item`/`payload` 等 wrapper；pasted contents 除 map 外也接受数组和单对象，runtime history 与 stored history 都会按内容内 ID/ID 别名重建 map。
 
 本轮补充：prompt/history pasted-content 引用解析现在接受大小写差异和 `pasted image`/`input-image`/`input_text` 等占位符别名，文本展开、图片引用过滤和 next pasted ID seed 共用同一识别面。
 

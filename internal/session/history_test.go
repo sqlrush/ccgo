@@ -265,6 +265,31 @@ func TestHistoryEntryAcceptsPastedContentContainerAliases(t *testing.T) {
 	}
 }
 
+func TestHistoryEntryAcceptsWrapperObjects(t *testing.T) {
+	var entry HistoryEntry
+	data := `{
+		"historyEntry": {
+			"prompt": "restore [Pasted text #12] [Image #13]",
+			"attachments": [
+				{"record": {"attachmentID": "12", "kind": "input_text", "value": "wrapped memo"}},
+				{"payload": {"imageID": "13", "type": "pasted-image", "data": "CCCC", "mimeType": "image/png", "name": "wrapped.png"}}
+			]
+		}
+	}`
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.Display != "restore [Pasted text #12] [Image #13]" {
+		t.Fatalf("wrapped display = %#v", entry)
+	}
+	if got := entry.PastedContents[12]; got.ID != 12 || got.Type != PastedContentText || got.Content != "wrapped memo" {
+		t.Fatalf("wrapped text = %#v", got)
+	}
+	if got := entry.PastedContents[13]; got.ID != 13 || got.Type != PastedContentImage || got.Content != "CCCC" || got.MediaType != "image/png" || got.Filename != "wrapped.png" {
+		t.Fatalf("wrapped image = %#v", got)
+	}
+}
+
 func TestImageDimensionsWidthHeightDefaultDisplaySize(t *testing.T) {
 	var dimensions ImageDimensions
 	if err := json.Unmarshal([]byte(`{"width":4000,"height":2000}`), &dimensions); err != nil {
@@ -339,6 +364,33 @@ func TestLoadHistoryAcceptsStoredPastedContentContainerAliases(t *testing.T) {
 	}
 	if got := history[0].PastedContents[11]; got.ID != 11 || got.Type != PastedContentText || got.Content != "expanded container memo" || got.MediaType != "text/plain" {
 		t.Fatalf("stored container text = %#v", got)
+	}
+}
+
+func TestLoadHistoryAcceptsWrappedEntriesAndPastedContentItems(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"payload":{"input":"restore [Pasted text #14] [Image #15]","attachments":[{"entry":{"contentID":"14","pasted_type":"input_text","contentDigest":"wrapped_hash","contentType":"text/plain"}},{"item":{"imageID":"15","kind":"input_image","hash":"image_hash","mimeType":"image/png","fileName":"wrapped-history.png"}}]},"createdAt":"1970-01-01T00:00:01Z","workspacePath":"/repo","session":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, func(hash string) (string, bool) {
+		if hash == "wrapped_hash" {
+			return "expanded wrapped memo", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Display != "restore [Pasted text #14] [Image #15]" {
+		t.Fatalf("history = %#v", history)
+	}
+	if got := history[0].PastedContents[14]; got.ID != 14 || got.Type != PastedContentText || got.Content != "expanded wrapped memo" || got.MediaType != "text/plain" {
+		t.Fatalf("wrapped stored text = %#v", got)
+	}
+	if got := history[0].PastedContents[15]; got.ID != 15 || got.Type != PastedContentImage || got.MediaType != "image/png" || got.Filename != "wrapped-history.png" {
+		t.Fatalf("wrapped stored image = %#v", got)
 	}
 }
 
