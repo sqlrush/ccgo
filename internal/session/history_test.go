@@ -158,8 +158,21 @@ func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := entry.PastedContents[1]
-	if got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 {
+	if got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 || got.Dimensions.DisplayHeight != 2000 {
 		t.Fatalf("pasted content aliases = %#v", got)
+	}
+}
+
+func TestImageDimensionsWidthHeightDefaultDisplaySize(t *testing.T) {
+	var dimensions ImageDimensions
+	if err := json.Unmarshal([]byte(`{"width":4000,"height":2000}`), &dimensions); err != nil {
+		t.Fatal(err)
+	}
+	if dimensions.OriginalWidth != 4000 || dimensions.OriginalHeight != 2000 || dimensions.DisplayWidth != 4000 || dimensions.DisplayHeight != 2000 {
+		t.Fatalf("dimensions = %#v", dimensions)
+	}
+	if got := ImageMetadataText(&dimensions, "/tmp/chart.png"); got != "[Image: source: /tmp/chart.png]" {
+		t.Fatalf("metadata = %q", got)
 	}
 }
 

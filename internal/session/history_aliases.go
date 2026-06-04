@@ -41,6 +41,12 @@ func (d *ImageDimensions) UnmarshalJSON(data []byte) error {
 	if d.OriginalHeight == 0 {
 		d.OriginalHeight = aux.Height
 	}
+	if d.DisplayWidth == 0 {
+		d.DisplayWidth = d.OriginalWidth
+	}
+	if d.DisplayHeight == 0 {
+		d.DisplayHeight = d.OriginalHeight
+	}
 	return nil
 }
 

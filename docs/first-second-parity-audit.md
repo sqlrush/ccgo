@@ -315,6 +315,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script loading now recurses through outer API/fixture wrappers such as `data`/`payload`/`body`/`result`/`response`/`recording`/`session`/`run`.
 - `internal/contracts`/`internal/session`: remote history `SDKEvent` message extraction now recurses through nested payload wrappers such as `record`/`entry`/`item`/`event`/`result`/`response`/`output`.
 - `internal/contracts`/`internal/session`: content block `type` decoding now normalizes camel/kebab/compact aliases such as `toolUse`, `tool-result`, `cacheEdits`, `inputImage`, and `chain-of-thought`.
+- `internal/session`: image history dimensions now default display size to original size when only `width`/`height` or original dimensions are present, preserving source metadata for single-size image fixtures.
 
 Still missing for full M6/M7 parity:
 
