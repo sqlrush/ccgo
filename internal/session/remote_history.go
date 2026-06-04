@@ -282,7 +282,7 @@ func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage
 		names  []string
 		target *string
 	}{
-		{names: []string{"next", "next_link", "nextLink", "next_url", "nextUrl", "next_href", "nextHref"}, target: &r.NextLink},
+		{names: []string{"next", "next_link", "nextLink", "next_url", "nextUrl", "next_href", "nextHref", "@odata.nextLink", "@odata.next_link", "odata.nextLink", "odata.next_link", "__next"}, target: &r.NextLink},
 		{names: []string{"previous", "previous_link", "previousLink", "previous_url", "previousUrl", "previous_href", "previousHref"}, target: &r.PreviousLink},
 		{names: []string{"prev", "prev_link", "prevLink", "prev_url", "prevUrl", "prev_href", "prevHref"}, target: &r.PrevLink},
 		{names: []string{"older", "older_link", "olderLink", "older_url", "olderUrl", "older_href", "olderHref"}, target: &r.OlderLink},
@@ -963,6 +963,10 @@ func remoteHistoryLinkCursor(link string) string {
 			query.Get("pageToken"),
 			query.Get("continuation_token"),
 			query.Get("continuationToken"),
+			query.Get("$skiptoken"),
+			query.Get("$skipToken"),
+			query.Get("skiptoken"),
+			query.Get("skipToken"),
 			query.Get("previous_cursor"),
 			query.Get("previousCursor"),
 			query.Get("prev_cursor"),
