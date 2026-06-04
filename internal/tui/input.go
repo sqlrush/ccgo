@@ -1055,13 +1055,25 @@ func parseImageHint(seq string) (imageHint, bool) {
 		return imageHint{}, false
 	}
 	payload := stripOSCTerminator(strings.TrimPrefix(seq, prefix))
-	metadata, content, _ := strings.Cut(payload, ":")
+	metadata, content := splitImageHintPayload(payload)
 	name := ""
 	mediaType := ""
 	sourcePath := ""
 	dimensions := session.ImageDimensions{}
 	for _, field := range strings.Split(metadata, ";") {
 		if raw, ok := strings.CutPrefix(field, "name="); ok {
+			name = decodeImageName(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "filename="); ok {
+			name = decodeImageName(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "fileName="); ok {
+			name = decodeImageName(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "file_name="); ok {
 			name = decodeImageName(raw)
 			continue
 		}
@@ -1077,11 +1089,23 @@ func parseImageHint(seq string) (imageHint, bool) {
 			mediaType = strings.TrimSpace(raw)
 			continue
 		}
+		if raw, ok := strings.CutPrefix(field, "mimeType="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
 		if raw, ok := strings.CutPrefix(field, "mime="); ok {
 			mediaType = strings.TrimSpace(raw)
 			continue
 		}
 		if raw, ok := strings.CutPrefix(field, "mime_type="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "contentType="); ok {
+			mediaType = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "content_type="); ok {
 			mediaType = strings.TrimSpace(raw)
 			continue
 		}
@@ -1102,6 +1126,26 @@ func parseImageHint(seq string) (imageHint, bool) {
 			continue
 		}
 		if raw, ok := strings.CutPrefix(field, "file_path="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "source="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "sourceURL="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "source_url="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "url="); ok {
+			sourcePath = strings.TrimSpace(raw)
+			continue
+		}
+		if raw, ok := strings.CutPrefix(field, "uri="); ok {
 			sourcePath = strings.TrimSpace(raw)
 			continue
 		}
@@ -1152,6 +1196,13 @@ func parseImageHint(seq string) (imageHint, bool) {
 	}
 	display = "[Image: " + name + "]"
 	return imageHint{Display: display, Content: content, MediaType: mediaType, Filename: name, Dimensions: dimensionPtr, SourcePath: sourcePath}, true
+}
+
+func splitImageHintPayload(payload string) (string, string) {
+	if index := strings.LastIndex(payload, ":"); index >= 0 {
+		return payload[:index], payload[index+1:]
+	}
+	return payload, ""
 }
 
 func stripOSCTerminator(payload string) string {

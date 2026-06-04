@@ -891,6 +891,24 @@ func TestParseImageHintAcceptsSTTerminatorAndBase64Name(t *testing.T) {
 	}
 }
 
+func TestParseImageHintAcceptsMetadataAliases(t *testing.T) {
+	key := ParseKey("\x1b]1337;File=fileName=diagram.webp;contentType=image/webp;sourceURL=file:///tmp/diagram.webp;originalWidth=2400;originalHeight=1200;displayWidth=600;displayHeight=300;inline=1:BBBB\a")
+	if key.Type != KeyImageHint || key.Text != "[Image: diagram.webp]" || key.Filename != "diagram.webp" || key.MediaType != "image/webp" || key.Content != "BBBB" || key.SourcePath != "file:///tmp/diagram.webp" {
+		t.Fatalf("key = %#v", key)
+	}
+	if key.Dimensions == nil || key.Dimensions.OriginalWidth != 2400 || key.Dimensions.OriginalHeight != 1200 || key.Dimensions.DisplayWidth != 600 || key.Dimensions.DisplayHeight != 300 {
+		t.Fatalf("dimensions = %#v", key.Dimensions)
+	}
+
+	prompt := NewPromptState(nil)
+	prompt.EnablePasteReferences()
+	prompt.Apply(ParseKey("\x1b]1337;File=file_name=shot.png;mimeType=image/png;source=/tmp/shot.png;inline=1:CCCC\a"))
+	image := prompt.PastedContents[1]
+	if prompt.Text != "[Image #1]" || image.Filename != "shot.png" || image.MediaType != "image/png" || image.Content != "CCCC" || image.SourcePath != "/tmp/shot.png" {
+		t.Fatalf("prompt = %#v image=%#v", prompt, image)
+	}
+}
+
 func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 	cases := []struct {
 		seq  string
