@@ -650,6 +650,40 @@ func TestFetchRemoteHistoryAcceptsConnectionWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsValueAndResourceAliases(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"value":[{"type":"status","eventId":"evt_value","session_id":"s","status":"latest"}],"hasNext":true,"nextPageToken":"evt_value"}`))
+		case "evt_value":
+			_, _ = w.Write([]byte(`{"history":{"edges":[{"cursor":"evt_resource","resource":{"type":"status","session_id":"s","status":"resource"}}],"pageInfo":{"hasNextPage":true}}}`))
+		case "evt_resource":
+			_, _ = w.Write([]byte(`{"resources":[{"type":"status","event_id":"evt_old","session_id":"s","status":"oldest"}],"has_more":false}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 3 || len(events.Events) != 3 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_value" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_resource" || events.Events[1].Status != "resource" || events.Events[2].ID != "evt_old" || events.Events[2].Status != "oldest" {
+		t.Fatalf("events = %#v", events.Events)
+	}
+	if len(seen) != 3 || seen[1].Get("before_id") != "evt_value" || seen[2].Get("before_id") != "evt_resource" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryUsesEdgeCursorWhenNodeIDMissing(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

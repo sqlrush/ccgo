@@ -52,6 +52,10 @@ type sessionEventsResponse struct {
 	Events               []contracts.SDKEvent `json:"events"`
 	Items                []contracts.SDKEvent `json:"items"`
 	Results              []contracts.SDKEvent `json:"results"`
+	Value                []contracts.SDKEvent `json:"value"`
+	Values               []contracts.SDKEvent `json:"values"`
+	Resources            []contracts.SDKEvent `json:"resources"`
+	Collection           []contracts.SDKEvent `json:"collection"`
 	Records              []contracts.SDKEvent `json:"records"`
 	Rows                 []contracts.SDKEvent `json:"rows"`
 	Entries              []contracts.SDKEvent `json:"entries"`
@@ -140,6 +144,10 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		{name: "events", target: &r.Events},
 		{name: "items", target: &r.Items},
 		{name: "results", target: &r.Results},
+		{name: "value", target: &r.Value},
+		{name: "values", target: &r.Values},
+		{name: "resources", target: &r.Resources},
+		{name: "collection", target: &r.Collection},
 		{name: "records", target: &r.Records},
 		{name: "rows", target: &r.Rows},
 		{name: "entries", target: &r.Entries},
@@ -380,6 +388,18 @@ func (r *sessionEventsResponse) mergeFrom(other sessionEventsResponse) {
 	if r.Results == nil {
 		r.Results = other.Results
 	}
+	if r.Value == nil {
+		r.Value = other.Value
+	}
+	if r.Values == nil {
+		r.Values = other.Values
+	}
+	if r.Resources == nil {
+		r.Resources = other.Resources
+	}
+	if r.Collection == nil {
+		r.Collection = other.Collection
+	}
 	if r.Records == nil {
 		r.Records = other.Records
 	}
@@ -558,7 +578,7 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 	events := make([]contracts.SDKEvent, 0, len(rawEdges))
 	for index, edge := range rawEdges {
 		cursor := remoteHistoryStringField(edge, "cursor")
-		rawEvent := firstRawField(edge, "node", "event", "record", "item")
+		rawEvent := firstRawField(edge, "node", "event", "record", "item", "resource", "value")
 		if rawEvent == nil {
 			rawEvent = edgeJSON(edge)
 		}
@@ -1038,7 +1058,7 @@ func firstEventList(values ...[]contracts.SDKEvent) []contracts.SDKEvent {
 }
 
 func responseEventList(response sessionEventsResponse) []contracts.SDKEvent {
-	return firstEventList(response.Data, response.Events, response.Items, response.Results, response.Records, response.Rows, response.Entries, response.Messages, response.History, response.Nodes, response.Edges)
+	return firstEventList(response.Data, response.Events, response.Items, response.Results, response.Value, response.Values, response.Resources, response.Collection, response.Records, response.Rows, response.Entries, response.Messages, response.History, response.Nodes, response.Edges)
 }
 
 func cloneHeader(header http.Header) http.Header {
