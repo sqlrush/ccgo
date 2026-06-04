@@ -296,6 +296,14 @@ func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
 	if got := TerminalVisibleText(shellInput); got != "xyz" {
 		t.Fatalf("shell visible = %q", got)
 	}
+	vsCodeShellInput := "m" + OSCSequence(OSCVSShellIntegration, "C") + "n"
+	vsCodeShellActions := parser.Feed(vsCodeShellInput)
+	if len(vsCodeShellActions) != 3 || vsCodeShellActions[1].Type != TerminalActionShell || vsCodeShellActions[1].OSC.Shell.Marker != "commandStart" {
+		t.Fatalf("vscode shell actions = %#v", vsCodeShellActions)
+	}
+	if got := TerminalVisibleText(vsCodeShellInput); got != "mn" {
+		t.Fatalf("vscode shell visible = %q", got)
+	}
 }
 
 func TestTerminalParserResetClearsStyle(t *testing.T) {

@@ -12,18 +12,19 @@ import (
 )
 
 const (
-	OSCPrefix           = "\x1b]"
-	OSCTerminator       = "\x07"
-	OSCStringTerminator = "\x1b\\"
-	OSCSetTitleAndIcon  = "0"
-	OSCCurrentDirectory = "7"
-	OSCHyperlink        = "8"
-	OSCITerm2           = "9"
-	OSCClipboard        = "52"
-	OSCKitty            = "99"
-	OSCShellIntegration = "133"
-	OSCGhostty          = "777"
-	OSCTabStatus        = "21337"
+	OSCPrefix             = "\x1b]"
+	OSCTerminator         = "\x07"
+	OSCStringTerminator   = "\x1b\\"
+	OSCSetTitleAndIcon    = "0"
+	OSCCurrentDirectory   = "7"
+	OSCHyperlink          = "8"
+	OSCITerm2             = "9"
+	OSCClipboard          = "52"
+	OSCKitty              = "99"
+	OSCShellIntegration   = "133"
+	OSCVSShellIntegration = "633"
+	OSCGhostty            = "777"
+	OSCTabStatus          = "21337"
 
 	ITerm2Progress              = "4"
 	ITerm2ProgressClear         = "0"
@@ -227,7 +228,7 @@ func ParseOSCContent(content string) OSCAction {
 			return OSCAction{Type: OSCActionNotification, Notification: notification}
 		}
 		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
-	case OSCShellIntegration:
+	case OSCShellIntegration, OSCVSShellIntegration:
 		if shell, ok := ParseShellIntegrationPayload(data); ok {
 			return OSCAction{Type: OSCActionShell, Shell: shell}
 		}

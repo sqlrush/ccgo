@@ -4147,6 +4147,10 @@ func TestParseOSCContent(t *testing.T) {
 	if shellEnd.Type != OSCActionShell || shellEnd.Shell.Marker != "commandEnd" || shellEnd.Shell.RawMarker != "D" || shellEnd.Shell.ExitCode != 127 || !shellEnd.Shell.HasExitCode {
 		t.Fatalf("shell command end = %#v", shellEnd)
 	}
+	vsCodeShell := ParseOSCContent("633;C")
+	if vsCodeShell.Type != OSCActionShell || vsCodeShell.Shell.Marker != "commandStart" || vsCodeShell.Shell.RawMarker != "C" {
+		t.Fatalf("vscode shell command start = %#v", vsCodeShell)
+	}
 
 	unknown := ParseOSCContent("999;noop")
 	if unknown.Type != OSCActionUnknown || unknown.Sequence != OSCPrefix+"999;noop" {
