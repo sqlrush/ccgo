@@ -361,6 +361,40 @@ func TestSidechainManagerCancelAndFailLifecycle(t *testing.T) {
 	}
 }
 
+func TestSidechainFinishNormalizesStatusAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	if _, err := manager.Start(SidechainOptions{ID: "alias-success", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := manager.Finish("alias-success", "success", "done", time.Unix(110, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stringField(summary.Content, "status") != SidechainStatusCompleted {
+		t.Fatalf("summary status = %#v", summary.Content)
+	}
+	state, err := FindSidechainState(sessionPath, sessionID, "alias-success")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != SidechainStatusCompleted || state.Summary != "done" {
+		t.Fatalf("state = %#v", state)
+	}
+
+	if _, err := manager.Start(SidechainOptions{ID: "alias-error", StartedAt: time.Unix(120, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := manager.Finish("alias-error", "error", "boom", time.Unix(130, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stringField(failed.Content, "status") != SidechainStatusFailed {
+		t.Fatalf("failed status = %#v", failed.Content)
+	}
+}
+
 func TestBuildSidechainResumeContext(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

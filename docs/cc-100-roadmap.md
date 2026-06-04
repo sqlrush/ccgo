@@ -92,6 +92,8 @@ M6 补充：remote history 现在也接受 HTTP `Link` header 中 `rel="previous
 
 M6 补充：sidechain/subagent state loader 现在接受 `subagent_start`/`agent_start`/`task_start` 和 `sidechain_end`/`subagent_finish`/`agent_finish`/`task_summary` 等 subtype 别名，并归一化 `active`/`success`/`canceled`/`error` 等运行状态别名，同时读取 `subagentId`/`agentID`、`subagentType`、`finalSummary` 等 content 字段。
 
+M6 补充：sidechain runtime finish 现在会在写入 summary 前把 `success`/`error`/`canceled` 等状态别名归一为 `completed`/`failed`/`cancelled`，让 sidechain transcript 与主 transcript 的 lifecycle 输出保持 canonical。
+
 M6 补充：sidechain agent metadata sidecar 读取现在接受 `type`/`subagentType`/`agentName`/`name`、`workspacePath`/`workspace`/`path`/`directory`、`taskDescription`/`prompt`/`input`/`command`/`title` 等字段别名，兼容历史或第三方生成的 subagent metadata。
 
 M6 补充：transcript metadata loader 现在会按 `messageId` 建立 file-history snapshot 和 attribution snapshot 索引，并接受 `message_id`/`messageUuid`/`id` 等字段别名，和官方按消息恢复 snapshot 的语义对齐。

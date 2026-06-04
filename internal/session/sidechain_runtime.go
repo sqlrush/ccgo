@@ -118,6 +118,7 @@ func (r SidechainRuntime) Finish(run SidechainRun, status string, summary string
 	if run.ID == "" {
 		return TranscriptMessage{}, os.ErrInvalid
 	}
+	status = normalizeSidechainStatus(status)
 	if status == "" {
 		status = SidechainStatusCompleted
 	}

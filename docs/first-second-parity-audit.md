@@ -160,6 +160,7 @@ M6 progress now includes:
 - `internal/session`: remote-history pagination now also accepts HTTP `Link` header URLs with `previous`/`prev`/`older`/`next` rels as continuation cursor fallbacks.
 - `internal/session`: sidechain state loading now accepts legacy subagent/agent/task start and finish subtype aliases, broader sidechain/subagent ID and type fields, summary aliases, and common running/completed/cancelled/failed status aliases.
 - `internal/session`: sidechain agent metadata sidecar loading now accepts broader agent type, workspace/worktree path, and task-description field aliases such as `subagentType`, `agentName`, `workspacePath`, `taskDescription`, `prompt`, and `title`.
+- `internal/session`: sidechain runtime finish now canonicalizes status aliases such as `success`, `error`, and `canceled` before writing summary records, keeping sidechain and main transcript lifecycle output stable.
 - `internal/session`: transcript metadata loading now indexes file-history and attribution snapshots by message ID, with aliases such as `message_id`, `messageUuid`, and `id`, while preserving raw snapshot lists.
 - `internal/session`: transcript indexes and session search now recover message `gitBranch` values, accept `git_branch`/`branch` aliases, and can match sessions by branch name.
 - `internal/session`: full transcript title derivation now matches indexed/lite fallback order: custom title, AI title, first user prompt, last-prompt metadata, then summary.
