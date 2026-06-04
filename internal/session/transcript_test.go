@@ -513,8 +513,8 @@ func TestBuildResumeConversationConvertsTranscriptChain(t *testing.T) {
 
 func TestBuildResumeConversationAcceptsContentBlockFieldAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
-		`{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","cacheControl":{"type":"ephemeral","ttl":"5m"}},{"type":"cache_edits","cacheReference":"cache_ref_1","edits":[{"type":"clear","cacheReference":"cache_ref_0"}]}]}}`,
-		`{"type":"user","uuid":"tr1","sessionId":"s1","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z","content":[{"type":"tool_result","toolUseId":"toolu_1","isError":true,"content":"denied"}]}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"tool_use","id":9001,"name":"Read","cacheControl":{"type":"ephemeral","ttl":"5m"}},{"type":"cache_edits","cacheReference":"cache_ref_1","edits":[{"type":"clear","cacheReference":"cache_ref_0"}]}]}}`,
+		`{"type":"user","uuid":"tr1","sessionId":"s1","parentUuid":"a1","timestamp":"2026-01-01T00:00:02Z","content":[{"type":"tool_result","toolUseId":9001,"isError":true,"content":"denied"}]}`,
 	})
 	resume, err := BuildResumeConversation(path, "tr1")
 	if err != nil {
@@ -530,6 +530,9 @@ func TestBuildResumeConversationAcceptsContentBlockFieldAliases(t *testing.T) {
 	if len(assistant.Content) != 2 {
 		t.Fatalf("assistant content = %#v", assistant.Content)
 	}
+	if assistant.Content[0].ID != "9001" {
+		t.Fatalf("numeric tool use id = %#v", assistant.Content[0])
+	}
 	if assistant.Content[0].CacheControl == nil || assistant.Content[0].CacheControl.Type != "ephemeral" || assistant.Content[0].CacheControl.TTL != "5m" {
 		t.Fatalf("cacheControl alias = %#v", assistant.Content[0].CacheControl)
 	}
@@ -537,7 +540,7 @@ func TestBuildResumeConversationAcceptsContentBlockFieldAliases(t *testing.T) {
 		t.Fatalf("cacheReference aliases = %#v", assistant.Content[1])
 	}
 	user := resume.Messages[1]
-	if len(user.Content) != 1 || user.Content[0].ToolUseID != "toolu_1" || !user.Content[0].IsError {
+	if len(user.Content) != 1 || user.Content[0].ToolUseID != "9001" || !user.Content[0].IsError {
 		t.Fatalf("tool result aliases = %#v", user.Content)
 	}
 }

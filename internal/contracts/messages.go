@@ -40,19 +40,44 @@ type ContentBlock struct {
 }
 
 func (b *ContentBlock) UnmarshalJSON(data []byte) error {
-	type contentBlockJSON ContentBlock
-	var base contentBlockJSON
-	if err := json.Unmarshal(data, &base); err != nil {
+	var aux struct {
+		Type           ContentBlockType `json:"type"`
+		Text           string           `json:"text"`
+		Source         any              `json:"source"`
+		ID             ID               `json:"id"`
+		Name           string           `json:"name"`
+		Input          json.RawMessage  `json:"input"`
+		Content        any              `json:"content"`
+		IsError        bool             `json:"is_error"`
+		ToolUseID      ID               `json:"tool_use_id"`
+		CacheControl   *CacheControl    `json:"cache_control"`
+		CacheReference string           `json:"cache_reference"`
+		Edits          []CacheEdit      `json:"edits"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	*b = ContentBlock(base)
+	*b = ContentBlock{
+		Type:           aux.Type,
+		Text:           aux.Text,
+		Source:         aux.Source,
+		ID:             string(aux.ID),
+		Name:           aux.Name,
+		Input:          aux.Input,
+		Content:        aux.Content,
+		IsError:        aux.IsError,
+		ToolUseID:      string(aux.ToolUseID),
+		CacheControl:   aux.CacheControl,
+		CacheReference: aux.CacheReference,
+		Edits:          aux.Edits,
+	}
 
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
 	if b.ToolUseID == "" {
-		b.ToolUseID = stringJSONField(fields, "toolUseId", "toolUseID")
+		b.ToolUseID = idJSONField(fields, "toolUseId", "toolUseID")
 	}
 	if _, hasCanonical := fields["is_error"]; !hasCanonical {
 		if value, ok := boolJSONField(fields, "isError"); ok {
@@ -112,6 +137,20 @@ func stringJSONField(fields map[string]json.RawMessage, names ...string) string 
 		var value string
 		if err := json.Unmarshal(raw, &value); err == nil {
 			return value
+		}
+	}
+	return ""
+}
+
+func idJSONField(fields map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value ID
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return string(value)
 		}
 	}
 	return ""
