@@ -71,6 +71,7 @@ const (
 	DECModeReverseVideo       = 5
 	DECModeOrigin             = 6
 	DECModeAutoWrap           = 7
+	DECModeAutoRepeat         = 8
 	DECModeMouseX10           = 9
 	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
@@ -236,6 +237,7 @@ const (
 	CSIModeActionReverseVideo      CSIModeActionType = "reverseVideo"
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
+	CSIModeActionAutoRepeat        CSIModeActionType = "autoRepeat"
 	CSIModeActionReverseWrap       CSIModeActionType = "reverseWrap"
 	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
 	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
@@ -581,6 +583,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionOrigin, Enabled: enabled}}, true
 	case DECModeAutoWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: enabled}}, true
+	case DECModeAutoRepeat:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoRepeat, Enabled: enabled}}, true
 	case DECModeReverseWrap:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionReverseWrap, Enabled: enabled}}, true
 	case DECModeMouseX10:

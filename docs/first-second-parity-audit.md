@@ -216,6 +216,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes ordinary ECMA insert/replace mode (`CSI 4h/l`) as a structured `insertMode` action.
 - `internal/tui`: terminal CSI parser now recognizes ordinary ECMA line-feed/new-line mode (`CSI 20h/l`) as a structured `lineFeedMode` action.
 - `internal/tui`: terminal CSI parser now recognizes DEC origin mode (`?6h/l`) and auto-wrap mode (`?7h/l`) as structured mode actions.
+- `internal/tui`: terminal CSI parser now recognizes DEC auto-repeat mode (`?8h/l`) as a structured `autoRepeat` mode action.
 - `internal/tui`: terminal CSI parser now recognizes DEC cursor blink mode (`?12h/l`) as a structured `cursorBlink` mode action.
 - `internal/tui`: terminal CSI parser now recognizes xterm/DEC reverse-wraparound mode (`?45h/l`) as a structured `reverseWrap` mode action.
 - `internal/tui`: terminal CSI parser now recognizes DEC application keypad mode (`?66h/l`) as a structured `applicationKeypad` mode action.
