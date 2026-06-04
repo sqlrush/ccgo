@@ -4921,6 +4921,30 @@ func TestRunInteractionScriptAcceptsPressFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsActionDiscriminatorAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"action":"type","value":"hi","expectPrompt":{"text":"hi"}},
+		{"type":"press","payload":"enter","expectEvent":{"type":"prompt_submitted","value":"hi"},"expectPrompt":{"empty":true}},
+		{"kind":"keys","data":["ctrl-x","ctrl-k"],"expectEvent":{"type":"kill_agents"}},
+		{"name":"paste","payload":"clip","expectPrompt":{"text":"[Pasted text #1]","expandedText":"clip","pastedContentCount":1}},
+		{"operation":"status","value":"busy","expectStatusContains":"busy"},
+		{"action":"resize","value":[50,9],"expectScreen":{"columns":50,"rows":9}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "hi" ||
+		result.Events[1].Type != ScreenEventKillAgents {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keybindings":{"keys":"ctrl-r","command":"submitPrompt"}},

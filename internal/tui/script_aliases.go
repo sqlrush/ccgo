@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"strings"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/session"
@@ -844,7 +845,123 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectSnapshotNotCamel != nil {
 		step.ExpectSnapshotNotContains = stringListValue(fields.ExpectSnapshotNotCamel)
 	}
+	applyScriptStepActionAlias(step, fieldMap)
 	return nil
+}
+
+func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMessage) {
+	action := canonicalScriptStepAction(stringJSONField(fields,
+		"action",
+		"step_action",
+		"stepAction",
+		"operation",
+		"op",
+		"command",
+		"kind",
+		"name",
+		"type",
+	))
+	switch action {
+	case "key", "press", "keypress", "key-press", "shortcut", "shortcut-key":
+		if step.Key == "" && len(step.Keys) == 0 {
+			if values := stringListJSONField(fields, "value", "payload", "data", "key", "keys", "shortcut", "sequence", "input", "text"); len(values) == 1 {
+				step.Key = values[0]
+			} else if len(values) > 1 {
+				step.Keys = append(step.Keys, values...)
+			}
+		}
+	case "keys", "presses", "shortcuts", "sequence", "key-sequence":
+		if step.Key == "" && len(step.Keys) == 0 {
+			step.Keys = append(step.Keys, stringListJSONField(fields, "value", "payload", "data", "keys", "sequence", "key_sequence", "keySequence", "shortcuts")...)
+		}
+	case "text", "type", "type-text", "input", "insert", "write":
+		if step.Text == "" {
+			step.Text = stringJSONField(fields, "value", "text", "input", "content", "body", "message", "data", "payload")
+		}
+	case "paste", "clipboard":
+		if step.Paste == "" {
+			step.Paste = stringJSONField(fields, "value", "paste", "clipboard", "text", "content", "data", "payload")
+		}
+	case "status", "set-status", "status-line":
+		if step.Status == "" {
+			step.Status = stringJSONField(fields, "value", "status", "text", "content", "message", "data", "payload")
+		}
+	case "snapshot", "capture", "capture-snapshot":
+		if step.SnapshotName == "" {
+			step.SnapshotName = stringJSONField(fields, "value", "snapshot", "name", "label", "id", "data", "payload")
+		}
+	case "resize", "terminal-size", "screen-size":
+		if step.ResizeWidth <= 0 || step.ResizeHeight <= 0 {
+			if size := scriptSizeJSONField(fields, "value", "size", "dimensions", "payload", "data"); size != nil {
+				if step.ResizeWidth <= 0 && size.Width > 0 {
+					step.ResizeWidth = size.Width
+				}
+				if step.ResizeHeight <= 0 && size.Height > 0 {
+					step.ResizeHeight = size.Height
+				}
+			}
+		}
+	case "mouse", "mouse-event":
+		if step.Mouse == nil {
+			step.Mouse = scriptMouseJSONField(fields, "value", "mouse", "event", "payload", "data")
+		}
+	case "image", "paste-image":
+		if step.Image == nil {
+			step.Image = scriptImageJSONField(fields, "value", "image", "payload", "data")
+		}
+	case "focus", "focus-in":
+		if !scriptStepHasFocusKey(step) {
+			step.Keys = append(step.Keys, "focus-in")
+		}
+	case "blur", "focus-out":
+		if !scriptStepHasFocusKey(step) {
+			step.Keys = append(step.Keys, "focus-out")
+		}
+	}
+}
+
+func canonicalScriptStepAction(action string) string {
+	action = strings.ToLower(strings.TrimSpace(action))
+	action = strings.ReplaceAll(action, "_", "-")
+	action = strings.ReplaceAll(action, " ", "-")
+	return action
+}
+
+func scriptMouseJSONField(fields map[string]json.RawMessage, names ...string) *ScriptMouse {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var mouse ScriptMouse
+		if err := json.Unmarshal(raw, &mouse); err == nil {
+			return &mouse
+		}
+	}
+	return nil
+}
+
+func scriptImageJSONField(fields map[string]json.RawMessage, names ...string) *ScriptImage {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var image ScriptImage
+		if err := json.Unmarshal(raw, &image); err == nil {
+			return &image
+		}
+	}
+	return nil
+}
+
+func scriptStepHasFocusKey(step *ScriptStep) bool {
+	for _, key := range step.Keys {
+		if key == "focus-in" || key == "focus-out" {
+			return true
+		}
+	}
+	return step.Key == "focus-in" || step.Key == "focus-out"
 }
 
 func normalizeScriptStepJSON(data []byte) []byte {
