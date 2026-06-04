@@ -643,6 +643,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"content-replacement","sessionId":"s1","agentId":"agent_1","replacements":[{"toolUseId":"toolu_2","replacement":"agent stub"}]}`,
 		`{"type":"content_replacement","session_id":"s3","agent_id":"agent_2","replacements":[{"tool_use_id":"toolu_4","block_id":"block_4","original_hash":"hash_4","replacement":"snake agent stub"}]}`,
 		`{"type":"content-replacement","sessionId":"s1","agentID":"agent_3","replacements":[{"toolUseID":"toolu_5","blockID":"block_5","originalHash":"hash_5","replacement":"upper agent stub"}]}`,
+		`{"type":"content-replacement","sessionID":"s9","records":{"type":"tool-result","toolUseID":"toolu_9","blockID":"block_9","hash":"hash_9","content":"record alias stub"}}`,
 		`{"type":"marble_origami_commit","session_id":"s3","collapse_id":"c1","summary_uuid":"sum1","summary_content":"collapsed","summary":"short","first_archived_uuid":"u1","last_archived_uuid":"a1"}`,
 		`{"type":"marble-origami-commit","sessionID":"s4","collapseID":"c2","summaryID":"sum2","content":"upper collapsed","firstArchivedID":"u2","lastArchivedID":"a2"}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
@@ -711,6 +712,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if got := transcript.ContentReplacements["agent_3"]; len(got) != 1 || got[0].ToolUseID != "toolu_5" || got[0].BlockID != "block_5" || got[0].Replacement != "upper agent stub" {
 		t.Fatalf("upper agent content replacements = %#v", got)
+	}
+	if got := transcript.ContentReplacements["s9"]; len(got) != 1 || got[0].Kind != "tool-result" || got[0].ToolUseID != "toolu_9" || got[0].BlockID != "block_9" || got[0].OriginalHash != "hash_9" || got[0].Replacement != "record alias stub" {
+		t.Fatalf("record alias content replacements = %#v", got)
 	}
 	if len(transcript.ContextCollapseCommits) != 2 || transcript.ContextCollapseCommits[0].CollapseID != "c1" || transcript.ContextCollapseCommits[0].SummaryUUID != "sum1" || transcript.ContextCollapseCommits[1].CollapseID != "c2" || transcript.ContextCollapseCommits[1].SummaryUUID != "sum2" || transcript.ContextCollapseCommits[1].FirstArchivedUUID != "u2" {
 		t.Fatalf("collapse commit = %#v", transcript.ContextCollapseCommits)
@@ -782,6 +786,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := metadata.ContentReplacements["agent_3"]; len(got) != 1 || got[0].ToolUseID != "toolu_5" || got[0].BlockID != "block_5" || got[0].Replacement != "upper agent stub" {
 		t.Fatalf("metadata upper agent replacements = %#v", got)
 	}
+	if got := metadata.ContentReplacements["s9"]; len(got) != 1 || got[0].Kind != "tool-result" || got[0].ToolUseID != "toolu_9" || got[0].BlockID != "block_9" || got[0].OriginalHash != "hash_9" || got[0].Replacement != "record alias stub" {
+		t.Fatalf("metadata record alias replacements = %#v", got)
+	}
 	if len(metadata.ContextCollapseCommits) != 2 || metadata.ContextCollapseCommits[0].CollapseID != "c1" || metadata.ContextCollapseCommits[0].SummaryUUID != "sum1" || metadata.ContextCollapseCommits[1].CollapseID != "c2" || metadata.ContextCollapseCommits[1].SummaryUUID != "sum2" || metadata.ContextCollapseCommits[1].FirstArchivedUUID != "u2" {
 		t.Fatalf("metadata collapse commit = %#v", metadata.ContextCollapseCommits)
 	}
@@ -801,6 +808,13 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if agentIndex.Tag != "aliased-tag" || agentIndex.AgentName != "Aliased Agent" || agentIndex.AgentColor != "green" || agentIndex.AgentSetting != "auditor" || agentIndex.Mode != "review" {
 		t.Fatalf("index agent value aliases = %#v", agentIndex)
+	}
+	contentIndex, err := LoadTranscriptIndex(path, "s9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contentIndex.ContentReplacementCount != 1 {
+		t.Fatalf("index content replacement aliases = %#v", contentIndex)
 	}
 }
 

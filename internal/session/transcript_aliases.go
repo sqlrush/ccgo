@@ -315,11 +315,21 @@ func (r *ContentReplacementRecord) UnmarshalJSON(data []byte) error {
 	type ContentReplacementRecordJSON ContentReplacementRecord
 	var aux struct {
 		*ContentReplacementRecordJSON
-		ToolUseIDUpper    string `json:"toolUseID"`
-		ToolUseIDSnake    string `json:"tool_use_id"`
-		BlockIDUpper      string `json:"blockID"`
-		BlockIDSnake      string `json:"block_id"`
-		OriginalHashSnake string `json:"original_hash"`
+		KindType                 string `json:"type"`
+		KindReplacementCamel     string `json:"replacementKind"`
+		KindReplacementSnake     string `json:"replacement_kind"`
+		ToolUseIDUpper           string `json:"toolUseID"`
+		ToolUseIDSnake           string `json:"tool_use_id"`
+		BlockIDUpper             string `json:"blockID"`
+		BlockIDSnake             string `json:"block_id"`
+		ReplacementContent       string `json:"content"`
+		ReplacementText          string `json:"text"`
+		ReplacementValue         string `json:"value"`
+		ReplacementOutput        string `json:"output"`
+		OriginalHashSnake        string `json:"original_hash"`
+		OriginalHashShort        string `json:"hash"`
+		OriginalContentHashCamel string `json:"originalContentHash"`
+		OriginalContentHashSnake string `json:"original_content_hash"`
 	}
 	base := ContentReplacementRecordJSON{}
 	aux.ContentReplacementRecordJSON = &base
@@ -327,14 +337,20 @@ func (r *ContentReplacementRecord) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*r = ContentReplacementRecord(base)
+	if r.Kind == "" {
+		r.Kind = firstNonEmptyString(aux.KindType, aux.KindReplacementCamel, aux.KindReplacementSnake)
+	}
 	if r.ToolUseID == "" {
 		r.ToolUseID = firstNonEmptyString(aux.ToolUseIDUpper, aux.ToolUseIDSnake)
 	}
 	if r.BlockID == "" {
 		r.BlockID = firstNonEmptyString(aux.BlockIDUpper, aux.BlockIDSnake)
 	}
+	if r.Replacement == "" {
+		r.Replacement = firstNonEmptyString(aux.ReplacementContent, aux.ReplacementText, aux.ReplacementValue, aux.ReplacementOutput)
+	}
 	if r.OriginalHash == "" {
-		r.OriginalHash = aux.OriginalHashSnake
+		r.OriginalHash = firstNonEmptyString(aux.OriginalHashSnake, aux.OriginalHashShort, aux.OriginalContentHashCamel, aux.OriginalContentHashSnake)
 	}
 	return nil
 }

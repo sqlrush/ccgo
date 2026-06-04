@@ -189,7 +189,35 @@ func parseContentReplacementMetadata(line []byte) (ContentReplacementEntry, bool
 			"subagentId", "subagentID", "subagent_id",
 		)
 	}
+	if len(entry.Replacements) == 0 {
+		entry.Replacements = parseContentReplacementRecords(fields.rawValue(
+			"replacements",
+			"replacementRecords", "replacement_records",
+			"records",
+			"contentReplacements", "content_replacements",
+			"items",
+		))
+	}
 	return entry, true
+}
+
+func parseContentReplacementRecords(raw json.RawMessage) []ContentReplacementRecord {
+	if len(raw) == 0 {
+		return nil
+	}
+	var records []ContentReplacementRecord
+	if err := json.Unmarshal(raw, &records); err == nil {
+		return records
+	}
+	var record ContentReplacementRecord
+	if err := json.Unmarshal(raw, &record); err != nil || record.isEmpty() {
+		return nil
+	}
+	return []ContentReplacementRecord{record}
+}
+
+func (r ContentReplacementRecord) isEmpty() bool {
+	return r.Kind == "" && r.ToolUseID == "" && r.BlockID == "" && r.Replacement == "" && r.OriginalHash == ""
 }
 
 func parseTombstoneMetadata(line []byte) (TombstoneEntry, bool) {
