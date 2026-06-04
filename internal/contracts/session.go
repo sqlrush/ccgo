@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -142,19 +143,42 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	type SDKEventJSON SDKEvent
 	var aux struct {
 		*SDKEventJSON
-		EventIDSnake         ID  `json:"event_id"`
-		EventIDCamel         ID  `json:"eventId"`
-		SessionIDUpper       ID  `json:"sessionID"`
-		SessionUUID          ID  `json:"sessionUuid"`
-		SessionUUIDUpper     ID  `json:"sessionUUID"`
-		SessionUUIDSnake     ID  `json:"session_uuid"`
-		ParentUUIDUpper      *ID `json:"parentUUID"`
-		ParentID             *ID `json:"parentId"`
-		ParentIDUpper        *ID `json:"parentID"`
-		ParentIDSnake        *ID `json:"parent_id"`
-		ParentMessageID      *ID `json:"parentMessageId"`
-		ParentMessageIDUpper *ID `json:"parentMessageID"`
-		ParentMessageIDSnake *ID `json:"parent_message_id"`
+		EventTypeSnake         string          `json:"event_type"`
+		EventTypeCamel         string          `json:"eventType"`
+		Event                  string          `json:"event"`
+		Name                   string          `json:"name"`
+		Kind                   string          `json:"kind"`
+		Role                   string          `json:"role"`
+		MessageType            string          `json:"messageType"`
+		MessageTypeSnake       string          `json:"message_type"`
+		EventIDSnake           ID              `json:"event_id"`
+		EventIDCamel           ID              `json:"eventId"`
+		SessionIDUpper         ID              `json:"sessionID"`
+		SessionUUID            ID              `json:"sessionUuid"`
+		SessionUUIDUpper       ID              `json:"sessionUUID"`
+		SessionUUIDSnake       ID              `json:"session_uuid"`
+		ParentUUIDUpper        *ID             `json:"parentUUID"`
+		ParentID               *ID             `json:"parentId"`
+		ParentIDUpper          *ID             `json:"parentID"`
+		ParentIDSnake          *ID             `json:"parent_id"`
+		ParentMessageID        *ID             `json:"parentMessageId"`
+		ParentMessageIDUpper   *ID             `json:"parentMessageID"`
+		ParentMessageIDSnake   *ID             `json:"parent_message_id"`
+		CreatedAt              string          `json:"createdAt"`
+		CreatedAtSnake         string          `json:"created_at"`
+		Time                   string          `json:"time"`
+		Datetime               string          `json:"datetime"`
+		DateTime               string          `json:"dateTime"`
+		MessagePayload         json.RawMessage `json:"message_payload"`
+		MessagePayloadCamel    json.RawMessage `json:"messagePayload"`
+		SerializedMessage      json.RawMessage `json:"serialized_message"`
+		SerializedMessageCamel json.RawMessage `json:"serializedMessage"`
+		Payload                json.RawMessage `json:"payload"`
+		Data                   json.RawMessage `json:"data"`
+		Body                   json.RawMessage `json:"body"`
+		Record                 json.RawMessage `json:"record"`
+		Entry                  json.RawMessage `json:"entry"`
+		Item                   json.RawMessage `json:"item"`
 	}
 	base := SDKEventJSON{}
 	aux.SDKEventJSON = &base
@@ -162,6 +186,9 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = SDKEvent(base)
+	if e.Type == "" {
+		e.Type = firstSDKEventType(aux.EventTypeSnake, aux.EventTypeCamel, aux.Event, aux.Name, aux.Kind, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+	}
 	if e.ID == "" {
 		e.ID = aux.EventIDSnake
 	}
@@ -180,6 +207,9 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	if e.SessionID == "" {
 		e.SessionID = aux.SessionUUIDSnake
 	}
+	if e.Timestamp == "" {
+		e.Timestamp = firstSDKEventString(aux.CreatedAt, aux.CreatedAtSnake, aux.Time, aux.Datetime, aux.DateTime)
+	}
 	if e.ParentUUID == nil {
 		e.ParentUUID = firstSDKEventIDPtr(
 			aux.ParentUUIDUpper,
@@ -191,7 +221,53 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.ParentMessageIDSnake,
 		)
 	}
+	if e.Message == nil {
+		e.Message = firstSDKEventMessage(e.Type,
+			aux.MessagePayload,
+			aux.MessagePayloadCamel,
+			aux.SerializedMessage,
+			aux.SerializedMessageCamel,
+			aux.Payload,
+			aux.Data,
+			aux.Body,
+			aux.Record,
+			aux.Entry,
+			aux.Item,
+		)
+	}
+	if e.Message == nil {
+		e.Message = sdkEventTopLevelMessage(data, e.Type)
+	}
 	return nil
+}
+
+func firstSDKEventType(values ...string) SDKEventType {
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case string(SDKEventSystem):
+			return SDKEventSystem
+		case string(SDKEventAssistant):
+			return SDKEventAssistant
+		case string(SDKEventUser):
+			return SDKEventUser
+		case string(SDKEventResult):
+			return SDKEventResult
+		case string(SDKEventError):
+			return SDKEventError
+		case string(SDKEventStatus):
+			return SDKEventStatus
+		}
+	}
+	return ""
+}
+
+func firstSDKEventString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func firstSDKEventIDPtr(values ...*ID) *ID {
@@ -202,4 +278,68 @@ func firstSDKEventIDPtr(values ...*ID) *ID {
 		}
 	}
 	return nil
+}
+
+func firstSDKEventMessage(eventType SDKEventType, values ...json.RawMessage) *Message {
+	for _, value := range values {
+		if message := sdkEventMessageFromRaw(value, eventType); message != nil {
+			return message
+		}
+	}
+	return nil
+}
+
+func sdkEventMessageFromRaw(raw json.RawMessage, eventType SDKEventType) *Message {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil
+	}
+	var message Message
+	if err := json.Unmarshal(raw, &message); err == nil && sdkEventMessageHasData(message) {
+		if message.Type == "" {
+			message.Type = MessageType(eventType)
+		}
+		return &message
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+	for _, name := range []string{"message", "serialized_message", "serializedMessage", "payload", "data", "body"} {
+		if nested := sdkEventMessageFromRaw(fields[name], eventType); nested != nil {
+			return nested
+		}
+	}
+	return nil
+}
+
+func sdkEventTopLevelMessage(data []byte, eventType SDKEventType) *Message {
+	var message Message
+	if err := json.Unmarshal(data, &message); err != nil || !sdkEventTopLevelMessageHasData(message) {
+		return nil
+	}
+	if message.Type == "" {
+		message.Type = MessageType(eventType)
+	}
+	return &message
+}
+
+func sdkEventMessageHasData(message Message) bool {
+	return message.Type != "" ||
+		message.ID != "" ||
+		message.UUID != "" ||
+		message.SessionID != "" ||
+		message.ParentUUID != nil ||
+		message.Timestamp != "" ||
+		len(message.Content) > 0 ||
+		message.Subtype != "" ||
+		message.Model != "" ||
+		message.Usage != nil
+}
+
+func sdkEventTopLevelMessageHasData(message Message) bool {
+	return len(message.Content) > 0 ||
+		message.Subtype != "" ||
+		message.Model != "" ||
+		message.Usage != nil
 }

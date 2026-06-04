@@ -1072,6 +1072,35 @@ func TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases(t *testing.T) {
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"eventType":"user","eventId":"evt_u1","sessionID":"s_payload","createdAt":"2026-01-01T00:00:01Z","payload":{"role":"user","content":[{"type":"text","text":"hi"}]}},
+		{"event_type":"assistant","event_id":"evt_a1","session_id":"s_payload","parentMessageId":"evt_u1","created_at":"2026-01-01T00:00:02Z","body":{"role":"assistant","content":[{"type":"text","text":"hello"}]}}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "evt_u1" || messages[1].UUID != "evt_a1" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].Type != "user" || messages[0].SessionID != "s_payload" || messages[0].Timestamp != "2026-01-01T00:00:01Z" {
+		t.Fatalf("user payload aliases = %#v", messages[0])
+	}
+	if messages[0].Message == nil || messages[0].Message.Type != contracts.MessageUser || messages[0].Message.SessionID != "s_payload" {
+		t.Fatalf("user nested message = %#v", messages[0].Message)
+	}
+	if messages[1].Type != "assistant" || messages[1].SessionID != "s_payload" || messages[1].Timestamp != "2026-01-01T00:00:02Z" {
+		t.Fatalf("assistant payload aliases = %#v", messages[1])
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "evt_u1" {
+		t.Fatalf("assistant parent alias = %#v", messages[1].ParentUUID)
+	}
+	if messages[1].Message == nil || messages[1].Message.Type != contracts.MessageAssistant || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_u1" {
+		t.Fatalf("assistant nested message = %#v", messages[1].Message)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesAcceptsNumericIDAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[{"type":"user","id":101,"sessionId":7,"timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","content":[{"type":"text","text":"hi"}]}},{"type":"assistant","eventId":102,"sessionId":7,"parentMessageID":101,"timestamp":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}]}`), &response); err != nil {
