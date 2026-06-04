@@ -150,7 +150,12 @@ func (e *LogEntry) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		*LogEntryJSON
 		PastedContentsSnake map[int]StoredPastedContent `json:"pasted_contents"`
+		SessionIDUpper      contracts.ID                `json:"sessionID"`
 		SessionIDSnake      contracts.ID                `json:"session_id"`
+		Session             contracts.ID                `json:"session"`
+		SessionUUID         contracts.ID                `json:"sessionUuid"`
+		SessionUUIDUpper    contracts.ID                `json:"sessionUUID"`
+		SessionUUIDSnake    contracts.ID                `json:"session_uuid"`
 	}
 	base := LogEntryJSON{}
 	aux.LogEntryJSON = &base
@@ -162,7 +167,16 @@ func (e *LogEntry) UnmarshalJSON(data []byte) error {
 		e.PastedContents = aux.PastedContentsSnake
 	}
 	if e.SessionID == "" {
-		e.SessionID = aux.SessionIDSnake
+		e.SessionID = firstHistoryID(aux.SessionIDUpper, aux.SessionIDSnake, aux.Session, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake)
 	}
 	return nil
+}
+
+func firstHistoryID(values ...contracts.ID) contracts.ID {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

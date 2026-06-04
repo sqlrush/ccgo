@@ -123,7 +123,7 @@ func TestAppendAndLoadPromptHistory(t *testing.T) {
 
 func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	line := `{"display":"run [Pasted text #1] [Image #2] [Image #3]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","contentType":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png","source_path":"/tmp/chart.png","dimensions":{"original_width":4000,"original_height":2000,"display_width":1000,"display_height":500}},"3":{"id":3,"type":"image","mime_type":"image/jpeg","fileName":"photo.jpg","file_path":"/tmp/photo.jpg","dimensions":{"width":3000,"height":1500}}},"timestamp":100,"project":"/repo","session_id":"session"}`
+	line := `{"display":"run [Pasted text #1] [Image #2] [Image #3]","pasted_contents":{"1":{"id":1,"type":"text","content_hash":"hash_1","contentType":"text/plain"},"2":{"id":2,"type":"image","media_type":"image/png","filename":"chart.png","source_path":"/tmp/chart.png","dimensions":{"original_width":4000,"original_height":2000,"display_width":1000,"display_height":500}},"3":{"id":3,"type":"image","mime_type":"image/jpeg","fileName":"photo.jpg","file_path":"/tmp/photo.jpg","dimensions":{"width":3000,"height":1500}}},"timestamp":100,"project":"/repo","sessionID":"session"}`
 	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
