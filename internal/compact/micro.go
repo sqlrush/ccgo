@@ -344,6 +344,9 @@ func LoadMicroResult(dir string, digest string) (MicroResult, bool, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return MicroResult{}, false, err
 	}
+	if result.Digest == "" {
+		result.Digest = digest
+	}
 	if result.Digest != digest {
 		return MicroResult{}, false, fmt.Errorf("microcompact cache digest mismatch: got %q want %q", result.Digest, digest)
 	}
@@ -418,6 +421,9 @@ func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
 			continue
 		}
 		digest := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if result.Digest == "" {
+			result.Digest = digest
+		}
 		if result.Digest != digest {
 			if options.DeleteInvalid {
 				if err := os.Remove(path); err != nil {

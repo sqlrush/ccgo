@@ -405,6 +405,47 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultUsesFilenameDigestFallback(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := "filename-digest"
+	payload := `{
+		"summary": "filename keyed cache",
+		"version": "microcompact.v1",
+		"createdAt": 100,
+		"ttlSeconds": 3600
+	}`
+	if err := os.WriteFile(microResultPath(cacheDir, digest), []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := LoadMicroResult(cacheDir, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected filename-keyed cache result")
+	}
+	if result.Digest != digest || result.Summary != "filename keyed cache" || result.Version != DefaultMicroCacheVersion {
+		t.Fatalf("result = %#v", result)
+	}
+	if !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+		t.Fatalf("expires_at = %#v", result.ExpiresAt)
+	}
+	pruned, err := PruneMicroCache(cacheDir, MicroPruneOptions{Now: time.Unix(200, 0).UTC(), DeleteInvalid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pruned != 0 {
+		t.Fatalf("filename-keyed cache should remain fresh; pruned=%d", pruned)
+	}
+	loaded, ok, err := LoadMicroResult(cacheDir, digest)
+	if err != nil || !ok || loaded.Digest != digest {
+		t.Fatalf("post-prune loaded=%#v ok=%v err=%v", loaded, ok, err)
+	}
+}
+
 func TestLoadMicroResultAcceptsNumericTimeAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
