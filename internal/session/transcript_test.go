@@ -592,6 +592,27 @@ func TestBuildResumeConversationAcceptsTextContentBlockAliases(t *testing.T) {
 	}
 }
 
+func TestBuildResumeConversationAcceptsImageContentBlockAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","content":[{"type":"image","source":{"kind":"base64","mimeType":"image/png","base64":"AAAA"}}]}`,
+	})
+	resume, err := BuildResumeConversation(path, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || len(resume.Messages) != 1 {
+		t.Fatalf("resume = %#v", resume)
+	}
+	content := resume.Messages[0].Content
+	if len(content) != 1 || content[0].Type != contracts.ContentImage {
+		t.Fatalf("content = %#v", content)
+	}
+	source, ok := content[0].Source.(contracts.ImageSource)
+	if !ok || source.Type != "base64" || source.MediaType != "image/png" || source.Data != "AAAA" {
+		t.Fatalf("source = %#v", content[0].Source)
+	}
+}
+
 func TestBuildResumeConversationUsesLatestLeaf(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null,"message":{"type":"user","content":[{"type":"text","text":"first"}]}}`,

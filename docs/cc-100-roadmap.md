@@ -416,6 +416,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：contract content block 解码现在接受文本块字段别名 `body`/`message`/`value`/`output`/`contentText`/`content_text`，并在 `text`/`thinking` block 中从字符串 `content` 回填文本，transcript resume 可恢复这些嵌套文本块格式。
 
+本轮补充：contract image source 解码现在接受 `mediaType`/`mimeType`/`contentType`、`base64`/`payload` 等 source 字段别名，并支持顶层 image block 直接携带媒体类型和 base64 数据，transcript resume 会保留为规范 `ImageSource`。
+
 ### M7: TUI Renderer And Interaction
 
 目标：还原交互式 Claude Code 体验。

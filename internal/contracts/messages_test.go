@@ -105,3 +105,49 @@ func TestMessageUnmarshalAcceptsContentBlockTextAliases(t *testing.T) {
 		t.Fatalf("content = %#v", message.Content)
 	}
 }
+
+func TestImageSourceUnmarshalAcceptsAliases(t *testing.T) {
+	var source ImageSource
+	if err := json.Unmarshal([]byte(`{"kind":"base64","mimeType":"image/jpeg","base64":"AAAA"}`), &source); err != nil {
+		t.Fatal(err)
+	}
+	if source.Type != "base64" || source.MediaType != "image/jpeg" || source.Data != "AAAA" {
+		t.Fatalf("source = %#v", source)
+	}
+}
+
+func TestContentBlockUnmarshalNormalizesImageSourceAliases(t *testing.T) {
+	var block ContentBlock
+	if err := json.Unmarshal([]byte(`{"type":"image","source":{"kind":"base64","contentType":"image/webp","payload":"BBBB"}}`), &block); err != nil {
+		t.Fatal(err)
+	}
+	source, ok := block.Source.(ImageSource)
+	if !ok || source.Type != "base64" || source.MediaType != "image/webp" || source.Data != "BBBB" {
+		t.Fatalf("source = %#v", block.Source)
+	}
+}
+
+func TestContentBlockUnmarshalAcceptsTopLevelImageSourceAliases(t *testing.T) {
+	var block ContentBlock
+	if err := json.Unmarshal([]byte(`{"type":"image","mimeType":"image/png","base64":"CCCC"}`), &block); err != nil {
+		t.Fatal(err)
+	}
+	source, ok := block.Source.(ImageSource)
+	if !ok || source.Type != "base64" || source.MediaType != "image/png" || source.Data != "CCCC" {
+		t.Fatalf("source = %#v", block.Source)
+	}
+}
+
+func TestMessageUnmarshalAcceptsImageContentBlockAliases(t *testing.T) {
+	var message Message
+	if err := json.Unmarshal([]byte(`{"role":"user","content":[{"type":"image","source":{"mimeType":"image/png","base64":"DDDD"}}]}`), &message); err != nil {
+		t.Fatal(err)
+	}
+	if len(message.Content) != 1 || message.Content[0].Type != ContentImage {
+		t.Fatalf("content = %#v", message.Content)
+	}
+	source, ok := message.Content[0].Source.(ImageSource)
+	if !ok || source.Type != "base64" || source.MediaType != "image/png" || source.Data != "DDDD" {
+		t.Fatalf("source = %#v", message.Content[0].Source)
+	}
+}

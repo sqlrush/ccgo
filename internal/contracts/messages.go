@@ -100,6 +100,14 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	if b.Type == "" && b.Text != "" {
 		b.Type = ContentText
 	}
+	if b.Type == ContentImage {
+		if source := imageSourceJSONField(fields, "source", "imageSource", "image_source"); source != nil {
+			b.Source = *source
+		}
+		if source := imageSourceFromBlockFields(fields); source != nil {
+			b.Source = *source
+		}
+	}
 	return nil
 }
 
@@ -118,6 +126,33 @@ type ImageSource struct {
 	Type      string `json:"type"`
 	MediaType string `json:"media_type,omitempty"`
 	Data      string `json:"data,omitempty"`
+}
+
+func (s *ImageSource) UnmarshalJSON(data []byte) error {
+	type imageSourceJSON ImageSource
+	var base imageSourceJSON
+	if err := json.Unmarshal(data, &base); err != nil {
+		return err
+	}
+	*s = ImageSource(base)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if s.Type == "" {
+		s.Type = stringJSONField(fields, "kind", "sourceType", "source_type", "encoding", "format")
+	}
+	if s.MediaType == "" {
+		s.MediaType = stringJSONField(fields, "mediaType", "mime_type", "mimeType", "content_type", "contentType", "mime", "media")
+	}
+	if s.Data == "" {
+		s.Data = stringJSONField(fields, "base64", "content", "value", "payload", "bytes")
+	}
+	if s.Type == "" && s.Data != "" {
+		s.Type = "base64"
+	}
+	return nil
 }
 
 func (e *CacheEdit) UnmarshalJSON(data []byte) error {
@@ -192,6 +227,44 @@ func cacheControlJSONField(fields map[string]json.RawMessage, names ...string) *
 		}
 	}
 	return nil
+}
+
+func imageSourceJSONField(fields map[string]json.RawMessage, names ...string) *ImageSource {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var source ImageSource
+		if err := json.Unmarshal(raw, &source); err == nil && (source.Type != "" || source.MediaType != "" || source.Data != "") {
+			return &source
+		}
+	}
+	return nil
+}
+
+func imageSourceFromBlockFields(fields map[string]json.RawMessage) *ImageSource {
+	source := ImageSource{
+		Type: stringJSONField(fields, "sourceType", "source_type", "encoding", "format"),
+		MediaType: stringJSONField(fields,
+			"media_type",
+			"mediaType",
+			"mime_type",
+			"mimeType",
+			"content_type",
+			"contentType",
+			"mime",
+			"media",
+		),
+		Data: stringJSONField(fields, "data", "base64", "content", "value", "payload", "bytes"),
+	}
+	if source.Type == "" && source.Data != "" {
+		source.Type = "base64"
+	}
+	if source.Type == "" && source.MediaType == "" && source.Data == "" {
+		return nil
+	}
+	return &source
 }
 
 func contentBlockTextJSONField(fields map[string]json.RawMessage, blockType ContentBlockType) string {
