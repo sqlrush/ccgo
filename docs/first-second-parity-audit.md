@@ -212,6 +212,7 @@ M7 progress now includes:
 - `internal/tui`: terminal OSC helpers now expose a lightweight `ParseOSCContent` covering title, hyperlink, tab-status, and unknown action branches.
 - `internal/tui`: terminal OSC helpers now parse complete BEL- or ST-terminated OSC sequences into `ParseOSCContent` actions.
 - `internal/tui`: terminal OSC parsing now dispatches clipboard, progress, and common notification sequences as structured actions while keeping visible-text stripping behavior intact.
+- `internal/tui`: terminal OSC parsing now recognizes OSC 7 current-directory URI payloads and exposes raw URI, scheme, host, and path as a structured directory action while keeping visible text clean.
 - `internal/tui`: terminal CSI scroll-region parsing now preserves ANSI default semantics for reset/omitted parameters instead of treating `CSI r` as a one-line region.
 - `internal/tui`: terminal ESC parsing now recognizes HTS (`ESC H`) as a structured tab-set cursor action.
 - `internal/tui`: terminal renderer constants now include clear-scrollback and legacy Windows cursor-home helpers for official clear-terminal sequence parity without platform auto-detection.

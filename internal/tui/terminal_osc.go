@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ const (
 	OSCTerminator       = "\x07"
 	OSCStringTerminator = "\x1b\\"
 	OSCSetTitleAndIcon  = "0"
+	OSCCurrentDirectory = "7"
 	OSCHyperlink        = "8"
 	OSCITerm2           = "9"
 	OSCClipboard        = "52"
@@ -68,6 +70,7 @@ type OSCActionType string
 
 const (
 	OSCActionTitle        OSCActionType = "title"
+	OSCActionDirectory    OSCActionType = "directory"
 	OSCActionLink         OSCActionType = "link"
 	OSCActionTabStatus    OSCActionType = "tabStatus"
 	OSCActionClipboard    OSCActionType = "clipboard"
@@ -80,6 +83,14 @@ type TerminalTitleAction struct {
 	Type  string
 	Title string
 	Name  string
+}
+
+type TerminalDirectoryAction struct {
+	URI    string
+	Scheme string
+	Host   string
+	Path   string
+	Valid  bool
 }
 
 type TerminalClipboardAction struct {
@@ -110,6 +121,7 @@ type TerminalNotificationAction struct {
 type OSCAction struct {
 	Type         OSCActionType
 	Title        TerminalTitleAction
+	Directory    TerminalDirectoryAction
 	Hyperlink    TerminalHyperlink
 	TabStatus    TabStatusFields
 	Clipboard    TerminalClipboardAction
@@ -186,6 +198,8 @@ func ParseOSCContent(content string) OSCAction {
 			Type:  OSCActionTitle,
 			Title: TerminalTitleAction{Type: "windowTitle", Title: data},
 		}
+	case OSCCurrentDirectory:
+		return OSCAction{Type: OSCActionDirectory, Directory: ParseDirectoryPayload(data)}
 	case OSCHyperlink:
 		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
 	case OSCClipboard:
@@ -213,6 +227,23 @@ func ParseOSCContent(content string) OSCAction {
 	default:
 		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
 	}
+}
+
+func TerminalDirectorySequence(uri string) string {
+	return OSCSequence(OSCCurrentDirectory, uri)
+}
+
+func ParseDirectoryPayload(payload string) TerminalDirectoryAction {
+	action := TerminalDirectoryAction{URI: payload}
+	parsed, err := url.Parse(payload)
+	if err != nil {
+		return action
+	}
+	action.Valid = true
+	action.Scheme = parsed.Scheme
+	action.Host = parsed.Host
+	action.Path = parsed.Path
+	return action
 }
 
 func TerminalHyperlinkSequence(url string, params map[string]string) string {

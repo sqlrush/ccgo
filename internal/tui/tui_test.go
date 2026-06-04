@@ -4020,6 +4020,11 @@ func TestParseOSCContent(t *testing.T) {
 		t.Fatalf("link = %#v", link)
 	}
 
+	directory := ParseOSCContent("7;file://localhost/Users/sqlrush/project%20one")
+	if directory.Type != OSCActionDirectory || !directory.Directory.Valid || directory.Directory.Scheme != "file" || directory.Directory.Host != "localhost" || directory.Directory.Path != "/Users/sqlrush/project one" {
+		t.Fatalf("directory = %#v", directory)
+	}
+
 	tab := ParseOSCContent(`21337;status=Ready\; go;indicator=#000001`)
 	if tab.Type != OSCActionTabStatus || tab.TabStatus.Status == nil || *tab.TabStatus.Status != "Ready; go" {
 		t.Fatalf("tab = %#v", tab)
@@ -4119,6 +4124,29 @@ func TestTerminalHyperlinkSequence(t *testing.T) {
 
 	visible := StripANSI(link + "docs" + end)
 	if visible != "docs" {
+		t.Fatalf("visible = %q", visible)
+	}
+}
+
+func TestTerminalDirectorySequenceAndParser(t *testing.T) {
+	sequence := TerminalDirectorySequence("file://localhost/tmp/workspace")
+	want := OSCPrefix + OSCCurrentDirectory + ";file://localhost/tmp/workspace" + OSCTerminator
+	if sequence != want {
+		t.Fatalf("directory sequence = %q, want %q", sequence, want)
+	}
+
+	parser := NewTerminalParser()
+	actions := parser.Feed("a" + sequence + "b")
+	if len(actions) != 3 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[0].Type != TerminalActionText || actions[1].Type != TerminalActionDirectory || actions[2].Type != TerminalActionText {
+		t.Fatalf("action types = %#v", actions)
+	}
+	if actions[1].OSC.Directory.URI != "file://localhost/tmp/workspace" || actions[1].OSC.Directory.Path != "/tmp/workspace" {
+		t.Fatalf("directory action = %#v", actions[1])
+	}
+	if visible := StripANSI("a" + sequence + "b"); visible != "ab" {
 		t.Fatalf("visible = %q", visible)
 	}
 }

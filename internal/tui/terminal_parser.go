@@ -17,6 +17,7 @@ const (
 	TerminalActionMode          TerminalActionType = "mode"
 	TerminalActionLink          TerminalActionType = "link"
 	TerminalActionTitle         TerminalActionType = "title"
+	TerminalActionDirectory     TerminalActionType = "directory"
 	TerminalActionTabStatus     TerminalActionType = "tabStatus"
 	TerminalActionClipboard     TerminalActionType = "clipboard"
 	TerminalActionProgress      TerminalActionType = "progress"
@@ -260,6 +261,8 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 			return TerminalAction{Type: TerminalActionLink, OSC: action.OSC}, true
 		case OSCActionTitle:
 			return TerminalAction{Type: TerminalActionTitle, OSC: action.OSC}, true
+		case OSCActionDirectory:
+			return TerminalAction{Type: TerminalActionDirectory, OSC: action.OSC}, true
 		case OSCActionTabStatus:
 			return TerminalAction{Type: TerminalActionTabStatus, OSC: action.OSC}, true
 		case OSCActionClipboard:
