@@ -68,13 +68,13 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 
 func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.RawMessage, overwrite bool, includeSummary bool) error {
 	if includeSummary {
-		if value, ok, err := microStringJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "content", "text", "value", "output"); err != nil {
+		if value, ok, err := microStringJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "text", "value", "output"); err != nil {
 			return err
 		} else if ok && (overwrite || result.Summary == "") {
 			result.Summary = value
 		}
 	}
-	if value, ok, err := microStringJSONField(fields, "Digest", "digest", "cacheKey", "cache_key", "key", "hash"); err != nil {
+	if value, ok, err := microStringJSONField(fields, "Digest", "digest", "cacheKey", "cache_key", "cacheDigest", "cache_digest", "digestHash", "digest_hash", "key", "hash", "fingerprint"); err != nil {
 		return err
 	} else if ok && (overwrite || result.Digest == "") {
 		result.Digest = value
@@ -84,27 +84,27 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 	} else if ok && (overwrite || !result.Cached) {
 		result.Cached = value
 	}
-	if value, ok, err := microIntJSONField(fields, "MessagesSummarized", "messagesSummarized", "messages_summarized", "summarized", "summarizedMessages", "summarized_messages", "messageCount", "message_count", "inputMessages", "input_messages"); err != nil {
+	if value, ok, err := microIntJSONField(fields, "MessagesSummarized", "messagesSummarized", "messages_summarized", "summarized", "summarizedCount", "summarized_count", "summarizedMessages", "summarized_messages", "summaryCount", "summary_count", "messageCount", "message_count", "inputMessages", "input_messages", "totalMessages", "total_messages"); err != nil {
 		return err
 	} else if ok && (overwrite || result.MessagesSummarized == 0) {
 		result.MessagesSummarized = value
 	}
-	if value, ok, err := microIntJSONField(fields, "MessagesKept", "messagesKept", "messages_kept", "kept", "keptMessages", "kept_messages", "retained", "retainedMessages", "retained_messages"); err != nil {
+	if value, ok, err := microIntJSONField(fields, "MessagesKept", "messagesKept", "messages_kept", "kept", "keptCount", "kept_count", "keptMessages", "kept_messages", "retained", "retainedCount", "retained_count", "retainedMessages", "retained_messages"); err != nil {
 		return err
 	} else if ok && (overwrite || result.MessagesKept == 0) {
 		result.MessagesKept = value
 	}
-	if value, ok, err := microStringJSONField(fields, "Version", "version", "cacheVersion", "cache_version", "schemaVersion", "schema_version"); err != nil {
+	if value, ok, err := microStringJSONField(fields, "Version", "version", "cacheVersion", "cache_version", "schemaVersion", "schema_version", "formatVersion", "format_version"); err != nil {
 		return err
 	} else if ok && (overwrite || result.Version == "") {
 		result.Version = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "created", "createdMs", "created_ms", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
+	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "created", "createdMs", "created_ms", "createdMillis", "created_millis", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
 		return err
 	} else if ok && (overwrite || result.CreatedAt.IsZero()) {
 		result.CreatedAt = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expires", "expiresMs", "expires_ms", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
+	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expires", "expiresMs", "expires_ms", "expiresMillis", "expires_millis", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
 		return err
 	} else if ok && (overwrite || result.ExpiresAt.IsZero()) {
 		result.ExpiresAt = value
@@ -112,10 +112,10 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 	if result.ExpiresAt.IsZero() && !result.CreatedAt.IsZero() {
 		if value, ok, err := microDurationJSONField(fields,
 			"ttl", "ttlSeconds", "ttl_seconds", "ttlSec", "ttl_sec",
-			"ttlMs", "ttl_ms", "ttlMillis", "ttl_millis",
+			"ttlMs", "ttl_ms", "ttlMillis", "ttl_millis", "ttlMilliseconds", "ttl_milliseconds",
 			"expiresIn", "expires_in", "expiresInSeconds", "expires_in_seconds",
-			"expiresInMs", "expires_in_ms", "expiresInMillis", "expires_in_millis",
-			"maxAge", "max_age", "maxAgeSeconds", "max_age_seconds", "maxAgeMs", "max_age_ms", "maxAgeMillis", "max_age_millis",
+			"expiresInMs", "expires_in_ms", "expiresInMillis", "expires_in_millis", "expiresInMilliseconds", "expires_in_milliseconds",
+			"maxAge", "max_age", "maxAgeSeconds", "max_age_seconds", "maxAgeMs", "max_age_ms", "maxAgeMillis", "max_age_millis", "maxAgeMilliseconds", "max_age_milliseconds",
 		); err != nil {
 			return err
 		} else if ok && value > 0 {
@@ -130,8 +130,8 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 		return nil, false
 	}
 	for _, name := range []string{
-		"result", "data", "cache", "entry", "record", "item", "payload", "response", "body",
-		"microcompact", "microCompact", "micro_result", "microResult", "microcompactResult", "microCompactResult",
+		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "record", "item", "payload", "response", "body",
+		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
 		"value",
 	} {
 		raw, ok := fields[name]
@@ -148,7 +148,7 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 
 func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
 	for _, name := range []string{
-		"Summary", "summary", "summaryText", "summary_text", "content", "text", "value", "output",
+		"Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "text", "value", "output",
 	} {
 		raw, ok := fields[name]
 		if !ok {

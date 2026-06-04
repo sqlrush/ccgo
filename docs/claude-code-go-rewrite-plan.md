@@ -238,6 +238,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：model-backed relevant memory selector prompt 现在包含 recent successful tools 和 already-surfaced memory paths 的有界上下文，模型侧选择与 deterministic prefilter 的 tool/surfaced 约束更一致。
 - 本轮补充：conversation runner 会在用户消息入队后基于 compact window 计算 token warning state，并在达到 warning/error/auto-compact/blocking 阈值时发出 `token_warning` event；warning state 接入 blocking-limit env override，auto-compact 判断接入既有 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，避免 warning 和 compact 阈值来源分叉。
 - 本轮补充：microcompact disk cache loader 现在读取 Go 默认、camelCase 和 snake_case 字段别名，并容忍计数字段的数字字符串，以及 RFC3339、Unix 秒、Unix 毫秒时间字段，提升 cached microcompact 文件在不同实现/版本间的恢复率。
+- 本轮补充：microcompact disk cache loader 现在接受 `cacheEntry`/`cache_entry`、`micro_compact`/`micro_compact_result` wrapper，以及 `summaryMarkdown`/`resultSummary`/`compressedText`、`cacheDigest`/`digestHash`/`fingerprint`、`summarizedCount`/`retainedCount`、`formatVersion` 和 `ttlMilliseconds`/`expiresInMilliseconds`/`maxAgeMilliseconds` 等相邻实现字段别名。
 
 ### M7: TUI renderer 和交互体验
 
