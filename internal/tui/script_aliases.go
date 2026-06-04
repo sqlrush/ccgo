@@ -211,6 +211,20 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		RawKeyCamel               *string                   `json:"rawKey"`
 		KeySequence               *string                   `json:"key_sequence"`
 		KeySequenceCamel          *string                   `json:"keySequence"`
+		Press                     *string                   `json:"press"`
+		PressKey                  *string                   `json:"press_key"`
+		PressKeyCamel             *string                   `json:"pressKey"`
+		KeyPress                  *string                   `json:"key_press"`
+		KeyPressCamel             *string                   `json:"keyPress"`
+		Keypress                  *string                   `json:"keypress"`
+		Shortcut                  *string                   `json:"shortcut"`
+		ShortcutKey               *string                   `json:"shortcut_key"`
+		ShortcutKeyCamel          *string                   `json:"shortcutKey"`
+		Presses                   []string                  `json:"presses"`
+		KeyPresses                []string                  `json:"key_presses"`
+		KeyPressesCamel           []string                  `json:"keyPresses"`
+		Keypresses                []string                  `json:"keypresses"`
+		Shortcuts                 []string                  `json:"shortcuts"`
 		Input                     *string                   `json:"input"`
 		InputText                 *string                   `json:"input_text"`
 		InputTextCamel            *string                   `json:"inputText"`
@@ -370,6 +384,48 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.KeySequenceCamel != nil {
 		step.Key = *fields.KeySequenceCamel
+	}
+	if fields.Press != nil {
+		step.Key = *fields.Press
+	}
+	if fields.PressKey != nil {
+		step.Key = *fields.PressKey
+	}
+	if fields.PressKeyCamel != nil {
+		step.Key = *fields.PressKeyCamel
+	}
+	if fields.KeyPress != nil {
+		step.Key = *fields.KeyPress
+	}
+	if fields.KeyPressCamel != nil {
+		step.Key = *fields.KeyPressCamel
+	}
+	if fields.Keypress != nil {
+		step.Key = *fields.Keypress
+	}
+	if fields.Shortcut != nil {
+		step.Key = *fields.Shortcut
+	}
+	if fields.ShortcutKey != nil {
+		step.Key = *fields.ShortcutKey
+	}
+	if fields.ShortcutKeyCamel != nil {
+		step.Key = *fields.ShortcutKeyCamel
+	}
+	if fields.Presses != nil {
+		step.Keys = append(step.Keys, fields.Presses...)
+	}
+	if fields.KeyPresses != nil {
+		step.Keys = append(step.Keys, fields.KeyPresses...)
+	}
+	if fields.KeyPressesCamel != nil {
+		step.Keys = append(step.Keys, fields.KeyPressesCamel...)
+	}
+	if fields.Keypresses != nil {
+		step.Keys = append(step.Keys, fields.Keypresses...)
+	}
+	if fields.Shortcuts != nil {
+		step.Keys = append(step.Keys, fields.Shortcuts...)
 	}
 	if fields.Input != nil {
 		step.Text = *fields.Input
@@ -794,6 +850,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 func normalizeScriptStepJSON(data []byte) []byte {
 	data = normalizeStringFieldsToArray(data,
 		"keys",
+		"presses",
+		"key_presses",
+		"keyPresses",
+		"keypresses",
+		"shortcuts",
 		"expect_status_contains",
 		"expectStatusContains",
 		"expect_status_not_contains",

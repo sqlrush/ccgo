@@ -4895,6 +4895,32 @@ func TestRunInteractionScriptAcceptsKeysStringSequences(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsPressFieldAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"press":"a","expectPrompt":{"text":"a"}},
+		{"keyPress":"b","expectPrompt":{"text":"ab"}},
+		{"shortcutKey":"enter","expectEvent":{"type":"prompt_submitted","value":"ab"},"expectPrompt":{"empty":true}},
+		{"keyPresses":"ctrl-x ctrl-k","expectEvent":{"type":"kill_agents"}},
+		{"shortcuts":["o","k","enter"],"expectEvent":{"type":"prompt_submitted","value":"ok"},"expectPrompt":{"empty":true}},
+		{"presses":["y","enter"],"expectEvent":{"type":"prompt_submitted","value":"y"},"expectPrompt":{"empty":true}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 4 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ab" ||
+		result.Events[1].Type != ScreenEventKillAgents ||
+		result.Events[2].Type != ScreenEventPromptSubmitted || result.Events[2].Value != "ok" ||
+		result.Events[3].Type != ScreenEventPromptSubmitted || result.Events[3].Value != "y" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keybindings":{"keys":"ctrl-r","command":"submitPrompt"}},
