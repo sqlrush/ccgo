@@ -178,47 +178,166 @@ func historyDimensionsJSONField(fields map[string]json.RawMessage, names ...stri
 	return nil
 }
 
-func (e *HistoryEntry) UnmarshalJSON(data []byte) error {
-	type HistoryEntryJSON HistoryEntry
-	var aux struct {
-		*HistoryEntryJSON
-		PastedContentsSnake map[int]PastedContent `json:"pasted_contents"`
+func historyIDJSONField(fields map[string]json.RawMessage, names ...string) contracts.ID {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var id contracts.ID
+		if err := json.Unmarshal(raw, &id); err == nil {
+			return id
+		}
 	}
-	base := HistoryEntryJSON{}
-	aux.HistoryEntryJSON = &base
-	if err := json.Unmarshal(data, &aux); err != nil {
+	return ""
+}
+
+func historyInt64JSONField(fields map[string]json.RawMessage, names ...string) int64 {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value int64
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+			if err == nil {
+				return parsed
+			}
+		}
+	}
+	return 0
+}
+
+func historyPastedContentsJSONField(fields map[string]json.RawMessage, names ...string) map[int]PastedContent {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var byID map[int]PastedContent
+		if err := json.Unmarshal(raw, &byID); err == nil {
+			return normalizeHistoryPastedContentIDs(byID)
+		}
+		var list []PastedContent
+		if err := json.Unmarshal(raw, &list); err == nil {
+			return historyPastedContentListMap(list)
+		}
+		var single PastedContent
+		if err := json.Unmarshal(raw, &single); err == nil && single.ID > 0 {
+			return historyPastedContentListMap([]PastedContent{single})
+		}
+	}
+	return nil
+}
+
+func normalizeHistoryPastedContentIDs(contents map[int]PastedContent) map[int]PastedContent {
+	out := make(map[int]PastedContent, len(contents))
+	for id, content := range contents {
+		if content.ID == 0 {
+			content.ID = id
+		}
+		out[id] = content
+	}
+	return out
+}
+
+func historyPastedContentListMap(contents []PastedContent) map[int]PastedContent {
+	out := make(map[int]PastedContent, len(contents))
+	for _, content := range contents {
+		if content.ID <= 0 {
+			continue
+		}
+		out[content.ID] = content
+	}
+	if len(out) == 0 && len(contents) > 0 {
+		return nil
+	}
+	return out
+}
+
+func historyStoredPastedContentsJSONField(fields map[string]json.RawMessage, names ...string) map[int]StoredPastedContent {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var byID map[int]StoredPastedContent
+		if err := json.Unmarshal(raw, &byID); err == nil {
+			return normalizeHistoryStoredPastedContentIDs(byID)
+		}
+		var list []StoredPastedContent
+		if err := json.Unmarshal(raw, &list); err == nil {
+			return historyStoredPastedContentListMap(list)
+		}
+		var single StoredPastedContent
+		if err := json.Unmarshal(raw, &single); err == nil && single.ID > 0 {
+			return historyStoredPastedContentListMap([]StoredPastedContent{single})
+		}
+	}
+	return nil
+}
+
+func normalizeHistoryStoredPastedContentIDs(contents map[int]StoredPastedContent) map[int]StoredPastedContent {
+	out := make(map[int]StoredPastedContent, len(contents))
+	for id, content := range contents {
+		if content.ID == 0 {
+			content.ID = id
+		}
+		out[id] = content
+	}
+	return out
+}
+
+func historyStoredPastedContentListMap(contents []StoredPastedContent) map[int]StoredPastedContent {
+	out := make(map[int]StoredPastedContent, len(contents))
+	for _, content := range contents {
+		if content.ID <= 0 {
+			continue
+		}
+		out[content.ID] = content
+	}
+	if len(out) == 0 && len(contents) > 0 {
+		return nil
+	}
+	return out
+}
+
+func (e *HistoryEntry) UnmarshalJSON(data []byte) error {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*e = HistoryEntry(base)
-	if e.PastedContents == nil {
-		e.PastedContents = aux.PastedContentsSnake
+	*e = HistoryEntry{
+		Display:        historyStringJSONField(fields, "display"),
+		PastedContents: historyPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
 	}
 	return nil
 }
 
 func (e *LogEntry) UnmarshalJSON(data []byte) error {
-	type LogEntryJSON LogEntry
-	var aux struct {
-		*LogEntryJSON
-		PastedContentsSnake map[int]StoredPastedContent `json:"pasted_contents"`
-		SessionIDUpper      contracts.ID                `json:"sessionID"`
-		SessionIDSnake      contracts.ID                `json:"session_id"`
-		Session             contracts.ID                `json:"session"`
-		SessionUUID         contracts.ID                `json:"sessionUuid"`
-		SessionUUIDUpper    contracts.ID                `json:"sessionUUID"`
-		SessionUUIDSnake    contracts.ID                `json:"session_uuid"`
-	}
-	base := LogEntryJSON{}
-	aux.LogEntryJSON = &base
-	if err := json.Unmarshal(data, &aux); err != nil {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*e = LogEntry(base)
-	if e.PastedContents == nil {
-		e.PastedContents = aux.PastedContentsSnake
-	}
-	if e.SessionID == "" {
-		e.SessionID = firstHistoryID(aux.SessionIDUpper, aux.SessionIDSnake, aux.Session, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake)
+	*e = LogEntry{
+		Display:        historyStringJSONField(fields, "display"),
+		PastedContents: historyStoredPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
+		Timestamp:      historyInt64JSONField(fields, "timestamp"),
+		Project:        historyStringJSONField(fields, "project"),
+		SessionID: firstHistoryID(
+			historyIDJSONField(fields, "sessionId"),
+			historyIDJSONField(fields, "sessionID"),
+			historyIDJSONField(fields, "session_id"),
+			historyIDJSONField(fields, "session"),
+			historyIDJSONField(fields, "sessionUuid"),
+			historyIDJSONField(fields, "sessionUUID"),
+			historyIDJSONField(fields, "session_uuid"),
+		),
 	}
 	return nil
 }

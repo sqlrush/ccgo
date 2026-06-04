@@ -167,6 +167,27 @@ func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 	}
 }
 
+func TestHistoryEntryAcceptsPastedContentsArrayAndSingleObject(t *testing.T) {
+	var entry HistoryEntry
+	if err := json.Unmarshal([]byte(`{"display":"restore","pastedContents":[{"pastedContentId":"4","kind":"text","value":"array memo"},{"imageID":"5","type":"image","base64":"AAAA","mimeType":"image/png"}]}`), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := entry.PastedContents[4]; got.ID != 4 || got.Type != PastedContentText || got.Content != "array memo" {
+		t.Fatalf("array text = %#v", got)
+	}
+	if got := entry.PastedContents[5]; got.ID != 5 || got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" {
+		t.Fatalf("array image = %#v", got)
+	}
+
+	var single HistoryEntry
+	if err := json.Unmarshal([]byte(`{"display":"single","pasted_contents":{"attachmentID":"6","pastedType":"pasted-text","value":"single memo"}}`), &single); err != nil {
+		t.Fatal(err)
+	}
+	if got := single.PastedContents[6]; got.ID != 6 || got.Type != PastedContentText || got.Content != "single memo" {
+		t.Fatalf("single pasted content = %#v", got)
+	}
+}
+
 func TestImageDimensionsWidthHeightDefaultDisplaySize(t *testing.T) {
 	var dimensions ImageDimensions
 	if err := json.Unmarshal([]byte(`{"width":4000,"height":2000}`), &dimensions); err != nil {
@@ -190,6 +211,33 @@ func TestStoredPastedContentAcceptsTypeAliases(t *testing.T) {
 	}
 	if got := entry.PastedContents[2]; got.ID != 2 || got.Type != PastedContentText || got.ContentHash != "text_hash" || got.MediaType != "text/plain" {
 		t.Fatalf("stored text = %#v", got)
+	}
+}
+
+func TestLoadHistoryAcceptsStoredPastedContentsArray(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"display":"restore [Pasted text #7] [Image #8]","pasted_contents":[{"contentID":"7","pasted_type":"input_text","content_hash":"text_hash","contentType":"text/plain"},{"imageID":"8","kind":"pasted-image","content_hash":"image_hash","mimeType":"image/png","fileName":"array.png"}],"timestamp":100,"project":"/repo","sessionID":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, func(hash string) (string, bool) {
+		if hash == "text_hash" {
+			return "expanded array memo", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history = %#v", history)
+	}
+	if got := history[0].PastedContents[7]; got.ID != 7 || got.Type != PastedContentText || got.Content != "expanded array memo" || got.MediaType != "text/plain" {
+		t.Fatalf("stored array text = %#v", got)
+	}
+	if got := history[0].PastedContents[8]; got.ID != 8 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/png" || got.Filename != "array.png" {
+		t.Fatalf("stored array image = %#v", got)
 	}
 }
 
