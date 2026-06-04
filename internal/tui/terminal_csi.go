@@ -63,6 +63,8 @@ const (
 	CSICommandRestoreCursor    byte = 'u'
 	CSICommandTerminalParams   byte = 'x'
 
+	CSIModeInsert = 4
+
 	DECModeApplicationCursor  = 1
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
@@ -219,6 +221,7 @@ const (
 	CSIModeActionApplicationCursor CSIModeActionType = "applicationCursor"
 	CSIModeActionAlternateScreen   CSIModeActionType = "alternateScreen"
 	CSIModeActionBracketedPaste    CSIModeActionType = "bracketedPaste"
+	CSIModeActionInsert            CSIModeActionType = "insertMode"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
 	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
 	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
@@ -399,6 +402,11 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 
 	if privateMode == '?' && (final == CSICommandSetMode || final == CSICommandResetMode) {
 		if action, ok := csiPrivateModeAction(p0, final == CSICommandSetMode); ok {
+			return action, true
+		}
+	}
+	if privateMode == 0 && (final == CSICommandSetMode || final == CSICommandResetMode) {
+		if action, ok := csiModeAction(p0, final == CSICommandSetMode); ok {
 			return action, true
 		}
 	}
@@ -583,6 +591,15 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionFocusEvents, Enabled: enabled}}, true
 	case DECModeSynchronizedUpdate:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionSynchronized, Enabled: enabled}}, true
+	default:
+		return CSIAction{}, false
+	}
+}
+
+func csiModeAction(mode int, enabled bool) (CSIAction, bool) {
+	switch mode {
+	case CSIModeInsert:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionInsert, Enabled: enabled}}, true
 	default:
 		return CSIAction{}, false
 	}
