@@ -76,6 +76,8 @@ M6 补充：remote history pagination 现在接受 `nextPageToken`/`nextToken`/`
 
 M6 补充：remote history pagination 现在也接受 `previousPageToken`/`prevPageToken`/`olderPageToken`、`previousToken`/`prevToken`/`olderToken` 及 snake_case 形式，响应字段、link object 和 link URL query 参数都会归一到续抓 before-id。
 
+M6 补充：remote history pagination 现在也接受相邻 before-cursor aliases，包括 `before`、`beforeID`、`olderThan`、`endingBefore` 和 `untilId`，响应字段、link object 和 link URL query 参数都会归一到续抓 before-id。
+
 M6 补充：remote history pagination 现在也接受 `hasMoreResults`/`hasMoreItems`/`hasMorePages`、`isTruncated`/`truncated` 等继续分页标记，以及 `nextKey`/`lastEvaluatedKey`/`lastKey` cursor 别名；响应字段和 link URL query 参数都会归一到续抓 before-id，覆盖 keyset/token 风格分页响应。
 
 M6 补充：remote history pagination 现在也接受 OData next-link 字段 `@odata.nextLink`、`odata.nextLink` 和 `__next`，并从 `$skiptoken`/`skipToken` link query 参数提取续抓 cursor。
