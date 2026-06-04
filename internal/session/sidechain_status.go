@@ -67,9 +67,10 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		}
 		if isSidechainStartSubtype(msg.Subtype) {
 			started = true
-			if state.StartedAt == "" {
-				state.StartedAt = msg.Timestamp
-			}
+			finished = false
+			state.StartedAt = msg.Timestamp
+			state.EndedAt = ""
+			state.Summary = ""
 			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechainID", "sidechain_id", "subagentId", "subagentID", "subagent_id", "agentId", "agentID", "agent_id", "id"); sidechainID != "" {
 				state.ID = sidechainID
 			}

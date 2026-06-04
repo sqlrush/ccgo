@@ -321,6 +321,43 @@ func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	}
 }
 
+func TestSidechainRuntimeRejectsDuplicateRunningStartAndAllowsRestart(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	runtime := SidechainRuntime{SessionPath: sessionPath, SessionID: sessionID}
+	first, err := runtime.Start(SidechainOptions{ID: "agent/one", StartedAt: time.Unix(100, 0).UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Start(SidechainOptions{ID: "agent/one", StartedAt: time.Unix(105, 0).UTC()}); err == nil {
+		t.Fatal("expected duplicate running sidechain start to fail")
+	}
+	state, err := FindSidechainState(sessionPath, sessionID, "agent/one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.MessageCount != 1 || state.Status != SidechainStatusRunning {
+		t.Fatalf("duplicate start should not append lifecycle state = %#v", state)
+	}
+	if _, err := runtime.Finish(first, SidechainStatusCompleted, "first run done", time.Unix(110, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	second, err := runtime.Start(SidechainOptions{ID: "agent/one", StartedAt: time.Unix(120, 0).UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("restart id = %q, want %q", second.ID, first.ID)
+	}
+	state, err = FindSidechainState(sessionPath, sessionID, "agent/one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != SidechainStatusRunning || state.Summary != "" || state.EndedAt != "" || state.StartedAt != time.Unix(120, 0).UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("restart state = %#v", state)
+	}
+}
+
 func TestSidechainManagerCancelAndFailLifecycle(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

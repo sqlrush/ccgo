@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -50,6 +51,11 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 	id := sanitizeSidechainID(options.ID)
 	if id == "" {
 		id = string(contracts.NewID())
+	}
+	if state, err := FindSidechainState(r.SessionPath, r.SessionID, id); err != nil {
+		return SidechainRun{}, err
+	} else if state.MessageCount > 0 && state.Status == SidechainStatusRunning {
+		return SidechainRun{}, fmt.Errorf("sidechain %s is already running", state.ID)
 	}
 	startedAt := options.StartedAt
 	if startedAt.IsZero() {
