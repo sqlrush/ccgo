@@ -958,14 +958,10 @@ func mergeScriptStepExpectationJSON(data []byte) []byte {
 			continue
 		}
 		raw = bytes.TrimSpace(raw)
-		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || raw[0] != '{' {
+		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 			continue
 		}
-		nested := map[string]json.RawMessage{}
-		if err := json.Unmarshal(raw, &nested); err != nil {
-			continue
-		}
-		if mergeScriptStepExpectationFields(fields, nested) {
+		if mergeScriptStepExpectationRaw(fields, raw) {
 			changed = true
 		}
 	}
@@ -977,6 +973,52 @@ func mergeScriptStepExpectationJSON(data []byte) []byte {
 		return data
 	}
 	return merged
+}
+
+func mergeScriptStepExpectationRaw(fields map[string]json.RawMessage, raw json.RawMessage) bool {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return false
+	}
+	switch raw[0] {
+	case '{':
+		nested := map[string]json.RawMessage{}
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			return false
+		}
+		return mergeScriptStepExpectationItem(fields, nested)
+	case '[':
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return false
+		}
+		changed := false
+		for _, item := range items {
+			if mergeScriptStepExpectationRaw(fields, item) {
+				changed = true
+			}
+		}
+		return changed
+	default:
+		return false
+	}
+}
+
+func mergeScriptStepExpectationItem(fields map[string]json.RawMessage, item map[string]json.RawMessage) bool {
+	changed := mergeScriptStepExpectationFields(fields, item)
+	target := scriptStepExpectationItemTargetField(item)
+	if target == "" {
+		return changed
+	}
+	value, ok := scriptStepExpectationItemValue(item)
+	if !ok {
+		return changed
+	}
+	if _, exists := fields[target]; exists {
+		return changed
+	}
+	fields[target] = value
+	return true
 }
 
 func mergeScriptStepExpectationFields(fields map[string]json.RawMessage, nested map[string]json.RawMessage) bool {
@@ -997,6 +1039,60 @@ func mergeScriptStepExpectationFields(fields map[string]json.RawMessage, nested 
 		}
 	}
 	return changed
+}
+
+func scriptStepExpectationItemTargetField(item map[string]json.RawMessage) string {
+	for _, name := range []string{
+		"target",
+		"field",
+		"expect",
+		"expected",
+		"assert",
+		"assertion",
+		"check",
+		"verification",
+		"kind",
+		"name",
+		"type",
+	} {
+		value := stringJSONField(item, name)
+		if value == "" {
+			continue
+		}
+		if target := scriptStepExpectationTargetField(value); target != "" {
+			return target
+		}
+	}
+	return ""
+}
+
+func scriptStepExpectationItemValue(item map[string]json.RawMessage) (json.RawMessage, bool) {
+	for _, name := range []string{
+		"value",
+		"payload",
+		"data",
+		"body",
+		"expectedValue",
+		"expected_value",
+		"expected",
+		"expectation",
+		"assertionValue",
+		"assertion_value",
+		"checkValue",
+		"check_value",
+		"actual",
+	} {
+		raw, ok := item[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+			continue
+		}
+		return raw, true
+	}
+	return nil, false
 }
 
 func scriptStepExpectationTargetField(name string) string {
