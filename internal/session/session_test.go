@@ -1,6 +1,7 @@
 package session
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -28,5 +29,27 @@ func TestAppendAndLoad(t *testing.T) {
 	}
 	if entries[0].Timestamp == "" {
 		t.Fatal("timestamp not populated")
+	}
+}
+
+func TestLoadAcceptsSessionEntryAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	line := `{"role":"user","messageID":"u1","parentMessageID":"p1","sessionID":"sess_1","message":{"type":"user","messageId":"nested_u1","sessionID":"sess_1","content":[{"type":"text","text":"hi"}]}}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v", entries)
+	}
+	entry := entries[0]
+	if entry.Type != contracts.MessageUser || entry.UUID != "u1" || entry.ParentUUID == nil || *entry.ParentUUID != "p1" || entry.SessionID != "sess_1" {
+		t.Fatalf("aliased entry = %#v", entry)
+	}
+	if entry.Message == nil || entry.Message.ID != "nested_u1" || entry.Message.UUID != "nested_u1" || entry.Message.SessionID != "sess_1" {
+		t.Fatalf("aliased nested message = %#v", entry.Message)
 	}
 }
