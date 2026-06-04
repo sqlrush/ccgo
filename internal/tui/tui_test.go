@@ -3808,6 +3808,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence("?25n"), want: CSIReportAction{Type: CSIReportActionUnknown, Code: 25, PrivateMode: '?'}},
 		{seq: CSISequence("4$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 4}},
 		{seq: CSISequence("?25$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 25, PrivateMode: '?'}},
+		{seq: CSISequence("4;1$y"), want: CSIReportAction{Type: CSIReportActionModeStatus, Code: 4, Status: 1}},
+		{seq: CSISequence("?25;2$y"), want: CSIReportAction{Type: CSIReportActionModeStatus, Code: 25, Status: 2, PrivateMode: '?'}},
 	}
 	for _, tc := range reportCases {
 		action, ok := ParseCSISequence(tc.seq)
@@ -3944,6 +3946,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions = parser.Feed(CSISequence("?25$p"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionModeRequest || actions[0].Report.Code != 25 || actions[0].Report.PrivateMode != '?' {
 		t.Fatalf("terminal parser mode request actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence("?25;2$y"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionModeStatus || actions[0].Report.Code != 25 || actions[0].Report.Status != 2 || actions[0].Report.PrivateMode != '?' {
+		t.Fatalf("terminal parser mode status actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence(4, "j") + CSISequence(2, "k"))

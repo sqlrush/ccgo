@@ -184,6 +184,8 @@ M7 补充：terminal CSI parser 现在把 DECREQTPARM terminal-parameters (`CSI 
 
 M7 补充：terminal CSI parser 现在把 xterm window manipulation/report (`CSI t`，如 `CSI 14t`/`CSI 18t`) 解析成 report action，保留 code 和 private marker，避免窗口/文本区尺寸查询序列落入 generic unknown。
 
+M7 补充：terminal CSI parser 现在把 DECRPM mode status report (`CSI Ps;Ps $ y` / `CSI ? Ps;Ps $ y`) 解析成 report action，保留 mode code、status 和 DEC private marker，和 DECRQM mode request 形成闭环。
+
 M7 补充：terminal CSI parser 现在把 TBC tab-clear (`CSI g`/`CSI 3g`) 解析成 cursor action，保留 clear-current/all code，避免制表位清理序列落入 generic unknown。
 
 M7 补充：terminal ESC parser 现在把 HTS horizontal-tab-set (`ESC H`) 解析成 cursor/tab-set action，和 CSI tab-clear 控制序列形成闭环。

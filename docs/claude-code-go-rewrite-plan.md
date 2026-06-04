@@ -273,6 +273,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 把 DECREQTPARM terminal-parameters (`CSI x`) 归入 report action，保留 code/private marker。
 - 本轮补充：terminal CSI parser 把 DECRQM mode request (`CSI Ps $ p` / `CSI ? Ps $ p`) 归入 report action，保留 mode code 和 DEC private marker。
 - 本轮补充：terminal CSI parser 把 xterm window manipulation/report (`CSI t`) 归入 report action，覆盖常见 `CSI 14t`/`CSI 18t` 窗口/文本区尺寸查询。
+- 本轮补充：terminal CSI parser 把 DECRPM mode status report (`CSI Ps;Ps $ y` / `CSI ? Ps;Ps $ y`) 归入 report action，保留 mode code、status 和 DEC private marker。
 - 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
 - 本轮补充：terminal ESC parser 把 HTS horizontal-tab-set (`ESC H`) 归入 cursor/tab-set action，和 CSI tab-clear 控制序列形成闭环。
 - 本轮补充：terminal sequence dispatcher 把 SS3 application cursor (`ESC OA`/`OB`/`OC`/`OD`) 归入结构化 cursor move action，避免 application cursor mode 序列落入 unknown。

@@ -66,6 +66,7 @@ const (
 	CSICommandWindowReport     byte = 't'
 	CSICommandRestoreCursor    byte = 'u'
 	CSICommandTerminalParams   byte = 'x'
+	CSICommandModeStatus       byte = 'y'
 
 	CSIModeInsert   = 4
 	CSIModeLineFeed = 20
@@ -216,12 +217,14 @@ const (
 	CSIReportActionTerminalParams CSIReportActionType = "terminalParameters"
 	CSIReportActionWindow         CSIReportActionType = "window"
 	CSIReportActionModeRequest    CSIReportActionType = "modeRequest"
+	CSIReportActionModeStatus     CSIReportActionType = "modeStatus"
 	CSIReportActionUnknown        CSIReportActionType = "unknown"
 )
 
 type CSIReportAction struct {
 	Type        CSIReportActionType
 	Code        int
+	Status      int
 	PrivateMode byte
 }
 
@@ -448,6 +451,10 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		}
 	case CSICommandTerminalParams:
 		return csiTerminalParameters(csiParamDefault(params, 0, 0), privateMode), true
+	case CSICommandModeStatus:
+		if intermediate == "$" {
+			return csiModeStatus(csiParamDefault(params, 0, 0), csiParamDefault(params, 1, 0), privateMode), true
+		}
 	case CSICommandScrollUp:
 		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionUp, Count: p0}}, true
 	case CSICommandScrollDown:
@@ -576,6 +583,13 @@ func csiModeRequest(code int, privateMode byte) CSIAction {
 	return CSIAction{
 		Type:   CSIActionReport,
 		Report: CSIReportAction{Type: CSIReportActionModeRequest, Code: code, PrivateMode: privateMode},
+	}
+}
+
+func csiModeStatus(code int, status int, privateMode byte) CSIAction {
+	return CSIAction{
+		Type:   CSIActionReport,
+		Report: CSIReportAction{Type: CSIReportActionModeStatus, Code: code, Status: status, PrivateMode: privateMode},
 	}
 }
 
