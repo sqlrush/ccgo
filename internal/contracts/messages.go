@@ -164,6 +164,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	type MessageJSON Message
 	var aux struct {
 		*MessageJSON
+		MessageID              ID    `json:"messageId"`
+		MessageIDUpper         ID    `json:"messageID"`
+		MessageIDSnake         ID    `json:"message_id"`
+		MessageUUID            ID    `json:"messageUuid"`
+		MessageUUIDUpper       ID    `json:"messageUUID"`
+		MessageUUIDSnake       ID    `json:"message_uuid"`
 		ParentUUIDUpper        *ID   `json:"parentUUID"`
 		ParentUUIDSnake        *ID   `json:"parent_uuid"`
 		ParentID               *ID   `json:"parentId"`
@@ -188,6 +194,19 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*m = Message(base)
+	if m.ID == "" {
+		m.ID = string(firstMessageID(aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake))
+	}
+	if m.UUID == "" {
+		m.UUID = firstMessageID(
+			aux.MessageUUID,
+			aux.MessageUUIDUpper,
+			aux.MessageUUIDSnake,
+			aux.MessageID,
+			aux.MessageIDUpper,
+			aux.MessageIDSnake,
+		)
+	}
 	if m.ParentUUID == nil {
 		m.ParentUUID = firstMessageIDPtr(
 			aux.ParentUUIDUpper,
@@ -222,6 +241,15 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		m.IsMeta = *aux.IsMetaSnake
 	}
 	return nil
+}
+
+func firstMessageID(values ...ID) ID {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func firstMessageIDPtr(values ...*ID) *ID {

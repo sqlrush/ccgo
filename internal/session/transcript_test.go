@@ -157,9 +157,9 @@ func TestLoadTranscriptAcceptsSerializedMessageMetadata(t *testing.T) {
 
 func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
-		`{"type":"user","messageUuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"user","messageUuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","messageId":"nested_u1","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
 		`{"type":"progress","messageId":"p1","parentMessageUuid":"u1"}`,
-		`{"type":"assistant","message_id":"a1","parentMessageID":"p1","session_id":"sess_1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","session_id":"sess_1","content":[{"type":"text","text":"done"}]}}`,
+		`{"type":"assistant","message_id":"a1","parentMessageID":"p1","session_id":"sess_1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","messageUUID":"nested_a1","session_id":"sess_1","content":[{"type":"text","text":"done"}]}}`,
 	})
 
 	transcript, err := LoadTranscript(path)
@@ -169,6 +169,12 @@ func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
 	assistant := transcript.Messages["a1"]
 	if assistant == nil || assistant.ParentUUID == nil || *assistant.ParentUUID != "u1" {
 		t.Fatalf("aliased assistant parent = %#v", assistant)
+	}
+	if user := transcript.Messages["u1"]; user == nil || user.Message == nil || user.Message.ID != "nested_u1" || user.Message.UUID != "nested_u1" {
+		t.Fatalf("aliased nested user id = %#v", user)
+	}
+	if assistant.Message == nil || assistant.Message.UUID != "nested_a1" {
+		t.Fatalf("aliased nested assistant id = %#v", assistant.Message)
 	}
 	chain := transcript.BuildConversationChain("a1")
 	if got := chainIDs(chain); strings.Join(got, ",") != "u1,a1" {
@@ -186,7 +192,7 @@ func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1" || resume.Messages[1].UUID != "a1" {
+	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1" || resume.Messages[0].UUID != "nested_u1" || resume.Messages[1].UUID != "nested_a1" {
 		t.Fatalf("aliased uuid indexed resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
 	}
 }
