@@ -43,12 +43,19 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	type SDKEventJSON SDKEvent
 	var aux struct {
 		*SDKEventJSON
-		EventIDSnake     ID `json:"event_id"`
-		EventIDCamel     ID `json:"eventId"`
-		SessionIDUpper   ID `json:"sessionID"`
-		SessionUUID      ID `json:"sessionUuid"`
-		SessionUUIDUpper ID `json:"sessionUUID"`
-		SessionUUIDSnake ID `json:"session_uuid"`
+		EventIDSnake         ID  `json:"event_id"`
+		EventIDCamel         ID  `json:"eventId"`
+		SessionIDUpper       ID  `json:"sessionID"`
+		SessionUUID          ID  `json:"sessionUuid"`
+		SessionUUIDUpper     ID  `json:"sessionUUID"`
+		SessionUUIDSnake     ID  `json:"session_uuid"`
+		ParentUUIDUpper      *ID `json:"parentUUID"`
+		ParentID             *ID `json:"parentId"`
+		ParentIDUpper        *ID `json:"parentID"`
+		ParentIDSnake        *ID `json:"parent_id"`
+		ParentMessageID      *ID `json:"parentMessageId"`
+		ParentMessageIDUpper *ID `json:"parentMessageID"`
+		ParentMessageIDSnake *ID `json:"parent_message_id"`
 	}
 	base := SDKEventJSON{}
 	aux.SDKEventJSON = &base
@@ -73,6 +80,27 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	}
 	if e.SessionID == "" {
 		e.SessionID = aux.SessionUUIDSnake
+	}
+	if e.ParentUUID == nil {
+		e.ParentUUID = firstSDKEventIDPtr(
+			aux.ParentUUIDUpper,
+			aux.ParentID,
+			aux.ParentIDUpper,
+			aux.ParentIDSnake,
+			aux.ParentMessageID,
+			aux.ParentMessageIDUpper,
+			aux.ParentMessageIDSnake,
+		)
+	}
+	return nil
+}
+
+func firstSDKEventIDPtr(values ...*ID) *ID {
+	for _, value := range values {
+		if value != nil && *value != "" {
+			cloned := *value
+			return &cloned
+		}
 	}
 	return nil
 }
