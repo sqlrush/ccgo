@@ -1107,6 +1107,29 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T)
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsNestedEventPayloadWrappers(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"eventType":"user","eventId":"evt_u1","sessionID":"s_nested","createdAt":"2026-01-01T00:00:01Z","payload":{"record":{"role":"user","text":"hi"}}},
+		{"eventType":"assistant","eventId":"evt_a1","sessionID":"s_nested","parentMessageID":"evt_u1","createdAt":"2026-01-01T00:00:02Z","data":{"entry":{"role":"assistant","message":"hello"}}}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "evt_u1" || messages[1].UUID != "evt_a1" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].Message == nil || len(messages[0].Message.Content) != 1 || messages[0].Message.Content[0].Text != "hi" {
+		t.Fatalf("user nested payload = %#v", messages[0].Message)
+	}
+	if messages[1].Message == nil || len(messages[1].Message.Content) != 1 || messages[1].Message.Content[0].Text != "hello" {
+		t.Fatalf("assistant nested payload = %#v", messages[1].Message)
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "evt_u1" || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_u1" {
+		t.Fatalf("parent linkage = %#v message=%#v", messages[1].ParentUUID, messages[1].Message)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesAcceptsNumericIDAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[{"type":"user","id":101,"sessionId":7,"timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","content":[{"type":"text","text":"hi"}]}},{"type":"assistant","eventId":102,"sessionId":7,"parentMessageID":101,"timestamp":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}]}`), &response); err != nil {

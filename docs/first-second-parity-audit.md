@@ -313,6 +313,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script single-step JSON now unwraps `step`/`scriptStep`/`interactionStep`/`record`/`entry`/`item`/`event` objects in arrays, JSONL records, and wrapper-object step lists.
 - `internal/tui`: interaction script top-level wrappers now accept record-array aliases such as `records`/`recordedSteps`/`events`/`entries`/`items`/`actions`/`timeline`.
 - `internal/tui`: interaction script loading now recurses through outer API/fixture wrappers such as `data`/`payload`/`body`/`result`/`response`/`recording`/`session`/`run`.
+- `internal/contracts`/`internal/session`: remote history `SDKEvent` message extraction now recurses through nested payload wrappers such as `record`/`entry`/`item`/`event`/`result`/`response`/`output`.
 
 Still missing for full M6/M7 parity:
 

@@ -305,7 +305,23 @@ func sdkEventMessageFromRaw(raw json.RawMessage, eventType SDKEventType) *Messag
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil
 	}
-	for _, name := range []string{"message", "serialized_message", "serializedMessage", "payload", "data", "body"} {
+	for _, name := range []string{
+		"message",
+		"message_payload",
+		"messagePayload",
+		"serialized_message",
+		"serializedMessage",
+		"payload",
+		"data",
+		"body",
+		"record",
+		"entry",
+		"item",
+		"event",
+		"result",
+		"response",
+		"output",
+	} {
 		if nested := sdkEventMessageFromRaw(fields[name], eventType); nested != nil {
 			return nested
 		}
