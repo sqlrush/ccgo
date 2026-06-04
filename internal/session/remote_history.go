@@ -176,6 +176,12 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		if !ok {
 			continue
 		}
+		if name == "links" {
+			if err := r.mergeLinksField(value); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := r.mergeWrappedFields(name, value); err != nil {
 			return err
 		}
@@ -314,6 +320,42 @@ func (r *sessionEventsResponse) mergeWrappedFields(name string, data json.RawMes
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	r.mergeFrom(nested)
+	return nil
+}
+
+func (r *sessionEventsResponse) mergeLinksField(data json.RawMessage) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	if data[0] == '{' {
+		return r.mergeWrappedFields("links", data)
+	}
+	if data[0] != '[' {
+		return fmt.Errorf("links must be an object wrapper or link array")
+	}
+	var links []map[string]json.RawMessage
+	if err := json.Unmarshal(data, &links); err != nil {
+		return fmt.Errorf("links: %w", err)
+	}
+	for _, link := range links {
+		href := remoteHistoryStringField(link, "href", "url", "uri", "link")
+		if href == "" {
+			continue
+		}
+		for _, rel := range remoteHistoryRelTokens(link) {
+			switch rel {
+			case "previous":
+				setIfEmpty(&r.PreviousLink, href)
+			case "prev":
+				setIfEmpty(&r.PrevLink, href)
+			case "older":
+				setIfEmpty(&r.OlderLink, href)
+			case "next":
+				setIfEmpty(&r.NextLink, href)
+			}
+		}
+	}
 	return nil
 }
 
@@ -549,6 +591,32 @@ func remoteHistoryStringField(raw map[string]json.RawMessage, names ...string) s
 		}
 	}
 	return ""
+}
+
+func remoteHistoryRelTokens(raw map[string]json.RawMessage) []string {
+	var tokens []string
+	for _, name := range []string{"rel", "relation", "name", "type"} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		data := bytes.TrimSpace(value)
+		if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(data, &text); err == nil {
+			tokens = append(tokens, strings.Fields(strings.ToLower(text))...)
+			continue
+		}
+		var values []string
+		if err := json.Unmarshal(data, &values); err == nil {
+			for _, value := range values {
+				tokens = append(tokens, strings.Fields(strings.ToLower(value))...)
+			}
+		}
+	}
+	return tokens
 }
 
 func jsonNumberString(data []byte) (string, bool) {
