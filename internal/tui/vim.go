@@ -208,6 +208,8 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.Prompt.moveLineEnd()
 	case '|':
 		s.Prompt.moveLineColumn(count)
+	case '%':
+		s.Prompt.moveMatchingPair()
 	case 'x':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
@@ -265,7 +267,7 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		}
 		s.VimRepeatingChar = true
 		return s.applyVimCharMotion(s.VimLastCharTarget)
-	case 'h', 'l', 'j', 'k', 'w', 'W', 'e', 'E', '$', '0', '|', 'b', 'B', '^':
+	case 'h', 'l', 'j', 'k', 'w', 'W', 'e', 'E', '$', '0', '|', '%', 'b', 'B', '^':
 		s.applyVimMotionOperator(operator, r, count)
 	}
 	return ScreenEvent{}
@@ -764,6 +766,16 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 	if motion == '|' {
 		cursor.moveLineColumn(count)
 		return orderedRange(start, cursor.Cursor, false)
+	}
+	if motion == '%' {
+		end, ok := p.matchingPairTarget()
+		if !ok {
+			return 0, 0, false, false
+		}
+		if end >= start {
+			return start, end + 1, false, true
+		}
+		return end, start + 1, false, true
 	}
 	for i := 0; i < count; i++ {
 		switch motion {
@@ -1315,6 +1327,91 @@ func (p *PromptState) moveLineColumn(column int) {
 		target = end
 	}
 	p.Cursor = target
+}
+
+func (p *PromptState) moveMatchingPair() {
+	target, ok := p.matchingPairTarget()
+	if ok {
+		p.Cursor = target
+	}
+}
+
+func (p *PromptState) matchingPairTarget() (int, bool) {
+	runes := []rune(p.Text)
+	if len(runes) == 0 {
+		return 0, false
+	}
+	cursor := p.clampCursor(p.Cursor)
+	if cursor >= len(runes) {
+		cursor = len(runes) - 1
+	}
+	lineEnd := cursor
+	for lineEnd < len(runes) && runes[lineEnd] != '\n' {
+		lineEnd++
+	}
+	for i := cursor; i < lineEnd; i++ {
+		if target, ok := matchingPairAt(runes, i); ok {
+			return target, true
+		}
+	}
+	return 0, false
+}
+
+func matchingPairAt(runes []rune, idx int) (int, bool) {
+	open, close, dir, ok := vimMatchingPair(runes[idx])
+	if !ok {
+		return 0, false
+	}
+	depth := 0
+	if dir > 0 {
+		for i := idx + 1; i < len(runes); i++ {
+			switch runes[i] {
+			case open:
+				depth++
+			case close:
+				if depth == 0 {
+					return i, true
+				}
+				depth--
+			}
+		}
+		return 0, false
+	}
+	for i := idx - 1; i >= 0; i-- {
+		switch runes[i] {
+		case close:
+			depth++
+		case open:
+			if depth == 0 {
+				return i, true
+			}
+			depth--
+		}
+	}
+	return 0, false
+}
+
+func vimMatchingPair(r rune) (rune, rune, int, bool) {
+	switch r {
+	case '(':
+		return '(', ')', 1, true
+	case ')':
+		return '(', ')', -1, true
+	case '[':
+		return '[', ']', 1, true
+	case ']':
+		return '[', ']', -1, true
+	case '{':
+		return '{', '}', 1, true
+	case '}':
+		return '{', '}', -1, true
+	case '<':
+		return '<', '>', 1, true
+	case '>':
+		return '<', '>', -1, true
+	default:
+		return 0, 0, 0, false
+	}
 }
 
 func (p *PromptState) deleteAll() {

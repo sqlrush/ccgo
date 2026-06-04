@@ -2903,6 +2903,58 @@ func TestREPLScreenVimRepeatsFindTillMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimMatchingPairMotionsAndOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "call(foo[bar])\nnext")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("0"))
+	screen.ApplyKey(ParseKey("%"))
+	if screen.Prompt.Cursor != len([]rune("call(foo[bar]")) {
+		t.Fatalf("cursor after %% = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("%"))
+	if screen.Prompt.Cursor != len([]rune("call")) {
+		t.Fatalf("cursor after reverse %% = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"f", "[", "%"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("call(foo[bar")) {
+		t.Fatalf("cursor after nested bracket %% = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "call(foo[bar])\nnext")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"f", "(", "d", "%"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "call\nnext" || screen.Prompt.Cursor != len([]rune("call")) || screen.VimRegister != "(foo[bar])" {
+		t.Fatalf("after d%% from open screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "call(foo) tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("0"))
+	for _, seq := range []string{"f", ")", "d", "%"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "call tail" || screen.Prompt.Cursor != len([]rune("call")) || screen.VimRegister != "(foo)" {
+		t.Fatalf("after d%% from close screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimWORDMotionsAndFirstNonBlank(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
