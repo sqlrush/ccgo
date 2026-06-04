@@ -87,6 +87,19 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 	} else if ok {
 		result.ExpiresAt = value
 	}
+	if result.ExpiresAt.IsZero() && !result.CreatedAt.IsZero() {
+		if value, ok, err := microDurationJSONField(fields,
+			"ttl", "ttlSeconds", "ttl_seconds", "ttlSec", "ttl_sec",
+			"ttlMs", "ttl_ms", "ttlMillis", "ttl_millis",
+			"expiresIn", "expires_in", "expiresInSeconds", "expires_in_seconds",
+			"expiresInMs", "expires_in_ms", "expiresInMillis", "expires_in_millis",
+			"maxAge", "max_age", "maxAgeSeconds", "max_age_seconds", "maxAgeMs", "max_age_ms", "maxAgeMillis", "max_age_millis",
+		); err != nil {
+			return err
+		} else if ok && value > 0 {
+			result.ExpiresAt = result.CreatedAt.Add(value)
+		}
+	}
 	*r = result
 	return nil
 }
@@ -413,6 +426,62 @@ func microTimeJSONField(fields map[string]json.RawMessage, names ...string) (tim
 		return value, true, nil
 	}
 	return time.Time{}, false, nil
+}
+
+func microDurationJSONField(fields map[string]json.RawMessage, names ...string) (time.Duration, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok || string(raw) == "null" {
+			continue
+		}
+		value, err := microParseJSONDuration(raw, name)
+		if err != nil {
+			return 0, false, err
+		}
+		return value, true, nil
+	}
+	return 0, false, nil
+}
+
+func microParseJSONDuration(raw json.RawMessage, field string) (time.Duration, error) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return 0, fmt.Errorf("empty duration field %q", field)
+		}
+		if duration, err := time.ParseDuration(text); err == nil {
+			return duration, nil
+		}
+		number, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return 0, err
+		}
+		return microDurationFromFloat(number, field), nil
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err == nil {
+		value, err := strconv.ParseFloat(number.String(), 64)
+		if err != nil {
+			return 0, err
+		}
+		return microDurationFromFloat(value, field), nil
+	}
+	return 0, fmt.Errorf("invalid duration field %q", field)
+}
+
+func microDurationFromFloat(value float64, field string) time.Duration {
+	if microDurationFieldIsMillis(field) {
+		return time.Duration(value * float64(time.Millisecond))
+	}
+	return time.Duration(value * float64(time.Second))
+}
+
+func microDurationFieldIsMillis(field string) bool {
+	lower := strings.ToLower(field)
+	return strings.Contains(lower, "ms") || strings.Contains(lower, "millis")
 }
 
 func microParseJSONTime(raw json.RawMessage, field string) (time.Time, error) {
