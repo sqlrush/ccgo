@@ -145,6 +145,7 @@ M6 progress now includes:
 - `internal/session`: content-replacement metadata now accepts alternate record wrapper and record value/hash field names across the full loader, lightweight metadata loader, and transcript index.
 - `internal/session`: remote-history parsing now also accepts connection-style `history`/`messages` wrappers with `nodes`/`edges[].node` event lists and `pageInfo`/`page_info` `hasNextPage`/`endCursor`/`startCursor` pagination aliases.
 - `internal/session`: remote-history connection edges now use `edges[].cursor` as the event cursor when the nested node lacks an event ID, preserving pagination even when pageInfo omits a cursor.
+- `internal/session`: remote-history pagination now accepts `hasMoreResults`/`hasMoreItems`/`hasMorePages`, `isTruncated`/`truncated`, and keyset cursor aliases such as `nextKey`/`lastEvaluatedKey`/`lastKey`.
 - `internal/session`: remote-history parsing now also accepts `eventList`/`event_list`, `sessionEvents`/`session_events`, and connection aliases such as `connection`, `eventConnection`, and `sessionEventsConnection`.
 - `internal/session`: remote-history parsing now also accepts `value`, `values`, `resources`, and `collection` event-list aliases, plus `edges[].resource`/`edges[].value` node payload aliases.
 - `internal/session`: remote-history parsing now unwraps generic response envelopes such as `payload`, `response`, `result`, and `body` when they contain event lists and pagination fields.

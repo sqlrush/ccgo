@@ -242,6 +242,21 @@ func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage
 	if err := setBoolField(raw, "more", &r.More); err != nil {
 		return err
 	}
+	for _, name := range []string{
+		"has_more_results",
+		"hasMoreResults",
+		"has_more_items",
+		"hasMoreItems",
+		"has_more_pages",
+		"hasMorePages",
+		"is_truncated",
+		"isTruncated",
+		"truncated",
+	} {
+		if err := setBoolField(raw, name, &r.HasMore); err != nil {
+			return err
+		}
+	}
 	for _, spec := range []struct {
 		name   string
 		target *string
@@ -260,6 +275,12 @@ func (r *sessionEventsResponse) mergeScalarFields(raw map[string]json.RawMessage
 		{name: "pageToken", target: &r.CursorCamel},
 		{name: "continuation_token", target: &r.Cursor},
 		{name: "continuationToken", target: &r.CursorCamel},
+		{name: "next_key", target: &r.NextCursor},
+		{name: "nextKey", target: &r.NextCursorCamel},
+		{name: "last_evaluated_key", target: &r.NextCursor},
+		{name: "lastEvaluatedKey", target: &r.NextCursorCamel},
+		{name: "last_key", target: &r.NextCursor},
+		{name: "lastKey", target: &r.NextCursorCamel},
 		{name: "end_cursor", target: &r.EndCursor},
 		{name: "endCursor", target: &r.EndCursorCamel},
 		{name: "start_cursor", target: &r.StartCursor},
