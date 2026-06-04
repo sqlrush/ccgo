@@ -206,6 +206,8 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.Prompt.moveFirstNonBlank()
 	case '$':
 		s.Prompt.moveLineEnd()
+	case '|':
+		s.Prompt.moveLineColumn(count)
 	case 'x':
 		s.recordVimUndo()
 		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
@@ -263,7 +265,7 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		}
 		s.VimRepeatingChar = true
 		return s.applyVimCharMotion(s.VimLastCharTarget)
-	case 'h', 'l', 'j', 'k', 'w', 'W', 'e', 'E', '$', '0', 'b', 'B', '^':
+	case 'h', 'l', 'j', 'k', 'w', 'W', 'e', 'E', '$', '0', '|', 'b', 'B', '^':
 		s.applyVimMotionOperator(operator, r, count)
 	}
 	return ScreenEvent{}
@@ -758,6 +760,10 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 			end++
 		}
 		return orderedRange(start, end, false)
+	}
+	if motion == '|' {
+		cursor.moveLineColumn(count)
+		return orderedRange(start, cursor.Cursor, false)
 	}
 	for i := 0; i < count; i++ {
 		switch motion {
@@ -1289,6 +1295,26 @@ func (p *PromptState) moveLineStart() {
 		cursor--
 	}
 	p.Cursor = cursor
+}
+
+func (p *PromptState) moveLineColumn(column int) {
+	if column <= 0 {
+		column = 1
+	}
+	runes := []rune(p.Text)
+	start := p.clampCursor(p.Cursor)
+	for start > 0 && runes[start-1] != '\n' {
+		start--
+	}
+	end := start
+	for end < len(runes) && runes[end] != '\n' {
+		end++
+	}
+	target := start + column - 1
+	if target > end {
+		target = end
+	}
+	p.Cursor = target
 }
 
 func (p *PromptState) deleteAll() {

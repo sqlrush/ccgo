@@ -3010,6 +3010,23 @@ func TestREPLScreenVimLineLocalStartMotions(t *testing.T) {
 	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\n  two\nthree")
 	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"k", "5", "|"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n  tw")) {
+		t.Fatalf("cursor after multiline 5| = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"$", "d", "3", "|"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\n  \nthree" || screen.Prompt.Cursor != len([]rune("one\n  ")) || screen.VimRegister != "two" {
+		t.Fatalf("after multiline d3| screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
 	for _, seq := range []string{"k", "I", "!"} {
 		screen.ApplyKey(ParseKey(seq))
 	}
