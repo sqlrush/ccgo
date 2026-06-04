@@ -200,39 +200,60 @@ type Message struct {
 }
 
 func (m *Message) UnmarshalJSON(data []byte) error {
-	type MessageJSON Message
 	var aux struct {
-		*MessageJSON
-		MessageID              ID    `json:"messageId"`
-		MessageIDUpper         ID    `json:"messageID"`
-		MessageIDSnake         ID    `json:"message_id"`
-		MessageUUID            ID    `json:"messageUuid"`
-		MessageUUIDUpper       ID    `json:"messageUUID"`
-		MessageUUIDSnake       ID    `json:"message_uuid"`
-		ParentUUIDUpper        *ID   `json:"parentUUID"`
-		ParentUUIDSnake        *ID   `json:"parent_uuid"`
-		ParentID               *ID   `json:"parentId"`
-		ParentIDUpper          *ID   `json:"parentID"`
-		ParentIDSnake          *ID   `json:"parent_id"`
-		ParentMessageID        *ID   `json:"parentMessageId"`
-		ParentMessageIDUpper   *ID   `json:"parentMessageID"`
-		ParentMessageIDSnake   *ID   `json:"parent_message_id"`
-		ParentMessageUUID      *ID   `json:"parentMessageUuid"`
-		ParentMessageUUIDUpper *ID   `json:"parentMessageUUID"`
-		ParentMessageUUIDSnake *ID   `json:"parent_message_uuid"`
-		SessionIDUpper         ID    `json:"sessionID"`
-		SessionIDSnake         ID    `json:"session_id"`
-		SessionUUID            ID    `json:"sessionUuid"`
-		SessionUUIDUpper       ID    `json:"sessionUUID"`
-		SessionUUIDSnake       ID    `json:"session_uuid"`
-		IsMetaSnake            *bool `json:"is_meta"`
+		ID                     ID             `json:"id"`
+		Type                   MessageType    `json:"type"`
+		UUID                   ID             `json:"uuid"`
+		ParentUUID             *ID            `json:"parentUuid"`
+		SessionID              ID             `json:"sessionId"`
+		IsMeta                 bool           `json:"isMeta"`
+		Timestamp              string         `json:"timestamp"`
+		Content                []ContentBlock `json:"content"`
+		Subtype                string         `json:"subtype"`
+		Model                  string         `json:"model"`
+		Usage                  *Usage         `json:"usage"`
+		Raw                    map[string]any `json:"raw"`
+		MessageID              ID             `json:"messageId"`
+		MessageIDUpper         ID             `json:"messageID"`
+		MessageIDSnake         ID             `json:"message_id"`
+		MessageUUID            ID             `json:"messageUuid"`
+		MessageUUIDUpper       ID             `json:"messageUUID"`
+		MessageUUIDSnake       ID             `json:"message_uuid"`
+		ParentUUIDUpper        *ID            `json:"parentUUID"`
+		ParentUUIDSnake        *ID            `json:"parent_uuid"`
+		ParentID               *ID            `json:"parentId"`
+		ParentIDUpper          *ID            `json:"parentID"`
+		ParentIDSnake          *ID            `json:"parent_id"`
+		ParentMessageID        *ID            `json:"parentMessageId"`
+		ParentMessageIDUpper   *ID            `json:"parentMessageID"`
+		ParentMessageIDSnake   *ID            `json:"parent_message_id"`
+		ParentMessageUUID      *ID            `json:"parentMessageUuid"`
+		ParentMessageUUIDUpper *ID            `json:"parentMessageUUID"`
+		ParentMessageUUIDSnake *ID            `json:"parent_message_uuid"`
+		SessionIDUpper         ID             `json:"sessionID"`
+		SessionIDSnake         ID             `json:"session_id"`
+		SessionUUID            ID             `json:"sessionUuid"`
+		SessionUUIDUpper       ID             `json:"sessionUUID"`
+		SessionUUIDSnake       ID             `json:"session_uuid"`
+		IsMetaSnake            *bool          `json:"is_meta"`
 	}
-	base := MessageJSON{}
-	aux.MessageJSON = &base
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	*m = Message(base)
+	*m = Message{
+		ID:         string(aux.ID),
+		Type:       aux.Type,
+		UUID:       aux.UUID,
+		ParentUUID: aux.ParentUUID,
+		SessionID:  aux.SessionID,
+		IsMeta:     aux.IsMeta,
+		Timestamp:  aux.Timestamp,
+		Content:    aux.Content,
+		Subtype:    aux.Subtype,
+		Model:      aux.Model,
+		Usage:      aux.Usage,
+		Raw:        aux.Raw,
+	}
 	if m.ID == "" {
 		m.ID = string(firstMessageID(aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake))
 	}

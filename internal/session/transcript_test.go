@@ -197,6 +197,32 @@ func TestLoadTranscriptAcceptsMessageUUIDFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsNestedMessageNumericID(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","id":9001,"session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","id":9002,"session_id":"sess_1","content":[{"type":"text","text":"done"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user := transcript.Messages["u1"]; user == nil || user.Message == nil || user.Message.ID != "9001" {
+		t.Fatalf("nested numeric user id = %#v", user)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil || assistant.Message == nil || assistant.Message.ID != "9002" {
+		t.Fatalf("nested numeric assistant id = %#v", assistant)
+	}
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || len(resume.Messages) != 2 || resume.Messages[0].ID != "9001" || resume.Messages[1].ID != "9002" {
+		t.Fatalf("indexed numeric nested ids = %#v", resume)
+	}
+}
+
 func TestLoadTranscriptAcceptsTypeAndTimestampAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"role":"user","id":"u1","session_id":"sess_1","created_at":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
