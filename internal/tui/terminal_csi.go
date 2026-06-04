@@ -222,6 +222,8 @@ type CSIScrollActionType string
 const (
 	CSIScrollActionUp                  CSIScrollActionType = "up"
 	CSIScrollActionDown                CSIScrollActionType = "down"
+	CSIScrollActionLeft                CSIScrollActionType = "left"
+	CSIScrollActionRight               CSIScrollActionType = "right"
 	CSIScrollActionSetRegion           CSIScrollActionType = "setRegion"
 	CSIScrollActionSetHorizontalRegion CSIScrollActionType = "setHorizontalRegion"
 )
@@ -360,6 +362,14 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 
 	if final == CSICommandSGR && privateMode == 0 {
 		return CSIAction{Type: CSIActionSGR, SGRParams: paramStr}, true
+	}
+	if intermediate == " " && privateMode == 0 {
+		switch final {
+		case CSICommandInsertCharacters:
+			return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionLeft, Count: p0}}, true
+		case CSICommandCursorUp:
+			return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionRight, Count: p0}}, true
+		}
 	}
 
 	switch final {

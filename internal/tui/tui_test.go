@@ -3814,6 +3814,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 	}{
 		{seq: CSISequence(2, "S"), want: CSIScrollAction{Type: CSIScrollActionUp, Count: 2}},
 		{seq: CSISequence(3, "T"), want: CSIScrollAction{Type: CSIScrollActionDown, Count: 3}},
+		{seq: CSISequence("4 @"), want: CSIScrollAction{Type: CSIScrollActionLeft, Count: 4}},
+		{seq: CSISequence("2 A"), want: CSIScrollAction{Type: CSIScrollActionRight, Count: 2}},
 		{seq: CSISequence(4, 10, "r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 4, Bottom: 10}},
 		{seq: ResetScrollRegion, want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1}},
 		{seq: CSISequence(";10r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1, Bottom: 10}},
@@ -3924,6 +3926,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions = parser.Feed(CSISequence(5, 40, "s"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionScroll || actions[0].Scroll.Type != CSIScrollActionSetHorizontalRegion || actions[0].Scroll.Left != 5 || actions[0].Scroll.Right != 40 {
 		t.Fatalf("terminal parser horizontal region actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence("3 @") + CSISequence("2 A"))
+	if len(actions) != 2 || actions[0].Type != TerminalActionScroll || actions[0].Scroll.Type != CSIScrollActionLeft || actions[0].Scroll.Count != 3 || actions[1].Type != TerminalActionScroll || actions[1].Scroll.Type != CSIScrollActionRight || actions[1].Scroll.Count != 2 {
+		t.Fatalf("terminal parser horizontal scroll actions = %#v", actions)
 	}
 }
 
