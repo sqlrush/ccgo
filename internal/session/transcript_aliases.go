@@ -32,6 +32,7 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		ParentMessageUUIDUpper *contracts.ID    `json:"parentMessageUUID"`
 		ParentMessageUUIDSnake *contracts.ID    `json:"parent_message_uuid"`
 		LogicalParentUUIDSnake *contracts.ID    `json:"logical_parent_uuid"`
+		SessionIDUpper         contracts.ID     `json:"sessionID"`
 		SessionIDSnake         contracts.ID     `json:"session_id"`
 		SessionUUID            contracts.ID     `json:"sessionUuid"`
 		SessionUUIDUpper       contracts.ID     `json:"sessionUUID"`
@@ -93,6 +94,9 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	}
 	if m.LogicalParentUUID == nil {
 		m.LogicalParentUUID = cloneIDPtr(aux.LogicalParentUUIDSnake)
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionIDUpper
 	}
 	if m.SessionID == "" {
 		m.SessionID = aux.SessionIDSnake

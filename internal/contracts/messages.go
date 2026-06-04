@@ -165,6 +165,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		*MessageJSON
 		ParentUUIDSnake  *ID   `json:"parent_uuid"`
+		SessionIDUpper   ID    `json:"sessionID"`
 		SessionIDSnake   ID    `json:"session_id"`
 		SessionUUID      ID    `json:"sessionUuid"`
 		SessionUUIDUpper ID    `json:"sessionUUID"`
@@ -179,6 +180,9 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	*m = Message(base)
 	if m.ParentUUID == nil {
 		m.ParentUUID = aux.ParentUUIDSnake
+	}
+	if m.SessionID == "" {
+		m.SessionID = aux.SessionIDUpper
 	}
 	if m.SessionID == "" {
 		m.SessionID = aux.SessionIDSnake

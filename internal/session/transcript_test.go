@@ -73,6 +73,46 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsSessionIDUpperAlias(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user","uuid":"u1","sessionID":"sess_upper","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","sessionID":"sess_upper","content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionID":"sess_upper","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","sessionID":"sess_upper","content":[{"type":"text","text":"done"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := transcript.Messages["u1"]
+	if user == nil {
+		t.Fatal("missing user message")
+	}
+	if user.SessionID != "sess_upper" || user.Message == nil || user.Message.SessionID != "sess_upper" {
+		t.Fatalf("user sessionID alias = %#v", user)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil {
+		t.Fatal("missing assistant message")
+	}
+	if assistant.SessionID != "sess_upper" || assistant.Message == nil || assistant.Message.SessionID != "sess_upper" {
+		t.Fatalf("assistant sessionID alias = %#v", assistant)
+	}
+	index, err := LoadTranscriptIndex(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.SessionID != "sess_upper" || index.MessageCount != 2 || index.FirstUUID != "u1" || index.LastUUID != "a1" {
+		t.Fatalf("index sessionID alias = %#v", index)
+	}
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || len(resume.Messages) != 2 || resume.Messages[0].SessionID != "sess_upper" || resume.Messages[1].SessionID != "sess_upper" {
+		t.Fatalf("resume sessionID alias = %#v", resume)
+	}
+}
+
 func TestContractMessageFromTranscriptPreservesAttachmentRawPayload(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"attachment","uuid":"att1","subtype":"relevant_memories","attachment":{"type":"relevant_memories","memories":[{"path":"/repo/memory.md","content":"memory body","mtimeMs":123}]}}`,
