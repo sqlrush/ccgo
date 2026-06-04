@@ -1075,8 +1075,8 @@ func TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases(t *testing.T) {
 func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[
-		{"eventType":"user","eventId":"evt_u1","sessionID":"s_payload","createdAt":"2026-01-01T00:00:01Z","payload":{"role":"user","content":[{"type":"text","text":"hi"}]}},
-		{"event_type":"assistant","event_id":"evt_a1","session_id":"s_payload","parentMessageId":"evt_u1","created_at":"2026-01-01T00:00:02Z","body":{"role":"assistant","content":[{"type":"text","text":"hello"}]}}
+		{"eventType":"user","eventId":"evt_u1","sessionID":"s_payload","createdAt":"2026-01-01T00:00:01Z","payload":{"role":"user","content":"hi"}},
+		{"event_type":"assistant","event_id":"evt_a1","session_id":"s_payload","parentMessageId":"evt_u1","created_at":"2026-01-01T00:00:02Z","body":{"role":"assistant","content":"hello"}}
 	]}`), &response); err != nil {
 		t.Fatal(err)
 	}
@@ -1090,6 +1090,9 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T)
 	if messages[0].Message == nil || messages[0].Message.Type != contracts.MessageUser || messages[0].Message.SessionID != "s_payload" {
 		t.Fatalf("user nested message = %#v", messages[0].Message)
 	}
+	if len(messages[0].Message.Content) != 1 || messages[0].Message.Content[0].Text != "hi" {
+		t.Fatalf("user content = %#v", messages[0].Message.Content)
+	}
 	if messages[1].Type != "assistant" || messages[1].SessionID != "s_payload" || messages[1].Timestamp != "2026-01-01T00:00:02Z" {
 		t.Fatalf("assistant payload aliases = %#v", messages[1])
 	}
@@ -1098,6 +1101,9 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T)
 	}
 	if messages[1].Message == nil || messages[1].Message.Type != contracts.MessageAssistant || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_u1" {
 		t.Fatalf("assistant nested message = %#v", messages[1].Message)
+	}
+	if len(messages[1].Message.Content) != 1 || messages[1].Message.Content[0].Text != "hello" {
+		t.Fatalf("assistant content = %#v", messages[1].Message.Content)
 	}
 }
 

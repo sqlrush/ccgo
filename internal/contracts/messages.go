@@ -1,6 +1,10 @@
 package contracts
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
 
 type MessageType string
 
@@ -201,43 +205,50 @@ type Message struct {
 
 func (m *Message) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ID                     ID             `json:"id"`
-		Type                   MessageType    `json:"type"`
-		UUID                   ID             `json:"uuid"`
-		ParentUUID             *ID            `json:"parentUuid"`
-		SessionID              ID             `json:"sessionId"`
-		IsMeta                 bool           `json:"isMeta"`
-		Timestamp              string         `json:"timestamp"`
-		Content                []ContentBlock `json:"content"`
-		Subtype                string         `json:"subtype"`
-		Model                  string         `json:"model"`
-		Usage                  *Usage         `json:"usage"`
-		Raw                    map[string]any `json:"raw"`
-		MessageID              ID             `json:"messageId"`
-		MessageIDUpper         ID             `json:"messageID"`
-		MessageIDSnake         ID             `json:"message_id"`
-		MessageUUID            ID             `json:"messageUuid"`
-		MessageUUIDUpper       ID             `json:"messageUUID"`
-		MessageUUIDSnake       ID             `json:"message_uuid"`
-		ParentUUIDUpper        *ID            `json:"parentUUID"`
-		ParentUUIDSnake        *ID            `json:"parent_uuid"`
-		ParentID               *ID            `json:"parentId"`
-		ParentIDUpper          *ID            `json:"parentID"`
-		ParentIDSnake          *ID            `json:"parent_id"`
-		ParentMessageID        *ID            `json:"parentMessageId"`
-		ParentMessageIDUpper   *ID            `json:"parentMessageID"`
-		ParentMessageIDSnake   *ID            `json:"parent_message_id"`
-		ParentMessageUUID      *ID            `json:"parentMessageUuid"`
-		ParentMessageUUIDUpper *ID            `json:"parentMessageUUID"`
-		ParentMessageUUIDSnake *ID            `json:"parent_message_uuid"`
-		SessionIDUpper         ID             `json:"sessionID"`
-		SessionIDSnake         ID             `json:"session_id"`
-		SessionUUID            ID             `json:"sessionUuid"`
-		SessionUUIDUpper       ID             `json:"sessionUUID"`
-		SessionUUIDSnake       ID             `json:"session_uuid"`
-		IsMetaSnake            *bool          `json:"is_meta"`
+		ID                     ID              `json:"id"`
+		Type                   MessageType     `json:"type"`
+		TypeCamel              string          `json:"messageType"`
+		TypeSnake              string          `json:"message_type"`
+		Role                   string          `json:"role"`
+		UUID                   ID              `json:"uuid"`
+		ParentUUID             *ID             `json:"parentUuid"`
+		SessionID              ID              `json:"sessionId"`
+		IsMeta                 bool            `json:"isMeta"`
+		Timestamp              string          `json:"timestamp"`
+		Content                json.RawMessage `json:"content"`
+		Subtype                string          `json:"subtype"`
+		Model                  string          `json:"model"`
+		Usage                  *Usage          `json:"usage"`
+		Raw                    map[string]any  `json:"raw"`
+		MessageID              ID              `json:"messageId"`
+		MessageIDUpper         ID              `json:"messageID"`
+		MessageIDSnake         ID              `json:"message_id"`
+		MessageUUID            ID              `json:"messageUuid"`
+		MessageUUIDUpper       ID              `json:"messageUUID"`
+		MessageUUIDSnake       ID              `json:"message_uuid"`
+		ParentUUIDUpper        *ID             `json:"parentUUID"`
+		ParentUUIDSnake        *ID             `json:"parent_uuid"`
+		ParentID               *ID             `json:"parentId"`
+		ParentIDUpper          *ID             `json:"parentID"`
+		ParentIDSnake          *ID             `json:"parent_id"`
+		ParentMessageID        *ID             `json:"parentMessageId"`
+		ParentMessageIDUpper   *ID             `json:"parentMessageID"`
+		ParentMessageIDSnake   *ID             `json:"parent_message_id"`
+		ParentMessageUUID      *ID             `json:"parentMessageUuid"`
+		ParentMessageUUIDUpper *ID             `json:"parentMessageUUID"`
+		ParentMessageUUIDSnake *ID             `json:"parent_message_uuid"`
+		SessionIDUpper         ID              `json:"sessionID"`
+		SessionIDSnake         ID              `json:"session_id"`
+		SessionUUID            ID              `json:"sessionUuid"`
+		SessionUUIDUpper       ID              `json:"sessionUUID"`
+		SessionUUIDSnake       ID              `json:"session_uuid"`
+		IsMetaSnake            *bool           `json:"is_meta"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	content, err := contentBlocksFromRaw(aux.Content)
+	if err != nil {
 		return err
 	}
 	*m = Message{
@@ -248,11 +259,14 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		SessionID:  aux.SessionID,
 		IsMeta:     aux.IsMeta,
 		Timestamp:  aux.Timestamp,
-		Content:    aux.Content,
+		Content:    content,
 		Subtype:    aux.Subtype,
 		Model:      aux.Model,
 		Usage:      aux.Usage,
 		Raw:        aux.Raw,
+	}
+	if m.Type == "" {
+		m.Type = firstMessageType(aux.TypeCamel, aux.TypeSnake, aux.Role)
 	}
 	if m.ID == "" {
 		m.ID = string(firstMessageID(aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake))
@@ -301,6 +315,43 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		m.IsMeta = *aux.IsMetaSnake
 	}
 	return nil
+}
+
+func contentBlocksFromRaw(raw json.RawMessage) ([]ContentBlock, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, nil
+	}
+	switch raw[0] {
+	case '"':
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return nil, err
+		}
+		return []ContentBlock{NewTextBlock(text)}, nil
+	case '{':
+		var block ContentBlock
+		if err := json.Unmarshal(raw, &block); err != nil {
+			return nil, err
+		}
+		return []ContentBlock{block}, nil
+	default:
+		var blocks []ContentBlock
+		if err := json.Unmarshal(raw, &blocks); err != nil {
+			return nil, err
+		}
+		return blocks, nil
+	}
+}
+
+func firstMessageType(values ...string) MessageType {
+	for _, value := range values {
+		switch MessageType(strings.ToLower(strings.TrimSpace(value))) {
+		case MessageUser, MessageAssistant, MessageSystem, MessageAttachment, MessageProgress, MessageTombstone:
+			return MessageType(strings.ToLower(strings.TrimSpace(value)))
+		}
+	}
+	return ""
 }
 
 func firstMessageID(values ...ID) ID {

@@ -36,6 +36,8 @@ M6 补充：transcript resume 的嵌套 content block 现在接受 `toolUseId`/`
 
 M6 补充：transcript resume 的 nested content block `id`/`tool_use_id`/`toolUseId` 现在接受 JSON number，并保留为字符串 tool-use ID。
 
+M6 补充：嵌套 contract message 的 `content` 现在接受字符串和单个 content-block 对象；字符串会归一为 text block，并接受 `role`/`messageType` 作为 message type 别名，提升 transcript/remote history payload 恢复率。
+
 M6 补充：嵌套 contract message 现在接受 `parentUUID`、`parentId`/`parentID`/`parent_id`、`parentMessageId`/`parentMessageID`/`parent_message_id` 和 parent-message UUID 别名，transcript/remote history payload 自带 parent alias 时不会丢失嵌套 parent。
 
 M6 补充：indexed resume chain 现在区分 byte budget 截断掉的 parent 和 transcript 里真实缺失的 parent，bounded resume 可以暴露 `TruncatedParent` 与 `MissingParent` 两种断点。
