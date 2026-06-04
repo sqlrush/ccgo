@@ -107,9 +107,9 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyUp, nil
 	case "down":
 		return KeyDown, nil
-	case "pageup", "page-up":
+	case "pageup", "page-up", "pgup", "pg-up", "prior":
 		return KeyPageUp, nil
-	case "pagedown", "page-down":
+	case "pagedown", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next":
 		return KeyPageDown, nil
 	case "home":
 		return KeyHome, nil

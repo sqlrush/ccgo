@@ -208,6 +208,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes DEC highlight, UTF-8, and urxvt numeric mouse modes (`?1001h/l`, `?1005h/l`, `?1015h/l`) as mouse-tracking mode actions.
 - `internal/tui`: terminal CSI parser now recognizes xterm alternate scroll mode (`?1007h/l`) as a structured mode action instead of an unknown sequence.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
+- `internal/tui`: keybinding config now accepts page navigation aliases such as `pgup`, `pg-up`, `prior`, `pgdn`, `pg-down`, and `next`.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts base/unmodified sequences such as `CSI 97u` and `CSI 13;1u`, mapping printable runes plus Enter, Tab, Esc, and Backspace instead of treating ordinary extended-key reports as unknown.
