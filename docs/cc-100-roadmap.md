@@ -476,6 +476,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：prompt history 的显示文本读取现在接受 `prompt`/`text`/`input`/`content`/`value` 等 display 别名，runtime history 和 stored history 都不会因旧字段名把 prompt 恢复成空字符串。
 
+本轮补充：prompt history 的 pasted-content 容器字段现在和 interaction script 对齐，接受 `pastedContent`/`pasted_content`、`pasteContents`/`paste_contents`、`pastes`、`attachments`/`attachment` 等别名，runtime history 和 stored history 都可复用 attachment 风格 fixture。
+
 本轮补充：snapshot corpus 支持 `.ansi` only baselines，方便复用真实终端输出 corpus，而不必预先生成 `.txt` companion 文件。
 
 本轮补充：terminal lifecycle 增加可选 extended-key mode，按官方 `CSI >1u`/`CSI >4;2m` 启用 kitty keyboard protocol 和 modifyOtherKeys，退出时重置 modifyOtherKeys 并 pop kitty stack，reassert 时先 pop 再 push，避免长期会话 stack 泄漏。

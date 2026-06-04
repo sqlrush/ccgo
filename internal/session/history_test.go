@@ -252,6 +252,19 @@ func TestHistoryEntryAcceptsPastedContentsArrayAndSingleObject(t *testing.T) {
 	}
 }
 
+func TestHistoryEntryAcceptsPastedContentContainerAliases(t *testing.T) {
+	var entry HistoryEntry
+	if err := json.Unmarshal([]byte(`{"display":"restore","attachments":[{"attachmentID":"9","kind":"text","value":"attached memo"},{"imageID":"10","type":"image","base64":"BBBB","mimeType":"image/png"}]}`), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := entry.PastedContents[9]; got.ID != 9 || got.Type != PastedContentText || got.Content != "attached memo" {
+		t.Fatalf("attachment text = %#v", got)
+	}
+	if got := entry.PastedContents[10]; got.ID != 10 || got.Type != PastedContentImage || got.Content != "BBBB" || got.MediaType != "image/png" {
+		t.Fatalf("attachment image = %#v", got)
+	}
+}
+
 func TestImageDimensionsWidthHeightDefaultDisplaySize(t *testing.T) {
 	var dimensions ImageDimensions
 	if err := json.Unmarshal([]byte(`{"width":4000,"height":2000}`), &dimensions); err != nil {
@@ -302,6 +315,30 @@ func TestLoadHistoryAcceptsStoredPastedContentsArray(t *testing.T) {
 	}
 	if got := history[0].PastedContents[8]; got.ID != 8 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/png" || got.Filename != "array.png" {
 		t.Fatalf("stored array image = %#v", got)
+	}
+}
+
+func TestLoadHistoryAcceptsStoredPastedContentContainerAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"display":"restore [Pasted text #11]","pasteContent":{"contentID":"11","pasted_type":"input_text","content_hash":"container_hash","contentType":"text/plain"},"timestamp":100,"project":"/repo","sessionID":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, func(hash string) (string, bool) {
+		if hash == "container_hash" {
+			return "expanded container memo", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history = %#v", history)
+	}
+	if got := history[0].PastedContents[11]; got.ID != 11 || got.Type != PastedContentText || got.Content != "expanded container memo" || got.MediaType != "text/plain" {
+		t.Fatalf("stored container text = %#v", got)
 	}
 }
 

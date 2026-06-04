@@ -322,6 +322,7 @@ M7 progress now includes:
 - `internal/session`/`internal/tui`: pasted-content reference parsing now accepts case differences and placeholders such as `pasted image`/`input-image`/`input_text`, sharing that recognition across text expansion, image filtering, and next pasted ID seeding.
 - `internal/session`: prompt-history `LogEntry` loading now accepts project aliases such as `projectPath`/`cwd`/`workingDirectory`/`workspacePath` and timestamp aliases such as `createdAt`/`unixTimestamp`, including RFC3339 timestamp normalization to Unix milliseconds.
 - `internal/session`: prompt-history display text loading now accepts aliases such as `prompt`/`text`/`input`/`content`/`value` for runtime and stored history.
+- `internal/session`: prompt-history pasted-content containers now accept aliases such as `pastedContent`/`pasted_content`, `pasteContents`/`paste_contents`, `pastes`, and `attachments`/`attachment`, matching interaction script fixture shapes for runtime and stored history.
 
 Still missing for full M6/M7 parity:
 

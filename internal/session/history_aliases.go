@@ -317,6 +317,22 @@ func historyStoredPastedContentListMap(contents []StoredPastedContent) map[int]S
 	return out
 }
 
+func historyPastedContentContainerFieldNames() []string {
+	return []string{
+		"pastedContents",
+		"pasted_contents",
+		"pastedContent",
+		"pasted_content",
+		"pastes",
+		"pasteContents",
+		"paste_contents",
+		"pasteContent",
+		"paste_content",
+		"attachments",
+		"attachment",
+	}
+}
+
 func (e *HistoryEntry) UnmarshalJSON(data []byte) error {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fields); err != nil {
@@ -324,7 +340,7 @@ func (e *HistoryEntry) UnmarshalJSON(data []byte) error {
 	}
 	*e = HistoryEntry{
 		Display:        historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"),
-		PastedContents: historyPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
+		PastedContents: historyPastedContentsJSONField(fields, historyPastedContentContainerFieldNames()...),
 	}
 	return nil
 }
@@ -336,7 +352,7 @@ func (e *LogEntry) UnmarshalJSON(data []byte) error {
 	}
 	*e = LogEntry{
 		Display:        historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"),
-		PastedContents: historyStoredPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
+		PastedContents: historyStoredPastedContentsJSONField(fields, historyPastedContentContainerFieldNames()...),
 		Timestamp:      historyTimestampJSONField(fields, "timestamp", "createdAt", "created_at", "time", "unixTimestamp", "unix_timestamp"),
 		Project:        historyStringJSONField(fields, "project", "projectPath", "project_path", "cwd", "cwdPath", "cwd_path", "workingDirectory", "working_directory", "workspacePath", "workspace_path", "workspace"),
 		SessionID: firstHistoryID(
