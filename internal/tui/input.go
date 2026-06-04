@@ -207,10 +207,10 @@ func parseModifiedNavigationKey(seq string) (Key, bool) {
 	case isModifiedNavigationCSI(seq, "\x1b[1;", "B"):
 		return Key{Type: KeyDown}, true
 	case isModifiedNavigationCSI(seq, "\x1b[1;", "C"):
-		modifier := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b[1;"), "C")
+		modifier, _ := modifiedNavigationModifier(seq, "\x1b[1;", "C")
 		return Key{Type: modifiedHorizontalArrowKey(modifier, KeyRight, KeyAltRight, KeyCtrlRight)}, true
 	case isModifiedNavigationCSI(seq, "\x1b[1;", "D"):
-		modifier := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b[1;"), "D")
+		modifier, _ := modifiedNavigationModifier(seq, "\x1b[1;", "D")
 		return Key{Type: modifiedHorizontalArrowKey(modifier, KeyLeft, KeyAltLeft, KeyCtrlLeft)}, true
 	case isModifiedNavigationCSI(seq, "\x1b[1;", "H"):
 		return Key{Type: KeyHome}, true
@@ -228,25 +228,30 @@ func parseModifiedNavigationKey(seq string) (Key, bool) {
 }
 
 func isModifiedNavigationCSI(seq, prefix, suffix string) bool {
-	if !strings.HasPrefix(seq, prefix) || !strings.HasSuffix(seq, suffix) {
-		return false
-	}
-	modifier := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), suffix)
-	if len(modifier) != 1 {
-		return false
-	}
-	return modifier[0] >= '2' && modifier[0] <= '9'
+	_, ok := modifiedNavigationModifier(seq, prefix, suffix)
+	return ok
 }
 
-func modifiedHorizontalArrowKey(modifier string, plain KeyType, alt KeyType, ctrl KeyType) KeyType {
-	switch modifier {
-	case "5", "6", "7", "8":
-		return ctrl
-	case "3", "4", "9":
-		return alt
-	default:
-		return plain
+func modifiedNavigationModifier(seq, prefix, suffix string) (int, bool) {
+	if !strings.HasPrefix(seq, prefix) || !strings.HasSuffix(seq, suffix) {
+		return 0, false
 	}
+	modifierText := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), suffix)
+	modifier, err := strconv.Atoi(modifierText)
+	if err != nil {
+		return 0, false
+	}
+	return modifier, modifier >= 2 && modifier <= 16
+}
+
+func modifiedHorizontalArrowKey(modifier int, plain KeyType, alt KeyType, ctrl KeyType) KeyType {
+	if modifier >= 5 && modifier <= 8 || modifier >= 13 && modifier <= 16 {
+		return ctrl
+	}
+	if modifier == 3 || modifier == 4 || modifier >= 9 && modifier <= 12 {
+		return alt
+	}
+	return plain
 }
 
 func parseCSIuKey(seq string) (Key, bool) {

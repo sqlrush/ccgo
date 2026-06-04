@@ -958,7 +958,7 @@ func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 }
 
 func TestParseModifiedNavigationKeySequences(t *testing.T) {
-	for _, modifier := range []string{"2", "3", "4", "5", "6", "7", "8", "9"} {
+	for _, modifier := range []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"} {
 		cases := []struct {
 			seq  string
 			want KeyType
@@ -989,6 +989,10 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 		{seq: "\x1b[1;6C", want: KeyCtrlRight},
 		{seq: "\x1b[1;7D", want: KeyCtrlLeft},
 		{seq: "\x1b[1;8C", want: KeyCtrlRight},
+		{seq: "\x1b[1;10D", want: KeyAltLeft},
+		{seq: "\x1b[1;11C", want: KeyAltRight},
+		{seq: "\x1b[1;13D", want: KeyCtrlLeft},
+		{seq: "\x1b[1;16C", want: KeyCtrlRight},
 	}
 	for _, tc := range arrowCases {
 		if key := ParseKey(tc.seq); key.Type != tc.want {
