@@ -613,17 +613,22 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"task-summary","sessionID":"s6","taskSummary":"aliased task","createdAt":"2026-01-01T00:00:06Z"}`,
 		`{"type":"tag","sessionId":"s1","tag":"tagged"}`,
 		`{"type":"tag","session_id":"s3","tag":"snake-tag"}`,
+		`{"type":"tag","sessionID":"s8","label":"aliased-tag"}`,
 		`{"type":"agent-name","sessionId":"s1","agentName":"Builder"}`,
 		`{"type":"agent_name","session_id":"s3","agent_name":"Snake Builder"}`,
+		`{"type":"agent-name","sessionID":"s8","name":"Aliased Agent"}`,
 		`{"type":"agent-color","sessionId":"s1","agentColor":"blue"}`,
 		`{"type":"agent_color","session_id":"s3","agent_color":"violet"}`,
+		`{"type":"agent-color","sessionID":"s8","color":"green"}`,
 		`{"type":"agent-setting","sessionId":"s1","agentSetting":"reviewer"}`,
 		`{"type":"agent_setting","session_id":"s3","agent_setting":"planner"}`,
+		`{"type":"agent-setting","sessionID":"s8","setting":"auditor"}`,
 		`{"type":"pr-link","sessionId":"s1","prNumber":42,"prUrl":"https://github.com/o/r/pull/42","prRepository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
 		`{"type":"pr_link","session_id":"s3","pr_number":43,"pr_url":"https://github.com/o/r/pull/43","pr_repository":"o/r","timestamp":"2026-01-01T00:00:04Z"}`,
 		`{"type":"pr-link","sessionID":"s5","pullRequestNumber":"45","pullRequestURL":"https://github.com/o/r/pull/45","repoFullName":"o/r"}`,
 		`{"type":"mode","sessionId":"s1","mode":"coordinator"}`,
 		`{"type":"mode","session_id":"s3","mode":"worker"}`,
+		`{"type":"mode","sessionID":"s8","status":"review"}`,
 		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
 		`{"type":"worktree_state","session_id":"s3","worktree_session":{"worktreePath":"/tmp/wt2","sessionId":"s3"}}`,
 		`{"type":"worktree-state","sessionID":"s4","worktreeState":{"worktreePath":"/tmp/wt4","sessionId":"s4"}}`,
@@ -670,6 +675,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if transcript.Tags["s3"] != "snake-tag" || transcript.AgentNames["s3"] != "Snake Builder" || transcript.AgentColors["s3"] != "violet" || transcript.AgentSettings["s3"] != "planner" {
 		t.Fatalf("snake agent metadata = %#v %#v %#v %#v", transcript.Tags, transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
+	}
+	if transcript.Tags["s8"] != "aliased-tag" || transcript.AgentNames["s8"] != "Aliased Agent" || transcript.AgentColors["s8"] != "green" || transcript.AgentSettings["s8"] != "auditor" || transcript.Modes["s8"] != "review" {
+		t.Fatalf("agent value aliases = %#v %#v %#v %#v %#v", transcript.Tags, transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings, transcript.Modes)
 	}
 	if transcript.PRLinks["s1"].PRNumber != 42 || transcript.Modes["s1"] != "coordinator" || len(transcript.WorktreeStates["s1"].WorktreeSession) == 0 {
 		t.Fatalf("session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
@@ -738,6 +746,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if metadata.Tags["s3"] != "snake-tag" || metadata.AgentNames["s3"] != "Snake Builder" || metadata.AgentColors["s3"] != "violet" || metadata.AgentSettings["s3"] != "planner" {
 		t.Fatalf("metadata snake agent = %#v %#v %#v %#v", metadata.Tags, metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings)
 	}
+	if metadata.Tags["s8"] != "aliased-tag" || metadata.AgentNames["s8"] != "Aliased Agent" || metadata.AgentColors["s8"] != "green" || metadata.AgentSettings["s8"] != "auditor" || metadata.Modes["s8"] != "review" {
+		t.Fatalf("metadata agent value aliases = %#v %#v %#v %#v %#v", metadata.Tags, metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings, metadata.Modes)
+	}
 	if metadata.PRLinks["s1"].PRRepository != "o/r" || metadata.Modes["s1"] != "coordinator" || len(metadata.WorktreeStates["s1"].WorktreeSession) == 0 {
 		t.Fatalf("metadata session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
 	}
@@ -783,6 +794,13 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if index.Title != "Aliased Title" || index.AITitle != "Aliased AI Title" || index.LastPrompt != "aliased prompt" {
 		t.Fatalf("index value aliases = %#v", index)
+	}
+	agentIndex, err := LoadTranscriptIndex(path, "s8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agentIndex.Tag != "aliased-tag" || agentIndex.AgentName != "Aliased Agent" || agentIndex.AgentColor != "green" || agentIndex.AgentSetting != "auditor" || agentIndex.Mode != "review" {
+		t.Fatalf("index agent value aliases = %#v", agentIndex)
 	}
 }
 

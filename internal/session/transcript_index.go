@@ -103,19 +103,19 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 				index.TaskSummary = entry.Summary
 			}
 		case "tag":
-			if entrySessionID, tag, ok := parseSessionStringMetadata(line, "tag"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, tag, ok := parseSessionStringMetadata(line, "tag", "value", "name", "label"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.Tag = tag
 			}
 		case "agent-name":
-			if entrySessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name", "name", "agent", "title"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.AgentName = name
 			}
 		case "agent-color":
-			if entrySessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color", "color", "colour", "value"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.AgentColor = color
 			}
 		case "agent-setting":
-			if entrySessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting", "setting", "value", "mode"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.AgentSetting = setting
 			}
 		case "pr-link":
@@ -125,7 +125,7 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 				index.PRRepository = entry.PRRepository
 			}
 		case "mode":
-			if entrySessionID, mode, ok := parseSessionStringMetadata(line, "mode"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, mode, ok := parseSessionStringMetadata(line, "mode", "value", "name", "status"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.Mode = mode
 			}
 		case "worktree-state":

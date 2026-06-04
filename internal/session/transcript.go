@@ -228,19 +228,19 @@ func LoadTranscript(path string) (Transcript, error) {
 				transcript.TaskSummaries[entry.SessionID] = entry
 			}
 		case metadataType == "tag":
-			if sessionID, tag, ok := parseSessionStringMetadata(line, "tag"); ok && sessionID != "" {
+			if sessionID, tag, ok := parseSessionStringMetadata(line, "tag", "value", "name", "label"); ok && sessionID != "" {
 				transcript.Tags[sessionID] = tag
 			}
 		case metadataType == "agent-name":
-			if sessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name"); ok && sessionID != "" {
+			if sessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name", "name", "agent", "title"); ok && sessionID != "" {
 				transcript.AgentNames[sessionID] = name
 			}
 		case metadataType == "agent-color":
-			if sessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color"); ok && sessionID != "" {
+			if sessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color", "color", "colour", "value"); ok && sessionID != "" {
 				transcript.AgentColors[sessionID] = color
 			}
 		case metadataType == "agent-setting":
-			if sessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting"); ok && sessionID != "" {
+			if sessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting", "setting", "value", "mode"); ok && sessionID != "" {
 				transcript.AgentSettings[sessionID] = setting
 			}
 		case metadataType == "pr-link":
@@ -248,7 +248,7 @@ func LoadTranscript(path string) (Transcript, error) {
 				transcript.PRLinks[entry.SessionID] = entry
 			}
 		case metadataType == "mode":
-			if sessionID, mode, ok := parseSessionStringMetadata(line, "mode"); ok && sessionID != "" {
+			if sessionID, mode, ok := parseSessionStringMetadata(line, "mode", "value", "name", "status"); ok && sessionID != "" {
 				transcript.Modes[sessionID] = mode
 			}
 		case metadataType == "worktree-state":
