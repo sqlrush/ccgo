@@ -296,10 +296,20 @@ func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
 	if got := TerminalVisibleText(shellInput); got != "xyz" {
 		t.Fatalf("shell visible = %q", got)
 	}
-	vsCodeShellInput := "m" + OSCSequence(OSCVSShellIntegration, "C") + "n"
+	vsCodeShellInput := "m" +
+		OSCSequence(OSCVSShellIntegration, "C") +
+		OSCSequence(OSCVSShellIntegration, "E", "go test ./...") +
+		OSCSequence(OSCVSShellIntegration, "P", "Cwd=/tmp/ccgo", "IsWindows=False") +
+		"n"
 	vsCodeShellActions := parser.Feed(vsCodeShellInput)
-	if len(vsCodeShellActions) != 3 || vsCodeShellActions[1].Type != TerminalActionShell || vsCodeShellActions[1].OSC.Shell.Marker != "commandStart" {
+	if len(vsCodeShellActions) != 5 || vsCodeShellActions[1].Type != TerminalActionShell || vsCodeShellActions[1].OSC.Shell.Marker != "commandStart" {
 		t.Fatalf("vscode shell actions = %#v", vsCodeShellActions)
+	}
+	if vsCodeShellActions[2].Type != TerminalActionShell || vsCodeShellActions[2].OSC.Shell.Marker != "commandLine" || vsCodeShellActions[2].OSC.Shell.Value != "go test ./..." {
+		t.Fatalf("vscode shell command line action = %#v", vsCodeShellActions[2])
+	}
+	if vsCodeShellActions[3].Type != TerminalActionShell || vsCodeShellActions[3].OSC.Shell.Marker != "property" || vsCodeShellActions[3].OSC.Shell.Properties["Cwd"] != "/tmp/ccgo" || vsCodeShellActions[3].OSC.Shell.Properties["IsWindows"] != "False" {
+		t.Fatalf("vscode shell property action = %#v", vsCodeShellActions[3])
 	}
 	if got := TerminalVisibleText(vsCodeShellInput); got != "mn" {
 		t.Fatalf("vscode shell visible = %q", got)

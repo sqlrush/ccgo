@@ -124,6 +124,8 @@ type TerminalNotificationAction struct {
 type TerminalShellIntegrationAction struct {
 	Marker      string
 	RawMarker   string
+	Value       string
+	Properties  map[string]string
 	ExitCode    int
 	HasExitCode bool
 }
@@ -420,6 +422,13 @@ func ParseShellIntegrationPayload(payload string) (TerminalShellIntegrationActio
 		action.Marker = "commandStart"
 	case "D":
 		action.Marker = "commandEnd"
+	case "E":
+		action.Marker = "commandLine"
+		action.Value = rest
+	case "P":
+		action.Marker = "property"
+		action.Value = rest
+		action.Properties = parseSemicolonFields(rest)
 	default:
 		return TerminalShellIntegrationAction{}, false
 	}
@@ -431,6 +440,27 @@ func ParseShellIntegrationPayload(payload string) (TerminalShellIntegrationActio
 		}
 	}
 	return action, true
+}
+
+func parseSemicolonFields(value string) map[string]string {
+	fields := map[string]string{}
+	for _, part := range strings.Split(value, ";") {
+		if part == "" {
+			continue
+		}
+		key, fieldValue, ok := strings.Cut(part, "=")
+		if !ok {
+			fields[part] = ""
+			continue
+		}
+		if key != "" {
+			fields[key] = fieldValue
+		}
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return fields
 }
 
 func parseOSCPercent(parts []string) int {

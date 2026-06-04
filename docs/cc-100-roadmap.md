@@ -562,6 +562,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：terminal OSC parser 现在把 OSC 133/633 shell integration marks (`A`/`B`/`C`/`D`) 解析成结构化 shellIntegration action，并保留 command-end exit code，真实 shell 输出的 prompt/command 标记不会落入 unknown。
 
+本轮补充：terminal OSC parser 现在识别 VS Code OSC 633 `E` command-line 和 `P` property 记录，保留 raw value，并把 semicolon property payload 解析成结构化 metadata，visible text/snapshot replay 继续剥离这些 shell 标记。
+
 本轮补充：terminal OSC parser 现在解析 OSC 7 current-directory URI，保留 raw URI 并暴露 scheme/host/path，TerminalParser 会输出 directory action，snapshot/visible-text replay 继续剥离该控制串。
 
 本轮补充：terminal renderer constants 增加官方 clear scrollback (`CSI 3J`) 和 legacy Windows home (`CSI 0f`) 序列 helper，支持现代 clear-screen+scrollback 和 legacy Windows clear 组合；平台自动探测仍留给调用方。

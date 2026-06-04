@@ -4151,6 +4151,17 @@ func TestParseOSCContent(t *testing.T) {
 	if vsCodeShell.Type != OSCActionShell || vsCodeShell.Shell.Marker != "commandStart" || vsCodeShell.Shell.RawMarker != "C" {
 		t.Fatalf("vscode shell command start = %#v", vsCodeShell)
 	}
+	vsCodeCommandLine := ParseOSCContent("633;E;go test ./...")
+	if vsCodeCommandLine.Type != OSCActionShell || vsCodeCommandLine.Shell.Marker != "commandLine" || vsCodeCommandLine.Shell.RawMarker != "E" || vsCodeCommandLine.Shell.Value != "go test ./..." {
+		t.Fatalf("vscode shell command line = %#v", vsCodeCommandLine)
+	}
+	vsCodeProperty := ParseOSCContent("633;P;Cwd=/tmp/ccgo;IsWindows=False;HasRichCommandDetection")
+	if vsCodeProperty.Type != OSCActionShell || vsCodeProperty.Shell.Marker != "property" || vsCodeProperty.Shell.RawMarker != "P" || vsCodeProperty.Shell.Value != "Cwd=/tmp/ccgo;IsWindows=False;HasRichCommandDetection" {
+		t.Fatalf("vscode shell property = %#v", vsCodeProperty)
+	}
+	if vsCodeProperty.Shell.Properties["Cwd"] != "/tmp/ccgo" || vsCodeProperty.Shell.Properties["IsWindows"] != "False" || vsCodeProperty.Shell.Properties["HasRichCommandDetection"] != "" {
+		t.Fatalf("vscode shell properties = %#v", vsCodeProperty.Shell.Properties)
+	}
 
 	unknown := ParseOSCContent("999;noop")
 	if unknown.Type != OSCActionUnknown || unknown.Sequence != OSCPrefix+"999;noop" {
