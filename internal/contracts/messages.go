@@ -216,6 +216,11 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		IsMeta                 bool            `json:"isMeta"`
 		Timestamp              string          `json:"timestamp"`
 		Content                json.RawMessage `json:"content"`
+		Text                   json.RawMessage `json:"text"`
+		Body                   json.RawMessage `json:"body"`
+		MessageText            json.RawMessage `json:"message"`
+		Value                  json.RawMessage `json:"value"`
+		Output                 json.RawMessage `json:"output"`
 		Subtype                string          `json:"subtype"`
 		Model                  string          `json:"model"`
 		Usage                  *Usage          `json:"usage"`
@@ -250,6 +255,9 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	content, err := contentBlocksFromRaw(aux.Content)
 	if err != nil {
 		return err
+	}
+	if len(content) == 0 && isEmptyJSONRaw(aux.Content) {
+		content = textContentBlocksFromRaw(aux.Text, aux.Body, aux.MessageText, aux.Value, aux.Output)
 	}
 	*m = Message{
 		ID:         string(aux.ID),
@@ -319,7 +327,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 
 func contentBlocksFromRaw(raw json.RawMessage) ([]ContentBlock, error) {
 	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+	if isEmptyJSONRaw(raw) {
 		return nil, nil
 	}
 	switch raw[0] {
@@ -335,6 +343,20 @@ func contentBlocksFromRaw(raw json.RawMessage) ([]ContentBlock, error) {
 			return nil, err
 		}
 		return []ContentBlock{block}, nil
+	case '[':
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, err
+		}
+		blocks := make([]ContentBlock, 0, len(items))
+		for _, item := range items {
+			next, err := contentBlocksFromRaw(item)
+			if err != nil {
+				return nil, err
+			}
+			blocks = append(blocks, next...)
+		}
+		return blocks, nil
 	default:
 		var blocks []ContentBlock
 		if err := json.Unmarshal(raw, &blocks); err != nil {
@@ -342,6 +364,25 @@ func contentBlocksFromRaw(raw json.RawMessage) ([]ContentBlock, error) {
 		}
 		return blocks, nil
 	}
+}
+
+func textContentBlocksFromRaw(values ...json.RawMessage) []ContentBlock {
+	for _, value := range values {
+		value = bytes.TrimSpace(value)
+		if isEmptyJSONRaw(value) || value[0] != '"' {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(value, &text); err == nil {
+			return []ContentBlock{NewTextBlock(text)}
+		}
+	}
+	return nil
+}
+
+func isEmptyJSONRaw(raw json.RawMessage) bool {
+	raw = bytes.TrimSpace(raw)
+	return len(raw) == 0 || bytes.Equal(raw, []byte("null"))
 }
 
 func firstMessageType(values ...string) MessageType {

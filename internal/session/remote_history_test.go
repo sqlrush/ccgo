@@ -1075,8 +1075,8 @@ func TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases(t *testing.T) {
 func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[
-		{"eventType":"user","eventId":"evt_u1","sessionID":"s_payload","createdAt":"2026-01-01T00:00:01Z","payload":{"role":"user","content":"hi"}},
-		{"event_type":"assistant","event_id":"evt_a1","session_id":"s_payload","parentMessageId":"evt_u1","created_at":"2026-01-01T00:00:02Z","body":{"role":"assistant","content":"hello"}}
+		{"eventType":"user","eventId":"evt_u1","sessionID":"s_payload","createdAt":"2026-01-01T00:00:01Z","payload":{"role":"user","text":"hi"}},
+		{"event_type":"assistant","event_id":"evt_a1","session_id":"s_payload","parentMessageId":"evt_u1","created_at":"2026-01-01T00:00:02Z","body":{"role":"assistant","message":"hello"}}
 	]}`), &response); err != nil {
 		t.Fatal(err)
 	}
