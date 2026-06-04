@@ -451,6 +451,62 @@ func TestLoadMicroResultAcceptsNumericTimeAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsAdjacentTimeFieldAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest  string
+		payload string
+	}{
+		{
+			digest: "cached-at-valid-until",
+			payload: `{
+				"summary": "valid until cache",
+				"digest": "cached-at-valid-until",
+				"version": "microcompact.v1",
+				"cachedAt": "1970-01-01T00:01:40Z",
+				"validUntil": "1970-01-01T01:01:40Z"
+			}`,
+		},
+		{
+			digest: "timestamp-expiration-ms",
+			payload: `{
+				"summary": "expiration cache",
+				"digest": "timestamp-expiration-ms",
+				"version": "microcompact.v1",
+				"timestampMs": "100000",
+				"expirationTimeMs": 3700000
+			}`,
+		},
+		{
+			digest: "updated-not-after",
+			payload: `{
+				"summary": "not after cache",
+				"digest": "updated-not-after",
+				"version": "microcompact.v1",
+				"updatedAt": 100,
+				"notAfter": 3700
+			}`,
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if !result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+			t.Fatalf("%s times = %#v", tc.digest, result)
+		}
+	}
+}
+
 func TestLoadMicroResultDerivesExpiryFromTTLFields(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
@@ -493,6 +549,28 @@ func TestLoadMicroResultDerivesExpiryFromTTLFields(t *testing.T) {
 				"maxAge": "1h30m"
 			}`,
 			want: time.Unix(5500, 0).UTC(),
+		},
+		{
+			digest: "ttl-time-to-live",
+			payload: `{
+				"summary": "time-to-live cache",
+				"digest": "ttl-time-to-live",
+				"version": "microcompact.v1",
+				"cachedAt": 100,
+				"timeToLiveSeconds": "3600"
+			}`,
+			want: time.Unix(3700, 0).UTC(),
+		},
+		{
+			digest: "ttl-valid-for-ms",
+			payload: `{
+				"summary": "valid-for cache",
+				"digest": "ttl-valid-for-ms",
+				"version": "microcompact.v1",
+				"createdAt": 100,
+				"validForMs": "3600000"
+			}`,
+			want: time.Unix(3700, 0).UTC(),
 		},
 		{
 			digest: "ttl-absolute-wins",

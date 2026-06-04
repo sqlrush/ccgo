@@ -99,12 +99,25 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 	} else if ok && (overwrite || result.Version == "") {
 		result.Version = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "created", "createdMs", "created_ms", "createdMillis", "created_millis", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
+	if value, ok, err := microTimeJSONField(fields,
+		"CreatedAt", "createdAt", "created_at", "created",
+		"cachedAt", "cached_at", "cacheCreatedAt", "cache_created_at",
+		"storedAt", "stored_at", "generatedAt", "generated_at", "updatedAt", "updated_at", "timestamp",
+		"createdMs", "created_ms", "createdMillis", "created_millis", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis",
+		"cachedAtMs", "cached_at_ms", "cacheCreatedAtMs", "cache_created_at_ms", "storedAtMs", "stored_at_ms", "generatedAtMs", "generated_at_ms", "updatedAtMs", "updated_at_ms", "timestampMs", "timestamp_ms",
+		"createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms",
+	); err != nil {
 		return err
 	} else if ok && (overwrite || result.CreatedAt.IsZero()) {
 		result.CreatedAt = value
 	}
-	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expires", "expiresMs", "expires_ms", "expiresMillis", "expires_millis", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
+	if value, ok, err := microTimeJSONField(fields,
+		"ExpiresAt", "expiresAt", "expires_at", "expires",
+		"expiry", "expiresOn", "expires_on", "expiration", "expirationTime", "expiration_time", "validUntil", "valid_until", "notAfter", "not_after", "cacheExpiresAt", "cache_expires_at",
+		"expiresMs", "expires_ms", "expiresMillis", "expires_millis", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis",
+		"expiryMs", "expiry_ms", "expirationMs", "expiration_ms", "expirationTimeMs", "expiration_time_ms", "validUntilMs", "valid_until_ms", "notAfterMs", "not_after_ms", "cacheExpiresAtMs", "cache_expires_at_ms",
+		"expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms",
+	); err != nil {
 		return err
 	} else if ok && (overwrite || result.ExpiresAt.IsZero()) {
 		result.ExpiresAt = value
@@ -112,10 +125,13 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 	if result.ExpiresAt.IsZero() && !result.CreatedAt.IsZero() {
 		if value, ok, err := microDurationJSONField(fields,
 			"ttl", "ttlSeconds", "ttl_seconds", "ttlSec", "ttl_sec",
+			"timeToLive", "time_to_live", "timeToLiveSeconds", "time_to_live_seconds", "ttlInSeconds", "ttl_in_seconds",
 			"ttlMs", "ttl_ms", "ttlMillis", "ttl_millis", "ttlMilliseconds", "ttl_milliseconds",
+			"timeToLiveMs", "time_to_live_ms", "timeToLiveMillis", "time_to_live_millis", "durationMs", "duration_ms", "durationMillis", "duration_millis",
 			"expiresIn", "expires_in", "expiresInSeconds", "expires_in_seconds",
 			"expiresInMs", "expires_in_ms", "expiresInMillis", "expires_in_millis", "expiresInMilliseconds", "expires_in_milliseconds",
 			"maxAge", "max_age", "maxAgeSeconds", "max_age_seconds", "maxAgeMs", "max_age_ms", "maxAgeMillis", "max_age_millis", "maxAgeMilliseconds", "max_age_milliseconds",
+			"validFor", "valid_for", "validForSeconds", "valid_for_seconds", "validForMs", "valid_for_ms", "validForMillis", "valid_for_millis",
 		); err != nil {
 			return err
 		} else if ok && value > 0 {
