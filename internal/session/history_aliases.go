@@ -1,7 +1,9 @@
 package session
 
 import (
+	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -52,95 +54,36 @@ func (d *ImageDimensions) UnmarshalJSON(data []byte) error {
 }
 
 func (c *PastedContent) UnmarshalJSON(data []byte) error {
-	type PastedContentJSON PastedContent
-	var aux struct {
-		*PastedContentJSON
-		Kind             string `json:"kind"`
-		PastedType       string `json:"pastedType"`
-		PastedTypeSnake  string `json:"pasted_type"`
-		Value            string `json:"value"`
-		Data             string `json:"data"`
-		Base64           string `json:"base64"`
-		MediaTypeSnake   string `json:"media_type"`
-		MimeType         string `json:"mimeType"`
-		MimeTypeSnake    string `json:"mime_type"`
-		ContentType      string `json:"contentType"`
-		ContentTypeSnake string `json:"content_type"`
-		FileName         string `json:"fileName"`
-		FileNameSnake    string `json:"file_name"`
-		Name             string `json:"name"`
-		SourcePathSnake  string `json:"source_path"`
-		FilePath         string `json:"filePath"`
-		FilePathSnake    string `json:"file_path"`
-		Path             string `json:"path"`
-	}
-	base := PastedContentJSON{}
-	aux.PastedContentJSON = &base
-	if err := json.Unmarshal(data, &aux); err != nil {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*c = PastedContent(base)
-	if c.Type == "" {
-		c.Type = firstHistoryString(aux.Kind, aux.PastedType, aux.PastedTypeSnake)
-	}
-	c.Type = canonicalPastedContentType(c.Type)
-	if c.Content == "" {
-		c.Content = firstHistoryString(aux.Value, aux.Data, aux.Base64)
-	}
-	if c.MediaType == "" {
-		c.MediaType = firstHistoryString(aux.MediaTypeSnake, aux.MimeType, aux.MimeTypeSnake, aux.ContentType, aux.ContentTypeSnake)
-	}
-	if c.Filename == "" {
-		c.Filename = firstHistoryString(aux.FileName, aux.FileNameSnake, aux.Name)
-	}
-	if c.SourcePath == "" {
-		c.SourcePath = firstHistoryString(aux.SourcePathSnake, aux.FilePath, aux.FilePathSnake, aux.Path)
+	*c = PastedContent{
+		ID:         historyIntJSONField(fields, historyIDFieldNames()...),
+		Type:       canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")),
+		Content:    historyStringJSONField(fields, "content", "value", "data", "base64"),
+		MediaType:  historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"),
+		Filename:   historyStringJSONField(fields, "filename", "fileName", "file_name", "name"),
+		Dimensions: historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"),
+		SourcePath: historyStringJSONField(fields, "sourcePath", "source_path", "filePath", "file_path", "path"),
 	}
 	return nil
 }
 
 func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
-	type StoredPastedContentJSON StoredPastedContent
-	var aux struct {
-		*StoredPastedContentJSON
-		Kind             string `json:"kind"`
-		PastedType       string `json:"pastedType"`
-		PastedTypeSnake  string `json:"pasted_type"`
-		ContentHashSnake string `json:"content_hash"`
-		MediaTypeSnake   string `json:"media_type"`
-		MimeType         string `json:"mimeType"`
-		MimeTypeSnake    string `json:"mime_type"`
-		ContentType      string `json:"contentType"`
-		ContentTypeSnake string `json:"content_type"`
-		FileName         string `json:"fileName"`
-		FileNameSnake    string `json:"file_name"`
-		Name             string `json:"name"`
-		SourcePathSnake  string `json:"source_path"`
-		FilePath         string `json:"filePath"`
-		FilePathSnake    string `json:"file_path"`
-		Path             string `json:"path"`
-	}
-	base := StoredPastedContentJSON{}
-	aux.StoredPastedContentJSON = &base
-	if err := json.Unmarshal(data, &aux); err != nil {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*c = StoredPastedContent(base)
-	if c.Type == "" {
-		c.Type = firstHistoryString(aux.Kind, aux.PastedType, aux.PastedTypeSnake)
-	}
-	c.Type = canonicalPastedContentType(c.Type)
-	if c.ContentHash == "" {
-		c.ContentHash = aux.ContentHashSnake
-	}
-	if c.MediaType == "" {
-		c.MediaType = firstHistoryString(aux.MediaTypeSnake, aux.MimeType, aux.MimeTypeSnake, aux.ContentType, aux.ContentTypeSnake)
-	}
-	if c.Filename == "" {
-		c.Filename = firstHistoryString(aux.FileName, aux.FileNameSnake, aux.Name)
-	}
-	if c.SourcePath == "" {
-		c.SourcePath = firstHistoryString(aux.SourcePathSnake, aux.FilePath, aux.FilePathSnake, aux.Path)
+	*c = StoredPastedContent{
+		ID:          historyIntJSONField(fields, historyIDFieldNames()...),
+		Type:        canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")),
+		Content:     historyStringJSONField(fields, "content", "value", "data", "base64"),
+		ContentHash: historyStringJSONField(fields, "contentHash", "content_hash", "hash", "contentDigest", "content_digest"),
+		MediaType:   historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"),
+		Filename:    historyStringJSONField(fields, "filename", "fileName", "file_name", "name"),
+		Dimensions:  historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"),
+		SourcePath:  historyStringJSONField(fields, "sourcePath", "source_path", "filePath", "file_path", "path"),
 	}
 	return nil
 }
@@ -162,13 +105,77 @@ func canonicalPastedContentType(value string) string {
 	}
 }
 
-func firstHistoryString(values ...string) string {
-	for _, value := range values {
-		if value != "" {
+func historyIDFieldNames() []string {
+	return []string{
+		"id",
+		"pastedId",
+		"pastedID",
+		"pasted_id",
+		"pastedContentId",
+		"pastedContentID",
+		"pasted_content_id",
+		"contentId",
+		"contentID",
+		"content_id",
+		"attachmentId",
+		"attachmentID",
+		"attachment_id",
+		"imageId",
+		"imageID",
+		"image_id",
+	}
+}
+
+func historyStringJSONField(fields map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
 			return value
 		}
 	}
 	return ""
+}
+
+func historyIntJSONField(fields map[string]json.RawMessage, names ...string) int {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value int
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			parsed, err := strconv.Atoi(strings.TrimSpace(text))
+			if err == nil {
+				return parsed
+			}
+		}
+	}
+	return 0
+}
+
+func historyDimensionsJSONField(fields map[string]json.RawMessage, names ...string) *ImageDimensions {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			continue
+		}
+		var dimensions ImageDimensions
+		if err := json.Unmarshal(raw, &dimensions); err == nil {
+			return &dimensions
+		}
+	}
+	return nil
 }
 
 func (e *HistoryEntry) UnmarshalJSON(data []byte) error {

@@ -4815,8 +4815,8 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 					"role": "user",
 					"text": "attached [Pasted text #13] [Image #14]",
 					"attachments": [
-						{"id": 13, "kind": "text", "value": "attached memo"},
-						{"id": 14, "pastedType": "image", "data": "BBBB", "contentType": "image/png", "fileName": "attached.png"}
+						{"pastedContentId": "13", "kind": "text", "value": "attached memo"},
+						{"attachmentID": "14", "pastedType": "image", "data": "BBBB", "contentType": "image/png", "fileName": "attached.png"}
 					],
 					"pastedImageId": 14
 				}

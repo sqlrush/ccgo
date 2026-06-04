@@ -317,6 +317,7 @@ M7 progress now includes:
 - `internal/contracts`/`internal/session`: content block `type` decoding now normalizes camel/kebab/compact aliases such as `toolUse`, `tool-result`, `cacheEdits`, `inputImage`, and `chain-of-thought`.
 - `internal/session`: image history dimensions now default display size to original size when only `width`/`height` or original dimensions are present, preserving source metadata for single-size image fixtures.
 - `internal/session`: pasted-content history type decoding now normalizes aliases such as `inputImage`/`pasted-image`/`input_text`/`pasted-text` to canonical `image`/`text` for runtime and stored history.
+- `internal/session`/`internal/tui`: pasted-content ID decoding now accepts aliases such as `pastedContentId`/`attachmentID`/`contentID`/`imageID` and numeric strings for runtime/stored history and script attachments.
 
 Still missing for full M6/M7 parity:
 

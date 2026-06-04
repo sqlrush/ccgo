@@ -153,16 +153,16 @@ func TestLoadPromptHistoryAcceptsFieldAliases(t *testing.T) {
 
 func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 	var entry HistoryEntry
-	err := json.Unmarshal([]byte(`{"display":"restore [Image #1] [Pasted text #2]","pasted_contents":{"1":{"id":1,"kind":"inputImage","base64":"AAAA","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}},"2":{"id":2,"pastedType":"pasted-text","value":"memo","contentType":"text/plain"}}}`), &entry)
+	err := json.Unmarshal([]byte(`{"display":"restore [Image #1] [Pasted text #2]","pasted_contents":{"1":{"pastedContentId":"1","kind":"inputImage","base64":"AAAA","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}},"2":{"attachmentID":"2","pastedType":"pasted-text","value":"memo","contentType":"text/plain"}}}`), &entry)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := entry.PastedContents[1]
-	if got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 || got.Dimensions.DisplayHeight != 2000 {
+	if got.ID != 1 || got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" || got.Filename != "chart.png" || got.SourcePath != "/tmp/chart.png" || got.Dimensions == nil || got.Dimensions.OriginalHeight != 2000 || got.Dimensions.DisplayHeight != 2000 {
 		t.Fatalf("pasted content aliases = %#v", got)
 	}
 	text := entry.PastedContents[2]
-	if text.Type != PastedContentText || text.Content != "memo" || text.MediaType != "text/plain" {
+	if text.ID != 2 || text.Type != PastedContentText || text.Content != "memo" || text.MediaType != "text/plain" {
 		t.Fatalf("text pasted content aliases = %#v", text)
 	}
 }
@@ -182,13 +182,13 @@ func TestImageDimensionsWidthHeightDefaultDisplaySize(t *testing.T) {
 
 func TestStoredPastedContentAcceptsTypeAliases(t *testing.T) {
 	var entry LogEntry
-	if err := json.Unmarshal([]byte(`{"display":"restore","pasted_contents":{"1":{"id":1,"kind":"pasted-image","content_hash":"image_hash","mimeType":"image/png"},"2":{"id":2,"pasted_type":"input_text","content_hash":"text_hash","contentType":"text/plain"}}}`), &entry); err != nil {
+	if err := json.Unmarshal([]byte(`{"display":"restore","pasted_contents":{"1":{"pastedId":"1","kind":"pasted-image","content_hash":"image_hash","mimeType":"image/png"},"2":{"contentID":"2","pasted_type":"input_text","content_hash":"text_hash","contentType":"text/plain"}}}`), &entry); err != nil {
 		t.Fatal(err)
 	}
-	if got := entry.PastedContents[1]; got.Type != PastedContentImage || got.ContentHash != "image_hash" || got.MediaType != "image/png" {
+	if got := entry.PastedContents[1]; got.ID != 1 || got.Type != PastedContentImage || got.ContentHash != "image_hash" || got.MediaType != "image/png" {
 		t.Fatalf("stored image = %#v", got)
 	}
-	if got := entry.PastedContents[2]; got.Type != PastedContentText || got.ContentHash != "text_hash" || got.MediaType != "text/plain" {
+	if got := entry.PastedContents[2]; got.ID != 2 || got.Type != PastedContentText || got.ContentHash != "text_hash" || got.MediaType != "text/plain" {
 		t.Fatalf("stored text = %#v", got)
 	}
 }
