@@ -1,6 +1,7 @@
 package compact
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -46,45 +47,66 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	if nested, ok := microResultWrappedJSON(fields); ok {
+		var result MicroResult
+		if err := json.Unmarshal(nested, &result); err != nil {
+			return err
+		}
+		if err := microResultApplyFieldAliases(&result, fields, false, false); err != nil {
+			return err
+		}
+		*r = result
+		return nil
+	}
 	var result MicroResult
-	if value, ok, err := microStringJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "content", "text", "value", "output"); err != nil {
+	if err := microResultApplyFieldAliases(&result, fields, true, true); err != nil {
 		return err
-	} else if ok {
-		result.Summary = value
+	}
+	*r = result
+	return nil
+}
+
+func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.RawMessage, overwrite bool, includeSummary bool) error {
+	if includeSummary {
+		if value, ok, err := microStringJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "content", "text", "value", "output"); err != nil {
+			return err
+		} else if ok && (overwrite || result.Summary == "") {
+			result.Summary = value
+		}
 	}
 	if value, ok, err := microStringJSONField(fields, "Digest", "digest", "cacheKey", "cache_key", "key", "hash"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || result.Digest == "") {
 		result.Digest = value
 	}
 	if value, ok, err := microBoolJSONField(fields, "Cached", "cached", "isCached", "is_cached", "fromCache", "from_cache", "cacheHit", "cache_hit"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || !result.Cached) {
 		result.Cached = value
 	}
 	if value, ok, err := microIntJSONField(fields, "MessagesSummarized", "messagesSummarized", "messages_summarized", "summarized", "summarizedMessages", "summarized_messages", "messageCount", "message_count", "inputMessages", "input_messages"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || result.MessagesSummarized == 0) {
 		result.MessagesSummarized = value
 	}
 	if value, ok, err := microIntJSONField(fields, "MessagesKept", "messagesKept", "messages_kept", "kept", "keptMessages", "kept_messages", "retained", "retainedMessages", "retained_messages"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || result.MessagesKept == 0) {
 		result.MessagesKept = value
 	}
 	if value, ok, err := microStringJSONField(fields, "Version", "version", "cacheVersion", "cache_version", "schemaVersion", "schema_version"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || result.Version == "") {
 		result.Version = value
 	}
 	if value, ok, err := microTimeJSONField(fields, "CreatedAt", "createdAt", "created_at", "created", "createdMs", "created_ms", "createdAtMs", "created_at_ms", "createdAtMillis", "created_at_millis", "createdAtUnix", "created_at_unix", "createdAtUnixMs", "created_at_unix_ms"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || result.CreatedAt.IsZero()) {
 		result.CreatedAt = value
 	}
 	if value, ok, err := microTimeJSONField(fields, "ExpiresAt", "expiresAt", "expires_at", "expires", "expiresMs", "expires_ms", "expiresAtMs", "expires_at_ms", "expiresAtMillis", "expires_at_millis", "expiresAtUnix", "expires_at_unix", "expiresAtUnixMs", "expires_at_unix_ms"); err != nil {
 		return err
-	} else if ok {
+	} else if ok && (overwrite || result.ExpiresAt.IsZero()) {
 		result.ExpiresAt = value
 	}
 	if result.ExpiresAt.IsZero() && !result.CreatedAt.IsZero() {
@@ -100,8 +122,47 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 			result.ExpiresAt = result.CreatedAt.Add(value)
 		}
 	}
-	*r = result
 	return nil
+}
+
+func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage, bool) {
+	if microResultHasDirectPayload(fields) {
+		return nil, false
+	}
+	for _, name := range []string{
+		"result", "data", "cache", "entry", "record", "item", "payload", "response", "body",
+		"microcompact", "microCompact", "micro_result", "microResult", "microcompactResult", "microCompactResult",
+		"value",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) > 0 && trimmed[0] == '{' {
+			return raw, true
+		}
+	}
+	return nil, false
+}
+
+func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{
+		"Summary", "summary", "summaryText", "summary_text", "content", "text", "value", "output",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+			continue
+		}
+		if trimmed[0] != '{' {
+			return true
+		}
+	}
+	return false
 }
 
 type MicroPruneOptions struct {

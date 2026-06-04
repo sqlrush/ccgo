@@ -312,6 +312,64 @@ func TestLoadMicroResultAcceptsAdjacentCacheFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest      string
+		body        string
+		want        string
+		wantExpires bool
+	}{
+		{
+			digest: "wrapped-result",
+			body:   `"result":{"summary":"result summary","digest":"wrapped-result","version":"microcompact.v1","createdAt":100}`,
+			want:   "result summary",
+		},
+		{
+			digest:      "wrapped-data",
+			body:        `"data":{"content":"data summary","cacheKey":"wrapped-data","cacheVersion":"microcompact.v1","created":100,"ttlSeconds":3600}`,
+			want:        "data summary",
+			wantExpires: true,
+		},
+		{
+			digest: "wrapped-value",
+			body:   `"value":{"text":"value summary","key":"wrapped-value","schemaVersion":"microcompact.v1","createdAt":100}`,
+			want:   "value summary",
+		},
+		{
+			digest:      "wrapped-envelope",
+			body:        `"data":{"summary":"envelope summary"},"digest":"wrapped-envelope","version":"microcompact.v1","createdAt":100,"ttlSeconds":3600`,
+			want:        "envelope summary",
+			wantExpires: true,
+		},
+		{
+			digest: "direct-value",
+			body:   `"value":"direct value summary","digest":"direct-value","version":"microcompact.v1","createdAt":100`,
+			want:   "direct value summary",
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte("{"+tc.body+"}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+		if tc.wantExpires && !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+			t.Fatalf("%s expires_at = %#v", tc.digest, result.ExpiresAt)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsNumericTimeAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
