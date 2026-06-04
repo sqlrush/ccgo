@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -197,6 +198,7 @@ func taskStatusJSONField(fields map[string]json.RawMessage, names ...string) *Ta
 }
 
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
+	data = unwrapScriptStepJSON(data)
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
 	var raw alias
@@ -847,6 +849,36 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	applyScriptStepActionAlias(step, fieldMap)
 	return nil
+}
+
+func unwrapScriptStepJSON(data []byte) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	for _, name := range []string{
+		"step",
+		"script_step",
+		"scriptStep",
+		"interaction_step",
+		"interactionStep",
+		"action_step",
+		"actionStep",
+		"record",
+		"entry",
+		"item",
+		"event",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] == '{' {
+			return raw
+		}
+	}
+	return data
 }
 
 func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMessage) {

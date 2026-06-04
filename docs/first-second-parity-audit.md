@@ -310,6 +310,7 @@ M7 progress now includes:
 - `internal/contracts`/`internal/session`: content block decoding now accepts text aliases such as `body`/`message`/`value`/`output`/`contentText`/`content_text` and string `content` for `text`/`thinking` blocks, so transcript resume preserves these nested block variants.
 - `internal/tui`: interaction script steps now accept `action`/`type`/`kind`/`name`/`operation` discriminator aliases for common actions such as key press, key sequences, text input, paste, status updates, resize, mouse/image, and focus/blur.
 - `internal/contracts`/`internal/session`: image content blocks now normalize source aliases such as `mediaType`/`mimeType`/`contentType` and `base64`/`payload`, including top-level image block fields, into canonical `ImageSource` values during transcript resume.
+- `internal/tui`: interaction script single-step JSON now unwraps `step`/`scriptStep`/`interactionStep`/`record`/`entry`/`item`/`event` objects in arrays, JSONL records, and wrapper-object step lists.
 
 Still missing for full M6/M7 parity:
 
