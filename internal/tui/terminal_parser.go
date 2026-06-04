@@ -43,6 +43,7 @@ type TerminalAction struct {
 	Report    CSIReportAction
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
+	Modes     []CSIModeAction
 	OSC       OSCAction
 	String    TerminalStringControlAction
 	Sequence  string
@@ -241,7 +242,7 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 		case CSIActionScroll:
 			return TerminalAction{Type: TerminalActionScroll, Scroll: action.CSI.Scroll}, true
 		case CSIActionMode:
-			return TerminalAction{Type: TerminalActionMode, Mode: action.CSI.Mode}, true
+			return TerminalAction{Type: TerminalActionMode, Mode: action.CSI.Mode, Modes: action.CSI.Modes}, true
 		case CSIActionReset:
 			p.Reset()
 			return TerminalAction{Type: TerminalActionReset}, true

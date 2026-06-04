@@ -289,6 +289,7 @@ type CSIAction struct {
 	Report    CSIReportAction
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
+	Modes     []CSIModeAction
 	SGRParams string
 	Sequence  string
 }
@@ -435,11 +436,17 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	}
 
 	if privateMode == '?' && (final == CSICommandSetMode || final == CSICommandResetMode) {
+		if action, ok := csiModeListAction(params, true, final == CSICommandSetMode); ok {
+			return action, true
+		}
 		if action, ok := csiPrivateModeAction(p0, final == CSICommandSetMode); ok {
 			return action, true
 		}
 	}
 	if privateMode == 0 && (final == CSICommandSetMode || final == CSICommandResetMode) {
+		if action, ok := csiModeListAction(params, false, final == CSICommandSetMode); ok {
+			return action, true
+		}
 		if action, ok := csiModeAction(p0, final == CSICommandSetMode); ok {
 			return action, true
 		}
@@ -540,6 +547,37 @@ func csiScrollRegion(params []int) CSIAction {
 		bottom = params[1]
 	}
 	return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: top, Bottom: bottom}}
+}
+
+func csiModeListAction(params []int, private bool, enabled bool) (CSIAction, bool) {
+	if len(params) <= 1 {
+		return CSIAction{}, false
+	}
+	modes := make([]CSIModeAction, 0, len(params))
+	for _, mode := range params {
+		if mode <= 0 {
+			continue
+		}
+		action, ok := csiSingleModeAction(mode, private, enabled)
+		if !ok {
+			continue
+		}
+		if action.Type != CSIActionMode {
+			return CSIAction{}, false
+		}
+		modes = append(modes, action.Mode)
+	}
+	if len(modes) == 0 {
+		return CSIAction{}, false
+	}
+	return CSIAction{Type: CSIActionMode, Mode: modes[0], Modes: modes}, true
+}
+
+func csiSingleModeAction(mode int, private bool, enabled bool) (CSIAction, bool) {
+	if private {
+		return csiPrivateModeAction(mode, enabled)
+	}
+	return csiModeAction(mode, enabled)
 }
 
 func csiEraseDisplayRegion(index int) CSIEraseRegion {
