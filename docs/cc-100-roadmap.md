@@ -44,6 +44,8 @@ M6 补充：tombstone metadata target/parent 现在接受 `targetId`/`deletedId`
 
 M6 补充：transcript metadata 现在接受 summary `leafID`/message ID、content-replacement `agentID`/`toolUseID`/`blockID` 和 context-collapse `collapseID`/`summaryID`/archived ID 别名，metadata loader 与 full loader 保持同一兼容面。
 
+M6 补充：worktree-state metadata 现在除 `worktreeSession`/`worktree_session` 外，也接受 `worktreeState`/`worktree_state`/`worktree`/`workspace` wrapper，full loader 和 lightweight metadata loader 都会保留旧 worktree payload。
+
 M6 补充：remote history GraphQL/connection 分页现在接受 `hasPrevious`/`hasPreviousPage`、`hasOlder`/`more` 继续分页标记，以及 `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor` 等 before-id cursor 别名，避免只返回第一页历史。
 
 M6 补充：remote history response parser 现在会递归解包 `data.session.events`、`data.projectSession.eventConnection`、`conversation`、`remoteHistory` 等 GraphQL/session wrapper，继续复用 `nodes`/`edges[].node` 和 `pageInfo` pagination 解析。

@@ -151,7 +151,7 @@ func parseWorktreeStateMetadata(line []byte) (WorktreeStateEntry, bool) {
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if len(entry.WorktreeSession) == 0 {
-		entry.WorktreeSession = fields.rawValue("worktree_session")
+		entry.WorktreeSession = fields.rawValue("worktree_session", "worktreeState", "worktree_state", "worktree", "workspace")
 	}
 	return entry, true
 }

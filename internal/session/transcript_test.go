@@ -620,6 +620,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"mode","session_id":"s3","mode":"worker"}`,
 		`{"type":"worktree-state","sessionId":"s1","worktreeSession":{"worktreePath":"/tmp/wt","sessionId":"s1"}}`,
 		`{"type":"worktree_state","session_id":"s3","worktree_session":{"worktreePath":"/tmp/wt2","sessionId":"s3"}}`,
+		`{"type":"worktree-state","sessionID":"s4","worktreeState":{"worktreePath":"/tmp/wt4","sessionId":"s4"}}`,
 		`{"type":"file-history-snapshot","messageId":"a1","snapshot":{"files":[]},"isSnapshotUpdate":false}`,
 		`{"type":"file_history_snapshot","message_id":"a2","snapshot":{"files":["alias"]},"is_snapshot_update":true}`,
 		`{"type":"attribution-snapshot","messageId":"a1","surface":"cli","fileStates":{}}`,
@@ -663,6 +664,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if transcript.PRLinks["s3"].PRNumber != 43 || transcript.Modes["s3"] != "worker" || len(transcript.WorktreeStates["s3"].WorktreeSession) == 0 {
 		t.Fatalf("snake session metadata = %#v %#v %#v", transcript.PRLinks, transcript.Modes, transcript.WorktreeStates)
+	}
+	if !strings.Contains(string(transcript.WorktreeStates["s4"].WorktreeSession), "/tmp/wt4") {
+		t.Fatalf("worktree state alias = %#v", transcript.WorktreeStates["s4"])
 	}
 	if len(transcript.FileHistorySnapshots) != 2 || len(transcript.AttributionSnapshots) != 2 || len(transcript.SpeculationAccepts) != 2 || transcript.SpeculationAccepts[1].TimeSavedMS != 3400 {
 		t.Fatalf("raw metadata counts = %d %d %d", len(transcript.FileHistorySnapshots), len(transcript.AttributionSnapshots), len(transcript.SpeculationAccepts))
@@ -718,6 +722,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if metadata.PRLinks["s3"].PRNumber != 43 || metadata.Modes["s3"] != "worker" || len(metadata.WorktreeStates["s3"].WorktreeSession) == 0 {
 		t.Fatalf("metadata snake session = %#v %#v %#v", metadata.PRLinks, metadata.Modes, metadata.WorktreeStates)
+	}
+	if !strings.Contains(string(metadata.WorktreeStates["s4"].WorktreeSession), "/tmp/wt4") {
+		t.Fatalf("metadata worktree state alias = %#v", metadata.WorktreeStates["s4"])
 	}
 	if len(metadata.FileHistorySnapshots) != 2 || len(metadata.AttributionSnapshots) != 2 || len(metadata.SpeculationAccepts) != 2 || metadata.SpeculationAccepts[1].TimeSavedMS != 3400 {
 		t.Fatalf("metadata raw counts = %d %d %d", len(metadata.FileHistorySnapshots), len(metadata.AttributionSnapshots), len(metadata.SpeculationAccepts))

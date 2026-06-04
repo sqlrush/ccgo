@@ -201,6 +201,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：基础 `SessionEntry` JSONL loader 接受 `role`/`entryType`/`messageType`、message ID/UUID、parent ID/UUID 和 `sessionID`/`session`/session UUID 别名，旧 entry 文件可通过 `session.Load` 保留类型、parent 和 session。
 - 本轮补充：tombstone metadata target/parent 加宽到 `targetId`/`deletedId`/`messageId` 和 `parentId`/`parentMessageId` ID/UUID 别名，delete/relink replay 可兼容旧字段拼写。
 - 本轮补充：transcript metadata 加宽 summary `leafID`/message ID、content-replacement `agentID`/`toolUseID`/`blockID` 和 context-collapse `collapseID`/`summaryID`/archived ID 别名，full loader 和 lightweight metadata loader 保持一致。
+- 本轮补充：worktree-state metadata 接受 `worktreeState`/`worktree_state`/`worktree`/`workspace` wrapper 别名，full loader 和 lightweight metadata loader 都能保留旧 worktree payload。
 - 本轮补充：remote history `SDKEvent` 解码接受顶层 `sessionID` 作为事件 session id 别名，materialize transcript 时会填充 record 与嵌套 message 的 session id（覆盖测试：`TestRemoteHistoryTranscriptMessagesAcceptsSessionIDUpperAlias`）。
 - 本轮补充：remote history `SDKEvent` 解码接受 `parentUUID`、`parentId`/`parentID`/`parent_id`、`parentMessageId`/`parentMessageID`/`parent_message_id` parent aliases，materialize transcript 时会保留 parent chain（覆盖测试：`TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases`）。
 - 本轮补充：memory 层补齐官方 `memoryAge`/freshness note 语义，`ReadDocumentsWithOptions` 可为超过 1 天的 memory 文档前缀 system-reminder，提示模型把 memory 当作 point-in-time observation 并核对当前代码。
