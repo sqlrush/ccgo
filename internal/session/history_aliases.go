@@ -323,7 +323,7 @@ func (e *HistoryEntry) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = HistoryEntry{
-		Display:        historyStringJSONField(fields, "display"),
+		Display:        historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"),
 		PastedContents: historyPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
 	}
 	return nil
@@ -335,7 +335,7 @@ func (e *LogEntry) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = LogEntry{
-		Display:        historyStringJSONField(fields, "display"),
+		Display:        historyStringJSONField(fields, "display", "prompt", "text", "input", "content", "value"),
 		PastedContents: historyStoredPastedContentsJSONField(fields, "pastedContents", "pasted_contents"),
 		Timestamp:      historyTimestampJSONField(fields, "timestamp", "createdAt", "created_at", "time", "unixTimestamp", "unix_timestamp"),
 		Project:        historyStringJSONField(fields, "project", "projectPath", "project_path", "cwd", "cwdPath", "cwd_path", "workingDirectory", "working_directory", "workspacePath", "workspace_path", "workspace"),

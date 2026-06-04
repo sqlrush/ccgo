@@ -186,6 +186,35 @@ func TestLoadPromptHistoryAcceptsProjectAndTimestampAliases(t *testing.T) {
 	}
 }
 
+func TestHistoryEntryAcceptsDisplayFieldAliases(t *testing.T) {
+	var entry HistoryEntry
+	if err := json.Unmarshal([]byte(`{"prompt":"run [Pasted text #1]","pastedContents":[{"id":1,"type":"text","content":"memo"}]}`), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.Display != "run [Pasted text #1]" || entry.PastedContents[1].Content != "memo" {
+		t.Fatalf("history entry = %#v", entry)
+	}
+}
+
+func TestLoadPromptHistoryAcceptsDisplayFieldAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	lines := []string{
+		`{"text":"text alias","pasted_contents":{},"timestamp":100,"project":"/repo","sessionID":"session"}`,
+		`{"input":"input alias","pasted_contents":{},"timestamp":200,"project":"/repo","sessionID":"other"}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := displays(history); strings.Join(got, ",") != "text alias,input alias" {
+		t.Fatalf("history = %#v", got)
+	}
+}
+
 func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 	var entry HistoryEntry
 	err := json.Unmarshal([]byte(`{"display":"restore [Image #1] [Pasted text #2]","pasted_contents":{"1":{"pastedContentId":"1","kind":"inputImage","base64":"AAAA","mimeType":"image/png","name":"chart.png","path":"/tmp/chart.png","dimensions":{"width":4000,"height":2000}},"2":{"attachmentID":"2","pastedType":"pasted-text","value":"memo","contentType":"text/plain"}}}`), &entry)
