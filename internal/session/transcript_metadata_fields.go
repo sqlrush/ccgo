@@ -82,7 +82,13 @@ func parseSummaryMetadata(line []byte) (contracts.ID, string, bool) {
 	if err != nil {
 		return "", "", false
 	}
-	leafUUID := fields.idValue("leafUuid", "leaf_uuid")
+	leafUUID := fields.idValue(
+		"leafUuid", "leafUUID", "leaf_uuid",
+		"leafId", "leafID", "leaf_id",
+		"messageUuid", "messageUUID", "message_uuid",
+		"messageId", "messageID", "message_id",
+		"uuid", "id",
+	)
 	return leafUUID, fields.stringValue("summary"), true
 }
 
@@ -171,7 +177,11 @@ func parseContentReplacementMetadata(line []byte) (ContentReplacementEntry, bool
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.AgentID == "" {
-		entry.AgentID = fields.stringValue("agent_id")
+		entry.AgentID = fields.stringValue(
+			"agentID", "agent_id", "agent",
+			"sidechainId", "sidechainID", "sidechain_id",
+			"subagentId", "subagentID", "subagent_id",
+		)
 	}
 	return entry, true
 }
@@ -246,19 +256,19 @@ func parseContextCollapseCommitMetadata(line []byte) (ContextCollapseCommitEntry
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.CollapseID == "" {
-		entry.CollapseID = fields.stringValue("collapse_id")
+		entry.CollapseID = fields.stringValue("collapseId", "collapseID", "collapse_id", "id")
 	}
 	if entry.SummaryUUID == "" {
-		entry.SummaryUUID = fields.stringValue("summary_uuid")
+		entry.SummaryUUID = fields.stringValue("summaryUuid", "summaryUUID", "summary_uuid", "summaryId", "summaryID", "summary_id")
 	}
 	if entry.SummaryContent == "" {
-		entry.SummaryContent = fields.stringValue("summary_content")
+		entry.SummaryContent = fields.stringValue("summaryContent", "summary_content", "content")
 	}
 	if entry.FirstArchivedUUID == "" {
-		entry.FirstArchivedUUID = fields.stringValue("first_archived_uuid")
+		entry.FirstArchivedUUID = fields.stringValue("firstArchivedUuid", "firstArchivedUUID", "first_archived_uuid", "firstArchivedId", "firstArchivedID", "first_archived_id")
 	}
 	if entry.LastArchivedUUID == "" {
-		entry.LastArchivedUUID = fields.stringValue("last_archived_uuid")
+		entry.LastArchivedUUID = fields.stringValue("lastArchivedUuid", "lastArchivedUUID", "last_archived_uuid", "lastArchivedId", "lastArchivedID", "last_archived_id")
 	}
 	return entry, true
 }

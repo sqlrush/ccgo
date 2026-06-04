@@ -315,7 +315,9 @@ func (r *ContentReplacementRecord) UnmarshalJSON(data []byte) error {
 	type ContentReplacementRecordJSON ContentReplacementRecord
 	var aux struct {
 		*ContentReplacementRecordJSON
+		ToolUseIDUpper    string `json:"toolUseID"`
 		ToolUseIDSnake    string `json:"tool_use_id"`
+		BlockIDUpper      string `json:"blockID"`
 		BlockIDSnake      string `json:"block_id"`
 		OriginalHashSnake string `json:"original_hash"`
 	}
@@ -326,13 +328,22 @@ func (r *ContentReplacementRecord) UnmarshalJSON(data []byte) error {
 	}
 	*r = ContentReplacementRecord(base)
 	if r.ToolUseID == "" {
-		r.ToolUseID = aux.ToolUseIDSnake
+		r.ToolUseID = firstNonEmptyString(aux.ToolUseIDUpper, aux.ToolUseIDSnake)
 	}
 	if r.BlockID == "" {
-		r.BlockID = aux.BlockIDSnake
+		r.BlockID = firstNonEmptyString(aux.BlockIDUpper, aux.BlockIDSnake)
 	}
 	if r.OriginalHash == "" {
 		r.OriginalHash = aux.OriginalHashSnake
 	}
 	return nil
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
