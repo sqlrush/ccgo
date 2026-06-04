@@ -72,6 +72,7 @@ const (
 	DECModeCursorBlink        = 12
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
+	DECModeApplicationKeypad  = 66
 	DECModeAltScreenBuffer    = 1047
 	DECModeSaveRestoreCursor  = 1048
 	DECModeAltScreenClear     = 1049
@@ -230,6 +231,7 @@ const (
 	CSIModeActionOrigin            CSIModeActionType = "originMode"
 	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
 	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
+	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
 	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
 	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
@@ -577,6 +579,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: cursorType}}, true
 	case DECModeAltScreen, DECModeAltScreenBuffer, DECModeAltScreenClear:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: enabled}}, true
+	case DECModeApplicationKeypad:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationKeypad, Enabled: enabled}}, true
 	case DECModeSaveRestoreCursor:
 		cursorType := CSICursorActionRestore
 		if enabled {
