@@ -221,6 +221,89 @@ func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsAdjacentLifecycleSubtypeAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "worker-failed", TranscriptMessage{
+		Type:      "system",
+		UUID:      "failed_start",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_started",
+		Content: map[string]any{
+			"taskID":    "worker_9",
+			"agentName": "researcher",
+			"workspace": "/tmp/research-worktree",
+			"task":      "trace lifecycle",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "worker-failed", TranscriptMessage{
+		Type:      "system",
+		UUID:      "failed_summary",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "task_failed",
+		Content: map[string]any{
+			"workerId":   "worker_9",
+			"resultText": "agent crashed",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "worker-completed", TranscriptMessage{
+		Type:      "system",
+		UUID:      "completed_start",
+		Timestamp: "2026-01-01T00:00:03Z",
+		Subtype:   "agentStarted",
+		Content: map[string]any{
+			"runID": "worker_10",
+			"kind":  "reviewer",
+			"cwd":   "/tmp/review-worktree",
+			"input": "review the diff",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "worker-completed", TranscriptMessage{
+		Type:      "system",
+		UUID:      "completed_summary",
+		Timestamp: "2026-01-01T00:00:04Z",
+		Subtype:   "sidechainCompleted",
+		Content: map[string]any{
+			"runId":        "worker_10",
+			"finalMessage": "review complete",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 2 {
+		t.Fatalf("states = %#v", states)
+	}
+	byID := map[string]SidechainState{}
+	for _, state := range states {
+		byID[state.ID] = state
+	}
+	failed := byID["worker_9"]
+	completed := byID["worker_10"]
+	if failed.ID != "worker_9" || failed.Status != SidechainStatusFailed || failed.Summary != "agent crashed" {
+		t.Fatalf("failed state = %#v", failed)
+	}
+	if failed.Metadata.AgentType != "researcher" || failed.Metadata.WorktreePath != "/tmp/research-worktree" || failed.Metadata.Description != "trace lifecycle" {
+		t.Fatalf("failed metadata = %#v", failed.Metadata)
+	}
+	if completed.ID != "worker_10" || completed.Status != SidechainStatusCompleted || completed.Summary != "review complete" {
+		t.Fatalf("completed state = %#v", completed)
+	}
+	if completed.Metadata.AgentType != "reviewer" || completed.Metadata.WorktreePath != "/tmp/review-worktree" || completed.Metadata.Description != "review the diff" {
+		t.Fatalf("completed metadata = %#v", completed.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsWrappedLifecycleContent(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"ccgo/internal/contracts"
 )
@@ -26,6 +27,57 @@ type SidechainState struct {
 	LastUUID     contracts.ID
 	MessageCount int
 	Metadata     SidechainMetadata
+}
+
+var sidechainLifecycleIDFields = []string{
+	"sidechainId", "sidechainID", "sidechain_id",
+	"subagentId", "subagentID", "subagent_id",
+	"agentId", "agentID", "agent_id",
+	"taskId", "taskID", "task_id",
+	"workerId", "workerID", "worker_id",
+	"runId", "runID", "run_id",
+	"id",
+}
+
+var sidechainLifecycleAgentTypeFields = []string{
+	"agentType", "agent_type",
+	"subagentType", "subagent_type",
+	"agentKind", "agent_kind",
+	"agentName", "agent_name",
+	"kind", "name", "agent",
+}
+
+var sidechainLifecycleWorktreeFields = []string{
+	"worktreePath", "worktree_path",
+	"worktree", "worktreeDir", "worktree_dir",
+	"workingDirectory", "working_directory",
+	"cwd",
+	"workspacePath", "workspace_path", "workspace",
+	"path", "directory",
+}
+
+var sidechainLifecycleDescriptionFields = []string{
+	"description", "description_text", "descriptionText",
+	"desc", "summary",
+	"task", "taskDescription", "task_description",
+	"prompt", "input", "command", "title",
+}
+
+var sidechainLifecycleStartStatusFields = []string{
+	"status", "state", "phase", "lifecycle", "lifecycle_state", "lifecycleState",
+}
+
+var sidechainLifecycleSummaryStatusFields = []string{
+	"status", "state", "result", "outcome", "phase", "lifecycle", "lifecycle_state", "lifecycleState",
+}
+
+var sidechainLifecycleSummaryFields = []string{
+	"summary", "summary_text", "summaryText",
+	"finalSummary", "final_summary",
+	"resultSummary", "result_summary",
+	"resultText", "result_text",
+	"finalMessage", "final_message",
+	"message", "text", "output", "value", "final",
 }
 
 func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
@@ -74,19 +126,19 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			state.StartedAt = msg.Timestamp
 			state.EndedAt = ""
 			state.Summary = ""
-			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechainID", "sidechain_id", "subagentId", "subagentID", "subagent_id", "agentId", "agentID", "agent_id", "id"); sidechainID != "" {
+			if sidechainID := firstStringField(msg.Content, sidechainLifecycleIDFields...); sidechainID != "" {
 				state.ID = sidechainID
 			}
-			if agentType := firstStringField(msg.Content, "agentType", "agent_type", "subagentType", "subagent_type", "agentKind", "agent_kind", "agent"); agentType != "" && state.Metadata.AgentType == "" {
+			if agentType := firstStringField(msg.Content, sidechainLifecycleAgentTypeFields...); agentType != "" && state.Metadata.AgentType == "" {
 				state.Metadata.AgentType = agentType
 			}
-			if worktreePath := firstStringField(msg.Content, "worktreePath", "worktree_path", "worktree", "worktreeDir", "worktree_dir", "workingDirectory", "working_directory", "cwd", "workspacePath", "workspace_path", "workspace", "path", "directory"); worktreePath != "" && state.Metadata.WorktreePath == "" {
+			if worktreePath := firstStringField(msg.Content, sidechainLifecycleWorktreeFields...); worktreePath != "" && state.Metadata.WorktreePath == "" {
 				state.Metadata.WorktreePath = worktreePath
 			}
-			if description := firstStringField(msg.Content, "description", "description_text", "descriptionText", "desc", "summary", "task", "taskDescription", "task_description", "prompt", "input", "command", "title"); description != "" && state.Metadata.Description == "" {
+			if description := firstStringField(msg.Content, sidechainLifecycleDescriptionFields...); description != "" && state.Metadata.Description == "" {
 				state.Metadata.Description = description
 			}
-			if status := sidechainStatusField(msg.Content, "status", "state", "phase", "lifecycle", "lifecycle_state", "lifecycleState"); status != "" {
+			if status := sidechainStatusField(msg.Content, sidechainLifecycleStartStatusFields...); status != "" {
 				state.Status = status
 			} else {
 				state.Status = SidechainStatusRunning
@@ -95,15 +147,17 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		if isSidechainSummarySubtype(msg.Subtype) {
 			finished = true
 			state.EndedAt = msg.Timestamp
-			if sidechainID := firstStringField(msg.Content, "sidechainId", "sidechainID", "sidechain_id", "subagentId", "subagentID", "subagent_id", "agentId", "agentID", "agent_id", "id"); sidechainID != "" {
+			if sidechainID := firstStringField(msg.Content, sidechainLifecycleIDFields...); sidechainID != "" {
 				state.ID = sidechainID
 			}
-			if status := sidechainStatusField(msg.Content, "status", "state", "result", "outcome", "phase", "lifecycle", "lifecycle_state", "lifecycleState"); status != "" {
+			if status := sidechainStatusField(msg.Content, sidechainLifecycleSummaryStatusFields...); status != "" {
+				state.Status = status
+			} else if status := defaultSidechainSummaryStatus(msg.Subtype); status != "" {
 				state.Status = status
 			} else {
 				state.Status = SidechainStatusCompleted
 			}
-			state.Summary = firstStringField(msg.Content, "summary", "summary_text", "summaryText", "finalSummary", "final_summary", "resultSummary", "result_summary", "message", "text")
+			state.Summary = firstStringField(msg.Content, sidechainLifecycleSummaryFields...)
 		}
 	}
 	if state.Status == SidechainStatusUnknown {
@@ -121,8 +175,8 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 }
 
 func isSidechainStartSubtype(subtype string) bool {
-	switch strings.TrimSpace(subtype) {
-	case "sidechain_start", "sidechainStart", "subagent_start", "subagentStart", "agent_start", "agentStart", "task_start", "taskStart":
+	switch sidechainSubtypeAction(subtype) {
+	case "start", "started":
 		return true
 	default:
 		return false
@@ -130,12 +184,53 @@ func isSidechainStartSubtype(subtype string) bool {
 }
 
 func isSidechainSummarySubtype(subtype string) bool {
-	switch strings.TrimSpace(subtype) {
-	case "sidechain_summary", "sidechainSummary", "sidechain_end", "sidechainEnd", "sidechain_finish", "sidechainFinish", "subagent_summary", "subagentSummary", "subagent_end", "subagentEnd", "subagent_finish", "subagentFinish", "agent_summary", "agentSummary", "agent_end", "agentEnd", "agent_finish", "agentFinish", "task_summary", "taskSummary", "task_end", "taskEnd", "task_finish", "taskFinish":
+	switch sidechainSubtypeAction(subtype) {
+	case "summary", "summarized", "summarised",
+		"end", "ended",
+		"finish", "finished",
+		"complete", "completed",
+		"success", "succeeded", "done",
+		"fail", "failed", "failure",
+		"error", "errored",
+		"cancel", "cancelled", "canceled",
+		"abort", "aborted":
 		return true
 	default:
 		return false
 	}
+}
+
+func defaultSidechainSummaryStatus(subtype string) string {
+	switch sidechainSubtypeAction(subtype) {
+	case "complete", "completed", "success", "succeeded", "done":
+		return SidechainStatusCompleted
+	case "fail", "failed", "failure", "error", "errored":
+		return SidechainStatusFailed
+	case "cancel", "cancelled", "canceled", "abort", "aborted":
+		return SidechainStatusCancelled
+	default:
+		return ""
+	}
+}
+
+func sidechainSubtypeAction(subtype string) string {
+	normalized := normalizeSidechainSubtype(subtype)
+	for _, prefix := range []string{"sidechain", "subagent", "agent", "task"} {
+		if strings.HasPrefix(normalized, prefix) {
+			return strings.TrimPrefix(normalized, prefix)
+		}
+	}
+	return ""
+}
+
+func normalizeSidechainSubtype(subtype string) string {
+	var builder strings.Builder
+	for _, r := range strings.TrimSpace(subtype) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return builder.String()
 }
 
 func sidechainStatusField(value any, keys ...string) string {

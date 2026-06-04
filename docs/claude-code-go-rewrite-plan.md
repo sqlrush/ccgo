@@ -185,6 +185,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：sidechain agent metadata sidecar 读取接受 `type`/`subagentType`/`agentName`/`name`、`workspacePath`/`workspace`/`path`/`directory`、`taskDescription`/`prompt`/`input`/`command`/`title` 等字段别名，避免历史或第三方 subagent sidecar 在 resume/list 时丢失 agent 类型、worktree 路径或任务描述。
 - 本轮补充：sidechain/subagent lifecycle content 读取会递归解包 `payload`/`data`/`body`/`result`/`response`/`metadata` 等 wrapper，嵌套的 subagent ID、status/outcome、summary、agent type、workspace path 和 task description 都可参与 state/list/resume 恢复。
 - 本轮补充：sidechain/subagent lifecycle 的 ID 等 string-like 字段接受 JSON number 和 Go 数字标量，numeric subagent ID 会保留为字符串并可用于 state/list/resume 查找。
+- 本轮补充：sidechain/subagent lifecycle subtype 现在接受 `subagent_started`、`agentStarted`、`task_failed`、`sidechainCompleted` 等相邻事件名，并从 `taskID`/`workerId`/`runId`、`agentName`/`kind`、`resultText`/`finalMessage` 等字段恢复 state/list/resume 信息；`*_failed`/`*_cancelled` subtype 无显式 status 时会归一到 failed/cancelled。
 - 本轮补充：transcript metadata loader 为 file-history snapshot 和 attribution snapshot 建立 `messageId` 索引，并接受 `message_id`/`messageUuid`/`id` 等字段别名，保留 raw list 的同时支持按消息恢复 snapshot。
 - 本轮补充：transcript message/index/session list 读取 `gitBranch`，兼容 `git_branch`/`branch` 别名，并让 session search 可以按分支名命中，贴近官方 lite metadata 的 branch 展示和检索行为。
 - 本轮补充：full transcript `TitleFromTranscript` 的标题优先级和 indexed/lite 路径对齐，按 custom title、AI title、首个用户 prompt、last-prompt、summary 顺序兜底。
