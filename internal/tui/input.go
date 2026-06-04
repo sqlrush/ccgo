@@ -88,6 +88,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseSGRMouse(seq); ok {
 		return key
 	}
+	if key, ok := parseURXVTMouse(seq); ok {
+		return key
+	}
 	if key, ok := parseLegacyMouse(seq); ok {
 		return key
 	}
@@ -427,6 +430,36 @@ func parseSGRMouse(seq string) (Key, bool) {
 		return Key{}, false
 	}
 	return Key{Type: KeyMouse, MouseButton: button, MouseX: x, MouseY: y, MouseRelease: final == 'm'}, true
+}
+
+func parseURXVTMouse(seq string) (Key, bool) {
+	if !strings.HasPrefix(seq, "\x1b[") || strings.HasPrefix(seq, "\x1b[<") || !strings.HasSuffix(seq, "M") {
+		return Key{}, false
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "M")
+	parts := strings.Split(body, ";")
+	if len(parts) != 3 {
+		return Key{}, false
+	}
+	button, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return Key{}, false
+	}
+	x, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return Key{}, false
+	}
+	y, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return Key{}, false
+	}
+	if button >= 32 {
+		button -= 32
+	}
+	if button < 0 || x < 1 || y < 1 {
+		return Key{}, false
+	}
+	return Key{Type: KeyMouse, MouseButton: button, MouseX: x, MouseY: y, MouseRelease: button&3 == 3}, true
 }
 
 func parseLegacyMouse(seq string) (Key, bool) {

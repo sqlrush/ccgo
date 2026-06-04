@@ -1021,6 +1021,18 @@ func TestParseMouseSequences(t *testing.T) {
 	if legacyWheel.Type != KeyMouse || legacyWheel.MouseButton != 64 || legacyWheel.MouseX != 10 || legacyWheel.MouseY != 4 || legacyWheel.MouseRelease {
 		t.Fatalf("legacy wheel = %#v", legacyWheel)
 	}
+	urxvtPress := ParseKey("\x1b[32;7;8M")
+	if urxvtPress.Type != KeyMouse || urxvtPress.MouseButton != 0 || urxvtPress.MouseX != 7 || urxvtPress.MouseY != 8 || urxvtPress.MouseRelease {
+		t.Fatalf("urxvt press = %#v", urxvtPress)
+	}
+	urxvtRelease := ParseKey("\x1b[35;5;6M")
+	if urxvtRelease.Type != KeyMouse || urxvtRelease.MouseButton != 3 || urxvtRelease.MouseX != 5 || urxvtRelease.MouseY != 6 || !urxvtRelease.MouseRelease {
+		t.Fatalf("urxvt release = %#v", urxvtRelease)
+	}
+	urxvtWheel := ParseKey("\x1b[96;10;4M")
+	if urxvtWheel.Type != KeyMouse || urxvtWheel.MouseButton != 64 || urxvtWheel.MouseX != 10 || urxvtWheel.MouseY != 4 || urxvtWheel.MouseRelease {
+		t.Fatalf("urxvt wheel = %#v", urxvtWheel)
+	}
 }
 
 func TestParseFocusEvents(t *testing.T) {
