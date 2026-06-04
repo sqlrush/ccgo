@@ -5870,6 +5870,54 @@ func TestRunDialogRuntimeScriptNormalizesTaskStateAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsAdjacentTaskPayloadAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"upsertTask": {"jobId": 7001, "label": "Index repo", "phase": "processing", "message": "reading files", "percent": "33"},
+			"openTasksDialog": true,
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"working": 1},
+				"contains": {"taskID": "7001", "label": "Index repo", "phase": "active", "message": "reading files", "percent": 33}
+			},
+			"expectStatusContains": ["running: 1"],
+			"expectSnapshotContains": ["Index repo [running] 33% - reading files"]
+		},
+		{
+			"action": "task",
+			"runID": "run_42",
+			"displayName": "Write report",
+			"taskState": "success",
+			"currentStep": "done",
+			"pct": "100",
+			"expectTasks": {
+				"count": 2,
+				"stateCounts": {"running": 1, "done": 1},
+				"contains": {"runId": "run_42", "displayName": "Write report", "taskState": "done", "currentStep": "done", "pct": 100}
+			},
+			"expectStatusContains": ["running: 1", "completed: 1"]
+		},
+		{
+			"action": "remove-task",
+			"jobID": 7001,
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"completed": 1},
+				"contains": {"runID": "run_42", "status": "completed", "progress": 100}
+			},
+			"expectStatusNotContains": ["running: 1"]
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(60, 10, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"input": "go", "expectPrompt": {"text": "go"}},

@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -1029,7 +1030,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "removetask", "remove-task", "deletetask", "delete-task":
 		if step.RemoveTaskID == "" {
-			step.RemoveTaskID = scriptActionIDField(fields, "task_id", "taskId", "taskID", "id")
+			step.RemoveTaskID = scriptActionIDField(fields, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
 		}
 	case "opentasks", "open-tasks", "opentasksdialog", "open-tasks-dialog", "showtasks", "show-tasks":
 		step.OpenTasksDialog = scriptActionBoolField(fields, true)
@@ -1144,7 +1145,23 @@ func scriptUnmarshalStepFields(fields map[string]json.RawMessage, target any) bo
 }
 
 func scriptActionIDField(fields map[string]json.RawMessage, idNames ...string) string {
-	return scriptActionStringField(fields, idNames...)
+	if value := scalarStringJSONField(fields, append([]string{"value", "payload", "data", "body"}, idNames...)...); value != "" {
+		return value
+	}
+	for _, raw := range scriptActionRawFields(fields) {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || raw[0] != '{' {
+			continue
+		}
+		nested := map[string]json.RawMessage{}
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			continue
+		}
+		if value := scalarStringJSONField(nested, idNames...); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func scriptActionStringField(fields map[string]json.RawMessage, objectNames ...string) string {
@@ -1721,6 +1738,29 @@ func stringJSONField(fields map[string]json.RawMessage, names ...string) string 
 	return ""
 }
 
+func scalarStringJSONField(fields map[string]json.RawMessage, names ...string) string {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var scalar any
+		if err := decoder.Decode(&scalar); err != nil {
+			continue
+		}
+		if value, ok := scalar.(json.Number); ok {
+			return value.String()
+		}
+	}
+	return ""
+}
+
 func stringListJSONField(fields map[string]json.RawMessage, names ...string) []string {
 	for _, name := range names {
 		raw, ok := fields[name]
@@ -1772,6 +1812,12 @@ func intPtrJSONField(fields map[string]json.RawMessage, names ...string) *int {
 		var value int
 		if err := json.Unmarshal(raw, &value); err == nil {
 			return &value
+		}
+		var stringValue string
+		if err := json.Unmarshal(raw, &stringValue); err == nil {
+			if value, err := strconv.Atoi(strings.TrimSpace(stringValue)); err == nil {
+				return &value
+			}
 		}
 	}
 	return nil
@@ -1976,50 +2022,24 @@ func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	}
 	*task = TaskStatus(raw)
 
-	var fields struct {
-		TaskID          *string `json:"task_id"`
-		TaskIDCamel     *string `json:"taskId"`
-		TaskTitle       *string `json:"task_title"`
-		TaskTitleCamel  *string `json:"taskTitle"`
-		Name            *string `json:"name"`
-		Status          *string `json:"status"`
-		StatusText      *string `json:"status_text"`
-		StatusTextCamel *string `json:"statusText"`
-		ProgressPercent *int    `json:"progress_percent"`
-		ProgressCamel   *int    `json:"progressPercent"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if fields.TaskID != nil {
-		task.ID = *fields.TaskID
+	if id := scalarStringJSONField(fieldMap, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
+		task.ID = id
 	}
-	if fields.TaskIDCamel != nil {
-		task.ID = *fields.TaskIDCamel
+	if title := stringJSONField(fieldMap, "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
+		task.Title = title
 	}
-	if fields.TaskTitle != nil {
-		task.Title = *fields.TaskTitle
+	if state := stringJSONField(fieldMap, "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
+		task.State = state
 	}
-	if fields.TaskTitleCamel != nil {
-		task.Title = *fields.TaskTitleCamel
+	if detail := stringJSONField(fieldMap, "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
+		task.Detail = detail
 	}
-	if fields.Name != nil {
-		task.Title = *fields.Name
-	}
-	if fields.Status != nil {
-		task.State = *fields.Status
-	}
-	if fields.StatusText != nil {
-		task.Detail = *fields.StatusText
-	}
-	if fields.StatusTextCamel != nil {
-		task.Detail = *fields.StatusTextCamel
-	}
-	if fields.ProgressPercent != nil {
-		task.Progress = *fields.ProgressPercent
-	}
-	if fields.ProgressCamel != nil {
-		task.Progress = *fields.ProgressCamel
+	if progress := intPtrJSONField(fieldMap, "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
+		task.Progress = *progress
 	}
 	return nil
 }
@@ -2109,50 +2129,24 @@ func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 	}
 	*expect = TaskExpectation(raw)
 
-	var fields struct {
-		TaskID          *string `json:"task_id"`
-		TaskIDCamel     *string `json:"taskId"`
-		TaskTitle       *string `json:"task_title"`
-		TaskTitleCamel  *string `json:"taskTitle"`
-		Name            *string `json:"name"`
-		Status          *string `json:"status"`
-		StatusText      *string `json:"status_text"`
-		StatusTextCamel *string `json:"statusText"`
-		ProgressPercent *int    `json:"progress_percent"`
-		ProgressCamel   *int    `json:"progressPercent"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
+	fieldMap := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if fields.TaskID != nil {
-		expect.ID = *fields.TaskID
+	if id := scalarStringJSONField(fieldMap, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
+		expect.ID = id
 	}
-	if fields.TaskIDCamel != nil {
-		expect.ID = *fields.TaskIDCamel
+	if title := stringJSONField(fieldMap, "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
+		expect.Title = title
 	}
-	if fields.TaskTitle != nil {
-		expect.Title = *fields.TaskTitle
+	if state := stringJSONField(fieldMap, "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
+		expect.State = state
 	}
-	if fields.TaskTitleCamel != nil {
-		expect.Title = *fields.TaskTitleCamel
+	if detail := stringJSONField(fieldMap, "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
+		expect.Detail = detail
 	}
-	if fields.Name != nil {
-		expect.Title = *fields.Name
-	}
-	if fields.Status != nil {
-		expect.State = *fields.Status
-	}
-	if fields.StatusText != nil {
-		expect.Detail = *fields.StatusText
-	}
-	if fields.StatusTextCamel != nil {
-		expect.Detail = *fields.StatusTextCamel
-	}
-	if fields.ProgressPercent != nil {
-		expect.Progress = fields.ProgressPercent
-	}
-	if fields.ProgressCamel != nil {
-		expect.Progress = fields.ProgressCamel
+	if progress := intPtrJSONField(fieldMap, "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
+		expect.Progress = progress
 	}
 	return nil
 }
