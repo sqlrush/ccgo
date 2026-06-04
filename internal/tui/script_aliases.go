@@ -894,7 +894,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		"type",
 	))
 	switch action {
-	case "key", "press", "keypress", "key-press", "shortcut", "shortcut-key":
+	case "key", "press", "presskey", "keypress", "key-press", "shortcut", "shortcutkey", "shortcut-key":
 		if step.Key == "" && len(step.Keys) == 0 {
 			if values := stringListJSONField(fields, "value", "payload", "data", "key", "keys", "shortcut", "sequence", "input", "text"); len(values) == 1 {
 				step.Key = values[0]
@@ -902,19 +902,19 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 				step.Keys = append(step.Keys, values...)
 			}
 		}
-	case "keys", "presses", "shortcuts", "sequence", "key-sequence":
+	case "keys", "presses", "shortcuts", "sequence", "keysequence", "key-sequence", "keyseq", "key-seq":
 		if step.Key == "" && len(step.Keys) == 0 {
 			step.Keys = append(step.Keys, stringListJSONField(fields, "value", "payload", "data", "keys", "sequence", "key_sequence", "keySequence", "shortcuts")...)
 		}
-	case "text", "type", "type-text", "input", "insert", "write":
+	case "text", "type", "typetext", "type-text", "input", "inputtext", "textinput", "insert", "inserttext", "write", "writetext":
 		if step.Text == "" {
 			step.Text = stringJSONField(fields, "value", "text", "input", "content", "body", "message", "data", "payload")
 		}
-	case "paste", "clipboard":
+	case "paste", "pastetext", "pastedtext", "clipboard", "clipboardtext":
 		if step.Paste == "" {
 			step.Paste = stringJSONField(fields, "value", "paste", "clipboard", "text", "content", "data", "payload")
 		}
-	case "status", "set-status", "status-line":
+	case "status", "setstatus", "set-status", "statusline", "status-line":
 		if step.Status == "" {
 			step.Status = stringJSONField(fields, "value", "status", "text", "content", "message", "data", "payload")
 		}
@@ -922,7 +922,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		if step.SnapshotName == "" {
 			step.SnapshotName = stringJSONField(fields, "value", "snapshot", "name", "label", "id", "data", "payload")
 		}
-	case "resize", "terminal-size", "screen-size":
+	case "resize", "terminalsize", "terminal-size", "screensize", "screen-size":
 		if step.ResizeWidth <= 0 || step.ResizeHeight <= 0 {
 			if size := scriptSizeJSONField(fields, "value", "size", "dimensions", "payload", "data"); size != nil {
 				if step.ResizeWidth <= 0 && size.Width > 0 {
