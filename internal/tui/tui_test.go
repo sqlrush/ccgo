@@ -4861,6 +4861,73 @@ func TestScriptMouseAcceptsCoordinateAliases(t *testing.T) {
 	}
 }
 
+func TestScriptBooleanAliasesAcceptNonStrictValues(t *testing.T) {
+	var mouse ScriptMouse
+	if err := json.Unmarshal([]byte(`{"button":0,"x":13,"y":5,"mouseUp":"yes"}`), &mouse); err != nil {
+		t.Fatal(err)
+	}
+	if !mouse.Release {
+		t.Fatalf("mouse release = %#v", mouse)
+	}
+
+	var release ScriptMouse
+	release.Release = true
+	if err := json.Unmarshal([]byte(`{"button":0,"x":13,"y":5,"release":0}`), &release); err != nil {
+		t.Fatal(err)
+	}
+	if release.Release {
+		t.Fatalf("direct release bool was not normalized: %#v", release)
+	}
+
+	var dialog DialogExpectation
+	if err := json.Unmarshal([]byte(`{"visible":"1","dialogId":"perm_1"}`), &dialog); err != nil {
+		t.Fatal(err)
+	}
+	if !dialog.Active || dialog.ID != "perm_1" {
+		t.Fatalf("dialog = %#v", dialog)
+	}
+
+	var result DialogResultExpectation
+	if err := json.Unmarshal([]byte(`{"exists":"on","isStale":"0"}`), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Found == nil || !*result.Found || result.Stale == nil || *result.Stale {
+		t.Fatalf("dialog result = %#v", result)
+	}
+
+	var prompt PromptExpectation
+	if err := json.Unmarshal([]byte(`{"empty":"true"}`), &prompt); err != nil {
+		t.Fatal(err)
+	}
+	if !prompt.Empty {
+		t.Fatalf("prompt = %#v", prompt)
+	}
+
+	var vim VimExpectation
+	if err := json.Unmarshal([]byte(`{"vimEnabled":"y","registerLinewise":"0"}`), &vim); err != nil {
+		t.Fatal(err)
+	}
+	if vim.Enabled == nil || !*vim.Enabled || vim.RegisterLinewise == nil || *vim.RegisterLinewise {
+		t.Fatalf("vim = %#v", vim)
+	}
+
+	var search ReverseSearchExpectation
+	if err := json.Unmarshal([]byte(`{"visible":"yes","empty":1}`), &search); err != nil {
+		t.Fatal(err)
+	}
+	if !search.Active || !search.NoResults {
+		t.Fatalf("reverse search = %#v", search)
+	}
+
+	var step ScriptStep
+	if err := json.Unmarshal([]byte(`{"focus":"on","expectNoEvent":"1","expectFocused":"true","openTasksDialog":"yes","cancelAllTasks":1}`), &step); err != nil {
+		t.Fatal(err)
+	}
+	if len(step.Keys) != 1 || step.Keys[0] != "focus-in" || !step.ExpectNoEvent || step.ExpectFocused == nil || !*step.ExpectFocused || !step.OpenTasksDialog || !step.CancelAllTasks {
+		t.Fatalf("step = %#v", step)
+	}
+}
+
 func TestRunInteractionScriptAcceptsMouseFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_1","kind":"permission"}},

@@ -1258,6 +1258,45 @@ func normalizeScriptStepJSON(data []byte) []byte {
 		"expect_snapshot_not_contains",
 		"expectSnapshotNotContains",
 	)
+	data = normalizeBoolFields(data,
+		"cancel_active_dialog",
+		"cancelActiveDialog",
+		"cancel_active",
+		"cancelActive",
+		"cancel_dialog",
+		"cancelDialog",
+		"close_dialog",
+		"closeDialog",
+		"cancel_all_permissions",
+		"cancelAllPermissions",
+		"cancel_permissions",
+		"cancelPermissions",
+		"cancel_all_tasks",
+		"cancelAllTasks",
+		"cancel_tasks",
+		"cancelTasks",
+		"open_tasks_dialog",
+		"openTasksDialog",
+		"open_tasks",
+		"openTasks",
+		"show_tasks",
+		"showTasks",
+		"focus",
+		"focused",
+		"focus_in",
+		"focusIn",
+		"focus_out",
+		"focusOut",
+		"blur",
+		"blurred",
+		"expect_no_event",
+		"expectNoEvent",
+		"expect_no_dialog_result",
+		"expectNoDialogResult",
+		"expect_no_dialog_results",
+		"expect_focused",
+		"expectFocused",
+	)
 	return normalizeObjectFieldsToArray(data,
 		"keybindings",
 		"key_bindings",
@@ -1291,6 +1330,38 @@ func normalizeStringFieldsToArray(data []byte, names ...string) []byte {
 			fields[name] = normalized
 			changed = true
 		}
+	}
+	if !changed {
+		return data
+	}
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return normalized
+}
+
+func normalizeBoolFields(data []byte, names ...string) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	changed := false
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		value, ok := scriptParseJSONBool(raw)
+		if !ok {
+			continue
+		}
+		if value {
+			fields[name] = json.RawMessage("true")
+		} else {
+			fields[name] = json.RawMessage("false")
+		}
+		changed = true
 	}
 	if !changed {
 		return data
@@ -1383,6 +1454,22 @@ func (image *ScriptImage) UnmarshalJSON(data []byte) error {
 }
 
 func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
+	data = normalizeBoolFields(data,
+		"Release",
+		"release",
+		"released",
+		"is_release",
+		"isRelease",
+		"mouse_release",
+		"mouseRelease",
+		"mouse_up",
+		"mouseUp",
+		"up",
+		"release_event",
+		"releaseEvent",
+		"released_event",
+		"releasedEvent",
+	)
 	type alias ScriptMouse
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -1441,6 +1528,16 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeBoolFields(data,
+		"Found",
+		"found",
+		"Stale",
+		"stale",
+		"exists",
+		"matched",
+		"is_stale",
+		"isStale",
+	)
 	type alias DialogResultExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -1478,6 +1575,15 @@ func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeBoolFields(data,
+		"Active",
+		"active",
+		"is_active",
+		"isActive",
+		"visible",
+		"exists",
+		"present",
+	)
 	data = normalizeStringFieldsToArray(data,
 		"actions",
 		"Actions",
@@ -1795,12 +1901,51 @@ func boolPtrJSONField(fields map[string]json.RawMessage, names ...string) *bool 
 		if !ok {
 			continue
 		}
-		var value bool
-		if err := json.Unmarshal(raw, &value); err == nil {
+		if value, ok := scriptParseJSONBool(raw); ok {
 			return &value
 		}
 	}
 	return nil
+}
+
+func scriptParseJSONBool(raw json.RawMessage) (bool, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return false, false
+	}
+	var value bool
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, true
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		switch strings.ToLower(strings.TrimSpace(text)) {
+		case "true", "1", "yes", "y", "on":
+			return true, true
+		case "false", "0", "no", "n", "off":
+			return false, true
+		default:
+			return false, false
+		}
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err == nil {
+		value, err := strconv.ParseFloat(number.String(), 64)
+		if err != nil {
+			return false, false
+		}
+		switch value {
+		case 1:
+			return true, true
+		case 0:
+			return false, true
+		default:
+			return false, false
+		}
+	}
+	return false, false
 }
 
 func intPtrJSONField(fields map[string]json.RawMessage, names ...string) *int {
@@ -1866,6 +2011,15 @@ func roleJSONField(fields map[string]json.RawMessage, names ...string) (Role, bo
 }
 
 func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeBoolFields(data,
+		"Empty",
+		"empty",
+		"is_empty",
+		"isEmpty",
+		"empty_prompt",
+		"emptyPrompt",
+		"blank",
+	)
 	data = normalizeObjectFieldsToArray(data, "pasted_contents", "pastedContents")
 	type alias PromptExpectation
 	var raw alias
@@ -2045,6 +2199,23 @@ func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *VimExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeBoolFields(data,
+		"Enabled",
+		"enabled",
+		"vim_enabled",
+		"vimEnabled",
+		"is_enabled",
+		"isEnabled",
+		"active",
+		"RegisterLinewise",
+		"register_linewise",
+		"registerLinewise",
+		"linewise",
+		"is_linewise",
+		"isLinewise",
+		"register_line_wise",
+		"registerLineWise",
+	)
 	type alias VimExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -2231,6 +2402,22 @@ func (expect *ScreenExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *ReverseSearchExpectation) UnmarshalJSON(data []byte) error {
+	data = normalizeBoolFields(data,
+		"Active",
+		"active",
+		"is_active",
+		"isActive",
+		"open",
+		"visible",
+		"NoResults",
+		"noResults",
+		"no_results",
+		"no_matches",
+		"noMatches",
+		"empty",
+		"empty_results",
+		"emptyResults",
+	)
 	type alias ReverseSearchExpectation
 	var raw alias
 	if err := json.Unmarshal(data, &raw); err != nil {
