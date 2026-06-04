@@ -7,13 +7,14 @@ import (
 )
 
 type ResumeConversation struct {
-	Leaf          contracts.ID
-	Found         bool
-	Messages      []contracts.Message
-	Chain         []TranscriptMessage
-	BytesRead     int64
-	HasBefore     bool
-	MissingParent *contracts.ID
+	Leaf            contracts.ID
+	Found           bool
+	Messages        []contracts.Message
+	Chain           []TranscriptMessage
+	BytesRead       int64
+	HasBefore       bool
+	MissingParent   *contracts.ID
+	TruncatedParent *contracts.ID
 }
 
 func BuildResumeConversation(path string, leaf contracts.ID) (ResumeConversation, error) {
@@ -52,13 +53,14 @@ func BuildIndexedResumeConversation(path string, leaf contracts.ID, maxBytes int
 		return ResumeConversation{Leaf: chain.Leaf}, nil
 	}
 	return ResumeConversation{
-		Leaf:          chain.Leaf,
-		Found:         true,
-		Messages:      TranscriptMessagesToContractMessages(chain.Messages),
-		Chain:         append([]TranscriptMessage(nil), chain.Messages...),
-		BytesRead:     chain.BytesRead,
-		HasBefore:     chain.HasBefore,
-		MissingParent: cloneIDPtr(chain.MissingParent),
+		Leaf:            chain.Leaf,
+		Found:           true,
+		Messages:        TranscriptMessagesToContractMessages(chain.Messages),
+		Chain:           append([]TranscriptMessage(nil), chain.Messages...),
+		BytesRead:       chain.BytesRead,
+		HasBefore:       chain.HasBefore,
+		MissingParent:   cloneIDPtr(chain.MissingParent),
+		TruncatedParent: cloneIDPtr(chain.TruncatedParent),
 	}, nil
 }
 

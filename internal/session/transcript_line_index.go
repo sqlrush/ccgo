@@ -34,12 +34,13 @@ type TranscriptIndexedTail struct {
 }
 
 type TranscriptIndexedChain struct {
-	Messages      []TranscriptMessage
-	Leaf          contracts.ID
-	Found         bool
-	BytesRead     int64
-	HasBefore     bool
-	MissingParent *contracts.ID
+	Messages        []TranscriptMessage
+	Leaf            contracts.ID
+	Found           bool
+	BytesRead       int64
+	HasBefore       bool
+	MissingParent   *contracts.ID
+	TruncatedParent *contracts.ID
 }
 
 func BuildTranscriptLineIndex(path string) (TranscriptLineIndex, error) {
@@ -248,6 +249,7 @@ func LoadTranscriptIndexedChain(path string, index TranscriptLineIndex, leaf con
 	bytesRead := int64(0)
 	hasBefore := false
 	var missingParent *contracts.ID
+	var truncatedParent *contracts.ID
 	for {
 		ref := index.Entries[entryIndex]
 		if _, ok := seen[ref.UUID]; ok {
@@ -257,6 +259,7 @@ func LoadTranscriptIndexedChain(path string, index TranscriptLineIndex, leaf con
 		refBytes := int64(ref.Length)
 		if maxBytes > 0 && len(refs) > 0 && bytesRead+refBytes > maxBytes {
 			hasBefore = true
+			truncatedParent = cloneIDPtr(&ref.UUID)
 			break
 		}
 		seen[ref.UUID] = struct{}{}
@@ -290,12 +293,13 @@ func LoadTranscriptIndexedChain(path string, index TranscriptLineIndex, leaf con
 		}
 	}
 	return TranscriptIndexedChain{
-		Messages:      messages,
-		Leaf:          leaf,
-		Found:         len(messages) > 0,
-		BytesRead:     bytesRead,
-		HasBefore:     hasBefore,
-		MissingParent: missingParent,
+		Messages:        messages,
+		Leaf:            leaf,
+		Found:           len(messages) > 0,
+		BytesRead:       bytesRead,
+		HasBefore:       hasBefore,
+		MissingParent:   missingParent,
+		TruncatedParent: truncatedParent,
 	}, nil
 }
 

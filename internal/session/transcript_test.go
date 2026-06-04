@@ -619,6 +619,25 @@ func TestBuildIndexedResumeConversationUsesLineIndex(t *testing.T) {
 	if !resume.Found || !resume.HasBefore || resume.BytesRead > budget || strings.Join(chainIDs(resume.Chain), ",") != "a1,u2" {
 		t.Fatalf("budgeted indexed resume = %#v chain=%#v budget=%d", resume, chainIDs(resume.Chain), budget)
 	}
+	if resume.TruncatedParent == nil || *resume.TruncatedParent != "u1" || resume.MissingParent != nil {
+		t.Fatalf("budgeted indexed resume parent markers = truncated:%#v missing:%#v", resume.TruncatedParent, resume.MissingParent)
+	}
+}
+
+func TestBuildIndexedResumeConversationReportsMissingParent(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","parentUuid":"missing_user","timestamp":"2026-01-01T00:00:01Z","message":{"type":"assistant","content":[{"type":"text","text":"orphan"}]}}`,
+	})
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || !resume.HasBefore || strings.Join(chainIDs(resume.Chain), ",") != "a1" {
+		t.Fatalf("orphan indexed resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+	if resume.MissingParent == nil || *resume.MissingParent != "missing_user" || resume.TruncatedParent != nil {
+		t.Fatalf("orphan indexed resume parent markers = missing:%#v truncated:%#v", resume.MissingParent, resume.TruncatedParent)
+	}
 }
 
 func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
