@@ -312,46 +312,36 @@ func (m *SnipMetadata) UnmarshalJSON(data []byte) error {
 }
 
 func (r *ContentReplacementRecord) UnmarshalJSON(data []byte) error {
-	type ContentReplacementRecordJSON ContentReplacementRecord
 	var aux struct {
-		*ContentReplacementRecordJSON
-		KindType                 string `json:"type"`
-		KindReplacementCamel     string `json:"replacementKind"`
-		KindReplacementSnake     string `json:"replacement_kind"`
-		ToolUseIDUpper           string `json:"toolUseID"`
-		ToolUseIDSnake           string `json:"tool_use_id"`
-		BlockIDUpper             string `json:"blockID"`
-		BlockIDSnake             string `json:"block_id"`
-		ReplacementContent       string `json:"content"`
-		ReplacementText          string `json:"text"`
-		ReplacementValue         string `json:"value"`
-		ReplacementOutput        string `json:"output"`
-		OriginalHashSnake        string `json:"original_hash"`
-		OriginalHashShort        string `json:"hash"`
-		OriginalContentHashCamel string `json:"originalContentHash"`
-		OriginalContentHashSnake string `json:"original_content_hash"`
+		KindType                 string       `json:"type"`
+		Kind                     string       `json:"kind"`
+		KindReplacementCamel     string       `json:"replacementKind"`
+		KindReplacementSnake     string       `json:"replacement_kind"`
+		ToolUseID                contracts.ID `json:"toolUseId"`
+		ToolUseIDUpper           contracts.ID `json:"toolUseID"`
+		ToolUseIDSnake           contracts.ID `json:"tool_use_id"`
+		BlockID                  contracts.ID `json:"blockId"`
+		BlockIDUpper             contracts.ID `json:"blockID"`
+		BlockIDSnake             contracts.ID `json:"block_id"`
+		Replacement              string       `json:"replacement"`
+		ReplacementContent       string       `json:"content"`
+		ReplacementText          string       `json:"text"`
+		ReplacementValue         string       `json:"value"`
+		ReplacementOutput        string       `json:"output"`
+		OriginalHash             string       `json:"originalHash"`
+		OriginalHashSnake        string       `json:"original_hash"`
+		OriginalHashShort        string       `json:"hash"`
+		OriginalContentHashCamel string       `json:"originalContentHash"`
+		OriginalContentHashSnake string       `json:"original_content_hash"`
 	}
-	base := ContentReplacementRecordJSON{}
-	aux.ContentReplacementRecordJSON = &base
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	*r = ContentReplacementRecord(base)
-	if r.Kind == "" {
-		r.Kind = firstNonEmptyString(aux.KindType, aux.KindReplacementCamel, aux.KindReplacementSnake)
-	}
-	if r.ToolUseID == "" {
-		r.ToolUseID = firstNonEmptyString(aux.ToolUseIDUpper, aux.ToolUseIDSnake)
-	}
-	if r.BlockID == "" {
-		r.BlockID = firstNonEmptyString(aux.BlockIDUpper, aux.BlockIDSnake)
-	}
-	if r.Replacement == "" {
-		r.Replacement = firstNonEmptyString(aux.ReplacementContent, aux.ReplacementText, aux.ReplacementValue, aux.ReplacementOutput)
-	}
-	if r.OriginalHash == "" {
-		r.OriginalHash = firstNonEmptyString(aux.OriginalHashSnake, aux.OriginalHashShort, aux.OriginalContentHashCamel, aux.OriginalContentHashSnake)
-	}
+	r.Kind = firstNonEmptyString(aux.Kind, aux.KindType, aux.KindReplacementCamel, aux.KindReplacementSnake)
+	r.ToolUseID = firstNonEmptyString(string(aux.ToolUseID), string(aux.ToolUseIDUpper), string(aux.ToolUseIDSnake))
+	r.BlockID = firstNonEmptyString(string(aux.BlockID), string(aux.BlockIDUpper), string(aux.BlockIDSnake))
+	r.Replacement = firstNonEmptyString(aux.Replacement, aux.ReplacementContent, aux.ReplacementText, aux.ReplacementValue, aux.ReplacementOutput)
+	r.OriginalHash = firstNonEmptyString(aux.OriginalHash, aux.OriginalHashSnake, aux.OriginalHashShort, aux.OriginalContentHashCamel, aux.OriginalContentHashSnake)
 	return nil
 }
 

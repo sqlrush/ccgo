@@ -224,23 +224,32 @@ func parseSnapshotMessageID(line []byte) contracts.ID {
 }
 
 func parseContentReplacementMetadata(line []byte) (ContentReplacementEntry, bool) {
-	var entry ContentReplacementEntry
-	if err := json.Unmarshal(line, &entry); err != nil {
-		return ContentReplacementEntry{}, false
-	}
 	fields, err := parseTranscriptMetadataFields(line)
 	if err != nil {
 		return ContentReplacementEntry{}, false
+	}
+	var aux struct {
+		Type         string          `json:"type"`
+		SessionID    contracts.ID    `json:"sessionId"`
+		Replacements json.RawMessage `json:"replacements"`
+	}
+	if err := json.Unmarshal(line, &aux); err != nil {
+		return ContentReplacementEntry{}, false
+	}
+	entry := ContentReplacementEntry{
+		Type:         aux.Type,
+		SessionID:    aux.SessionID,
+		Replacements: parseContentReplacementRecords(aux.Replacements),
 	}
 	if entry.SessionID == "" {
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.AgentID == "" {
-		entry.AgentID = fields.stringValue(
-			"agentID", "agent_id", "agent",
+		entry.AgentID = string(fields.idValue(
+			"agentId", "agentID", "agent_id", "agent",
 			"sidechainId", "sidechainID", "sidechain_id",
 			"subagentId", "subagentID", "subagent_id",
-		)
+		))
 	}
 	if len(entry.Replacements) == 0 {
 		entry.Replacements = parseContentReplacementRecords(fields.rawValue(
