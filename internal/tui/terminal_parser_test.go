@@ -66,6 +66,23 @@ func TestTerminalVisibleTextExpandsRepeatPrecedingCharacter(t *testing.T) {
 	}
 }
 
+func TestTerminalVisibleWidthUsesBaseWidthForCombiningMarks(t *testing.T) {
+	input := "e\u0301" + CSISequence(2, "b") + "x"
+	if got := TerminalVisibleText(input); got != "e\u0301e\u0301e\u0301x" {
+		t.Fatalf("visible = %q", got)
+	}
+	if got := TerminalVisibleWidth(input); got != 4 {
+		t.Fatalf("width = %d", got)
+	}
+
+	if got := padOrTrim("e\u0301x", 2); got != "e\u0301x" {
+		t.Fatalf("padOrTrim exact = %q", got)
+	}
+	if got := padOrTrim("e\u0301x", 1); got != "e\u0301" {
+		t.Fatalf("padOrTrim trim = %q", got)
+	}
+}
+
 func TestTerminalParserDispatchesStringControlActions(t *testing.T) {
 	parser := NewTerminalParser()
 	input := "a" +
@@ -119,7 +136,7 @@ func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
 		t.Fatalf("actions = %#v", actions)
 	}
 	want := []TerminalGrapheme{
-		{Value: "e\u0301", Width: 2},
+		{Value: "e\u0301", Width: 1},
 		{Value: " ", Width: 1},
 		{Value: "\u2764\ufe0f", Width: 2},
 		{Value: " ", Width: 1},

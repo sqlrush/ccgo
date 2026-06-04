@@ -343,24 +343,41 @@ func nextTerminalGrapheme(text string) (string, int) {
 }
 
 func terminalGraphemeStringWidth(grapheme string) int {
-	count := 0
-	var first rune
+	baseWidth := 1
+	hasBase := false
+	hasWidePresentation := false
 	for _, r := range grapheme {
-		if count == 0 {
-			first = r
+		if !hasBase {
+			hasBase = true
+			if isTerminalEmoji(r) || isTerminalEastAsianWide(r) {
+				baseWidth = 2
+			}
+			continue
 		}
-		count++
-		if count > 1 {
-			return 2
+		if r == 0x200d || isTerminalRegionalIndicator(r) || isTerminalEmojiModifier(r) || isTerminalEmojiTag(r) {
+			hasWidePresentation = true
+			continue
+		}
+		if isTerminalVariationSelector(r) {
+			if r == 0xfe0f {
+				hasWidePresentation = true
+			}
+			continue
+		}
+		if isTerminalCombiningMark(r) {
+			continue
+		}
+		if isTerminalEmoji(r) || isTerminalEastAsianWide(r) {
+			hasWidePresentation = true
 		}
 	}
-	if count == 0 {
+	if !hasBase {
 		return 1
 	}
-	if isTerminalEmoji(first) || isTerminalEastAsianWide(first) {
+	if hasWidePresentation {
 		return 2
 	}
-	return 1
+	return baseWidth
 }
 
 func isTerminalEmoji(r rune) bool {
