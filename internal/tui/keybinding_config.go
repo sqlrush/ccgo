@@ -91,21 +91,21 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyBackspace, nil
 	case "delete", "del":
 		return KeyDelete, nil
-	case "left":
+	case "left", "arrow-left", "arrowleft":
 		return KeyLeft, nil
-	case "right":
+	case "right", "arrow-right", "arrowright":
 		return KeyRight, nil
-	case "alt+left", "alt-left", "meta+left", "meta-left", "option+left", "option-left":
+	case "alt+left", "alt-left", "meta+left", "meta-left", "option+left", "option-left", "alt+arrow-left", "alt-arrow-left", "meta+arrow-left", "meta-arrow-left", "option+arrow-left", "option-arrow-left":
 		return KeyAltLeft, nil
-	case "alt+right", "alt-right", "meta+right", "meta-right", "option+right", "option-right":
+	case "alt+right", "alt-right", "meta+right", "meta-right", "option+right", "option-right", "alt+arrow-right", "alt-arrow-right", "meta+arrow-right", "meta-arrow-right", "option+arrow-right", "option-arrow-right":
 		return KeyAltRight, nil
-	case "ctrl+left", "ctrl-left", "control+left", "control-left":
+	case "ctrl+left", "ctrl-left", "control+left", "control-left", "ctrl+arrow-left", "ctrl-arrow-left", "control+arrow-left", "control-arrow-left":
 		return KeyCtrlLeft, nil
-	case "ctrl+right", "ctrl-right", "control+right", "control-right":
+	case "ctrl+right", "ctrl-right", "control+right", "control-right", "ctrl+arrow-right", "ctrl-arrow-right", "control+arrow-right", "control-arrow-right":
 		return KeyCtrlRight, nil
-	case "up":
+	case "up", "arrow-up", "arrowup":
 		return KeyUp, nil
-	case "down":
+	case "down", "arrow-down", "arrowdown":
 		return KeyDown, nil
 	case "pageup", "page-up", "pgup", "pg-up", "prior":
 		return KeyPageUp, nil

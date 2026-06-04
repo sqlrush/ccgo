@@ -234,6 +234,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes DEC left/right margin mode (`?69h/l`) as a structured `leftRightMarginMode` action.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: keybinding config now accepts page navigation aliases such as `pgup`, `pg-up`, `prior`, `pgdn`, `pg-down`, and `next`.
+- `internal/tui`: keybinding config and named-key script input now accept DOM-style arrow key aliases such as `arrowLeft`, `arrowRight`, `arrowUp`, `arrowDown`, and modifier-arrow variants.
 - `internal/tui`: keybinding action parsing now accepts broader editor-style aliases such as `cursorLeft`, `lineStart`, `deletePreviousChar`, `killLine`, `acceptSelection`, and `search`.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
