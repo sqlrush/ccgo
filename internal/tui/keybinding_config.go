@@ -247,13 +247,33 @@ func ParseActionName(raw string) (Action, error) {
 	switch name {
 	case "", "none", "noop", "no_op", "null", "unbind", "unbound":
 		return ActionNone, nil
-	case "submit", "submit_prompt":
+	case "submit", "submit_prompt", "send", "send_message", "submit_message":
 		return ActionSubmitPrompt, nil
-	case "newline", "insert_newline":
+	case "newline", "new_line", "line_break", "insert_newline":
 		return ActionInsertNewline, nil
-	case "delete_word_back", "delete_word_backward":
+	case "left", "cursor_left", "backward", "move_backward":
+		return ActionMoveLeft, nil
+	case "right", "cursor_right", "forward", "move_forward":
+		return ActionMoveRight, nil
+	case "word_left", "word_backward", "backward_word", "move_word_backward":
+		return ActionMoveWordLeft, nil
+	case "word_right", "word_forward", "forward_word", "move_word_forward":
+		return ActionMoveWordRight, nil
+	case "home", "start", "line_start", "beginning", "move_to_start":
+		return ActionMoveStart, nil
+	case "end", "line_end", "move_to_end":
+		return ActionMoveEnd, nil
+	case "backspace", "delete_back", "delete_backward", "delete_previous", "delete_previous_char":
+		return ActionDeleteBackward, nil
+	case "delete", "del", "delete_forward", "delete_next", "delete_next_char":
+		return ActionDeleteForward, nil
+	case "delete_start", "delete_line_start", "delete_to_beginning", "delete_to_line_start":
+		return ActionDeleteToStart, nil
+	case "kill_line", "delete_line_end", "delete_to_line_end":
+		return ActionDeleteToEnd, nil
+	case "delete_word_back", "delete_word_backward", "delete_word_left", "kill_word_backward", "backward_kill_word":
 		return ActionDeleteWordBack, nil
-	case "delete_word_fwd", "delete_word_forward":
+	case "delete_word_fwd", "delete_word_forward", "delete_word_right", "kill_word", "kill_word_forward":
 		return ActionDeleteWordFwd, nil
 	case "history_prev", "history_previous", "previous_history":
 		return ActionHistoryPrevious, nil
@@ -263,13 +283,17 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionPageUp, nil
 	case "pagedown", "page_down":
 		return ActionPageDown, nil
+	case "half_page_up", "half_up":
+		return ActionHalfPageUp, nil
+	case "half_page_down", "half_down":
+		return ActionHalfPageDown, nil
 	case "scroll_top", "scroll_to_top", "top":
 		return ActionScrollToTop, nil
 	case "scroll_bottom", "scroll_to_bottom", "bottom":
 		return ActionScrollToBottom, nil
-	case "confirm", "confirm_selection":
+	case "confirm", "confirm_selection", "accept", "accept_selection", "select", "select_item":
 		return ActionConfirmSelection, nil
-	case "reverse_search", "history_search", "search_history":
+	case "reverse_search", "history_search", "search_history", "search":
 		return ActionReverseSearch, nil
 	}
 	action := Action(name)
