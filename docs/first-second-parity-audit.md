@@ -147,6 +147,7 @@ M6 progress now includes:
 - `internal/session`: remote-history pageInfo parsing now accepts previous/older pagination signals such as `hasPrevious`/`hasPreviousPage`, `hasOlder`/`more`, and before-id cursors such as `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor`.
 - `internal/session`: remote-history pagination bool parsing now accepts numeric and yes/no-style bool values in addition to JSON bools and true/false strings.
 - `internal/session`: remote-history pagination cursor/id parsing now accepts JSON numbers and preserves them as string cursors for page fields and `edges[].cursor`.
+- `internal/contracts`: ID JSON decoding now accepts JSON numbers/null so remote-history event, message, session, and parent ID aliases can preserve numeric IDs as strings during transcript materialization.
 - `internal/session`: remote-history response parsing now recursively unwraps GraphQL/session containers such as `data.session.events`, `data.projectSession.eventConnection`, `conversation`, and `remoteHistory` before applying `nodes`/`edges[].node` event-list and `pageInfo` pagination parsing.
 - `internal/session`: remote-history link pagination now accepts `links.next`/`links.previous`/`links.prev`/`links.older` string URLs or `{href,url,uri,link}` objects and extracts before/cursor query parameters for continuation.
 - `internal/session`: remote-history pagination now also accepts HTTP `Link` header URLs with `previous`/`prev`/`older`/`next` rels as continuation cursor fallbacks.

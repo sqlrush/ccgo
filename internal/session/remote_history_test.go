@@ -802,6 +802,26 @@ func TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases(t *testing.T) {
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsNumericIDAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[{"type":"user","id":101,"sessionId":7,"timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","content":[{"type":"text","text":"hi"}]}},{"type":"assistant","eventId":102,"sessionId":7,"parentMessageID":101,"timestamp":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "101" || messages[1].UUID != "102" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].SessionID != "7" || messages[1].SessionID != "7" {
+		t.Fatalf("numeric session ids = %#v", messages)
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "101" {
+		t.Fatalf("numeric parent alias = %#v", messages[1].ParentUUID)
+	}
+	if messages[1].Message == nil || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "101" || messages[1].Message.SessionID != "7" {
+		t.Fatalf("message numeric aliases = %#v", messages[1].Message)
+	}
+}
+
 func TestAppendRemoteHistoryTranscriptDeduplicatesExistingMessages(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","uuid":"u1","sessionId":"s1","content":[{"type":"text","text":"hi"}]}}`,
