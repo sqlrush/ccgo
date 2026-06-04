@@ -207,6 +207,7 @@ M7 progress now includes:
 - `internal/tui`: terminal sequence dispatcher and parser now classify DCS/APC/PM/SOS string-control sequences as `stringControl` actions with payload, terminator, and incomplete-flush state while keeping visible text extraction free of those invisible payloads.
 - `internal/tui`: terminal CSI parser now recognizes DEC highlight, UTF-8, and urxvt numeric mouse modes (`?1001h/l`, `?1005h/l`, `?1015h/l`) as mouse-tracking mode actions.
 - `internal/tui`: terminal CSI parser now recognizes xterm alternate scroll mode (`?1007h/l`) as a structured mode action instead of an unknown sequence.
+- `internal/tui`: terminal CSI parser now recognizes DEC application cursor mode (`?1h/l`) as a structured mode action, pairing with SS3 application cursor key parsing.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
 - `internal/tui`: keybinding config now accepts page navigation aliases such as `pgup`, `pg-up`, `prior`, `pgdn`, `pg-down`, and `next`.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.

@@ -63,6 +63,7 @@ const (
 	CSICommandRestoreCursor    byte = 'u'
 	CSICommandTerminalParams   byte = 'x'
 
+	DECModeApplicationCursor  = 1
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
 	DECModeAltScreenBuffer    = 1047
@@ -215,12 +216,13 @@ type CSIScrollAction struct {
 type CSIModeActionType string
 
 const (
-	CSIModeActionAlternateScreen CSIModeActionType = "alternateScreen"
-	CSIModeActionBracketedPaste  CSIModeActionType = "bracketedPaste"
-	CSIModeActionMouseTracking   CSIModeActionType = "mouseTracking"
-	CSIModeActionFocusEvents     CSIModeActionType = "focusEvents"
-	CSIModeActionAlternateScroll CSIModeActionType = "alternateScroll"
-	CSIModeActionSynchronized    CSIModeActionType = "synchronizedOutput"
+	CSIModeActionApplicationCursor CSIModeActionType = "applicationCursor"
+	CSIModeActionAlternateScreen   CSIModeActionType = "alternateScreen"
+	CSIModeActionBracketedPaste    CSIModeActionType = "bracketedPaste"
+	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
+	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
+	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
+	CSIModeActionSynchronized      CSIModeActionType = "synchronizedOutput"
 )
 
 type CSIMouseTrackingMode string
@@ -543,6 +545,8 @@ func csiCursorStyle(index int) (CursorStyle, bool) {
 
 func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 	switch mode {
+	case DECModeApplicationCursor:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationCursor, Enabled: enabled}}, true
 	case DECModeCursorVisible:
 		cursorType := CSICursorActionHide
 		if enabled {
