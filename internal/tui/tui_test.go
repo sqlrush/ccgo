@@ -6059,6 +6059,48 @@ func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsExpectationWrappers(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action": "typeText",
+			"value": "go",
+			"expect": {
+				"prompt": {"text": "go"},
+				"noEvent": "true"
+			}
+		},
+		{
+			"type": "press",
+			"value": "enter",
+			"assertions": {
+				"event": {"type": "prompt_submitted", "value": "go"},
+				"eventCount": 1,
+				"totalEventCount": 1,
+				"prompt": {"empty": "yes"}
+			}
+		},
+		{
+			"message": {"role": "assistant", "text": "ready"},
+			"snapshot": "ready-state",
+			"checks": {
+				"snapshotContains": "assistant: ready",
+				"screen": {"columns": 30, "rows": 6}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || len(result.Snapshots) != 1 || result.Snapshots[0].Name != "ready-state" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsEventAndResultAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

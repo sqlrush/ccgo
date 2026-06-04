@@ -268,6 +268,7 @@ func isBindingSpecObject(data json.RawMessage) bool {
 
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = unwrapScriptStepJSON(data)
+	data = mergeScriptStepExpectationJSON(data)
 	rawStepData := data
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
@@ -928,6 +929,125 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	applyScriptStepActionAlias(step, fieldMap)
 	return nil
+}
+
+func mergeScriptStepExpectationJSON(data []byte) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	changed := false
+	for _, name := range []string{
+		"expect",
+		"expected",
+		"expectation",
+		"expectations",
+		"assert",
+		"asserts",
+		"assertion",
+		"assertions",
+		"check",
+		"checks",
+		"verify",
+		"verification",
+		"then",
+		"after",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || raw[0] != '{' {
+			continue
+		}
+		nested := map[string]json.RawMessage{}
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			continue
+		}
+		if mergeScriptStepExpectationFields(fields, nested) {
+			changed = true
+		}
+	}
+	if !changed {
+		return data
+	}
+	merged, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return merged
+}
+
+func mergeScriptStepExpectationFields(fields map[string]json.RawMessage, nested map[string]json.RawMessage) bool {
+	changed := false
+	for name, raw := range nested {
+		if target := scriptStepExpectationTargetField(name); target != "" {
+			if _, exists := fields[target]; !exists {
+				fields[target] = raw
+				changed = true
+			}
+			continue
+		}
+		if strings.HasPrefix(name, "expect") || strings.HasPrefix(name, "Expect") {
+			if _, exists := fields[name]; !exists {
+				fields[name] = raw
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+func scriptStepExpectationTargetField(name string) string {
+	switch canonicalScriptStepAction(name) {
+	case "event":
+		return "expectEvent"
+	case "events":
+		return "expectEvents"
+	case "noevent", "no-event":
+		return "expectNoEvent"
+	case "eventcount", "event-count":
+		return "expectEventCount"
+	case "totaleventcount", "total-event-count":
+		return "expectTotalEventCount"
+	case "dialog":
+		return "expectDialog"
+	case "dialogresult", "dialog-result":
+		return "expectDialogResult"
+	case "dialogresults", "dialog-results":
+		return "expectDialogResults"
+	case "nodialogresult", "no-dialog-result", "nodialogresults", "no-dialog-results":
+		return "expectNoDialogResult"
+	case "dialogresultcount", "dialog-result-count":
+		return "expectDialogResultCount"
+	case "totaldialogresultcount", "total-dialog-result-count":
+		return "expectTotalDialogResultCount"
+	case "prompt", "input":
+		return "expectPrompt"
+	case "vim":
+		return "expectVim"
+	case "tasks":
+		return "expectTasks"
+	case "reversesearch", "reverse-search":
+		return "expectReverseSearch"
+	case "viewport":
+		return "expectViewport"
+	case "screen", "terminal":
+		return "expectScreen"
+	case "focused", "focus":
+		return "expectFocused"
+	case "statuscontains", "status-contains":
+		return "expectStatusContains"
+	case "statusnotcontains", "status-not-contains":
+		return "expectStatusNotContains"
+	case "snapshotcontains", "snapshot-contains":
+		return "expectSnapshotContains"
+	case "snapshotnotcontains", "snapshot-not-contains":
+		return "expectSnapshotNotContains"
+	default:
+		return ""
+	}
 }
 
 func unwrapScriptStepJSON(data []byte) []byte {
