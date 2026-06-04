@@ -613,6 +613,29 @@ func TestBuildResumeConversationAcceptsImageContentBlockAliases(t *testing.T) {
 	}
 }
 
+func TestBuildResumeConversationAcceptsContentBlockTypeAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","content":[{"type":"toolUse","id":"toolu_1","name":"Read"},{"type":"tool-result","toolUseId":"toolu_1","content":"ok"},{"type":"cacheEdits","cacheReference":"cache_1"},{"type":"inputImage","mimeType":"image/png","base64":"AAAA"}]}`,
+	})
+	resume, err := BuildResumeConversation(path, "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || len(resume.Messages) != 1 {
+		t.Fatalf("resume = %#v", resume)
+	}
+	content := resume.Messages[0].Content
+	if len(content) != 4 {
+		t.Fatalf("content = %#v", content)
+	}
+	if content[0].Type != contracts.ContentToolUse || content[1].Type != contracts.ContentToolResult || content[2].Type != contracts.ContentCacheEdits || content[3].Type != contracts.ContentImage {
+		t.Fatalf("content types = %#v", content)
+	}
+	if content[1].ToolUseID != "toolu_1" || content[2].CacheReference != "cache_1" {
+		t.Fatalf("content aliases = %#v", content)
+	}
+}
+
 func TestBuildResumeConversationUsesLatestLeaf(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null,"message":{"type":"user","content":[{"type":"text","text":"first"}]}}`,

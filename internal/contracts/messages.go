@@ -62,7 +62,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*b = ContentBlock{
-		Type:           aux.Type,
+		Type:           canonicalContentBlockType(string(aux.Type)),
 		Text:           aux.Text,
 		Source:         aux.Source,
 		ID:             string(aux.ID),
@@ -227,6 +227,31 @@ func cacheControlJSONField(fields map[string]json.RawMessage, names ...string) *
 		}
 	}
 	return nil
+}
+
+func canonicalContentBlockType(value string) ContentBlockType {
+	trimmed := strings.TrimSpace(value)
+	normalized := strings.ToLower(trimmed)
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	switch normalized {
+	case "":
+		return ""
+	case "text", "input_text", "inputtext", "content_text", "contenttext":
+		return ContentText
+	case "thinking", "reasoning", "thought", "chain_of_thought", "chainofthought":
+		return ContentThinking
+	case "tool_use", "tooluse", "tool_call", "toolcall", "function_call", "functioncall":
+		return ContentToolUse
+	case "tool_result", "toolresult", "tool_response", "toolresponse", "tool_output", "tooloutput", "function_result", "functionresult":
+		return ContentToolResult
+	case "image", "input_image", "inputimage", "image_source", "imagesource":
+		return ContentImage
+	case "cache_edits", "cacheedits", "cache_edit", "cacheedit":
+		return ContentCacheEdits
+	default:
+		return ContentBlockType(trimmed)
+	}
 }
 
 func imageSourceJSONField(fields map[string]json.RawMessage, names ...string) *ImageSource {

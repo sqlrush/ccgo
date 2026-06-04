@@ -94,6 +94,38 @@ func TestContentBlockUnmarshalAcceptsTextAliases(t *testing.T) {
 	}
 }
 
+func TestContentBlockUnmarshalAcceptsTypeAliases(t *testing.T) {
+	var message Message
+	if err := json.Unmarshal([]byte(`{"role":"assistant","content":[
+		{"type":"toolUse","id":"toolu_1","name":"Read"},
+		{"type":"tool-result","toolUseId":"toolu_1","content":"ok"},
+		{"type":"cacheEdits","cacheReference":"cache_1"},
+		{"type":"inputImage","mimeType":"image/png","base64":"AAAA"},
+		{"type":"chain-of-thought","content":"reasoning"}
+	]}`), &message); err != nil {
+		t.Fatal(err)
+	}
+	if len(message.Content) != 5 {
+		t.Fatalf("content = %#v", message.Content)
+	}
+	if message.Content[0].Type != ContentToolUse || message.Content[0].ID != "toolu_1" {
+		t.Fatalf("tool use = %#v", message.Content[0])
+	}
+	if message.Content[1].Type != ContentToolResult || message.Content[1].ToolUseID != "toolu_1" {
+		t.Fatalf("tool result = %#v", message.Content[1])
+	}
+	if message.Content[2].Type != ContentCacheEdits || message.Content[2].CacheReference != "cache_1" {
+		t.Fatalf("cache edits = %#v", message.Content[2])
+	}
+	source, ok := message.Content[3].Source.(ImageSource)
+	if message.Content[3].Type != ContentImage || !ok || source.MediaType != "image/png" || source.Data != "AAAA" {
+		t.Fatalf("image = %#v source=%#v", message.Content[3], message.Content[3].Source)
+	}
+	if message.Content[4].Type != ContentThinking || message.Content[4].Text != "reasoning" {
+		t.Fatalf("thinking = %#v", message.Content[4])
+	}
+}
+
 func TestMessageUnmarshalAcceptsContentBlockTextAliases(t *testing.T) {
 	var message Message
 	if err := json.Unmarshal([]byte(`{"role":"assistant","content":[{"type":"text","body":"hello"},{"type":"thinking","content":"reasoning"}]}`), &message); err != nil {
