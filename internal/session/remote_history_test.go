@@ -462,6 +462,38 @@ func TestFetchRemoteHistoryAcceptsGraphQLSessionWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsGraphQLViewerAndNodeWrappers(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":{"viewer":{"session":{"events":{"edges":[{"cursor":"evt_viewer","node":{"type":"status","session_id":"s","status":"latest"}}],"pageInfo":{"hasPreviousPage":true,"startCursor":"evt_viewer"}}}}}}`))
+		case "evt_viewer":
+			_, _ = w.Write([]byte(`{"data":{"node":{"eventConnection":{"nodes":[{"type":"status","event_id":"evt_node","session_id":"s","status":"older"}],"pageInfo":{"hasPreviousPage":false}}}}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if len(events.Events) != 2 || events.Events[0].ID != "evt_viewer" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_node" || events.Events[1].Status != "older" {
+		t.Fatalf("event order = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_viewer" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsLinkURLCursors(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
