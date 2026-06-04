@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"strings"
 
 	"ccgo/internal/contracts"
 )
@@ -82,6 +83,7 @@ func (c *PastedContent) UnmarshalJSON(data []byte) error {
 	if c.Type == "" {
 		c.Type = firstHistoryString(aux.Kind, aux.PastedType, aux.PastedTypeSnake)
 	}
+	c.Type = canonicalPastedContentType(c.Type)
 	if c.Content == "" {
 		c.Content = firstHistoryString(aux.Value, aux.Data, aux.Base64)
 	}
@@ -101,6 +103,9 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 	type StoredPastedContentJSON StoredPastedContent
 	var aux struct {
 		*StoredPastedContentJSON
+		Kind             string `json:"kind"`
+		PastedType       string `json:"pastedType"`
+		PastedTypeSnake  string `json:"pasted_type"`
 		ContentHashSnake string `json:"content_hash"`
 		MediaTypeSnake   string `json:"media_type"`
 		MimeType         string `json:"mimeType"`
@@ -121,6 +126,10 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = StoredPastedContent(base)
+	if c.Type == "" {
+		c.Type = firstHistoryString(aux.Kind, aux.PastedType, aux.PastedTypeSnake)
+	}
+	c.Type = canonicalPastedContentType(c.Type)
 	if c.ContentHash == "" {
 		c.ContentHash = aux.ContentHashSnake
 	}
@@ -134,6 +143,23 @@ func (c *StoredPastedContent) UnmarshalJSON(data []byte) error {
 		c.SourcePath = firstHistoryString(aux.SourcePathSnake, aux.FilePath, aux.FilePathSnake, aux.Path)
 	}
 	return nil
+}
+
+func canonicalPastedContentType(value string) string {
+	trimmed := strings.TrimSpace(value)
+	normalized := strings.ToLower(trimmed)
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	switch normalized {
+	case "", PastedContentText:
+		return normalized
+	case PastedContentImage, "input_image", "inputimage", "pasted_image", "pastedimage", "image_paste", "imagepaste", "file_image", "fileimage":
+		return PastedContentImage
+	case "paste", "pasted_text", "pastedtext", "input_text", "inputtext", "text_paste", "textpaste", "clipboard_text", "clipboardtext":
+		return PastedContentText
+	default:
+		return trimmed
+	}
 }
 
 func firstHistoryString(values ...string) string {
