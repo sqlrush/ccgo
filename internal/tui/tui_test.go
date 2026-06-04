@@ -6379,6 +6379,14 @@ func TestParseInteractionScriptAcceptsNestedRecordArrayWrappers(t *testing.T) {
 			{"action":"type","value":"ship"},
 			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"ship"}}
 		]}}`,
+		"resource_attributes": `{"id":"fixture_1","type":"interaction-script","attributes":{"steps":[
+			{"action":"type","value":"plan"},
+			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"plan"}}
+		]}}`,
+		"resource_properties": `{"resource":{"id":"fixture_2","type":"interaction-script","properties":{"timeline":[
+			{"action":"type","value":"audit"},
+			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"audit"}}
+		]}}}`,
 		"response_fixture": `{"response":{"fixture":{"steps":[
 			{"action":"type","value":"test"},
 			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"test"}}
