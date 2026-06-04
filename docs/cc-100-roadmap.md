@@ -148,7 +148,7 @@ M7 补充：keybinding config 的 page navigation key name 现在接受 `pgup`/`
 
 M7 补充：keybinding config 和脚本 named-key 输入现在接受 DOM-style arrow key aliases，包括 `arrowLeft`/`arrowRight`/`arrowUp`/`arrowDown` 以及 ctrl/alt/meta/option arrow variants。
 
-M7 补充：keybinding action parser 现在接受更多 editor-style action aliases，包括 `cursorLeft`/`cursorRight`、`lineStart`/`lineEnd`、`deletePreviousChar`/`deleteNextChar`、`killLine`、`acceptSelection` 和 `search`。
+M7 补充：keybinding action parser 现在接受更多 editor/global-style action aliases，包括 `cursorLeft`/`cursorRight`、`lineStart`/`lineEnd`、`deletePreviousChar`/`deleteNextChar`、`killLine`、`pasteKillRing`/`yankPrevious`、`clearScreen`、`openExternalEditor`、`toggleTasks`、`cancelAgents`、`focusPrev`、`acceptSelection` 和 `search`。
 
 M7 补充：keybinding config 和脚本 named-key 输入现在接受短修饰符别名，包括 `c-`/`m-`/`a-`/`opt-`/`s-` 以及 compact/camel 形式，可覆盖 control、meta、alt、option 和 shift key names。
 

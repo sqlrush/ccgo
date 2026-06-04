@@ -342,6 +342,24 @@ func ParseActionName(raw string) (Action, error) {
 	switch name {
 	case "", "none", "noop", "no_op", "null", "unbind", "unbound":
 		return ActionNone, nil
+	case "cancel", "cancel_prompt", "dismiss", "close", "escape", "abort":
+		return ActionCancel, nil
+	case "interrupt", "interrupt_request", "stop", "stop_generation", "stop_response", "cancel_generation", "cancel_response":
+		return ActionInterrupt, nil
+	case "exit", "quit", "eof", "close_app", "exit_app":
+		return ActionExit, nil
+	case "redraw", "clear", "clear_screen", "redraw_screen", "refresh", "refresh_screen":
+		return ActionRedraw, nil
+	case "toggle_transcript", "transcript", "show_transcript", "toggle_history":
+		return ActionToggleTranscript, nil
+	case "toggle_todos", "toggle_todo", "todos", "toggle_tasks", "toggle_task_list":
+		return ActionToggleTodos, nil
+	case "external_editor", "external_edit", "open_editor", "open_external_editor", "editor", "edit_in_editor":
+		return ActionExternalEditor, nil
+	case "stash_prompt", "stash", "stash_input", "stash_current_prompt":
+		return ActionStashPrompt, nil
+	case "kill_agents", "kill_agent", "stop_agents", "cancel_agents":
+		return ActionKillAgents, nil
 	case "submit", "submit_prompt", "send", "send_message", "submit_message":
 		return ActionSubmitPrompt, nil
 	case "newline", "new_line", "line_break", "insert_newline":
@@ -370,10 +388,18 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionDeleteWordBack, nil
 	case "delete_word_fwd", "delete_word_forward", "delete_word_right", "kill_word", "kill_word_forward":
 		return ActionDeleteWordFwd, nil
+	case "yank", "paste_yank", "paste_kill_ring":
+		return ActionYank, nil
+	case "yank_pop", "yank_previous", "rotate_yank", "paste_previous_yank":
+		return ActionYankPop, nil
 	case "history_prev", "history_previous", "previous_history":
 		return ActionHistoryPrevious, nil
 	case "history_next", "next_history":
 		return ActionHistoryNext, nil
+	case "scroll_up", "line_up", "scroll_line_up":
+		return ActionScrollUp, nil
+	case "scroll_down", "line_down", "scroll_line_down":
+		return ActionScrollDown, nil
 	case "pageup", "page_up":
 		return ActionPageUp, nil
 	case "pagedown", "page_down":
@@ -390,6 +416,10 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionConfirmSelection, nil
 	case "reverse_search", "history_search", "search_history", "search":
 		return ActionReverseSearch, nil
+	case "focus_next", "next_focus", "focus_forward", "tab_next":
+		return ActionFocusNext, nil
+	case "focus_previous", "focus_prev", "previous_focus", "prev_focus", "focus_backward", "tab_previous":
+		return ActionFocusPrevious, nil
 	}
 	action := Action(name)
 	if !IsKnownAction(action) {
