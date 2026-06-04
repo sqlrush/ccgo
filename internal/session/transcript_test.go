@@ -822,7 +822,7 @@ func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"pr-link","sessionID":"s4","prNumber":"44","prUrl":"https://github.com/o/r/pull/44","prRepository":"o/r"}`,
 		`{"type":"speculation-accept","createdAt":"2026-01-01T00:00:05Z","timeSavedMs":"5600"}`,
-		`{"type":"marble-origami-snapshot","sessionID":"s4","armed":true,"lastSpawnTokens":"96"}`,
+		`{"type":"marble-origami-snapshot","sessionID":"s4","isArmed":"true","spawnTokens":"96","items":[{"uuid":"pending_1"}]}`,
 	})
 	transcript, err := LoadTranscript(path)
 	if err != nil {
@@ -834,7 +834,7 @@ func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	if len(transcript.SpeculationAccepts) != 1 || transcript.SpeculationAccepts[0].TimeSavedMS != 5600 || transcript.SpeculationAccepts[0].Timestamp != "2026-01-01T00:00:05Z" {
 		t.Fatalf("transcript speculation = %#v", transcript.SpeculationAccepts)
 	}
-	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "s4" || transcript.ContextCollapseSnapshot.LastSpawnTokens != 96 {
+	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "s4" || !transcript.ContextCollapseSnapshot.Armed || transcript.ContextCollapseSnapshot.LastSpawnTokens != 96 || len(transcript.ContextCollapseSnapshot.Staged) != 1 {
 		t.Fatalf("transcript snapshot = %#v", transcript.ContextCollapseSnapshot)
 	}
 
@@ -842,7 +842,7 @@ func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.PRLinks["s4"].PRNumber != 44 || metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.LastSpawnTokens != 96 {
+	if metadata.PRLinks["s4"].PRNumber != 44 || metadata.ContextCollapseSnapshot == nil || !metadata.ContextCollapseSnapshot.Armed || metadata.ContextCollapseSnapshot.LastSpawnTokens != 96 || len(metadata.ContextCollapseSnapshot.Staged) != 1 {
 		t.Fatalf("metadata = %#v snapshot=%#v", metadata.PRLinks, metadata.ContextCollapseSnapshot)
 	}
 	if len(metadata.SpeculationAccepts) != 1 || metadata.SpeculationAccepts[0].TimeSavedMS != 5600 {

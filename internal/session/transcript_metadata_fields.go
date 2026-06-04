@@ -62,6 +62,33 @@ func (f transcriptMetadataFields) intValue(keys ...string) int {
 	return 0
 }
 
+func (f transcriptMetadataFields) boolValue(keys ...string) (bool, bool) {
+	for _, key := range keys {
+		raw, ok := f[key]
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value bool
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			switch strings.ToLower(strings.TrimSpace(text)) {
+			case "1", "t", "true", "yes", "y", "on":
+				return true, true
+			case "0", "f", "false", "no", "n", "off":
+				return false, true
+			}
+		}
+		var number int
+		if err := json.Unmarshal(raw, &number); err == nil {
+			return number != 0, true
+		}
+	}
+	return false, false
+}
+
 func (f transcriptMetadataFields) rawValue(keys ...string) json.RawMessage {
 	for _, key := range keys {
 		raw, ok := f[key]
@@ -71,6 +98,22 @@ func (f transcriptMetadataFields) rawValue(keys ...string) json.RawMessage {
 		return append(json.RawMessage(nil), raw...)
 	}
 	return nil
+}
+
+func (f transcriptMetadataFields) arrayValue(keys ...string) []any {
+	raw := f.rawValue(keys...)
+	if len(raw) == 0 {
+		return nil
+	}
+	var values []any
+	if err := json.Unmarshal(raw, &values); err == nil {
+		return values
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return nil
+	}
+	return []any{value}
 }
 
 func isNullJSON(raw json.RawMessage) bool {
@@ -318,7 +361,15 @@ func parseContextCollapseSnapshotMetadata(line []byte) (ContextCollapseSnapshotE
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.LastSpawnTokens == 0 {
-		entry.LastSpawnTokens = fields.intValue("lastSpawnTokens", "last_spawn_tokens")
+		entry.LastSpawnTokens = fields.intValue("lastSpawnTokens", "last_spawn_tokens", "spawnTokens", "spawn_tokens", "tokenCount", "token_count")
+	}
+	if !entry.Armed {
+		if armed, ok := fields.boolValue("armed", "isArmed", "is_armed", "enabled", "ready"); ok {
+			entry.Armed = armed
+		}
+	}
+	if len(entry.Staged) == 0 {
+		entry.Staged = fields.arrayValue("staged", "stagedMessages", "staged_messages", "pending", "entries", "items")
 	}
 	return entry, true
 }
