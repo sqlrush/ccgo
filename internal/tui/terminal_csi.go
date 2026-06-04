@@ -82,6 +82,7 @@ const (
 	DECModeApplicationKeypad  = 66
 	DECModeBackarrowKey       = 67
 	DECModeLeftRightMargin    = 69
+	DECModeNoClearOnColumn    = 95
 	DECModeAltScreenBuffer    = 1047
 	DECModeSaveRestoreCursor  = 1048
 	DECModeAltScreenClear     = 1049
@@ -249,6 +250,7 @@ const (
 	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
 	CSIModeActionBackarrowKey      CSIModeActionType = "backarrowKey"
 	CSIModeActionLeftRightMargin   CSIModeActionType = "leftRightMarginMode"
+	CSIModeActionNoClearOnColumn   CSIModeActionType = "noClearOnColumnSwitch"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
 	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
 	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
@@ -617,6 +619,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionBackarrowKey, Enabled: enabled}}, true
 	case DECModeLeftRightMargin:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionLeftRightMargin, Enabled: enabled}}, true
+	case DECModeNoClearOnColumn:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionNoClearOnColumn, Enabled: enabled}}, true
 	case DECModeSaveRestoreCursor:
 		cursorType := CSICursorActionRestore
 		if enabled {
