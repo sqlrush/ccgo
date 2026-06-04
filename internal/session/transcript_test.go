@@ -35,7 +35,7 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","session_id":"sess_1","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","session_id":"sess_1","content":[{"type":"text","text":"hi"}]}}`,
 		`{"type":"progress","uuid":"p1","parent_uuid":"u1"}`,
-		`{"type":"assistant","uuid":"a1","parent_uuid":"p1","logical_parent_uuid":"u1","session_id":"sess_1","is_sidechain":true,"agent_id":"agent_alias","timestamp":"2026-01-01T00:00:01Z","message":{"id":"msg_1","type":"assistant","parent_uuid":"u1","session_id":"sess_1","is_meta":true,"content":[{"type":"text","text":"done"}]}}`,
+		`{"type":"assistant","uuid":"a1","parent_uuid":"p1","logical_parent_uuid":"u1","session_id":"sess_1","is_sidechain":true,"agent_id":"agent_alias","timestamp":"2026-01-01T00:00:01Z","message":{"id":"msg_1","type":"assistant","parentMessageID":"u1","session_id":"sess_1","is_meta":true,"content":[{"type":"text","text":"done"}]}}`,
 	})
 
 	transcript, err := LoadTranscript(path)

@@ -164,13 +164,23 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	type MessageJSON Message
 	var aux struct {
 		*MessageJSON
-		ParentUUIDSnake  *ID   `json:"parent_uuid"`
-		SessionIDUpper   ID    `json:"sessionID"`
-		SessionIDSnake   ID    `json:"session_id"`
-		SessionUUID      ID    `json:"sessionUuid"`
-		SessionUUIDUpper ID    `json:"sessionUUID"`
-		SessionUUIDSnake ID    `json:"session_uuid"`
-		IsMetaSnake      *bool `json:"is_meta"`
+		ParentUUIDUpper        *ID   `json:"parentUUID"`
+		ParentUUIDSnake        *ID   `json:"parent_uuid"`
+		ParentID               *ID   `json:"parentId"`
+		ParentIDUpper          *ID   `json:"parentID"`
+		ParentIDSnake          *ID   `json:"parent_id"`
+		ParentMessageID        *ID   `json:"parentMessageId"`
+		ParentMessageIDUpper   *ID   `json:"parentMessageID"`
+		ParentMessageIDSnake   *ID   `json:"parent_message_id"`
+		ParentMessageUUID      *ID   `json:"parentMessageUuid"`
+		ParentMessageUUIDUpper *ID   `json:"parentMessageUUID"`
+		ParentMessageUUIDSnake *ID   `json:"parent_message_uuid"`
+		SessionIDUpper         ID    `json:"sessionID"`
+		SessionIDSnake         ID    `json:"session_id"`
+		SessionUUID            ID    `json:"sessionUuid"`
+		SessionUUIDUpper       ID    `json:"sessionUUID"`
+		SessionUUIDSnake       ID    `json:"session_uuid"`
+		IsMetaSnake            *bool `json:"is_meta"`
 	}
 	base := MessageJSON{}
 	aux.MessageJSON = &base
@@ -179,7 +189,19 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	*m = Message(base)
 	if m.ParentUUID == nil {
-		m.ParentUUID = aux.ParentUUIDSnake
+		m.ParentUUID = firstMessageIDPtr(
+			aux.ParentUUIDUpper,
+			aux.ParentUUIDSnake,
+			aux.ParentID,
+			aux.ParentIDUpper,
+			aux.ParentIDSnake,
+			aux.ParentMessageID,
+			aux.ParentMessageIDUpper,
+			aux.ParentMessageIDSnake,
+			aux.ParentMessageUUID,
+			aux.ParentMessageUUIDUpper,
+			aux.ParentMessageUUIDSnake,
+		)
 	}
 	if m.SessionID == "" {
 		m.SessionID = aux.SessionIDUpper
@@ -198,6 +220,16 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	if aux.IsMetaSnake != nil {
 		m.IsMeta = *aux.IsMetaSnake
+	}
+	return nil
+}
+
+func firstMessageIDPtr(values ...*ID) *ID {
+	for _, value := range values {
+		if value != nil && *value != "" {
+			cloned := *value
+			return &cloned
+		}
 	}
 	return nil
 }

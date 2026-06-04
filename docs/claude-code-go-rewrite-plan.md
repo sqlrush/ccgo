@@ -196,6 +196,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：lightweight transcript metadata loader 在 `system`/`compact_boundary` 后清空旧 `marble-origami-commit`/`marble-origami-snapshot` 状态，和 full loader/官方 sessionStorage compact-boundary 语义一致。
 - 本轮补充：transcript metadata loader 接受 `sessionID`/`session` 作为 session-scoped metadata ID 别名，并容忍 `prNumber`、`timeSavedMs`、`lastSpawnTokens` 等计数字段使用数字字符串。
 - 本轮补充：transcript message 和嵌套 contract message 接受顶层 `sessionID` 作为 session id 别名，`LoadTranscript`、`LoadTranscriptIndex` 和 indexed resume 会保留该 session id（覆盖测试：`TestLoadTranscriptAcceptsSessionIDUpperAlias`）。
+- 本轮补充：嵌套 contract message 接受 `parentUUID`、`parentId`/`parentID`/`parent_id`、`parentMessageId`/`parentMessageID`/`parent_message_id` 和 parent-message UUID 别名，transcript/remote history payload 自带 parent alias 时不会丢失嵌套 parent。
 - 本轮补充：remote history `SDKEvent` 解码接受顶层 `sessionID` 作为事件 session id 别名，materialize transcript 时会填充 record 与嵌套 message 的 session id（覆盖测试：`TestRemoteHistoryTranscriptMessagesAcceptsSessionIDUpperAlias`）。
 - 本轮补充：remote history `SDKEvent` 解码接受 `parentUUID`、`parentId`/`parentID`/`parent_id`、`parentMessageId`/`parentMessageID`/`parent_message_id` parent aliases，materialize transcript 时会保留 parent chain（覆盖测试：`TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases`）。
 - 本轮补充：memory 层补齐官方 `memoryAge`/freshness note 语义，`ReadDocumentsWithOptions` 可为超过 1 天的 memory 文档前缀 system-reminder，提示模型把 memory 当作 point-in-time observation 并核对当前代码。
