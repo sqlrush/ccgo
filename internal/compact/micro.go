@@ -464,13 +464,49 @@ func microBoolJSONField(fields map[string]json.RawMessage, names ...string) (boo
 		if !ok || string(raw) == "null" {
 			continue
 		}
-		var value bool
-		if err := json.Unmarshal(raw, &value); err != nil {
+		value, err := microParseJSONBool(raw, name)
+		if err != nil {
 			return false, false, err
 		}
 		return value, true, nil
 	}
 	return false, false, nil
+}
+
+func microParseJSONBool(raw json.RawMessage, field string) (bool, error) {
+	var value bool
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, nil
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		switch strings.ToLower(strings.TrimSpace(text)) {
+		case "true", "1", "yes", "y", "on":
+			return true, nil
+		case "false", "0", "no", "n", "off":
+			return false, nil
+		default:
+			return false, fmt.Errorf("invalid bool field %q: %q", field, text)
+		}
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err == nil {
+		value, err := strconv.ParseFloat(number.String(), 64)
+		if err != nil {
+			return false, err
+		}
+		switch value {
+		case 1:
+			return true, nil
+		case 0:
+			return false, nil
+		default:
+			return false, fmt.Errorf("invalid bool field %q: %s", field, number.String())
+		}
+	}
+	return false, fmt.Errorf("invalid bool field %q", field)
 }
 
 func microIntJSONField(fields map[string]json.RawMessage, names ...string) (int, bool, error) {

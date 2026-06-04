@@ -2,6 +2,7 @@ package compact
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -309,6 +310,43 @@ func TestLoadMicroResultAcceptsAdjacentCacheFieldAliases(t *testing.T) {
 	}
 	if !result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
 		t.Fatalf("result times = %#v", result)
+	}
+}
+
+func TestLoadMicroResultAcceptsAdjacentBoolCacheAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest string
+		field  string
+		want   bool
+	}{
+		{digest: "cache-hit-string-yes", field: `"cacheHit":"yes"`, want: true},
+		{digest: "from-cache-number-one", field: `"fromCache":1`, want: true},
+		{digest: "is-cached-string-no", field: `"isCached":"no"`, want: false},
+	} {
+		payload := fmt.Sprintf(`{
+			"summary": %q,
+			"digest": %q,
+			%s,
+			"version": "microcompact.v1",
+			"createdAt": 100
+		}`, tc.digest+" summary", tc.digest, tc.field)
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Cached != tc.want || result.Summary != tc.digest+" summary" {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
 	}
 }
 
