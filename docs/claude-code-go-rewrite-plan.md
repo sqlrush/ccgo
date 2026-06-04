@@ -242,6 +242,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 把 xterm window manipulation/report (`CSI t`) 归入 report action，覆盖常见 `CSI 14t`/`CSI 18t` 窗口/文本区尺寸查询。
 - 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
 - 本轮补充：terminal CSI parser 把 REP repeat-preceding-character (`CSI b`) 归入 edit action，visible-text/snapshot pipeline 和 ANSI message wrapping/trim 会按重复次数展开前一个可重复 grapheme。
+- 本轮补充：terminal CSI parser 按 ANSI 默认参数解析 scroll-region (`CSI r`/`CSI ;10r`)，缺失 top 默认为 1，缺失 bottom 保持 0 表示 reset/full-height，避免 reset scroll region 被误判为单行区域。
 - 本轮补充：terminal CSI parser 把 DECSTR soft reset (`CSI !p`) 归入 reset action，并在 terminal parser 中清理 SGR/link 状态。
 - 本轮补充：prompt history 写入按官方 `history.ts` 跳过 image pasted content，避免把 image base64/filename/mediaType 存入 `history.jsonl`，读取路径仍兼容旧 image metadata。
 - 本轮补充：paste-cache 增加按 cutoff mtime 清理旧 `.txt` paste 文件的 best-effort 入口，忽略缺失目录、非 `.txt` 文件和单文件错误，和官方 `cleanupOldPastes` 语义对齐。

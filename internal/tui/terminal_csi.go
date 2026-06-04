@@ -372,7 +372,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandScrollDown:
 		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionDown, Count: p0}}, true
 	case CSICommandScrollRegion:
-		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: p0, Bottom: p1}}, true
+		return csiScrollRegion(params), true
 	case CSICommandSaveCursor:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionSave}}, true
 	case CSICommandWindowReport:
@@ -475,6 +475,18 @@ func csiWindowReport(code int, privateMode byte) CSIAction {
 		Type:   CSIActionReport,
 		Report: CSIReportAction{Type: CSIReportActionWindow, Code: code, PrivateMode: privateMode},
 	}
+}
+
+func csiScrollRegion(params []int) CSIAction {
+	top := 1
+	if len(params) > 0 && params[0] > 0 {
+		top = params[0]
+	}
+	bottom := 0
+	if len(params) > 1 && params[1] > 0 {
+		bottom = params[1]
+	}
+	return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: top, Bottom: bottom}}
 }
 
 func csiEraseDisplayRegion(index int) CSIEraseRegion {

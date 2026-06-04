@@ -3616,7 +3616,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(2, "S"), want: CSIScrollAction{Type: CSIScrollActionUp, Count: 2}},
 		{seq: CSISequence(3, "T"), want: CSIScrollAction{Type: CSIScrollActionDown, Count: 3}},
 		{seq: CSISequence(4, 10, "r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 4, Bottom: 10}},
-		{seq: ResetScrollRegion, want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1, Bottom: 1}},
+		{seq: ResetScrollRegion, want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1}},
+		{seq: CSISequence(";10r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1, Bottom: 10}},
 	}
 	for _, tc := range scrollCases {
 		action, ok := ParseCSISequence(tc.seq)
