@@ -69,6 +69,7 @@ const (
 	DECModeSaveRestoreCursor  = 1048
 	DECModeAltScreenClear     = 1049
 	DECModeMouseNormal        = 1000
+	DECModeMouseHighlight     = 1001
 	DECModeMouseButton        = 1002
 	DECModeMouseAny           = 1003
 	DECModeMouseUTF8          = 1005
@@ -223,13 +224,14 @@ const (
 type CSIMouseTrackingMode string
 
 const (
-	CSIMouseTrackingOff    CSIMouseTrackingMode = "off"
-	CSIMouseTrackingNormal CSIMouseTrackingMode = "normal"
-	CSIMouseTrackingButton CSIMouseTrackingMode = "button"
-	CSIMouseTrackingAny    CSIMouseTrackingMode = "any"
-	CSIMouseTrackingUTF8   CSIMouseTrackingMode = "utf8"
-	CSIMouseTrackingSGR    CSIMouseTrackingMode = "sgr"
-	CSIMouseTrackingURXVT  CSIMouseTrackingMode = "urxvt"
+	CSIMouseTrackingOff       CSIMouseTrackingMode = "off"
+	CSIMouseTrackingNormal    CSIMouseTrackingMode = "normal"
+	CSIMouseTrackingHighlight CSIMouseTrackingMode = "highlight"
+	CSIMouseTrackingButton    CSIMouseTrackingMode = "button"
+	CSIMouseTrackingAny       CSIMouseTrackingMode = "any"
+	CSIMouseTrackingUTF8      CSIMouseTrackingMode = "utf8"
+	CSIMouseTrackingSGR       CSIMouseTrackingMode = "sgr"
+	CSIMouseTrackingURXVT     CSIMouseTrackingMode = "urxvt"
 )
 
 type CSIModeAction struct {
@@ -557,6 +559,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: enabled}}, true
 	case DECModeMouseNormal:
 		return csiMouseModeAction(CSIMouseTrackingNormal, enabled), true
+	case DECModeMouseHighlight:
+		return csiMouseModeAction(CSIMouseTrackingHighlight, enabled), true
 	case DECModeMouseButton:
 		return csiMouseModeAction(CSIMouseTrackingButton, enabled), true
 	case DECModeMouseAny:

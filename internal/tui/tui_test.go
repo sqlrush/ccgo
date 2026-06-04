@@ -3648,6 +3648,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: "\x1b[?1047l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
 		{seq: EnableBracketedPaste, want: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: true}},
 		{seq: "\x1b[?1000h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingNormal}},
+		{seq: "\x1b[?1001h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingHighlight}},
+		{seq: "\x1b[?1001l", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: false, MouseMode: CSIMouseTrackingOff}},
 		{seq: "\x1b[?1002h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingButton}},
 		{seq: "\x1b[?1003l", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: false, MouseMode: CSIMouseTrackingOff}},
 		{seq: "\x1b[?1005h", want: CSIModeAction{Type: CSIModeActionMouseTracking, Enabled: true, MouseMode: CSIMouseTrackingUTF8}},
