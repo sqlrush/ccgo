@@ -319,6 +319,7 @@ M7 progress now includes:
 - `internal/session`: pasted-content history type decoding now normalizes aliases such as `inputImage`/`pasted-image`/`input_text`/`pasted-text` to canonical `image`/`text` for runtime and stored history.
 - `internal/session`/`internal/tui`: pasted-content ID decoding now accepts aliases such as `pastedContentId`/`attachmentID`/`contentID`/`imageID` and numeric strings for runtime/stored history and script attachments.
 - `internal/session`: prompt-history `pastedContents`/`pasted_contents` now accepts map, list, and single-object shapes for runtime and stored history, rebuilding maps from content IDs and aliases.
+- `internal/session`/`internal/tui`: pasted-content reference parsing now accepts case differences and placeholders such as `pasted image`/`input-image`/`input_text`, sharing that recognition across text expansion, image filtering, and next pasted ID seeding.
 
 Still missing for full M6/M7 parity:
 

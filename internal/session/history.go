@@ -99,7 +99,7 @@ type Reference struct {
 
 type PasteResolver func(hash string) (content string, ok bool)
 
-var referencePattern = regexp.MustCompile(`\[(Pasted text|Image|\.\.\.Truncated text) #(\d+)(?: \+\d+ lines)?(\.)*\]`)
+var referencePattern = regexp.MustCompile(`(?i)\[((?:pasted|input)[ _-]+text|(?:pasted|input)[ _-]+image|image|(?:\.\.\.)?truncated[ _-]+text) #(\d+)(?: \+\d+ lines)?(\.)*\]`)
 
 func HistoryPath() string {
 	return filepath.Join(platform.ClaudeHomeDir(), "history.jsonl")

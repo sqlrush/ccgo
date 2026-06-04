@@ -93,7 +93,7 @@ func TestPromptMessagesFiltersUnreferencedImages(t *testing.T) {
 		t.Fatalf("message = %#v text=%q", messages[0], got)
 	}
 
-	messages = PromptMessages("look [Image #2]", map[int]PastedContent{
+	messages = PromptMessages("look [pasted image #2]", map[int]PastedContent{
 		1: {ID: 1, Type: PastedContentImage, Content: "AAAA", MediaType: "image/png", SourcePath: "/tmp/orphan.png"},
 		2: {ID: 2, Type: PastedContentImage, Content: "BBBB", MediaType: "image/jpeg"},
 	})

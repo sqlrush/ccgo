@@ -34,12 +34,19 @@ func TestPastedTextReferences(t *testing.T) {
 		t.Fatalf("refs = %#v", refs)
 	}
 
-	expanded := ExpandPastedTextRefs("x [Pasted text #1] y [Image #2] z [Pasted text #3]", map[int]PastedContent{
+	aliasInput := "a [pasted text #4] b [Pasted image #5] c [input-image #6] d [...truncated text #7.] e [input_text #0]"
+	aliasRefs := ParseReferences(aliasInput)
+	if len(aliasRefs) != 4 || aliasRefs[0].ID != 4 || aliasRefs[1].ID != 5 || aliasRefs[2].ID != 6 || aliasRefs[3].ID != 7 {
+		t.Fatalf("alias refs = %#v", aliasRefs)
+	}
+
+	expanded := ExpandPastedTextRefs("x [Pasted text #1] y [Image #2] z [Pasted text #3] w [input_text #4]", map[int]PastedContent{
 		1: {ID: 1, Type: PastedContentText, Content: "TEXT"},
 		2: {ID: 2, Type: PastedContentImage, Content: "IMAGE"},
 		3: {ID: 3, Type: PastedContentText, Content: "[Pasted text #1]"},
+		4: {ID: 4, Type: PastedContentText, Content: "ALIAS"},
 	})
-	if expanded != "x TEXT y [Image #2] z [Pasted text #1]" {
+	if expanded != "x TEXT y [Image #2] z [Pasted text #1] w ALIAS" {
 		t.Fatalf("expanded = %q", expanded)
 	}
 }
