@@ -21,6 +21,7 @@ const (
 	OSCITerm2           = "9"
 	OSCClipboard        = "52"
 	OSCKitty            = "99"
+	OSCShellIntegration = "133"
 	OSCGhostty          = "777"
 	OSCTabStatus        = "21337"
 
@@ -76,6 +77,7 @@ const (
 	OSCActionClipboard    OSCActionType = "clipboard"
 	OSCActionProgress     OSCActionType = "progress"
 	OSCActionNotification OSCActionType = "notification"
+	OSCActionShell        OSCActionType = "shellIntegration"
 	OSCActionUnknown      OSCActionType = "unknown"
 )
 
@@ -118,6 +120,13 @@ type TerminalNotificationAction struct {
 	Message  string
 }
 
+type TerminalShellIntegrationAction struct {
+	Marker      string
+	RawMarker   string
+	ExitCode    int
+	HasExitCode bool
+}
+
 type OSCAction struct {
 	Type         OSCActionType
 	Title        TerminalTitleAction
@@ -127,6 +136,7 @@ type OSCAction struct {
 	Clipboard    TerminalClipboardAction
 	Progress     TerminalProgressAction
 	Notification TerminalNotificationAction
+	Shell        TerminalShellIntegrationAction
 	Sequence     string
 }
 
@@ -215,6 +225,11 @@ func ParseOSCContent(content string) OSCAction {
 	case OSCKitty:
 		if notification, ok := ParseKittyNotificationPayload(data); ok {
 			return OSCAction{Type: OSCActionNotification, Notification: notification}
+		}
+		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
+	case OSCShellIntegration:
+		if shell, ok := ParseShellIntegrationPayload(data); ok {
+			return OSCAction{Type: OSCActionShell, Shell: shell}
 		}
 		return OSCAction{Type: OSCActionUnknown, Sequence: OSCPrefix + content}
 	case OSCGhostty:
@@ -390,6 +405,31 @@ func ParseGhosttyNotificationPayload(payload string) (TerminalNotificationAction
 		notification.Message = parts[2]
 	}
 	return notification, true
+}
+
+func ParseShellIntegrationPayload(payload string) (TerminalShellIntegrationAction, bool) {
+	marker, rest, _ := strings.Cut(payload, ";")
+	action := TerminalShellIntegrationAction{RawMarker: marker}
+	switch marker {
+	case "A":
+		action.Marker = "promptStart"
+	case "B":
+		action.Marker = "promptEnd"
+	case "C":
+		action.Marker = "commandStart"
+	case "D":
+		action.Marker = "commandEnd"
+	default:
+		return TerminalShellIntegrationAction{}, false
+	}
+	if marker == "D" && rest != "" {
+		codeText, _, _ := strings.Cut(rest, ";")
+		if code, err := strconv.Atoi(strings.TrimSpace(codeText)); err == nil {
+			action.ExitCode = code
+			action.HasExitCode = true
+		}
+	}
+	return action, true
 }
 
 func parseOSCPercent(parts []string) int {

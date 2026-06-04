@@ -4139,6 +4139,15 @@ func TestParseOSCContent(t *testing.T) {
 		t.Fatalf("ghostty notification = %#v", ghostty)
 	}
 
+	shellStart := ParseOSCContent("133;A")
+	if shellStart.Type != OSCActionShell || shellStart.Shell.Marker != "promptStart" || shellStart.Shell.RawMarker != "A" || shellStart.Shell.HasExitCode {
+		t.Fatalf("shell prompt start = %#v", shellStart)
+	}
+	shellEnd := ParseOSCContent("133;D;127")
+	if shellEnd.Type != OSCActionShell || shellEnd.Shell.Marker != "commandEnd" || shellEnd.Shell.RawMarker != "D" || shellEnd.Shell.ExitCode != 127 || !shellEnd.Shell.HasExitCode {
+		t.Fatalf("shell command end = %#v", shellEnd)
+	}
+
 	unknown := ParseOSCContent("999;noop")
 	if unknown.Type != OSCActionUnknown || unknown.Sequence != OSCPrefix+"999;noop" {
 		t.Fatalf("unknown = %#v", unknown)

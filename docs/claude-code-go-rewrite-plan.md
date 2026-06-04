@@ -351,6 +351,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal OSC helper 增加轻量 `ParseOSCContent`，覆盖官方 title(0/1/2)、OSC 8 hyperlink、OSC 21337 tab status 和 unknown action 分支。
 - 本轮补充：terminal OSC helper 增加完整 OSC sequence parser，可从带 `ESC ]` 前缀且以 BEL 或 ST 终止的序列解析出 `ParseOSCContent` action。
 - 本轮补充：terminal OSC parser 把 OSC 52 clipboard、iTerm2 progress/notification、Kitty notification 和 Ghostty notification 作为结构化 terminal actions 暴露，visible text/snapshot 继续正确剥离这些控制串。
+- 本轮补充：terminal OSC parser 把 OSC 133 shell integration marks (`A`/`B`/`C`/`D`) 作为结构化 shellIntegration action 暴露，保留 command-end exit code，visible text/snapshot 继续剥离这些 shell 标记。
 - 本轮补充：terminal OSC parser 现在解析 OSC 7 current-directory URI，保留 raw URI 并暴露 scheme/host/path，TerminalParser 会输出 directory action，visible text/snapshot replay 继续剥离该控制串。
 - 本轮补充：terminal renderer constants 增加官方 clear scrollback (`CSI 3J`) 和 legacy Windows home (`CSI 0f`) 序列 helper，支持现代 clear-screen+scrollback 和 legacy Windows clear 组合；平台自动探测仍留给调用方。
 - 本轮补充：terminal CSI helper 增加通用 `CSISequence`、cursor up/down/forward/back/position/move 和 line/screen erase 序列，按官方 helper 的零移动返回空串与 horizontal-first cursorMove 行为生成 ANSI。

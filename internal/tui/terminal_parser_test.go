@@ -287,6 +287,15 @@ func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
 	if got := TerminalVisibleText(input); got != "abcd" {
 		t.Fatalf("visible = %q", got)
 	}
+
+	shellInput := "x" + OSCSequence(OSCShellIntegration, "A") + "y" + OSCSequence(OSCShellIntegration, "D", "2") + "z"
+	shellActions := parser.Feed(shellInput)
+	if len(shellActions) != 5 || shellActions[1].Type != TerminalActionShell || shellActions[1].OSC.Shell.Marker != "promptStart" || shellActions[3].Type != TerminalActionShell || shellActions[3].OSC.Shell.Marker != "commandEnd" || shellActions[3].OSC.Shell.ExitCode != 2 || !shellActions[3].OSC.Shell.HasExitCode {
+		t.Fatalf("shell actions = %#v", shellActions)
+	}
+	if got := TerminalVisibleText(shellInput); got != "xyz" {
+		t.Fatalf("shell visible = %q", got)
+	}
 }
 
 func TestTerminalParserResetClearsStyle(t *testing.T) {
