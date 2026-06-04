@@ -3719,6 +3719,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(4, "C"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorForward, Count: 4}},
 		{seq: CSISequence(6, "a"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorForward, Count: 6}},
 		{seq: CSISequence(5, "D"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorBack, Count: 5}},
+		{seq: CSISequence(7, "j"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorBack, Count: 7}},
+		{seq: CSISequence(3, "k"), want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorUp, Count: 3}},
 		{seq: CSISequence(2, "E"), want: CSICursorAction{Type: CSICursorActionNextLine, Count: 2}},
 		{seq: CSISequence(3, "F"), want: CSICursorAction{Type: CSICursorActionPrevLine, Count: 3}},
 		{seq: CSISequence(2, "I"), want: CSICursorAction{Type: CSICursorActionTab, Count: 2}},
@@ -3935,6 +3937,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions = parser.Feed(CSISequence(2, "O"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionErase || actions[0].Erase.Type != CSIEraseActionArea || actions[0].Erase.Region != CSIEraseAll {
 		t.Fatalf("terminal parser area erase actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence(4, "j") + CSISequence(2, "k"))
+	if len(actions) != 2 || actions[0].Type != TerminalActionCursor || actions[0].Cursor.Direction != CSICursorBack || actions[0].Cursor.Count != 4 || actions[1].Type != TerminalActionCursor || actions[1].Cursor.Direction != CSICursorUp || actions[1].Cursor.Count != 2 {
+		t.Fatalf("terminal parser alternate backward cursor actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence(5, 40, "s"))

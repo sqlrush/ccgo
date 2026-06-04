@@ -57,6 +57,8 @@ const (
 	CSICommandResetMode        byte = 'l'
 	CSICommandSGR              byte = 'm'
 	CSICommandDSR              byte = 'n'
+	CSICommandCursorBackAlt    byte = 'j'
+	CSICommandCursorUpAlt      byte = 'k'
 	CSICommandSoftReset        byte = 'p'
 	CSICommandCursorStyle      byte = 'q'
 	CSICommandScrollRegion     byte = 'r'
@@ -390,6 +392,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiEdit(CSIEditActionRepeatChars, p0), true
 	case CSICommandCursorBack:
 		return csiCursorMove(CSICursorBack, p0), true
+	case CSICommandCursorBackAlt:
+		return csiCursorMove(CSICursorBack, p0), true
 	case CSICommandCursorNextLine:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionNextLine, Count: p0}}, true
 	case CSICommandCursorPrevLine:
@@ -410,6 +414,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiCursorMove(CSICursorDown, p0), true
 	case CSICommandVerticalPosition:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRow, Row: p0}}, true
+	case CSICommandCursorUpAlt:
+		return csiCursorMove(CSICursorUp, p0), true
 	case CSICommandTabClear:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabClear, Count: csiParamDefault(params, 0, 0)}}, true
 	case CSICommandEraseDisplay:
