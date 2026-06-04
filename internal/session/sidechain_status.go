@@ -77,6 +77,12 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			if agentType := firstStringField(msg.Content, "agentType", "agent_type", "subagentType", "subagent_type", "agentKind", "agent_kind", "agent"); agentType != "" && state.Metadata.AgentType == "" {
 				state.Metadata.AgentType = agentType
 			}
+			if worktreePath := firstStringField(msg.Content, "worktreePath", "worktree_path", "worktree", "worktreeDir", "worktree_dir", "workingDirectory", "working_directory", "cwd", "workspacePath", "workspace_path", "workspace", "path", "directory"); worktreePath != "" && state.Metadata.WorktreePath == "" {
+				state.Metadata.WorktreePath = worktreePath
+			}
+			if description := firstStringField(msg.Content, "description", "description_text", "descriptionText", "desc", "summary", "task", "taskDescription", "task_description", "prompt", "input", "command", "title"); description != "" && state.Metadata.Description == "" {
+				state.Metadata.Description = description
+			}
 			if status := sidechainStatusField(msg.Content, "status", "state", "phase", "lifecycle", "lifecycle_state", "lifecycleState"); status != "" {
 				state.Status = status
 			} else {
@@ -230,12 +236,26 @@ func stringField(value any, key string) string {
 }
 
 func firstStringField(value any, keys ...string) string {
+	return firstStringFieldDepth(value, keys, 0)
+}
+
+func firstStringFieldDepth(value any, keys []string, depth int) string {
+	if depth > 4 {
+		return ""
+	}
 	switch fields := value.(type) {
 	case map[string]any:
 		for _, key := range keys {
 			raw, _ := fields[key].(string)
 			if raw != "" {
 				return raw
+			}
+		}
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "entry", "item", "event", "metadata", "details"} {
+			if raw, ok := fields[key]; ok {
+				if value := firstStringFieldDepth(raw, keys, depth+1); value != "" {
+					return value
+				}
 			}
 		}
 	case map[string]string:

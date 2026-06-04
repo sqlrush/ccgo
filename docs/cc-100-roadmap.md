@@ -102,6 +102,8 @@ M6 补充：remote history 现在也接受 HTTP `Link` header 中 `rel="previous
 
 M6 补充：sidechain/subagent state loader 现在接受 `subagent_start`/`agent_start`/`task_start` 和 `sidechain_end`/`subagent_finish`/`agent_finish`/`task_summary` 等 subtype 别名，并归一化 `active`/`success`/`canceled`/`error` 等运行状态别名，同时读取 `subagentId`/`agentID`、`subagentType`、`finalSummary` 等 content 字段。
 
+M6 补充：sidechain/subagent lifecycle content 读取现在会递归解包 `payload`/`data`/`body`/`result`/`response`/`metadata` 等 wrapper，嵌套的 subagent ID、status/outcome、summary、agent type、workspace path 和 task description 都可参与 state/list/resume 恢复。
+
 M6 补充：sidechain runtime finish 现在会在写入 summary 前把 `success`/`error`/`canceled` 等状态别名归一为 `completed`/`failed`/`cancelled`，让 sidechain transcript 与主 transcript 的 lifecycle 输出保持 canonical。
 
 M6 补充：sidechain agent metadata sidecar 读取现在接受 `type`/`subagentType`/`agentName`/`name`、`workspacePath`/`workspace`/`path`/`directory`、`taskDescription`/`prompt`/`input`/`command`/`title` 等字段别名，兼容历史或第三方生成的 subagent metadata。
@@ -437,6 +439,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：remote history `SDKEvent` 解码现在接受 `parentUUID`、`parentId`/`parentID`/`parent_id` 和 `parentMessageId`/`parentMessageID`/`parent_message_id` 作为 parent alias，materialize transcript 时会保留 parent chain（覆盖测试：`TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases`）。
 
 本轮补充：sidechain/subagent state loader 接受 legacy/fork 命名的 start/finish subtype、ID/type/summary 字段别名和常见状态别名，提升旧 subagent transcript resume/list 的恢复率。
+
+本轮补充：sidechain/subagent lifecycle content 读取递归解包常见 wrapper，并从嵌套 start/summary event 中恢复 subagent ID、status、summary、agent type、workspace path 和 task description，减少 fork/第三方 transcript 需要手工扁平化字段的情况。
 
 本轮补充：sidechain runtime 现在会拒绝同一 sidechain ID 的 running 状态重复 start；已完成后重新 start 会被视为新 lifecycle，state loader 会清空上一轮 summary/endedAt 并使用新的 startedAt。
 

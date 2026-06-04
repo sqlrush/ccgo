@@ -221,6 +221,57 @@ func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsWrappedLifecycleContent(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "wrapped", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "agent_start",
+		Content: map[string]any{
+			"payload": map[string]any{
+				"subagentID":      "subagent_nested",
+				"agentKind":       "planner",
+				"workspacePath":   "/tmp/planner-worktree",
+				"lifecycle":       "in_progress",
+				"taskDescription": "plan the rollout",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "wrapped", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "task_summary",
+		Content: map[string]any{
+			"result": map[string]any{
+				"outcome":       "failed_error",
+				"resultSummary": "nested task failed",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "subagent_nested" || state.Status != SidechainStatusFailed || state.Summary != "nested task failed" || state.Metadata.AgentType != "planner" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.WorktreePath != "/tmp/planner-worktree" || state.Metadata.Description != "plan the rollout" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")
