@@ -89,7 +89,7 @@ func parseSummaryMetadata(line []byte) (contracts.ID, string, bool) {
 		"messageId", "messageID", "message_id",
 		"uuid", "id",
 	)
-	return leafUUID, fields.stringValue("summary"), true
+	return leafUUID, fields.stringValue("summary", "summaryContent", "summary_content", "content", "text", "body", "message"), true
 }
 
 func parseSessionStringMetadata(line []byte, valueKeys ...string) (contracts.ID, string, bool) {

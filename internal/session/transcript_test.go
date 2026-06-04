@@ -597,13 +597,17 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
 		`{"type":"summary","leaf_uuid":"a2","summary":"snake short"}`,
 		`{"type":"summary","leafID":"a3","summary":"id short"}`,
+		`{"type":"summary","messageID":"a4","content":"content short"}`,
 		`{"type":"custom-title","sessionId":"s1","customTitle":"Title"}`,
 		`{"type":"custom_title","session_id":"s3","custom_title":"Snake Title"}`,
+		`{"type":"custom-title","sessionID":"s7","title":"Aliased Title"}`,
 		`{"type":"ai-title","sessionId":"s1","aiTitle":"AI Title"}`,
 		`{"type":"ai_title","sessionId":"s2","aiTitle":"Alias AI Title"}`,
 		`{"type":"ai-title","session_id":"s3","ai_title":"Snake AI Title"}`,
+		`{"type":"ai-title","sessionID":"s7","name":"Aliased AI Title"}`,
 		`{"type":"last-prompt","sessionId":"s1","lastPrompt":"last prompt text"}`,
 		`{"type":"last_prompt","session_id":"s3","last_prompt":"snake prompt"}`,
+		`{"type":"last-prompt","sessionID":"s7","prompt":"aliased prompt"}`,
 		`{"type":"task-summary","sessionId":"s1","summary":"running tests","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"task_summary","session_id":"s3","summary":"snake task","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"task-summary","sessionID":"s6","taskSummary":"aliased task","createdAt":"2026-01-01T00:00:06Z"}`,
@@ -654,6 +658,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if transcript.Summaries["a2"] != "snake short" || transcript.Summaries["a3"] != "id short" || transcript.CustomTitles["s3"] != "Snake Title" || transcript.AITitles["s3"] != "Snake AI Title" || transcript.LastPrompts["s3"] != "snake prompt" || transcript.TaskSummaries["s3"].Summary != "snake task" {
 		t.Fatalf("snake metadata = %#v %#v %#v %#v %#v", transcript.Summaries, transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
+	if transcript.Summaries["a4"] != "content short" || transcript.CustomTitles["s7"] != "Aliased Title" || transcript.AITitles["s7"] != "Aliased AI Title" || transcript.LastPrompts["s7"] != "aliased prompt" {
+		t.Fatalf("value alias metadata = %#v %#v %#v %#v", transcript.Summaries, transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts)
 	}
 	if transcript.TaskSummaries["s6"].Summary != "aliased task" || transcript.TaskSummaries["s6"].Timestamp != "2026-01-01T00:00:06Z" {
 		t.Fatalf("task summary aliases = %#v", transcript.TaskSummaries["s6"])
@@ -719,6 +726,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if metadata.Summaries["a2"] != "snake short" || metadata.Summaries["a3"] != "id short" || metadata.CustomTitles["s3"] != "Snake Title" || metadata.AITitles["s3"] != "Snake AI Title" || metadata.LastPrompts["s3"] != "snake prompt" || metadata.TaskSummaries["s3"].Summary != "snake task" {
 		t.Fatalf("metadata snake fields = %#v %#v %#v %#v %#v", metadata.Summaries, metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
 	}
+	if metadata.Summaries["a4"] != "content short" || metadata.CustomTitles["s7"] != "Aliased Title" || metadata.AITitles["s7"] != "Aliased AI Title" || metadata.LastPrompts["s7"] != "aliased prompt" {
+		t.Fatalf("metadata value aliases = %#v %#v %#v %#v", metadata.Summaries, metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts)
+	}
 	if metadata.TaskSummaries["s6"].Summary != "aliased task" || metadata.TaskSummaries["s6"].Timestamp != "2026-01-01T00:00:06Z" {
 		t.Fatalf("metadata task summary aliases = %#v", metadata.TaskSummaries["s6"])
 	}
@@ -766,6 +776,13 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.SessionID != "s3" || metadata.ContextCollapseSnapshot.LastSpawnTokens != 64 {
 		t.Fatalf("metadata snapshot = %#v", metadata.ContextCollapseSnapshot)
+	}
+	index, err := LoadTranscriptIndex(path, "s7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "Aliased Title" || index.AITitle != "Aliased AI Title" || index.LastPrompt != "aliased prompt" {
+		t.Fatalf("index value aliases = %#v", index)
 	}
 }
 

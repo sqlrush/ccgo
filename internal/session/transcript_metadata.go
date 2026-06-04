@@ -93,15 +93,15 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 				metadata.Summaries[leafUUID] = summary
 			}
 		case "custom-title":
-			if sessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title"); ok && sessionID != "" {
+			if sessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title", "title", "name"); ok && sessionID != "" {
 				metadata.CustomTitles[sessionID] = title
 			}
 		case "ai-title":
-			if sessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title"); ok && sessionID != "" {
+			if sessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title", "title", "name"); ok && sessionID != "" {
 				metadata.AITitles[sessionID] = title
 			}
 		case "last-prompt":
-			if sessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt"); ok && sessionID != "" {
+			if sessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt", "prompt", "input", "text", "content", "message"); ok && sessionID != "" {
 				metadata.LastPrompts[sessionID] = prompt
 			}
 		case "task-summary":

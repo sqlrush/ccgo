@@ -85,17 +85,17 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 				}
 			}
 		case "custom-title":
-			if entrySessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title"); ok && strings.TrimSpace(title) != "" {
+			if entrySessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title", "title", "name"); ok && strings.TrimSpace(title) != "" {
 				if sessionID == "" || entrySessionID == sessionID {
 					customTitle = title
 				}
 			}
 		case "ai-title":
-			if entrySessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title", "title", "name"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.AITitle = title
 			}
 		case "last-prompt":
-			if entrySessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt"); ok && (sessionID == "" || entrySessionID == sessionID) {
+			if entrySessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt", "prompt", "input", "text", "content", "message"); ok && (sessionID == "" || entrySessionID == sessionID) {
 				index.LastPrompt = prompt
 			}
 		case "task-summary":
