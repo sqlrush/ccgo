@@ -3926,14 +3926,22 @@ func TestParseCSISequenceActions(t *testing.T) {
 	}
 
 	mixedCursorMode, ok := ParseCSISequence(CSISequence("?25;1000h"))
-	if !ok || mixedCursorMode.Type != CSIActionCursor || mixedCursorMode.Cursor.Type != CSICursorActionShow {
-		t.Fatalf("mixed cursor/mode fallback = %#v ok=%v", mixedCursorMode, ok)
+	if !ok || mixedCursorMode.Type != CSIActionMode || len(mixedCursorMode.Modes) != 2 {
+		t.Fatalf("mixed cursor/mode action = %#v ok=%v", mixedCursorMode, ok)
+	}
+	if mixedCursorMode.Modes[0].Type != CSIModeActionCursorVisible || !mixedCursorMode.Modes[0].Enabled || mixedCursorMode.Modes[1].Type != CSIModeActionMouseTracking || mixedCursorMode.Modes[1].MouseMode != CSIMouseTrackingNormal || !mixedCursorMode.Modes[1].Enabled {
+		t.Fatalf("mixed cursor/mode list = %#v", mixedCursorMode.Modes)
 	}
 
 	parser := NewTerminalParser()
 	actions := parser.Feed(CSISequence("?1000;1006;2004h"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionMode || len(actions[0].Modes) != 3 || actions[0].Mode != actions[0].Modes[0] {
 		t.Fatalf("terminal parser multi mode actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence("?25;1000h"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionMode || len(actions[0].Modes) != 2 || actions[0].Modes[0].Type != CSIModeActionCursorVisible || actions[0].Modes[1].MouseMode != CSIMouseTrackingNormal {
+		t.Fatalf("terminal parser mixed cursor/mode actions = %#v", actions)
 	}
 
 	actions = parser.Feed(CSISequence("?K"))

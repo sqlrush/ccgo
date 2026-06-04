@@ -270,6 +270,7 @@ const (
 	CSIModeActionReverseWrap       CSIModeActionType = "reverseWrap"
 	CSIModeActionLogging           CSIModeActionType = "logging"
 	CSIModeActionCursorBlink       CSIModeActionType = "cursorBlink"
+	CSIModeActionCursorVisible     CSIModeActionType = "cursorVisible"
 	CSIModeActionApplicationKeypad CSIModeActionType = "applicationKeypad"
 	CSIModeActionBackarrowKey      CSIModeActionType = "backarrowKey"
 	CSIModeActionLeftRightMargin   CSIModeActionType = "leftRightMarginMode"
@@ -643,6 +644,10 @@ func csiModeListAction(params []int, private bool, enabled bool) (CSIAction, boo
 			continue
 		}
 		if action.Type != CSIActionMode {
+			if private && mode == DECModeCursorVisible && action.Type == CSIActionCursor {
+				modes = append(modes, CSIModeAction{Type: CSIModeActionCursorVisible, Enabled: enabled})
+				continue
+			}
 			return CSIAction{}, false
 		}
 		modes = append(modes, action.Mode)
