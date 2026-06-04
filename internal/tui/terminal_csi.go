@@ -66,6 +66,8 @@ const (
 	CSIModeInsert = 4
 
 	DECModeApplicationCursor  = 1
+	DECModeOrigin             = 6
+	DECModeAutoWrap           = 7
 	DECModeCursorVisible      = 25
 	DECModeAltScreen          = 47
 	DECModeAltScreenBuffer    = 1047
@@ -222,6 +224,8 @@ const (
 	CSIModeActionAlternateScreen   CSIModeActionType = "alternateScreen"
 	CSIModeActionBracketedPaste    CSIModeActionType = "bracketedPaste"
 	CSIModeActionInsert            CSIModeActionType = "insertMode"
+	CSIModeActionOrigin            CSIModeActionType = "originMode"
+	CSIModeActionAutoWrap          CSIModeActionType = "autoWrap"
 	CSIModeActionMouseTracking     CSIModeActionType = "mouseTracking"
 	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
 	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
@@ -555,6 +559,10 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 	switch mode {
 	case DECModeApplicationCursor:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationCursor, Enabled: enabled}}, true
+	case DECModeOrigin:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionOrigin, Enabled: enabled}}, true
+	case DECModeAutoWrap:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAutoWrap, Enabled: enabled}}, true
 	case DECModeCursorVisible:
 		cursorType := CSICursorActionHide
 		if enabled {
