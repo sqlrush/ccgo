@@ -161,6 +161,7 @@ M6 progress now includes:
 - `internal/session`: transcript message loading now preserves structured SerializedMessage metadata such as `userType`, `entrypoint`, `version`, and `slug`, including common alias spellings.
 - `internal/session`: lightweight transcript metadata loading now clears stale context-collapse commit/snapshot state after compact-boundary messages, matching the full loader and official sessionStorage restore semantics.
 - `internal/session`: transcript metadata loading now accepts `sessionID` and `session` as session-scoped ID aliases and tolerates numeric strings for counters such as `prNumber`, `timeSavedMs`, and `lastSpawnTokens`.
+- `internal/session`: transcript metadata ID helpers now reuse contract `ID` JSON decoding so metadata IDs such as `messageID` and `sessionID` can be JSON numbers preserved as strings.
 - `internal/session`: context-collapse snapshot metadata now accepts alternate armed, token-count, and staged payload field names in both full and lightweight metadata loaders.
 - `internal/session` and `internal/contracts`: transcript records and nested contract messages now accept top-level `sessionID` as a session id alias, preserving it through `LoadTranscript`, `LoadTranscriptIndex`, and indexed resume (`TestLoadTranscriptAcceptsSessionIDUpperAlias`).
 - `internal/contracts`/`internal/session`: remote-history `SDKEvent` decoding now accepts top-level `sessionID` as an event session id alias and preserves it during transcript materialization (`TestRemoteHistoryTranscriptMessagesAcceptsSessionIDUpperAlias`).

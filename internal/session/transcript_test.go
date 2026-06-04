@@ -820,6 +820,8 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 
 func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	path := writeTranscript(t, []string{
+		`{"type":"summary","messageID":123,"content":"numeric summary"}`,
+		`{"type":"tag","sessionID":404,"label":"numeric-session"}`,
 		`{"type":"pr-link","sessionID":"s4","prNumber":"44","prUrl":"https://github.com/o/r/pull/44","prRepository":"o/r"}`,
 		`{"type":"speculation-accept","createdAt":"2026-01-01T00:00:05Z","timeSavedMs":"5600"}`,
 		`{"type":"marble-origami-snapshot","sessionID":"s4","isArmed":"true","spawnTokens":"96","items":[{"uuid":"pending_1"}]}`,
@@ -830,6 +832,9 @@ func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	}
 	if transcript.PRLinks["s4"].PRNumber != 44 || transcript.PRLinks["s4"].PRRepository != "o/r" {
 		t.Fatalf("transcript pr link = %#v", transcript.PRLinks)
+	}
+	if transcript.Summaries["123"] != "numeric summary" || transcript.Tags["404"] != "numeric-session" {
+		t.Fatalf("transcript numeric metadata = summaries:%#v tags:%#v", transcript.Summaries, transcript.Tags)
 	}
 	if len(transcript.SpeculationAccepts) != 1 || transcript.SpeculationAccepts[0].TimeSavedMS != 5600 || transcript.SpeculationAccepts[0].Timestamp != "2026-01-01T00:00:05Z" {
 		t.Fatalf("transcript speculation = %#v", transcript.SpeculationAccepts)
@@ -844,6 +849,9 @@ func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	}
 	if metadata.PRLinks["s4"].PRNumber != 44 || metadata.ContextCollapseSnapshot == nil || !metadata.ContextCollapseSnapshot.Armed || metadata.ContextCollapseSnapshot.LastSpawnTokens != 96 || len(metadata.ContextCollapseSnapshot.Staged) != 1 {
 		t.Fatalf("metadata = %#v snapshot=%#v", metadata.PRLinks, metadata.ContextCollapseSnapshot)
+	}
+	if metadata.Summaries["123"] != "numeric summary" || metadata.Tags["404"] != "numeric-session" {
+		t.Fatalf("lightweight numeric metadata = summaries:%#v tags:%#v", metadata.Summaries, metadata.Tags)
 	}
 	if len(metadata.SpeculationAccepts) != 1 || metadata.SpeculationAccepts[0].TimeSavedMS != 5600 {
 		t.Fatalf("metadata speculation = %#v", metadata.SpeculationAccepts)

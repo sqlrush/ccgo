@@ -34,7 +34,17 @@ func (f transcriptMetadataFields) stringValue(keys ...string) string {
 }
 
 func (f transcriptMetadataFields) idValue(keys ...string) contracts.ID {
-	return contracts.ID(f.stringValue(keys...))
+	for _, key := range keys {
+		raw, ok := f[key]
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value contracts.ID
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return ""
 }
 
 func (f transcriptMetadataFields) sessionIDValue() contracts.ID {
