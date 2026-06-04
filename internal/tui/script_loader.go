@@ -66,7 +66,24 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, false, nil
 	}
-	for _, name := range []string{"steps", "script", "script_steps", "scriptSteps", "interaction_script", "interactionScript", "interaction_steps", "interactionSteps"} {
+	for _, name := range []string{
+		"steps",
+		"script",
+		"script_steps",
+		"scriptSteps",
+		"interaction_script",
+		"interactionScript",
+		"interaction_steps",
+		"interactionSteps",
+		"records",
+		"recorded_steps",
+		"recordedSteps",
+		"events",
+		"entries",
+		"items",
+		"actions",
+		"timeline",
+	} {
 		value, ok := raw[name]
 		if !ok {
 			continue
