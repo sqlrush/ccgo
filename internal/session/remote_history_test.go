@@ -718,6 +718,44 @@ func TestFetchRemoteHistoryAcceptsValueAndResourceAliases(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsGenericResponseWrappers(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"payload":{"events":[{"type":"status","event_id":"evt_payload","session_id":"s","status":"payload"}],"hasMore":true,"nextCursor":"evt_payload"}}`))
+		case "evt_payload":
+			_, _ = w.Write([]byte(`{"response":{"items":[{"type":"status","event_id":"evt_response","session_id":"s","status":"response"}],"paging":{"more":true,"olderCursor":"evt_response"}}}`))
+		case "evt_response":
+			_, _ = w.Write([]byte(`{"result":{"value":[{"type":"status","event_id":"evt_result","session_id":"s","status":"result"}],"@odata.nextLink":"/v1/sessions/s/events?skipToken=evt_body"}}`))
+		case "evt_body":
+			_, _ = w.Write([]byte(`{"body":{"resources":[{"type":"status","event_id":"evt_body","session_id":"s","status":"body"}],"has_more":false}}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 4 || len(events.Events) != 4 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	for index, want := range []string{"payload", "response", "result", "body"} {
+		if events.Events[index].Status != want {
+			t.Fatalf("event %d = %#v, want status %q", index, events.Events[index], want)
+		}
+	}
+	if len(seen) != 4 || seen[1].Get("before_id") != "evt_payload" || seen[2].Get("before_id") != "evt_response" || seen[3].Get("before_id") != "evt_body" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryUsesEdgeCursorWhenNodeIDMissing(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -145,6 +145,7 @@ M6 progress now includes:
 - `internal/session`: remote-history connection edges now use `edges[].cursor` as the event cursor when the nested node lacks an event ID, preserving pagination even when pageInfo omits a cursor.
 - `internal/session`: remote-history parsing now also accepts `eventList`/`event_list`, `sessionEvents`/`session_events`, and connection aliases such as `connection`, `eventConnection`, and `sessionEventsConnection`.
 - `internal/session`: remote-history parsing now also accepts `value`, `values`, `resources`, and `collection` event-list aliases, plus `edges[].resource`/`edges[].value` node payload aliases.
+- `internal/session`: remote-history parsing now unwraps generic response envelopes such as `payload`, `response`, `result`, and `body` when they contain event lists and pagination fields.
 - `internal/session`: remote-history pageInfo parsing now accepts previous/older pagination signals such as `hasPrevious`/`hasPreviousPage`, `hasOlder`/`more`, and before-id cursors such as `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor`.
 - `internal/session`: remote-history pagination bool parsing now accepts numeric and yes/no-style bool values in addition to JSON bools and true/false strings.
 - `internal/session`: remote-history pagination cursor/id parsing now accepts JSON numbers and preserves them as string cursors for page fields and `edges[].cursor`.
