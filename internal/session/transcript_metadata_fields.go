@@ -113,6 +113,12 @@ func parseTaskSummaryMetadata(line []byte) (TaskSummaryEntry, bool) {
 	if entry.SessionID == "" {
 		entry.SessionID = fields.sessionIDValue()
 	}
+	if entry.Summary == "" {
+		entry.Summary = fields.stringValue("taskSummary", "task_summary", "content", "text", "body", "message")
+	}
+	if entry.Timestamp == "" {
+		entry.Timestamp = fields.stringValue("timestamp", "createdAt", "created_at", "time")
+	}
 	return entry, true
 }
 

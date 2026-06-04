@@ -606,6 +606,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"last_prompt","session_id":"s3","last_prompt":"snake prompt"}`,
 		`{"type":"task-summary","sessionId":"s1","summary":"running tests","timestamp":"2026-01-01T00:00:03Z"}`,
 		`{"type":"task_summary","session_id":"s3","summary":"snake task","timestamp":"2026-01-01T00:00:03Z"}`,
+		`{"type":"task-summary","sessionID":"s6","taskSummary":"aliased task","createdAt":"2026-01-01T00:00:06Z"}`,
 		`{"type":"tag","sessionId":"s1","tag":"tagged"}`,
 		`{"type":"tag","session_id":"s3","tag":"snake-tag"}`,
 		`{"type":"agent-name","sessionId":"s1","agentName":"Builder"}`,
@@ -653,6 +654,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if transcript.Summaries["a2"] != "snake short" || transcript.Summaries["a3"] != "id short" || transcript.CustomTitles["s3"] != "Snake Title" || transcript.AITitles["s3"] != "Snake AI Title" || transcript.LastPrompts["s3"] != "snake prompt" || transcript.TaskSummaries["s3"].Summary != "snake task" {
 		t.Fatalf("snake metadata = %#v %#v %#v %#v %#v", transcript.Summaries, transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
+	if transcript.TaskSummaries["s6"].Summary != "aliased task" || transcript.TaskSummaries["s6"].Timestamp != "2026-01-01T00:00:06Z" {
+		t.Fatalf("task summary aliases = %#v", transcript.TaskSummaries["s6"])
 	}
 	if transcript.AgentNames["s1"] != "Builder" || transcript.AgentColors["s1"] != "blue" || transcript.AgentSettings["s1"] != "reviewer" {
 		t.Fatalf("agent metadata = %#v %#v %#v", transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings)
@@ -714,6 +718,9 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 	if metadata.Summaries["a2"] != "snake short" || metadata.Summaries["a3"] != "id short" || metadata.CustomTitles["s3"] != "Snake Title" || metadata.AITitles["s3"] != "Snake AI Title" || metadata.LastPrompts["s3"] != "snake prompt" || metadata.TaskSummaries["s3"].Summary != "snake task" {
 		t.Fatalf("metadata snake fields = %#v %#v %#v %#v %#v", metadata.Summaries, metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
+	}
+	if metadata.TaskSummaries["s6"].Summary != "aliased task" || metadata.TaskSummaries["s6"].Timestamp != "2026-01-01T00:00:06Z" {
+		t.Fatalf("metadata task summary aliases = %#v", metadata.TaskSummaries["s6"])
 	}
 	if metadata.AgentNames["s1"] != "Builder" || metadata.AgentColors["s1"] != "blue" || metadata.AgentSettings["s1"] != "reviewer" {
 		t.Fatalf("metadata agent = %#v %#v %#v", metadata.AgentNames, metadata.AgentColors, metadata.AgentSettings)
