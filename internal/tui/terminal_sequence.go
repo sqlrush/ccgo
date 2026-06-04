@@ -81,7 +81,11 @@ func ParseTerminalSequence(sequence string) (TerminalSequenceAction, bool) {
 		}
 		return TerminalSequenceAction{Type: TerminalSequenceESC, ESC: action}, true
 	case TerminalSequenceSS3:
-		return TerminalSequenceAction{Type: TerminalSequenceUnknown, Sequence: sequence}, true
+		action, ok := ParseSS3Sequence(sequence)
+		if !ok {
+			return TerminalSequenceAction{Type: TerminalSequenceUnknown, Sequence: sequence}, true
+		}
+		return TerminalSequenceAction{Type: TerminalSequenceSS3, CSI: action}, true
 	case TerminalSequenceDCS, TerminalSequenceAPC, TerminalSequencePM, TerminalSequenceSOS:
 		return TerminalSequenceAction{
 			Type:          IdentifyTerminalSequence(sequence),
@@ -92,6 +96,24 @@ func ParseTerminalSequence(sequence string) (TerminalSequenceAction, bool) {
 			return TerminalSequenceAction{Type: TerminalSequenceUnknown, Sequence: sequence}, true
 		}
 		return TerminalSequenceAction{}, false
+	}
+}
+
+func ParseSS3Sequence(sequence string) (CSIAction, bool) {
+	if !strings.HasPrefix(sequence, ESCPrefix+"O") || len(sequence) != 3 {
+		return CSIAction{}, false
+	}
+	switch sequence[2] {
+	case 'A':
+		return csiCursorMove(CSICursorUp, 1), true
+	case 'B':
+		return csiCursorMove(CSICursorDown, 1), true
+	case 'C':
+		return csiCursorMove(CSICursorForward, 1), true
+	case 'D':
+		return csiCursorMove(CSICursorBack, 1), true
+	default:
+		return CSIAction{}, false
 	}
 }
 

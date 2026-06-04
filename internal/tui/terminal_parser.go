@@ -224,7 +224,7 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 		return TerminalAction{}, false
 	}
 	switch action.Type {
-	case TerminalSequenceCSI:
+	case TerminalSequenceCSI, TerminalSequenceSS3:
 		switch action.CSI.Type {
 		case CSIActionSGR:
 			p.style = ApplySGR(action.CSI.SGRParams, p.style)

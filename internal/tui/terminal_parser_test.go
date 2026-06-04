@@ -194,8 +194,8 @@ func TestTerminalParserDispatchesSequenceActions(t *testing.T) {
 	if actions[8].Type != TerminalActionCursor || actions[8].Cursor.Type != CSICursorActionMove || actions[8].Cursor.Direction != CSICursorDown {
 		t.Fatalf("esc cursor action = %#v", actions[8])
 	}
-	if actions[9].Type != TerminalActionUnknown || actions[9].Sequence != "\x1bOA" {
-		t.Fatalf("unknown action = %#v", actions[9])
+	if actions[9].Type != TerminalActionCursor || actions[9].Cursor.Type != CSICursorActionMove || actions[9].Cursor.Direction != CSICursorUp || actions[9].Cursor.Count != 1 {
+		t.Fatalf("ss3 cursor action = %#v", actions[9])
 	}
 }
 

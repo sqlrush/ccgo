@@ -45,8 +45,12 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	}
 
 	ss3, ok := ParseTerminalSequence("\x1bOA")
-	if !ok || ss3.Type != TerminalSequenceUnknown || ss3.Sequence != "\x1bOA" {
+	if !ok || ss3.Type != TerminalSequenceSS3 || ss3.CSI.Type != CSIActionCursor || ss3.CSI.Cursor.Type != CSICursorActionMove || ss3.CSI.Cursor.Direction != CSICursorUp || ss3.CSI.Cursor.Count != 1 {
 		t.Fatalf("ss3 dispatch = %#v ok=%v", ss3, ok)
+	}
+	unknownSS3, ok := ParseTerminalSequence("\x1bOP")
+	if !ok || unknownSS3.Type != TerminalSequenceUnknown || unknownSS3.Sequence != "\x1bOP" {
+		t.Fatalf("unknown ss3 dispatch = %#v ok=%v", unknownSS3, ok)
 	}
 
 	dcs, ok := ParseTerminalSequence("\x1bPtmux;" + EnterAlternateScreen + OSCStringTerminator)
