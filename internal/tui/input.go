@@ -202,6 +202,16 @@ func ParseKey(seq string) Key {
 
 func parseModifiedNavigationKey(seq string) (Key, bool) {
 	switch {
+	case isModifiedNavigationCSI(seq, "\x1b[1;", "A"):
+		return Key{Type: KeyUp}, true
+	case isModifiedNavigationCSI(seq, "\x1b[1;", "B"):
+		return Key{Type: KeyDown}, true
+	case isModifiedNavigationCSI(seq, "\x1b[1;", "C"):
+		modifier := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b[1;"), "C")
+		return Key{Type: modifiedHorizontalArrowKey(modifier, KeyRight, KeyAltRight, KeyCtrlRight)}, true
+	case isModifiedNavigationCSI(seq, "\x1b[1;", "D"):
+		modifier := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b[1;"), "D")
+		return Key{Type: modifiedHorizontalArrowKey(modifier, KeyLeft, KeyAltLeft, KeyCtrlLeft)}, true
 	case isModifiedNavigationCSI(seq, "\x1b[1;", "H"):
 		return Key{Type: KeyHome}, true
 	case isModifiedNavigationCSI(seq, "\x1b[1;", "F"):
@@ -226,6 +236,17 @@ func isModifiedNavigationCSI(seq, prefix, suffix string) bool {
 		return false
 	}
 	return modifier[0] >= '2' && modifier[0] <= '9'
+}
+
+func modifiedHorizontalArrowKey(modifier string, plain KeyType, alt KeyType, ctrl KeyType) KeyType {
+	switch modifier {
+	case "5", "6", "7", "8":
+		return ctrl
+	case "3", "4", "9":
+		return alt
+	default:
+		return plain
+	}
 }
 
 func parseCSIuKey(seq string) (Key, bool) {

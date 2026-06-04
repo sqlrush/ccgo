@@ -975,6 +975,26 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 			}
 		}
 	}
+	arrowCases := []struct {
+		seq  string
+		want KeyType
+	}{
+		{seq: "\x1b[1;2D", want: KeyLeft},
+		{seq: "\x1b[1;2C", want: KeyRight},
+		{seq: "\x1b[1;2A", want: KeyUp},
+		{seq: "\x1b[1;2B", want: KeyDown},
+		{seq: "\x1b[1;4D", want: KeyAltLeft},
+		{seq: "\x1b[1;4C", want: KeyAltRight},
+		{seq: "\x1b[1;6D", want: KeyCtrlLeft},
+		{seq: "\x1b[1;6C", want: KeyCtrlRight},
+		{seq: "\x1b[1;7D", want: KeyCtrlLeft},
+		{seq: "\x1b[1;8C", want: KeyCtrlRight},
+	}
+	for _, tc := range arrowCases {
+		if key := ParseKey(tc.seq); key.Type != tc.want {
+			t.Fatalf("ParseKey(%q) = %#v, want %q", tc.seq, key, tc.want)
+		}
+	}
 }
 
 func TestParseCSIuKeySequences(t *testing.T) {
