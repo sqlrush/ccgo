@@ -570,9 +570,17 @@ func setIfEmpty(target *string, value string) {
 
 func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contracts.SDKEvent, error) {
 	if name != "edges" {
-		var events []contracts.SDKEvent
-		if err := json.Unmarshal(data, &events); err != nil {
+		var rawEvents []json.RawMessage
+		if err := json.Unmarshal(data, &rawEvents); err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		events := make([]contracts.SDKEvent, 0, len(rawEvents))
+		for index, rawEvent := range rawEvents {
+			event, err := decodeRemoteHistoryEventElement(name, index, rawEvent)
+			if err != nil {
+				return nil, err
+			}
+			events = append(events, event)
 		}
 		return events, nil
 	}
@@ -583,7 +591,7 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 	events := make([]contracts.SDKEvent, 0, len(rawEdges))
 	for index, edge := range rawEdges {
 		cursor := remoteHistoryStringField(edge, "cursor")
-		rawEvent := firstRawField(edge, "node", "event", "record", "item", "resource", "value")
+		rawEvent := firstObjectRawField(edge, "node", "event", "record", "item", "resource", "value")
 		if rawEvent == nil {
 			rawEvent = edgeJSON(edge)
 		}
@@ -599,10 +607,85 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 	return events, nil
 }
 
-func firstRawField(raw map[string]json.RawMessage, names ...string) json.RawMessage {
+func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessage) (contracts.SDKEvent, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return contracts.SDKEvent{}, nil
+	}
+	cursor := ""
+	rawEvent := data
+	if data[0] == '{' {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(data, &fields); err == nil {
+			cursor = remoteHistoryStringField(fields, "cursor")
+			if nested := remoteHistoryWrappedEventRaw(fields); nested != nil {
+				rawEvent = nested
+			}
+		}
+	}
+	var event contracts.SDKEvent
+	if err := json.Unmarshal(rawEvent, &event); err != nil {
+		return contracts.SDKEvent{}, fmt.Errorf("%s[%d]: %w", name, index, err)
+	}
+	if event.ID == "" {
+		event.ID = contracts.ID(cursor)
+	}
+	return event, nil
+}
+
+func remoteHistoryWrappedEventRaw(fields map[string]json.RawMessage) json.RawMessage {
+	if remoteHistoryHasDirectEventFields(fields) {
+		return nil
+	}
+	return firstObjectRawField(fields, "node", "event", "record", "entry", "item", "resource", "value", "data", "payload", "body", "result", "response", "output")
+}
+
+func remoteHistoryHasDirectEventFields(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{
+		"type",
+		"event_type",
+		"eventType",
+		"name",
+		"kind",
+		"role",
+		"messageType",
+		"message_type",
+		"id",
+		"event_id",
+		"eventId",
+		"uuid",
+		"session_id",
+		"sessionId",
+		"sessionID",
+		"session_uuid",
+		"sessionUuid",
+		"sessionUUID",
+		"status",
+		"message",
+		"message_payload",
+		"messagePayload",
+		"serialized_message",
+		"serializedMessage",
+	} {
+		if value, ok := fields[name]; ok && len(bytes.TrimSpace(value)) > 0 && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return true
+		}
+	}
+	if value, ok := fields["event"]; ok {
+		trimmed := bytes.TrimSpace(value)
+		return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) && trimmed[0] != '{'
+	}
+	return false
+}
+
+func firstObjectRawField(raw map[string]json.RawMessage, names ...string) json.RawMessage {
 	for _, name := range names {
 		value, ok := raw[name]
-		if ok && len(bytes.TrimSpace(value)) > 0 && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(value)
+		if len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) && trimmed[0] == '{' {
 			return value
 		}
 	}
