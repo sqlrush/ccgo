@@ -3817,6 +3817,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(4, 10, "r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 4, Bottom: 10}},
 		{seq: ResetScrollRegion, want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1}},
 		{seq: CSISequence(";10r"), want: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: 1, Bottom: 10}},
+		{seq: CSISequence(10, 80, "s"), want: CSIScrollAction{Type: CSIScrollActionSetHorizontalRegion, Left: 10, Right: 80}},
+		{seq: CSISequence(";120s"), want: CSIScrollAction{Type: CSIScrollActionSetHorizontalRegion, Left: 1, Right: 120}},
 	}
 	for _, tc := range scrollCases {
 		action, ok := ParseCSISequence(tc.seq)
@@ -3917,6 +3919,11 @@ func TestParseCSISequenceActions(t *testing.T) {
 	actions := parser.Feed(CSISequence("?1000;1006;2004h"))
 	if len(actions) != 1 || actions[0].Type != TerminalActionMode || len(actions[0].Modes) != 3 || actions[0].Mode != actions[0].Modes[0] {
 		t.Fatalf("terminal parser multi mode actions = %#v", actions)
+	}
+
+	actions = parser.Feed(CSISequence(5, 40, "s"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionScroll || actions[0].Scroll.Type != CSIScrollActionSetHorizontalRegion || actions[0].Scroll.Left != 5 || actions[0].Scroll.Right != 40 {
+		t.Fatalf("terminal parser horizontal region actions = %#v", actions)
 	}
 }
 

@@ -220,9 +220,10 @@ type CSIReportAction struct {
 type CSIScrollActionType string
 
 const (
-	CSIScrollActionUp        CSIScrollActionType = "up"
-	CSIScrollActionDown      CSIScrollActionType = "down"
-	CSIScrollActionSetRegion CSIScrollActionType = "setRegion"
+	CSIScrollActionUp                  CSIScrollActionType = "up"
+	CSIScrollActionDown                CSIScrollActionType = "down"
+	CSIScrollActionSetRegion           CSIScrollActionType = "setRegion"
+	CSIScrollActionSetHorizontalRegion CSIScrollActionType = "setHorizontalRegion"
 )
 
 type CSIScrollAction struct {
@@ -230,6 +231,8 @@ type CSIScrollAction struct {
 	Count  int
 	Top    int
 	Bottom int
+	Left   int
+	Right  int
 }
 
 type CSIModeActionType string
@@ -423,6 +426,9 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandScrollRegion:
 		return csiScrollRegion(params), true
 	case CSICommandSaveCursor:
+		if privateMode == 0 && len(params) > 0 {
+			return csiHorizontalRegion(params), true
+		}
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionSave}}, true
 	case CSICommandWindowReport:
 		return csiWindowReport(csiParamDefault(params, 0, 0), privateMode), true
@@ -547,6 +553,18 @@ func csiScrollRegion(params []int) CSIAction {
 		bottom = params[1]
 	}
 	return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetRegion, Top: top, Bottom: bottom}}
+}
+
+func csiHorizontalRegion(params []int) CSIAction {
+	left := 1
+	if len(params) > 0 && params[0] > 0 {
+		left = params[0]
+	}
+	right := 0
+	if len(params) > 1 && params[1] > 0 {
+		right = params[1]
+	}
+	return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionSetHorizontalRegion, Left: left, Right: right}}
 }
 
 func csiModeListAction(params []int, private bool, enabled bool) (CSIAction, bool) {
