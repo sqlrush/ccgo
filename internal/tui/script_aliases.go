@@ -1019,6 +1019,37 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		if step.Image == nil {
 			step.Image = scriptImageJSONField(fields, "value", "image", "payload", "data")
 		}
+	case "permission", "permissionrequest", "permission-request", "requestpermission", "request-permission":
+		if step.RequestPermission == nil {
+			step.RequestPermission = scriptPermissionRequestActionField(fields)
+		}
+	case "task", "taskstatus", "task-status", "upserttask", "upsert-task":
+		if step.UpsertTask == nil {
+			step.UpsertTask = scriptTaskStatusActionField(fields)
+		}
+	case "removetask", "remove-task", "deletetask", "delete-task":
+		if step.RemoveTaskID == "" {
+			step.RemoveTaskID = scriptActionIDField(fields, "task_id", "taskId", "taskID", "id")
+		}
+	case "opentasks", "open-tasks", "opentasksdialog", "open-tasks-dialog", "showtasks", "show-tasks":
+		step.OpenTasksDialog = scriptActionBoolField(fields, true)
+	case "cancelactivedialog", "cancel-active-dialog", "canceldialog", "cancel-dialog", "closedialog", "close-dialog":
+		step.CancelActiveDialog = scriptActionBoolField(fields, true)
+	case "cancelpermission", "cancel-permission":
+		if step.CancelPermissionID == "" {
+			step.CancelPermissionID = scriptActionIDField(fields, "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "id")
+		}
+	case "cancelpermissions", "cancel-permissions", "cancelallpermissions", "cancel-all-permissions":
+		step.CancelAllPermissions = scriptActionBoolField(fields, true)
+	case "canceltasks", "cancel-tasks", "cancelalltasks", "cancel-all-tasks":
+		step.CancelAllTasks = scriptActionBoolField(fields, true)
+		if step.CancelTasksDetail == "" {
+			step.CancelTasksDetail = scriptActionStringField(fields, "reason", "detail", "message", "description")
+		}
+	case "dialog", "showdialog", "show-dialog", "opendialog", "open-dialog":
+		if step.Dialog == nil {
+			step.Dialog = scriptDialogActionField(fields)
+		}
 	case "focus", "focusin", "focus-in":
 		if !scriptStepHasFocusKey(step) {
 			step.Keys = append(step.Keys, "focus-in")
@@ -1035,6 +1066,125 @@ func canonicalScriptStepAction(action string) string {
 	action = strings.ReplaceAll(action, "_", "-")
 	action = strings.ReplaceAll(action, " ", "-")
 	return action
+}
+
+func scriptPermissionRequestActionField(fields map[string]json.RawMessage) *PermissionRequest {
+	for _, raw := range scriptActionRawFields(fields, "request", "permission", "permission_request", "permissionRequest") {
+		var request PermissionRequest
+		if err := json.Unmarshal(raw, &request); err == nil {
+			return &request
+		}
+	}
+	var request PermissionRequest
+	if scriptUnmarshalStepFields(fields, &request) && scriptPermissionRequestHasData(request) {
+		return &request
+	}
+	return nil
+}
+
+func scriptPermissionRequestHasData(request PermissionRequest) bool {
+	return request.ID != "" || request.ToolName != "" || request.Path != "" || request.Description != "" || len(request.Actions) > 0
+}
+
+func scriptTaskStatusActionField(fields map[string]json.RawMessage) *TaskStatus {
+	for _, raw := range scriptActionRawFields(fields, "task", "task_status", "taskStatus") {
+		var task TaskStatus
+		if err := json.Unmarshal(raw, &task); err == nil {
+			return &task
+		}
+	}
+	var task TaskStatus
+	if scriptUnmarshalStepFields(fields, &task) && scriptTaskStatusHasData(task) {
+		return &task
+	}
+	return nil
+}
+
+func scriptTaskStatusHasData(task TaskStatus) bool {
+	return task.ID != "" || task.Title != "" || task.State != "" || task.Detail != "" || task.Progress != 0
+}
+
+func scriptDialogActionField(fields map[string]json.RawMessage) *Dialog {
+	for _, raw := range scriptActionRawFields(fields, "dialog") {
+		var dialog Dialog
+		if err := json.Unmarshal(raw, &dialog); err == nil {
+			return &dialog
+		}
+	}
+	var dialog Dialog
+	if scriptUnmarshalStepFields(fields, &dialog) && scriptDialogHasData(dialog) {
+		return &dialog
+	}
+	return nil
+}
+
+func scriptDialogHasData(dialog Dialog) bool {
+	return dialog.ID != "" || dialog.Kind != "" || dialog.Title != "" || dialog.Body != "" || len(dialog.Actions) > 0 || dialog.Focused != 0
+}
+
+func scriptActionRawFields(fields map[string]json.RawMessage, names ...string) []json.RawMessage {
+	allNames := append([]string{"value", "payload", "data", "body"}, names...)
+	raws := make([]json.RawMessage, 0, len(allNames))
+	for _, name := range allNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raws = append(raws, raw)
+	}
+	return raws
+}
+
+func scriptUnmarshalStepFields(fields map[string]json.RawMessage, target any) bool {
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(raw, target) == nil
+}
+
+func scriptActionIDField(fields map[string]json.RawMessage, idNames ...string) string {
+	return scriptActionStringField(fields, idNames...)
+}
+
+func scriptActionStringField(fields map[string]json.RawMessage, objectNames ...string) string {
+	if value := stringJSONField(fields, append([]string{"value", "payload", "data", "body"}, objectNames...)...); value != "" {
+		return value
+	}
+	for _, raw := range scriptActionRawFields(fields) {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || raw[0] != '{' {
+			continue
+		}
+		nested := map[string]json.RawMessage{}
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			continue
+		}
+		if value := stringJSONField(nested, objectNames...); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func scriptActionBoolField(fields map[string]json.RawMessage, fallback bool) bool {
+	if value := boolPtrJSONField(fields, "value", "payload", "data", "enabled", "active", "open"); value != nil {
+		return *value
+	}
+	for _, raw := range scriptActionRawFields(fields) {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || raw[0] != '{' {
+			continue
+		}
+		nested := map[string]json.RawMessage{}
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			continue
+		}
+		if value := boolPtrJSONField(nested, "enabled", "active", "open", "value"); value != nil {
+			return *value
+		}
+	}
+	return fallback
 }
 
 func scriptMouseJSONField(fields map[string]json.RawMessage, names ...string) *ScriptMouse {

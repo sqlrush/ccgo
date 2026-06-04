@@ -5366,6 +5366,85 @@ func TestParseInteractionScriptAcceptsCompactMouseActionAlias(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsRuntimeActionDiscriminatorAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action":"requestPermission",
+			"payload":{"permissionId":"perm_action","tool":"Bash","actions":"Allow"},
+			"expectDialog":{"active":true,"id":"perm_action","kind":"permission"},
+			"expectStatusContains":"permissions: 1"
+		},
+		{
+			"action":"keyPress",
+			"payload":"enter",
+			"expectEvent":{"type":"dialog_action","value":"Allow","dialogId":"perm_action","dialogKind":"permission"},
+			"expectDialogResult":{"id":"perm_action","status":"allowed","found":true}
+		},
+		{
+			"type":"taskStatus",
+			"payload":{"taskId":"task_action","name":"Build","status":"running","statusText":"go test","progressPercent":25},
+			"expectTasks":{"count":1,"stateCounts":{"running":1},"contains":{"taskId":"task_action","status":"running","statusText":"go test","progressPercent":25}}
+		},
+		{
+			"kind":"showTasks",
+			"expectDialog":{"active":true,"id":"tasks","kind":"task"},
+			"expectSnapshotContains":"Build [running] 25% - go test"
+		},
+		{
+			"name":"cancelTasks",
+			"payload":{"reason":"stopped"},
+			"expectTasks":{"count":1,"stateCounts":{"cancelled":1},"contains":{"taskId":"task_action","status":"cancelled","statusText":"stopped","progressPercent":25}},
+			"expectStatusContains":"cancelled: 1"
+		},
+		{
+			"operation":"removeTask",
+			"payload":{"taskId":"task_action"},
+			"expectTasks":{"count":0}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_action" || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+	if len(runtime.Tasks) != 0 {
+		t.Fatalf("tasks = %#v", runtime.Tasks)
+	}
+}
+
+func TestRunInteractionScriptAcceptsDialogActionDiscriminatorAlias(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action":"showDialog",
+			"payload":{"dialogId":"custom_action","dialogKind":"permission","heading":"Custom","content":"Pick one.","options":"Proceed"},
+			"expectDialog":{"visible":true,"dialogId":"custom_action","dialogKind":"permission","heading":"Custom","content":"Pick one.","actions":"Proceed"}
+		},
+		{
+			"action":"keyPress",
+			"payload":"enter",
+			"expectEvent":{"type":"dialog_action","value":"Proceed","dialogId":"custom_action","dialogKind":"permission"}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].DialogID != "custom_action" || result.Events[0].Value != "Proceed" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAppliesStepKeybindings(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keybindings":{"keys":"ctrl-r","command":"submitPrompt"}},
