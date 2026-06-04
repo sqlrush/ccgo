@@ -45,6 +45,7 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		*SDKEventJSON
 		EventIDSnake     ID `json:"event_id"`
 		EventIDCamel     ID `json:"eventId"`
+		SessionIDUpper   ID `json:"sessionID"`
 		SessionUUID      ID `json:"sessionUuid"`
 		SessionUUIDUpper ID `json:"sessionUUID"`
 		SessionUUIDSnake ID `json:"session_uuid"`
@@ -60,6 +61,9 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	}
 	if e.ID == "" {
 		e.ID = aux.EventIDCamel
+	}
+	if e.SessionID == "" {
+		e.SessionID = aux.SessionIDUpper
 	}
 	if e.SessionID == "" {
 		e.SessionID = aux.SessionUUID

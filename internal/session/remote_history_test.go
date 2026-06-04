@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -735,6 +736,20 @@ func TestRemoteHistoryTranscriptMessagesUsesEventFallbackFields(t *testing.T) {
 	}
 	if messages[1].Message == nil || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_u1" || messages[1].Message.SessionID != "s1" || messages[1].Message.Timestamp != "2026-01-01T00:00:02Z" {
 		t.Fatalf("assistant message fallback fields = %#v", messages[1].Message)
+	}
+}
+
+func TestRemoteHistoryTranscriptMessagesAcceptsSessionIDUpperAlias(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[{"type":"assistant","id":"evt_a1","sessionID":"s_upper","timestamp":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 1 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].SessionID != "s_upper" || messages[0].Message == nil || messages[0].Message.SessionID != "s_upper" {
+		t.Fatalf("sessionID alias materialization = %#v", messages[0])
 	}
 }
 
