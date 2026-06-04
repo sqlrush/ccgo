@@ -231,6 +231,30 @@ func TestHistoryEntryAcceptsPastedContentFieldAliases(t *testing.T) {
 	}
 }
 
+func TestHistoryEntryAcceptsPastedContentBodyAndBase64DataAliases(t *testing.T) {
+	var entry HistoryEntry
+	data := `{
+		"display": "restore [Pasted text #3] [Image #4] [Pasted text #5]",
+		"pasted_contents": {
+			"3": {"pastedContentId": "3", "kind": "text", "text": "text memo"},
+			"4": {"imageID": "4", "type": "image", "base64Data": "BBBB", "mimeType": "image/png"},
+			"5": {"attachmentID": "5", "pastedType": "input_text", "body": "body memo"}
+		}
+	}`
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := entry.PastedContents[3]; got.ID != 3 || got.Type != PastedContentText || got.Content != "text memo" {
+		t.Fatalf("text alias = %#v", got)
+	}
+	if got := entry.PastedContents[4]; got.ID != 4 || got.Type != PastedContentImage || got.Content != "BBBB" || got.MediaType != "image/png" {
+		t.Fatalf("base64Data alias = %#v", got)
+	}
+	if got := entry.PastedContents[5]; got.ID != 5 || got.Type != PastedContentText || got.Content != "body memo" {
+		t.Fatalf("body alias = %#v", got)
+	}
+}
+
 func TestHistoryEntryAcceptsPastedContentsArrayAndSingleObject(t *testing.T) {
 	var entry HistoryEntry
 	if err := json.Unmarshal([]byte(`{"display":"restore","pastedContents":[{"pastedContentId":"4","kind":"text","value":"array memo"},{"imageID":"5","type":"image","base64":"AAAA","mimeType":"image/png"}]}`), &entry); err != nil {
@@ -316,6 +340,30 @@ func TestStoredPastedContentAcceptsTypeAliases(t *testing.T) {
 	}
 }
 
+func TestStoredPastedContentAcceptsHashAndInlineContentAliases(t *testing.T) {
+	var entry LogEntry
+	data := `{
+		"display": "restore",
+		"pasted_contents": {
+			"3": {"contentID": "3", "pasted_type": "input_text", "digest": "digest_hash", "contentType": "text/plain"},
+			"4": {"contentID": "4", "pasted_type": "input_text", "sha256": "sha_hash", "contentType": "text/plain"},
+			"5": {"contentID": "5", "pasted_type": "input_text", "body": "inline memo", "contentType": "text/plain"}
+		}
+	}`
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := entry.PastedContents[3]; got.ID != 3 || got.Type != PastedContentText || got.ContentHash != "digest_hash" || got.MediaType != "text/plain" {
+		t.Fatalf("digest hash = %#v", got)
+	}
+	if got := entry.PastedContents[4]; got.ID != 4 || got.Type != PastedContentText || got.ContentHash != "sha_hash" || got.MediaType != "text/plain" {
+		t.Fatalf("sha256 hash = %#v", got)
+	}
+	if got := entry.PastedContents[5]; got.ID != 5 || got.Type != PastedContentText || got.Content != "inline memo" || got.MediaType != "text/plain" {
+		t.Fatalf("inline body = %#v", got)
+	}
+}
+
 func TestLoadHistoryAcceptsStoredPastedContentsArray(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
 	line := `{"display":"restore [Pasted text #7] [Image #8]","pasted_contents":[{"contentID":"7","pasted_type":"input_text","content_hash":"text_hash","contentType":"text/plain"},{"imageID":"8","kind":"pasted-image","content_hash":"image_hash","mimeType":"image/png","fileName":"array.png"}],"timestamp":100,"project":"/repo","sessionID":"session"}`
@@ -364,6 +412,37 @@ func TestLoadHistoryAcceptsStoredPastedContentContainerAliases(t *testing.T) {
 	}
 	if got := history[0].PastedContents[11]; got.ID != 11 || got.Type != PastedContentText || got.Content != "expanded container memo" || got.MediaType != "text/plain" {
 		t.Fatalf("stored container text = %#v", got)
+	}
+}
+
+func TestLoadHistoryAcceptsStoredPastedContentHashAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"display":"restore [Pasted text #16] [Pasted text #17]","pasted_contents":{"16":{"contentID":"16","pasted_type":"input_text","digest":"digest_hash","contentType":"text/plain"},"17":{"contentID":"17","pasted_type":"input_text","checksum":"checksum_hash","contentType":"text/plain"}},"timestamp":100,"project":"/repo","sessionID":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, func(hash string) (string, bool) {
+		switch hash {
+		case "digest_hash":
+			return "expanded digest memo", true
+		case "checksum_hash":
+			return "expanded checksum memo", true
+		default:
+			return "", false
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history = %#v", history)
+	}
+	if got := history[0].PastedContents[16]; got.ID != 16 || got.Type != PastedContentText || got.Content != "expanded digest memo" || got.MediaType != "text/plain" {
+		t.Fatalf("digest alias = %#v", got)
+	}
+	if got := history[0].PastedContents[17]; got.ID != 17 || got.Type != PastedContentText || got.Content != "expanded checksum memo" || got.MediaType != "text/plain" {
+		t.Fatalf("checksum alias = %#v", got)
 	}
 }
 

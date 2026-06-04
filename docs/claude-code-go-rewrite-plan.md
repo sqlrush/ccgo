@@ -315,6 +315,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：REPL message metadata 保留 `imagePasteIds`，并从已有用户消息的 image ids 和 pasted refs 初始化/推进 `NextPastedID`，贴近官方 resume/continue 避免 paste ID 重用的逻辑。
 - 本轮补充：reverse-search 现在按完整 `HistoryEntry` 匹配和选择历史，选中后恢复 text/image pasted-content metadata，后续 submit event 仍携带 display 与图片元数据。
 - 本轮补充：prompt history pasted-content 读取接受 `mimeType`/`mime_type`/`contentType`、`fileName`/`file_name`/`name`、`filePath`/`file_path`/`path` 等 text/image metadata 别名，使历史恢复路径和 image hint/parser metadata 兼容面一致。
+- 本轮补充：prompt history pasted-content 正文字段接受 `text`/`body`/`message`/`raw`/`base64Data` 等别名，stored pasted-content hash 接受 `digest`/`checksum`/`sha256` 等别名，attachment/cache 风格历史记录可以恢复正文或命中 paste-cache。
 - 本轮补充：prompt history `LogEntry` 读取接受 `sessionID`/`session`/`sessionUuid`/`sessionUUID`/`session_uuid` 作为 session id 别名，current-session-first 历史排序不会因 session 字段拼写不同而失效。
 - 本轮补充：prompt history `HistoryEntry`/`LogEntry` 和 pasted-content item 现在接受 `entry`/`record`/`item`/`payload` 等 wrapper，stored history 可从 nested payload 读取显示文本/附件并用外层 project/session/timestamp metadata 补齐。
 - 本轮补充：REPL message restore 现在可从用户消息 content blocks、`imagePasteIds` 和 pasted-content metadata 重建 prompt text、`[Image #N]` 引用和 base64 image pasted contents。

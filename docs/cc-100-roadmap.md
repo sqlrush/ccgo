@@ -272,6 +272,8 @@ M7 补充：Ctrl-S prompt stash 现在保存并恢复 prompt text、cursor 和 p
 
 M7 补充：prompt history pasted-content 读取现在接受 `mimeType`/`mime_type`/`contentType`、`fileName`/`file_name`/`name`、`filePath`/`file_path`/`path` 等 text/image metadata 别名，历史恢复路径和 image hint/parser metadata 兼容面保持一致。
 
+M7 补充：prompt history pasted-content 正文字段现在接受 `text`/`body`/`message`/`raw`/`base64Data` 等别名，stored pasted-content hash 也接受 `digest`/`checksum`/`sha256` 等别名，减少 attachment/cache 风格历史记录恢复时丢失正文或 paste-cache 命中的情况。
+
 M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`sessionUuid`/`sessionUUID`/`session_uuid` 作为 session id 别名，current-session-first 历史排序不会因 session 字段拼写不同而失效。
 
 当前状态不是 100% 还原，而是“核心地基 + 运行时框架 + 第一批具体工具”的可编译阶段。

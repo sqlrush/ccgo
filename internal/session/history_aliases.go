@@ -101,7 +101,7 @@ func historyApplyPastedContentFields(content *PastedContent, fields map[string]j
 	if value := canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")); value != "" && (overwrite || content.Type == "") {
 		content.Type = value
 	}
-	if value := historyStringJSONField(fields, "content", "value", "data", "base64"); value != "" && (overwrite || content.Content == "") {
+	if value := historyStringJSONField(fields, historyPastedContentContentFieldNames()...); value != "" && (overwrite || content.Content == "") {
 		content.Content = value
 	}
 	if value := historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"); value != "" && (overwrite || content.MediaType == "") {
@@ -125,10 +125,10 @@ func historyApplyStoredPastedContentFields(content *StoredPastedContent, fields 
 	if value := canonicalPastedContentType(historyStringJSONField(fields, "type", "kind", "pastedType", "pasted_type")); value != "" && (overwrite || content.Type == "") {
 		content.Type = value
 	}
-	if value := historyStringJSONField(fields, "content", "value", "data", "base64"); value != "" && (overwrite || content.Content == "") {
+	if value := historyStringJSONField(fields, historyPastedContentContentFieldNames()...); value != "" && (overwrite || content.Content == "") {
 		content.Content = value
 	}
-	if value := historyStringJSONField(fields, "contentHash", "content_hash", "hash", "contentDigest", "content_digest"); value != "" && (overwrite || content.ContentHash == "") {
+	if value := historyStringJSONField(fields, historyPastedContentHashFieldNames()...); value != "" && (overwrite || content.ContentHash == "") {
 		content.ContentHash = value
 	}
 	if value := historyStringJSONField(fields, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"); value != "" && (overwrite || content.MediaType == "") {
@@ -477,7 +477,44 @@ func historyPastedContentWrapperFieldNames() []string {
 }
 
 func historyPastedContentValueFieldNames() []string {
-	return []string{"content", "value", "data", "base64"}
+	return historyPastedContentContentFieldNames()
+}
+
+func historyPastedContentContentFieldNames() []string {
+	return []string{
+		"content",
+		"value",
+		"data",
+		"base64",
+		"text",
+		"body",
+		"message",
+		"input",
+		"raw",
+		"payloadText",
+		"payload_text",
+		"base64Data",
+		"base64_data",
+		"encodedContent",
+		"encoded_content",
+	}
+}
+
+func historyPastedContentHashFieldNames() []string {
+	return []string{
+		"contentHash",
+		"content_hash",
+		"hash",
+		"contentDigest",
+		"content_digest",
+		"digest",
+		"checksum",
+		"sha256",
+		"contentSHA256",
+		"content_sha256",
+		"contentChecksum",
+		"content_checksum",
+	}
 }
 
 func historyWrappedPayloadJSON(fields map[string]json.RawMessage, wrappers []string, scalarDirect []string, containerDirect []string) (json.RawMessage, bool) {
