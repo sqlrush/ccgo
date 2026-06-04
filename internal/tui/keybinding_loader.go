@@ -42,7 +42,31 @@ func ParseKeyBindingSpecs(data []byte) ([]BindingSpec, error) {
 	return specs, nil
 }
 
-var keyBindingCollectionFields = []string{"bindings", "keybindings", "keyBindings", "keyboardBindings", "keybinding_specs", "keybindingSpecs", "shortcuts", "shortcutBindings"}
+var keyBindingCollectionFields = []string{
+	"bindings",
+	"keybindings",
+	"keyBindings",
+	"keyboardBindings",
+	"keyboardShortcuts",
+	"keyboard_shortcuts",
+	"keybinding_specs",
+	"keybindingSpecs",
+	"keymap",
+	"keyMap",
+	"keymaps",
+	"keyMaps",
+	"shortcuts",
+	"shortcutBindings",
+	"hotkeys",
+	"hotKeys",
+	"hot_keys",
+	"userKeybindings",
+	"userKeyBindings",
+	"user_keybindings",
+	"customKeybindings",
+	"customKeyBindings",
+	"custom_keybindings",
+}
 
 var keyBindingOuterWrapperFields = []string{"data", "payload", "body", "result", "response", "settings", "config", "configuration", "keyboard", "keymap", "preferences", "userPreferences"}
 
@@ -103,7 +127,11 @@ func parseKeyBindingSpecValue(name string, data json.RawMessage) ([]BindingSpec,
 		}
 		return specs, nil
 	case '{':
-		specs, err := parseKeyBindingMap(data)
+		specs, ok, err := parseKeyBindingWrapper(data)
+		if ok || err != nil {
+			return specs, err
+		}
+		specs, err = parseKeyBindingMap(data)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s map: %w", name, err)
 		}

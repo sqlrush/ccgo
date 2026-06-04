@@ -1650,6 +1650,62 @@ func TestParseKeyBindingSpecsAcceptsNestedWrappers(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsCollectionAliases(t *testing.T) {
+	specs, err := ParseKeyBindingSpecs([]byte(`{
+		"keymap": {
+			"ctrl-r": "pageDown",
+			"ctrl-x ctrl-k": false
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 2 || specs[0].Key != "ctrl-r" || specs[0].Action != Action("pageDown") || specs[1].Key != "ctrl-x ctrl-k" || specs[1].Action != ActionNone {
+		t.Fatalf("keymap specs = %#v", specs)
+	}
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
+		t.Fatalf("keymap ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("keymap ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionNone {
+		t.Fatalf("keymap ctrl-x ctrl-k action = %q", action)
+	}
+
+	specs, err = ParseKeyBindingSpecs([]byte(`{
+		"keymap": {
+			"bindings": [
+				{"shortcut": "shift-enter", "command": "insertNewline"}
+			]
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Key != "shift-enter" || specs[0].Action != Action("insertNewline") {
+		t.Fatalf("wrapped keymap specs = %#v", specs)
+	}
+
+	specs, err = ParseKeyBindingSpecs([]byte(`{
+		"preferences": {
+			"keyboardShortcuts": {
+				"ctrl-w": {"commandName": "deleteWordBackward"}
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Key != "ctrl-w" || specs[0].Action != Action("deleteWordBackward") {
+		t.Fatalf("keyboardShortcuts specs = %#v", specs)
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsArrayKeySequences(t *testing.T) {
 	specs, err := ParseKeyBindingSpecs([]byte(`[
 		{"keys": ["ctrl-x", "ctrl-k"], "command": "pageDown"},
