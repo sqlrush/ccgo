@@ -42,13 +42,24 @@ func ParseKeyBindingSpecs(data []byte) ([]BindingSpec, error) {
 	return specs, nil
 }
 
+var keyBindingCollectionFields = []string{"bindings", "keybindings", "keyBindings", "keyboardBindings", "keybinding_specs", "keybindingSpecs", "shortcuts", "shortcutBindings"}
+
+var keyBindingOuterWrapperFields = []string{"data", "payload", "body", "result", "response", "settings", "config", "configuration", "keyboard", "keymap", "preferences", "userPreferences"}
+
 func parseKeyBindingWrapper(data []byte) ([]BindingSpec, bool, error) {
+	return parseKeyBindingWrapperDepth(data, 0)
+}
+
+func parseKeyBindingWrapperDepth(data []byte, depth int) ([]BindingSpec, bool, error) {
+	if depth > 4 {
+		return nil, false, nil
+	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, false, fmt.Errorf("parse keybinding spec wrapper: %w", err)
 	}
 	var specs []BindingSpec
-	for _, name := range []string{"bindings", "keybindings", "keyBindings", "keyboardBindings", "keybinding_specs", "keybindingSpecs", "shortcuts", "shortcutBindings"} {
+	for _, name := range keyBindingCollectionFields {
 		value, ok := raw[name]
 		if !ok {
 			continue
@@ -60,6 +71,20 @@ func parseKeyBindingWrapper(data []byte) ([]BindingSpec, bool, error) {
 		specs = append(specs, parsed...)
 	}
 	if len(specs) == 0 {
+		for _, name := range keyBindingOuterWrapperFields {
+			value, ok := raw[name]
+			if !ok {
+				continue
+			}
+			value = bytes.TrimSpace(value)
+			if len(value) == 0 || value[0] != '{' {
+				continue
+			}
+			parsed, ok, err := parseKeyBindingWrapperDepth(value, depth+1)
+			if ok || err != nil {
+				return parsed, ok, err
+			}
+		}
 		return nil, false, nil
 	}
 	return specs, true, nil

@@ -1603,6 +1603,53 @@ func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsNestedWrappers(t *testing.T) {
+	wrapper := []byte(`{
+		"data": {
+			"settings": {
+				"keyboard": {
+					"bindings": [
+						{"shortcutKey": "ctrl-r", "commandName": "pageDown"},
+						{"keys": ["ctrl-x", "ctrl-k"], "command": "none"}
+					]
+				}
+			}
+		}
+	}`)
+	specs, err := ParseKeyBindingSpecs(wrapper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 2 || specs[0].Key != "ctrl-r" || specs[0].Action != Action("pageDown") || specs[1].Key != "ctrl-x ctrl-k" || specs[1].Action != Action("none") {
+		t.Fatalf("specs = %#v", specs)
+	}
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
+		t.Fatalf("ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionNone {
+		t.Fatalf("ctrl-x ctrl-k action = %q", action)
+	}
+
+	path := filepath.Join(t.TempDir(), "nested-keybindings.json")
+	if err := os.WriteFile(path, wrapper, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadKeyBindingSpecs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != len(specs) || loaded[0].Key != specs[0].Key || loaded[1].Key != specs[1].Key {
+		t.Fatalf("loaded specs = %#v", loaded)
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsArrayKeySequences(t *testing.T) {
 	specs, err := ParseKeyBindingSpecs([]byte(`[
 		{"keys": ["ctrl-x", "ctrl-k"], "command": "pageDown"},
