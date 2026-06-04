@@ -646,6 +646,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 		`{"type":"content-replacement","sessionID":"s9","records":{"type":"tool-result","toolUseID":"toolu_9","blockID":"block_9","hash":"hash_9","content":"record alias stub"}}`,
 		`{"type":"marble_origami_commit","session_id":"s3","collapse_id":"c1","summary_uuid":"sum1","summary_content":"collapsed","summary":"short","first_archived_uuid":"u1","last_archived_uuid":"a1"}`,
 		`{"type":"marble-origami-commit","sessionID":"s4","collapseID":"c2","summaryID":"sum2","content":"upper collapsed","firstArchivedID":"u2","lastArchivedID":"a2"}`,
+		`{"type":"marble-origami-commit","sessionID":505,"collapseID":5001,"summaryID":5002,"content":"numeric collapsed","firstArchivedID":5003,"lastArchivedID":5004}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":42}`,
 		`{"type":"marble_origami_snapshot","session_id":"s3","armed":true,"last_spawn_tokens":64}`,
 	})
@@ -716,7 +717,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := transcript.ContentReplacements["s9"]; len(got) != 1 || got[0].Kind != "tool-result" || got[0].ToolUseID != "toolu_9" || got[0].BlockID != "block_9" || got[0].OriginalHash != "hash_9" || got[0].Replacement != "record alias stub" {
 		t.Fatalf("record alias content replacements = %#v", got)
 	}
-	if len(transcript.ContextCollapseCommits) != 2 || transcript.ContextCollapseCommits[0].CollapseID != "c1" || transcript.ContextCollapseCommits[0].SummaryUUID != "sum1" || transcript.ContextCollapseCommits[1].CollapseID != "c2" || transcript.ContextCollapseCommits[1].SummaryUUID != "sum2" || transcript.ContextCollapseCommits[1].FirstArchivedUUID != "u2" {
+	if len(transcript.ContextCollapseCommits) != 3 || transcript.ContextCollapseCommits[0].CollapseID != "c1" || transcript.ContextCollapseCommits[0].SummaryUUID != "sum1" || transcript.ContextCollapseCommits[1].CollapseID != "c2" || transcript.ContextCollapseCommits[1].SummaryUUID != "sum2" || transcript.ContextCollapseCommits[1].FirstArchivedUUID != "u2" || transcript.ContextCollapseCommits[2].SessionID != "505" || transcript.ContextCollapseCommits[2].CollapseID != "5001" || transcript.ContextCollapseCommits[2].SummaryUUID != "5002" || transcript.ContextCollapseCommits[2].FirstArchivedUUID != "5003" || transcript.ContextCollapseCommits[2].LastArchivedUUID != "5004" {
 		t.Fatalf("collapse commit = %#v", transcript.ContextCollapseCommits)
 	}
 	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "s3" || transcript.ContextCollapseSnapshot.LastSpawnTokens != 64 {
@@ -789,7 +790,7 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	if got := metadata.ContentReplacements["s9"]; len(got) != 1 || got[0].Kind != "tool-result" || got[0].ToolUseID != "toolu_9" || got[0].BlockID != "block_9" || got[0].OriginalHash != "hash_9" || got[0].Replacement != "record alias stub" {
 		t.Fatalf("metadata record alias replacements = %#v", got)
 	}
-	if len(metadata.ContextCollapseCommits) != 2 || metadata.ContextCollapseCommits[0].CollapseID != "c1" || metadata.ContextCollapseCommits[0].SummaryUUID != "sum1" || metadata.ContextCollapseCommits[1].CollapseID != "c2" || metadata.ContextCollapseCommits[1].SummaryUUID != "sum2" || metadata.ContextCollapseCommits[1].FirstArchivedUUID != "u2" {
+	if len(metadata.ContextCollapseCommits) != 3 || metadata.ContextCollapseCommits[0].CollapseID != "c1" || metadata.ContextCollapseCommits[0].SummaryUUID != "sum1" || metadata.ContextCollapseCommits[1].CollapseID != "c2" || metadata.ContextCollapseCommits[1].SummaryUUID != "sum2" || metadata.ContextCollapseCommits[1].FirstArchivedUUID != "u2" || metadata.ContextCollapseCommits[2].SessionID != "505" || metadata.ContextCollapseCommits[2].CollapseID != "5001" || metadata.ContextCollapseCommits[2].SummaryUUID != "5002" || metadata.ContextCollapseCommits[2].FirstArchivedUUID != "5003" || metadata.ContextCollapseCommits[2].LastArchivedUUID != "5004" {
 		t.Fatalf("metadata collapse commit = %#v", metadata.ContextCollapseCommits)
 	}
 	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.SessionID != "s3" || metadata.ContextCollapseSnapshot.LastSpawnTokens != 64 {

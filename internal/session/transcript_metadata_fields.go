@@ -332,9 +332,7 @@ func parseSpeculationAcceptMetadata(line []byte) (SpeculationAcceptEntry, bool) 
 
 func parseContextCollapseCommitMetadata(line []byte) (ContextCollapseCommitEntry, bool) {
 	var entry ContextCollapseCommitEntry
-	if err := json.Unmarshal(line, &entry); err != nil {
-		return ContextCollapseCommitEntry{}, false
-	}
+	_ = json.Unmarshal(line, &entry)
 	fields, err := parseTranscriptMetadataFields(line)
 	if err != nil {
 		return ContextCollapseCommitEntry{}, false
@@ -343,19 +341,19 @@ func parseContextCollapseCommitMetadata(line []byte) (ContextCollapseCommitEntry
 		entry.SessionID = fields.sessionIDValue()
 	}
 	if entry.CollapseID == "" {
-		entry.CollapseID = fields.stringValue("collapseId", "collapseID", "collapse_id", "id")
+		entry.CollapseID = string(fields.idValue("collapseId", "collapseID", "collapse_id", "id"))
 	}
 	if entry.SummaryUUID == "" {
-		entry.SummaryUUID = fields.stringValue("summaryUuid", "summaryUUID", "summary_uuid", "summaryId", "summaryID", "summary_id")
+		entry.SummaryUUID = string(fields.idValue("summaryUuid", "summaryUUID", "summary_uuid", "summaryId", "summaryID", "summary_id"))
 	}
 	if entry.SummaryContent == "" {
 		entry.SummaryContent = fields.stringValue("summaryContent", "summary_content", "content")
 	}
 	if entry.FirstArchivedUUID == "" {
-		entry.FirstArchivedUUID = fields.stringValue("firstArchivedUuid", "firstArchivedUUID", "first_archived_uuid", "firstArchivedId", "firstArchivedID", "first_archived_id")
+		entry.FirstArchivedUUID = string(fields.idValue("firstArchivedUuid", "firstArchivedUUID", "first_archived_uuid", "firstArchivedId", "firstArchivedID", "first_archived_id"))
 	}
 	if entry.LastArchivedUUID == "" {
-		entry.LastArchivedUUID = fields.stringValue("lastArchivedUuid", "lastArchivedUUID", "last_archived_uuid", "lastArchivedId", "lastArchivedID", "last_archived_id")
+		entry.LastArchivedUUID = string(fields.idValue("lastArchivedUuid", "lastArchivedUUID", "last_archived_uuid", "lastArchivedId", "lastArchivedID", "last_archived_id"))
 	}
 	return entry, true
 }
