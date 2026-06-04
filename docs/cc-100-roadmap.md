@@ -488,6 +488,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：remote history 普通事件数组现在也会解包元素级 `event`/`record`/`entry`/`item`/`resource`/`value` 以及无事件本体字段时的 `data`/`payload`/`body` wrapper，并用元素 `cursor` 作为事件 ID fallback，覆盖非 GraphQL edges 的 wrapper item 响应。
 
+本轮补充：remote history 普通事件数组现在也接受 JSON:API/resource-style 元素，事件 payload 可放在 `attributes` 或 `properties` 里，并使用外层 resource `id` 作为 SDK event ID fallback。
+
 本轮补充：remote history event-list 字段现在接受 keyed event map，例如 `events: {"evt_1": {...}}`，会按 key 稳定排序并在事件缺 ID 时用 map key 作为 fallback event ID。
 
 本轮补充：contract content block `type` 解码现在会归一化 `toolUse`/`tool-result`/`cacheEdits`/`inputImage`/`chain-of-thought` 等 camel/kebab/compact 别名，transcript resume 可保留为规范 block type。

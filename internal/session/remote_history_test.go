@@ -888,6 +888,54 @@ func TestFetchRemoteHistoryAcceptsWrappedEventArrayItems(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsResourceAttributeEvents(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{
+				"data": [
+					{"id":"evt_attr_1","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"latest"}},
+					{"id":"evt_attr_2","type":"session-events","attributes":{"event_type":"assistant","session_id":"s","parentMessageID":"evt_attr_1","createdAt":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}}
+				],
+				"links": {"prev": "/v1/sessions/s/events?before_id=evt_attr_2"}
+			}`))
+		case "evt_attr_2":
+			_, _ = w.Write([]byte(`{
+				"data": [
+					{"id":"evt_attr_3","type":"session-events","properties":{"role":"user","sessionId":"s","createdAt":"2026-01-01T00:00:03Z","message":{"type":"user","content":[{"type":"text","text":"older"}]}}}
+				]
+			}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 3 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_attr_1" || events.Events[0].Status != "latest" || events.Events[0].SessionID != "s" {
+		t.Fatalf("status resource event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_attr_2" || events.Events[1].Type != contracts.SDKEventAssistant || events.Events[1].Message == nil || len(events.Events[1].Message.Content) != 1 || events.Events[1].Message.Content[0].Text != "hello" {
+		t.Fatalf("assistant resource event = %#v", events.Events[1])
+	}
+	if events.Events[2].ID != "evt_attr_3" || events.Events[2].Type != contracts.SDKEventUser || events.Events[2].Message == nil || len(events.Events[2].Message.Content) != 1 || events.Events[2].Message.Content[0].Text != "older" {
+		t.Fatalf("properties resource event = %#v", events.Events[2])
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_attr_2" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsKeyedEventMaps(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

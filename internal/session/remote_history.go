@@ -742,11 +742,13 @@ func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessag
 		return contracts.SDKEvent{}, nil
 	}
 	cursor := ""
+	resourceID := ""
 	rawEvent := data
 	if data[0] == '{' {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(data, &fields); err == nil {
 			cursor = remoteHistoryStringField(fields, "cursor")
+			resourceID = remoteHistoryStringField(fields, "id", "event_id", "eventId", "uuid")
 			if nested := remoteHistoryWrappedEventRaw(fields); nested != nil {
 				rawEvent = nested
 			}
@@ -757,16 +759,21 @@ func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessag
 		return contracts.SDKEvent{}, fmt.Errorf("%s[%d]: %w", name, index, err)
 	}
 	if event.ID == "" {
-		event.ID = contracts.ID(cursor)
+		event.ID = contracts.ID(firstNonEmpty(resourceID, cursor))
 	}
 	return event, nil
 }
 
 func remoteHistoryWrappedEventRaw(fields map[string]json.RawMessage) json.RawMessage {
+	if remoteHistoryRecognizedEventType(fields) == "" {
+		if nested := firstObjectRawField(fields, "attributes", "properties"); nested != nil {
+			return nested
+		}
+	}
 	if remoteHistoryHasDirectEventFields(fields) {
 		return nil
 	}
-	return firstObjectRawField(fields, "node", "event", "record", "entry", "item", "resource", "value", "data", "payload", "body", "result", "response", "output")
+	return firstObjectRawField(fields, "node", "event", "record", "entry", "item", "resource", "value", "attributes", "properties", "data", "payload", "body", "result", "response", "output")
 }
 
 func remoteHistoryHasDirectEventFields(fields map[string]json.RawMessage) bool {
