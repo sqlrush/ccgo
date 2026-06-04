@@ -84,6 +84,7 @@ const (
 	DECModeBackarrowKey       = 67
 	DECModeLeftRightMargin    = 69
 	DECModeNoClearOnColumn    = 95
+	DECModeAltScreenSwitching = 1046
 	DECModeAltScreenBuffer    = 1047
 	DECModeSaveRestoreCursor  = 1048
 	DECModeAltScreenClear     = 1049
@@ -257,6 +258,7 @@ const (
 	CSIModeActionFocusEvents       CSIModeActionType = "focusEvents"
 	CSIModeActionAlternateScroll   CSIModeActionType = "alternateScroll"
 	CSIModeActionSynchronized      CSIModeActionType = "synchronizedOutput"
+	CSIModeActionAltScreenSwitch   CSIModeActionType = "alternateScreenSwitching"
 )
 
 type CSIMouseTrackingMode string
@@ -615,6 +617,8 @@ func csiPrivateModeAction(mode int, enabled bool) (CSIAction, bool) {
 			cursorType = CSICursorActionShow
 		}
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: cursorType}}, true
+	case DECModeAltScreenSwitching:
+		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAltScreenSwitch, Enabled: enabled}}, true
 	case DECModeAltScreen, DECModeAltScreenBuffer, DECModeAltScreenClear:
 		return CSIAction{Type: CSIActionMode, Mode: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: enabled}}, true
 	case DECModeApplicationKeypad:

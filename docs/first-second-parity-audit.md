@@ -254,7 +254,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts base/unmodified sequences such as `CSI 97u` and `CSI 13;1u`, mapping printable runes plus Enter, Tab, Esc, and Backspace instead of treating ordinary extended-key reports as unknown.
 - `internal/tui`: terminal CSI parsing now emits report actions for DA/device attributes queries such as `CSI c`, `CSI >c`, and `CSI =c`, preserving the private marker and code through the terminal parser dispatcher.
 - `internal/tui`: terminal CSI parsing now accepts ECMA/xterm cursor alias final bytes `CSI a`, `CSI e`, and `CSI \`` as cursor-forward, cursor-down, and cursor-column actions.
-- `internal/tui`: terminal CSI parsing now accepts DEC private mode `?1047h/l` alternate-screen buffer and `?1048h/l` save/restore cursor variants using the existing mode/cursor action surface.
+- `internal/tui`: terminal CSI parsing now accepts DEC private mode `?1046h/l` alternate-screen switching, `?1047h/l` alternate-screen buffer, and `?1048h/l` save/restore cursor variants using distinct mode/cursor action surfaces.
 - `internal/tui`: terminal CSI parsing now emits report actions for DECREQTPARM terminal-parameters queries such as `CSI x`, preserving code and private marker fields.
 - `internal/tui`: terminal CSI parsing now emits report actions for xterm window manipulation/report queries such as `CSI 14t` and `CSI 18t`, preserving code and private marker fields.
 - `internal/tui`: terminal CSI parsing now emits cursor actions for TBC tab-clear sequences such as `CSI g` and `CSI 3g`, preserving the clear-current/all code.

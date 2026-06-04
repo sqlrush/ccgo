@@ -178,7 +178,7 @@ M7 补充：terminal CSI parser 现在把 DA/device attributes (`CSI c`、`CSI >
 
 M7 补充：terminal CSI parser 现在接受 ECMA/xterm cursor alias final bytes：`CSI a` 映射 cursor-forward、`CSI e` 映射 cursor-down、`CSI \`` 映射 cursor-column，避免常见终端输出别名落入 unknown。
 
-M7 补充：terminal CSI parser 现在接受 DEC private mode `?1047h/l` alternate-screen buffer 和 `?1048h/l` save/restore cursor，补齐常见 alternate-screen lifecycle 序列变体。
+M7 补充：terminal CSI parser 现在接受 DEC private mode `?1046h/l` alternate-screen switching mode、`?1047h/l` alternate-screen buffer 和 `?1048h/l` save/restore cursor，补齐常见 alternate-screen lifecycle 序列变体。
 
 M7 补充：terminal CSI parser 现在把 DECREQTPARM terminal-parameters (`CSI x`) 解析成 report action，保留 code 和 private marker，避免终端参数查询序列落入 generic unknown。
 
@@ -563,6 +563,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：terminal CSI parser 现在也把 DEC `?1001h/l` highlight、`?1005h/l` UTF-8 mouse mode 和 `?1015h/l` urxvt numeric mouse mode 解析成 mouseTracking action，和输入侧 numeric mouse 兼容面闭环。
 
 本轮补充：terminal CSI parser 现在把 xterm `?1007h/l` alternate scroll mode 解析成独立 mode action，避免 alternate-screen wheel 兼容序列落入 unknown。
+
+本轮补充：terminal CSI parser 现在把 DEC `?1046h/l` alternate-screen switching mode 解析成独立 `alternateScreenSwitching` action，和 `?1047/?1049` 的实际 alternate-screen buffer 切换区分开。
 
 本轮补充：terminal CSI parser 现在把 DEC `?2026h/l` synchronized output mode 解析成 mode action，和 renderer/snapshot 的 BSU/ESU 包裹路径闭环。
 

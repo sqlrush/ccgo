@@ -3780,6 +3780,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: "\x1b[?95l", want: CSIModeAction{Type: CSIModeActionNoClearOnColumn, Enabled: false}},
 		{seq: EnterAlternateScreen, want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},
 		{seq: "\x1b[?47l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
+		{seq: "\x1b[?1046h", want: CSIModeAction{Type: CSIModeActionAltScreenSwitch, Enabled: true}},
+		{seq: "\x1b[?1046l", want: CSIModeAction{Type: CSIModeActionAltScreenSwitch, Enabled: false}},
 		{seq: "\x1b[?1047h", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: true}},
 		{seq: "\x1b[?1047l", want: CSIModeAction{Type: CSIModeActionAlternateScreen, Enabled: false}},
 		{seq: EnableBracketedPaste, want: CSIModeAction{Type: CSIModeActionBracketedPaste, Enabled: true}},
