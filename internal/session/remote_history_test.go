@@ -364,6 +364,40 @@ func TestFetchRemoteHistoryAcceptsTruncatedPaginationAliases(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsKeysetCursorLinkQueries(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"links":{"older":"/v1/sessions/s/events?lastEvaluatedKey=evt_link"}}`))
+		case "evt_link":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":{"next":"/v1/sessions/s/events?nextKey=evt_next_key"}}`))
+		case "evt_next_key":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}],"hasMoreResults":false}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 3 || len(events.Events) != 3 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].Status != "latest" || events.Events[1].Status != "older" || events.Events[2].Status != "oldest" {
+		t.Fatalf("events = %#v", events.Events)
+	}
+	if len(seen) != 3 || seen[1].Get("before_id") != "evt_link" || seen[2].Get("before_id") != "evt_next_key" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsWrappedDataPageFields(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
