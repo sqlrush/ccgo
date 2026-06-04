@@ -4406,13 +4406,36 @@ func TestRunInteractionScriptAcceptsStructuredMouse(t *testing.T) {
 	}
 }
 
+func TestScriptMouseAcceptsCoordinateAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "page camel", raw: `{"button":0,"pageX":13,"pageY":5}`},
+		{name: "offset snake", raw: `{"button":0,"offset_x":13,"offset_y":5}`},
+		{name: "viewport camel", raw: `{"button":0,"viewportX":13,"viewportY":5}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mouse ScriptMouse
+			if err := json.Unmarshal([]byte(tc.raw), &mouse); err != nil {
+				t.Fatal(err)
+			}
+			if mouse.X != 13 || mouse.Y != 5 {
+				t.Fatalf("mouse = %#v", mouse)
+			}
+		})
+	}
+}
+
 func TestRunInteractionScriptAcceptsMouseFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_1","kind":"permission"}},
 		{"mouse_event":{"buttonMask":0,"clientX":13,"clientY":5,"isRelease":false},"expectEvent":{"event":"dialog_action","payload":"Deny","dialogId":"perm_1","dialogKind":"permission"}},
 		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_2","kind":"permission"}},
 		{"mouse":{"btn":0,"mouse_x":13,"mouse_y":5,"mouseUp":true},"expectNoEvent":true,"expectDialog":{"visible":true,"dialogId":"perm_2"}},
-		{"mouse":{"code":0,"screenX":13,"screenY":5,"releaseEvent":false},"expectEvent":{"type":"dialog_action","value":"Deny","dialog_id":"perm_2","dialog_kind":"permission"}}
+		{"mouse":{"code":0,"screenX":13,"screenY":5,"releaseEvent":false},"expectEvent":{"type":"dialog_action","value":"Deny","dialog_id":"perm_2","dialog_kind":"permission"}},
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_3","kind":"permission"}},
+		{"mouse_event":{"button":0,"pageX":13,"pageY":5,"released":false},"expectEvent":{"type":"dialog_action","value":"Deny","dialog_id":"perm_3","dialog_kind":"permission"}}
 	]`))
 	if err != nil {
 		t.Fatal(err)
@@ -4422,9 +4445,10 @@ func TestRunInteractionScriptAcceptsMouseFieldAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 2 ||
+	if len(result.Events) != 3 ||
 		result.Events[0].Type != ScreenEventDialogAction || result.Events[0].Value != "Deny" || result.Events[0].DialogID != "perm_1" ||
-		result.Events[1].Type != ScreenEventDialogAction || result.Events[1].Value != "Deny" || result.Events[1].DialogID != "perm_2" {
+		result.Events[1].Type != ScreenEventDialogAction || result.Events[1].Value != "Deny" || result.Events[1].DialogID != "perm_2" ||
+		result.Events[2].Type != ScreenEventDialogAction || result.Events[2].Value != "Deny" || result.Events[2].DialogID != "perm_3" {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }

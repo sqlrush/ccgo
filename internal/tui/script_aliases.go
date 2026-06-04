@@ -942,10 +942,10 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	if button := intPtrJSONField(fields, "button_code", "buttonCode", "button_mask", "buttonMask", "mouse_button", "mouseButton", "button", "btn", "code", "mask"); button != nil {
 		mouse.Button = *button
 	}
-	if x := intPtrJSONField(fields, "column", "col", "mouse_x", "mouseX", "client_x", "clientX", "screen_x", "screenX"); x != nil {
+	if x := intPtrJSONField(fields, "column", "col", "mouse_x", "mouseX", "client_x", "clientX", "screen_x", "screenX", "page_x", "pageX", "offset_x", "offsetX", "viewport_x", "viewportX"); x != nil {
 		mouse.X = *x
 	}
-	if y := intPtrJSONField(fields, "row", "line", "mouse_y", "mouseY", "client_y", "clientY", "screen_y", "screenY"); y != nil {
+	if y := intPtrJSONField(fields, "row", "line", "mouse_y", "mouseY", "client_y", "clientY", "screen_y", "screenY", "page_y", "pageY", "offset_y", "offsetY", "viewport_y", "viewportY"); y != nil {
 		mouse.Y = *y
 	}
 	if release := boolPtrJSONField(fields, "released", "is_release", "isRelease", "mouse_release", "mouseRelease", "mouse_up", "mouseUp", "up", "release_event", "releaseEvent", "released_event", "releasedEvent"); release != nil {
