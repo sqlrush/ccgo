@@ -286,7 +286,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。
 - 本轮补充：permission runtime 会把 `Reject`/`deny`/`decline`/`disallow`/`no` 等 permission action 归一为 denied 结果，把 `Cancel`/`abort` 归一为 cancelled 结果，并让 scripted dialog-result status 断言接受 `rejected`/`approved` 等状态别名。
 - 本轮补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
-- 本轮补充：scripted runtime 的 permission/task payload 现在会递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge`/`node` 等 JSON:API/GraphQL wrapper；resource/node 顶层 ID 会回填到内层 permission/task，并避免仅因 wrapper 顶层 ID 生成半空 runtime 对象。
+- 本轮补充：scripted runtime 的 permission/task payload 现在会递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge`/`node`、`included`/`collection`/`list`/`values` 等 JSON:API/GraphQL wrapper；resource/node 顶层 ID 会回填到内层 permission/task，带明确非 permission/task `type` 的 included resource 会被跳过，并避免仅因 wrapper 顶层 ID 生成半空 runtime 对象。
 - 本轮补充：scripted runtime mutation 的 `removeTask`/`cancelPermission`/`cancelTasks` 现在也会从 wrapped `value`/`payload`/`data`/`resource`/`edge.node` 中递归读取 task/permission ID 和 cancellation detail，兼容 resource/action fixture 直接驱动 runtime mutation。
 - 本轮补充：scripted runtime mutation 的直接 alias 字段现在也接受 object payload，例如 `removeTask: {resource:{id}}`、`cancelPermission: {edge:{node:{id}}}` 和 `cancelTasks: {resource:{attributes:{reasonText}}}` 不再因 string/bool 强类型字段提前解析失败。
 - 本轮补充：scripted runtime action 的 boolean payload 现在同样递归解包 `resource`/`attributes`/`edge.node`/`attrs`，`cancelTasks`/`openTasks` 等动作可用 wrapped `enabled:false`/`open:false` 明确禁用，避免 wrapper object 默认 fallback 成 true。
@@ -303,7 +303,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：keybinding config 和脚本 named-key 输入现在接受 `backtab`/`back-tab`/`btab` 等 Shift-Tab terminfo/fixture 别名，并映射到既有 focus-previous key surface。
 - 本轮补充：keybinding JSON loader 现在递归解包 `data`/`payload`/`settings`/`config`/`keyboard`/`keymap` 等外层 wrapper，嵌套 preference export 中的 `bindings`/`shortcuts` 不需要手工扁平化。
 - 本轮补充：keybinding JSON loader 现在也递归解包 JSON:API/resource-style `resource`/`attributes`/`properties`/`attrs` wrapper，API/preferences envelope 内的 `keybindings`/`keymap` 可直接加载。
-- 本轮补充：keybinding JSON loader 现在把 `data`/`payload`/`body`/`result`/`response`、`resources`、`nodes` 和 `items` 下的数组视为 binding list，数组元素也可直接使用 JSON:API/resource-style `resource`/`node`/`attributes`/`properties` wrapper。
+- 本轮补充：keybinding JSON loader 现在把 `data`/`payload`/`body`/`result`/`response`、`resources`、`included`、`collection`/`list`/`children`/`values`、`nodes` 和 `items` 下的数组视为 binding list，数组元素也可直接使用 JSON:API/resource-style `resource`/`node`/`attributes`/`properties` wrapper。
 - 本轮补充：keybinding JSON loader 现在也接受 GraphQL connection 风格的 `edges` binding list，binding item 可用 `edges[].node` 或 `edge.node` wrapper，外层可递归解包 `viewer`/`node`/`*Connection` wrapper。
 - 本轮补充：keybinding JSON loader 现在接受 `keymap`/`keymaps`、`keyboardShortcuts`、`hotkeys`、`userKeybindings`、`customKeybindings` 等集合字段别名，并同时支持直接 object-map 和嵌套 `bindings` wrapper。
 - 本轮补充：interaction script 的 per-step keybinding mutation 复用同一套 collection alias、object-map 和 resource wrapper 解析，脚本步骤可直接使用 `keymap`、`keyboardShortcuts`、`hotkeys`、`keyboard`、`preferences` 或 `keybindingConfig` 临时改键位。
@@ -418,7 +418,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script loader 现在也接受 JSON:API/resource-style `resource`/`attributes`/`properties` wrapper，可从 attributes/properties 内继续解析 `steps`/`records`/`timeline`，减少官方 fixture API envelope 的改写成本。
 - 本轮补充：interaction script 的单个 step item 现在也接受 JSON:API/resource-style `resource`/`node`/`attributes`/`properties` wrapper，数组元素和 JSONL 行可直接使用 API fixture 的 step resource 形态。
 - 本轮补充：interaction script loader 现在把 `data`/`payload`/`body`/`result`/`response`、`resources` 和 `nodes` 中的数组也视为 step list，可直接加载 API/GraphQL collection envelope，同时保留单步 `data` 载荷兼容。
-- 本轮补充：interaction script loader 现在接受 GraphQL connection 风格的 `edges` step list，数组元素可用 `edges[].node` 或 `edge.node` wrapper，外层也可递归解包 `viewer`/`node`/`*Connection` wrapper 来加载录制脚本。
+- 本轮补充：interaction script loader 现在接受 GraphQL connection 风格的 `edges` step list 和 JSON:API/HAL collection 风格的 `included`、`collection`/`list`/`children`/`values` step list，数组元素可用 `edges[].node`、`edge.node`、`resource.attributes` 或 `resource.properties` wrapper，外层也可递归解包 `viewer`/`node`/`*Connection` wrapper 来加载录制脚本。
 - 本轮补充：ANSI snapshot corpus 比对支持 `.ansi` only baseline fallback，strict stale-baseline 检查同时覆盖 `.txt` 和 `.ansi`。
 - 本轮补充：interaction script JSONL loader 单行上限提升到 50MiB，和 transcript/session 大记录读取容忍度对齐，覆盖大型 paste、image metadata 或 snapshot fixture 脚本行。
 - 本轮补充：terminal lifecycle 增加可选 extended-key mode，按官方 `CSI >1u`/`CSI >4;2m` 启用 kitty keyboard protocol 和 modifyOtherKeys，退出时重置 modifyOtherKeys 并 pop kitty stack，reassert 时先 pop 再 push 以避免长期会话 stack 泄漏。

@@ -75,7 +75,7 @@ var keyBindingOuterWrapperFields = []string{
 	"settings", "config", "configuration", "keyboard", "keymap", "preferences", "userPreferences",
 }
 
-var keyBindingArrayWrapperFields = []string{"data", "payload", "body", "result", "response", "resources", "nodes", "items", "edges"}
+var keyBindingArrayWrapperFields = []string{"data", "payload", "body", "result", "response", "resources", "included", "collection", "collections", "list", "lists", "children", "values", "nodes", "items", "edges"}
 
 func parseKeyBindingWrapper(data []byte) ([]BindingSpec, bool, error) {
 	return parseKeyBindingWrapperDepth(data, 0)

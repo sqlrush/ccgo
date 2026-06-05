@@ -469,6 +469,13 @@ func scriptMessagePayloadWrapperNames() []string {
 		"output",
 		"body",
 		"resources",
+		"included",
+		"collection",
+		"collections",
+		"list",
+		"lists",
+		"children",
+		"values",
 		"nodes",
 		"edges",
 		"edge",
@@ -1783,6 +1790,9 @@ func scriptPermissionRequestFromJSON(raw json.RawMessage, depth int) (*Permissio
 		}
 		return nil, false
 	}
+	if resourceType := normalizedScriptRuntimeResourceType(fields); resourceType != "" && !scriptPermissionResourceType(resourceType) {
+		return nil, false
+	}
 	if hasRequest && !scriptPermissionRequestShouldTryWrappers(fields, request) {
 		return &request, true
 	}
@@ -1840,6 +1850,9 @@ func scriptTaskStatusFromJSON(raw json.RawMessage, depth int) (*TaskStatus, bool
 		if hasTask {
 			return &task, true
 		}
+		return nil, false
+	}
+	if resourceType := normalizedScriptRuntimeResourceType(fields); resourceType != "" && !scriptTaskResourceType(resourceType) {
 		return nil, false
 	}
 	if hasTask && !scriptTaskStatusShouldTryWrappers(fields, task) {
@@ -1914,6 +1927,14 @@ func scriptRuntimePayloadWrapperNames(names ...string) []string {
 		"entry",
 		"item",
 		"items",
+		"resources",
+		"included",
+		"collection",
+		"collections",
+		"list",
+		"lists",
+		"children",
+		"values",
 		"records",
 		"entries",
 		"nodes",
@@ -1921,6 +1942,29 @@ func scriptRuntimePayloadWrapperNames(names ...string) []string {
 		"results",
 	}
 	return append(wrappers, names...)
+}
+
+func normalizedScriptRuntimeResourceType(fields map[string]json.RawMessage) string {
+	value := stringJSONField(fields, "type", "resource_type", "resourceType", "kind")
+	value = strings.TrimSpace(strings.ToLower(value))
+	value = strings.ReplaceAll(value, "-", "")
+	value = strings.ReplaceAll(value, "_", "")
+	value = strings.ReplaceAll(value, " ", "")
+	return value
+}
+
+func scriptPermissionResourceType(resourceType string) bool {
+	return strings.Contains(resourceType, "permission") ||
+		strings.Contains(resourceType, "approval") ||
+		strings.Contains(resourceType, "allowance") ||
+		strings.Contains(resourceType, "toolrequest")
+}
+
+func scriptTaskResourceType(resourceType string) bool {
+	return strings.Contains(resourceType, "task") ||
+		strings.Contains(resourceType, "job") ||
+		strings.Contains(resourceType, "run") ||
+		strings.Contains(resourceType, "status")
 }
 
 func scriptDialogActionField(fields map[string]json.RawMessage) *Dialog {

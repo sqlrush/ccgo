@@ -81,8 +81,15 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		"events",
 		"entries",
 		"items",
+		"included",
 		"actions",
 		"timeline",
+		"collection",
+		"collections",
+		"list",
+		"lists",
+		"children",
+		"values",
 		"edges",
 	} {
 		value, ok := raw[name]
@@ -103,6 +110,14 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		"response",
 		"resources",
 		"nodes",
+		"items",
+		"included",
+		"collection",
+		"collections",
+		"list",
+		"lists",
+		"children",
+		"values",
 		"edges",
 	} {
 		value, ok := raw[name]

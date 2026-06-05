@@ -1700,6 +1700,14 @@ func TestParseKeyBindingSpecsAcceptsAPIArrayEnvelopes(t *testing.T) {
 				]
 			}
 		}`,
+		"payload_included": `{
+			"payload": {
+				"included": [
+					{"resource": {"id": "kb_1", "type": "keybinding", "attributes": {"shortcutKey": "ctrl-r", "commandName": "pageDown"}}},
+					{"resource": {"id": "kb_2", "type": "keybinding", "properties": {"keys": ["ctrl-x", "ctrl-k"], "command": "none"}}}
+				]
+			}
+		}`,
 		"top_level_edges": `{
 			"edges": [
 				{"node": {"id": "kb_1", "type": "keybinding", "properties": {"shortcutKey": "ctrl-r", "commandName": "pageDown"}}},
@@ -7360,6 +7368,47 @@ func TestRunDialogRuntimeScriptAcceptsWrappedRuntimePayloads(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsIncludedRuntimePayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"requestPermission": {
+				"included": [
+					{"type": "metadata", "attributes": {"name": "fixture"}},
+					{"resource": {"type": "permission-request", "attributes": {"requestID": "perm_included", "toolName": "Bash", "resourcePath": "/tmp/project", "reasonText": "Need shell.", "allowedActions": ["Allow", "Deny"]}}}
+				]
+			},
+			"expectDialog": {"active": true, "permissionID": "perm_included", "dialogKind": "permission", "actions": ["Allow", "Deny"]}
+		},
+		{
+			"cancelPermission": "perm_included",
+			"expectDialogResult": {"requestID": "perm_included", "state": "cancelled", "found": true}
+		},
+		{
+			"upsertTask": {
+				"collection": {
+					"values": [
+						{"type": "metadata", "attributes": {"name": "fixture"}},
+						{"resource": {"type": "task-status", "attributes": {"runId": "task_included", "displayName": "Index included payload", "phase": "in_progress", "message": "loading", "percentage": "55"}}}
+					]
+				}
+			},
+			"expectTasks": {"count": 1, "stateCounts": {"running": 1}, "contains": {"runID": "task_included", "status": "running", "progress": 55}}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(64, 10, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_included" || result.DialogResults[0].Status != DialogResultCancelled {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsRuntimeMutationArrayPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
@@ -8342,6 +8391,10 @@ func TestParseInteractionScriptAcceptsAPIArrayEnvelopes(t *testing.T) {
 			{"node":{"id":"step_1","type":"interaction-step","properties":{"action":"type","value":"audit"}}},
 			{"node":{"id":"step_2","type":"interaction-step","properties":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"audit"},"expectPrompt":{"empty":true}}}}
 		]}}`,
+		"collection_included": `{"data":{"collection":{"included":[
+			{"resource":{"id":"step_1","type":"interaction-step","attributes":{"action":"type","value":"included"}}},
+			{"resource":{"id":"step_2","type":"interaction-step","properties":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"included"},"expectPrompt":{"empty":true}}}}
+		]}}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			steps, err := ParseInteractionScript([]byte(script))
