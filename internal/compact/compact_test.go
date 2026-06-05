@@ -455,6 +455,72 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsContentBlockSummaryPayloads(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest  string
+		payload string
+		want    string
+	}{
+		{
+			digest: "summary-block",
+			payload: `{
+				"summary": {"type": "text", "text": "block summary"},
+				"digest": "summary-block",
+				"version": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "block summary",
+		},
+		{
+			digest: "summary-array",
+			payload: `{
+				"summary": [
+					{"type": "text", "text": "first summary"},
+					{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AA=="}},
+					{"type": "text", "text": "second summary"}
+				],
+				"cacheKey": "summary-array",
+				"cacheVersion": "microcompact.v1",
+				"cachedAt": 100
+			}`,
+			want: "first summary\nsecond summary",
+		},
+		{
+			digest: "response-content-blocks",
+			payload: `{
+				"response": {
+					"content": [
+						{"type": "text", "text": "response summary"},
+						"tail line"
+					],
+					"cacheDigest": "response-content-blocks",
+					"formatVersion": "microcompact.v1",
+					"createdAt": 100
+				}
+			}`,
+			want: "response summary\ntail line",
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsMetadataCacheAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {

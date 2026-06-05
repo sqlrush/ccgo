@@ -81,7 +81,7 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 
 func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.RawMessage, overwrite bool, includeSummary bool) error {
 	if includeSummary {
-		if value, ok, err := microStringJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "text", "value", "output"); err != nil {
+		if value, ok, err := microSummaryJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "text", "value", "output"); err != nil {
 			return err
 		} else if ok && (overwrite || result.Summary == "") {
 			result.Summary = value
@@ -496,6 +496,88 @@ func microStringJSONField(fields map[string]json.RawMessage, names ...string) (s
 			return "", false, err
 		}
 		return value, true, nil
+	}
+	return "", false, nil
+}
+
+func microSummaryJSONField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok || string(raw) == "null" {
+			continue
+		}
+		value, ok, err := microSummaryFromRaw(raw, name)
+		if err != nil {
+			return "", false, err
+		}
+		if ok {
+			return value, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func microSummaryFromRaw(raw json.RawMessage, field string) (string, bool, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return "", false, nil
+	}
+	var text string
+	if err := json.Unmarshal(trimmed, &text); err == nil {
+		return text, true, nil
+	}
+	switch trimmed[0] {
+	case '{':
+		var block contracts.ContentBlock
+		if err := json.Unmarshal(trimmed, &block); err != nil {
+			return "", false, err
+		}
+		if block.Type == contracts.ContentText && block.Text != "" {
+			return block.Text, true, nil
+		}
+		return "", false, fmt.Errorf("invalid summary field %q: expected text content block", field)
+	case '[':
+		var items []json.RawMessage
+		if err := json.Unmarshal(trimmed, &items); err != nil {
+			return "", false, err
+		}
+		parts := make([]string, 0, len(items))
+		for _, item := range items {
+			part, ok, err := microSummaryArrayItemFromRaw(item, field)
+			if err != nil {
+				return "", false, err
+			}
+			if ok {
+				parts = append(parts, part)
+			}
+		}
+		if len(parts) == 0 {
+			return "", false, fmt.Errorf("invalid summary field %q: expected at least one text item", field)
+		}
+		return strings.Join(parts, "\n"), true, nil
+	default:
+		return "", false, fmt.Errorf("invalid summary field %q", field)
+	}
+}
+
+func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bool, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return "", false, nil
+	}
+	var text string
+	if err := json.Unmarshal(trimmed, &text); err == nil {
+		return text, true, nil
+	}
+	if trimmed[0] != '{' {
+		return "", false, fmt.Errorf("invalid summary field %q", field)
+	}
+	var block contracts.ContentBlock
+	if err := json.Unmarshal(trimmed, &block); err != nil {
+		return "", false, err
+	}
+	if block.Type == contracts.ContentText && block.Text != "" {
+		return block.Text, true, nil
 	}
 	return "", false, nil
 }
