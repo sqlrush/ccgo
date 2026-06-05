@@ -606,6 +606,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script 的 direct expectation count alias 字段现在也递归解包 wrapper；`expectEventCount`、`expectTotalEventCount`、`expectDialogResultCount`、`expectTotalDialogResultCount` 可从 wrapped `value`/`count`/`total` 恢复计数断言，避免 direct expectation fixture 在 int decode 阶段失败。
 
+本轮补充：interaction script 的 UpperCamel step 字段现在也复用 raw/wrapper 解析；`UpsertTask`、`CancelAllTasks`、`OpenTasksDialog`、`ExpectScreen`、`ExpectTasks` 等 Go 默认字段名可直接接受 JSON:API/GraphQL-style wrapper，task status/expectation 的 ID/title/state/detail/progress 标量改为 raw-first 解码并继续接受数字字符串 progress。
+
 本轮补充：interaction script 的 direct expectation string-list alias 字段现在也递归解包 wrapper；`expectStatusContains`/`NotContains` 和 `expectSnapshotContains`/`NotContains` 可从 wrapped `value`/`values`/`contains`/`items` 恢复断言列表，避免 direct expectation fixture 在 list decode 阶段失败。
 
 本轮补充：interaction script 的 direct expectation collection alias 字段现在也递归解包 wrapper；`expectEvents`、`expectDialogResults` 可从 wrapped `events`/`results`/`items`/`nodes` 中恢复结构化断言列表，避免 wrapper collection fixture 被当成空对象断言。

@@ -658,7 +658,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(rawStepData, &rawFieldMap); err != nil {
 		return err
 	}
-	if request := permissionRequestJSONField(fieldMap, "request_permission", "requestPermission", "permission", "permission_request", "permissionRequest", "request"); request != nil {
+	if request := permissionRequestJSONField(fieldMap, "RequestPermission", "request_permission", "requestPermission", "permission", "permission_request", "permissionRequest", "request"); request != nil {
 		step.RequestPermission = request
 	}
 	if values := scriptNamedStringListField(rawFieldMap,
@@ -833,28 +833,28 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	} else if ok {
 		step.Keybindings = specs
 	}
-	if task := taskStatusJSONField(fieldMap, "upsert_task", "upsertTask", "task", "task_status", "taskStatus"); task != nil {
+	if task := taskStatusJSONField(fieldMap, "UpsertTask", "upsert_task", "upsertTask", "task", "task_status", "taskStatus"); task != nil {
 		step.UpsertTask = task
 	}
-	if step.RemoveTaskID == "" && scriptHasAnyJSONField(fieldMap, "remove_task_id", "removeTaskId", "removeTaskID", "remove_task", "removeTask", "delete_task", "deleteTask") {
-		step.RemoveTaskID = scriptActionIDField(fieldMap, "remove_task_id", "removeTaskId", "removeTaskID", "remove_task", "removeTask", "delete_task", "deleteTask", "task", "task_status", "taskStatus", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
+	if step.RemoveTaskID == "" && scriptHasAnyJSONField(fieldMap, "RemoveTaskID", "remove_task_id", "removeTaskId", "removeTaskID", "RemoveTask", "remove_task", "removeTask", "DeleteTask", "delete_task", "deleteTask") {
+		step.RemoveTaskID = scriptActionIDField(fieldMap, "RemoveTaskID", "remove_task_id", "removeTaskId", "removeTaskID", "RemoveTask", "remove_task", "removeTask", "DeleteTask", "delete_task", "deleteTask", "task", "task_status", "taskStatus", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "cancel_active_dialog", "cancelActiveDialog", "cancel_active", "cancelActive", "cancel_dialog", "cancelDialog", "close_dialog", "closeDialog"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "CancelActiveDialog", "cancel_active_dialog", "cancelActiveDialog", "CancelActive", "cancel_active", "cancelActive", "CancelDialog", "cancel_dialog", "cancelDialog", "CloseDialog", "close_dialog", "closeDialog"); ok {
 		step.CancelActiveDialog = value
 	}
-	if step.CancelPermissionID == "" && scriptHasAnyJSONField(fieldMap, "cancel_permission_id", "cancelPermissionId", "cancelPermissionID", "cancel_permission", "cancelPermission") {
-		step.CancelPermissionID = scriptActionIDField(fieldMap, "cancel_permission_id", "cancelPermissionId", "cancelPermissionID", "cancel_permission", "cancelPermission", "permission", "permission_request", "permissionRequest", "request", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
+	if step.CancelPermissionID == "" && scriptHasAnyJSONField(fieldMap, "CancelPermissionID", "cancel_permission_id", "cancelPermissionId", "cancelPermissionID", "CancelPermission", "cancel_permission", "cancelPermission") {
+		step.CancelPermissionID = scriptActionIDField(fieldMap, "CancelPermissionID", "cancel_permission_id", "cancelPermissionId", "cancelPermissionID", "CancelPermission", "cancel_permission", "cancelPermission", "permission", "permission_request", "permissionRequest", "request", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "cancel_all_permissions", "cancelAllPermissions", "cancel_permissions", "cancelPermissions"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "CancelAllPermissions", "cancel_all_permissions", "cancelAllPermissions", "CancelPermissions", "cancel_permissions", "cancelPermissions"); ok {
 		step.CancelAllPermissions = value
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "cancel_all_tasks", "cancelAllTasks", "cancel_tasks", "cancelTasks"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "CancelAllTasks", "cancel_all_tasks", "cancelAllTasks", "CancelTasks", "cancel_tasks", "cancelTasks"); ok {
 		step.CancelAllTasks = value
 	}
 	if step.CancelTasksDetail == "" {
-		step.CancelTasksDetail = scriptActionStringField(fieldMap, "cancel_all_tasks", "cancelAllTasks", "cancel_tasks", "cancelTasks", "cancel_tasks_detail", "cancelTasksDetail", "cancel_reason", "cancelReason", "reason", "reason_text", "reasonText", "detail", "message", "description", "body", "text", "status_text", "statusText")
+		step.CancelTasksDetail = scriptActionStringField(fieldMap, "CancelAllTasks", "cancel_all_tasks", "cancelAllTasks", "CancelTasks", "cancel_tasks", "cancelTasks", "CancelTasksDetail", "cancel_tasks_detail", "cancelTasksDetail", "CancelReason", "cancel_reason", "cancelReason", "reason", "reason_text", "reasonText", "detail", "message", "description", "body", "text", "status_text", "statusText")
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "open_tasks_dialog", "openTasksDialog", "open_tasks", "openTasks", "show_tasks", "showTasks"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "OpenTasksDialog", "open_tasks_dialog", "openTasksDialog", "OpenTasks", "open_tasks", "openTasks", "ShowTasks", "show_tasks", "showTasks"); ok {
 		step.OpenTasksDialog = value
 	}
 	if step.ResizeWidth <= 0 {
@@ -971,7 +971,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.Keys = append(step.Keys, scriptFocusKey(!value))
 	}
 	if events := scriptNamedEventListField(fieldMap,
-		[]string{"expect_event", "expectEvent"},
+		[]string{"ExpectEvent", "expect_event", "expectEvent"},
 		"event",
 		"expected_event",
 		"expectedEvent",
@@ -986,7 +986,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectEvent = &event
 	}
 	if events := scriptNamedEventListField(fieldMap,
-		[]string{"expect_events", "expectEvents"},
+		[]string{"ExpectEvents", "expect_events", "expectEvents"},
 		"events",
 		"event",
 		"expected_events",
@@ -999,11 +999,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	); len(events) > 0 {
 		step.ExpectEvents = events
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_event", "expectNoEvent"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "ExpectNoEvent", "expect_no_event", "expectNoEvent"); ok {
 		step.ExpectNoEvent = value
 	}
 	if count, ok := scriptNamedIntField(fieldMap,
-		[]string{"expect_event_count", "expectEventCount"},
+		[]string{"ExpectEventCount", "expect_event_count", "expectEventCount"},
 		"count",
 		"event_count",
 		"eventCount",
@@ -1013,7 +1013,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectEventCount = &count
 	}
 	if count, ok := scriptNamedIntField(fieldMap,
-		[]string{"expect_total_event_count", "expectTotalEventCount"},
+		[]string{"ExpectTotalEventCount", "expect_total_event_count", "expectTotalEventCount"},
 		"total",
 		"total_count",
 		"totalCount",
@@ -1025,7 +1025,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectTotalEventCount = &count
 	}
 	if results := scriptNamedDialogResultListField(fieldMap,
-		[]string{"expect_dialog_result", "expectDialogResult"},
+		[]string{"ExpectDialogResult", "expect_dialog_result", "expectDialogResult"},
 		"dialog_result",
 		"dialogResult",
 		"result",
@@ -1041,7 +1041,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectDialogResult = &result
 	}
 	if results := scriptNamedDialogResultListField(fieldMap,
-		[]string{"expect_dialog_results", "expectDialogResults"},
+		[]string{"ExpectDialogResults", "expect_dialog_results", "expectDialogResults"},
 		"dialog_results",
 		"dialogResults",
 		"results",
@@ -1055,11 +1055,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	); len(results) > 0 {
 		step.ExpectDialogResults = results
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_dialog_result", "expectNoDialogResult", "expect_no_dialog_results"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "ExpectNoDialogResult", "expect_no_dialog_result", "expectNoDialogResult", "ExpectNoDialogResults", "expect_no_dialog_results"); ok {
 		step.ExpectNoDialogResult = value
 	}
 	if count, ok := scriptNamedIntField(fieldMap,
-		[]string{"expect_dialog_result_count", "expectDialogResultCount"},
+		[]string{"ExpectDialogResultCount", "expect_dialog_result_count", "expectDialogResultCount"},
 		"count",
 		"dialog_result_count",
 		"dialogResultCount",
@@ -1071,7 +1071,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectDialogResultCount = &count
 	}
 	if count, ok := scriptNamedIntField(fieldMap,
-		[]string{"expect_total_dialog_result_count", "expectTotalDialogResultCount"},
+		[]string{"ExpectTotalDialogResultCount", "expect_total_dialog_result_count", "expectTotalDialogResultCount"},
 		"total",
 		"total_count",
 		"totalCount",
@@ -1085,7 +1085,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectTotalDialogResultCount = &count
 	}
 	if dialog := scriptNamedDialogExpectationField(fieldMap,
-		[]string{"expect_dialog", "expectDialog"},
+		[]string{"ExpectDialog", "expect_dialog", "expectDialog"},
 		"dialog",
 		"modal",
 		"expectation",
@@ -1096,7 +1096,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectDialog = dialog
 	}
 	if prompt := scriptNamedPromptExpectationField(fieldMap,
-		[]string{"expect_prompt", "expectPrompt"},
+		[]string{"ExpectPrompt", "expect_prompt", "expectPrompt"},
 		"prompt",
 		"expectation",
 		"expected",
@@ -1106,7 +1106,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectPrompt = prompt
 	}
 	if vim := scriptNamedVimExpectationField(fieldMap,
-		[]string{"expect_vim", "expectVim"},
+		[]string{"ExpectVim", "expect_vim", "expectVim"},
 		"vim",
 		"vim_state",
 		"vimState",
@@ -1118,7 +1118,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectVim = vim
 	}
 	if tasks := scriptNamedTasksExpectationField(fieldMap,
-		[]string{"expect_tasks", "expectTasks"},
+		[]string{"ExpectTasks", "expect_tasks", "expectTasks"},
 		"tasks",
 		"task_expectation",
 		"taskExpectation",
@@ -1130,7 +1130,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectTasks = tasks
 	}
 	if reverse := scriptNamedReverseSearchExpectationField(fieldMap,
-		[]string{"expect_reverse_search", "expectReverseSearch"},
+		[]string{"ExpectReverseSearch", "expect_reverse_search", "expectReverseSearch"},
 		"reverse_search",
 		"reverseSearch",
 		"search",
@@ -1142,7 +1142,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectReverseSearch = reverse
 	}
 	if viewport := scriptNamedViewportExpectationField(fieldMap,
-		[]string{"expect_viewport", "expectViewport"},
+		[]string{"ExpectViewport", "expect_viewport", "expectViewport"},
 		"viewport",
 		"view",
 		"expectation",
@@ -1153,7 +1153,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectViewport = viewport
 	}
 	if screen := scriptNamedScreenExpectationField(fieldMap,
-		[]string{"expect_screen", "expectScreen"},
+		[]string{"ExpectScreen", "expect_screen", "expectScreen"},
 		"screen",
 		"terminal",
 		"terminal_size",
@@ -1166,12 +1166,12 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	); screen != nil {
 		step.ExpectScreen = screen
 	}
-	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_focused", "expectFocused"); ok {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "ExpectFocused", "expect_focused", "expectFocused"); ok {
 		focused := value
 		step.ExpectFocused = &focused
 	}
 	if values := scriptNamedStringListField(fieldMap,
-		[]string{"expect_status_contains", "expectStatusContains"},
+		[]string{"ExpectStatusContains", "expect_status_contains", "expectStatusContains"},
 		"contains",
 		"status",
 		"text",
@@ -1184,7 +1184,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectStatusContains = values
 	}
 	if values := scriptNamedStringListField(fieldMap,
-		[]string{"expect_status_not_contains", "expectStatusNotContains"},
+		[]string{"ExpectStatusNotContains", "expect_status_not_contains", "expectStatusNotContains"},
 		"not_contains",
 		"notContains",
 		"contains",
@@ -1199,7 +1199,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectStatusNotContains = values
 	}
 	if values := scriptNamedStringListField(fieldMap,
-		[]string{"expect_snapshot_contains", "expectSnapshotContains"},
+		[]string{"ExpectSnapshotContains", "expect_snapshot_contains", "expectSnapshotContains"},
 		"contains",
 		"snapshot",
 		"text",
@@ -1212,7 +1212,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectSnapshotContains = values
 	}
 	if values := scriptNamedStringListField(fieldMap,
-		[]string{"expect_snapshot_not_contains", "expectSnapshotNotContains"},
+		[]string{"ExpectSnapshotNotContains", "expect_snapshot_not_contains", "expectSnapshotNotContains"},
 		"not_contains",
 		"notContains",
 		"contains",
@@ -3142,42 +3142,58 @@ func scriptStepHasFocusKey(step *ScriptStep) bool {
 
 func normalizeScriptStepJSON(data []byte) []byte {
 	data = normalizeStringFieldsToArray(data,
+		"Keys",
 		"keys",
 		"presses",
 		"key_presses",
 		"keyPresses",
 		"keypresses",
 		"shortcuts",
+		"ExpectStatusContains",
 		"expect_status_contains",
 		"expectStatusContains",
+		"ExpectStatusNotContains",
 		"expect_status_not_contains",
 		"expectStatusNotContains",
+		"ExpectSnapshotContains",
 		"expect_snapshot_contains",
 		"expectSnapshotContains",
+		"ExpectSnapshotNotContains",
 		"expect_snapshot_not_contains",
 		"expectSnapshotNotContains",
 	)
 	data = normalizeBoolFields(data,
+		"CancelActiveDialog",
 		"cancel_active_dialog",
 		"cancelActiveDialog",
+		"CancelActive",
 		"cancel_active",
 		"cancelActive",
+		"CancelDialog",
 		"cancel_dialog",
 		"cancelDialog",
+		"CloseDialog",
 		"close_dialog",
 		"closeDialog",
+		"CancelAllPermissions",
 		"cancel_all_permissions",
 		"cancelAllPermissions",
+		"CancelPermissions",
 		"cancel_permissions",
 		"cancelPermissions",
+		"CancelAllTasks",
 		"cancel_all_tasks",
 		"cancelAllTasks",
+		"CancelTasks",
 		"cancel_tasks",
 		"cancelTasks",
+		"OpenTasksDialog",
 		"open_tasks_dialog",
 		"openTasksDialog",
+		"OpenTasks",
 		"open_tasks",
 		"openTasks",
+		"ShowTasks",
 		"show_tasks",
 		"showTasks",
 		"focus",
@@ -3188,11 +3204,15 @@ func normalizeScriptStepJSON(data []byte) []byte {
 		"focusOut",
 		"blur",
 		"blurred",
+		"ExpectNoEvent",
 		"expect_no_event",
 		"expectNoEvent",
+		"ExpectNoDialogResult",
 		"expect_no_dialog_result",
 		"expectNoDialogResult",
+		"ExpectNoDialogResults",
 		"expect_no_dialog_results",
+		"ExpectFocused",
 		"expect_focused",
 		"expectFocused",
 	)
@@ -3257,12 +3277,69 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"keybindingSpecs",
 		"SnapshotName",
 		"snapshotName",
+		"snapshot_name",
 		"RequestPermission",
 		"requestPermission",
 		"request_permission",
 		"UpsertTask",
 		"upsertTask",
 		"upsert_task",
+		"RemoveTaskID",
+		"removeTaskID",
+		"removeTaskId",
+		"remove_task_id",
+		"RemoveTask",
+		"removeTask",
+		"remove_task",
+		"DeleteTask",
+		"deleteTask",
+		"delete_task",
+		"CancelActiveDialog",
+		"cancelActiveDialog",
+		"cancel_active_dialog",
+		"CancelActive",
+		"cancelActive",
+		"cancel_active",
+		"CancelDialog",
+		"cancelDialog",
+		"cancel_dialog",
+		"CloseDialog",
+		"closeDialog",
+		"close_dialog",
+		"CancelPermissionID",
+		"cancelPermissionID",
+		"cancelPermissionId",
+		"cancel_permission_id",
+		"CancelPermission",
+		"cancelPermission",
+		"cancel_permission",
+		"CancelAllPermissions",
+		"cancelAllPermissions",
+		"cancel_all_permissions",
+		"CancelPermissions",
+		"cancelPermissions",
+		"cancel_permissions",
+		"CancelAllTasks",
+		"cancelAllTasks",
+		"cancel_all_tasks",
+		"CancelTasks",
+		"cancelTasks",
+		"cancel_tasks",
+		"CancelTasksDetail",
+		"cancelTasksDetail",
+		"cancel_tasks_detail",
+		"CancelReason",
+		"cancelReason",
+		"cancel_reason",
+		"OpenTasksDialog",
+		"openTasksDialog",
+		"open_tasks_dialog",
+		"OpenTasks",
+		"openTasks",
+		"open_tasks",
+		"ShowTasks",
+		"showTasks",
+		"show_tasks",
 		"ResizeWidth",
 		"resizeWidth",
 		"resize_width",
@@ -3284,10 +3361,14 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"ExpectDialogResult",
 		"expectDialogResult",
 		"expect_dialog_result",
+		"ExpectDialogResults",
+		"expectDialogResults",
+		"expect_dialog_results",
 		"ExpectNoDialogResult",
 		"expectNoDialogResult",
 		"expect_no_dialog_result",
 		"ExpectNoDialogResults",
+		"expectNoDialogResults",
 		"expect_no_dialog_results",
 		"ExpectDialogResultCount",
 		"expectDialogResultCount",
@@ -3298,6 +3379,27 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"ExpectFocused",
 		"expectFocused",
 		"expect_focused",
+		"ExpectDialog",
+		"expectDialog",
+		"expect_dialog",
+		"ExpectPrompt",
+		"expectPrompt",
+		"expect_prompt",
+		"ExpectVim",
+		"expectVim",
+		"expect_vim",
+		"ExpectTasks",
+		"expectTasks",
+		"expect_tasks",
+		"ExpectReverseSearch",
+		"expectReverseSearch",
+		"expect_reverse_search",
+		"ExpectViewport",
+		"expectViewport",
+		"expect_viewport",
+		"ExpectScreen",
+		"expectScreen",
+		"expect_screen",
 		"ExpectStatusContains",
 		"expectStatusContains",
 		"expect_status_contains",
@@ -3320,6 +3422,29 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 			continue
 		}
 		if raw[0] != '{' && raw[0] != '[' {
+			continue
+		}
+		delete(fields, name)
+		changed = true
+	}
+	if !changed {
+		return data
+	}
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return normalized
+}
+
+func stripJSONAliasFields(data []byte, names ...string) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	changed := false
+	for _, name := range names {
+		if _, ok := fields[name]; !ok {
 			continue
 		}
 		delete(fields, name)
@@ -4191,7 +4316,50 @@ func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	type alias TaskStatus
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"ID",
+		"id",
+		"task_id",
+		"taskId",
+		"taskID",
+		"job_id",
+		"jobId",
+		"jobID",
+		"run_id",
+		"runId",
+		"runID",
+		"Title",
+		"task_title",
+		"taskTitle",
+		"title",
+		"name",
+		"label",
+		"display_name",
+		"displayName",
+		"State",
+		"status",
+		"state",
+		"phase",
+		"lifecycle",
+		"task_state",
+		"taskState",
+		"Detail",
+		"status_text",
+		"statusText",
+		"detail",
+		"message",
+		"description",
+		"summary",
+		"current_step",
+		"currentStep",
+		"Progress",
+		"progress_percent",
+		"progressPercent",
+		"percent",
+		"percentage",
+		"progress",
+		"pct",
+	), &raw); err != nil {
 		return err
 	}
 	*task = TaskStatus(raw)
@@ -4200,19 +4368,19 @@ func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if id := scalarStringJSONField(fieldMap, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
+	if id := scalarStringJSONField(fieldMap, "ID", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
 		task.ID = id
 	}
-	if title := stringJSONField(fieldMap, "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
+	if title := stringJSONField(fieldMap, "Title", "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
 		task.Title = title
 	}
-	if state := stringJSONField(fieldMap, "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
+	if state := stringJSONField(fieldMap, "State", "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
 		task.State = state
 	}
-	if detail := stringJSONField(fieldMap, "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
+	if detail := stringJSONField(fieldMap, "Detail", "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
 		task.Detail = detail
 	}
-	if progress := intPtrJSONField(fieldMap, "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
+	if progress := intPtrJSONField(fieldMap, "Progress", "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
 		task.Progress = *progress
 	}
 	return nil
@@ -4315,7 +4483,50 @@ func (expect *TasksExpectation) UnmarshalJSON(data []byte) error {
 func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 	type alias TaskExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"ID",
+		"id",
+		"task_id",
+		"taskId",
+		"taskID",
+		"job_id",
+		"jobId",
+		"jobID",
+		"run_id",
+		"runId",
+		"runID",
+		"Title",
+		"task_title",
+		"taskTitle",
+		"title",
+		"name",
+		"label",
+		"display_name",
+		"displayName",
+		"State",
+		"status",
+		"state",
+		"phase",
+		"lifecycle",
+		"task_state",
+		"taskState",
+		"Detail",
+		"status_text",
+		"statusText",
+		"detail",
+		"message",
+		"description",
+		"summary",
+		"current_step",
+		"currentStep",
+		"Progress",
+		"progress_percent",
+		"progressPercent",
+		"percent",
+		"percentage",
+		"progress",
+		"pct",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = TaskExpectation(raw)
@@ -4324,19 +4535,19 @@ func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if id := scalarStringJSONField(fieldMap, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
+	if id := scalarStringJSONField(fieldMap, "ID", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
 		expect.ID = id
 	}
-	if title := stringJSONField(fieldMap, "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
+	if title := stringJSONField(fieldMap, "Title", "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
 		expect.Title = title
 	}
-	if state := stringJSONField(fieldMap, "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
+	if state := stringJSONField(fieldMap, "State", "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
 		expect.State = state
 	}
-	if detail := stringJSONField(fieldMap, "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
+	if detail := stringJSONField(fieldMap, "Detail", "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
 		expect.Detail = detail
 	}
-	if progress := intPtrJSONField(fieldMap, "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
+	if progress := intPtrJSONField(fieldMap, "Progress", "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
 		expect.Progress = progress
 	}
 	return nil

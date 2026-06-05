@@ -5858,6 +5858,77 @@ func TestRunInteractionScriptAcceptsWrappedResizeAliasFields(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedUpperCamelStepFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"UpsertTask": {
+				"resource": {
+					"attributes": {
+						"id": "task_upper",
+						"title": "Build",
+						"state": "running",
+						"detail": "go test",
+						"progress": "25"
+					}
+				}
+			},
+			"OpenTasksDialog": {
+				"resource": {
+					"attributes": {
+						"value": "true"
+					}
+				}
+			},
+			"ExpectScreen": {
+				"resource": {
+					"attributes": {
+						"columns": 40,
+						"rows": 8
+					}
+				}
+			},
+			"ExpectTasks": {
+				"resource": {
+					"attributes": {
+						"count": 1,
+						"stateCounts": {"running": 1},
+						"contains": {"id": "task_upper", "state": "running", "detail": "go test", "progress": 25}
+					}
+				}
+			}
+		},
+		{
+			"CancelAllTasks": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"enabled": 1,
+							"reasonText": "stopped"
+						}
+					}
+				}
+			},
+			"ExpectTasks": {
+				"resource": {
+					"attributes": {
+						"count": 1,
+						"stateCounts": {"cancelled": 1},
+						"contains": {"id": "task_upper", "state": "cancelled", "detail": "stopped", "progress": 25}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsWrappedStringActionPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
