@@ -7013,6 +7013,46 @@ func TestRunDialogRuntimeScriptAcceptsWrappedRuntimePayloads(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsRuntimeMutationArrayPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"requestPermission": [
+				{"id": "perm_array", "toolName": "Bash", "path": "/tmp/project", "description": "Need shell.", "actions": ["Allow", "Deny"]}
+			],
+			"expectDialog": {"active": true, "permissionID": "perm_array", "dialogKind": "permission"}
+		},
+		{
+			"cancelPermission": "perm_array",
+			"expectDialogResult": {"permissionID": "perm_array", "status": "cancelled", "found": true},
+			"expectDialog": {"active": false}
+		},
+		{
+			"upsertTask": [
+				{"taskId": "task_array", "name": "Build", "status": "running", "statusText": "go test", "progressPercent": 25}
+			],
+			"expectTasks": {"count": 1, "stateCounts": {"running": 1}, "contains": {"taskId": "task_array", "status": "running", "statusText": "go test", "progressPercent": 25}}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].RequestPermission == nil || steps[0].RequestPermission.ID != "perm_array" || steps[0].RequestPermission.ToolName != "Bash" {
+		t.Fatalf("request permission = %#v", steps[0].RequestPermission)
+	}
+	if steps[2].UpsertTask == nil || steps[2].UpsertTask.ID != "task_array" || steps[2].UpsertTask.Progress != 25 {
+		t.Fatalf("upsert task = %#v", steps[2].UpsertTask)
+	}
+	screen := NewREPLScreen(60, 10, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_array" || result.DialogResults[0].Status != DialogResultCancelled {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsWrappedRuntimeMutationPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

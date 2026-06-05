@@ -632,6 +632,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script 的 runtime permission/task payload 现在递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge`/`node` 等 JSON:API/GraphQL wrapper，并把 resource/node 顶层 ID 回填到内层 runtime 对象，避免 wrapper-only payload 被误解析成空对象。
 
+本轮补充：interaction script 的 direct runtime mutation 字段现在改为 raw payload 解析；`requestPermission`/`request_permission` 和 `upsertTask`/`upsert_task` singular 字段也可接受单元素数组并取首项，避免 API/fixture 把 mutation payload 包成数组时在基础 step unmarshal 阶段提前失败。
+
 本轮补充：interaction script 的 runtime mutation action 现在也递归解包 wrapped `removeTask`/`cancelPermission` ID 和 `cancelTasks` cancellation detail；`payload.resource.attributes`、`edge.node` 和相邻 API envelope 可直接驱动 task removal、permission cancellation 与 task bulk-cancel。
 
 本轮补充：interaction script 的 direct runtime mutation alias 字段现在接受 object payload；`removeTask: {resource:{id}}`、`cancelPermission: {edge:{node:{id}}}`、`cancelTasks: {resource:{attributes:{reasonText}}}` 会走同一递归解析路径，不再被 string/bool alias 字段提前拒绝。
