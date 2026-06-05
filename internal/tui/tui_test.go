@@ -5609,6 +5609,54 @@ func TestRunInteractionScriptAcceptsWrappedStringActionPayloads(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedKeyActionPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action": "typeText",
+			"value": "go",
+			"expectPrompt": {"text": "go"}
+		},
+		{
+			"action": "keyPress",
+			"payload": {
+				"resource": {
+					"attributes": {
+						"key": "enter"
+					}
+				}
+			},
+			"expectEvent": {"type": "prompt_submitted", "value": "go"},
+			"expectPrompt": {"empty": true}
+		},
+		{
+			"kind": "keySequence",
+			"payload": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"sequence": ["ctrl-x", "ctrl-k"]
+						}
+					}
+				}
+			},
+			"expectEvent": {"type": "kill_agents"}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "go" ||
+		result.Events[1].Type != ScreenEventKillAgents {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsCompactEventActionAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"action":"focusOut","expectEvent":{"type":"focus_out"},"expectFocused":false},

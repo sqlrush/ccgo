@@ -1291,7 +1291,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 	switch action {
 	case "key", "press", "presskey", "keypress", "key-press", "shortcut", "shortcutkey", "shortcut-key":
 		if step.Key == "" && len(step.Keys) == 0 {
-			if values := stringListJSONField(fields, "value", "payload", "data", "key", "keys", "shortcut", "sequence", "input", "text"); len(values) == 1 {
+			if values := scriptActionStringListField(fields, "key", "keys", "shortcut", "sequence", "input", "text", "data", "payload", "value"); len(values) == 1 {
 				step.Key = values[0]
 			} else if len(values) > 1 {
 				step.Keys = append(step.Keys, values...)
@@ -1299,7 +1299,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "keys", "presses", "shortcuts", "sequence", "keysequence", "key-sequence", "keyseq", "key-seq":
 		if step.Key == "" && len(step.Keys) == 0 {
-			step.Keys = append(step.Keys, stringListJSONField(fields, "value", "payload", "data", "keys", "sequence", "key_sequence", "keySequence", "shortcuts")...)
+			step.Keys = append(step.Keys, scriptActionStringListField(fields, "keys", "sequence", "key_sequence", "keySequence", "shortcuts", "data", "payload", "value")...)
 		}
 	case "text", "type", "typetext", "type-text", "input", "inputtext", "textinput", "insert", "inserttext", "write", "writetext":
 		if step.Text == "" {
@@ -1676,6 +1676,67 @@ func scriptActionStringField(fields map[string]json.RawMessage, objectNames ...s
 		}
 	}
 	return ""
+}
+
+func scriptActionStringListField(fields map[string]json.RawMessage, names ...string) []string {
+	for _, name := range append([]string{"value", "payload", "data", "body"}, names...) {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if values := scriptActionStringListFromJSON(raw, names, 0); len(values) > 0 {
+			return values
+		}
+	}
+	return nil
+}
+
+func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth int) []string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil
+	}
+	var values stringList
+	if err := json.Unmarshal(raw, &values); err == nil {
+		return stringListValue(&values)
+	}
+	if depth >= 8 {
+		return nil
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil
+		}
+		out := []string{}
+		for _, item := range items {
+			out = append(out, scriptActionStringListFromJSON(item, names, depth+1)...)
+		}
+		if len(out) > 0 {
+			return out
+		}
+		return nil
+	}
+	if raw[0] != '{' {
+		return nil
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+	if values := stringListJSONField(fields, names...); len(values) > 0 {
+		return values
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if values := scriptActionStringListFromJSON(nested, names, depth+1); len(values) > 0 {
+			return values
+		}
+	}
+	return nil
 }
 
 func scriptRuntimeMutationBoolField(fields map[string]json.RawMessage, names ...string) (bool, bool) {
