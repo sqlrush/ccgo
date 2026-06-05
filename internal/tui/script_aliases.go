@@ -340,44 +340,44 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		KeybindingSpecsCamel      []BindingSpec             `json:"keybindingSpecs"`
 		UpsertTask                *TaskStatus               `json:"upsert_task"`
 		UpsertTaskCamel           *TaskStatus               `json:"upsertTask"`
-		RemoveTaskID              *string                   `json:"remove_task_id"`
-		RemoveTaskIDCamel         *string                   `json:"removeTaskId"`
-		RemoveTaskIDUpperCamel    *string                   `json:"removeTaskID"`
-		RemoveTask                *string                   `json:"remove_task"`
-		RemoveTaskCamel           *string                   `json:"removeTask"`
-		DeleteTask                *string                   `json:"delete_task"`
-		DeleteTaskCamel           *string                   `json:"deleteTask"`
-		CancelActiveDialog        *bool                     `json:"cancel_active_dialog"`
-		CancelActiveDialogCamel   *bool                     `json:"cancelActiveDialog"`
-		CancelActive              *bool                     `json:"cancel_active"`
-		CancelActiveCamel         *bool                     `json:"cancelActive"`
-		CancelDialog              *bool                     `json:"cancel_dialog"`
-		CancelDialogCamel         *bool                     `json:"cancelDialog"`
-		CloseDialog               *bool                     `json:"close_dialog"`
-		CloseDialogCamel          *bool                     `json:"closeDialog"`
-		CancelPermissionID        *string                   `json:"cancel_permission_id"`
-		CancelPermissionIDAlt     *string                   `json:"cancelPermissionId"`
-		CancelPermissionIDUpper   *string                   `json:"cancelPermissionID"`
-		CancelPermission          *string                   `json:"cancel_permission"`
-		CancelPermissionCamel     *string                   `json:"cancelPermission"`
-		CancelAllPermissions      *bool                     `json:"cancel_all_permissions"`
-		CancelAllPermissionsCamel *bool                     `json:"cancelAllPermissions"`
-		CancelPermissions         *bool                     `json:"cancel_permissions"`
-		CancelPermissionsCamel    *bool                     `json:"cancelPermissions"`
-		CancelAllTasks            *bool                     `json:"cancel_all_tasks"`
-		CancelAllTasksCamel       *bool                     `json:"cancelAllTasks"`
-		CancelTasks               *bool                     `json:"cancel_tasks"`
-		CancelTasksCamel          *bool                     `json:"cancelTasks"`
-		CancelTasksDetail         *string                   `json:"cancel_tasks_detail"`
-		CancelTasksDetailCamel    *string                   `json:"cancelTasksDetail"`
-		CancelReason              *string                   `json:"cancel_reason"`
-		CancelReasonCamel         *string                   `json:"cancelReason"`
-		OpenTasksDialog           *bool                     `json:"open_tasks_dialog"`
-		OpenTasksDialogCamel      *bool                     `json:"openTasksDialog"`
-		OpenTasks                 *bool                     `json:"open_tasks"`
-		OpenTasksCamel            *bool                     `json:"openTasks"`
-		ShowTasks                 *bool                     `json:"show_tasks"`
-		ShowTasksCamel            *bool                     `json:"showTasks"`
+		RemoveTaskID              *json.RawMessage          `json:"remove_task_id"`
+		RemoveTaskIDCamel         *json.RawMessage          `json:"removeTaskId"`
+		RemoveTaskIDUpperCamel    *json.RawMessage          `json:"removeTaskID"`
+		RemoveTask                *json.RawMessage          `json:"remove_task"`
+		RemoveTaskCamel           *json.RawMessage          `json:"removeTask"`
+		DeleteTask                *json.RawMessage          `json:"delete_task"`
+		DeleteTaskCamel           *json.RawMessage          `json:"deleteTask"`
+		CancelActiveDialog        *json.RawMessage          `json:"cancel_active_dialog"`
+		CancelActiveDialogCamel   *json.RawMessage          `json:"cancelActiveDialog"`
+		CancelActive              *json.RawMessage          `json:"cancel_active"`
+		CancelActiveCamel         *json.RawMessage          `json:"cancelActive"`
+		CancelDialog              *json.RawMessage          `json:"cancel_dialog"`
+		CancelDialogCamel         *json.RawMessage          `json:"cancelDialog"`
+		CloseDialog               *json.RawMessage          `json:"close_dialog"`
+		CloseDialogCamel          *json.RawMessage          `json:"closeDialog"`
+		CancelPermissionID        *json.RawMessage          `json:"cancel_permission_id"`
+		CancelPermissionIDAlt     *json.RawMessage          `json:"cancelPermissionId"`
+		CancelPermissionIDUpper   *json.RawMessage          `json:"cancelPermissionID"`
+		CancelPermission          *json.RawMessage          `json:"cancel_permission"`
+		CancelPermissionCamel     *json.RawMessage          `json:"cancelPermission"`
+		CancelAllPermissions      *json.RawMessage          `json:"cancel_all_permissions"`
+		CancelAllPermissionsCamel *json.RawMessage          `json:"cancelAllPermissions"`
+		CancelPermissions         *json.RawMessage          `json:"cancel_permissions"`
+		CancelPermissionsCamel    *json.RawMessage          `json:"cancelPermissions"`
+		CancelAllTasks            *json.RawMessage          `json:"cancel_all_tasks"`
+		CancelAllTasksCamel       *json.RawMessage          `json:"cancelAllTasks"`
+		CancelTasks               *json.RawMessage          `json:"cancel_tasks"`
+		CancelTasksCamel          *json.RawMessage          `json:"cancelTasks"`
+		CancelTasksDetail         *json.RawMessage          `json:"cancel_tasks_detail"`
+		CancelTasksDetailCamel    *json.RawMessage          `json:"cancelTasksDetail"`
+		CancelReason              *json.RawMessage          `json:"cancel_reason"`
+		CancelReasonCamel         *json.RawMessage          `json:"cancelReason"`
+		OpenTasksDialog           *json.RawMessage          `json:"open_tasks_dialog"`
+		OpenTasksDialogCamel      *json.RawMessage          `json:"openTasksDialog"`
+		OpenTasks                 *json.RawMessage          `json:"open_tasks"`
+		OpenTasksCamel            *json.RawMessage          `json:"openTasks"`
+		ShowTasks                 *json.RawMessage          `json:"show_tasks"`
+		ShowTasksCamel            *json.RawMessage          `json:"showTasks"`
 		ResizeWidth               *int                      `json:"resize_width"`
 		ResizeWidthCamel          *int                      `json:"resizeWidth"`
 		ResizeHeight              *int                      `json:"resize_height"`
@@ -622,119 +622,26 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if task := taskStatusJSONField(fieldMap, "task", "task_status", "taskStatus"); task != nil {
 		step.UpsertTask = task
 	}
-	if fields.RemoveTaskID != nil {
-		step.RemoveTaskID = *fields.RemoveTaskID
+	if step.RemoveTaskID == "" && scriptHasAnyJSONField(fieldMap, "remove_task_id", "removeTaskId", "removeTaskID", "remove_task", "removeTask", "delete_task", "deleteTask") {
+		step.RemoveTaskID = scriptActionIDField(fieldMap, "remove_task_id", "removeTaskId", "removeTaskID", "remove_task", "removeTask", "delete_task", "deleteTask", "task", "task_status", "taskStatus", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
 	}
-	if fields.RemoveTaskIDCamel != nil {
-		step.RemoveTaskID = *fields.RemoveTaskIDCamel
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "cancel_active_dialog", "cancelActiveDialog", "cancel_active", "cancelActive", "cancel_dialog", "cancelDialog", "close_dialog", "closeDialog"); ok {
+		step.CancelActiveDialog = value
 	}
-	if fields.RemoveTaskIDUpperCamel != nil {
-		step.RemoveTaskID = *fields.RemoveTaskIDUpperCamel
+	if step.CancelPermissionID == "" && scriptHasAnyJSONField(fieldMap, "cancel_permission_id", "cancelPermissionId", "cancelPermissionID", "cancel_permission", "cancelPermission") {
+		step.CancelPermissionID = scriptActionIDField(fieldMap, "cancel_permission_id", "cancelPermissionId", "cancelPermissionID", "cancel_permission", "cancelPermission", "permission", "permission_request", "permissionRequest", "request", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
 	}
-	if fields.RemoveTask != nil {
-		step.RemoveTaskID = *fields.RemoveTask
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "cancel_all_permissions", "cancelAllPermissions", "cancel_permissions", "cancelPermissions"); ok {
+		step.CancelAllPermissions = value
 	}
-	if fields.RemoveTaskCamel != nil {
-		step.RemoveTaskID = *fields.RemoveTaskCamel
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "cancel_all_tasks", "cancelAllTasks", "cancel_tasks", "cancelTasks"); ok {
+		step.CancelAllTasks = value
 	}
-	if fields.DeleteTask != nil {
-		step.RemoveTaskID = *fields.DeleteTask
+	if step.CancelTasksDetail == "" {
+		step.CancelTasksDetail = scriptActionStringField(fieldMap, "cancel_all_tasks", "cancelAllTasks", "cancel_tasks", "cancelTasks", "cancel_tasks_detail", "cancelTasksDetail", "cancel_reason", "cancelReason", "reason", "reason_text", "reasonText", "detail", "message", "description", "body", "text", "status_text", "statusText")
 	}
-	if fields.DeleteTaskCamel != nil {
-		step.RemoveTaskID = *fields.DeleteTaskCamel
-	}
-	if fields.CancelActiveDialog != nil {
-		step.CancelActiveDialog = *fields.CancelActiveDialog
-	}
-	if fields.CancelActiveDialogCamel != nil {
-		step.CancelActiveDialog = *fields.CancelActiveDialogCamel
-	}
-	if fields.CancelActive != nil {
-		step.CancelActiveDialog = *fields.CancelActive
-	}
-	if fields.CancelActiveCamel != nil {
-		step.CancelActiveDialog = *fields.CancelActiveCamel
-	}
-	if fields.CancelDialog != nil {
-		step.CancelActiveDialog = *fields.CancelDialog
-	}
-	if fields.CancelDialogCamel != nil {
-		step.CancelActiveDialog = *fields.CancelDialogCamel
-	}
-	if fields.CloseDialog != nil {
-		step.CancelActiveDialog = *fields.CloseDialog
-	}
-	if fields.CloseDialogCamel != nil {
-		step.CancelActiveDialog = *fields.CloseDialogCamel
-	}
-	if fields.CancelPermissionID != nil {
-		step.CancelPermissionID = *fields.CancelPermissionID
-	}
-	if fields.CancelPermissionIDAlt != nil {
-		step.CancelPermissionID = *fields.CancelPermissionIDAlt
-	}
-	if fields.CancelPermissionIDUpper != nil {
-		step.CancelPermissionID = *fields.CancelPermissionIDUpper
-	}
-	if fields.CancelPermission != nil {
-		step.CancelPermissionID = *fields.CancelPermission
-	}
-	if fields.CancelPermissionCamel != nil {
-		step.CancelPermissionID = *fields.CancelPermissionCamel
-	}
-	if fields.CancelAllPermissions != nil {
-		step.CancelAllPermissions = *fields.CancelAllPermissions
-	}
-	if fields.CancelAllPermissionsCamel != nil {
-		step.CancelAllPermissions = *fields.CancelAllPermissionsCamel
-	}
-	if fields.CancelPermissions != nil {
-		step.CancelAllPermissions = *fields.CancelPermissions
-	}
-	if fields.CancelPermissionsCamel != nil {
-		step.CancelAllPermissions = *fields.CancelPermissionsCamel
-	}
-	if fields.CancelAllTasks != nil {
-		step.CancelAllTasks = *fields.CancelAllTasks
-	}
-	if fields.CancelAllTasksCamel != nil {
-		step.CancelAllTasks = *fields.CancelAllTasksCamel
-	}
-	if fields.CancelTasks != nil {
-		step.CancelAllTasks = *fields.CancelTasks
-	}
-	if fields.CancelTasksCamel != nil {
-		step.CancelAllTasks = *fields.CancelTasksCamel
-	}
-	if fields.CancelTasksDetail != nil {
-		step.CancelTasksDetail = *fields.CancelTasksDetail
-	}
-	if fields.CancelTasksDetailCamel != nil {
-		step.CancelTasksDetail = *fields.CancelTasksDetailCamel
-	}
-	if fields.CancelReason != nil {
-		step.CancelTasksDetail = *fields.CancelReason
-	}
-	if fields.CancelReasonCamel != nil {
-		step.CancelTasksDetail = *fields.CancelReasonCamel
-	}
-	if fields.OpenTasksDialog != nil {
-		step.OpenTasksDialog = *fields.OpenTasksDialog
-	}
-	if fields.OpenTasksDialogCamel != nil {
-		step.OpenTasksDialog = *fields.OpenTasksDialogCamel
-	}
-	if fields.OpenTasks != nil {
-		step.OpenTasksDialog = *fields.OpenTasks
-	}
-	if fields.OpenTasksCamel != nil {
-		step.OpenTasksDialog = *fields.OpenTasksCamel
-	}
-	if fields.ShowTasks != nil {
-		step.OpenTasksDialog = *fields.ShowTasks
-	}
-	if fields.ShowTasksCamel != nil {
-		step.OpenTasksDialog = *fields.ShowTasksCamel
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "open_tasks_dialog", "openTasksDialog", "open_tasks", "openTasks", "show_tasks", "showTasks"); ok {
+		step.OpenTasksDialog = value
 	}
 	if fields.ResizeWidth != nil {
 		step.ResizeWidth = *fields.ResizeWidth
@@ -1710,6 +1617,74 @@ func scriptActionStringField(fields map[string]json.RawMessage, objectNames ...s
 		}
 	}
 	return ""
+}
+
+func scriptRuntimeMutationBoolField(fields map[string]json.RawMessage, names ...string) (bool, bool) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value, ok := scriptActionBoolFromJSON(raw, 0); ok {
+			return value, true
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && (raw[0] == '{' || raw[0] == '[') {
+			return true, true
+		}
+	}
+	return false, false
+}
+
+func scriptActionBoolFromJSON(raw json.RawMessage, depth int) (bool, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return false, false
+	}
+	if value, ok := scriptParseJSONBool(raw); ok {
+		return value, true
+	}
+	if depth >= 8 {
+		return false, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return false, false
+		}
+		for _, item := range items {
+			if value, ok := scriptActionBoolFromJSON(item, depth+1); ok {
+				return value, true
+			}
+		}
+		return false, false
+	}
+	if raw[0] != '{' {
+		return false, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return false, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("enabled", "active", "open", "visible", "checked", "selected", "value") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value, ok := scriptActionBoolFromJSON(nested, depth+1); ok {
+			return value, true
+		}
+	}
+	return false, false
+}
+
+func scriptHasAnyJSONField(fields map[string]json.RawMessage, names ...string) bool {
+	for _, name := range names {
+		if _, ok := fields[name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func scriptActionIDFromJSON(raw json.RawMessage, idNames []string, depth int) string {

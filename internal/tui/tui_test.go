@@ -6286,6 +6286,77 @@ func TestRunDialogRuntimeScriptAcceptsWrappedRuntimeMutationPayloads(t *testing.
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsWrappedRuntimeMutationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"requestPermission": {
+				"id": "perm_field",
+				"toolName": "Bash",
+				"description": "Need shell.",
+				"actions": ["Allow", "Deny"]
+			},
+			"expectDialog": {"active": true, "permissionID": "perm_field"}
+		},
+		{
+			"cancelPermission": {
+				"edge": {
+					"node": {
+						"id": "perm_field"
+					}
+				}
+			},
+			"expectDialogResult": {"permissionID": "perm_field", "status": "cancelled", "found": true},
+			"expectDialog": {"active": false}
+		},
+		{
+			"task": {"id": "task_field_remove", "title": "Remove field", "state": "running", "detail": "queued", "progress": 5},
+			"expectTasks": {"count": 1}
+		},
+		{
+			"task": {"id": "task_field_keep", "title": "Keep field", "state": "running", "detail": "working", "progress": 25},
+			"expectTasks": {"count": 2, "stateCounts": {"running": 2}}
+		},
+		{
+			"removeTask": {
+				"resource": {
+					"id": "task_field_remove",
+					"type": "task"
+				}
+			},
+			"expectTasks": {
+				"count": 1,
+				"contains": {"id": "task_field_keep", "state": "running", "detail": "working"}
+			}
+		},
+		{
+			"cancelTasks": {
+				"resource": {
+					"attributes": {
+						"reasonText": "field wrapped stop"
+					}
+				}
+			},
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"cancelled": 1},
+				"contains": {"id": "task_field_keep", "state": "cancelled", "detail": "field wrapped stop"}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(64, 10, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_field" || result.DialogResults[0].Status != DialogResultCancelled {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"input": "go", "expectPrompt": {"text": "go"}},
