@@ -5290,10 +5290,10 @@ func TestRunInteractionScriptAcceptsPastedContentAliases(t *testing.T) {
 			"pasteText": "alpha\nbeta",
 			"expectPrompt": {
 				"pastedContents": {
-					"pastedId": 1,
-					"kind": "text",
-					"value": "alpha\nbeta",
-					"contains": "beta"
+					"ID": "1",
+					"Type": "text",
+					"Content": "alpha\nbeta",
+					"ContentContains": "beta"
 				}
 			}
 		},
@@ -5301,11 +5301,11 @@ func TestRunInteractionScriptAcceptsPastedContentAliases(t *testing.T) {
 			"image": {"fileName": "chart.png", "mimeType": "image/png", "data": "AAAA"},
 			"expectPrompt": {
 				"pastedContents": {
-					"pastedContentId": 2,
-					"pastedType": "image",
-					"contentType": "image/png",
-					"fileName": "chart.png",
-					"data": "AAAA"
+					"ID": "2",
+					"Type": "image",
+					"MediaType": "image/png",
+					"Filename": "chart.png",
+					"Content": "AAAA"
 				}
 			}
 		}

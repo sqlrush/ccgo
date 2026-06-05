@@ -4439,88 +4439,143 @@ func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
 
 func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 	data = normalizeStringFieldsToArray(data,
+		"ContentContains",
 		"content_contains",
 		"contentContains",
+		"Contains",
 		"contains",
+		"TextContains",
 		"text_contains",
 		"textContains",
+		"ValueContains",
 		"value_contains",
 		"valueContains",
 	)
 	type alias PastedContentExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"ID",
+		"id",
+		"PastedID",
+		"pasted_id",
+		"pastedId",
+		"pastedID",
+		"PastedContentID",
+		"pasted_content_id",
+		"pastedContentId",
+		"pastedContentID",
+		"ContentID",
+		"content_id",
+		"contentId",
+		"contentID",
+		"Type",
+		"type",
+		"Kind",
+		"kind",
+		"ContentKind",
+		"content_kind",
+		"contentKind",
+		"ItemType",
+		"item_type",
+		"itemType",
+		"PastedType",
+		"pasted_type",
+		"pastedType",
+		"Content",
+		"content",
+		"Value",
+		"value",
+		"Text",
+		"text",
+		"Body",
+		"body",
+		"Message",
+		"message",
+		"Data",
+		"data",
+		"Base64",
+		"base64",
+		"ContentContains",
+		"content_contains",
+		"contentContains",
+		"Contains",
+		"contains",
+		"TextContains",
+		"text_contains",
+		"textContains",
+		"ValueContains",
+		"value_contains",
+		"valueContains",
+		"MediaType",
+		"media_type",
+		"mediaType",
+		"MimeType",
+		"mime_type",
+		"mimeType",
+		"ContentType",
+		"content_type",
+		"contentType",
+		"Media",
+		"media",
+		"Mime",
+		"mime",
+		"FileType",
+		"file_type",
+		"fileType",
+		"Filename",
+		"filename",
+		"FileName",
+		"file_name",
+		"fileName",
+		"Name",
+		"name",
+		"SourcePath",
+		"source_path",
+		"sourcePath",
+		"Path",
+		"path",
+		"FilePath",
+		"filePath",
+		"file_path",
+		"Dimensions",
+		"dimensions",
+		"ImageDimensions",
+		"imageDimensions",
+		"image_dimensions",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = PastedContentExpectation(raw)
 
-	var fields struct {
-		ContentContains      *stringList `json:"content_contains"`
-		ContentContainsCamel *stringList `json:"contentContains"`
-		Contains             *stringList `json:"contains"`
-		TextContains         *stringList `json:"text_contains"`
-		TextContainsCamel    *stringList `json:"textContains"`
-		ValueContains        *stringList `json:"value_contains"`
-		ValueContainsCamel   *stringList `json:"valueContains"`
-		MediaType            *string     `json:"media_type"`
-		MediaTypeCamel       *string     `json:"mediaType"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
 	fieldMap := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
 	if expect.ID == 0 {
-		if id := intPtrJSONField(fieldMap, "pasted_id", "pastedId", "pastedID", "pasted_content_id", "pastedContentId", "pastedContentID", "content_id", "contentId", "contentID"); id != nil {
+		if id := intPtrJSONField(fieldMap, "ID", "id", "PastedID", "pasted_id", "pastedId", "pastedID", "PastedContentID", "pasted_content_id", "pastedContentId", "pastedContentID", "ContentID", "content_id", "contentId", "contentID"); id != nil {
 			expect.ID = *id
 		}
 	}
 	if expect.Type == "" {
-		expect.Type = stringJSONField(fieldMap, "kind", "content_kind", "contentKind", "item_type", "itemType", "pasted_type", "pastedType")
+		expect.Type = stringJSONField(fieldMap, "Type", "type", "Kind", "kind", "ContentKind", "content_kind", "contentKind", "ItemType", "item_type", "itemType", "PastedType", "pasted_type", "pastedType")
 	}
 	if expect.Content == "" {
-		expect.Content = stringJSONField(fieldMap, "value", "text", "body", "message", "data", "base64")
+		expect.Content = scalarStringJSONField(fieldMap, "Content", "content", "Value", "value", "Text", "text", "Body", "body", "Message", "message", "Data", "data", "Base64", "base64")
 	}
 	if expect.SourcePath == "" {
-		expect.SourcePath = stringJSONField(fieldMap, "source_path", "sourcePath", "path", "filePath", "file_path")
+		expect.SourcePath = stringJSONField(fieldMap, "SourcePath", "source_path", "sourcePath", "Path", "path", "FilePath", "filePath", "file_path")
 	}
 	if expect.Dimensions == nil {
-		expect.Dimensions = imageDimensionsJSONField(fieldMap, "dimensions", "imageDimensions", "image_dimensions")
+		expect.Dimensions = imageDimensionsJSONField(fieldMap, "Dimensions", "dimensions", "ImageDimensions", "imageDimensions", "image_dimensions")
 	}
-	if fields.ContentContains != nil {
-		expect.ContentContains = stringListValue(fields.ContentContains)
-	}
-	if fields.ContentContainsCamel != nil {
-		expect.ContentContains = stringListValue(fields.ContentContainsCamel)
-	}
-	if fields.Contains != nil {
-		expect.ContentContains = stringListValue(fields.Contains)
-	}
-	if fields.TextContains != nil {
-		expect.ContentContains = stringListValue(fields.TextContains)
-	}
-	if fields.TextContainsCamel != nil {
-		expect.ContentContains = stringListValue(fields.TextContainsCamel)
-	}
-	if fields.ValueContains != nil {
-		expect.ContentContains = stringListValue(fields.ValueContains)
-	}
-	if fields.ValueContainsCamel != nil {
-		expect.ContentContains = stringListValue(fields.ValueContainsCamel)
-	}
-	if fields.MediaType != nil {
-		expect.MediaType = *fields.MediaType
-	}
-	if fields.MediaTypeCamel != nil {
-		expect.MediaType = *fields.MediaTypeCamel
+	if values := stringListJSONField(fieldMap, "ContentContains", "content_contains", "contentContains", "Contains", "contains", "TextContains", "text_contains", "textContains", "ValueContains", "value_contains", "valueContains"); values != nil {
+		expect.ContentContains = values
 	}
 	if expect.MediaType == "" {
-		expect.MediaType = stringJSONField(fieldMap, "mime_type", "mimeType", "content_type", "contentType", "media", "mime", "file_type", "fileType")
+		expect.MediaType = stringJSONField(fieldMap, "MediaType", "media_type", "mediaType", "MimeType", "mime_type", "mimeType", "ContentType", "content_type", "contentType", "Media", "media", "Mime", "mime", "FileType", "file_type", "fileType")
 	}
 	if expect.Filename == "" {
-		expect.Filename = stringJSONField(fieldMap, "file_name", "fileName", "name", "path")
+		expect.Filename = stringJSONField(fieldMap, "Filename", "filename", "FileName", "file_name", "fileName", "Name", "name", "Path", "path")
 	}
 	return nil
 }
