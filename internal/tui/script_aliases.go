@@ -345,159 +345,159 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	*step = ScriptStep(raw)
 
 	var fields struct {
-		RequestPermission         *PermissionRequest        `json:"request_permission"`
-		RequestPermissionCamel    *PermissionRequest        `json:"requestPermission"`
-		Key                       *json.RawMessage          `json:"key"`
-		Keys                      *json.RawMessage          `json:"keys"`
-		RawKey                    *json.RawMessage          `json:"raw_key"`
-		RawKeyCamel               *json.RawMessage          `json:"rawKey"`
-		KeySequence               *json.RawMessage          `json:"key_sequence"`
-		KeySequenceCamel          *json.RawMessage          `json:"keySequence"`
-		Press                     *json.RawMessage          `json:"press"`
-		PressKey                  *json.RawMessage          `json:"press_key"`
-		PressKeyCamel             *json.RawMessage          `json:"pressKey"`
-		KeyPress                  *json.RawMessage          `json:"key_press"`
-		KeyPressCamel             *json.RawMessage          `json:"keyPress"`
-		Keypress                  *json.RawMessage          `json:"keypress"`
-		Shortcut                  *json.RawMessage          `json:"shortcut"`
-		ShortcutKey               *json.RawMessage          `json:"shortcut_key"`
-		ShortcutKeyCamel          *json.RawMessage          `json:"shortcutKey"`
-		Presses                   *json.RawMessage          `json:"presses"`
-		KeyPresses                *json.RawMessage          `json:"key_presses"`
-		KeyPressesCamel           *json.RawMessage          `json:"keyPresses"`
-		Keypresses                *json.RawMessage          `json:"keypresses"`
-		Shortcuts                 *json.RawMessage          `json:"shortcuts"`
-		Input                     *json.RawMessage          `json:"input"`
-		InputText                 *json.RawMessage          `json:"input_text"`
-		InputTextCamel            *json.RawMessage          `json:"inputText"`
-		TextInput                 *json.RawMessage          `json:"text_input"`
-		TextInputCamel            *json.RawMessage          `json:"textInput"`
-		KeysText                  *json.RawMessage          `json:"keys_text"`
-		KeysTextCamel             *json.RawMessage          `json:"keysText"`
-		PasteText                 *json.RawMessage          `json:"paste_text"`
-		PasteTextCamel            *json.RawMessage          `json:"pasteText"`
-		PastedText                *json.RawMessage          `json:"pasted_text"`
-		PastedTextCamel           *json.RawMessage          `json:"pastedText"`
-		Clipboard                 *json.RawMessage          `json:"clipboard"`
-		Messages                  []Message                 `json:"messages"`
-		AppendMessages            []Message                 `json:"append_messages"`
-		AppendMessagesCamel       []Message                 `json:"appendMessages"`
-		TranscriptMessages        []Message                 `json:"transcript_messages"`
-		TranscriptMessagesCamel   []Message                 `json:"transcriptMessages"`
-		Status                    *json.RawMessage          `json:"status"`
-		SetStatus                 *json.RawMessage          `json:"set_status"`
-		SetStatusCamel            *json.RawMessage          `json:"setStatus"`
-		StatusLine                *json.RawMessage          `json:"status_line"`
-		StatusLineCamel           *json.RawMessage          `json:"statusLine"`
-		BaseStatus                *json.RawMessage          `json:"base_status"`
-		BaseStatusCamel           *json.RawMessage          `json:"baseStatus"`
-		Mouse                     *ScriptMouse              `json:"mouse"`
-		MouseEvent                *ScriptMouse              `json:"mouse_event"`
-		MouseEventCamel           *ScriptMouse              `json:"mouseEvent"`
-		Keybindings               []BindingSpec             `json:"keybindings"`
-		KeyBindings               []BindingSpec             `json:"key_bindings"`
-		KeyBindingsCamel          []BindingSpec             `json:"keyBindings"`
-		KeybindingSpecs           []BindingSpec             `json:"keybinding_specs"`
-		KeybindingSpecsCamel      []BindingSpec             `json:"keybindingSpecs"`
-		UpsertTask                *TaskStatus               `json:"upsert_task"`
-		UpsertTaskCamel           *TaskStatus               `json:"upsertTask"`
-		RemoveTaskID              *json.RawMessage          `json:"remove_task_id"`
-		RemoveTaskIDCamel         *json.RawMessage          `json:"removeTaskId"`
-		RemoveTaskIDUpperCamel    *json.RawMessage          `json:"removeTaskID"`
-		RemoveTask                *json.RawMessage          `json:"remove_task"`
-		RemoveTaskCamel           *json.RawMessage          `json:"removeTask"`
-		DeleteTask                *json.RawMessage          `json:"delete_task"`
-		DeleteTaskCamel           *json.RawMessage          `json:"deleteTask"`
-		CancelActiveDialog        *json.RawMessage          `json:"cancel_active_dialog"`
-		CancelActiveDialogCamel   *json.RawMessage          `json:"cancelActiveDialog"`
-		CancelActive              *json.RawMessage          `json:"cancel_active"`
-		CancelActiveCamel         *json.RawMessage          `json:"cancelActive"`
-		CancelDialog              *json.RawMessage          `json:"cancel_dialog"`
-		CancelDialogCamel         *json.RawMessage          `json:"cancelDialog"`
-		CloseDialog               *json.RawMessage          `json:"close_dialog"`
-		CloseDialogCamel          *json.RawMessage          `json:"closeDialog"`
-		CancelPermissionID        *json.RawMessage          `json:"cancel_permission_id"`
-		CancelPermissionIDAlt     *json.RawMessage          `json:"cancelPermissionId"`
-		CancelPermissionIDUpper   *json.RawMessage          `json:"cancelPermissionID"`
-		CancelPermission          *json.RawMessage          `json:"cancel_permission"`
-		CancelPermissionCamel     *json.RawMessage          `json:"cancelPermission"`
-		CancelAllPermissions      *json.RawMessage          `json:"cancel_all_permissions"`
-		CancelAllPermissionsCamel *json.RawMessage          `json:"cancelAllPermissions"`
-		CancelPermissions         *json.RawMessage          `json:"cancel_permissions"`
-		CancelPermissionsCamel    *json.RawMessage          `json:"cancelPermissions"`
-		CancelAllTasks            *json.RawMessage          `json:"cancel_all_tasks"`
-		CancelAllTasksCamel       *json.RawMessage          `json:"cancelAllTasks"`
-		CancelTasks               *json.RawMessage          `json:"cancel_tasks"`
-		CancelTasksCamel          *json.RawMessage          `json:"cancelTasks"`
-		CancelTasksDetail         *json.RawMessage          `json:"cancel_tasks_detail"`
-		CancelTasksDetailCamel    *json.RawMessage          `json:"cancelTasksDetail"`
-		CancelReason              *json.RawMessage          `json:"cancel_reason"`
-		CancelReasonCamel         *json.RawMessage          `json:"cancelReason"`
-		OpenTasksDialog           *json.RawMessage          `json:"open_tasks_dialog"`
-		OpenTasksDialogCamel      *json.RawMessage          `json:"openTasksDialog"`
-		OpenTasks                 *json.RawMessage          `json:"open_tasks"`
-		OpenTasksCamel            *json.RawMessage          `json:"openTasks"`
-		ShowTasks                 *json.RawMessage          `json:"show_tasks"`
-		ShowTasksCamel            *json.RawMessage          `json:"showTasks"`
-		ResizeWidth               *json.RawMessage          `json:"resize_width"`
-		ResizeWidthCamel          *json.RawMessage          `json:"resizeWidth"`
-		ResizeHeight              *json.RawMessage          `json:"resize_height"`
-		ResizeHeightCamel         *json.RawMessage          `json:"resizeHeight"`
-		SnapshotName              *json.RawMessage          `json:"snapshot_name"`
-		SnapshotNameCamel         *json.RawMessage          `json:"snapshotName"`
-		Focus                     *json.RawMessage          `json:"focus"`
-		Focused                   *json.RawMessage          `json:"focused"`
-		FocusIn                   *json.RawMessage          `json:"focus_in"`
-		FocusInCamel              *json.RawMessage          `json:"focusIn"`
-		FocusOut                  *json.RawMessage          `json:"focus_out"`
-		FocusOutCamel             *json.RawMessage          `json:"focusOut"`
-		Blur                      *json.RawMessage          `json:"blur"`
-		Blurred                   *json.RawMessage          `json:"blurred"`
-		ExpectEvent               *ScreenEvent              `json:"expect_event"`
-		ExpectEventCamel          *ScreenEvent              `json:"expectEvent"`
-		ExpectEvents              *json.RawMessage          `json:"expect_events"`
-		ExpectEventsCamel         *json.RawMessage          `json:"expectEvents"`
-		ExpectNoEvent             *json.RawMessage          `json:"expect_no_event"`
-		ExpectNoEventCamel        *json.RawMessage          `json:"expectNoEvent"`
-		ExpectEventCount          *json.RawMessage          `json:"expect_event_count"`
-		ExpectEventCountCamel     *json.RawMessage          `json:"expectEventCount"`
-		ExpectTotalEventCount     *json.RawMessage          `json:"expect_total_event_count"`
-		ExpectTotalEventCamel     *json.RawMessage          `json:"expectTotalEventCount"`
-		ExpectDialogResult        *DialogResultExpectation  `json:"expect_dialog_result"`
-		ExpectDialogResultCamel   *DialogResultExpectation  `json:"expectDialogResult"`
-		ExpectDialogResults       *json.RawMessage          `json:"expect_dialog_results"`
-		ExpectDialogResultsCamel  *json.RawMessage          `json:"expectDialogResults"`
-		ExpectNoDialogResult      *json.RawMessage          `json:"expect_no_dialog_result"`
-		ExpectNoDialogResultCamel *json.RawMessage          `json:"expectNoDialogResult"`
-		ExpectNoDialogResults     *json.RawMessage          `json:"expect_no_dialog_results"`
-		ExpectDialogResultCount   *json.RawMessage          `json:"expect_dialog_result_count"`
-		ExpectDialogCountCamel    *json.RawMessage          `json:"expectDialogResultCount"`
-		ExpectTotalDialogCount    *json.RawMessage          `json:"expect_total_dialog_result_count"`
-		ExpectTotalDialogCamel    *json.RawMessage          `json:"expectTotalDialogResultCount"`
-		ExpectDialog              *DialogExpectation        `json:"expect_dialog"`
-		ExpectDialogCamel         *DialogExpectation        `json:"expectDialog"`
-		ExpectPrompt              *json.RawMessage          `json:"expect_prompt"`
-		ExpectPromptCamel         *json.RawMessage          `json:"expectPrompt"`
-		ExpectVim                 *json.RawMessage          `json:"expect_vim"`
-		ExpectVimCamel            *json.RawMessage          `json:"expectVim"`
-		ExpectTasks               *TasksExpectation         `json:"expect_tasks"`
-		ExpectTasksCamel          *TasksExpectation         `json:"expectTasks"`
-		ExpectReverseSearch       *ReverseSearchExpectation `json:"expect_reverse_search"`
-		ExpectReverseSearchCamel  *ReverseSearchExpectation `json:"expectReverseSearch"`
-		ExpectViewport            *json.RawMessage          `json:"expect_viewport"`
-		ExpectViewportCamel       *json.RawMessage          `json:"expectViewport"`
-		ExpectScreen              *json.RawMessage          `json:"expect_screen"`
-		ExpectScreenCamel         *json.RawMessage          `json:"expectScreen"`
-		ExpectFocused             *json.RawMessage          `json:"expect_focused"`
-		ExpectFocusedCamel        *json.RawMessage          `json:"expectFocused"`
-		ExpectStatusContains      *json.RawMessage          `json:"expect_status_contains"`
-		ExpectStatusContainsCamel *json.RawMessage          `json:"expectStatusContains"`
-		ExpectStatusNotContains   *json.RawMessage          `json:"expect_status_not_contains"`
-		ExpectStatusNotCamel      *json.RawMessage          `json:"expectStatusNotContains"`
-		ExpectSnapshotContains    *json.RawMessage          `json:"expect_snapshot_contains"`
-		ExpectSnapshotCamel       *json.RawMessage          `json:"expectSnapshotContains"`
-		ExpectSnapshotNotContains *json.RawMessage          `json:"expect_snapshot_not_contains"`
-		ExpectSnapshotNotCamel    *json.RawMessage          `json:"expectSnapshotNotContains"`
+		RequestPermission         *PermissionRequest       `json:"request_permission"`
+		RequestPermissionCamel    *PermissionRequest       `json:"requestPermission"`
+		Key                       *json.RawMessage         `json:"key"`
+		Keys                      *json.RawMessage         `json:"keys"`
+		RawKey                    *json.RawMessage         `json:"raw_key"`
+		RawKeyCamel               *json.RawMessage         `json:"rawKey"`
+		KeySequence               *json.RawMessage         `json:"key_sequence"`
+		KeySequenceCamel          *json.RawMessage         `json:"keySequence"`
+		Press                     *json.RawMessage         `json:"press"`
+		PressKey                  *json.RawMessage         `json:"press_key"`
+		PressKeyCamel             *json.RawMessage         `json:"pressKey"`
+		KeyPress                  *json.RawMessage         `json:"key_press"`
+		KeyPressCamel             *json.RawMessage         `json:"keyPress"`
+		Keypress                  *json.RawMessage         `json:"keypress"`
+		Shortcut                  *json.RawMessage         `json:"shortcut"`
+		ShortcutKey               *json.RawMessage         `json:"shortcut_key"`
+		ShortcutKeyCamel          *json.RawMessage         `json:"shortcutKey"`
+		Presses                   *json.RawMessage         `json:"presses"`
+		KeyPresses                *json.RawMessage         `json:"key_presses"`
+		KeyPressesCamel           *json.RawMessage         `json:"keyPresses"`
+		Keypresses                *json.RawMessage         `json:"keypresses"`
+		Shortcuts                 *json.RawMessage         `json:"shortcuts"`
+		Input                     *json.RawMessage         `json:"input"`
+		InputText                 *json.RawMessage         `json:"input_text"`
+		InputTextCamel            *json.RawMessage         `json:"inputText"`
+		TextInput                 *json.RawMessage         `json:"text_input"`
+		TextInputCamel            *json.RawMessage         `json:"textInput"`
+		KeysText                  *json.RawMessage         `json:"keys_text"`
+		KeysTextCamel             *json.RawMessage         `json:"keysText"`
+		PasteText                 *json.RawMessage         `json:"paste_text"`
+		PasteTextCamel            *json.RawMessage         `json:"pasteText"`
+		PastedText                *json.RawMessage         `json:"pasted_text"`
+		PastedTextCamel           *json.RawMessage         `json:"pastedText"`
+		Clipboard                 *json.RawMessage         `json:"clipboard"`
+		Messages                  []Message                `json:"messages"`
+		AppendMessages            []Message                `json:"append_messages"`
+		AppendMessagesCamel       []Message                `json:"appendMessages"`
+		TranscriptMessages        []Message                `json:"transcript_messages"`
+		TranscriptMessagesCamel   []Message                `json:"transcriptMessages"`
+		Status                    *json.RawMessage         `json:"status"`
+		SetStatus                 *json.RawMessage         `json:"set_status"`
+		SetStatusCamel            *json.RawMessage         `json:"setStatus"`
+		StatusLine                *json.RawMessage         `json:"status_line"`
+		StatusLineCamel           *json.RawMessage         `json:"statusLine"`
+		BaseStatus                *json.RawMessage         `json:"base_status"`
+		BaseStatusCamel           *json.RawMessage         `json:"baseStatus"`
+		Mouse                     *ScriptMouse             `json:"mouse"`
+		MouseEvent                *ScriptMouse             `json:"mouse_event"`
+		MouseEventCamel           *ScriptMouse             `json:"mouseEvent"`
+		Keybindings               []BindingSpec            `json:"keybindings"`
+		KeyBindings               []BindingSpec            `json:"key_bindings"`
+		KeyBindingsCamel          []BindingSpec            `json:"keyBindings"`
+		KeybindingSpecs           []BindingSpec            `json:"keybinding_specs"`
+		KeybindingSpecsCamel      []BindingSpec            `json:"keybindingSpecs"`
+		UpsertTask                *TaskStatus              `json:"upsert_task"`
+		UpsertTaskCamel           *TaskStatus              `json:"upsertTask"`
+		RemoveTaskID              *json.RawMessage         `json:"remove_task_id"`
+		RemoveTaskIDCamel         *json.RawMessage         `json:"removeTaskId"`
+		RemoveTaskIDUpperCamel    *json.RawMessage         `json:"removeTaskID"`
+		RemoveTask                *json.RawMessage         `json:"remove_task"`
+		RemoveTaskCamel           *json.RawMessage         `json:"removeTask"`
+		DeleteTask                *json.RawMessage         `json:"delete_task"`
+		DeleteTaskCamel           *json.RawMessage         `json:"deleteTask"`
+		CancelActiveDialog        *json.RawMessage         `json:"cancel_active_dialog"`
+		CancelActiveDialogCamel   *json.RawMessage         `json:"cancelActiveDialog"`
+		CancelActive              *json.RawMessage         `json:"cancel_active"`
+		CancelActiveCamel         *json.RawMessage         `json:"cancelActive"`
+		CancelDialog              *json.RawMessage         `json:"cancel_dialog"`
+		CancelDialogCamel         *json.RawMessage         `json:"cancelDialog"`
+		CloseDialog               *json.RawMessage         `json:"close_dialog"`
+		CloseDialogCamel          *json.RawMessage         `json:"closeDialog"`
+		CancelPermissionID        *json.RawMessage         `json:"cancel_permission_id"`
+		CancelPermissionIDAlt     *json.RawMessage         `json:"cancelPermissionId"`
+		CancelPermissionIDUpper   *json.RawMessage         `json:"cancelPermissionID"`
+		CancelPermission          *json.RawMessage         `json:"cancel_permission"`
+		CancelPermissionCamel     *json.RawMessage         `json:"cancelPermission"`
+		CancelAllPermissions      *json.RawMessage         `json:"cancel_all_permissions"`
+		CancelAllPermissionsCamel *json.RawMessage         `json:"cancelAllPermissions"`
+		CancelPermissions         *json.RawMessage         `json:"cancel_permissions"`
+		CancelPermissionsCamel    *json.RawMessage         `json:"cancelPermissions"`
+		CancelAllTasks            *json.RawMessage         `json:"cancel_all_tasks"`
+		CancelAllTasksCamel       *json.RawMessage         `json:"cancelAllTasks"`
+		CancelTasks               *json.RawMessage         `json:"cancel_tasks"`
+		CancelTasksCamel          *json.RawMessage         `json:"cancelTasks"`
+		CancelTasksDetail         *json.RawMessage         `json:"cancel_tasks_detail"`
+		CancelTasksDetailCamel    *json.RawMessage         `json:"cancelTasksDetail"`
+		CancelReason              *json.RawMessage         `json:"cancel_reason"`
+		CancelReasonCamel         *json.RawMessage         `json:"cancelReason"`
+		OpenTasksDialog           *json.RawMessage         `json:"open_tasks_dialog"`
+		OpenTasksDialogCamel      *json.RawMessage         `json:"openTasksDialog"`
+		OpenTasks                 *json.RawMessage         `json:"open_tasks"`
+		OpenTasksCamel            *json.RawMessage         `json:"openTasks"`
+		ShowTasks                 *json.RawMessage         `json:"show_tasks"`
+		ShowTasksCamel            *json.RawMessage         `json:"showTasks"`
+		ResizeWidth               *json.RawMessage         `json:"resize_width"`
+		ResizeWidthCamel          *json.RawMessage         `json:"resizeWidth"`
+		ResizeHeight              *json.RawMessage         `json:"resize_height"`
+		ResizeHeightCamel         *json.RawMessage         `json:"resizeHeight"`
+		SnapshotName              *json.RawMessage         `json:"snapshot_name"`
+		SnapshotNameCamel         *json.RawMessage         `json:"snapshotName"`
+		Focus                     *json.RawMessage         `json:"focus"`
+		Focused                   *json.RawMessage         `json:"focused"`
+		FocusIn                   *json.RawMessage         `json:"focus_in"`
+		FocusInCamel              *json.RawMessage         `json:"focusIn"`
+		FocusOut                  *json.RawMessage         `json:"focus_out"`
+		FocusOutCamel             *json.RawMessage         `json:"focusOut"`
+		Blur                      *json.RawMessage         `json:"blur"`
+		Blurred                   *json.RawMessage         `json:"blurred"`
+		ExpectEvent               *ScreenEvent             `json:"expect_event"`
+		ExpectEventCamel          *ScreenEvent             `json:"expectEvent"`
+		ExpectEvents              *json.RawMessage         `json:"expect_events"`
+		ExpectEventsCamel         *json.RawMessage         `json:"expectEvents"`
+		ExpectNoEvent             *json.RawMessage         `json:"expect_no_event"`
+		ExpectNoEventCamel        *json.RawMessage         `json:"expectNoEvent"`
+		ExpectEventCount          *json.RawMessage         `json:"expect_event_count"`
+		ExpectEventCountCamel     *json.RawMessage         `json:"expectEventCount"`
+		ExpectTotalEventCount     *json.RawMessage         `json:"expect_total_event_count"`
+		ExpectTotalEventCamel     *json.RawMessage         `json:"expectTotalEventCount"`
+		ExpectDialogResult        *DialogResultExpectation `json:"expect_dialog_result"`
+		ExpectDialogResultCamel   *DialogResultExpectation `json:"expectDialogResult"`
+		ExpectDialogResults       *json.RawMessage         `json:"expect_dialog_results"`
+		ExpectDialogResultsCamel  *json.RawMessage         `json:"expectDialogResults"`
+		ExpectNoDialogResult      *json.RawMessage         `json:"expect_no_dialog_result"`
+		ExpectNoDialogResultCamel *json.RawMessage         `json:"expectNoDialogResult"`
+		ExpectNoDialogResults     *json.RawMessage         `json:"expect_no_dialog_results"`
+		ExpectDialogResultCount   *json.RawMessage         `json:"expect_dialog_result_count"`
+		ExpectDialogCountCamel    *json.RawMessage         `json:"expectDialogResultCount"`
+		ExpectTotalDialogCount    *json.RawMessage         `json:"expect_total_dialog_result_count"`
+		ExpectTotalDialogCamel    *json.RawMessage         `json:"expectTotalDialogResultCount"`
+		ExpectDialog              *DialogExpectation       `json:"expect_dialog"`
+		ExpectDialogCamel         *DialogExpectation       `json:"expectDialog"`
+		ExpectPrompt              *json.RawMessage         `json:"expect_prompt"`
+		ExpectPromptCamel         *json.RawMessage         `json:"expectPrompt"`
+		ExpectVim                 *json.RawMessage         `json:"expect_vim"`
+		ExpectVimCamel            *json.RawMessage         `json:"expectVim"`
+		ExpectTasks               *json.RawMessage         `json:"expect_tasks"`
+		ExpectTasksCamel          *json.RawMessage         `json:"expectTasks"`
+		ExpectReverseSearch       *json.RawMessage         `json:"expect_reverse_search"`
+		ExpectReverseSearchCamel  *json.RawMessage         `json:"expectReverseSearch"`
+		ExpectViewport            *json.RawMessage         `json:"expect_viewport"`
+		ExpectViewportCamel       *json.RawMessage         `json:"expectViewport"`
+		ExpectScreen              *json.RawMessage         `json:"expect_screen"`
+		ExpectScreenCamel         *json.RawMessage         `json:"expectScreen"`
+		ExpectFocused             *json.RawMessage         `json:"expect_focused"`
+		ExpectFocusedCamel        *json.RawMessage         `json:"expectFocused"`
+		ExpectStatusContains      *json.RawMessage         `json:"expect_status_contains"`
+		ExpectStatusContainsCamel *json.RawMessage         `json:"expectStatusContains"`
+		ExpectStatusNotContains   *json.RawMessage         `json:"expect_status_not_contains"`
+		ExpectStatusNotCamel      *json.RawMessage         `json:"expectStatusNotContains"`
+		ExpectSnapshotContains    *json.RawMessage         `json:"expect_snapshot_contains"`
+		ExpectSnapshotCamel       *json.RawMessage         `json:"expectSnapshotContains"`
+		ExpectSnapshotNotContains *json.RawMessage         `json:"expect_snapshot_not_contains"`
+		ExpectSnapshotNotCamel    *json.RawMessage         `json:"expectSnapshotNotContains"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -983,17 +983,29 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	); vim != nil {
 		step.ExpectVim = vim
 	}
-	if fields.ExpectTasks != nil {
-		step.ExpectTasks = fields.ExpectTasks
+	if tasks := scriptNamedTasksExpectationField(fieldMap,
+		[]string{"expect_tasks", "expectTasks"},
+		"tasks",
+		"task_expectation",
+		"taskExpectation",
+		"expectation",
+		"expected",
+		"expect_tasks",
+		"expectTasks",
+	); tasks != nil {
+		step.ExpectTasks = tasks
 	}
-	if fields.ExpectTasksCamel != nil {
-		step.ExpectTasks = fields.ExpectTasksCamel
-	}
-	if fields.ExpectReverseSearch != nil {
-		step.ExpectReverseSearch = fields.ExpectReverseSearch
-	}
-	if fields.ExpectReverseSearchCamel != nil {
-		step.ExpectReverseSearch = fields.ExpectReverseSearchCamel
+	if reverse := scriptNamedReverseSearchExpectationField(fieldMap,
+		[]string{"expect_reverse_search", "expectReverseSearch"},
+		"reverse_search",
+		"reverseSearch",
+		"search",
+		"expectation",
+		"expected",
+		"expect_reverse_search",
+		"expectReverseSearch",
+	); reverse != nil {
+		step.ExpectReverseSearch = reverse
 	}
 	if viewport := scriptNamedViewportExpectationField(fieldMap,
 		[]string{"expect_viewport", "expectViewport"},
@@ -2234,6 +2246,150 @@ func scriptScreenExpectationFromJSON(raw json.RawMessage, names []string, depth 
 
 func scriptScreenExpectationHasData(screen ScreenExpectation) bool {
 	return screen.Width > 0 || screen.Height > 0
+}
+
+func scriptNamedTasksExpectationField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) *TasksExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if tasks, ok := scriptTasksExpectationFromJSON(raw, nestedNames, 0); ok {
+			return tasks
+		}
+	}
+	return nil
+}
+
+func scriptTasksExpectationFromJSON(raw json.RawMessage, names []string, depth int) (*TasksExpectation, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if tasks, ok := scriptTasksExpectationFromJSON(item, names, depth+1); ok {
+				return tasks, true
+			}
+		}
+		return nil, false
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil, false
+	}
+	var tasks TasksExpectation
+	if err := json.Unmarshal(raw, &tasks); err == nil && scriptTasksExpectationHasData(tasks) {
+		return &tasks, true
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if tasks, ok := scriptTasksExpectationFromJSON(nested, names, depth+1); ok {
+			return tasks, true
+		}
+	}
+	return nil, false
+}
+
+func scriptTasksExpectationHasData(tasks TasksExpectation) bool {
+	return tasks.Count != nil ||
+		len(tasks.StateCounts) > 0 ||
+		len(tasks.Contains) > 0
+}
+
+func scriptNamedReverseSearchExpectationField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) *ReverseSearchExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if reverse, ok := scriptReverseSearchExpectationFromJSON(raw, nestedNames, 0); ok {
+			return reverse
+		}
+	}
+	return nil
+}
+
+func scriptReverseSearchExpectationFromJSON(raw json.RawMessage, names []string, depth int) (*ReverseSearchExpectation, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if reverse, ok := scriptReverseSearchExpectationFromJSON(item, names, depth+1); ok {
+				return reverse, true
+			}
+		}
+		return nil, false
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	var reverse ReverseSearchExpectation
+	if err := json.Unmarshal(raw, &reverse); err == nil && scriptReverseSearchExpectationHasData(reverse, fields) {
+		return &reverse, true
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if reverse, ok := scriptReverseSearchExpectationFromJSON(nested, names, depth+1); ok {
+			return reverse, true
+		}
+	}
+	return nil, false
+}
+
+func scriptReverseSearchExpectationHasData(reverse ReverseSearchExpectation, fields map[string]json.RawMessage) bool {
+	if reverse.Active ||
+		reverse.Query != "" ||
+		reverse.Cursor != nil ||
+		reverse.Current != "" ||
+		reverse.ResultCount > 0 ||
+		reverse.NoResults {
+		return true
+	}
+	for _, name := range []string{
+		"Active",
+		"active",
+		"is_active",
+		"isActive",
+		"open",
+		"visible",
+		"NoResults",
+		"noResults",
+		"no_results",
+		"no_matches",
+		"noMatches",
+		"empty",
+		"empty_results",
+		"emptyResults",
+	} {
+		if _, ok := fields[name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func scriptActionIntFromJSON(raw json.RawMessage, names []string, depth int) (int, bool) {

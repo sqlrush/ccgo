@@ -1993,6 +1993,50 @@ func TestRunInteractionScriptAcceptsReverseSearchAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedReverseSearchExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"keys": ["ctrl-r", "d", "e", "p"],
+			"expectReverseSearch": {
+				"resource": {
+					"attributes": {
+						"isActive": true,
+						"search": "dep",
+						"cursorIndex": 3,
+						"currentResult": "deploy new",
+						"matchCount": 2
+					}
+				}
+			}
+		},
+		{
+			"key": "\u001b",
+			"expect_reverse_search": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"visible": false
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].ExpectReverseSearch == nil || !steps[0].ExpectReverseSearch.Active || steps[0].ExpectReverseSearch.Query != "dep" || steps[0].ExpectReverseSearch.Cursor == nil || *steps[0].ExpectReverseSearch.Cursor != 3 || steps[0].ExpectReverseSearch.Current != "deploy new" || steps[0].ExpectReverseSearch.ResultCount != 2 {
+		t.Fatalf("first reverse expectation = %#v", steps[0].ExpectReverseSearch)
+	}
+	if steps[1].ExpectReverseSearch == nil || steps[1].ExpectReverseSearch.Active {
+		t.Fatalf("second reverse expectation = %#v", steps[1].ExpectReverseSearch)
+	}
+	screen := NewREPLScreen(40, 8, []string{"deploy old", "test", "deploy new"})
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPermissionAndTaskDialogs(t *testing.T) {
 	permission := PermissionDialog(PermissionRequest{
 		ID:          "perm_1",
@@ -6682,6 +6726,65 @@ func TestRunDialogRuntimeScriptAcceptsTaskExpectationAliases(t *testing.T) {
 	]`))
 	if err != nil {
 		t.Fatal(err)
+	}
+	screen := NewREPLScreen(50, 9, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunDialogRuntimeScriptAcceptsWrappedTaskExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"upsertTask": {"taskId": "task_1", "name": "Build", "status": "running", "statusText": "go test", "progressPercent": 40},
+			"expectTasks": {
+				"resource": {
+					"attributes": {
+						"taskCount": 1,
+						"statusCounts": {"running": 1},
+						"contains": {"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 40}
+					}
+				}
+			}
+		},
+		{
+			"cancelAllTasks": true,
+			"cancelTasksDetail": "stopped",
+			"expect_tasks": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"total": 1,
+							"countsByState": {"cancelled": 1},
+							"contains": {"id": "task_1", "state": "cancelled", "detail": "stopped"}
+						}
+					}
+				}
+			}
+		},
+		{
+			"removeTask": "task_1",
+			"expectTasks": {
+				"resource": {
+					"attributes": {
+						"taskCount": 0
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].ExpectTasks == nil || steps[0].ExpectTasks.Count == nil || *steps[0].ExpectTasks.Count != 1 || steps[0].ExpectTasks.StateCounts["running"] != 1 || len(steps[0].ExpectTasks.Contains) != 1 {
+		t.Fatalf("first task expectation = %#v", steps[0].ExpectTasks)
+	}
+	if steps[1].ExpectTasks == nil || steps[1].ExpectTasks.Count == nil || *steps[1].ExpectTasks.Count != 1 || steps[1].ExpectTasks.StateCounts["cancelled"] != 1 || len(steps[1].ExpectTasks.Contains) != 1 {
+		t.Fatalf("second task expectation = %#v", steps[1].ExpectTasks)
+	}
+	if steps[2].ExpectTasks == nil || steps[2].ExpectTasks.Count == nil || *steps[2].ExpectTasks.Count != 0 {
+		t.Fatalf("third task expectation = %#v", steps[2].ExpectTasks)
 	}
 	screen := NewREPLScreen(50, 9, nil)
 	runtime := NewDialogRuntime()
