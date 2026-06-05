@@ -54,6 +54,8 @@ M6 补充：sidechain/subagent lifecycle state loader 现在接受 `subagent_sta
 
 M6 补充：sidechain/subagent lifecycle content 读取现在接受 JSON:API/resource-style `resource`/`attributes`/`properties` wrapper，外层 resource `id` 可作为 sidechain ID fallback，内层 agent metadata、status/outcome 和 summary 字段仍能恢复到 state/list/resume。
 
+M6 补充：sidechain/subagent lifecycle content 读取现在也递归解包 GraphQL/JSON:API 风格的 `edge`/`node`/`attrs` wrapper，wrapped start/summary event 可继续恢复 ID、status、summary 和 agent metadata。
+
 M6 补充：sidechain/subagent lifecycle status 归一化现在接受 compact/camel aliases，包括 `inProgress`、`completedSuccessfully`、`cancelledByUser`/`canceledByUser`、`failedError`/`failedWithError` 和 `timedOut`，并保持 transcript/runtime 输出为 canonical running/completed/cancelled/failed。
 
 M6 补充：transcript resume 的嵌套 content block 现在接受 `toolUseId`/`toolUseID`、`isError`、`cacheControl`、`cacheReference` 字段别名，并保留 cache edit 的 `cacheReference`。
@@ -131,6 +133,8 @@ M6 补充：remote history 现在也接受 HTTP `Link` header 中 `rel="previous
 M6 补充：sidechain/subagent state loader 现在接受 `subagent_start`/`agent_start`/`task_start` 和 `sidechain_end`/`subagent_finish`/`agent_finish`/`task_summary` 等 subtype 别名，并归一化 `active`/`success`/`canceled`/`error` 等运行状态别名，同时读取 `subagentId`/`agentID`、`subagentType`、`finalSummary` 等 content 字段。
 
 M6 补充：sidechain/subagent lifecycle content 读取现在会递归解包 `payload`/`data`/`body`/`result`/`response`/`metadata` 等 wrapper，嵌套的 subagent ID、status/outcome、summary、agent type、workspace path 和 task description 都可参与 state/list/resume 恢复。
+
+M6 补充：sidechain/subagent lifecycle content 读取现在也递归解包 GraphQL/JSON:API 风格的 `edge`/`node`/`attrs` wrapper，wrapped start/summary event 可继续恢复 ID、status、summary 和 agent metadata。
 
 M6 补充：sidechain/subagent lifecycle 的 ID 等 string-like 字段现在接受 JSON number 和 Go 数字标量，numeric subagent ID 会保留为字符串并可用于 state/list/resume 查找。
 
@@ -487,6 +491,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：sidechain/subagent state loader 接受 legacy/fork 命名的 start/finish subtype、ID/type/summary 字段别名和常见状态别名，提升旧 subagent transcript resume/list 的恢复率。
 
 本轮补充：sidechain/subagent lifecycle content 读取递归解包常见 wrapper，并从嵌套 start/summary event 中恢复 subagent ID、status、summary、agent type、workspace path 和 task description，减少 fork/第三方 transcript 需要手工扁平化字段的情况。
+
+本轮补充：sidechain/subagent lifecycle content 读取现在也递归解包 GraphQL/JSON:API 风格的 `edge`/`node`/`attrs` wrapper，wrapped start/summary event 可继续恢复 ID、status、summary 和 agent metadata。
 
 本轮补充：sidechain/subagent lifecycle content 的 ID 等 string-like 字段现在接受 JSON number/数字标量，numeric subagent ID 会保留为字符串并能通过 resume fallback 找回对应 sidechain。
 

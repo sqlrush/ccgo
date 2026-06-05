@@ -427,6 +427,66 @@ func TestLoadSidechainStateAcceptsResourceLifecycleAttributes(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsGraphQLResourceLifecycleWrappers(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "graphql-resource", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_started",
+		Content: map[string]any{
+			"edge": map[string]any{
+				"node": map[string]any{
+					"attrs": map[string]any{
+						"subagentId":      "graph_worker",
+						"subagentType":    "scanner",
+						"workspacePath":   "/tmp/graph-worktree",
+						"taskDescription": "scan wrappers",
+						"lifecycleState":  "inProgress",
+					},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "graphql-resource", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "agent_finish",
+		Content: map[string]any{
+			"edge": map[string]any{
+				"node": map[string]any{
+					"properties": map[string]any{
+						"agentID":      "graph_worker",
+						"outcome":      "completedSuccessfully",
+						"finalSummary": "graph done",
+					},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "graph_worker" || state.Status != SidechainStatusCompleted || state.Summary != "graph done" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.AgentType != "scanner" || state.Metadata.WorktreePath != "/tmp/graph-worktree" || state.Metadata.Description != "scan wrappers" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsNumericLifecycleIDs(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")
