@@ -5556,6 +5556,65 @@ func TestRunInteractionScriptAcceptsCompactEventActionAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedMouseAndImageActionPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"dialog": {
+				"title": "Permission",
+				"body": "Allow?",
+				"actions": ["Allow", "Deny"],
+				"id": "perm_wrapped_mouse",
+				"kind": "permission"
+			}
+		},
+		{
+			"action": "mouseEvent",
+			"payload": {
+				"resource": {
+					"type": "mouse-event",
+					"attributes": {
+						"buttonMask": 0,
+						"clientX": 13,
+						"clientY": 5,
+						"isRelease": false
+					}
+				}
+			},
+			"expectEvent": {"type": "dialog_action", "value": "Deny", "dialogId": "perm_wrapped_mouse", "dialogKind": "permission"}
+		},
+		{
+			"name": "pasteImage",
+			"payload": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"fileName": "wrapped.png",
+							"mimeType": "image/png",
+							"data": "BBBB"
+						}
+					}
+				}
+			},
+			"expectPrompt": {
+				"text": "[Image #1]",
+				"pastedContentCount": 1,
+				"pastedContents": {"pastedId": 1, "kind": "image", "fileName": "wrapped.png", "contentType": "image/png", "value": "BBBB"}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventDialogAction || result.Events[0].DialogID != "perm_wrapped_mouse" || result.Events[0].Value != "Deny" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestParseInteractionScriptAcceptsCompactMouseActionAlias(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"action":"mouseEvent","payload":{"buttonMask":0,"clientX":13,"clientY":5,"isRelease":false}}

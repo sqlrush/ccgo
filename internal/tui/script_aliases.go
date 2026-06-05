@@ -1884,9 +1884,8 @@ func scriptMouseJSONField(fields map[string]json.RawMessage, names ...string) *S
 		if !ok {
 			continue
 		}
-		var mouse ScriptMouse
-		if err := json.Unmarshal(raw, &mouse); err == nil {
-			return &mouse
+		if mouse, ok := scriptMouseFromJSON(raw, 0); ok {
+			return mouse
 		}
 	}
 	return nil
@@ -1898,12 +1897,105 @@ func scriptImageJSONField(fields map[string]json.RawMessage, names ...string) *S
 		if !ok {
 			continue
 		}
-		var image ScriptImage
-		if err := json.Unmarshal(raw, &image); err == nil {
-			return &image
+		if image, ok := scriptImageFromJSON(raw, 0); ok {
+			return image
 		}
 	}
 	return nil
+}
+
+func scriptMouseFromJSON(raw json.RawMessage, depth int) (*ScriptMouse, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	var mouse ScriptMouse
+	if err := json.Unmarshal(raw, &mouse); err == nil && scriptMouseHasData(mouse) {
+		return &mouse, true
+	}
+	if depth >= 8 {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if mouse, ok := scriptMouseFromJSON(item, depth+1); ok {
+				return mouse, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("mouse", "mouse_event", "mouseEvent", "event", "input") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if mouse, ok := scriptMouseFromJSON(nested, depth+1); ok {
+			return mouse, true
+		}
+	}
+	return nil, false
+}
+
+func scriptImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	var image ScriptImage
+	if err := json.Unmarshal(raw, &image); err == nil && scriptImageHasData(image) {
+		return &image, true
+	}
+	if depth >= 8 {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if image, ok := scriptImageFromJSON(item, depth+1); ok {
+				return image, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("image", "paste_image", "pasteImage", "image_paste", "imagePaste", "attachment", "media") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if image, ok := scriptImageFromJSON(nested, depth+1); ok {
+			return image, true
+		}
+	}
+	return nil, false
+}
+
+func scriptMouseHasData(mouse ScriptMouse) bool {
+	return mouse.Button != 0 || mouse.X != 0 || mouse.Y != 0 || mouse.Release
+}
+
+func scriptImageHasData(image ScriptImage) bool {
+	return image.Filename != "" || image.MediaType != "" || image.Content != "" || image.SourcePath != "" || image.Dimensions != nil
 }
 
 func scriptStepHasFocusKey(step *ScriptStep) bool {

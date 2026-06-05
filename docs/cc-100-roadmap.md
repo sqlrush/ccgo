@@ -592,6 +592,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script action/type/kind/name/operation 动作判别字段现在也接受 compact/camel event/media aliases，包括 `focusIn`、`focusOut`、`mouseEvent`、`pasteImage` 和 `imagePaste`。
 
+本轮补充：interaction script 的 mouseEvent/pasteImage action payload 现在递归解包 JSON:API/GraphQL-style `resource`/`attributes`/`properties`/`attrs`/`edge.node` wrapper，wrapped mouse 坐标/按钮和 image filename/media/content 可直接驱动 dialog click 与 image paste。
+
 本轮补充：interaction script action/type/kind/name/operation 动作判别字段现在也能驱动 runtime/dialog mutation，支持 `requestPermission`、`taskStatus`、`showTasks`、`cancelTasks`、`removeTask` 和 `showDialog` 等动作，并从 `value`/`payload`/`data`/`body` 载荷解析 permission/task/dialog 对象、task/permission ID 或取消原因。
 
 本轮补充：interaction script 的 runtime permission/task payload 现在递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge`/`node` 等 JSON:API/GraphQL wrapper，并把 resource/node 顶层 ID 回填到内层 runtime 对象，避免 wrapper-only payload 被误解析成空对象。
