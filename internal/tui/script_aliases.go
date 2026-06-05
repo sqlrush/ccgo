@@ -3680,16 +3680,75 @@ func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
 	data = normalizeBoolFields(data,
 		"Found",
 		"found",
+		"Exists",
+		"exists",
+		"Matched",
+		"matched",
 		"Stale",
 		"stale",
-		"exists",
-		"matched",
+		"IsStale",
 		"is_stale",
 		"isStale",
 	)
 	type alias DialogResultExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"ID",
+		"id",
+		"DialogID",
+		"dialog_id",
+		"dialogId",
+		"dialogID",
+		"PermissionID",
+		"permission_id",
+		"permissionId",
+		"permissionID",
+		"RequestID",
+		"request_id",
+		"requestId",
+		"requestID",
+		"ToolUseID",
+		"tool_use_id",
+		"toolUseId",
+		"toolUseID",
+		"OperationID",
+		"operation_id",
+		"operationId",
+		"operationID",
+		"Kind",
+		"kind",
+		"DialogKind",
+		"dialog_kind",
+		"dialogKind",
+		"Action",
+		"action",
+		"Value",
+		"value",
+		"ActionValue",
+		"action_value",
+		"actionValue",
+		"SelectedAction",
+		"selected_action",
+		"selectedAction",
+		"Status",
+		"status",
+		"ResultStatus",
+		"result_status",
+		"resultStatus",
+		"State",
+		"state",
+		"Found",
+		"found",
+		"Exists",
+		"exists",
+		"Matched",
+		"matched",
+		"Stale",
+		"stale",
+		"IsStale",
+		"is_stale",
+		"isStale",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = DialogResultExpectation(raw)
@@ -3699,26 +3758,26 @@ func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if expect.ID == "" {
-		expect.ID = scalarStringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
+		expect.ID = scalarStringJSONField(fields, "ID", "id", "DialogID", "dialog_id", "dialogId", "dialogID", "PermissionID", "permission_id", "permissionId", "permissionID", "RequestID", "request_id", "requestId", "requestID", "ToolUseID", "tool_use_id", "toolUseId", "toolUseID", "OperationID", "operation_id", "operationId", "operationID")
 	}
 	if expect.Kind == "" {
-		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
+		if dialogKind := stringJSONField(fields, "Kind", "kind", "DialogKind", "dialog_kind", "dialogKind"); dialogKind != "" {
 			expect.Kind = DialogKind(dialogKind)
 		}
 	}
 	if expect.Action == "" {
-		expect.Action = stringJSONField(fields, "value", "action_value", "actionValue", "selected_action", "selectedAction")
+		expect.Action = stringJSONField(fields, "Action", "action", "Value", "value", "ActionValue", "action_value", "actionValue", "SelectedAction", "selected_action", "selectedAction")
 	}
 	if expect.Status == "" {
-		if status := stringJSONField(fields, "result_status", "resultStatus", "state"); status != "" {
+		if status := stringJSONField(fields, "Status", "status", "ResultStatus", "result_status", "resultStatus", "State", "state"); status != "" {
 			expect.Status = DialogResultStatus(status)
 		}
 	}
 	if expect.Found == nil {
-		expect.Found = boolPtrJSONField(fields, "exists", "matched")
+		expect.Found = boolPtrJSONField(fields, "Found", "found", "Exists", "exists", "Matched", "matched")
 	}
 	if expect.Stale == nil {
-		expect.Stale = boolPtrJSONField(fields, "is_stale", "isStale")
+		expect.Stale = boolPtrJSONField(fields, "Stale", "stale", "IsStale", "is_stale", "isStale")
 	}
 	return nil
 }

@@ -7926,13 +7926,13 @@ func TestRunInteractionScriptAcceptsResourceExpectationWrapperArrays(t *testing.
 func TestRunDialogRuntimeScriptAcceptsEventAndResultAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
-			"request_permission": {"id": "perm_1", "tool_name": "Bash"},
-			"expectDialog": {"active": true, "id": "perm_1", "kind": "permission"}
+			"request_permission": {"id": "123", "tool_name": "Bash"},
+			"expectDialog": {"active": true, "id": "123", "kind": "permission"}
 		},
 		{
 			"key": "enter",
-			"expectEvent": {"eventType": "dialog_action", "payload": "Allow", "dialogID": "perm_1", "dialogKind": "permission"},
-			"expectDialogResult": {"dialogId": "perm_1", "dialogKind": "permission", "actionValue": "Allow", "resultStatus": "allowed", "exists": true, "isStale": false}
+			"expectEvent": {"eventType": "dialog_action", "payload": "Allow", "dialogID": "123", "dialogKind": "permission"},
+			"expectDialogResult": {"ID": 123, "DialogKind": "permission", "ActionValue": "Allow", "ResultStatus": "allowed", "Found": "true", "Stale": "false"}
 		}
 	]`))
 	if err != nil {
