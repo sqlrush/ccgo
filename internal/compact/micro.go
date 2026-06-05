@@ -162,7 +162,7 @@ func microResultApplyNestedFieldAliases(result *MicroResult, fields map[string]j
 		"microResultMetadata", "micro_result_metadata",
 		"attributes", "properties", "attrs", "info",
 		"cacheInfo", "cache_info", "cacheDetails", "cache_details",
-		"cacheEntry", "cache_entry", "entry", "record", "cache",
+		"cacheEntry", "cache_entry", "entry", "record", "cache", "value",
 	} {
 		raw, ok := fields[name]
 		if !ok {
@@ -218,6 +218,9 @@ func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
 			continue
 		}
 		if trimmed[0] != '{' {
+			return true
+		}
+		if _, ok, _ := microSummaryFromRaw(raw, name); ok {
 			return true
 		}
 	}

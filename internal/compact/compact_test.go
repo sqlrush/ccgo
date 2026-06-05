@@ -476,6 +476,16 @@ func TestLoadMicroResultAcceptsContentBlockSummaryPayloads(t *testing.T) {
 			want: "block summary",
 		},
 		{
+			digest: "value-content-block",
+			payload: `{
+				"value": {"type": "text", "text": "value block summary"},
+				"digest": "value-content-block",
+				"version": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "value block summary",
+		},
+		{
 			digest: "summary-array",
 			payload: `{
 				"summary": [
