@@ -6684,19 +6684,19 @@ func TestRunDialogRuntimeScriptAcceptsPermissionRequestAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
 			"request_permission": {
-				"permissionId": "perm_alias",
-				"tool": "Write",
-				"filePath": "/tmp/a.txt",
-				"prompt": "Need write access.",
-				"actions": "Approve"
+				"ID": 9001,
+				"ToolName": "Write",
+				"Path": "/tmp/a.txt",
+				"Description": "Need write access.",
+				"Actions": "Approve"
 			},
-			"expectDialog": {"active": true, "id": "perm_alias", "kind": "permission"},
+			"expectDialog": {"active": true, "id": "9001", "kind": "permission"},
 			"expectSnapshotContains": ["Tool: Write", "Path: /tmp/a.txt", "Need write access.", "Approve"]
 		},
 		{
 			"key": "enter",
-			"expectEvent": {"type": "dialog_action", "value": "Approve", "dialogId": "perm_alias", "dialogKind": "permission"},
-			"expectDialogResult": {"id": "perm_alias", "kind": "permission", "action": "Approve", "status": "allowed", "found": true}
+			"expectEvent": {"type": "dialog_action", "value": "Approve", "dialogId": "9001", "dialogKind": "permission"},
+			"expectDialogResult": {"id": "9001", "kind": "permission", "action": "Approve", "status": "allowed", "found": true}
 		}
 	]`))
 	if err != nil {
@@ -6708,7 +6708,7 @@ func TestRunDialogRuntimeScriptAcceptsPermissionRequestAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_alias" || result.DialogResults[0].Status != DialogResultAllowed {
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "9001" || result.DialogResults[0].Status != DialogResultAllowed {
 		t.Fatalf("dialog results = %#v", result.DialogResults)
 	}
 	if len(runtime.Permissions) != 0 || runtime.Active != nil {

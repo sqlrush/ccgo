@@ -4217,7 +4217,112 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 	data = normalizeStringFieldsToArray(data, "Actions", "actions")
 	type alias PermissionRequest
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"ID",
+		"id",
+		"RequestID",
+		"request_id",
+		"requestId",
+		"requestID",
+		"PermissionID",
+		"permission_id",
+		"permissionId",
+		"permissionID",
+		"ToolUseID",
+		"tool_use_id",
+		"toolUseId",
+		"toolUseID",
+		"OperationID",
+		"operation_id",
+		"operationId",
+		"operationID",
+		"ToolName",
+		"tool_name",
+		"toolName",
+		"Tool",
+		"tool",
+		"Name",
+		"name",
+		"Operation",
+		"operation",
+		"Command",
+		"command",
+		"CommandName",
+		"command_name",
+		"commandName",
+		"ToolTitle",
+		"tool_title",
+		"toolTitle",
+		"Path",
+		"path",
+		"FilePath",
+		"file_path",
+		"filePath",
+		"TargetPath",
+		"target_path",
+		"targetPath",
+		"ResourcePath",
+		"resource_path",
+		"resourcePath",
+		"WorkingDirectory",
+		"working_directory",
+		"workingDirectory",
+		"Cwd",
+		"cwd",
+		"Target",
+		"target",
+		"Resource",
+		"resource",
+		"URI",
+		"uri",
+		"URL",
+		"url",
+		"File",
+		"file",
+		"Filename",
+		"filename",
+		"Description",
+		"description",
+		"Prompt",
+		"prompt",
+		"Message",
+		"message",
+		"Reason",
+		"reason",
+		"ReasonText",
+		"reason_text",
+		"reasonText",
+		"Summary",
+		"summary",
+		"Details",
+		"details",
+		"Body",
+		"body",
+		"Text",
+		"text",
+		"Content",
+		"content",
+		"Actions",
+		"actions",
+		"Options",
+		"options",
+		"Choices",
+		"choices",
+		"AllowedActions",
+		"allowed_actions",
+		"allowedActions",
+		"AvailableActions",
+		"available_actions",
+		"availableActions",
+		"ActionChoices",
+		"action_choices",
+		"actionChoices",
+		"Buttons",
+		"buttons",
+		"ActionsList",
+		"actions_list",
+		"actionsList",
+	), &raw); err != nil {
 		return err
 	}
 	*request = PermissionRequest(raw)
@@ -4227,19 +4332,19 @@ func (request *PermissionRequest) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if request.ID == "" {
-		request.ID = scalarStringJSONField(fields, "request_id", "requestId", "requestID", "permission_id", "permissionId", "permissionID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
+		request.ID = scalarStringJSONField(fields, "ID", "id", "RequestID", "request_id", "requestId", "requestID", "PermissionID", "permission_id", "permissionId", "permissionID", "ToolUseID", "tool_use_id", "toolUseId", "toolUseID", "OperationID", "operation_id", "operationId", "operationID")
 	}
 	if request.ToolName == "" {
-		request.ToolName = stringJSONField(fields, "tool_name", "toolName", "tool", "name", "operation", "command", "command_name", "commandName", "tool_title", "toolTitle")
+		request.ToolName = stringJSONField(fields, "ToolName", "tool_name", "toolName", "Tool", "tool", "Name", "name", "Operation", "operation", "Command", "command", "CommandName", "command_name", "commandName", "ToolTitle", "tool_title", "toolTitle")
 	}
 	if request.Path == "" {
-		request.Path = stringJSONField(fields, "file_path", "filePath", "target_path", "targetPath", "resource_path", "resourcePath", "working_directory", "workingDirectory", "cwd", "path", "target", "resource", "uri", "url", "file", "filename")
+		request.Path = stringJSONField(fields, "Path", "path", "FilePath", "file_path", "filePath", "TargetPath", "target_path", "targetPath", "ResourcePath", "resource_path", "resourcePath", "WorkingDirectory", "working_directory", "workingDirectory", "Cwd", "cwd", "Target", "target", "Resource", "resource", "URI", "uri", "URL", "url", "File", "file", "Filename", "filename")
 	}
 	if request.Description == "" {
-		request.Description = stringJSONField(fields, "prompt", "message", "reason", "reason_text", "reasonText", "summary", "description", "details", "body", "text", "content")
+		request.Description = stringJSONField(fields, "Description", "description", "Prompt", "prompt", "Message", "message", "Reason", "reason", "ReasonText", "reason_text", "reasonText", "Summary", "summary", "Details", "details", "Body", "body", "Text", "text", "Content", "content")
 	}
 	if len(request.Actions) == 0 {
-		request.Actions = stringListJSONField(fields, "options", "choices", "allowed_actions", "allowedActions", "available_actions", "availableActions", "action_choices", "actionChoices", "buttons", "actions_list", "actionsList")
+		request.Actions = stringListJSONField(fields, "Actions", "actions", "Options", "options", "Choices", "choices", "AllowedActions", "allowed_actions", "allowedActions", "AvailableActions", "available_actions", "availableActions", "ActionChoices", "action_choices", "actionChoices", "Buttons", "buttons", "ActionsList", "actions_list", "actionsList")
 	}
 	return nil
 }
