@@ -2000,11 +2000,11 @@ func TestRunInteractionScriptAcceptsWrappedReverseSearchExpectationAliasFields(t
 			"expectReverseSearch": {
 				"resource": {
 					"attributes": {
-						"isActive": true,
-						"search": "dep",
-						"cursorIndex": 3,
-						"currentResult": "deploy new",
-						"matchCount": 2
+						"Active": "true",
+						"Query": "dep",
+						"Cursor": "3",
+						"Current": "deploy new",
+						"ResultCount": "2"
 					}
 				}
 			}
@@ -2015,8 +2015,21 @@ func TestRunInteractionScriptAcceptsWrappedReverseSearchExpectationAliasFields(t
 				"edge": {
 					"node": {
 						"attrs": {
-							"visible": false
+							"Active": "false"
 						}
+					}
+				}
+			}
+		},
+		{
+			"keys": ["ctrl-r", "x"],
+			"ExpectReverseSearch": {
+				"resource": {
+					"attributes": {
+						"Active": "true",
+						"Query": "x",
+						"Cursor": "1",
+						"NoResults": "true"
 					}
 				}
 			}
@@ -2030,6 +2043,9 @@ func TestRunInteractionScriptAcceptsWrappedReverseSearchExpectationAliasFields(t
 	}
 	if steps[1].ExpectReverseSearch == nil || steps[1].ExpectReverseSearch.Active {
 		t.Fatalf("second reverse expectation = %#v", steps[1].ExpectReverseSearch)
+	}
+	if steps[2].ExpectReverseSearch == nil || !steps[2].ExpectReverseSearch.Active || steps[2].ExpectReverseSearch.Query != "x" || steps[2].ExpectReverseSearch.Cursor == nil || *steps[2].ExpectReverseSearch.Cursor != 1 || !steps[2].ExpectReverseSearch.NoResults {
+		t.Fatalf("third reverse expectation = %#v", steps[2].ExpectReverseSearch)
 	}
 	screen := NewREPLScreen(40, 8, []string{"deploy old", "test", "deploy new"})
 	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {

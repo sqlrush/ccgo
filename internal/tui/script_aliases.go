@@ -4679,46 +4679,64 @@ func (expect *ReverseSearchExpectation) UnmarshalJSON(data []byte) error {
 	)
 	type alias ReverseSearchExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Active",
+		"active",
+		"is_active",
+		"isActive",
+		"open",
+		"visible",
+		"Cursor",
+		"cursor",
+		"cursor_index",
+		"cursorIndex",
+		"cursor_position",
+		"cursorPosition",
+		"caret",
+		"position",
+		"ResultCount",
+		"result_count",
+		"resultCount",
+		"match_count",
+		"matchCount",
+		"matches",
+		"results",
+		"total",
+		"NoResults",
+		"noResults",
+		"no_results",
+		"no_matches",
+		"noMatches",
+		"empty",
+		"empty_results",
+		"emptyResults",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = ReverseSearchExpectation(raw)
 
-	var fields struct {
-		ResultCount *int  `json:"result_count"`
-		NoResults   *bool `json:"no_results"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
 	fieldMap := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if active := boolPtrJSONField(fieldMap, "is_active", "isActive", "open", "visible"); active != nil {
+	if active := boolPtrJSONField(fieldMap, "Active", "active", "is_active", "isActive", "open", "visible"); active != nil {
 		expect.Active = *active
 	}
 	if expect.Query == "" {
 		expect.Query = stringJSONField(fieldMap, "search", "term", "pattern", "text", "input", "value")
 	}
 	if expect.Cursor == nil {
-		expect.Cursor = intPtrJSONField(fieldMap, "cursor_index", "cursorIndex", "cursor_position", "cursorPosition", "caret", "position")
+		expect.Cursor = intPtrJSONField(fieldMap, "Cursor", "cursor", "cursor_index", "cursorIndex", "cursor_position", "cursorPosition", "caret", "position")
 	}
 	if expect.Current == "" {
 		expect.Current = stringJSONField(fieldMap, "current_result", "currentResult", "current_match", "currentMatch", "match", "selected", "selection")
 	}
-	if fields.ResultCount != nil {
-		expect.ResultCount = *fields.ResultCount
-	}
 	if expect.ResultCount == 0 {
-		if resultCount := intPtrJSONField(fieldMap, "match_count", "matchCount", "matches", "resultCount", "results", "total"); resultCount != nil {
+		if resultCount := intPtrJSONField(fieldMap, "ResultCount", "result_count", "resultCount", "match_count", "matchCount", "matches", "results", "total"); resultCount != nil {
 			expect.ResultCount = *resultCount
 		}
 	}
-	if fields.NoResults != nil {
-		expect.NoResults = *fields.NoResults
-	}
-	if noResults := boolPtrJSONField(fieldMap, "no_matches", "noMatches", "empty", "empty_results", "emptyResults"); noResults != nil {
+	if noResults := boolPtrJSONField(fieldMap, "NoResults", "noResults", "no_results", "no_matches", "noMatches", "empty", "empty_results", "emptyResults"); noResults != nil {
 		expect.NoResults = *noResults
 	}
 	return nil
