@@ -6420,10 +6420,10 @@ func TestRunInteractionScriptAcceptsWrappedMouseAndImageActionPayloads(t *testin
 				"resource": {
 					"type": "mouse-event",
 					"attributes": {
-						"buttonMask": 0,
-						"clientX": 13,
-						"clientY": 5,
-						"isRelease": false
+						"Button": "0",
+						"X": "13",
+						"Y": "5",
+						"Release": "false"
 					}
 				}
 			},

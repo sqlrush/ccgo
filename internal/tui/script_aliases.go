@@ -3606,22 +3606,116 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	data = normalizeBoolFields(data,
 		"Release",
 		"release",
+		"Released",
 		"released",
+		"IsRelease",
 		"is_release",
 		"isRelease",
+		"MouseRelease",
 		"mouse_release",
 		"mouseRelease",
+		"MouseUp",
 		"mouse_up",
 		"mouseUp",
+		"Up",
 		"up",
+		"ReleaseEvent",
 		"release_event",
 		"releaseEvent",
+		"ReleasedEvent",
 		"released_event",
 		"releasedEvent",
 	)
 	type alias ScriptMouse
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Button",
+		"button",
+		"ButtonCode",
+		"button_code",
+		"buttonCode",
+		"ButtonMask",
+		"button_mask",
+		"buttonMask",
+		"MouseButton",
+		"mouse_button",
+		"mouseButton",
+		"Btn",
+		"btn",
+		"Code",
+		"code",
+		"Mask",
+		"mask",
+		"X",
+		"x",
+		"Column",
+		"column",
+		"Col",
+		"col",
+		"MouseX",
+		"mouse_x",
+		"mouseX",
+		"ClientX",
+		"client_x",
+		"clientX",
+		"ScreenX",
+		"screen_x",
+		"screenX",
+		"PageX",
+		"page_x",
+		"pageX",
+		"OffsetX",
+		"offset_x",
+		"offsetX",
+		"ViewportX",
+		"viewport_x",
+		"viewportX",
+		"Y",
+		"y",
+		"Row",
+		"row",
+		"Line",
+		"line",
+		"MouseY",
+		"mouse_y",
+		"mouseY",
+		"ClientY",
+		"client_y",
+		"clientY",
+		"ScreenY",
+		"screen_y",
+		"screenY",
+		"PageY",
+		"page_y",
+		"pageY",
+		"OffsetY",
+		"offset_y",
+		"offsetY",
+		"ViewportY",
+		"viewport_y",
+		"viewportY",
+		"Release",
+		"release",
+		"Released",
+		"released",
+		"IsRelease",
+		"is_release",
+		"isRelease",
+		"MouseRelease",
+		"mouse_release",
+		"mouseRelease",
+		"MouseUp",
+		"mouse_up",
+		"mouseUp",
+		"Up",
+		"up",
+		"ReleaseEvent",
+		"release_event",
+		"releaseEvent",
+		"ReleasedEvent",
+		"released_event",
+		"releasedEvent",
+	), &raw); err != nil {
 		return err
 	}
 	*mouse = ScriptMouse(raw)
@@ -3630,16 +3724,16 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if button := intPtrJSONField(fields, "button_code", "buttonCode", "button_mask", "buttonMask", "mouse_button", "mouseButton", "button", "btn", "code", "mask"); button != nil {
+	if button := intPtrJSONField(fields, "Button", "button", "ButtonCode", "button_code", "buttonCode", "ButtonMask", "button_mask", "buttonMask", "MouseButton", "mouse_button", "mouseButton", "Btn", "btn", "Code", "code", "Mask", "mask"); button != nil {
 		mouse.Button = *button
 	}
-	if x := intPtrJSONField(fields, "column", "col", "mouse_x", "mouseX", "client_x", "clientX", "screen_x", "screenX", "page_x", "pageX", "offset_x", "offsetX", "viewport_x", "viewportX"); x != nil {
+	if x := intPtrJSONField(fields, "X", "x", "Column", "column", "Col", "col", "MouseX", "mouse_x", "mouseX", "ClientX", "client_x", "clientX", "ScreenX", "screen_x", "screenX", "PageX", "page_x", "pageX", "OffsetX", "offset_x", "offsetX", "ViewportX", "viewport_x", "viewportX"); x != nil {
 		mouse.X = *x
 	}
-	if y := intPtrJSONField(fields, "row", "line", "mouse_y", "mouseY", "client_y", "clientY", "screen_y", "screenY", "page_y", "pageY", "offset_y", "offsetY", "viewport_y", "viewportY"); y != nil {
+	if y := intPtrJSONField(fields, "Y", "y", "Row", "row", "Line", "line", "MouseY", "mouse_y", "mouseY", "ClientY", "client_y", "clientY", "ScreenY", "screen_y", "screenY", "PageY", "page_y", "pageY", "OffsetY", "offset_y", "offsetY", "ViewportY", "viewport_y", "viewportY"); y != nil {
 		mouse.Y = *y
 	}
-	if release := boolPtrJSONField(fields, "released", "is_release", "isRelease", "mouse_release", "mouseRelease", "mouse_up", "mouseUp", "up", "release_event", "releaseEvent", "released_event", "releasedEvent"); release != nil {
+	if release := boolPtrJSONField(fields, "Release", "release", "Released", "released", "IsRelease", "is_release", "isRelease", "MouseRelease", "mouse_release", "mouseRelease", "MouseUp", "mouse_up", "mouseUp", "Up", "up", "ReleaseEvent", "release_event", "releaseEvent", "ReleasedEvent", "released_event", "releasedEvent"); release != nil {
 		mouse.Release = *release
 	}
 	return nil
