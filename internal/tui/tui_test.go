@@ -6140,6 +6140,74 @@ func TestRunDialogRuntimeScriptAcceptsAdjacentTaskPayloadAliases(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsWrappedRuntimePayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"permission": {
+				"resource": {
+					"id": "perm_wrapped",
+					"type": "permission-request",
+					"attributes": {
+						"operation": "NotebookEdit",
+						"resourcePath": "/tmp/wrapped.ipynb",
+						"body": "Need notebook edit.",
+						"allowedActions": "Approve"
+					}
+				}
+			},
+			"expectDialog": {
+				"active": true,
+				"permissionID": "perm_wrapped",
+				"dialogKind": "permission",
+				"actions": "Approve",
+				"bodyContains": ["Tool: NotebookEdit", "Path: /tmp/wrapped.ipynb", "Need notebook edit."]
+			},
+			"expectStatusContains": ["permissions: 1"]
+		},
+		{
+			"key": "enter",
+			"expectDialogResult": {"requestID": "perm_wrapped", "state": "approved", "found": true},
+			"expectStatusNotContains": ["permissions: 1"]
+		},
+		{
+			"task": {
+				"edge": {
+					"node": {
+						"id": "task_wrapped",
+						"attrs": {
+							"displayName": "Index wrapped payload",
+							"phase": "processing",
+							"message": "loading",
+							"pct": "44"
+						}
+					}
+				}
+			},
+			"openTasksDialog": true,
+			"snapshotName": "wrapped-task",
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"working": 1},
+				"contains": {"jobId": "task_wrapped", "displayName": "Index wrapped payload", "phase": "active", "message": "loading", "pct": 44}
+			},
+			"expectStatusContains": ["running: 1"],
+			"expectSnapshotContains": ["Index wrapped payload [running] 44% - loading"]
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(64, 10, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_wrapped" || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"input": "go", "expectPrompt": {"text": "go"}},
@@ -6449,6 +6517,10 @@ func TestParseInteractionScriptAcceptsStepRecordWrappers(t *testing.T) {
 {"event":{"action":"type","value":"ship"}}
 {"item":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"ship"}}}
 `,
+		"attrs": `[
+			{"attrs":{"action":"type","value":"attrs"}},
+			{"attrs":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"attrs"}}}
+		]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			steps, err := ParseInteractionScript([]byte(script))

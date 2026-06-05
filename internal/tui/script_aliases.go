@@ -176,9 +176,8 @@ func permissionRequestJSONField(fields map[string]json.RawMessage, names ...stri
 		if !ok {
 			continue
 		}
-		var request PermissionRequest
-		if err := json.Unmarshal(raw, &request); err == nil {
-			return &request
+		if request, ok := scriptPermissionRequestFromJSON(raw, 0); ok {
+			return request
 		}
 	}
 	return nil
@@ -190,9 +189,8 @@ func taskStatusJSONField(fields map[string]json.RawMessage, names ...string) *Ta
 		if !ok {
 			continue
 		}
-		var task TaskStatus
-		if err := json.Unmarshal(raw, &task); err == nil {
-			return &task
+		if task, ok := scriptTaskStatusFromJSON(raw, 0); ok {
+			return task
 		}
 	}
 	return nil
@@ -1198,6 +1196,7 @@ func unwrapScriptStepJSON(data []byte) []byte {
 		"edge",
 		"attributes",
 		"properties",
+		"attrs",
 	} {
 		raw, ok := fields[name]
 		if !ok {
@@ -1422,9 +1421,8 @@ func canonicalScriptStepAction(action string) string {
 
 func scriptPermissionRequestActionField(fields map[string]json.RawMessage) *PermissionRequest {
 	for _, raw := range scriptActionRawFields(fields, "request", "permission", "permission_request", "permissionRequest") {
-		var request PermissionRequest
-		if err := json.Unmarshal(raw, &request); err == nil {
-			return &request
+		if request, ok := scriptPermissionRequestFromJSON(raw, 0); ok {
+			return request
 		}
 	}
 	var request PermissionRequest
@@ -1440,9 +1438,8 @@ func scriptPermissionRequestHasData(request PermissionRequest) bool {
 
 func scriptTaskStatusActionField(fields map[string]json.RawMessage) *TaskStatus {
 	for _, raw := range scriptActionRawFields(fields, "task", "task_status", "taskStatus") {
-		var task TaskStatus
-		if err := json.Unmarshal(raw, &task); err == nil {
-			return &task
+		if task, ok := scriptTaskStatusFromJSON(raw, 0); ok {
+			return task
 		}
 	}
 	var task TaskStatus
@@ -1454,6 +1451,184 @@ func scriptTaskStatusActionField(fields map[string]json.RawMessage) *TaskStatus 
 
 func scriptTaskStatusHasData(task TaskStatus) bool {
 	return task.ID != "" || task.Title != "" || task.State != "" || task.Detail != "" || task.Progress != 0
+}
+
+func scriptPermissionRequestFromJSON(raw json.RawMessage, depth int) (*PermissionRequest, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	var request PermissionRequest
+	hasRequest := json.Unmarshal(raw, &request) == nil && scriptPermissionRequestHasData(request)
+	if depth >= 8 {
+		if hasRequest {
+			return &request, true
+		}
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if request, ok := scriptPermissionRequestFromJSON(item, depth+1); ok {
+				return request, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		if hasRequest {
+			return &request, true
+		}
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		if hasRequest {
+			return &request, true
+		}
+		return nil, false
+	}
+	if hasRequest && !scriptPermissionRequestShouldTryWrappers(fields, request) {
+		return &request, true
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("request", "permission", "permission_request", "permissionRequest") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if request, ok := scriptPermissionRequestFromJSON(nested, depth+1); ok {
+			if request.ID == "" {
+				request.ID = scalarStringJSONField(fields, "request_id", "requestId", "requestID", "permission_id", "permissionId", "permissionID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
+			}
+			return request, true
+		}
+	}
+	if hasRequest {
+		return &request, true
+	}
+	return nil, false
+}
+
+func scriptTaskStatusFromJSON(raw json.RawMessage, depth int) (*TaskStatus, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	var task TaskStatus
+	hasTask := json.Unmarshal(raw, &task) == nil && scriptTaskStatusHasData(task)
+	if depth >= 8 {
+		if hasTask {
+			return &task, true
+		}
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if task, ok := scriptTaskStatusFromJSON(item, depth+1); ok {
+				return task, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		if hasTask {
+			return &task, true
+		}
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		if hasTask {
+			return &task, true
+		}
+		return nil, false
+	}
+	if hasTask && !scriptTaskStatusShouldTryWrappers(fields, task) {
+		return &task, true
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("task", "task_status", "taskStatus") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if task, ok := scriptTaskStatusFromJSON(nested, depth+1); ok {
+			if task.ID == "" {
+				task.ID = scalarStringJSONField(fields, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
+			}
+			return task, true
+		}
+	}
+	if hasTask {
+		return &task, true
+	}
+	return nil, false
+}
+
+func scriptPermissionRequestShouldTryWrappers(fields map[string]json.RawMessage, request PermissionRequest) bool {
+	return request.ID != "" &&
+		request.ToolName == "" &&
+		request.Path == "" &&
+		request.Description == "" &&
+		len(request.Actions) == 0 &&
+		scriptHasStructuredRuntimePayloadWrapper(fields)
+}
+
+func scriptTaskStatusShouldTryWrappers(fields map[string]json.RawMessage, task TaskStatus) bool {
+	return task.ID != "" &&
+		task.Title == "" &&
+		task.State == "" &&
+		task.Detail == "" &&
+		task.Progress == 0 &&
+		scriptHasStructuredRuntimePayloadWrapper(fields)
+}
+
+func scriptHasStructuredRuntimePayloadWrapper(fields map[string]json.RawMessage) bool {
+	for _, name := range scriptRuntimePayloadWrapperNames() {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && (raw[0] == '{' || raw[0] == '[') {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptRuntimePayloadWrapperNames(names ...string) []string {
+	wrappers := []string{
+		"value",
+		"payload",
+		"data",
+		"body",
+		"result",
+		"response",
+		"output",
+		"resource",
+		"node",
+		"edge",
+		"attributes",
+		"properties",
+		"attrs",
+		"record",
+		"entry",
+		"item",
+		"items",
+		"records",
+		"entries",
+		"nodes",
+		"edges",
+		"results",
+	}
+	return append(wrappers, names...)
 }
 
 func scriptDialogActionField(fields map[string]json.RawMessage) *Dialog {
