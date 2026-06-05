@@ -576,7 +576,12 @@ func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bo
 	if trimmed[0] != '{' {
 		return "", false, fmt.Errorf("invalid summary field %q", field)
 	}
-	return microSummaryContentBlockText(trimmed)
+	if text, ok, err := microSummaryContentBlockText(trimmed); err != nil {
+		return "", false, err
+	} else if ok {
+		return text, true, nil
+	}
+	return microSummaryMessageText(trimmed)
 }
 
 func microSummaryContentBlockText(raw json.RawMessage) (string, bool, error) {

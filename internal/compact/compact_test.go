@@ -490,6 +490,19 @@ func TestLoadMicroResultAcceptsContentBlockSummaryPayloads(t *testing.T) {
 			want: "first summary\nsecond summary",
 		},
 		{
+			digest: "summary-message-array",
+			payload: `{
+				"summary": [
+					{"role": "assistant", "content": [{"type": "text", "text": "message one"}, {"type": "thinking", "text": "hidden"}]},
+					{"type": "text", "text": "block two"}
+				],
+				"cacheKey": "summary-message-array",
+				"cacheVersion": "microcompact.v1",
+				"cachedAt": 100
+			}`,
+			want: "message one\nblock two",
+		},
+		{
 			digest: "response-content-blocks",
 			payload: `{
 				"response": {
