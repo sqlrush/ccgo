@@ -4427,57 +4427,96 @@ func (expect *VimExpectation) UnmarshalJSON(data []byte) error {
 	data = normalizeBoolFields(data,
 		"Enabled",
 		"enabled",
+		"VimEnabled",
 		"vim_enabled",
 		"vimEnabled",
+		"IsEnabled",
 		"is_enabled",
 		"isEnabled",
+		"Active",
 		"active",
 		"RegisterLinewise",
 		"register_linewise",
 		"registerLinewise",
+		"Linewise",
 		"linewise",
+		"IsLinewise",
 		"is_linewise",
 		"isLinewise",
+		"RegisterLineWise",
 		"register_line_wise",
 		"registerLineWise",
 	)
 	type alias VimExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Enabled",
+		"enabled",
+		"VimEnabled",
+		"vim_enabled",
+		"vimEnabled",
+		"IsEnabled",
+		"is_enabled",
+		"isEnabled",
+		"Active",
+		"active",
+		"Mode",
+		"mode",
+		"VimMode",
+		"vim_mode",
+		"vimMode",
+		"ModeName",
+		"mode_name",
+		"modeName",
+		"CurrentMode",
+		"current_mode",
+		"currentMode",
+		"State",
+		"state",
+		"Register",
+		"register",
+		"VimRegister",
+		"vim_register",
+		"vimRegister",
+		"RegisterValue",
+		"register_value",
+		"registerValue",
+		"YankRegister",
+		"yank_register",
+		"yankRegister",
+		"RegisterLinewise",
+		"register_linewise",
+		"registerLinewise",
+		"Linewise",
+		"linewise",
+		"IsLinewise",
+		"is_linewise",
+		"isLinewise",
+		"RegisterLineWise",
+		"register_line_wise",
+		"registerLineWise",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = VimExpectation(raw)
 
-	var fields struct {
-		RegisterLinewise      *bool `json:"register_linewise"`
-		RegisterLinewiseCamel *bool `json:"registerLinewise"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
 	fieldMap := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
 	if expect.Enabled == nil {
-		expect.Enabled = boolPtrJSONField(fieldMap, "vim_enabled", "vimEnabled", "is_enabled", "isEnabled", "enabled", "active")
+		expect.Enabled = boolPtrJSONField(fieldMap, "Enabled", "enabled", "VimEnabled", "vim_enabled", "vimEnabled", "IsEnabled", "is_enabled", "isEnabled", "Active", "active")
 	}
 	if expect.Mode == "" {
-		if mode := stringJSONField(fieldMap, "vim_mode", "vimMode", "mode_name", "modeName", "current_mode", "currentMode", "state"); mode != "" {
+		if mode := stringJSONField(fieldMap, "Mode", "mode", "VimMode", "vim_mode", "vimMode", "ModeName", "mode_name", "modeName", "CurrentMode", "current_mode", "currentMode", "State", "state"); mode != "" {
 			expect.Mode = VimMode(mode)
 		}
 	}
 	if expect.Register == "" {
-		expect.Register = stringJSONField(fieldMap, "vim_register", "vimRegister", "register_value", "registerValue", "yank_register", "yankRegister")
-	}
-	if fields.RegisterLinewise != nil {
-		expect.RegisterLinewise = fields.RegisterLinewise
-	}
-	if fields.RegisterLinewiseCamel != nil {
-		expect.RegisterLinewise = fields.RegisterLinewiseCamel
+		expect.Register = stringJSONField(fieldMap, "Register", "register", "VimRegister", "vim_register", "vimRegister", "RegisterValue", "register_value", "registerValue", "YankRegister", "yank_register", "yankRegister")
 	}
 	if expect.RegisterLinewise == nil {
-		expect.RegisterLinewise = boolPtrJSONField(fieldMap, "linewise", "is_linewise", "isLinewise", "register_line_wise", "registerLineWise")
+		expect.RegisterLinewise = boolPtrJSONField(fieldMap, "RegisterLinewise", "register_linewise", "registerLinewise", "Linewise", "linewise", "IsLinewise", "is_linewise", "isLinewise", "RegisterLineWise", "register_line_wise", "registerLineWise")
 	}
 	return nil
 }

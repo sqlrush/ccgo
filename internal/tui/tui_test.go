@@ -8659,8 +8659,8 @@ func TestRunInteractionScriptAcceptsWrappedVimExpectationAliasFields(t *testing.
 			"expectVim": {
 				"resource": {
 					"attributes": {
-						"vimEnabled": true,
-						"modeName": "insert"
+						"Enabled": "true",
+						"ModeName": "insert"
 					}
 				}
 			}
@@ -8671,10 +8671,10 @@ func TestRunInteractionScriptAcceptsWrappedVimExpectationAliasFields(t *testing.
 				"edge": {
 					"node": {
 						"attrs": {
-							"isEnabled": true,
-							"currentMode": "normal",
-							"vimRegister": "a",
-							"linewise": false
+							"Enabled": "true",
+							"CurrentMode": "normal",
+							"VimRegister": "a",
+							"Linewise": "false"
 						}
 					}
 				}
