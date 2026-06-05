@@ -6579,6 +6579,75 @@ func TestRunDialogRuntimeScriptChecksDialogDetails(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsWrappedDialogExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {"id": "perm_wrapped_dialog", "tool_name": "Bash", "path": "/tmp/a", "description": "Run command", "actions": ["Allow", "Deny"]},
+			"expectDialog": {
+				"resource": {
+					"attributes": {
+						"visible": true,
+						"dialogId": "perm_wrapped_dialog",
+						"dialogKind": "permission",
+						"heading": "Permission",
+						"bodyContains": ["Tool: Bash", "Path: /tmp/a", "Run command"],
+						"actions": ["Allow", "Deny"],
+						"actionCount": 2,
+						"focusedIndex": 0
+					}
+				}
+			}
+		},
+		{
+			"key": "tab",
+			"expect_dialog": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"active": true,
+							"dialogID": "perm_wrapped_dialog",
+							"actionContains": "Deny",
+							"focusedIndex": 1
+						}
+					}
+				}
+			}
+		},
+		{
+			"key": "enter",
+			"expectDialogResult": {"id": "perm_wrapped_dialog", "kind": "permission", "action": "Deny", "status": "denied", "found": true},
+			"expectDialog": {
+				"resource": {
+					"attributes": {
+						"visible": false
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].ExpectDialog == nil || !steps[0].ExpectDialog.Active || steps[0].ExpectDialog.ID != "perm_wrapped_dialog" || steps[0].ExpectDialog.ActionCount == nil || *steps[0].ExpectDialog.ActionCount != 2 || steps[0].ExpectDialog.Focused == nil || *steps[0].ExpectDialog.Focused != 0 {
+		t.Fatalf("first dialog expectation = %#v", steps[0].ExpectDialog)
+	}
+	if steps[1].ExpectDialog == nil || !steps[1].ExpectDialog.Active || steps[1].ExpectDialog.Focused == nil || *steps[1].ExpectDialog.Focused != 1 || len(steps[1].ExpectDialog.ActionContains) != 1 {
+		t.Fatalf("second dialog expectation = %#v", steps[1].ExpectDialog)
+	}
+	if steps[2].ExpectDialog == nil || steps[2].ExpectDialog.Active {
+		t.Fatalf("third dialog expectation = %#v", steps[2].ExpectDialog)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultDenied {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsDialogFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
