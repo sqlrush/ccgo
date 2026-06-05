@@ -5211,6 +5211,63 @@ func TestRunInteractionScriptAcceptsImageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedImageField(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"image": {
+				"resource": {
+					"type": "image",
+					"attributes": {
+						"fileName": "wrapped.png",
+						"mimeType": "image/png",
+						"data": "AAAA",
+						"sourcePath": "/tmp/wrapped.png"
+					}
+				}
+			},
+			"expectPrompt": {
+				"text": "[Image #1]",
+				"pastedContentCount": 1,
+				"nextPastedID": 2,
+				"pastedContents": {"id": 1, "type": "image", "fileName": "wrapped.png", "contentType": "image/png", "value": "AAAA", "sourcePath": "/tmp/wrapped.png"}
+			}
+		},
+		{
+			"image": [
+				{
+					"edge": {
+						"node": {
+							"attrs": {
+								"name": "wrapped-array.webp",
+								"mime_type": "image/webp",
+								"base64": "BBBB"
+							}
+						}
+					}
+				}
+			],
+			"expectPrompt": {
+				"text": "[Image #1] [Image #2]",
+				"pastedContentCount": 2,
+				"nextPastedID": 3,
+				"pastedContents": {"id": 2, "kind": "image", "fileName": "wrapped-array.webp", "mimeType": "image/webp", "content": "BBBB"}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 ||
+		steps[0].Image == nil || steps[0].Image.Filename != "wrapped.png" || steps[0].Image.MediaType != "image/png" || steps[0].Image.Content != "AAAA" || steps[0].Image.SourcePath != "/tmp/wrapped.png" ||
+		steps[1].Image == nil || steps[1].Image.Filename != "wrapped-array.webp" || steps[1].Image.MediaType != "image/webp" || steps[1].Image.Content != "BBBB" {
+		t.Fatalf("steps = %#v", steps)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsPastedContentAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

@@ -822,6 +822,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if dialog := scriptDialogJSONField(rawFieldMap, "Dialog", "dialog"); dialog != nil {
 		step.Dialog = dialog
 	}
+	if image := scriptImageJSONField(rawFieldMap, "Image", "image"); image != nil {
+		step.Image = image
+	}
 	if fields.Keybindings != nil {
 		step.Keybindings = fields.Keybindings
 	}
@@ -3254,6 +3257,8 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"mouseEvent",
 		"Dialog",
 		"dialog",
+		"Image",
+		"image",
 		"SnapshotName",
 		"snapshotName",
 		"RequestPermission",
