@@ -391,9 +391,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		StatusLineCamel           *json.RawMessage `json:"statusLine"`
 		BaseStatus                *json.RawMessage `json:"base_status"`
 		BaseStatusCamel           *json.RawMessage `json:"baseStatus"`
-		Mouse                     *ScriptMouse     `json:"mouse"`
-		MouseEvent                *ScriptMouse     `json:"mouse_event"`
-		MouseEventCamel           *ScriptMouse     `json:"mouseEvent"`
+		Mouse                     *json.RawMessage `json:"mouse"`
+		MouseEvent                *json.RawMessage `json:"mouse_event"`
+		MouseEventCamel           *json.RawMessage `json:"mouseEvent"`
 		Keybindings               []BindingSpec    `json:"keybindings"`
 		KeyBindings               []BindingSpec    `json:"key_bindings"`
 		KeyBindingsCamel          []BindingSpec    `json:"keyBindings"`
@@ -651,14 +651,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"value",
 		)
 	}
-	if fields.Mouse != nil {
-		step.Mouse = fields.Mouse
-	}
-	if fields.MouseEvent != nil {
-		step.Mouse = fields.MouseEvent
-	}
-	if fields.MouseEventCamel != nil {
-		step.Mouse = fields.MouseEventCamel
+	if mouse := scriptMouseJSONField(rawFieldMap, "Mouse", "mouse", "mouse_event", "mouseEvent"); mouse != nil {
+		step.Mouse = mouse
 	}
 	if fields.Keybindings != nil {
 		step.Keybindings = fields.Keybindings
@@ -3010,6 +3004,10 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"paste",
 		"Status",
 		"status",
+		"Mouse",
+		"mouse",
+		"mouse_event",
+		"mouseEvent",
 		"SnapshotName",
 		"snapshotName",
 		"RequestPermission",

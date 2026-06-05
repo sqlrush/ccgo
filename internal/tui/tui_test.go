@@ -5094,6 +5094,33 @@ func TestRunInteractionScriptAcceptsMouseFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsMouseArrayAndWrapperFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_array_mouse","kind":"permission"}},
+		{"mouseEvent":[{"buttonMask":0,"clientX":13,"clientY":5,"isRelease":false}],"expectEvent":{"type":"dialog_action","value":"Deny","dialogId":"perm_array_mouse","dialogKind":"permission"}},
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_wrapped_direct_mouse","kind":"permission"}},
+		{"mouse_event":{"resource":{"type":"mouse-event","attributes":{"buttonMask":0,"clientX":13,"clientY":5,"isRelease":false}}},"expectEvent":{"type":"dialog_action","value":"Deny","dialogId":"perm_wrapped_direct_mouse","dialogKind":"permission"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 4 ||
+		steps[1].Mouse == nil || steps[1].Mouse.Button != 0 || steps[1].Mouse.X != 13 || steps[1].Mouse.Y != 5 || steps[1].Mouse.Release ||
+		steps[3].Mouse == nil || steps[3].Mouse.Button != 0 || steps[3].Mouse.X != 13 || steps[3].Mouse.Y != 5 || steps[3].Mouse.Release {
+		t.Fatalf("steps = %#v", steps)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventDialogAction || result.Events[0].Value != "Deny" || result.Events[0].DialogID != "perm_array_mouse" ||
+		result.Events[1].Type != ScreenEventDialogAction || result.Events[1].Value != "Deny" || result.Events[1].DialogID != "perm_wrapped_direct_mouse" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptTypesTextField(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	result, err := RunInteractionScriptChecked(&screen, []ScriptStep{
