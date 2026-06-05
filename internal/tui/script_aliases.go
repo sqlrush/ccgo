@@ -223,6 +223,15 @@ func scriptKeybindingsJSONField(fields map[string]json.RawMessage) ([]BindingSpe
 		"customKeybindings",
 		"customKeyBindings",
 		"custom_keybindings",
+		"keybinding",
+		"keyBinding",
+		"keybinding_config",
+		"keybindingConfig",
+		"keyboard",
+		"keyboard_config",
+		"keyboardConfig",
+		"preferences",
+		"userPreferences",
 	}
 	for _, name := range names {
 		raw, ok := fields[name]

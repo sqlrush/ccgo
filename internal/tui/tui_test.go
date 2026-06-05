@@ -5575,6 +5575,8 @@ func TestRunInteractionScriptAcceptsKeybindingCollectionAliases(t *testing.T) {
 		{"text":"first","key":"ctrl-r","expectEvent":{"type":"prompt_submitted","value":"first"},"expectPrompt":{"empty":true}},
 		{"keyboardShortcuts":{"bindings":[{"shortcut":"ctrl-w","commandName":"submitPrompt"}]}},
 		{"text":"second","key":"ctrl-w","expectEvent":{"type":"prompt_submitted","value":"second"},"expectPrompt":{"empty":true}},
+		{"keyboard":{"resource":{"attributes":{"keymap":{"ctrl-y":"submitPrompt"}}}}},
+		{"text":"third","key":"ctrl-y","expectEvent":{"type":"prompt_submitted","value":"third"},"expectPrompt":{"empty":true}},
 		{"hotkeys":{"ctrl-x ctrl-k":false}},
 		{"keys":"ctrl-x ctrl-k","expectNoEvent":true}
 	]`))
@@ -5586,9 +5588,10 @@ func TestRunInteractionScriptAcceptsKeybindingCollectionAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 2 ||
+	if len(result.Events) != 3 ||
 		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "first" ||
-		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "second" {
+		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "second" ||
+		result.Events[2].Type != ScreenEventPromptSubmitted || result.Events[2].Value != "third" {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }
