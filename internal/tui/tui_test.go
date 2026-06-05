@@ -6485,6 +6485,38 @@ func TestParseInteractionScriptAcceptsNestedRecordArrayWrappers(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsResourceStepItems(t *testing.T) {
+	for name, script := range map[string]string{
+		"jsonapi_attributes": `{"steps":[
+			{"id":"step_1","type":"interaction-step","attributes":{"action":"type","value":"go"}},
+			{"id":"step_2","type":"interaction-step","attributes":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"go"},"expectPrompt":{"empty":true}}}
+		]}`,
+		"nested_resource_properties": `{"timeline":[
+			{"resource":{"id":"step_1","type":"interaction-step","properties":{"action":"type","value":"ship"}}},
+			{"resource":{"id":"step_2","type":"interaction-step","properties":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"ship"},"expectPrompt":{"empty":true}}}}
+		]}`,
+		"jsonl_node_properties": `
+{"node":{"id":"step_1","type":"interaction-step","properties":{"action":"type","value":"audit"}}}
+{"node":{"id":"step_2","type":"interaction-step","properties":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"audit"},"expectPrompt":{"empty":true}}}}
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps, err := ParseInteractionScript([]byte(script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			screen := NewREPLScreen(30, 6, nil)
+			result, err := RunInteractionScriptChecked(&screen, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted {
+				t.Fatalf("events = %#v", result.Events)
+			}
+		})
+	}
+}
+
 func TestRunInteractionScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script.json")
 	script := []byte(`{"interactionScript":[

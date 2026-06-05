@@ -576,6 +576,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script 单步 JSON 现在接受 `step`/`scriptStep`/`interactionStep`/`record`/`entry`/`item`/`event` wrapper，可用于数组元素、JSONL 行和 wrapper object 中的 steps item，减少录制脚本逐行改写成本。
 
+本轮补充：interaction script 单步 JSON 现在也接受 JSON:API/resource-style `resource`/`node`/`attributes`/`properties` wrapper，数组元素和 JSONL 行可直接使用 API fixture 的 step resource 形态。
+
 本轮补充：interaction script 顶层 wrapper 现在接受 `records`/`recordedSteps`/`events`/`entries`/`items`/`actions`/`timeline` 数组入口，并复用单步 wrapper 拆包逻辑。
 
 本轮补充：interaction script loader 现在接受 `data`/`payload`/`body`/`result`/`response`/`recording`/`session`/`run` 等外层对象 wrapper，可继续递归查找 steps/records/events/timeline。

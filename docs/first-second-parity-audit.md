@@ -352,6 +352,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script action discriminators can now drive runtime/dialog mutations such as `requestPermission`, `taskStatus`, `showTasks`, `cancelTasks`, `removeTask`, and `showDialog`, using `value`/`payload`/`data`/`body` payloads for objects, IDs, and cancel reasons.
 - `internal/contracts`/`internal/session`: image content blocks now normalize source aliases such as `mediaType`/`mimeType`/`contentType` and `base64`/`payload`, including top-level image block fields, into canonical `ImageSource` values during transcript resume.
 - `internal/tui`: interaction script single-step JSON now unwraps `step`/`scriptStep`/`interactionStep`/`record`/`entry`/`item`/`event` objects in arrays, JSONL records, and wrapper-object step lists.
+- `internal/tui`: interaction script single-step JSON now also unwraps JSON:API/resource-style `resource`/`node`/`attributes`/`properties` step items, so API fixture arrays and JSONL records can keep step resource envelopes.
 - `internal/tui`: interaction script top-level wrappers now accept record-array aliases such as `records`/`recordedSteps`/`events`/`entries`/`items`/`actions`/`timeline`.
 - `internal/tui`: interaction script loading now recurses through outer API/fixture wrappers such as `data`/`payload`/`body`/`result`/`response`/`recording`/`session`/`run`.
 - `internal/tui`: interaction script loading now also recurses through JSON:API/resource-style `resource`/`attributes`/`properties` wrappers, so API envelopes can expose `steps`/`records`/`timeline` without manual flattening.

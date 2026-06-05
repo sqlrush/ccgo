@@ -1189,7 +1189,125 @@ func unwrapScriptStepJSON(data []byte) []byte {
 			return raw
 		}
 	}
+	if scriptStepJSONHasDirectFields(fields) {
+		return data
+	}
+	for _, name := range []string{
+		"node",
+		"resource",
+		"attributes",
+		"properties",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] == '{' {
+			return unwrapScriptStepJSON(raw)
+		}
+	}
 	return data
+}
+
+func scriptStepJSONHasDirectFields(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{
+		"action",
+		"step_action",
+		"stepAction",
+		"operation",
+		"op",
+		"command",
+		"kind",
+		"value",
+		"key",
+		"keys",
+		"raw_key",
+		"rawKey",
+		"key_sequence",
+		"keySequence",
+		"press",
+		"press_key",
+		"pressKey",
+		"key_press",
+		"keyPress",
+		"keypress",
+		"shortcut",
+		"shortcut_key",
+		"shortcutKey",
+		"presses",
+		"key_presses",
+		"keyPresses",
+		"keypresses",
+		"shortcuts",
+		"text",
+		"input",
+		"input_text",
+		"inputText",
+		"text_input",
+		"textInput",
+		"keys_text",
+		"keysText",
+		"paste",
+		"paste_text",
+		"pasteText",
+		"pasted_text",
+		"pastedText",
+		"clipboard",
+		"messages",
+		"append_messages",
+		"appendMessages",
+		"transcript_messages",
+		"transcriptMessages",
+		"status",
+		"set_status",
+		"setStatus",
+		"status_line",
+		"statusLine",
+		"base_status",
+		"baseStatus",
+		"mouse",
+		"mouse_event",
+		"mouseEvent",
+		"image",
+		"request_permission",
+		"requestPermission",
+		"permission",
+		"permissionRequest",
+		"task",
+		"task_status",
+		"taskStatus",
+		"dialog",
+		"expect_event",
+		"expectEvent",
+		"expect_events",
+		"expectEvents",
+		"expect_prompt",
+		"expectPrompt",
+		"expect_dialog",
+		"expectDialog",
+		"expect_screen",
+		"expectScreen",
+		"expect_viewport",
+		"expectViewport",
+		"expect_vim",
+		"expectVim",
+		"snapshot",
+		"snapshot_name",
+		"snapshotName",
+		"keybindings",
+		"key_bindings",
+		"keyBindings",
+		"keymap",
+		"keyMap",
+		"keyboardShortcuts",
+		"hotkeys",
+	} {
+		if raw, ok := fields[name]; ok && len(bytes.TrimSpace(raw)) > 0 && string(bytes.TrimSpace(raw)) != "null" {
+			return true
+		}
+	}
+	return false
 }
 
 func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMessage) {
