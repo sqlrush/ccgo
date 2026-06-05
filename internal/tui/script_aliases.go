@@ -455,8 +455,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		Blurred                   *json.RawMessage          `json:"blurred"`
 		ExpectEvent               *ScreenEvent              `json:"expect_event"`
 		ExpectEventCamel          *ScreenEvent              `json:"expectEvent"`
-		ExpectEvents              []ScreenEvent             `json:"expect_events"`
-		ExpectEventsCamel         []ScreenEvent             `json:"expectEvents"`
+		ExpectEvents              *json.RawMessage          `json:"expect_events"`
+		ExpectEventsCamel         *json.RawMessage          `json:"expectEvents"`
 		ExpectNoEvent             *json.RawMessage          `json:"expect_no_event"`
 		ExpectNoEventCamel        *json.RawMessage          `json:"expectNoEvent"`
 		ExpectEventCount          *json.RawMessage          `json:"expect_event_count"`
@@ -465,8 +465,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectTotalEventCamel     *json.RawMessage          `json:"expectTotalEventCount"`
 		ExpectDialogResult        *DialogResultExpectation  `json:"expect_dialog_result"`
 		ExpectDialogResultCamel   *DialogResultExpectation  `json:"expectDialogResult"`
-		ExpectDialogResults       []DialogResultExpectation `json:"expect_dialog_results"`
-		ExpectDialogResultsCamel  []DialogResultExpectation `json:"expectDialogResults"`
+		ExpectDialogResults       *json.RawMessage          `json:"expect_dialog_results"`
+		ExpectDialogResultsCamel  *json.RawMessage          `json:"expectDialogResults"`
 		ExpectNoDialogResult      *json.RawMessage          `json:"expect_no_dialog_result"`
 		ExpectNoDialogResultCamel *json.RawMessage          `json:"expectNoDialogResult"`
 		ExpectNoDialogResults     *json.RawMessage          `json:"expect_no_dialog_results"`
@@ -835,11 +835,19 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectEventCamel != nil {
 		step.ExpectEvent = fields.ExpectEventCamel
 	}
-	if fields.ExpectEvents != nil {
-		step.ExpectEvents = fields.ExpectEvents
-	}
-	if fields.ExpectEventsCamel != nil {
-		step.ExpectEvents = fields.ExpectEventsCamel
+	if events := scriptNamedEventListField(fieldMap,
+		[]string{"expect_events", "expectEvents"},
+		"events",
+		"event",
+		"expected_events",
+		"expectedEvents",
+		"items",
+		"entries",
+		"nodes",
+		"results",
+		"value",
+	); len(events) > 0 {
+		step.ExpectEvents = events
 	}
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_event", "expectNoEvent"); ok {
 		step.ExpectNoEvent = value
@@ -872,11 +880,20 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectDialogResultCamel != nil {
 		step.ExpectDialogResult = fields.ExpectDialogResultCamel
 	}
-	if fields.ExpectDialogResults != nil {
-		step.ExpectDialogResults = fields.ExpectDialogResults
-	}
-	if fields.ExpectDialogResultsCamel != nil {
-		step.ExpectDialogResults = fields.ExpectDialogResultsCamel
+	if results := scriptNamedDialogResultListField(fieldMap,
+		[]string{"expect_dialog_results", "expectDialogResults"},
+		"dialog_results",
+		"dialogResults",
+		"results",
+		"result",
+		"expected_results",
+		"expectedResults",
+		"items",
+		"entries",
+		"nodes",
+		"value",
+	); len(results) > 0 {
+		step.ExpectDialogResults = results
 	}
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_dialog_result", "expectNoDialogResult", "expect_no_dialog_results"); ok {
 		step.ExpectNoDialogResult = value
@@ -1811,6 +1828,118 @@ func scriptNamedIntField(fields map[string]json.RawMessage, directNames []string
 		}
 	}
 	return 0, false
+}
+
+func scriptNamedEventListField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) []ScreenEvent {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if events := scriptEventListFromJSON(raw, nestedNames, 0); len(events) > 0 {
+			return events
+		}
+	}
+	return nil
+}
+
+func scriptEventListFromJSON(raw json.RawMessage, names []string, depth int) []ScreenEvent {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil
+		}
+		out := []ScreenEvent{}
+		for _, item := range items {
+			out = append(out, scriptEventListFromJSON(item, names, depth+1)...)
+		}
+		return out
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil
+	}
+	var event ScreenEvent
+	if err := json.Unmarshal(raw, &event); err == nil && scriptScreenEventHasData(event) {
+		return []ScreenEvent{event}
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if events := scriptEventListFromJSON(nested, names, depth+1); len(events) > 0 {
+			return events
+		}
+	}
+	return nil
+}
+
+func scriptScreenEventHasData(event ScreenEvent) bool {
+	return event.Type != "" || event.Value != "" || event.DialogID != "" || event.DialogKind != "" || event.Display != "" || len(event.PastedContents) > 0
+}
+
+func scriptNamedDialogResultListField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) []DialogResultExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if results := scriptDialogResultListFromJSON(raw, nestedNames, 0); len(results) > 0 {
+			return results
+		}
+	}
+	return nil
+}
+
+func scriptDialogResultListFromJSON(raw json.RawMessage, names []string, depth int) []DialogResultExpectation {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil
+		}
+		out := []DialogResultExpectation{}
+		for _, item := range items {
+			out = append(out, scriptDialogResultListFromJSON(item, names, depth+1)...)
+		}
+		return out
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil
+	}
+	var result DialogResultExpectation
+	if err := json.Unmarshal(raw, &result); err == nil && scriptDialogResultExpectationHasData(result) {
+		return []DialogResultExpectation{result}
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if results := scriptDialogResultListFromJSON(nested, names, depth+1); len(results) > 0 {
+			return results
+		}
+	}
+	return nil
+}
+
+func scriptDialogResultExpectationHasData(result DialogResultExpectation) bool {
+	return result.ID != "" || result.Kind != "" || result.Action != "" || result.Status != "" || result.Found != nil || result.Stale != nil
 }
 
 func scriptActionIntFromJSON(raw json.RawMessage, names []string, depth int) (int, bool) {

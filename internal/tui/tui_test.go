@@ -7018,6 +7018,73 @@ func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedExpectationCollectionAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"input": "go", "expectPrompt": {"text": "go"}},
+		{
+			"key": "enter",
+			"expectEvents": {
+				"resource": {
+					"attributes": {
+						"events": [
+							{"type": "prompt_submitted", "value": "go"}
+						]
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 || len(steps[1].ExpectEvents) != 1 ||
+		steps[1].ExpectEvents[0].Type != ScreenEventPromptSubmitted ||
+		steps[1].ExpectEvents[0].Value != "go" {
+		t.Fatalf("expect events = %#v", steps[1].ExpectEvents)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "go" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+
+	dialogSteps, err := ParseInteractionScript([]byte(`[
+		{"request_permission": {"id": "perm_1", "tool_name": "Bash"}},
+		{
+			"key": "enter",
+			"expectDialogResults": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"results": [
+								{"id": "perm_1", "status": "allowed", "found": true}
+							]
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dialogSteps) != 2 || len(dialogSteps[1].ExpectDialogResults) != 1 ||
+		dialogSteps[1].ExpectDialogResults[0].ID != "perm_1" ||
+		dialogSteps[1].ExpectDialogResults[0].Status != DialogResultAllowed ||
+		dialogSteps[1].ExpectDialogResults[0].Found == nil ||
+		!*dialogSteps[1].ExpectDialogResults[0].Found {
+		t.Fatalf("expect dialog results = %#v", dialogSteps[1].ExpectDialogResults)
+	}
+	dialogScreen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&dialogScreen, runtime, "ready", dialogSteps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsExpectationWrappers(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
