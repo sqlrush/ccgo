@@ -525,8 +525,22 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		CandidateMemoriesCamel  []json.RawMessage `json:"candidateMemories"`
 		Candidates              []json.RawMessage `json:"candidates"`
 		Results                 []json.RawMessage `json:"results"`
+		Nodes                   []json.RawMessage `json:"nodes"`
+		Edges                   []json.RawMessage `json:"edges"`
+		Items                   []json.RawMessage `json:"items"`
+		Resources               []json.RawMessage `json:"resources"`
 		Selection               json.RawMessage   `json:"selection"`
 		Selected                json.RawMessage   `json:"selected"`
+		Data                    json.RawMessage   `json:"data"`
+		Payload                 json.RawMessage   `json:"payload"`
+		Body                    json.RawMessage   `json:"body"`
+		Resource                json.RawMessage   `json:"resource"`
+		Attributes              json.RawMessage   `json:"attributes"`
+		Properties              json.RawMessage   `json:"properties"`
+		Attrs                   json.RawMessage   `json:"attrs"`
+		Viewer                  json.RawMessage   `json:"viewer"`
+		Edge                    json.RawMessage   `json:"edge"`
+		Node                    json.RawMessage   `json:"node"`
 		Result                  json.RawMessage   `json:"result"`
 		Response                json.RawMessage   `json:"response"`
 		Recall                  json.RawMessage   `json:"recall"`
@@ -584,6 +598,10 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 				object.CandidateMemoriesCamel,
 				object.Candidates,
 				object.Results,
+				object.Nodes,
+				object.Edges,
+				object.Items,
+				object.Resources,
 			)
 		}
 		query := strings.TrimSpace(object.Query)
@@ -606,7 +624,25 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			query = strings.TrimSpace(object.ExpandedQueryCamel)
 		}
 		if len(ids) == 0 {
-			query, ids = recallSelectionFromNestedPayloads(query, object.Selection, object.Selected, object.Result, object.Response, object.Recall, object.MemoryRecall, object.MemoryRecallCamel)
+			query, ids = recallSelectionFromNestedPayloads(query,
+				object.Selection,
+				object.Selected,
+				object.Data,
+				object.Payload,
+				object.Body,
+				object.Resource,
+				object.Attributes,
+				object.Properties,
+				object.Attrs,
+				object.Viewer,
+				object.Edge,
+				object.Node,
+				object.Result,
+				object.Response,
+				object.Recall,
+				object.MemoryRecall,
+				object.MemoryRecallCamel,
+			)
 		}
 		return query, ids, query != "" || len(ids) > 0
 	}
@@ -646,6 +682,20 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			query, ids = relevantMemorySelectionFromNestedPayloads(query, rawObjectValues(rawObject,
 				"selected",
 				"selection",
+				"data",
+				"payload",
+				"body",
+				"resource",
+				"attributes",
+				"properties",
+				"attrs",
+				"viewer",
+				"edge",
+				"node",
+				"nodes",
+				"edges",
+				"items",
+				"resources",
 				"result",
 				"response",
 				"memory_selection",
@@ -702,8 +752,22 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		Memories                     []json.RawMessage `json:"memories"`
 		FilesList                    []json.RawMessage `json:"files_list"`
 		FilesListCamel               []json.RawMessage `json:"filesList"`
+		Nodes                        []json.RawMessage `json:"nodes"`
+		Edges                        []json.RawMessage `json:"edges"`
+		Items                        []json.RawMessage `json:"items"`
+		Resources                    []json.RawMessage `json:"resources"`
 		Selected                     json.RawMessage   `json:"selected"`
 		Selection                    json.RawMessage   `json:"selection"`
+		Data                         json.RawMessage   `json:"data"`
+		Payload                      json.RawMessage   `json:"payload"`
+		Body                         json.RawMessage   `json:"body"`
+		Resource                     json.RawMessage   `json:"resource"`
+		Attributes                   json.RawMessage   `json:"attributes"`
+		Properties                   json.RawMessage   `json:"properties"`
+		Attrs                        json.RawMessage   `json:"attrs"`
+		Viewer                       json.RawMessage   `json:"viewer"`
+		Edge                         json.RawMessage   `json:"edge"`
+		Node                         json.RawMessage   `json:"node"`
 		Result                       json.RawMessage   `json:"result"`
 		Response                     json.RawMessage   `json:"response"`
 		MemorySelection              json.RawMessage   `json:"memory_selection"`
@@ -753,6 +817,10 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 				object.Memories,
 				object.FilesList,
 				object.FilesListCamel,
+				object.Nodes,
+				object.Edges,
+				object.Items,
+				object.Resources,
 			)
 		}
 		query := strings.TrimSpace(object.Query)
@@ -778,6 +846,16 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			query, ids = relevantMemorySelectionFromNestedPayloads(query,
 				object.Selected,
 				object.Selection,
+				object.Data,
+				object.Payload,
+				object.Body,
+				object.Resource,
+				object.Attributes,
+				object.Properties,
+				object.Attrs,
+				object.Viewer,
+				object.Edge,
+				object.Node,
 				object.Result,
 				object.Response,
 				object.MemorySelection,
@@ -1092,6 +1170,26 @@ var recallNestedItemKeys = []string{
 	"candidateSession",
 	"candidate_memory",
 	"candidateMemory",
+	"data",
+	"payload",
+	"body",
+	"result",
+	"response",
+	"resource",
+	"attributes",
+	"properties",
+	"attrs",
+	"viewer",
+	"edge",
+	"node",
+	"nodes",
+	"edges",
+	"items",
+	"resources",
+	"record",
+	"entry",
+	"item",
+	"value",
 }
 
 var relevantMemoryNestedItemKeys = []string{
@@ -1106,6 +1204,26 @@ var relevantMemoryNestedItemKeys = []string{
 	"relevantMemory",
 	"candidate_memory",
 	"candidateMemory",
+	"data",
+	"payload",
+	"body",
+	"result",
+	"response",
+	"resource",
+	"attributes",
+	"properties",
+	"attrs",
+	"viewer",
+	"edge",
+	"node",
+	"nodes",
+	"edges",
+	"items",
+	"resources",
+	"record",
+	"entry",
+	"item",
+	"value",
 }
 
 func stripMarkdownFence(raw string) string {
