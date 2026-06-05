@@ -1684,6 +1684,50 @@ func TestParseKeyBindingSpecsAcceptsResourceWrappers(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsAPIArrayEnvelopes(t *testing.T) {
+	for name, fixture := range map[string]string{
+		"data_array": `{
+			"data": [
+				{"shortcutKey": "ctrl-r", "commandName": "pageDown"},
+				{"shortcut": "ctrl-j", "action": "submitPrompt"}
+			]
+		}`,
+		"response_nodes": `{
+			"response": {
+				"nodes": [
+					{"node": {"id": "kb_1", "type": "keybinding", "properties": {"shortcutKey": "ctrl-r", "commandName": "pageDown"}}},
+					{"resource": {"id": "kb_2", "type": "keybinding", "attributes": {"keys": ["ctrl-x", "ctrl-k"], "command": "none"}}}
+				]
+			}
+		}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			specs, err := ParseKeyBindingSpecs([]byte(fixture))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(specs) != 2 {
+				t.Fatalf("specs = %#v", specs)
+			}
+			keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
+				t.Fatalf("ctrl-r action = %q", action)
+			}
+		})
+	}
+
+	specs, err := ParseKeyBindingSpecs([]byte(`{"bindings":[{"shortcut":"ctrl-r","action":"pageDown"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Key != "ctrl-r" || specs[0].Action != Action("pageDown") {
+		t.Fatalf("direct shortcut spec = %#v", specs)
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsCollectionAliases(t *testing.T) {
 	specs, err := ParseKeyBindingSpecs([]byte(`{
 		"keymap": {

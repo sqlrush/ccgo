@@ -70,6 +70,8 @@ var keyBindingCollectionFields = []string{
 
 var keyBindingOuterWrapperFields = []string{"data", "payload", "body", "result", "response", "resource", "attributes", "properties", "attrs", "settings", "config", "configuration", "keyboard", "keymap", "preferences", "userPreferences"}
 
+var keyBindingArrayWrapperFields = []string{"data", "payload", "body", "result", "response", "resources", "nodes", "items"}
+
 func parseKeyBindingWrapper(data []byte) ([]BindingSpec, bool, error) {
 	return parseKeyBindingWrapperDepth(data, 0)
 }
@@ -95,6 +97,16 @@ func parseKeyBindingWrapperDepth(data []byte, depth int) ([]BindingSpec, bool, e
 		specs = append(specs, parsed...)
 	}
 	if len(specs) == 0 {
+		for _, name := range keyBindingArrayWrapperFields {
+			value, ok := raw[name]
+			if !ok {
+				continue
+			}
+			parsed, ok, err := parseKeyBindingOptionalSpecValue(name, value, depth+1)
+			if ok || err != nil {
+				return parsed, ok, err
+			}
+		}
 		for _, name := range keyBindingOuterWrapperFields {
 			value, ok := raw[name]
 			if !ok {
@@ -112,6 +124,23 @@ func parseKeyBindingWrapperDepth(data []byte, depth int) ([]BindingSpec, bool, e
 		return nil, false, nil
 	}
 	return specs, true, nil
+}
+
+func parseKeyBindingOptionalSpecValue(name string, data json.RawMessage, depth int) ([]BindingSpec, bool, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil, false, nil
+	}
+	switch data[0] {
+	case '[':
+		specs, err := parseKeyBindingSpecValue(name, data)
+		return specs, true, err
+	case '{':
+		specs, ok, err := parseKeyBindingWrapperDepth(data, depth)
+		return specs, ok, err
+	default:
+		return nil, false, nil
+	}
 }
 
 func parseKeyBindingSpecValue(name string, data json.RawMessage) ([]BindingSpec, error) {
@@ -195,6 +224,7 @@ func parseKeyBindingMapEntry(key string, data json.RawMessage) (BindingSpec, err
 }
 
 func (spec *BindingSpec) UnmarshalJSON(data []byte) error {
+	data = unwrapBindingSpecJSON(data)
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -217,6 +247,51 @@ func (spec *BindingSpec) UnmarshalJSON(data []byte) error {
 		spec.Action = action
 	}
 	return nil
+}
+
+func unwrapBindingSpecJSON(data []byte) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	if bindingSpecJSONHasDirectFields(fields) {
+		return data
+	}
+	for _, name := range []string{
+		"binding",
+		"keybinding",
+		"keyBinding",
+		"shortcutBinding",
+		"entry",
+		"item",
+		"node",
+		"resource",
+		"attributes",
+		"properties",
+		"attrs",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] == '{' {
+			return unwrapBindingSpecJSON(raw)
+		}
+	}
+	return data
+}
+
+func bindingSpecJSONHasDirectFields(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{
+		"Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "sequence",
+		"Action", "action", "command", "action_name", "actionName", "command_name", "commandName", "command_id", "commandId",
+	} {
+		if raw, ok := fields[name]; ok && len(bytes.TrimSpace(raw)) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return true
+		}
+	}
+	return false
 }
 
 func bindingKeyField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
