@@ -457,8 +457,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectEventCamel          *ScreenEvent              `json:"expectEvent"`
 		ExpectEvents              []ScreenEvent             `json:"expect_events"`
 		ExpectEventsCamel         []ScreenEvent             `json:"expectEvents"`
-		ExpectNoEvent             *bool                     `json:"expect_no_event"`
-		ExpectNoEventCamel        *bool                     `json:"expectNoEvent"`
+		ExpectNoEvent             *json.RawMessage          `json:"expect_no_event"`
+		ExpectNoEventCamel        *json.RawMessage          `json:"expectNoEvent"`
 		ExpectEventCount          *int                      `json:"expect_event_count"`
 		ExpectEventCountCamel     *int                      `json:"expectEventCount"`
 		ExpectTotalEventCount     *int                      `json:"expect_total_event_count"`
@@ -467,9 +467,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectDialogResultCamel   *DialogResultExpectation  `json:"expectDialogResult"`
 		ExpectDialogResults       []DialogResultExpectation `json:"expect_dialog_results"`
 		ExpectDialogResultsCamel  []DialogResultExpectation `json:"expectDialogResults"`
-		ExpectNoDialogResult      *bool                     `json:"expect_no_dialog_result"`
-		ExpectNoDialogResultCamel *bool                     `json:"expectNoDialogResult"`
-		ExpectNoDialogResults     *bool                     `json:"expect_no_dialog_results"`
+		ExpectNoDialogResult      *json.RawMessage          `json:"expect_no_dialog_result"`
+		ExpectNoDialogResultCamel *json.RawMessage          `json:"expectNoDialogResult"`
+		ExpectNoDialogResults     *json.RawMessage          `json:"expect_no_dialog_results"`
 		ExpectDialogResultCount   *int                      `json:"expect_dialog_result_count"`
 		ExpectDialogCountCamel    *int                      `json:"expectDialogResultCount"`
 		ExpectTotalDialogCount    *int                      `json:"expect_total_dialog_result_count"`
@@ -488,8 +488,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectViewportCamel       *ViewportExpectation      `json:"expectViewport"`
 		ExpectScreen              *ScreenExpectation        `json:"expect_screen"`
 		ExpectScreenCamel         *ScreenExpectation        `json:"expectScreen"`
-		ExpectFocused             *bool                     `json:"expect_focused"`
-		ExpectFocusedCamel        *bool                     `json:"expectFocused"`
+		ExpectFocused             *json.RawMessage          `json:"expect_focused"`
+		ExpectFocusedCamel        *json.RawMessage          `json:"expectFocused"`
 		ExpectStatusContains      *stringList               `json:"expect_status_contains"`
 		ExpectStatusContainsCamel *stringList               `json:"expectStatusContains"`
 		ExpectStatusNotContains   *stringList               `json:"expect_status_not_contains"`
@@ -841,11 +841,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectEventsCamel != nil {
 		step.ExpectEvents = fields.ExpectEventsCamel
 	}
-	if fields.ExpectNoEvent != nil {
-		step.ExpectNoEvent = *fields.ExpectNoEvent
-	}
-	if fields.ExpectNoEventCamel != nil {
-		step.ExpectNoEvent = *fields.ExpectNoEventCamel
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_event", "expectNoEvent"); ok {
+		step.ExpectNoEvent = value
 	}
 	if fields.ExpectEventCount != nil {
 		step.ExpectEventCount = fields.ExpectEventCount
@@ -871,14 +868,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectDialogResultsCamel != nil {
 		step.ExpectDialogResults = fields.ExpectDialogResultsCamel
 	}
-	if fields.ExpectNoDialogResult != nil {
-		step.ExpectNoDialogResult = *fields.ExpectNoDialogResult
-	}
-	if fields.ExpectNoDialogResultCamel != nil {
-		step.ExpectNoDialogResult = *fields.ExpectNoDialogResultCamel
-	}
-	if fields.ExpectNoDialogResults != nil {
-		step.ExpectNoDialogResult = *fields.ExpectNoDialogResults
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_dialog_result", "expectNoDialogResult", "expect_no_dialog_results"); ok {
+		step.ExpectNoDialogResult = value
 	}
 	if fields.ExpectDialogResultCount != nil {
 		step.ExpectDialogResultCount = fields.ExpectDialogResultCount
@@ -934,11 +925,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectScreenCamel != nil {
 		step.ExpectScreen = fields.ExpectScreenCamel
 	}
-	if fields.ExpectFocused != nil {
-		step.ExpectFocused = fields.ExpectFocused
-	}
-	if fields.ExpectFocusedCamel != nil {
-		step.ExpectFocused = fields.ExpectFocusedCamel
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_focused", "expectFocused"); ok {
+		focused := value
+		step.ExpectFocused = &focused
 	}
 	if fields.ExpectStatusContains != nil {
 		step.ExpectStatusContains = stringListValue(fields.ExpectStatusContains)
@@ -2329,6 +2318,17 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"ResizeHeight",
 		"resizeHeight",
 		"resize_height",
+		"ExpectNoEvent",
+		"expectNoEvent",
+		"expect_no_event",
+		"ExpectNoDialogResult",
+		"expectNoDialogResult",
+		"expect_no_dialog_result",
+		"ExpectNoDialogResults",
+		"expect_no_dialog_results",
+		"ExpectFocused",
+		"expectFocused",
+		"expect_focused",
 	} {
 		raw, ok := fields[name]
 		if !ok {
