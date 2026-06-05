@@ -4610,7 +4610,26 @@ func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
 func (expect *ScreenExpectation) UnmarshalJSON(data []byte) error {
 	type alias ScreenExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Width",
+		"width",
+		"screen_width",
+		"screenWidth",
+		"columns",
+		"cols",
+		"column_count",
+		"columnCount",
+		"Height",
+		"height",
+		"screen_height",
+		"screenHeight",
+		"rows",
+		"lines",
+		"row_count",
+		"rowCount",
+		"line_count",
+		"lineCount",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = ScreenExpectation(raw)
@@ -4620,12 +4639,12 @@ func (expect *ScreenExpectation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if expect.Width == 0 {
-		if width := intPtrJSONField(fields, "screen_width", "screenWidth", "columns", "cols", "column_count", "columnCount"); width != nil {
+		if width := intPtrJSONField(fields, "Width", "width", "screen_width", "screenWidth", "columns", "cols", "column_count", "columnCount"); width != nil {
 			expect.Width = *width
 		}
 	}
 	if expect.Height == 0 {
-		if height := intPtrJSONField(fields, "screen_height", "screenHeight", "rows", "lines", "row_count", "rowCount", "line_count", "lineCount"); height != nil {
+		if height := intPtrJSONField(fields, "Height", "height", "screen_height", "screenHeight", "rows", "lines", "row_count", "rowCount", "line_count", "lineCount"); height != nil {
 			expect.Height = *height
 		}
 	}

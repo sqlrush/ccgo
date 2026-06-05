@@ -5882,8 +5882,8 @@ func TestRunInteractionScriptAcceptsWrappedUpperCamelStepFields(t *testing.T) {
 			"ExpectScreen": {
 				"resource": {
 					"attributes": {
-						"columns": 40,
-						"rows": 8
+						"Width": "40",
+						"Height": "8"
 					}
 				}
 			},
