@@ -5496,6 +5496,45 @@ func TestRunInteractionScriptAcceptsCompactActionDiscriminatorAliases(t *testing
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedResizeActionPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action": "resize",
+			"payload": {
+				"resource": {
+					"type": "terminal-size",
+					"attributes": {
+						"columns": "52",
+						"rows": "10"
+					}
+				}
+			},
+			"expectScreen": {"columns": 52, "rows": 10}
+		},
+		{
+			"operation": "terminalSize",
+			"payload": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"terminalWidth": "54",
+							"terminalHeight": "11"
+						}
+					}
+				}
+			},
+			"expectScreen": {"columns": 54, "rows": 11}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsCompactEventActionAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"action":"focusOut","expectEvent":{"type":"focus_out"},"expectFocused":false},

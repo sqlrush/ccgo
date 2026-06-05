@@ -588,6 +588,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script action/type/kind/name/operation 动作判别字段现在接受 compact/camel fixture aliases，例如 `typeText`、`inputText`、`insertText`、`keyPress`、`pressKey`、`keySequence`、`pasteText`、`pastedText`、`clipboardText`、`setStatus`、`statusLine`、`terminalSize` 和 `screenSize`。
 
+本轮补充：interaction script 的 resize/terminalSize/screenSize action payload 现在递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge.node` 等 wrapper，JSON:API/GraphQL fixture 中的 columns/rows 可直接驱动 screen resize。
+
 本轮补充：interaction script action/type/kind/name/operation 动作判别字段现在也接受 compact/camel event/media aliases，包括 `focusIn`、`focusOut`、`mouseEvent`、`pasteImage` 和 `imagePaste`。
 
 本轮补充：interaction script action/type/kind/name/operation 动作判别字段现在也能驱动 runtime/dialog mutation，支持 `requestPermission`、`taskStatus`、`showTasks`、`cancelTasks`、`removeTask` 和 `showDialog` 等动作，并从 `value`/`payload`/`data`/`body` 载荷解析 permission/task/dialog 对象、task/permission ID 或取消原因。

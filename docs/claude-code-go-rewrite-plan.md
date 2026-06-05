@@ -305,6 +305,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script 的 `keys` 字段支持 printable text chunk 和空格分隔 named-key sequence，例如 `ctrl-x ctrl-k`，减少官方脚本把连续输入拆成数组的改写成本。
 - 本轮补充：interaction script key input 接受 press-style aliases，包括 `press`、`keyPress`、`keypress`、`shortcutKey`、`presses`、`keyPresses` 和 `shortcuts`。
 - 本轮补充：interaction script action/type/kind/name/operation 动作判别字段接受 compact/camel fixture aliases，包括 `typeText`、`inputText`、`insertText`、`keyPress`、`pressKey`、`keySequence`、`pasteText`、`pastedText`、`clipboardText`、`setStatus`、`statusLine`、`terminalSize` 和 `screenSize`。
+- 本轮补充：interaction script resize/terminalSize/screenSize action payload 现在递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge.node` 等 wrapper，官方/API fixture 可把 columns/rows 放在 JSON:API 或 GraphQL envelope 内。
 - 本轮补充：interaction script action/type/kind/name/operation 动作判别字段继续接受 compact/camel event/media aliases，包括 `focusIn`、`focusOut`、`mouseEvent`、`pasteImage` 和 `imagePaste`。
 - 本轮补充：interaction script action/type/kind/name/operation 动作判别字段也可驱动 runtime/dialog mutation，支持 `requestPermission`、`taskStatus`、`showTasks`、`cancelTasks`、`removeTask` 和 `showDialog` 等动作，并从 `value`/`payload`/`data`/`body` 载荷解析对象、ID 或取消原因。
 - 本轮补充：terminal CSI-u/kitty keyboard parser 接受 `codepoint:alternate` 和 `modifier:event-type` 冒号字段，按主 codepoint/modifier 解析 ctrl/alt/shift/rune 键，覆盖 kitty progressive keyboard protocol 的常见变体。

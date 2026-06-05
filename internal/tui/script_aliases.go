@@ -155,12 +155,71 @@ func scriptSizeJSONField(fields map[string]json.RawMessage, names ...string) *sc
 		if !ok {
 			continue
 		}
-		var size scriptSize
-		if err := json.Unmarshal(raw, &size); err == nil {
-			return &size
+		if size, ok := scriptSizeFromJSON(raw, 0); ok {
+			return size
 		}
 	}
 	return nil
+}
+
+func scriptSizeFromJSON(raw json.RawMessage, depth int) (*scriptSize, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	var size scriptSize
+	if err := json.Unmarshal(raw, &size); err == nil && scriptSizeHasData(size) {
+		return &size, true
+	}
+	if depth >= 8 {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if size, ok := scriptSizeFromJSON(item, depth+1); ok {
+				return size, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(
+		"size",
+		"dimensions",
+		"resize",
+		"resize_to",
+		"resizeTo",
+		"screen_size",
+		"screenSize",
+		"terminal_size",
+		"terminalSize",
+		"viewport",
+		"screen",
+		"terminal",
+	) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if size, ok := scriptSizeFromJSON(nested, depth+1); ok {
+			return size, true
+		}
+	}
+	return nil, false
+}
+
+func scriptSizeHasData(size scriptSize) bool {
+	return size.Width > 0 || size.Height > 0
 }
 
 func scriptFocusKey(focused bool) string {
