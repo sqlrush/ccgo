@@ -5404,9 +5404,9 @@ func TestRunInteractionScriptAcceptsWrappedPromptExpectationAliasFields(t *testi
 			"expectPrompt": {
 				"resource": {
 					"attributes": {
-						"text": "abc",
-						"cursorIndex": 3,
-						"isEmpty": false
+						"Text": "abc",
+						"Cursor": "3",
+						"Empty": "false"
 					}
 				}
 			}
@@ -5417,9 +5417,9 @@ func TestRunInteractionScriptAcceptsWrappedPromptExpectationAliasFields(t *testi
 				"edge": {
 					"node": {
 						"attrs": {
-							"blank": true,
-							"pastedContentCount": 0,
-							"nextPastedID": 1
+							"Empty": "true",
+							"PastedContentCount": "0",
+							"NextPastedID": "1"
 						}
 					}
 				}

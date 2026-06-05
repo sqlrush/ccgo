@@ -4165,22 +4165,65 @@ func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
 		"emptyPrompt",
 		"blank",
 	)
-	data = normalizeObjectFieldsToArray(data, "pasted_contents", "pastedContents")
+	data = normalizeObjectFieldsToArray(data, "PastedContents", "pasted_contents", "pastedContents")
 	type alias PromptExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Text",
+		"text",
+		"value",
+		"input",
+		"content",
+		"message",
+		"prompt",
+		"prompt_text",
+		"promptText",
+		"input_text",
+		"inputText",
+		"Expanded",
+		"expanded",
+		"expanded_text",
+		"expandedText",
+		"expanded_prompt",
+		"expandedPrompt",
+		"expanded_value",
+		"expandedValue",
+		"full_text",
+		"fullText",
+		"Cursor",
+		"cursor",
+		"cursor_index",
+		"cursorIndex",
+		"cursor_position",
+		"cursorPosition",
+		"caret",
+		"position",
+		"Empty",
+		"empty",
+		"is_empty",
+		"isEmpty",
+		"empty_prompt",
+		"emptyPrompt",
+		"blank",
+		"PastedContentCount",
+		"pasted_content_count",
+		"pastedContentCount",
+		"PastedContents",
+		"pasted_contents",
+		"pastedContents",
+		"NextPastedID",
+		"next_pasted_id",
+		"nextPastedId",
+		"nextPastedID",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = PromptExpectation(raw)
 
 	var fields struct {
-		PastedContentCount      *int                       `json:"pasted_content_count"`
-		PastedContentCountCamel *int                       `json:"pastedContentCount"`
-		PastedContents          []PastedContentExpectation `json:"pasted_contents"`
-		PastedContentsCamel     []PastedContentExpectation `json:"pastedContents"`
-		NextPastedID            *int                       `json:"next_pasted_id"`
-		NextPastedIDAlt         *int                       `json:"nextPastedId"`
-		NextPastedIDUpper       *int                       `json:"nextPastedID"`
+		PastedContents      []PastedContentExpectation `json:"PastedContents"`
+		PastedContentsSnake []PastedContentExpectation `json:"pasted_contents"`
+		PastedContentsCamel []PastedContentExpectation `json:"pastedContents"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -4190,37 +4233,31 @@ func (expect *PromptExpectation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if expect.Text == "" {
-		expect.Text = stringJSONField(fieldMap, "value", "input", "content", "message", "prompt", "prompt_text", "promptText", "input_text", "inputText")
+		expect.Text = stringJSONField(fieldMap, "Text", "text", "value", "input", "content", "message", "prompt", "prompt_text", "promptText", "input_text", "inputText")
 	}
 	if expect.Expanded == "" {
-		expect.Expanded = stringJSONField(fieldMap, "expanded_text", "expandedText", "expanded_prompt", "expandedPrompt", "expanded_value", "expandedValue", "full_text", "fullText")
+		expect.Expanded = stringJSONField(fieldMap, "Expanded", "expanded", "expanded_text", "expandedText", "expanded_prompt", "expandedPrompt", "expanded_value", "expandedValue", "full_text", "fullText")
 	}
 	if expect.Cursor == nil {
-		expect.Cursor = intPtrJSONField(fieldMap, "cursor_index", "cursorIndex", "cursor_position", "cursorPosition", "caret", "position")
+		expect.Cursor = intPtrJSONField(fieldMap, "Cursor", "cursor", "cursor_index", "cursorIndex", "cursor_position", "cursorPosition", "caret", "position")
 	}
-	if empty := boolPtrJSONField(fieldMap, "is_empty", "isEmpty", "empty_prompt", "emptyPrompt", "blank"); empty != nil {
+	if empty := boolPtrJSONField(fieldMap, "Empty", "empty", "is_empty", "isEmpty", "empty_prompt", "emptyPrompt", "blank"); empty != nil {
 		expect.Empty = *empty
 	}
-	if fields.PastedContentCount != nil {
-		expect.PastedContentCount = fields.PastedContentCount
-	}
-	if fields.PastedContentCountCamel != nil {
-		expect.PastedContentCount = fields.PastedContentCountCamel
+	if expect.PastedContentCount == nil {
+		expect.PastedContentCount = intPtrJSONField(fieldMap, "PastedContentCount", "pasted_content_count", "pastedContentCount")
 	}
 	if fields.PastedContents != nil {
 		expect.PastedContents = fields.PastedContents
 	}
+	if fields.PastedContentsSnake != nil {
+		expect.PastedContents = fields.PastedContentsSnake
+	}
 	if fields.PastedContentsCamel != nil {
 		expect.PastedContents = fields.PastedContentsCamel
 	}
-	if fields.NextPastedID != nil {
-		expect.NextPastedID = fields.NextPastedID
-	}
-	if fields.NextPastedIDAlt != nil {
-		expect.NextPastedID = fields.NextPastedIDAlt
-	}
-	if fields.NextPastedIDUpper != nil {
-		expect.NextPastedID = fields.NextPastedIDUpper
+	if expect.NextPastedID == nil {
+		expect.NextPastedID = intPtrJSONField(fieldMap, "NextPastedID", "next_pasted_id", "nextPastedId", "nextPastedID")
 	}
 	return nil
 }
