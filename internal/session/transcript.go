@@ -177,119 +177,121 @@ func LoadTranscript(path string) (Transcript, error) {
 
 	scanner := newTranscriptScanner(f)
 	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
+		physicalLine := bytes.TrimSpace(scanner.Bytes())
+		if len(physicalLine) == 0 {
 			continue
 		}
-		var envelope transcriptEnvelope
-		if err := json.Unmarshal(line, &envelope); err != nil {
-			continue
-		}
-		if envelope.Type == "progress" && envelope.UUID != "" {
-			progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
-			continue
-		}
-		metadataType := normalizeTranscriptMetadataType(envelope.Type)
-		switch {
-		case isTranscriptType(envelope.Type):
-			var msg TranscriptMessage
-			if err := json.Unmarshal(line, &msg); err != nil || msg.UUID == "" {
+		for _, line := range transcriptRecordLines(physicalLine) {
+			var envelope transcriptEnvelope
+			if err := json.Unmarshal(line, &envelope); err != nil {
 				continue
 			}
-			if msg.ParentUUID != nil {
-				if bridged, ok := progressBridge[*msg.ParentUUID]; ok {
-					msg.ParentUUID = cloneIDPtr(bridged)
+			if envelope.Type == "progress" && envelope.UUID != "" {
+				progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
+				continue
+			}
+			metadataType := normalizeTranscriptMetadataType(envelope.Type)
+			switch {
+			case isTranscriptType(envelope.Type):
+				var msg TranscriptMessage
+				if err := json.Unmarshal(line, &msg); err != nil || msg.UUID == "" {
+					continue
 				}
-			}
-			msg.Raw = append(json.RawMessage(nil), line...)
-			transcript.addMessage(&msg)
-			if msg.IsCompactBoundary() {
-				transcript.ContextCollapseCommits = nil
-				transcript.ContextCollapseSnapshot = nil
-			}
-		case metadataType == "summary":
-			if leafUUID, summary, ok := parseSummaryMetadata(line); ok && leafUUID != "" {
-				transcript.Summaries[leafUUID] = summary
-			}
-		case metadataType == "custom-title":
-			if sessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title", "title", "name"); ok && sessionID != "" {
-				transcript.CustomTitles[sessionID] = title
-			}
-		case metadataType == "ai-title":
-			if sessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title", "title", "name"); ok && sessionID != "" {
-				transcript.AITitles[sessionID] = title
-			}
-		case metadataType == "last-prompt":
-			if sessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt", "prompt", "input", "text", "content", "message"); ok && sessionID != "" {
-				transcript.LastPrompts[sessionID] = prompt
-			}
-		case metadataType == "task-summary":
-			if entry, ok := parseTaskSummaryMetadata(line); ok && entry.SessionID != "" {
-				transcript.TaskSummaries[entry.SessionID] = entry
-			}
-		case metadataType == "tag":
-			if sessionID, tag, ok := parseSessionStringMetadata(line, "tag", "value", "name", "label"); ok && sessionID != "" {
-				transcript.Tags[sessionID] = tag
-			}
-		case metadataType == "agent-name":
-			if sessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name", "name", "agent", "title"); ok && sessionID != "" {
-				transcript.AgentNames[sessionID] = name
-			}
-		case metadataType == "agent-color":
-			if sessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color", "color", "colour", "value"); ok && sessionID != "" {
-				transcript.AgentColors[sessionID] = color
-			}
-		case metadataType == "agent-setting":
-			if sessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting", "setting", "value", "mode"); ok && sessionID != "" {
-				transcript.AgentSettings[sessionID] = setting
-			}
-		case metadataType == "pr-link":
-			if entry, ok := parsePRLinkMetadata(line); ok && entry.SessionID != "" {
-				transcript.PRLinks[entry.SessionID] = entry
-			}
-		case metadataType == "mode":
-			if sessionID, mode, ok := parseSessionStringMetadata(line, "mode", "value", "name", "status"); ok && sessionID != "" {
-				transcript.Modes[sessionID] = mode
-			}
-		case metadataType == "worktree-state":
-			if entry, ok := parseWorktreeStateMetadata(line); ok && entry.SessionID != "" {
-				transcript.WorktreeStates[entry.SessionID] = entry
-			}
-		case metadataType == "content-replacement":
-			if entry, ok := parseContentReplacementMetadata(line); ok && entry.SessionID != "" {
-				key := entry.SessionID
-				if entry.AgentID != "" {
-					key = contracts.ID(entry.AgentID)
+				if msg.ParentUUID != nil {
+					if bridged, ok := progressBridge[*msg.ParentUUID]; ok {
+						msg.ParentUUID = cloneIDPtr(bridged)
+					}
 				}
-				transcript.ContentReplacements[key] = append(transcript.ContentReplacements[key], entry.Replacements...)
-			}
-		case metadataType == "tombstone":
-			if entry, ok := parseTombstoneMetadata(line); ok && entry.TargetUUID != "" {
-				transcript.Tombstones[entry.TargetUUID] = entry
-			}
-		case metadataType == "file-history-snapshot":
-			snapshot := append(json.RawMessage(nil), line...)
-			transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, snapshot)
-			if messageID := parseSnapshotMessageID(line); messageID != "" {
-				transcript.FileHistoryByMessageID[messageID] = snapshot
-			}
-		case metadataType == "attribution-snapshot":
-			snapshot := append(json.RawMessage(nil), line...)
-			transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, snapshot)
-			if messageID := parseSnapshotMessageID(line); messageID != "" {
-				transcript.AttributionByMessageID[messageID] = snapshot
-			}
-		case metadataType == "speculation-accept":
-			if entry, ok := parseSpeculationAcceptMetadata(line); ok {
-				transcript.SpeculationAccepts = append(transcript.SpeculationAccepts, entry)
-			}
-		case metadataType == "marble-origami-commit":
-			if entry, ok := parseContextCollapseCommitMetadata(line); ok {
-				transcript.ContextCollapseCommits = append(transcript.ContextCollapseCommits, entry)
-			}
-		case metadataType == "marble-origami-snapshot":
-			if entry, ok := parseContextCollapseSnapshotMetadata(line); ok {
-				transcript.ContextCollapseSnapshot = &entry
+				msg.Raw = append(json.RawMessage(nil), line...)
+				transcript.addMessage(&msg)
+				if msg.IsCompactBoundary() {
+					transcript.ContextCollapseCommits = nil
+					transcript.ContextCollapseSnapshot = nil
+				}
+			case metadataType == "summary":
+				if leafUUID, summary, ok := parseSummaryMetadata(line); ok && leafUUID != "" {
+					transcript.Summaries[leafUUID] = summary
+				}
+			case metadataType == "custom-title":
+				if sessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title", "title", "name"); ok && sessionID != "" {
+					transcript.CustomTitles[sessionID] = title
+				}
+			case metadataType == "ai-title":
+				if sessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title", "title", "name"); ok && sessionID != "" {
+					transcript.AITitles[sessionID] = title
+				}
+			case metadataType == "last-prompt":
+				if sessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt", "prompt", "input", "text", "content", "message"); ok && sessionID != "" {
+					transcript.LastPrompts[sessionID] = prompt
+				}
+			case metadataType == "task-summary":
+				if entry, ok := parseTaskSummaryMetadata(line); ok && entry.SessionID != "" {
+					transcript.TaskSummaries[entry.SessionID] = entry
+				}
+			case metadataType == "tag":
+				if sessionID, tag, ok := parseSessionStringMetadata(line, "tag", "value", "name", "label"); ok && sessionID != "" {
+					transcript.Tags[sessionID] = tag
+				}
+			case metadataType == "agent-name":
+				if sessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name", "name", "agent", "title"); ok && sessionID != "" {
+					transcript.AgentNames[sessionID] = name
+				}
+			case metadataType == "agent-color":
+				if sessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color", "color", "colour", "value"); ok && sessionID != "" {
+					transcript.AgentColors[sessionID] = color
+				}
+			case metadataType == "agent-setting":
+				if sessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting", "setting", "value", "mode"); ok && sessionID != "" {
+					transcript.AgentSettings[sessionID] = setting
+				}
+			case metadataType == "pr-link":
+				if entry, ok := parsePRLinkMetadata(line); ok && entry.SessionID != "" {
+					transcript.PRLinks[entry.SessionID] = entry
+				}
+			case metadataType == "mode":
+				if sessionID, mode, ok := parseSessionStringMetadata(line, "mode", "value", "name", "status"); ok && sessionID != "" {
+					transcript.Modes[sessionID] = mode
+				}
+			case metadataType == "worktree-state":
+				if entry, ok := parseWorktreeStateMetadata(line); ok && entry.SessionID != "" {
+					transcript.WorktreeStates[entry.SessionID] = entry
+				}
+			case metadataType == "content-replacement":
+				if entry, ok := parseContentReplacementMetadata(line); ok && entry.SessionID != "" {
+					key := entry.SessionID
+					if entry.AgentID != "" {
+						key = contracts.ID(entry.AgentID)
+					}
+					transcript.ContentReplacements[key] = append(transcript.ContentReplacements[key], entry.Replacements...)
+				}
+			case metadataType == "tombstone":
+				if entry, ok := parseTombstoneMetadata(line); ok && entry.TargetUUID != "" {
+					transcript.Tombstones[entry.TargetUUID] = entry
+				}
+			case metadataType == "file-history-snapshot":
+				snapshot := append(json.RawMessage(nil), line...)
+				transcript.FileHistorySnapshots = append(transcript.FileHistorySnapshots, snapshot)
+				if messageID := parseSnapshotMessageID(line); messageID != "" {
+					transcript.FileHistoryByMessageID[messageID] = snapshot
+				}
+			case metadataType == "attribution-snapshot":
+				snapshot := append(json.RawMessage(nil), line...)
+				transcript.AttributionSnapshots = append(transcript.AttributionSnapshots, snapshot)
+				if messageID := parseSnapshotMessageID(line); messageID != "" {
+					transcript.AttributionByMessageID[messageID] = snapshot
+				}
+			case metadataType == "speculation-accept":
+				if entry, ok := parseSpeculationAcceptMetadata(line); ok {
+					transcript.SpeculationAccepts = append(transcript.SpeculationAccepts, entry)
+				}
+			case metadataType == "marble-origami-commit":
+				if entry, ok := parseContextCollapseCommitMetadata(line); ok {
+					transcript.ContextCollapseCommits = append(transcript.ContextCollapseCommits, entry)
+				}
+			case metadataType == "marble-origami-snapshot":
+				if entry, ok := parseContextCollapseSnapshotMetadata(line); ok {
+					transcript.ContextCollapseSnapshot = &entry
+				}
 			}
 		}
 	}

@@ -939,6 +939,57 @@ func TestLoadTranscriptCollectsMetadataEntries(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptMetadataAcceptsWrappedResourceEntries(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"resource":{"id":"resource_title","type":"custom-title","attributes":{"sessionId":"wrapped","title":"Wrapped Title"}}}`,
+		`{"data":{"included":[{"id":"tool_1","type":"tool","attributes":{"name":"Bash"}},{"id":"ai_1","type":"ai-title","attributes":{"sessionId":"wrapped","name":"Wrapped AI"}},{"resource":{"type":"task-summary","attributes":{"sessionID":"wrapped","content":"Wrapped task","createdAt":"2026-01-01T00:00:00Z"}}},{"edge":{"node":{"type":"content-replacement","attributes":{"sessionId":"wrapped","records":{"toolUseID":"toolu_wrapped","content":"wrapped replacement"}}}}}]}}`,
+		`{"collection":{"values":[{"type":"tag","attributes":{"sessionId":"wrapped","label":"wrapped-tag"}},{"type":"marble-origami-snapshot","attributes":{"sessionID":"wrapped","isArmed":"true","spawnTokens":"88","items":[{"uuid":"pending_wrapped"}]}}]}}`,
+		`{"data":{"type":"worktree-state","attributes":{"sessionID":"wrapped","workspace":{"worktreePath":"/tmp/wrapped","sessionId":"wrapped"}}}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.CustomTitles["wrapped"] != "Wrapped Title" || transcript.AITitles["wrapped"] != "Wrapped AI" || transcript.TaskSummaries["wrapped"].Summary != "Wrapped task" || transcript.Tags["wrapped"] != "wrapped-tag" {
+		t.Fatalf("wrapped transcript metadata = titles:%#v ai:%#v tasks:%#v tags:%#v", transcript.CustomTitles, transcript.AITitles, transcript.TaskSummaries, transcript.Tags)
+	}
+	if got := transcript.ContentReplacements["wrapped"]; len(got) != 1 || got[0].ToolUseID != "toolu_wrapped" || got[0].Replacement != "wrapped replacement" {
+		t.Fatalf("wrapped content replacements = %#v", got)
+	}
+	if !strings.Contains(string(transcript.WorktreeStates["wrapped"].WorktreeSession), "/tmp/wrapped") {
+		t.Fatalf("wrapped worktree state = %#v", transcript.WorktreeStates["wrapped"])
+	}
+	if transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "wrapped" || !transcript.ContextCollapseSnapshot.Armed || transcript.ContextCollapseSnapshot.LastSpawnTokens != 88 || len(transcript.ContextCollapseSnapshot.Staged) != 1 {
+		t.Fatalf("wrapped context collapse snapshot = %#v", transcript.ContextCollapseSnapshot)
+	}
+
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.CustomTitles["wrapped"] != "Wrapped Title" || metadata.AITitles["wrapped"] != "Wrapped AI" || metadata.TaskSummaries["wrapped"].Summary != "Wrapped task" || metadata.Tags["wrapped"] != "wrapped-tag" {
+		t.Fatalf("wrapped lightweight metadata = titles:%#v ai:%#v tasks:%#v tags:%#v", metadata.CustomTitles, metadata.AITitles, metadata.TaskSummaries, metadata.Tags)
+	}
+	if got := metadata.ContentReplacements["wrapped"]; len(got) != 1 || got[0].ToolUseID != "toolu_wrapped" || got[0].Replacement != "wrapped replacement" {
+		t.Fatalf("wrapped lightweight content replacements = %#v", got)
+	}
+	if !strings.Contains(string(metadata.WorktreeStates["wrapped"].WorktreeSession), "/tmp/wrapped") {
+		t.Fatalf("wrapped lightweight worktree state = %#v", metadata.WorktreeStates["wrapped"])
+	}
+	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.SessionID != "wrapped" || !metadata.ContextCollapseSnapshot.Armed || metadata.ContextCollapseSnapshot.LastSpawnTokens != 88 || len(metadata.ContextCollapseSnapshot.Staged) != 1 {
+		t.Fatalf("wrapped lightweight context collapse snapshot = %#v", metadata.ContextCollapseSnapshot)
+	}
+
+	index, err := LoadTranscriptIndex(path, "wrapped")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "Wrapped Title" || index.AITitle != "Wrapped AI" || index.TaskSummary != "Wrapped task" || index.Tag != "wrapped-tag" || !index.HasWorktreeState || index.ContentReplacementCount != 1 {
+		t.Fatalf("wrapped transcript index = %#v", index)
+	}
+}
+
 func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","messageID":123,"content":"numeric summary"}`,

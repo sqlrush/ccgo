@@ -60,81 +60,83 @@ func LoadTranscriptIndex(path string, sessionID contracts.ID) (TranscriptIndex, 
 	buf := make([]byte, 0, 1024*1024)
 	scanner.Buffer(buf, 50*1024*1024)
 	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
+		physicalLine := bytes.TrimSpace(scanner.Bytes())
+		if len(physicalLine) == 0 {
 			continue
 		}
-		var envelope transcriptEnvelope
-		if err := json.Unmarshal(line, &envelope); err != nil {
-			continue
-		}
-		if isTranscriptType(envelope.Type) {
-			var msg TranscriptMessage
-			if err := json.Unmarshal(line, &msg); err != nil || msg.UUID == "" {
+		for _, line := range transcriptRecordLines(physicalLine) {
+			var envelope transcriptEnvelope
+			if err := json.Unmarshal(line, &envelope); err != nil {
 				continue
 			}
-			index.addMessage(msg)
-			continue
-		}
-		switch normalizeTranscriptMetadataType(envelope.Type) {
-		case "summary":
-			if _, summary, ok := parseSummaryMetadata(line); ok {
-				index.SummaryCount++
-				if firstSummary == "" && strings.TrimSpace(summary) != "" {
-					firstSummary = summary
+			if isTranscriptType(envelope.Type) {
+				var msg TranscriptMessage
+				if err := json.Unmarshal(line, &msg); err != nil || msg.UUID == "" {
+					continue
 				}
+				index.addMessage(msg)
+				continue
 			}
-		case "custom-title":
-			if entrySessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title", "title", "name"); ok && strings.TrimSpace(title) != "" {
-				if sessionID == "" || entrySessionID == sessionID {
-					customTitle = title
+			switch normalizeTranscriptMetadataType(envelope.Type) {
+			case "summary":
+				if _, summary, ok := parseSummaryMetadata(line); ok {
+					index.SummaryCount++
+					if firstSummary == "" && strings.TrimSpace(summary) != "" {
+						firstSummary = summary
+					}
 				}
-			}
-		case "ai-title":
-			if entrySessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title", "title", "name"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.AITitle = title
-			}
-		case "last-prompt":
-			if entrySessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt", "prompt", "input", "text", "content", "message"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.LastPrompt = prompt
-			}
-		case "task-summary":
-			if entry, ok := parseTaskSummaryMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
-				index.TaskSummary = entry.Summary
-			}
-		case "tag":
-			if entrySessionID, tag, ok := parseSessionStringMetadata(line, "tag", "value", "name", "label"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.Tag = tag
-			}
-		case "agent-name":
-			if entrySessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name", "name", "agent", "title"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.AgentName = name
-			}
-		case "agent-color":
-			if entrySessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color", "color", "colour", "value"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.AgentColor = color
-			}
-		case "agent-setting":
-			if entrySessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting", "setting", "value", "mode"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.AgentSetting = setting
-			}
-		case "pr-link":
-			if entry, ok := parsePRLinkMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
-				index.PRNumber = entry.PRNumber
-				index.PRURL = entry.PRURL
-				index.PRRepository = entry.PRRepository
-			}
-		case "mode":
-			if entrySessionID, mode, ok := parseSessionStringMetadata(line, "mode", "value", "name", "status"); ok && (sessionID == "" || entrySessionID == sessionID) {
-				index.Mode = mode
-			}
-		case "worktree-state":
-			if entry, ok := parseWorktreeStateMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
-				index.HasWorktreeState = len(entry.WorktreeSession) > 0 && string(entry.WorktreeSession) != "null"
-			}
-		case "content-replacement":
-			if entry, ok := parseContentReplacementMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
-				index.ContentReplacementCount += len(entry.Replacements)
+			case "custom-title":
+				if entrySessionID, title, ok := parseSessionStringMetadata(line, "customTitle", "custom_title", "title", "name"); ok && strings.TrimSpace(title) != "" {
+					if sessionID == "" || entrySessionID == sessionID {
+						customTitle = title
+					}
+				}
+			case "ai-title":
+				if entrySessionID, title, ok := parseSessionStringMetadata(line, "aiTitle", "ai_title", "title", "name"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.AITitle = title
+				}
+			case "last-prompt":
+				if entrySessionID, prompt, ok := parseSessionStringMetadata(line, "lastPrompt", "last_prompt", "prompt", "input", "text", "content", "message"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.LastPrompt = prompt
+				}
+			case "task-summary":
+				if entry, ok := parseTaskSummaryMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
+					index.TaskSummary = entry.Summary
+				}
+			case "tag":
+				if entrySessionID, tag, ok := parseSessionStringMetadata(line, "tag", "value", "name", "label"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.Tag = tag
+				}
+			case "agent-name":
+				if entrySessionID, name, ok := parseSessionStringMetadata(line, "agentName", "agent_name", "name", "agent", "title"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.AgentName = name
+				}
+			case "agent-color":
+				if entrySessionID, color, ok := parseSessionStringMetadata(line, "agentColor", "agent_color", "color", "colour", "value"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.AgentColor = color
+				}
+			case "agent-setting":
+				if entrySessionID, setting, ok := parseSessionStringMetadata(line, "agentSetting", "agent_setting", "setting", "value", "mode"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.AgentSetting = setting
+				}
+			case "pr-link":
+				if entry, ok := parsePRLinkMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
+					index.PRNumber = entry.PRNumber
+					index.PRURL = entry.PRURL
+					index.PRRepository = entry.PRRepository
+				}
+			case "mode":
+				if entrySessionID, mode, ok := parseSessionStringMetadata(line, "mode", "value", "name", "status"); ok && (sessionID == "" || entrySessionID == sessionID) {
+					index.Mode = mode
+				}
+			case "worktree-state":
+				if entry, ok := parseWorktreeStateMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
+					index.HasWorktreeState = len(entry.WorktreeSession) > 0 && string(entry.WorktreeSession) != "null"
+				}
+			case "content-replacement":
+				if entry, ok := parseContentReplacementMetadata(line); ok && (sessionID == "" || entry.SessionID == sessionID) {
+					index.ContentReplacementCount += len(entry.Replacements)
+				}
 			}
 		}
 	}
