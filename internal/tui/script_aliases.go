@@ -459,10 +459,10 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectEventsCamel         []ScreenEvent             `json:"expectEvents"`
 		ExpectNoEvent             *json.RawMessage          `json:"expect_no_event"`
 		ExpectNoEventCamel        *json.RawMessage          `json:"expectNoEvent"`
-		ExpectEventCount          *int                      `json:"expect_event_count"`
-		ExpectEventCountCamel     *int                      `json:"expectEventCount"`
-		ExpectTotalEventCount     *int                      `json:"expect_total_event_count"`
-		ExpectTotalEventCamel     *int                      `json:"expectTotalEventCount"`
+		ExpectEventCount          *json.RawMessage          `json:"expect_event_count"`
+		ExpectEventCountCamel     *json.RawMessage          `json:"expectEventCount"`
+		ExpectTotalEventCount     *json.RawMessage          `json:"expect_total_event_count"`
+		ExpectTotalEventCamel     *json.RawMessage          `json:"expectTotalEventCount"`
 		ExpectDialogResult        *DialogResultExpectation  `json:"expect_dialog_result"`
 		ExpectDialogResultCamel   *DialogResultExpectation  `json:"expectDialogResult"`
 		ExpectDialogResults       []DialogResultExpectation `json:"expect_dialog_results"`
@@ -470,10 +470,10 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectNoDialogResult      *json.RawMessage          `json:"expect_no_dialog_result"`
 		ExpectNoDialogResultCamel *json.RawMessage          `json:"expectNoDialogResult"`
 		ExpectNoDialogResults     *json.RawMessage          `json:"expect_no_dialog_results"`
-		ExpectDialogResultCount   *int                      `json:"expect_dialog_result_count"`
-		ExpectDialogCountCamel    *int                      `json:"expectDialogResultCount"`
-		ExpectTotalDialogCount    *int                      `json:"expect_total_dialog_result_count"`
-		ExpectTotalDialogCamel    *int                      `json:"expectTotalDialogResultCount"`
+		ExpectDialogResultCount   *json.RawMessage          `json:"expect_dialog_result_count"`
+		ExpectDialogCountCamel    *json.RawMessage          `json:"expectDialogResultCount"`
+		ExpectTotalDialogCount    *json.RawMessage          `json:"expect_total_dialog_result_count"`
+		ExpectTotalDialogCamel    *json.RawMessage          `json:"expectTotalDialogResultCount"`
 		ExpectDialog              *DialogExpectation        `json:"expect_dialog"`
 		ExpectDialogCamel         *DialogExpectation        `json:"expectDialog"`
 		ExpectPrompt              *PromptExpectation        `json:"expect_prompt"`
@@ -844,17 +844,27 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_event", "expectNoEvent"); ok {
 		step.ExpectNoEvent = value
 	}
-	if fields.ExpectEventCount != nil {
-		step.ExpectEventCount = fields.ExpectEventCount
+	if count, ok := scriptNamedIntField(fieldMap,
+		[]string{"expect_event_count", "expectEventCount"},
+		"count",
+		"event_count",
+		"eventCount",
+		"expected",
+		"value",
+	); ok {
+		step.ExpectEventCount = &count
 	}
-	if fields.ExpectEventCountCamel != nil {
-		step.ExpectEventCount = fields.ExpectEventCountCamel
-	}
-	if fields.ExpectTotalEventCount != nil {
-		step.ExpectTotalEventCount = fields.ExpectTotalEventCount
-	}
-	if fields.ExpectTotalEventCamel != nil {
-		step.ExpectTotalEventCount = fields.ExpectTotalEventCamel
+	if count, ok := scriptNamedIntField(fieldMap,
+		[]string{"expect_total_event_count", "expectTotalEventCount"},
+		"total",
+		"total_count",
+		"totalCount",
+		"event_count",
+		"eventCount",
+		"expected",
+		"value",
+	); ok {
+		step.ExpectTotalEventCount = &count
 	}
 	if fields.ExpectDialogResult != nil {
 		step.ExpectDialogResult = fields.ExpectDialogResult
@@ -871,17 +881,31 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_no_dialog_result", "expectNoDialogResult", "expect_no_dialog_results"); ok {
 		step.ExpectNoDialogResult = value
 	}
-	if fields.ExpectDialogResultCount != nil {
-		step.ExpectDialogResultCount = fields.ExpectDialogResultCount
+	if count, ok := scriptNamedIntField(fieldMap,
+		[]string{"expect_dialog_result_count", "expectDialogResultCount"},
+		"count",
+		"dialog_result_count",
+		"dialogResultCount",
+		"result_count",
+		"resultCount",
+		"expected",
+		"value",
+	); ok {
+		step.ExpectDialogResultCount = &count
 	}
-	if fields.ExpectDialogCountCamel != nil {
-		step.ExpectDialogResultCount = fields.ExpectDialogCountCamel
-	}
-	if fields.ExpectTotalDialogCount != nil {
-		step.ExpectTotalDialogResultCount = fields.ExpectTotalDialogCount
-	}
-	if fields.ExpectTotalDialogCamel != nil {
-		step.ExpectTotalDialogResultCount = fields.ExpectTotalDialogCamel
+	if count, ok := scriptNamedIntField(fieldMap,
+		[]string{"expect_total_dialog_result_count", "expectTotalDialogResultCount"},
+		"total",
+		"total_count",
+		"totalCount",
+		"dialog_result_count",
+		"dialogResultCount",
+		"result_count",
+		"resultCount",
+		"expected",
+		"value",
+	); ok {
+		step.ExpectTotalDialogResultCount = &count
 	}
 	if fields.ExpectDialog != nil {
 		step.ExpectDialog = fields.ExpectDialog
@@ -2321,11 +2345,23 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"ExpectNoEvent",
 		"expectNoEvent",
 		"expect_no_event",
+		"ExpectEventCount",
+		"expectEventCount",
+		"expect_event_count",
+		"ExpectTotalEventCount",
+		"expectTotalEventCount",
+		"expect_total_event_count",
 		"ExpectNoDialogResult",
 		"expectNoDialogResult",
 		"expect_no_dialog_result",
 		"ExpectNoDialogResults",
 		"expect_no_dialog_results",
+		"ExpectDialogResultCount",
+		"expectDialogResultCount",
+		"expect_dialog_result_count",
+		"ExpectTotalDialogResultCount",
+		"expectTotalDialogResultCount",
+		"expect_total_dialog_result_count",
 		"ExpectFocused",
 		"expectFocused",
 		"expect_focused",

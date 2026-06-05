@@ -7147,6 +7147,109 @@ func TestRunDialogRuntimeScriptChecksDialogResultCounts(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedExpectationCountAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"text": "draft",
+			"expect_event_count": {
+				"resource": {
+					"attributes": {
+						"value": "0"
+					}
+				}
+			},
+			"expectTotalEventCount": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"value": "0"
+						}
+					}
+				}
+			},
+			"expect_prompt": {"text": "draft"}
+		},
+		{
+			"key": "enter",
+			"expectEventCount": {
+				"resource": {
+					"attributes": {
+						"count": "1"
+					}
+				}
+			},
+			"expect_total_event_count": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"total": "1"
+						}
+					}
+				}
+			},
+			"expect_event": {"type": "prompt_submitted", "value": "draft"},
+			"expect_prompt": {"empty": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+
+	dialogSteps, err := ParseInteractionScript([]byte(`[
+		{
+			"request_permission": {"id": "perm_1", "tool_name": "Bash"},
+			"expect_dialog_result_count": {
+				"resource": {
+					"attributes": {
+						"value": "0"
+					}
+				}
+			},
+			"expectTotalDialogResultCount": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"value": "0"
+						}
+					}
+				}
+			}
+		},
+		{
+			"key": "enter",
+			"expectDialogResultCount": {
+				"resource": {
+					"attributes": {
+						"count": "1"
+					}
+				}
+			},
+			"expect_total_dialog_result_count": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"total": "1"
+						}
+					}
+				}
+			},
+			"expect_dialog_result": {"id": "perm_1", "status": "allowed", "found": true}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dialogScreen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&dialogScreen, runtime, "ready", dialogSteps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestParseInteractionScriptAcceptsJSONArrayJSONLAndFile(t *testing.T) {
 	arraySteps, err := ParseInteractionScript([]byte(`[
 		{"text": "go", "expect_prompt": {"text": "go"}},
