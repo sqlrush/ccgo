@@ -484,10 +484,10 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectTasksCamel          *TasksExpectation         `json:"expectTasks"`
 		ExpectReverseSearch       *ReverseSearchExpectation `json:"expect_reverse_search"`
 		ExpectReverseSearchCamel  *ReverseSearchExpectation `json:"expectReverseSearch"`
-		ExpectViewport            *ViewportExpectation      `json:"expect_viewport"`
-		ExpectViewportCamel       *ViewportExpectation      `json:"expectViewport"`
-		ExpectScreen              *ScreenExpectation        `json:"expect_screen"`
-		ExpectScreenCamel         *ScreenExpectation        `json:"expectScreen"`
+		ExpectViewport            *json.RawMessage          `json:"expect_viewport"`
+		ExpectViewportCamel       *json.RawMessage          `json:"expectViewport"`
+		ExpectScreen              *json.RawMessage          `json:"expect_screen"`
+		ExpectScreenCamel         *json.RawMessage          `json:"expectScreen"`
 		ExpectFocused             *json.RawMessage          `json:"expect_focused"`
 		ExpectFocusedCamel        *json.RawMessage          `json:"expectFocused"`
 		ExpectStatusContains      *json.RawMessage          `json:"expect_status_contains"`
@@ -995,17 +995,30 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectReverseSearchCamel != nil {
 		step.ExpectReverseSearch = fields.ExpectReverseSearchCamel
 	}
-	if fields.ExpectViewport != nil {
-		step.ExpectViewport = fields.ExpectViewport
+	if viewport := scriptNamedViewportExpectationField(fieldMap,
+		[]string{"expect_viewport", "expectViewport"},
+		"viewport",
+		"view",
+		"expectation",
+		"expected",
+		"expect_viewport",
+		"expectViewport",
+	); viewport != nil {
+		step.ExpectViewport = viewport
 	}
-	if fields.ExpectViewportCamel != nil {
-		step.ExpectViewport = fields.ExpectViewportCamel
-	}
-	if fields.ExpectScreen != nil {
-		step.ExpectScreen = fields.ExpectScreen
-	}
-	if fields.ExpectScreenCamel != nil {
-		step.ExpectScreen = fields.ExpectScreenCamel
+	if screen := scriptNamedScreenExpectationField(fieldMap,
+		[]string{"expect_screen", "expectScreen"},
+		"screen",
+		"terminal",
+		"terminal_size",
+		"terminalSize",
+		"size",
+		"expectation",
+		"expected",
+		"expect_screen",
+		"expectScreen",
+	); screen != nil {
+		step.ExpectScreen = screen
 	}
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "expect_focused", "expectFocused"); ok {
 		focused := value
@@ -2104,6 +2117,123 @@ func scriptVimExpectationHasData(vim VimExpectation) bool {
 		vim.Mode != "" ||
 		vim.Register != "" ||
 		vim.RegisterLinewise != nil
+}
+
+func scriptNamedViewportExpectationField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) *ViewportExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if viewport, ok := scriptViewportExpectationFromJSON(raw, nestedNames, 0); ok {
+			return viewport
+		}
+	}
+	return nil
+}
+
+func scriptViewportExpectationFromJSON(raw json.RawMessage, names []string, depth int) (*ViewportExpectation, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if viewport, ok := scriptViewportExpectationFromJSON(item, names, depth+1); ok {
+				return viewport, true
+			}
+		}
+		return nil, false
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil, false
+	}
+	var viewport ViewportExpectation
+	if err := json.Unmarshal(raw, &viewport); err == nil && scriptViewportExpectationHasData(viewport) {
+		return &viewport, true
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if viewport, ok := scriptViewportExpectationFromJSON(nested, names, depth+1); ok {
+			return viewport, true
+		}
+	}
+	return nil, false
+}
+
+func scriptViewportExpectationHasData(viewport ViewportExpectation) bool {
+	return viewport.Offset != nil ||
+		viewport.VisibleLineCount > 0 ||
+		len(viewport.VisibleContains) > 0 ||
+		len(viewport.VisibleNotContains) > 0
+}
+
+func scriptNamedScreenExpectationField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) *ScreenExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if screen, ok := scriptScreenExpectationFromJSON(raw, nestedNames, 0); ok {
+			return screen
+		}
+	}
+	return nil
+}
+
+func scriptScreenExpectationFromJSON(raw json.RawMessage, names []string, depth int) (*ScreenExpectation, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if screen, ok := scriptScreenExpectationFromJSON(item, names, depth+1); ok {
+				return screen, true
+			}
+		}
+		return nil, false
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil, false
+	}
+	var screen ScreenExpectation
+	if err := json.Unmarshal(raw, &screen); err == nil && scriptScreenExpectationHasData(screen) {
+		return &screen, true
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if screen, ok := scriptScreenExpectationFromJSON(nested, names, depth+1); ok {
+			return screen, true
+		}
+	}
+	return nil, false
+}
+
+func scriptScreenExpectationHasData(screen ScreenExpectation) bool {
+	return screen.Width > 0 || screen.Height > 0
 }
 
 func scriptActionIntFromJSON(raw json.RawMessage, names []string, depth int) (int, bool) {

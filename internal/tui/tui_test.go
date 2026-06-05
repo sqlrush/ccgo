@@ -8134,6 +8134,84 @@ func TestRunInteractionScriptAcceptsScreenViewportAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedScreenViewportExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"expectScreen": {
+				"resource": {
+					"attributes": {
+						"columns": 22,
+						"rows": 6
+					}
+				}
+			}
+		},
+		{"message": {"role": "system", "text": "one"}},
+		{"message": {"role": "system", "text": "two"}},
+		{"message": {"role": "system", "text": "three"}},
+		{"message": {"role": "system", "text": "four"}},
+		{
+			"message": {"role": "system", "text": "five"},
+			"expectViewport": {
+				"resource": {
+					"attributes": {
+						"scrollOffset": 1,
+						"visibleRows": 4,
+						"visibleContains": "system: five"
+					}
+				}
+			}
+		},
+		{
+			"key": "\u001b[5~",
+			"expect_viewport": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"scroll_offset": 0,
+							"lineCount": 4,
+							"visibleNotContains": "system: five"
+						}
+					}
+				}
+			}
+		},
+		{
+			"resizeWidth": 30,
+			"resizeHeight": 7,
+			"expect_screen": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"screenWidth": 30,
+							"screenHeight": 7
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].ExpectScreen == nil || steps[0].ExpectScreen.Width != 22 || steps[0].ExpectScreen.Height != 6 {
+		t.Fatalf("first screen expectation = %#v", steps[0].ExpectScreen)
+	}
+	if steps[5].ExpectViewport == nil || steps[5].ExpectViewport.Offset == nil || *steps[5].ExpectViewport.Offset != 1 || steps[5].ExpectViewport.VisibleLineCount != 4 || len(steps[5].ExpectViewport.VisibleContains) != 1 {
+		t.Fatalf("first viewport expectation = %#v", steps[5].ExpectViewport)
+	}
+	if steps[6].ExpectViewport == nil || steps[6].ExpectViewport.Offset == nil || *steps[6].ExpectViewport.Offset != 0 || steps[6].ExpectViewport.VisibleLineCount != 4 || len(steps[6].ExpectViewport.VisibleNotContains) != 1 {
+		t.Fatalf("second viewport expectation = %#v", steps[6].ExpectViewport)
+	}
+	if steps[7].ExpectScreen == nil || steps[7].ExpectScreen.Width != 30 || steps[7].ExpectScreen.Height != 7 {
+		t.Fatalf("second screen expectation = %#v", steps[7].ExpectScreen)
+	}
+	screen := NewREPLScreen(22, 6, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsStepStateAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"request": "label-only", "task": "label-only", "resize": {"columns": 42, "rows": 8}, "expectScreen": {"width": 42, "height": 8}},
