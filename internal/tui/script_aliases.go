@@ -4108,15 +4108,92 @@ func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
 
 func (dialog *Dialog) UnmarshalJSON(data []byte) error {
 	data = normalizeStringFieldsToArray(data,
-		"actions",
 		"Actions",
+		"actions",
+		"Options",
 		"options",
+		"Choices",
 		"choices",
+		"Buttons",
 		"buttons",
 	)
 	type alias Dialog
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"ID",
+		"id",
+		"DialogID",
+		"dialog_id",
+		"dialogId",
+		"dialogID",
+		"PermissionID",
+		"permission_id",
+		"permissionId",
+		"permissionID",
+		"RequestID",
+		"request_id",
+		"requestId",
+		"requestID",
+		"ToolUseID",
+		"tool_use_id",
+		"toolUseId",
+		"toolUseID",
+		"OperationID",
+		"operation_id",
+		"operationId",
+		"operationID",
+		"Kind",
+		"kind",
+		"DialogKind",
+		"dialog_kind",
+		"dialogKind",
+		"DialogType",
+		"dialog_type",
+		"dialogType",
+		"Title",
+		"title",
+		"Heading",
+		"heading",
+		"Header",
+		"header",
+		"Label",
+		"label",
+		"Name",
+		"name",
+		"Body",
+		"body",
+		"Content",
+		"content",
+		"Text",
+		"text",
+		"Message",
+		"message",
+		"Description",
+		"description",
+		"Actions",
+		"actions",
+		"Options",
+		"options",
+		"Choices",
+		"choices",
+		"Buttons",
+		"buttons",
+		"Focused",
+		"focused",
+		"FocusedIndex",
+		"focused_index",
+		"focusedIndex",
+		"FocusIndex",
+		"focus_index",
+		"focusIndex",
+		"SelectedIndex",
+		"selected_index",
+		"selectedIndex",
+		"Focus",
+		"focus",
+		"Selected",
+		"selected",
+	), &raw); err != nil {
 		return err
 	}
 	*dialog = Dialog(raw)
@@ -4125,25 +4202,25 @@ func (dialog *Dialog) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if dialog.Title == "" {
-		dialog.Title = stringJSONField(fields, "heading", "header", "label", "name")
-	}
-	if dialog.Body == "" {
-		dialog.Body = stringJSONField(fields, "content", "text", "message", "description")
-	}
-	if len(dialog.Actions) == 0 {
-		dialog.Actions = stringListJSONField(fields, "options", "choices", "buttons")
-	}
-	if focused := intPtrJSONField(fields, "focused_index", "focusedIndex", "selected_index", "selectedIndex", "focus", "selected"); focused != nil {
-		dialog.Focused = *focused
-	}
 	if dialog.ID == "" {
-		dialog.ID = scalarStringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
+		dialog.ID = scalarStringJSONField(fields, "ID", "id", "DialogID", "dialog_id", "dialogId", "dialogID", "PermissionID", "permission_id", "permissionId", "permissionID", "RequestID", "request_id", "requestId", "requestID", "ToolUseID", "tool_use_id", "toolUseId", "toolUseID", "OperationID", "operation_id", "operationId", "operationID")
 	}
 	if dialog.Kind == "" {
-		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
+		if dialogKind := stringJSONField(fields, "Kind", "kind", "DialogKind", "dialog_kind", "dialogKind", "DialogType", "dialog_type", "dialogType"); dialogKind != "" {
 			dialog.Kind = DialogKind(dialogKind)
 		}
+	}
+	if dialog.Title == "" {
+		dialog.Title = stringJSONField(fields, "Title", "title", "Heading", "heading", "Header", "header", "Label", "label", "Name", "name")
+	}
+	if dialog.Body == "" {
+		dialog.Body = stringJSONField(fields, "Body", "body", "Content", "content", "Text", "text", "Message", "message", "Description", "description")
+	}
+	if len(dialog.Actions) == 0 {
+		dialog.Actions = stringListJSONField(fields, "Actions", "actions", "Options", "options", "Choices", "choices", "Buttons", "buttons")
+	}
+	if focused := intPtrJSONField(fields, "Focused", "focused", "FocusedIndex", "focused_index", "focusedIndex", "FocusIndex", "focus_index", "focusIndex", "SelectedIndex", "selected_index", "selectedIndex", "Focus", "focus", "Selected", "selected"); focused != nil {
+		dialog.Focused = *focused
 	}
 	return nil
 }

@@ -7000,28 +7000,28 @@ func TestRunInteractionScriptAcceptsWrappedDialogStepFields(t *testing.T) {
 				"resource": {
 					"type": "dialog",
 					"attributes": {
-						"dialogId": "wrapped_direct",
-						"dialogKind": "permission",
-						"heading": "Wrapped Direct",
-						"content": "Choose direct.",
-						"options": ["Proceed", "Cancel"],
-						"focusedIndex": 0
+						"ID": 123,
+						"Kind": "permission",
+						"Title": "Wrapped Direct",
+						"Body": "Choose direct.",
+						"Actions": "Proceed",
+						"Focused": "0"
 					}
 				}
 			},
 			"expectDialog": {
 				"visible": true,
-				"dialogId": "wrapped_direct",
+				"dialogId": "123",
 				"dialogKind": "permission",
 				"heading": "Wrapped Direct",
 				"content": "Choose direct.",
-				"actions": ["Proceed", "Cancel"],
+				"actions": "Proceed",
 				"focusedIndex": 0
 			}
 		},
 		{
 			"key": "enter",
-			"expectEvent": {"type": "dialog_action", "value": "Proceed", "dialogId": "wrapped_direct", "dialogKind": "permission"}
+			"expectEvent": {"type": "dialog_action", "value": "Proceed", "dialogId": "123", "dialogKind": "permission"}
 		},
 		{
 			"dialog": [
@@ -7050,7 +7050,7 @@ func TestRunInteractionScriptAcceptsWrappedDialogStepFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(steps) != 4 ||
-		steps[0].Dialog == nil || steps[0].Dialog.ID != "wrapped_direct" || steps[0].Dialog.Title != "Wrapped Direct" || len(steps[0].Dialog.Actions) != 2 ||
+		steps[0].Dialog == nil || steps[0].Dialog.ID != "123" || steps[0].Dialog.Title != "Wrapped Direct" || len(steps[0].Dialog.Actions) != 1 ||
 		steps[2].Dialog == nil || steps[2].Dialog.ID != "wrapped_array" || steps[2].Dialog.Title != "Wrapped Array" || len(steps[2].Dialog.Actions) != 1 {
 		t.Fatalf("steps = %#v", steps)
 	}
@@ -7060,7 +7060,7 @@ func TestRunInteractionScriptAcceptsWrappedDialogStepFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(result.Events) != 2 ||
-		result.Events[0].DialogID != "wrapped_direct" || result.Events[0].Value != "Proceed" ||
+		result.Events[0].DialogID != "123" || result.Events[0].Value != "Proceed" ||
 		result.Events[1].DialogID != "wrapped_array" || result.Events[1].Value != "Approve" {
 		t.Fatalf("events = %#v", result.Events)
 	}
