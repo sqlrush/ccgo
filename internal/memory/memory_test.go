@@ -480,6 +480,43 @@ func TestMemoryAgentSelectRelevantMemoriesParsesGraphQLResourceSelections(t *tes
 	}
 }
 
+func TestMemoryAgentSelectRelevantMemoriesParsesIncludedCollections(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	opsPath := filepath.Join(dir, "ops.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_included",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"data":{
+				"collection":{
+					"query":"database access",
+					"included":[
+						{"type":"tool","id":"tool_1","attributes":{"name":"Read"}},
+						{"type":"memory-selection","id":"ops.md"},
+						{"resource":{"type":"memory-selection","properties":{"filePath":"db.md"}}}
+					]
+				}
+			}
+		}`)},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "ops.md,db.md" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Selected) != 2 || result.Selected[0].Path != opsPath || result.Selected[1].Path != dbPath {
+		t.Fatalf("selected = %#v", result.Selected)
+	}
+}
+
 func TestPrefetchRelevantMemoriesCanUseMemoryAgentSelector(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "db.md")
@@ -1363,6 +1400,55 @@ func TestMemoryAgentRecallParsesGraphQLResourceSelections(t *testing.T) {
 							{"edge":{"node":{"properties":{"summaryId":"other"}}}}
 						]
 					}
+				}
+			}
+		}`)},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior,other" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "prior" || result.Matches[1].Summary.SessionID != "other" {
+		t.Fatalf("matches = %#v", result.Matches)
+	}
+}
+
+func TestMemoryAgentRecallParsesIncludedCollections(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+	}{
+		{id: "prior", summary: "database access policy notes", updated: 200},
+		{id: "other", summary: "credential rotation notes", updated: 100},
+	} {
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_recall_included",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"data":{
+				"collection":{
+					"query":"database access",
+					"included":[
+						{"type":"tool","id":"tool_1","attributes":{"name":"Read"}},
+						{"type":"session-memory","id":"prior"},
+						{"resource":{"type":"session-memory","properties":{"summaryId":"other"}}}
+					]
 				}
 			}
 		}`)},

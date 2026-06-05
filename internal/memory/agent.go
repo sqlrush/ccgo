@@ -508,6 +508,10 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		CandidateIDsCamel       []string          `json:"candidateIds"`
 		ID                      string            `json:"id"`
 		IDs                     []string          `json:"ids"`
+		Type                    string            `json:"type"`
+		ResourceType            string            `json:"resource_type"`
+		ResourceTypeCamel       string            `json:"resourceType"`
+		Kind                    string            `json:"kind"`
 		Matches                 []json.RawMessage `json:"matches"`
 		Memories                []json.RawMessage `json:"memories"`
 		Sessions                []json.RawMessage `json:"sessions"`
@@ -529,6 +533,13 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		Edges                   []json.RawMessage `json:"edges"`
 		Items                   []json.RawMessage `json:"items"`
 		Resources               []json.RawMessage `json:"resources"`
+		Included                json.RawMessage   `json:"included"`
+		Collection              json.RawMessage   `json:"collection"`
+		List                    json.RawMessage   `json:"list"`
+		Children                json.RawMessage   `json:"children"`
+		Values                  json.RawMessage   `json:"values"`
+		Records                 json.RawMessage   `json:"records"`
+		Entries                 json.RawMessage   `json:"entries"`
 		Selection               json.RawMessage   `json:"selection"`
 		Selected                json.RawMessage   `json:"selected"`
 		Data                    json.RawMessage   `json:"data"`
@@ -577,7 +588,9 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			ids = recallIDs(append([]string{object.CandidateID, object.CandidateIDCamel}, append(object.CandidateIDs, object.CandidateIDsCamel...)...))
 		}
 		if len(ids) == 0 {
-			ids = recallIDs(append([]string{object.ID}, object.IDs...))
+			if recallResourceTypeAllowsBareID(normalizedSelectionResourceTypeFromStrings(object.Type, object.ResourceType, object.ResourceTypeCamel, object.Kind)) {
+				ids = recallIDs(append([]string{object.ID}, object.IDs...))
+			}
 		}
 		if len(ids) == 0 {
 			ids = recallIDsFromRawItems(
@@ -637,6 +650,13 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 				object.Viewer,
 				object.Edge,
 				object.Node,
+				object.Included,
+				object.Collection,
+				object.List,
+				object.Children,
+				object.Values,
+				object.Records,
+				object.Entries,
 				object.Result,
 				object.Response,
 				object.Recall,
@@ -696,6 +716,13 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 				"edges",
 				"items",
 				"resources",
+				"included",
+				"collection",
+				"list",
+				"children",
+				"values",
+				"records",
+				"entries",
 				"result",
 				"response",
 				"memory_selection",
@@ -738,6 +765,10 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		Files                        []string          `json:"files"`
 		ID                           string            `json:"id"`
 		IDs                          []string          `json:"ids"`
+		Type                         string            `json:"type"`
+		ResourceType                 string            `json:"resource_type"`
+		ResourceTypeCamel            string            `json:"resourceType"`
+		Kind                         string            `json:"kind"`
 		MemoryID                     string            `json:"memory_id"`
 		MemoryIDCamel                string            `json:"memoryId"`
 		MemoryIDs                    []string          `json:"memory_ids"`
@@ -756,6 +787,13 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		Edges                        []json.RawMessage `json:"edges"`
 		Items                        []json.RawMessage `json:"items"`
 		Resources                    []json.RawMessage `json:"resources"`
+		Included                     json.RawMessage   `json:"included"`
+		Collection                   json.RawMessage   `json:"collection"`
+		List                         json.RawMessage   `json:"list"`
+		Children                     json.RawMessage   `json:"children"`
+		Values                       json.RawMessage   `json:"values"`
+		Records                      json.RawMessage   `json:"records"`
+		Entries                      json.RawMessage   `json:"entries"`
 		Selected                     json.RawMessage   `json:"selected"`
 		Selection                    json.RawMessage   `json:"selection"`
 		Data                         json.RawMessage   `json:"data"`
@@ -776,7 +814,7 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		RelevantMemorySelectionCamel json.RawMessage   `json:"relevantMemorySelection"`
 	}
 	if err := json.Unmarshal([]byte(raw), &object); err == nil {
-		ids := relevantMemoryIDs(append([]string{
+		directIDs := []string{
 			object.MemoryPath,
 			object.MemoryPathCamel,
 			object.SelectedMemoryPath,
@@ -787,12 +825,12 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			object.FilePathCamel,
 			object.Path,
 			object.File,
-			object.ID,
 			object.MemoryID,
 			object.MemoryIDCamel,
 			object.SelectedID,
 			object.SelectedIDCamel,
-		}, appendManyStringSlices(
+		}
+		directIDGroups := [][]string{
 			object.MemoryPaths,
 			object.MemoryPathsCamel,
 			object.SelectedMemoryPaths,
@@ -803,14 +841,18 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			object.FilePathsCamel,
 			object.Paths,
 			object.Files,
-			object.IDs,
 			object.MemoryIDs,
 			object.MemoryIDsCamel,
 			object.SelectedIDs,
 			object.SelectedIDsCamel,
 			object.RelevantIDs,
 			object.RelevantIDsCamel,
-		)...))
+		}
+		if relevantMemoryResourceTypeAllowsBareID(normalizedSelectionResourceTypeFromStrings(object.Type, object.ResourceType, object.ResourceTypeCamel, object.Kind)) {
+			directIDs = append(directIDs, object.ID)
+			directIDGroups = append(directIDGroups, object.IDs)
+		}
+		ids := relevantMemoryIDs(append(directIDs, appendManyStringSlices(directIDGroups...)...))
 		if len(ids) == 0 {
 			ids = relevantMemoryIDsFromRawItems(
 				object.Matches,
@@ -856,6 +898,13 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 				object.Viewer,
 				object.Edge,
 				object.Node,
+				object.Included,
+				object.Collection,
+				object.List,
+				object.Children,
+				object.Values,
+				object.Records,
+				object.Entries,
 				object.Result,
 				object.Response,
 				object.MemorySelection,
@@ -898,7 +947,11 @@ func relevantMemoryQueryFromRawObject(object map[string]json.RawMessage) string 
 
 func relevantMemoryIDsFromRawObject(object map[string]json.RawMessage) []string {
 	var raw []string
+	allowBareObjectID := relevantMemoryObjectAllowsBareID(object)
 	for _, key := range relevantMemoryItemIDKeys {
+		if !allowBareObjectID && relevantMemoryItemKeyIsBareID(key) {
+			continue
+		}
 		if value, ok := object[key]; ok {
 			raw = appendRelevantMemoryIDsFromRawValue(raw, value)
 		}
@@ -1010,7 +1063,11 @@ func appendRecallIDsFromRawValue(raw []string, value json.RawMessage) []string {
 	if err := json.Unmarshal(value, &object); err != nil {
 		return raw
 	}
+	allowBareObjectID := recallObjectAllowsBareID(object)
 	for _, key := range recallItemIDKeys {
+		if !allowBareObjectID && recallItemKeyIsBareID(key) {
+			continue
+		}
 		if nested, ok := object[key]; ok {
 			raw = appendRecallIDsFromRawValue(raw, nested)
 		}
@@ -1046,7 +1103,11 @@ func appendRelevantMemoryIDsFromRawValue(raw []string, value json.RawMessage) []
 	if err := json.Unmarshal(value, &object); err != nil {
 		return raw
 	}
+	allowBareObjectID := relevantMemoryObjectAllowsBareID(object)
 	for _, key := range relevantMemoryItemIDKeys {
+		if !allowBareObjectID && relevantMemoryItemKeyIsBareID(key) {
+			continue
+		}
 		if nested, ok := object[key]; ok {
 			raw = appendRelevantMemoryIDsFromRawValue(raw, nested)
 		}
@@ -1186,6 +1247,16 @@ var recallNestedItemKeys = []string{
 	"edges",
 	"items",
 	"resources",
+	"included",
+	"collection",
+	"collections",
+	"list",
+	"lists",
+	"children",
+	"values",
+	"records",
+	"entries",
+	"objects",
 	"record",
 	"entry",
 	"item",
@@ -1220,10 +1291,101 @@ var relevantMemoryNestedItemKeys = []string{
 	"edges",
 	"items",
 	"resources",
+	"included",
+	"collection",
+	"collections",
+	"list",
+	"lists",
+	"children",
+	"values",
+	"records",
+	"entries",
+	"objects",
 	"record",
 	"entry",
 	"item",
 	"value",
+}
+
+func recallItemKeyIsBareID(key string) bool {
+	switch key {
+	case "id", "uuid":
+		return true
+	default:
+		return false
+	}
+}
+
+func relevantMemoryItemKeyIsBareID(key string) bool {
+	switch key {
+	case "id", "ids", "uuid":
+		return true
+	default:
+		return false
+	}
+}
+
+func recallObjectAllowsBareID(object map[string]json.RawMessage) bool {
+	return recallResourceTypeAllowsBareID(normalizedSelectionResourceType(object))
+}
+
+func relevantMemoryObjectAllowsBareID(object map[string]json.RawMessage) bool {
+	return relevantMemoryResourceTypeAllowsBareID(normalizedSelectionResourceType(object))
+}
+
+func recallResourceTypeAllowsBareID(resourceType string) bool {
+	if resourceType == "" {
+		return true
+	}
+	return strings.Contains(resourceType, "session") ||
+		strings.Contains(resourceType, "memory") ||
+		strings.Contains(resourceType, "summary") ||
+		strings.Contains(resourceType, "recall") ||
+		strings.Contains(resourceType, "selection") ||
+		strings.Contains(resourceType, "candidate")
+}
+
+func relevantMemoryResourceTypeAllowsBareID(resourceType string) bool {
+	if resourceType == "" {
+		return true
+	}
+	return strings.Contains(resourceType, "memory") ||
+		strings.Contains(resourceType, "file") ||
+		strings.Contains(resourceType, "path") ||
+		strings.Contains(resourceType, "selection") ||
+		strings.Contains(resourceType, "candidate")
+}
+
+func normalizedSelectionResourceType(object map[string]json.RawMessage) string {
+	for _, key := range []string{"type", "resource_type", "resourceType", "kind"} {
+		value := stringFromRawJSON(object[key])
+		if normalized := normalizeSelectionResourceType(value); normalized != "" {
+			return normalized
+		}
+	}
+	return ""
+}
+
+func normalizeSelectionResourceType(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.ToLower(value)
+	value = strings.ReplaceAll(value, "-", "")
+	value = strings.ReplaceAll(value, "_", "")
+	value = strings.ReplaceAll(value, " ", "")
+	return value
+}
+
+func normalizedSelectionResourceTypeFromStrings(values ...string) string {
+	for _, value := range values {
+		normalized := normalizeSelectionResourceType(value)
+		if normalized != "" {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func stripMarkdownFence(raw string) string {
