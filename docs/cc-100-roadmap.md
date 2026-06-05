@@ -638,6 +638,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script 的 direct message list 字段现在改为 raw payload 解析；`messages`/`appendMessages`/`transcriptMessages` 可递归解包 `resource.attributes`、`data[]`、`edge.node.attrs` 等 API/GraphQL wrapper，并保留 image paste id 等 message metadata。
 
+本轮补充：interaction script 的 direct single message 字段现在也复用 raw message parser；`message`/`Message` 可递归解包 `resource.attributes`、`edge.node.attrs`，并在数组形态下回退为多条 message 追加，避免单条消息 wrapper 被基础解码成空消息。
+
 本轮补充：interaction script 的 runtime mutation action 现在也递归解包 wrapped `removeTask`/`cancelPermission` ID 和 `cancelTasks` cancellation detail；`payload.resource.attributes`、`edge.node` 和相邻 API envelope 可直接驱动 task removal、permission cancellation 与 task bulk-cancel。
 
 本轮补充：interaction script 的 direct runtime mutation alias 字段现在接受 object payload；`removeTask: {resource:{id}}`、`cancelPermission: {edge:{node:{id}}}`、`cancelTasks: {resource:{attributes:{reasonText}}}` 会走同一递归解析路径，不再被 string/bool alias 字段提前拒绝。

@@ -5428,6 +5428,48 @@ func TestRunInteractionScriptAcceptsMessageContentAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedMessageField(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"message": {
+				"resource": {
+					"type": "message",
+					"attributes": {"speaker": "assistant", "body": "wrapped direct"}
+				}
+			},
+			"snapshotName": "wrapped-direct",
+			"expectSnapshotContains": "assistant: wrapped direct"
+		},
+		{
+			"message": [
+				{"edge": {"node": {"attrs": {"role": "system", "text": "wrapped array system"}}}},
+				{"resource": {"attributes": {"role": "tool", "text": "wrapped array tool"}}}
+			],
+			"snapshotName": "wrapped-array",
+			"expectSnapshotContains": ["system: wrapped array system", "tool: wrapped array tool"]
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 ||
+		steps[0].Message == nil || steps[0].Message.Role != RoleAssistant || steps[0].Message.Text != "wrapped direct" ||
+		len(steps[1].Messages) != 2 || steps[1].Messages[0].Role != RoleSystem || steps[1].Messages[1].Role != RoleTool {
+		t.Fatalf("steps = %#v", steps)
+	}
+	screen := NewREPLScreen(60, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 2 {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+	if len(screen.Messages) != 3 {
+		t.Fatalf("messages = %#v", screen.Messages)
+	}
+}
+
 func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

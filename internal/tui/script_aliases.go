@@ -761,6 +761,16 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"value",
 		)
 	}
+	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "Message", "message"); err != nil {
+		return err
+	} else if ok {
+		if len(messages) == 1 {
+			message := messages[0]
+			step.Message = &message
+		} else {
+			step.Messages = messages
+		}
+	}
 	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "Messages", "messages"); err != nil {
 		return err
 	} else if ok {
@@ -3159,6 +3169,8 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"paste",
 		"Status",
 		"status",
+		"Message",
+		"message",
 		"Messages",
 		"messages",
 		"append_messages",
