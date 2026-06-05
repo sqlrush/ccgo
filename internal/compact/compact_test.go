@@ -521,6 +521,80 @@ func TestLoadMicroResultAcceptsContentBlockSummaryPayloads(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsMessageSummaryPayloads(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest  string
+		payload string
+		want    string
+	}{
+		{
+			digest: "summary-message",
+			payload: `{
+				"summary": {
+					"role": "assistant",
+					"content": [
+						{"type": "text", "text": "message summary"},
+						{"type": "thinking", "text": "not part of visible summary"}
+					]
+				},
+				"digest": "summary-message",
+				"version": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "message summary",
+		},
+		{
+			digest: "message-wrapper",
+			payload: `{
+				"message": {
+					"role": "assistant",
+					"content": [
+						{"type": "text", "text": "wrapped message summary"},
+						"tail line"
+					]
+				},
+				"cacheKey": "message-wrapper",
+				"cacheVersion": "microcompact.v1",
+				"cachedAt": 100
+			}`,
+			want: "wrapped message summary\ntail line",
+		},
+		{
+			digest: "response-message-wrapper",
+			payload: `{
+				"response": {
+					"message": {
+						"type": "assistant",
+						"content": {"type": "text", "body": "response message summary"}
+					},
+					"cacheDigest": "response-message-wrapper",
+					"formatVersion": "microcompact.v1",
+					"createdAt": 100
+				}
+			}`,
+			want: "response message summary",
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsMetadataCacheAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {

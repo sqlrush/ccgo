@@ -190,6 +190,7 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 	for _, name := range []string{
 		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "record", "item", "resource", "payload", "response", "body",
 		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
+		"message", "assistantMessage", "assistant_message", "resultMessage", "result_message", "outputMessage", "output_message", "completion", "completionMessage", "completion_message",
 		"attributes", "properties", "value",
 	} {
 		raw, ok := fields[name]
@@ -528,14 +529,17 @@ func microSummaryFromRaw(raw json.RawMessage, field string) (string, bool, error
 	}
 	switch trimmed[0] {
 	case '{':
-		var block contracts.ContentBlock
-		if err := json.Unmarshal(trimmed, &block); err != nil {
+		if text, ok, err := microSummaryContentBlockText(trimmed); err != nil {
 			return "", false, err
+		} else if ok {
+			return text, true, nil
 		}
-		if block.Type == contracts.ContentText && block.Text != "" {
-			return block.Text, true, nil
+		if text, ok, err := microSummaryMessageText(trimmed); err != nil {
+			return "", false, err
+		} else if ok {
+			return text, true, nil
 		}
-		return "", false, fmt.Errorf("invalid summary field %q: expected text content block", field)
+		return "", false, fmt.Errorf("invalid summary field %q: expected text content block or message", field)
 	case '[':
 		var items []json.RawMessage
 		if err := json.Unmarshal(trimmed, &items); err != nil {
@@ -572,12 +576,27 @@ func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bo
 	if trimmed[0] != '{' {
 		return "", false, fmt.Errorf("invalid summary field %q", field)
 	}
+	return microSummaryContentBlockText(trimmed)
+}
+
+func microSummaryContentBlockText(raw json.RawMessage) (string, bool, error) {
 	var block contracts.ContentBlock
-	if err := json.Unmarshal(trimmed, &block); err != nil {
+	if err := json.Unmarshal(raw, &block); err != nil {
 		return "", false, err
 	}
 	if block.Type == contracts.ContentText && block.Text != "" {
 		return block.Text, true, nil
+	}
+	return "", false, nil
+}
+
+func microSummaryMessageText(raw json.RawMessage) (string, bool, error) {
+	var message contracts.Message
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return "", false, err
+	}
+	if text := msgs.TextContent(message); text != "" {
+		return text, true, nil
 	}
 	return "", false, nil
 }
