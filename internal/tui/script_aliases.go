@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -332,6 +333,150 @@ func isBindingSpecObject(data json.RawMessage) bool {
 	return false
 }
 
+func scriptMessagesJSONField(fields map[string]json.RawMessage, names ...string) ([]Message, bool, error) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		messages, ok, err := scriptMessagesFromJSON(raw, 0)
+		if err != nil {
+			return nil, true, fmt.Errorf("%s: %w", name, err)
+		}
+		return messages, ok, nil
+	}
+	return nil, false, nil
+}
+
+func scriptMessagesFromJSON(raw json.RawMessage, depth int) ([]Message, bool, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false, nil
+	}
+	if depth >= 8 {
+		return nil, false, nil
+	}
+	switch raw[0] {
+	case '[':
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false, err
+		}
+		messages := make([]Message, 0, len(items))
+		for _, item := range items {
+			parsed, ok, err := scriptMessagesFromJSON(item, depth+1)
+			if err != nil {
+				return nil, false, err
+			}
+			if ok {
+				messages = append(messages, parsed...)
+			}
+		}
+		return messages, true, nil
+	case '{':
+		fields := map[string]json.RawMessage{}
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil, false, err
+		}
+		if scriptMessageJSONHasDirectFields(fields) {
+			var message Message
+			if err := json.Unmarshal(raw, &message); err != nil {
+				return nil, false, err
+			}
+			if scriptMessageHasData(message) {
+				return []Message{message}, true, nil
+			}
+		}
+		for _, name := range scriptMessagePayloadWrapperNames() {
+			nested, ok := fields[name]
+			if !ok {
+				continue
+			}
+			parsed, ok, err := scriptMessagesFromJSON(nested, depth+1)
+			if err != nil {
+				return nil, false, err
+			}
+			if ok {
+				return parsed, true, nil
+			}
+		}
+	}
+	return nil, false, nil
+}
+
+func scriptMessageJSONHasDirectFields(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{
+		"Role",
+		"role",
+		"type",
+		"speaker",
+		"Text",
+		"text",
+		"content",
+		"body",
+		"message",
+		"contentBlocks",
+		"content_blocks",
+		"blocks",
+		"messageContent",
+		"message_content",
+		"imagePasteId",
+		"imagePasteID",
+		"image_paste_id",
+		"imagePasteIds",
+		"imagePasteIDs",
+		"image_paste_ids",
+		"pastedContents",
+		"pasted_contents",
+		"pastedContent",
+		"pasted_content",
+		"attachments",
+		"attachment",
+	} {
+		if _, ok := fields[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptMessageHasData(message Message) bool {
+	return message.Text != "" ||
+		len(message.ContentBlocks) > 0 ||
+		len(message.ImagePasteIDs) > 0 ||
+		len(message.PastedContents) > 0
+}
+
+func scriptMessagePayloadWrapperNames() []string {
+	return []string{
+		"messages",
+		"append_messages",
+		"appendMessages",
+		"transcript_messages",
+		"transcriptMessages",
+		"message",
+		"record",
+		"entry",
+		"item",
+		"event",
+		"data",
+		"payload",
+		"result",
+		"response",
+		"output",
+		"body",
+		"resources",
+		"nodes",
+		"edges",
+		"edge",
+		"node",
+		"resource",
+		"attributes",
+		"properties",
+		"attrs",
+	}
+}
+
 func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = unwrapScriptStepJSON(data)
 	data = mergeScriptStepExpectationJSON(data)
@@ -379,11 +524,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		PastedText                *json.RawMessage `json:"pasted_text"`
 		PastedTextCamel           *json.RawMessage `json:"pastedText"`
 		Clipboard                 *json.RawMessage `json:"clipboard"`
-		Messages                  []Message        `json:"messages"`
-		AppendMessages            []Message        `json:"append_messages"`
-		AppendMessagesCamel       []Message        `json:"appendMessages"`
-		TranscriptMessages        []Message        `json:"transcript_messages"`
-		TranscriptMessagesCamel   []Message        `json:"transcriptMessages"`
+		Messages                  *json.RawMessage `json:"messages"`
+		AppendMessages            *json.RawMessage `json:"append_messages"`
+		AppendMessagesCamel       *json.RawMessage `json:"appendMessages"`
+		TranscriptMessages        *json.RawMessage `json:"transcript_messages"`
+		TranscriptMessagesCamel   *json.RawMessage `json:"transcriptMessages"`
 		Status                    *json.RawMessage `json:"status"`
 		SetStatus                 *json.RawMessage `json:"set_status"`
 		SetStatusCamel            *json.RawMessage `json:"setStatus"`
@@ -616,20 +761,30 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"value",
 		)
 	}
-	if fields.Messages != nil {
-		step.Messages = fields.Messages
+	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "Messages", "messages"); err != nil {
+		return err
+	} else if ok {
+		step.Messages = messages
 	}
-	if fields.AppendMessages != nil {
-		step.Messages = fields.AppendMessages
+	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "append_messages"); err != nil {
+		return err
+	} else if ok {
+		step.Messages = messages
 	}
-	if fields.AppendMessagesCamel != nil {
-		step.Messages = fields.AppendMessagesCamel
+	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "appendMessages"); err != nil {
+		return err
+	} else if ok {
+		step.Messages = messages
 	}
-	if fields.TranscriptMessages != nil {
-		step.Messages = fields.TranscriptMessages
+	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "transcript_messages"); err != nil {
+		return err
+	} else if ok {
+		step.Messages = messages
 	}
-	if fields.TranscriptMessagesCamel != nil {
-		step.Messages = fields.TranscriptMessagesCamel
+	if messages, ok, err := scriptMessagesJSONField(rawFieldMap, "transcriptMessages"); err != nil {
+		return err
+	} else if ok {
+		step.Messages = messages
 	}
 	if step.Status == "" {
 		step.Status = scriptNamedStringField(rawFieldMap,
@@ -3004,6 +3159,12 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"paste",
 		"Status",
 		"status",
+		"Messages",
+		"messages",
+		"append_messages",
+		"appendMessages",
+		"transcript_messages",
+		"transcriptMessages",
 		"Mouse",
 		"mouse",
 		"mouse_event",

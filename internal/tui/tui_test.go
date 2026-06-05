@@ -5500,6 +5500,61 @@ func TestRunInteractionScriptAcceptsMessageListAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedMessageListFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"messages": {
+				"resource": {
+					"type": "message",
+					"attributes": {"role": "assistant", "text": "wrapped single"}
+				}
+			},
+			"snapshot": "wrapped-single",
+			"expectSnapshotContains": "assistant: wrapped single"
+		},
+		{
+			"appendMessages": {
+				"data": [
+					{"resource": {"type": "message", "attributes": {"speaker": "system", "body": "wrapped system"}}},
+					{"edge": {"node": {"attrs": {"role": "tool", "text": "wrapped tool"}}}}
+				]
+			},
+			"snapshot": "wrapped-list",
+			"expectSnapshotContains": ["system: wrapped system", "tool: wrapped tool"]
+		},
+		{
+			"transcript_messages": {
+				"edges": [
+					{"node": {"role": "user", "text": "wrapped user", "imagePasteIds": [21]}}
+				]
+			},
+			"snapshot": "wrapped-transcript",
+			"expectSnapshotContains": "user: wrapped user",
+			"expectPrompt": {"nextPastedID": 22}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 3 ||
+		len(steps[0].Messages) != 1 || steps[0].Messages[0].Role != RoleAssistant || steps[0].Messages[0].Text != "wrapped single" ||
+		len(steps[1].Messages) != 2 || steps[1].Messages[0].Role != RoleSystem || steps[1].Messages[1].Role != RoleTool ||
+		len(steps[2].Messages) != 1 || steps[2].Messages[0].Role != RoleUser || len(steps[2].Messages[0].ImagePasteIDs) != 1 || steps[2].Messages[0].ImagePasteIDs[0] != 21 {
+		t.Fatalf("steps = %#v", steps)
+	}
+	screen := NewREPLScreen(60, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 3 {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+	if len(screen.Messages) != 4 {
+		t.Fatalf("messages = %#v", screen.Messages)
+	}
+}
+
 func TestRunInteractionScriptAcceptsInputFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[
