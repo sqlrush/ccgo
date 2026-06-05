@@ -1333,6 +1333,60 @@ func TestFetchRemoteHistoryAcceptsConnectionAliasWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsRelationshipAndConnectionAliasWrappers(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{
+				"data": {
+					"type": "session",
+					"id": "s",
+					"relationships": {
+						"events": {
+							"data": [
+								{"type":"status","eventId":"evt_rel","sessionID":"s","status":"relationship"}
+							],
+							"pageInfo": {"hasPreviousPage": true, "startCursor": "evt_rel"}
+						}
+					}
+				}
+			}`))
+		case "evt_rel":
+			_, _ = w.Write([]byte(`{
+				"data": {
+					"resultsConnection": {
+						"children": [
+							{"type":"status","event_id":"evt_child","session_id":"s","status":"child"}
+						],
+						"pageInfo": {"hasPreviousPage": false}
+					}
+				}
+			}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_rel" || events.Events[0].Status != "relationship" || events.Events[1].ID != "evt_child" || events.Events[1].Status != "child" {
+		t.Fatalf("relationship events = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_rel" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryStopsAtMaxPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

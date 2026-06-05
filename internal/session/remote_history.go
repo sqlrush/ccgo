@@ -165,6 +165,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		{name: "history", target: &r.History},
 		{name: "nodes", target: &r.Nodes},
 		{name: "edges", target: &r.Edges},
+		{name: "children", target: &r.Events},
 		{name: "event_list", target: &r.Events},
 		{name: "eventList", target: &r.Events},
 		{name: "session_events", target: &r.Events},
@@ -176,6 +177,10 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		{name: "eventsConnection", target: &r.Events},
 		{name: "session_events_connection", target: &r.Events},
 		{name: "sessionEventsConnection", target: &r.Events},
+		{name: "results_connection", target: &r.Results},
+		{name: "resultsConnection", target: &r.Results},
+		{name: "children_connection", target: &r.Events},
+		{name: "childrenConnection", target: &r.Events},
 	} {
 		value, ok := raw[spec.name]
 		if !ok {
@@ -187,7 +192,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 	}
 	for _, name := range []string{
 		"page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
-		"attributes", "properties",
+		"attributes", "properties", "relationships",
 		"session", "project_session", "projectSession", "conversation", "remote_history", "remoteHistory",
 		"event_page", "eventPage", "session_history", "sessionHistory", "viewer", "node", "_embedded", "embedded",
 	} {
