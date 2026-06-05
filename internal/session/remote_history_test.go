@@ -1023,6 +1023,53 @@ func TestFetchRemoteHistoryAcceptsIncludedResourceEvents(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryResolvesRelationshipIdentifiersFromIncluded(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"type": "session",
+				"id": "s",
+				"relationships": {
+					"events": {
+						"data": [
+							{"type":"session-events","id":"evt_rel_status"},
+							{"type":"session-events","id":"evt_rel_assistant"}
+						],
+						"pageInfo": {"hasPreviousPage": false}
+					}
+				}
+			},
+			"included": [
+				{"id":"tool_1","type":"tool","attributes":{"name":"Bash"}},
+				{"id":"evt_rel_status","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"linked"}},
+				{"id":"evt_rel_assistant","type":"session-events","attributes":{"role":"assistant","sessionId":"s","createdAt":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"linked assistant"}]}}}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 1 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_rel_status" || events.Events[0].Status != "linked" || events.Events[0].SessionID != "s" {
+		t.Fatalf("linked status event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_rel_assistant" || events.Events[1].Type != contracts.SDKEventAssistant || events.Events[1].Message == nil || len(events.Events[1].Message.Content) != 1 || events.Events[1].Message.Content[0].Text != "linked assistant" {
+		t.Fatalf("linked assistant event = %#v", events.Events[1])
+	}
+	if len(seen) != 1 {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsKeyedEventMaps(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

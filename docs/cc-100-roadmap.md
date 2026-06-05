@@ -474,6 +474,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：remote history response parser 现在也递归解包 JSON:API `relationships` wrapper，并接受 `children`、`resultsConnection`/`results_connection` 和 `childrenConnection`/`children_connection` 事件集合别名，relationship 内的 `pageInfo` pagination 仍可驱动续抓。
 
+本轮补充：remote history 在 JSON:API `relationships.events.data` 只有 resource identifier 时，会继续使用 top-level `included` 中的真实事件 resource，避免把 `{type,id}` 标识符误当作空事件遮蔽完整 payload。
+
 本轮补充：remote history event-list 字段现在可直接承载单个 SDK event 对象；`data`/`result` 等字段不再必须是数组或 wrapper 才能进入分页结果。
 
 本轮补充：remote history REST/link 风格分页接受 `links.next`/`links.previous`/`links.prev`/`links.older` 的字符串 URL、`{href,url,uri,link}` 对象，或直接携带 cursor 字段的 link object，并从 before/cursor query 参数或 direct cursor fields 提取续抓 before-id。

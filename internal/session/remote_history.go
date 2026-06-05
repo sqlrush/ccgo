@@ -1453,17 +1453,73 @@ func firstRemoteHistoryEventID(events []contracts.SDKEvent) string {
 	return ""
 }
 
-func firstEventList(values ...[]contracts.SDKEvent) []contracts.SDKEvent {
-	for _, value := range values {
-		if value != nil {
-			return value
+func responseEventList(response sessionEventsResponse) []contracts.SDKEvent {
+	candidates := [][]contracts.SDKEvent{
+		response.Data,
+		response.Events,
+		response.Items,
+		response.Results,
+		response.Value,
+		response.Values,
+		response.Resources,
+		response.Collection,
+		response.Records,
+		response.Rows,
+		response.Entries,
+		response.Messages,
+		response.History,
+		response.Nodes,
+		response.Edges,
+		response.Included,
+	}
+	var first []contracts.SDKEvent
+	haveFirst := false
+	for _, candidate := range candidates {
+		if candidate == nil {
+			continue
 		}
+		if !haveFirst {
+			first = candidate
+			haveFirst = true
+		}
+		if remoteHistoryEventsHaveMaterialPayload(candidate) {
+			return candidate
+		}
+	}
+	if haveFirst {
+		return first
 	}
 	return nil
 }
 
-func responseEventList(response sessionEventsResponse) []contracts.SDKEvent {
-	return firstEventList(response.Data, response.Events, response.Items, response.Results, response.Value, response.Values, response.Resources, response.Collection, response.Records, response.Rows, response.Entries, response.Messages, response.History, response.Nodes, response.Edges, response.Included)
+func remoteHistoryEventsHaveMaterialPayload(events []contracts.SDKEvent) bool {
+	for _, event := range events {
+		if remoteHistoryEventHasMaterialPayload(event) {
+			return true
+		}
+	}
+	return false
+}
+
+func remoteHistoryEventHasMaterialPayload(event contracts.SDKEvent) bool {
+	switch event.Type {
+	case contracts.SDKEventSystem,
+		contracts.SDKEventAssistant,
+		contracts.SDKEventUser,
+		contracts.SDKEventResult,
+		contracts.SDKEventError,
+		contracts.SDKEventStatus:
+		return true
+	}
+	return event.SessionID != "" ||
+		event.SessionIDCamel != "" ||
+		event.ParentUUID != nil ||
+		event.ParentUUIDCamel != nil ||
+		event.Timestamp != "" ||
+		event.Message != nil ||
+		event.Status != "" ||
+		event.Result != nil ||
+		event.Error != ""
 }
 
 func cloneHeader(header http.Header) http.Header {
