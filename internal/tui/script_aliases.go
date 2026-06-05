@@ -4555,54 +4555,63 @@ func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 
 func (expect *ViewportExpectation) UnmarshalJSON(data []byte) error {
 	data = normalizeStringFieldsToArray(data,
+		"VisibleContains",
 		"visible_contains",
 		"visibleContains",
+		"VisibleNotContains",
 		"visible_not_contains",
 		"visibleNotContains",
 	)
 	type alias ViewportExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Offset",
+		"offset",
+		"scroll_offset",
+		"scrollOffset",
+		"viewport_offset",
+		"viewportOffset",
+		"top",
+		"start_line",
+		"startLine",
+		"VisibleLineCount",
+		"visible_line_count",
+		"visibleLineCount",
+		"line_count",
+		"lineCount",
+		"visible_rows",
+		"visibleRows",
+		"visible_lines",
+		"visibleLines",
+		"rows",
+		"VisibleContains",
+		"visible_contains",
+		"visibleContains",
+		"VisibleNotContains",
+		"visible_not_contains",
+		"visibleNotContains",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = ViewportExpectation(raw)
 
-	var fields struct {
-		VisibleLineCount        *int        `json:"visible_line_count"`
-		VisibleContains         *stringList `json:"visible_contains"`
-		VisibleContainsCamel    *stringList `json:"visibleContains"`
-		VisibleNotContains      *stringList `json:"visible_not_contains"`
-		VisibleNotContainsCamel *stringList `json:"visibleNotContains"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
 	fieldMap := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
 	if expect.Offset == nil {
-		expect.Offset = intPtrJSONField(fieldMap, "scroll_offset", "scrollOffset", "viewport_offset", "viewportOffset", "top", "start_line", "startLine")
-	}
-	if fields.VisibleLineCount != nil {
-		expect.VisibleLineCount = *fields.VisibleLineCount
+		expect.Offset = intPtrJSONField(fieldMap, "Offset", "offset", "scroll_offset", "scrollOffset", "viewport_offset", "viewportOffset", "top", "start_line", "startLine")
 	}
 	if expect.VisibleLineCount == 0 {
-		if visibleLineCount := intPtrJSONField(fieldMap, "line_count", "lineCount", "visible_rows", "visibleRows", "visible_lines", "visibleLines", "rows"); visibleLineCount != nil {
+		if visibleLineCount := intPtrJSONField(fieldMap, "VisibleLineCount", "visible_line_count", "visibleLineCount", "line_count", "lineCount", "visible_rows", "visibleRows", "visible_lines", "visibleLines", "rows"); visibleLineCount != nil {
 			expect.VisibleLineCount = *visibleLineCount
 		}
 	}
-	if fields.VisibleContains != nil {
-		expect.VisibleContains = stringListValue(fields.VisibleContains)
+	if len(expect.VisibleContains) == 0 {
+		expect.VisibleContains = stringListJSONField(fieldMap, "VisibleContains", "visible_contains", "visibleContains")
 	}
-	if fields.VisibleContainsCamel != nil {
-		expect.VisibleContains = stringListValue(fields.VisibleContainsCamel)
-	}
-	if fields.VisibleNotContains != nil {
-		expect.VisibleNotContains = stringListValue(fields.VisibleNotContains)
-	}
-	if fields.VisibleNotContainsCamel != nil {
-		expect.VisibleNotContains = stringListValue(fields.VisibleNotContainsCamel)
+	if len(expect.VisibleNotContains) == 0 {
+		expect.VisibleNotContains = stringListJSONField(fieldMap, "VisibleNotContains", "visible_not_contains", "visibleNotContains")
 	}
 	return nil
 }

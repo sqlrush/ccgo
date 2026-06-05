@@ -8747,9 +8747,9 @@ func TestRunInteractionScriptAcceptsWrappedScreenViewportExpectationAliasFields(
 			"expectViewport": {
 				"resource": {
 					"attributes": {
-						"scrollOffset": 1,
-						"visibleRows": 4,
-						"visibleContains": "system: five"
+						"Offset": "1",
+						"VisibleLineCount": "4",
+						"VisibleContains": "system: five"
 					}
 				}
 			}
@@ -8760,9 +8760,9 @@ func TestRunInteractionScriptAcceptsWrappedScreenViewportExpectationAliasFields(
 				"edge": {
 					"node": {
 						"attrs": {
-							"scroll_offset": 0,
-							"lineCount": 4,
-							"visibleNotContains": "system: five"
+							"Offset": "0",
+							"VisibleLineCount": "4",
+							"VisibleNotContains": "system: five"
 						}
 					}
 				}
