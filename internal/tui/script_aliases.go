@@ -439,10 +439,10 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		OpenTasksCamel            *json.RawMessage          `json:"openTasks"`
 		ShowTasks                 *json.RawMessage          `json:"show_tasks"`
 		ShowTasksCamel            *json.RawMessage          `json:"showTasks"`
-		ResizeWidth               *int                      `json:"resize_width"`
-		ResizeWidthCamel          *int                      `json:"resizeWidth"`
-		ResizeHeight              *int                      `json:"resize_height"`
-		ResizeHeightCamel         *int                      `json:"resizeHeight"`
+		ResizeWidth               *json.RawMessage          `json:"resize_width"`
+		ResizeWidthCamel          *json.RawMessage          `json:"resizeWidth"`
+		ResizeHeight              *json.RawMessage          `json:"resize_height"`
+		ResizeHeightCamel         *json.RawMessage          `json:"resizeHeight"`
 		SnapshotName              *json.RawMessage          `json:"snapshot_name"`
 		SnapshotNameCamel         *json.RawMessage          `json:"snapshotName"`
 		Focus                     *bool                     `json:"focus"`
@@ -716,17 +716,40 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "open_tasks_dialog", "openTasksDialog", "open_tasks", "openTasks", "show_tasks", "showTasks"); ok {
 		step.OpenTasksDialog = value
 	}
-	if fields.ResizeWidth != nil {
-		step.ResizeWidth = *fields.ResizeWidth
+	if step.ResizeWidth <= 0 {
+		if width, ok := scriptNamedIntField(rawFieldMap,
+			[]string{"ResizeWidth", "resize_width", "resizeWidth"},
+			"width",
+			"w",
+			"columns",
+			"cols",
+			"screen_width",
+			"screenWidth",
+			"terminal_width",
+			"terminalWidth",
+			"resize_width",
+			"resizeWidth",
+			"value",
+		); ok {
+			step.ResizeWidth = width
+		}
 	}
-	if fields.ResizeWidthCamel != nil {
-		step.ResizeWidth = *fields.ResizeWidthCamel
-	}
-	if fields.ResizeHeight != nil {
-		step.ResizeHeight = *fields.ResizeHeight
-	}
-	if fields.ResizeHeightCamel != nil {
-		step.ResizeHeight = *fields.ResizeHeightCamel
+	if step.ResizeHeight <= 0 {
+		if height, ok := scriptNamedIntField(rawFieldMap,
+			[]string{"ResizeHeight", "resize_height", "resizeHeight"},
+			"height",
+			"h",
+			"rows",
+			"screen_height",
+			"screenHeight",
+			"terminal_height",
+			"terminalHeight",
+			"resize_height",
+			"resizeHeight",
+			"value",
+		); ok {
+			step.ResizeHeight = height
+		}
 	}
 	if size := scriptSizeJSONField(fieldMap, "resize", "resize_to", "resizeTo", "screen_size", "screenSize", "terminal_size", "terminalSize", "size"); size != nil {
 		if size.Width > 0 {
@@ -737,13 +760,38 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		}
 	}
 	if step.ResizeWidth <= 0 {
-		if width := intPtrJSONField(fieldMap, "width", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth"); width != nil {
-			step.ResizeWidth = *width
+		if width, ok := scriptNamedIntField(rawFieldMap,
+			[]string{"width", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth"},
+			"width",
+			"w",
+			"columns",
+			"cols",
+			"screen_width",
+			"screenWidth",
+			"terminal_width",
+			"terminalWidth",
+			"resize_width",
+			"resizeWidth",
+			"value",
+		); ok {
+			step.ResizeWidth = width
 		}
 	}
 	if step.ResizeHeight <= 0 {
-		if height := intPtrJSONField(fieldMap, "height", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight"); height != nil {
-			step.ResizeHeight = *height
+		if height, ok := scriptNamedIntField(rawFieldMap,
+			[]string{"height", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight"},
+			"height",
+			"h",
+			"rows",
+			"screen_height",
+			"screenHeight",
+			"terminal_height",
+			"terminalHeight",
+			"resize_height",
+			"resizeHeight",
+			"value",
+		); ok {
+			step.ResizeHeight = height
 		}
 	}
 	if step.SnapshotName == "" {
@@ -1719,6 +1767,78 @@ func scriptNamedStringField(fields map[string]json.RawMessage, directNames []str
 	return ""
 }
 
+func scriptNamedIntField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) (int, bool) {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value, ok := scriptActionIntFromJSON(raw, nestedNames, 0); ok {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func scriptActionIntFromJSON(raw json.RawMessage, names []string, depth int) (int, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return 0, false
+	}
+	if value, ok := scriptIntFromJSON(raw); ok {
+		return value, true
+	}
+	if depth >= 8 {
+		return 0, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return 0, false
+		}
+		for _, item := range items {
+			if value, ok := scriptActionIntFromJSON(item, names, depth+1); ok {
+				return value, true
+			}
+		}
+		return 0, false
+	}
+	if raw[0] != '{' {
+		return 0, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return 0, false
+	}
+	if value := intPtrJSONField(fields, names...); value != nil {
+		return *value, true
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value, ok := scriptActionIntFromJSON(nested, names, depth+1); ok {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func scriptIntFromJSON(raw json.RawMessage) (int, bool) {
+	var value int
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, true
+	}
+	var stringValue string
+	if err := json.Unmarshal(raw, &stringValue); err == nil {
+		if value, err := strconv.Atoi(strings.TrimSpace(stringValue)); err == nil {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
 func scriptActionStringListField(fields map[string]json.RawMessage, names ...string) []string {
 	for _, name := range append([]string{"value", "payload", "data", "body"}, names...) {
 		raw, ok := fields[name]
@@ -2215,6 +2335,12 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"status",
 		"SnapshotName",
 		"snapshotName",
+		"ResizeWidth",
+		"resizeWidth",
+		"resize_width",
+		"ResizeHeight",
+		"resizeHeight",
+		"resize_height",
 	} {
 		raw, ok := fields[name]
 		if !ok {

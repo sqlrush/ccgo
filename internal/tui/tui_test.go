@@ -5535,6 +5535,56 @@ func TestRunInteractionScriptAcceptsWrappedResizeActionPayloads(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedResizeAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"resizeWidth": {
+				"resource": {
+					"attributes": {
+						"value": "58"
+					}
+				}
+			},
+			"resizeHeight": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"value": "12"
+						}
+					}
+				}
+			},
+			"expectScreen": {"columns": 58, "rows": 12}
+		},
+		{
+			"screenWidth": {
+				"resource": {
+					"attributes": {
+						"columns": "42"
+					}
+				}
+			},
+			"screenHeight": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"rows": "9"
+						}
+					}
+				}
+			},
+			"expectScreen": {"columns": 42, "rows": 9}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsWrappedStringActionPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
