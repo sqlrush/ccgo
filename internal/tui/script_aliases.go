@@ -445,14 +445,14 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ResizeHeightCamel         *json.RawMessage          `json:"resizeHeight"`
 		SnapshotName              *json.RawMessage          `json:"snapshot_name"`
 		SnapshotNameCamel         *json.RawMessage          `json:"snapshotName"`
-		Focus                     *bool                     `json:"focus"`
-		Focused                   *bool                     `json:"focused"`
-		FocusIn                   *bool                     `json:"focus_in"`
-		FocusInCamel              *bool                     `json:"focusIn"`
-		FocusOut                  *bool                     `json:"focus_out"`
-		FocusOutCamel             *bool                     `json:"focusOut"`
-		Blur                      *bool                     `json:"blur"`
-		Blurred                   *bool                     `json:"blurred"`
+		Focus                     *json.RawMessage          `json:"focus"`
+		Focused                   *json.RawMessage          `json:"focused"`
+		FocusIn                   *json.RawMessage          `json:"focus_in"`
+		FocusInCamel              *json.RawMessage          `json:"focusIn"`
+		FocusOut                  *json.RawMessage          `json:"focus_out"`
+		FocusOutCamel             *json.RawMessage          `json:"focusOut"`
+		Blur                      *json.RawMessage          `json:"blur"`
+		Blurred                   *json.RawMessage          `json:"blurred"`
 		ExpectEvent               *ScreenEvent              `json:"expect_event"`
 		ExpectEventCamel          *ScreenEvent              `json:"expectEvent"`
 		ExpectEvents              []ScreenEvent             `json:"expect_events"`
@@ -817,29 +817,17 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"value",
 		)
 	}
-	if fields.Focus != nil {
-		step.Keys = append(step.Keys, scriptFocusKey(*fields.Focus))
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "focus", "focused"); ok {
+		step.Keys = append(step.Keys, scriptFocusKey(value))
 	}
-	if fields.Focused != nil {
-		step.Keys = append(step.Keys, scriptFocusKey(*fields.Focused))
-	}
-	if fields.FocusIn != nil && *fields.FocusIn {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "focus_in", "focusIn"); ok && value {
 		step.Keys = append(step.Keys, "focus-in")
 	}
-	if fields.FocusInCamel != nil && *fields.FocusInCamel {
-		step.Keys = append(step.Keys, "focus-in")
-	}
-	if fields.FocusOut != nil && *fields.FocusOut {
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "focus_out", "focusOut", "blur"); ok && value {
 		step.Keys = append(step.Keys, "focus-out")
 	}
-	if fields.FocusOutCamel != nil && *fields.FocusOutCamel {
-		step.Keys = append(step.Keys, "focus-out")
-	}
-	if fields.Blur != nil && *fields.Blur {
-		step.Keys = append(step.Keys, "focus-out")
-	}
-	if fields.Blurred != nil {
-		step.Keys = append(step.Keys, scriptFocusKey(!*fields.Blurred))
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "blurred"); ok {
+		step.Keys = append(step.Keys, scriptFocusKey(!value))
 	}
 	if fields.ExpectEvent != nil {
 		step.ExpectEvent = fields.ExpectEvent

@@ -5853,6 +5853,74 @@ func TestRunInteractionScriptAcceptsCompactEventActionAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedFocusAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"focus": {
+				"resource": {
+					"attributes": {
+						"enabled": false
+					}
+				}
+			},
+			"expectEvent": {"type": "focus_out"},
+			"expectFocused": false
+		},
+		{
+			"focused": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"value": true
+						}
+					}
+				}
+			},
+			"expectEvent": {"type": "focus_in"},
+			"expectFocused": true
+		},
+		{
+			"focusOut": {
+				"resource": {
+					"attributes": {
+						"enabled": true
+					}
+				}
+			},
+			"expectEvent": {"type": "focus_out"},
+			"expectFocused": false
+		},
+		{
+			"focusIn": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"selected": true
+						}
+					}
+				}
+			},
+			"expectEvent": {"type": "focus_in"},
+			"expectFocused": true
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 4 ||
+		result.Events[0].Type != ScreenEventFocusOut ||
+		result.Events[1].Type != ScreenEventFocusIn ||
+		result.Events[2].Type != ScreenEventFocusOut ||
+		result.Events[3].Type != ScreenEventFocusIn {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsWrappedMouseAndImageActionPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
