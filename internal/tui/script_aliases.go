@@ -3648,7 +3648,56 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 	type alias ScreenEvent
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Type",
+		"type",
+		"EventType",
+		"event_type",
+		"eventType",
+		"Event",
+		"event",
+		"Name",
+		"name",
+		"Value",
+		"value",
+		"Payload",
+		"payload",
+		"Text",
+		"text",
+		"Message",
+		"message",
+		"Data",
+		"data",
+		"Display",
+		"display",
+		"ID",
+		"id",
+		"DialogID",
+		"dialog_id",
+		"dialogId",
+		"dialogID",
+		"PermissionID",
+		"permission_id",
+		"permissionId",
+		"permissionID",
+		"RequestID",
+		"request_id",
+		"requestId",
+		"requestID",
+		"ToolUseID",
+		"tool_use_id",
+		"toolUseId",
+		"toolUseID",
+		"OperationID",
+		"operation_id",
+		"operationId",
+		"operationID",
+		"Kind",
+		"kind",
+		"DialogKind",
+		"dialog_kind",
+		"dialogKind",
+	), &raw); err != nil {
 		return err
 	}
 	*event = ScreenEvent(raw)
@@ -3658,18 +3707,21 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if event.Type == "" {
-		if eventType := stringJSONField(fields, "event_type", "eventType", "event", "name"); eventType != "" {
+		if eventType := stringJSONField(fields, "Type", "type", "EventType", "event_type", "eventType", "Event", "event", "Name", "name"); eventType != "" {
 			event.Type = ScreenEventType(eventType)
 		}
 	}
 	if event.Value == "" {
-		event.Value = stringJSONField(fields, "payload", "text", "message", "data")
+		event.Value = scalarStringJSONField(fields, "Value", "value", "Payload", "payload", "Text", "text", "Message", "message", "Data", "data")
+	}
+	if event.Display == "" {
+		event.Display = scalarStringJSONField(fields, "Display", "display")
 	}
 	if event.DialogID == "" {
-		event.DialogID = scalarStringJSONField(fields, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
+		event.DialogID = scalarStringJSONField(fields, "ID", "id", "DialogID", "dialog_id", "dialogId", "dialogID", "PermissionID", "permission_id", "permissionId", "permissionID", "RequestID", "request_id", "requestId", "requestID", "ToolUseID", "tool_use_id", "toolUseId", "toolUseID", "OperationID", "operation_id", "operationId", "operationID")
 	}
 	if event.DialogKind == "" {
-		if dialogKind := stringJSONField(fields, "dialog_kind", "dialogKind"); dialogKind != "" {
+		if dialogKind := stringJSONField(fields, "Kind", "kind", "DialogKind", "dialog_kind", "dialogKind"); dialogKind != "" {
 			event.DialogKind = DialogKind(dialogKind)
 		}
 	}

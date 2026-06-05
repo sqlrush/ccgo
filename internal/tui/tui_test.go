@@ -7931,7 +7931,7 @@ func TestRunDialogRuntimeScriptAcceptsEventAndResultAliases(t *testing.T) {
 		},
 		{
 			"key": "enter",
-			"expectEvent": {"eventType": "dialog_action", "payload": "Allow", "dialogID": "123", "dialogKind": "permission"},
+			"expectEvent": {"Type": "dialog_action", "Value": "Allow", "DialogID": 123, "DialogKind": "permission"},
 			"expectDialogResult": {"ID": 123, "DialogKind": "permission", "ActionValue": "Allow", "ResultStatus": "allowed", "Found": "true", "Stale": "false"}
 		}
 	]`))
