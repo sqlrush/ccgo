@@ -7085,6 +7085,65 @@ func TestRunInteractionScriptAcceptsWrappedExpectationCollectionAliasFields(t *t
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedSingleExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"input": "go", "expectPrompt": {"text": "go"}},
+		{
+			"key": "enter",
+			"expectEvent": {
+				"resource": {
+					"attributes": {
+						"event": {"type": "prompt_submitted", "value": "go"}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 || steps[1].ExpectEvent == nil ||
+		steps[1].ExpectEvent.Type != ScreenEventPromptSubmitted ||
+		steps[1].ExpectEvent.Value != "go" {
+		t.Fatalf("expect event = %#v", steps[1].ExpectEvent)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+
+	dialogSteps, err := ParseInteractionScript([]byte(`[
+		{"request_permission": {"id": "perm_1", "tool_name": "Bash"}},
+		{
+			"key": "enter",
+			"expectDialogResult": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"result": {"id": "perm_1", "status": "allowed", "found": true}
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dialogSteps) != 2 || dialogSteps[1].ExpectDialogResult == nil ||
+		dialogSteps[1].ExpectDialogResult.ID != "perm_1" ||
+		dialogSteps[1].ExpectDialogResult.Status != DialogResultAllowed ||
+		dialogSteps[1].ExpectDialogResult.Found == nil ||
+		!*dialogSteps[1].ExpectDialogResult.Found {
+		t.Fatalf("expect dialog result = %#v", dialogSteps[1].ExpectDialogResult)
+	}
+	dialogScreen := NewREPLScreen(40, 8, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&dialogScreen, runtime, "ready", dialogSteps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsExpectationWrappers(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

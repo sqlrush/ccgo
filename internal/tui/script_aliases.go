@@ -836,6 +836,21 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.ExpectEvent = fields.ExpectEventCamel
 	}
 	if events := scriptNamedEventListField(fieldMap,
+		[]string{"expect_event", "expectEvent"},
+		"event",
+		"expected_event",
+		"expectedEvent",
+		"expected",
+		"items",
+		"entries",
+		"nodes",
+		"results",
+		"value",
+	); len(events) > 0 {
+		event := events[0]
+		step.ExpectEvent = &event
+	}
+	if events := scriptNamedEventListField(fieldMap,
 		[]string{"expect_events", "expectEvents"},
 		"events",
 		"event",
@@ -879,6 +894,22 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if fields.ExpectDialogResultCamel != nil {
 		step.ExpectDialogResult = fields.ExpectDialogResultCamel
+	}
+	if results := scriptNamedDialogResultListField(fieldMap,
+		[]string{"expect_dialog_result", "expectDialogResult"},
+		"dialog_result",
+		"dialogResult",
+		"result",
+		"expected_result",
+		"expectedResult",
+		"expected",
+		"items",
+		"entries",
+		"nodes",
+		"value",
+	); len(results) > 0 {
+		result := results[0]
+		step.ExpectDialogResult = &result
 	}
 	if results := scriptNamedDialogResultListField(fieldMap,
 		[]string{"expect_dialog_results", "expectDialogResults"},
