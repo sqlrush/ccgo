@@ -612,6 +612,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script 的 direct single expectation alias 字段现在也递归解包 wrapper；`expectEvent`、`expectDialogResult` 可从 wrapped `event`/`result`/`expected` 中恢复结构化单项断言，避免 wrapper fixture 被当成空 expectation。
 
+本轮补充：interaction script 的 direct single expectation alias 字段现在改为 raw payload 解析；`expectEvent`、`expectDialogResult` singular 字段也可接受单元素数组并取首项，避免 API/fixture 把 singular expectation 包成数组时在基础 step unmarshal 阶段提前失败。
+
 本轮补充：interaction script 的 direct prompt expectation 现在也递归解包 JSON:API/GraphQL-style wrapper；`expectPrompt`/`expect_prompt` 可从 `resource.attributes`、`edge.node.attrs` 等外壳中恢复 prompt text、cursor、empty、pasted-content count 和 next pasted ID 断言，避免 wrapper fixture 静默变成空 prompt expectation。
 
 本轮补充：interaction script 的 direct vim expectation 现在也递归解包 JSON:API/GraphQL-style wrapper；`expectVim`/`expect_vim` 可从 `resource.attributes`、`edge.node.attrs` 等外壳中恢复 enabled、mode、register 和 register-linewise 断言，避免 wrapper fixture 静默变成空 Vim expectation。
