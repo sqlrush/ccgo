@@ -610,6 +610,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：prompt history 的 `HistoryEntry`/`LogEntry` 以及 `pastedContents`/`pasted_contents` item 现在接受 `entry`/`record`/`item`/`payload` 等 wrapper；pasted contents 除 map 外也接受数组和单对象，runtime history 与 stored history 都会按内容内 ID/ID 别名重建 map。
 
+本轮补充：prompt history 的 `HistoryEntry`/`LogEntry` 和 pasted-content item 现在也递归解包 `edge`/`node`/`resource`/`attributes`/`properties`/`attrs` wrapper，GraphQL/JSON:API history exports 可直接恢复 prompt 与附件 metadata。
+
 本轮补充：prompt/history pasted-content 引用解析现在接受大小写差异和 `pasted image`/`input-image`/`input_text` 等占位符别名，文本展开、图片引用过滤和 next pasted ID seed 共用同一识别面。
 
 本轮补充：prompt history `LogEntry` 读取现在接受 `projectPath`/`cwd`/`workingDirectory`/`workspacePath` 等 project 别名，以及 `createdAt`/`unixTimestamp` 等 timestamp 别名；RFC3339 时间会归一为毫秒时间戳，避免旧 history 因字段名不同被 project/session 过滤漏掉。

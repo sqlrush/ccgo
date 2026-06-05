@@ -359,6 +359,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：prompt history pasted-content 正文字段接受 `text`/`body`/`message`/`raw`/`base64Data` 等别名，stored pasted-content hash 接受 `digest`/`checksum`/`sha256` 等别名，attachment/cache 风格历史记录可以恢复正文或命中 paste-cache。
 - 本轮补充：prompt history `LogEntry` 读取接受 `sessionID`/`session`/`sessionUuid`/`sessionUUID`/`session_uuid` 作为 session id 别名，current-session-first 历史排序不会因 session 字段拼写不同而失效。
 - 本轮补充：prompt history `HistoryEntry`/`LogEntry` 和 pasted-content item 现在接受 `entry`/`record`/`item`/`payload` 等 wrapper，stored history 可从 nested payload 读取显示文本/附件并用外层 project/session/timestamp metadata 补齐。
+- 本轮补充：prompt history `HistoryEntry`/`LogEntry` 和 pasted-content item 现在也递归解包 `edge`/`node`/`resource`/`attributes`/`properties`/`attrs` wrapper，GraphQL/JSON:API history exports 可直接恢复 prompt 与附件 metadata。
 - 本轮补充：REPL message restore 现在可从用户消息 content blocks、`imagePasteIds` 和 pasted-content metadata 重建 prompt text、`[Image #N]` 引用和 base64 image pasted contents。
 - 本轮补充：Ctrl-S prompt stash 现在保存/恢复 prompt text、cursor 和 pasted-content metadata，空 prompt 下再次触发会恢复 stash，贴近官方 `chat:stash`。
 - 本轮补充：remote history REST/link 风格分页接受 `links`/`_links` 的 `next`/`previous`/`prev`/`older` 字符串 URL 或 `{href,url,uri,link}` 对象，并从 `before_id`、`beforeId`、`cursor`、`pageCursor`、`previousCursor`、`prevCursor`、`beforeCursor`、`olderCursor`、`startCursor`、`endCursor` 等 query 参数提取续抓 before-id。

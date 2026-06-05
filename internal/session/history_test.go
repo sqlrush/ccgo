@@ -314,6 +314,37 @@ func TestHistoryEntryAcceptsWrapperObjects(t *testing.T) {
 	}
 }
 
+func TestHistoryEntryAcceptsGraphQLAndResourceWrappers(t *testing.T) {
+	var entry HistoryEntry
+	data := `{
+		"edge": {
+			"node": {
+				"resource": {
+					"attributes": {
+						"prompt": "restore [Pasted text #14] [Image #15]",
+						"attachments": [
+							{"edge": {"node": {"attributes": {"attachmentID": "14", "kind": "input_text", "value": "edge memo"}}}},
+							{"resource": {"properties": {"imageID": "15", "type": "pasted-image", "data": "DDDD", "mimeType": "image/png", "name": "edge.png"}}}
+						]
+					}
+				}
+			}
+		}
+	}`
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.Display != "restore [Pasted text #14] [Image #15]" {
+		t.Fatalf("wrapped display = %#v", entry)
+	}
+	if got := entry.PastedContents[14]; got.ID != 14 || got.Type != PastedContentText || got.Content != "edge memo" {
+		t.Fatalf("edge text = %#v", got)
+	}
+	if got := entry.PastedContents[15]; got.ID != 15 || got.Type != PastedContentImage || got.Content != "DDDD" || got.MediaType != "image/png" || got.Filename != "edge.png" {
+		t.Fatalf("edge image = %#v", got)
+	}
+}
+
 func TestImageDimensionsWidthHeightDefaultDisplaySize(t *testing.T) {
 	var dimensions ImageDimensions
 	if err := json.Unmarshal([]byte(`{"width":4000,"height":2000}`), &dimensions); err != nil {
@@ -388,6 +419,30 @@ func TestLoadHistoryAcceptsStoredPastedContentsArray(t *testing.T) {
 	}
 	if got := history[0].PastedContents[8]; got.ID != 8 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/png" || got.Filename != "array.png" {
 		t.Fatalf("stored array image = %#v", got)
+	}
+}
+
+func TestLoadHistoryAcceptsGraphQLWrappedLogEntries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"edge":{"node":{"properties":{"text":"restore [Pasted text #16]","attachments":[{"edge":{"node":{"properties":{"contentID":"16","pasted_type":"input_text","content_hash":"graph_hash","contentType":"text/plain"}}}}]}}},"timestamp":100,"projectPath":"/repo","sessionID":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, func(hash string) (string, bool) {
+		if hash == "graph_hash" {
+			return "expanded graph memo", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Display != "restore [Pasted text #16]" {
+		t.Fatalf("history = %#v", history)
+	}
+	if got := history[0].PastedContents[16]; got.ID != 16 || got.Type != PastedContentText || got.Content != "expanded graph memo" || got.MediaType != "text/plain" {
+		t.Fatalf("graph stored text = %#v", got)
 	}
 }
 

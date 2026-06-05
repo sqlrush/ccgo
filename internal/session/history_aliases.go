@@ -465,7 +465,11 @@ func historyApplyLogEntryFields(entry *LogEntry, fields map[string]json.RawMessa
 }
 
 func historyEntryWrapperFieldNames() []string {
-	return []string{"entry", "record", "item", "payload", "body", "data", "result", "value", "historyEntry", "history_entry", "logEntry", "log_entry"}
+	return []string{
+		"entry", "record", "item", "edge", "node", "resource", "attributes", "properties", "attrs",
+		"payload", "body", "data", "result", "value",
+		"historyEntry", "history_entry", "logEntry", "log_entry",
+	}
 }
 
 func historyEntryValueFieldNames() []string {
@@ -473,7 +477,11 @@ func historyEntryValueFieldNames() []string {
 }
 
 func historyPastedContentWrapperFieldNames() []string {
-	return []string{"pastedContent", "pasted_content", "storedPastedContent", "stored_pasted_content", "attachment", "paste", "entry", "record", "item", "payload", "body", "data", "result", "value"}
+	return []string{
+		"pastedContent", "pasted_content", "storedPastedContent", "stored_pasted_content", "attachment", "paste",
+		"entry", "record", "item", "edge", "node", "resource", "attributes", "properties", "attrs",
+		"payload", "body", "data", "result", "value",
+	}
 }
 
 func historyPastedContentValueFieldNames() []string {
