@@ -2281,10 +2281,14 @@ func scriptDialogExpectationHasData(dialog DialogExpectation, fields map[string]
 	for _, name := range []string{
 		"Active",
 		"active",
+		"IsActive",
 		"is_active",
 		"isActive",
+		"Visible",
 		"visible",
+		"Exists",
 		"exists",
+		"Present",
 		"present",
 	} {
 		if _, ok := fields[name]; ok {
@@ -3723,116 +3727,176 @@ func (expect *DialogExpectation) UnmarshalJSON(data []byte) error {
 	data = normalizeBoolFields(data,
 		"Active",
 		"active",
+		"IsActive",
 		"is_active",
 		"isActive",
+		"Visible",
 		"visible",
+		"Exists",
 		"exists",
+		"Present",
 		"present",
 	)
 	data = normalizeStringFieldsToArray(data,
 		"actions",
 		"Actions",
+		"Options",
+		"options",
+		"Choices",
+		"choices",
+		"Buttons",
+		"buttons",
+		"BodyContains",
 		"body_contains",
 		"bodyContains",
+		"BodyNotContains",
 		"body_not_contains",
 		"bodyNotContains",
+		"ActionContains",
 		"action_contains",
 		"actionContains",
+		"ActionNotContains",
 		"action_not_contains",
 		"actionNotContains",
 	)
 	type alias DialogExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Active",
+		"active",
+		"IsActive",
+		"is_active",
+		"isActive",
+		"Visible",
+		"visible",
+		"Exists",
+		"exists",
+		"Present",
+		"present",
+		"ID",
+		"id",
+		"DialogID",
+		"dialog_id",
+		"dialogId",
+		"dialogID",
+		"PermissionID",
+		"permission_id",
+		"permissionId",
+		"permissionID",
+		"RequestID",
+		"request_id",
+		"requestId",
+		"requestID",
+		"ToolUseID",
+		"tool_use_id",
+		"toolUseId",
+		"toolUseID",
+		"OperationID",
+		"operation_id",
+		"operationId",
+		"operationID",
+		"Kind",
+		"kind",
+		"DialogKind",
+		"dialog_kind",
+		"dialogKind",
+		"Title",
+		"title",
+		"Heading",
+		"heading",
+		"Header",
+		"header",
+		"Label",
+		"label",
+		"Name",
+		"name",
+		"Body",
+		"body",
+		"Content",
+		"content",
+		"Text",
+		"text",
+		"Message",
+		"message",
+		"Description",
+		"description",
+		"BodyContains",
+		"body_contains",
+		"bodyContains",
+		"BodyNotContains",
+		"body_not_contains",
+		"bodyNotContains",
+		"Actions",
+		"actions",
+		"Options",
+		"options",
+		"Choices",
+		"choices",
+		"Buttons",
+		"buttons",
+		"ActionContains",
+		"action_contains",
+		"actionContains",
+		"ActionNotContains",
+		"action_not_contains",
+		"actionNotContains",
+		"ActionCount",
+		"action_count",
+		"actionCount",
+		"ActionsCount",
+		"actions_count",
+		"actionsCount",
+		"Focused",
+		"focused",
+		"FocusedIndex",
+		"focused_index",
+		"focusedIndex",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = DialogExpectation(raw)
 
-	var fields struct {
-		BodyContains        *stringList `json:"body_contains"`
-		BodyContainsCamel   *stringList `json:"bodyContains"`
-		BodyNotContains     *stringList `json:"body_not_contains"`
-		BodyNotCamel        *stringList `json:"bodyNotContains"`
-		Actions             *stringList `json:"actions"`
-		ActionContains      *stringList `json:"action_contains"`
-		ActionContainsCamel *stringList `json:"actionContains"`
-		ActionNotContains   *stringList `json:"action_not_contains"`
-		ActionNotCamel      *stringList `json:"actionNotContains"`
-		ActionCount         *int        `json:"action_count"`
-		ActionCountCamel    *int        `json:"actionCount"`
-		ActionsCount        *int        `json:"actions_count"`
-		ActionsCountCamel   *int        `json:"actionsCount"`
-		FocusedIndex        *int        `json:"focused_index"`
-		FocusedIndexCamel   *int        `json:"focusedIndex"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
 	fieldMap := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if active := boolPtrJSONField(fieldMap, "is_active", "isActive", "visible", "exists", "present"); active != nil {
+	if active := boolPtrJSONField(fieldMap, "Active", "active", "IsActive", "is_active", "isActive", "Visible", "visible", "Exists", "exists", "Present", "present"); active != nil {
 		expect.Active = *active
 	}
 	if expect.ID == "" {
-		expect.ID = scalarStringJSONField(fieldMap, "dialog_id", "dialogId", "dialogID", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID")
+		expect.ID = scalarStringJSONField(fieldMap, "ID", "id", "DialogID", "dialog_id", "dialogId", "dialogID", "PermissionID", "permission_id", "permissionId", "permissionID", "RequestID", "request_id", "requestId", "requestID", "ToolUseID", "tool_use_id", "toolUseId", "toolUseID", "OperationID", "operation_id", "operationId", "operationID")
 	}
 	if expect.Kind == "" {
-		if dialogKind := stringJSONField(fieldMap, "dialog_kind", "dialogKind"); dialogKind != "" {
+		if dialogKind := stringJSONField(fieldMap, "Kind", "kind", "DialogKind", "dialog_kind", "dialogKind"); dialogKind != "" {
 			expect.Kind = DialogKind(dialogKind)
 		}
 	}
 	if expect.Title == "" {
-		expect.Title = stringJSONField(fieldMap, "heading", "header", "label", "name")
+		expect.Title = stringJSONField(fieldMap, "Title", "title", "Heading", "heading", "Header", "header", "Label", "label", "Name", "name")
 	}
 	if expect.Body == "" {
-		expect.Body = stringJSONField(fieldMap, "content", "text", "message", "description")
+		expect.Body = stringJSONField(fieldMap, "Body", "body", "Content", "content", "Text", "text", "Message", "message", "Description", "description")
 	}
-	if fields.BodyContains != nil {
-		expect.BodyContains = stringListValue(fields.BodyContains)
+	if values := stringListJSONField(fieldMap, "BodyContains", "body_contains", "bodyContains"); values != nil {
+		expect.BodyContains = values
 	}
-	if fields.BodyContainsCamel != nil {
-		expect.BodyContains = stringListValue(fields.BodyContainsCamel)
+	if values := stringListJSONField(fieldMap, "BodyNotContains", "body_not_contains", "bodyNotContains"); values != nil {
+		expect.BodyNotContains = values
 	}
-	if fields.BodyNotContains != nil {
-		expect.BodyNotContains = stringListValue(fields.BodyNotContains)
+	if values := stringListJSONField(fieldMap, "Actions", "actions", "Options", "options", "Choices", "choices", "Buttons", "buttons"); values != nil {
+		expect.Actions = values
 	}
-	if fields.BodyNotCamel != nil {
-		expect.BodyNotContains = stringListValue(fields.BodyNotCamel)
+	if values := stringListJSONField(fieldMap, "ActionContains", "action_contains", "actionContains"); values != nil {
+		expect.ActionContains = values
 	}
-	if fields.Actions != nil {
-		expect.Actions = stringListValue(fields.Actions)
+	if values := stringListJSONField(fieldMap, "ActionNotContains", "action_not_contains", "actionNotContains"); values != nil {
+		expect.ActionNotContains = values
 	}
-	if fields.ActionContains != nil {
-		expect.ActionContains = stringListValue(fields.ActionContains)
+	if expect.ActionCount == nil {
+		expect.ActionCount = intPtrJSONField(fieldMap, "ActionCount", "action_count", "actionCount", "ActionsCount", "actions_count", "actionsCount")
 	}
-	if fields.ActionContainsCamel != nil {
-		expect.ActionContains = stringListValue(fields.ActionContainsCamel)
-	}
-	if fields.ActionNotContains != nil {
-		expect.ActionNotContains = stringListValue(fields.ActionNotContains)
-	}
-	if fields.ActionNotCamel != nil {
-		expect.ActionNotContains = stringListValue(fields.ActionNotCamel)
-	}
-	if fields.ActionCount != nil {
-		expect.ActionCount = fields.ActionCount
-	}
-	if fields.ActionCountCamel != nil {
-		expect.ActionCount = fields.ActionCountCamel
-	}
-	if fields.ActionsCount != nil {
-		expect.ActionCount = fields.ActionsCount
-	}
-	if fields.ActionsCountCamel != nil {
-		expect.ActionCount = fields.ActionsCountCamel
-	}
-	if fields.FocusedIndex != nil {
-		expect.Focused = fields.FocusedIndex
-	}
-	if fields.FocusedIndexCamel != nil {
-		expect.Focused = fields.FocusedIndexCamel
+	if expect.Focused == nil {
+		expect.Focused = intPtrJSONField(fieldMap, "Focused", "focused", "FocusedIndex", "focused_index", "focusedIndex")
 	}
 	return nil
 }

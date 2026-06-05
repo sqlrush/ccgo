@@ -6860,14 +6860,14 @@ func TestRunDialogRuntimeScriptAcceptsWrappedDialogExpectationAliasFields(t *tes
 			"expectDialog": {
 				"resource": {
 					"attributes": {
-						"visible": true,
-						"dialogId": "perm_wrapped_dialog",
-						"dialogKind": "permission",
-						"heading": "Permission",
-						"bodyContains": ["Tool: Bash", "Path: /tmp/a", "Run command"],
-						"actions": ["Allow", "Deny"],
-						"actionCount": 2,
-						"focusedIndex": 0
+						"Visible": "true",
+						"DialogID": "perm_wrapped_dialog",
+						"DialogKind": "permission",
+						"Heading": "Permission",
+						"BodyContains": ["Tool: Bash", "Path: /tmp/a", "Run command"],
+						"Actions": ["Allow", "Deny"],
+						"ActionCount": "2",
+						"FocusedIndex": "0"
 					}
 				}
 			}
@@ -6878,10 +6878,10 @@ func TestRunDialogRuntimeScriptAcceptsWrappedDialogExpectationAliasFields(t *tes
 				"edge": {
 					"node": {
 						"attrs": {
-							"active": true,
-							"dialogID": "perm_wrapped_dialog",
-							"actionContains": "Deny",
-							"focusedIndex": 1
+							"Active": "true",
+							"DialogID": "perm_wrapped_dialog",
+							"ActionContains": "Deny",
+							"FocusedIndex": "1"
 						}
 					}
 				}
@@ -6893,7 +6893,7 @@ func TestRunDialogRuntimeScriptAcceptsWrappedDialogExpectationAliasFields(t *tes
 			"expectDialog": {
 				"resource": {
 					"attributes": {
-						"visible": false
+						"Visible": "false"
 					}
 				}
 			}
