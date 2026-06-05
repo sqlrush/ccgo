@@ -95,6 +95,27 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		return steps, true, nil
 	}
 	for _, name := range []string{
+		"data",
+		"payload",
+		"body",
+		"result",
+		"response",
+		"resources",
+		"nodes",
+	} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		steps, ok, err := parseInteractionScriptOptionalStepsValue(value)
+		if ok || err != nil {
+			if err != nil {
+				return nil, true, fmt.Errorf("parse interaction script object %q: %w", name, err)
+			}
+			return steps, true, nil
+		}
+	}
+	for _, name := range []string{
 		"scenario",
 		"test",
 		"case",
@@ -143,6 +164,22 @@ func parseInteractionScriptStepsValue(value json.RawMessage) ([]ScriptStep, erro
 		return nil, err
 	}
 	return steps, nil
+}
+
+func parseInteractionScriptOptionalStepsValue(value json.RawMessage) ([]ScriptStep, bool, error) {
+	value = bytes.TrimSpace(value)
+	if len(value) == 0 || bytes.Equal(value, []byte("null")) {
+		return nil, false, nil
+	}
+	if value[0] == '[' {
+		steps, err := parseInteractionScriptStepsValue(value)
+		return steps, true, err
+	}
+	if value[0] == '{' {
+		steps, ok, err := parseInteractionScriptObject(value)
+		return steps, ok, err
+	}
+	return nil, false, nil
 }
 
 func parseInteractionScriptNestedObject(value json.RawMessage) ([]ScriptStep, bool, error) {

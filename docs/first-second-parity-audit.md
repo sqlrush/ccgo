@@ -356,6 +356,7 @@ M7 progress now includes:
 - `internal/tui`: interaction script top-level wrappers now accept record-array aliases such as `records`/`recordedSteps`/`events`/`entries`/`items`/`actions`/`timeline`.
 - `internal/tui`: interaction script loading now recurses through outer API/fixture wrappers such as `data`/`payload`/`body`/`result`/`response`/`recording`/`session`/`run`.
 - `internal/tui`: interaction script loading now also recurses through JSON:API/resource-style `resource`/`attributes`/`properties` wrappers, so API envelopes can expose `steps`/`records`/`timeline` without manual flattening.
+- `internal/tui`: interaction script loading now accepts API/GraphQL collection arrays under `data`, `payload`, `body`, `result`, `response`, `resources`, and `nodes`, while preserving single-step `data` payload fallback.
 - `internal/contracts`/`internal/session`: remote history `SDKEvent` message extraction now recurses through nested payload wrappers such as `record`/`entry`/`item`/`event`/`result`/`response`/`output`.
 - `internal/session`: remote-history event arrays now unwrap element-level wrappers such as `event`/`record`/`entry`/`item`/`resource`/`value` and wrapper-only `data`/`payload`/`body`, using element cursors as event ID fallback outside GraphQL edges.
 - `internal/session`: remote-history event arrays now accept JSON:API/resource-style elements with event payloads inside `attributes` or `properties`, preserving the outer resource `id` as the SDK event ID fallback.

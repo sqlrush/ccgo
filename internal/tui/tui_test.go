@@ -6517,6 +6517,50 @@ func TestRunInteractionScriptAcceptsResourceStepItems(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsAPIArrayEnvelopes(t *testing.T) {
+	for name, script := range map[string]string{
+		"data_array": `{"data":[
+			{"action":"type","value":"go"},
+			{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"go"},"expectPrompt":{"empty":true}}
+		]}`,
+		"payload_resources": `{"payload":{"resources":[
+			{"resource":{"id":"step_1","type":"interaction-step","attributes":{"action":"type","value":"ship"}}},
+			{"resource":{"id":"step_2","type":"interaction-step","attributes":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"ship"},"expectPrompt":{"empty":true}}}}
+		]}}`,
+		"response_nodes": `{"response":{"nodes":[
+			{"node":{"id":"step_1","type":"interaction-step","properties":{"action":"type","value":"audit"}}},
+			{"node":{"id":"step_2","type":"interaction-step","properties":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"audit"},"expectPrompt":{"empty":true}}}}
+		]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps, err := ParseInteractionScript([]byte(script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			screen := NewREPLScreen(30, 6, nil)
+			result, err := RunInteractionScriptChecked(&screen, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted {
+				t.Fatalf("events = %#v", result.Events)
+			}
+		})
+	}
+
+	steps, err := ParseInteractionScript([]byte(`{"action":"type","data":"solo"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+	if got := screen.Prompt.Text; got != "solo" {
+		t.Fatalf("prompt text = %q", got)
+	}
+}
+
 func TestRunInteractionScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script.json")
 	script := []byte(`{"interactionScript":[
