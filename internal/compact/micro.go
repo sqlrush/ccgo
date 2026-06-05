@@ -43,6 +43,12 @@ type MicroResult struct {
 }
 
 func (r *MicroResult) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		if nested, ok := microResultArrayWrappedJSON(trimmed); ok {
+			return json.Unmarshal(nested, r)
+		}
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -188,11 +194,11 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 		return nil, false
 	}
 	for _, name := range []string{
-		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "record", "item", "resource", "payload", "response", "body",
-		"viewer", "edge", "node",
+		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "entries", "record", "records", "item", "items", "resource", "resources", "payload", "response", "body",
+		"viewer", "edge", "edges", "node", "nodes",
 		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
-		"message", "assistantMessage", "assistant_message", "resultMessage", "result_message", "outputMessage", "output_message", "completion", "completionMessage", "completion_message",
-		"attributes", "properties", "attrs", "value",
+		"message", "messages", "assistantMessage", "assistant_message", "resultMessage", "result_message", "outputMessage", "output_message", "completion", "completionMessage", "completion_message",
+		"attributes", "properties", "attrs", "value", "values", "included", "collection", "list", "children",
 	} {
 		raw, ok := fields[name]
 		if !ok {
@@ -201,6 +207,32 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 		trimmed := bytes.TrimSpace(raw)
 		if len(trimmed) > 0 && trimmed[0] == '{' {
 			return raw, true
+		}
+		if len(trimmed) > 0 && trimmed[0] == '[' {
+			if nested, ok := microResultArrayWrappedJSON(trimmed); ok {
+				return nested, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func microResultArrayWrappedJSON(data json.RawMessage) (json.RawMessage, bool) {
+	var items []json.RawMessage
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, false
+	}
+	for _, item := range items {
+		trimmed := bytes.TrimSpace(item)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '{' {
+			continue
+		}
+		var result MicroResult
+		if err := json.Unmarshal(trimmed, &result); err != nil {
+			continue
+		}
+		if result.Summary != "" {
+			return item, true
 		}
 	}
 	return nil, false

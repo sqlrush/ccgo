@@ -437,6 +437,24 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 			wantExpires: true,
 		},
 		{
+			digest: "graphql-edges-cache",
+			body: `"data":{"edges":[
+				{"node":{"id":"tool_1","type":"tool","attrs":{"name":"Bash"}}},
+				{"node":{"id":"graphql-edges-cache","type":"microcompact-cache","attrs":{"summaryMarkdown":"edges summary","formatVersion":"microcompact.v1","cachedAt":100,"ttlSeconds":3600}}}
+			]}`,
+			want:        "edges summary",
+			wantExpires: true,
+		},
+		{
+			digest: "included-resource-cache",
+			body: `"included":[
+				{"id":"tool_2","type":"tool","attributes":{"name":"Read"}},
+				{"resource":{"id":"included-resource-cache","type":"microcompact-cache","attributes":{"compressedText":"included summary","cacheVersion":"microcompact.v1","generatedAt":100,"maxAgeSeconds":3600}}}
+			]`,
+			want:        "included summary",
+			wantExpires: true,
+		},
+		{
 			digest:      "wrapped-envelope",
 			body:        `"data":{"summary":"envelope summary"},"digest":"wrapped-envelope","version":"microcompact.v1","createdAt":100,"ttlSeconds":3600`,
 			want:        "envelope summary",
