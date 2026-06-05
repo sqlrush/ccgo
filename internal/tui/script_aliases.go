@@ -478,8 +478,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectDialogCamel         *DialogExpectation        `json:"expectDialog"`
 		ExpectPrompt              *json.RawMessage          `json:"expect_prompt"`
 		ExpectPromptCamel         *json.RawMessage          `json:"expectPrompt"`
-		ExpectVim                 *VimExpectation           `json:"expect_vim"`
-		ExpectVimCamel            *VimExpectation           `json:"expectVim"`
+		ExpectVim                 *json.RawMessage          `json:"expect_vim"`
+		ExpectVimCamel            *json.RawMessage          `json:"expectVim"`
 		ExpectTasks               *TasksExpectation         `json:"expect_tasks"`
 		ExpectTasksCamel          *TasksExpectation         `json:"expectTasks"`
 		ExpectReverseSearch       *ReverseSearchExpectation `json:"expect_reverse_search"`
@@ -971,11 +971,17 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	); prompt != nil {
 		step.ExpectPrompt = prompt
 	}
-	if fields.ExpectVim != nil {
-		step.ExpectVim = fields.ExpectVim
-	}
-	if fields.ExpectVimCamel != nil {
-		step.ExpectVim = fields.ExpectVimCamel
+	if vim := scriptNamedVimExpectationField(fieldMap,
+		[]string{"expect_vim", "expectVim"},
+		"vim",
+		"vim_state",
+		"vimState",
+		"expectation",
+		"expected",
+		"expect_vim",
+		"expectVim",
+	); vim != nil {
+		step.ExpectVim = vim
 	}
 	if fields.ExpectTasks != nil {
 		step.ExpectTasks = fields.ExpectTasks
@@ -2038,6 +2044,66 @@ func scriptPromptExpectationHasData(prompt PromptExpectation) bool {
 		prompt.PastedContentCount != nil ||
 		len(prompt.PastedContents) > 0 ||
 		prompt.NextPastedID != nil
+}
+
+func scriptNamedVimExpectationField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) *VimExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if vim, ok := scriptVimExpectationFromJSON(raw, nestedNames, 0); ok {
+			return vim
+		}
+	}
+	return nil
+}
+
+func scriptVimExpectationFromJSON(raw json.RawMessage, names []string, depth int) (*VimExpectation, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if vim, ok := scriptVimExpectationFromJSON(item, names, depth+1); ok {
+				return vim, true
+			}
+		}
+		return nil, false
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil, false
+	}
+	var vim VimExpectation
+	if err := json.Unmarshal(raw, &vim); err == nil && scriptVimExpectationHasData(vim) {
+		return &vim, true
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if vim, ok := scriptVimExpectationFromJSON(nested, names, depth+1); ok {
+			return vim, true
+		}
+	}
+	return nil, false
+}
+
+func scriptVimExpectationHasData(vim VimExpectation) bool {
+	return vim.Enabled != nil ||
+		vim.Mode != "" ||
+		vim.Register != "" ||
+		vim.RegisterLinewise != nil
 }
 
 func scriptActionIntFromJSON(raw json.RawMessage, names []string, depth int) (int, bool) {

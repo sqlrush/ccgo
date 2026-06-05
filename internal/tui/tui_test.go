@@ -8044,6 +8044,51 @@ func TestRunInteractionScriptAcceptsVimAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedVimExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"input": "abc",
+			"expectVim": {
+				"resource": {
+					"attributes": {
+						"vimEnabled": true,
+						"modeName": "insert"
+					}
+				}
+			}
+		},
+		{
+			"keys": ["\u001b", "0", "y", "l"],
+			"expect_vim": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"isEnabled": true,
+							"currentMode": "normal",
+							"vimRegister": "a",
+							"linewise": false
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].ExpectVim == nil || steps[0].ExpectVim.Enabled == nil || !*steps[0].ExpectVim.Enabled || steps[0].ExpectVim.Mode != VimInsert {
+		t.Fatalf("first vim expectation = %#v", steps[0].ExpectVim)
+	}
+	if steps[1].ExpectVim == nil || steps[1].ExpectVim.Enabled == nil || !*steps[1].ExpectVim.Enabled || steps[1].ExpectVim.Mode != VimNormal || steps[1].ExpectVim.Register != "a" || steps[1].ExpectVim.RegisterLinewise == nil || *steps[1].ExpectVim.RegisterLinewise {
+		t.Fatalf("second vim expectation = %#v", steps[1].ExpectVim)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptChecksViewport(t *testing.T) {
 	screen := NewREPLScreen(22, 6, nil)
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
