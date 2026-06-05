@@ -6843,6 +6843,79 @@ func TestRunInteractionScriptAcceptsDialogStepAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedDialogStepFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"dialog": {
+				"resource": {
+					"type": "dialog",
+					"attributes": {
+						"dialogId": "wrapped_direct",
+						"dialogKind": "permission",
+						"heading": "Wrapped Direct",
+						"content": "Choose direct.",
+						"options": ["Proceed", "Cancel"],
+						"focusedIndex": 0
+					}
+				}
+			},
+			"expectDialog": {
+				"visible": true,
+				"dialogId": "wrapped_direct",
+				"dialogKind": "permission",
+				"heading": "Wrapped Direct",
+				"content": "Choose direct.",
+				"actions": ["Proceed", "Cancel"],
+				"focusedIndex": 0
+			}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "dialog_action", "value": "Proceed", "dialogId": "wrapped_direct", "dialogKind": "permission"}
+		},
+		{
+			"dialog": [
+				{
+					"edge": {
+						"node": {
+							"attrs": {
+								"dialogID": "wrapped_array",
+								"dialogKind": "permission",
+								"title": "Wrapped Array",
+								"body": "Choose array.",
+								"actions": ["Approve"]
+							}
+						}
+					}
+				}
+			],
+			"expectDialog": {"active": true, "dialogID": "wrapped_array", "title": "Wrapped Array", "body": "Choose array.", "actions": "Approve"}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "dialog_action", "value": "Approve", "dialogId": "wrapped_array", "dialogKind": "permission"}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 4 ||
+		steps[0].Dialog == nil || steps[0].Dialog.ID != "wrapped_direct" || steps[0].Dialog.Title != "Wrapped Direct" || len(steps[0].Dialog.Actions) != 2 ||
+		steps[2].Dialog == nil || steps[2].Dialog.ID != "wrapped_array" || steps[2].Dialog.Title != "Wrapped Array" || len(steps[2].Dialog.Actions) != 1 {
+		t.Fatalf("steps = %#v", steps)
+	}
+	screen := NewREPLScreen(52, 9, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].DialogID != "wrapped_direct" || result.Events[0].Value != "Proceed" ||
+		result.Events[1].DialogID != "wrapped_array" || result.Events[1].Value != "Approve" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunDialogRuntimeScriptAcceptsCamelRuntimeAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`{"interactionScript":[
 		{

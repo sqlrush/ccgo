@@ -819,6 +819,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if mouse := scriptMouseJSONField(rawFieldMap, "Mouse", "mouse", "mouse_event", "mouseEvent"); mouse != nil {
 		step.Mouse = mouse
 	}
+	if dialog := scriptDialogJSONField(rawFieldMap, "Dialog", "dialog"); dialog != nil {
+		step.Dialog = dialog
+	}
 	if fields.Keybindings != nil {
 		step.Keybindings = fields.Keybindings
 	}
@@ -1931,9 +1934,8 @@ func scriptRuntimePayloadWrapperNames(names ...string) []string {
 
 func scriptDialogActionField(fields map[string]json.RawMessage) *Dialog {
 	for _, raw := range scriptActionRawFields(fields, "dialog") {
-		var dialog Dialog
-		if err := json.Unmarshal(raw, &dialog); err == nil {
-			return &dialog
+		if dialog, ok := scriptDialogFromJSON(raw, 0); ok {
+			return dialog
 		}
 	}
 	var dialog Dialog
@@ -1945,6 +1947,75 @@ func scriptDialogActionField(fields map[string]json.RawMessage) *Dialog {
 
 func scriptDialogHasData(dialog Dialog) bool {
 	return dialog.ID != "" || dialog.Kind != "" || dialog.Title != "" || dialog.Body != "" || len(dialog.Actions) > 0 || dialog.Focused != 0
+}
+
+func scriptDialogJSONField(fields map[string]json.RawMessage, names ...string) *Dialog {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if dialog, ok := scriptDialogFromJSON(raw, 0); ok {
+			return dialog
+		}
+	}
+	return nil
+}
+
+func scriptDialogFromJSON(raw json.RawMessage, depth int) (*Dialog, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	var dialog Dialog
+	hasDialog := json.Unmarshal(raw, &dialog) == nil && scriptDialogHasData(dialog)
+	if depth >= 8 {
+		if hasDialog {
+			return &dialog, true
+		}
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if dialog, ok := scriptDialogFromJSON(item, depth+1); ok {
+				return dialog, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		if hasDialog {
+			return &dialog, true
+		}
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		if hasDialog {
+			return &dialog, true
+		}
+		return nil, false
+	}
+	if hasDialog && !scriptHasStructuredRuntimePayloadWrapper(fields) {
+		return &dialog, true
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("dialog") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if dialog, ok := scriptDialogFromJSON(nested, depth+1); ok {
+			return dialog, true
+		}
+	}
+	if hasDialog {
+		return &dialog, true
+	}
+	return nil, false
 }
 
 func scriptActionRawFields(fields map[string]json.RawMessage, names ...string) []json.RawMessage {
@@ -3181,6 +3252,8 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"mouse",
 		"mouse_event",
 		"mouseEvent",
+		"Dialog",
+		"dialog",
 		"SnapshotName",
 		"snapshotName",
 		"RequestPermission",
