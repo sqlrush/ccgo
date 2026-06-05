@@ -6208,6 +6208,84 @@ func TestRunDialogRuntimeScriptAcceptsWrappedRuntimePayloads(t *testing.T) {
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsWrappedRuntimeMutationPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"requestPermission": {
+				"id": "perm_cancel",
+				"toolName": "Bash",
+				"path": "/tmp/project",
+				"description": "Need shell.",
+				"actions": ["Allow", "Deny"]
+			},
+			"expectDialog": {"active": true, "permissionID": "perm_cancel", "dialogKind": "permission"}
+		},
+		{
+			"action": "cancelPermission",
+			"payload": {
+				"edge": {
+					"node": {
+						"id": "perm_cancel"
+					}
+				}
+			},
+			"expectDialogResult": {"permissionID": "perm_cancel", "status": "cancelled", "found": true},
+			"expectDialog": {"active": false}
+		},
+		{
+			"task": {"id": "task_remove", "title": "Remove me", "state": "running", "detail": "queued", "progress": 10},
+			"expectTasks": {"count": 1, "stateCounts": {"running": 1}}
+		},
+		{
+			"task": {"id": "task_keep", "title": "Keep me", "state": "running", "detail": "working", "progress": 20},
+			"expectTasks": {"count": 2, "stateCounts": {"running": 2}}
+		},
+		{
+			"action": "removeTask",
+			"payload": {
+				"resource": {
+					"id": "task_remove",
+					"type": "task"
+				}
+			},
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"running": 1},
+				"contains": {"id": "task_keep", "state": "running", "detail": "working"}
+			}
+		},
+		{
+			"action": "cancelTasks",
+			"payload": {
+				"resource": {
+					"type": "task-cancellation",
+					"attributes": {
+						"cancelReason": "wrapped stop"
+					}
+				}
+			},
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"cancelled": 1},
+				"contains": {"id": "task_keep", "state": "cancelled", "detail": "wrapped stop"}
+			},
+			"expectStatusContains": ["cancelled: 1"]
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(64, 10, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].ID != "perm_cancel" || result.DialogResults[0].Status != DialogResultCancelled {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"input": "go", "expectPrompt": {"text": "go"}},

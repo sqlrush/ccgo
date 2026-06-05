@@ -1380,7 +1380,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "removetask", "remove-task", "deletetask", "delete-task":
 		if step.RemoveTaskID == "" {
-			step.RemoveTaskID = scriptActionIDField(fields, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
+			step.RemoveTaskID = scriptActionIDField(fields, "task", "task_status", "taskStatus", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
 		}
 	case "opentasks", "open-tasks", "opentasksdialog", "open-tasks-dialog", "showtasks", "show-tasks":
 		step.OpenTasksDialog = scriptActionBoolField(fields, true)
@@ -1388,14 +1388,14 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		step.CancelActiveDialog = scriptActionBoolField(fields, true)
 	case "cancelpermission", "cancel-permission":
 		if step.CancelPermissionID == "" {
-			step.CancelPermissionID = scriptActionIDField(fields, "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
+			step.CancelPermissionID = scriptActionIDField(fields, "permission", "permission_request", "permissionRequest", "request", "permission_id", "permissionId", "permissionID", "request_id", "requestId", "requestID", "dialog_id", "dialogId", "dialogID", "tool_use_id", "toolUseId", "toolUseID", "operation_id", "operationId", "operationID", "id")
 		}
 	case "cancelpermissions", "cancel-permissions", "cancelallpermissions", "cancel-all-permissions":
 		step.CancelAllPermissions = scriptActionBoolField(fields, true)
 	case "canceltasks", "cancel-tasks", "cancelalltasks", "cancel-all-tasks":
 		step.CancelAllTasks = scriptActionBoolField(fields, true)
 		if step.CancelTasksDetail == "" {
-			step.CancelTasksDetail = scriptActionStringField(fields, "reason", "detail", "message", "description")
+			step.CancelTasksDetail = scriptActionStringField(fields, "cancel_reason", "cancelReason", "reason", "reason_text", "reasonText", "detail", "message", "description", "body", "text", "status_text", "statusText")
 		}
 	case "dialog", "showdialog", "show-dialog", "opendialog", "open-dialog":
 		if step.Dialog == nil {
@@ -1675,15 +1675,16 @@ func scriptActionIDField(fields map[string]json.RawMessage, idNames ...string) s
 		return value
 	}
 	for _, raw := range scriptActionRawFields(fields) {
-		raw = bytes.TrimSpace(raw)
-		if len(raw) == 0 || raw[0] != '{' {
+		if value := scriptActionIDFromJSON(raw, idNames, 0); value != "" {
+			return value
+		}
+	}
+	for _, name := range idNames {
+		raw, ok := fields[name]
+		if !ok {
 			continue
 		}
-		nested := map[string]json.RawMessage{}
-		if err := json.Unmarshal(raw, &nested); err != nil {
-			continue
-		}
-		if value := scalarStringJSONField(nested, idNames...); value != "" {
+		if value := scriptActionIDFromJSON(raw, idNames, 0); value != "" {
 			return value
 		}
 	}
@@ -1695,17 +1696,132 @@ func scriptActionStringField(fields map[string]json.RawMessage, objectNames ...s
 		return value
 	}
 	for _, raw := range scriptActionRawFields(fields) {
-		raw = bytes.TrimSpace(raw)
-		if len(raw) == 0 || raw[0] != '{' {
-			continue
-		}
-		nested := map[string]json.RawMessage{}
-		if err := json.Unmarshal(raw, &nested); err != nil {
-			continue
-		}
-		if value := stringJSONField(nested, objectNames...); value != "" {
+		if value := scriptActionStringFromJSON(raw, objectNames, 0); value != "" {
 			return value
 		}
+	}
+	for _, name := range objectNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value := scriptActionStringFromJSON(raw, objectNames, 0); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func scriptActionIDFromJSON(raw json.RawMessage, idNames []string, depth int) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return ""
+	}
+	if value := scriptScalarStringFromJSON(raw); value != "" {
+		return value
+	}
+	if depth >= 8 {
+		return ""
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return ""
+		}
+		for _, item := range items {
+			if value := scriptActionIDFromJSON(item, idNames, depth+1); value != "" {
+				return value
+			}
+		}
+		return ""
+	}
+	if raw[0] != '{' {
+		return ""
+	}
+	nested := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &nested); err != nil {
+		return ""
+	}
+	if value := scalarStringJSONField(nested, idNames...); value != "" {
+		return value
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(idNames...) {
+		raw, ok := nested[name]
+		if !ok {
+			continue
+		}
+		if value := scriptActionIDFromJSON(raw, idNames, depth+1); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func scriptActionStringFromJSON(raw json.RawMessage, objectNames []string, depth int) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return ""
+	}
+	if value := scriptStringFromJSON(raw); value != "" {
+		return value
+	}
+	if depth >= 8 {
+		return ""
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return ""
+		}
+		for _, item := range items {
+			if value := scriptActionStringFromJSON(item, objectNames, depth+1); value != "" {
+				return value
+			}
+		}
+		return ""
+	}
+	if raw[0] != '{' {
+		return ""
+	}
+	nested := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &nested); err != nil {
+		return ""
+	}
+	if value := stringJSONField(nested, objectNames...); value != "" {
+		return value
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(objectNames...) {
+		raw, ok := nested[name]
+		if !ok {
+			continue
+		}
+		if value := scriptActionStringFromJSON(raw, objectNames, depth+1); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func scriptScalarStringFromJSON(raw json.RawMessage) string {
+	if value := scriptStringFromJSON(raw); value != "" {
+		return value
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var scalar any
+	if err := decoder.Decode(&scalar); err != nil {
+		return ""
+	}
+	if value, ok := scalar.(json.Number); ok {
+		return value.String()
+	}
+	return ""
+}
+
+func scriptStringFromJSON(raw json.RawMessage) string {
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
 	}
 	return ""
 }
