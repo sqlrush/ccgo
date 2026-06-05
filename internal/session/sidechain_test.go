@@ -487,6 +487,70 @@ func TestLoadSidechainStateAcceptsGraphQLResourceLifecycleWrappers(t *testing.T)
 	}
 }
 
+func TestLoadSidechainStateAcceptsLifecycleCollectionWrappers(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "collection-resource", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "agent_start",
+		Content: map[string]any{
+			"edges": []any{
+				map[string]any{
+					"node": map[string]any{
+						"attrs": map[string]any{
+							"subagentId":      "collection_worker",
+							"agentKind":       "collector",
+							"workspacePath":   "/tmp/collection-worktree",
+							"taskDescription": "collect wrapped lifecycle",
+							"lifecycleState":  "inProgress",
+						},
+					},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "collection-resource", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "sidechainCompleted",
+		Content: map[string]any{
+			"included": []any{
+				map[string]any{
+					"resource": map[string]any{
+						"attributes": map[string]any{
+							"agentID":      "collection_worker",
+							"outcome":      "completedSuccessfully",
+							"finalMessage": "collection lifecycle complete",
+						},
+					},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "collection_worker" || state.Status != SidechainStatusCompleted || state.Summary != "collection lifecycle complete" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.AgentType != "collector" || state.Metadata.WorktreePath != "/tmp/collection-worktree" || state.Metadata.Description != "collect wrapped lifecycle" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsNumericLifecycleIDs(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

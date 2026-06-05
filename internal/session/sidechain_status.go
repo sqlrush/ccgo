@@ -361,11 +361,17 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 				}
 			}
 		}
-		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "entry", "item", "event", "edge", "node", "resource", "attributes", "properties", "attrs", "metadata", "details", "value", "output"} {
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "records", "entry", "entries", "item", "items", "event", "events", "edge", "edges", "node", "nodes", "resource", "resources", "attributes", "properties", "attrs", "metadata", "details", "value", "values", "output", "outputs", "included", "collection", "list", "children"} {
 			if raw, ok := fields[key]; ok {
 				if value := firstStringFieldDepth(raw, keys, depth+1); value != "" {
 					return value
 				}
+			}
+		}
+	case []any:
+		for _, item := range fields {
+			if value := firstStringFieldDepth(item, keys, depth+1); value != "" {
+				return value
 			}
 		}
 	case map[string]string:
