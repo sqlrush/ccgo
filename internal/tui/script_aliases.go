@@ -259,12 +259,15 @@ func taskStatusJSONField(fields map[string]json.RawMessage, names ...string) *Ta
 func scriptKeybindingsJSONField(fields map[string]json.RawMessage) ([]BindingSpec, bool, error) {
 	names := []string{
 		"bindings",
+		"Keybindings",
 		"keybindings",
+		"KeyBindings",
 		"key_bindings",
 		"keyBindings",
 		"keyboardBindings",
 		"keyboardShortcuts",
 		"keyboard_shortcuts",
+		"KeybindingSpecs",
 		"keybinding_specs",
 		"keybindingSpecs",
 		"keymap",
@@ -539,11 +542,11 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		Mouse                     *json.RawMessage `json:"mouse"`
 		MouseEvent                *json.RawMessage `json:"mouse_event"`
 		MouseEventCamel           *json.RawMessage `json:"mouseEvent"`
-		Keybindings               []BindingSpec    `json:"keybindings"`
-		KeyBindings               []BindingSpec    `json:"key_bindings"`
-		KeyBindingsCamel          []BindingSpec    `json:"keyBindings"`
-		KeybindingSpecs           []BindingSpec    `json:"keybinding_specs"`
-		KeybindingSpecsCamel      []BindingSpec    `json:"keybindingSpecs"`
+		Keybindings               *json.RawMessage `json:"keybindings"`
+		KeyBindings               *json.RawMessage `json:"key_bindings"`
+		KeyBindingsCamel          *json.RawMessage `json:"keyBindings"`
+		KeybindingSpecs           *json.RawMessage `json:"keybinding_specs"`
+		KeybindingSpecsCamel      *json.RawMessage `json:"keybindingSpecs"`
 		UpsertTask                *json.RawMessage `json:"upsert_task"`
 		UpsertTaskCamel           *json.RawMessage `json:"upsertTask"`
 		RemoveTaskID              *json.RawMessage `json:"remove_task_id"`
@@ -824,21 +827,6 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if image := scriptImageJSONField(rawFieldMap, "Image", "image"); image != nil {
 		step.Image = image
-	}
-	if fields.Keybindings != nil {
-		step.Keybindings = fields.Keybindings
-	}
-	if fields.KeyBindings != nil {
-		step.Keybindings = fields.KeyBindings
-	}
-	if fields.KeyBindingsCamel != nil {
-		step.Keybindings = fields.KeyBindingsCamel
-	}
-	if fields.KeybindingSpecs != nil {
-		step.Keybindings = fields.KeybindingSpecs
-	}
-	if fields.KeybindingSpecsCamel != nil {
-		step.Keybindings = fields.KeybindingSpecsCamel
 	}
 	if specs, ok, err := scriptKeybindingsJSONField(rawFieldMap); err != nil {
 		return err
@@ -3259,6 +3247,14 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"dialog",
 		"Image",
 		"image",
+		"Keybindings",
+		"keybindings",
+		"KeyBindings",
+		"key_bindings",
+		"keyBindings",
+		"KeybindingSpecs",
+		"keybinding_specs",
+		"keybindingSpecs",
 		"SnapshotName",
 		"snapshotName",
 		"RequestPermission",

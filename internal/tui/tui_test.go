@@ -6497,6 +6497,10 @@ func TestRunInteractionScriptAcceptsKeybindingCollectionAliases(t *testing.T) {
 		{"text":"second","key":"ctrl-w","expectEvent":{"type":"prompt_submitted","value":"second"},"expectPrompt":{"empty":true}},
 		{"keyboard":{"resource":{"attributes":{"keymap":{"ctrl-y":"submitPrompt"}}}}},
 		{"text":"third","key":"ctrl-y","expectEvent":{"type":"prompt_submitted","value":"third"},"expectPrompt":{"empty":true}},
+		{"Keybindings":{"resource":{"attributes":{"keymap":{"ctrl-a":"submitPrompt"}}}}},
+		{"text":"fourth","key":"ctrl-a","expectEvent":{"type":"prompt_submitted","value":"fourth"},"expectPrompt":{"empty":true}},
+		{"keybindingSpecs":{"edges":[{"node":{"attrs":{"shortcutKey":"ctrl-e","commandName":"submitPrompt"}}}]}},
+		{"text":"fifth","key":"ctrl-e","expectEvent":{"type":"prompt_submitted","value":"fifth"},"expectPrompt":{"empty":true}},
 		{"hotkeys":{"ctrl-x ctrl-k":false}},
 		{"keys":"ctrl-x ctrl-k","expectNoEvent":true}
 	]`))
@@ -6508,10 +6512,12 @@ func TestRunInteractionScriptAcceptsKeybindingCollectionAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 3 ||
+	if len(result.Events) != 5 ||
 		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "first" ||
 		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "second" ||
-		result.Events[2].Type != ScreenEventPromptSubmitted || result.Events[2].Value != "third" {
+		result.Events[2].Type != ScreenEventPromptSubmitted || result.Events[2].Value != "third" ||
+		result.Events[3].Type != ScreenEventPromptSubmitted || result.Events[3].Value != "fourth" ||
+		result.Events[4].Type != ScreenEventPromptSubmitted || result.Events[4].Value != "fifth" {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }
