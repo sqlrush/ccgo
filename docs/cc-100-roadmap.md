@@ -596,6 +596,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script loader 现在把 `data`/`payload`/`body`/`result`/`response`、`resources` 和 `nodes` 下的数组也视为 step list，可直接加载 API/GraphQL collection envelope，同时保留单步 `data` 载荷兼容。
 
+本轮补充：interaction script loader 现在接受 GraphQL connection 风格的 `edges` step list，数组元素可用 `edges[].node` 或 `edge.node` wrapper，外层也可递归解包 `viewer`/`node`/`*Connection` wrapper 来加载录制脚本。
+
 本轮补充：prompt/image history 的 `ImageDimensions` 读取 `width`/`height` 或仅 original 尺寸时，会默认 display 尺寸等于 original 尺寸，避免只有单尺寸字段的 image fixture 丢失 source metadata。
 
 本轮补充：prompt history 的 pasted-content 类型现在会归一化 `inputImage`/`pasted-image`/`input_text`/`pasted-text` 等别名，runtime history 和 stored history 恢复都会映射到规范 `image`/`text`。

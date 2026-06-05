@@ -1195,6 +1195,7 @@ func unwrapScriptStepJSON(data []byte) []byte {
 	for _, name := range []string{
 		"node",
 		"resource",
+		"edge",
 		"attributes",
 		"properties",
 	} {

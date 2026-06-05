@@ -6605,6 +6605,38 @@ func TestParseInteractionScriptAcceptsAPIArrayEnvelopes(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsGraphQLConnectionEnvelopes(t *testing.T) {
+	for name, script := range map[string]string{
+		"top_level_edges": `{"edges":[
+			{"node":{"id":"step_1","type":"interaction-step","properties":{"action":"type","value":"graph"}}},
+			{"edge":{"node":{"id":"step_2","type":"interaction-step","attributes":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"graph"},"expectPrompt":{"empty":true}}}}}
+		]}`,
+		"nested_viewer_connection": `{"data":{"viewer":{"recordingConnection":{"edges":[
+			{"node":{"id":"step_1","type":"interaction-step","properties":{"action":"type","value":"view"}}},
+			{"node":{"id":"step_2","type":"interaction-step","properties":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"view"},"expectPrompt":{"empty":true}}}}
+		]}}}}`,
+		"node_steps_connection": `{"data":{"node":{"steps":{"edges":[
+			{"node":{"id":"step_1","type":"interaction-step","attributes":{"action":"type","value":"node"}}},
+			{"node":{"id":"step_2","type":"interaction-step","attributes":{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"node"},"expectPrompt":{"empty":true}}}}
+		]}}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps, err := ParseInteractionScript([]byte(script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			screen := NewREPLScreen(30, 6, nil)
+			result, err := RunInteractionScriptChecked(&screen, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted {
+				t.Fatalf("events = %#v", result.Events)
+			}
+		})
+	}
+}
+
 func TestRunInteractionScriptFileCheckedLoadsAndRunsScript(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script.json")
 	script := []byte(`{"interactionScript":[

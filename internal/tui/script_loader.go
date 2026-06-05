@@ -83,6 +83,7 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		"items",
 		"actions",
 		"timeline",
+		"edges",
 	} {
 		value, ok := raw[name]
 		if !ok {
@@ -102,6 +103,7 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		"response",
 		"resources",
 		"nodes",
+		"edges",
 	} {
 		value, ok := raw[name]
 		if !ok {
@@ -121,6 +123,13 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		"case",
 		"fixture",
 		"interaction",
+		"viewer",
+		"node",
+		"connection",
+		"stepConnection",
+		"stepsConnection",
+		"interactionConnection",
+		"recordingConnection",
 		"data",
 		"payload",
 		"body",
