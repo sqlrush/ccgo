@@ -988,6 +988,41 @@ func TestFetchRemoteHistoryAcceptsResourcePageAttributes(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsIncludedResourceEvents(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"included": [
+				{"id":"tool_1","type":"tool","attributes":{"name":"Bash"}},
+				{"id":"evt_included_status","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"included"}},
+				{"resource":{"id":"evt_included_assistant","type":"session-events","properties":{"role":"assistant","sessionId":"s","createdAt":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello included"}]}}}}
+			],
+			"pageInfo": {"hasPreviousPage": false}
+		}`))
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 1 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_included_status" || events.Events[0].Status != "included" || events.Events[0].SessionID != "s" {
+		t.Fatalf("status included event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_included_assistant" || events.Events[1].Type != contracts.SDKEventAssistant || events.Events[1].Message == nil || len(events.Events[1].Message.Content) != 1 || events.Events[1].Message.Content[0].Text != "hello included" {
+		t.Fatalf("assistant included event = %#v", events.Events[1])
+	}
+	if len(seen) != 1 {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsKeyedEventMaps(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -65,6 +65,7 @@ type sessionEventsResponse struct {
 	History              []contracts.SDKEvent `json:"history"`
 	Nodes                []contracts.SDKEvent `json:"nodes"`
 	Edges                []contracts.SDKEvent `json:"edges"`
+	Included             []contracts.SDKEvent `json:"included"`
 	HasMore              bool                 `json:"has_more"`
 	HasMoreCamel         bool                 `json:"hasMore"`
 	HasNext              bool                 `json:"has_next"`
@@ -202,6 +203,15 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		}
 		if err := r.mergeWrappedFields(name, value); err != nil {
 			return err
+		}
+	}
+	if value, ok := raw["included"]; ok {
+		events, ok, err := decodeRemoteHistoryFilteredEventArray("included", value)
+		if err != nil {
+			return err
+		}
+		if ok && r.Included == nil {
+			r.Included = events
 		}
 	}
 	return nil
@@ -494,6 +504,9 @@ func (r *sessionEventsResponse) mergeFrom(other sessionEventsResponse) {
 	if r.Edges == nil {
 		r.Edges = other.Edges
 	}
+	if r.Included == nil {
+		r.Included = other.Included
+	}
 	r.mergePageFields(other)
 }
 
@@ -678,6 +691,35 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 	return events, nil
 }
 
+func decodeRemoteHistoryFilteredEventArray(name string, data json.RawMessage) ([]contracts.SDKEvent, bool, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil, false, nil
+	}
+	if data[0] != '[' {
+		return nil, false, fmt.Errorf("%s must be an event array", name)
+	}
+	var rawEvents []json.RawMessage
+	if err := json.Unmarshal(data, &rawEvents); err != nil {
+		return nil, false, fmt.Errorf("%s: %w", name, err)
+	}
+	events := make([]contracts.SDKEvent, 0, len(rawEvents))
+	for index, rawEvent := range rawEvents {
+		if !remoteHistoryRawLooksLikeEvent(rawEvent) {
+			continue
+		}
+		event, err := decodeRemoteHistoryEventElement(name, index, rawEvent)
+		if err != nil {
+			return nil, false, err
+		}
+		events = append(events, event)
+	}
+	if len(events) == 0 {
+		return nil, false, nil
+	}
+	return events, true, nil
+}
+
 func decodeRemoteHistoryEventMap(name string, data json.RawMessage) ([]contracts.SDKEvent, bool, error) {
 	var rawEvents map[string]json.RawMessage
 	if err := json.Unmarshal(data, &rawEvents); err != nil {
@@ -722,7 +764,7 @@ func decodeRemoteHistoryEventMap(name string, data json.RawMessage) ([]contracts
 func remoteHistoryEventMapReservedKey(key string) bool {
 	switch key {
 	case "page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
-		"attributes", "properties",
+		"attributes", "properties", "included",
 		"has_more", "hasMore", "has_next", "hasNext", "has_next_page", "hasNextPage",
 		"has_previous", "hasPrevious", "has_previous_page", "hasPreviousPage", "has_older", "hasOlder", "more",
 		"first_id", "firstId", "next_before_id", "nextBeforeId", "next_cursor", "nextCursor",
@@ -741,6 +783,24 @@ func remoteHistoryEventMapReservedKey(key string) bool {
 	}
 }
 
+func remoteHistoryRawLooksLikeEvent(data json.RawMessage) bool {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) || data[0] != '{' {
+		return false
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false
+	}
+	if remoteHistoryLooksLikeSingleEvent(fields) {
+		return true
+	}
+	if nested := remoteHistoryWrappedEventRaw(fields); nested != nil {
+		return remoteHistoryRawLooksLikeEvent(nested)
+	}
+	return false
+}
+
 func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessage) (contracts.SDKEvent, error) {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
@@ -749,15 +809,22 @@ func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessag
 	cursor := ""
 	resourceID := ""
 	rawEvent := data
-	if data[0] == '{' {
+	for len(rawEvent) > 0 && rawEvent[0] == '{' {
 		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(data, &fields); err == nil {
-			cursor = remoteHistoryStringField(fields, "cursor")
-			resourceID = remoteHistoryStringField(fields, "id", "event_id", "eventId", "uuid")
-			if nested := remoteHistoryWrappedEventRaw(fields); nested != nil {
-				rawEvent = nested
-			}
+		if err := json.Unmarshal(rawEvent, &fields); err != nil {
+			break
 		}
+		cursor = firstNonEmpty(cursor, remoteHistoryStringField(fields, "cursor"))
+		resourceID = firstNonEmpty(resourceID, remoteHistoryStringField(fields, "id", "event_id", "eventId", "uuid"))
+		nested := remoteHistoryWrappedEventRaw(fields)
+		if nested == nil {
+			break
+		}
+		nested = bytes.TrimSpace(nested)
+		if len(nested) == 0 || bytes.Equal(nested, rawEvent) {
+			break
+		}
+		rawEvent = nested
 	}
 	var event contracts.SDKEvent
 	if err := json.Unmarshal(rawEvent, &event); err != nil {
@@ -1391,7 +1458,7 @@ func firstEventList(values ...[]contracts.SDKEvent) []contracts.SDKEvent {
 }
 
 func responseEventList(response sessionEventsResponse) []contracts.SDKEvent {
-	return firstEventList(response.Data, response.Events, response.Items, response.Results, response.Value, response.Values, response.Resources, response.Collection, response.Records, response.Rows, response.Entries, response.Messages, response.History, response.Nodes, response.Edges)
+	return firstEventList(response.Data, response.Events, response.Items, response.Results, response.Value, response.Values, response.Resources, response.Collection, response.Records, response.Rows, response.Entries, response.Messages, response.History, response.Nodes, response.Edges, response.Included)
 }
 
 func cloneHeader(header http.Header) http.Header {

@@ -112,6 +112,8 @@ M6 补充：remote history event-list 现在接受 `value`/`values`/`resources`/
 
 M6 补充：remote history response parser 现在会解包 `payload`/`response`/`result`/`body` 等通用响应外壳，外壳内的 event list、pagination、links 会继续递归解析。
 
+M6 补充：remote history response parser 现在接受 JSON:API `included` collection，会过滤非事件资源，并递归解包 `resource`/`attributes`/`properties` 后用外层 resource id 作为事件 ID fallback。
+
 M6 补充：remote history `data`/`payload`/`response`/`result`/`body` 等 event-list 字段现在也接受单个 SDK event 对象，避免非数组单事件页被当作普通 wrapper 后丢失。
 
 M6 补充：remote history `SDKEvent` 本体现在接受 `eventType`/`event_type`/`role` 类型别名、`createdAt`/`created_at` 时间戳别名，以及 `payload`/`data`/`body`/`serializedMessage` message payload 别名；payload 只有 `role`/`content` 时也能 materialize 成 transcript message。
