@@ -5253,6 +5253,54 @@ func TestRunInteractionScriptAcceptsPromptFieldAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedPromptExpectationAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"input": "abc",
+			"expectPrompt": {
+				"resource": {
+					"attributes": {
+						"text": "abc",
+						"cursorIndex": 3,
+						"isEmpty": false
+					}
+				}
+			}
+		},
+		{
+			"key": "enter",
+			"expectPrompt": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"blank": true,
+							"pastedContentCount": 0,
+							"nextPastedID": 1
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if steps[0].ExpectPrompt == nil || steps[0].ExpectPrompt.Text != "abc" || steps[0].ExpectPrompt.Cursor == nil || *steps[0].ExpectPrompt.Cursor != 3 {
+		t.Fatalf("first prompt expectation = %#v", steps[0].ExpectPrompt)
+	}
+	if steps[1].ExpectPrompt == nil || !steps[1].ExpectPrompt.Empty || steps[1].ExpectPrompt.PastedContentCount == nil || *steps[1].ExpectPrompt.PastedContentCount != 0 || steps[1].ExpectPrompt.NextPastedID == nil || *steps[1].ExpectPrompt.NextPastedID != 1 {
+		t.Fatalf("second prompt expectation = %#v", steps[1].ExpectPrompt)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "abc" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsStringContainsAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

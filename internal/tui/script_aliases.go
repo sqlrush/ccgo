@@ -476,8 +476,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectTotalDialogCamel    *json.RawMessage          `json:"expectTotalDialogResultCount"`
 		ExpectDialog              *DialogExpectation        `json:"expect_dialog"`
 		ExpectDialogCamel         *DialogExpectation        `json:"expectDialog"`
-		ExpectPrompt              *PromptExpectation        `json:"expect_prompt"`
-		ExpectPromptCamel         *PromptExpectation        `json:"expectPrompt"`
+		ExpectPrompt              *json.RawMessage          `json:"expect_prompt"`
+		ExpectPromptCamel         *json.RawMessage          `json:"expectPrompt"`
 		ExpectVim                 *VimExpectation           `json:"expect_vim"`
 		ExpectVimCamel            *VimExpectation           `json:"expectVim"`
 		ExpectTasks               *TasksExpectation         `json:"expect_tasks"`
@@ -961,11 +961,15 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.ExpectDialogCamel != nil {
 		step.ExpectDialog = fields.ExpectDialogCamel
 	}
-	if fields.ExpectPrompt != nil {
-		step.ExpectPrompt = fields.ExpectPrompt
-	}
-	if fields.ExpectPromptCamel != nil {
-		step.ExpectPrompt = fields.ExpectPromptCamel
+	if prompt := scriptNamedPromptExpectationField(fieldMap,
+		[]string{"expect_prompt", "expectPrompt"},
+		"prompt",
+		"expectation",
+		"expected",
+		"expect_prompt",
+		"expectPrompt",
+	); prompt != nil {
+		step.ExpectPrompt = prompt
 	}
 	if fields.ExpectVim != nil {
 		step.ExpectVim = fields.ExpectVim
@@ -1971,6 +1975,69 @@ func scriptDialogResultListFromJSON(raw json.RawMessage, names []string, depth i
 
 func scriptDialogResultExpectationHasData(result DialogResultExpectation) bool {
 	return result.ID != "" || result.Kind != "" || result.Action != "" || result.Status != "" || result.Found != nil || result.Stale != nil
+}
+
+func scriptNamedPromptExpectationField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) *PromptExpectation {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if prompt, ok := scriptPromptExpectationFromJSON(raw, nestedNames, 0); ok {
+			return prompt
+		}
+	}
+	return nil
+}
+
+func scriptPromptExpectationFromJSON(raw json.RawMessage, names []string, depth int) (*PromptExpectation, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if prompt, ok := scriptPromptExpectationFromJSON(item, names, depth+1); ok {
+				return prompt, true
+			}
+		}
+		return nil, false
+	}
+	if depth >= 8 || raw[0] != '{' {
+		return nil, false
+	}
+	var prompt PromptExpectation
+	if err := json.Unmarshal(raw, &prompt); err == nil && scriptPromptExpectationHasData(prompt) {
+		return &prompt, true
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames(names...) {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if prompt, ok := scriptPromptExpectationFromJSON(nested, names, depth+1); ok {
+			return prompt, true
+		}
+	}
+	return nil, false
+}
+
+func scriptPromptExpectationHasData(prompt PromptExpectation) bool {
+	return prompt.Text != "" ||
+		prompt.Expanded != "" ||
+		prompt.Cursor != nil ||
+		prompt.Empty ||
+		prompt.PastedContentCount != nil ||
+		len(prompt.PastedContents) > 0 ||
+		prompt.NextPastedID != nil
 }
 
 func scriptActionIntFromJSON(raw json.RawMessage, names []string, depth int) (int, bool) {
