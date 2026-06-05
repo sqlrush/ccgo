@@ -936,6 +936,58 @@ func TestFetchRemoteHistoryAcceptsResourceAttributeEvents(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsResourcePageAttributes(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{
+				"data": {
+					"id": "page_1",
+					"type": "session-event-page",
+					"attributes": {
+						"list": [
+							{"eventType":"status","eventId":"evt_page","sessionID":"s","status":"latest"}
+						],
+						"pageInfo": {"hasPreviousPage": true, "startCursor": "evt_page"}
+					}
+				}
+			}`))
+		case "evt_page":
+			_, _ = w.Write([]byte(`{
+				"data": {
+					"id": "evt_single_resource",
+					"type": "session-events",
+					"attributes": {"eventType":"status","sessionID":"s","status":"single"}
+				}
+			}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_page" || events.Events[0].Status != "latest" || events.Events[0].SessionID != "s" {
+		t.Fatalf("page resource event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_single_resource" || events.Events[1].Status != "single" || events.Events[1].SessionID != "s" {
+		t.Fatalf("single resource event = %#v", events.Events[1])
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_page" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsKeyedEventMaps(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

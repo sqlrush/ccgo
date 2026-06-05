@@ -146,6 +146,9 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 		{name: "events", target: &r.Events},
 		{name: "items", target: &r.Items},
 		{name: "results", target: &r.Results},
+		{name: "list", target: &r.Events},
+		{name: "object", target: &r.Events},
+		{name: "objects", target: &r.Events},
 		{name: "value", target: &r.Value},
 		{name: "values", target: &r.Values},
 		{name: "resources", target: &r.Resources},
@@ -183,6 +186,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 	}
 	for _, name := range []string{
 		"page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
+		"attributes", "properties",
 		"session", "project_session", "projectSession", "conversation", "remote_history", "remoteHistory",
 		"event_page", "eventPage", "session_history", "sessionHistory", "viewer", "node", "_embedded", "embedded",
 	} {
@@ -718,6 +722,7 @@ func decodeRemoteHistoryEventMap(name string, data json.RawMessage) ([]contracts
 func remoteHistoryEventMapReservedKey(key string) bool {
 	switch key {
 	case "page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
+		"attributes", "properties",
 		"has_more", "hasMore", "has_next", "hasNext", "has_next_page", "hasNextPage",
 		"has_previous", "hasPrevious", "has_previous_page", "hasPreviousPage", "has_older", "hasOlder", "more",
 		"first_id", "firstId", "next_before_id", "nextBeforeId", "next_cursor", "nextCursor",
@@ -817,6 +822,16 @@ func remoteHistoryHasDirectEventFields(fields map[string]json.RawMessage) bool {
 func remoteHistoryLooksLikeSingleEvent(fields map[string]json.RawMessage) bool {
 	if remoteHistoryRecognizedEventType(fields) != "" {
 		return true
+	}
+	for _, name := range []string{"attributes", "properties"} {
+		nested := firstObjectRawField(fields, name)
+		if nested == nil {
+			continue
+		}
+		var nestedFields map[string]json.RawMessage
+		if err := json.Unmarshal(nested, &nestedFields); err == nil && remoteHistoryLooksLikeSingleEvent(nestedFields) {
+			return true
+		}
 	}
 	status := remoteHistoryStringField(fields, "status")
 	if status == "" {
