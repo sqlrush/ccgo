@@ -1700,6 +1700,24 @@ func TestParseKeyBindingSpecsAcceptsAPIArrayEnvelopes(t *testing.T) {
 				]
 			}
 		}`,
+		"top_level_edges": `{
+			"edges": [
+				{"node": {"id": "kb_1", "type": "keybinding", "properties": {"shortcutKey": "ctrl-r", "commandName": "pageDown"}}},
+				{"edge": {"node": {"id": "kb_2", "type": "keybinding", "attributes": {"keys": ["ctrl-x", "ctrl-k"], "command": "none"}}}}
+			]
+		}`,
+		"nested_viewer_connection": `{
+			"data": {
+				"viewer": {
+					"keybindingsConnection": {
+						"edges": [
+							{"node": {"id": "kb_1", "type": "keybinding", "properties": {"shortcutKey": "ctrl-r", "commandName": "pageDown"}}},
+							{"node": {"id": "kb_2", "type": "keybinding", "attributes": {"keys": ["ctrl-x", "ctrl-k"], "command": "none"}}}
+						]
+					}
+				}
+			}
+		}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			specs, err := ParseKeyBindingSpecs([]byte(fixture))
