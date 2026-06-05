@@ -7157,9 +7157,9 @@ func TestRunDialogRuntimeScriptAcceptsWrappedTaskExpectationAliasFields(t *testi
 			"expectTasks": {
 				"resource": {
 					"attributes": {
-						"taskCount": 1,
-						"statusCounts": {"running": 1},
-						"contains": {"taskId": "task_1", "taskTitle": "Build", "status": "running", "statusText": "go test", "progressPercent": 40}
+						"Count": "1",
+						"StateCounts": {"running": "1"},
+						"Contains": {"ID": "task_1", "Title": "Build", "State": "running", "Detail": "go test", "Progress": "40"}
 					}
 				}
 			}
@@ -7171,9 +7171,9 @@ func TestRunDialogRuntimeScriptAcceptsWrappedTaskExpectationAliasFields(t *testi
 				"edge": {
 					"node": {
 						"attrs": {
-							"total": 1,
-							"countsByState": {"cancelled": 1},
-							"contains": {"id": "task_1", "state": "cancelled", "detail": "stopped"}
+							"Count": "1",
+							"StateCounts": {"cancelled": "1"},
+							"Contains": {"ID": "task_1", "State": "cancelled", "Detail": "stopped"}
 						}
 					}
 				}
@@ -7184,7 +7184,7 @@ func TestRunDialogRuntimeScriptAcceptsWrappedTaskExpectationAliasFields(t *testi
 			"expectTasks": {
 				"resource": {
 					"attributes": {
-						"taskCount": 0
+						"Count": "0"
 					}
 				}
 			}

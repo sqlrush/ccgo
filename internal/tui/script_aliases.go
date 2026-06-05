@@ -4312,6 +4312,28 @@ func intMapJSONField(fields map[string]json.RawMessage, names ...string) map[str
 		if err := json.Unmarshal(raw, &value); err == nil {
 			return value
 		}
+		var rawValues map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &rawValues); err != nil {
+			continue
+		}
+		value = make(map[string]int, len(rawValues))
+		for key, rawValue := range rawValues {
+			var intValue int
+			if err := json.Unmarshal(rawValue, &intValue); err == nil {
+				value[key] = intValue
+				continue
+			}
+			var stringValue string
+			if err := json.Unmarshal(rawValue, &stringValue); err != nil {
+				return nil
+			}
+			parsed, err := strconv.Atoi(strings.TrimSpace(stringValue))
+			if err != nil {
+				return nil
+			}
+			value[key] = parsed
+		}
+		return value
 	}
 	return nil
 }
@@ -4752,36 +4774,49 @@ func (expect *VimExpectation) UnmarshalJSON(data []byte) error {
 }
 
 func (expect *TasksExpectation) UnmarshalJSON(data []byte) error {
-	data = normalizeObjectFieldsToArray(data, "contains")
+	data = normalizeObjectFieldsToArray(data, "Contains", "contains")
 	type alias TasksExpectation
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data,
+		"Count",
+		"count",
+		"TaskCount",
+		"task_count",
+		"taskCount",
+		"Total",
+		"total",
+		"Size",
+		"size",
+		"Length",
+		"length",
+		"StateCounts",
+		"state_counts",
+		"stateCounts",
+		"StatusCounts",
+		"status_counts",
+		"statusCounts",
+		"Counts",
+		"counts",
+		"CountsByState",
+		"counts_by_state",
+		"countsByState",
+		"ByState",
+		"by_state",
+		"byState",
+	), &raw); err != nil {
 		return err
 	}
 	*expect = TasksExpectation(raw)
 
-	var fields struct {
-		StateCounts      map[string]int `json:"state_counts"`
-		StateCountsCamel map[string]int `json:"stateCounts"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
 	fieldMap := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
 	if expect.Count == nil {
-		expect.Count = intPtrJSONField(fieldMap, "task_count", "taskCount", "total", "size", "length")
-	}
-	if fields.StateCounts != nil {
-		expect.StateCounts = fields.StateCounts
-	}
-	if fields.StateCountsCamel != nil {
-		expect.StateCounts = fields.StateCountsCamel
+		expect.Count = intPtrJSONField(fieldMap, "Count", "count", "TaskCount", "task_count", "taskCount", "Total", "total", "Size", "size", "Length", "length")
 	}
 	if len(expect.StateCounts) == 0 {
-		expect.StateCounts = intMapJSONField(fieldMap, "status_counts", "statusCounts", "counts", "counts_by_state", "countsByState", "by_state", "byState")
+		expect.StateCounts = intMapJSONField(fieldMap, "StateCounts", "state_counts", "stateCounts", "StatusCounts", "status_counts", "statusCounts", "Counts", "counts", "CountsByState", "counts_by_state", "countsByState", "ByState", "by_state", "byState")
 	}
 	return nil
 }
