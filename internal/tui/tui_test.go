@@ -6357,6 +6357,64 @@ func TestRunDialogRuntimeScriptAcceptsWrappedRuntimeMutationAliasFields(t *testi
 	}
 }
 
+func TestRunDialogRuntimeScriptAcceptsWrappedRuntimeActionBooleans(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"task": {"id": "task_bool", "title": "Wrapped bool", "state": "running", "detail": "working", "progress": 12},
+			"expectTasks": {"count": 1, "stateCounts": {"running": 1}}
+		},
+		{
+			"action": "cancelTasks",
+			"payload": {
+				"resource": {
+					"attributes": {
+						"enabled": false,
+						"reasonText": "should not cancel"
+					}
+				}
+			},
+			"expectTasks": {
+				"count": 1,
+				"stateCounts": {"running": 1},
+				"contains": {"id": "task_bool", "state": "running", "detail": "working"}
+			},
+			"expectStatusContains": ["running: 1"]
+		},
+		{
+			"action": "openTasks",
+			"payload": {
+				"resource": {
+					"attributes": {
+						"open": false
+					}
+				}
+			},
+			"expectDialog": {"active": false}
+		},
+		{
+			"action": "openTasks",
+			"payload": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"open": true
+						}
+					}
+				}
+			},
+			"expectDialog": {"active": true, "dialogID": "tasks", "dialogKind": "task"}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(64, 10, nil)
+	runtime := NewDialogRuntime()
+	if _, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsEventFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"input": "go", "expectPrompt": {"text": "go"}},

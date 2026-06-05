@@ -1802,20 +1802,18 @@ func scriptStringFromJSON(raw json.RawMessage) string {
 }
 
 func scriptActionBoolField(fields map[string]json.RawMessage, fallback bool) bool {
-	if value := boolPtrJSONField(fields, "value", "payload", "data", "enabled", "active", "open"); value != nil {
-		return *value
+	for _, name := range []string{"value", "payload", "data", "body", "enabled", "active", "open"} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value, ok := scriptActionBoolFromJSON(raw, 0); ok {
+			return value
+		}
 	}
 	for _, raw := range scriptActionRawFields(fields) {
-		raw = bytes.TrimSpace(raw)
-		if len(raw) == 0 || raw[0] != '{' {
-			continue
-		}
-		nested := map[string]json.RawMessage{}
-		if err := json.Unmarshal(raw, &nested); err != nil {
-			continue
-		}
-		if value := boolPtrJSONField(nested, "enabled", "active", "open", "value"); value != nil {
-			return *value
+		if value, ok := scriptActionBoolFromJSON(raw, 0); ok {
+			return value
 		}
 	}
 	return fallback
