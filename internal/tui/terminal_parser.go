@@ -51,10 +51,12 @@ type TerminalAction struct {
 }
 
 type TerminalParser struct {
-	tokenizer *TerminalTokenizer
-	style     TextStyle
-	inLink    bool
-	linkURL   string
+	tokenizer        *TerminalTokenizer
+	style            TextStyle
+	inLink           bool
+	linkURL          string
+	pendingGrapheme  string
+	pendingTextStyle TextStyle
 }
 
 func NewTerminalParser() *TerminalParser {
@@ -75,7 +77,9 @@ func (p *TerminalParser) Flush() []TerminalAction {
 	if p.tokenizer == nil {
 		p.tokenizer = NewTerminalOutputTokenizer()
 	}
-	return p.processTokens(p.tokenizer.Flush())
+	actions := p.processTokens(p.tokenizer.Flush())
+	actions = append(actions, p.flushPendingText()...)
+	return actions
 }
 
 func (p *TerminalParser) Reset() {
@@ -87,6 +91,8 @@ func (p *TerminalParser) Reset() {
 	p.style = DefaultTextStyle()
 	p.inLink = false
 	p.linkURL = ""
+	p.pendingGrapheme = ""
+	p.pendingTextStyle = TextStyle{}
 }
 
 func (p *TerminalParser) Style() TextStyle {
@@ -187,6 +193,7 @@ func (p *TerminalParser) processTokens(tokens []TerminalToken) []TerminalAction 
 		case TerminalTokenText:
 			actions = append(actions, p.processText(token.Value)...)
 		case TerminalTokenSequence:
+			actions = append(actions, p.flushPendingText()...)
 			if action, ok := p.processSequence(token.Value); ok {
 				actions = append(actions, action)
 			}
@@ -197,28 +204,81 @@ func (p *TerminalParser) processTokens(tokens []TerminalToken) []TerminalAction 
 
 func (p *TerminalParser) processText(text string) []TerminalAction {
 	actions := []TerminalAction{}
-	current := ""
 	for len(text) > 0 {
-		r, size := utf8.DecodeRuneInString(text)
-		if r == utf8.RuneError && size == 0 {
+		index := strings.IndexByte(text, terminalBEL)
+		if index < 0 {
+			actions = append(actions, p.processPlainText(text)...)
 			break
 		}
-		chunk := text[:size]
-		text = text[size:]
-		if r == rune(terminalBEL) {
-			if current != "" {
-				actions = append(actions, TerminalAction{Type: TerminalActionText, Graphemes: terminalGraphemes(current), Style: p.style})
-				current = ""
-			}
-			actions = append(actions, TerminalAction{Type: TerminalActionBell})
-			continue
+		if index > 0 {
+			actions = append(actions, p.processPlainText(text[:index])...)
 		}
-		current += chunk
-	}
-	if current != "" {
-		actions = append(actions, TerminalAction{Type: TerminalActionText, Graphemes: terminalGraphemes(current), Style: p.style})
+		actions = append(actions, p.flushPendingText()...)
+		actions = append(actions, TerminalAction{Type: TerminalActionBell})
+		text = text[index+1:]
 	}
 	return actions
+}
+
+func (p *TerminalParser) processPlainText(text string) []TerminalAction {
+	if text == "" {
+		return nil
+	}
+	style := p.style
+	if p.pendingGrapheme != "" {
+		text = p.pendingGrapheme + text
+		style = p.pendingTextStyle
+		p.pendingGrapheme = ""
+		p.pendingTextStyle = TextStyle{}
+	}
+	graphemes := terminalGraphemes(text)
+	if len(graphemes) == 0 {
+		return nil
+	}
+	if last := graphemes[len(graphemes)-1]; terminalGraphemeMayContinueAtChunkBoundary(last.Value) {
+		p.pendingGrapheme = last.Value
+		p.pendingTextStyle = style
+		graphemes = graphemes[:len(graphemes)-1]
+	}
+	if len(graphemes) == 0 {
+		return nil
+	}
+	return []TerminalAction{{Type: TerminalActionText, Graphemes: graphemes, Style: style}}
+}
+
+func (p *TerminalParser) flushPendingText() []TerminalAction {
+	if p.pendingGrapheme == "" {
+		return nil
+	}
+	grapheme := p.pendingGrapheme
+	style := p.pendingTextStyle
+	p.pendingGrapheme = ""
+	p.pendingTextStyle = TextStyle{}
+	return []TerminalAction{{Type: TerminalActionText, Graphemes: terminalGraphemes(grapheme), Style: style}}
+}
+
+func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
+	if value == "" {
+		return false
+	}
+	last, _ := utf8.DecodeLastRuneInString(value)
+	if last == 0x200d || isTerminalEmojiModifier(last) {
+		return true
+	}
+	regionalCount := 0
+	hasEmojiTag := false
+	for _, r := range value {
+		if isTerminalRegionalIndicator(r) {
+			regionalCount++
+		}
+		if r >= 0xe0020 && r <= 0xe007e {
+			hasEmojiTag = true
+		}
+		if r == 0xe007f {
+			hasEmojiTag = false
+		}
+	}
+	return regionalCount%2 == 1 || hasEmojiTag
 }
 
 func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool) {

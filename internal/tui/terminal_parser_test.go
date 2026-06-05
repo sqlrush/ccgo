@@ -158,6 +158,71 @@ func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
 	}
 }
 
+func TestTerminalParserKeepsChunkedGraphemeClustersTogether(t *testing.T) {
+	parser := NewTerminalParser()
+	if actions := parser.Feed("\U0001f469\u200d"); len(actions) != 0 {
+		t.Fatalf("partial zwj actions = %#v", actions)
+	}
+	actions := parser.Feed("\U0001f4bb ok")
+	if len(actions) != 1 || actions[0].Type != TerminalActionText || len(actions[0].Graphemes) != 4 {
+		t.Fatalf("zwj actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\U0001f469\u200d\U0001f4bb" || got.Width != 2 {
+		t.Fatalf("zwj grapheme = %#v", got)
+	}
+	if width := TerminalActionsVisibleWidth(actions); width != 5 {
+		t.Fatalf("zwj width = %d", width)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\U0001f469\U0001f3fd"); len(actions) != 0 {
+		t.Fatalf("partial modified emoji actions = %#v", actions)
+	}
+	actions = parser.Feed("\u200d\U0001f4bb!")
+	if len(actions) != 1 || actions[0].Type != TerminalActionText || len(actions[0].Graphemes) != 2 {
+		t.Fatalf("modified zwj actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\U0001f469\U0001f3fd\u200d\U0001f4bb" || got.Width != 2 {
+		t.Fatalf("modified zwj grapheme = %#v", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\U0001f1fa"); len(actions) != 0 {
+		t.Fatalf("partial regional actions = %#v", actions)
+	}
+	actions = parser.Feed("\U0001f1f8!")
+	if len(actions) != 1 || len(actions[0].Graphemes) != 2 {
+		t.Fatalf("regional actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\U0001f1fa\U0001f1f8" || got.Width != 2 {
+		t.Fatalf("regional grapheme = %#v", got)
+	}
+	if width := TerminalActionsVisibleWidth(actions); width != 3 {
+		t.Fatalf("regional width = %d", width)
+	}
+
+	parser = NewTerminalParser()
+	actions = parser.Feed("\U0001f1fa" + CSISequence(31, "m") + "red")
+	if len(actions) != 2 {
+		t.Fatalf("sequence boundary actions = %#v", actions)
+	}
+	if actions[0].Type != TerminalActionText || actions[0].Graphemes[0].Value != "\U0001f1fa" || actions[0].Graphemes[0].Width != 2 {
+		t.Fatalf("flushed regional action = %#v", actions[0])
+	}
+	if actions[1].Type != TerminalActionText || actions[1].Style.Foreground != namedTerminalColor(NamedColorRed) {
+		t.Fatalf("styled text action = %#v", actions[1])
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\U0001f1fa"); len(actions) != 0 {
+		t.Fatalf("flush partial feed actions = %#v", actions)
+	}
+	actions = parser.Flush()
+	if len(actions) != 1 || actions[0].Type != TerminalActionText || actions[0].Graphemes[0].Value != "\U0001f1fa" {
+		t.Fatalf("flush partial actions = %#v", actions)
+	}
+}
+
 func TestTerminalParserAppliesSGRToFollowingText(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("plain" + CSISequence(31, "m") + "red" + CSISequence("m") + "normal")
