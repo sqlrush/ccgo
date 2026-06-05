@@ -1650,6 +1650,40 @@ func TestParseKeyBindingSpecsAcceptsNestedWrappers(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsResourceWrappers(t *testing.T) {
+	specs, err := ParseKeyBindingSpecs([]byte(`{
+		"resource": {
+			"id": "user-keybindings",
+			"type": "keybinding-config",
+			"attributes": {
+				"keybindings": [
+					{"shortcutKey": "ctrl-r", "commandName": "pageDown"}
+				]
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Key != "ctrl-r" || specs[0].Action != Action("pageDown") {
+		t.Fatalf("resource specs = %#v", specs)
+	}
+
+	specs, err = ParseKeyBindingSpecs([]byte(`{
+		"properties": {
+			"keymap": {
+				"ctrl-x ctrl-k": false
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Key != "ctrl-x ctrl-k" || specs[0].Action != ActionNone {
+		t.Fatalf("properties specs = %#v", specs)
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsCollectionAliases(t *testing.T) {
 	specs, err := ParseKeyBindingSpecs([]byte(`{
 		"keymap": {
