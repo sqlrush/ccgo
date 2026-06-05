@@ -1303,19 +1303,19 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "text", "type", "typetext", "type-text", "input", "inputtext", "textinput", "insert", "inserttext", "write", "writetext":
 		if step.Text == "" {
-			step.Text = stringJSONField(fields, "value", "text", "input", "content", "body", "message", "data", "payload")
+			step.Text = scriptActionStringField(fields, "text", "input", "content", "body", "message", "data", "payload", "value")
 		}
 	case "paste", "pastetext", "pastedtext", "clipboard", "clipboardtext":
 		if step.Paste == "" {
-			step.Paste = stringJSONField(fields, "value", "paste", "clipboard", "text", "content", "data", "payload")
+			step.Paste = scriptActionStringField(fields, "paste", "clipboard", "text", "content", "body", "message", "data", "payload", "value")
 		}
 	case "status", "setstatus", "set-status", "statusline", "status-line":
 		if step.Status == "" {
-			step.Status = stringJSONField(fields, "value", "status", "text", "content", "message", "data", "payload")
+			step.Status = scriptActionStringField(fields, "status", "text", "content", "body", "message", "data", "payload", "value")
 		}
 	case "snapshot", "capture", "capture-snapshot":
 		if step.SnapshotName == "" {
-			step.SnapshotName = stringJSONField(fields, "value", "snapshot", "name", "label", "id", "data", "payload")
+			step.SnapshotName = scriptActionStringField(fields, "snapshot", "name", "label", "id", "data", "payload", "value")
 		}
 	case "resize", "terminalsize", "terminal-size", "screensize", "screen-size":
 		if step.ResizeWidth <= 0 || step.ResizeHeight <= 0 {

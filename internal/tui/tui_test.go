@@ -5535,6 +5535,80 @@ func TestRunInteractionScriptAcceptsWrappedResizeActionPayloads(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedStringActionPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action": "typeText",
+			"payload": {
+				"resource": {
+					"attributes": {
+						"text": "hi"
+					}
+				}
+			},
+			"expectPrompt": {"text": "hi"}
+		},
+		{
+			"type": "keyPress",
+			"payload": "enter",
+			"expectEvent": {"type": "prompt_submitted", "value": "hi"},
+			"expectPrompt": {"empty": true}
+		},
+		{
+			"name": "pasteText",
+			"payload": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"content": "clip"
+						}
+					}
+				}
+			},
+			"expectPrompt": {"text": "[Pasted text #1]", "expandedText": "clip", "pastedContentCount": 1}
+		},
+		{
+			"operation": "setStatus",
+			"payload": {
+				"resource": {
+					"attributes": {
+						"message": "wrapped status"
+					}
+				}
+			},
+			"expectStatusContains": "wrapped status"
+		},
+		{"message": {"role": "assistant", "text": "ready"}},
+		{
+			"action": "snapshot",
+			"payload": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"name": "wrapped-snapshot"
+						}
+					}
+				}
+			},
+			"expectSnapshotContains": "assistant: ready"
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "hi" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "wrapped-snapshot" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
 func TestRunInteractionScriptAcceptsCompactEventActionAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"action":"focusOut","expectEvent":{"type":"focus_out"},"expectFocused":false},
