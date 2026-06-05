@@ -189,9 +189,10 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 	}
 	for _, name := range []string{
 		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "record", "item", "resource", "payload", "response", "body",
+		"viewer", "edge", "node",
 		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
 		"message", "assistantMessage", "assistant_message", "resultMessage", "result_message", "outputMessage", "output_message", "completion", "completionMessage", "completion_message",
-		"attributes", "properties", "value",
+		"attributes", "properties", "attrs", "value",
 	} {
 		raw, ok := fields[name]
 		if !ok {

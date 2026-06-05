@@ -425,6 +425,18 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 			wantExpires: true,
 		},
 		{
+			digest:      "graphql-edge-attrs",
+			body:        `"edge":{"node":{"id":"graphql-edge-attrs","attrs":{"summaryMarkdown":"edge attrs summary","formatVersion":"microcompact.v1","cachedAt":100,"ttlSeconds":3600}}}`,
+			want:        "edge attrs summary",
+			wantExpires: true,
+		},
+		{
+			digest:      "graphql-viewer-node",
+			body:        `"data":{"viewer":{"node":{"id":"graphql-viewer-node","properties":{"compressedText":"viewer node summary","cacheVersion":"microcompact.v1","generatedAt":100,"maxAgeMilliseconds":3600000}}}}`,
+			want:        "viewer node summary",
+			wantExpires: true,
+		},
+		{
 			digest:      "wrapped-envelope",
 			body:        `"data":{"summary":"envelope summary"},"digest":"wrapped-envelope","version":"microcompact.v1","createdAt":100,"ttlSeconds":3600`,
 			want:        "envelope summary",
