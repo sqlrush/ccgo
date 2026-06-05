@@ -490,14 +490,14 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ExpectScreenCamel         *ScreenExpectation        `json:"expectScreen"`
 		ExpectFocused             *json.RawMessage          `json:"expect_focused"`
 		ExpectFocusedCamel        *json.RawMessage          `json:"expectFocused"`
-		ExpectStatusContains      *stringList               `json:"expect_status_contains"`
-		ExpectStatusContainsCamel *stringList               `json:"expectStatusContains"`
-		ExpectStatusNotContains   *stringList               `json:"expect_status_not_contains"`
-		ExpectStatusNotCamel      *stringList               `json:"expectStatusNotContains"`
-		ExpectSnapshotContains    *stringList               `json:"expect_snapshot_contains"`
-		ExpectSnapshotCamel       *stringList               `json:"expectSnapshotContains"`
-		ExpectSnapshotNotContains *stringList               `json:"expect_snapshot_not_contains"`
-		ExpectSnapshotNotCamel    *stringList               `json:"expectSnapshotNotContains"`
+		ExpectStatusContains      *json.RawMessage          `json:"expect_status_contains"`
+		ExpectStatusContainsCamel *json.RawMessage          `json:"expectStatusContains"`
+		ExpectStatusNotContains   *json.RawMessage          `json:"expect_status_not_contains"`
+		ExpectStatusNotCamel      *json.RawMessage          `json:"expectStatusNotContains"`
+		ExpectSnapshotContains    *json.RawMessage          `json:"expect_snapshot_contains"`
+		ExpectSnapshotCamel       *json.RawMessage          `json:"expectSnapshotContains"`
+		ExpectSnapshotNotContains *json.RawMessage          `json:"expect_snapshot_not_contains"`
+		ExpectSnapshotNotCamel    *json.RawMessage          `json:"expectSnapshotNotContains"`
 	}
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -953,29 +953,61 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		focused := value
 		step.ExpectFocused = &focused
 	}
-	if fields.ExpectStatusContains != nil {
-		step.ExpectStatusContains = stringListValue(fields.ExpectStatusContains)
+	if values := scriptNamedStringListField(fieldMap,
+		[]string{"expect_status_contains", "expectStatusContains"},
+		"contains",
+		"status",
+		"text",
+		"content",
+		"message",
+		"values",
+		"items",
+		"value",
+	); len(values) > 0 {
+		step.ExpectStatusContains = values
 	}
-	if fields.ExpectStatusContainsCamel != nil {
-		step.ExpectStatusContains = stringListValue(fields.ExpectStatusContainsCamel)
+	if values := scriptNamedStringListField(fieldMap,
+		[]string{"expect_status_not_contains", "expectStatusNotContains"},
+		"not_contains",
+		"notContains",
+		"contains",
+		"status",
+		"text",
+		"content",
+		"message",
+		"values",
+		"items",
+		"value",
+	); len(values) > 0 {
+		step.ExpectStatusNotContains = values
 	}
-	if fields.ExpectStatusNotContains != nil {
-		step.ExpectStatusNotContains = stringListValue(fields.ExpectStatusNotContains)
+	if values := scriptNamedStringListField(fieldMap,
+		[]string{"expect_snapshot_contains", "expectSnapshotContains"},
+		"contains",
+		"snapshot",
+		"text",
+		"content",
+		"message",
+		"values",
+		"items",
+		"value",
+	); len(values) > 0 {
+		step.ExpectSnapshotContains = values
 	}
-	if fields.ExpectStatusNotCamel != nil {
-		step.ExpectStatusNotContains = stringListValue(fields.ExpectStatusNotCamel)
-	}
-	if fields.ExpectSnapshotContains != nil {
-		step.ExpectSnapshotContains = stringListValue(fields.ExpectSnapshotContains)
-	}
-	if fields.ExpectSnapshotCamel != nil {
-		step.ExpectSnapshotContains = stringListValue(fields.ExpectSnapshotCamel)
-	}
-	if fields.ExpectSnapshotNotContains != nil {
-		step.ExpectSnapshotNotContains = stringListValue(fields.ExpectSnapshotNotContains)
-	}
-	if fields.ExpectSnapshotNotCamel != nil {
-		step.ExpectSnapshotNotContains = stringListValue(fields.ExpectSnapshotNotCamel)
+	if values := scriptNamedStringListField(fieldMap,
+		[]string{"expect_snapshot_not_contains", "expectSnapshotNotContains"},
+		"not_contains",
+		"notContains",
+		"contains",
+		"snapshot",
+		"text",
+		"content",
+		"message",
+		"values",
+		"items",
+		"value",
+	); len(values) > 0 {
+		step.ExpectSnapshotNotContains = values
 	}
 	applyScriptStepActionAlias(step, fieldMap)
 	return nil
@@ -2365,6 +2397,18 @@ func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 		"ExpectFocused",
 		"expectFocused",
 		"expect_focused",
+		"ExpectStatusContains",
+		"expectStatusContains",
+		"expect_status_contains",
+		"ExpectStatusNotContains",
+		"expectStatusNotContains",
+		"expect_status_not_contains",
+		"ExpectSnapshotContains",
+		"expectSnapshotContains",
+		"expect_snapshot_contains",
+		"ExpectSnapshotNotContains",
+		"expectSnapshotNotContains",
+		"expect_snapshot_not_contains",
 	} {
 		raw, ok := fields[name]
 		if !ok {

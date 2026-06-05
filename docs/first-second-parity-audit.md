@@ -294,6 +294,7 @@ M7 progress now includes:
 - `internal/tui`: direct scripted focus aliases such as `focus`, `focused`, `focusIn`, `focusOut`, and `blurred` now recursively unwrap boolean JSON:API/GraphQL-style wrapper objects.
 - `internal/tui`: direct scripted expectation bool aliases such as `expectNoEvent`, `expectNoDialogResult(s)`, and `expectFocused` now recursively unwrap JSON:API/GraphQL-style wrapper objects.
 - `internal/tui`: direct scripted expectation count aliases such as `expectEventCount`, `expectTotalEventCount`, `expectDialogResultCount`, and `expectTotalDialogResultCount` now recursively unwrap numeric JSON:API/GraphQL-style wrapper objects.
+- `internal/tui`: direct scripted expectation string-list aliases such as `expectStatusContains`, `expectStatusNotContains`, `expectSnapshotContains`, and `expectSnapshotNotContains` now recursively unwrap JSON:API/GraphQL-style wrapper objects.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts base/unmodified sequences such as `CSI 97u` and `CSI 13;1u`, mapping printable runes plus Enter, Tab, Esc, and Backspace instead of treating ordinary extended-key reports as unknown.

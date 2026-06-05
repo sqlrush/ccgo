@@ -5728,6 +5728,61 @@ func TestRunInteractionScriptAcceptsWrappedStringAliasFields(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedExpectationStringListAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"setStatus": "runtime ready",
+			"expectStatusContains": {
+				"resource": {
+					"attributes": {
+						"value": "runtime ready"
+					}
+				}
+			},
+			"expectStatusNotContains": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"values": ["missing status"]
+						}
+					}
+				}
+			}
+		},
+		{"message": {"role": "assistant", "text": "ready"}},
+		{
+			"snapshotName": "wrapped-list-snapshot",
+			"expectSnapshotContains": {
+				"resource": {
+					"attributes": {
+						"contains": ["assistant: ready"]
+					}
+				}
+			},
+			"expectSnapshotNotContains": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"items": ["missing snapshot"]
+						}
+					}
+				}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "wrapped-list-snapshot" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
 func TestRunInteractionScriptAcceptsWrappedKeyActionPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{
