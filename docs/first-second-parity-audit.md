@@ -289,6 +289,7 @@ M7 progress now includes:
 - `internal/tui`: scripted interaction key input now accepts press-style aliases such as `press`, `keyPress`, `keypress`, `shortcutKey`, `presses`, `keyPresses`, and `shortcuts`.
 - `internal/tui`: scripted key and key-sequence action payloads now recursively unwrap JSON:API/GraphQL-style wrappers, preserving wrapped single keys and key sequence arrays from API-shaped interaction fixtures.
 - `internal/tui`: direct scripted key alias fields such as `key`, `keyPress`, and `keyPresses` now accept JSON:API/GraphQL-style wrapper objects without failing strong string/list decoding.
+- `internal/tui`: direct scripted string alias fields such as `text`, `pasteText`, `setStatus`, and `snapshotName` now accept JSON:API/GraphQL-style wrapper objects without failing strong scalar decoding.
 - `internal/tui`: terminal key parsing now accepts CSI-u/kitty keyboard protocol sequences for existing ctrl/alt editing keys, shift-enter, shift-tab, and printable shift-only runes.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts colon-suffixed alternate codepoint and modifier event-type fields such as `CSI 97:65;5:1u`.
 - `internal/tui`: terminal CSI-u/kitty keyboard parsing now also accepts base/unmodified sequences such as `CSI 97u` and `CSI 13;1u`, mapping printable runes plus Enter, Tab, Esc, and Backspace instead of treating ordinary extended-key reports as unknown.

@@ -306,6 +306,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script 的 `keys` 字段支持 printable text chunk 和空格分隔 named-key sequence，例如 `ctrl-x ctrl-k`，减少官方脚本把连续输入拆成数组的改写成本。
 - 本轮补充：interaction script key input 接受 press-style aliases，包括 `press`、`keyPress`、`keypress`、`shortcutKey`、`presses`、`keyPresses` 和 `shortcuts`。
 - 本轮补充：interaction script key/keySequence action payload 现在递归解包 JSON:API/GraphQL-style wrapper，`payload.resource.attributes.key` 和 `edge.node.attrs.sequence` 可直接驱动按键与组合键序列。
+- 本轮补充：interaction script 的直接字符串 alias 字段现在也接受 wrapped object；`text`、`pasteText`、`setStatus`、`snapshotName` 等字段可从 `resource.attributes` 或 `edge.node.attrs` 中恢复正文、paste、status 和 snapshot 名称，避免 direct field fixture 在 scalar decode 阶段失败。
 - 本轮补充：interaction script action/type/kind/name/operation 动作判别字段接受 compact/camel fixture aliases，包括 `typeText`、`inputText`、`insertText`、`keyPress`、`pressKey`、`keySequence`、`pasteText`、`pastedText`、`clipboardText`、`setStatus`、`statusLine`、`terminalSize` 和 `screenSize`。
 - 本轮补充：interaction script 的 typeText/pasteText/setStatus/snapshot 字符串 action payload 现在递归解包 JSON:API/GraphQL-style wrapper，`payload.resource.attributes.text`、`edge.node.attrs.content`、`resource.attributes.message` 和 wrapped snapshot `name` 可直接驱动 prompt、paste、status 与 snapshot capture。
 - 本轮补充：interaction script resize/terminalSize/screenSize action payload 现在递归解包 `value`/`payload`/`data`/`resource`/`attributes`/`properties`/`attrs`/`edge.node` 等 wrapper，官方/API fixture 可把 columns/rows 放在 JSON:API 或 GraphQL envelope 内。

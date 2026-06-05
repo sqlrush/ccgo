@@ -5609,6 +5609,75 @@ func TestRunInteractionScriptAcceptsWrappedStringActionPayloads(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsWrappedStringAliasFields(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"text": {
+				"resource": {
+					"attributes": {
+						"content": "hi"
+					}
+				}
+			},
+			"expectPrompt": {"text": "hi"}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {"type": "prompt_submitted", "value": "hi"},
+			"expectPrompt": {"empty": true}
+		},
+		{
+			"pasteText": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"text": "clip"
+						}
+					}
+				}
+			},
+			"expectPrompt": {"text": "[Pasted text #1]", "expandedText": "clip", "pastedContentCount": 1}
+		},
+		{
+			"setStatus": {
+				"resource": {
+					"attributes": {
+						"message": "direct status"
+					}
+				}
+			},
+			"expectStatusContains": "direct status"
+		},
+		{"message": {"role": "assistant", "text": "ready"}},
+		{
+			"snapshotName": {
+				"edge": {
+					"node": {
+						"attrs": {
+							"name": "direct-snapshot"
+						}
+					}
+				}
+			},
+			"expectSnapshotContains": "assistant: ready"
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "hi" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	if len(result.Snapshots) != 1 || result.Snapshots[0].Name != "direct-snapshot" {
+		t.Fatalf("snapshots = %#v", result.Snapshots)
+	}
+}
+
 func TestRunInteractionScriptAcceptsWrappedKeyActionPayloads(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

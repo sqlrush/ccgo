@@ -339,7 +339,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
 	var raw alias
-	if err := json.Unmarshal(stripScriptStepRawKeyAliasFields(data), &raw); err != nil {
+	if err := json.Unmarshal(stripScriptStepRawScalarAliasFields(data), &raw); err != nil {
 		return err
 	}
 	*step = ScriptStep(raw)
@@ -367,30 +367,30 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		KeyPressesCamel           *json.RawMessage          `json:"keyPresses"`
 		Keypresses                *json.RawMessage          `json:"keypresses"`
 		Shortcuts                 *json.RawMessage          `json:"shortcuts"`
-		Input                     *string                   `json:"input"`
-		InputText                 *string                   `json:"input_text"`
-		InputTextCamel            *string                   `json:"inputText"`
-		TextInput                 *string                   `json:"text_input"`
-		TextInputCamel            *string                   `json:"textInput"`
-		KeysText                  *string                   `json:"keys_text"`
-		KeysTextCamel             *string                   `json:"keysText"`
-		PasteText                 *string                   `json:"paste_text"`
-		PasteTextCamel            *string                   `json:"pasteText"`
-		PastedText                *string                   `json:"pasted_text"`
-		PastedTextCamel           *string                   `json:"pastedText"`
-		Clipboard                 *string                   `json:"clipboard"`
+		Input                     *json.RawMessage          `json:"input"`
+		InputText                 *json.RawMessage          `json:"input_text"`
+		InputTextCamel            *json.RawMessage          `json:"inputText"`
+		TextInput                 *json.RawMessage          `json:"text_input"`
+		TextInputCamel            *json.RawMessage          `json:"textInput"`
+		KeysText                  *json.RawMessage          `json:"keys_text"`
+		KeysTextCamel             *json.RawMessage          `json:"keysText"`
+		PasteText                 *json.RawMessage          `json:"paste_text"`
+		PasteTextCamel            *json.RawMessage          `json:"pasteText"`
+		PastedText                *json.RawMessage          `json:"pasted_text"`
+		PastedTextCamel           *json.RawMessage          `json:"pastedText"`
+		Clipboard                 *json.RawMessage          `json:"clipboard"`
 		Messages                  []Message                 `json:"messages"`
 		AppendMessages            []Message                 `json:"append_messages"`
 		AppendMessagesCamel       []Message                 `json:"appendMessages"`
 		TranscriptMessages        []Message                 `json:"transcript_messages"`
 		TranscriptMessagesCamel   []Message                 `json:"transcriptMessages"`
-		Status                    *string                   `json:"status"`
-		SetStatus                 *string                   `json:"set_status"`
-		SetStatusCamel            *string                   `json:"setStatus"`
-		StatusLine                *string                   `json:"status_line"`
-		StatusLineCamel           *string                   `json:"statusLine"`
-		BaseStatus                *string                   `json:"base_status"`
-		BaseStatusCamel           *string                   `json:"baseStatus"`
+		Status                    *json.RawMessage          `json:"status"`
+		SetStatus                 *json.RawMessage          `json:"set_status"`
+		SetStatusCamel            *json.RawMessage          `json:"setStatus"`
+		StatusLine                *json.RawMessage          `json:"status_line"`
+		StatusLineCamel           *json.RawMessage          `json:"statusLine"`
+		BaseStatus                *json.RawMessage          `json:"base_status"`
+		BaseStatusCamel           *json.RawMessage          `json:"baseStatus"`
 		Mouse                     *ScriptMouse              `json:"mouse"`
 		MouseEvent                *ScriptMouse              `json:"mouse_event"`
 		MouseEventCamel           *ScriptMouse              `json:"mouseEvent"`
@@ -443,8 +443,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		ResizeWidthCamel          *int                      `json:"resizeWidth"`
 		ResizeHeight              *int                      `json:"resize_height"`
 		ResizeHeightCamel         *int                      `json:"resizeHeight"`
-		SnapshotName              *string                   `json:"snapshot_name"`
-		SnapshotNameCamel         *string                   `json:"snapshotName"`
+		SnapshotName              *json.RawMessage          `json:"snapshot_name"`
+		SnapshotNameCamel         *json.RawMessage          `json:"snapshotName"`
 		Focus                     *bool                     `json:"focus"`
 		Focused                   *bool                     `json:"focused"`
 		FocusIn                   *bool                     `json:"focus_in"`
@@ -581,41 +581,46 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	); len(values) > 0 {
 		step.Keys = append(step.Keys, values...)
 	}
-	if fields.Input != nil {
-		step.Text = *fields.Input
+	if step.Text == "" {
+		step.Text = scriptNamedStringField(rawFieldMap,
+			[]string{
+				"Text",
+				"text",
+				"input",
+				"input_text",
+				"inputText",
+				"text_input",
+				"textInput",
+				"keys_text",
+				"keysText",
+			},
+			"text",
+			"input",
+			"content",
+			"body",
+			"message",
+			"value",
+		)
 	}
-	if fields.InputText != nil {
-		step.Text = *fields.InputText
-	}
-	if fields.InputTextCamel != nil {
-		step.Text = *fields.InputTextCamel
-	}
-	if fields.TextInput != nil {
-		step.Text = *fields.TextInput
-	}
-	if fields.TextInputCamel != nil {
-		step.Text = *fields.TextInputCamel
-	}
-	if fields.KeysText != nil {
-		step.Text = *fields.KeysText
-	}
-	if fields.KeysTextCamel != nil {
-		step.Text = *fields.KeysTextCamel
-	}
-	if fields.PasteText != nil {
-		step.Paste = *fields.PasteText
-	}
-	if fields.PasteTextCamel != nil {
-		step.Paste = *fields.PasteTextCamel
-	}
-	if fields.PastedText != nil {
-		step.Paste = *fields.PastedText
-	}
-	if fields.PastedTextCamel != nil {
-		step.Paste = *fields.PastedTextCamel
-	}
-	if fields.Clipboard != nil {
-		step.Paste = *fields.Clipboard
+	if step.Paste == "" {
+		step.Paste = scriptNamedStringField(rawFieldMap,
+			[]string{
+				"Paste",
+				"paste",
+				"paste_text",
+				"pasteText",
+				"pasted_text",
+				"pastedText",
+				"clipboard",
+			},
+			"paste",
+			"clipboard",
+			"text",
+			"content",
+			"body",
+			"message",
+			"value",
+		)
 	}
 	if fields.Messages != nil {
 		step.Messages = fields.Messages
@@ -632,26 +637,25 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if fields.TranscriptMessagesCamel != nil {
 		step.Messages = fields.TranscriptMessagesCamel
 	}
-	if fields.Status != nil {
-		step.Status = *fields.Status
-	}
-	if fields.SetStatus != nil {
-		step.Status = *fields.SetStatus
-	}
-	if fields.SetStatusCamel != nil {
-		step.Status = *fields.SetStatusCamel
-	}
-	if fields.StatusLine != nil {
-		step.Status = *fields.StatusLine
-	}
-	if fields.StatusLineCamel != nil {
-		step.Status = *fields.StatusLineCamel
-	}
-	if fields.BaseStatus != nil {
-		step.Status = *fields.BaseStatus
-	}
-	if fields.BaseStatusCamel != nil {
-		step.Status = *fields.BaseStatusCamel
+	if step.Status == "" {
+		step.Status = scriptNamedStringField(rawFieldMap,
+			[]string{
+				"Status",
+				"status",
+				"set_status",
+				"setStatus",
+				"status_line",
+				"statusLine",
+				"base_status",
+				"baseStatus",
+			},
+			"status",
+			"text",
+			"message",
+			"content",
+			"body",
+			"value",
+		)
 	}
 	if fields.Mouse != nil {
 		step.Mouse = fields.Mouse
@@ -742,14 +746,28 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			step.ResizeHeight = *height
 		}
 	}
-	if fields.SnapshotName != nil {
-		step.SnapshotName = *fields.SnapshotName
-	}
-	if fields.SnapshotNameCamel != nil {
-		step.SnapshotName = *fields.SnapshotNameCamel
-	}
 	if step.SnapshotName == "" {
-		step.SnapshotName = stringJSONField(fieldMap, "snapshot", "snapshot_id", "snapshotId", "snapshot_label", "snapshotLabel", "capture_name", "captureName", "baseline_name", "baselineName")
+		step.SnapshotName = scriptNamedStringField(rawFieldMap,
+			[]string{
+				"SnapshotName",
+				"snapshotName",
+				"snapshot_name",
+				"snapshot",
+				"snapshot_id",
+				"snapshotId",
+				"snapshot_label",
+				"snapshotLabel",
+				"capture_name",
+				"captureName",
+				"baseline_name",
+				"baselineName",
+			},
+			"snapshot",
+			"name",
+			"label",
+			"id",
+			"value",
+		)
 	}
 	if fields.Focus != nil {
 		step.Keys = append(step.Keys, scriptFocusKey(*fields.Focus))
@@ -1688,6 +1706,19 @@ func scriptActionStringField(fields map[string]json.RawMessage, objectNames ...s
 	return ""
 }
 
+func scriptNamedStringField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) string {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if value := scriptActionStringFromJSON(raw, nestedNames, 0); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func scriptActionStringListField(fields map[string]json.RawMessage, names ...string) []string {
 	for _, name := range append([]string{"value", "payload", "data", "body"}, names...) {
 		raw, ok := fields[name]
@@ -2165,13 +2196,26 @@ func normalizeScriptStepJSON(data []byte) []byte {
 	)
 }
 
-func stripScriptStepRawKeyAliasFields(data []byte) []byte {
+func stripScriptStepRawScalarAliasFields(data []byte) []byte {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return data
 	}
 	changed := false
-	for _, name := range []string{"Key", "key", "Keys", "keys"} {
+	for _, name := range []string{
+		"Key",
+		"key",
+		"Keys",
+		"keys",
+		"Text",
+		"text",
+		"Paste",
+		"paste",
+		"Status",
+		"status",
+		"SnapshotName",
+		"snapshotName",
+	} {
 		raw, ok := fields[name]
 		if !ok {
 			continue
