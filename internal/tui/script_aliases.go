@@ -339,7 +339,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	data = normalizeScriptStepJSON(data)
 	type alias ScriptStep
 	var raw alias
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(stripScriptStepRawKeyAliasFields(data), &raw); err != nil {
 		return err
 	}
 	*step = ScriptStep(raw)
@@ -347,24 +347,26 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	var fields struct {
 		RequestPermission         *PermissionRequest        `json:"request_permission"`
 		RequestPermissionCamel    *PermissionRequest        `json:"requestPermission"`
-		RawKey                    *string                   `json:"raw_key"`
-		RawKeyCamel               *string                   `json:"rawKey"`
-		KeySequence               *string                   `json:"key_sequence"`
-		KeySequenceCamel          *string                   `json:"keySequence"`
-		Press                     *string                   `json:"press"`
-		PressKey                  *string                   `json:"press_key"`
-		PressKeyCamel             *string                   `json:"pressKey"`
-		KeyPress                  *string                   `json:"key_press"`
-		KeyPressCamel             *string                   `json:"keyPress"`
-		Keypress                  *string                   `json:"keypress"`
-		Shortcut                  *string                   `json:"shortcut"`
-		ShortcutKey               *string                   `json:"shortcut_key"`
-		ShortcutKeyCamel          *string                   `json:"shortcutKey"`
-		Presses                   []string                  `json:"presses"`
-		KeyPresses                []string                  `json:"key_presses"`
-		KeyPressesCamel           []string                  `json:"keyPresses"`
-		Keypresses                []string                  `json:"keypresses"`
-		Shortcuts                 []string                  `json:"shortcuts"`
+		Key                       *json.RawMessage          `json:"key"`
+		Keys                      *json.RawMessage          `json:"keys"`
+		RawKey                    *json.RawMessage          `json:"raw_key"`
+		RawKeyCamel               *json.RawMessage          `json:"rawKey"`
+		KeySequence               *json.RawMessage          `json:"key_sequence"`
+		KeySequenceCamel          *json.RawMessage          `json:"keySequence"`
+		Press                     *json.RawMessage          `json:"press"`
+		PressKey                  *json.RawMessage          `json:"press_key"`
+		PressKeyCamel             *json.RawMessage          `json:"pressKey"`
+		KeyPress                  *json.RawMessage          `json:"key_press"`
+		KeyPressCamel             *json.RawMessage          `json:"keyPress"`
+		Keypress                  *json.RawMessage          `json:"keypress"`
+		Shortcut                  *json.RawMessage          `json:"shortcut"`
+		ShortcutKey               *json.RawMessage          `json:"shortcut_key"`
+		ShortcutKeyCamel          *json.RawMessage          `json:"shortcutKey"`
+		Presses                   *json.RawMessage          `json:"presses"`
+		KeyPresses                *json.RawMessage          `json:"key_presses"`
+		KeyPressesCamel           *json.RawMessage          `json:"keyPresses"`
+		Keypresses                *json.RawMessage          `json:"keypresses"`
+		Shortcuts                 *json.RawMessage          `json:"shortcuts"`
 		Input                     *string                   `json:"input"`
 		InputText                 *string                   `json:"input_text"`
 		InputTextCamel            *string                   `json:"inputText"`
@@ -517,59 +519,67 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if request := permissionRequestJSONField(fieldMap, "permission", "permission_request", "permissionRequest", "request"); request != nil {
 		step.RequestPermission = request
 	}
-	if fields.RawKey != nil {
-		step.Key = *fields.RawKey
+	if values := scriptNamedStringListField(rawFieldMap,
+		[]string{
+			"Key",
+			"key",
+			"raw_key",
+			"rawKey",
+			"key_sequence",
+			"keySequence",
+			"sequence",
+			"press",
+			"press_key",
+			"pressKey",
+			"key_press",
+			"keyPress",
+			"keypress",
+			"shortcut",
+			"shortcut_key",
+			"shortcutKey",
+		},
+		"key",
+		"keys",
+		"sequence",
+		"key_sequence",
+		"keySequence",
+		"shortcut",
+		"input",
+		"text",
+		"content",
+		"body",
+		"message",
+		"value",
+	); len(values) == 1 {
+		step.Key = values[0]
+	} else if len(values) > 1 {
+		step.Keys = append(step.Keys, values...)
 	}
-	if fields.RawKeyCamel != nil {
-		step.Key = *fields.RawKeyCamel
-	}
-	if fields.KeySequence != nil {
-		step.Key = *fields.KeySequence
-	}
-	if fields.KeySequenceCamel != nil {
-		step.Key = *fields.KeySequenceCamel
-	}
-	if fields.Press != nil {
-		step.Key = *fields.Press
-	}
-	if fields.PressKey != nil {
-		step.Key = *fields.PressKey
-	}
-	if fields.PressKeyCamel != nil {
-		step.Key = *fields.PressKeyCamel
-	}
-	if fields.KeyPress != nil {
-		step.Key = *fields.KeyPress
-	}
-	if fields.KeyPressCamel != nil {
-		step.Key = *fields.KeyPressCamel
-	}
-	if fields.Keypress != nil {
-		step.Key = *fields.Keypress
-	}
-	if fields.Shortcut != nil {
-		step.Key = *fields.Shortcut
-	}
-	if fields.ShortcutKey != nil {
-		step.Key = *fields.ShortcutKey
-	}
-	if fields.ShortcutKeyCamel != nil {
-		step.Key = *fields.ShortcutKeyCamel
-	}
-	if fields.Presses != nil {
-		step.Keys = append(step.Keys, fields.Presses...)
-	}
-	if fields.KeyPresses != nil {
-		step.Keys = append(step.Keys, fields.KeyPresses...)
-	}
-	if fields.KeyPressesCamel != nil {
-		step.Keys = append(step.Keys, fields.KeyPressesCamel...)
-	}
-	if fields.Keypresses != nil {
-		step.Keys = append(step.Keys, fields.Keypresses...)
-	}
-	if fields.Shortcuts != nil {
-		step.Keys = append(step.Keys, fields.Shortcuts...)
+	if values := scriptNamedStringListField(rawFieldMap,
+		[]string{
+			"Keys",
+			"keys",
+			"presses",
+			"key_presses",
+			"keyPresses",
+			"keypresses",
+			"shortcuts",
+		},
+		"keys",
+		"sequence",
+		"key_sequence",
+		"keySequence",
+		"shortcuts",
+		"key",
+		"shortcut",
+		"input",
+		"text",
+		"content",
+		"body",
+		"message",
+		"value",
+	); len(values) > 0 {
+		step.Keys = append(step.Keys, values...)
 	}
 	if fields.Input != nil {
 		step.Text = *fields.Input
@@ -1691,6 +1701,19 @@ func scriptActionStringListField(fields map[string]json.RawMessage, names ...str
 	return nil
 }
 
+func scriptNamedStringListField(fields map[string]json.RawMessage, directNames []string, nestedNames ...string) []string {
+	for _, name := range directNames {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if values := scriptActionStringListFromJSON(raw, nestedNames, 0); len(values) > 0 {
+			return values
+		}
+	}
+	return nil
+}
+
 func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth int) []string {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
@@ -2140,6 +2163,37 @@ func normalizeScriptStepJSON(data []byte) []byte {
 		"expect_dialog_results",
 		"expectDialogResults",
 	)
+}
+
+func stripScriptStepRawKeyAliasFields(data []byte) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	changed := false
+	for _, name := range []string{"Key", "key", "Keys", "keys"} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+			continue
+		}
+		if raw[0] != '{' && raw[0] != '[' {
+			continue
+		}
+		delete(fields, name)
+		changed = true
+	}
+	if !changed {
+		return data
+	}
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return normalized
 }
 
 func normalizeStringFieldsToArray(data []byte, names ...string) []byte {
