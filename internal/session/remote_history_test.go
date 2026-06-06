@@ -1232,7 +1232,8 @@ func TestFetchRemoteHistoryAcceptsIncludedResourceEvents(t *testing.T) {
 			"included": [
 				{"id":"tool_1","type":"tool","attributes":{"name":"Bash"}},
 				{"id":"evt_included_status","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"included"}},
-				{"resource":{"id":"evt_included_assistant","type":"session-events","properties":{"role":"assistant","sessionId":"s","createdAt":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello included"}]}}}}
+				{"resource":{"id":"evt_included_assistant","type":"session-events","properties":{"role":"assistant","sessionId":"s","createdAt":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello included"}]}}}},
+				{"edge":{"cursor":"evt_included_edge","node":{"attrs":{"eventType":"status","sessionID":"s","status":"edge attrs"}}}}
 			],
 			"pageInfo": {"hasPreviousPage": false}
 		}`))
@@ -1244,7 +1245,7 @@ func TestFetchRemoteHistoryAcceptsIncludedResourceEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !events.Complete || events.Pages != 1 || len(events.Events) != 2 || events.NextBeforeID != "" {
+	if !events.Complete || events.Pages != 1 || len(events.Events) != 3 || events.NextBeforeID != "" {
 		t.Fatalf("events = %#v", events)
 	}
 	if events.Events[0].ID != "evt_included_status" || events.Events[0].Status != "included" || events.Events[0].SessionID != "s" {
@@ -1252,6 +1253,9 @@ func TestFetchRemoteHistoryAcceptsIncludedResourceEvents(t *testing.T) {
 	}
 	if events.Events[1].ID != "evt_included_assistant" || events.Events[1].Type != contracts.SDKEventAssistant || events.Events[1].Message == nil || len(events.Events[1].Message.Content) != 1 || events.Events[1].Message.Content[0].Text != "hello included" {
 		t.Fatalf("assistant included event = %#v", events.Events[1])
+	}
+	if events.Events[2].ID != "evt_included_edge" || events.Events[2].Status != "edge attrs" || events.Events[2].SessionID != "s" {
+		t.Fatalf("edge attrs included event = %#v", events.Events[2])
 	}
 	if len(seen) != 1 {
 		t.Fatalf("queries = %#v", seen)

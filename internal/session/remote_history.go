@@ -198,7 +198,7 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 	}
 	for _, name := range []string{
 		"page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
-		"attributes", "properties", "relationships",
+		"attributes", "properties", "attrs", "relationships",
 		"session", "project_session", "projectSession", "conversation", "remote_history", "remoteHistory",
 		"event_page", "eventPage", "session_history", "sessionHistory", "viewer", "node", "_embedded", "embedded",
 	} {
@@ -829,7 +829,7 @@ func decodeRemoteHistoryEventMap(name string, data json.RawMessage) ([]contracts
 func remoteHistoryEventMapReservedKey(key string) bool {
 	switch key {
 	case "page", "pagination", "page_info", "pageInfo", "paging", "links", "_links", "meta", "metadata",
-		"attributes", "properties", "included",
+		"attributes", "properties", "attrs", "included",
 		"has_more", "hasMore", "has_next", "hasNext", "has_next_page", "hasNextPage",
 		"has_previous", "hasPrevious", "has_previous_page", "hasPreviousPage", "has_older", "hasOlder", "more",
 		"first_id", "firstId", "next_before_id", "nextBeforeId", "next_cursor", "nextCursor",
@@ -932,14 +932,14 @@ func decodeRemoteHistoryEventElement(name string, index int, data json.RawMessag
 
 func remoteHistoryWrappedEventRaw(fields map[string]json.RawMessage) json.RawMessage {
 	if remoteHistoryRecognizedEventType(fields) == "" {
-		if nested := firstObjectRawField(fields, "attributes", "properties"); nested != nil {
+		if nested := firstObjectRawField(fields, "attributes", "properties", "attrs"); nested != nil {
 			return nested
 		}
 	}
 	if remoteHistoryHasDirectEventFields(fields) {
 		return nil
 	}
-	return firstObjectRawField(fields, "node", "event", "record", "entry", "item", "resource", "value", "attributes", "properties", "data", "payload", "body", "result", "response", "output")
+	return firstObjectRawField(fields, "edge", "node", "event", "record", "entry", "item", "resource", "value", "attributes", "properties", "attrs", "data", "payload", "body", "result", "response", "output")
 }
 
 func remoteHistoryHasDirectEventFields(fields map[string]json.RawMessage) bool {
@@ -984,7 +984,7 @@ func remoteHistoryLooksLikeSingleEvent(fields map[string]json.RawMessage) bool {
 	if remoteHistoryRecognizedEventType(fields) != "" {
 		return true
 	}
-	for _, name := range []string{"attributes", "properties"} {
+	for _, name := range []string{"attributes", "properties", "attrs"} {
 		nested := firstObjectRawField(fields, name)
 		if nested == nil {
 			continue
