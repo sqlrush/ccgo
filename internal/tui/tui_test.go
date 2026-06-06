@@ -3506,6 +3506,73 @@ func TestREPLScreenVimLineLocalStartMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimFirstNonBlankLineMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\n    three\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "+"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n  ")) {
+		t.Fatalf("cursor after + = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("-"))
+	if screen.Prompt.Cursor != 0 {
+		t.Fatalf("cursor after - = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"2", "_"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n  ")) {
+		t.Fatalf("cursor after 2_ = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\n    three\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "v", "+"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimVisual || screen.Prompt.Cursor != len([]rune("one\n  ")) {
+		t.Fatalf("after visual + screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree\nfour\nfive")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "d", "+", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "five" || screen.Prompt.Cursor != 0 || screen.VimRegister != "three\nfour\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after d+ dot-repeat screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "+", "+", "2", "d", "-"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "four" || screen.Prompt.Cursor != 0 || screen.VimRegister != "one\n  two\nthree\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after d- screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "+", "d", "_"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one\nthree\nfour" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "  two\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after d_ screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimBackwardEndMotions(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
