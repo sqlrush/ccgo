@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ccgo/internal/api/anthropic"
@@ -2400,18 +2401,18 @@ func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
 		MessageText:          stringMapField(value, "message"),
 		Observation:          stringMapField(value, "observation"),
 		Finding:              stringMapField(value, "finding"),
-		SourceUUID:           stringMapField(value, "source_uuid"),
-		SourceUUIDCamel:      stringMapField(value, "sourceUuid"),
-		SourceID:             stringMapField(value, "source_id"),
-		SourceIDCamel:        stringMapField(value, "sourceId"),
-		Source:               nestedIDFromValue(value["source"]),
-		MessageUUID:          stringMapField(value, "message_uuid"),
-		MessageUUIDCamel:     stringMapField(value, "messageUuid"),
-		MessageID:            stringMapField(value, "message_id"),
-		MessageIDCamel:       stringMapField(value, "messageId"),
-		SourceMessageID:      stringMapField(value, "source_message_id"),
-		SourceMessageIDCamel: stringMapField(value, "sourceMessageId"),
-		UUID:                 stringMapField(value, "uuid"),
+		SourceUUID:           idMapField(value, "source_uuid", "sourceUUID"),
+		SourceUUIDCamel:      idMapField(value, "sourceUuid"),
+		SourceID:             idMapField(value, "source_id", "sourceID", "source_event_id", "source_event_uuid", "origin_id", "origin_uuid"),
+		SourceIDCamel:        idMapField(value, "sourceId", "sourceEventId", "sourceEventID", "sourceEventUuid", "sourceEventUUID", "originId", "originUuid", "originUUID"),
+		Source:               sourceIDFromFactMap(value),
+		MessageUUID:          idMapField(value, "message_uuid", "messageUUID"),
+		MessageUUIDCamel:     idMapField(value, "messageUuid"),
+		MessageID:            idMapField(value, "message_id", "messageID"),
+		MessageIDCamel:       idMapField(value, "messageId"),
+		SourceMessageID:      idMapField(value, "source_message_id", "source_message_uuid", "sourceMessageID", "sourceMessageUUID"),
+		SourceMessageIDCamel: idMapField(value, "sourceMessageId", "sourceMessageUuid"),
+		UUID:                 idMapField(value, "uuid"),
 	}
 	if fact.MessageUUID == "" {
 		if _, ok := value["message"].(map[string]any); ok {
@@ -2433,6 +2434,19 @@ func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
 	return fact, true
 }
 
+func idMapField(value map[string]any, keys ...string) string {
+	return idMapFieldDepth(value, 0, keys...)
+}
+
+func idMapFieldDepth(value map[string]any, depth int, keys ...string) string {
+	for _, key := range keys {
+		if id := nestedIDFromValueDepth(value[key], depth+1); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
 func stringMapField(value map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if text := textFromValue(value[key]); text != "" {
@@ -2442,15 +2456,75 @@ func stringMapField(value map[string]any, keys ...string) string {
 	return ""
 }
 
+func sourceIDFromFactMap(value map[string]any) string {
+	for _, key := range []string{
+		"source",
+		"origin",
+		"source_message",
+		"sourceMessage",
+		"source_event",
+		"sourceEvent",
+		"source_turn",
+		"sourceTurn",
+		"event",
+		"turn",
+	} {
+		if id := nestedIDFromValue(value[key]); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
 func nestedIDFromValue(value any) string {
-	if text := directStringValue(value); text != "" {
-		return text
+	return nestedIDFromValueDepth(value, 0)
+}
+
+func nestedIDFromValueDepth(value any, depth int) string {
+	if depth > 6 {
+		return ""
+	}
+	if id := directIDValue(value); id != "" {
+		return id
 	}
 	object, ok := value.(map[string]any)
 	if !ok {
 		return ""
 	}
-	return stringMapField(object, "source_uuid", "sourceUuid", "source_id", "sourceId", "message_uuid", "messageUuid", "message_id", "messageId", "uuid", "id")
+	if id := idMapFieldDepth(object, depth+1,
+		"source_uuid", "sourceUuid", "sourceUUID",
+		"source_id", "sourceId", "sourceID",
+		"source_message_uuid", "sourceMessageUuid", "sourceMessageUUID",
+		"source_message_id", "sourceMessageId", "sourceMessageID",
+		"message_uuid", "messageUuid", "messageUUID",
+		"message_id", "messageId", "messageID",
+		"event_uuid", "eventUuid", "eventUUID",
+		"event_id", "eventId", "eventID",
+		"turn_uuid", "turnUuid", "turnUUID",
+		"turn_id", "turnId", "turnID",
+		"origin_uuid", "originUuid", "originUUID",
+		"origin_id", "originId", "originID",
+		"uuid", "id",
+	); id != "" {
+		return id
+	}
+	for _, key := range []string{
+		"source",
+		"origin",
+		"source_message",
+		"sourceMessage",
+		"source_event",
+		"sourceEvent",
+		"source_turn",
+		"sourceTurn",
+		"event",
+		"turn",
+	} {
+		if id := nestedIDFromValueDepth(object[key], depth+1); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 func textFromValue(value any) string {
@@ -2479,6 +2553,41 @@ func directStringValue(value any) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+func directIDValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case json.Number:
+		return strings.TrimSpace(typed.String())
+	case float64:
+		return strings.TrimSpace(strconv.FormatFloat(typed, 'f', -1, 64))
+	case float32:
+		return strings.TrimSpace(strconv.FormatFloat(float64(typed), 'f', -1, 32))
+	case int:
+		return strconv.Itoa(typed)
+	case int8:
+		return strconv.FormatInt(int64(typed), 10)
+	case int16:
+		return strconv.FormatInt(int64(typed), 10)
+	case int32:
+		return strconv.FormatInt(int64(typed), 10)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case uint:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint64:
+		return strconv.FormatUint(typed, 10)
+	default:
+		return ""
+	}
 }
 
 type rawMemoryFact struct {

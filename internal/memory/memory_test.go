@@ -1359,6 +1359,36 @@ func TestMemoryAgentExtractsNestedFactSourceObjects(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsAdditionalFactSourceAliases(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_source_aliases",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"facts":[
+			{"kind":"preference","text":"prefer source message uuid aliases","sourceMessageUUID":"user_1"},
+			{"type":"decision","content":"keep source event aliases","source_event_id":1234},
+			{"category":"request","summary":"support turn source objects","turn":{"id":"turn_1"}}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember more source aliases")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 3 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer source message uuid aliases", "user_1") {
+		t.Fatalf("sourceMessageUUID fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "keep source event aliases", "1234") {
+		t.Fatalf("source event alias fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactRequest, "support turn source objects", "turn_1") {
+		t.Fatalf("turn source object fact missing = %#v", result.Facts)
+	}
+}
+
 func TestMemoryAgentExtractsStructuredFactText(t *testing.T) {
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_memory_structured_text",
