@@ -3136,6 +3136,9 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 	case "space", "spacebar":
 		return " ", false
 	}
+	if base, ok := scriptDOMCodeBaseName(normalized); ok {
+		return base, false
+	}
 	if base, ok := scriptNumpadKeyBaseName(normalized); ok {
 		return base, false
 	}
@@ -3149,6 +3152,35 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 		return trimmed, false
 	}
 	return trimmed, false
+}
+
+func scriptDOMCodeBaseName(normalized string) (string, bool) {
+	switch normalized {
+	case "backquote":
+		return "`", true
+	case "minus":
+		return "-", true
+	case "equal":
+		return "=", true
+	case "bracketleft", "bracket-left":
+		return "[", true
+	case "bracketright", "bracket-right":
+		return "]", true
+	case "backslash", "intlbackslash", "intl-backslash":
+		return "\\", true
+	case "semicolon":
+		return ";", true
+	case "quote":
+		return "'", true
+	case "comma":
+		return ",", true
+	case "period":
+		return ".", true
+	case "slash":
+		return "/", true
+	default:
+		return "", false
+	}
 }
 
 func scriptNumpadKeyBaseName(normalized string) (string, bool) {
