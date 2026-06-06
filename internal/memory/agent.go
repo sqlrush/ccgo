@@ -2309,13 +2309,13 @@ func normalizeFactKind(raw string) (FactKind, bool) {
 	name := strings.ToLower(strings.TrimSpace(raw))
 	name = strings.NewReplacer("-", "_", " ", "_").Replace(name)
 	switch name {
-	case "preference", "pref", "user_preference", "memory_preference":
+	case "preference", "pref", "user_pref", "user_preference", "memory_preference", "personal_preference", "instruction", "user_instruction":
 		return FactPreference, true
-	case "request", "user_request", "ask", "todo", "task":
+	case "request", "user_request", "ask", "todo", "task", "requirement", "user_requirement", "action_item", "follow_up", "followup":
 		return FactRequest, true
-	case "decision", "decided", "choice", "resolution":
+	case "decision", "decided", "choice", "resolution", "outcome", "conclusion", "agreement":
 		return FactDecision, true
-	case "tool", "tool_use", "tool_result", "tool_call":
+	case "tool", "tool_use", "tool_usage", "tool_result", "tool_call", "command", "command_run", "operation":
 		return FactTool, true
 	default:
 		return "", false
