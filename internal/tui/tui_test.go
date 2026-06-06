@@ -8614,6 +8614,70 @@ func TestParseInteractionScriptAcceptsWrapperObjects(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsProviderResponseWrappers(t *testing.T) {
+	scriptArray := []map[string]any{
+		{"action": "type", "value": "provider"},
+		{"type": "press", "value": "enter", "expectEvent": map[string]any{"type": "prompt_submitted", "value": "provider"}},
+	}
+	scriptArrayData, err := json.Marshal(scriptArray)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptObjectData, err := json.Marshal(map[string]any{"steps": scriptArray})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string]any{
+		"choices_message_content": map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"content": string(scriptArrayData)},
+			}},
+		},
+		"candidate_parts_text": map[string]any{
+			"candidates": []any{map[string]any{
+				"content": map[string]any{
+					"parts": []any{map[string]any{"text": string(scriptObjectData)}},
+				},
+			}},
+		},
+	}
+	for name, wrapper := range tests {
+		t.Run(name, func(t *testing.T) {
+			data, err := json.Marshal(wrapper)
+			if err != nil {
+				t.Fatal(err)
+			}
+			steps, err := ParseInteractionScript(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(steps) != 2 {
+				t.Fatalf("steps = %#v", steps)
+			}
+			screen := NewREPLScreen(30, 6, nil)
+			result, err := RunInteractionScriptChecked(&screen, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "provider" {
+				t.Fatalf("events = %#v", result.Events)
+			}
+		})
+	}
+
+	steps, err := ParseInteractionScript([]byte(`{"action":"type","value":"direct","result":{"text":"[{\"action\":\"type\",\"value\":\"wrong\"}]"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+	if screen.Prompt.Text != "direct" {
+		t.Fatalf("direct step was treated as provider response: %#v", steps)
+	}
+}
+
 func TestParseInteractionScriptAcceptsSuiteCaseArrays(t *testing.T) {
 	for name, script := range map[string]string{
 		"cases": `{"cases":[

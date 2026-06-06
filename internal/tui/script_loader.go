@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 const maxInteractionScriptLineBytes = 50 * 1024 * 1024
@@ -36,6 +37,13 @@ func ParseInteractionScript(data []byte) ([]ScriptStep, error) {
 		steps, ok, err := parseInteractionScriptObject(data)
 		if ok || err != nil {
 			return steps, err
+		}
+		if text, ok := interactionScriptProviderResponseText(data); ok {
+			steps, err := ParseInteractionScript([]byte(text))
+			if err != nil {
+				return nil, fmt.Errorf("parse interaction script provider response: %w", err)
+			}
+			return steps, nil
 		}
 	}
 
@@ -317,6 +325,96 @@ func interactionScriptObjectHasContainer(data []byte) bool {
 		}
 	}
 	return false
+}
+
+func interactionScriptProviderResponseText(data []byte) (string, bool) {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(data, &object); err != nil {
+		return "", false
+	}
+	if scriptStepJSONHasDirectFields(object) {
+		return "", false
+	}
+	for _, name := range []string{
+		"choice",
+		"choices",
+		"output",
+		"outputs",
+		"candidate",
+		"candidates",
+		"generation",
+		"generations",
+		"completion",
+		"completions",
+		"response",
+		"responses",
+		"result",
+		"results",
+	} {
+		value, ok := object[name]
+		if !ok {
+			continue
+		}
+		if text, ok := interactionScriptProviderTextFromRaw(value, 0, false); ok {
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func interactionScriptProviderTextFromRaw(raw json.RawMessage, depth int, allowScalar bool) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || depth > 8 {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		return text, allowScalar && text != ""
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return "", false
+		}
+		parts := make([]string, 0, len(items))
+		for _, item := range items {
+			part, ok := interactionScriptProviderTextFromRaw(item, depth+1, false)
+			if ok {
+				parts = append(parts, part)
+			}
+		}
+		if len(parts) == 0 {
+			return "", false
+		}
+		return strings.Join(parts, "\n"), true
+	}
+	if raw[0] != '{' {
+		return "", false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", false
+	}
+	for _, name := range []string{"text", "content", "value", "output"} {
+		value, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if text, ok := interactionScriptProviderTextFromRaw(value, depth+1, true); ok {
+			return text, true
+		}
+	}
+	for _, name := range []string{"message", "delta", "part", "parts", "candidate", "choice", "generation", "result", "response"} {
+		value, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if text, ok := interactionScriptProviderTextFromRaw(value, depth+1, false); ok {
+			return text, true
+		}
+	}
+	return "", false
 }
 
 func parseInteractionScriptOptionalStepsValue(value json.RawMessage) ([]ScriptStep, bool, error) {
