@@ -912,6 +912,16 @@ func TestParseImageHintAcceptsMetadataAliases(t *testing.T) {
 	}
 }
 
+func TestParseImageHintNormalizesMetadataKeys(t *testing.T) {
+	key := ParseKey("\x1b]1337;File=Name=case.png;MIME_TYPE=image/png;source-url=file:///tmp/case.png;original-width=200;Original_Height=100;display-width=50;Display-Height=25;inline=1:CCCC\a")
+	if key.Type != KeyImageHint || key.Text != "[Image: case.png]" || key.Filename != "case.png" || key.MediaType != "image/png" || key.Content != "CCCC" || key.SourcePath != "file:///tmp/case.png" {
+		t.Fatalf("key = %#v", key)
+	}
+	if key.Dimensions == nil || key.Dimensions.OriginalWidth != 200 || key.Dimensions.OriginalHeight != 100 || key.Dimensions.DisplayWidth != 50 || key.Dimensions.DisplayHeight != 25 {
+		t.Fatalf("dimensions = %#v", key.Dimensions)
+	}
+}
+
 func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 	cases := []struct {
 		seq  string

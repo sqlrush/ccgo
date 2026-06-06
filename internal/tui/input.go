@@ -1240,131 +1240,24 @@ func parseImageHint(seq string) (imageHint, bool) {
 	sourcePath := ""
 	dimensions := session.ImageDimensions{}
 	for _, field := range strings.Split(metadata, ";") {
-		if raw, ok := strings.CutPrefix(field, "name="); ok {
+		key, raw, ok := parseImageHintMetadataField(field)
+		if !ok {
+			continue
+		}
+		switch key {
+		case "name", "filename", "file":
 			name = decodeImageName(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "filename="); ok {
-			name = decodeImageName(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "fileName="); ok {
-			name = decodeImageName(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "file_name="); ok {
-			name = decodeImageName(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "type="); ok {
+		case "type", "mediatype", "mimetype", "mime", "contenttype":
 			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "mediaType="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "media_type="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "mimeType="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "mime="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "mime_type="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "contentType="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "content_type="); ok {
-			mediaType = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "sourcePath="); ok {
+		case "sourcepath", "path", "filepath", "imagepath", "source", "sourceurl", "fileurl", "imageurl", "url", "sourceuri", "fileuri", "imageuri", "uri":
 			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "source_path="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "path="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "filePath="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "file_path="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "source="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "sourceURL="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "source_url="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "url="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "uri="); ok {
-			sourcePath = strings.TrimSpace(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "width="); ok {
+		case "width", "originalwidth":
 			dimensions.OriginalWidth = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "height="); ok {
+		case "height", "originalheight":
 			dimensions.OriginalHeight = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "originalWidth="); ok {
-			dimensions.OriginalWidth = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "original_width="); ok {
-			dimensions.OriginalWidth = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "originalHeight="); ok {
-			dimensions.OriginalHeight = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "original_height="); ok {
-			dimensions.OriginalHeight = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "displayWidth="); ok {
+		case "displaywidth":
 			dimensions.DisplayWidth = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "display_width="); ok {
-			dimensions.DisplayWidth = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "displayHeight="); ok {
-			dimensions.DisplayHeight = parseImageDimension(raw)
-			continue
-		}
-		if raw, ok := strings.CutPrefix(field, "display_height="); ok {
+		case "displayheight":
 			dimensions.DisplayHeight = parseImageDimension(raw)
 		}
 	}
@@ -1375,6 +1268,21 @@ func parseImageHint(seq string) (imageHint, bool) {
 	}
 	display = "[Image: " + name + "]"
 	return imageHint{Display: display, Content: content, MediaType: mediaType, Filename: name, Dimensions: dimensionPtr, SourcePath: sourcePath}, true
+}
+
+func parseImageHintMetadataField(field string) (string, string, bool) {
+	name, value, ok := strings.Cut(field, "=")
+	if !ok {
+		return "", "", false
+	}
+	return normalizeImageHintMetadataKey(name), value, true
+}
+
+func normalizeImageHintMetadataKey(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	return name
 }
 
 func splitImageHintPayload(payload string) (string, string) {
