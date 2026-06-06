@@ -4094,6 +4094,28 @@ func TestREPLScreenVimEditCommands(t *testing.T) {
 
 	screen = NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "g", "J"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one  two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
+		t.Fatalf("after gJ screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "g", "J", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "onetwothree" || screen.Prompt.Cursor != len([]rune("onetwo")) {
+		t.Fatalf("after gJ dot-repeat screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\ntwo")
 	screen.ApplyKey(ParseKey("\x1b"))
 	for _, seq := range []string{"g", "g", "o"} {

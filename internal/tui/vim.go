@@ -515,6 +515,12 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 		if operator == 0 {
 			s.restoreVimLastVisualSelection()
 		}
+	case 'J':
+		if operator == 0 {
+			s.recordVimUndo()
+			s.Prompt.joinLinesRaw(count)
+			s.recordVimChange(vimRecordedChange{Kind: "joinRaw", Count: count})
+		}
 	case 'j':
 		if operator == 0 {
 			s.Prompt.moveLogicalLine(count)
@@ -899,6 +905,9 @@ func (s *REPLScreen) replayVimLastChange() {
 	case "join":
 		s.recordVimUndo()
 		s.Prompt.joinLines(change.Count)
+	case "joinRaw":
+		s.recordVimUndo()
+		s.Prompt.joinLinesRaw(change.Count)
 	case "indent":
 		s.recordVimUndo()
 		s.Prompt.indentLines(change.Dir, change.Count)
@@ -1415,6 +1424,30 @@ func (p *PromptState) joinLines(count int) {
 		}
 		joined += next
 	}
+	newLines := make([]string, 0, len(lines)-linesToJoin)
+	newLines = append(newLines, lines[:current]...)
+	newLines = append(newLines, joined)
+	newLines = append(newLines, lines[current+linesToJoin+1:]...)
+	p.Text = strings.Join(newLines, "\n")
+	p.Cursor = lineStartOffset(newLines, current) + cursorPos
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) joinLinesRaw(count int) {
+	if count <= 0 {
+		count = 1
+	}
+	lines := strings.Split(p.Text, "\n")
+	current := p.currentLogicalLine()
+	if current >= len(lines)-1 {
+		return
+	}
+	linesToJoin := count
+	if linesToJoin > len(lines)-current-1 {
+		linesToJoin = len(lines) - current - 1
+	}
+	cursorPos := len([]rune(lines[current]))
+	joined := strings.Join(lines[current:current+linesToJoin+1], "")
 	newLines := make([]string, 0, len(lines)-linesToJoin)
 	newLines = append(newLines, lines[:current]...)
 	newLines = append(newLines, joined)
