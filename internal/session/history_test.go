@@ -266,7 +266,7 @@ func TestHistoryEntryAcceptsPastedContentBodyAndBase64DataAliases(t *testing.T) 
 func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
 	var entry HistoryEntry
 	data := `{
-		"display": "restore [Image #21] [Image #22]",
+		"display": "restore [Image #21] [Image #22] [Image #24] [Image #25]",
 		"pastedContents": [
 			{
 				"imageID": "21",
@@ -278,6 +278,16 @@ func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
 				"imageID": "22",
 				"kind": "pasted-image",
 				"imageSource": {"type":"url","url":"file:///tmp/photo.jpg","mimeType":"image/jpeg"}
+			},
+			{
+				"imageID": "24",
+				"kind": "pasted-image",
+				"dataUrl": "data:image/gif;base64,CCCC"
+			},
+			{
+				"imageID": "25",
+				"kind": "pasted-image",
+				"source": "data:image/png;base64,DDDD"
 			}
 		]
 	}`
@@ -289,6 +299,12 @@ func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
 	}
 	if got := entry.PastedContents[22]; got.ID != 22 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/jpeg" || got.SourcePath != "file:///tmp/photo.jpg" {
 		t.Fatalf("source URL image = %#v", got)
+	}
+	if got := entry.PastedContents[24]; got.ID != 24 || got.Type != PastedContentImage || got.Content != "CCCC" || got.MediaType != "image/gif" || got.SourcePath != "" {
+		t.Fatalf("data URL image = %#v", got)
+	}
+	if got := entry.PastedContents[25]; got.ID != 25 || got.Type != PastedContentImage || got.Content != "DDDD" || got.MediaType != "image/png" || got.SourcePath != "" {
+		t.Fatalf("source data URL image = %#v", got)
 	}
 }
 
@@ -461,7 +477,7 @@ func TestLoadHistoryAcceptsStoredPastedContentsArray(t *testing.T) {
 
 func TestLoadHistoryPreservesStoredImageSourceContent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	line := `{"display":"look [Image #23]","pasted_contents":{"23":{"imageID":"23","kind":"pasted-image","fileName":"diagram.webp","source":{"type":"base64","mediaType":"image/webp","data":"BBBB","sourceUrl":"file:///tmp/diagram.webp"}}},"timestamp":100,"project":"/repo","sessionID":"session"}`
+	line := `{"display":"look [Image #23]","pasted_contents":{"23":{"imageID":"23","kind":"pasted-image","fileName":"diagram.webp","source":{"type":"base64","dataUrl":"data:image/webp;base64,BBBB","sourceUrl":"file:///tmp/diagram.webp"}}},"timestamp":100,"project":"/repo","sessionID":"session"}`
 	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

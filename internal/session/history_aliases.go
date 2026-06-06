@@ -113,8 +113,16 @@ func historyApplyPastedContentFields(content *PastedContent, fields map[string]j
 	if value := historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"); value != nil && (overwrite || content.Dimensions == nil) {
 		content.Dimensions = value
 	}
-	if value := historyStringJSONField(fields, historyPastedContentSourcePathFieldNames()...); value != "" && (overwrite || content.SourcePath == "") {
-		content.SourcePath = value
+	historyApplyPastedContentDataURLFields(content, fields)
+	if sourcePath, mediaType, data, isDataURL := historyPastedContentSourcePathJSONField(fields); isDataURL {
+		if data != "" && (overwrite || content.Content == "") {
+			content.Content = data
+		}
+		if mediaType != "" && (overwrite || content.MediaType == "") {
+			content.MediaType = mediaType
+		}
+	} else if sourcePath != "" && (overwrite || content.SourcePath == "") {
+		content.SourcePath = sourcePath
 	}
 	historyApplyPastedContentSourceFields(content, fields)
 }
@@ -141,8 +149,16 @@ func historyApplyStoredPastedContentFields(content *StoredPastedContent, fields 
 	if value := historyDimensionsJSONField(fields, "dimensions", "imageDimensions", "image_dimensions"); value != nil && (overwrite || content.Dimensions == nil) {
 		content.Dimensions = value
 	}
-	if value := historyStringJSONField(fields, historyPastedContentSourcePathFieldNames()...); value != "" && (overwrite || content.SourcePath == "") {
-		content.SourcePath = value
+	historyApplyStoredPastedContentDataURLFields(content, fields)
+	if sourcePath, mediaType, data, isDataURL := historyPastedContentSourcePathJSONField(fields); isDataURL {
+		if data != "" && (overwrite || content.Content == "") {
+			content.Content = data
+		}
+		if mediaType != "" && (overwrite || content.MediaType == "") {
+			content.MediaType = mediaType
+		}
+	} else if sourcePath != "" && (overwrite || content.SourcePath == "") {
+		content.SourcePath = sourcePath
 	}
 	historyApplyStoredPastedContentSourceFields(content, fields)
 }
@@ -522,8 +538,20 @@ func historyPastedContentSourcePathFieldNames() []string {
 		"source_uri",
 		"filePath",
 		"file_path",
+		"fileURL",
+		"fileUrl",
+		"file_url",
+		"fileURI",
+		"fileUri",
+		"file_uri",
 		"imagePath",
 		"image_path",
+		"imageURL",
+		"imageUrl",
+		"image_url",
+		"imageURI",
+		"imageUri",
+		"image_uri",
 		"cachePath",
 		"cache_path",
 		"storedPath",
@@ -537,6 +565,20 @@ func historyPastedContentSourcePathFieldNames() []string {
 	}
 }
 
+func historyPastedContentDataURLFieldNames() []string {
+	return []string{
+		"dataURL",
+		"dataUrl",
+		"data_url",
+		"imageDataURL",
+		"imageDataUrl",
+		"image_data_url",
+		"sourceDataURL",
+		"sourceDataUrl",
+		"source_data_url",
+	}
+}
+
 func historyPastedContentSourceObjectFieldNames() []string {
 	return []string{
 		"source",
@@ -547,6 +589,20 @@ func historyPastedContentSourceObjectFieldNames() []string {
 		"mediaSource",
 		"media_source",
 	}
+}
+
+func historyPastedContentSourcePathJSONField(fields map[string]json.RawMessage) (string, string, string, bool) {
+	for _, name := range historyPastedContentSourcePathFieldNames() {
+		value := historyStringJSONField(fields, name)
+		if value == "" {
+			continue
+		}
+		if mediaType, data, ok := historyImageDataURL(value); ok {
+			return "", mediaType, data, true
+		}
+		return value, "", "", false
+	}
+	return "", "", "", false
 }
 
 func historyPastedContentHashFieldNames() []string {
@@ -566,19 +622,99 @@ func historyPastedContentHashFieldNames() []string {
 	}
 }
 
+func historyApplyPastedContentDataURLFields(content *PastedContent, fields map[string]json.RawMessage) {
+	mediaType, data, ok := historyImageDataURLJSONField(fields)
+	if !ok {
+		return
+	}
+	if data != "" && content.Content == "" {
+		content.Content = data
+	}
+	if mediaType != "" && content.MediaType == "" {
+		content.MediaType = mediaType
+	}
+}
+
+func historyApplyStoredPastedContentDataURLFields(content *StoredPastedContent, fields map[string]json.RawMessage) {
+	mediaType, data, ok := historyImageDataURLJSONField(fields)
+	if !ok {
+		return
+	}
+	if data != "" && content.Content == "" {
+		content.Content = data
+	}
+	if mediaType != "" && content.MediaType == "" {
+		content.MediaType = mediaType
+	}
+}
+
+func historyImageDataURLJSONField(fields map[string]json.RawMessage) (string, string, bool) {
+	for _, name := range append(historyPastedContentDataURLFieldNames(), historyPastedContentSourcePathFieldNames()...) {
+		value := historyStringJSONField(fields, name)
+		if value == "" {
+			continue
+		}
+		if mediaType, data, ok := historyImageDataURL(value); ok {
+			return mediaType, data, true
+		}
+	}
+	return "", "", false
+}
+
+func historyImageDataURL(value string) (string, string, bool) {
+	value = strings.TrimSpace(value)
+	if !historyImageDataURLLooksLike(value) {
+		return "", "", false
+	}
+	comma := strings.IndexByte(value, ',')
+	if comma < 0 {
+		return "", "", false
+	}
+	meta := strings.TrimSpace(value[len("data:"):comma])
+	payload := strings.TrimSpace(value[comma+1:])
+	if payload == "" {
+		return "", "", false
+	}
+	parts := strings.Split(meta, ";")
+	mediaType := strings.TrimSpace(parts[0])
+	isBase64 := false
+	for _, part := range parts[1:] {
+		if strings.EqualFold(strings.TrimSpace(part), "base64") {
+			isBase64 = true
+			break
+		}
+	}
+	if !isBase64 {
+		return "", "", false
+	}
+	return mediaType, payload, true
+}
+
+func historyImageDataURLLooksLike(value string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), "data:")
+}
+
 func historyApplyPastedContentSourceFields(content *PastedContent, fields map[string]json.RawMessage) {
 	source := historyImageSourceJSONField(fields)
 	if source == nil {
 		return
 	}
+	historyApplyPastedContentDataURLFields(content, source)
 	if value := historyStringJSONField(source, historyPastedContentContentFieldNames()...); value != "" && content.Content == "" {
 		content.Content = value
 	}
 	if value := historyStringJSONField(source, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"); value != "" && content.MediaType == "" {
 		content.MediaType = value
 	}
-	if value := historyStringJSONField(source, historyPastedContentSourcePathFieldNames()...); value != "" && content.SourcePath == "" {
-		content.SourcePath = value
+	if sourcePath, mediaType, data, isDataURL := historyPastedContentSourcePathJSONField(source); isDataURL {
+		if data != "" && content.Content == "" {
+			content.Content = data
+		}
+		if mediaType != "" && content.MediaType == "" {
+			content.MediaType = mediaType
+		}
+	} else if sourcePath != "" && content.SourcePath == "" {
+		content.SourcePath = sourcePath
 	}
 }
 
@@ -587,6 +723,7 @@ func historyApplyStoredPastedContentSourceFields(content *StoredPastedContent, f
 	if source == nil {
 		return
 	}
+	historyApplyStoredPastedContentDataURLFields(content, source)
 	if value := historyStringJSONField(source, historyPastedContentContentFieldNames()...); value != "" && content.Content == "" {
 		content.Content = value
 	}
@@ -596,8 +733,15 @@ func historyApplyStoredPastedContentSourceFields(content *StoredPastedContent, f
 	if value := historyStringJSONField(source, "mediaType", "media_type", "mimeType", "mime_type", "contentType", "content_type"); value != "" && content.MediaType == "" {
 		content.MediaType = value
 	}
-	if value := historyStringJSONField(source, historyPastedContentSourcePathFieldNames()...); value != "" && content.SourcePath == "" {
-		content.SourcePath = value
+	if sourcePath, mediaType, data, isDataURL := historyPastedContentSourcePathJSONField(source); isDataURL {
+		if data != "" && content.Content == "" {
+			content.Content = data
+		}
+		if mediaType != "" && content.MediaType == "" {
+			content.MediaType = mediaType
+		}
+	} else if sourcePath != "" && content.SourcePath == "" {
+		content.SourcePath = sourcePath
 	}
 }
 
