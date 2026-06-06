@@ -211,11 +211,19 @@ func PrepareStoredPastedContents(pastedContents map[int]PastedContent) map[int]S
 	stored := map[int]StoredPastedContent{}
 	for id, content := range pastedContents {
 		if content.Type == PastedContentImage {
+			stored[id] = StoredPastedContent{
+				ID:         storedPastedContentID(id, content.ID),
+				Type:       content.Type,
+				MediaType:  content.MediaType,
+				Filename:   content.Filename,
+				Dimensions: content.Dimensions,
+				SourcePath: content.SourcePath,
+			}
 			continue
 		}
 		if len(content.Content) <= MaxPastedContentLength {
 			stored[id] = StoredPastedContent{
-				ID:        content.ID,
+				ID:        storedPastedContentID(id, content.ID),
 				Type:      content.Type,
 				Content:   content.Content,
 				MediaType: content.MediaType,
@@ -224,7 +232,7 @@ func PrepareStoredPastedContents(pastedContents map[int]PastedContent) map[int]S
 			continue
 		}
 		stored[id] = StoredPastedContent{
-			ID:          content.ID,
+			ID:          storedPastedContentID(id, content.ID),
 			Type:        content.Type,
 			ContentHash: HashPastedText(content.Content),
 			MediaType:   content.MediaType,
@@ -232,6 +240,13 @@ func PrepareStoredPastedContents(pastedContents map[int]PastedContent) map[int]S
 		}
 	}
 	return stored
+}
+
+func storedPastedContentID(mapID int, contentID int) int {
+	if contentID > 0 {
+		return contentID
+	}
+	return mapID
 }
 
 func NewLogEntry(project string, sessionID contracts.ID, entry HistoryEntry, now time.Time) LogEntry {

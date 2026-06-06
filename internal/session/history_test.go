@@ -56,7 +56,15 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	stored := PrepareStoredPastedContents(map[int]PastedContent{
 		1: {ID: 1, Type: PastedContentText, Content: "small", MediaType: "text/plain"},
 		2: {ID: 2, Type: PastedContentText, Content: large},
-		3: {ID: 3, Type: PastedContentImage, Content: "base64", MediaType: "image/png", Filename: "chart.png"},
+		3: {
+			ID:         3,
+			Type:       PastedContentImage,
+			Content:    "base64",
+			MediaType:  "image/png",
+			Filename:   "chart.png",
+			SourcePath: "/tmp/image-cache/session/3.png",
+			Dimensions: &ImageDimensions{OriginalWidth: 4000, OriginalHeight: 2000, DisplayWidth: 1000, DisplayHeight: 500},
+		},
 	})
 	if stored[1].Content != "small" || stored[1].ContentHash != "" {
 		t.Fatalf("small stored = %#v", stored[1])
@@ -64,8 +72,8 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	if stored[2].Content != "" || stored[2].ContentHash != HashPastedText(large) {
 		t.Fatalf("large stored = %#v", stored[2])
 	}
-	if _, ok := stored[3]; ok {
-		t.Fatalf("image metadata should not be stored in prompt history: %#v", stored[3])
+	if stored[3].Content != "" || stored[3].ContentHash != "" || stored[3].Type != PastedContentImage || stored[3].MediaType != "image/png" || stored[3].Filename != "chart.png" || stored[3].SourcePath != "/tmp/image-cache/session/3.png" || stored[3].Dimensions == nil || stored[3].Dimensions.DisplayWidth != 1000 {
+		t.Fatalf("image metadata stored = %#v", stored[3])
 	}
 
 	entry := LogEntryToHistoryEntry(LogEntry{
@@ -73,7 +81,7 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 		PastedContents: map[int]StoredPastedContent{
 			1: stored[1],
 			2: stored[2],
-			3: {ID: 3, Type: PastedContentImage, MediaType: "image/png", Filename: "chart.png"},
+			3: stored[3],
 		},
 	}, func(hash string) (string, bool) {
 		if hash != HashPastedText(large) {
@@ -84,7 +92,7 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	if entry.PastedContents[1].Content != "small" || entry.PastedContents[2].Content != large {
 		t.Fatalf("resolved entry = %#v", entry)
 	}
-	if entry.PastedContents[3].Type != PastedContentImage || entry.PastedContents[3].Content != "" || entry.PastedContents[3].Filename != "chart.png" {
+	if entry.PastedContents[3].Type != PastedContentImage || entry.PastedContents[3].Content != "" || entry.PastedContents[3].Filename != "chart.png" || entry.PastedContents[3].SourcePath != "/tmp/image-cache/session/3.png" || entry.PastedContents[3].Dimensions == nil || entry.PastedContents[3].Dimensions.DisplayHeight != 500 {
 		t.Fatalf("resolved image entry = %#v", entry.PastedContents[3])
 	}
 }
@@ -592,7 +600,7 @@ func TestAddToHistoryStoresLargePasteAndHonorsSkipEnv(t *testing.T) {
 	}
 }
 
-func TestAddToHistorySkipsImagePastedContent(t *testing.T) {
+func TestAddToHistoryStoresImagePastedContentMetadata(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
 	path := filepath.Join(dir, "history.jsonl")
@@ -600,7 +608,15 @@ func TestAddToHistorySkipsImagePastedContent(t *testing.T) {
 	written, err := AddToHistory(path, "/repo", "session", HistoryEntry{
 		Display: "cmd [Image #1]",
 		PastedContents: map[int]PastedContent{
-			1: {ID: 1, Type: PastedContentImage, Content: "base64", MediaType: "image/png", Filename: "chart.png"},
+			1: {
+				ID:         1,
+				Type:       PastedContentImage,
+				Content:    "base64",
+				MediaType:  "image/png",
+				Filename:   "chart.png",
+				SourcePath: filepath.Join(dir, "image-cache", "session", "1.png"),
+				Dimensions: &ImageDimensions{OriginalWidth: 4000, OriginalHeight: 2000, DisplayWidth: 1000, DisplayHeight: 500},
+			},
 		},
 	})
 	if err != nil {
@@ -614,15 +630,22 @@ func TestAddToHistorySkipsImagePastedContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := string(data)
-	if strings.Contains(raw, `"type":"image"`) || strings.Contains(raw, "chart.png") || strings.Contains(raw, "base64") {
-		t.Fatalf("history should not store image pasted content: %s", raw)
+	if !strings.Contains(raw, `"type":"image"`) || !strings.Contains(raw, "chart.png") || !strings.Contains(raw, "image-cache") {
+		t.Fatalf("history should store image metadata: %s", raw)
+	}
+	if strings.Contains(raw, "base64") || strings.Contains(raw, `"contentHash"`) {
+		t.Fatalf("history should not store image bytes or text-paste hash for images: %s", raw)
 	}
 	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, RetrievePastedText)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(history) != 1 || history[0].Display != "cmd [Image #1]" || len(history[0].PastedContents) != 0 {
+	if len(history) != 1 || history[0].Display != "cmd [Image #1]" {
 		t.Fatalf("history = %#v", history)
+	}
+	image := history[0].PastedContents[1]
+	if image.Type != PastedContentImage || image.Content != "" || image.MediaType != "image/png" || image.Filename != "chart.png" || image.SourcePath == "" || image.Dimensions == nil || image.Dimensions.OriginalWidth != 4000 {
+		t.Fatalf("image history = %#v", image)
 	}
 }
 
