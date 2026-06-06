@@ -10,8 +10,10 @@ import (
 type VimMode string
 
 const (
-	VimInsert VimMode = "insert"
-	VimNormal VimMode = "normal"
+	VimInsert     VimMode = "insert"
+	VimNormal     VimMode = "normal"
+	VimVisual     VimMode = "visual"
+	VimVisualLine VimMode = "visual_line"
 )
 
 type vimPromptSnapshot struct {
@@ -42,6 +44,24 @@ func (s *REPLScreen) SetVimEnabled(enabled bool) {
 	}
 }
 
+func normalizeVimMode(mode string) VimMode {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	switch normalized {
+	case "insert", "vim_insert":
+		return VimInsert
+	case "normal", "command", "vim_normal":
+		return VimNormal
+	case "visual", "char", "character", "visual_char", "visual_character":
+		return VimVisual
+	case "visualline", "visual_line", "line", "linewise", "visual_linewise":
+		return VimVisualLine
+	default:
+		return VimMode(strings.TrimSpace(mode))
+	}
+}
+
 func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	if !s.VimEnabled {
 		return ScreenEvent{}, false
@@ -61,6 +81,24 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 		}
 		s.trackVimInsertedText(key)
 		return ScreenEvent{}, false
+	}
+	if s.VimMode == VimVisual || s.VimMode == VimVisualLine {
+		switch key.Type {
+		case KeyEsc:
+			s.exitVimVisual()
+			return ScreenEvent{}, true
+		case KeyLeft:
+			return s.applyVimVisualRune('h'), true
+		case KeyRight:
+			return s.applyVimVisualRune('l'), true
+		case KeyUp:
+			return s.applyVimVisualRune('k'), true
+		case KeyDown:
+			return s.applyVimVisualRune('j'), true
+		case KeyRune:
+			return s.applyVimVisualRune(key.Rune), true
+		}
+		return ScreenEvent{}, true
 	}
 	switch key.Type {
 	case KeyEsc:
@@ -132,6 +170,10 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.undoVimPrompt()
 	case '.':
 		s.replayVimLastChange()
+	case 'v':
+		s.enterVimVisual(false)
+	case 'V':
+		s.enterVimVisual(true)
 	case 'r':
 		s.VimPendingReplace = true
 		s.VimPendingCount = count
@@ -228,6 +270,120 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.applyVimMotionOperator('c', '$', 1)
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
+	if s.VimPendingG {
+		return s.applyVimVisualG(r)
+	}
+	if isVimCountRune(r) {
+		if r == '0' && s.VimCount == 0 {
+			s.applyVimVisualMotion('0', 1)
+			return ScreenEvent{}
+		}
+		s.VimCount = s.VimCount*10 + int(r-'0')
+		return ScreenEvent{}
+	}
+	count := s.takeVimCount()
+	switch r {
+	case 'v':
+		if s.VimMode == VimVisual {
+			s.exitVimVisual()
+			return ScreenEvent{}
+		}
+		s.VimMode = VimVisual
+		s.VimVisualLinewise = false
+	case 'V':
+		if s.VimMode == VimVisualLine {
+			s.exitVimVisual()
+			return ScreenEvent{}
+		}
+		s.VimMode = VimVisualLine
+		s.VimVisualLinewise = true
+	case 'g':
+		s.VimPendingG = true
+		s.VimPendingCount = count
+	case 'y', 'd', 'c':
+		s.applyVimVisualOperator(r)
+	case 'h', 'l', 'j', 'k', 'w', 'W', 'b', 'B', 'e', 'E', '$', '^', '|', '%', 'G':
+		s.applyVimVisualMotion(r, count)
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimVisualG(r rune) ScreenEvent {
+	count := s.VimPendingCount
+	s.clearVimPending()
+	switch r {
+	case 'g':
+		targetLine := 1
+		if count > 1 {
+			targetLine = count
+		}
+		s.Prompt.goToLine(targetLine)
+	case 'j':
+		s.Prompt.moveLogicalLine(count)
+	case 'k':
+		s.Prompt.moveLogicalLine(-count)
+	case 'e':
+		applyN(count, func() { s.Prompt.moveWordBackwardEnd() })
+	case 'E':
+		applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimVisualMotion(motion rune, count int) {
+	switch motion {
+	case 'h':
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyLeft}) })
+	case 'l':
+		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyRight}) })
+	case 'j':
+		s.Prompt.moveLogicalLine(count)
+	case 'k':
+		s.Prompt.moveLogicalLine(-count)
+	case 'w':
+		applyN(count, func() { s.Prompt.moveWordForward() })
+	case 'W':
+		applyN(count, func() { s.Prompt.moveWORDForward() })
+	case 'b':
+		applyN(count, func() { s.Prompt.moveWordBackward() })
+	case 'B':
+		applyN(count, func() { s.Prompt.moveWORDBackward() })
+	case 'e':
+		applyN(count, func() { s.Prompt.moveWordEnd() })
+	case 'E':
+		applyN(count, func() { s.Prompt.moveWORDEnd() })
+	case '$':
+		s.Prompt.moveLineEnd()
+	case '^':
+		s.Prompt.moveFirstNonBlank()
+	case '0':
+		s.Prompt.moveLineStart()
+	case '|':
+		s.Prompt.moveLineColumn(count)
+	case '%':
+		s.Prompt.moveMatchingPair()
+	case 'G':
+		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
+	}
+}
+
+func (s *REPLScreen) applyVimVisualOperator(operator rune) {
+	start, end, linewise, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	s.applyVimRangeOperator(operator, start, end, linewise)
+	if operator == 'c' {
+		s.VimVisualAnchor = 0
+		s.VimVisualLinewise = false
+		s.clearVimPending()
+		return
+	}
+	s.exitVimVisual()
 }
 
 func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
@@ -539,6 +695,26 @@ func (s *REPLScreen) applyVimReplace(r rune) ScreenEvent {
 func (s *REPLScreen) enterVimInsert() {
 	s.VimMode = VimInsert
 	s.VimInsertedText = ""
+	s.VimVisualAnchor = 0
+	s.VimVisualLinewise = false
+}
+
+func (s *REPLScreen) enterVimVisual(linewise bool) {
+	s.clearVimPending()
+	s.VimVisualAnchor = s.Prompt.clampCursor(s.Prompt.Cursor)
+	s.VimVisualLinewise = linewise
+	if linewise {
+		s.VimMode = VimVisualLine
+		return
+	}
+	s.VimMode = VimVisual
+}
+
+func (s *REPLScreen) exitVimVisual() {
+	s.clearVimPending()
+	s.VimMode = VimNormal
+	s.VimVisualAnchor = 0
+	s.VimVisualLinewise = false
 }
 
 func (s *REPLScreen) trackVimInsertedText(key Key) {
@@ -843,6 +1019,30 @@ func orderedRange(start int, end int, linewise bool) (int, int, bool, bool) {
 	return start, end, linewise, true
 }
 
+func (s *REPLScreen) vimVisualSelectionRange() (int, int, bool, bool) {
+	if s.VimMode == VimVisualLine || s.VimVisualLinewise {
+		return s.Prompt.visualLineRange(s.VimVisualAnchor, s.Prompt.Cursor)
+	}
+	runes := []rune(s.Prompt.Text)
+	if len(runes) == 0 {
+		return 0, 0, false, false
+	}
+	anchor := s.Prompt.clampCursor(s.VimVisualAnchor)
+	cursor := s.Prompt.clampCursor(s.Prompt.Cursor)
+	if anchor <= cursor {
+		end := cursor
+		if end < len(runes) {
+			end++
+		}
+		return orderedRange(anchor, end, false)
+	}
+	end := anchor
+	if end < len(runes) {
+		end++
+	}
+	return orderedRange(cursor, end, false)
+}
+
 func (p *PromptState) lineCount() int {
 	return len(strings.Split(p.Text, "\n"))
 }
@@ -941,6 +1141,43 @@ func (p *PromptState) currentLogicalLine() int {
 	line := 0
 	for i, r := range []rune(p.Text) {
 		if i >= p.Cursor {
+			break
+		}
+		if r == '\n' {
+			line++
+		}
+	}
+	return line
+}
+
+func (p *PromptState) visualLineRange(anchor int, cursor int) (int, int, bool, bool) {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 || p.Text == "" {
+		return 0, 0, false, false
+	}
+	anchorLine := p.lineIndexAtCursor(anchor)
+	cursorLine := p.lineIndexAtCursor(cursor)
+	startLine := anchorLine
+	endLine := cursorLine
+	if endLine < startLine {
+		startLine, endLine = endLine, startLine
+	}
+	start := lineStartOffset(lines, startLine)
+	end := len([]rune(p.Text))
+	if endLine+1 < len(lines) {
+		end = lineStartOffset(lines, endLine+1)
+	}
+	if start == end {
+		return 0, 0, false, false
+	}
+	return start, end, true, true
+}
+
+func (p *PromptState) lineIndexAtCursor(cursor int) int {
+	cursor = p.clampCursor(cursor)
+	line := 0
+	for i, r := range []rune(p.Text) {
+		if i >= cursor {
 			break
 		}
 		if r == '\n' {

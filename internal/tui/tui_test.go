@@ -3636,6 +3636,76 @@ func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimVisualCharOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "beta" || screen.VimRegisterLinewise || screen.Prompt.Text != "alpha beta gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after visual yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "d"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha  gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "beta" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual delete screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "c"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "alpha  gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "beta" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual change screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimVisualLineOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "j", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "one\ntwo\n" || !screen.VimRegisterLinewise || screen.Prompt.Text != "one\ntwo\nthree" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual line yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"G", "V", "k", "d"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one" || screen.Prompt.Cursor != len([]rune("one\n"))-1 || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual line delete screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"G", "V", "k", "c"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual line change screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimGLineNavigationAndOperators(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
@@ -8662,6 +8732,7 @@ func TestRunInteractionScriptChecksVimState(t *testing.T) {
 	screen.SetVimEnabled(true)
 	enabled := true
 	linewise := false
+	linewiseRegister := true
 	cursor := len([]rune("abc"))
 	_, err := RunInteractionScriptChecked(&screen, []ScriptStep{
 		{
@@ -8672,6 +8743,14 @@ func TestRunInteractionScriptChecksVimState(t *testing.T) {
 		{
 			Keys:      []string{"\x1b", "0", "y", "l"},
 			ExpectVim: &VimExpectation{Enabled: &enabled, Mode: VimNormal, Register: "a", RegisterLinewise: &linewise},
+		},
+		{
+			Keys:      []string{"v"},
+			ExpectVim: &VimExpectation{Enabled: &enabled, Mode: VimVisual},
+		},
+		{
+			Keys:      []string{"\x1b", "V", "y"},
+			ExpectVim: &VimExpectation{Enabled: &enabled, Mode: VimNormal, Register: "abc\n", RegisterLinewise: &linewiseRegister},
 		},
 	})
 	if err != nil {
@@ -8693,6 +8772,10 @@ func TestRunInteractionScriptAcceptsVimAliases(t *testing.T) {
 				"vimRegister": "a",
 				"linewise": false
 			}
+		},
+		{
+			"keys": ["V"],
+			"expectVim": {"active": true, "modeName": "visualLine"}
 		}
 	]`))
 	if err != nil {

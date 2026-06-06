@@ -70,6 +70,8 @@ type REPLScreen struct {
 	VimRegister          string
 	VimRegisterLinewise  bool
 	VimUndoStack         []vimPromptSnapshot
+	VimVisualAnchor      int
+	VimVisualLinewise    bool
 	Focused              bool
 	ReverseSearch        ReverseSearchState
 	StashedPrompt        *PromptStash

@@ -5081,7 +5081,7 @@ func (expect *VimExpectation) UnmarshalJSON(data []byte) error {
 	}
 	if expect.Mode == "" {
 		if mode := stringJSONField(fieldMap, "Mode", "mode", "VimMode", "vim_mode", "vimMode", "ModeName", "mode_name", "modeName", "CurrentMode", "current_mode", "currentMode", "State", "state"); mode != "" {
-			expect.Mode = VimMode(mode)
+			expect.Mode = normalizeVimMode(mode)
 		}
 	}
 	if expect.Register == "" {

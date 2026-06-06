@@ -634,7 +634,7 @@ func compareVim(index int, got REPLScreen, want VimExpectation) error {
 	if want.Enabled != nil && got.VimEnabled != *want.Enabled {
 		return fmt.Errorf("script step %d vim enabled = %v, want %v", index, got.VimEnabled, *want.Enabled)
 	}
-	if want.Mode != "" && got.VimMode != want.Mode {
+	if want.Mode != "" && got.VimMode != normalizeVimMode(string(want.Mode)) {
 		return fmt.Errorf("script step %d vim mode = %q, want %q", index, got.VimMode, want.Mode)
 	}
 	if want.Register != "" && got.VimRegister != want.Register {
