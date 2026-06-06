@@ -265,7 +265,7 @@ func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
 		return false
 	}
 	last, _ := utf8.DecodeLastRuneInString(value)
-	if last == 0x200d || isTerminalEmojiModifier(last) {
+	if last == 0x200d || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) {
 		return true
 	}
 	regionalCount := 0
@@ -440,6 +440,10 @@ func terminalGraphemeStringWidth(grapheme string) int {
 			}
 			continue
 		}
+		if isTerminalEmojiKeycapMark(r) {
+			hasWidePresentation = true
+			continue
+		}
 		if isTerminalCombiningMark(r) {
 			continue
 		}
@@ -454,6 +458,14 @@ func terminalGraphemeStringWidth(grapheme string) int {
 		return 2
 	}
 	return baseWidth
+}
+
+func terminalGraphemeCanStartKeycapSequence(value string) bool {
+	runes := []rune(value)
+	if len(runes) == 1 {
+		return isTerminalEmojiKeycapBase(runes[0])
+	}
+	return len(runes) == 2 && isTerminalEmojiKeycapBase(runes[0]) && runes[1] == 0xfe0f
 }
 
 func isTerminalEmoji(r rune) bool {
@@ -492,6 +504,14 @@ func isTerminalVariationSelector(r rune) bool {
 
 func isTerminalEmojiModifier(r rune) bool {
 	return r >= 0x1f3fb && r <= 0x1f3ff
+}
+
+func isTerminalEmojiKeycapBase(r rune) bool {
+	return r == '#' || r == '*' || (r >= '0' && r <= '9')
+}
+
+func isTerminalEmojiKeycapMark(r rune) bool {
+	return r == 0x20e3
 }
 
 func isTerminalEmojiTag(r rune) bool {
