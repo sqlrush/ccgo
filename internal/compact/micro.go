@@ -639,7 +639,12 @@ func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bo
 	} else if nonText {
 		return "", false, nil
 	}
-	return microSummaryMessageText(trimmed)
+	if text, ok, err := microSummaryMessageText(trimmed); err != nil {
+		return "", false, err
+	} else if ok {
+		return text, true, nil
+	}
+	return microSummaryProviderText(trimmed)
 }
 
 func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {

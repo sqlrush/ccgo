@@ -632,6 +632,19 @@ func TestLoadMicroResultAcceptsMessageSummaryPayloads(t *testing.T) {
 			}`,
 			want: "response message summary",
 		},
+		{
+			digest: "summary-provider-array",
+			payload: `{
+				"summary": [
+					{"parts": [{"text": "array provider summary"}]},
+					{"content": {"parts": [{"text": "tail provider line"}]}}
+				],
+				"digest": "summary-provider-array",
+				"version": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "array provider summary\ntail provider line",
+		},
 	} {
 		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
 			t.Fatal(err)
