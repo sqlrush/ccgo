@@ -649,6 +649,48 @@ func TestAddToHistoryStoresImagePastedContentMetadata(t *testing.T) {
 	}
 }
 
+func TestLoadHistoryRestoresExistingImageCacheSourcePath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	ClearStoredImagePaths()
+	defer ClearStoredImagePaths()
+
+	historyPath := filepath.Join(dir, "history.jsonl")
+	imagePath := filepath.Join(dir, "image-cache", "session", "4.webp")
+	if err := os.MkdirAll(filepath.Dir(imagePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(imagePath, []byte("webp"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendHistory(historyPath, LogEntry{
+		Display:   "cmd [Image #4]",
+		Timestamp: 100,
+		Project:   "/repo",
+		SessionID: "session",
+		PastedContents: map[int]StoredPastedContent{
+			4: {ID: 4, Type: PastedContentImage, MediaType: "image/webp", Filename: "diagram.webp"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(historyPath, "/repo", "session", MaxHistoryItems, RetrievePastedText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history = %#v", history)
+	}
+	image := history[0].PastedContents[4]
+	if image.SourcePath != imagePath || image.MediaType != "image/webp" || image.Filename != "diagram.webp" {
+		t.Fatalf("image = %#v, want source path %q", image, imagePath)
+	}
+	if cached, ok := GetStoredImagePath(4); !ok || cached != imagePath {
+		t.Fatalf("cached image path = %q ok=%v, want %q", cached, ok, imagePath)
+	}
+}
+
 func TestCleanupOldPastesRemovesOnlyOldTextFiles(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)

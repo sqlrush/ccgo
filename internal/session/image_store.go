@@ -40,6 +40,18 @@ func CacheImagePath(sessionID contracts.ID, content PastedContent) (string, bool
 	return imagePath, true
 }
 
+func ResolveStoredImagePath(sessionID contracts.ID, content PastedContent) (string, bool) {
+	if sessionID == "" || content.Type != PastedContentImage || content.ID <= 0 {
+		return "", false
+	}
+	imagePath := ImagePath(sessionID, content.ID, content.MediaType)
+	if _, err := os.Stat(imagePath); err != nil {
+		return "", false
+	}
+	rememberImagePath(content.ID, imagePath)
+	return imagePath, true
+}
+
 func StoreImage(sessionID contracts.ID, content PastedContent) (string, bool) {
 	if content.Type != PastedContentImage {
 		return "", false

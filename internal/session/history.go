@@ -265,20 +265,31 @@ func NewLogEntry(project string, sessionID contracts.ID, entry HistoryEntry, now
 func LogEntryToHistoryEntry(entry LogEntry, resolver PasteResolver) HistoryEntry {
 	pastedContents := map[int]PastedContent{}
 	for id, stored := range entry.PastedContents {
+		contentID := storedPastedContentID(id, stored.ID)
 		if stored.Type == PastedContentImage {
+			sourcePath := stored.SourcePath
+			if sourcePath == "" {
+				if path, ok := ResolveStoredImagePath(entry.SessionID, PastedContent{
+					ID:        contentID,
+					Type:      stored.Type,
+					MediaType: stored.MediaType,
+				}); ok {
+					sourcePath = path
+				}
+			}
 			pastedContents[id] = PastedContent{
-				ID:         stored.ID,
+				ID:         contentID,
 				Type:       stored.Type,
 				MediaType:  stored.MediaType,
 				Filename:   stored.Filename,
 				Dimensions: stored.Dimensions,
-				SourcePath: stored.SourcePath,
+				SourcePath: sourcePath,
 			}
 			continue
 		}
 		if stored.Content != "" {
 			pastedContents[id] = PastedContent{
-				ID:        stored.ID,
+				ID:        contentID,
 				Type:      stored.Type,
 				Content:   stored.Content,
 				MediaType: stored.MediaType,
@@ -294,7 +305,7 @@ func LogEntryToHistoryEntry(entry LogEntry, resolver PasteResolver) HistoryEntry
 			continue
 		}
 		pastedContents[id] = PastedContent{
-			ID:        stored.ID,
+			ID:        contentID,
 			Type:      stored.Type,
 			Content:   content,
 			MediaType: stored.MediaType,
