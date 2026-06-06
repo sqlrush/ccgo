@@ -3136,6 +3136,9 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 	case "space", "spacebar":
 		return " ", false
 	}
+	if base, ok := scriptNumpadKeyBaseName(normalized); ok {
+		return base, false
+	}
 	if strings.HasPrefix(normalized, "key") && len([]rune(normalized)) == 4 {
 		return string([]rune(normalized)[3]), false
 	}
@@ -3146,6 +3149,34 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 		return trimmed, false
 	}
 	return trimmed, false
+}
+
+func scriptNumpadKeyBaseName(normalized string) (string, bool) {
+	suffix, ok := strings.CutPrefix(normalized, "numpad")
+	if !ok {
+		return "", false
+	}
+	suffix = strings.TrimPrefix(suffix, "-")
+	switch suffix {
+	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		return suffix, true
+	case "decimal":
+		return ".", true
+	case "comma":
+		return ",", true
+	case "add", "plus":
+		return "+", true
+	case "subtract", "minus":
+		return "-", true
+	case "multiply", "asterisk", "star":
+		return "*", true
+	case "divide", "slash":
+		return "/", true
+	case "equal", "equals":
+		return "=", true
+	default:
+		return "", false
+	}
 }
 
 func scriptKeyIdentifierBaseName(trimmed string) (string, bool, bool) {
