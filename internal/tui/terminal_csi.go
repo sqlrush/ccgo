@@ -230,6 +230,10 @@ type CSIReportAction struct {
 	Code        int
 	Status      int
 	PrivateMode byte
+	Height      int
+	Width       int
+	Rows        int
+	Columns     int
 }
 
 type CSIScrollActionType string
@@ -480,7 +484,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		}
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionSave}}, true
 	case CSICommandWindowReport:
-		return csiWindowReport(csiParamDefault(params, 0, 0), privateMode), true
+		return csiWindowReport(params, privateMode), true
 	case CSICommandRestoreCursor:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionRestore}}, true
 	case CSICommandCursorStyle:
@@ -585,10 +589,22 @@ func csiTerminalParameters(code int, privateMode byte) CSIAction {
 	}
 }
 
-func csiWindowReport(code int, privateMode byte) CSIAction {
+func csiWindowReport(params []int, privateMode byte) CSIAction {
+	code := csiParamDefault(params, 0, 0)
+	report := CSIReportAction{Type: CSIReportActionWindow, Code: code, PrivateMode: privateMode}
+	if privateMode == 0 {
+		switch code {
+		case 4:
+			report.Height = csiParamDefault(params, 1, 0)
+			report.Width = csiParamDefault(params, 2, 0)
+		case 8:
+			report.Rows = csiParamDefault(params, 1, 0)
+			report.Columns = csiParamDefault(params, 2, 0)
+		}
+	}
 	return CSIAction{
 		Type:   CSIActionReport,
-		Report: CSIReportAction{Type: CSIReportActionWindow, Code: code, PrivateMode: privateMode},
+		Report: report,
 	}
 }
 

@@ -260,7 +260,7 @@ M7 补充：terminal CSI parser 现在接受 DEC private mode `?1046h/l` alterna
 
 M7 补充：terminal CSI parser 现在把 DECREQTPARM terminal-parameters (`CSI x`) 解析成 report action，保留 code 和 private marker，避免终端参数查询序列落入 generic unknown。
 
-M7 补充：terminal CSI parser 现在把 xterm window manipulation/report (`CSI t`，如 `CSI 14t`/`CSI 18t`) 解析成 report action，保留 code 和 private marker，避免窗口/文本区尺寸查询序列落入 generic unknown。
+M7 补充：terminal CSI parser 现在把 xterm window manipulation/report (`CSI t`，如 `CSI 14t`/`CSI 18t`) 解析成 report action，保留 code/private marker，并为 `CSI 4;height;width t` 与 `CSI 8;rows;cols t` 暴露结构化尺寸字段，避免窗口/文本区尺寸序列落入 generic unknown。
 
 M7 补充：terminal CSI parser 现在把 DECRPM mode status report (`CSI Ps;Ps $ y` / `CSI ? Ps;Ps $ y`) 解析成 report action，保留 mode code、status 和 DEC private marker，和 DECRQM mode request 形成闭环。
 
@@ -784,7 +784,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：terminal CSI parser 把 DECRQM mode request (`CSI Ps $ p` / `CSI ? Ps $ p`) 归入 report action，保留 mode code 和 DEC private marker。
 
-本轮补充：terminal CSI parser 把 xterm window manipulation/report (`CSI t`) 归入 report action，覆盖常见 `CSI 14t`/`CSI 18t` 窗口/文本区尺寸查询。
+本轮补充：terminal CSI parser 把 xterm window manipulation/report (`CSI t`) 归入 report action，覆盖常见 `CSI 14t`/`CSI 18t` 查询，并把 `CSI 4;height;width t` 与 `CSI 8;rows;cols t` 的 pixel/text-area 尺寸参数结构化暴露。
 
 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
 
