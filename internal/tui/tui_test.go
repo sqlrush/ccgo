@@ -3913,6 +3913,23 @@ func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	if screen.VimMode != VimNormal || screen.Prompt.Text != "red blue blue" || screen.Prompt.Cursor != len([]rune("red blue blue"))-1 || screen.VimRegister != "green" || screen.VimRegisterLinewise {
 		t.Fatalf("after visual P screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "r", "X"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha XXXX gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after visual replace screen = %#v", screen)
+	}
+	for _, seq := range []string{"$", "g", "v", "u"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha xxxx gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after visual replace gv lowercase screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimVisualLineOperators(t *testing.T) {
@@ -4072,6 +4089,17 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	}
 	if screen.VimMode != VimNormal || screen.Prompt.Text != "one\none\nfour" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
 		t.Fatalf("after visual line paste screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "j", "r", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "...\n...\nthree" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual line replace screen = %#v", screen)
 	}
 }
 

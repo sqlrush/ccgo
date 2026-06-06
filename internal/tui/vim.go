@@ -273,6 +273,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 }
 
 func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
+	if s.VimPendingReplace {
+		return s.applyVimVisualReplace(r)
+	}
 	if s.VimPendingG {
 		return s.applyVimVisualG(r)
 	}
@@ -313,6 +316,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualChangeCase(r)
 	case 'J':
 		s.applyVimVisualJoin(false)
+	case 'r':
+		s.VimPendingReplace = true
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'p', 'P':
@@ -448,6 +453,19 @@ func (s *REPLScreen) applyVimVisualChangeCase(op rune) {
 		s.recordVimChange(vimRecordedChange{Kind: "changeCase", Target: op, Count: count})
 	}
 	s.clearVimVisualState()
+}
+
+func (s *REPLScreen) applyVimVisualReplace(r rune) ScreenEvent {
+	start, end, linewise, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.clearVimVisualState()
+		return ScreenEvent{}
+	}
+	s.rememberVimVisualSelection()
+	s.recordVimUndo()
+	s.Prompt.replaceRangeRunes(start, end, linewise, r)
+	s.clearVimVisualState()
+	return ScreenEvent{}
 }
 
 func (s *REPLScreen) applyVimVisualJoin(raw bool) {
@@ -1419,6 +1437,35 @@ func (p *PromptState) changeCaseRange(start int, end int, op rune) int {
 	p.Cursor = start
 	p.resetHistoryCursor()
 	return end - start
+}
+
+func (p *PromptState) replaceRangeRunes(start int, end int, linewise bool, replacement rune) int {
+	runes := []rune(p.Text)
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if end < start {
+		start, end = end, start
+	}
+	changed := 0
+	for i := start; i < end; i++ {
+		if runes[i] == '\n' {
+			continue
+		}
+		runes[i] = replacement
+		changed++
+	}
+	p.Text = string(runes)
+	p.Cursor = start
+	if linewise {
+		lines := strings.Split(p.Text, "\n")
+		p.Cursor = lineStartOffset(lines, p.lineIndexAtCursor(start))
+	}
+	p.resetHistoryCursor()
+	return changed
 }
 
 func changeRuneCase(runes []rune, start int, end int, op rune) {
