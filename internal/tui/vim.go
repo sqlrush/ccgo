@@ -436,6 +436,10 @@ func (s *REPLScreen) applyVimVisualG(r rune) ScreenEvent {
 		s.applyVimVisualJoin(true)
 	case '_':
 		s.Prompt.moveVimLastNonBlankMotion(count)
+	case 'u', 'U':
+		s.applyVimVisualChangeCase(r)
+	case '~':
+		s.applyVimVisualToggleCase()
 	}
 	return ScreenEvent{}
 }

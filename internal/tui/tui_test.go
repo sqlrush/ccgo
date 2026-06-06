@@ -4336,6 +4336,52 @@ func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimVisualGCaseOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "v", "e", "g", "U"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "ALPHA beta" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual gU screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "ALPHA beta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "v", "e", "g", "u"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha beta" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual gu screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha BETA")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "v", "e", "g", "~"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "ALPHA BETA" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual g~ screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "j", "g", "U"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "ONE\nTWO\nthree" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual line gU screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
