@@ -87,6 +87,10 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	if !ok || utf8Charset.Type != TerminalSequenceESC || utf8Charset.ESC.Type != ESCActionCharset || utf8Charset.ESC.CharsetSlot != '%' || utf8Charset.ESC.CharsetDesignator != 'G' {
 		t.Fatalf("utf8 charset esc dispatch = %#v ok=%v", utf8Charset, ok)
 	}
+	charsetShift, ok := ParseTerminalSequence("\x1bn")
+	if !ok || charsetShift.Type != TerminalSequenceESC || charsetShift.ESC.Type != ESCActionCharsetShift || charsetShift.ESC.CharsetShift != "lockingShiftG2" {
+		t.Fatalf("charset shift esc dispatch = %#v ok=%v", charsetShift, ok)
+	}
 	if text, ok := ParseTerminalSequence("plain"); ok || text.Type != "" {
 		t.Fatalf("plain dispatch = %#v ok=%v", text, ok)
 	}

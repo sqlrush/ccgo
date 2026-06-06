@@ -5765,6 +5765,24 @@ func TestParseESCSequenceActions(t *testing.T) {
 		}
 	}
 
+	charsetShiftCases := []struct {
+		seq   string
+		shift string
+	}{
+		{seq: "\x1bN", shift: "singleShiftG2"},
+		{seq: "\x1bn", shift: "lockingShiftG2"},
+		{seq: "\x1bo", shift: "lockingShiftG3"},
+		{seq: "\x1b|", shift: "lockingShiftG3Right"},
+		{seq: "\x1b}", shift: "lockingShiftG2Right"},
+		{seq: "\x1b~", shift: "lockingShiftG1Right"},
+	}
+	for _, tc := range charsetShiftCases {
+		shift, ok := ParseESCSequence(tc.seq)
+		if !ok || shift.Type != ESCActionCharsetShift || shift.CharsetShift != tc.shift {
+			t.Fatalf("charset shift for %q = %#v ok=%v", tc.seq, shift, ok)
+		}
+	}
+
 	reset, ok := ParseESCSequence(ESCResetSequence)
 	if !ok || reset.Type != ESCActionReset {
 		t.Fatalf("reset action = %#v", reset)

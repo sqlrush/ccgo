@@ -361,7 +361,7 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 		case ESCActionReset:
 			p.Reset()
 			return TerminalAction{Type: TerminalActionReset}, true
-		case ESCActionCharset:
+		case ESCActionCharset, ESCActionCharsetShift:
 			return TerminalAction{}, false
 		default:
 			return TerminalAction{Type: TerminalActionUnknown, Sequence: action.ESC.Sequence}, true
