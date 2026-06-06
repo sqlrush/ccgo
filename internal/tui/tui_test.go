@@ -4367,6 +4367,41 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimVisualUppercaseLineOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "v", "l", "Y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one\ntwo\nthree" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual Y screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "v", "l", "\"", "a", "D"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one\nthree" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\n" || !screen.VimRegisterLinewise || screen.VimRegisters['a'].Text != "two\n" || !screen.VimRegisters['a'].Linewise {
+		t.Fatalf("after visual \"aD screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "v", "l", "C"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\nthree" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual C screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimGLineNavigationAndOperators(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

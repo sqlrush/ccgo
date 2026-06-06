@@ -388,6 +388,12 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualJoin(false)
 	case 'r':
 		s.VimPendingReplace = true
+	case 'Y':
+		s.applyVimVisualLineOperator('y')
+	case 'D':
+		s.applyVimVisualLineOperator('d')
+	case 'C':
+		s.applyVimVisualLineOperator('c')
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'p', 'P':
@@ -616,6 +622,23 @@ func (s *REPLScreen) applyVimVisualOperator(operator rune) {
 	}
 	s.rememberVimVisualSelection()
 	s.applyVimRangeOperator(operator, start, end, linewise)
+	if operator == 'c' {
+		s.VimVisualAnchor = 0
+		s.VimVisualLinewise = false
+		s.clearVimPending()
+		return
+	}
+	s.clearVimVisualState()
+}
+
+func (s *REPLScreen) applyVimVisualLineOperator(operator rune) {
+	start, end, _, ok := s.Prompt.visualLineRange(s.VimVisualAnchor, s.Prompt.Cursor)
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	s.rememberVimVisualSelection()
+	s.applyVimRangeOperator(operator, start, end, true)
 	if operator == 'c' {
 		s.VimVisualAnchor = 0
 		s.VimVisualLinewise = false
@@ -1585,7 +1608,7 @@ func vimNormalCommandUsesRegister(r rune) bool {
 
 func vimVisualCommandUsesRegister(r rune) bool {
 	switch r {
-	case 'y', 'd', 'c', 'p', 'P', 'x', 's':
+	case 'y', 'd', 'c', 'Y', 'D', 'C', 'p', 'P', 'x', 's':
 		return true
 	default:
 		return false
