@@ -120,6 +120,8 @@ M6 补充：remote history event-list 现在接受 `value`/`values`/`resources`/
 
 M6 补充：remote history response parser 现在会解包 `payload`/`response`/`result`/`body` 等通用响应外壳，外壳内的 event list、pagination、links 会继续递归解析。
 
+M6 补充：remote history response parser 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper，可从 `message.content`、content-block array 和 `content.parts[].text` 中恢复 event page JSON，并保留 pagination 继续驱动 `before_id` 续抓。
+
 M6 补充：remote history response parser 现在接受 JSON:API `included` collection，会过滤非事件资源，并递归解包 `resource`/`attributes`/`properties` 后用外层 resource id 作为事件 ID fallback。
 
 M6 补充：remote history `data`/`payload`/`response`/`result`/`body` 等 event-list 字段现在也接受单个 SDK event 对象，避免非数组单事件页被当作普通 wrapper 后丢失。
@@ -525,6 +527,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：model-backed memory fact extraction 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` response wrapper，可从 `message.content`、content-block array 和 `content.parts[].text` 里递归恢复 JSON facts payload。
 
 本轮补充：compact runner 的 summary 响应现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper，可在构建 compact plan 前从 `message.content`、content-block array 和 `content.parts[].text` 中恢复 visible summary text。
+
+本轮补充：remote history response parser 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper，可从 `message.content`、content-block array 和 `content.parts[].text` 中恢复 event page JSON，并保留 pagination 继续驱动 `before_id` 续抓。
 
 本轮补充：microcompact disk cache loader 现在读取 Go 默认、camelCase、snake_case 和相邻实现常见字段别名/包装形态，包括 `result`/`data`/`cache`/`value` wrapper、`content`/`text` summary、`cacheKey`/`key`/`hash` digest、cache-hit 别名、计数字段别名/数字字符串、RFC3339/Unix 秒/Unix 毫秒时间字段，以及 `createdAt` + `ttlSeconds`/`ttlMs`/`expiresIn`/`maxAge` 等相对 TTL 推导，提升 cached microcompact 文件在不同实现/版本间的恢复率。
 

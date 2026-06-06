@@ -219,6 +219,15 @@ func (r *sessionEventsResponse) mergeJSON(data []byte) error {
 			r.Included = events
 		}
 	}
+	if responseEventList(*r) == nil {
+		if text, ok := remoteHistoryProviderResponseText(raw); ok {
+			var nested sessionEventsResponse
+			if err := nested.mergeJSON([]byte(text)); err != nil {
+				return fmt.Errorf("remote history provider response: %w", err)
+			}
+			r.mergeFrom(nested)
+		}
+	}
 	return nil
 }
 
@@ -1013,6 +1022,101 @@ func remoteHistoryRelTokens(raw map[string]json.RawMessage) []string {
 		}
 	}
 	return tokens
+}
+
+func remoteHistoryProviderResponseText(raw map[string]json.RawMessage) (string, bool) {
+	for _, name := range []string{
+		"choice",
+		"choices",
+		"output",
+		"outputs",
+		"candidate",
+		"candidates",
+		"generation",
+		"generations",
+		"completion",
+		"completions",
+		"response",
+		"responses",
+		"result",
+		"results",
+	} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		if text, ok := remoteHistoryProviderTextFromRaw(value, 0, false); ok {
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func remoteHistoryProviderTextFromRaw(raw json.RawMessage, depth int, allowScalar bool) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || depth > 8 {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		if allowScalar && remoteHistoryProviderTextLooksJSON(text) {
+			return text, true
+		}
+		return "", false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return "", false
+		}
+		parts := make([]string, 0, len(items))
+		for _, item := range items {
+			part, ok := remoteHistoryProviderTextFromRaw(item, depth+1, false)
+			if ok {
+				parts = append(parts, part)
+			}
+		}
+		if len(parts) == 0 {
+			return "", false
+		}
+		text = strings.Join(parts, "\n")
+		if remoteHistoryProviderTextLooksJSON(text) {
+			return text, true
+		}
+		return "", false
+	}
+	if raw[0] != '{' {
+		return "", false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", false
+	}
+	for _, name := range []string{"text", "content", "value", "output"} {
+		value, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if text, ok := remoteHistoryProviderTextFromRaw(value, depth+1, true); ok {
+			return text, true
+		}
+	}
+	for _, name := range []string{"message", "delta", "part", "parts", "candidate", "choice", "generation", "result", "response"} {
+		value, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if text, ok := remoteHistoryProviderTextFromRaw(value, depth+1, false); ok {
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func remoteHistoryProviderTextLooksJSON(text string) bool {
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(text, "{") || strings.HasPrefix(text, "[")
 }
 
 func jsonNumberString(data []byte) (string, bool) {

@@ -528,6 +528,75 @@ func TestFetchRemoteHistoryAcceptsGraphQLViewerAndNodeWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
+	providerWrapper := func(t *testing.T, field string, page map[string]any) []byte {
+		t.Helper()
+		pageData, err := json.Marshal(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wrapper map[string]any
+		switch field {
+		case "choices":
+			wrapper = map[string]any{
+				"choices": []any{map[string]any{
+					"message": map[string]any{"content": string(pageData)},
+				}},
+			}
+		case "candidates":
+			wrapper = map[string]any{
+				"candidates": []any{map[string]any{
+					"content": map[string]any{
+						"parts": []any{map[string]any{"text": string(pageData)}},
+					},
+				}},
+			}
+		default:
+			t.Fatalf("unknown provider field %q", field)
+		}
+		data, err := json.Marshal(wrapper)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write(providerWrapper(t, "choices", map[string]any{
+				"events":  []any{map[string]any{"type": "status", "event_id": "evt_provider", "session_id": "s", "status": "latest"}},
+				"hasMore": true,
+			}))
+		case "evt_provider":
+			_, _ = w.Write(providerWrapper(t, "candidates", map[string]any{
+				"items": []any{map[string]any{"type": "status", "eventId": "evt_candidate", "sessionId": "s", "status": "older"}},
+			}))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if len(events.Events) != 2 || events.Events[0].ID != "evt_provider" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_candidate" || events.Events[1].Status != "older" {
+		t.Fatalf("event order = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_provider" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsLinkURLCursors(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
