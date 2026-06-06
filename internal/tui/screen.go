@@ -87,6 +87,7 @@ type REPLScreen struct {
 	VimSearchBackward     bool
 	VimSearchOperator     rune
 	VimSearchCount        int
+	VimSearchReturnMode   VimMode
 	VimLastSearchQuery    string
 	VimLastSearchBackward bool
 	Focused               bool

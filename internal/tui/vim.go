@@ -348,6 +348,12 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		}
 		s.VimMode = VimVisualLine
 		s.VimVisualLinewise = true
+	case 'n':
+		s.repeatVimSearch(false, count)
+	case 'N':
+		s.repeatVimSearch(true, count)
+	case '/', '?':
+		s.enterVimVisualSearch(r == '?', count)
 	case 'g':
 		s.VimPendingG = true
 		s.VimPendingCount = count
@@ -423,11 +429,17 @@ func (s *REPLScreen) applyVimReplaceModeKey(key Key) ScreenEvent {
 func (s *REPLScreen) applyVimSearchKey(key Key) ScreenEvent {
 	switch key.Type {
 	case KeyEsc:
+		returnMode := s.VimSearchReturnMode
 		s.VimMode = VimNormal
+		if isVimVisualMode(returnMode) {
+			s.VimMode = returnMode
+			s.VimVisualLinewise = returnMode == VimVisualLine
+		}
 		s.VimSearchQuery = ""
 		s.VimSearchBackward = false
 		s.VimSearchOperator = 0
 		s.VimSearchCount = 0
+		s.VimSearchReturnMode = ""
 	case KeyBackspace:
 		runes := []rune(s.VimSearchQuery)
 		if len(runes) > 0 {
@@ -442,17 +454,23 @@ func (s *REPLScreen) applyVimSearchKey(key Key) ScreenEvent {
 		backward := s.VimSearchBackward
 		operator := s.VimSearchOperator
 		count := s.VimSearchCount
+		returnMode := s.VimSearchReturnMode
 		s.VimMode = VimNormal
 		s.VimSearchQuery = ""
 		s.VimSearchBackward = false
 		s.VimSearchOperator = 0
 		s.VimSearchCount = 0
+		s.VimSearchReturnMode = ""
 		if query != "" {
 			if operator != 0 {
 				s.applyVimSearchOperator(operator, query, backward, count)
 				return ScreenEvent{}
 			}
 			s.applyVimPromptSearchCount(query, backward, true, count)
+		}
+		if isVimVisualMode(returnMode) {
+			s.VimMode = returnMode
+			s.VimVisualLinewise = returnMode == VimVisualLine
 		}
 	}
 	return ScreenEvent{}
@@ -470,12 +488,19 @@ func (s *REPLScreen) enterVimSearchOperator(backward bool, operator rune, count 
 	s.enterVimSearchMotion(backward, operator, count)
 }
 
+func (s *REPLScreen) enterVimVisualSearch(backward bool, count int) {
+	returnMode := s.VimMode
+	s.enterVimSearchMotion(backward, 0, count)
+	s.VimSearchReturnMode = returnMode
+}
+
 func (s *REPLScreen) enterVimSearchMotion(backward bool, operator rune, count int) {
 	s.clearVimPending()
 	s.VimSearchQuery = ""
 	s.VimSearchBackward = backward
 	s.VimSearchOperator = operator
 	s.VimSearchCount = count
+	s.VimSearchReturnMode = ""
 	if backward {
 		s.VimMode = VimSearchBack
 		return
@@ -499,6 +524,10 @@ func (s *REPLScreen) repeatVimSearch(reverse bool, count int) {
 			return
 		}
 	}
+}
+
+func isVimVisualMode(mode VimMode) bool {
+	return mode == VimVisual || mode == VimVisualLine
 }
 
 func (s *REPLScreen) applyVimPromptSearch(query string, backward bool, remember bool) bool {

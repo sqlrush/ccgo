@@ -3896,6 +3896,52 @@ func TestREPLScreenVimSearchOperators(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimVisualSearch(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "v", "/", "g", "a", "m", "m", "a", "\r", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "alpha beta g" || screen.VimRegisterLinewise || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual /gamma yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "/", "t", "h", "r", "e", "e", "\r", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "one\ntwo\nthree\n" || !screen.VimRegisterLinewise || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual-line /three yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma beta tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "/", "b", "e", "t", "a", "\r", "0", "v", "n", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "alpha b" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual n yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "v", "/", "b", "e", "\x1b", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "a" || screen.VimSearchQuery != "" || screen.VimSearchReturnMode != "" {
+		t.Fatalf("after cancelled visual search yank screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
