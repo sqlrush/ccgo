@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -77,6 +78,9 @@ func ParseKeyName(raw string) (KeyType, error) {
 	compact := strings.NewReplacer("-", "", "+", "").Replace(name)
 	compact = expandCompactShortKeyModifierAlias(compact)
 	compact = expandCompactModifierArrowAlias(compact)
+	if key, ok := parseFunctionKeyName(compact); ok {
+		return key, nil
+	}
 	switch name {
 	case "enter", "enter-key", "return", "return-key", "numpad-enter", "ctrl+j", "ctrl-j", "control+j", "control-j", "ctrl+m", "ctrl-m", "control+m", "control-m":
 		return KeyEnter, nil
@@ -310,6 +314,29 @@ func parseRawControlSymbolKeyName(name string) (KeyType, bool) {
 	default:
 		return KeyUnknown, false
 	}
+}
+
+func parseFunctionKeyName(compact string) (KeyType, bool) {
+	candidates := []string{compact}
+	if trimmed := strings.TrimSuffix(compact, "key"); trimmed != compact {
+		candidates = append(candidates, trimmed)
+	}
+	for _, candidate := range candidates {
+		for _, prefix := range []string{"functionkey", "function", "fn", "f"} {
+			suffix, ok := strings.CutPrefix(candidate, prefix)
+			if !ok || suffix == "" {
+				continue
+			}
+			number, err := strconv.Atoi(suffix)
+			if err != nil {
+				continue
+			}
+			if key, ok := functionKeyType(number); ok {
+				return key, true
+			}
+		}
+	}
+	return KeyUnknown, false
 }
 
 func expandDelimitedShortKeyModifierAlias(name string) string {

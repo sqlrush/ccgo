@@ -100,6 +100,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseModifiedNavigationKey(seq); ok {
 		return key
 	}
+	if key, ok := parseFunctionKey(seq); ok {
+		return key
+	}
 	switch seq {
 	case "\r", "\n":
 		return Key{Type: KeyEnter}
@@ -240,6 +243,100 @@ func parseModifiedNavigationKey(seq string) (Key, bool) {
 		return Key{Type: KeyPageDown}, true
 	default:
 		return Key{}, false
+	}
+}
+
+func parseFunctionKey(seq string) (Key, bool) {
+	switch seq {
+	case "\x1bOP", "\x1b[[A":
+		return Key{Type: KeyF1}, true
+	case "\x1bOQ", "\x1b[[B":
+		return Key{Type: KeyF2}, true
+	case "\x1bOR", "\x1b[[C":
+		return Key{Type: KeyF3}, true
+	case "\x1bOS", "\x1b[[D":
+		return Key{Type: KeyF4}, true
+	case "\x1b[[E":
+		return Key{Type: KeyF5}, true
+	}
+	if !strings.HasPrefix(seq, "\x1b[") {
+		return Key{}, false
+	}
+	inner := strings.TrimPrefix(seq, "\x1b[")
+	if strings.HasSuffix(inner, "~") {
+		params := strings.TrimSuffix(inner, "~")
+		code, ok := firstCSIParamNumber(params)
+		if !ok {
+			return Key{}, false
+		}
+		if strings.ContainsAny(params, ";:") && code < 15 {
+			return Key{}, false
+		}
+		if key, ok := functionKeyFromTerminalCode(code); ok {
+			return Key{Type: key}, true
+		}
+		return Key{}, false
+	}
+	if len(inner) < 3 || !strings.Contains(inner[:len(inner)-1], ";") {
+		return Key{}, false
+	}
+	code, ok := firstCSIParamNumber(inner[:len(inner)-1])
+	if !ok || code != 1 {
+		return Key{}, false
+	}
+	switch inner[len(inner)-1] {
+	case 'P':
+		return Key{Type: KeyF1}, true
+	case 'Q':
+		return Key{Type: KeyF2}, true
+	case 'R':
+		return Key{Type: KeyF3}, true
+	case 'S':
+		return Key{Type: KeyF4}, true
+	default:
+		return Key{}, false
+	}
+}
+
+func firstCSIParamNumber(params string) (int, bool) {
+	if index := strings.IndexAny(params, ";:"); index >= 0 {
+		params = params[:index]
+	}
+	if params == "" {
+		return 0, false
+	}
+	value, err := strconv.Atoi(params)
+	return value, err == nil
+}
+
+func functionKeyFromTerminalCode(code int) (KeyType, bool) {
+	switch code {
+	case 11:
+		return KeyF1, true
+	case 12:
+		return KeyF2, true
+	case 13:
+		return KeyF3, true
+	case 14:
+		return KeyF4, true
+	case 15:
+		return KeyF5, true
+	case 17:
+		return KeyF6, true
+	case 18:
+		return KeyF7, true
+	case 19:
+		return KeyF8, true
+	case 20:
+		return KeyF9, true
+	case 21:
+		return KeyF10, true
+	case 23:
+		return KeyF11, true
+	case 24:
+		return KeyF12, true
+	default:
+		return KeyUnknown, false
 	}
 }
 

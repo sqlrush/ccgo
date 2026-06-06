@@ -1001,6 +1001,50 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 	}
 }
 
+func TestParseFunctionKeySequences(t *testing.T) {
+	cases := []struct {
+		seq  string
+		want KeyType
+	}{
+		{seq: "\x1bOP", want: KeyF1},
+		{seq: "\x1bOQ", want: KeyF2},
+		{seq: "\x1bOR", want: KeyF3},
+		{seq: "\x1bOS", want: KeyF4},
+		{seq: "\x1b[[A", want: KeyF1},
+		{seq: "\x1b[[B", want: KeyF2},
+		{seq: "\x1b[[C", want: KeyF3},
+		{seq: "\x1b[[D", want: KeyF4},
+		{seq: "\x1b[[E", want: KeyF5},
+		{seq: "\x1b[11~", want: KeyF1},
+		{seq: "\x1b[12~", want: KeyF2},
+		{seq: "\x1b[13~", want: KeyF3},
+		{seq: "\x1b[14~", want: KeyF4},
+		{seq: "\x1b[15~", want: KeyF5},
+		{seq: "\x1b[17~", want: KeyF6},
+		{seq: "\x1b[18~", want: KeyF7},
+		{seq: "\x1b[19~", want: KeyF8},
+		{seq: "\x1b[20~", want: KeyF9},
+		{seq: "\x1b[21~", want: KeyF10},
+		{seq: "\x1b[23~", want: KeyF11},
+		{seq: "\x1b[24~", want: KeyF12},
+		{seq: "\x1b[1;2P", want: KeyF1},
+		{seq: "\x1b[1;5Q", want: KeyF2},
+		{seq: "\x1b[15;2~", want: KeyF5},
+		{seq: "\x1b[24;5~", want: KeyF12},
+	}
+	for _, tc := range cases {
+		if key := ParseKey(tc.seq); key.Type != tc.want {
+			t.Fatalf("ParseKey(%q) = %#v, want %q", tc.seq, key, tc.want)
+		}
+	}
+	if key := ParseKey("\x1b[P"); key.Type != KeyUnknown {
+		t.Fatalf("CSI P should not parse as F1: %#v", key)
+	}
+	if key := ParseKey("\x1b[2;3P"); key.Type != KeyUnknown {
+		t.Fatalf("CSI 2;3P should not parse as F1: %#v", key)
+	}
+}
+
 func TestParseCSIuKeySequences(t *testing.T) {
 	cases := []struct {
 		seq  string
@@ -1599,6 +1643,27 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 		t.Fatalf("ctrl-underscore CSI-u action = %q", action)
 	}
 	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab", "ctrl-q", "controlQ", "cQ", "ctrl-v", "controlV", "cV", "ctrl-z", "controlZ", "cZ", "ctrl-space", "controlSpace", "cSpace", "ctrl-@", "control@", "c@", "ctrl-2", "control2", "c2", "ctrl-\\", "control\\", "c\\", "ctrl-]", "control]", "c]", "ctrl-^", "control^", "c^", "ctrl-6", "control6", "c6", "ctrl-_", "control_", "c_", "ctrl-slash", "control/", "c/"} {
+		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
+			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
+		}
+	}
+}
+
+func TestKeymapFromSpecsAcceptsFunctionKeys(t *testing.T) {
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
+		{Key: "F1", Action: ActionCancel},
+		{Key: "function-key-12", Action: ActionScrollToBottom},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x1bOP")); action != ActionCancel {
+		t.Fatalf("F1 action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[24~")); action != ActionScrollToBottom {
+		t.Fatalf("F12 action = %q", action)
+	}
+	for _, name := range []string{"f1", "F2", "f3Key", "function4", "function-key-5", "functionKey6", "fn7", "fn-8"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

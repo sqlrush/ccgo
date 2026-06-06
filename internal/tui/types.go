@@ -81,6 +81,18 @@ const (
 	KeyTab              KeyType = "tab"
 	KeyShiftTab         KeyType = "shift+tab"
 	KeyEsc              KeyType = "esc"
+	KeyF1               KeyType = "f1"
+	KeyF2               KeyType = "f2"
+	KeyF3               KeyType = "f3"
+	KeyF4               KeyType = "f4"
+	KeyF5               KeyType = "f5"
+	KeyF6               KeyType = "f6"
+	KeyF7               KeyType = "f7"
+	KeyF8               KeyType = "f8"
+	KeyF9               KeyType = "f9"
+	KeyF10              KeyType = "f10"
+	KeyF11              KeyType = "f11"
+	KeyF12              KeyType = "f12"
 	KeyAltLeft          KeyType = "alt+left"
 	KeyAltRight         KeyType = "alt+right"
 	KeyAltB             KeyType = "alt+b"
@@ -122,6 +134,37 @@ const (
 	KeyFocusOut         KeyType = "focus_out"
 	KeyUnknown          KeyType = "unknown"
 )
+
+func functionKeyType(number int) (KeyType, bool) {
+	switch number {
+	case 1:
+		return KeyF1, true
+	case 2:
+		return KeyF2, true
+	case 3:
+		return KeyF3, true
+	case 4:
+		return KeyF4, true
+	case 5:
+		return KeyF5, true
+	case 6:
+		return KeyF6, true
+	case 7:
+		return KeyF7, true
+	case 8:
+		return KeyF8, true
+	case 9:
+		return KeyF9, true
+	case 10:
+		return KeyF10, true
+	case 11:
+		return KeyF11, true
+	case 12:
+		return KeyF12, true
+	default:
+		return KeyUnknown, false
+	}
+}
 
 type Key struct {
 	Type         KeyType
