@@ -73,6 +73,14 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	if s.VimMode == "" {
 		s.VimMode = VimInsert
 	}
+	if s.shouldStopVimMacroRecording(key) {
+		s.VimRecordingMacro = 0
+		return ScreenEvent{}, true
+	}
+	recordMacro := s.VimRecordingMacro
+	if recordMacro != 0 && !s.VimReplayingMacro {
+		defer s.appendVimMacroKey(recordMacro, key)
+	}
 	if s.VimMode == VimReplace {
 		return s.applyVimReplaceModeKey(key), true
 	}
@@ -154,6 +162,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	if s.VimPendingMark != 0 {
 		return s.applyVimMark(r)
 	}
+	if s.VimPendingMacro != 0 {
+		return s.applyVimMacro(r)
+	}
 	if s.VimPendingG {
 		return s.applyVimG(r)
 	}
@@ -201,6 +212,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
 	case 'm', '`', '\'':
 		s.VimPendingMark = r
+		s.VimPendingCount = count
+	case 'q', '@':
+		s.VimPendingMacro = r
 		s.VimPendingCount = count
 	case '>', '<':
 		s.VimPendingIndent = r
@@ -724,6 +738,79 @@ func (s *REPLScreen) applyVimMarkOperator(operator rune, mark rune, target int, 
 	s.recordVimChange(vimRecordedChange{Kind: "operatorMark", Operator: operator, Target: mark, Count: count, Linewise: linewise})
 }
 
+func (s *REPLScreen) applyVimMacro(target rune) ScreenEvent {
+	action := s.VimPendingMacro
+	count := s.VimPendingCount
+	s.clearVimPending()
+	if action == '@' && target == '@' {
+		target = s.VimLastMacro
+	}
+	if !isVimMacroRegisterRune(target) {
+		return ScreenEvent{}
+	}
+	switch action {
+	case 'q':
+		if s.VimMacros == nil {
+			s.VimMacros = make(map[rune][]Key)
+		}
+		s.VimMacros[target] = nil
+		s.VimRecordingMacro = target
+	case '@':
+		if s.VimReplayingMacro {
+			return ScreenEvent{}
+		}
+		macro := append([]Key(nil), s.VimMacros[target]...)
+		if len(macro) == 0 {
+			return ScreenEvent{}
+		}
+		if count <= 0 {
+			count = 1
+		}
+		s.VimLastMacro = target
+		s.VimReplayingMacro = true
+		defer func() { s.VimReplayingMacro = false }()
+		var last ScreenEvent
+		for i := 0; i < count; i++ {
+			for _, key := range macro {
+				event := s.ApplyKey(key)
+				if event.Type != ScreenEventNone {
+					last = event
+				}
+			}
+		}
+		return last
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) shouldStopVimMacroRecording(key Key) bool {
+	if s.VimRecordingMacro == 0 || s.VimReplayingMacro || s.VimMode != VimNormal {
+		return false
+	}
+	if key.Type != KeyRune || key.Rune != 'q' {
+		return false
+	}
+	return !s.hasVimPendingState()
+}
+
+func (s *REPLScreen) hasVimPendingState() bool {
+	return s.VimPendingOperator != 0 ||
+		s.VimPendingCharMotion != 0 ||
+		s.VimPendingTextObject != 0 ||
+		s.VimPendingG ||
+		s.VimPendingIndent != 0 ||
+		s.VimPendingMark != 0 ||
+		s.VimPendingMacro != 0 ||
+		s.VimPendingReplace
+}
+
+func (s *REPLScreen) appendVimMacroKey(register rune, key Key) {
+	if s.VimMacros == nil {
+		s.VimMacros = make(map[rune][]Key)
+	}
+	s.VimMacros[register] = append(s.VimMacros[register], key)
+}
+
 func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
 	motion := s.VimPendingCharMotion
 	operator := s.VimPendingOperator
@@ -1146,6 +1233,7 @@ func (s *REPLScreen) clearVimPending() {
 	s.VimPendingG = false
 	s.VimPendingIndent = 0
 	s.VimPendingMark = 0
+	s.VimPendingMacro = 0
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
@@ -1194,6 +1282,10 @@ func isVimCountRune(r rune) bool {
 
 func isVimMarkRune(r rune) bool {
 	return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z'
+}
+
+func isVimMacroRegisterRune(r rune) bool {
+	return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9'
 }
 
 func applyN(count int, fn func()) {

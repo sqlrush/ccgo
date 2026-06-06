@@ -3781,6 +3781,31 @@ func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimMacros(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"q", "a", "A", "!", "\x1b", "q"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRecordingMacro != 0 || screen.Prompt.Text != "one!" || len(screen.VimMacros['a']) != 3 {
+		t.Fatalf("after recording macro screen = %#v", screen)
+	}
+	for _, seq := range []string{"0", "2", "@", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one!!!" {
+		t.Fatalf("after 2@a screen = %#v", screen)
+	}
+	for _, seq := range []string{"@", "@"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one!!!!" || screen.VimLastMacro != 'a' {
+		t.Fatalf("after @@ screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

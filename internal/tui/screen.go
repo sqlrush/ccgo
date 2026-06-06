@@ -78,6 +78,11 @@ type REPLScreen struct {
 	VimLastVisualValid    bool
 	VimMarks              map[rune]int
 	VimPendingMark        rune
+	VimMacros             map[rune][]Key
+	VimPendingMacro       rune
+	VimRecordingMacro     rune
+	VimReplayingMacro     bool
+	VimLastMacro          rune
 	Focused               bool
 	ReverseSearch         ReverseSearchState
 	StashedPrompt         *PromptStash
