@@ -141,10 +141,10 @@ func (size *scriptSize) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if width := intPtrJSONField(fields, "width", "w", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth", "resize_width", "resizeWidth", "inner_width", "innerWidth", "outer_width", "outerWidth", "client_width", "clientWidth", "offset_width", "offsetWidth", "content_width", "contentWidth", "rect_width", "rectWidth"); width != nil {
+	if width := intPtrJSONField(fields, "width", "w", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth", "resize_width", "resizeWidth", "inner_width", "innerWidth", "outer_width", "outerWidth", "client_width", "clientWidth", "offset_width", "offsetWidth", "content_width", "contentWidth", "rect_width", "rectWidth", "inline_size", "inlineSize"); width != nil {
 		size.Width = *width
 	}
-	if height := intPtrJSONField(fields, "height", "h", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight", "resize_height", "resizeHeight", "inner_height", "innerHeight", "outer_height", "outerHeight", "client_height", "clientHeight", "offset_height", "offsetHeight", "content_height", "contentHeight", "rect_height", "rectHeight"); height != nil {
+	if height := intPtrJSONField(fields, "height", "h", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight", "resize_height", "resizeHeight", "inner_height", "innerHeight", "outer_height", "outerHeight", "client_height", "clientHeight", "offset_height", "offsetHeight", "content_height", "contentHeight", "rect_height", "rectHeight", "block_size", "blockSize"); height != nil {
 		size.Height = *height
 	}
 	return nil
@@ -923,6 +923,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"contentWidth",
 			"rect_width",
 			"rectWidth",
+			"inline_size",
+			"inlineSize",
 			"value",
 		); ok {
 			step.ResizeWidth = width
@@ -952,6 +954,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"contentHeight",
 			"rect_height",
 			"rectHeight",
+			"block_size",
+			"blockSize",
 			"value",
 		); ok {
 			step.ResizeHeight = height
@@ -967,7 +971,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if step.ResizeWidth <= 0 {
 		if width, ok := scriptNamedIntField(rawFieldMap,
-			[]string{"width", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth", "inner_width", "innerWidth", "outer_width", "outerWidth", "client_width", "clientWidth", "offset_width", "offsetWidth", "content_width", "contentWidth", "rect_width", "rectWidth"},
+			[]string{"width", "columns", "cols", "screen_width", "screenWidth", "terminal_width", "terminalWidth", "inner_width", "innerWidth", "outer_width", "outerWidth", "client_width", "clientWidth", "offset_width", "offsetWidth", "content_width", "contentWidth", "rect_width", "rectWidth", "inline_size", "inlineSize"},
 			"width",
 			"w",
 			"columns",
@@ -990,6 +994,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"contentWidth",
 			"rect_width",
 			"rectWidth",
+			"inline_size",
+			"inlineSize",
 			"value",
 		); ok {
 			step.ResizeWidth = width
@@ -997,7 +1003,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if step.ResizeHeight <= 0 {
 		if height, ok := scriptNamedIntField(rawFieldMap,
-			[]string{"height", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight", "inner_height", "innerHeight", "outer_height", "outerHeight", "client_height", "clientHeight", "offset_height", "offsetHeight", "content_height", "contentHeight", "rect_height", "rectHeight"},
+			[]string{"height", "rows", "screen_height", "screenHeight", "terminal_height", "terminalHeight", "inner_height", "innerHeight", "outer_height", "outerHeight", "client_height", "clientHeight", "offset_height", "offsetHeight", "content_height", "contentHeight", "rect_height", "rectHeight", "block_size", "blockSize"},
 			"height",
 			"h",
 			"rows",
@@ -1019,6 +1025,8 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"contentHeight",
 			"rect_height",
 			"rectHeight",
+			"block_size",
+			"blockSize",
 			"value",
 		); ok {
 			step.ResizeHeight = height

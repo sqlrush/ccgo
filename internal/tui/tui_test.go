@@ -6194,6 +6194,18 @@ func TestRunInteractionScriptAcceptsDOMResizePayloads(t *testing.T) {
 				}
 			},
 			"expectScreen": {"columns": 66, "rows": 15}
+		},
+		{
+			"action": "resize",
+			"payload": {
+				"contentBoxSize": [
+					{
+						"inlineSize": "68",
+						"blockSize": "16"
+					}
+				]
+			},
+			"expectScreen": {"columns": 68, "rows": 16}
 		}
 	]`))
 	if err != nil {
