@@ -87,7 +87,7 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 
 func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.RawMessage, overwrite bool, includeSummary bool) error {
 	if includeSummary {
-		if value, ok, err := microSummaryJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "text", "value", "output"); err != nil {
+		if value, ok, err := microSummaryJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output"); err != nil {
 			return err
 		} else if ok && (overwrite || result.Summary == "") {
 			result.Summary = value
@@ -196,6 +196,7 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 	for _, name := range []string{
 		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "entries", "record", "records", "item", "items", "resource", "resources", "payload", "response", "body",
 		"viewer", "edge", "edges", "node", "nodes",
+		"choice", "choices", "output", "outputs", "candidate", "candidates", "generation", "generations", "resultList", "result_list", "results", "responseList", "response_list", "responses", "completionChoice", "completion_choice", "completionChoices", "completion_choices", "completions", "alternative", "alternatives", "delta",
 		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
 		"message", "messages", "assistantMessage", "assistant_message", "resultMessage", "result_message", "outputMessage", "output_message", "completion", "completionMessage", "completion_message",
 		"attributes", "properties", "attrs", "value", "values", "included", "collection", "list", "children",
@@ -240,7 +241,7 @@ func microResultArrayWrappedJSON(data json.RawMessage) (json.RawMessage, bool) {
 
 func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
 	for _, name := range []string{
-		"Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "text", "value", "output",
+		"Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output",
 	} {
 		raw, ok := fields[name]
 		if !ok {
@@ -250,7 +251,7 @@ func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
 		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 			continue
 		}
-		if trimmed[0] != '{' {
+		if trimmed[0] != '{' && trimmed[0] != '[' {
 			return true
 		}
 		if _, ok, _ := microSummaryFromRaw(raw, name); ok {
@@ -570,7 +571,17 @@ func microSummaryFromRaw(raw json.RawMessage, field string) (string, bool, error
 		} else if ok {
 			return text, true, nil
 		}
+		if nonText, err := microSummaryNonTextContentBlock(trimmed); err != nil {
+			return "", false, err
+		} else if nonText {
+			return "", false, nil
+		}
 		if text, ok, err := microSummaryMessageText(trimmed); err != nil {
+			return "", false, err
+		} else if ok {
+			return text, true, nil
+		}
+		if text, ok, err := microSummaryProviderText(trimmed); err != nil {
 			return "", false, err
 		} else if ok {
 			return text, true, nil
@@ -617,7 +628,46 @@ func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bo
 	} else if ok {
 		return text, true, nil
 	}
+	if nonText, err := microSummaryNonTextContentBlock(trimmed); err != nil {
+		return "", false, err
+	} else if nonText {
+		return "", false, nil
+	}
 	return microSummaryMessageText(trimmed)
+}
+
+func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", false, err
+	}
+	for _, name := range []string{"parts", "segments", "message", "delta", "content", "output"} {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		text, ok, err := microSummaryFromRaw(nested, name)
+		if err != nil {
+			return "", false, err
+		}
+		if ok {
+			return text, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func microSummaryNonTextContentBlock(raw json.RawMessage) (bool, error) {
+	var block contracts.ContentBlock
+	if err := json.Unmarshal(raw, &block); err != nil {
+		return false, err
+	}
+	switch block.Type {
+	case contracts.ContentThinking, contracts.ContentToolUse, contracts.ContentToolResult, contracts.ContentImage, contracts.ContentCacheEdits:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func microSummaryContentBlockText(raw json.RawMessage) (string, bool, error) {

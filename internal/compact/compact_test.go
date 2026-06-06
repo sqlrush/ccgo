@@ -648,6 +648,123 @@ func TestLoadMicroResultAcceptsMessageSummaryPayloads(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest      string
+		payload     string
+		want        string
+		wantExpires bool
+	}{
+		{
+			digest: "choices-message",
+			payload: `{
+				"choices": [
+					{"finish_reason": "stop"},
+					{
+						"message": {
+							"role": "assistant",
+							"content": [
+								{"type": "text", "text": "choice summary"},
+								{"type": "thinking", "text": "hidden"}
+							]
+						}
+					}
+				],
+				"cacheKey": "choices-message",
+				"cacheVersion": "microcompact.v1",
+				"createdAt": 100,
+				"ttlSeconds": 3600
+			}`,
+			want:        "choice summary",
+			wantExpires: true,
+		},
+		{
+			digest: "outputs-content",
+			payload: `{
+				"outputs": [
+					{
+						"content": [
+							{"type": "text", "text": "output summary"},
+							"tail line"
+						]
+					}
+				],
+				"digest": "outputs-content",
+				"version": "microcompact.v1",
+				"cachedAt": 100
+			}`,
+			want: "output summary\ntail line",
+		},
+		{
+			digest: "output-message",
+			payload: `{
+				"output": {
+					"message": {
+						"role": "assistant",
+						"content": "output message summary"
+					}
+				},
+				"cacheDigest": "output-message",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "output message summary",
+		},
+		{
+			digest: "candidate-parts",
+			payload: `{
+				"candidates": [
+					{
+						"content": {
+							"parts": [
+								{"text": "candidate summary"},
+								{"text": "second line"}
+							]
+						}
+					}
+				],
+				"cacheKey": "candidate-parts",
+				"cacheVersion": "microcompact.v1",
+				"generatedAt": 100
+			}`,
+			want: "candidate summary\nsecond line",
+		},
+		{
+			digest: "generations-text",
+			payload: `{
+				"generations": [
+					{"text": "generation summary"}
+				],
+				"fingerprint": "generations-text",
+				"schemaVersion": "microcompact.v1",
+				"created": 100
+			}`,
+			want: "generation summary",
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+		if tc.wantExpires && !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC()) {
+			t.Fatalf("%s expires_at = %#v", tc.digest, result.ExpiresAt)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsMetadataCacheAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {

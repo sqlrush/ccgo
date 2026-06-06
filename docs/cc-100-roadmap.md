@@ -528,6 +528,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：microcompact disk cache loader 现在会把 `value` 字段中的 text content-block object 识别为 direct summary payload，同时继续从同一 `value` object 中补 digest、version、timestamp 等 cache metadata，避免 `value` 作为 summary/cache wrapper 双义字段时丢摘要或 sidecar 信息。
 
+本轮补充：microcompact disk cache loader 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations`/`results` 等响应数组 wrapper，并可从 `message.content`、`output.content` 和 `content.parts[].text` 中恢复 summary，同时保留外层 cache metadata。
+
 本轮补充：transcript metadata loader 现在先递归解包 JSON:API/resource、GraphQL edge/node、`included`、collection/list/values 等 wrapper，再做 metadata type 分类；full transcript、lightweight metadata 和 transcript index 都能恢复 wrapped title/task/tag/worktree/content-replacement/context-collapse metadata。
 
 本轮补充：contract content block 解码现在接受文本块字段别名 `body`/`message`/`value`/`output`/`contentText`/`content_text`，并在 `text`/`thinking` block 中从字符串 `content` 回填文本，transcript resume 可恢复这些嵌套文本块格式。
