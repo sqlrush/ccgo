@@ -3787,6 +3787,17 @@ func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 
 	screen = NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
+	typePromptText(&screen, "ALPHA beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "v", "e", "u"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha beta gamma" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual lowercase screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
 	typePromptText(&screen, "alpha beta gamma")
 	screen.ApplyKey(ParseKey("\x1b"))
 	for _, seq := range []string{"0", "w", "v", "e", "o", "b", "y"} {
@@ -3873,6 +3884,17 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	}
 	if screen.VimMode != VimNormal || screen.Prompt.Text != "ONE\nTWO\nthree" || screen.Prompt.Cursor != 0 {
 		t.Fatalf("after visual line toggle case screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "j", "U"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "ONE\nTWO\nthree" || screen.Prompt.Cursor != 0 {
+		t.Fatalf("after visual line uppercase screen = %#v", screen)
 	}
 
 	screen = NewREPLScreen(40, 8, nil)

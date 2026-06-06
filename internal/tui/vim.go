@@ -309,6 +309,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualIndent(r)
 	case '~':
 		s.applyVimVisualToggleCase()
+	case 'u', 'U':
+		s.applyVimVisualChangeCase(r)
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'x':
@@ -420,6 +422,20 @@ func (s *REPLScreen) applyVimVisualToggleCase() {
 	count := s.Prompt.toggleCaseRange(start, end)
 	if count > 0 {
 		s.recordVimChange(vimRecordedChange{Kind: "toggleCase", Count: count})
+	}
+	s.exitVimVisual()
+}
+
+func (s *REPLScreen) applyVimVisualChangeCase(op rune) {
+	start, end, _, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	s.recordVimUndo()
+	count := s.Prompt.changeCaseRange(start, end, op)
+	if count > 0 {
+		s.recordVimChange(vimRecordedChange{Kind: "changeCase", Target: op, Count: count})
 	}
 	s.exitVimVisual()
 }
@@ -811,6 +827,9 @@ func (s *REPLScreen) replayVimLastChange() {
 	case "toggleCase":
 		s.recordVimUndo()
 		s.Prompt.toggleCase(change.Count)
+	case "changeCase":
+		s.recordVimUndo()
+		s.Prompt.changeCase(change.Count, change.Target)
 	case "join":
 		s.recordVimUndo()
 		s.Prompt.joinLines(change.Count)
@@ -1107,6 +1126,9 @@ func (p *PromptState) rangeText(start int, end int) string {
 	if start < 0 {
 		start = 0
 	}
+	if start > len(runes) {
+		start = len(runes)
+	}
 	if end > len(runes) {
 		end = len(runes)
 	}
@@ -1237,25 +1259,31 @@ func (p *PromptState) moveLogicalLine(delta int) {
 }
 
 func (p *PromptState) toggleCase(count int) {
+	p.changeCase(count, '~')
+}
+
+func (p *PromptState) changeCase(count int, op rune) int {
 	if count <= 0 {
 		count = 1
 	}
 	runes := []rune(p.Text)
 	cursor := p.clampCursor(p.Cursor)
-	for i := 0; i < count && cursor+i < len(runes); i++ {
-		idx := cursor + i
-		runes[idx] = toggleRuneCase(runes[idx])
+	end := cursor + count
+	if end > len(runes) {
+		end = len(runes)
 	}
+	changeRuneCase(runes, cursor, end, op)
 	p.Text = string(runes)
-	if cursor+count <= len(runes) {
-		p.Cursor = cursor + count
-	} else {
-		p.Cursor = len(runes)
-	}
+	p.Cursor = end
 	p.resetHistoryCursor()
+	return end - cursor
 }
 
 func (p *PromptState) toggleCaseRange(start int, end int) int {
+	return p.changeCaseRange(start, end, '~')
+}
+
+func (p *PromptState) changeCaseRange(start int, end int, op rune) int {
 	runes := []rune(p.Text)
 	if start < 0 {
 		start = 0
@@ -1266,16 +1294,26 @@ func (p *PromptState) toggleCaseRange(start int, end int) int {
 	if end < start {
 		start, end = end, start
 	}
-	for i := start; i < end; i++ {
-		runes[i] = toggleRuneCase(runes[i])
-	}
+	changeRuneCase(runes, start, end, op)
 	p.Text = string(runes)
 	p.Cursor = start
 	p.resetHistoryCursor()
 	return end - start
 }
 
-func toggleRuneCase(r rune) rune {
+func changeRuneCase(runes []rune, start int, end int, op rune) {
+	for i := start; i < end; i++ {
+		runes[i] = convertRuneCase(runes[i], op)
+	}
+}
+
+func convertRuneCase(r rune, op rune) rune {
+	switch op {
+	case 'u':
+		return unicode.ToLower(r)
+	case 'U':
+		return unicode.ToUpper(r)
+	}
 	switch {
 	case unicode.IsUpper(r):
 		return unicode.ToLower(r)
