@@ -417,6 +417,30 @@ func TestTerminalParserDispatchesMultiDynamicOSCColorActions(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesSpecialOSCColorActions(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" + OSCSequence(OSCSpecialColor, "0", "#112233", "4", "?") + "b" + OSCSequence(OSCResetSpecialColor, "4") + "c"
+	actions := parser.Feed(input)
+	if len(actions) != 5 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionSpecialColor || !actions[1].OSC.SpecialColor.Valid || len(actions[1].OSC.SpecialColor.Entries) != 2 {
+		t.Fatalf("special color action = %#v", actions[1])
+	}
+	if actions[1].OSC.SpecialColor.Entries[0].Index != 0 || actions[1].OSC.SpecialColor.Entries[0].Color == nil || *actions[1].OSC.SpecialColor.Entries[0].Color != (RGBColor{R: 17, G: 34, B: 51}) {
+		t.Fatalf("special color set = %#v", actions[1].OSC.SpecialColor.Entries[0])
+	}
+	if actions[1].OSC.SpecialColor.Entries[1].Index != 4 || !actions[1].OSC.SpecialColor.Entries[1].Query {
+		t.Fatalf("special color query = %#v", actions[1].OSC.SpecialColor.Entries[1])
+	}
+	if actions[3].Type != TerminalActionSpecialColor || !actions[3].OSC.SpecialColor.Valid || len(actions[3].OSC.SpecialColor.Entries) != 1 || !actions[3].OSC.SpecialColor.Entries[0].Reset || actions[3].OSC.SpecialColor.Entries[0].Index != 4 {
+		t.Fatalf("special color reset = %#v", actions[3])
+	}
+	if got := TerminalVisibleText(input); got != "abc" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
 func TestTerminalParserResetClearsStyle(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed(CSISequence(1, "m") + "bold" + ESCResetSequence + "plain")

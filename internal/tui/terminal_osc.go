@@ -17,6 +17,7 @@ const (
 	OSCStringTerminator         = "\x1b\\"
 	OSCSetTitleAndIcon          = "0"
 	OSCPaletteColor             = "4"
+	OSCSpecialColor             = "5"
 	OSCCurrentDirectory         = "7"
 	OSCHyperlink                = "8"
 	OSCITerm2                   = "9"
@@ -41,6 +42,7 @@ const (
 	OSCResetTektronixCursor     = "118"
 	OSCResetHighlightForeground = "119"
 	OSCResetPalette             = "104"
+	OSCResetSpecialColor        = "105"
 	OSCClipboard                = "52"
 	OSCKitty                    = "99"
 	OSCShellIntegration         = "133"
@@ -100,6 +102,7 @@ const (
 	OSCActionClipboard    OSCActionType = "clipboard"
 	OSCActionColor        OSCActionType = "color"
 	OSCActionPalette      OSCActionType = "palette"
+	OSCActionSpecialColor OSCActionType = "specialColor"
 	OSCActionProgress     OSCActionType = "progress"
 	OSCActionNotification OSCActionType = "notification"
 	OSCActionShell        OSCActionType = "shellIntegration"
@@ -171,6 +174,22 @@ type TerminalOSCPaletteAction struct {
 	Valid    bool
 }
 
+type TerminalOSCSpecialColorEntry struct {
+	Index int
+	Color *RGBColor
+	Query bool
+	Reset bool
+	Raw   string
+	Valid bool
+}
+
+type TerminalOSCSpecialColorAction struct {
+	Entries  []TerminalOSCSpecialColorEntry
+	ResetAll bool
+	Raw      string
+	Valid    bool
+}
+
 type TerminalNotificationAction struct {
 	Provider string
 	ID       string
@@ -198,6 +217,7 @@ type OSCAction struct {
 	Clipboard    TerminalClipboardAction
 	Color        TerminalOSCColorAction
 	Palette      TerminalOSCPaletteAction
+	SpecialColor TerminalOSCSpecialColorAction
 	Progress     TerminalProgressAction
 	Notification TerminalNotificationAction
 	Shell        TerminalShellIntegrationAction
@@ -274,6 +294,8 @@ func ParseOSCContent(content string) OSCAction {
 		}
 	case OSCPaletteColor:
 		return OSCAction{Type: OSCActionPalette, Palette: ParseOSCPalettePayload(data)}
+	case OSCSpecialColor:
+		return OSCAction{Type: OSCActionSpecialColor, SpecialColor: ParseOSCSpecialColorPayload(data)}
 	case OSCCurrentDirectory:
 		return OSCAction{Type: OSCActionDirectory, Directory: ParseDirectoryPayload(data)}
 	case OSCHyperlink:
@@ -283,6 +305,8 @@ func ParseOSCContent(content string) OSCAction {
 		return OSCAction{Type: OSCActionColor, Color: ParseOSCColorPayload(strconv.Itoa(commandNumber), data)}
 	case OSCResetPalette:
 		return OSCAction{Type: OSCActionPalette, Palette: ParseOSCPaletteResetPayload(data)}
+	case OSCResetSpecialColor:
+		return OSCAction{Type: OSCActionSpecialColor, SpecialColor: ParseOSCSpecialColorResetPayload(data)}
 	case OSCClipboard:
 		return OSCAction{Type: OSCActionClipboard, Clipboard: ParseClipboardPayload(data)}
 	case OSCITerm2:
@@ -597,6 +621,81 @@ func parseOSCPaletteIndex(value string) (int, bool) {
 	}
 	index, err := strconv.Atoi(value)
 	if err != nil || index < 0 {
+		return 0, false
+	}
+	return index, true
+}
+
+func ParseOSCSpecialColorPayload(payload string) TerminalOSCSpecialColorAction {
+	action := TerminalOSCSpecialColorAction{
+		Raw: payload,
+	}
+	parts := strings.Split(payload, ";")
+	if len(parts) == 0 || len(parts)%2 != 0 {
+		return action
+	}
+	entries := make([]TerminalOSCSpecialColorEntry, 0, len(parts)/2)
+	for i := 0; i < len(parts); i += 2 {
+		index, ok := parseOSCSpecialColorIndex(parts[i])
+		if !ok {
+			return action
+		}
+		spec := strings.TrimSpace(parts[i+1])
+		entry := TerminalOSCSpecialColorEntry{
+			Index: index,
+			Raw:   parts[i+1],
+		}
+		switch {
+		case spec == "?":
+			entry.Query = true
+			entry.Valid = true
+		default:
+			color, ok := ParseOSCColor(spec)
+			if !ok {
+				return action
+			}
+			entry.Color = color
+			entry.Valid = true
+		}
+		entries = append(entries, entry)
+	}
+	action.Entries = entries
+	action.Valid = len(entries) > 0
+	return action
+}
+
+func ParseOSCSpecialColorResetPayload(payload string) TerminalOSCSpecialColorAction {
+	action := TerminalOSCSpecialColorAction{
+		Raw: payload,
+	}
+	payload = strings.TrimSpace(payload)
+	if payload == "" {
+		action.ResetAll = true
+		action.Valid = true
+		return action
+	}
+	parts := strings.Split(payload, ";")
+	entries := make([]TerminalOSCSpecialColorEntry, 0, len(parts))
+	for _, part := range parts {
+		index, ok := parseOSCSpecialColorIndex(part)
+		if !ok {
+			return action
+		}
+		entries = append(entries, TerminalOSCSpecialColorEntry{
+			Index: index,
+			Reset: true,
+			Raw:   part,
+			Valid: true,
+		})
+	}
+	action.Entries = entries
+	action.Valid = len(entries) > 0
+	return action
+}
+
+func parseOSCSpecialColorIndex(value string) (int, bool) {
+	index, ok := parseOSCPaletteIndex(value)
+	if !ok || index > 4 {
 		return 0, false
 	}
 	return index, true

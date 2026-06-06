@@ -4636,6 +4636,28 @@ func TestParseOSCContent(t *testing.T) {
 	if paletteReset.Type != OSCActionPalette || !paletteReset.Palette.Valid || len(paletteReset.Palette.Entries) != 2 || !paletteReset.Palette.Entries[0].Reset || paletteReset.Palette.Entries[1].Index != 2 {
 		t.Fatalf("palette reset = %#v", paletteReset)
 	}
+	specialColor := ParseOSCContent("5;0;#112233;4;?")
+	if specialColor.Type != OSCActionSpecialColor || !specialColor.SpecialColor.Valid || len(specialColor.SpecialColor.Entries) != 2 {
+		t.Fatalf("special color = %#v", specialColor)
+	}
+	if specialColor.SpecialColor.Entries[0].Index != 0 || specialColor.SpecialColor.Entries[0].Color == nil || *specialColor.SpecialColor.Entries[0].Color != (RGBColor{R: 17, G: 34, B: 51}) {
+		t.Fatalf("special color set = %#v", specialColor.SpecialColor.Entries[0])
+	}
+	if specialColor.SpecialColor.Entries[1].Index != 4 || !specialColor.SpecialColor.Entries[1].Query || specialColor.SpecialColor.Entries[1].Color != nil {
+		t.Fatalf("special color query = %#v", specialColor.SpecialColor.Entries[1])
+	}
+	specialReset := ParseOSCContent("105;1;4")
+	if specialReset.Type != OSCActionSpecialColor || !specialReset.SpecialColor.Valid || len(specialReset.SpecialColor.Entries) != 2 || !specialReset.SpecialColor.Entries[0].Reset || specialReset.SpecialColor.Entries[1].Index != 4 {
+		t.Fatalf("special color reset = %#v", specialReset)
+	}
+	specialResetAll := ParseOSCContent("105")
+	if specialResetAll.Type != OSCActionSpecialColor || !specialResetAll.SpecialColor.Valid || !specialResetAll.SpecialColor.ResetAll || len(specialResetAll.SpecialColor.Entries) != 0 {
+		t.Fatalf("special color reset all = %#v", specialResetAll)
+	}
+	invalidSpecialColor := ParseOSCContent("5;5;#112233")
+	if invalidSpecialColor.Type != OSCActionSpecialColor || invalidSpecialColor.SpecialColor.Valid {
+		t.Fatalf("invalid special color = %#v", invalidSpecialColor)
+	}
 
 	progress := ParseOSCContent("9;4;1;101")
 	if progress.Type != OSCActionProgress || progress.Progress.State != TerminalProgressRunning || progress.Progress.Percent != 100 {
