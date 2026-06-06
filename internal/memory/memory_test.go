@@ -517,6 +517,53 @@ func TestMemoryAgentSelectRelevantMemoriesParsesIncludedCollections(t *testing.T
 	}
 }
 
+func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	opsPath := filepath.Join(dir, "ops.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_provider",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"choices":[
+				{"finish_reason":"stop"},
+				{"message":{"role":"assistant","content":"{\"query\":\"database access\",\"memory_paths\":[\"ops.md\",\"db.md\"]}"}}
+			]
+		}`)},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "ops.md,db.md" {
+		t.Fatalf("choice result = %#v", result)
+	}
+	if len(result.Selected) != 2 || result.Selected[0].Path != opsPath || result.Selected[1].Path != dbPath {
+		t.Fatalf("choice selected = %#v", result.Selected)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"candidates":[
+			{"content":{"parts":[{"text":"{\"memoryPaths\":[\"db.md\"]}"}]}}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || strings.Join(result.SelectedIDs, ",") != "db.md" {
+		t.Fatalf("candidate result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != dbPath {
+		t.Fatalf("candidate selected = %#v", result.Selected)
+	}
+}
+
 func TestPrefetchRelevantMemoriesCanUseMemoryAgentSelector(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "db.md")
@@ -1462,6 +1509,64 @@ func TestMemoryAgentRecallParsesIncludedCollections(t *testing.T) {
 	}
 	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "prior" || result.Matches[1].Summary.SessionID != "other" {
 		t.Fatalf("matches = %#v", result.Matches)
+	}
+}
+
+func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+	}{
+		{id: "prior", summary: "database access policy notes", updated: 200},
+		{id: "other", summary: "credential rotation notes", updated: 100},
+	} {
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_recall_provider",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"choices":[
+				{"message":{"content":[{"type":"text","text":"{\"query\":\"database access\",\"session_ids\":[\"prior\",\"other\"]}"}]}}
+			]
+		}`)},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior,other" {
+		t.Fatalf("choice result = %#v", result)
+	}
+	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "prior" || result.Matches[1].Summary.SessionID != "other" {
+		t.Fatalf("choice matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"candidates":[
+			{"content":{"parts":[{"text":"{\"selectedIds\":[\"other\"]}"}]}}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credential rotation?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other" {
+		t.Fatalf("candidate result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("candidate matches = %#v", result.Matches)
 	}
 }
 

@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -473,10 +474,16 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		if scalar == "" {
 			return "", nil, false
 		}
+		if startsJSONValue(scalar) {
+			return parseRecallAgentJSON(scalar)
+		}
 		if len(strings.Fields(scalar)) == 1 {
 			return "", recallIDs([]string{scalar}), true
 		}
 		return scalar, nil, true
+	}
+	if text, ok := selectionProviderResponseText(raw); ok {
+		return parseRecallAgentJSON(text)
 	}
 	var object struct {
 		Query                   string            `json:"query"`
@@ -689,10 +696,16 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		if scalar == "" {
 			return "", nil, false
 		}
+		if startsJSONValue(scalar) {
+			return parseRelevantMemoryAgentJSON(scalar)
+		}
 		if relevantMemoryLooksLikeID(scalar) {
 			return "", relevantMemoryIDs([]string{scalar}), true
 		}
 		return scalar, nil, true
+	}
+	if text, ok := selectionProviderResponseText(raw); ok {
+		return parseRelevantMemoryAgentJSON(text)
 	}
 	var rawObject map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &rawObject); err == nil {
@@ -978,6 +991,93 @@ func stringFromRawJSON(value json.RawMessage) string {
 		return strings.TrimSpace(text)
 	}
 	return ""
+}
+
+func selectionProviderResponseText(raw string) (string, bool) {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &object); err != nil {
+		return "", false
+	}
+	for _, key := range []string{
+		"choice",
+		"choices",
+		"output",
+		"outputs",
+		"candidate",
+		"candidates",
+		"generation",
+		"generations",
+		"completion",
+		"completions",
+		"response",
+		"responses",
+		"result",
+		"results",
+	} {
+		value, ok := object[key]
+		if !ok {
+			continue
+		}
+		if text, ok := selectionProviderTextFromRaw(value, 0); ok {
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func selectionProviderTextFromRaw(raw json.RawMessage, depth int) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || depth > 8 {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		return text, text != ""
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return "", false
+		}
+		parts := make([]string, 0, len(items))
+		for _, item := range items {
+			part, ok := selectionProviderTextFromRaw(item, depth+1)
+			if ok {
+				parts = append(parts, part)
+			}
+		}
+		if len(parts) == 0 {
+			return "", false
+		}
+		return strings.Join(parts, "\n"), true
+	}
+	if raw[0] != '{' {
+		return "", false
+	}
+	var block contracts.ContentBlock
+	if err := json.Unmarshal(raw, &block); err == nil && block.Type == contracts.ContentText && strings.TrimSpace(block.Text) != "" {
+		return strings.TrimSpace(block.Text), true
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", false
+	}
+	for _, key := range []string{"text", "content", "value", "output"} {
+		if value, ok := fields[key]; ok {
+			if text, ok := selectionProviderTextFromRaw(value, depth+1); ok {
+				return text, true
+			}
+		}
+	}
+	for _, key := range []string{"message", "delta", "part", "parts", "candidate", "choice", "generation", "result", "response"} {
+		if value, ok := fields[key]; ok {
+			if text, ok := selectionProviderTextFromRaw(value, depth+1); ok {
+				return text, true
+			}
+		}
+	}
+	return "", false
 }
 
 func recallSelectionFromNestedPayloads(fallbackQuery string, payloads ...json.RawMessage) (string, []contracts.ID) {
