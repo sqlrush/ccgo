@@ -1359,7 +1359,7 @@ func fetchRemoteHistoryPageStatus(ctx context.Context, client *http.Client, auth
 		return nil, 0, nil
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNoContent {
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
 		return &RemoteHistoryPage{Events: []contracts.SDKEvent{}}, resp.StatusCode, nil
 	}
 	if resp.StatusCode != http.StatusOK {

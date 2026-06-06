@@ -138,6 +138,26 @@ func TestFetchRemoteHistoryAcceptsEmptyTerminalPages(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryTreatsMissingSessionAsEmptyTerminalPage(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusGone} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer server.Close()
+
+			authCtx := NewRemoteHistoryAuthContext("s", "", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+			events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !events.Complete || events.Pages != 1 || len(events.Events) != 0 || events.NextBeforeID != "" {
+				t.Fatalf("events = %#v", events)
+			}
+		})
+	}
+}
+
 func TestFetchRemoteHistoryRefreshesTokenOnUnauthorized(t *testing.T) {
 	var tokens []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
