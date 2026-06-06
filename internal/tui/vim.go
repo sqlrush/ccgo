@@ -27,6 +27,11 @@ type vimPromptSnapshot struct {
 	PendingSpaceAfterImage bool
 }
 
+type vimRegisterValue struct {
+	Text     string
+	Linewise bool
+}
+
 type vimRecordedChange struct {
 	Kind     string
 	Text     string
@@ -175,6 +180,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	if s.VimPendingMacro != 0 {
 		return s.applyVimMacro(r)
 	}
+	if s.VimPendingRegister {
+		return s.applyVimRegister(r)
+	}
 	if s.VimPendingG {
 		return s.applyVimG(r)
 	}
@@ -193,6 +201,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		return ScreenEvent{}
 	}
 	count := s.takeVimCount()
+	if s.VimActiveRegister != 0 && r != '"' && !vimNormalCommandUsesRegister(r) {
+		defer func() { s.VimActiveRegister = 0 }()
+	}
 	switch r {
 	case 'i':
 		s.enterVimInsert()
@@ -228,6 +239,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.enterVimSearchCount(r == '?', count)
 	case 'm', '`', '\'':
 		s.VimPendingMark = r
+		s.VimPendingCount = count
+	case '"':
+		s.VimPendingRegister = true
 		s.VimPendingCount = count
 	case 'q', '@':
 		s.VimPendingMacro = r
@@ -324,6 +338,9 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 	if s.VimPendingG {
 		return s.applyVimVisualG(r)
 	}
+	if s.VimPendingRegister {
+		return s.applyVimRegister(r)
+	}
 	if isVimCountRune(r) {
 		if r == '0' && s.VimCount == 0 {
 			s.applyVimVisualMotion('0', 1)
@@ -333,6 +350,9 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		return ScreenEvent{}
 	}
 	count := s.takeVimCount()
+	if s.VimActiveRegister != 0 && r != '"' && !vimVisualCommandUsesRegister(r) {
+		defer func() { s.VimActiveRegister = 0 }()
+	}
 	switch r {
 	case 'v':
 		if s.VimMode == VimVisual {
@@ -354,6 +374,9 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.repeatVimSearch(true, count)
 	case '/', '?':
 		s.enterVimVisualSearch(r == '?', count)
+	case '"':
+		s.VimPendingRegister = true
+		s.VimPendingCount = count
 	case 'g':
 		s.VimPendingG = true
 		s.VimPendingCount = count
@@ -684,7 +707,8 @@ func (s *REPLScreen) applyVimVisualJoin(raw bool) {
 }
 
 func (s *REPLScreen) applyVimVisualPaste() {
-	if s.VimRegister == "" {
+	replacement, registerLinewise, ok := s.takeVimPasteRegister()
+	if !ok {
 		s.exitVimVisual()
 		return
 	}
@@ -693,8 +717,7 @@ func (s *REPLScreen) applyVimVisualPaste() {
 		s.exitVimVisual()
 		return
 	}
-	replacement := s.VimRegister
-	replacementLinewise := s.VimRegisterLinewise || strings.HasSuffix(replacement, "\n")
+	replacementLinewise := registerLinewise || strings.HasSuffix(replacement, "\n")
 	replaced := s.Prompt.rangeText(start, end)
 	s.rememberVimVisualSelection()
 	s.recordVimUndo()
@@ -933,6 +956,25 @@ func (s *REPLScreen) applyVimMacro(target rune) ScreenEvent {
 	return ScreenEvent{}
 }
 
+func (s *REPLScreen) applyVimRegister(target rune) ScreenEvent {
+	count := s.VimPendingCount
+	s.VimPendingRegister = false
+	s.VimPendingCount = 0
+	if !isVimRegisterRune(target) {
+		s.VimActiveRegister = 0
+		return ScreenEvent{}
+	}
+	if target == '"' {
+		s.VimActiveRegister = 0
+	} else {
+		s.VimActiveRegister = target
+	}
+	if count > 1 {
+		s.VimCount = count
+	}
+	return ScreenEvent{}
+}
+
 func (s *REPLScreen) shouldStopVimMacroRecording(key Key) bool {
 	if s.VimRecordingMacro == 0 || s.VimReplayingMacro || s.VimMode != VimNormal {
 		return false
@@ -951,6 +993,7 @@ func (s *REPLScreen) hasVimPendingState() bool {
 		s.VimPendingIndent != 0 ||
 		s.VimPendingMark != 0 ||
 		s.VimPendingMacro != 0 ||
+		s.VimPendingRegister ||
 		s.VimPendingReplace
 }
 
@@ -1127,23 +1170,68 @@ func (s *REPLScreen) setVimRegister(content string, linewise bool) {
 	if linewise && !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
+	if s.VimActiveRegister == '_' {
+		s.VimActiveRegister = 0
+		return
+	}
 	s.VimRegister = content
 	s.VimRegisterLinewise = linewise
+	s.writeVimNamedRegister(content, linewise)
+	s.VimActiveRegister = 0
+}
+
+func (s *REPLScreen) writeVimNamedRegister(content string, linewise bool) {
+	register := s.VimActiveRegister
+	if register == 0 || register == '"' || register == '_' || !isVimRegisterRune(register) {
+		return
+	}
+	key := normalizeVimRegister(register)
+	value := vimRegisterValue{Text: content, Linewise: linewise}
+	if isVimUpperRegister(register) {
+		if existing, ok := s.VimRegisters[key]; ok {
+			value.Text = existing.Text + content
+			value.Linewise = existing.Linewise || linewise
+		}
+	}
+	if s.VimRegisters == nil {
+		s.VimRegisters = make(map[rune]vimRegisterValue)
+	}
+	s.VimRegisters[key] = value
 }
 
 func (s *REPLScreen) applyVimPaste(after bool, count int) {
-	if s.VimRegister == "" {
+	register, linewise, ok := s.takeVimPasteRegister()
+	if !ok {
 		return
 	}
 	if count <= 0 {
 		count = 1
 	}
 	s.recordVimUndo()
-	if s.VimRegisterLinewise || strings.HasSuffix(s.VimRegister, "\n") {
-		s.Prompt.pasteLinewise(s.VimRegister, after, count)
+	if linewise || strings.HasSuffix(register, "\n") {
+		s.Prompt.pasteLinewise(register, after, count)
 		return
 	}
-	s.Prompt.pasteCharacterwise(s.VimRegister, after, count)
+	s.Prompt.pasteCharacterwise(register, after, count)
+}
+
+func (s *REPLScreen) takeVimPasteRegister() (string, bool, bool) {
+	register := s.VimActiveRegister
+	s.VimActiveRegister = 0
+	switch {
+	case register == 0 || register == '"':
+		return s.VimRegister, s.VimRegisterLinewise, s.VimRegister != ""
+	case register == '_':
+		return "", false, false
+	case !isVimRegisterRune(register):
+		return "", false, false
+	default:
+		value, ok := s.VimRegisters[normalizeVimRegister(register)]
+		if !ok || value.Text == "" {
+			return "", false, false
+		}
+		return value.Text, value.Linewise, true
+	}
 }
 
 func (s *REPLScreen) applyVimRepeatedCharMotion(count int, reverse bool) {
@@ -1401,6 +1489,7 @@ func (s *REPLScreen) clearVimPending() {
 	s.VimPendingIndent = 0
 	s.VimPendingMark = 0
 	s.VimPendingMacro = 0
+	s.VimPendingRegister = false
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
@@ -1453,6 +1542,39 @@ func isVimMarkRune(r rune) bool {
 
 func isVimMacroRegisterRune(r rune) bool {
 	return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9'
+}
+
+func isVimRegisterRune(r rune) bool {
+	return r == '"' || r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9'
+}
+
+func vimNormalCommandUsesRegister(r rune) bool {
+	switch r {
+	case 'd', 'c', 'y', 'Y', 'p', 'P', 's', 'S', 'D', 'C':
+		return true
+	default:
+		return false
+	}
+}
+
+func vimVisualCommandUsesRegister(r rune) bool {
+	switch r {
+	case 'y', 'd', 'c', 'p', 'P', 'x', 's':
+		return true
+	default:
+		return false
+	}
+}
+
+func isVimUpperRegister(r rune) bool {
+	return r >= 'A' && r <= 'Z'
+}
+
+func normalizeVimRegister(r rune) rune {
+	if isVimUpperRegister(r) {
+		return unicode.ToLower(r)
+	}
+	return r
 }
 
 func applyN(count int, fn func()) {

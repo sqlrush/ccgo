@@ -3768,6 +3768,63 @@ func TestREPLScreenVimYankPasteRegister(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimNamedRegisters(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "\"", "a", "y", "w", "$", "\"", "a", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha beta gammaalpha " || screen.VimRegister != "alpha " || screen.VimRegisters['a'].Text != "alpha " || screen.VimRegisters['a'].Linewise {
+		t.Fatalf("after \"ayw \"ap screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "\"", "a", "d", "w", "\"", "a", "P"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha beta" || screen.VimRegister != "alpha " || screen.VimRegisters['a'].Text != "alpha " || screen.VimRegisters['a'].Linewise {
+		t.Fatalf("after \"adw \"aP screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one two three")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "\"", "a", "y", "w", "w", "\"", "A", "y", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimRegisters['a'].Text != "one two " || screen.VimRegister != "two " {
+		t.Fatalf("after uppercase append register screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "red blue green")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "\"", "b", "y", "$", "\"", "b", "P"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "red blue greenblue" || screen.VimRegisters['b'].Text != "blue" || screen.VimRegisters['b'].Linewise {
+		t.Fatalf("after visual \"by \"bP screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "\"", "a", "l", "y", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if _, ok := screen.VimRegisters['a']; ok {
+		t.Fatalf("register should not persist after non-register command: %#v", screen)
+	}
+}
+
 func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

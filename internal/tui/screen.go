@@ -69,6 +69,9 @@ type REPLScreen struct {
 	VimReplayingChange    bool
 	VimRegister           string
 	VimRegisterLinewise   bool
+	VimRegisters          map[rune]vimRegisterValue
+	VimPendingRegister    bool
+	VimActiveRegister     rune
 	VimUndoStack          []vimPromptSnapshot
 	VimVisualAnchor       int
 	VimVisualLinewise     bool
