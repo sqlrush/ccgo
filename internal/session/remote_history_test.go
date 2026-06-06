@@ -1413,6 +1413,37 @@ func TestFetchRemoteHistoryAcceptsConnectionWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryUnwrapsNestedEdgeResources(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"history": {
+				"edges": [
+					{"cursor":"edge_resource","node":{"resource":{"id":"evt_resource","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"resource"}}}},
+					{"cursor":"edge_value","node":{"value":{"properties":{"type":"status","eventId":"evt_value","session_id":"s","status":"value"}}}}
+				],
+				"pageInfo": {"hasNextPage": false}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 1 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_resource" || events.Events[0].SessionID != "s" || events.Events[0].Status != "resource" {
+		t.Fatalf("resource edge event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_value" || events.Events[1].SessionID != "s" || events.Events[1].Status != "value" {
+		t.Fatalf("value edge event = %#v", events.Events[1])
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsValueAndResourceAliases(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

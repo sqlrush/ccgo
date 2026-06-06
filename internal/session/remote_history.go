@@ -726,9 +726,12 @@ func decodeRemoteHistoryEventArrayWithPage(name string, data json.RawMessage) ([
 		if rawEvent == nil {
 			rawEvent = edgeJSON(edge)
 		}
-		var event contracts.SDKEvent
-		if err := json.Unmarshal(rawEvent, &event); err != nil {
-			return nil, page, fmt.Errorf("%s[%d]: %w", name, index, err)
+		if !remoteHistoryRawLooksLikeEvent(rawEvent) && remoteHistoryRawLooksLikeNonEventResource(rawEvent) {
+			continue
+		}
+		event, err := decodeRemoteHistoryEventElement(name, index, rawEvent)
+		if err != nil {
+			return nil, page, err
 		}
 		if event.ID == "" {
 			event.ID = contracts.ID(cursor)
