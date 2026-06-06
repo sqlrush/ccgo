@@ -4168,6 +4168,17 @@ func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 
 	screen = NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "O", "b", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "alpha beta" || screen.VimRegisterLinewise || screen.Prompt.Text != "alpha beta gamma" {
+		t.Fatalf("after visual O yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
 	typePromptText(&screen, "one\ntwo\nthree")
 	screen.ApplyKey(ParseKey("\x1b"))
 	for _, seq := range []string{"g", "g", "v", "j", ">"} {
@@ -4315,6 +4326,17 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	}
 	if screen.VimMode != VimNormal || screen.VimRegister != "one\ntwo\nthree\n" || !screen.VimRegisterLinewise || screen.Prompt.Text != "one\ntwo\nthree\nfour" {
 		t.Fatalf("after visual line o yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "V", "j", "O", "k", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "one\ntwo\nthree\n" || !screen.VimRegisterLinewise || screen.Prompt.Text != "one\ntwo\nthree\nfour" {
+		t.Fatalf("after visual line O yank screen = %#v", screen)
 	}
 
 	screen = NewREPLScreen(40, 8, nil)

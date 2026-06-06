@@ -376,7 +376,7 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 	case 'g':
 		s.VimPendingG = true
 		s.VimPendingCount = count
-	case 'o':
+	case 'o', 'O':
 		s.toggleVimVisualActiveEnd()
 	case '>', '<':
 		s.applyVimVisualIndent(r)
