@@ -115,6 +115,40 @@ func TestSidechainRuntimeStartAppendFinish(t *testing.T) {
 	}
 }
 
+func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	runtime := SidechainRuntime{SessionPath: sessionPath, SessionID: sessionID}
+	run, err := runtime.Start(SidechainOptions{
+		ID:           "agent/meta",
+		StartedAt:    time.Unix(100, 0).UTC(),
+		AgentType:    "researcher",
+		WorktreePath: "/tmp/research-worktree",
+		Description:  "research the migration",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(run.MetadataPath); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "agent/meta")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != SidechainStatusRunning {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research the migration" {
+		t.Fatalf("metadata recovered from lifecycle payload = %#v", state.Metadata)
+	}
+	resumed, ok := ResumeSidechainRunFromState(state)
+	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || resumed.Metadata.Description != "research the migration" {
+		t.Fatalf("resumed = %#v ok=%v", resumed, ok)
+	}
+}
+
 func TestLoadSidechainStateMarksOrphanTranscriptUnknown(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

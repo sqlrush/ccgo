@@ -90,10 +90,12 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 		Subtype:     "sidechain_start",
 		IsSidechain: true,
 		Content: map[string]any{
-			"sidechainId": id,
-			"agentId":     id,
-			"status":      run.Status,
-			"agentType":   options.AgentType,
+			"sidechainId":  id,
+			"agentId":      id,
+			"status":       run.Status,
+			"agentType":    options.AgentType,
+			"worktreePath": options.WorktreePath,
+			"description":  options.Description,
 		},
 	}); err != nil {
 		return SidechainRun{}, err
