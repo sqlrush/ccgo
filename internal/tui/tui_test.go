@@ -3568,6 +3568,69 @@ func TestREPLScreenVimBackwardEndOperatorMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimCaseOperatorMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "ALPHA BETA gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "g", "u", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha BETA gamma" || screen.Prompt.Cursor != 0 || screen.VimRegister != "" {
+		t.Fatalf("after guw screen = %#v", screen)
+	}
+	for _, seq := range []string{"w", "."} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "alpha beta gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "" {
+		t.Fatalf("after guw dot-repeat screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "g", "U", "i", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ALPHA beta gamma" || screen.Prompt.Cursor != 0 || screen.VimRegister != "" {
+		t.Fatalf("after gUiw screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abc def ghi")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "g", "U", "f", "c"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ABC def ghi" || screen.Prompt.Cursor != 0 || screen.VimRegister != "" {
+		t.Fatalf("after gUfc screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "g", "~", "w"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ALPHA beta" || screen.Prompt.Cursor != 0 || screen.VimRegister != "" {
+		t.Fatalf("after g~w screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "g", "U", "U"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ONE\ntwo\nthree" || screen.Prompt.Cursor != 0 || screen.VimRegister != "" {
+		t.Fatalf("after gUU screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimNormalModeSpecialKeys(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

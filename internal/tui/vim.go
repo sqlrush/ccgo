@@ -449,7 +449,7 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 	count := s.takeVimOperatorCount()
 	s.clearVimPending()
 	switch r {
-	case 'd', 'c', 'y':
+	case 'd', 'c', 'y', 'u', 'U', '~':
 		if r == operator {
 			s.applyVimLineOperator(operator, count)
 		}
@@ -488,6 +488,15 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 	count := s.VimPendingCount
 	s.clearVimPending()
 	switch r {
+	case 'u', 'U', '~':
+		if operator == 0 {
+			s.VimPendingOperator = r
+			s.VimPendingCount = count
+			return ScreenEvent{}
+		}
+		if r == operator {
+			s.applyVimLineOperator(operator, count)
+		}
 	case 'g':
 		targetLine := 1
 		if count > 1 {
@@ -628,6 +637,12 @@ func (s *REPLScreen) applyVimBackwardEndMotionOperator(operator rune, motion run
 
 func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
 	start, end := s.Prompt.lineRange(count)
+	if isVimCaseOperator(operator) {
+		s.recordVimUndo()
+		s.Prompt.changeCaseRange(start, end, operator)
+		s.recordVimChange(vimRecordedChange{Kind: "lineOperator", Operator: operator, Count: count})
+		return
+	}
 	s.setVimRegister(s.Prompt.rangeText(start, end), true)
 	switch operator {
 	case 'y':
@@ -665,6 +680,11 @@ func (s *REPLScreen) applyVimSubstitute(count int) {
 }
 
 func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, linewise bool) {
+	if isVimCaseOperator(operator) {
+		s.recordVimUndo()
+		s.Prompt.changeCaseRange(start, end, operator)
+		return
+	}
 	s.setVimRegister(s.Prompt.rangeText(start, end), linewise)
 	switch operator {
 	case 'y':
@@ -682,6 +702,15 @@ func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, li
 		if operator == 'c' {
 			s.enterVimInsert()
 		}
+	}
+}
+
+func isVimCaseOperator(operator rune) bool {
+	switch operator {
+	case 'u', 'U', '~':
+		return true
+	default:
+		return false
 	}
 }
 
