@@ -14,6 +14,7 @@ const (
 	VimNormal     VimMode = "normal"
 	VimVisual     VimMode = "visual"
 	VimVisualLine VimMode = "visual_line"
+	VimReplace    VimMode = "replace"
 )
 
 type vimPromptSnapshot struct {
@@ -51,6 +52,8 @@ func normalizeVimMode(mode string) VimMode {
 	switch normalized {
 	case "insert", "vim_insert":
 		return VimInsert
+	case "replace", "vim_replace", "replace_mode":
+		return VimReplace
 	case "normal", "command", "vim_normal":
 		return VimNormal
 	case "visual", "char", "character", "visual_char", "visual_character":
@@ -68,6 +71,9 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	}
 	if s.VimMode == "" {
 		s.VimMode = VimInsert
+	}
+	if s.VimMode == VimReplace {
+		return s.applyVimReplaceModeKey(key), true
 	}
 	if s.VimMode == VimInsert {
 		if key.Type == KeyEsc {
@@ -177,6 +183,8 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case 'r':
 		s.VimPendingReplace = true
 		s.VimPendingCount = count
+	case 'R':
+		s.enterVimReplace()
 	case 'f', 't', 'F', 'T':
 		s.VimPendingCharMotion = r
 		s.VimPendingCount = count
@@ -352,6 +360,25 @@ func (s *REPLScreen) applyVimVisualG(r rune) ScreenEvent {
 		applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
 	case 'J':
 		s.applyVimVisualJoin(true)
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimReplaceModeKey(key Key) ScreenEvent {
+	switch key.Type {
+	case KeyEsc:
+		if s.VimInsertedText != "" {
+			s.recordVimChange(vimRecordedChange{Kind: "replaceMode", Text: s.VimInsertedText})
+		}
+		s.VimMode = VimNormal
+		s.clearVimPending()
+		s.VimInsertedText = ""
+	case KeyRune:
+		s.trackVimInsertedText(key)
+		s.Prompt.replaceTextFromCursor(string(key.Rune))
+	case KeyPaste:
+		s.trackVimInsertedText(key)
+		s.Prompt.replaceTextFromCursor(key.Text)
 	}
 	return ScreenEvent{}
 }
@@ -859,6 +886,15 @@ func (s *REPLScreen) enterVimInsert() {
 	s.VimVisualLinewise = false
 }
 
+func (s *REPLScreen) enterVimReplace() {
+	s.recordVimUndo()
+	s.clearVimPending()
+	s.VimMode = VimReplace
+	s.VimInsertedText = ""
+	s.VimVisualAnchor = 0
+	s.VimVisualLinewise = false
+}
+
 func (s *REPLScreen) enterVimVisual(linewise bool) {
 	s.clearVimPending()
 	s.VimVisualAnchor = s.Prompt.clampCursor(s.Prompt.Cursor)
@@ -950,6 +986,12 @@ func (s *REPLScreen) replayVimLastChange() {
 		}
 		s.recordVimUndo()
 		s.Prompt.insertText(change.Text)
+	case "replaceMode":
+		if change.Text == "" {
+			return
+		}
+		s.recordVimUndo()
+		s.Prompt.replaceTextFromCursor(change.Text)
 	case "x":
 		s.recordVimUndo()
 		applyN(change.Count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
@@ -2386,6 +2428,29 @@ func (p *PromptState) replaceRunes(count int, r rune) {
 	}
 	for i := p.Cursor; i < end; i++ {
 		runes[i] = r
+	}
+	p.Text = string(runes)
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) replaceTextFromCursor(text string) {
+	if text == "" {
+		return
+	}
+	runes := []rune(p.Text)
+	if p.Cursor < 0 {
+		p.Cursor = 0
+	}
+	if p.Cursor > len(runes) {
+		p.Cursor = len(runes)
+	}
+	for _, r := range []rune(text) {
+		if p.Cursor < len(runes) {
+			runes[p.Cursor] = r
+		} else {
+			runes = append(runes, r)
+		}
+		p.Cursor++
 	}
 	p.Text = string(runes)
 	p.resetHistoryCursor()
