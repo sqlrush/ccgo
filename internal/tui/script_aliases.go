@@ -2997,8 +2997,9 @@ func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bo
 }
 
 func scriptKeyEventUnknownName(key string) bool {
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "", "unidentified", "unknown":
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(key), "_", "-"), " ", "-"))
+	switch normalized {
+	case "", "unidentified", "unknown", "keydown", "key-down", "keyup", "key-up", "keypress", "key-press":
 		return true
 	default:
 		return false
@@ -3013,9 +3014,23 @@ func scriptKeyEventNumericNameFromFields(fields map[string]json.RawMessage) (str
 		return scriptKeyEventKeyCodeName(*value)
 	}
 	if value := intPtrJSONField(fields, "which", "Which"); value != nil && *value > 0 {
+		if scriptKeyEventWhichUsesCharCode(fields) {
+			return scriptKeyEventCharCodeName(*value)
+		}
 		return scriptKeyEventKeyCodeName(*value)
 	}
 	return "", false
+}
+
+func scriptKeyEventWhichUsesCharCode(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{"type", "eventType", "event_type", "event", "kind", "action", "name"} {
+		value := stringJSONField(fields, name)
+		normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(value), "_", "-"), " ", "-"))
+		if normalized == "keypress" || normalized == "key-press" {
+			return true
+		}
+	}
+	return false
 }
 
 func scriptKeyEventCharCodeName(code int) (string, bool) {
