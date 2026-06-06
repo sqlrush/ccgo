@@ -64,6 +64,57 @@ func TestMessageUnmarshalAcceptsTextBodyAliases(t *testing.T) {
 	}
 }
 
+func TestSDKEventUnmarshalAcceptsTypeAliases(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw         string
+		want        SDKEventType
+		wantMessage bool
+	}{
+		"assistant message": {
+			raw:         `{"type":"assistant_message","message":{"content":"hello"}}`,
+			want:        SDKEventAssistant,
+			wantMessage: true,
+		},
+		"user camel": {
+			raw:         `{"eventType":"userMessage","payload":{"text":"hi"}}`,
+			want:        SDKEventUser,
+			wantMessage: true,
+		},
+		"system event": {
+			raw:         `{"message_type":"system-event","body":{"text":"rules"}}`,
+			want:        SDKEventSystem,
+			wantMessage: true,
+		},
+		"result event": {
+			raw:  `{"kind":"result_event","result":{"ok":true}}`,
+			want: SDKEventResult,
+		},
+		"error event": {
+			raw:  `{"name":"errorEvent","error":"boom"}`,
+			want: SDKEventError,
+		},
+		"progress update": {
+			raw:  `{"event":"progress_update","status":"working"}`,
+			want: SDKEventStatus,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var event SDKEvent
+			if err := json.Unmarshal([]byte(tc.raw), &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Type != tc.want {
+				t.Fatalf("event type = %q, want %q", event.Type, tc.want)
+			}
+			if tc.wantMessage {
+				if event.Message == nil || event.Message.Type != MessageType(tc.want) || len(event.Message.Content) != 1 {
+					t.Fatalf("event message = %#v", event.Message)
+				}
+			}
+		})
+	}
+}
+
 func TestContentBlockUnmarshalAcceptsTextAliases(t *testing.T) {
 	for name, raw := range map[string]string{
 		"body":         `{"type":"text","body":"from body"}`,

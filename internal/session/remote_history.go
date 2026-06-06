@@ -927,8 +927,7 @@ func remoteHistoryLooksLikeSingleEvent(fields map[string]json.RawMessage) bool {
 
 func remoteHistoryRecognizedEventType(fields map[string]json.RawMessage) string {
 	for _, name := range []string{"type", "event_type", "eventType", "event", "name", "kind", "role", "messageType", "message_type"} {
-		switch strings.ToLower(strings.TrimSpace(remoteHistoryStringField(fields, name))) {
-		case "system", "assistant", "user", "result", "error", "status":
+		if contracts.CanonicalSDKEventType(remoteHistoryStringField(fields, name)) != "" {
 			return name
 		}
 	}

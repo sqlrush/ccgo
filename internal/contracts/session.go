@@ -186,8 +186,8 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = SDKEvent(base)
-	if e.Type == "" {
-		e.Type = firstSDKEventType(aux.EventTypeSnake, aux.EventTypeCamel, aux.Event, aux.Name, aux.Kind, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+	if eventType := firstSDKEventType(string(e.Type), aux.EventTypeSnake, aux.EventTypeCamel, aux.Event, aux.Name, aux.Kind, aux.MessageType, aux.MessageTypeSnake, aux.Role); eventType != "" {
+		e.Type = eventType
 	}
 	if e.ID == "" {
 		e.ID = aux.EventIDSnake
@@ -250,27 +250,43 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	if e.Message == nil {
 		e.Message = sdkEventTopLevelMessage(data, e.Type)
 	}
+	if e.Message != nil && e.Message.Type == "" && e.Type != "" {
+		e.Message.Type = MessageType(e.Type)
+	}
 	return nil
 }
 
 func firstSDKEventType(values ...string) SDKEventType {
 	for _, value := range values {
-		switch strings.ToLower(strings.TrimSpace(value)) {
-		case string(SDKEventSystem):
-			return SDKEventSystem
-		case string(SDKEventAssistant):
-			return SDKEventAssistant
-		case string(SDKEventUser):
-			return SDKEventUser
-		case string(SDKEventResult):
-			return SDKEventResult
-		case string(SDKEventError):
-			return SDKEventError
-		case string(SDKEventStatus):
-			return SDKEventStatus
+		if eventType := CanonicalSDKEventType(value); eventType != "" {
+			return eventType
 		}
 	}
 	return ""
+}
+
+func CanonicalSDKEventType(value string) SDKEventType {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return ""
+	}
+	compact := strings.NewReplacer("_", "", "-", "", " ", "", ".", "").Replace(normalized)
+	switch compact {
+	case "system", "systemmessage", "messagesystem", "systemevent", "eventsystem":
+		return SDKEventSystem
+	case "assistant", "assistantmessage", "messageassistant", "assistantevent", "eventassistant":
+		return SDKEventAssistant
+	case "user", "usermessage", "messageuser", "userevent", "eventuser":
+		return SDKEventUser
+	case "result", "resultevent", "eventresult":
+		return SDKEventResult
+	case "error", "errorevent", "eventerror":
+		return SDKEventError
+	case "status", "statusevent", "eventstatus", "statusupdate", "updatestatus", "progress", "progressevent", "eventprogress", "progressupdate", "updateprogress":
+		return SDKEventStatus
+	default:
+		return ""
+	}
 }
 
 func firstSDKEventString(values ...string) string {

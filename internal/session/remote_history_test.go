@@ -1360,9 +1360,9 @@ func TestFetchRemoteHistoryAcceptsSingleObjectEventPages(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			_, _ = w.Write([]byte(`{"data":{"eventType":"status","eventId":"evt_single","session_id":"s","status":"single"},"hasNext":true,"nextCursor":"evt_single"}`))
+			_, _ = w.Write([]byte(`{"data":{"eventType":"status_update","eventId":"evt_single","session_id":"s","status":"single"},"hasNext":true,"nextCursor":"evt_single"}`))
 		case "evt_single":
-			_, _ = w.Write([]byte(`{"result":{"type":"status","id":"evt_result","session_id":"s","status":"result"},"more":false}`))
+			_, _ = w.Write([]byte(`{"result":{"type":"status-event","id":"evt_result","session_id":"s","status":"result"},"more":false}`))
 		default:
 			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
 		}
@@ -1377,7 +1377,7 @@ func TestFetchRemoteHistoryAcceptsSingleObjectEventPages(t *testing.T) {
 	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
 		t.Fatalf("events = %#v", events)
 	}
-	if events.Events[0].ID != "evt_single" || events.Events[0].Status != "single" || events.Events[1].ID != "evt_result" || events.Events[1].Status != "result" {
+	if events.Events[0].ID != "evt_single" || events.Events[0].Type != contracts.SDKEventStatus || events.Events[0].Status != "single" || events.Events[1].ID != "evt_result" || events.Events[1].Type != contracts.SDKEventStatus || events.Events[1].Status != "result" {
 		t.Fatalf("events = %#v", events.Events)
 	}
 	if len(seen) != 2 || seen[1].Get("before_id") != "evt_single" {
@@ -1757,6 +1757,33 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T)
 	}
 	if len(messages[1].Message.Content) != 1 || messages[1].Message.Content[0].Text != "hello" {
 		t.Fatalf("assistant content = %#v", messages[1].Message.Content)
+	}
+}
+
+func TestRemoteHistoryTranscriptMessagesAcceptsEventTypeAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"type":"user_message","eventId":"evt_u_alias","sessionID":"s_alias","createdAt":"2026-01-01T00:00:01Z","payload":{"text":"hi alias"}},
+		{"eventType":"assistantMessage","eventId":"evt_a_alias","sessionID":"s_alias","parentMessageId":"evt_u_alias","createdAt":"2026-01-01T00:00:02Z","body":{"message":"hello alias"}},
+		{"kind":"progress_update","eventId":"evt_status","sessionID":"s_alias","status":"ignored"}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Events) != 3 || response.Events[0].Type != contracts.SDKEventUser || response.Events[1].Type != contracts.SDKEventAssistant || response.Events[2].Type != contracts.SDKEventStatus {
+		t.Fatalf("events = %#v", response.Events)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "evt_u_alias" || messages[1].UUID != "evt_a_alias" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].Type != "user" || messages[0].Message == nil || messages[0].Message.Type != contracts.MessageUser || messages[0].Message.Content[0].Text != "hi alias" {
+		t.Fatalf("user alias message = %#v", messages[0])
+	}
+	if messages[1].Type != "assistant" || messages[1].Message == nil || messages[1].Message.Type != contracts.MessageAssistant || messages[1].Message.Content[0].Text != "hello alias" {
+		t.Fatalf("assistant alias message = %#v", messages[1])
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "evt_u_alias" || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_u_alias" {
+		t.Fatalf("assistant alias parent = %#v message=%#v", messages[1].ParentUUID, messages[1].Message)
 	}
 }
 
