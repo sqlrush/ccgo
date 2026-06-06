@@ -1028,6 +1028,67 @@ func TestLoadTranscriptMetadataAcceptsWrappedResourceEntries(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptMetadataAcceptsTypedPayloadFields(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"custom-title","payload":{"sessionId":"typed_payload","title":"Nested Title"}}`,
+		`{"type":"ai-title","data":{"sessionId":"typed_payload","name":"Nested AI"}}`,
+		`{"type":"last-prompt","metadata":{"sessionId":"typed_payload","text":"Nested prompt"}}`,
+		`{"type":"task-summary","result":{"sessionID":"typed_payload","body":"Nested task","createdAt":"2026-01-01T00:00:00Z"}}`,
+		`{"type":"tag","response":{"sessionId":"typed_payload","label":"nested-tag"}}`,
+		`{"type":"agent-name","resource":{"attributes":{"sessionId":"typed_payload","agentName":"Nested Agent"}}}`,
+		`{"type":"agent-color","body":{"sessionId":"typed_payload","color":"orange"}}`,
+		`{"type":"agent-setting","entry":{"sessionId":"typed_payload","setting":"navigator"}}`,
+		`{"type":"sessionMode","value":{"sessionId":"typed_payload","mode":"audit"}}`,
+		`{"type":"pr-link","data":{"sessionId":"typed_payload","number":"47","url":"https://github.com/o/r/pull/47","repo":"o/r"}}`,
+		`{"type":"worktree-state","payload":{"sessionId":"typed_payload","workspace":{"worktreePath":"/tmp/typed","sessionId":"typed_payload"}}}`,
+		`{"type":"content-replacement","body":{"sessionId":"typed_payload","records":{"toolUseID":"toolu_typed","content":"typed replacement"}}}`,
+		`{"type":"speculation-accept","payload":{"timeSavedMs":"2400","createdAt":"2026-01-01T00:00:01Z"}}`,
+		`{"type":"contextCollapseSnapshot","payload":{"sessionId":"typed_payload","enabled":"yes","tokenCount":"55","items":[{"uuid":"pending_typed"}]}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.CustomTitles["typed_payload"] != "Nested Title" || transcript.AITitles["typed_payload"] != "Nested AI" || transcript.LastPrompts["typed_payload"] != "Nested prompt" || transcript.TaskSummaries["typed_payload"].Summary != "Nested task" {
+		t.Fatalf("typed payload transcript metadata = titles:%#v ai:%#v prompts:%#v tasks:%#v", transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
+	if transcript.Tags["typed_payload"] != "nested-tag" || transcript.AgentNames["typed_payload"] != "Nested Agent" || transcript.AgentColors["typed_payload"] != "orange" || transcript.AgentSettings["typed_payload"] != "navigator" || transcript.Modes["typed_payload"] != "audit" {
+		t.Fatalf("typed payload agent metadata = tags:%#v names:%#v colors:%#v settings:%#v modes:%#v", transcript.Tags, transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings, transcript.Modes)
+	}
+	if transcript.PRLinks["typed_payload"].PRNumber != 47 || !strings.Contains(string(transcript.WorktreeStates["typed_payload"].WorktreeSession), "/tmp/typed") {
+		t.Fatalf("typed payload session metadata = pr:%#v worktree:%#v", transcript.PRLinks["typed_payload"], transcript.WorktreeStates["typed_payload"])
+	}
+	if got := transcript.ContentReplacements["typed_payload"]; len(got) != 1 || got[0].ToolUseID != "toolu_typed" || got[0].Replacement != "typed replacement" {
+		t.Fatalf("typed payload content replacement = %#v", got)
+	}
+	if len(transcript.SpeculationAccepts) != 1 || transcript.SpeculationAccepts[0].TimeSavedMS != 2400 || transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.LastSpawnTokens != 55 || len(transcript.ContextCollapseSnapshot.Staged) != 1 {
+		t.Fatalf("typed payload raw metadata = speculation:%#v snapshot:%#v", transcript.SpeculationAccepts, transcript.ContextCollapseSnapshot)
+	}
+
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.CustomTitles["typed_payload"] != "Nested Title" || metadata.AITitles["typed_payload"] != "Nested AI" || metadata.LastPrompts["typed_payload"] != "Nested prompt" || metadata.TaskSummaries["typed_payload"].Summary != "Nested task" {
+		t.Fatalf("typed payload lightweight metadata = titles:%#v ai:%#v prompts:%#v tasks:%#v", metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
+	}
+	if got := metadata.ContentReplacements["typed_payload"]; len(got) != 1 || got[0].ToolUseID != "toolu_typed" || got[0].Replacement != "typed replacement" {
+		t.Fatalf("typed payload lightweight content replacement = %#v", got)
+	}
+	if metadata.ContextCollapseSnapshot == nil || metadata.ContextCollapseSnapshot.SessionID != "typed_payload" || !metadata.ContextCollapseSnapshot.Armed || metadata.ContextCollapseSnapshot.LastSpawnTokens != 55 {
+		t.Fatalf("typed payload lightweight snapshot = %#v", metadata.ContextCollapseSnapshot)
+	}
+
+	index, err := LoadTranscriptIndex(path, "typed_payload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "Nested Title" || index.AITitle != "Nested AI" || index.LastPrompt != "Nested prompt" || index.TaskSummary != "Nested task" || index.Tag != "nested-tag" || index.AgentName != "Nested Agent" || index.Mode != "audit" || index.PRNumber != 47 || !index.HasWorktreeState || index.ContentReplacementCount != 1 {
+		t.Fatalf("typed payload transcript index = %#v", index)
+	}
+}
+
 func TestLoadTranscriptMetadataAcceptsCompactTypeAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"customTitle","sessionId":"alias","title":"Camel Title"}`,

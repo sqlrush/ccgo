@@ -11,6 +11,44 @@ import (
 
 type transcriptMetadataFields map[string]json.RawMessage
 
+var transcriptMetadataFieldWrapperKeys = []string{
+	"payload",
+	"data",
+	"body",
+	"content",
+	"result",
+	"response",
+	"record",
+	"entry",
+	"item",
+	"event",
+	"message",
+	"resource",
+	"node",
+	"edge",
+	"attributes",
+	"properties",
+	"attrs",
+	"metadata",
+	"meta",
+	"value",
+	"object",
+	"included",
+	"resources",
+	"records",
+	"entries",
+	"items",
+	"nodes",
+	"edges",
+	"collection",
+	"list",
+	"children",
+	"values",
+	"results",
+	"events",
+	"messages",
+}
+
 func parseTranscriptMetadataFields(line []byte) (transcriptMetadataFields, error) {
 	var fields transcriptMetadataFields
 	if err := json.Unmarshal(line, &fields); err != nil {
@@ -20,29 +58,15 @@ func parseTranscriptMetadataFields(line []byte) (transcriptMetadataFields, error
 }
 
 func (f transcriptMetadataFields) stringValue(keys ...string) string {
-	for _, key := range keys {
-		raw, ok := f[key]
-		if !ok || isNullJSON(raw) {
-			continue
-		}
-		var value string
-		if err := json.Unmarshal(raw, &value); err == nil {
-			return value
-		}
+	if value, ok := transcriptMetadataStringValue(f, keys, 0); ok {
+		return value
 	}
 	return ""
 }
 
 func (f transcriptMetadataFields) idValue(keys ...string) contracts.ID {
-	for _, key := range keys {
-		raw, ok := f[key]
-		if !ok || isNullJSON(raw) {
-			continue
-		}
-		var value contracts.ID
-		if err := json.Unmarshal(raw, &value); err == nil {
-			return value
-		}
+	if value, ok := transcriptMetadataIDValue(f, keys, 0); ok {
+		return value
 	}
 	return ""
 }
@@ -52,29 +76,117 @@ func (f transcriptMetadataFields) sessionIDValue() contracts.ID {
 }
 
 func (f transcriptMetadataFields) intValue(keys ...string) int {
-	for _, key := range keys {
-		raw, ok := f[key]
-		if !ok || isNullJSON(raw) {
-			continue
-		}
-		var value int
-		if err := json.Unmarshal(raw, &value); err == nil {
-			return value
-		}
-		var text string
-		if err := json.Unmarshal(raw, &text); err == nil {
-			value, err := strconv.Atoi(strings.TrimSpace(text))
-			if err == nil {
-				return value
-			}
-		}
+	if value, ok := transcriptMetadataIntValue(f, keys, 0); ok {
+		return value
 	}
 	return 0
 }
 
 func (f transcriptMetadataFields) boolValue(keys ...string) (bool, bool) {
+	return transcriptMetadataBoolValue(f, keys, 0)
+}
+
+func (f transcriptMetadataFields) rawValue(keys ...string) json.RawMessage {
+	if raw, ok := transcriptMetadataRawValue(f, keys, 0); ok {
+		return raw
+	}
+	return nil
+}
+
+func transcriptMetadataStringValue(fields transcriptMetadataFields, keys []string, depth int) (string, bool) {
+	if depth > 6 {
+		return "", false
+	}
 	for _, key := range keys {
-		raw, ok := f[key]
+		raw, ok := fields[key]
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+		if nested, ok := transcriptMetadataNestedFields(raw); ok {
+			if value, ok := transcriptMetadataStringValue(nested, keys, depth+1); ok {
+				return value, true
+			}
+		}
+	}
+	for _, nested := range transcriptMetadataWrapperFields(fields) {
+		if value, ok := transcriptMetadataStringValue(nested, keys, depth+1); ok {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func transcriptMetadataIDValue(fields transcriptMetadataFields, keys []string, depth int) (contracts.ID, bool) {
+	if depth > 6 {
+		return "", false
+	}
+	for _, key := range keys {
+		raw, ok := fields[key]
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value contracts.ID
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+		if nested, ok := transcriptMetadataNestedFields(raw); ok {
+			if value, ok := transcriptMetadataIDValue(nested, keys, depth+1); ok {
+				return value, true
+			}
+		}
+	}
+	for _, nested := range transcriptMetadataWrapperFields(fields) {
+		if value, ok := transcriptMetadataIDValue(nested, keys, depth+1); ok {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func transcriptMetadataIntValue(fields transcriptMetadataFields, keys []string, depth int) (int, bool) {
+	if depth > 6 {
+		return 0, false
+	}
+	for _, key := range keys {
+		raw, ok := fields[key]
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value int
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			value, err := strconv.Atoi(strings.TrimSpace(text))
+			if err == nil {
+				return value, true
+			}
+		}
+		if nested, ok := transcriptMetadataNestedFields(raw); ok {
+			if value, ok := transcriptMetadataIntValue(nested, keys, depth+1); ok {
+				return value, true
+			}
+		}
+	}
+	for _, nested := range transcriptMetadataWrapperFields(fields) {
+		if value, ok := transcriptMetadataIntValue(nested, keys, depth+1); ok {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func transcriptMetadataBoolValue(fields transcriptMetadataFields, keys []string, depth int) (bool, bool) {
+	if depth > 6 {
+		return false, false
+	}
+	for _, key := range keys {
+		raw, ok := fields[key]
 		if !ok || isNullJSON(raw) {
 			continue
 		}
@@ -95,19 +207,80 @@ func (f transcriptMetadataFields) boolValue(keys ...string) (bool, bool) {
 		if err := json.Unmarshal(raw, &number); err == nil {
 			return number != 0, true
 		}
+		if nested, ok := transcriptMetadataNestedFields(raw); ok {
+			if value, ok := transcriptMetadataBoolValue(nested, keys, depth+1); ok {
+				return value, true
+			}
+		}
+	}
+	for _, nested := range transcriptMetadataWrapperFields(fields) {
+		if value, ok := transcriptMetadataBoolValue(nested, keys, depth+1); ok {
+			return value, true
+		}
 	}
 	return false, false
 }
 
-func (f transcriptMetadataFields) rawValue(keys ...string) json.RawMessage {
+func transcriptMetadataRawValue(fields transcriptMetadataFields, keys []string, depth int) (json.RawMessage, bool) {
+	if depth > 6 {
+		return nil, false
+	}
 	for _, key := range keys {
-		raw, ok := f[key]
+		raw, ok := fields[key]
 		if !ok || isNullJSON(raw) {
 			continue
 		}
-		return append(json.RawMessage(nil), raw...)
+		return append(json.RawMessage(nil), raw...), true
 	}
-	return nil
+	for _, nested := range transcriptMetadataWrapperFields(fields) {
+		if raw, ok := transcriptMetadataRawValue(nested, keys, depth+1); ok {
+			return raw, true
+		}
+	}
+	return nil, false
+}
+
+func transcriptMetadataNestedFields(raw json.RawMessage) (transcriptMetadataFields, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || raw[0] != '{' {
+		return nil, false
+	}
+	var fields transcriptMetadataFields
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	return fields, true
+}
+
+func transcriptMetadataWrapperFields(fields transcriptMetadataFields) []transcriptMetadataFields {
+	nested := make([]transcriptMetadataFields, 0, 2)
+	for _, key := range transcriptMetadataFieldWrapperKeys {
+		raw, ok := fields[key]
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 {
+			continue
+		}
+		switch raw[0] {
+		case '{':
+			if fields, ok := transcriptMetadataNestedFields(raw); ok {
+				nested = append(nested, fields)
+			}
+		case '[':
+			var items []json.RawMessage
+			if err := json.Unmarshal(raw, &items); err != nil {
+				continue
+			}
+			for _, item := range items {
+				if fields, ok := transcriptMetadataNestedFields(item); ok {
+					nested = append(nested, fields)
+				}
+			}
+		}
+	}
+	return nested
 }
 
 func (f transcriptMetadataFields) arrayValue(keys ...string) []any {
