@@ -396,6 +396,10 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualLineOperator('d')
 	case 'C':
 		s.applyVimVisualLineOperator('c')
+	case 'X':
+		s.applyVimVisualLineOperator('d')
+	case 'S':
+		s.applyVimVisualLineOperator('c')
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'p', 'P':
@@ -1616,7 +1620,7 @@ func vimNormalCommandUsesRegister(r rune) bool {
 
 func vimVisualCommandUsesRegister(r rune) bool {
 	switch r {
-	case 'y', 'd', 'c', 'Y', 'D', 'C', 'p', 'P', 'x', 's':
+	case 'y', 'd', 'c', 'Y', 'D', 'C', 'X', 'S', 'p', 'P', 'x', 's':
 		return true
 	default:
 		return false
