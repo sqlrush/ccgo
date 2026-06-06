@@ -476,6 +476,52 @@ func TestLoadSidechainStateAcceptsAdjacentLifecycleSubtypeAliases(t *testing.T) 
 	}
 }
 
+func TestLoadSidechainStateAcceptsTimestampAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "timestamp-aliases", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_started",
+		Content: map[string]any{
+			"subagentId":       "timestamp_worker",
+			"startTimestampMs": int64(1710000000123),
+			"status":           "running",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "timestamp-aliases", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "agent_finish",
+		Content: map[string]any{
+			"agentID":              "timestamp_worker",
+			"completedTimestamp":   1710000100,
+			"completedTimestampMs": int64(1710000100456),
+			"resultText":           "timestamp aliases complete",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "timestamp-aliases")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ID != "timestamp_worker" || state.Status != SidechainStatusCompleted || state.Summary != "timestamp aliases complete" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.StartedAt != "1710000000123" {
+		t.Fatalf("started at = %q", state.StartedAt)
+	}
+	if state.EndedAt != "1710000100" {
+		t.Fatalf("ended at = %q", state.EndedAt)
+	}
+}
+
 func TestLoadSidechainStateAcceptsWrappedLifecycleContent(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")
