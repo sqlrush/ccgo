@@ -54,6 +54,8 @@ M6 补充：microcompact disk cache loader 现在会把 `value` 字段中的 tex
 
 M6 补充：microcompact disk cache loader 的 relative TTL 现在接受分钟、小时和天级字段别名，包括 `ttlMinutes`、`expiresInHours`、`validForDays` 及 snake/camel 相邻形式，恢复 cached microcompact 过期时间时不再只依赖秒/毫秒字段。
 
+M6 补充：microcompact disk cache loader 的 relative TTL 字符串现在接受固定单位 ISO-8601 duration，例如 `PT1H30M`、`P1D`、`P1DT2H`，同时仍拒绝年/月这类长度不固定的 duration，避免 cache expiry 产生歧义。
+
 M6 补充：sidechain/subagent lifecycle state loader 现在接受 `subagent_started`、`agentStarted`、`task_failed`、`sidechainCompleted` 等相邻 subtype aliases，支持 `taskID`/`workerId`/`runId`、`agentName`/`kind`、`resultText`/`finalMessage` 等字段，并在 failed/cancelled subtype 没有显式 status 时自动归一状态。
 
 M6 补充：sidechain/subagent lifecycle content 读取现在接受 JSON:API/resource-style `resource`/`attributes`/`properties` wrapper，外层 resource `id` 可作为 sidechain ID fallback，内层 agent metadata、status/outcome 和 summary 字段仍能恢复到 state/list/resume。

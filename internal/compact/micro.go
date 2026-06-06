@@ -884,6 +884,9 @@ func microParseJSONDuration(raw json.RawMessage, field string) (time.Duration, e
 		if duration, err := time.ParseDuration(text); err == nil {
 			return duration, nil
 		}
+		if duration, ok := microParseISO8601Duration(text); ok {
+			return duration, nil
+		}
 		number, err := strconv.ParseFloat(text, 64)
 		if err != nil {
 			return 0, err
@@ -901,6 +904,71 @@ func microParseJSONDuration(raw json.RawMessage, field string) (time.Duration, e
 		return microDurationFromFloat(value, field), nil
 	}
 	return 0, fmt.Errorf("invalid duration field %q", field)
+}
+
+func microParseISO8601Duration(text string) (time.Duration, bool) {
+	value := strings.ToUpper(strings.TrimSpace(text))
+	if len(value) < 2 || value[0] != 'P' {
+		return 0, false
+	}
+	value = value[1:]
+	inTime := false
+	total := 0.0
+	for value != "" {
+		if value[0] == 'T' {
+			if inTime {
+				return 0, false
+			}
+			inTime = true
+			value = value[1:]
+			continue
+		}
+		index := strings.IndexFunc(value, func(r rune) bool {
+			return !((r >= '0' && r <= '9') || r == '.')
+		})
+		if index <= 0 {
+			return 0, false
+		}
+		number, err := strconv.ParseFloat(value[:index], 64)
+		if err != nil {
+			return 0, false
+		}
+		unit := value[index]
+		switch unit {
+		case 'W':
+			if inTime {
+				return 0, false
+			}
+			total += number * float64(7*24*time.Hour)
+		case 'D':
+			if inTime {
+				return 0, false
+			}
+			total += number * float64(24*time.Hour)
+		case 'H':
+			if !inTime {
+				return 0, false
+			}
+			total += number * float64(time.Hour)
+		case 'M':
+			if !inTime {
+				return 0, false
+			}
+			total += number * float64(time.Minute)
+		case 'S':
+			if !inTime {
+				return 0, false
+			}
+			total += number * float64(time.Second)
+		default:
+			return 0, false
+		}
+		value = value[index+1:]
+	}
+	if total <= 0 {
+		return 0, false
+	}
+	return time.Duration(total), true
 }
 
 func microDurationFromFloat(value float64, field string) time.Duration {

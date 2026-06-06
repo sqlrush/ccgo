@@ -423,6 +423,71 @@ func TestLoadMicroResultAcceptsMinuteHourDayTTLAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsISO8601TTLDurations(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest string
+		field  string
+		want   time.Duration
+	}{
+		{digest: "ttl-iso-hours-minutes", field: `"ttl":"PT1H30M"`, want: 90 * time.Minute},
+		{digest: "expires-iso-day-hours", field: `"expiresIn":"P1DT2H"`, want: 26 * time.Hour},
+		{digest: "valid-iso-minutes", field: `"validFor":"PT45M"`, want: 45 * time.Minute},
+	} {
+		payload := fmt.Sprintf(`{
+			"summary": %q,
+			"digest": %q,
+			"version": "microcompact.v1",
+			"createdAt": 100,
+			%s
+		}`, tc.digest+" summary", tc.digest, tc.field)
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if want := time.Unix(100, 0).UTC().Add(tc.want); !result.ExpiresAt.Equal(want) {
+			t.Fatalf("%s expires_at = %s, want %s", tc.digest, result.ExpiresAt, want)
+		}
+	}
+}
+
+func TestLoadMicroResultRejectsAmbiguousISO8601TTLDurations(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest string
+		field  string
+	}{
+		{digest: "ttl-iso-month", field: `"ttl":"P1M"`},
+		{digest: "ttl-iso-year", field: `"ttl":"P1Y"`},
+	} {
+		payload := fmt.Sprintf(`{
+			"summary": %q,
+			"digest": %q,
+			"version": "microcompact.v1",
+			"createdAt": 100,
+			%s
+		}`, tc.digest+" summary", tc.digest, tc.field)
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := LoadMicroResult(cacheDir, tc.digest); err == nil {
+			t.Fatalf("%s loaded ambiguous ISO-8601 TTL", tc.digest)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
