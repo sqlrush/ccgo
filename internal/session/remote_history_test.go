@@ -1920,6 +1920,26 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventMessageIDAliases(t *testing.
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsEventTimestampAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"type":"user","eventId":"evt_time_u","sessionID":"s_time","eventTime":"2026-01-01T00:00:01Z","message":{"type":"user","content":[{"type":"text","text":"hi"}]}},
+		{"type":"assistant","eventId":"evt_time_a","sessionID":"s_time","parentMessageId":"evt_time_u","occurred_at":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].Timestamp != "2026-01-01T00:00:01Z" || messages[1].Timestamp != "2026-01-01T00:00:02Z" {
+		t.Fatalf("timestamps = %#v", messages)
+	}
+	if messages[0].Message == nil || messages[0].Message.Timestamp != "2026-01-01T00:00:01Z" || messages[1].Message == nil || messages[1].Message.Timestamp != "2026-01-01T00:00:02Z" {
+		t.Fatalf("nested timestamps = %#v %#v", messages[0].Message, messages[1].Message)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[

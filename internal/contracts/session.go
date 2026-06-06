@@ -3,6 +3,7 @@ package contracts
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -173,9 +174,17 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		ParentMessageIDSnake   *ID             `json:"parent_message_id"`
 		CreatedAt              string          `json:"createdAt"`
 		CreatedAtSnake         string          `json:"created_at"`
+		Created                string          `json:"created"`
+		CreatedTime            string          `json:"createdTime"`
+		CreatedTimeSnake       string          `json:"created_time"`
 		Time                   string          `json:"time"`
 		Datetime               string          `json:"datetime"`
 		DateTime               string          `json:"dateTime"`
+		DateTimeSnake          string          `json:"date_time"`
+		EventTime              string          `json:"eventTime"`
+		EventTimeSnake         string          `json:"event_time"`
+		OccurredAt             string          `json:"occurredAt"`
+		OccurredAtSnake        string          `json:"occurred_at"`
 		MessagePayload         json.RawMessage `json:"message_payload"`
 		MessagePayloadCamel    json.RawMessage `json:"messagePayload"`
 		SerializedMessage      json.RawMessage `json:"serialized_message"`
@@ -189,7 +198,8 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	}
 	base := SDKEventJSON{}
 	aux.SDKEventJSON = &base
-	if err := json.Unmarshal(data, &aux); err != nil {
+	normalizedData := normalizeSDKEventTimestampJSON(data)
+	if err := json.Unmarshal(normalizedData, &aux); err != nil {
 		return err
 	}
 	*e = SDKEvent(base)
@@ -223,7 +233,21 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		e.SessionID = aux.SessionUUIDSnake
 	}
 	if e.Timestamp == "" {
-		e.Timestamp = firstSDKEventString(aux.CreatedAt, aux.CreatedAtSnake, aux.Time, aux.Datetime, aux.DateTime)
+		e.Timestamp = firstSDKEventString(
+			aux.CreatedAt,
+			aux.CreatedAtSnake,
+			aux.Created,
+			aux.CreatedTime,
+			aux.CreatedTimeSnake,
+			aux.Time,
+			aux.Datetime,
+			aux.DateTime,
+			aux.DateTimeSnake,
+			aux.EventTime,
+			aux.EventTimeSnake,
+			aux.OccurredAt,
+			aux.OccurredAtSnake,
+		)
 	}
 	if e.ParentUUID == nil {
 		e.ParentUUID = firstSDKEventIDPtr(
@@ -278,6 +302,56 @@ func firstSDKEventType(values ...string) SDKEventType {
 		}
 	}
 	return ""
+}
+
+func normalizeSDKEventTimestampJSON(data []byte) []byte {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return data
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return data
+	}
+	changed := false
+	for _, name := range []string{
+		"timestamp",
+		"createdAt",
+		"created_at",
+		"created",
+		"createdTime",
+		"created_time",
+		"time",
+		"datetime",
+		"dateTime",
+		"date_time",
+		"eventTime",
+		"event_time",
+		"occurredAt",
+		"occurred_at",
+	} {
+		raw := bytes.TrimSpace(fields[name])
+		if len(raw) == 0 || !sdkEventTimestampRawLooksNumeric(raw) {
+			continue
+		}
+		fields[name] = []byte(strconv.Quote(string(raw)))
+		changed = true
+	}
+	if !changed {
+		return data
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return data
+	}
+	return encoded
+}
+
+func sdkEventTimestampRawLooksNumeric(raw []byte) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	return raw[0] == '-' || (raw[0] >= '0' && raw[0] <= '9')
 }
 
 func CanonicalSDKEventType(value string) SDKEventType {

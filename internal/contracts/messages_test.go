@@ -187,6 +187,40 @@ func TestSDKEventUnmarshalAcceptsTypeAliases(t *testing.T) {
 	}
 }
 
+func TestSDKEventUnmarshalAcceptsTimestampAliases(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw  string
+		want string
+	}{
+		"event time": {
+			raw:  `{"type":"status","eventTime":"2026-01-01T00:00:01Z","status":"working"}`,
+			want: "2026-01-01T00:00:01Z",
+		},
+		"occurred at": {
+			raw:  `{"type":"status","occurred_at":"2026-01-01T00:00:02Z","status":"working"}`,
+			want: "2026-01-01T00:00:02Z",
+		},
+		"numeric timestamp": {
+			raw:  `{"type":"status","timestamp":1767225603000,"status":"working"}`,
+			want: "1767225603000",
+		},
+		"numeric created at": {
+			raw:  `{"type":"status","createdAt":1767225604,"status":"working"}`,
+			want: "1767225604",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var event SDKEvent
+			if err := json.Unmarshal([]byte(tc.raw), &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Timestamp != tc.want {
+				t.Fatalf("timestamp = %q, want %q", event.Timestamp, tc.want)
+			}
+		})
+	}
+}
+
 func TestContentBlockUnmarshalAcceptsTextAliases(t *testing.T) {
 	for name, raw := range map[string]string{
 		"body":         `{"type":"text","body":"from body"}`,
