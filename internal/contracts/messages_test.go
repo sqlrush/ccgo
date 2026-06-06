@@ -143,6 +143,32 @@ func TestSDKEventUnmarshalAcceptsTypeAliases(t *testing.T) {
 			raw:  `{"event":"progress_update","status":"working"}`,
 			want: SDKEventStatus,
 		},
+		"assistant delta": {
+			raw:         `{"eventType":"assistant_delta","payload":{"message":"partial"}}`,
+			want:        SDKEventAssistant,
+			wantMessage: true,
+		},
+		"human message": {
+			raw:         `{"role":"humanMessage","body":{"text":"hello"}}`,
+			want:        SDKEventUser,
+			wantMessage: true,
+		},
+		"final result": {
+			raw:  `{"name":"finalResult","result":{"summary":"done"}}`,
+			want: SDKEventResult,
+		},
+		"response completed": {
+			raw:  `{"kind":"response.completed","result":{"ok":true}}`,
+			want: SDKEventResult,
+		},
+		"failure event": {
+			raw:  `{"eventType":"failureEvent","error":"boom"}`,
+			want: SDKEventError,
+		},
+		"status message": {
+			raw:  `{"event":"statusMessage","status":"queued"}`,
+			want: SDKEventStatus,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var event SDKEvent

@@ -274,15 +274,15 @@ func CanonicalSDKEventType(value string) SDKEventType {
 	switch compact {
 	case "system", "systemmessage", "messagesystem", "systemevent", "eventsystem":
 		return SDKEventSystem
-	case "assistant", "assistantmessage", "messageassistant", "assistantevent", "eventassistant":
+	case "assistant", "assistantmessage", "messageassistant", "assistantevent", "eventassistant", "assistantdelta", "assistantmessagedelta", "messageassistantdelta", "messagedelta":
 		return SDKEventAssistant
-	case "user", "usermessage", "messageuser", "userevent", "eventuser":
+	case "user", "usermessage", "messageuser", "userevent", "eventuser", "humanmessage", "messagehuman", "humaninput", "userinput", "inputuser":
 		return SDKEventUser
-	case "result", "resultevent", "eventresult":
+	case "result", "resultevent", "eventresult", "finalresult", "resultfinal", "completionevent", "eventcompletion", "completionresult", "resultcompletion", "responsecomplete", "responsecompleted":
 		return SDKEventResult
-	case "error", "errorevent", "eventerror":
+	case "error", "errorevent", "eventerror", "failureevent", "eventfailure", "failedevent", "eventfailed", "exceptionevent", "eventexception", "errorupdate", "updateerror":
 		return SDKEventError
-	case "status", "statusevent", "eventstatus", "statusupdate", "updatestatus", "progress", "progressevent", "eventprogress", "progressupdate", "updateprogress":
+	case "status", "statusevent", "eventstatus", "statusupdate", "updatestatus", "statusmessage", "messagestatus", "progress", "progressevent", "eventprogress", "progressupdate", "updateprogress", "progressmessage", "messageprogress":
 		return SDKEventStatus
 	default:
 		return ""
