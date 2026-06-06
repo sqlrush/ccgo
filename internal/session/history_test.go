@@ -146,6 +146,46 @@ func TestLogEntryToHistoryEntryRestoresCachedImageContent(t *testing.T) {
 	}
 }
 
+func TestLogEntryToHistoryEntryRestoresCachedImageWithoutMediaType(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	ClearStoredImagePaths()
+	defer ClearStoredImagePaths()
+
+	sessionID := contracts.ID("session-cache-missing-type")
+	encoded := base64.StdEncoding.EncodeToString([]byte("cached webp"))
+	storedPath, ok := StoreImage(sessionID, PastedContent{
+		ID:        32,
+		Type:      PastedContentImage,
+		Content:   encoded,
+		MediaType: "image/webp",
+		Filename:  "diagram.webp",
+	})
+	if !ok {
+		t.Fatal("store image failed")
+	}
+
+	entry := LogEntryToHistoryEntry(LogEntry{
+		Display:   "look [Image #32]",
+		SessionID: sessionID,
+		PastedContents: map[int]StoredPastedContent{
+			32: {ID: 32, Type: PastedContentImage, Filename: "diagram.webp"},
+		},
+	}, nil)
+	image := entry.PastedContents[32]
+	if image.Content != encoded || image.MediaType != "image/webp" || image.SourcePath != storedPath {
+		t.Fatalf("cached image without media type = %#v", image)
+	}
+	messages := PromptMessages(entry.Display, entry.PastedContents)
+	if len(messages) == 0 || len(messages[0].Content) != 2 || messages[0].Content[1].Type != contracts.ContentImage {
+		t.Fatalf("prompt messages = %#v", messages)
+	}
+	source, ok := messages[0].Content[1].Source.(contracts.ImageSource)
+	if !ok || source.MediaType != "image/webp" || source.Data != encoded {
+		t.Fatalf("image source = %#v", messages[0].Content[1].Source)
+	}
+}
+
 func TestAppendAndLoadPromptHistory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
 	project := "/repo"

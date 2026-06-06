@@ -53,23 +53,23 @@ func ResolveStoredImagePath(sessionID contracts.ID, content PastedContent) (stri
 	return imagePath, true
 }
 
-func RestoreCachedImageContent(sessionID contracts.ID, content PastedContent, sourcePath string) (string, bool) {
+func RestoreCachedImageContent(sessionID contracts.ID, content PastedContent, sourcePath string) (string, string, string, bool) {
 	if sessionID == "" || content.Type != PastedContentImage || content.ID <= 0 {
-		return "", false
+		return "", "", "", false
 	}
-	path := strings.TrimSpace(sourcePath)
-	if path == "" {
-		path = ImagePath(sessionID, content.ID, content.MediaType)
-	}
-	localPath, ok := localImageCachePath(sessionID, content.ID, path)
+	localPath, inferredMediaType, ok := resolveCachedImagePath(sessionID, content, sourcePath)
 	if !ok {
-		return "", false
+		return "", "", "", false
 	}
 	data, err := os.ReadFile(localPath)
 	if err != nil {
-		return "", false
+		return "", "", "", false
 	}
-	return base64.StdEncoding.EncodeToString(data), true
+	mediaType := strings.TrimSpace(content.MediaType)
+	if mediaType == "" {
+		mediaType = inferredMediaType
+	}
+	return base64.StdEncoding.EncodeToString(data), mediaType, localPath, true
 }
 
 func StoreImage(sessionID contracts.ID, content PastedContent) (string, bool) {
@@ -164,11 +164,52 @@ func imageExtension(mediaType string) string {
 	if mediaType == "" {
 		mediaType = "image/png"
 	}
+	mediaType = strings.TrimSpace(strings.ToLower(mediaType))
+	if base, _, ok := strings.Cut(mediaType, ";"); ok {
+		mediaType = strings.TrimSpace(base)
+	}
 	_, extension, ok := strings.Cut(mediaType, "/")
 	if !ok || extension == "" {
 		return "png"
 	}
+	if plus := strings.IndexByte(extension, '+'); plus >= 0 {
+		extension = extension[:plus]
+	}
+	extension = strings.TrimPrefix(extension, "x-")
+	extension = strings.NewReplacer("/", "", "\\", "", ":", "", ";", "").Replace(extension)
+	if extension == "" {
+		return "png"
+	}
 	return extension
+}
+
+func resolveCachedImagePath(sessionID contracts.ID, content PastedContent, sourcePath string) (string, string, bool) {
+	path := strings.TrimSpace(sourcePath)
+	if path != "" {
+		localPath, ok := localImageCachePath(sessionID, content.ID, path)
+		if !ok {
+			return "", "", false
+		}
+		if _, err := os.Stat(localPath); err != nil {
+			return "", "", false
+		}
+		return localPath, imageMediaTypeFromPath(localPath), true
+	}
+	localPath := ImagePath(sessionID, content.ID, content.MediaType)
+	if _, err := os.Stat(localPath); err == nil {
+		return localPath, imageMediaTypeFromPath(localPath), true
+	}
+	matches, err := filepath.Glob(filepath.Join(ImageStoreDir(sessionID), strconv.Itoa(content.ID)+".*"))
+	if err != nil || len(matches) == 0 {
+		return "", "", false
+	}
+	for _, match := range matches {
+		localPath, ok := localImageCachePath(sessionID, content.ID, match)
+		if ok {
+			return localPath, imageMediaTypeFromPath(localPath), true
+		}
+	}
+	return "", "", false
 }
 
 func localImageCachePath(sessionID contracts.ID, imageID int, sourcePath string) (string, bool) {
@@ -200,6 +241,20 @@ func localImageCachePath(sessionID contracts.ID, imageID int, sourcePath string)
 		return "", false
 	}
 	return absPath, true
+}
+
+func imageMediaTypeFromPath(path string) string {
+	extension := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
+	switch extension {
+	case "":
+		return ""
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "svg":
+		return "image/svg+xml"
+	default:
+		return "image/" + extension
+	}
 }
 
 func rememberImagePath(imageID int, imagePath string) {

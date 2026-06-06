@@ -278,20 +278,27 @@ func LogEntryToHistoryEntry(entry LogEntry, resolver PasteResolver) HistoryEntry
 				}
 			}
 			content := stored.Content
+			mediaType := stored.MediaType
 			if content == "" {
-				if restored, ok := RestoreCachedImageContent(entry.SessionID, PastedContent{
+				if restored, inferredMediaType, restoredPath, ok := RestoreCachedImageContent(entry.SessionID, PastedContent{
 					ID:        contentID,
 					Type:      stored.Type,
 					MediaType: stored.MediaType,
 				}, sourcePath); ok {
 					content = restored
+					if mediaType == "" {
+						mediaType = inferredMediaType
+					}
+					if sourcePath == "" {
+						sourcePath = restoredPath
+					}
 				}
 			}
 			pastedContents[id] = PastedContent{
 				ID:         contentID,
 				Type:       stored.Type,
 				Content:    content,
-				MediaType:  stored.MediaType,
+				MediaType:  mediaType,
 				Filename:   stored.Filename,
 				Dimensions: stored.Dimensions,
 				SourcePath: sourcePath,

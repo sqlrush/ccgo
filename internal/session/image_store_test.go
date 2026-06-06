@@ -143,3 +143,17 @@ func TestImagePathDefaultsToPngExtension(t *testing.T) {
 		t.Fatalf("path = %q, want %q", got, want)
 	}
 }
+
+func TestImagePathNormalizesMediaTypeParameters(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	if got, want := ImagePath("session-1", 5, "image/png; charset=binary"), filepath.Join(dir, "image-cache", "session-1", "5.png"); got != want {
+		t.Fatalf("png path = %q, want %q", got, want)
+	}
+	if got, want := ImagePath("session-1", 6, "image/svg+xml"), filepath.Join(dir, "image-cache", "session-1", "6.svg"); got != want {
+		t.Fatalf("svg path = %q, want %q", got, want)
+	}
+	if got, want := ImagePath("session-1", 7, "image/x-png"), filepath.Join(dir, "image-cache", "session-1", "7.png"); got != want {
+		t.Fatalf("x-png path = %q, want %q", got, want)
+	}
+}
