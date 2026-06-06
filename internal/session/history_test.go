@@ -263,6 +263,35 @@ func TestHistoryEntryAcceptsPastedContentBodyAndBase64DataAliases(t *testing.T) 
 	}
 }
 
+func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
+	var entry HistoryEntry
+	data := `{
+		"display": "restore [Image #21] [Image #22]",
+		"pastedContents": [
+			{
+				"imageID": "21",
+				"type": "input_image",
+				"fileName": "source.png",
+				"source": {"type":"base64","media_type":"image/png","data":"AAAA"}
+			},
+			{
+				"imageID": "22",
+				"kind": "pasted-image",
+				"imageSource": {"type":"url","url":"file:///tmp/photo.jpg","mimeType":"image/jpeg"}
+			}
+		]
+	}`
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := entry.PastedContents[21]; got.ID != 21 || got.Type != PastedContentImage || got.Content != "AAAA" || got.MediaType != "image/png" || got.Filename != "source.png" {
+		t.Fatalf("source object image = %#v", got)
+	}
+	if got := entry.PastedContents[22]; got.ID != 22 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/jpeg" || got.SourcePath != "file:///tmp/photo.jpg" {
+		t.Fatalf("source URL image = %#v", got)
+	}
+}
+
 func TestHistoryEntryAcceptsPastedContentsArrayAndSingleObject(t *testing.T) {
 	var entry HistoryEntry
 	if err := json.Unmarshal([]byte(`{"display":"restore","pastedContents":[{"pastedContentId":"4","kind":"text","value":"array memo"},{"imageID":"5","type":"image","base64":"AAAA","mimeType":"image/png"}]}`), &entry); err != nil {
@@ -427,6 +456,34 @@ func TestLoadHistoryAcceptsStoredPastedContentsArray(t *testing.T) {
 	}
 	if got := history[0].PastedContents[8]; got.ID != 8 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/png" || got.Filename != "array.png" {
 		t.Fatalf("stored array image = %#v", got)
+	}
+}
+
+func TestLoadHistoryPreservesStoredImageSourceContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	line := `{"display":"look [Image #23]","pasted_contents":{"23":{"imageID":"23","kind":"pasted-image","fileName":"diagram.webp","source":{"type":"base64","mediaType":"image/webp","data":"BBBB","sourceUrl":"file:///tmp/diagram.webp"}}},"timestamp":100,"project":"/repo","sessionID":"session"}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := LoadHistory(path, "/repo", "session", MaxHistoryItems, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history = %#v", history)
+	}
+	got := history[0].PastedContents[23]
+	if got.ID != 23 || got.Type != PastedContentImage || got.Content != "BBBB" || got.MediaType != "image/webp" || got.Filename != "diagram.webp" || got.SourcePath != "file:///tmp/diagram.webp" {
+		t.Fatalf("stored image source = %#v", got)
+	}
+	messages := PromptMessages(history[0].Display, history[0].PastedContents)
+	if len(messages) == 0 || len(messages[0].Content) != 2 || messages[0].Content[1].Type != contracts.ContentImage {
+		t.Fatalf("prompt messages = %#v", messages)
+	}
+	source, ok := messages[0].Content[1].Source.(contracts.ImageSource)
+	if !ok || source.MediaType != "image/webp" || source.Data != "BBBB" {
+		t.Fatalf("image source = %#v", messages[0].Content[1].Source)
 	}
 }
 

@@ -280,6 +280,7 @@ func LogEntryToHistoryEntry(entry LogEntry, resolver PasteResolver) HistoryEntry
 			pastedContents[id] = PastedContent{
 				ID:         contentID,
 				Type:       stored.Type,
+				Content:    stored.Content,
 				MediaType:  stored.MediaType,
 				Filename:   stored.Filename,
 				Dimensions: stored.Dimensions,
