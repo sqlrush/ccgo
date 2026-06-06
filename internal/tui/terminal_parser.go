@@ -21,6 +21,7 @@ const (
 	TerminalActionTabStatus     TerminalActionType = "tabStatus"
 	TerminalActionClipboard     TerminalActionType = "clipboard"
 	TerminalActionColor         TerminalActionType = "color"
+	TerminalActionPalette       TerminalActionType = "palette"
 	TerminalActionProgress      TerminalActionType = "progress"
 	TerminalActionNotification  TerminalActionType = "notification"
 	TerminalActionShell         TerminalActionType = "shellIntegration"
@@ -332,6 +333,8 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 			return TerminalAction{Type: TerminalActionClipboard, OSC: action.OSC}, true
 		case OSCActionColor:
 			return TerminalAction{Type: TerminalActionColor, OSC: action.OSC}, true
+		case OSCActionPalette:
+			return TerminalAction{Type: TerminalActionPalette, OSC: action.OSC}, true
 		case OSCActionProgress:
 			return TerminalAction{Type: TerminalActionProgress, OSC: action.OSC}, true
 		case OSCActionNotification:

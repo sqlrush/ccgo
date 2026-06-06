@@ -335,11 +335,12 @@ func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
 		TerminalProgressSequence(TerminalProgressRunning, 40) +
 		OSCSequence(OSCForegroundColor, "rgb:f/0/8") +
 		OSCSequence(OSCResetCursor) +
+		OSCSequence(OSCPaletteColor, "1", "#112233") +
 		"c" +
 		GhosttyNotificationSequence("Build complete", "Claude") +
 		"d"
 	actions := parser.Feed(input)
-	if len(actions) != 9 {
+	if len(actions) != 10 {
 		t.Fatalf("actions = %#v", actions)
 	}
 	if actions[1].Type != TerminalActionClipboard || actions[1].OSC.Clipboard.Text != "copy me" {
@@ -354,8 +355,11 @@ func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
 	if actions[5].Type != TerminalActionColor || actions[5].OSC.Color.Target != "cursor" || !actions[5].OSC.Color.Valid || !actions[5].OSC.Color.Reset || actions[5].OSC.Color.Color != nil {
 		t.Fatalf("color reset action = %#v", actions[5])
 	}
-	if actions[7].Type != TerminalActionNotification || actions[7].OSC.Notification.Provider != "ghostty" || actions[7].OSC.Notification.Title != "Claude" || actions[7].OSC.Notification.Message != "Build complete" {
-		t.Fatalf("notification action = %#v", actions[7])
+	if actions[6].Type != TerminalActionPalette || !actions[6].OSC.Palette.Valid || len(actions[6].OSC.Palette.Entries) != 1 || actions[6].OSC.Palette.Entries[0].Index != 1 || actions[6].OSC.Palette.Entries[0].Color == nil || *actions[6].OSC.Palette.Entries[0].Color != (RGBColor{R: 17, G: 34, B: 51}) {
+		t.Fatalf("palette action = %#v", actions[6])
+	}
+	if actions[8].Type != TerminalActionNotification || actions[8].OSC.Notification.Provider != "ghostty" || actions[8].OSC.Notification.Title != "Claude" || actions[8].OSC.Notification.Message != "Build complete" {
+		t.Fatalf("notification action = %#v", actions[8])
 	}
 	if got := TerminalVisibleText(input); got != "abcd" {
 		t.Fatalf("visible = %q", got)

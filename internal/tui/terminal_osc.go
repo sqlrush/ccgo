@@ -16,6 +16,7 @@ const (
 	OSCTerminator         = "\x07"
 	OSCStringTerminator   = "\x1b\\"
 	OSCSetTitleAndIcon    = "0"
+	OSCPaletteColor       = "4"
 	OSCCurrentDirectory   = "7"
 	OSCHyperlink          = "8"
 	OSCITerm2             = "9"
@@ -25,6 +26,7 @@ const (
 	OSCResetForeground    = "110"
 	OSCResetBackground    = "111"
 	OSCResetCursor        = "112"
+	OSCResetPalette       = "104"
 	OSCClipboard          = "52"
 	OSCKitty              = "99"
 	OSCShellIntegration   = "133"
@@ -83,6 +85,7 @@ const (
 	OSCActionTabStatus    OSCActionType = "tabStatus"
 	OSCActionClipboard    OSCActionType = "clipboard"
 	OSCActionColor        OSCActionType = "color"
+	OSCActionPalette      OSCActionType = "palette"
 	OSCActionProgress     OSCActionType = "progress"
 	OSCActionNotification OSCActionType = "notification"
 	OSCActionShell        OSCActionType = "shellIntegration"
@@ -128,6 +131,22 @@ type TerminalOSCColorAction struct {
 	Valid  bool
 }
 
+type TerminalOSCPaletteEntry struct {
+	Index int
+	Color *RGBColor
+	Query bool
+	Reset bool
+	Raw   string
+	Valid bool
+}
+
+type TerminalOSCPaletteAction struct {
+	Entries  []TerminalOSCPaletteEntry
+	ResetAll bool
+	Raw      string
+	Valid    bool
+}
+
 type TerminalNotificationAction struct {
 	Provider string
 	ID       string
@@ -154,6 +173,7 @@ type OSCAction struct {
 	TabStatus    TabStatusFields
 	Clipboard    TerminalClipboardAction
 	Color        TerminalOSCColorAction
+	Palette      TerminalOSCPaletteAction
 	Progress     TerminalProgressAction
 	Notification TerminalNotificationAction
 	Shell        TerminalShellIntegrationAction
@@ -228,12 +248,16 @@ func ParseOSCContent(content string) OSCAction {
 			Type:  OSCActionTitle,
 			Title: TerminalTitleAction{Type: "windowTitle", Title: data},
 		}
+	case OSCPaletteColor:
+		return OSCAction{Type: OSCActionPalette, Palette: ParseOSCPalettePayload(data)}
 	case OSCCurrentDirectory:
 		return OSCAction{Type: OSCActionDirectory, Directory: ParseDirectoryPayload(data)}
 	case OSCHyperlink:
 		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
 	case OSCForegroundColor, OSCBackgroundColor, OSCCursorColor, OSCResetForeground, OSCResetBackground, OSCResetCursor:
 		return OSCAction{Type: OSCActionColor, Color: ParseOSCColorPayload(strconv.Itoa(commandNumber), data)}
+	case OSCResetPalette:
+		return OSCAction{Type: OSCActionPalette, Palette: ParseOSCPaletteResetPayload(data)}
 	case OSCClipboard:
 		return OSCAction{Type: OSCActionClipboard, Clipboard: ParseClipboardPayload(data)}
 	case OSCITerm2:
@@ -402,6 +426,85 @@ func oscColorResetCommand(command string) bool {
 	default:
 		return false
 	}
+}
+
+func ParseOSCPalettePayload(payload string) TerminalOSCPaletteAction {
+	action := TerminalOSCPaletteAction{
+		Raw: payload,
+	}
+	parts := strings.Split(payload, ";")
+	if len(parts) == 0 || len(parts)%2 != 0 {
+		return action
+	}
+	entries := make([]TerminalOSCPaletteEntry, 0, len(parts)/2)
+	for i := 0; i < len(parts); i += 2 {
+		index, ok := parseOSCPaletteIndex(parts[i])
+		if !ok {
+			return action
+		}
+		spec := strings.TrimSpace(parts[i+1])
+		entry := TerminalOSCPaletteEntry{
+			Index: index,
+			Raw:   parts[i+1],
+		}
+		switch {
+		case spec == "?":
+			entry.Query = true
+			entry.Valid = true
+		default:
+			color, ok := ParseOSCColor(spec)
+			if !ok {
+				return action
+			}
+			entry.Color = color
+			entry.Valid = true
+		}
+		entries = append(entries, entry)
+	}
+	action.Entries = entries
+	action.Valid = len(entries) > 0
+	return action
+}
+
+func ParseOSCPaletteResetPayload(payload string) TerminalOSCPaletteAction {
+	action := TerminalOSCPaletteAction{
+		Raw: payload,
+	}
+	payload = strings.TrimSpace(payload)
+	if payload == "" {
+		action.ResetAll = true
+		action.Valid = true
+		return action
+	}
+	parts := strings.Split(payload, ";")
+	entries := make([]TerminalOSCPaletteEntry, 0, len(parts))
+	for _, part := range parts {
+		index, ok := parseOSCPaletteIndex(part)
+		if !ok {
+			return action
+		}
+		entries = append(entries, TerminalOSCPaletteEntry{
+			Index: index,
+			Reset: true,
+			Raw:   part,
+			Valid: true,
+		})
+	}
+	action.Entries = entries
+	action.Valid = len(entries) > 0
+	return action
+}
+
+func parseOSCPaletteIndex(value string) (int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	index, err := strconv.Atoi(value)
+	if err != nil || index < 0 {
+		return 0, false
+	}
+	return index, true
 }
 
 func ParseITerm2ProgressPayload(payload string) (TerminalProgressAction, bool) {

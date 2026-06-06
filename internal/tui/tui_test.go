@@ -4597,6 +4597,27 @@ func TestParseOSCContent(t *testing.T) {
 	if backgroundReset.Type != OSCActionColor || backgroundReset.Color.Target != "background" || !backgroundReset.Color.Valid || !backgroundReset.Color.Reset || backgroundReset.Color.Color != nil {
 		t.Fatalf("background color reset = %#v", backgroundReset)
 	}
+	palette := ParseOSCContent("4;1;#112233;2;?;260;rgb:f/0/8")
+	if palette.Type != OSCActionPalette || !palette.Palette.Valid || len(palette.Palette.Entries) != 3 {
+		t.Fatalf("palette = %#v", palette)
+	}
+	if palette.Palette.Entries[0].Index != 1 || palette.Palette.Entries[0].Color == nil || *palette.Palette.Entries[0].Color != (RGBColor{R: 17, G: 34, B: 51}) {
+		t.Fatalf("palette set = %#v", palette.Palette.Entries[0])
+	}
+	if palette.Palette.Entries[1].Index != 2 || !palette.Palette.Entries[1].Query || palette.Palette.Entries[1].Color != nil {
+		t.Fatalf("palette query = %#v", palette.Palette.Entries[1])
+	}
+	if palette.Palette.Entries[2].Index != 260 || palette.Palette.Entries[2].Color == nil || *palette.Palette.Entries[2].Color != (RGBColor{R: 255, G: 0, B: 136}) {
+		t.Fatalf("palette extended index = %#v", palette.Palette.Entries[2])
+	}
+	paletteResetAll := ParseOSCContent("104")
+	if paletteResetAll.Type != OSCActionPalette || !paletteResetAll.Palette.Valid || !paletteResetAll.Palette.ResetAll || len(paletteResetAll.Palette.Entries) != 0 {
+		t.Fatalf("palette reset all = %#v", paletteResetAll)
+	}
+	paletteReset := ParseOSCContent("104;1;2")
+	if paletteReset.Type != OSCActionPalette || !paletteReset.Palette.Valid || len(paletteReset.Palette.Entries) != 2 || !paletteReset.Palette.Entries[0].Reset || paletteReset.Palette.Entries[1].Index != 2 {
+		t.Fatalf("palette reset = %#v", paletteReset)
+	}
 
 	progress := ParseOSCContent("9;4;1;101")
 	if progress.Type != OSCActionProgress || progress.Progress.State != TerminalProgressRunning || progress.Progress.Percent != 100 {
