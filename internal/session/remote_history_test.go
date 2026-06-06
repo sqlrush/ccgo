@@ -1166,6 +1166,63 @@ func TestFetchRemoteHistoryAcceptsResourcePageAttributes(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsMixedJSONAPIDataResourceArrays(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{
+				"data": [
+					{"id":"tool_1","type":"tool","attributes":{"name":"Bash"}},
+					{
+						"id": "s",
+						"type": "session",
+						"relationships": {
+							"events": {
+								"data": [
+									{"id":"evt_rel_array","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"relationship"}}
+								],
+								"pageInfo": {"hasPreviousPage": true, "startCursor": "evt_rel_array"}
+							}
+						}
+					}
+				]
+			}`))
+		case "evt_rel_array":
+			_, _ = w.Write([]byte(`{
+				"data": [
+					{"id":"task_1","type":"task","attributes":{"title":"ignored"}},
+					{"id":"evt_direct_array","type":"session-events","attributes":{"eventType":"status","sessionID":"s","status":"direct"}}
+				],
+				"pageInfo": {"hasPreviousPage": false}
+			}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_rel_array" || events.Events[0].Status != "relationship" || events.Events[0].SessionID != "s" {
+		t.Fatalf("relationship resource event = %#v", events.Events[0])
+	}
+	if events.Events[1].ID != "evt_direct_array" || events.Events[1].Status != "direct" || events.Events[1].SessionID != "s" {
+		t.Fatalf("direct resource event = %#v", events.Events[1])
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_rel_array" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsIncludedResourceEvents(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

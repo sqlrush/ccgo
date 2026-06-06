@@ -388,13 +388,14 @@ func (r *sessionEventsResponse) mergeEventListField(name string, target *[]contr
 		return nil
 	}
 	if data[0] == '[' {
-		events, err := decodeRemoteHistoryEventArray(name, data)
+		events, page, err := decodeRemoteHistoryEventArrayWithPage(name, data)
 		if err != nil {
 			return err
 		}
 		if *target == nil {
 			*target = events
 		}
+		r.mergePageFields(page)
 		return nil
 	}
 	if data[0] == '{' {
@@ -679,24 +680,44 @@ func setIfEmpty(target *string, value string) {
 }
 
 func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contracts.SDKEvent, error) {
+	events, _, err := decodeRemoteHistoryEventArrayWithPage(name, data)
+	return events, err
+}
+
+func decodeRemoteHistoryEventArrayWithPage(name string, data json.RawMessage) ([]contracts.SDKEvent, sessionEventsResponse, error) {
+	var page sessionEventsResponse
 	if name != "edges" {
 		var rawEvents []json.RawMessage
 		if err := json.Unmarshal(data, &rawEvents); err != nil {
-			return nil, fmt.Errorf("%s: %w", name, err)
+			return nil, page, fmt.Errorf("%s: %w", name, err)
 		}
 		events := make([]contracts.SDKEvent, 0, len(rawEvents))
 		for index, rawEvent := range rawEvents {
+			if !remoteHistoryRawLooksLikeEvent(rawEvent) {
+				nested, ok, err := decodeRemoteHistoryNestedEventArrayItem(name, index, rawEvent)
+				if err != nil {
+					return nil, page, err
+				}
+				if ok {
+					events = append(events, responseEventList(nested)...)
+					page.mergePageFields(nested)
+					continue
+				}
+				if remoteHistoryRawLooksLikeNonEventResource(rawEvent) {
+					continue
+				}
+			}
 			event, err := decodeRemoteHistoryEventElement(name, index, rawEvent)
 			if err != nil {
-				return nil, err
+				return nil, page, err
 			}
 			events = append(events, event)
 		}
-		return events, nil
+		return events, page, nil
 	}
 	var rawEdges []map[string]json.RawMessage
 	if err := json.Unmarshal(data, &rawEdges); err != nil {
-		return nil, fmt.Errorf("%s: %w", name, err)
+		return nil, page, fmt.Errorf("%s: %w", name, err)
 	}
 	events := make([]contracts.SDKEvent, 0, len(rawEdges))
 	for index, edge := range rawEdges {
@@ -707,14 +728,29 @@ func decodeRemoteHistoryEventArray(name string, data json.RawMessage) ([]contrac
 		}
 		var event contracts.SDKEvent
 		if err := json.Unmarshal(rawEvent, &event); err != nil {
-			return nil, fmt.Errorf("%s[%d]: %w", name, index, err)
+			return nil, page, fmt.Errorf("%s[%d]: %w", name, index, err)
 		}
 		if event.ID == "" {
 			event.ID = contracts.ID(cursor)
 		}
 		events = append(events, event)
 	}
-	return events, nil
+	return events, page, nil
+}
+
+func decodeRemoteHistoryNestedEventArrayItem(name string, index int, data json.RawMessage) (sessionEventsResponse, bool, error) {
+	var nested sessionEventsResponse
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) || data[0] != '{' {
+		return nested, false, nil
+	}
+	if err := nested.mergeJSON(data); err != nil {
+		return nested, false, fmt.Errorf("%s[%d]: %w", name, index, err)
+	}
+	if responseEventList(nested) == nil {
+		return nested, false, nil
+	}
+	return nested, true, nil
 }
 
 func decodeRemoteHistoryFilteredEventArray(name string, data json.RawMessage) ([]contracts.SDKEvent, bool, error) {
@@ -824,6 +860,34 @@ func remoteHistoryRawLooksLikeEvent(data json.RawMessage) bool {
 	}
 	if nested := remoteHistoryWrappedEventRaw(fields); nested != nil {
 		return remoteHistoryRawLooksLikeEvent(nested)
+	}
+	return false
+}
+
+func remoteHistoryRawLooksLikeNonEventResource(data json.RawMessage) bool {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) || data[0] != '{' {
+		return false
+	}
+	if remoteHistoryRawLooksLikeEvent(data) {
+		return false
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false
+	}
+	for _, value := range []string{
+		remoteHistoryStringField(fields, "type", "resource_type", "resourceType"),
+		remoteHistoryStringField(fields, "kind", "resource_kind", "resourceKind"),
+	} {
+		compact := strings.NewReplacer("_", "", "-", "", " ", "", ".", "").Replace(strings.ToLower(strings.TrimSpace(value)))
+		if compact == "" || contracts.CanonicalSDKEventType(value) != "" {
+			continue
+		}
+		if strings.Contains(compact, "event") || strings.Contains(compact, "message") || strings.Contains(compact, "history") {
+			continue
+		}
+		return true
 	}
 	return false
 }
