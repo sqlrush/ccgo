@@ -231,6 +231,7 @@ type CSIReportAction struct {
 	Type        CSIReportActionType
 	Code        int
 	Codes       []int
+	Params      []int
 	Status      int
 	PrivateMode byte
 	Height      int
@@ -478,7 +479,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 			return csiModeRequest(csiParamDefault(params, 0, 0), privateMode), true
 		}
 	case CSICommandTerminalParams:
-		return csiTerminalParameters(csiParamDefault(params, 0, 0), privateMode), true
+		return csiTerminalParameters(rawP0, params, privateMode), true
 	case CSICommandModeStatus:
 		if intermediate == "$" {
 			return csiModeStatus(csiParamDefault(params, 0, 0), csiParamDefault(params, 1, 0), privateMode), true
@@ -619,10 +620,14 @@ func csiDeviceAttributes(code int, params []int, privateMode byte) CSIAction {
 	}
 }
 
-func csiTerminalParameters(code int, privateMode byte) CSIAction {
+func csiTerminalParameters(code int, params []int, privateMode byte) CSIAction {
+	report := CSIReportAction{Type: CSIReportActionTerminalParams, Code: code, PrivateMode: privateMode}
+	if len(params) > 1 {
+		report.Params = append([]int(nil), params...)
+	}
 	return CSIAction{
 		Type:   CSIActionReport,
-		Report: CSIReportAction{Type: CSIReportActionTerminalParams, Code: code, PrivateMode: privateMode},
+		Report: report,
 	}
 }
 

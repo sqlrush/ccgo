@@ -409,6 +409,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 接受 ECMA `CSI Ps j` / `CSI Ps k` HPB/VPB backward cursor final bytes，并映射到已有 cursor-back/cursor-up actions。
 - 本轮补充：terminal CSI parser 接受 DEC private mode `?1047h/l` alternate-screen buffer 和 `?1048h/l` save/restore cursor，复用已有 mode/cursor actions。
 - 本轮补充：terminal CSI parser 把 DECREQTPARM terminal-parameters (`CSI x`) 归入 report action，保留 code/private marker。
+- 本轮补充：terminal CSI parser 现在保留 DECREPTPARM/terminal-parameters response 的完整参数列表，例如 `CSI 2;1;1;112;112;1;0x` 不再只留下 report code。
 - 本轮补充：terminal CSI parser 把 DECRQM mode request (`CSI Ps $ p` / `CSI ? Ps $ p`) 归入 report action，保留 mode code 和 DEC private marker。
 - 本轮补充：terminal CSI parser 把 CPR cursor-position responses (`CSI row;col R` / DEC private `CSI ? row;col R`) 归入 report action，结构化暴露 row/column 并保持 visible-text stripping。
 - 本轮补充：terminal CSI parser 继续补齐 DEC 私有 DSR/CPR，`CSI ?6n` 现在归入 cursor-position report query，`CSI ?row;col;page R` 会保留 page 元数据。

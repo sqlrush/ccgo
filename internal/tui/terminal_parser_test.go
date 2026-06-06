@@ -479,6 +479,22 @@ func TestTerminalParserDispatchesDeviceAttributeReports(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesTerminalParameterReports(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" + CSISequence("2;1;1;112;112;1;0x") + "b"
+	actions := parser.Feed(input)
+	if len(actions) != 3 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	wantParams := []int{2, 1, 1, 112, 112, 1, 0}
+	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionTerminalParams || actions[1].Report.Code != 2 || !reflect.DeepEqual(actions[1].Report.Params, wantParams) {
+		t.Fatalf("terminal parameter report action = %#v", actions[1])
+	}
+	if got := TerminalVisibleText(input); got != "ab" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
 func TestTerminalParserDispatchesCursorPositionReports(t *testing.T) {
 	parser := NewTerminalParser()
 	input := "a" + CSISequence("?12;34;2R") + "b"
