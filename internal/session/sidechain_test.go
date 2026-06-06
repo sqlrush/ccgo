@@ -289,6 +289,76 @@ func TestNormalizeSidechainStatusAcceptsCompactAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsFailureAndCancelSummaryAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "failed-alias", TranscriptMessage{
+		Type:      "system",
+		UUID:      "failed_start",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_start",
+		Content: map[string]any{
+			"subagentId": "failed_alias",
+			"status":     "running",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "failed-alias", TranscriptMessage{
+		Type:      "system",
+		UUID:      "failed_summary",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "agent_failed",
+		Content: map[string]any{
+			"agentId":      "failed_alias",
+			"errorMessage": "model call failed",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "cancelled-alias", TranscriptMessage{
+		Type:      "system",
+		UUID:      "cancel_start",
+		Timestamp: "2026-01-01T00:00:03Z",
+		Subtype:   "sidechain_start",
+		Content: map[string]any{
+			"sidechainId": "cancelled_alias",
+			"status":      "running",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "cancelled-alias", TranscriptMessage{
+		Type:      "system",
+		UUID:      "cancel_summary",
+		Timestamp: "2026-01-01T00:00:04Z",
+		Subtype:   "sidechain_cancelled",
+		Content: map[string]any{
+			"sidechainId":  "cancelled_alias",
+			"cancelReason": "user stopped the run",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]SidechainState{}
+	for _, state := range states {
+		byID[state.ID] = state
+	}
+	failed := byID["failed_alias"]
+	if failed.Status != SidechainStatusFailed || failed.Summary != "model call failed" {
+		t.Fatalf("failed state = %#v", failed)
+	}
+	cancelled := byID["cancelled_alias"]
+	if cancelled.Status != SidechainStatusCancelled || cancelled.Summary != "user stopped the run" {
+		t.Fatalf("cancelled state = %#v", cancelled)
+	}
+}
+
 func TestLoadSidechainStateAcceptsAdjacentLifecycleSubtypeAliases(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

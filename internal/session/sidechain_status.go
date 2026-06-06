@@ -94,7 +94,14 @@ var sidechainLifecycleSummaryFields = []string{
 	"resultSummary", "result_summary",
 	"resultText", "result_text",
 	"finalMessage", "final_message",
+	"errorMessage", "error_message",
+	"errorText", "error_text",
+	"failureReason", "failure_reason",
+	"failedReason", "failed_reason",
+	"cancelReason", "cancel_reason",
+	"cancellationReason", "cancellation_reason",
 	"message", "text", "output", "value", "final",
+	"error", "failure", "reason",
 }
 
 func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
