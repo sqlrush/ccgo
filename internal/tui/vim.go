@@ -307,6 +307,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.toggleVimVisualActiveEnd()
 	case '>', '<':
 		s.applyVimVisualIndent(r)
+	case '~':
+		s.applyVimVisualToggleCase()
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'x':
@@ -404,6 +406,20 @@ func (s *REPLScreen) applyVimVisualIndent(dir rune) {
 	affected := s.Prompt.indentRange(dir, start, end)
 	if affected > 0 {
 		s.recordVimChange(vimRecordedChange{Kind: "indent", Dir: dir, Count: affected})
+	}
+	s.exitVimVisual()
+}
+
+func (s *REPLScreen) applyVimVisualToggleCase() {
+	start, end, _, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	s.recordVimUndo()
+	count := s.Prompt.toggleCaseRange(start, end)
+	if count > 0 {
+		s.recordVimChange(vimRecordedChange{Kind: "toggleCase", Count: count})
 	}
 	s.exitVimVisual()
 }
@@ -1228,15 +1244,7 @@ func (p *PromptState) toggleCase(count int) {
 	cursor := p.clampCursor(p.Cursor)
 	for i := 0; i < count && cursor+i < len(runes); i++ {
 		idx := cursor + i
-		r := runes[idx]
-		switch {
-		case unicode.IsUpper(r):
-			runes[idx] = unicode.ToLower(r)
-		case unicode.IsLower(r):
-			runes[idx] = unicode.ToUpper(r)
-		default:
-			runes[idx] = unicode.ToUpper(r)
-		}
+		runes[idx] = toggleRuneCase(runes[idx])
 	}
 	p.Text = string(runes)
 	if cursor+count <= len(runes) {
@@ -1245,6 +1253,37 @@ func (p *PromptState) toggleCase(count int) {
 		p.Cursor = len(runes)
 	}
 	p.resetHistoryCursor()
+}
+
+func (p *PromptState) toggleCaseRange(start int, end int) int {
+	runes := []rune(p.Text)
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if end < start {
+		start, end = end, start
+	}
+	for i := start; i < end; i++ {
+		runes[i] = toggleRuneCase(runes[i])
+	}
+	p.Text = string(runes)
+	p.Cursor = start
+	p.resetHistoryCursor()
+	return end - start
+}
+
+func toggleRuneCase(r rune) rune {
+	switch {
+	case unicode.IsUpper(r):
+		return unicode.ToLower(r)
+	case unicode.IsLower(r):
+		return unicode.ToUpper(r)
+	default:
+		return unicode.ToUpper(r)
+	}
 }
 
 func (p *PromptState) joinLines(count int) {
