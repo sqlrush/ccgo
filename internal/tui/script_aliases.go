@@ -14,6 +14,25 @@ import (
 type stringList []string
 type intList []int
 
+var scriptTaskIDFieldAliases = []string{
+	"task_id", "taskId", "taskID",
+	"job_id", "jobId", "jobID",
+	"run_id", "runId", "runID",
+	"operation_id", "operationId", "operationID",
+	"request_id", "requestId", "requestID",
+	"thread_id", "threadId", "threadID",
+	"workflow_id", "workflowId", "workflowID",
+	"tool_use_id", "toolUseId", "toolUseID",
+	"id",
+}
+
+func scriptTaskIDFields(prefix ...string) []string {
+	fields := make([]string, 0, len(prefix)+len(scriptTaskIDFieldAliases))
+	fields = append(fields, prefix...)
+	fields = append(fields, scriptTaskIDFieldAliases...)
+	return fields
+}
+
 func (list *stringList) UnmarshalJSON(data []byte) error {
 	var single string
 	if err := json.Unmarshal(data, &single); err == nil {
@@ -878,7 +897,7 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		step.UpsertTask = task
 	}
 	if step.RemoveTaskID == "" && scriptHasAnyJSONField(fieldMap, "RemoveTaskID", "remove_task_id", "removeTaskId", "removeTaskID", "RemoveTask", "remove_task", "removeTask", "DeleteTask", "delete_task", "deleteTask") {
-		step.RemoveTaskID = scriptActionIDField(fieldMap, "RemoveTaskID", "remove_task_id", "removeTaskId", "removeTaskID", "RemoveTask", "remove_task", "removeTask", "DeleteTask", "delete_task", "deleteTask", "task", "task_status", "taskStatus", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
+		step.RemoveTaskID = scriptActionIDField(fieldMap, scriptTaskIDFields("RemoveTaskID", "remove_task_id", "removeTaskId", "removeTaskID", "RemoveTask", "remove_task", "removeTask", "DeleteTask", "delete_task", "deleteTask", "task", "task_status", "taskStatus")...)
 	}
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "CancelActiveDialog", "cancel_active_dialog", "cancelActiveDialog", "CancelActive", "cancel_active", "cancelActive", "CancelDialog", "cancel_dialog", "cancelDialog", "CloseDialog", "close_dialog", "closeDialog"); ok {
 		step.CancelActiveDialog = value
@@ -1773,7 +1792,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "removetask", "remove-task", "deletetask", "delete-task":
 		if step.RemoveTaskID == "" {
-			step.RemoveTaskID = scriptActionIDField(fields, "task", "task_status", "taskStatus", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
+			step.RemoveTaskID = scriptActionIDField(fields, scriptTaskIDFields("task", "task_status", "taskStatus")...)
 		}
 	case "opentasks", "open-tasks", "opentasksdialog", "open-tasks-dialog", "showtasks", "show-tasks":
 		step.OpenTasksDialog = scriptActionBoolField(fields, true)
@@ -1959,7 +1978,7 @@ func scriptTaskStatusFromJSON(raw json.RawMessage, depth int) (*TaskStatus, bool
 		}
 		if task, ok := scriptTaskStatusFromJSON(nested, depth+1); ok {
 			if task.ID == "" {
-				task.ID = scalarStringJSONField(fields, "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id")
+				task.ID = scalarStringJSONField(fields, scriptTaskIDFields()...)
 			}
 			return task, true
 		}
@@ -5721,7 +5740,7 @@ func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if id := scalarStringJSONField(fieldMap, "ID", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
+	if id := scalarStringJSONField(fieldMap, scriptTaskIDFields("ID")...); id != "" {
 		task.ID = id
 	}
 	if title := stringJSONField(fieldMap, "Title", "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
@@ -5940,7 +5959,7 @@ func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fieldMap); err != nil {
 		return err
 	}
-	if id := scalarStringJSONField(fieldMap, "ID", "task_id", "taskId", "taskID", "job_id", "jobId", "jobID", "run_id", "runId", "runID", "id"); id != "" {
+	if id := scalarStringJSONField(fieldMap, scriptTaskIDFields("ID")...); id != "" {
 		expect.ID = id
 	}
 	if title := stringJSONField(fieldMap, "Title", "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {

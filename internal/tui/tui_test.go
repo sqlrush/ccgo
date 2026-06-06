@@ -8852,6 +8852,29 @@ func TestRunDialogRuntimeScriptAcceptsAdjacentTaskPayloadAliases(t *testing.T) {
 			"expectStatusContains": ["running: 1", "completed: 1"]
 		},
 		{
+			"action": "task",
+			"operationID": "op_99",
+			"name": "Deploy",
+			"status": "active",
+			"detail": "uploading",
+			"progress": 10,
+			"expectTasks": {
+				"count": 3,
+				"stateCounts": {"running": 2, "completed": 1},
+				"contains": {"requestID": "op_99", "title": "Deploy", "state": "running", "detail": "uploading", "progress": 10}
+			},
+			"expectStatusContains": ["running: 2", "completed: 1"]
+		},
+		{
+			"action": "remove-task",
+			"requestID": "op_99",
+			"expectTasks": {
+				"count": 2,
+				"stateCounts": {"running": 1, "completed": 1},
+				"contains": {"runID": "run_42", "status": "completed", "progress": 100}
+			}
+		},
+		{
 			"action": "remove-task",
 			"jobID": 7001,
 			"expectTasks": {
