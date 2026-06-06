@@ -1830,9 +1830,13 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		if step.Key == "" && len(step.Keys) == 0 {
 			step.Keys = append(step.Keys, scriptActionStringListField(fields, "keys", "sequence", "key_sequence", "keySequence", "shortcuts", "data", "payload", "value")...)
 		}
-	case "text", "type", "typetext", "type-text", "input", "inputtext", "textinput", "insert", "inserttext", "write", "writetext":
-		if step.Text == "" {
-			step.Text = scriptActionStringField(fields, "text", "input", "content", "body", "message", "data", "payload", "value")
+	case "text", "type", "typetext", "type-text", "input", "beforeinput", "before-input", "inputevent", "input-event", "dominput", "dom-input", "inputtext", "textinput", "insert", "inserttext", "write", "writetext":
+		if scriptDOMInputEventIsPaste(fields) {
+			if step.Paste == "" {
+				step.Paste = scriptActionStringField(fields, "data", "text", "input", "content", "body", "message", "payload", "value")
+			}
+		} else if step.Text == "" {
+			step.Text = scriptActionStringField(fields, "data", "text", "input", "content", "body", "message", "payload", "value")
 		}
 	case "paste", "pastetext", "pastedtext", "clipboard", "clipboardtext":
 		if step.Paste == "" {
@@ -1912,6 +1916,16 @@ func canonicalScriptStepAction(action string) string {
 	action = strings.ReplaceAll(action, "_", "-")
 	action = strings.ReplaceAll(action, " ", "-")
 	return action
+}
+
+func scriptDOMInputEventIsPaste(fields map[string]json.RawMessage) bool {
+	inputType := canonicalScriptStepAction(stringJSONField(fields, "inputType", "input_type", "input-type", "inputKind", "input_kind"))
+	switch inputType {
+	case "insertfrompaste", "insert-from-paste", "insertfrompasteasquotation", "insert-from-paste-as-quotation", "insertfromdrop", "insert-from-drop":
+		return true
+	default:
+		return false
+	}
 }
 
 func scriptPermissionRequestActionField(fields map[string]json.RawMessage) *PermissionRequest {

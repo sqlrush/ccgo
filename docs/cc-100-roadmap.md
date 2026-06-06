@@ -612,6 +612,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：scripted interaction 的 DOM key event replay 也会跳过 `Dead`/`Process`/IME key names、`isComposing` payload 和 composition event type，避免 IME/dead-key 录制 artifact 被当成普通 prompt 文本插入。
 
+本轮补充：scripted interaction action replay 现在接受 DOM `beforeinput`/`input` event 的 `data` payload，`insertText` 等文本输入进入 prompt typing，`insertFromPaste`/drop variants 进入现有 pasted-content 路径。
+
 本轮补充：scripted interaction step 现在接受 `expect`/`expected`/`assertions`/`checks`/`verify`/`then`/`after` 等 expectation wrapper object，可把嵌套的 prompt/event/dialog/snapshot/screen/task/vim/viewport 断言映射到已有 `expect*` 字段。
 
 本轮补充：scripted interaction expectation wrapper 现在也接受 assertion/check 数组，数组元素可用 `type`/`kind`/`name`/`target` 等 discriminator 搭配 `value`/`payload` 声明 prompt/event/dialog/snapshot/screen/task/vim/viewport 断言，减少官方脚本 fixture 的结构改写成本。

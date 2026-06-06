@@ -7546,6 +7546,25 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsDOMInputEvents(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"type":"beforeinput","inputType":"insertText","data":"hi","expectPrompt":{"text":"hi"}},
+		{"type":"input","inputType":"insertFromPaste","data":"clip\nboard","expectPrompt":{"text":"hi[Pasted text #1 +1 lines]","expandedText":"hiclip\nboard","pastedContentCount":1}},
+		{"key":"enter","expectEvent":{"type":"prompt_submitted","value":"hiclip\nboard"},"expectPrompt":{"empty":true}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "hiclip\nboard" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsPressFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"press":"a","expectPrompt":{"text":"a"}},
