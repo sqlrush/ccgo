@@ -9314,6 +9314,34 @@ func TestRunInteractionScriptAcceptsStepStateAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsFocusActionPayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"action": "focus", "payload": {"focused": false}, "expectEvent": {"type": "focus_out"}, "expectFocused": false},
+		{"kind": "blur", "payload": {"blurred": false}, "expectEvent": {"type": "focus_in"}, "expectFocused": true},
+		{"operation": "focusState", "data": {"focus": false}, "expectEvent": {"type": "focus_out"}, "expectFocused": false},
+		{"name": "setFocus", "value": "yes", "expectEvent": {"type": "focus_in"}, "expectFocused": true}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(30, 6, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 4 {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	for i, want := range []ScreenEventType{ScreenEventFocusOut, ScreenEventFocusIn, ScreenEventFocusOut, ScreenEventFocusIn} {
+		if result.Events[i].Type != want {
+			t.Fatalf("event %d = %#v, want %s", i, result.Events[i], want)
+		}
+	}
+	if !screen.Focused {
+		t.Fatal("screen should end focused")
+	}
+}
+
 func TestRunInteractionScriptChecksFocusState(t *testing.T) {
 	screen := NewREPLScreen(30, 6, nil)
 	focused := true

@@ -1794,13 +1794,13 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		if step.Dialog == nil {
 			step.Dialog = scriptDialogActionField(fields)
 		}
-	case "focus", "focusin", "focus-in":
+	case "focus", "focusin", "focus-in", "focused", "setfocus", "set-focus", "focusstate", "focus-state":
 		if !scriptStepHasFocusKey(step) {
-			step.Keys = append(step.Keys, "focus-in")
+			step.Keys = append(step.Keys, scriptFocusKey(scriptActionBoolField(fields, true)))
 		}
-	case "blur", "focusout", "focus-out":
+	case "blur", "focusout", "focus-out", "blurred":
 		if !scriptStepHasFocusKey(step) {
-			step.Keys = append(step.Keys, "focus-out")
+			step.Keys = append(step.Keys, scriptFocusKey(!scriptActionBoolField(fields, true)))
 		}
 	}
 }
@@ -3151,7 +3151,7 @@ func scriptActionBoolFromJSON(raw json.RawMessage, depth int) (bool, bool) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return false, false
 	}
-	for _, name := range scriptRuntimePayloadWrapperNames("enabled", "active", "open", "visible", "checked", "selected", "value") {
+	for _, name := range scriptRuntimePayloadWrapperNames("enabled", "active", "open", "visible", "focused", "focus", "blurred", "blur", "checked", "selected", "value") {
 		nested, ok := fields[name]
 		if !ok {
 			continue
