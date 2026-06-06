@@ -1900,6 +1900,26 @@ func TestRemoteHistoryTranscriptMessagesAcceptsParentIDAliases(t *testing.T) {
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsEventMessageIDAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"type":"user","messageID":"msg_u1","sessionID":"s_msg","timestamp":"2026-01-01T00:00:01Z","message":{"type":"user","content":[{"type":"text","text":"hi"}]}},
+		{"type":"assistant","message_uuid":"msg_a1","sessionID":"s_msg","parentMessageId":"msg_u1","timestamp":"2026-01-01T00:00:02Z","message":{"type":"assistant","content":[{"type":"text","text":"hello"}]}}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "msg_u1" || messages[1].UUID != "msg_a1" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "msg_u1" {
+		t.Fatalf("parent alias = %#v", messages[1].ParentUUID)
+	}
+	if messages[1].Message == nil || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "msg_u1" {
+		t.Fatalf("message parent alias = %#v", messages[1].Message)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[

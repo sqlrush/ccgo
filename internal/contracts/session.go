@@ -153,6 +153,13 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		MessageTypeSnake       string          `json:"message_type"`
 		EventIDSnake           ID              `json:"event_id"`
 		EventIDCamel           ID              `json:"eventId"`
+		EventIDUpper           ID              `json:"eventID"`
+		MessageID              ID              `json:"messageId"`
+		MessageIDUpper         ID              `json:"messageID"`
+		MessageIDSnake         ID              `json:"message_id"`
+		MessageUUID            ID              `json:"messageUuid"`
+		MessageUUIDUpper       ID              `json:"messageUUID"`
+		MessageUUIDSnake       ID              `json:"message_uuid"`
 		SessionIDUpper         ID              `json:"sessionID"`
 		SessionUUID            ID              `json:"sessionUuid"`
 		SessionUUIDUpper       ID              `json:"sessionUUID"`
@@ -190,10 +197,18 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		e.Type = eventType
 	}
 	if e.ID == "" {
-		e.ID = aux.EventIDSnake
-	}
-	if e.ID == "" {
-		e.ID = aux.EventIDCamel
+		e.ID = firstSDKEventID(
+			aux.EventIDSnake,
+			aux.EventIDCamel,
+			aux.EventIDUpper,
+			aux.MessageUUID,
+			aux.MessageUUIDUpper,
+			aux.MessageUUIDSnake,
+			aux.MessageID,
+			aux.MessageIDUpper,
+			aux.MessageIDSnake,
+			e.UUID,
+		)
 	}
 	if e.SessionID == "" {
 		e.SessionID = aux.SessionIDUpper
@@ -290,6 +305,15 @@ func CanonicalSDKEventType(value string) SDKEventType {
 }
 
 func firstSDKEventString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstSDKEventID(values ...ID) ID {
 	for _, value := range values {
 		if value != "" {
 			return value
