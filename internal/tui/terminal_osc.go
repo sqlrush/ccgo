@@ -22,6 +22,9 @@ const (
 	OSCForegroundColor    = "10"
 	OSCBackgroundColor    = "11"
 	OSCCursorColor        = "12"
+	OSCResetForeground    = "110"
+	OSCResetBackground    = "111"
+	OSCResetCursor        = "112"
 	OSCClipboard          = "52"
 	OSCKitty              = "99"
 	OSCShellIntegration   = "133"
@@ -120,6 +123,7 @@ type TerminalOSCColorAction struct {
 	Target string
 	Color  *RGBColor
 	Query  bool
+	Reset  bool
 	Raw    string
 	Valid  bool
 }
@@ -228,7 +232,7 @@ func ParseOSCContent(content string) OSCAction {
 		return OSCAction{Type: OSCActionDirectory, Directory: ParseDirectoryPayload(data)}
 	case OSCHyperlink:
 		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
-	case OSCForegroundColor, OSCBackgroundColor, OSCCursorColor:
+	case OSCForegroundColor, OSCBackgroundColor, OSCCursorColor, OSCResetForeground, OSCResetBackground, OSCResetCursor:
 		return OSCAction{Type: OSCActionColor, Color: ParseOSCColorPayload(strconv.Itoa(commandNumber), data)}
 	case OSCClipboard:
 		return OSCAction{Type: OSCActionClipboard, Clipboard: ParseClipboardPayload(data)}
@@ -355,6 +359,11 @@ func ParseOSCColorPayload(command string, payload string) TerminalOSCColorAction
 		Raw:    payload,
 	}
 	payload = strings.TrimSpace(payload)
+	if oscColorResetCommand(command) {
+		action.Reset = true
+		action.Valid = payload == ""
+		return action
+	}
 	if payload == "?" {
 		action.Query = true
 		action.Valid = true
@@ -375,8 +384,23 @@ func oscColorTarget(command string) string {
 		return "background"
 	case OSCCursorColor:
 		return "cursor"
+	case OSCResetForeground:
+		return "foreground"
+	case OSCResetBackground:
+		return "background"
+	case OSCResetCursor:
+		return "cursor"
 	default:
 		return command
+	}
+}
+
+func oscColorResetCommand(command string) bool {
+	switch command {
+	case OSCResetForeground, OSCResetBackground, OSCResetCursor:
+		return true
+	default:
+		return false
 	}
 }
 
