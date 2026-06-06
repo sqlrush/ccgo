@@ -315,6 +315,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualJoin(false)
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
+	case 'p', 'P':
+		s.applyVimVisualPaste()
 	case 'x':
 		s.applyVimVisualOperator('d')
 	case 's':
@@ -464,6 +466,26 @@ func (s *REPLScreen) applyVimVisualJoin(raw bool) {
 		}
 		s.recordVimChange(vimRecordedChange{Kind: kind, Count: joined})
 	}
+	s.clearVimVisualState()
+}
+
+func (s *REPLScreen) applyVimVisualPaste() {
+	if s.VimRegister == "" {
+		s.exitVimVisual()
+		return
+	}
+	start, end, linewise, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	replacement := s.VimRegister
+	replacementLinewise := s.VimRegisterLinewise || strings.HasSuffix(replacement, "\n")
+	replaced := s.Prompt.rangeText(start, end)
+	s.rememberVimVisualSelection()
+	s.recordVimUndo()
+	s.Prompt.replaceRangeWithPaste(start, end, linewise, replacement, replacementLinewise)
+	s.setVimRegister(replaced, linewise)
 	s.clearVimVisualState()
 }
 
@@ -1621,6 +1643,70 @@ func (p *PromptState) pasteLinewise(content string, after bool, count int) {
 	newLines = append(newLines, lines[insertLine:]...)
 	p.Text = strings.Join(newLines, "\n")
 	p.Cursor = lineStartOffset(newLines, insertLine)
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) replaceRangeWithPaste(start int, end int, linewise bool, content string, contentLinewise bool) {
+	if linewise || contentLinewise {
+		p.replaceLineRangeWithPaste(start, end, content)
+		return
+	}
+	runes := []rune(p.Text)
+	start = p.clampCursor(start)
+	end = p.clampCursor(end)
+	if end < start {
+		start, end = end, start
+	}
+	insert := []rune(content)
+	replaced := make([]rune, 0, len(runes)-(end-start)+len(insert))
+	replaced = append(replaced, runes[:start]...)
+	replaced = append(replaced, insert...)
+	replaced = append(replaced, runes[end:]...)
+	p.Text = string(replaced)
+	if len(insert) > 0 {
+		p.Cursor = start + len(insert) - 1
+	} else {
+		p.Cursor = start
+	}
+	p.resetHistoryCursor()
+}
+
+func (p *PromptState) replaceLineRangeWithPaste(start int, end int, content string) {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 {
+		return
+	}
+	start = p.clampCursor(start)
+	end = p.clampCursor(end)
+	if end < start {
+		start, end = end, start
+	}
+	inclusiveEnd := end
+	if inclusiveEnd > start {
+		inclusiveEnd--
+	}
+	startLine := p.lineIndexAtCursor(start)
+	endLine := p.lineIndexAtCursor(inclusiveEnd)
+	if startLine < 0 {
+		startLine = 0
+	}
+	if endLine < startLine {
+		startLine, endLine = endLine, startLine
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - 1
+	}
+	if endLine >= len(lines) {
+		endLine = len(lines) - 1
+	}
+	content = strings.TrimSuffix(content, "\n")
+	insertLines := strings.Split(content, "\n")
+	newLines := make([]string, 0, len(lines)-(endLine-startLine+1)+len(insertLines))
+	newLines = append(newLines, lines[:startLine]...)
+	newLines = append(newLines, insertLines...)
+	newLines = append(newLines, lines[endLine+1:]...)
+	p.Text = strings.Join(newLines, "\n")
+	p.Cursor = lineStartOffset(newLines, startLine)
 	p.resetHistoryCursor()
 }
 

@@ -3891,6 +3891,28 @@ func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	if screen.VimMode != VimNormal || screen.Prompt.Text != "  one\n  two\nthree" || screen.Prompt.Cursor != len([]rune("  ")) {
 		t.Fatalf("after visual indent screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "y", "$", "b", "v", "e", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha beta beta" || screen.Prompt.Cursor != len([]rune("alpha beta beta"))-1 || screen.VimRegister != "gamma" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual paste screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "red blue green")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "y", "$", "b", "v", "e", "P"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "red blue blue" || screen.Prompt.Cursor != len([]rune("red blue blue"))-1 || screen.VimRegister != "green" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual P screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimVisualLineOperators(t *testing.T) {
@@ -4039,6 +4061,17 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	}
 	if screen.VimMode != VimNormal || screen.Prompt.Text != "one two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
 		t.Fatalf("after visual J screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "y", "y", "j", "V", "j", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one\none\nfour" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual line paste screen = %#v", screen)
 	}
 }
 
