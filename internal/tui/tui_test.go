@@ -5587,6 +5587,56 @@ func TestRunInteractionScriptAcceptsPastedContentAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsClipboardDataPastePayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"clipboardData": {
+				"text/plain": "alpha\nbeta"
+			},
+			"expectPrompt": {
+				"text": "[Pasted text #1 +1 lines]",
+				"expandedText": "alpha\nbeta",
+				"pastedContentCount": 1
+			}
+		},
+		{
+			"action": "paste",
+			"payload": {
+				"clipboardData": {
+					"items": [
+						{"type": "text/plain", "text": "gamma"}
+					]
+				}
+			},
+			"expectPrompt": {
+				"text": "[Pasted text #1 +1 lines][Pasted text #2]",
+				"expandedText": "alpha\nbetagamma",
+				"pastedContentCount": 2
+			}
+		},
+		{
+			"action": "clipboardText",
+			"payload": {
+				"dataTransfer": {
+					"plainText": "delta"
+				}
+			},
+			"expectPrompt": {
+				"text": "[Pasted text #1 +1 lines][Pasted text #2][Pasted text #3]",
+				"expandedText": "alpha\nbetagammadelta",
+				"pastedContentCount": 3
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[

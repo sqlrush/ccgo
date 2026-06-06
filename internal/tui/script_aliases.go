@@ -534,6 +534,10 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		PastedText                *json.RawMessage `json:"pasted_text"`
 		PastedTextCamel           *json.RawMessage `json:"pastedText"`
 		Clipboard                 *json.RawMessage `json:"clipboard"`
+		ClipboardData             *json.RawMessage `json:"clipboard_data"`
+		ClipboardDataCamel        *json.RawMessage `json:"clipboardData"`
+		DataTransfer              *json.RawMessage `json:"data_transfer"`
+		DataTransferCamel         *json.RawMessage `json:"dataTransfer"`
 		Messages                  *json.RawMessage `json:"messages"`
 		AppendMessages            *json.RawMessage `json:"append_messages"`
 		AppendMessagesCamel       *json.RawMessage `json:"appendMessages"`
@@ -761,9 +765,27 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 				"pasted_text",
 				"pastedText",
 				"clipboard",
+				"clipboard_data",
+				"clipboardData",
+				"data_transfer",
+				"dataTransfer",
 			},
 			"paste",
 			"clipboard",
+			"clipboard_data",
+			"clipboardData",
+			"data_transfer",
+			"dataTransfer",
+			"text/plain",
+			"textPlain",
+			"plain_text",
+			"plainText",
+			"clipboard_text",
+			"clipboardText",
+			"items",
+			"item",
+			"clipboard_items",
+			"clipboardItems",
 			"text",
 			"content",
 			"body",
@@ -1553,6 +1575,10 @@ func scriptStepJSONHasDirectFields(fields map[string]json.RawMessage) bool {
 		"pasted_text",
 		"pastedText",
 		"clipboard",
+		"clipboard_data",
+		"clipboardData",
+		"data_transfer",
+		"dataTransfer",
 		"messages",
 		"append_messages",
 		"appendMessages",
@@ -1640,7 +1666,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "paste", "pastetext", "pastedtext", "clipboard", "clipboardtext":
 		if step.Paste == "" {
-			step.Paste = scriptActionStringField(fields, "paste", "clipboard", "text", "content", "body", "message", "data", "payload", "value")
+			step.Paste = scriptActionStringField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "items", "item", "clipboard_items", "clipboardItems", "text", "content", "body", "message", "data", "payload", "value")
 		}
 	case "status", "setstatus", "set-status", "statusline", "status-line":
 		if step.Status == "" {
