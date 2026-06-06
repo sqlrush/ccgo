@@ -391,7 +391,7 @@ func TestLoadTranscriptMetadataDropsCollapseStateAtCompactBoundary(t *testing.T)
 	path := writeTranscript(t, []string{
 		`{"type":"marble-origami-commit","sessionId":"s1","collapseId":"old","summaryUuid":"old_sum","summary":"old","firstArchivedUuid":"u1","lastArchivedUuid":"a1"}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":true,"lastSpawnTokens":12}`,
-		`{"type":"system","subtype":"compact_boundary","uuid":"cb1","parentUuid":null,"compactMetadata":{"trigger":"manual","preTokens":100}}`,
+		`{"type":"system-event","subtype":"compact_boundary","uuid":"cb1","parentUuid":null,"compactMetadata":{"trigger":"manual","preTokens":100}}`,
 		`{"type":"marble-origami-commit","sessionId":"s1","collapseId":"new","summaryUuid":"new_sum","summary":"new","firstArchivedUuid":"u2","lastArchivedUuid":"a2"}`,
 		`{"type":"marble-origami-snapshot","sessionId":"s1","armed":false,"lastSpawnTokens":24}`,
 	})
@@ -1129,7 +1129,7 @@ func TestReappendSessionMetadataWritesSessionScopedTailEntries(t *testing.T) {
 func TestLoadTranscriptTailKeepsOnlyRecentMessagesAndBridgesProgress(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
-		`{"type":"progress","uuid":"p1","parentUuid":"u1"}`,
+		`{"type":"progress_update","uuid":"p1","parentUuid":"u1"}`,
 		`{"type":"assistant","uuid":"a1","parentUuid":"p1"}`,
 		`{"type":"summary","leafUuid":"a1","summary":"short"}`,
 		`{"type":"user","uuid":"u2","parentUuid":"a1"}`,
@@ -1154,7 +1154,7 @@ func TestLoadTranscriptTailBytesReadsCompleteRecords(t *testing.T) {
 	lines := []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
 		`{"type":"assistant","uuid":"a1","parentUuid":"u1"}`,
-		`{"type":"progress","uuid":"p1","parentUuid":"a1"}`,
+		`{"type":"progress_update","uuid":"p1","parentUuid":"a1"}`,
 		`{"type":"user","uuid":"u2","parentUuid":"p1"}`,
 		`{"type":"assistant","uuid":"a2","parentUuid":"u2"}`,
 	}

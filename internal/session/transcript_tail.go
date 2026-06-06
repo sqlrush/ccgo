@@ -50,7 +50,7 @@ func LoadTranscriptTail(path string, limit int) ([]TranscriptMessage, error) {
 		if err := unmarshalTranscriptLine(scanner.Bytes(), &envelope); err != nil {
 			continue
 		}
-		if envelope.Type == "progress" && envelope.UUID != "" {
+		if contracts.CanonicalMessageType(envelope.Type) == contracts.MessageProgress && envelope.UUID != "" {
 			progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
 			continue
 		}
@@ -235,7 +235,7 @@ func transcriptMessageFromLine(line []byte, progressBridge map[contracts.ID]*con
 	if err := unmarshalTranscriptLine(line, &envelope); err != nil {
 		return TranscriptMessage{}, false
 	}
-	if envelope.Type == "progress" && envelope.UUID != "" {
+	if contracts.CanonicalMessageType(envelope.Type) == contracts.MessageProgress && envelope.UUID != "" {
 		progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
 		return TranscriptMessage{}, false
 	}

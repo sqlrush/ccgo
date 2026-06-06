@@ -79,7 +79,7 @@ func LoadTranscriptMetadata(path string) (TranscriptMetadata, error) {
 				continue
 			}
 			if isTranscriptType(envelope.Type) {
-				if envelope.Type == "system" {
+				if contracts.CanonicalMessageType(envelope.Type) == contracts.MessageSystem {
 					var msg TranscriptMessage
 					if err := json.Unmarshal(line, &msg); err == nil && msg.IsCompactBoundary() {
 						metadata.ContextCollapseCommits = nil
