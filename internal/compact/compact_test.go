@@ -314,6 +314,79 @@ func TestLoadMicroResultAcceptsAdjacentCacheFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest  string
+		payload string
+		want    string
+	}{
+		{
+			digest: "summary-body",
+			payload: `{
+				"body": "body alias summary",
+				"digest": "summary-body",
+				"version": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "body alias summary",
+		},
+		{
+			digest: "summary-markdown",
+			payload: `{
+				"markdown": "# markdown alias summary",
+				"cacheKey": "summary-markdown",
+				"cacheVersion": "microcompact.v1",
+				"cachedAt": 100
+			}`,
+			want: "# markdown alias summary",
+		},
+		{
+			digest: "summary-final",
+			payload: `{
+				"cacheEntry": {
+					"finalSummary": "final alias summary",
+					"cacheDigest": "summary-final",
+					"formatVersion": "microcompact.v1",
+					"generatedAt": 100
+				}
+			}`,
+			want: "final alias summary",
+		},
+		{
+			digest: "summary-detail-block",
+			payload: `{
+				"resource": {
+					"id": "summary-detail-block",
+					"attributes": {
+						"details": {"type": "text", "text": "detail block alias summary"},
+						"version": "microcompact.v1",
+						"createdAt": 100
+					}
+				}
+			}`,
+			want: "detail block alias summary",
+		},
+	} {
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion {
+			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsAdjacentBoolCacheAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
@@ -861,6 +934,43 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 				"storedAt": 100
 			}`,
 			want: "response output text summary",
+		},
+		{
+			digest: "response-body",
+			payload: `{
+				"response": {
+					"body": "response body summary"
+				},
+				"cacheDigest": "response-body",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "response body summary",
+		},
+		{
+			digest: "result-final-summary",
+			payload: `{
+				"results": [
+					{"finishReason": "safety"},
+					{"finalSummary": "result final summary"}
+				],
+				"fingerprint": "result-final-summary",
+				"schemaVersion": "microcompact.v1",
+				"created": 100
+			}`,
+			want: "result final summary",
+		},
+		{
+			digest: "completion-response-text",
+			payload: `{
+				"completion": {
+					"responseText": "completion response text summary"
+				},
+				"cacheDigest": "completion-response-text",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "completion response text summary",
 		},
 		{
 			digest: "responses-output-text-block",

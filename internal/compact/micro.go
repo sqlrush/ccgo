@@ -42,6 +42,24 @@ type MicroResult struct {
 	ExpiresAt          time.Time
 }
 
+var microSummaryFieldAliases = []string{
+	"Summary", "summary", "summaryText", "summary_text", "summaryContent", "summary_content",
+	"resultSummary", "result_summary", "finalSummary", "final_summary",
+	"summaryMarkdown", "summary_markdown", "markdown", "body", "description", "details", "detail",
+	"compressed", "compressedText", "compressed_text", "content", "parts", "text", "value",
+	"output", "outputText", "output_text", "resultText", "result_text",
+	"completionText", "completion_text", "responseText", "response_text", "messageText", "message_text",
+}
+
+var microProviderSummaryFieldAliases = []string{
+	"summary", "summaryText", "summary_text", "summaryContent", "summary_content",
+	"resultSummary", "result_summary", "finalSummary", "final_summary",
+	"summaryMarkdown", "summary_markdown", "markdown", "body", "description", "details", "detail",
+	"parts", "segments", "message", "delta", "content", "output", "outputText", "output_text",
+	"resultText", "result_text", "completionText", "completion_text",
+	"responseText", "response_text", "messageText", "message_text",
+}
+
 func (r *MicroResult) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) > 0 && trimmed[0] == '[' {
@@ -87,7 +105,7 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 
 func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.RawMessage, overwrite bool, includeSummary bool) error {
 	if includeSummary {
-		if value, ok, err := microSummaryJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output", "outputText", "output_text"); err != nil {
+		if value, ok, err := microSummaryJSONField(fields, microSummaryFieldAliases...); err != nil {
 			return err
 		} else if ok && (overwrite || result.Summary == "") {
 			result.Summary = value
@@ -255,9 +273,7 @@ func microResultArrayWrappedJSON(data json.RawMessage) (json.RawMessage, bool) {
 }
 
 func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
-	for _, name := range []string{
-		"Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output", "outputText", "output_text",
-	} {
+	for _, name := range microSummaryFieldAliases {
 		raw, ok := fields[name]
 		if !ok {
 			continue
@@ -667,7 +683,7 @@ func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return "", false, err
 	}
-	for _, name := range []string{"parts", "segments", "message", "delta", "content", "output", "outputText", "output_text"} {
+	for _, name := range microProviderSummaryFieldAliases {
 		nested, ok := fields[name]
 		if !ok {
 			continue
