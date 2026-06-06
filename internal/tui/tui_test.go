@@ -7517,6 +7517,7 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 		{"keys":[{"keyCode":17,"ctrlKey":true},{"keyCode":88,"ctrlKey":true},{"which":75,"ctrlKey":true}],"expectEvent":{"type":"kill_agents"}},
 		{"kind":"keys","data":[{"code":"KeyO"},{"code":"Digit1"},{"key":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"o1"},"expectPrompt":{"empty":true}},
 		{"keys":[{"key":"x","modifiers":["ctrl"]},{"key":"k","modifiers":["control"]}],"expectEvent":{"type":"kill_agents"}},
+		{"keys":[{"type":"keyup","key":"x"},{"eventType":"keyUp","code":"KeyY"},{"name":"key-release","which":90}],"expectNoEvent":true,"expectPrompt":{"empty":true}},
 		{"press":{"payload":{"key":"Unidentified","keyCode":13,"shiftKey":true}},"expectPrompt":{"text":"\n","cursor":1}}
 	]`))
 	if err != nil {

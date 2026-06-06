@@ -3062,6 +3062,9 @@ func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth i
 }
 
 func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bool) {
+	if scriptKeyEventIsRelease(fields) {
+		return "", true
+	}
 	key := stringJSONField(fields,
 		"key", "Key", "keyName", "key_name", "name", "value",
 		"code", "Code", "keyCodeName", "key_code_name",
@@ -3122,6 +3125,18 @@ func scriptKeyEventNumericNameFromFields(fields map[string]json.RawMessage) (str
 		return scriptKeyEventKeyCodeName(*value)
 	}
 	return "", false
+}
+
+func scriptKeyEventIsRelease(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{"type", "eventType", "event_type", "event", "kind", "action", "name"} {
+		value := stringJSONField(fields, name)
+		normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(value), "_", "-"), " ", "-"))
+		switch normalized {
+		case "keyup", "key-up", "keyrelease", "key-release", "keyreleased", "key-released", "keyboardup", "keyboard-up", "keyboardrelease", "keyboard-release", "release", "released":
+			return true
+		}
+	}
+	return false
 }
 
 func scriptKeyEventWhichUsesCharCode(fields map[string]json.RawMessage) bool {

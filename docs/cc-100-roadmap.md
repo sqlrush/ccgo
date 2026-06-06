@@ -608,6 +608,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：scripted interaction 的布尔字段现在接受非严格 bool payload，包括 `"true"`/`"false"`、`yes`/`no`、`on`/`off` 和数字 `1`/`0`；覆盖 mouse release、dialog visible/result、prompt empty、vim state、reverse-search，以及 focus/cancel/openTasks/expectNoEvent/expectFocused 等顶层 step 控制字段，减少官方/外部交互脚本 fixture 因 bool 表示差异失败的情况。
 
+本轮补充：scripted interaction 的 DOM key event replay 现在会把 `keyup`/`keyUp`/`key-release` 这类 release payload 当作 no-op，避免浏览器/Playwright 录制同时包含 keydown 和 keyup 时重复插入 prompt 输入。
+
 本轮补充：scripted interaction step 现在接受 `expect`/`expected`/`assertions`/`checks`/`verify`/`then`/`after` 等 expectation wrapper object，可把嵌套的 prompt/event/dialog/snapshot/screen/task/vim/viewport 断言映射到已有 `expect*` 字段。
 
 本轮补充：scripted interaction expectation wrapper 现在也接受 assertion/check 数组，数组元素可用 `type`/`kind`/`name`/`target` 等 discriminator 搭配 `value`/`payload` 声明 prompt/event/dialog/snapshot/screen/task/vim/viewport 断言，减少官方脚本 fixture 的结构改写成本。
