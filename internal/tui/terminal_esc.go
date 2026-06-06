@@ -13,8 +13,13 @@ const (
 	ESCTabSet             = "\x1bH"
 	ESCFinalStart         = 0x30
 	ESCFinalEnd           = 0x7e
-	ESCCharsetSelectLeft  = '('
-	ESCCharsetSelectRight = ')'
+	ESCCharsetSelectG0    = '('
+	ESCCharsetSelectG1    = ')'
+	ESCCharsetSelectG2    = '*'
+	ESCCharsetSelectG3    = '+'
+	ESCCharsetSelectG1Alt = '-'
+	ESCCharsetSelectG2Alt = '.'
+	ESCCharsetSelectG3Alt = '/'
 )
 
 type ESCActionType string
@@ -49,6 +54,9 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 	if chars == "" {
 		return ESCAction{}, false
 	}
+	if isESCCharsetSelector(chars[0]) && len(chars) >= 2 {
+		return ESCAction{Type: ESCActionCharset, CharsetSlot: chars[0], CharsetDesignator: chars[1], Sequence: ESCPrefix + chars}, true
+	}
 	switch chars[0] {
 	case 'c':
 		return ESCAction{Type: ESCActionReset}, true
@@ -64,10 +72,16 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}}, true
 	case 'H':
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabSet}}, true
-	case ESCCharsetSelectLeft, ESCCharsetSelectRight:
-		if len(chars) >= 2 {
-			return ESCAction{Type: ESCActionCharset, CharsetSlot: chars[0], CharsetDesignator: chars[1], Sequence: ESCPrefix + chars}, true
-		}
 	}
 	return ESCAction{Type: ESCActionUnknown, Sequence: ESCPrefix + chars}, true
+}
+
+func isESCCharsetSelector(b byte) bool {
+	switch b {
+	case ESCCharsetSelectG0, ESCCharsetSelectG1, ESCCharsetSelectG2, ESCCharsetSelectG3,
+		ESCCharsetSelectG1Alt, ESCCharsetSelectG2Alt, ESCCharsetSelectG3Alt:
+		return true
+	default:
+		return false
+	}
 }

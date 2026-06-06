@@ -5743,9 +5743,24 @@ func TestParseESCSequenceActions(t *testing.T) {
 	if action, ok := ParseESCContent(""); ok || action.Type != "" {
 		t.Fatalf("empty esc content parsed = %#v", action)
 	}
-	charset, ok := ParseESCSequence("\x1b(B")
-	if !ok || charset.Type != ESCActionCharset || charset.CharsetSlot != '(' || charset.CharsetDesignator != 'B' {
-		t.Fatalf("charset selection = %#v ok=%v", charset, ok)
+	charsetCases := []struct {
+		seq        string
+		slot       byte
+		designator byte
+	}{
+		{seq: "\x1b(B", slot: '(', designator: 'B'},
+		{seq: "\x1b)0", slot: ')', designator: '0'},
+		{seq: "\x1b*B", slot: '*', designator: 'B'},
+		{seq: "\x1b+0", slot: '+', designator: '0'},
+		{seq: "\x1b-A", slot: '-', designator: 'A'},
+		{seq: "\x1b.A", slot: '.', designator: 'A'},
+		{seq: "\x1b/A", slot: '/', designator: 'A'},
+	}
+	for _, tc := range charsetCases {
+		charset, ok := ParseESCSequence(tc.seq)
+		if !ok || charset.Type != ESCActionCharset || charset.CharsetSlot != tc.slot || charset.CharsetDesignator != tc.designator {
+			t.Fatalf("charset selection for %q = %#v ok=%v", tc.seq, charset, ok)
+		}
 	}
 
 	reset, ok := ParseESCSequence(ESCResetSequence)
