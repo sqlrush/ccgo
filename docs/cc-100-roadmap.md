@@ -558,7 +558,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：contract image source 解码现在接受 `mediaType`/`mimeType`/`contentType`、`base64`/`payload` 等 source 字段别名，并支持顶层 image block 直接携带媒体类型和 base64 数据，transcript resume 会保留为规范 `ImageSource`。
 
-本轮补充：remote history `SDKEvent` payload materialization 现在会递归解包 `payload`/`data`/`body` 内的 `record`/`entry`/`item`/`event`/`result`/`response`/`output` wrapper，减少远端事件多层包装导致的消息丢失。
+本轮补充：remote history `SDKEvent` payload materialization 现在会递归解包 `payload`/`data`/`body`/`metadata`/`meta`/`attributes`/`properties` 内的 `record`/`entry`/`item`/`event`/`result`/`response`/`output` wrapper，减少远端事件多层包装导致的消息丢失。
 
 本轮补充：remote history 普通事件数组现在也会解包元素级 `event`/`record`/`entry`/`item`/`resource`/`value` 以及无事件本体字段时的 `data`/`payload`/`body` wrapper，并用元素 `cursor` 作为事件 ID fallback，覆盖非 GraphQL edges 的 wrapper item 响应。
 

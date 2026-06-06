@@ -236,6 +236,18 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		)
 	}
 	if e.Message == nil {
+		fields := map[string]json.RawMessage{}
+		if err := json.Unmarshal(data, &fields); err == nil {
+			e.Message = firstSDKEventSidecarMessage(e.Type,
+				fields["metadata"],
+				fields["meta"],
+				fields["attributes"],
+				fields["properties"],
+				fields["attrs"],
+			)
+		}
+	}
+	if e.Message == nil {
 		e.Message = sdkEventTopLevelMessage(data, e.Type)
 	}
 	return nil
@@ -324,6 +336,26 @@ func sdkEventMessageFromRaw(raw json.RawMessage, eventType SDKEventType) *Messag
 	} {
 		if nested := sdkEventMessageFromRaw(fields[name], eventType); nested != nil {
 			return nested
+		}
+	}
+	for _, name := range []string{
+		"metadata",
+		"meta",
+		"attributes",
+		"properties",
+		"attrs",
+	} {
+		if nested := sdkEventMessageFromRaw(fields[name], eventType); nested != nil && sdkEventTopLevelMessageHasData(*nested) {
+			return nested
+		}
+	}
+	return nil
+}
+
+func firstSDKEventSidecarMessage(eventType SDKEventType, values ...json.RawMessage) *Message {
+	for _, value := range values {
+		if message := sdkEventMessageFromRaw(value, eventType); message != nil && sdkEventTopLevelMessageHasData(*message) {
+			return message
 		}
 	}
 	return nil
