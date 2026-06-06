@@ -76,6 +76,8 @@ type REPLScreen struct {
 	VimLastVisualCursor   int
 	VimLastVisualLinewise bool
 	VimLastVisualValid    bool
+	VimMarks              map[rune]int
+	VimPendingMark        rune
 	Focused               bool
 	ReverseSearch         ReverseSearchState
 	StashedPrompt         *PromptStash

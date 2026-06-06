@@ -36,6 +36,7 @@ type vimRecordedChange struct {
 	Object   rune
 	Dir      rune
 	Below    bool
+	Linewise bool
 }
 
 func (s *REPLScreen) SetVimEnabled(enabled bool) {
@@ -150,6 +151,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	if s.VimPendingTextObject != 0 {
 		return s.applyVimTextObject(r)
 	}
+	if s.VimPendingMark != 0 {
+		return s.applyVimMark(r)
+	}
 	if s.VimPendingG {
 		return s.applyVimG(r)
 	}
@@ -195,6 +199,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case 'G':
 		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
+	case 'm', '`', '\'':
+		s.VimPendingMark = r
+		s.VimPendingCount = count
 	case '>', '<':
 		s.VimPendingIndent = r
 		s.VimPendingCount = count
@@ -555,6 +562,10 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.VimPendingOperator = operator
 		s.VimPendingTextObject = r
 		s.VimPendingCount = count
+	case '`', '\'':
+		s.VimPendingOperator = operator
+		s.VimPendingMark = r
+		s.VimPendingCount = count
 	case 'G':
 		s.applyVimLineMotionOperator(operator, vimGTargetLine(s.Prompt.lineCount(), count), 'G', count)
 	case 'g':
@@ -669,6 +680,48 @@ func (s *REPLScreen) applyVimTextObject(obj rune) ScreenEvent {
 	s.applyVimRangeOperator(operator, start, end, false)
 	s.recordVimChange(vimRecordedChange{Kind: "operatorTextObj", Operator: operator, Scope: scope, Object: obj, Count: count})
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimMark(mark rune) ScreenEvent {
+	action := s.VimPendingMark
+	operator := s.VimPendingOperator
+	count := s.VimPendingCount
+	s.clearVimPending()
+	if !isVimMarkRune(mark) {
+		return ScreenEvent{}
+	}
+	switch action {
+	case 'm':
+		if s.VimMarks == nil {
+			s.VimMarks = make(map[rune]int)
+		}
+		s.VimMarks[mark] = s.Prompt.clampCursor(s.Prompt.Cursor)
+	case '`', '\'':
+		target, ok := s.VimMarks[mark]
+		if !ok {
+			return ScreenEvent{}
+		}
+		linewise := action == '\''
+		if operator != 0 {
+			s.applyVimMarkOperator(operator, mark, target, linewise, count)
+			return ScreenEvent{}
+		}
+		if linewise {
+			s.Prompt.goToLine(s.Prompt.lineIndexAtCursor(target) + 1)
+			return ScreenEvent{}
+		}
+		s.Prompt.Cursor = s.Prompt.clampCursor(target)
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimMarkOperator(operator rune, mark rune, target int, linewise bool, count int) {
+	start, end, ok := s.Prompt.markMotionRange(target, linewise)
+	if !ok {
+		return
+	}
+	s.applyVimRangeOperator(operator, start, end, linewise)
+	s.recordVimChange(vimRecordedChange{Kind: "operatorMark", Operator: operator, Target: mark, Count: count, Linewise: linewise})
 }
 
 func (s *REPLScreen) applyVimCharMotion(target rune) ScreenEvent {
@@ -1057,6 +1110,12 @@ func (s *REPLScreen) replayVimLastChange() {
 			return
 		}
 		s.applyVimRangeOperator(change.Operator, start, end, false)
+	case "operatorMark":
+		target, ok := s.VimMarks[change.Target]
+		if !ok {
+			return
+		}
+		s.applyVimMarkOperator(change.Operator, change.Target, target, change.Linewise, change.Count)
 	}
 }
 
@@ -1086,6 +1145,7 @@ func (s *REPLScreen) clearVimPending() {
 	s.VimPendingTextObject = 0
 	s.VimPendingG = false
 	s.VimPendingIndent = 0
+	s.VimPendingMark = 0
 	s.VimPendingCount = 0
 	s.VimCount = 0
 	s.VimPendingReplace = false
@@ -1130,6 +1190,10 @@ func (s *REPLScreen) undoVimPrompt() {
 
 func isVimCountRune(r rune) bool {
 	return r >= '0' && r <= '9'
+}
+
+func isVimMarkRune(r rune) bool {
+	return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z'
 }
 
 func applyN(count int, fn func()) {
@@ -1356,6 +1420,25 @@ func (p *PromptState) lineMotionRange(targetLine int) (int, int, bool) {
 		return 0, 0, false
 	}
 	return start, end, true
+}
+
+func (p *PromptState) markMotionRange(target int, linewise bool) (int, int, bool) {
+	target = p.clampCursor(target)
+	if linewise {
+		return p.lineMotionRange(p.lineIndexAtCursor(target) + 1)
+	}
+	start := p.clampCursor(p.Cursor)
+	end := target
+	runes := []rune(p.Text)
+	if end >= start {
+		if end < len(runes) {
+			end++
+		}
+	} else if start < len(runes) {
+		start++
+	}
+	start, end, _, ok := orderedRange(start, end, false)
+	return start, end, ok
 }
 
 func (p *PromptState) lineRange(count int) (int, int) {

@@ -4165,6 +4165,39 @@ func TestREPLScreenVimJKLineMotionsAndOperators(t *testing.T) {
 	if screen.Prompt.Text != "one" || screen.VimRegister != "two\nthree\n" {
 		t.Fatalf("after dk screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "m", "a", "$", "`", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("cursor after `a = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "l", "m", "a", "G", "'", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("cursor after 'a = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "m", "a", "G", "d", "'", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one" || screen.VimRegister != "two\nthree\nfour\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after d'a screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimEditCommands(t *testing.T) {
