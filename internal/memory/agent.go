@@ -514,6 +514,16 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		CandidateIDCamel        string            `json:"candidateId"`
 		CandidateIDs            []string          `json:"candidate_ids"`
 		CandidateIDsCamel       []string          `json:"candidateIds"`
+		SessionURI              string            `json:"session_uri"`
+		SessionURICamel         string            `json:"sessionUri"`
+		SessionURL              string            `json:"session_url"`
+		SessionURLCamel         string            `json:"sessionUrl"`
+		URI                     string            `json:"uri"`
+		URIs                    []string          `json:"uris"`
+		URL                     string            `json:"url"`
+		URLs                    []string          `json:"urls"`
+		Href                    string            `json:"href"`
+		Hrefs                   []string          `json:"hrefs"`
 		ID                      string            `json:"id"`
 		IDs                     []string          `json:"ids"`
 		Type                    string            `json:"type"`
@@ -601,6 +611,12 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append([]string{object.CandidateID, object.CandidateIDCamel}, append(object.CandidateIDs, object.CandidateIDsCamel...)...))
+		}
+		if len(ids) == 0 {
+			ids = recallIDs(append(
+				[]string{object.SessionURI, object.SessionURICamel, object.SessionURL, object.SessionURLCamel, object.URI, object.URL, object.Href},
+				appendManyStringSlices(object.URIs, object.URLs, object.Hrefs)...,
+			))
 		}
 		if len(ids) == 0 {
 			if recallResourceTypeAllowsBareID(normalizedSelectionResourceTypeFromStrings(object.Type, object.ResourceType, object.ResourceTypeCamel, object.Kind)) {
@@ -1333,6 +1349,18 @@ var recallItemIDKeys = []string{
 	"candidateMemoryID",
 	"candidate_memory",
 	"candidateMemory",
+	"session_uri",
+	"sessionUri",
+	"sessionURI",
+	"session_url",
+	"sessionUrl",
+	"sessionURL",
+	"uri",
+	"uris",
+	"url",
+	"urls",
+	"href",
+	"hrefs",
 	"summary_id",
 	"summaryId",
 	"summaryID",
@@ -1664,16 +1692,25 @@ func recallMatchesBySessionIDs(root string, ids []contracts.ID, query string, op
 		return nil, err
 	}
 	byID := map[contracts.ID]SessionSummary{}
+	lookup := map[string]SessionSummary{}
 	for _, summary := range summaries {
 		if options.ExcludeSessionID != "" && summary.SessionID == options.ExcludeSessionID {
 			continue
 		}
 		byID[summary.SessionID] = summary
+		for _, key := range recallSummaryLookupKeys(summary) {
+			if _, ok := lookup[key]; !ok {
+				lookup[key] = summary
+			}
+		}
 	}
 	terms := queryTerms(query)
 	var matches []RecallMatch
 	for _, id := range ids {
 		summary, ok := byID[id]
+		if !ok {
+			summary, ok = recallLookupSummary(lookup, string(id))
+		}
 		if !ok {
 			continue
 		}
@@ -1687,6 +1724,46 @@ func recallMatchesBySessionIDs(root string, ids []contracts.ID, query string, op
 		matches = matches[:options.Limit]
 	}
 	return matches, nil
+}
+
+func recallSummaryLookupKeys(summary SessionSummary) []string {
+	path := strings.TrimSpace(summary.Path)
+	sessionID := strings.TrimSpace(string(summary.SessionID))
+	keys := []string{sessionID}
+	if path != "" {
+		keys = append(keys,
+			path,
+			filepath.ToSlash(path),
+			relevantMemoryFileURI(path),
+			filepath.Base(filepath.Dir(path)),
+		)
+	}
+	return uniqueNonEmptyStrings(keys)
+}
+
+func recallLookupSummary(lookup map[string]SessionSummary, id string) (SessionSummary, bool) {
+	for _, key := range recallLookupKeysForID(id) {
+		if summary, ok := lookup[key]; ok {
+			return summary, true
+		}
+	}
+	return SessionSummary{}, false
+}
+
+func recallLookupKeysForID(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	keys := []string{id}
+	parsed, err := url.Parse(id)
+	if err == nil && parsed.Scheme != "" && parsed.Path != "" {
+		path := strings.TrimSpace(parsed.Path)
+		fromSlash := filepath.FromSlash(path)
+		keys = append(keys, path, fromSlash, filepath.ToSlash(fromSlash))
+		keys = append(keys, filepath.Base(filepath.Dir(fromSlash)), filepath.Base(fromSlash), strings.TrimSuffix(filepath.Base(fromSlash), filepath.Ext(fromSlash)))
+	}
+	return uniqueNonEmptyStrings(keys)
 }
 
 func relevantMemorySelectionsByIDs(candidates []relevantMemoryCandidate, ids []string, surfaced map[string]struct{}, limit int) []RelevantMemorySelection {
