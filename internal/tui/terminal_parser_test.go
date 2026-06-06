@@ -456,7 +456,7 @@ func TestTerminalParserDispatchesWindowResizeReports(t *testing.T) {
 	if len(actions) != 3 {
 		t.Fatalf("actions = %#v", actions)
 	}
-	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionWindow || actions[1].Report.Code != 8 || actions[1].Report.Rows != 24 || actions[1].Report.Columns != 80 {
+	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionWindow || actions[1].Report.Code != 8 || actions[1].Report.Rows != 24 || actions[1].Report.Columns != 80 || !reflect.DeepEqual(actions[1].Report.Params, []int{8, 24, 80}) {
 		t.Fatalf("window report action = %#v", actions[1])
 	}
 	if got := TerminalVisibleText(input); got != "ab" {

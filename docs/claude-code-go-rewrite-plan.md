@@ -414,6 +414,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 把 CPR cursor-position responses (`CSI row;col R` / DEC private `CSI ? row;col R`) 归入 report action，结构化暴露 row/column 并保持 visible-text stripping。
 - 本轮补充：terminal CSI parser 继续补齐 DEC 私有 DSR/CPR，`CSI ?6n` 现在归入 cursor-position report query，`CSI ?row;col;page R` 会保留 page 元数据。
 - 本轮补充：terminal CSI parser 把 xterm window manipulation/report (`CSI t`) 归入 report action，覆盖常见 `CSI 14t`/`CSI 18t` 查询，并把 `CSI 4;height;width t` 与 `CSI 8;rows;cols t` 的 pixel/text-area 尺寸参数结构化暴露。
+- 本轮补充：terminal CSI parser 现在保留 xterm window report 的完整参数列表，例如 `CSI 3;x;y t`、`CSI 4;height;width t`、`CSI 8;rows;cols t` 不再丢失 report code 后面的原始字段。
 - 本轮补充：terminal CSI parser 把 DECRPM mode status report (`CSI Ps;Ps $ y` / `CSI ? Ps;Ps $ y`) 归入 report action，保留 mode code、status 和 DEC private marker。
 - 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
 - 本轮补充：terminal ESC parser 把 HTS horizontal-tab-set (`ESC H`) 归入 cursor/tab-set action，和 CSI tab-clear 控制序列形成闭环。

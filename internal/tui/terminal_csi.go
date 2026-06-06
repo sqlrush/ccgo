@@ -634,6 +634,9 @@ func csiTerminalParameters(code int, params []int, privateMode byte) CSIAction {
 func csiWindowReport(params []int, privateMode byte) CSIAction {
 	code := csiParamDefault(params, 0, 0)
 	report := CSIReportAction{Type: CSIReportActionWindow, Code: code, PrivateMode: privateMode}
+	if len(params) > 1 {
+		report.Params = append([]int(nil), params...)
+	}
 	if privateMode == 0 {
 		switch code {
 		case 4:
