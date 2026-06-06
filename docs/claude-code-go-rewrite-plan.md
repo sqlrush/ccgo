@@ -456,6 +456,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal OSC helper 增加 OSC 52 clipboard 序列生成，固定 clipboard selection `c` 并按 UTF-8 base64 编码 payload；native clipboard/tmux buffer runtime 仍未接入。
 - 本轮补充：terminal OSC helper 增加显式 ST (`ESC \\`) terminator 入口，可按官方 Kitty 避免 BEL 的路径生成 OSC 序列，同时默认 `OSCSequence` 仍保持 BEL terminator。
 - 本轮补充：terminal OSC helper 增加 OSC color parser，支持 `#RRGGBB` 和 XParseColor 风格 `rgb:R/G/B`，按官方规则把 1-4 位 hex component 缩放到 8-bit RGB。
+- 本轮补充：terminal OSC parser 把 OSC 10/11/12 前景色、背景色和光标色设置/查询解析为结构化 color action，复用既有 OSC color parser，visible text/snapshot 继续剥离这些控制串。
 - 本轮补充：terminal OSC helper 增加 OSC 21337 tab-status payload parser，支持 `\;`/`\\` 转义、bare key 或空值清理、unknown key ignore，并复用 OSC color parser 解析 indicator/status-color。
 - 本轮补充：terminal OSC helper 增加 OSC 8 hyperlink payload parser，按官方规则解析 params、保留 URL 内部分号，并把空 URL 识别为 hyperlink end。
 - 本轮补充：terminal OSC helper 增加轻量 `ParseOSCContent`，覆盖官方 title(0/1/2)、OSC 8 hyperlink、OSC 21337 tab status 和 unknown action 分支。

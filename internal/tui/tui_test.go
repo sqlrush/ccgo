@@ -4577,6 +4577,19 @@ func TestParseOSCContent(t *testing.T) {
 		t.Fatalf("clipboard = %#v", clipboard)
 	}
 
+	foreground := ParseOSCContent("10;rgb:f/0/8")
+	if foreground.Type != OSCActionColor || foreground.Color.Target != "foreground" || !foreground.Color.Valid || foreground.Color.Color == nil || *foreground.Color.Color != (RGBColor{R: 255, G: 0, B: 136}) {
+		t.Fatalf("foreground color = %#v", foreground)
+	}
+	backgroundQuery := ParseOSCContent("11;?")
+	if backgroundQuery.Type != OSCActionColor || backgroundQuery.Color.Target != "background" || !backgroundQuery.Color.Valid || !backgroundQuery.Color.Query || backgroundQuery.Color.Color != nil {
+		t.Fatalf("background color query = %#v", backgroundQuery)
+	}
+	cursor := ParseOSCContent("12;#5f87ff")
+	if cursor.Type != OSCActionColor || cursor.Color.Target != "cursor" || !cursor.Color.Valid || cursor.Color.Color == nil || *cursor.Color.Color != (RGBColor{R: 95, G: 135, B: 255}) {
+		t.Fatalf("cursor color = %#v", cursor)
+	}
+
 	progress := ParseOSCContent("9;4;1;101")
 	if progress.Type != OSCActionProgress || progress.Progress.State != TerminalProgressRunning || progress.Progress.Percent != 100 {
 		t.Fatalf("progress = %#v", progress)

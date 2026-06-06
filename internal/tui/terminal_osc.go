@@ -19,6 +19,9 @@ const (
 	OSCCurrentDirectory   = "7"
 	OSCHyperlink          = "8"
 	OSCITerm2             = "9"
+	OSCForegroundColor    = "10"
+	OSCBackgroundColor    = "11"
+	OSCCursorColor        = "12"
 	OSCClipboard          = "52"
 	OSCKitty              = "99"
 	OSCShellIntegration   = "133"
@@ -76,6 +79,7 @@ const (
 	OSCActionLink         OSCActionType = "link"
 	OSCActionTabStatus    OSCActionType = "tabStatus"
 	OSCActionClipboard    OSCActionType = "clipboard"
+	OSCActionColor        OSCActionType = "color"
 	OSCActionProgress     OSCActionType = "progress"
 	OSCActionNotification OSCActionType = "notification"
 	OSCActionShell        OSCActionType = "shellIntegration"
@@ -112,6 +116,14 @@ type TerminalProgressAction struct {
 	RawCommand string
 }
 
+type TerminalOSCColorAction struct {
+	Target string
+	Color  *RGBColor
+	Query  bool
+	Raw    string
+	Valid  bool
+}
+
 type TerminalNotificationAction struct {
 	Provider string
 	ID       string
@@ -137,6 +149,7 @@ type OSCAction struct {
 	Hyperlink    TerminalHyperlink
 	TabStatus    TabStatusFields
 	Clipboard    TerminalClipboardAction
+	Color        TerminalOSCColorAction
 	Progress     TerminalProgressAction
 	Notification TerminalNotificationAction
 	Shell        TerminalShellIntegrationAction
@@ -215,6 +228,8 @@ func ParseOSCContent(content string) OSCAction {
 		return OSCAction{Type: OSCActionDirectory, Directory: ParseDirectoryPayload(data)}
 	case OSCHyperlink:
 		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
+	case OSCForegroundColor, OSCBackgroundColor, OSCCursorColor:
+		return OSCAction{Type: OSCActionColor, Color: ParseOSCColorPayload(strconv.Itoa(commandNumber), data)}
 	case OSCClipboard:
 		return OSCAction{Type: OSCActionClipboard, Clipboard: ParseClipboardPayload(data)}
 	case OSCITerm2:
@@ -332,6 +347,37 @@ func ParseClipboardPayload(payload string) TerminalClipboardAction {
 	action.Text = string(decoded)
 	action.Valid = true
 	return action
+}
+
+func ParseOSCColorPayload(command string, payload string) TerminalOSCColorAction {
+	action := TerminalOSCColorAction{
+		Target: oscColorTarget(command),
+		Raw:    payload,
+	}
+	payload = strings.TrimSpace(payload)
+	if payload == "?" {
+		action.Query = true
+		action.Valid = true
+		return action
+	}
+	if color, ok := ParseOSCColor(payload); ok {
+		action.Color = color
+		action.Valid = true
+	}
+	return action
+}
+
+func oscColorTarget(command string) string {
+	switch command {
+	case OSCForegroundColor:
+		return "foreground"
+	case OSCBackgroundColor:
+		return "background"
+	case OSCCursorColor:
+		return "cursor"
+	default:
+		return command
+	}
 }
 
 func ParseITerm2ProgressPayload(payload string) (TerminalProgressAction, bool) {
