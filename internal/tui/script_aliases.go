@@ -3971,27 +3971,83 @@ func scriptMouseWheelButtonFromFields(fields map[string]json.RawMessage) (int, b
 }
 
 func scriptMouseDOMButtonFromFields(fields map[string]json.RawMessage) (int, bool) {
+	motion := scriptMouseIsMotionEvent(fields)
+	drag := scriptMouseIsDragEvent(fields)
 	if which := intPtrJSONField(fields, "Which", "which"); which != nil {
-		switch *which {
-		case 1:
-			return 0, true
-		case 2:
-			return 1, true
-		case 3:
-			return 2, true
+		if button, ok := scriptMouseDOMWhichButton(*which); ok {
+			if motion || drag {
+				return button | 32, true
+			}
+			return button, true
 		}
 	}
 	if buttons := intPtrJSONField(fields, "Buttons", "buttons", "ButtonState", "button_state", "buttonState", "ButtonsMask", "buttons_mask", "buttonsMask"); buttons != nil {
-		switch {
-		case *buttons&1 != 0:
-			return 0, true
-		case *buttons&4 != 0:
-			return 1, true
-		case *buttons&2 != 0:
-			return 2, true
+		if button, ok := scriptMouseDOMButtonsButton(*buttons); ok {
+			if motion || drag {
+				return button | 32, true
+			}
+			return button, true
+		}
+		if motion {
+			return 35, true
 		}
 	}
+	if drag {
+		if button := intPtrJSONField(fields, "Button", "button", "Btn", "btn"); button != nil {
+			if *button >= 0 && *button <= 2 {
+				return *button | 32, true
+			}
+		}
+		return 32, true
+	}
+	if motion {
+		return 35, true
+	}
 	return 0, false
+}
+
+func scriptMouseDOMWhichButton(value int) (int, bool) {
+	switch value {
+	case 1:
+		return 0, true
+	case 2:
+		return 1, true
+	case 3:
+		return 2, true
+	default:
+		return 0, false
+	}
+}
+
+func scriptMouseDOMButtonsButton(value int) (int, bool) {
+	switch {
+	case value&1 != 0:
+		return 0, true
+	case value&4 != 0:
+		return 1, true
+	case value&2 != 0:
+		return 2, true
+	default:
+		return 0, false
+	}
+}
+
+func scriptMouseIsMotionEvent(fields map[string]json.RawMessage) bool {
+	switch scriptMouseEventName(fields) {
+	case "mousemove", "mouse-move", "pointermove", "pointer-move":
+		return true
+	default:
+		return false
+	}
+}
+
+func scriptMouseIsDragEvent(fields map[string]json.RawMessage) bool {
+	switch scriptMouseEventName(fields) {
+	case "drag", "dragstart", "drag-start", "dragmove", "drag-move":
+		return true
+	default:
+		return false
+	}
 }
 
 func scriptMouseWheelDirection(fields map[string]json.RawMessage) int {

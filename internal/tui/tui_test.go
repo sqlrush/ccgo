@@ -5093,6 +5093,25 @@ func TestRunInteractionScriptAcceptsDOMMouseButtonAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptIgnoresDOMButtonlessMouseMove(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_move","kind":"permission"}},
+		{"mouseEvent":{"type":"mousemove","button":0,"clientX":13,"clientY":5},"expectNoEvent":true,"expectDialog":{"active":true,"id":"perm_move"}},
+		{"mouseEvent":{"type":"mousedown","button":0,"clientX":13,"clientY":5},"expectEvent":{"type":"dialog_action","value":"Deny","dialogId":"perm_move","dialogKind":"permission"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventDialogAction || result.Events[0].DialogID != "perm_move" || result.Events[0].Value != "Deny" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestScriptMouseAcceptsCoordinateAliases(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -5181,6 +5200,31 @@ func TestScriptMouseAcceptsDOMButtonAliases(t *testing.T) {
 				t.Fatal(err)
 			}
 			if mouse.Button != tc.button || mouse.X != 13 || mouse.Y != 5 {
+				t.Fatalf("mouse = %#v, button want %d", mouse, tc.button)
+			}
+		})
+	}
+}
+
+func TestScriptMouseMapsDOMMotionButtons(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		raw    string
+		button int
+	}{
+		{name: "buttonless mouse move", raw: `{"type":"mousemove","button":0,"clientX":13,"clientY":5}`, button: 35},
+		{name: "buttonless pointer move", raw: `{"type":"pointermove","buttons":0,"clientX":13,"clientY":5}`, button: 35},
+		{name: "left drag from buttons", raw: `{"type":"pointermove","buttons":1,"clientX":13,"clientY":5}`, button: 32},
+		{name: "right drag from buttons", raw: `{"type":"pointermove","buttons":2,"clientX":13,"clientY":5}`, button: 34},
+		{name: "middle drag from which", raw: `{"type":"mousemove","which":2,"clientX":13,"clientY":5}`, button: 33},
+		{name: "drag event defaults to left motion", raw: `{"type":"dragmove","button":0,"clientX":13,"clientY":5}`, button: 32},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mouse ScriptMouse
+			if err := json.Unmarshal([]byte(tc.raw), &mouse); err != nil {
+				t.Fatal(err)
+			}
+			if mouse.Button != tc.button || mouse.X != 13 || mouse.Y != 5 || mouse.Release {
 				t.Fatalf("mouse = %#v, button want %d", mouse, tc.button)
 			}
 		})
