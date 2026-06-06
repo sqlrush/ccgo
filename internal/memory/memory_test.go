@@ -877,6 +877,47 @@ legacy summary text
 	}
 }
 
+func TestLoadSessionSummaryAcceptsNumericTimeAliases(t *testing.T) {
+	tests := []struct {
+		name  string
+		field string
+		want  time.Time
+	}{
+		{
+			name:  "updated millis",
+			field: "updatedAtMs: 1700000000123",
+			want:  time.UnixMilli(1700000000123).UTC(),
+		},
+		{
+			name:  "created unix seconds",
+			field: "createdAtUnix: 1700000000",
+			want:  time.Unix(1700000000, 0).UTC(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, SessionSummaryFilename)
+			if err := os.WriteFile(path, []byte(`---
+type: session
+sessionId: sess_time
+`+tt.field+`
+---
+numeric time summary
+`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := LoadSessionSummary(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !loaded.UpdatedAt.Equal(tt.want) {
+				t.Fatalf("updated at = %s, want %s", loaded.UpdatedAt.Format(time.RFC3339Nano), tt.want.Format(time.RFC3339Nano))
+			}
+		})
+	}
+}
+
 func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{

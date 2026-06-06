@@ -100,7 +100,16 @@ func LoadSessionSummary(path string) (SessionSummary, error) {
 		return SessionSummary{}, err
 	}
 	frontmatter, body := ParseFrontmatter(string(data))
-	updatedAt, _ := time.Parse(time.RFC3339, firstFrontmatterField(frontmatter, "updated_at", "updatedAt", "updated", "timestamp", "created_at", "createdAt"))
+	updatedAt := firstFrontmatterTime(frontmatter,
+		"updated_at", "updatedAt", "updated", "timestamp", "created_at", "createdAt", "created",
+		"updated_at_ms", "updatedAtMs", "updatedAtMillis", "updated_at_millis",
+		"updated_unix", "updatedUnix", "updated_at_unix", "updatedAtUnix",
+		"updated_unix_ms", "updatedUnixMs", "updated_at_unix_ms", "updatedAtUnixMs",
+		"timestamp_ms", "timestampMs", "timestampMillis", "timestamp_millis",
+		"created_at_ms", "createdAtMs", "createdAtMillis", "created_at_millis",
+		"created_unix", "createdUnix", "created_at_unix", "createdAtUnix",
+		"created_unix_ms", "createdUnixMs", "created_at_unix_ms", "createdAtUnixMs",
+	)
 	metadata := session.CompactMetadata{
 		Trigger:            firstFrontmatterField(frontmatter, "compact_trigger", "compactTrigger", "trigger"),
 		UserContext:        firstFrontmatterField(frontmatter, "user_context", "userContext"),
@@ -362,6 +371,43 @@ func formatSessionSummary(summary SessionSummary) string {
 func parseInt(raw string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(raw))
 	return n
+}
+
+func firstFrontmatterTime(fields map[string]string, keys ...string) time.Time {
+	for _, key := range keys {
+		value := strings.TrimSpace(fields[key])
+		if value == "" {
+			continue
+		}
+		if parsed, ok := parseFrontmatterTime(key, value); ok {
+			return parsed
+		}
+	}
+	return time.Time{}
+}
+
+func parseFrontmatterTime(key string, raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(strings.Trim(raw, `"'`))
+	if raw == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed.UTC(), true
+		}
+	}
+	if value, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		if frontmatterTimeKeyIsMillis(key) || value >= 1_000_000_000_000 || value <= -1_000_000_000_000 {
+			return time.UnixMilli(value).UTC(), true
+		}
+		return time.Unix(value, 0).UTC(), true
+	}
+	return time.Time{}, false
+}
+
+func frontmatterTimeKeyIsMillis(key string) bool {
+	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+	return strings.Contains(normalized, "ms") || strings.Contains(normalized, "milli")
 }
 
 func firstFrontmatterField(fields map[string]string, keys ...string) string {
