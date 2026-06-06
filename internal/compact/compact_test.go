@@ -1175,6 +1175,51 @@ func TestRunnerBuildsNoToolSummaryRequestAndPlan(t *testing.T) {
 	}
 }
 
+func TestRunnerAcceptsProviderWrappedSummaryResponses(t *testing.T) {
+	history := []contracts.Message{msgs.UserText("one"), msgs.AssistantText("two", "sonnet", nil), msgs.UserText("three")}
+	for name, responseText := range map[string]string{
+		"choices_message_content": `{
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": [
+						{"type":"text","text":"provider choice summary"},
+						{"type":"thinking","text":"hidden"}
+					]
+				}
+			}]
+		}`,
+		"candidate_parts_text": `{
+			"candidates": [{
+				"content": {
+					"parts": [
+						{"text":"provider candidate summary"},
+						{"text":"second line"}
+					]
+				}
+			}]
+		}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &fakeCompactClient{response: &anthropic.Response{
+				ID:      "msg_summary_provider",
+				Type:    "message",
+				Role:    "assistant",
+				Model:   "sonnet",
+				Content: []contracts.ContentBlock{contracts.NewTextBlock(responseText)},
+			}}
+			result, err := (Runner{Client: client, KeepLast: 1}).Compact(context.Background(), history, TriggerManual, 30, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			summary := msgs.TextContent(result.Plan.Summary)
+			if !strings.Contains(summary, "provider") || strings.Contains(summary, `"choices"`) || strings.Contains(summary, `"candidates"`) {
+				t.Fatalf("summary = %q", summary)
+			}
+		})
+	}
+}
+
 type fakeCompactClient struct {
 	request  anthropic.Request
 	response *anthropic.Response

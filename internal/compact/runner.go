@@ -2,6 +2,7 @@ package compact
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -146,5 +147,22 @@ func responseText(response *anthropic.Response) string {
 			parts = append(parts, block.Text)
 		}
 	}
-	return strings.Join(parts, "\n")
+	text := strings.TrimSpace(strings.Join(parts, "\n"))
+	if summary, ok := providerWrappedSummaryText(text); ok {
+		return summary
+	}
+	return text
+}
+
+func providerWrappedSummaryText(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || (raw[0] != '{' && raw[0] != '[') {
+		return "", false
+	}
+	var result MicroResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return "", false
+	}
+	summary := strings.TrimSpace(result.Summary)
+	return summary, summary != ""
 }
