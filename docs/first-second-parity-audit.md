@@ -348,6 +348,7 @@ M7 progress now includes:
 - `internal/tui`: terminal sequence dispatch now parses SS3 application cursor sequences such as `ESC OA`/`OB`/`OC`/`OD` as structured cursor move actions.
 - `internal/tui`: terminal grapheme width now keeps base+combining-mark clusters at the base glyph width while preserving wide treatment for emoji presentation, ZWJ, regional-indicator, and tag sequences.
 - `internal/tui`: terminal grapheme segmentation now treats emoji keycap sequences such as `1️⃣` and `2⃣` as single wide graphemes, including streaming chunks split after the keycap base or variation selector.
+- `internal/tui`: terminal grapheme segmentation now applies Hangul L/V/T jamo joining, keeping decomposed syllables such as `한` as one wide grapheme across full input and streaming chunk boundaries.
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/session`: prompt history writing now skips image pasted-content records like official `history.ts`, while the reader still accepts older image metadata entries.
 - `internal/session`: paste-cache now has a best-effort cutoff-mtime cleanup helper for old `.txt` paste files, matching official `cleanupOldPastes` behavior.

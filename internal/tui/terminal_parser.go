@@ -265,7 +265,7 @@ func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
 		return false
 	}
 	last, _ := utf8.DecodeLastRuneInString(value)
-	if last == 0x200d || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) {
+	if last == 0x200d || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeMayContinueHangul(value) {
 		return true
 	}
 	regionalCount := 0
@@ -388,6 +388,7 @@ func nextTerminalGrapheme(text string) (string, int) {
 	if isTerminalRegionalIndicator(first) {
 		regionalCount = 1
 	}
+	hangulClass := terminalHangulClassOf(first)
 	for end < len(text) {
 		r, nextSize := utf8.DecodeRuneInString(text[end:])
 		if r == utf8.RuneError && nextSize == 0 {
@@ -413,6 +414,12 @@ func nextTerminalGrapheme(text string) (string, int) {
 			regionalCount++
 			continue
 		}
+		if nextHangulClass := terminalHangulClassOf(r); terminalHangulCanJoin(hangulClass, nextHangulClass) {
+			end += nextSize
+			hangulClass = terminalHangulJoinedClass(hangulClass, nextHangulClass)
+			previousWasZWJ = false
+			continue
+		}
 		break
 	}
 	return text[:end], end
@@ -425,7 +432,7 @@ func terminalGraphemeStringWidth(grapheme string) int {
 	for _, r := range grapheme {
 		if !hasBase {
 			hasBase = true
-			if isTerminalEmoji(r) || isTerminalEastAsianWide(r) {
+			if isTerminalEmoji(r) || isTerminalEastAsianWide(r) || isTerminalHangulWideBase(r) {
 				baseWidth = 2
 			}
 			continue
@@ -466,6 +473,86 @@ func terminalGraphemeCanStartKeycapSequence(value string) bool {
 		return isTerminalEmojiKeycapBase(runes[0])
 	}
 	return len(runes) == 2 && isTerminalEmojiKeycapBase(runes[0]) && runes[1] == 0xfe0f
+}
+
+func terminalGraphemeMayContinueHangul(value string) bool {
+	class := terminalHangulNone
+	for _, r := range value {
+		if next := terminalHangulClassOf(r); next != terminalHangulNone {
+			class = next
+		}
+	}
+	return class != terminalHangulNone
+}
+
+type terminalHangulClass uint8
+
+const (
+	terminalHangulNone terminalHangulClass = iota
+	terminalHangulL
+	terminalHangulV
+	terminalHangulT
+	terminalHangulLV
+	terminalHangulLVT
+)
+
+func terminalHangulClassOf(r rune) terminalHangulClass {
+	switch {
+	case (r >= 0x1100 && r <= 0x115f) || (r >= 0xa960 && r <= 0xa97c):
+		return terminalHangulL
+	case (r >= 0x1160 && r <= 0x11a7) || (r >= 0xd7b0 && r <= 0xd7c6):
+		return terminalHangulV
+	case (r >= 0x11a8 && r <= 0x11ff) || (r >= 0xd7cb && r <= 0xd7fb):
+		return terminalHangulT
+	case r >= 0xac00 && r <= 0xd7a3:
+		if (r-0xac00)%28 == 0 {
+			return terminalHangulLV
+		}
+		return terminalHangulLVT
+	default:
+		return terminalHangulNone
+	}
+}
+
+func terminalHangulCanJoin(left, right terminalHangulClass) bool {
+	switch left {
+	case terminalHangulL:
+		return right == terminalHangulL || right == terminalHangulV || right == terminalHangulLV || right == terminalHangulLVT
+	case terminalHangulV, terminalHangulLV:
+		return right == terminalHangulV || right == terminalHangulT
+	case terminalHangulT, terminalHangulLVT:
+		return right == terminalHangulT
+	default:
+		return false
+	}
+}
+
+func terminalHangulJoinedClass(left, right terminalHangulClass) terminalHangulClass {
+	switch {
+	case left == terminalHangulL && right == terminalHangulL:
+		return terminalHangulL
+	case left == terminalHangulL && right == terminalHangulV:
+		return terminalHangulV
+	case left == terminalHangulL && right == terminalHangulLV:
+		return terminalHangulLV
+	case left == terminalHangulL && right == terminalHangulLVT:
+		return terminalHangulLVT
+	case (left == terminalHangulV || left == terminalHangulLV) && right == terminalHangulV:
+		return terminalHangulV
+	case (left == terminalHangulV || left == terminalHangulLV) && right == terminalHangulT:
+		return terminalHangulT
+	case (left == terminalHangulT || left == terminalHangulLVT) && right == terminalHangulT:
+		return terminalHangulT
+	case right != terminalHangulNone:
+		return right
+	default:
+		return left
+	}
+}
+
+func isTerminalHangulWideBase(r rune) bool {
+	class := terminalHangulClassOf(r)
+	return class == terminalHangulL || class == terminalHangulLV || class == terminalHangulLVT
 }
 
 func isTerminalEmoji(r rune) bool {
