@@ -5289,6 +5289,7 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence("?7;8;2R"), want: CSIReportAction{Type: CSIReportActionCursorPosition, PrivateMode: '?', Row: 7, Column: 8, Page: 2}},
 		{seq: CSISequence("4$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 4}},
 		{seq: CSISequence("?25$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 25, PrivateMode: '?'}},
+		{seq: CSISequence("?25;1000$p"), want: CSIReportAction{Type: CSIReportActionModeRequest, Code: 25, Params: []int{25, 1000}, PrivateMode: '?'}},
 		{seq: CSISequence("4;1$y"), want: CSIReportAction{Type: CSIReportActionModeStatus, Code: 4, Params: []int{4, 1}, Status: 1}},
 		{seq: CSISequence("?25;2$y"), want: CSIReportAction{Type: CSIReportActionModeStatus, Code: 25, Params: []int{25, 2}, Status: 2, PrivateMode: '?'}},
 		{seq: CSISequence("?25;2;99$y"), want: CSIReportAction{Type: CSIReportActionModeStatus, Code: 25, Params: []int{25, 2, 99}, Status: 2, PrivateMode: '?'}},
@@ -5446,8 +5447,8 @@ func TestParseCSISequenceActions(t *testing.T) {
 		t.Fatalf("terminal parser column edit actions = %#v", actions)
 	}
 
-	actions = parser.Feed(CSISequence("?25$p"))
-	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionModeRequest || actions[0].Report.Code != 25 || actions[0].Report.PrivateMode != '?' {
+	actions = parser.Feed(CSISequence("?25;1000$p"))
+	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionModeRequest || actions[0].Report.Code != 25 || actions[0].Report.PrivateMode != '?' || !reflect.DeepEqual(actions[0].Report.Params, []int{25, 1000}) {
 		t.Fatalf("terminal parser mode request actions = %#v", actions)
 	}
 

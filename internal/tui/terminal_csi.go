@@ -476,7 +476,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 			return CSIAction{Type: CSIActionReset}, true
 		}
 		if intermediate == "$" {
-			return csiModeRequest(csiParamDefault(params, 0, 0), privateMode), true
+			return csiModeRequest(csiParamDefault(params, 0, 0), params, privateMode), true
 		}
 	case CSICommandTerminalParams:
 		return csiTerminalParameters(rawP0, params, privateMode), true
@@ -653,10 +653,14 @@ func csiWindowReport(params []int, privateMode byte) CSIAction {
 	}
 }
 
-func csiModeRequest(code int, privateMode byte) CSIAction {
+func csiModeRequest(code int, params []int, privateMode byte) CSIAction {
+	report := CSIReportAction{Type: CSIReportActionModeRequest, Code: code, PrivateMode: privateMode}
+	if len(params) > 1 {
+		report.Params = append([]int(nil), params...)
+	}
 	return CSIAction{
 		Type:   CSIActionReport,
-		Report: CSIReportAction{Type: CSIReportActionModeRequest, Code: code, PrivateMode: privateMode},
+		Report: report,
 	}
 }
 
