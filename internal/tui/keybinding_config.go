@@ -67,7 +67,11 @@ func ParseKeyChord(raw string) ([]KeyType, error) {
 }
 
 func ParseKeyName(raw string) (KeyType, error) {
-	name := strings.ToLower(strings.TrimSpace(raw))
+	rawName := strings.ToLower(strings.TrimSpace(raw))
+	if key, ok := parseRawControlSymbolKeyName(rawName); ok {
+		return key, nil
+	}
+	name := rawName
 	name = strings.ReplaceAll(name, "_", "-")
 	name = expandDelimitedShortKeyModifierAlias(name)
 	compact := strings.NewReplacer("-", "", "+", "").Replace(name)
@@ -168,6 +172,14 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlZ, nil
 	case "ctrl+space", "ctrl-space", "control+space", "control-space", "ctrl+@", "ctrl-@", "control+@", "control-@", "ctrl+2", "ctrl-2", "control+2", "control-2":
 		return KeyCtrlSpace, nil
+	case "ctrl+backslash", "ctrl-backslash", "control+backslash", "control-backslash":
+		return KeyCtrlBackslash, nil
+	case "ctrl+rightbracket", "ctrl-rightbracket", "control+rightbracket", "control-rightbracket", "ctrl+right-bracket", "ctrl-right-bracket", "control+right-bracket", "control-right-bracket":
+		return KeyCtrlRightBracket, nil
+	case "ctrl+caret", "ctrl-caret", "control+caret", "control-caret", "ctrl+6", "ctrl-6", "control+6", "control-6":
+		return KeyCtrlCaret, nil
+	case "ctrl+underscore", "ctrl-underscore", "control+underscore", "control-underscore", "ctrl+slash", "ctrl-slash", "control+slash", "control-slash":
+		return KeyCtrlUnderscore, nil
 	case "paste", "bracketed-paste":
 		return KeyPaste, nil
 	case "image-hint", "image":
@@ -270,8 +282,33 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlZ, nil
 	case "ctrlspace", "controlspace", "ctrl@", "control@", "ctrl2", "control2":
 		return KeyCtrlSpace, nil
+	case "ctrlbackslash", "controlbackslash", "ctrl\\", "control\\":
+		return KeyCtrlBackslash, nil
+	case "ctrlrightbracket", "controlrightbracket", "ctrl]", "control]":
+		return KeyCtrlRightBracket, nil
+	case "ctrlcaret", "controlcaret", "ctrl^", "control^", "ctrl6", "control6":
+		return KeyCtrlCaret, nil
+	case "ctrlunderscore", "controlunderscore", "ctrlslash", "controlslash", "ctrl/", "control/":
+		return KeyCtrlUnderscore, nil
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
+	}
+}
+
+func parseRawControlSymbolKeyName(name string) (KeyType, bool) {
+	switch name {
+	case "ctrl+\\", "ctrl-\\", "control+\\", "control-\\", "c+\\", "c-\\":
+		return KeyCtrlBackslash, true
+	case "ctrl+]", "ctrl-]", "control+]", "control-]", "c+]", "c-]":
+		return KeyCtrlRightBracket, true
+	case "ctrl+^", "ctrl-^", "control+^", "control-^", "c+^", "c-^":
+		return KeyCtrlCaret, true
+	case "ctrl+_", "ctrl-_", "ctrl_", "control+_", "control-_", "control_", "c+_", "c-_", "c_":
+		return KeyCtrlUnderscore, true
+	case "ctrl+/", "ctrl-/", "control+/", "control-/", "c+/", "c-/":
+		return KeyCtrlUnderscore, true
+	default:
+		return KeyUnknown, false
 	}
 }
 
@@ -342,7 +379,7 @@ func compactNavigationKeySuffix(suffix string) string {
 
 func compactCtrlKeySuffix(suffix string) bool {
 	switch suffix {
-	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "?", "@", "2", "space", "left", "right", "arrowleft", "arrowright":
+	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "?", "@", "2", "\\", "]", "^", "6", "/", "space", "backslash", "rightbracket", "right-bracket", "caret", "underscore", "slash", "left", "right", "arrowleft", "arrowright":
 		return true
 	default:
 		return false

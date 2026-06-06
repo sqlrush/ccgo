@@ -1018,6 +1018,14 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[127u", want: KeyBackspace},
 		{seq: "\x00", want: KeyCtrlSpace},
 		{seq: "\x1b[0u", want: KeyCtrlSpace},
+		{seq: "\x1c", want: KeyCtrlBackslash},
+		{seq: "\x1d", want: KeyCtrlRightBracket},
+		{seq: "\x1e", want: KeyCtrlCaret},
+		{seq: "\x1f", want: KeyCtrlUnderscore},
+		{seq: "\x1b[28u", want: KeyCtrlBackslash},
+		{seq: "\x1b[29u", want: KeyCtrlRightBracket},
+		{seq: "\x1b[30u", want: KeyCtrlCaret},
+		{seq: "\x1b[31u", want: KeyCtrlUnderscore},
 		{seq: "\x1b[97;5u", want: KeyCtrlA},
 		{seq: "\x1b[65;5u", want: KeyCtrlA},
 		{seq: "\x1b[97:65;5:1u", want: KeyCtrlA},
@@ -1031,6 +1039,12 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[32;5u", want: KeyCtrlSpace},
 		{seq: "\x1b[64;5u", want: KeyCtrlSpace},
 		{seq: "\x1b[50;5u", want: KeyCtrlSpace},
+		{seq: "\x1b[92;5u", want: KeyCtrlBackslash},
+		{seq: "\x1b[93;5u", want: KeyCtrlRightBracket},
+		{seq: "\x1b[94;5u", want: KeyCtrlCaret},
+		{seq: "\x1b[54;5u", want: KeyCtrlCaret},
+		{seq: "\x1b[95;5u", want: KeyCtrlUnderscore},
+		{seq: "\x1b[47;5u", want: KeyCtrlUnderscore},
 		{seq: "\x1b[98;3u", want: KeyAltB},
 		{seq: "\x1b[98:66;3:1u", want: KeyAltB},
 		{seq: "\x1b[68;3u", want: KeyAltD},
@@ -1513,6 +1527,10 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 		{Key: "cV", Action: ActionPageDown},
 		{Key: "controlZ", Action: ActionReverseSearch},
 		{Key: "c-space", Action: ActionScrollToTop},
+		{Key: "c-\\", Action: ActionScrollToBottom},
+		{Key: "control]", Action: ActionMoveStart},
+		{Key: "ctrl-6", Action: ActionRedraw},
+		{Key: "ctrl_", Action: ActionDeleteWordBack},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1544,6 +1562,18 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x00")); action != ActionScrollToTop {
 		t.Fatalf("ctrl-space alias action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x1c")); action != ActionScrollToBottom {
+		t.Fatalf("ctrl-backslash alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1d")); action != ActionMoveStart {
+		t.Fatalf("ctrl-right-bracket alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1e")); action != ActionRedraw {
+		t.Fatalf("ctrl-caret alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1f")); action != ActionDeleteWordBack {
+		t.Fatalf("ctrl-underscore alias action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x1b[113;5u")); action != ActionPageUp {
 		t.Fatalf("ctrl-q CSI-u action = %q", action)
 	}
@@ -1556,7 +1586,19 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[32;5u")); action != ActionScrollToTop {
 		t.Fatalf("ctrl-space CSI-u action = %q", action)
 	}
-	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab", "ctrl-q", "controlQ", "cQ", "ctrl-v", "controlV", "cV", "ctrl-z", "controlZ", "cZ", "ctrl-space", "controlSpace", "cSpace", "ctrl-@", "control@", "c@", "ctrl-2", "control2", "c2"} {
+	if action := keymap.Resolve(ParseKey("\x1b[92;5u")); action != ActionScrollToBottom {
+		t.Fatalf("ctrl-backslash CSI-u action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[93;5u")); action != ActionMoveStart {
+		t.Fatalf("ctrl-right-bracket CSI-u action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[54;5u")); action != ActionRedraw {
+		t.Fatalf("ctrl-caret CSI-u action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[47;5u")); action != ActionDeleteWordBack {
+		t.Fatalf("ctrl-underscore CSI-u action = %q", action)
+	}
+	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab", "ctrl-q", "controlQ", "cQ", "ctrl-v", "controlV", "cV", "ctrl-z", "controlZ", "cZ", "ctrl-space", "controlSpace", "cSpace", "ctrl-@", "control@", "c@", "ctrl-2", "control2", "c2", "ctrl-\\", "control\\", "c\\", "ctrl-]", "control]", "c]", "ctrl-^", "control^", "c^", "ctrl-6", "control6", "c6", "ctrl-_", "control_", "c_", "ctrl-slash", "control/", "c/"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
