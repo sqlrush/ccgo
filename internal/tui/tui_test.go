@@ -1449,7 +1449,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
 		}
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "backtab", "back-tab", "backTab", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "cmdY", "commandF", "superB", "superF", "cmd-arrow-left", "command-arrow-right", "super-arrow-left", "super-arrow-right", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "cmdArrowLeft", "commandArrowRight", "superArrowLeft", "superArrowRight", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "cmd-b", "cmd-d", "cmd-f", "cmd-y", "cmd-backspace", "cmd-left", "cmd-right", "command-b", "command-d", "command-f", "command-y", "command-backspace", "command-left", "command-right", "super-b", "super-d", "super-f", "super-y", "super-backspace", "super-left", "super-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "backtab", "back-tab", "backTab", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-up-key", "pageUpKey", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "pageDownKey", "pg-dn-key", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "deleteForward", "delete-forward", "forwardDelete", "forward-delete", "deleteBackward", "delete-backward", "homeKey", "endKey", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "cmdY", "commandF", "superB", "superF", "cmd-arrow-left", "command-arrow-right", "super-arrow-left", "super-arrow-right", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "cmdArrowLeft", "commandArrowRight", "superArrowLeft", "superArrowRight", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "cmd-b", "cmd-d", "cmd-f", "cmd-y", "cmd-backspace", "cmd-left", "cmd-right", "command-b", "command-d", "command-f", "command-y", "command-backspace", "command-left", "command-right", "super-b", "super-d", "super-f", "super-y", "super-backspace", "super-left", "super-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -8035,6 +8035,28 @@ func TestRunInteractionScriptAcceptsWrappedMouseAndImageActionPayloads(t *testin
 		t.Fatal(err)
 	}
 	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventDialogAction || result.Events[0].DialogID != "perm_wrapped_mouse" || result.Events[0].Value != "Deny" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunInteractionScriptAcceptsDOMEditingKeyAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"text": "abc", "expectPrompt": {"text": "abc", "cursor": 3}},
+		{"keyPress": {"key": "homeKey"}, "expectPrompt": {"text": "abc", "cursor": 0}},
+		{"keyPress": {"key": "forwardDelete"}, "expectPrompt": {"text": "bc", "cursor": 0}},
+		{"keyPress": {"key": "endKey"}, "expectPrompt": {"text": "bc", "cursor": 2}},
+		{"keyPress": {"key": "deleteBackward"}, "expectPrompt": {"text": "b", "cursor": 1}},
+		{"keyPress": {"key": "enter"}, "expectEvent": {"type": "prompt_submitted", "value": "b"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "b" {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }

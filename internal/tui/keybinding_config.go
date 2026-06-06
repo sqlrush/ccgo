@@ -90,9 +90,9 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyAltY, nil
 	case "alt+backspace", "alt-backspace", "meta+backspace", "meta-backspace", "option+backspace", "option-backspace", "cmd+backspace", "cmd-backspace", "command+backspace", "command-backspace", "super+backspace", "super-backspace":
 		return KeyAltBS, nil
-	case "backspace", "bs", "ctrl+?", "ctrl-?", "control+?", "control-?", "ctrl+h", "ctrl-h", "control+h", "control-h":
+	case "backspace", "bs", "backspace-key", "delete-backward", "ctrl+?", "ctrl-?", "control+?", "control-?", "ctrl+h", "ctrl-h", "control+h", "control-h":
 		return KeyBackspace, nil
-	case "delete", "del":
+	case "delete", "del", "delete-key", "delete-forward", "forward-delete":
 		return KeyDelete, nil
 	case "left", "arrow-left", "arrowleft":
 		return KeyLeft, nil
@@ -114,9 +114,9 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyPageUp, nil
 	case "pagedown", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next":
 		return KeyPageDown, nil
-	case "home":
+	case "home", "home-key":
 		return KeyHome, nil
-	case "end":
+	case "end", "end-key":
 		return KeyEnd, nil
 	case "tab", "ctrl+i", "ctrl-i", "control+i", "control-i":
 		return KeyTab, nil
@@ -196,7 +196,7 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyAltY, nil
 	case "altbackspace", "metabackspace", "optionbackspace", "cmdbackspace", "commandbackspace", "superbackspace":
 		return KeyAltBS, nil
-	case "ctrl?", "control?", "ctrlh", "controlh":
+	case "ctrl?", "control?", "ctrlh", "controlh", "backspacekey", "deletebackward":
 		return KeyBackspace, nil
 	case "ctrli", "controli":
 		return KeyTab, nil
@@ -208,6 +208,16 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlLeft, nil
 	case "ctrlright", "controlright":
 		return KeyCtrlRight, nil
+	case "deletekey", "deleteforward", "forwarddelete":
+		return KeyDelete, nil
+	case "homekey":
+		return KeyHome, nil
+	case "endkey":
+		return KeyEnd, nil
+	case "pageupkey", "pgupkey":
+		return KeyPageUp, nil
+	case "pagedownkey", "pgdnkey":
+		return KeyPageDown, nil
 	case "ctrla", "controla":
 		return KeyCtrlA, nil
 	case "ctrlb", "controlb":

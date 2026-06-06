@@ -341,7 +341,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parsing now marks DEC selective erase `CSI ? Ps J` / `CSI ? Ps K` separately from ordinary ED/EL erase actions.
 - `internal/tui`: terminal CSI parsing now exposes ECMA `CSI Ps N` / `CSI Ps O` erase-in-field and erase-in-area actions with the same to-end/to-start/all regions used by other erase operations.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.
-- `internal/tui`: keybinding config now accepts page navigation aliases such as `pgup`, `pg-up`, `prior`, `pgdn`, `pg-down`, and `next`.
+- `internal/tui`: keybinding config now accepts page/navigation/editing aliases such as `pgup`, `pg-up`, `prior`, `pageUpKey`, `pgdn`, `pg-down`, `next`, `pageDownKey`, `homeKey`, `endKey`, `deleteForward`, `forwardDelete`, and `deleteBackward`.
 - `internal/tui`: keybinding config and named-key script input now accept DOM-style arrow key aliases such as `arrowLeft`, `arrowRight`, `arrowUp`, `arrowDown`, and modifier-arrow variants.
 - `internal/tui`: keybinding action parsing now accepts broader editor/global-style aliases such as `cursorLeft`, `lineStart`, `deletePreviousChar`, `killLine`, `pasteKillRing`, `clearScreen`, `openExternalEditor`, `toggleTasks`, `cancelAgents`, `focusPrev`, `acceptSelection`, and `search`.
 - `internal/tui`: keybinding config and named-key script input now accept short modifier aliases such as `c-left`, `cA`, `m-b`, `a-right`, `optF`, `s-tab`, and `sEnter`.

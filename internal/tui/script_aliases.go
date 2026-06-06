@@ -3249,9 +3249,9 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 		return "enter", false
 	case "tab":
 		return "tab", false
-	case "backspace", "deletebackward":
+	case "backspace", "backspace-key", "deletebackward", "delete-backward", "backwarddelete", "backward-delete":
 		return "backspace", false
-	case "delete", "del", "deleteforward":
+	case "delete", "del", "delete-key", "deleteforward", "delete-forward", "forwarddelete", "forward-delete":
 		return "delete", false
 	case "arrowleft", "arrow-left", "left":
 		return "left", false
@@ -3261,12 +3261,14 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 		return "up", false
 	case "arrowdown", "arrow-down", "down":
 		return "down", false
-	case "pageup", "page-up", "pgup":
+	case "pageup", "page-up", "pgup", "pg-up", "prior", "pageupkey", "page-up-key", "pgupkey", "pg-up-key":
 		return "page-up", false
-	case "pagedown", "page-down", "pgdn":
+	case "pagedown", "page-down", "pgdn", "pg-dn", "next", "pagedownkey", "page-down-key", "pgdnkey", "pg-dn-key":
 		return "page-down", false
-	case "home", "end":
-		return normalized, false
+	case "home", "homekey", "home-key":
+		return "home", false
+	case "end", "endkey", "end-key":
+		return "end", false
 	case "space", "spacebar":
 		return " ", false
 	}
