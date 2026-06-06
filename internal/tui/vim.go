@@ -434,6 +434,8 @@ func (s *REPLScreen) applyVimVisualG(r rune) ScreenEvent {
 		applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
 	case 'J':
 		s.applyVimVisualJoin(true)
+	case '_':
+		s.Prompt.moveVimLastNonBlankMotion(count)
 	}
 	return ScreenEvent{}
 }
@@ -861,6 +863,12 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 			applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
 		} else {
 			s.applyVimBackwardEndMotionOperator(operator, r, count)
+		}
+	case '_':
+		if operator == 0 {
+			s.Prompt.moveVimLastNonBlankMotion(count)
+		} else {
+			s.applyVimMotionOperator(operator, r, count)
 		}
 	}
 	return ScreenEvent{}
@@ -1676,6 +1684,36 @@ func (p *PromptState) moveVimFirstNonBlankMotion(motion rune, count int) {
 	p.moveFirstNonBlank()
 }
 
+func (p *PromptState) vimLastNonBlankMotionTargetLine(count int) int {
+	if count <= 0 {
+		count = 1
+	}
+	return p.currentLogicalLine() + count
+}
+
+func (p *PromptState) moveVimLastNonBlankMotion(count int) {
+	lines := strings.Split(p.Text, "\n")
+	line := p.vimLastNonBlankMotionTargetLine(count)
+	if line < 1 {
+		line = 1
+	}
+	if line > len(lines) {
+		line = len(lines)
+	}
+	lineIndex := line - 1
+	p.Cursor = lineStartOffset(lines, lineIndex) + lastNonBlankOffset(lines[lineIndex])
+}
+
+func lastNonBlankOffset(line string) int {
+	runes := []rune(line)
+	for i := len(runes) - 1; i >= 0; i-- {
+		if !unicode.IsSpace(runes[i]) {
+			return i
+		}
+	}
+	return 0
+}
+
 func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int) (int, int, bool, bool) {
 	if count <= 0 {
 		count = 1
@@ -1683,6 +1721,18 @@ func (p *PromptState) operatorMotionRange(operator rune, motion rune, count int)
 	runes := []rune(p.Text)
 	start := p.clampCursor(p.Cursor)
 	cursor := *p
+	if motion == '_' {
+		cursor.moveVimLastNonBlankMotion(count)
+		end := cursor.Cursor
+		if end >= start {
+			if end < len(runes) {
+				end++
+			}
+		} else if start < len(runes) {
+			start++
+		}
+		return orderedRange(start, end, false)
+	}
 	switch motion {
 	case 'j':
 		start, end, ok := p.lineMotionRange(p.currentLogicalLine() + count + 1)

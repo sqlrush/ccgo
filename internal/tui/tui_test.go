@@ -3573,6 +3573,47 @@ func TestREPLScreenVimFirstNonBlankLineMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimLastNonBlankGMotion(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one   \n  two  \nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "g", "_"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one"))-1 {
+		t.Fatalf("cursor after g_ = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"g", "g", "2", "g", "_"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one   \n  two"))-1 {
+		t.Fatalf("cursor after 2g_ = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one   \n  two")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "v", "g", "_", "y"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRegister != "one" || screen.VimRegisterLinewise || screen.Prompt.Text != "one   \n  two" {
+		t.Fatalf("after visual g_ yank screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one   \n  two")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "d", "g", "_"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "   \n  two" || screen.Prompt.Cursor != 0 || screen.VimRegister != "one" || screen.VimRegisterLinewise {
+		t.Fatalf("after dg_ screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimBackwardEndMotions(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
