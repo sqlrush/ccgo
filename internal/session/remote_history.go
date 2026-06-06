@@ -1000,7 +1000,7 @@ func remoteHistoryCursorField(raw map[string]json.RawMessage) string {
 
 func remoteHistoryRelTokens(raw map[string]json.RawMessage) []string {
 	var tokens []string
-	for _, name := range []string{"rel", "relation", "name", "type"} {
+	for _, name := range []string{"rel", "relation", "name", "type", "kind", "label"} {
 		value, ok := raw[name]
 		if !ok {
 			continue

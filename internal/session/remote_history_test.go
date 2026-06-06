@@ -774,6 +774,40 @@ func TestFetchRemoteHistoryAcceptsLinkArrayCursors(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsLinkArrayRelationAliases(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"links":[{"kind":"self","href":"/v1/sessions/s/events?cursor=self"},{"kind":"previous","href":"/v1/sessions/s/events?before_id=evt_kind"}]}`))
+		case "evt_kind":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":[{"label":["older"],"url":"/v1/sessions/s/events?cursor=evt_label"}]}`))
+		case "evt_label":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}],"links":[]}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 3 || len(events.Events) != 3 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].Status != "latest" || events.Events[1].Status != "older" || events.Events[2].Status != "oldest" {
+		t.Fatalf("events = %#v", events.Events)
+	}
+	if len(seen) != 3 || seen[1].Get("before_id") != "evt_kind" || seen[2].Get("before_id") != "evt_label" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsHALLinkCursors(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
