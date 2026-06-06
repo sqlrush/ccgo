@@ -2844,6 +2844,12 @@ func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth i
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil
 	}
+	if key, ok := scriptKeyEventNameFromFields(fields); ok {
+		if key == "" {
+			return nil
+		}
+		return []string{key}
+	}
 	if values := stringListJSONField(fields, names...); len(values) > 0 {
 		return values
 	}
@@ -2857,6 +2863,151 @@ func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth i
 		}
 	}
 	return nil
+}
+
+func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bool) {
+	key := stringJSONField(fields,
+		"key", "Key", "keyName", "key_name", "name", "value",
+		"code", "Code", "keyCodeName", "key_code_name",
+	)
+	if key == "" {
+		return "", false
+	}
+	base, modifierOnly := scriptKeyEventBaseName(key)
+	if base == "" || modifierOnly {
+		return "", true
+	}
+	modifiers := scriptKeyEventModifiers(fields)
+	switch {
+	case modifiers["ctrl"] && scriptKeyEventCanUseCtrl(base):
+		return "ctrl-" + strings.ToLower(base), true
+	case modifiers["alt"] && scriptKeyEventCanUseAlt(base):
+		return "alt-" + strings.ToLower(base), true
+	case modifiers["meta"] && scriptKeyEventCanUseAlt(base):
+		return "meta-" + strings.ToLower(base), true
+	case modifiers["shift"] && scriptKeyEventCanUseShift(base):
+		return "shift-" + strings.ToLower(base), true
+	case modifiers["shift"] && len([]rune(base)) == 1 && !modifiers["ctrl"] && !modifiers["alt"] && !modifiers["meta"]:
+		return strings.ToUpper(base), true
+	default:
+		return base, true
+	}
+}
+
+func scriptKeyEventBaseName(key string) (string, bool) {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		return "", false
+	}
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(trimmed, "_", "-"), " ", "-"))
+	switch normalized {
+	case "control", "ctrl", "shift", "alt", "option", "meta", "command", "cmd", "super":
+		return "", true
+	case "escape", "esc":
+		return "escape", false
+	case "enter", "return", "numpadenter":
+		return "enter", false
+	case "tab":
+		return "tab", false
+	case "backspace", "deletebackward":
+		return "backspace", false
+	case "delete", "del", "deleteforward":
+		return "delete", false
+	case "arrowleft", "arrow-left", "left":
+		return "left", false
+	case "arrowright", "arrow-right", "right":
+		return "right", false
+	case "arrowup", "arrow-up", "up":
+		return "up", false
+	case "arrowdown", "arrow-down", "down":
+		return "down", false
+	case "pageup", "page-up", "pgup":
+		return "page-up", false
+	case "pagedown", "page-down", "pgdn":
+		return "page-down", false
+	case "home", "end":
+		return normalized, false
+	case "space", "spacebar":
+		return " ", false
+	}
+	if strings.HasPrefix(normalized, "key") && len([]rune(normalized)) == 4 {
+		return string([]rune(normalized)[3]), false
+	}
+	if strings.HasPrefix(normalized, "digit") && len([]rune(normalized)) == 6 {
+		return string([]rune(normalized)[5]), false
+	}
+	if len([]rune(trimmed)) == 1 {
+		return trimmed, false
+	}
+	return trimmed, false
+}
+
+func scriptKeyEventModifiers(fields map[string]json.RawMessage) map[string]bool {
+	modifiers := map[string]bool{}
+	for _, name := range []string{"ctrlKey", "controlKey", "ctrl", "control", "isCtrl", "isControl"} {
+		if value, ok := scriptBoolJSONField(fields, name); ok && value {
+			modifiers["ctrl"] = true
+		}
+	}
+	for _, name := range []string{"altKey", "optionKey", "alt", "option", "isAlt", "isOption"} {
+		if value, ok := scriptBoolJSONField(fields, name); ok && value {
+			modifiers["alt"] = true
+		}
+	}
+	for _, name := range []string{"metaKey", "cmdKey", "commandKey", "meta", "cmd", "command", "superKey"} {
+		if value, ok := scriptBoolJSONField(fields, name); ok && value {
+			modifiers["meta"] = true
+		}
+	}
+	for _, name := range []string{"shiftKey", "shift", "isShift"} {
+		if value, ok := scriptBoolJSONField(fields, name); ok && value {
+			modifiers["shift"] = true
+		}
+	}
+	for _, modifier := range stringListJSONField(fields, "modifiers", "modifier", "mods") {
+		switch strings.ToLower(strings.TrimSpace(modifier)) {
+		case "ctrl", "control":
+			modifiers["ctrl"] = true
+		case "alt", "option":
+			modifiers["alt"] = true
+		case "meta", "cmd", "command", "super":
+			modifiers["meta"] = true
+		case "shift":
+			modifiers["shift"] = true
+		}
+	}
+	return modifiers
+}
+
+func scriptBoolJSONField(fields map[string]json.RawMessage, name string) (bool, bool) {
+	raw, ok := fields[name]
+	if !ok {
+		return false, false
+	}
+	return scriptParseJSONBool(raw)
+}
+
+func scriptKeyEventCanUseCtrl(base string) bool {
+	normalized := strings.ToLower(base)
+	if len([]rune(normalized)) == 1 {
+		r := []rune(normalized)[0]
+		return r >= 'a' && r <= 'z'
+	}
+	return normalized == "left" || normalized == "right"
+}
+
+func scriptKeyEventCanUseAlt(base string) bool {
+	normalized := strings.ToLower(base)
+	if len([]rune(normalized)) == 1 {
+		r := []rune(normalized)[0]
+		return r >= 'a' && r <= 'z'
+	}
+	return normalized == "left" || normalized == "right" || normalized == "backspace"
+}
+
+func scriptKeyEventCanUseShift(base string) bool {
+	normalized := strings.ToLower(base)
+	return normalized == "enter" || normalized == "tab"
 }
 
 func scriptRuntimeMutationBoolField(fields map[string]json.RawMessage, names ...string) (bool, bool) {
