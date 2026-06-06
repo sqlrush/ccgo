@@ -3806,6 +3806,46 @@ func TestREPLScreenVimMacros(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimSearch(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta alpha gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "/", "a", "l", "p", "h", "a", "\r"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	secondAlpha := len([]rune("alpha beta "))
+	if screen.VimMode != VimNormal || screen.Prompt.Cursor != secondAlpha || screen.VimLastSearchQuery != "alpha" || screen.VimLastSearchBackward {
+		t.Fatalf("after /alpha screen = %#v", screen)
+	}
+	screen.ApplyKey(ParseKey("n"))
+	if screen.Prompt.Cursor != 0 {
+		t.Fatalf("after n wrap cursor = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("N"))
+	if screen.Prompt.Cursor != secondAlpha {
+		t.Fatalf("after N cursor = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta alpha gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"?", "b", "e", "t", "a", "\r"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimLastSearchQuery != "beta" || !screen.VimLastSearchBackward {
+		t.Fatalf("after ?beta screen = %#v", screen)
+	}
+
+	for _, seq := range []string{"/", "g", "a", "\x7f", "\x1b"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimSearchQuery != "" || screen.Prompt.Cursor != len([]rune("alpha ")) {
+		t.Fatalf("after cancelled search screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

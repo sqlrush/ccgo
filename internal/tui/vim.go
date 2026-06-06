@@ -15,6 +15,8 @@ const (
 	VimVisual     VimMode = "visual"
 	VimVisualLine VimMode = "visual_line"
 	VimReplace    VimMode = "replace"
+	VimSearch     VimMode = "search"
+	VimSearchBack VimMode = "search_backward"
 )
 
 type vimPromptSnapshot struct {
@@ -55,6 +57,10 @@ func normalizeVimMode(mode string) VimMode {
 		return VimInsert
 	case "replace", "vim_replace", "replace_mode":
 		return VimReplace
+	case "search", "vim_search", "search_forward":
+		return VimSearch
+	case "searchbackward", "search_backward", "search_reverse", "vim_search_backward":
+		return VimSearchBack
 	case "normal", "command", "vim_normal":
 		return VimNormal
 	case "visual", "char", "character", "visual_char", "visual_character":
@@ -80,6 +86,9 @@ func (s *REPLScreen) applyVimKey(key Key) (ScreenEvent, bool) {
 	recordMacro := s.VimRecordingMacro
 	if recordMacro != 0 && !s.VimReplayingMacro {
 		defer s.appendVimMacroKey(recordMacro, key)
+	}
+	if s.VimMode == VimSearch || s.VimMode == VimSearchBack {
+		return s.applyVimSearchKey(key), true
 	}
 	if s.VimMode == VimReplace {
 		return s.applyVimReplaceModeKey(key), true
@@ -191,6 +200,10 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.undoVimPrompt()
 	case '.':
 		s.replayVimLastChange()
+	case 'n':
+		s.repeatVimSearch(false, count)
+	case 'N':
+		s.repeatVimSearch(true, count)
 	case 'v':
 		s.enterVimVisual(false)
 	case 'V':
@@ -210,6 +223,8 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case 'G':
 		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
+	case '/', '?':
+		s.enterVimSearch(r == '?')
 	case 'm', '`', '\'':
 		s.VimPendingMark = r
 		s.VimPendingCount = count
@@ -402,6 +417,76 @@ func (s *REPLScreen) applyVimReplaceModeKey(key Key) ScreenEvent {
 		s.Prompt.replaceTextFromCursor(key.Text)
 	}
 	return ScreenEvent{}
+}
+
+func (s *REPLScreen) applyVimSearchKey(key Key) ScreenEvent {
+	switch key.Type {
+	case KeyEsc:
+		s.VimMode = VimNormal
+		s.VimSearchQuery = ""
+		s.VimSearchBackward = false
+	case KeyBackspace:
+		runes := []rune(s.VimSearchQuery)
+		if len(runes) > 0 {
+			s.VimSearchQuery = string(runes[:len(runes)-1])
+		}
+	case KeyRune:
+		s.VimSearchQuery += string(key.Rune)
+	case KeyPaste:
+		s.VimSearchQuery += key.Text
+	case KeyEnter:
+		query := s.VimSearchQuery
+		backward := s.VimSearchBackward
+		s.VimMode = VimNormal
+		s.VimSearchQuery = ""
+		s.VimSearchBackward = false
+		if query != "" {
+			s.applyVimPromptSearch(query, backward, true)
+		}
+	}
+	return ScreenEvent{}
+}
+
+func (s *REPLScreen) enterVimSearch(backward bool) {
+	s.clearVimPending()
+	s.VimSearchQuery = ""
+	s.VimSearchBackward = backward
+	if backward {
+		s.VimMode = VimSearchBack
+		return
+	}
+	s.VimMode = VimSearch
+}
+
+func (s *REPLScreen) repeatVimSearch(reverse bool, count int) {
+	if s.VimLastSearchQuery == "" {
+		return
+	}
+	if count <= 0 {
+		count = 1
+	}
+	backward := s.VimLastSearchBackward
+	if reverse {
+		backward = !backward
+	}
+	for i := 0; i < count; i++ {
+		if !s.applyVimPromptSearch(s.VimLastSearchQuery, backward, false) {
+			return
+		}
+	}
+}
+
+func (s *REPLScreen) applyVimPromptSearch(query string, backward bool, remember bool) bool {
+	if remember {
+		s.VimLastSearchQuery = query
+		s.VimLastSearchBackward = backward
+	}
+	pos, ok := s.Prompt.searchFromCursor(query, backward)
+	if !ok {
+		return false
+	}
+	s.Prompt.Cursor = pos
+	return true
 }
 
 func (s *REPLScreen) applyVimVisualMotion(motion rune, count int) {
@@ -1531,6 +1616,67 @@ func (p *PromptState) markMotionRange(target int, linewise bool) (int, int, bool
 	}
 	start, end, _, ok := orderedRange(start, end, false)
 	return start, end, ok
+}
+
+func (p *PromptState) searchFromCursor(query string, backward bool) (int, bool) {
+	haystack := []rune(p.Text)
+	needle := []rune(query)
+	if len(needle) == 0 || len(needle) > len(haystack) {
+		return 0, false
+	}
+	cursor := p.clampCursor(p.Cursor)
+	if backward {
+		return searchRunesBackward(haystack, needle, cursor)
+	}
+	return searchRunesForward(haystack, needle, cursor)
+}
+
+func searchRunesForward(haystack []rune, needle []rune, cursor int) (int, bool) {
+	start := cursor + 1
+	if start > len(haystack) {
+		start = len(haystack)
+	}
+	for idx := start; idx <= len(haystack)-len(needle); idx++ {
+		if runesHavePrefix(haystack[idx:], needle) {
+			return idx, true
+		}
+	}
+	for idx := 0; idx < start && idx <= len(haystack)-len(needle); idx++ {
+		if runesHavePrefix(haystack[idx:], needle) {
+			return idx, true
+		}
+	}
+	return 0, false
+}
+
+func searchRunesBackward(haystack []rune, needle []rune, cursor int) (int, bool) {
+	start := cursor - 1
+	if start > len(haystack)-len(needle) {
+		start = len(haystack) - len(needle)
+	}
+	for idx := start; idx >= 0; idx-- {
+		if runesHavePrefix(haystack[idx:], needle) {
+			return idx, true
+		}
+	}
+	for idx := len(haystack) - len(needle); idx >= cursor && idx >= 0; idx-- {
+		if runesHavePrefix(haystack[idx:], needle) {
+			return idx, true
+		}
+	}
+	return 0, false
+}
+
+func runesHavePrefix(haystack []rune, prefix []rune) bool {
+	if len(prefix) > len(haystack) {
+		return false
+	}
+	for idx, r := range prefix {
+		if haystack[idx] != r {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *PromptState) lineRange(count int) (int, int) {

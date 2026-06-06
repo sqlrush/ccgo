@@ -83,6 +83,10 @@ type REPLScreen struct {
 	VimRecordingMacro     rune
 	VimReplayingMacro     bool
 	VimLastMacro          rune
+	VimSearchQuery        string
+	VimSearchBackward     bool
+	VimLastSearchQuery    string
+	VimLastSearchBackward bool
 	Focused               bool
 	ReverseSearch         ReverseSearchState
 	StashedPrompt         *PromptStash
