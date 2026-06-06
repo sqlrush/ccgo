@@ -312,13 +312,9 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case '%':
 		s.Prompt.moveMatchingPair()
 	case 'x':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
-		s.recordVimChange(vimRecordedChange{Kind: "x", Count: count})
+		s.applyVimDeleteChars(count, false)
 	case 'X':
-		s.recordVimUndo()
-		applyN(count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
-		s.recordVimChange(vimRecordedChange{Kind: "X", Count: count})
+		s.applyVimDeleteChars(count, true)
 	case 's':
 		s.applyVimSubstitute(count)
 	case 'S':
@@ -1131,6 +1127,38 @@ func (s *REPLScreen) applyVimSubstitute(count int) {
 	s.enterVimInsert()
 }
 
+func (s *REPLScreen) applyVimDeleteChars(count int, backward bool) {
+	if count <= 0 {
+		count = 1
+	}
+	runes := []rune(s.Prompt.Text)
+	if len(runes) == 0 {
+		return
+	}
+	cursor := s.Prompt.clampCursor(s.Prompt.Cursor)
+	start := cursor
+	end := cursor + count
+	kind := "x"
+	if backward {
+		start = cursor - count
+		end = cursor
+		kind = "X"
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if start == end {
+		return
+	}
+	s.recordVimUndo()
+	s.setVimRegister(s.Prompt.rangeText(start, end), false)
+	s.Prompt.deleteRange(start, end)
+	s.recordVimChange(vimRecordedChange{Kind: kind, Count: count})
+}
+
 func (s *REPLScreen) applyVimRangeOperator(operator rune, start int, end int, linewise bool) {
 	if isVimCaseOperator(operator) {
 		s.recordVimUndo()
@@ -1386,11 +1414,9 @@ func (s *REPLScreen) replayVimLastChange() {
 		s.recordVimUndo()
 		s.Prompt.replaceTextFromCursor(change.Text)
 	case "x":
-		s.recordVimUndo()
-		applyN(change.Count, func() { s.Prompt.Apply(Key{Type: KeyDelete}) })
+		s.applyVimDeleteChars(change.Count, false)
 	case "X":
-		s.recordVimUndo()
-		applyN(change.Count, func() { s.Prompt.Apply(Key{Type: KeyBackspace}) })
+		s.applyVimDeleteChars(change.Count, true)
 	case "replace":
 		s.recordVimUndo()
 		s.Prompt.replaceRunes(change.Count, change.Target)
@@ -1550,7 +1576,7 @@ func isVimRegisterRune(r rune) bool {
 
 func vimNormalCommandUsesRegister(r rune) bool {
 	switch r {
-	case 'd', 'c', 'y', 'Y', 'p', 'P', 's', 'S', 'D', 'C':
+	case 'd', 'c', 'y', 'Y', 'p', 'P', 'x', 'X', 's', 'S', 'D', 'C':
 		return true
 	default:
 		return false

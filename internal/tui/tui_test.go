@@ -3825,6 +3825,52 @@ func TestREPLScreenVimNamedRegisters(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimDeleteCharRegisters(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abc")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "bc" || screen.Prompt.Cursor != 0 || screen.VimRegister != "a" || screen.VimRegisterLinewise {
+		t.Fatalf("after x screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abc")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"$", "X"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "ab" || screen.Prompt.Cursor != len([]rune("ab")) || screen.VimRegister != "c" || screen.VimRegisterLinewise {
+		t.Fatalf("after X screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abc")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "\"", "a", "x", "\"", "a", "p"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "bac" || screen.VimRegisters['a'].Text != "a" || screen.VimRegister != "a" {
+		t.Fatalf("after \"ax \"ap screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "abc")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "\"", "_", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "bc" || screen.VimRegister != "" {
+		t.Fatalf("after \"_x screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimLinewiseYankPaste(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
