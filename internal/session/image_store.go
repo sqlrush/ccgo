@@ -69,6 +69,7 @@ func RestoreCachedImageContent(sessionID contracts.ID, content PastedContent, so
 	if mediaType == "" {
 		mediaType = inferredMediaType
 	}
+	rememberImagePath(content.ID, localPath)
 	return base64.StdEncoding.EncodeToString(data), mediaType, localPath, true
 }
 

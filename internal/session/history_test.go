@@ -847,11 +847,14 @@ func TestLoadHistoryRestoresExistingImageCacheSourcePath(t *testing.T) {
 		t.Fatalf("history = %#v", history)
 	}
 	image := history[0].PastedContents[4]
-	if image.SourcePath != imagePath || image.MediaType != "image/webp" || image.Filename != "diagram.webp" {
+	if image.MediaType != "image/webp" || image.Filename != "diagram.webp" {
 		t.Fatalf("image = %#v, want source path %q", image, imagePath)
 	}
-	if cached, ok := GetStoredImagePath(4); !ok || cached != imagePath {
+	requireSameFile(t, image.SourcePath, imagePath)
+	if cached, ok := GetStoredImagePath(4); !ok {
 		t.Fatalf("cached image path = %q ok=%v, want %q", cached, ok, imagePath)
+	} else {
+		requireSameFile(t, cached, imagePath)
 	}
 }
 

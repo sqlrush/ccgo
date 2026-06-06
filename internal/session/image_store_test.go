@@ -158,6 +158,49 @@ func TestImagePathNormalizesMediaTypeParameters(t *testing.T) {
 	}
 }
 
+func TestRestoreCachedImageContentRemembersResolvedPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	ClearStoredImagePaths()
+	defer ClearStoredImagePaths()
+
+	sessionID := contracts.ID("session-remember")
+	storedPath, ok := StoreImage(sessionID, PastedContent{
+		ID:        41,
+		Type:      PastedContentImage,
+		Content:   base64.StdEncoding.EncodeToString([]byte("cached image")),
+		MediaType: "image/png",
+	})
+	if !ok {
+		t.Fatal("store image failed")
+	}
+	ClearStoredImagePaths()
+	if got, ok := GetStoredImagePath(41); ok {
+		t.Fatalf("path remained cached after clear: %q", got)
+	}
+
+	content, mediaType, restoredPath, ok := RestoreCachedImageContent(sessionID, PastedContent{
+		ID:        41,
+		Type:      PastedContentImage,
+		MediaType: "image/png",
+	}, "")
+	if !ok {
+		t.Fatal("restore cached image failed")
+	}
+	if got := string(mustDecodeBase64(t, content)); got != "cached image" {
+		t.Fatalf("restored content = %q", got)
+	}
+	if mediaType != "image/png" {
+		t.Fatalf("media type = %q", mediaType)
+	}
+	if !sameFile(t, restoredPath, storedPath) {
+		t.Fatalf("restored path = %q, want same file as %q", restoredPath, storedPath)
+	}
+	if got, ok := GetStoredImagePath(41); !ok || !sameFile(t, got, restoredPath) {
+		t.Fatalf("remembered path = %q ok=%v, want same file as %q", got, ok, restoredPath)
+	}
+}
+
 func TestRestoreCachedImageContentRejectsSymlinkEscape(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
@@ -181,4 +224,26 @@ func TestRestoreCachedImageContentRejectsSymlinkEscape(t *testing.T) {
 	}, ""); ok || content != "" || mediaType != "" || restoredPath != "" {
 		t.Fatalf("restore symlink escape = content=%q mediaType=%q path=%q ok=%v", content, mediaType, restoredPath, ok)
 	}
+}
+
+func mustDecodeBase64(t *testing.T, value string) []byte {
+	t.Helper()
+	data, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func sameFile(t *testing.T, a, b string) bool {
+	t.Helper()
+	aInfo, err := os.Stat(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bInfo, err := os.Stat(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return os.SameFile(aInfo, bInfo)
 }
