@@ -238,6 +238,20 @@ func TestSearchTranscriptFileStreamsMatches(t *testing.T) {
 	}
 }
 
+func TestSearchTranscriptFileAcceptsWrappedRecords(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"data":[{"type":"user","uuid":"u1","sessionId":"sess_1","message":{"type":"user","content":"wrapped compact alpha"}},{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"sess_1","message":{"type":"assistant","content":"wrapped compact beta"}}]}`,
+		`{"resource":{"attributes":{"type":"user","uuid":"u2","parentUuid":"a1","sessionId":"sess_1","message":{"type":"user","content":"wrapped compact gamma"}}}}`,
+	})
+	matches, err := SearchTranscriptFile(path, "wrapped compact", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 3 || !strings.Contains(matches[0], "alpha") || !strings.Contains(matches[1], "beta") || !strings.Contains(matches[2], "gamma") {
+		t.Fatalf("wrapped matches = %#v", matches)
+	}
+}
+
 func TestSearchProjectSessionsFindsTranscriptText(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	root := "/repo/project"

@@ -156,22 +156,19 @@ func SearchTranscriptFile(path string, query string, maxMatches int) ([]string, 
 	defer f.Close()
 
 	var matches []string
+	progressBridge := map[contracts.ID]*contracts.ID{}
 	scanner := newTranscriptScanner(f)
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		var envelope transcriptEnvelope
-		if err := unmarshalTranscriptLine(line, &envelope); err != nil || !isTranscriptType(envelope.Type) {
-			continue
+		for _, msg := range transcriptMessagesFromPhysicalLine(scanner.Bytes(), progressBridge) {
+			text := strings.TrimSpace(textFromTranscriptMessage(&msg))
+			if text == "" || !strings.Contains(strings.ToLower(text), query) {
+				continue
+			}
+			matches = append(matches, snippet(text, query, 160))
+			if len(matches) >= maxMatches {
+				break
+			}
 		}
-		var msg TranscriptMessage
-		if err := unmarshalTranscriptLine(line, &msg); err != nil || msg.UUID == "" {
-			continue
-		}
-		text := strings.TrimSpace(textFromTranscriptMessage(&msg))
-		if text == "" || !strings.Contains(strings.ToLower(text), query) {
-			continue
-		}
-		matches = append(matches, snippet(text, query, 160))
 		if len(matches) >= maxMatches {
 			break
 		}

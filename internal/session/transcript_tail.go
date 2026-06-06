@@ -46,33 +46,14 @@ func LoadTranscriptTail(path string, limit int) ([]TranscriptMessage, error) {
 
 	scanner := newTranscriptScanner(f)
 	for scanner.Scan() {
-		var envelope transcriptEnvelope
-		if err := unmarshalTranscriptLine(scanner.Bytes(), &envelope); err != nil {
-			continue
-		}
-		if contracts.CanonicalMessageType(envelope.Type) == contracts.MessageProgress && envelope.UUID != "" {
-			progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
-			continue
-		}
-		if !isTranscriptType(envelope.Type) {
-			continue
-		}
-		var msg TranscriptMessage
-		if err := unmarshalTranscriptLine(scanner.Bytes(), &msg); err != nil || msg.UUID == "" {
-			continue
-		}
-		if msg.ParentUUID != nil {
-			if bridged, ok := progressBridge[*msg.ParentUUID]; ok {
-				msg.ParentUUID = cloneIDPtr(bridged)
+		for _, msg := range transcriptMessagesFromPhysicalLine(scanner.Bytes(), progressBridge) {
+			if len(ring) < limit {
+				ring = append(ring, msg)
+			} else {
+				ring[seen%limit] = msg
 			}
+			seen++
 		}
-		msg.Raw = append(json.RawMessage(nil), scanner.Bytes()...)
-		if len(ring) < limit {
-			ring = append(ring, msg)
-		} else {
-			ring[seen%limit] = msg
-		}
-		seen++
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -136,8 +117,7 @@ func LoadTranscriptTailBytes(path string, maxBytes int64) (TranscriptByteTail, e
 		if len(line) == 0 {
 			continue
 		}
-		msg, ok := transcriptMessageFromLine(line, progressBridge)
-		if ok {
+		for _, msg := range transcriptMessagesFromPhysicalLine(line, progressBridge) {
 			messages = append(messages, msg)
 		}
 	}
@@ -182,37 +162,38 @@ func LoadTranscriptWindow(path string, target contracts.ID, before int, after in
 
 	scanner := newTranscriptScanner(f)
 	for scanner.Scan() {
-		msg, ok := transcriptMessageFromLine(scanner.Bytes(), progressBridge)
-		if !ok {
-			continue
-		}
-		if window.Found {
-			if remainingAfter > 0 {
+		for _, msg := range transcriptMessagesFromPhysicalLine(scanner.Bytes(), progressBridge) {
+			if window.Found {
+				if remainingAfter > 0 {
+					window.Messages = append(window.Messages, msg)
+					remainingAfter--
+					continue
+				}
+				window.HasAfter = true
+				break
+			}
+			if msg.UUID == target {
+				window.Found = true
+				window.HasBefore = seenBefore > len(prior)
+				window.Messages = append(window.Messages, prior...)
+				window.TargetIndex = len(window.Messages)
 				window.Messages = append(window.Messages, msg)
-				remainingAfter--
+				remainingAfter = after
 				continue
 			}
-			window.HasAfter = true
+			seenBefore++
+			if before == 0 {
+				continue
+			}
+			if len(prior) < before {
+				prior = append(prior, msg)
+			} else {
+				copy(prior, prior[1:])
+				prior[len(prior)-1] = msg
+			}
+		}
+		if window.HasAfter {
 			break
-		}
-		if msg.UUID == target {
-			window.Found = true
-			window.HasBefore = seenBefore > len(prior)
-			window.Messages = append(window.Messages, prior...)
-			window.TargetIndex = len(window.Messages)
-			window.Messages = append(window.Messages, msg)
-			remainingAfter = after
-			continue
-		}
-		seenBefore++
-		if before == 0 {
-			continue
-		}
-		if len(prior) < before {
-			prior = append(prior, msg)
-		} else {
-			copy(prior, prior[1:])
-			prior[len(prior)-1] = msg
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -228,6 +209,17 @@ func offsetStartsLine(f *os.File, offset int64) bool {
 	var previous [1]byte
 	n, err := f.ReadAt(previous[:], offset-1)
 	return err == nil && n == 1 && previous[0] == '\n'
+}
+
+func transcriptMessagesFromPhysicalLine(line []byte, progressBridge map[contracts.ID]*contracts.ID) []TranscriptMessage {
+	var messages []TranscriptMessage
+	for _, recordLine := range transcriptRecordLines(line) {
+		msg, ok := transcriptMessageFromLine(recordLine, progressBridge)
+		if ok {
+			messages = append(messages, msg)
+		}
+	}
+	return messages
 }
 
 func transcriptMessageFromLine(line []byte, progressBridge map[contracts.ID]*contracts.ID) (TranscriptMessage, bool) {

@@ -1186,6 +1186,48 @@ func TestLoadTranscriptTailBytesReadsCompleteRecords(t *testing.T) {
 	}
 }
 
+func TestLightweightTranscriptLoadersAcceptWrappedRecords(t *testing.T) {
+	lines := []string{
+		`{"data":[{"type":"user","uuid":"u1","parentUuid":null,"message":{"type":"user","content":"wrapped hi"}},{"type":"progress_update","uuid":"p1","parentUuid":"u1"},{"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"type":"assistant","content":"wrapped done"}}]}`,
+		`{"resource":{"attributes":{"type":"user","uuid":"u2","parentUuid":"a1","message":{"type":"user","content":"wrapped continue"}}}}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"u2","message":{"type":"assistant","content":"final"}}`,
+	}
+	path := writeTranscript(t, lines)
+
+	tail, err := LoadTranscriptTail(path, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tailIDs(tail); strings.Join(got, ",") != "u1,a1,u2,a2" {
+		t.Fatalf("wrapped tail = %#v", got)
+	}
+	if tail[1].ParentUUID == nil || *tail[1].ParentUUID != "u1" {
+		t.Fatalf("wrapped tail bridge = %#v", tail[1].ParentUUID)
+	}
+
+	byteTail, err := LoadTranscriptTailBytes(path, int64(len(strings.Join(lines, "\n"))+1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tailIDs(byteTail.Messages); strings.Join(got, ",") != "u1,a1,u2,a2" {
+		t.Fatalf("wrapped byte tail = %#v", got)
+	}
+	if byteTail.Messages[1].ParentUUID == nil || *byteTail.Messages[1].ParentUUID != "u1" {
+		t.Fatalf("wrapped byte-tail bridge = %#v", byteTail.Messages[1].ParentUUID)
+	}
+
+	window, err := LoadTranscriptWindow(path, "u2", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !window.Found || window.TargetIndex != 1 || strings.Join(tailIDs(window.Messages), ",") != "a1,u2,a2" {
+		t.Fatalf("wrapped window = %#v ids=%#v", window, tailIDs(window.Messages))
+	}
+	if window.Messages[0].ParentUUID == nil || *window.Messages[0].ParentUUID != "u1" {
+		t.Fatalf("wrapped window bridge = %#v", window.Messages[0].ParentUUID)
+	}
+}
+
 func TestLoadTranscriptWindowAroundUUID(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","parentUuid":null}`,
