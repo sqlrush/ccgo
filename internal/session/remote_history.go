@@ -1570,71 +1570,7 @@ func remoteHistoryLinkCursor(link string) string {
 	parsed, err := url.Parse(link)
 	if err == nil {
 		query := parsed.Query()
-		if cursor := firstNonEmpty(
-			query.Get("before_id"),
-			query.Get("beforeId"),
-			query.Get("next_before_id"),
-			query.Get("nextBeforeId"),
-			query.Get("cursor"),
-			query.Get("pageCursor"),
-			query.Get("next_page_token"),
-			query.Get("nextPageToken"),
-			query.Get("next_token"),
-			query.Get("nextToken"),
-			query.Get("previous_page_token"),
-			query.Get("previousPageToken"),
-			query.Get("previous_token"),
-			query.Get("previousToken"),
-			query.Get("prev_page_token"),
-			query.Get("prevPageToken"),
-			query.Get("prev_token"),
-			query.Get("prevToken"),
-			query.Get("older_page_token"),
-			query.Get("olderPageToken"),
-			query.Get("older_token"),
-			query.Get("olderToken"),
-			query.Get("older_than"),
-			query.Get("olderThan"),
-			query.Get("page_token"),
-			query.Get("pageToken"),
-			query.Get("continuation_token"),
-			query.Get("continuationToken"),
-			query.Get("next_key"),
-			query.Get("nextKey"),
-			query.Get("last_evaluated_key"),
-			query.Get("lastEvaluatedKey"),
-			query.Get("last_key"),
-			query.Get("lastKey"),
-			query.Get("$skiptoken"),
-			query.Get("$skipToken"),
-			query.Get("skiptoken"),
-			query.Get("skipToken"),
-			query.Get("previous_cursor"),
-			query.Get("previousCursor"),
-			query.Get("prev_cursor"),
-			query.Get("prevCursor"),
-			query.Get("before_cursor"),
-			query.Get("beforeCursor"),
-			query.Get("ending_before"),
-			query.Get("endingBefore"),
-			query.Get("starting_after"),
-			query.Get("startingAfter"),
-			query.Get("after"),
-			query.Get("after_id"),
-			query.Get("afterId"),
-			query.Get("afterID"),
-			query.Get("until"),
-			query.Get("until_id"),
-			query.Get("untilId"),
-			query.Get("older_cursor"),
-			query.Get("olderCursor"),
-			query.Get("before"),
-			query.Get("beforeID"),
-			query.Get("start_cursor"),
-			query.Get("startCursor"),
-			query.Get("end_cursor"),
-			query.Get("endCursor"),
-		); cursor != "" {
+		if cursor := remoteHistoryQueryCursor(query); cursor != "" {
 			return cursor
 		}
 		if parsed.Scheme != "" || parsed.Host != "" || strings.Contains(link, "/") {
@@ -1645,6 +1581,109 @@ func remoteHistoryLinkCursor(link string) string {
 		return ""
 	}
 	return link
+}
+
+func remoteHistoryQueryCursor(query url.Values) string {
+	return remoteHistoryQueryValue(query,
+		"before_id",
+		"beforeId",
+		"next_before_id",
+		"nextBeforeId",
+		"cursor",
+		"pageCursor",
+		"next_page_token",
+		"nextPageToken",
+		"next_token",
+		"nextToken",
+		"previous_page_token",
+		"previousPageToken",
+		"previous_token",
+		"previousToken",
+		"prev_page_token",
+		"prevPageToken",
+		"prev_token",
+		"prevToken",
+		"older_page_token",
+		"olderPageToken",
+		"older_token",
+		"olderToken",
+		"older_than",
+		"olderThan",
+		"page_token",
+		"pageToken",
+		"continuation_token",
+		"continuationToken",
+		"next_key",
+		"nextKey",
+		"last_evaluated_key",
+		"lastEvaluatedKey",
+		"last_key",
+		"lastKey",
+		"$skiptoken",
+		"$skipToken",
+		"skiptoken",
+		"skipToken",
+		"previous_cursor",
+		"previousCursor",
+		"prev_cursor",
+		"prevCursor",
+		"before_cursor",
+		"beforeCursor",
+		"ending_before",
+		"endingBefore",
+		"starting_after",
+		"startingAfter",
+		"after",
+		"after_id",
+		"afterId",
+		"afterID",
+		"until",
+		"until_id",
+		"untilId",
+		"older_cursor",
+		"olderCursor",
+		"before",
+		"beforeID",
+		"start_cursor",
+		"startCursor",
+		"end_cursor",
+		"endCursor",
+	)
+}
+
+func remoteHistoryQueryValue(query url.Values, names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(query.Get(name)); value != "" {
+			return value
+		}
+	}
+	normalized := map[string]string{}
+	for name, values := range query {
+		if len(values) == 0 {
+			continue
+		}
+		value := strings.TrimSpace(values[0])
+		if value == "" {
+			continue
+		}
+		key := remoteHistoryNormalizedQueryKey(name)
+		if normalized[key] == "" {
+			normalized[key] = value
+		}
+	}
+	for _, name := range names {
+		if value := normalized[remoteHistoryNormalizedQueryKey(name)]; value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func remoteHistoryNormalizedQueryKey(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	return name
 }
 
 func remoteHistoryLinkHeaderCursor(values []string) string {

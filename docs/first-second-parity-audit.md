@@ -188,7 +188,7 @@ M6 progress now includes:
 - `internal/session`: remote-history pageInfo parsing now accepts previous/older pagination signals such as `hasPrevious`/`hasPreviousPage`, `hasOlder`/`more`, and before-id cursors such as `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor`.
 - `internal/session`: remote-history pagination bool parsing now accepts numeric and yes/no-style bool values in addition to JSON bools and true/false strings.
 - `internal/session`: remote-history pagination cursor/id parsing now accepts JSON numbers and preserves them as string cursors for page fields and `edges[].cursor`.
-- `internal/session`: remote-history pagination now accepts token aliases such as `nextPageToken`, `nextToken`, `pageToken`, and `continuationToken` in response fields and link query parameters.
+- `internal/session`: remote-history pagination now accepts token aliases such as `nextPageToken`, `nextToken`, `pageToken`, and `continuationToken` in response fields and link query parameters, including `_`/`-` query-parameter variants in links.
 - `internal/session`: remote-history pagination now also accepts previous/older token aliases such as `previousPageToken`, `prevPageToken`, `olderPageToken`, and matching snake_case/token forms in response fields, link objects, and link query parameters.
 - `internal/session`: remote-history pagination now also accepts adjacent before-cursor aliases such as `before`, `beforeID`, `olderThan`, `endingBefore`, and `untilId` in response fields, link objects, and link URL query parameters.
 - `internal/session`: remote-history pagination now also accepts OData next-link fields such as `@odata.nextLink`, `odata.nextLink`, and `__next`, extracting `$skiptoken`/`skipToken` link query values as continuation cursors.
