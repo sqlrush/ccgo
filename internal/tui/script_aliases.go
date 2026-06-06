@@ -33,6 +33,89 @@ func scriptTaskIDFields(prefix ...string) []string {
 	return fields
 }
 
+var scriptTaskTitleFields = []string{
+	"Title",
+	"task_title", "taskTitle",
+	"title",
+	"name",
+	"label",
+	"display_name", "displayName",
+	"display_title", "displayTitle",
+	"task_name", "taskName",
+	"operation",
+	"operation_name", "operationName",
+	"command",
+	"command_name", "commandName",
+	"activity",
+	"activity_name", "activityName",
+	"job_name", "jobName",
+	"run_name", "runName",
+	"workflow_name", "workflowName",
+}
+
+var scriptTaskStateFields = []string{
+	"State",
+	"status",
+	"state",
+	"phase",
+	"lifecycle",
+	"task_state", "taskState",
+	"task_status", "taskStatus",
+	"job_status", "jobStatus",
+	"run_status", "runStatus",
+	"operation_status", "operationStatus",
+	"result_state", "resultState",
+	"result_status", "resultStatus",
+	"outcome",
+}
+
+var scriptTaskDetailFields = []string{
+	"Detail",
+	"status_text", "statusText",
+	"status_message", "statusMessage",
+	"detail",
+	"detail_text", "detailText",
+	"message",
+	"description",
+	"summary",
+	"current_step", "currentStep",
+	"current_action", "currentAction",
+	"progress_message", "progressMessage",
+	"body",
+	"text",
+	"output",
+	"output_text", "outputText",
+	"result",
+	"result_text", "resultText",
+	"reason",
+	"reason_text", "reasonText",
+	"note",
+	"notes",
+}
+
+var scriptTaskProgressFields = []string{
+	"Progress",
+	"progress_percent", "progressPercent",
+	"percent",
+	"percentage",
+	"progress",
+	"pct",
+	"completion",
+	"completion_percent", "completionPercent",
+	"completion_percentage", "completionPercentage",
+	"completed_percent", "completedPercent",
+	"done_percent", "donePercent",
+}
+
+func scriptTaskStatusAliasFields() []string {
+	fields := scriptTaskIDFields("ID")
+	fields = append(fields, scriptTaskTitleFields...)
+	fields = append(fields, scriptTaskStateFields...)
+	fields = append(fields, scriptTaskDetailFields...)
+	fields = append(fields, scriptTaskProgressFields...)
+	return fields
+}
+
 func (list *stringList) UnmarshalJSON(data []byte) error {
 	var single string
 	if err := json.Unmarshal(data, &single); err == nil {
@@ -5688,50 +5771,7 @@ func (expect *PastedContentExpectation) UnmarshalJSON(data []byte) error {
 func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	type alias TaskStatus
 	var raw alias
-	if err := json.Unmarshal(stripJSONAliasFields(data,
-		"ID",
-		"id",
-		"task_id",
-		"taskId",
-		"taskID",
-		"job_id",
-		"jobId",
-		"jobID",
-		"run_id",
-		"runId",
-		"runID",
-		"Title",
-		"task_title",
-		"taskTitle",
-		"title",
-		"name",
-		"label",
-		"display_name",
-		"displayName",
-		"State",
-		"status",
-		"state",
-		"phase",
-		"lifecycle",
-		"task_state",
-		"taskState",
-		"Detail",
-		"status_text",
-		"statusText",
-		"detail",
-		"message",
-		"description",
-		"summary",
-		"current_step",
-		"currentStep",
-		"Progress",
-		"progress_percent",
-		"progressPercent",
-		"percent",
-		"percentage",
-		"progress",
-		"pct",
-	), &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data, scriptTaskStatusAliasFields()...), &raw); err != nil {
 		return err
 	}
 	*task = TaskStatus(raw)
@@ -5743,16 +5783,16 @@ func (task *TaskStatus) UnmarshalJSON(data []byte) error {
 	if id := scalarStringJSONField(fieldMap, scriptTaskIDFields("ID")...); id != "" {
 		task.ID = id
 	}
-	if title := stringJSONField(fieldMap, "Title", "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
+	if title := stringJSONField(fieldMap, scriptTaskTitleFields...); title != "" {
 		task.Title = title
 	}
-	if state := stringJSONField(fieldMap, "State", "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
+	if state := stringJSONField(fieldMap, scriptTaskStateFields...); state != "" {
 		task.State = state
 	}
-	if detail := stringJSONField(fieldMap, "Detail", "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
+	if detail := stringJSONField(fieldMap, scriptTaskDetailFields...); detail != "" {
 		task.Detail = detail
 	}
-	if progress := intPtrJSONField(fieldMap, "Progress", "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
+	if progress := intPtrJSONField(fieldMap, scriptTaskProgressFields...); progress != nil {
 		task.Progress = *progress
 	}
 	return nil
@@ -5907,50 +5947,7 @@ func (expect *TasksExpectation) UnmarshalJSON(data []byte) error {
 func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 	type alias TaskExpectation
 	var raw alias
-	if err := json.Unmarshal(stripJSONAliasFields(data,
-		"ID",
-		"id",
-		"task_id",
-		"taskId",
-		"taskID",
-		"job_id",
-		"jobId",
-		"jobID",
-		"run_id",
-		"runId",
-		"runID",
-		"Title",
-		"task_title",
-		"taskTitle",
-		"title",
-		"name",
-		"label",
-		"display_name",
-		"displayName",
-		"State",
-		"status",
-		"state",
-		"phase",
-		"lifecycle",
-		"task_state",
-		"taskState",
-		"Detail",
-		"status_text",
-		"statusText",
-		"detail",
-		"message",
-		"description",
-		"summary",
-		"current_step",
-		"currentStep",
-		"Progress",
-		"progress_percent",
-		"progressPercent",
-		"percent",
-		"percentage",
-		"progress",
-		"pct",
-	), &raw); err != nil {
+	if err := json.Unmarshal(stripJSONAliasFields(data, scriptTaskStatusAliasFields()...), &raw); err != nil {
 		return err
 	}
 	*expect = TaskExpectation(raw)
@@ -5962,16 +5959,16 @@ func (expect *TaskExpectation) UnmarshalJSON(data []byte) error {
 	if id := scalarStringJSONField(fieldMap, scriptTaskIDFields("ID")...); id != "" {
 		expect.ID = id
 	}
-	if title := stringJSONField(fieldMap, "Title", "task_title", "taskTitle", "title", "name", "label", "display_name", "displayName"); title != "" {
+	if title := stringJSONField(fieldMap, scriptTaskTitleFields...); title != "" {
 		expect.Title = title
 	}
-	if state := stringJSONField(fieldMap, "State", "status", "state", "phase", "lifecycle", "task_state", "taskState"); state != "" {
+	if state := stringJSONField(fieldMap, scriptTaskStateFields...); state != "" {
 		expect.State = state
 	}
-	if detail := stringJSONField(fieldMap, "Detail", "status_text", "statusText", "detail", "message", "description", "summary", "current_step", "currentStep"); detail != "" {
+	if detail := stringJSONField(fieldMap, scriptTaskDetailFields...); detail != "" {
 		expect.Detail = detail
 	}
-	if progress := intPtrJSONField(fieldMap, "Progress", "progress_percent", "progressPercent", "percent", "percentage", "progress", "pct"); progress != nil {
+	if progress := intPtrJSONField(fieldMap, scriptTaskProgressFields...); progress != nil {
 		expect.Progress = progress
 	}
 	return nil

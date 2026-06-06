@@ -407,13 +407,13 @@ func normalizeTaskState(state string) string {
 		return ""
 	case TaskPending, "queued", "queue", "waiting", "scheduled", "todo":
 		return TaskPending
-	case TaskRunning, "active", "started", "in_progress", "in-progress", "working", "processing":
+	case TaskRunning, "active", "started", "in_progress", "in-progress", "inprogress", "working", "processing":
 		return TaskRunning
-	case TaskCompleted, "complete", "done", "success", "succeeded", "ok":
+	case TaskCompleted, "complete", "done", "success", "succeeded", "successful", "ok", "completed_successfully", "completed-successfully", "completedsuccessfully":
 		return TaskCompleted
-	case TaskCancelled, "canceled", "cancel", "aborted", "stopped", "interrupted":
+	case TaskCancelled, "canceled", "cancel", "aborted", "stopped", "interrupted", "cancelled_by_user", "cancelled-by-user", "cancelledbyuser", "canceled_by_user", "canceled-by-user", "canceledbyuser":
 		return TaskCancelled
-	case TaskFailed, "failure", "error", "errored", "failed_error":
+	case TaskFailed, "failure", "error", "errored", "failed_error", "failed-error", "failederror", "failed_with_error", "failed-with-error", "failedwitherror", "timed_out", "timed-out", "timedout":
 		return TaskFailed
 	default:
 		return strings.TrimSpace(state)

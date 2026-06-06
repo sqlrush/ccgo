@@ -8886,6 +8886,29 @@ func TestRunDialogRuntimeScriptAcceptsAdjacentTaskPayloadAliases(t *testing.T) {
 			"expectStatusContains": ["running: 2", "completed: 1"]
 		},
 		{
+			"action": "task",
+			"workflowID": "wf_7",
+			"operationName": "Refresh index",
+			"jobStatus": "inProgress",
+			"statusMessage": "scanning",
+			"completionPercent": "66",
+			"expectTasks": {
+				"count": 4,
+				"stateCounts": {"running": 3, "completed": 1},
+				"contains": {"workflowID": "wf_7", "displayTitle": "Refresh index", "resultState": "inProgress", "statusMessage": "scanning", "completionPercent": 66}
+			},
+			"expectStatusContains": ["running: 3", "completed: 1"]
+		},
+		{
+			"action": "remove-task",
+			"workflowID": "wf_7",
+			"expectTasks": {
+				"count": 3,
+				"stateCounts": {"running": 2, "completed": 1},
+				"contains": {"operationID": "op_99", "status": "running", "progress": 10}
+			}
+		},
+		{
 			"action": "remove-task",
 			"requestID": "op_99",
 			"expectTasks": {
