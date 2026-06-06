@@ -76,6 +76,13 @@ var sidechainLifecycleDescriptionFields = []string{
 	"taskPrompt", "task_prompt",
 	"instructions", "instruction",
 	"objective", "goal", "request",
+	"operationName", "operation_name",
+	"commandName", "command_name",
+	"displayName", "display_name",
+	"displayTitle", "display_title",
+	"jobName", "job_name",
+	"runName", "run_name",
+	"workflowName", "workflow_name",
 	"prompt", "input", "command", "title",
 }
 

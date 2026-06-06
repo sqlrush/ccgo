@@ -24,16 +24,23 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 	}
 	metadata := SidechainMetadata(canonical)
 	if metadata.AgentType == "" {
-		metadata.AgentType = firstStringField(fields, "agent_type", "agentKind", "agent_kind", "agent", "type", "subagentType", "subagent_type", "agentName", "agent_name", "name")
+		metadata.AgentType = firstStringField(fields, appendSidechainMetadataFallbackFields(sidechainLifecycleAgentTypeFields, "type")...)
 	}
 	if metadata.WorktreePath == "" {
-		metadata.WorktreePath = firstStringField(fields, "worktree_path", "worktree", "worktreeDir", "worktree_dir", "workingDirectory", "working_directory", "cwd", "workspacePath", "workspace_path", "workspace", "path", "directory")
+		metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
 	}
 	if metadata.Description == "" {
-		metadata.Description = firstStringField(fields, "description_text", "descriptionText", "desc", "summary", "task", "taskDescription", "task_description", "prompt", "input", "command", "title")
+		metadata.Description = firstStringField(fields, sidechainLifecycleDescriptionFields...)
 	}
 	*m = metadata
 	return nil
+}
+
+func appendSidechainMetadataFallbackFields(fields []string, fallback ...string) []string {
+	out := make([]string, 0, len(fields)+len(fallback))
+	out = append(out, fields...)
+	out = append(out, fallback...)
+	return out
 }
 
 func (m SidechainMetadata) Empty() bool {

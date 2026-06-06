@@ -721,7 +721,7 @@ func TestLoadSidechainStateAcceptsRuntimeLifecycleFieldAliases(t *testing.T) {
 				"jobID":         "job_77",
 				"workerType":    "investigator",
 				"workspaceRoot": "/tmp/runtime-worktree",
-				"instructions":  "inspect runtime aliases",
+				"operationName": "inspect runtime aliases",
 				"startedAtMs":   1700000000000,
 				"jobStatus":     "queued",
 			},
@@ -797,7 +797,7 @@ func TestLoadSidechainStateAcceptsExtendedMetadataAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadataPath := SidechainMetadataPath(sessionPath, sessionID, "subagent_7")
-	if err := os.WriteFile(metadataPath, []byte(`{"subagentType":"planner","workspacePath":"/tmp/planner-worktree","taskDescription":"plan the migration"}`), 0o644); err != nil {
+	if err := os.WriteFile(metadataPath, []byte(`{"agentName":"planner","workspaceRoot":"/tmp/planner-worktree","commandName":"plan the migration"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
