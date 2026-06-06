@@ -1678,9 +1678,25 @@ func transcriptForMemory(history []contracts.Message) string {
 }
 
 func parseFacts(raw string) ([]MemoryFact, error) {
+	return parseFactsText(raw, 0)
+}
+
+func parseFactsText(raw string, depth int) ([]MemoryFact, error) {
+	if depth > 8 {
+		return nil, fmt.Errorf("memory facts response nested too deeply")
+	}
 	raw = strings.TrimSpace(raw)
 	payload := stripMarkdownFence(raw)
 	facts, err := parseFactsJSON(payload)
+	if err == nil && len(facts) > 0 {
+		return facts, nil
+	}
+	if text, ok := scalarJSONString(payload); ok && startsJSONValue(text) {
+		return parseFactsText(text, depth+1)
+	}
+	if text, ok := selectionProviderResponseText(payload); ok {
+		return parseFactsText(text, depth+1)
+	}
 	if err == nil {
 		return facts, nil
 	}
@@ -1688,9 +1704,18 @@ func parseFacts(raw string) ([]MemoryFact, error) {
 		return nil, err
 	}
 	if payload, ok := firstJSONValue(raw); ok {
-		return parseFactsJSON(payload)
+		return parseFactsText(payload, depth+1)
 	}
 	return nil, err
+}
+
+func scalarJSONString(raw string) (string, bool) {
+	var scalar string
+	if err := json.Unmarshal([]byte(raw), &scalar); err != nil {
+		return "", false
+	}
+	scalar = strings.TrimSpace(scalar)
+	return scalar, scalar != ""
 }
 
 func parseFactsJSON(raw string) ([]MemoryFact, error) {

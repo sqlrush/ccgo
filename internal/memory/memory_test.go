@@ -1162,6 +1162,52 @@ func TestMemoryAgentExtractsStructuredFactText(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		kind     FactKind
+		text     string
+		source   contracts.ID
+	}{
+		{
+			name:     "choices message content",
+			response: `{"choices":[{"message":{"content":"{\"facts\":[{\"kind\":\"preference\",\"text\":\"accept provider choices\",\"source_uuid\":\"user_1\"}]}"}}]}`,
+			kind:     FactPreference,
+			text:     "accept provider choices",
+			source:   "user_1",
+		},
+		{
+			name:     "candidate parts text",
+			response: `{"candidates":[{"content":{"parts":[{"text":"{\"facts\":[{\"type\":\"decision\",\"summary\":\"accept candidate part text\",\"messageUuid\":\"assistant_1\"}]}"}]}}]}`,
+			kind:     FactDecision,
+			text:     "accept candidate part text",
+			source:   "assistant_1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &fakeMemoryClient{response: &anthropic.Response{
+				ID:      "msg_memory_provider_wrapped",
+				Type:    "message",
+				Role:    "assistant",
+				Model:   "sonnet",
+				Content: []contracts.ContentBlock{contracts.NewTextBlock(tt.response)},
+			}}
+			result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("No fallback facts")}, ExtractOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Fallback || len(result.Facts) != 1 {
+				t.Fatalf("result = %#v", result)
+			}
+			if !hasMemoryFact(result.Facts, tt.kind, tt.text, tt.source) {
+				t.Fatalf("provider-wrapped fact missing = %#v", result.Facts)
+			}
+		})
+	}
+}
+
 func hasMemoryFact(facts []MemoryFact, kind FactKind, text string, source contracts.ID) bool {
 	for _, fact := range facts {
 		if fact.Kind == kind && fact.Text == text && fact.SourceUUID == source {
