@@ -971,6 +971,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	if image := scriptImageJSONField(rawFieldMap, "Image", "image"); image != nil {
 		step.Image = image
 	}
+	if step.Image == nil {
+		step.Image = scriptClipboardImageJSONField(rawFieldMap, "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "items", "clipboard_items", "clipboardItems")
+	}
 	if specs, ok, err := scriptKeybindingsJSONField(rawFieldMap); err != nil {
 		return err
 	} else if ok {
@@ -1836,6 +1839,9 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 				step.Keys = append(step.Keys, keys...)
 			}
 		} else if scriptDOMInputEventIsPaste(fields) {
+			if step.Image == nil {
+				step.Image = scriptClipboardImageJSONField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "items", "payload", "data", "value")
+			}
 			if step.Paste == "" {
 				step.Paste = scriptActionStringField(fields, "data", "text", "input", "content", "body", "message", "payload", "value")
 			}
@@ -1843,6 +1849,9 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 			step.Text = scriptActionStringField(fields, "data", "text", "input", "content", "body", "message", "payload", "value")
 		}
 	case "paste", "pastetext", "pastedtext", "clipboard", "clipboardtext":
+		if step.Image == nil {
+			step.Image = scriptClipboardImageJSONField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "items", "payload", "data", "value")
+		}
 		if step.Paste == "" {
 			step.Paste = scriptActionStringField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "items", "item", "clipboard_items", "clipboardItems", "text", "content", "body", "message", "data", "payload", "value")
 		}
@@ -3721,6 +3730,9 @@ func scriptActionStringFromJSON(raw json.RawMessage, objectNames []string, depth
 	if err := json.Unmarshal(raw, &nested); err != nil {
 		return ""
 	}
+	if scriptActionStringSkipsImageLikeObject(nested, objectNames) {
+		return ""
+	}
 	if value := stringJSONField(nested, objectNames...); value != "" {
 		return value
 	}
@@ -3734,6 +3746,23 @@ func scriptActionStringFromJSON(raw json.RawMessage, objectNames []string, depth
 		}
 	}
 	return ""
+}
+
+func scriptActionStringSkipsImageLikeObject(fields map[string]json.RawMessage, objectNames []string) bool {
+	if !scriptActionStringNamesIncludeClipboardPayload(objectNames) || !scriptImageLikeFields(fields) {
+		return false
+	}
+	return stringJSONField(fields, "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "text") == ""
+}
+
+func scriptActionStringNamesIncludeClipboardPayload(names []string) bool {
+	for _, name := range names {
+		switch canonicalScriptStepAction(name) {
+		case "paste", "paste-text", "pastetext", "pasted-text", "pastedtext", "clipboard", "clipboard-data", "clipboarddata", "data-transfer", "datatransfer", "clipboard-items", "clipboarditems":
+			return true
+		}
+	}
+	return false
 }
 
 func scriptScalarStringFromJSON(raw json.RawMessage) string {
@@ -3804,6 +3833,19 @@ func scriptImageJSONField(fields map[string]json.RawMessage, names ...string) *S
 	return nil
 }
 
+func scriptClipboardImageJSONField(fields map[string]json.RawMessage, names ...string) *ScriptImage {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if image, ok := scriptClipboardImageFromJSON(raw, 0); ok {
+			return image
+		}
+	}
+	return nil
+}
+
 func scriptMouseFromJSON(raw json.RawMessage, depth int) (*ScriptMouse, bool) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
@@ -3847,6 +3889,50 @@ func scriptMouseFromJSON(raw json.RawMessage, depth int) (*ScriptMouse, bool) {
 	return nil, false
 }
 
+func scriptClipboardImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if depth >= 8 {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if image, ok := scriptClipboardImageFromJSON(item, depth+1); ok {
+				return image, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	if scriptImageLikeFields(fields) {
+		if image, ok := scriptImageFromJSON(raw, depth+1); ok {
+			return image, true
+		}
+	}
+	for _, name := range scriptRuntimePayloadWrapperNames("clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "file", "items", "item", "clipboard_items", "clipboardItems") {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if image, ok := scriptClipboardImageFromJSON(nested, depth+1); ok {
+			return image, true
+		}
+	}
+	return nil, false
+}
+
 func scriptImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage, bool) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
@@ -3878,7 +3964,7 @@ func scriptImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage, bool) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, false
 	}
-	for _, name := range scriptRuntimePayloadWrapperNames("image", "paste_image", "pasteImage", "image_paste", "imagePaste", "attachment", "media") {
+	for _, name := range scriptRuntimePayloadWrapperNames("image", "paste_image", "pasteImage", "image_paste", "imagePaste", "attachment", "media", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "file", "items", "item", "clipboard_items", "clipboardItems") {
 		nested, ok := fields[name]
 		if !ok {
 			continue
@@ -3896,6 +3982,14 @@ func scriptMouseHasData(mouse ScriptMouse) bool {
 
 func scriptImageHasData(image ScriptImage) bool {
 	return image.Filename != "" || image.MediaType != "" || image.Content != "" || image.SourcePath != "" || image.Dimensions != nil
+}
+
+func scriptImageLikeFields(fields map[string]json.RawMessage) bool {
+	mediaType := stringJSONField(fields, "media_type", "mediaType", "mime_type", "mimeType", "content_type", "contentType")
+	if mediaType == "" {
+		mediaType = stringJSONField(fields, "type", "kind")
+	}
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(mediaType)), "image/")
 }
 
 func scriptStepHasFocusKey(step *ScriptStep) bool {
@@ -4352,6 +4446,11 @@ func (image *ScriptImage) UnmarshalJSON(data []byte) error {
 	}
 	if image.MediaType == "" {
 		image.MediaType = stringJSONField(fields, "media_type", "mime_type", "mimeType", "content_type", "contentType")
+	}
+	if image.MediaType == "" {
+		if mediaType := stringJSONField(fields, "type", "kind"); strings.HasPrefix(strings.ToLower(strings.TrimSpace(mediaType)), "image/") {
+			image.MediaType = mediaType
+		}
 	}
 	if image.Content == "" {
 		image.Content = stringJSONField(fields, "data", "base64", "base64Content", "contentBase64")

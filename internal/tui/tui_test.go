@@ -7100,6 +7100,35 @@ func TestRunInteractionScriptAcceptsClipboardDataPastePayloads(t *testing.T) {
 				"expandedText": "alpha\nbetagammadelta",
 				"pastedContentCount": 3
 			}
+		},
+		{
+			"clipboardData": {
+				"items": [
+					{"kind": "file", "type": "image/png", "name": "clip.png", "data": "AAAA"}
+				]
+			},
+			"expectPrompt": {
+				"text": "[Pasted text #1 +1 lines][Pasted text #2][Pasted text #3][Image #4]",
+				"expandedText": "alpha\nbetagammadelta[Image #4]",
+				"pastedContentCount": 4,
+				"pastedContents": {"id": 4, "type": "image", "mediaType": "image/png", "filename": "clip.png", "content": "AAAA"}
+			}
+		},
+		{
+			"action": "paste",
+			"payload": {
+				"dataTransfer": {
+					"files": [
+						{"type": "image/jpeg", "fileName": "drop.jpg", "base64": "BBBB", "sourcePath": "/tmp/drop.jpg"}
+					]
+				}
+			},
+			"expectPrompt": {
+				"text": "[Pasted text #1 +1 lines][Pasted text #2][Pasted text #3][Image #4] [Image #5]",
+				"expandedText": "alpha\nbetagammadelta[Image #4] [Image #5]",
+				"pastedContentCount": 5,
+				"pastedContents": {"id": 5, "type": "image", "mediaType": "image/jpeg", "filename": "drop.jpg", "content": "BBBB", "sourcePath": "/tmp/drop.jpg"}
+			}
 		}
 	]`))
 	if err != nil {
