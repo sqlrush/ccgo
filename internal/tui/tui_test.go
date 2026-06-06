@@ -6196,6 +6196,9 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 		{"keys":[{"type":"keypress","which":33},{"eventType":"keypress","which":65},{"name":"keypress","which":32},{"keyCode":13}],"expectEvent":{"type":"prompt_submitted","value":"!A "},"expectPrompt":{"empty":true}},
 		{"keys":[{"code":"Numpad1"},{"code":"NumpadAdd"},{"code":"Numpad2"},{"code":"NumpadDecimal"},{"code":"NumpadEnter"}],"expectEvent":{"type":"prompt_submitted","value":"1+2."},"expectPrompt":{"empty":true}},
 		{"keys":[{"code":"Minus"},{"code":"Equal"},{"code":"BracketLeft"},{"code":"BracketRight"},{"code":"Backslash"},{"code":"Semicolon"},{"code":"Quote"},{"code":"Comma"},{"code":"Period"},{"code":"Slash"},{"key":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"-=[]\\;',./"},"expectPrompt":{"empty":true}},
+		{"keys":[{"keyCode":192},{"keyCode":186},{"keyCode":187},{"keyCode":188},{"keyCode":189},{"keyCode":190},{"keyCode":191},{"keyCode":219},{"keyCode":220},{"keyCode":221},{"keyCode":222},{"keyCode":13}],"expectEvent":{"type":"prompt_submitted","value":"\u0060;=,-./[\\]'"},"expectPrompt":{"empty":true}},
+		{"keys":[{"keyCode":106},{"keyCode":107},{"keyCode":109},{"keyCode":110},{"keyCode":111},{"keyCode":13}],"expectEvent":{"type":"prompt_submitted","value":"*+-./"},"expectPrompt":{"empty":true}},
+		{"keys":[{"code":"NumpadParenLeft"},{"code":"NumpadHash"},{"code":"NumpadParenRight"},{"code":"NumpadBackspace"},{"code":"Numpad3"},{"code":"NumpadEnter"}],"expectEvent":{"type":"prompt_submitted","value":"(#3"},"expectPrompt":{"empty":true}},
 		{"keys":[{"keyCode":17,"ctrlKey":true},{"keyCode":88,"ctrlKey":true},{"which":75,"ctrlKey":true}],"expectEvent":{"type":"kill_agents"}},
 		{"kind":"keys","data":[{"code":"KeyO"},{"code":"Digit1"},{"key":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"o1"},"expectPrompt":{"empty":true}},
 		{"keys":[{"key":"x","modifiers":["ctrl"]},{"key":"k","modifiers":["control"]}],"expectEvent":{"type":"kill_agents"}},
@@ -6209,16 +6212,19 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 9 ||
+	if len(result.Events) != 12 ||
 		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "hi" ||
 		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "hi !" ||
 		result.Events[2].Type != ScreenEventPromptSubmitted || result.Events[2].Value != "a B" ||
 		result.Events[3].Type != ScreenEventPromptSubmitted || result.Events[3].Value != "!A " ||
 		result.Events[4].Type != ScreenEventPromptSubmitted || result.Events[4].Value != "1+2." ||
 		result.Events[5].Type != ScreenEventPromptSubmitted || result.Events[5].Value != "-=[]\\;',./" ||
-		result.Events[6].Type != ScreenEventKillAgents ||
-		result.Events[7].Type != ScreenEventPromptSubmitted || result.Events[7].Value != "o1" ||
-		result.Events[8].Type != ScreenEventKillAgents {
+		result.Events[6].Type != ScreenEventPromptSubmitted || result.Events[6].Value != "`;=,-./[\\]'" ||
+		result.Events[7].Type != ScreenEventPromptSubmitted || result.Events[7].Value != "*+-./" ||
+		result.Events[8].Type != ScreenEventPromptSubmitted || result.Events[8].Value != "(#3" ||
+		result.Events[9].Type != ScreenEventKillAgents ||
+		result.Events[10].Type != ScreenEventPromptSubmitted || result.Events[10].Value != "o1" ||
+		result.Events[11].Type != ScreenEventKillAgents {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }

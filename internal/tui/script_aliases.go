@@ -3094,6 +3094,38 @@ func scriptKeyEventKeyCodeName(code int) (string, bool) {
 	case code >= 96 && code <= 105:
 		return string(rune('0' + code - 96)), true
 	}
+	switch code {
+	case 59, 186:
+		return ";", true
+	case 61, 187:
+		return "=", true
+	case 106:
+		return "*", true
+	case 107:
+		return "+", true
+	case 109, 173, 189:
+		return "-", true
+	case 110:
+		return ".", true
+	case 111:
+		return "/", true
+	case 188:
+		return ",", true
+	case 190:
+		return ".", true
+	case 191:
+		return "/", true
+	case 192:
+		return "`", true
+	case 219:
+		return "[", true
+	case 220:
+		return "\\", true
+	case 221:
+		return "]", true
+	case 222:
+		return "'", true
+	}
 	return "", false
 }
 
@@ -3206,6 +3238,14 @@ func scriptNumpadKeyBaseName(normalized string) (string, bool) {
 		return "/", true
 	case "equal", "equals":
 		return "=", true
+	case "hash", "number", "pound":
+		return "#", true
+	case "parenleft", "paren-left", "leftparen", "left-paren", "openparen", "open-paren":
+		return "(", true
+	case "parenright", "paren-right", "rightparen", "right-paren", "closeparen", "close-paren":
+		return ")", true
+	case "backspace", "deletebackward", "delete-backward":
+		return "backspace", true
 	default:
 		return "", false
 	}
