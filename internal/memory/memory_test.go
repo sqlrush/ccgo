@@ -583,6 +583,55 @@ func TestMemoryAgentSelectRelevantMemoriesParsesLinkObjectAliases(t *testing.T) 
 	}
 }
 
+func TestMemoryAgentSelectRelevantMemoriesParsesFileSelectionAliases(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	opsPath := filepath.Join(dir, "ops.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_files",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"query":"database access",
+			"selectedFiles":[
+				{"type":"file-selection","filePath":"db.md"},
+				{"type":"file-selection","file":{"path":"ops.md"}}
+			]
+		}`)},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "db.md,ops.md" {
+		t.Fatalf("selectedFiles result = %#v", result)
+	}
+	if len(result.Selected) != 2 || result.Selected[0].Path != dbPath || result.Selected[1].Path != opsPath {
+		t.Fatalf("selectedFiles selected = %#v", result.Selected)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"memorySelection": {
+			"relevantFilePaths": ["ops.md"],
+			"candidateFiles": [{"links":{"self":{"href":"file://` + filepath.ToSlash(dbPath) + `"}}}]
+		}
+	}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "deployment", RelevantMemorySelectorOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || strings.Join(result.SelectedIDs, ",") != "ops.md,file://"+filepath.ToSlash(dbPath) {
+		t.Fatalf("nested file aliases result = %#v", result)
+	}
+	if len(result.Selected) != 2 || result.Selected[0].Path != opsPath || result.Selected[1].Path != dbPath {
+		t.Fatalf("nested file aliases selected = %#v", result.Selected)
+	}
+}
+
 func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "db.md")
