@@ -482,7 +482,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiTerminalParameters(rawP0, params, privateMode), true
 	case CSICommandModeStatus:
 		if intermediate == "$" {
-			return csiModeStatus(csiParamDefault(params, 0, 0), csiParamDefault(params, 1, 0), privateMode), true
+			return csiModeStatus(csiParamDefault(params, 0, 0), csiParamDefault(params, 1, 0), params, privateMode), true
 		}
 	case CSICommandScrollUp:
 		return CSIAction{Type: CSIActionScroll, Scroll: CSIScrollAction{Type: CSIScrollActionUp, Count: p0}}, true
@@ -660,10 +660,14 @@ func csiModeRequest(code int, privateMode byte) CSIAction {
 	}
 }
 
-func csiModeStatus(code int, status int, privateMode byte) CSIAction {
+func csiModeStatus(code int, status int, params []int, privateMode byte) CSIAction {
+	report := CSIReportAction{Type: CSIReportActionModeStatus, Code: code, Status: status, PrivateMode: privateMode}
+	if len(params) > 1 {
+		report.Params = append([]int(nil), params...)
+	}
 	return CSIAction{
 		Type:   CSIActionReport,
-		Report: CSIReportAction{Type: CSIReportActionModeStatus, Code: code, Status: status, PrivateMode: privateMode},
+		Report: report,
 	}
 }
 
