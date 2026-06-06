@@ -80,15 +80,15 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyShiftEnter, nil
 	case "esc", "escape", "ctrl+[", "ctrl-[", "control+[", "control-[":
 		return KeyEsc, nil
-	case "alt+b", "alt-b", "meta+b", "meta-b", "option+b", "option-b":
+	case "alt+b", "alt-b", "meta+b", "meta-b", "option+b", "option-b", "cmd+b", "cmd-b", "command+b", "command-b":
 		return KeyAltB, nil
-	case "alt+d", "alt-d", "meta+d", "meta-d", "option+d", "option-d":
+	case "alt+d", "alt-d", "meta+d", "meta-d", "option+d", "option-d", "cmd+d", "cmd-d", "command+d", "command-d":
 		return KeyAltD, nil
-	case "alt+f", "alt-f", "meta+f", "meta-f", "option+f", "option-f":
+	case "alt+f", "alt-f", "meta+f", "meta-f", "option+f", "option-f", "cmd+f", "cmd-f", "command+f", "command-f":
 		return KeyAltF, nil
-	case "alt+y", "alt-y", "meta+y", "meta-y", "option+y", "option-y":
+	case "alt+y", "alt-y", "meta+y", "meta-y", "option+y", "option-y", "cmd+y", "cmd-y", "command+y", "command-y":
 		return KeyAltY, nil
-	case "alt+backspace", "alt-backspace", "meta+backspace", "meta-backspace", "option+backspace", "option-backspace":
+	case "alt+backspace", "alt-backspace", "meta+backspace", "meta-backspace", "option+backspace", "option-backspace", "cmd+backspace", "cmd-backspace", "command+backspace", "command-backspace":
 		return KeyAltBS, nil
 	case "backspace", "bs", "ctrl+?", "ctrl-?", "control+?", "control-?", "ctrl+h", "ctrl-h", "control+h", "control-h":
 		return KeyBackspace, nil
@@ -98,9 +98,9 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyLeft, nil
 	case "right", "arrow-right", "arrowright":
 		return KeyRight, nil
-	case "alt+left", "alt-left", "meta+left", "meta-left", "option+left", "option-left", "alt+arrow-left", "alt-arrow-left", "meta+arrow-left", "meta-arrow-left", "option+arrow-left", "option-arrow-left":
+	case "alt+left", "alt-left", "meta+left", "meta-left", "option+left", "option-left", "cmd+left", "cmd-left", "command+left", "command-left", "alt+arrow-left", "alt-arrow-left", "meta+arrow-left", "meta-arrow-left", "option+arrow-left", "option-arrow-left", "cmd+arrow-left", "cmd-arrow-left", "command+arrow-left", "command-arrow-left":
 		return KeyAltLeft, nil
-	case "alt+right", "alt-right", "meta+right", "meta-right", "option+right", "option-right", "alt+arrow-right", "alt-arrow-right", "meta+arrow-right", "meta-arrow-right", "option+arrow-right", "option-arrow-right":
+	case "alt+right", "alt-right", "meta+right", "meta-right", "option+right", "option-right", "cmd+right", "cmd-right", "command+right", "command-right", "alt+arrow-right", "alt-arrow-right", "meta+arrow-right", "meta-arrow-right", "option+arrow-right", "option-arrow-right", "cmd+arrow-right", "cmd-arrow-right", "command+arrow-right", "command-arrow-right":
 		return KeyAltRight, nil
 	case "ctrl+left", "ctrl-left", "control+left", "control-left", "ctrl+arrow-left", "ctrl-arrow-left", "control+arrow-left", "control-arrow-left":
 		return KeyCtrlLeft, nil
@@ -186,23 +186,23 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyShiftEnter, nil
 	case "shifttab", "backtab", "btab":
 		return KeyShiftTab, nil
-	case "altb", "metab", "optionb":
+	case "altb", "metab", "optionb", "cmdb", "commandb":
 		return KeyAltB, nil
-	case "altd", "metad", "optiond":
+	case "altd", "metad", "optiond", "cmdd", "commandd":
 		return KeyAltD, nil
-	case "altf", "metaf", "optionf":
+	case "altf", "metaf", "optionf", "cmdf", "commandf":
 		return KeyAltF, nil
-	case "alty", "metay", "optiony":
+	case "alty", "metay", "optiony", "cmdy", "commandy":
 		return KeyAltY, nil
-	case "altbackspace", "metabackspace", "optionbackspace":
+	case "altbackspace", "metabackspace", "optionbackspace", "cmdbackspace", "commandbackspace":
 		return KeyAltBS, nil
 	case "ctrl?", "control?", "ctrlh", "controlh":
 		return KeyBackspace, nil
 	case "ctrli", "controli":
 		return KeyTab, nil
-	case "altleft", "metaleft", "optionleft":
+	case "altleft", "metaleft", "optionleft", "cmdleft", "commandleft":
 		return KeyAltLeft, nil
-	case "altright", "metaright", "optionright":
+	case "altright", "metaright", "optionright", "cmdright", "commandright":
 		return KeyAltRight, nil
 	case "ctrlleft", "controlleft":
 		return KeyCtrlLeft, nil
@@ -300,7 +300,7 @@ func expandCompactShortKeyModifierAlias(compact string) string {
 }
 
 func expandCompactModifierArrowAlias(compact string) string {
-	for _, prefix := range []string{"ctrl", "control", "alt", "meta", "option"} {
+	for _, prefix := range []string{"ctrl", "control", "alt", "meta", "option", "cmd", "command"} {
 		if suffix, ok := strings.CutPrefix(compact, prefix); ok {
 			navigation := compactNavigationKeySuffix(suffix)
 			if navigation != suffix {
