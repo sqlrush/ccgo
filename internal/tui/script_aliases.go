@@ -3923,6 +3923,8 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 		mouse.Button = *button
 	} else if button, ok := scriptMouseWheelButtonFromFields(fields); ok {
 		mouse.Button = button
+	} else if button, ok := scriptMouseDOMButtonFromFields(fields); ok {
+		mouse.Button = button
 	} else if button := intPtrJSONField(fields, "Button", "button", "Btn", "btn", "Code", "code", "Mask", "mask"); button != nil {
 		mouse.Button = *button
 	}
@@ -3966,6 +3968,30 @@ func scriptMouseWheelButtonFromFields(fields map[string]json.RawMessage) (int, b
 	default:
 		return 0, false
 	}
+}
+
+func scriptMouseDOMButtonFromFields(fields map[string]json.RawMessage) (int, bool) {
+	if which := intPtrJSONField(fields, "Which", "which"); which != nil {
+		switch *which {
+		case 1:
+			return 0, true
+		case 2:
+			return 1, true
+		case 3:
+			return 2, true
+		}
+	}
+	if buttons := intPtrJSONField(fields, "Buttons", "buttons", "ButtonState", "button_state", "buttonState", "ButtonsMask", "buttons_mask", "buttonsMask"); buttons != nil {
+		switch {
+		case *buttons&1 != 0:
+			return 0, true
+		case *buttons&4 != 0:
+			return 1, true
+		case *buttons&2 != 0:
+			return 2, true
+		}
+	}
+	return 0, false
 }
 
 func scriptMouseWheelDirection(fields map[string]json.RawMessage) int {

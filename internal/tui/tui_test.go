@@ -5074,6 +5074,25 @@ func TestRunInteractionScriptAcceptsStructuredMouse(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsDOMMouseButtonAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_dom","kind":"permission"}},
+		{"mouseEvent":{"buttons":2,"clientX":13,"clientY":5},"expectNoEvent":true,"expectDialog":{"active":true,"id":"perm_dom"}},
+		{"mouseEvent":{"which":1,"clientX":13,"clientY":5},"expectEvent":{"type":"dialog_action","value":"Deny","dialogId":"perm_dom","dialogKind":"permission"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventDialogAction || result.Events[0].DialogID != "perm_dom" || result.Events[0].Value != "Deny" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestScriptMouseAcceptsCoordinateAliases(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -5137,6 +5156,31 @@ func TestScriptMouseDerivesWheelButtonFromEventPayload(t *testing.T) {
 				t.Fatal(err)
 			}
 			if mouse.Button != tc.button || mouse.X != 10 || mouse.Y != 4 || mouse.Release {
+				t.Fatalf("mouse = %#v, button want %d", mouse, tc.button)
+			}
+		})
+	}
+}
+
+func TestScriptMouseAcceptsDOMButtonAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		raw    string
+		button int
+	}{
+		{name: "which left", raw: `{"which":1,"clientX":13,"clientY":5}`, button: 0},
+		{name: "which middle", raw: `{"which":2,"clientX":13,"clientY":5}`, button: 1},
+		{name: "which right", raw: `{"which":3,"clientX":13,"clientY":5}`, button: 2},
+		{name: "buttons left", raw: `{"buttons":1,"clientX":13,"clientY":5}`, button: 0},
+		{name: "buttons right", raw: `{"buttons":2,"clientX":13,"clientY":5}`, button: 2},
+		{name: "buttons middle", raw: `{"buttons":4,"clientX":13,"clientY":5}`, button: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mouse ScriptMouse
+			if err := json.Unmarshal([]byte(tc.raw), &mouse); err != nil {
+				t.Fatal(err)
+			}
+			if mouse.Button != tc.button || mouse.X != 13 || mouse.Y != 5 {
 				t.Fatalf("mouse = %#v, button want %d", mouse, tc.button)
 			}
 		})
