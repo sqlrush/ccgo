@@ -1013,6 +1013,9 @@ func selectionProviderResponseText(raw string) (string, bool) {
 		"responses",
 		"result",
 		"results",
+		"message",
+		"content",
+		"text",
 	} {
 		value, ok := object[key]
 		if !ok {

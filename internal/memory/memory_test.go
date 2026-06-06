@@ -566,6 +566,22 @@ func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *test
 	if len(result.Selected) != 1 || result.Selected[0].Path != dbPath {
 		t.Fatalf("candidate selected = %#v", result.Selected)
 	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"content":[
+			{"type":"text","text":"{\"memory_paths\":[\"ops.md\"],\"query\":\"deployment runbook\"}"}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "deployment", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "deployment runbook" || strings.Join(result.SelectedIDs, ",") != "ops.md" {
+		t.Fatalf("content result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != opsPath {
+		t.Fatalf("content selected = %#v", result.Selected)
+	}
 }
 
 func TestPrefetchRelevantMemoriesCanUseMemoryAgentSelector(t *testing.T) {
@@ -1192,6 +1208,13 @@ func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
 			text:     "accept candidate part text",
 			source:   "assistant_1",
 		},
+		{
+			name:     "top-level content block",
+			response: `{"content":[{"type":"text","text":"{\"facts\":[{\"kind\":\"request\",\"content\":\"accept top-level content facts\",\"sourceId\":\"user_1\"}]}"}]}`,
+			kind:     FactRequest,
+			text:     "accept top-level content facts",
+			source:   "user_1",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1625,6 +1648,22 @@ func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
 	}
 	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
 		t.Fatalf("candidate matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"content":[
+			{"type":"text","text":"{\"query\":\"database access\",\"selected_session_ids\":[\"prior\"]}"}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior" {
+		t.Fatalf("content result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("content matches = %#v", result.Matches)
 	}
 }
 
