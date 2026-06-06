@@ -582,6 +582,20 @@ func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *test
 	if len(result.Selected) != 1 || result.Selected[0].Path != opsPath {
 		t.Fatalf("content selected = %#v", result.Selected)
 	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"output_text": "{\"memoryPaths\":[\"db.md\"],\"query\":\"database output\"}"
+	}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database output" || strings.Join(result.SelectedIDs, ",") != "db.md" {
+		t.Fatalf("output_text result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != dbPath {
+		t.Fatalf("output_text selected = %#v", result.Selected)
+	}
 }
 
 func TestPrefetchRelevantMemoriesCanUseMemoryAgentSelector(t *testing.T) {
@@ -1215,6 +1229,13 @@ func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
 			text:     "accept top-level content facts",
 			source:   "user_1",
 		},
+		{
+			name:     "top-level output text",
+			response: `{"output_text":"{\"facts\":[{\"kind\":\"tool_use\",\"content\":\"accept output text facts\",\"sourceId\":\"assistant_1\"}]}"}`,
+			kind:     FactTool,
+			text:     "accept output text facts",
+			source:   "assistant_1",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1664,6 +1685,20 @@ func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
 	}
 	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
 		t.Fatalf("content matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"output_text":"{\"query\":\"credential output\",\"selected_session_ids\":[\"other\"]}"
+	}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "credential output", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential output" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other" {
+		t.Fatalf("output_text result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("output_text matches = %#v", result.Matches)
 	}
 }
 

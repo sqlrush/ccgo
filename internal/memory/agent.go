@@ -1016,6 +1016,8 @@ func selectionProviderResponseText(raw string) (string, bool) {
 		"message",
 		"content",
 		"text",
+		"outputText",
+		"output_text",
 	} {
 		value, ok := object[key]
 		if !ok {
@@ -1081,7 +1083,7 @@ func selectionProviderTextFromRaw(raw json.RawMessage, depth int) (string, bool)
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return "", false
 	}
-	for _, key := range []string{"text", "content", "value", "output"} {
+	for _, key := range []string{"text", "content", "value", "output", "outputText", "output_text"} {
 		if value, ok := fields[key]; ok {
 			if text, ok := selectionProviderTextFromRaw(value, depth+1); ok {
 				return text, true
