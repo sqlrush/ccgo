@@ -5755,6 +5755,8 @@ func TestParseESCSequenceActions(t *testing.T) {
 		{seq: "\x1b-A", slot: '-', designator: 'A'},
 		{seq: "\x1b.A", slot: '.', designator: 'A'},
 		{seq: "\x1b/A", slot: '/', designator: 'A'},
+		{seq: "\x1b%G", slot: '%', designator: 'G'},
+		{seq: "\x1b%@", slot: '%', designator: '@'},
 	}
 	for _, tc := range charsetCases {
 		charset, ok := ParseESCSequence(tc.seq)

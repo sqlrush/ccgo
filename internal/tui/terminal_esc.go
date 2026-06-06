@@ -13,6 +13,7 @@ const (
 	ESCTabSet             = "\x1bH"
 	ESCFinalStart         = 0x30
 	ESCFinalEnd           = 0x7e
+	ESCCharsetSelectUTF8  = '%'
 	ESCCharsetSelectG0    = '('
 	ESCCharsetSelectG1    = ')'
 	ESCCharsetSelectG2    = '*'
@@ -78,7 +79,7 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 
 func isESCCharsetSelector(b byte) bool {
 	switch b {
-	case ESCCharsetSelectG0, ESCCharsetSelectG1, ESCCharsetSelectG2, ESCCharsetSelectG3,
+	case ESCCharsetSelectUTF8, ESCCharsetSelectG0, ESCCharsetSelectG1, ESCCharsetSelectG2, ESCCharsetSelectG3,
 		ESCCharsetSelectG1Alt, ESCCharsetSelectG2Alt, ESCCharsetSelectG3Alt:
 		return true
 	default:
