@@ -166,6 +166,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlY, nil
 	case "ctrl+z", "ctrl-z", "control+z", "control-z":
 		return KeyCtrlZ, nil
+	case "ctrl+space", "ctrl-space", "control+space", "control-space", "ctrl+@", "ctrl-@", "control+@", "control-@", "ctrl+2", "ctrl-2", "control+2", "control-2":
+		return KeyCtrlSpace, nil
 	case "paste", "bracketed-paste":
 		return KeyPaste, nil
 	case "image-hint", "image":
@@ -266,6 +268,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlY, nil
 	case "ctrlz", "controlz":
 		return KeyCtrlZ, nil
+	case "ctrlspace", "controlspace", "ctrl@", "control@", "ctrl2", "control2":
+		return KeyCtrlSpace, nil
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
 	}
@@ -338,7 +342,7 @@ func compactNavigationKeySuffix(suffix string) string {
 
 func compactCtrlKeySuffix(suffix string) bool {
 	switch suffix {
-	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "?", "left", "right", "arrowleft", "arrowright":
+	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "?", "@", "2", "space", "left", "right", "arrowleft", "arrowright":
 		return true
 	default:
 		return false

@@ -1016,6 +1016,8 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[9u", want: KeyTab},
 		{seq: "\x1b[27u", want: KeyEsc},
 		{seq: "\x1b[127u", want: KeyBackspace},
+		{seq: "\x00", want: KeyCtrlSpace},
+		{seq: "\x1b[0u", want: KeyCtrlSpace},
 		{seq: "\x1b[97;5u", want: KeyCtrlA},
 		{seq: "\x1b[65;5u", want: KeyCtrlA},
 		{seq: "\x1b[97:65;5:1u", want: KeyCtrlA},
@@ -1026,6 +1028,9 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[109;5u", want: KeyEnter},
 		{seq: "\x1b[91;5u", want: KeyEsc},
 		{seq: "\x1b[63;5u", want: KeyBackspace},
+		{seq: "\x1b[32;5u", want: KeyCtrlSpace},
+		{seq: "\x1b[64;5u", want: KeyCtrlSpace},
+		{seq: "\x1b[50;5u", want: KeyCtrlSpace},
 		{seq: "\x1b[98;3u", want: KeyAltB},
 		{seq: "\x1b[98:66;3:1u", want: KeyAltB},
 		{seq: "\x1b[68;3u", want: KeyAltD},
@@ -1464,7 +1469,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
 		}
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "enterKey", "returnKey", "numpadEnter", "escapeKey", "escKey", "tabKey", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftEnterKey", "shiftNumpadEnter", "shiftTab", "shiftTabKey", "backtab", "back-tab", "backTab", "backtabKey", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-up-key", "pageUpKey", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "pageDownKey", "pg-dn-key", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "deleteForward", "delete-forward", "forwardDelete", "forward-delete", "deleteBackward", "delete-backward", "homeKey", "endKey", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "cmdY", "commandF", "superB", "superF", "cmd-arrow-left", "command-arrow-right", "super-arrow-left", "super-arrow-right", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "cmdArrowLeft", "commandArrowRight", "superArrowLeft", "superArrowRight", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "cmd-b", "cmd-d", "cmd-f", "cmd-y", "cmd-backspace", "cmd-left", "cmd-right", "command-b", "command-d", "command-f", "command-y", "command-backspace", "command-left", "command-right", "super-b", "super-d", "super-f", "super-y", "super-backspace", "super-left", "super-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "enterKey", "returnKey", "numpadEnter", "escapeKey", "escKey", "tabKey", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftEnterKey", "shiftNumpadEnter", "shiftTab", "shiftTabKey", "backtab", "back-tab", "backTab", "backtabKey", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-up-key", "pageUpKey", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "pageDownKey", "pg-dn-key", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "deleteForward", "delete-forward", "forwardDelete", "forward-delete", "deleteBackward", "delete-backward", "homeKey", "endKey", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "cmdY", "commandF", "superB", "superF", "cmd-arrow-left", "command-arrow-right", "super-arrow-left", "super-arrow-right", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "cmdArrowLeft", "commandArrowRight", "superArrowLeft", "superArrowRight", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "cmd-b", "cmd-d", "cmd-f", "cmd-y", "cmd-backspace", "cmd-left", "cmd-right", "command-b", "command-d", "command-f", "command-y", "command-backspace", "command-left", "command-right", "super-b", "super-d", "super-f", "super-y", "super-backspace", "super-left", "super-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-space", "ctrl-@", "ctrl-2", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "control-space", "control-@", "control-2", "c-h", "c-i", "c-m", "c-space", "c-@", "c-2", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "ctrlSpace", "controlSpace", "cH", "cI", "cM", "cSpace", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -1507,6 +1512,7 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 		{Key: "ctrl-q", Action: ActionPageUp},
 		{Key: "cV", Action: ActionPageDown},
 		{Key: "controlZ", Action: ActionReverseSearch},
+		{Key: "c-space", Action: ActionScrollToTop},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1535,6 +1541,9 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1a")); action != ActionReverseSearch {
 		t.Fatalf("ctrl-z alias action = %q", action)
 	}
+	if action := keymap.Resolve(ParseKey("\x00")); action != ActionScrollToTop {
+		t.Fatalf("ctrl-space alias action = %q", action)
+	}
 	if action := keymap.Resolve(ParseKey("\x1b[113;5u")); action != ActionPageUp {
 		t.Fatalf("ctrl-q CSI-u action = %q", action)
 	}
@@ -1544,7 +1553,10 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[122;5u")); action != ActionReverseSearch {
 		t.Fatalf("ctrl-z CSI-u action = %q", action)
 	}
-	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab", "ctrl-q", "controlQ", "cQ", "ctrl-v", "controlV", "cV", "ctrl-z", "controlZ", "cZ"} {
+	if action := keymap.Resolve(ParseKey("\x1b[32;5u")); action != ActionScrollToTop {
+		t.Fatalf("ctrl-space CSI-u action = %q", action)
+	}
+	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab", "ctrl-q", "controlQ", "cQ", "ctrl-v", "controlV", "cV", "ctrl-z", "controlZ", "cZ", "ctrl-space", "controlSpace", "cSpace", "ctrl-@", "control@", "c@", "ctrl-2", "control2", "c2"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}

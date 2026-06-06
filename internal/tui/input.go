@@ -163,6 +163,8 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlY}
 	case "\x1a":
 		return Key{Type: KeyCtrlZ}
+	case "\x00":
+		return Key{Type: KeyCtrlSpace}
 	case "\t":
 		return Key{Type: KeyTab}
 	case "\x1b[Z":
@@ -318,6 +320,8 @@ func csiModifierState(modifier int) (shift bool, alt bool, ctrl bool) {
 
 func baseCSIuKey(codepoint int) (Key, bool) {
 	switch codepoint {
+	case 0:
+		return Key{Type: KeyCtrlSpace}, true
 	case 8, 127:
 		return Key{Type: KeyBackspace}, true
 	case 9:
@@ -398,6 +402,8 @@ func ctrlCSIuKey(codepoint int) (Key, bool) {
 		return Key{Type: KeyCtrlZ}, true
 	}
 	switch codepoint {
+	case 0, 32, 50, 64:
+		return Key{Type: KeyCtrlSpace}, true
 	case 27, '[':
 		return Key{Type: KeyEsc}, true
 	case 8, 127, '?':
