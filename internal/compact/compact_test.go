@@ -386,6 +386,43 @@ func TestLoadMicroResultAcceptsAdjacentCacheEntryAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsMinuteHourDayTTLAliases(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		digest string
+		field  string
+		want   time.Duration
+	}{
+		{digest: "ttl-minutes", field: `"ttlMinutes":"90"`, want: 90 * time.Minute},
+		{digest: "expires-hours", field: `"expiresInHours":2`, want: 2 * time.Hour},
+		{digest: "valid-days", field: `"validForDays":1`, want: 24 * time.Hour},
+	} {
+		payload := fmt.Sprintf(`{
+			"summary": %q,
+			"digest": %q,
+			"version": "microcompact.v1",
+			"createdAt": 100,
+			%s
+		}`, tc.digest+" summary", tc.digest, tc.field)
+		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, ok, err := LoadMicroResult(cacheDir, tc.digest)
+		if err != nil {
+			t.Fatalf("%s load error: %v", tc.digest, err)
+		}
+		if !ok {
+			t.Fatalf("%s was not loaded", tc.digest)
+		}
+		if want := time.Unix(100, 0).UTC().Add(tc.want); !result.ExpiresAt.Equal(want) {
+			t.Fatalf("%s expires_at = %s, want %s", tc.digest, result.ExpiresAt, want)
+		}
+	}
+}
+
 func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {

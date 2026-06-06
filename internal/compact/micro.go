@@ -151,6 +151,21 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 			"expiresInMs", "expires_in_ms", "expiresInMillis", "expires_in_millis", "expiresInMilliseconds", "expires_in_milliseconds",
 			"maxAge", "max_age", "maxAgeSeconds", "max_age_seconds", "maxAgeMs", "max_age_ms", "maxAgeMillis", "max_age_millis", "maxAgeMilliseconds", "max_age_milliseconds",
 			"validFor", "valid_for", "validForSeconds", "valid_for_seconds", "validForMs", "valid_for_ms", "validForMillis", "valid_for_millis",
+			"ttlMinutes", "ttl_minutes", "ttlMins", "ttl_mins", "ttlMin", "ttl_min",
+			"timeToLiveMinutes", "time_to_live_minutes", "timeToLiveMins", "time_to_live_mins",
+			"expiresInMinutes", "expires_in_minutes", "expiresInMins", "expires_in_mins",
+			"maxAgeMinutes", "max_age_minutes", "maxAgeMins", "max_age_mins",
+			"validForMinutes", "valid_for_minutes", "validForMins", "valid_for_mins",
+			"ttlHours", "ttl_hours", "ttlHrs", "ttl_hrs", "ttlHour", "ttl_hour",
+			"timeToLiveHours", "time_to_live_hours", "timeToLiveHrs", "time_to_live_hrs",
+			"expiresInHours", "expires_in_hours", "expiresInHrs", "expires_in_hrs",
+			"maxAgeHours", "max_age_hours", "maxAgeHrs", "max_age_hrs",
+			"validForHours", "valid_for_hours", "validForHrs", "valid_for_hrs",
+			"ttlDays", "ttl_days", "ttlDay", "ttl_day",
+			"timeToLiveDays", "time_to_live_days",
+			"expiresInDays", "expires_in_days",
+			"maxAgeDays", "max_age_days",
+			"validForDays", "valid_for_days",
 		); err != nil {
 			return err
 		} else if ok && value > 0 {
@@ -892,12 +907,36 @@ func microDurationFromFloat(value float64, field string) time.Duration {
 	if microDurationFieldIsMillis(field) {
 		return time.Duration(value * float64(time.Millisecond))
 	}
+	if microDurationFieldIsMinutes(field) {
+		return time.Duration(value * float64(time.Minute))
+	}
+	if microDurationFieldIsHours(field) {
+		return time.Duration(value * float64(time.Hour))
+	}
+	if microDurationFieldIsDays(field) {
+		return time.Duration(value * float64(24*time.Hour))
+	}
 	return time.Duration(value * float64(time.Second))
 }
 
 func microDurationFieldIsMillis(field string) bool {
 	lower := strings.ToLower(field)
 	return strings.Contains(lower, "ms") || strings.Contains(lower, "millis")
+}
+
+func microDurationFieldIsMinutes(field string) bool {
+	lower := strings.ToLower(field)
+	return strings.Contains(lower, "minutes") || strings.Contains(lower, "mins") || strings.HasSuffix(lower, "min") || strings.HasSuffix(lower, "_min")
+}
+
+func microDurationFieldIsHours(field string) bool {
+	lower := strings.ToLower(field)
+	return strings.Contains(lower, "hours") || strings.Contains(lower, "hrs") || strings.HasSuffix(lower, "hour") || strings.HasSuffix(lower, "_hour")
+}
+
+func microDurationFieldIsDays(field string) bool {
+	lower := strings.ToLower(field)
+	return strings.Contains(lower, "days") || strings.HasSuffix(lower, "day") || strings.HasSuffix(lower, "_day")
 }
 
 func microParseJSONTime(raw json.RawMessage, field string) (time.Time, error) {
