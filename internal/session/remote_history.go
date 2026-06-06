@@ -1526,7 +1526,7 @@ func remoteHistoryLinkHeaderCursor(values []string) string {
 	}
 	cursors := map[string]string{}
 	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
+		for _, part := range remoteHistorySplitLinkHeader(value) {
 			link, rel := remoteHistoryLinkHeaderPart(part)
 			cursor := remoteHistoryLinkCursor(link)
 			if cursor == "" {
@@ -1542,6 +1542,53 @@ func remoteHistoryLinkHeaderCursor(values []string) string {
 		}
 	}
 	return firstNonEmpty(cursors["previous"], cursors["prev"], cursors["older"], cursors["next"])
+}
+
+func remoteHistorySplitLinkHeader(value string) []string {
+	var parts []string
+	start := 0
+	inAngle := false
+	inQuote := false
+	escaped := false
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if inQuote {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inQuote = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inQuote = true
+		case '<':
+			inAngle = true
+		case '>':
+			inAngle = false
+		case ',':
+			if inAngle {
+				continue
+			}
+			part := strings.TrimSpace(value[start:i])
+			if part != "" {
+				parts = append(parts, part)
+			}
+			start = i + 1
+		}
+	}
+	part := strings.TrimSpace(value[start:])
+	if part != "" {
+		parts = append(parts, part)
+	}
+	return parts
 }
 
 func remoteHistoryLinkHeaderPart(part string) (string, string) {

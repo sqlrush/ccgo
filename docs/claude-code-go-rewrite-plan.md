@@ -428,7 +428,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Ctrl-S prompt stash 现在保存/恢复 prompt text、cursor 和 pasted-content metadata，空 prompt 下再次触发会恢复 stash，贴近官方 `chat:stash`。
 - 本轮补充：remote history REST/link 风格分页接受 `links`/`_links` 的 `next`/`previous`/`prev`/`older` 字符串 URL 或 `{href,url,uri,link}` 对象，并从 `before_id`、`beforeId`、`cursor`、`pageCursor`、`previousCursor`、`prevCursor`、`beforeCursor`、`olderCursor`、`startCursor`、`endCursor` 等 query 参数提取续抓 before-id。
 - 本轮补充：remote history REST/link 风格分页也接受 RFC/JSON:API 风格 `links` 数组，按 `rel`/`relation`/`name`/`type`/`kind`/`label` 中的 `previous`/`prev`/`older`/`next` 选择 continuation URL。
-- 本轮补充：remote history HTTP `Link` header 分页接受 `rel="previous"`/`prev`/`older`/`next` URL，并从同一组 before/cursor query 参数提取续抓 before-id。
+- 本轮补充：remote history HTTP `Link` header 分页接受 `rel="previous"`/`prev`/`older`/`next` URL，并按 RFC Link 结构处理 `<...>` URL 和 quoted 参数里的逗号，再从同一组 before/cursor query 参数提取续抓 before-id。
 - 本轮补充：sidechain/subagent state loader 接受 `subagent_start`/`agent_start`/`task_start` 和 `sidechain_end`/`subagent_finish`/`agent_finish`/`task_summary` 等 subtype 别名，并归一化 `active`/`success`/`canceled`/`error` 等状态别名。
 - 本轮补充：sidechain runtime finish 在写入 summary 前会把 `success`/`error`/`canceled` 等状态别名归一为 `completed`/`failed`/`cancelled`，sidechain transcript 和主 transcript 的 lifecycle 输出保持 canonical。
 - 本轮补充：sidechain runtime 现在会拒绝同一 sidechain ID 的 running 状态重复 start；已完成后重新 start 会被视为新 lifecycle，state loader 会清空上一轮 summary/endedAt 并使用新的 startedAt。

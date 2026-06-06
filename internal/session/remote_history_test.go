@@ -881,10 +881,10 @@ func TestFetchRemoteHistoryAcceptsLinkHeaderCursors(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			w.Header().Set("Link", `</v1/sessions/s/events?cursor=self>; rel="self", </v1/sessions/s/events?before_id=evt_header>; rel="prev"`)
+			w.Header().Set("Link", `</v1/sessions/s/events?cursor=self>; rel="self"; title="latest, self", </v1/sessions/s/events?before_id=evt_header&filter=alpha,beta>; rel="prev"`)
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}]}`))
 		case "evt_header":
-			w.Header().Set("Link", `</v1/sessions/s/events?cursor=evt_older>; rel="older"`)
+			w.Header().Set("Link", `</v1/sessions/s/events?cursor=evt_older&tags=one,two>; rel="older"`)
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}]}`))
 		case "evt_older":
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}]}`))
