@@ -1449,7 +1449,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
 		}
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "backtab", "back-tab", "backTab", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "cmdY", "commandF", "cmd-arrow-left", "command-arrow-right", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "cmdArrowLeft", "commandArrowRight", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "cmd-b", "cmd-d", "cmd-f", "cmd-y", "cmd-backspace", "cmd-left", "cmd-right", "command-b", "command-d", "command-f", "command-y", "command-backspace", "command-left", "command-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "backtab", "back-tab", "backTab", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "cmdY", "commandF", "superB", "superF", "cmd-arrow-left", "command-arrow-right", "super-arrow-left", "super-arrow-right", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "cmdArrowLeft", "commandArrowRight", "superArrowLeft", "superArrowRight", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "cmd-b", "cmd-d", "cmd-f", "cmd-y", "cmd-backspace", "cmd-left", "cmd-right", "command-b", "command-d", "command-f", "command-y", "command-backspace", "command-left", "command-right", "super-b", "super-d", "super-f", "super-y", "super-backspace", "super-left", "super-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -1462,10 +1462,11 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 	}
 }
 
-func TestKeymapFromSpecsAcceptsCommandModifierAliases(t *testing.T) {
+func TestKeymapFromSpecsAcceptsCommandAndSuperModifierAliases(t *testing.T) {
 	keymap, err := KeymapFromSpecs(DefaultKeymap(), []BindingSpec{
 		{Key: "cmdB", Action: ActionMoveStart},
 		{Key: "command-arrow-right", Action: ActionMoveEnd},
+		{Key: "super-backspace", Action: ActionDeleteWordBack},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1475,6 +1476,9 @@ func TestKeymapFromSpecsAcceptsCommandModifierAliases(t *testing.T) {
 	}
 	if action := keymap.Resolve(Key{Type: KeyAltRight}); action != ActionMoveEnd {
 		t.Fatalf("command-arrow-right action = %q", action)
+	}
+	if action := keymap.Resolve(Key{Type: KeyAltBS}); action != ActionDeleteWordBack {
+		t.Fatalf("super-backspace action = %q", action)
 	}
 }
 
