@@ -38,6 +38,7 @@ type vimRecordedChange struct {
 	Object   rune
 	Dir      rune
 	Below    bool
+	Backward bool
 	Linewise bool
 }
 
@@ -224,7 +225,7 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 	case 'G':
 		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
 	case '/', '?':
-		s.enterVimSearch(r == '?')
+		s.enterVimSearchCount(r == '?', count)
 	case 'm', '`', '\'':
 		s.VimPendingMark = r
 		s.VimPendingCount = count
@@ -425,6 +426,8 @@ func (s *REPLScreen) applyVimSearchKey(key Key) ScreenEvent {
 		s.VimMode = VimNormal
 		s.VimSearchQuery = ""
 		s.VimSearchBackward = false
+		s.VimSearchOperator = 0
+		s.VimSearchCount = 0
 	case KeyBackspace:
 		runes := []rune(s.VimSearchQuery)
 		if len(runes) > 0 {
@@ -437,20 +440,42 @@ func (s *REPLScreen) applyVimSearchKey(key Key) ScreenEvent {
 	case KeyEnter:
 		query := s.VimSearchQuery
 		backward := s.VimSearchBackward
+		operator := s.VimSearchOperator
+		count := s.VimSearchCount
 		s.VimMode = VimNormal
 		s.VimSearchQuery = ""
 		s.VimSearchBackward = false
+		s.VimSearchOperator = 0
+		s.VimSearchCount = 0
 		if query != "" {
-			s.applyVimPromptSearch(query, backward, true)
+			if operator != 0 {
+				s.applyVimSearchOperator(operator, query, backward, count)
+				return ScreenEvent{}
+			}
+			s.applyVimPromptSearchCount(query, backward, true, count)
 		}
 	}
 	return ScreenEvent{}
 }
 
 func (s *REPLScreen) enterVimSearch(backward bool) {
+	s.enterVimSearchCount(backward, 1)
+}
+
+func (s *REPLScreen) enterVimSearchCount(backward bool, count int) {
+	s.enterVimSearchMotion(backward, 0, count)
+}
+
+func (s *REPLScreen) enterVimSearchOperator(backward bool, operator rune, count int) {
+	s.enterVimSearchMotion(backward, operator, count)
+}
+
+func (s *REPLScreen) enterVimSearchMotion(backward bool, operator rune, count int) {
 	s.clearVimPending()
 	s.VimSearchQuery = ""
 	s.VimSearchBackward = backward
+	s.VimSearchOperator = operator
+	s.VimSearchCount = count
 	if backward {
 		s.VimMode = VimSearchBack
 		return
@@ -477,15 +502,24 @@ func (s *REPLScreen) repeatVimSearch(reverse bool, count int) {
 }
 
 func (s *REPLScreen) applyVimPromptSearch(query string, backward bool, remember bool) bool {
+	return s.applyVimPromptSearchCount(query, backward, remember, 1)
+}
+
+func (s *REPLScreen) applyVimPromptSearchCount(query string, backward bool, remember bool, count int) bool {
 	if remember {
 		s.VimLastSearchQuery = query
 		s.VimLastSearchBackward = backward
 	}
-	pos, ok := s.Prompt.searchFromCursor(query, backward)
-	if !ok {
-		return false
+	if count <= 0 {
+		count = 1
 	}
-	s.Prompt.Cursor = pos
+	for i := 0; i < count; i++ {
+		pos, ok := s.Prompt.searchFromCursor(query, backward)
+		if !ok {
+			return false
+		}
+		s.Prompt.Cursor = pos
+	}
 	return true
 }
 
@@ -665,6 +699,8 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.VimPendingOperator = operator
 		s.VimPendingMark = r
 		s.VimPendingCount = count
+	case '/', '?':
+		s.enterVimSearchOperator(r == '?', operator, count)
 	case 'G':
 		s.applyVimLineMotionOperator(operator, vimGTargetLine(s.Prompt.lineCount(), count), 'G', count)
 	case 'g':
@@ -962,6 +998,21 @@ func (s *REPLScreen) applyVimBackwardEndMotionOperator(operator rune, motion run
 	}
 	s.applyVimRangeOperator(operator, start, end, false)
 	s.recordVimChange(vimRecordedChange{Kind: "operatorBackwardEnd", Operator: operator, Motion: motion, Count: count})
+}
+
+func (s *REPLScreen) applyVimSearchOperator(operator rune, query string, backward bool, count int) bool {
+	if count <= 0 {
+		count = 1
+	}
+	s.VimLastSearchQuery = query
+	s.VimLastSearchBackward = backward
+	start, end, ok := s.Prompt.searchMotionRange(query, backward, count)
+	if !ok {
+		return false
+	}
+	s.applyVimRangeOperator(operator, start, end, false)
+	s.recordVimChange(vimRecordedChange{Kind: "operatorSearch", Operator: operator, Text: query, Count: count, Backward: backward})
+	return true
 }
 
 func (s *REPLScreen) applyVimLineOperator(operator rune, count int) {
@@ -1288,6 +1339,8 @@ func (s *REPLScreen) replayVimLastChange() {
 			return
 		}
 		s.applyVimMarkOperator(change.Operator, change.Target, target, change.Linewise, change.Count)
+	case "operatorSearch":
+		s.applyVimSearchOperator(change.Operator, change.Text, change.Backward, change.Count)
 	}
 }
 
@@ -1629,6 +1682,29 @@ func (p *PromptState) searchFromCursor(query string, backward bool) (int, bool) 
 		return searchRunesBackward(haystack, needle, cursor)
 	}
 	return searchRunesForward(haystack, needle, cursor)
+}
+
+func (p *PromptState) searchMotionRange(query string, backward bool, count int) (int, int, bool) {
+	if count <= 0 {
+		count = 1
+	}
+	start := p.clampCursor(p.Cursor)
+	cursor := *p
+	target := start
+	ok := false
+	for i := 0; i < count; i++ {
+		target, ok = cursor.searchFromCursor(query, backward)
+		if !ok {
+			return 0, 0, false
+		}
+		cursor.Cursor = target
+	}
+	end := target
+	if backward {
+		start, end = target, start
+	}
+	start, end, _, ok = orderedRange(start, end, false)
+	return start, end, ok
 }
 
 func searchRunesForward(haystack []rune, needle []rune, cursor int) (int, bool) {

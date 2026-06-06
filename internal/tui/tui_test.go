@@ -3844,6 +3844,56 @@ func TestREPLScreenVimSearch(t *testing.T) {
 	if screen.VimMode != VimNormal || screen.VimSearchQuery != "" || screen.Prompt.Cursor != len([]rune("alpha ")) {
 		t.Fatalf("after cancelled search screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma beta gamma tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "2", "/", "g", "a", "m", "m", "a", "\r"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Cursor != len([]rune("alpha beta gamma beta ")) {
+		t.Fatalf("after 2/gamma screen = %#v", screen)
+	}
+}
+
+func TestREPLScreenVimSearchOperators(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma delta gamma tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "d", "/", "g", "a", "m", "m", "a", "\r"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "gamma delta gamma tail" || screen.Prompt.Cursor != 0 || screen.VimRegister != "alpha beta " || screen.VimRegisterLinewise {
+		t.Fatalf("after d/gamma screen = %#v", screen)
+	}
+	screen.ApplyKey(ParseKey("."))
+	if screen.Prompt.Text != "gamma tail" || screen.Prompt.Cursor != 0 || screen.VimRegister != "gamma delta " {
+		t.Fatalf("after dot repeat d/gamma screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma tail")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"c", "?", "b", "e", "t", "a", "\r"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "alpha " || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "beta gamma tail" || screen.VimRegisterLinewise {
+		t.Fatalf("after c?beta screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "d", "/", "b", "e", "\x1b"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha beta gamma" || screen.VimSearchOperator != 0 || screen.VimPendingOperator != 0 {
+		t.Fatalf("after cancelled operator search screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimVisualCharOperators(t *testing.T) {
