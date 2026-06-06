@@ -26,7 +26,7 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 		metadata.AgentType = topLevelStringField(fields, "type")
 	}
 	metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
-	metadata.Description = firstStringField(fields, sidechainLifecycleDescriptionFields...)
+	metadata.Description = firstTextField(fields, sidechainLifecycleDescriptionFields...)
 	*m = metadata
 	return nil
 }

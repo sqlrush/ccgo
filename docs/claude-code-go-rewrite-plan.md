@@ -220,6 +220,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：remote history pagination 现在接受 `starting_after`/`startingAfter`/`after*` cursor aliases，page 字段和 link URL query 都可驱动下一页 `before_id` 续抓。
 - 本轮补充：remote history `SDKEvent` 本体接受 `eventType`/`event_type`/`role` 类型别名、`createdAt`/`created_at` 时间戳别名，以及 `payload`/`data`/`body`/`metadata`/`meta`/`attributes`/`properties`/`serializedMessage` message payload 别名；payload 只有 `role`/`content` 时也能 materialize 成 transcript message。
 - 本轮补充：sidechain lifecycle 读取现在接受运行时相邻字段别名，包括 `jobId`/`threadId`/`workflowId`/`operationId`/`requestId`、`workerType`/`taskType`、`workspaceRoot`/`projectPath`、`instructions`/`operationName`/`commandName`/`displayTitle`、`jobStatus`、`resultState`、`outputText` 和毫秒级 start/end time 字段，并会递归解包 `runtime`/`context`/`state` 容器。
+- 本轮补充：sidechain lifecycle 和 metadata sidecar 的 task description/summary 读取现在接受 visible text payload，包括 text content block、message object、content block array、provider-style `message.content`/`parts`/`outputText` wrapper，并继续跳过 thinking/tool/image 等非可见块。
 - 本轮补充：transcript resume 的嵌套 content block 接受 `toolUseId`/`toolUseID`、`isError`、`cacheControl`、`cacheReference` 字段别名，并保留 cache edit 的 `cacheReference`。
 - 本轮补充：transcript resume 的 nested content block `id`/`tool_use_id`/`toolUseId` 现在接受 JSON number，并保留为字符串 tool-use ID。
 - 本轮补充：嵌套 contract message 的 `content` 接受字符串、单个 content-block 对象，以及混合字符串/content-block 数组；字符串会归一为 text block，并接受 `text`/`body`/`message`/`value`/`output` 正文字段和 `role`/`messageType` 类型别名，提升 transcript/remote history payload 恢复率。

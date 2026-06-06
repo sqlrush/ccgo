@@ -493,6 +493,63 @@ func TestLoadSidechainStateAcceptsWrappedLifecycleContent(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsVisibleTextLifecyclePayloads(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "text-payload", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_started",
+		Content: map[string]any{
+			"payload": map[string]any{
+				"subagentId":    "text_worker",
+				"agentName":     "writer",
+				"workspacePath": "/tmp/text-worktree",
+				"taskDescription": map[string]any{
+					"type": "text",
+					"text": "write visible payload support",
+				},
+				"status": "running",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "text-payload", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "agent_finish",
+		Content: map[string]any{
+			"response": map[string]any{
+				"agentID": "text_worker",
+				"outcome": "completedSuccessfully",
+				"message": map[string]any{
+					"role": "assistant",
+					"content": []any{
+						map[string]any{"type": "text", "text": "visible provider summary"},
+						map[string]any{"type": "thinking", "text": "hidden chain of thought"},
+					},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "text-payload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ID != "text_worker" || state.Status != SidechainStatusCompleted || state.Summary != "visible provider summary" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.AgentType != "writer" || state.Metadata.WorktreePath != "/tmp/text-worktree" || state.Metadata.Description != "write visible payload support" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsResourceLifecycleAttributes(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")
@@ -829,6 +886,45 @@ func TestLoadSidechainStateAcceptsWrappedMetadataSidecarAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research wrapped sidecar" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
+func TestLoadSidechainStateAcceptsVisibleTextMetadataSidecarAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "text_meta", TranscriptMessage{
+		Type: "assistant",
+		UUID: "msg_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metadataPath := SidechainMetadataPath(sessionPath, sessionID, "text_meta")
+	if err := os.WriteFile(metadataPath, []byte(`{
+		"resource": {
+			"id": "meta_2",
+			"type": "sidechain-metadata",
+			"attributes": {
+				"agentName": "summarizer",
+				"workspaceRoot": "/tmp/summary-worktree",
+				"description": {
+					"role": "assistant",
+					"content": [
+						{"type": "text", "text": "summarize wrapped text metadata"},
+						{"type": "thinking", "text": "hidden"}
+					]
+				}
+			}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "text_meta")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.AgentType != "summarizer" || state.Metadata.WorktreePath != "/tmp/summary-worktree" || state.Metadata.Description != "summarize wrapped text metadata" {
 		t.Fatalf("metadata = %#v", state.Metadata)
 	}
 }

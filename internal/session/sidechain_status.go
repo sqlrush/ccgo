@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"ccgo/internal/contracts"
+	msgs "ccgo/internal/messages"
 )
 
 type SidechainState struct {
@@ -198,7 +199,7 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			if worktreePath := firstStringField(msg.Content, sidechainLifecycleWorktreeFields...); worktreePath != "" && state.Metadata.WorktreePath == "" {
 				state.Metadata.WorktreePath = worktreePath
 			}
-			if description := firstStringField(msg.Content, sidechainLifecycleDescriptionFields...); description != "" && state.Metadata.Description == "" {
+			if description := firstTextField(msg.Content, sidechainLifecycleDescriptionFields...); description != "" && state.Metadata.Description == "" {
 				state.Metadata.Description = description
 			}
 			if status := sidechainStatusField(msg.Content, sidechainLifecycleStartStatusFields...); status != "" {
@@ -220,7 +221,7 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			} else {
 				state.Status = SidechainStatusCompleted
 			}
-			state.Summary = firstStringField(msg.Content, sidechainLifecycleSummaryFields...)
+			state.Summary = firstTextField(msg.Content, sidechainLifecycleSummaryFields...)
 		}
 	}
 	if state.Status == SidechainStatusUnknown {
@@ -411,6 +412,10 @@ func firstStringField(value any, keys ...string) string {
 	return firstStringFieldDepth(value, keys, 0)
 }
 
+func firstTextField(value any, keys ...string) string {
+	return firstTextFieldDepth(value, keys, 0)
+}
+
 func firstStringFieldDepth(value any, keys []string, depth int) string {
 	if depth > 4 {
 		return ""
@@ -446,6 +451,137 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 	default:
 	}
 	return ""
+}
+
+func firstTextFieldDepth(value any, keys []string, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	switch fields := value.(type) {
+	case map[string]any:
+		for _, key := range keys {
+			if raw, ok := fields[key]; ok {
+				if value := visibleTextField(raw); value != "" {
+					return value
+				}
+			}
+		}
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "records", "entry", "entries", "item", "items", "event", "events", "edge", "edges", "node", "nodes", "resource", "resources", "attributes", "properties", "attrs", "metadata", "details", "runtime", "context", "state", "value", "values", "output", "outputs", "included", "collection", "list", "children"} {
+			if raw, ok := fields[key]; ok {
+				if value := firstTextFieldDepth(raw, keys, depth+1); value != "" {
+					return value
+				}
+			}
+		}
+	case []any:
+		for _, item := range fields {
+			if value := firstTextFieldDepth(item, keys, depth+1); value != "" {
+				return value
+			}
+		}
+	case map[string]string:
+		for _, key := range keys {
+			if raw := fields[key]; raw != "" {
+				return raw
+			}
+		}
+	default:
+	}
+	return ""
+}
+
+func visibleTextField(value any) string {
+	if value == nil {
+		return ""
+	}
+	if value := scalarStringField(value); value != "" {
+		return value
+	}
+	if text := visibleContentBlockText(value); text != "" {
+		return text
+	}
+	if nonVisibleContentBlock(value) {
+		return ""
+	}
+	if text := visibleMessageText(value); text != "" {
+		return text
+	}
+	switch raw := value.(type) {
+	case map[string]any:
+		for _, key := range []string{
+			"summary", "summaryText", "summary_text", "finalSummary", "final_summary",
+			"resultSummary", "result_summary", "resultText", "result_text",
+			"finalMessage", "final_message", "completion", "completionText", "completion_text",
+			"outputText", "output_text", "messageText", "message_text",
+			"body", "text", "message", "content", "parts", "segments", "output", "value",
+			"detail", "details", "description",
+		} {
+			if nested, ok := raw[key]; ok {
+				if text := visibleTextField(nested); text != "" {
+					return text
+				}
+			}
+		}
+	case []any:
+		parts := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if text := visibleTextField(item); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]string:
+		for _, key := range []string{"text", "body", "message", "content", "value", "output", "summary", "description", "details"} {
+			if text := raw[key]; text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func visibleContentBlockText(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	var block contracts.ContentBlock
+	if err := json.Unmarshal(data, &block); err != nil {
+		return ""
+	}
+	if block.Type == contracts.ContentText && block.Text != "" {
+		return block.Text
+	}
+	return ""
+}
+
+func nonVisibleContentBlock(value any) bool {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return false
+	}
+	var block contracts.ContentBlock
+	if err := json.Unmarshal(data, &block); err != nil {
+		return false
+	}
+	switch block.Type {
+	case contracts.ContentThinking, contracts.ContentToolUse, contracts.ContentToolResult, contracts.ContentImage, contracts.ContentCacheEdits:
+		return true
+	default:
+		return false
+	}
+}
+
+func visibleMessageText(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	var message contracts.Message
+	if err := json.Unmarshal(data, &message); err != nil {
+		return ""
+	}
+	return msgs.TextContent(message)
 }
 
 func scalarStringField(value any) string {
