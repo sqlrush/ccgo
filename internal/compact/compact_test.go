@@ -1189,6 +1189,13 @@ func TestRunnerAcceptsProviderWrappedSummaryResponses(t *testing.T) {
 				}
 			}]
 		}`,
+		"choices_fenced_message_content": "```json\n" + `{
+			"choices": [{
+				"message": {
+					"content": [{"type":"text","text":"provider fenced summary"}]
+				}
+			}]
+		}` + "\n```",
 		"candidate_parts_text": `{
 			"candidates": [{
 				"content": {
