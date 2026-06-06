@@ -1057,16 +1057,27 @@ func remoteHistoryProviderResponseText(raw map[string]json.RawMessage) (string, 
 		"message",
 		"content",
 		"text",
+		"outputText",
+		"output_text",
 	} {
 		value, ok := raw[name]
 		if !ok {
 			continue
 		}
-		if text, ok := remoteHistoryProviderTextFromRaw(value, 0, false); ok {
+		if text, ok := remoteHistoryProviderTextFromRaw(value, 0, remoteHistoryProviderScalarEnvelope(name)); ok {
 			return text, true
 		}
 	}
 	return "", false
+}
+
+func remoteHistoryProviderScalarEnvelope(name string) bool {
+	switch name {
+	case "content", "text", "outputText", "output_text":
+		return true
+	default:
+		return false
+	}
 }
 
 func remoteHistoryProviderTextFromRaw(raw json.RawMessage, depth int, allowScalar bool) (string, bool) {
@@ -1107,7 +1118,7 @@ func remoteHistoryProviderTextFromRaw(raw json.RawMessage, depth int, allowScala
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return "", false
 	}
-	for _, name := range []string{"text", "content", "value", "output"} {
+	for _, name := range []string{"text", "content", "value", "output", "outputText", "output_text"} {
 		value, ok := fields[name]
 		if !ok {
 			continue

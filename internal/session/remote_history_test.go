@@ -612,6 +612,10 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 					"text": string(pageData),
 				}},
 			}
+		case "output_text":
+			wrapper = map[string]any{
+				"output_text": string(pageData),
+			}
 		default:
 			t.Fatalf("unknown provider field %q", field)
 		}
@@ -640,6 +644,11 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 		case "evt_candidate":
 			_, _ = w.Write(providerWrapper(t, "content", map[string]any{
 				"results": []any{map[string]any{"type": "status", "event_id": "evt_content", "session_id": "s", "status": "content"}},
+				"hasMore": true,
+			}))
+		case "evt_content":
+			_, _ = w.Write(providerWrapper(t, "output_text", map[string]any{
+				"event": map[string]any{"type": "status", "event_id": "evt_output_text", "session_id": "s", "status": "output_text"},
 			}))
 		default:
 			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
@@ -652,13 +661,13 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !events.Complete || events.Pages != 3 || events.NextBeforeID != "" {
+	if !events.Complete || events.Pages != 4 || events.NextBeforeID != "" {
 		t.Fatalf("events = %#v", events)
 	}
-	if len(events.Events) != 3 || events.Events[0].ID != "evt_provider" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_candidate" || events.Events[1].Status != "older" || events.Events[2].ID != "evt_content" || events.Events[2].Status != "content" {
+	if len(events.Events) != 4 || events.Events[0].ID != "evt_provider" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_candidate" || events.Events[1].Status != "older" || events.Events[2].ID != "evt_content" || events.Events[2].Status != "content" || events.Events[3].ID != "evt_output_text" || events.Events[3].Status != "output_text" {
 		t.Fatalf("event order = %#v", events.Events)
 	}
-	if len(seen) != 3 || seen[1].Get("before_id") != "evt_provider" || seen[2].Get("before_id") != "evt_candidate" {
+	if len(seen) != 4 || seen[1].Get("before_id") != "evt_provider" || seen[2].Get("before_id") != "evt_candidate" || seen[3].Get("before_id") != "evt_content" {
 		t.Fatalf("queries = %#v", seen)
 	}
 }
