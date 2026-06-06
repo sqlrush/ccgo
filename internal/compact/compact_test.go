@@ -2,6 +2,7 @@ package compact
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -653,6 +654,10 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	fencedSummary, err := json.Marshal("```json\n{\"summary\":\"choice fenced summary\"}\n```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		digest      string
 		payload     string
@@ -698,6 +703,22 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 				"cachedAt": 100
 			}`,
 			want: "output summary\ntail line",
+		},
+		{
+			digest: "choices-fenced-message",
+			payload: `{
+				"choices": [
+					{
+						"message": {
+							"content": ` + string(fencedSummary) + `
+						}
+					}
+				],
+				"cacheKey": "choices-fenced-message",
+				"cacheVersion": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "choice fenced summary",
 		},
 		{
 			digest: "output-message",

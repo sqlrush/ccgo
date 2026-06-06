@@ -562,6 +562,9 @@ func microSummaryFromRaw(raw json.RawMessage, field string) (string, bool, error
 	}
 	var text string
 	if err := json.Unmarshal(trimmed, &text); err == nil {
+		if summary, ok := microSummaryFromTextPayload(text); ok {
+			return summary, true, nil
+		}
 		return text, true, nil
 	}
 	switch trimmed[0] {
@@ -618,6 +621,9 @@ func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bo
 	}
 	var text string
 	if err := json.Unmarshal(trimmed, &text); err == nil {
+		if summary, ok := microSummaryFromTextPayload(text); ok {
+			return summary, true, nil
+		}
 		return text, true, nil
 	}
 	if trimmed[0] != '{' {
@@ -651,10 +657,55 @@ func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
 			return "", false, err
 		}
 		if ok {
+			if summary, ok := microSummaryFromTextPayload(text); ok {
+				return summary, true, nil
+			}
 			return text, true, nil
 		}
 	}
 	return "", false, nil
+}
+
+func microSummaryFromTextPayload(text string) (string, bool) {
+	payload, ok := microSummaryTextJSONPayload(text)
+	if !ok {
+		return "", false
+	}
+	var result MicroResult
+	if err := json.Unmarshal([]byte(payload), &result); err != nil {
+		return "", false
+	}
+	summary := strings.TrimSpace(result.Summary)
+	return summary, summary != ""
+}
+
+func microSummaryTextJSONPayload(text string) (string, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", false
+	}
+	if strings.HasPrefix(text, "{") || strings.HasPrefix(text, "[") {
+		return text, true
+	}
+	start := strings.Index(text, "```")
+	if start < 0 {
+		return "", false
+	}
+	afterFence := text[start+3:]
+	lineEnd := strings.IndexAny(afterFence, "\r\n")
+	if lineEnd < 0 {
+		return "", false
+	}
+	content := strings.TrimLeft(afterFence[lineEnd:], "\r\n")
+	end := strings.Index(content, "```")
+	if end >= 0 {
+		content = content[:end]
+	}
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "{") || strings.HasPrefix(content, "[") {
+		return content, true
+	}
+	return "", false
 }
 
 func microSummaryNonTextContentBlock(raw json.RawMessage) (bool, error) {
