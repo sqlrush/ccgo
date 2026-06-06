@@ -2025,6 +2025,23 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventTypeAliases(t *testing.T) {
 	}
 }
 
+func TestRemoteHistoryEventsAcceptStatusErrorResultAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"type":"status","eventId":"evt_status_alias","sessionID":"s_alias","statusMessage":"queued"},
+		{"type":"error","eventId":"evt_error_alias","sessionID":"s_alias","errorMessage":"boom"},
+		{"type":"result","eventId":"evt_result_alias","sessionID":"s_alias","outputText":"done"}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Events) != 3 {
+		t.Fatalf("events = %#v", response.Events)
+	}
+	if response.Events[0].Status != "queued" || response.Events[1].Error != "boom" || response.Events[2].Result != "done" {
+		t.Fatalf("event aliases = %#v", response.Events)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesAcceptsNestedEventPayloadWrappers(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[

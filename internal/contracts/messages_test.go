@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -245,6 +246,53 @@ func TestSDKEventUnmarshalAcceptsScalarMessagePayload(t *testing.T) {
 			}
 			if event.Message == nil || event.Message.Type != tc.wantType || len(event.Message.Content) != 1 || event.Message.Content[0].Text != tc.wantText {
 				t.Fatalf("message = %#v", event.Message)
+			}
+		})
+	}
+}
+
+func TestSDKEventUnmarshalAcceptsStatusErrorResultAliases(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw        string
+		wantStatus string
+		wantError  string
+		wantResult any
+	}{
+		"status message": {
+			raw:        `{"type":"status","statusMessage":"queued"}`,
+			wantStatus: "queued",
+		},
+		"progress message": {
+			raw:        `{"eventType":"progress","progress_message":"working"}`,
+			wantStatus: "working",
+		},
+		"error message": {
+			raw:       `{"type":"error","errorMessage":"boom"}`,
+			wantError: "boom",
+		},
+		"failure reason": {
+			raw:       `{"eventType":"failureEvent","failure_reason":"denied"}`,
+			wantError: "denied",
+		},
+		"result text": {
+			raw:        `{"type":"result","outputText":"done"}`,
+			wantResult: "done",
+		},
+		"result object": {
+			raw:        `{"eventType":"finalResult","response":{"ok":true}}`,
+			wantResult: map[string]any{"ok": true},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var event SDKEvent
+			if err := json.Unmarshal([]byte(tc.raw), &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Status != tc.wantStatus || event.Error != tc.wantError {
+				t.Fatalf("event = %#v", event)
+			}
+			if tc.wantResult != nil && !reflect.DeepEqual(event.Result, tc.wantResult) {
+				t.Fatalf("result = %#v, want %#v", event.Result, tc.wantResult)
 			}
 		})
 	}

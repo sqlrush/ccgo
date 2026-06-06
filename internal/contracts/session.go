@@ -185,6 +185,31 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		EventTimeSnake         string          `json:"event_time"`
 		OccurredAt             string          `json:"occurredAt"`
 		OccurredAtSnake        string          `json:"occurred_at"`
+		StatusMessage          string          `json:"statusMessage"`
+		StatusMessageSnake     string          `json:"status_message"`
+		StatusText             string          `json:"statusText"`
+		StatusTextSnake        string          `json:"status_text"`
+		State                  string          `json:"state"`
+		Phase                  string          `json:"phase"`
+		ProgressMessage        string          `json:"progressMessage"`
+		ProgressMessageSnake   string          `json:"progress_message"`
+		ErrorMessage           string          `json:"errorMessage"`
+		ErrorMessageSnake      string          `json:"error_message"`
+		ErrorText              string          `json:"errorText"`
+		ErrorTextSnake         string          `json:"error_text"`
+		FailureReason          string          `json:"failureReason"`
+		FailureReasonSnake     string          `json:"failure_reason"`
+		Reason                 string          `json:"reason"`
+		ResultText             string          `json:"resultText"`
+		ResultTextSnake        string          `json:"result_text"`
+		OutputText             string          `json:"outputText"`
+		OutputTextSnake        string          `json:"output_text"`
+		CompletionText         string          `json:"completionText"`
+		CompletionTextSnake    string          `json:"completion_text"`
+		Output                 json.RawMessage `json:"output"`
+		Response               json.RawMessage `json:"response"`
+		Value                  json.RawMessage `json:"value"`
+		Completion             json.RawMessage `json:"completion"`
 		MessagePayload         json.RawMessage `json:"message_payload"`
 		MessagePayloadCamel    json.RawMessage `json:"messagePayload"`
 		SerializedMessage      json.RawMessage `json:"serialized_message"`
@@ -259,6 +284,36 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.ParentMessageIDUpper,
 			aux.ParentMessageIDSnake,
 		)
+	}
+	if e.Type == SDKEventStatus && e.Status == "" {
+		e.Status = firstSDKEventString(
+			aux.StatusMessage,
+			aux.StatusMessageSnake,
+			aux.StatusText,
+			aux.StatusTextSnake,
+			aux.ProgressMessage,
+			aux.ProgressMessageSnake,
+			aux.State,
+			aux.Phase,
+		)
+	}
+	if e.Type == SDKEventError && e.Error == "" {
+		e.Error = firstSDKEventString(
+			aux.ErrorMessage,
+			aux.ErrorMessageSnake,
+			aux.ErrorText,
+			aux.ErrorTextSnake,
+			aux.FailureReason,
+			aux.FailureReasonSnake,
+			aux.Reason,
+		)
+	}
+	if e.Type == SDKEventResult && e.Result == nil {
+		if result := firstSDKEventString(aux.ResultText, aux.ResultTextSnake, aux.OutputText, aux.OutputTextSnake, aux.CompletionText, aux.CompletionTextSnake); result != "" {
+			e.Result = result
+		} else {
+			e.Result = firstSDKEventRawAny(aux.Output, aux.Response, aux.Value, aux.Completion)
+		}
 	}
 	if e.Message == nil {
 		e.Message = firstSDKEventMessage(e.Type,
@@ -392,6 +447,20 @@ func firstSDKEventString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstSDKEventRawAny(values ...json.RawMessage) any {
+	for _, value := range values {
+		value = bytes.TrimSpace(value)
+		if len(value) == 0 || bytes.Equal(value, []byte("null")) {
+			continue
+		}
+		var out any
+		if err := json.Unmarshal(value, &out); err == nil {
+			return out
+		}
+	}
+	return nil
 }
 
 func firstSDKEventID(values ...ID) ID {
