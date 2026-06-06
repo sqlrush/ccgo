@@ -278,7 +278,7 @@ func (spec *BindingSpec) UnmarshalJSON(data []byte) error {
 	}
 	*spec = BindingSpec{}
 
-	key, ok, err := bindingKeyField(fields, "Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "sequence")
+	key, ok, err := bindingKeyField(fields, "Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "shortcut_keys", "shortcutKeys", "sequence", "accelerator", "accelerators", "keystroke", "keyStroke", "hotkey", "hotKey", "key_combo", "keyCombo", "chord", "keyChord")
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func unwrapBindingSpecJSON(data []byte) []byte {
 
 func bindingSpecJSONHasDirectFields(fields map[string]json.RawMessage) bool {
 	for _, name := range []string{
-		"Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "sequence",
+		"Key", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "shortcut_keys", "shortcutKeys", "sequence", "accelerator", "accelerators", "keystroke", "keyStroke", "hotkey", "hotKey", "key_combo", "keyCombo", "chord", "keyChord",
 		"Action", "action", "command", "action_name", "actionName", "command_name", "commandName", "command_id", "commandId",
 	} {
 		if raw, ok := fields[name]; ok && len(bytes.TrimSpace(raw)) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {

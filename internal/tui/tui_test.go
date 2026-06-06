@@ -1635,7 +1635,10 @@ func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
 		"shortcuts": {
 			"ctrl-[": false,
 			"shift-enter": {"command_id": "insert-newline"},
-			"ctrl-w": {"shortcutKey": "ctrl-w", "actionName": "deleteWordBackward"}
+			"ctrl-w": {"shortcutKey": "ctrl-w", "actionName": "deleteWordBackward"},
+			"ctrl-q": {"accelerator": "ctrl-q", "actionName": "pageUp"},
+			"ctrl-v": {"keystroke": "ctrl-v", "actionName": "pageDown"},
+			"ctrl-z": {"hotKey": "ctrl-z", "actionName": "redraw"}
 		}
 	}`))
 	if err != nil {
@@ -1653,6 +1656,15 @@ func TestParseKeyBindingSpecsAcceptsJSONShapes(t *testing.T) {
 	}
 	if action := keymap.Resolve(ParseKey("\x17")); action != ActionDeleteWordBack {
 		t.Fatalf("shortcutKey override action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x11")); action != ActionPageUp {
+		t.Fatalf("accelerator override action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x16")); action != ActionPageDown {
+		t.Fatalf("keystroke override action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1a")); action != ActionRedraw {
+		t.Fatalf("hotKey override action = %q", action)
 	}
 }
 
