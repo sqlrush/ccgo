@@ -2963,6 +2963,7 @@ func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bo
 	key := stringJSONField(fields,
 		"key", "Key", "keyName", "key_name", "name", "value",
 		"code", "Code", "keyCodeName", "key_code_name",
+		"keyIdentifier", "key_identifier", "KeyIdentifier",
 	)
 	if scriptKeyEventUnknownName(key) {
 		key = ""
@@ -3086,6 +3087,9 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 	if trimmed == "" {
 		return "", false
 	}
+	if base, modifierOnly, ok := scriptKeyIdentifierBaseName(trimmed); ok {
+		return base, modifierOnly
+	}
 	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(trimmed, "_", "-"), " ", "-"))
 	switch normalized {
 	case "control", "ctrl", "shift", "alt", "option", "meta", "command", "cmd", "super":
@@ -3127,6 +3131,36 @@ func scriptKeyEventBaseName(key string) (string, bool) {
 		return trimmed, false
 	}
 	return trimmed, false
+}
+
+func scriptKeyIdentifierBaseName(trimmed string) (string, bool, bool) {
+	upper := strings.ToUpper(strings.TrimSpace(trimmed))
+	if !strings.HasPrefix(upper, "U+") || len(upper) <= 2 {
+		return "", false, false
+	}
+	parsed, err := strconv.ParseInt(upper[2:], 16, 32)
+	if err != nil {
+		return "", false, false
+	}
+	code := int(parsed)
+	switch code {
+	case 8, 127:
+		return "backspace", false, true
+	case 9:
+		return "tab", false, true
+	case 10, 13:
+		return "enter", false, true
+	case 16, 17, 18, 91, 92, 93, 224:
+		return "", true, true
+	case 27:
+		return "escape", false, true
+	case 32:
+		return " ", false, true
+	}
+	if code >= 32 && code <= 0x10ffff {
+		return string(rune(code)), false, true
+	}
+	return "", false, false
 }
 
 func scriptKeyEventModifiers(fields map[string]json.RawMessage) map[string]bool {

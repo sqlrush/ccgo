@@ -6192,6 +6192,7 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"keys":[{"key":"h"},{"key":"i"},{"key":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"hi"},"expectPrompt":{"empty":true}},
 		{"keys":[{"keyCode":72},{"which":73},{"keyCode":32},{"charCode":33},{"keyCode":13}],"expectEvent":{"type":"prompt_submitted","value":"hi !"},"expectPrompt":{"empty":true}},
+		{"keys":[{"keyIdentifier":"U+0061"},{"key_identifier":"U+0020"},{"keyIdentifier":"U+0062","shiftKey":true},{"keyIdentifier":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"a B"},"expectPrompt":{"empty":true}},
 		{"keys":[{"keyCode":17,"ctrlKey":true},{"keyCode":88,"ctrlKey":true},{"which":75,"ctrlKey":true}],"expectEvent":{"type":"kill_agents"}},
 		{"kind":"keys","data":[{"code":"KeyO"},{"code":"Digit1"},{"key":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"o1"},"expectPrompt":{"empty":true}},
 		{"keys":[{"key":"x","modifiers":["ctrl"]},{"key":"k","modifiers":["control"]}],"expectEvent":{"type":"kill_agents"}},
@@ -6205,12 +6206,13 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Events) != 5 ||
+	if len(result.Events) != 6 ||
 		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "hi" ||
 		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "hi !" ||
-		result.Events[2].Type != ScreenEventKillAgents ||
-		result.Events[3].Type != ScreenEventPromptSubmitted || result.Events[3].Value != "o1" ||
-		result.Events[4].Type != ScreenEventKillAgents {
+		result.Events[2].Type != ScreenEventPromptSubmitted || result.Events[2].Value != "a B" ||
+		result.Events[3].Type != ScreenEventKillAgents ||
+		result.Events[4].Type != ScreenEventPromptSubmitted || result.Events[4].Value != "o1" ||
+		result.Events[5].Type != ScreenEventKillAgents {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }
