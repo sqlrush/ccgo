@@ -3916,12 +3916,7 @@ func scriptClipboardImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage,
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, false
 	}
-	if scriptImageLikeFields(fields) {
-		if image, ok := scriptImageFromJSON(raw, depth+1); ok {
-			return image, true
-		}
-	}
-	for _, name := range scriptRuntimePayloadWrapperNames("clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "file", "items", "item", "clipboard_items", "clipboardItems") {
+	for _, name := range scriptClipboardImageWrapperNames() {
 		nested, ok := fields[name]
 		if !ok {
 			continue
@@ -3930,7 +3925,33 @@ func scriptClipboardImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage,
 			return image, true
 		}
 	}
+	if scriptImageLikeFields(fields) {
+		if image, ok := scriptImageFromJSON(raw, depth+1); ok {
+			return image, true
+		}
+	}
 	return nil, false
+}
+
+func scriptClipboardImageWrapperNames() []string {
+	return scriptRuntimePayloadWrapperNames(
+		"clipboard",
+		"clipboard_data",
+		"clipboardData",
+		"data_transfer",
+		"dataTransfer",
+		"files",
+		"file",
+		"blob",
+		"item",
+		"items",
+		"clipboard_items",
+		"clipboardItems",
+		"getAsFile",
+		"asFile",
+		"fileData",
+		"file_data",
+	)
 }
 
 func scriptImageFromJSON(raw json.RawMessage, depth int) (*ScriptImage, bool) {

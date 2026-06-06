@@ -812,6 +812,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script paste payload 现在也可从 DOM `clipboardData.items` 和 `dataTransfer.files` 中恢复 `image/*` file item，映射为已有 image paste，并避免把 image file 的 `data`/`base64` 内容误当成普通 pasted text。
 
+本轮补充：interaction script clipboard/dataTransfer image paste 现在也优先读取 `items[].file`、`items[].blob`、`items[].getAsFile` 等嵌套 file payload，保留真实 filename、media type、base64 和 source path，而不是只保留外层 MIME。
+
 本轮补充：interaction script resize payload 现在接受 DOM/window 尺寸别名 `innerWidth`/`innerHeight`、`clientWidth`/`clientHeight`、`offsetWidth`/`offsetHeight` 和 ResizeObserver 风格 `contentRect`/`target` wrapper。
 
 本轮补充：interaction script resize payload 现在接受 ResizeObserver `contentBoxSize`/`borderBoxSize` 数组里的 `inlineSize`/`blockSize` 字段，覆盖现代浏览器 box-size 事件形态。

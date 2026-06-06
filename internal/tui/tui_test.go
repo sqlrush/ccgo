@@ -7140,6 +7140,43 @@ func TestRunInteractionScriptAcceptsClipboardDataPastePayloads(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsNestedClipboardImageFiles(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"action": "paste",
+			"payload": {
+				"clipboardData": {
+					"items": [
+						{
+							"kind": "file",
+							"type": "image/png",
+							"getAsFile": {
+								"name": "nested.png",
+								"type": "image/png",
+								"data": "CCCC",
+								"sourcePath": "/tmp/nested.png"
+							}
+						}
+					]
+				}
+			},
+			"expectPrompt": {
+				"text": "[Image #1]",
+				"expandedText": "[Image #1]",
+				"pastedContentCount": 1,
+				"pastedContents": {"id": 1, "type": "image", "mediaType": "image/png", "filename": "nested.png", "content": "CCCC", "sourcePath": "/tmp/nested.png"}
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunInteractionScriptAcceptsJSONFieldAliases(t *testing.T) {
 	var steps []ScriptStep
 	if err := json.Unmarshal([]byte(`[
