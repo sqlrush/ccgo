@@ -74,11 +74,11 @@ func ParseKeyName(raw string) (KeyType, error) {
 	compact = expandCompactShortKeyModifierAlias(compact)
 	compact = expandCompactModifierArrowAlias(compact)
 	switch name {
-	case "enter", "return", "ctrl+j", "ctrl-j", "control+j", "control-j", "ctrl+m", "ctrl-m", "control+m", "control-m":
+	case "enter", "enter-key", "return", "return-key", "numpad-enter", "ctrl+j", "ctrl-j", "control+j", "control-j", "ctrl+m", "ctrl-m", "control+m", "control-m":
 		return KeyEnter, nil
-	case "shift+enter", "shift-enter", "shift+return", "shift-return":
+	case "shift+enter", "shift-enter", "shift+enter-key", "shift-enter-key", "shift+return", "shift-return", "shift+return-key", "shift-return-key", "shift+numpad-enter", "shift-numpad-enter":
 		return KeyShiftEnter, nil
-	case "esc", "escape", "ctrl+[", "ctrl-[", "control+[", "control-[":
+	case "esc", "esc-key", "escape", "escape-key", "ctrl+[", "ctrl-[", "control+[", "control-[":
 		return KeyEsc, nil
 	case "alt+b", "alt-b", "meta+b", "meta-b", "option+b", "option-b", "cmd+b", "cmd-b", "command+b", "command-b", "super+b", "super-b":
 		return KeyAltB, nil
@@ -118,9 +118,9 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyHome, nil
 	case "end", "end-key":
 		return KeyEnd, nil
-	case "tab", "ctrl+i", "ctrl-i", "control+i", "control-i":
+	case "tab", "tab-key", "ctrl+i", "ctrl-i", "control+i", "control-i":
 		return KeyTab, nil
-	case "shift+tab", "shift-tab", "backtab", "back-tab", "btab":
+	case "shift+tab", "shift-tab", "shift+tab-key", "shift-tab-key", "backtab", "back-tab", "backtab-key", "back-tab-key", "btab":
 		return KeyShiftTab, nil
 	case "ctrl+a", "ctrl-a", "control+a", "control-a":
 		return KeyCtrlA, nil
@@ -178,13 +178,17 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyFocusOut, nil
 	}
 	switch compact {
-	case "ctrlj", "controlj", "ctrlm", "controlm":
+	case "enterkey", "returnkey", "numpadenter", "ctrlj", "controlj", "ctrlm", "controlm":
 		return KeyEnter, nil
 	case "ctrl[", "control[":
 		return KeyEsc, nil
-	case "shiftenter", "shiftreturn":
+	case "esckey", "escapekey":
+		return KeyEsc, nil
+	case "shiftenter", "shiftenterkey", "shiftnumpadenter", "shiftreturn", "shiftreturnkey":
 		return KeyShiftEnter, nil
-	case "shifttab", "backtab", "btab":
+	case "tabkey":
+		return KeyTab, nil
+	case "shifttab", "shifttabkey", "backtab", "backtabkey", "btab":
 		return KeyShiftTab, nil
 	case "altb", "metab", "optionb", "cmdb", "commandb", "superb":
 		return KeyAltB, nil
