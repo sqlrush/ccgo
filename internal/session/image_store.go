@@ -224,6 +224,9 @@ func localImageCachePath(sessionID contracts.ID, imageID int, sourcePath string)
 		}
 		path = parsed.Path
 	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(ImageStoreDir(sessionID), path)
+	}
 	path = filepath.Clean(path)
 	root := filepath.Clean(ImageStoreDir(sessionID))
 	absPath, err := filepath.Abs(path)

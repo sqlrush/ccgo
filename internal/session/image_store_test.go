@@ -201,6 +201,41 @@ func TestRestoreCachedImageContentRemembersResolvedPath(t *testing.T) {
 	}
 }
 
+func TestRestoreCachedImageContentAcceptsRelativeCachePath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	ClearStoredImagePaths()
+	defer ClearStoredImagePaths()
+
+	sessionID := contracts.ID("session-relative")
+	storedPath, ok := StoreImage(sessionID, PastedContent{
+		ID:        42,
+		Type:      PastedContentImage,
+		Content:   base64.StdEncoding.EncodeToString([]byte("relative image")),
+		MediaType: "image/webp",
+	})
+	if !ok {
+		t.Fatal("store image failed")
+	}
+
+	content, mediaType, restoredPath, ok := RestoreCachedImageContent(sessionID, PastedContent{
+		ID:   42,
+		Type: PastedContentImage,
+	}, filepath.Base(storedPath))
+	if !ok {
+		t.Fatal("restore relative cached image failed")
+	}
+	if got := string(mustDecodeBase64(t, content)); got != "relative image" {
+		t.Fatalf("restored content = %q", got)
+	}
+	if mediaType != "image/webp" {
+		t.Fatalf("media type = %q", mediaType)
+	}
+	if !sameFile(t, restoredPath, storedPath) {
+		t.Fatalf("restored path = %q, want same file as %q", restoredPath, storedPath)
+	}
+}
+
 func TestRestoreCachedImageContentRejectsSymlinkEscape(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
