@@ -524,6 +524,8 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		URLs                    []string          `json:"urls"`
 		Href                    string            `json:"href"`
 		Hrefs                   []string          `json:"hrefs"`
+		Links                   json.RawMessage   `json:"links"`
+		HALLinks                json.RawMessage   `json:"_links"`
 		ID                      string            `json:"id"`
 		IDs                     []string          `json:"ids"`
 		Type                    string            `json:"type"`
@@ -617,6 +619,9 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 				[]string{object.SessionURI, object.SessionURICamel, object.SessionURL, object.SessionURLCamel, object.URI, object.URL, object.Href},
 				appendManyStringSlices(object.URIs, object.URLs, object.Hrefs)...,
 			))
+		}
+		if len(ids) == 0 {
+			ids = recallIDsFromSelectionLinks(object.Links, object.HALLinks)
 		}
 		if len(ids) == 0 {
 			if recallResourceTypeAllowsBareID(normalizedSelectionResourceTypeFromStrings(object.Type, object.ResourceType, object.ResourceTypeCamel, object.Kind)) {
@@ -765,6 +770,8 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 				"filesList",
 				"items",
 				"resources",
+				"links",
+				"_links",
 				"included",
 				"collection",
 				"list",
@@ -820,6 +827,8 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		URLs                         []string          `json:"urls"`
 		Href                         string            `json:"href"`
 		Hrefs                        []string          `json:"hrefs"`
+		Links                        json.RawMessage   `json:"links"`
+		HALLinks                     json.RawMessage   `json:"_links"`
 		File                         string            `json:"file"`
 		Files                        []string          `json:"files"`
 		ID                           string            `json:"id"`
@@ -924,6 +933,9 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		}
 		ids := relevantMemoryIDs(append(directIDs, appendManyStringSlices(directIDGroups...)...))
 		if len(ids) == 0 {
+			ids = relevantMemoryIDsFromSelectionLinks(object.Links, object.HALLinks)
+		}
+		if len(ids) == 0 {
 			ids = relevantMemoryIDsFromRawItems(
 				object.Matches,
 				object.Memories,
@@ -1024,6 +1036,11 @@ func relevantMemoryIDsFromRawObject(object map[string]json.RawMessage) []string 
 		}
 		if value, ok := object[key]; ok {
 			raw = appendRelevantMemoryIDsFromRawValue(raw, value)
+		}
+	}
+	for _, key := range selectionLinkContainerKeys {
+		if value, ok := object[key]; ok {
+			raw = appendSelectionLinkStrings(raw, value)
 		}
 	}
 	return relevantMemoryIDs(raw)
@@ -1249,6 +1266,11 @@ func appendRecallIDsFromRawValue(raw []string, value json.RawMessage) []string {
 			raw = appendRecallIDsFromRawValue(raw, nested)
 		}
 	}
+	for _, key := range selectionLinkContainerKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendSelectionLinkStrings(raw, nested)
+		}
+	}
 	for _, key := range recallNestedItemKeys {
 		if nested, ok := object[key]; ok {
 			raw = appendRecallIDsFromRawValue(raw, nested)
@@ -1289,10 +1311,110 @@ func appendRelevantMemoryIDsFromRawValue(raw []string, value json.RawMessage) []
 			raw = appendRelevantMemoryIDsFromRawValue(raw, nested)
 		}
 	}
+	for _, key := range selectionLinkContainerKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendSelectionLinkStrings(raw, nested)
+		}
+	}
 	for _, key := range relevantMemoryNestedItemKeys {
 		if nested, ok := object[key]; ok {
 			raw = appendRelevantMemoryIDsFromRawValue(raw, nested)
 		}
+	}
+	return raw
+}
+
+var selectionLinkContainerKeys = []string{"links", "_links"}
+
+var selectionLinkIDKeys = []string{
+	"href",
+	"url",
+	"uri",
+	"link",
+	"path",
+	"file",
+	"file_path",
+	"filePath",
+	"file_uri",
+	"fileUri",
+	"file_url",
+	"fileUrl",
+	"session_uri",
+	"sessionUri",
+	"session_url",
+	"sessionUrl",
+	"summary_uri",
+	"summaryUri",
+	"summary_url",
+	"summaryUrl",
+}
+
+var selectionLinkMetadataKeys = map[string]struct{}{
+	"rel":      {},
+	"relation": {},
+	"name":     {},
+	"type":     {},
+	"kind":     {},
+	"label":    {},
+	"title":    {},
+	"method":   {},
+}
+
+func recallIDsFromSelectionLinks(payloads ...json.RawMessage) []contracts.ID {
+	var raw []string
+	for _, payload := range payloads {
+		raw = appendSelectionLinkStrings(raw, payload)
+	}
+	return recallIDs(raw)
+}
+
+func relevantMemoryIDsFromSelectionLinks(payloads ...json.RawMessage) []string {
+	var raw []string
+	for _, payload := range payloads {
+		raw = appendSelectionLinkStrings(raw, payload)
+	}
+	return relevantMemoryIDs(raw)
+}
+
+func appendSelectionLinkStrings(raw []string, value json.RawMessage) []string {
+	value = bytes.TrimSpace(value)
+	if len(value) == 0 || bytes.Equal(value, []byte("null")) {
+		return raw
+	}
+	var id string
+	if err := json.Unmarshal(value, &id); err == nil {
+		return append(raw, id)
+	}
+	var ids []string
+	if err := json.Unmarshal(value, &ids); err == nil {
+		return append(raw, ids...)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(value, &items); err == nil {
+		for _, item := range items {
+			raw = appendSelectionLinkStrings(raw, item)
+		}
+		return raw
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(value, &object); err != nil {
+		return raw
+	}
+	foundDirectLink := false
+	for _, key := range selectionLinkIDKeys {
+		if nested, ok := object[key]; ok {
+			raw = appendSelectionLinkStrings(raw, nested)
+			foundDirectLink = true
+		}
+	}
+	if foundDirectLink {
+		return raw
+	}
+	for key, nested := range object {
+		if _, skip := selectionLinkMetadataKeys[key]; skip {
+			continue
+		}
+		raw = appendSelectionLinkStrings(raw, nested)
 	}
 	return raw
 }
