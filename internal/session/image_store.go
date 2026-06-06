@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/base64"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -50,6 +51,25 @@ func ResolveStoredImagePath(sessionID contracts.ID, content PastedContent) (stri
 	}
 	rememberImagePath(content.ID, imagePath)
 	return imagePath, true
+}
+
+func RestoreCachedImageContent(sessionID contracts.ID, content PastedContent, sourcePath string) (string, bool) {
+	if sessionID == "" || content.Type != PastedContentImage || content.ID <= 0 {
+		return "", false
+	}
+	path := strings.TrimSpace(sourcePath)
+	if path == "" {
+		path = ImagePath(sessionID, content.ID, content.MediaType)
+	}
+	localPath, ok := localImageCachePath(sessionID, content.ID, path)
+	if !ok {
+		return "", false
+	}
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		return "", false
+	}
+	return base64.StdEncoding.EncodeToString(data), true
 }
 
 func StoreImage(sessionID contracts.ID, content PastedContent) (string, bool) {
@@ -149,6 +169,37 @@ func imageExtension(mediaType string) string {
 		return "png"
 	}
 	return extension
+}
+
+func localImageCachePath(sessionID contracts.ID, imageID int, sourcePath string) (string, bool) {
+	path := strings.TrimSpace(sourcePath)
+	if path == "" || imageID <= 0 {
+		return "", false
+	}
+	if parsed, err := url.Parse(path); err == nil && parsed.Scheme != "" {
+		if parsed.Scheme != "file" || parsed.Path == "" {
+			return "", false
+		}
+		path = parsed.Path
+	}
+	path = filepath.Clean(path)
+	root := filepath.Clean(ImageStoreDir(sessionID))
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", false
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	if !strings.HasPrefix(filepath.Base(absPath), strconv.Itoa(imageID)+".") {
+		return "", false
+	}
+	return absPath, true
 }
 
 func rememberImagePath(imageID int, imagePath string) {

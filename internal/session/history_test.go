@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -94,6 +95,54 @@ func TestPrepareStoredPastedContents(t *testing.T) {
 	}
 	if entry.PastedContents[3].Type != PastedContentImage || entry.PastedContents[3].Content != "" || entry.PastedContents[3].Filename != "chart.png" || entry.PastedContents[3].SourcePath != "/tmp/image-cache/session/3.png" || entry.PastedContents[3].Dimensions == nil || entry.PastedContents[3].Dimensions.DisplayHeight != 500 {
 		t.Fatalf("resolved image entry = %#v", entry.PastedContents[3])
+	}
+}
+
+func TestLogEntryToHistoryEntryRestoresCachedImageContent(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	ClearStoredImagePaths()
+	defer ClearStoredImagePaths()
+
+	sessionID := contracts.ID("session-cache")
+	encoded := base64.StdEncoding.EncodeToString([]byte("cached image"))
+	storedPath, ok := StoreImage(sessionID, PastedContent{
+		ID:        30,
+		Type:      PastedContentImage,
+		Content:   encoded,
+		MediaType: "image/png",
+		Filename:  "cached.png",
+	})
+	if !ok {
+		t.Fatal("store image failed")
+	}
+	unsafePath := filepath.Join(t.TempDir(), "31.png")
+	if err := os.WriteFile(unsafePath, []byte("outside cache"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := LogEntryToHistoryEntry(LogEntry{
+		Display:   "look [Image #30] [Image #31]",
+		SessionID: sessionID,
+		PastedContents: map[int]StoredPastedContent{
+			30: {ID: 30, Type: PastedContentImage, MediaType: "image/png", Filename: "cached.png"},
+			31: {ID: 31, Type: PastedContentImage, MediaType: "image/png", Filename: "outside.png", SourcePath: unsafePath},
+		},
+	}, nil)
+	cached := entry.PastedContents[30]
+	if cached.Content != encoded || cached.SourcePath != storedPath || cached.Filename != "cached.png" {
+		t.Fatalf("cached image entry = %#v", cached)
+	}
+	if outside := entry.PastedContents[31]; outside.Content != "" || outside.SourcePath != unsafePath {
+		t.Fatalf("outside image entry = %#v", outside)
+	}
+	messages := PromptMessages(entry.Display, entry.PastedContents)
+	if len(messages) == 0 || len(messages[0].Content) != 2 || messages[0].Content[1].Type != contracts.ContentImage {
+		t.Fatalf("prompt messages = %#v", messages)
+	}
+	source, ok := messages[0].Content[1].Source.(contracts.ImageSource)
+	if !ok || source.MediaType != "image/png" || source.Data != encoded {
+		t.Fatalf("image source = %#v", messages[0].Content[1].Source)
 	}
 }
 
