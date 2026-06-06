@@ -4003,6 +4003,43 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	if screen.VimMode != VimNormal || screen.Prompt.Text != "one\ntwo\nthree\nfour" || screen.Prompt.Cursor != len([]rune("one\n")) {
 		t.Fatalf("after visual line outdent screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "j", "J"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
+		t.Fatalf("after visual line J screen = %#v", screen)
+	}
+	screen.ApplyKey(ParseKey("."))
+	if screen.Prompt.Text != "one two three" || screen.Prompt.Cursor != len([]rune("one two")) {
+		t.Fatalf("after visual line J dot-repeat screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "V", "j", "g", "J"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one  two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
+		t.Fatalf("after visual line gJ screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\n  two\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "v", "j", "J"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one two\nthree" || screen.Prompt.Cursor != len([]rune("one")) {
+		t.Fatalf("after visual J screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimGLineNavigationAndOperators(t *testing.T) {

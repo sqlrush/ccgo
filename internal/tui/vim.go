@@ -311,6 +311,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualToggleCase()
 	case 'u', 'U':
 		s.applyVimVisualChangeCase(r)
+	case 'J':
+		s.applyVimVisualJoin(false)
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'x':
@@ -341,6 +343,8 @@ func (s *REPLScreen) applyVimVisualG(r rune) ScreenEvent {
 		applyN(count, func() { s.Prompt.moveWordBackwardEnd() })
 	case 'E':
 		applyN(count, func() { s.Prompt.moveWORDBackwardEnd() })
+	case 'J':
+		s.applyVimVisualJoin(true)
 	}
 	return ScreenEvent{}
 }
@@ -440,6 +444,25 @@ func (s *REPLScreen) applyVimVisualChangeCase(op rune) {
 	count := s.Prompt.changeCaseRange(start, end, op)
 	if count > 0 {
 		s.recordVimChange(vimRecordedChange{Kind: "changeCase", Target: op, Count: count})
+	}
+	s.clearVimVisualState()
+}
+
+func (s *REPLScreen) applyVimVisualJoin(raw bool) {
+	start, end, _, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	s.rememberVimVisualSelection()
+	s.recordVimUndo()
+	joined := s.Prompt.joinRange(start, end, raw)
+	if joined > 0 {
+		kind := "join"
+		if raw {
+			kind = "joinRaw"
+		}
+		s.recordVimChange(vimRecordedChange{Kind: kind, Count: joined})
 	}
 	s.clearVimVisualState()
 }
@@ -1403,58 +1426,82 @@ func (p *PromptState) joinLines(count int) {
 	if count <= 0 {
 		count = 1
 	}
-	lines := strings.Split(p.Text, "\n")
 	current := p.currentLogicalLine()
-	if current >= len(lines)-1 {
-		return
-	}
-	linesToJoin := count
-	if linesToJoin > len(lines)-current-1 {
-		linesToJoin = len(lines) - current - 1
-	}
-	joined := lines[current]
-	cursorPos := len([]rune(joined))
-	for i := 1; i <= linesToJoin; i++ {
-		next := strings.TrimLeftFunc(lines[current+i], unicode.IsSpace)
-		if next == "" {
-			continue
-		}
-		if joined != "" && !strings.HasSuffix(joined, " ") {
-			joined += " "
-		}
-		joined += next
-	}
-	newLines := make([]string, 0, len(lines)-linesToJoin)
-	newLines = append(newLines, lines[:current]...)
-	newLines = append(newLines, joined)
-	newLines = append(newLines, lines[current+linesToJoin+1:]...)
-	p.Text = strings.Join(newLines, "\n")
-	p.Cursor = lineStartOffset(newLines, current) + cursorPos
-	p.resetHistoryCursor()
+	p.joinLineRange(current, current+count, false)
 }
 
 func (p *PromptState) joinLinesRaw(count int) {
 	if count <= 0 {
 		count = 1
 	}
-	lines := strings.Split(p.Text, "\n")
 	current := p.currentLogicalLine()
-	if current >= len(lines)-1 {
-		return
+	p.joinLineRange(current, current+count, true)
+}
+
+func (p *PromptState) joinRange(start int, end int, raw bool) int {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 {
+		return 0
 	}
-	linesToJoin := count
-	if linesToJoin > len(lines)-current-1 {
-		linesToJoin = len(lines) - current - 1
+	start = p.clampCursor(start)
+	end = p.clampCursor(end)
+	if end < start {
+		start, end = end, start
 	}
-	cursorPos := len([]rune(lines[current]))
-	joined := strings.Join(lines[current:current+linesToJoin+1], "")
+	inclusiveEnd := end
+	if inclusiveEnd > start {
+		inclusiveEnd--
+	}
+	startLine := p.lineIndexAtCursor(start)
+	endLine := p.lineIndexAtCursor(inclusiveEnd)
+	return p.joinLineRange(startLine, endLine, raw)
+}
+
+func (p *PromptState) joinLineRange(startLine int, endLine int, raw bool) int {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 {
+		return 0
+	}
+	if startLine < 0 {
+		startLine = 0
+	}
+	if endLine < startLine {
+		startLine, endLine = endLine, startLine
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - 1
+	}
+	if endLine >= len(lines) {
+		endLine = len(lines) - 1
+	}
+	if endLine <= startLine {
+		return 0
+	}
+	linesToJoin := endLine - startLine
+	cursorPos := len([]rune(lines[startLine]))
+	joined := lines[startLine]
+	if raw {
+		joined = strings.Join(lines[startLine:endLine+1], "")
+	} else {
+		for i := startLine + 1; i <= endLine; i++ {
+			next := strings.TrimLeftFunc(lines[i], unicode.IsSpace)
+			if next == "" {
+				continue
+			}
+			if joined != "" && !strings.HasSuffix(joined, " ") {
+				joined += " "
+			}
+			joined += next
+		}
+	}
 	newLines := make([]string, 0, len(lines)-linesToJoin)
-	newLines = append(newLines, lines[:current]...)
+	newLines = append(newLines, lines[:startLine]...)
 	newLines = append(newLines, joined)
-	newLines = append(newLines, lines[current+linesToJoin+1:]...)
+	newLines = append(newLines, lines[endLine+1:]...)
 	p.Text = strings.Join(newLines, "\n")
-	p.Cursor = lineStartOffset(newLines, current) + cursorPos
+	p.Cursor = lineStartOffset(newLines, startLine) + cursorPos
 	p.resetHistoryCursor()
+	return linesToJoin
 }
 
 func (p *PromptState) indentLines(dir rune, count int) {
