@@ -305,6 +305,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case 'o':
 		s.toggleVimVisualActiveEnd()
+	case '>', '<':
+		s.applyVimVisualIndent(r)
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'x':
@@ -388,6 +390,20 @@ func (s *REPLScreen) applyVimVisualOperator(operator rune) {
 		s.VimVisualLinewise = false
 		s.clearVimPending()
 		return
+	}
+	s.exitVimVisual()
+}
+
+func (s *REPLScreen) applyVimVisualIndent(dir rune) {
+	start, end, _, ok := s.vimVisualSelectionRange()
+	if !ok {
+		s.exitVimVisual()
+		return
+	}
+	s.recordVimUndo()
+	affected := s.Prompt.indentRange(dir, start, end)
+	if affected > 0 {
+		s.recordVimChange(vimRecordedChange{Kind: "indent", Dir: dir, Count: affected})
 	}
 	s.exitVimVisual()
 }
@@ -1269,14 +1285,42 @@ func (p *PromptState) indentLines(dir rune, count int) {
 	if count <= 0 {
 		count = 1
 	}
-	lines := strings.Split(p.Text, "\n")
 	current := p.currentLogicalLine()
-	linesToAffect := count
-	if linesToAffect > len(lines)-current {
-		linesToAffect = len(lines) - current
+	p.indentLineRange(dir, current, current+count-1)
+}
+
+func (p *PromptState) indentRange(dir rune, start int, end int) int {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 {
+		return 0
 	}
-	for i := 0; i < linesToAffect; i++ {
-		idx := current + i
+	startLine := p.lineIndexAtCursor(start)
+	inclusiveEnd := end
+	if inclusiveEnd > start {
+		inclusiveEnd--
+	}
+	endLine := p.lineIndexAtCursor(inclusiveEnd)
+	return p.indentLineRange(dir, startLine, endLine)
+}
+
+func (p *PromptState) indentLineRange(dir rune, startLine int, endLine int) int {
+	lines := strings.Split(p.Text, "\n")
+	if len(lines) == 0 {
+		return 0
+	}
+	if startLine < 0 {
+		startLine = 0
+	}
+	if endLine < startLine {
+		startLine, endLine = endLine, startLine
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - 1
+	}
+	if endLine >= len(lines) {
+		endLine = len(lines) - 1
+	}
+	for idx := startLine; idx <= endLine; idx++ {
 		line := lines[idx]
 		if dir == '>' {
 			lines[idx] = "  " + line
@@ -1299,8 +1343,9 @@ func (p *PromptState) indentLines(dir rune, count int) {
 		}
 	}
 	p.Text = strings.Join(lines, "\n")
-	p.Cursor = lineStartOffset(lines, current) + firstNonBlankOffset(lines[current])
+	p.Cursor = lineStartOffset(lines, startLine) + firstNonBlankOffset(lines[startLine])
 	p.resetHistoryCursor()
+	return endLine - startLine + 1
 }
 
 func (p *PromptState) openLine(below bool) {
