@@ -757,10 +757,73 @@ func historyImageSourceJSONField(fields map[string]json.RawMessage) map[string]j
 		}
 		var source map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &source); err == nil {
-			return source
+			return historyUnwrapImageSourceJSON(source)
 		}
 	}
 	return nil
+}
+
+func historyUnwrapImageSourceJSON(source map[string]json.RawMessage) map[string]json.RawMessage {
+	current := source
+	for depth := 0; depth < 8; depth++ {
+		if historyImageSourceHasDirectPayload(current) {
+			return current
+		}
+		raw, ok := historyImageSourceWrappedPayloadJSON(current)
+		if !ok {
+			return current
+		}
+		var nested map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			return current
+		}
+		current = nested
+	}
+	return current
+}
+
+func historyImageSourceHasDirectPayload(fields map[string]json.RawMessage) bool {
+	for _, names := range [][]string{
+		historyPastedContentContentFieldNames(),
+		historyPastedContentDataURLFieldNames(),
+		historyPastedContentSourcePathFieldNames(),
+	} {
+		for _, name := range names {
+			if historyRawStringFieldPresent(fields, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func historyRawStringFieldPresent(fields map[string]json.RawMessage, name string) bool {
+	raw, ok := fields[name]
+	if !ok {
+		return false
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return false
+	}
+	return strings.TrimSpace(value) != ""
+}
+
+func historyImageSourceWrappedPayloadJSON(fields map[string]json.RawMessage) (json.RawMessage, bool) {
+	for _, name := range []string{
+		"edge", "node", "resource", "attributes", "properties", "attrs",
+		"payload", "body", "data", "result", "response", "value",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) > 0 && trimmed[0] == '{' {
+			return raw, true
+		}
+	}
+	return nil, false
 }
 
 func historyWrappedPayloadJSON(fields map[string]json.RawMessage, wrappers []string, scalarDirect []string, containerDirect []string) (json.RawMessage, bool) {

@@ -357,7 +357,7 @@ func TestHistoryEntryAcceptsPastedContentBodyAndBase64DataAliases(t *testing.T) 
 func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
 	var entry HistoryEntry
 	data := `{
-		"display": "restore [Image #21] [Image #22] [Image #24] [Image #25]",
+		"display": "restore [Image #21] [Image #22] [Image #24] [Image #25] [Image #26] [Image #27]",
 		"pastedContents": [
 			{
 				"imageID": "21",
@@ -379,6 +379,17 @@ func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
 				"imageID": "25",
 				"kind": "pasted-image",
 				"source": "data:image/png;base64,DDDD"
+			},
+			{
+				"imageID": "26",
+				"kind": "pasted-image",
+				"fileName": "wrapped-source.png",
+				"source": {"resource":{"attributes":{"dataUrl":"data:image/png;base64,EEEE"}}}
+			},
+			{
+				"imageID": "27",
+				"kind": "pasted-image",
+				"imageSource": {"edge":{"node":{"attrs":{"url":"file:///tmp/wrapped-photo.jpg","mimeType":"image/jpeg"}}}}
 			}
 		]
 	}`
@@ -396,6 +407,12 @@ func TestHistoryEntryAcceptsImageSourceObjectAliases(t *testing.T) {
 	}
 	if got := entry.PastedContents[25]; got.ID != 25 || got.Type != PastedContentImage || got.Content != "DDDD" || got.MediaType != "image/png" || got.SourcePath != "" {
 		t.Fatalf("source data URL image = %#v", got)
+	}
+	if got := entry.PastedContents[26]; got.ID != 26 || got.Type != PastedContentImage || got.Content != "EEEE" || got.MediaType != "image/png" || got.Filename != "wrapped-source.png" {
+		t.Fatalf("wrapped source object image = %#v", got)
+	}
+	if got := entry.PastedContents[27]; got.ID != 27 || got.Type != PastedContentImage || got.Content != "" || got.MediaType != "image/jpeg" || got.SourcePath != "file:///tmp/wrapped-photo.jpg" {
+		t.Fatalf("wrapped source URL image = %#v", got)
 	}
 }
 
