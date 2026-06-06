@@ -7565,6 +7565,39 @@ func TestRunInteractionScriptAcceptsDOMInputEvents(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsDOMInputDeletionEvents(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"text":"abc","expectPrompt":{"text":"abc","cursor":3}},
+		{"type":"beforeinput","inputType":"deleteContentBackward","expectPrompt":{"text":"ab","cursor":2}},
+		{"key":"enter","expectEvent":{"type":"prompt_submitted","value":"ab"},"expectPrompt":{"empty":true}},
+		{"text":"abc","expectPrompt":{"text":"abc","cursor":3}},
+		{"key":"home","expectPrompt":{"text":"abc","cursor":0}},
+		{"type":"input","inputType":"deleteContentForward","expectPrompt":{"text":"bc","cursor":0}},
+		{"key":"enter","expectEvent":{"type":"prompt_submitted","value":"bc"},"expectPrompt":{"empty":true}},
+		{"text":"one two","expectPrompt":{"text":"one two","cursor":7}},
+		{"type":"beforeinput","inputType":"deleteWordBackward","expectPrompt":{"text":"one ","cursor":4}},
+		{"type":"input","inputType":"insertLineBreak","expectPrompt":{"text":"one \n","cursor":5}},
+		{"text":"tail","expectPrompt":{"text":"one \ntail","cursor":9}},
+		{"type":"beforeinput","inputType":"deleteHardLineBackward","expectPrompt":{"text":"one \n","cursor":5}},
+		{"text":"tail","expectPrompt":{"text":"one \ntail","cursor":9}},
+		{"key":"home","expectPrompt":{"text":"one \ntail","cursor":5}},
+		{"type":"beforeinput","inputType":"deleteHardLineForward","expectPrompt":{"text":"one \n","cursor":5}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 2 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ab" ||
+		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "bc" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsPressFieldAliases(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"press":"a","expectPrompt":{"text":"a"}},

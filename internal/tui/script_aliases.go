@@ -1831,7 +1831,11 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 			step.Keys = append(step.Keys, scriptActionStringListField(fields, "keys", "sequence", "key_sequence", "keySequence", "shortcuts", "data", "payload", "value")...)
 		}
 	case "text", "type", "typetext", "type-text", "input", "beforeinput", "before-input", "inputevent", "input-event", "dominput", "dom-input", "inputtext", "textinput", "insert", "inserttext", "write", "writetext":
-		if scriptDOMInputEventIsPaste(fields) {
+		if keys := scriptDOMInputEventKeys(fields); len(keys) > 0 {
+			if step.Key == "" && len(step.Keys) == 0 {
+				step.Keys = append(step.Keys, keys...)
+			}
+		} else if scriptDOMInputEventIsPaste(fields) {
 			if step.Paste == "" {
 				step.Paste = scriptActionStringField(fields, "data", "text", "input", "content", "body", "message", "payload", "value")
 			}
@@ -1925,6 +1929,30 @@ func scriptDOMInputEventIsPaste(fields map[string]json.RawMessage) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func scriptDOMInputEventKeys(fields map[string]json.RawMessage) []string {
+	inputType := canonicalScriptStepAction(stringJSONField(fields, "inputType", "input_type", "input-type", "inputKind", "input_kind"))
+	switch inputType {
+	case "insertlinebreak", "insert-line-break", "insertparagraph", "insert-paragraph":
+		return []string{"shift-enter"}
+	case "deletecontentbackward", "delete-content-backward":
+		return []string{"backspace"}
+	case "deletecontentforward", "delete-content-forward", "deletecontent", "delete-content":
+		return []string{"delete"}
+	case "deletewordbackward", "delete-word-backward":
+		return []string{"ctrl-w"}
+	case "deletewordforward", "delete-word-forward":
+		return []string{"alt-d"}
+	case "deletesoftlinebackward", "delete-soft-line-backward", "deletehardlinebackward", "delete-hard-line-backward":
+		return []string{"ctrl-u"}
+	case "deletesoftlineforward", "delete-soft-line-forward", "deletehardlineforward", "delete-hard-line-forward":
+		return []string{"ctrl-k"}
+	case "deleteentiresoftline", "delete-entire-soft-line":
+		return []string{"ctrl-u", "ctrl-k"}
+	default:
+		return nil
 	}
 }
 
