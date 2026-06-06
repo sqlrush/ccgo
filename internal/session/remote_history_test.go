@@ -713,9 +713,9 @@ func TestFetchRemoteHistoryAcceptsLinkObjectCursorFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"links":{"older":{"lastEvaluatedKey":"evt_object"}}}`))
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"links":{"older":{"last-evaluated-key":"evt_object"}}}`))
 		case "evt_object":
-			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":[{"rel":"previous","cursor":"evt_array"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":[{"rel":"previous","before-id":"evt_array"}]}`))
 		case "evt_array":
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}],"links":{"next":null}}`))
 		default:

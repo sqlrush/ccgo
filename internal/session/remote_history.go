@@ -1031,18 +1031,46 @@ func firstObjectRawField(raw map[string]json.RawMessage, names ...string) json.R
 func remoteHistoryStringField(raw map[string]json.RawMessage, names ...string) string {
 	for _, name := range names {
 		value, ok := raw[name]
-		if !ok || len(bytes.TrimSpace(value)) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		if !ok {
 			continue
 		}
-		var text string
-		if err := json.Unmarshal(value, &text); err == nil {
-			return text
-		}
-		if text, ok := jsonNumberString(value); ok {
+		if text, ok := remoteHistoryStringRawValue(value); ok {
 			return text
 		}
 	}
+	for _, name := range names {
+		normalizedName := remoteHistoryNormalizedFieldName(name)
+		for rawName, value := range raw {
+			if remoteHistoryNormalizedFieldName(rawName) != normalizedName {
+				continue
+			}
+			if text, ok := remoteHistoryStringRawValue(value); ok {
+				return text
+			}
+		}
+	}
 	return ""
+}
+
+func remoteHistoryStringRawValue(value json.RawMessage) (string, bool) {
+	if len(bytes.TrimSpace(value)) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err == nil {
+		return text, true
+	}
+	if text, ok := jsonNumberString(value); ok {
+		return text, true
+	}
+	return "", false
+}
+
+func remoteHistoryNormalizedFieldName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	return name
 }
 
 func remoteHistoryCursorField(raw map[string]json.RawMessage) string {
