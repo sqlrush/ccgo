@@ -1537,6 +1537,8 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 		{name: "acceptSelection", want: ActionConfirmSelection},
 		{name: "search", want: ActionReverseSearch},
 		{name: "unbound", want: ActionNone},
+		{name: "-workbench.action.clearScreen", want: ActionNone},
+		{name: "-editor.action.deleteWordLeft", want: ActionNone},
 	} {
 		action, err := ParseActionName(tc.name)
 		if err != nil || action != tc.want {
@@ -2160,6 +2162,35 @@ func TestParseKeyBindingSpecsAcceptsArrayKeySequences(t *testing.T) {
 	}
 	if action := keymap.Resolve(ParseKey("\x19")); action != ActionReverseSearch {
 		t.Fatalf("ctrl-x ctrl-y action = %q", action)
+	}
+}
+
+func TestParseKeyBindingSpecsTreatsDashCommandsAsUnbinds(t *testing.T) {
+	specs, err := ParseKeyBindingSpecs([]byte(`[
+		{"key": "ctrl-r", "command": "-workbench.action.clearScreen"},
+		{"key": "ctrl-x ctrl-k", "command": {"value": "-claude.action.killAgents"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 2 || specs[0].Action != Action("-workbench.action.clearScreen") || specs[1].Action != Action("-claude.action.killAgents") {
+		t.Fatalf("specs = %#v", specs)
+	}
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionNone {
+		t.Fatalf("ctrl-r should be unbound, got %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionNone {
+		t.Fatalf("ctrl-x ctrl-k should be unbound, got %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionDeleteToEnd {
+		t.Fatalf("ctrl-k after cleared chord action = %q", action)
 	}
 }
 

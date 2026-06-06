@@ -432,6 +432,9 @@ func compactShiftKeySuffix(suffix string) bool {
 }
 
 func ParseActionName(raw string) (Action, error) {
+	if actionNameIsExplicitUnbind(raw) {
+		return ActionNone, nil
+	}
 	name := normalizeActionName(raw)
 	name = stripActionNamespace(name)
 	switch name {
@@ -521,6 +524,10 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionNone, fmt.Errorf("unknown action %q", raw)
 	}
 	return action, nil
+}
+
+func actionNameIsExplicitUnbind(raw string) bool {
+	return strings.HasPrefix(strings.TrimSpace(raw), "-")
 }
 
 func stripActionNamespace(name string) string {
