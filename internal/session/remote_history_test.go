@@ -540,7 +540,7 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 		case "choices":
 			wrapper = map[string]any{
 				"choices": []any{map[string]any{
-					"message": map[string]any{"content": string(pageData)},
+					"message": map[string]any{"content": "```json\n" + string(pageData) + "\n```"},
 				}},
 			}
 		case "candidates":

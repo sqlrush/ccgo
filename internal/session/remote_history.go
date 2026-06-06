@@ -1060,8 +1060,8 @@ func remoteHistoryProviderTextFromRaw(raw json.RawMessage, depth int, allowScala
 	var text string
 	if err := json.Unmarshal(raw, &text); err == nil {
 		text = strings.TrimSpace(text)
-		if allowScalar && remoteHistoryProviderTextLooksJSON(text) {
-			return text, true
+		if allowScalar {
+			return remoteHistoryProviderJSONPayload(text)
 		}
 		return "", false
 	}
@@ -1081,10 +1081,7 @@ func remoteHistoryProviderTextFromRaw(raw json.RawMessage, depth int, allowScala
 			return "", false
 		}
 		text = strings.Join(parts, "\n")
-		if remoteHistoryProviderTextLooksJSON(text) {
-			return text, true
-		}
-		return "", false
+		return remoteHistoryProviderJSONPayload(text)
 	}
 	if raw[0] != '{' {
 		return "", false
@@ -1117,6 +1114,32 @@ func remoteHistoryProviderTextFromRaw(raw json.RawMessage, depth int, allowScala
 func remoteHistoryProviderTextLooksJSON(text string) bool {
 	text = strings.TrimSpace(text)
 	return strings.HasPrefix(text, "{") || strings.HasPrefix(text, "[")
+}
+
+func remoteHistoryProviderJSONPayload(text string) (string, bool) {
+	text = strings.TrimSpace(text)
+	if remoteHistoryProviderTextLooksJSON(text) {
+		return text, true
+	}
+	start := strings.Index(text, "```")
+	if start < 0 {
+		return "", false
+	}
+	afterFence := text[start+3:]
+	lineEnd := strings.IndexAny(afterFence, "\r\n")
+	if lineEnd < 0 {
+		return "", false
+	}
+	content := strings.TrimLeft(afterFence[lineEnd:], "\r\n")
+	end := strings.Index(content, "```")
+	if end >= 0 {
+		content = content[:end]
+	}
+	content = strings.TrimSpace(content)
+	if remoteHistoryProviderTextLooksJSON(content) {
+		return content, true
+	}
+	return "", false
 }
 
 func jsonNumberString(data []byte) (string, bool) {
