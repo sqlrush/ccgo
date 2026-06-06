@@ -1,6 +1,9 @@
 package tui
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestTerminalParserTextBellAndGraphemeWidths(t *testing.T) {
 	parser := NewTerminalParser()
@@ -455,6 +458,21 @@ func TestTerminalParserDispatchesWindowResizeReports(t *testing.T) {
 	}
 	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionWindow || actions[1].Report.Code != 8 || actions[1].Report.Rows != 24 || actions[1].Report.Columns != 80 {
 		t.Fatalf("window report action = %#v", actions[1])
+	}
+	if got := TerminalVisibleText(input); got != "ab" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
+func TestTerminalParserDispatchesDeviceAttributeReports(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" + CSISequence("?62;1;2;6c") + "b"
+	actions := parser.Feed(input)
+	if len(actions) != 3 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionDeviceAttrs || actions[1].Report.PrivateMode != '?' || actions[1].Report.Code != 62 || !reflect.DeepEqual(actions[1].Report.Codes, []int{62, 1, 2, 6}) {
+		t.Fatalf("device attribute report action = %#v", actions[1])
 	}
 	if got := TerminalVisibleText(input); got != "ab" {
 		t.Fatalf("visible = %q", got)

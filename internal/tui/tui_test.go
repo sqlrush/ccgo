@@ -5267,6 +5267,7 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence("c"), want: CSIReportAction{Type: CSIReportActionDeviceAttrs}},
 		{seq: CSISequence(">1c"), want: CSIReportAction{Type: CSIReportActionDeviceAttrs, Code: 1, PrivateMode: '>'}},
 		{seq: CSISequence("=2c"), want: CSIReportAction{Type: CSIReportActionDeviceAttrs, Code: 2, PrivateMode: '='}},
+		{seq: CSISequence("?62;1;2;6c"), want: CSIReportAction{Type: CSIReportActionDeviceAttrs, Code: 62, Codes: []int{62, 1, 2, 6}, PrivateMode: '?'}},
 		{seq: CSISequence("x"), want: CSIReportAction{Type: CSIReportActionTerminalParams}},
 		{seq: CSISequence(1, "x"), want: CSIReportAction{Type: CSIReportActionTerminalParams, Code: 1}},
 		{seq: CSISequence("?2x"), want: CSIReportAction{Type: CSIReportActionTerminalParams, Code: 2, PrivateMode: '?'}},
@@ -5291,7 +5292,7 @@ func TestParseCSISequenceActions(t *testing.T) {
 	}
 	for _, tc := range reportCases {
 		action, ok := ParseCSISequence(tc.seq)
-		if !ok || action.Type != CSIActionReport || action.Report != tc.want {
+		if !ok || action.Type != CSIActionReport || !reflect.DeepEqual(action.Report, tc.want) {
 			t.Fatalf("report action for %q = %#v, want %#v", tc.seq, action, tc.want)
 		}
 	}

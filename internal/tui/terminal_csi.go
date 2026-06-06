@@ -230,6 +230,7 @@ const (
 type CSIReportAction struct {
 	Type        CSIReportActionType
 	Code        int
+	Codes       []int
 	Status      int
 	PrivateMode byte
 	Height      int
@@ -438,7 +439,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandCursorPosition, CSICommandHorizontalVPos:
 		return CSIAction{Type: CSIActionCursor, Cursor: CSICursorAction{Type: CSICursorActionPosition, Row: p0, Column: p1}}, true
 	case CSICommandDeviceAttributes:
-		return csiDeviceAttributes(csiParamDefault(params, 0, 0), privateMode), true
+		return csiDeviceAttributes(rawP0, params, privateMode), true
 	case CSICommandCursorDownAlt:
 		return csiCursorMove(CSICursorDown, p0), true
 	case CSICommandVerticalPosition:
@@ -607,10 +608,14 @@ func csiCursorPositionReport(row int, column int, page int, privateMode byte) CS
 	}
 }
 
-func csiDeviceAttributes(code int, privateMode byte) CSIAction {
+func csiDeviceAttributes(code int, params []int, privateMode byte) CSIAction {
+	report := CSIReportAction{Type: CSIReportActionDeviceAttrs, Code: code, PrivateMode: privateMode}
+	if len(params) > 1 {
+		report.Codes = append([]int(nil), params...)
+	}
 	return CSIAction{
 		Type:   CSIActionReport,
-		Report: CSIReportAction{Type: CSIReportActionDeviceAttrs, Code: code, PrivateMode: privateMode},
+		Report: report,
 	}
 }
 
