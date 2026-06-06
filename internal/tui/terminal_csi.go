@@ -470,7 +470,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandDeleteLines:
 		return csiEdit(CSIEditActionDeleteLines, p0), true
 	case CSICommandDSR:
-		return csiReport(rawP0, privateMode), true
+		return csiReport(rawP0, params, privateMode), true
 	case CSICommandSoftReset:
 		if intermediate == "!" && privateMode == 0 && len(params) == 0 {
 			return CSIAction{Type: CSIActionReset}, true
@@ -578,7 +578,7 @@ func csiEdit(actionType CSIEditActionType, count int) CSIAction {
 	}
 }
 
-func csiReport(code int, privateMode byte) CSIAction {
+func csiReport(code int, params []int, privateMode byte) CSIAction {
 	actionType := CSIReportActionUnknown
 	switch code {
 	case 5:
@@ -590,9 +590,13 @@ func csiReport(code int, privateMode byte) CSIAction {
 			actionType = CSIReportActionCursorPosition
 		}
 	}
+	report := CSIReportAction{Type: actionType, Code: code, PrivateMode: privateMode}
+	if len(params) > 1 {
+		report.Params = append([]int(nil), params...)
+	}
 	return CSIAction{
 		Type:   CSIActionReport,
-		Report: CSIReportAction{Type: actionType, Code: code, PrivateMode: privateMode},
+		Report: report,
 	}
 }
 

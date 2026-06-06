@@ -510,6 +510,21 @@ func TestTerminalParserDispatchesCursorPositionReports(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesDeviceStatusReports(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" + CSISequence("?6;1n") + "b"
+	actions := parser.Feed(input)
+	if len(actions) != 3 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionCursorPosition || actions[1].Report.Code != 6 || actions[1].Report.PrivateMode != '?' || !reflect.DeepEqual(actions[1].Report.Params, []int{6, 1}) {
+		t.Fatalf("device status report action = %#v", actions[1])
+	}
+	if got := TerminalVisibleText(input); got != "ab" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
 func TestTerminalParserUsesOutputTokenizerForCSIM(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("\x1b[M`rK")

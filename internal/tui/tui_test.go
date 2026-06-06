@@ -5282,6 +5282,7 @@ func TestParseCSISequenceActions(t *testing.T) {
 		{seq: CSISequence(6, "n"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Code: 6}},
 		{seq: CSISequence(0, "n"), want: CSIReportAction{Type: CSIReportActionUnknown, Code: 0}},
 		{seq: CSISequence("?6n"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Code: 6, PrivateMode: '?'}},
+		{seq: CSISequence("?6;1n"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Code: 6, Params: []int{6, 1}, PrivateMode: '?'}},
 		{seq: CSISequence("?25n"), want: CSIReportAction{Type: CSIReportActionUnknown, Code: 25, PrivateMode: '?'}},
 		{seq: CSISequence(12, 34, "R"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Row: 12, Column: 34}},
 		{seq: CSISequence("0;0R"), want: CSIReportAction{Type: CSIReportActionCursorPosition, Row: 1, Column: 1}},
