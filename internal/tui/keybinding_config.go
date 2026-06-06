@@ -398,9 +398,9 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionMoveStart, nil
 	case "end", "line_end", "move_to_end":
 		return ActionMoveEnd, nil
-	case "backspace", "delete_back", "delete_backward", "delete_previous", "delete_previous_char":
+	case "backspace", "delete_back", "delete_backward", "backward_delete", "delete_previous", "delete_previous_char", "delete_backward_char", "backward_delete_char":
 		return ActionDeleteBackward, nil
-	case "delete", "del", "delete_forward", "delete_next", "delete_next_char":
+	case "delete", "del", "delete_forward", "forward_delete", "delete_next", "delete_next_char", "delete_forward_char", "forward_delete_char":
 		return ActionDeleteForward, nil
 	case "delete_start", "delete_line_start", "delete_to_beginning", "delete_to_line_start":
 		return ActionDeleteToStart, nil
