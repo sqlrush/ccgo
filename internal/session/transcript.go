@@ -792,7 +792,46 @@ func isTranscriptType(entryType string) bool {
 }
 
 func normalizeTranscriptMetadataType(entryType string) string {
-	return strings.ReplaceAll(entryType, "_", "-")
+	normalized := strings.ToLower(strings.NewReplacer("_", "-", " ", "-").Replace(strings.TrimSpace(entryType)))
+	compact := strings.ReplaceAll(normalized, "-", "")
+	switch compact {
+	case "customtitle", "sessiontitle":
+		return "custom-title"
+	case "aititle", "generatedtitle":
+		return "ai-title"
+	case "lastprompt", "lastuserprompt":
+		return "last-prompt"
+	case "tasksummary":
+		return "task-summary"
+	case "agentname", "agenttitle":
+		return "agent-name"
+	case "agentcolor", "agentcolour":
+		return "agent-color"
+	case "agentsetting", "agentsettings":
+		return "agent-setting"
+	case "prlink", "pullrequestlink":
+		return "pr-link"
+	case "sessionmode":
+		return "mode"
+	case "worktreestate", "workspacestate":
+		return "worktree-state"
+	case "contentreplacement", "contentreplacements":
+		return "content-replacement"
+	case "messagetombstone":
+		return "tombstone"
+	case "filehistorysnapshot", "filesnapshot":
+		return "file-history-snapshot"
+	case "attributionsnapshot":
+		return "attribution-snapshot"
+	case "speculationaccept", "speculationaccepted":
+		return "speculation-accept"
+	case "marbleorigamicommit", "contextcollapsecommit", "contextcompactcommit":
+		return "marble-origami-commit"
+	case "marbleorigamisnapshot", "contextcollapsesnapshot", "contextcompactsnapshot":
+		return "marble-origami-snapshot"
+	default:
+		return normalized
+	}
 }
 
 func resolveProgressParent(bridge map[contracts.ID]*contracts.ID, parent *contracts.ID) *contracts.ID {

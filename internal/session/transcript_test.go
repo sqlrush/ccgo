@@ -1028,6 +1028,72 @@ func TestLoadTranscriptMetadataAcceptsWrappedResourceEntries(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptMetadataAcceptsCompactTypeAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"customTitle","sessionId":"alias","title":"Camel Title"}`,
+		`{"type":"aiTitle","sessionId":"alias","title":"Camel AI"}`,
+		`{"type":"lastPrompt","sessionId":"alias","prompt":"camel prompt"}`,
+		`{"type":"taskSummary","sessionId":"alias","summary":"camel task","createdAt":"2026-01-01T00:00:00Z"}`,
+		`{"type":"agentName","sessionId":"alias","name":"Camel Agent"}`,
+		`{"type":"agentColor","sessionId":"alias","color":"cyan"}`,
+		`{"type":"agentSetting","sessionId":"alias","setting":"planner"}`,
+		`{"type":"sessionMode","sessionId":"alias","value":"review"}`,
+		`{"type":"prLink","sessionId":"alias","number":"46","url":"https://github.com/o/r/pull/46","repo":"o/r"}`,
+		`{"type":"worktreeState","sessionId":"alias","worktree":{"worktreePath":"/tmp/camel","sessionId":"alias"}}`,
+		`{"type":"contentReplacement","sessionId":"alias","records":{"toolUseID":"toolu_alias","content":"alias replacement"}}`,
+		`{"type":"fileHistorySnapshot","messageId":"msg_alias","snapshot":{"files":[]}}`,
+		`{"type":"attributionSnapshot","messageId":"msg_alias","snapshot":{"entries":[]}}`,
+		`{"type":"speculationAccept","createdAt":"2026-01-01T00:00:01Z","timeSavedMs":"1200"}`,
+		`{"type":"contextCollapseCommit","sessionId":"alias","collapseId":"collapse_alias","summaryId":"summary_alias","content":"collapsed","firstArchivedId":"u1","lastArchivedId":"u2"}`,
+		`{"type":"contextCollapseSnapshot","sessionId":"alias","armed":true,"lastSpawnTokens":32}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.CustomTitles["alias"] != "Camel Title" || transcript.AITitles["alias"] != "Camel AI" || transcript.LastPrompts["alias"] != "camel prompt" || transcript.TaskSummaries["alias"].Summary != "camel task" {
+		t.Fatalf("compact type aliases transcript = titles:%#v ai:%#v prompts:%#v tasks:%#v", transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
+	if transcript.AgentNames["alias"] != "Camel Agent" || transcript.AgentColors["alias"] != "cyan" || transcript.AgentSettings["alias"] != "planner" || transcript.Modes["alias"] != "review" {
+		t.Fatalf("compact agent aliases transcript = %#v %#v %#v %#v", transcript.AgentNames, transcript.AgentColors, transcript.AgentSettings, transcript.Modes)
+	}
+	if transcript.PRLinks["alias"].PRNumber != 46 || !strings.Contains(string(transcript.WorktreeStates["alias"].WorktreeSession), "/tmp/camel") {
+		t.Fatalf("compact session aliases transcript = %#v %#v", transcript.PRLinks["alias"], transcript.WorktreeStates["alias"])
+	}
+	if got := transcript.ContentReplacements["alias"]; len(got) != 1 || got[0].ToolUseID != "toolu_alias" || got[0].Replacement != "alias replacement" {
+		t.Fatalf("compact content replacement aliases transcript = %#v", got)
+	}
+	if len(transcript.FileHistoryByMessageID["msg_alias"]) == 0 || len(transcript.AttributionByMessageID["msg_alias"]) == 0 || len(transcript.SpeculationAccepts) != 1 || transcript.SpeculationAccepts[0].TimeSavedMS != 1200 {
+		t.Fatalf("compact raw aliases transcript = file:%#v attr:%#v speculation:%#v", transcript.FileHistoryByMessageID, transcript.AttributionByMessageID, transcript.SpeculationAccepts)
+	}
+	if len(transcript.ContextCollapseCommits) != 1 || transcript.ContextCollapseCommits[0].CollapseID != "collapse_alias" || transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "alias" || transcript.ContextCollapseSnapshot.LastSpawnTokens != 32 {
+		t.Fatalf("compact context collapse aliases transcript = commits:%#v snapshot:%#v", transcript.ContextCollapseCommits, transcript.ContextCollapseSnapshot)
+	}
+
+	metadata, err := LoadTranscriptMetadata(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.CustomTitles["alias"] != "Camel Title" || metadata.AITitles["alias"] != "Camel AI" || metadata.LastPrompts["alias"] != "camel prompt" || metadata.TaskSummaries["alias"].Summary != "camel task" {
+		t.Fatalf("compact type aliases metadata = titles:%#v ai:%#v prompts:%#v tasks:%#v", metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
+	}
+	if got := metadata.ContentReplacements["alias"]; len(got) != 1 || got[0].ToolUseID != "toolu_alias" || got[0].Replacement != "alias replacement" {
+		t.Fatalf("compact content replacement aliases metadata = %#v", got)
+	}
+	if len(metadata.FileHistoryByMessageID["msg_alias"]) == 0 || len(metadata.AttributionByMessageID["msg_alias"]) == 0 || len(metadata.SpeculationAccepts) != 1 || metadata.SpeculationAccepts[0].TimeSavedMS != 1200 {
+		t.Fatalf("compact raw aliases metadata = file:%#v attr:%#v speculation:%#v", metadata.FileHistoryByMessageID, metadata.AttributionByMessageID, metadata.SpeculationAccepts)
+	}
+
+	index, err := LoadTranscriptIndex(path, "alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Title != "Camel Title" || index.AITitle != "Camel AI" || index.LastPrompt != "camel prompt" || index.TaskSummary != "camel task" || index.AgentName != "Camel Agent" || index.Mode != "review" || index.ContentReplacementCount != 1 {
+		t.Fatalf("compact type aliases index = %#v", index)
+	}
+}
+
 func TestLoadTranscriptMetadataAcceptsSessionIDAndNumericStrings(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"summary","messageID":123,"content":"numeric summary"}`,
