@@ -63,6 +63,23 @@ var sidechainLifecycleDescriptionFields = []string{
 	"prompt", "input", "command", "title",
 }
 
+var sidechainLifecycleStartTimeFields = []string{
+	"startedAt", "started_at",
+	"startTime", "start_time",
+	"startedTime", "started_time",
+	"createdAt", "created_at",
+	"timestamp", "time",
+}
+
+var sidechainLifecycleEndTimeFields = []string{
+	"endedAt", "ended_at",
+	"endTime", "end_time",
+	"completedAt", "completed_at",
+	"finishedAt", "finished_at",
+	"stoppedAt", "stopped_at",
+	"timestamp", "time",
+}
+
 var sidechainLifecycleStartStatusFields = []string{
 	"status", "state", "phase", "lifecycle", "lifecycle_state", "lifecycleState",
 }
@@ -123,7 +140,7 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		if isSidechainStartSubtype(msg.Subtype) {
 			started = true
 			finished = false
-			state.StartedAt = msg.Timestamp
+			state.StartedAt = firstNonEmptyString(firstStringField(msg.Content, sidechainLifecycleStartTimeFields...), msg.Timestamp)
 			state.EndedAt = ""
 			state.Summary = ""
 			if sidechainID := firstStringField(msg.Content, sidechainLifecycleIDFields...); sidechainID != "" {
@@ -146,7 +163,7 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		}
 		if isSidechainSummarySubtype(msg.Subtype) {
 			finished = true
-			state.EndedAt = msg.Timestamp
+			state.EndedAt = firstNonEmptyString(firstStringField(msg.Content, sidechainLifecycleEndTimeFields...), msg.Timestamp)
 			if sidechainID := firstStringField(msg.Content, sidechainLifecycleIDFields...); sidechainID != "" {
 				state.ID = sidechainID
 			}

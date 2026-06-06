@@ -221,6 +221,54 @@ func TestLoadSidechainStateAcceptsSubtypeAndStatusAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsLifecycleTimeAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	startedAt := "2026-01-01T00:00:10Z"
+	endedAt := "2026-01-01T00:01:30Z"
+	if err := AppendSidechainMessage(sessionPath, sessionID, "timed", TranscriptMessage{
+		Type:      "system",
+		UUID:      "start_1",
+		Timestamp: "2026-01-01T00:00:01Z",
+		Subtype:   "subagent_started",
+		Content: map[string]any{
+			"payload": map[string]any{
+				"subagentId": "timed_worker",
+				"startedAt":  startedAt,
+				"status":     "running",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "timed", TranscriptMessage{
+		Type:      "system",
+		UUID:      "summary_1",
+		Timestamp: "2026-01-01T00:00:02Z",
+		Subtype:   "task_done",
+		Content: map[string]any{
+			"result": map[string]any{
+				"agentID":     "timed_worker",
+				"completedAt": endedAt,
+				"final":       "timed work done",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "timed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ID != "timed_worker" || state.Status != SidechainStatusCompleted || state.Summary != "timed work done" {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.StartedAt != startedAt || state.EndedAt != endedAt {
+		t.Fatalf("times = started %q ended %q", state.StartedAt, state.EndedAt)
+	}
+}
+
 func TestNormalizeSidechainStatusAcceptsCompactAliases(t *testing.T) {
 	cases := map[string]string{
 		"inProgress":            SidechainStatusRunning,
