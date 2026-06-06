@@ -22,13 +22,16 @@ type ESCActionType string
 const (
 	ESCActionCursor  ESCActionType = "cursor"
 	ESCActionReset   ESCActionType = "reset"
+	ESCActionCharset ESCActionType = "charset"
 	ESCActionUnknown ESCActionType = "unknown"
 )
 
 type ESCAction struct {
-	Type     ESCActionType
-	Cursor   CSICursorAction
-	Sequence string
+	Type              ESCActionType
+	Cursor            CSICursorAction
+	CharsetSlot       byte
+	CharsetDesignator byte
+	Sequence          string
 }
 
 func IsESCFinal(b byte) bool {
@@ -63,7 +66,7 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabSet}}, true
 	case ESCCharsetSelectLeft, ESCCharsetSelectRight:
 		if len(chars) >= 2 {
-			return ESCAction{}, false
+			return ESCAction{Type: ESCActionCharset, CharsetSlot: chars[0], CharsetDesignator: chars[1], Sequence: ESCPrefix + chars}, true
 		}
 	}
 	return ESCAction{Type: ESCActionUnknown, Sequence: ESCPrefix + chars}, true

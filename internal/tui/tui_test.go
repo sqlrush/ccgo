@@ -5743,8 +5743,9 @@ func TestParseESCSequenceActions(t *testing.T) {
 	if action, ok := ParseESCContent(""); ok || action.Type != "" {
 		t.Fatalf("empty esc content parsed = %#v", action)
 	}
-	if action, ok := ParseESCSequence("\x1b(B"); ok || action.Type != "" {
-		t.Fatalf("charset selection should be ignored = %#v", action)
+	charset, ok := ParseESCSequence("\x1b(B")
+	if !ok || charset.Type != ESCActionCharset || charset.CharsetSlot != '(' || charset.CharsetDesignator != 'B' {
+		t.Fatalf("charset selection = %#v ok=%v", charset, ok)
 	}
 
 	reset, ok := ParseESCSequence(ESCResetSequence)

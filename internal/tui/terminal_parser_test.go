@@ -46,8 +46,11 @@ func TestTerminalVisibleTextUsesParserAndPreservesRawBell(t *testing.T) {
 		"d" +
 		"\x1b^pm\x1b\\" +
 		"e" +
+		"\x1b(B" +
 		"\x1bXsos\x07" +
-		"f\x07"
+		"f" +
+		"\x1b)0" +
+		"\x07"
 	if got := TerminalVisibleText(input); got != "aredbcdef\x07" {
 		t.Fatalf("visible = %q", got)
 	}

@@ -75,8 +75,9 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 		t.Fatalf("unknown esc dispatch = %#v ok=%v", unknown, ok)
 	}
 
-	if ignored, ok := ParseTerminalSequence("\x1b(B"); ok || ignored.Type != "" {
-		t.Fatalf("ignored esc dispatch = %#v ok=%v", ignored, ok)
+	charset, ok := ParseTerminalSequence("\x1b(B")
+	if !ok || charset.Type != TerminalSequenceESC || charset.ESC.Type != ESCActionCharset || charset.ESC.CharsetSlot != '(' || charset.ESC.CharsetDesignator != 'B' {
+		t.Fatalf("charset esc dispatch = %#v ok=%v", charset, ok)
 	}
 	if text, ok := ParseTerminalSequence("plain"); ok || text.Type != "" {
 		t.Fatalf("plain dispatch = %#v ok=%v", text, ok)
