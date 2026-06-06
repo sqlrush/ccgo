@@ -2162,6 +2162,15 @@ func TestREPLScreenDialogFocusAndConfirm(t *testing.T) {
 	if screen.Dialog != nil {
 		t.Fatalf("dialog should close after shift mouse click")
 	}
+
+	screen.Dialog = &Dialog{Title: "Permission", Body: "Allow?", Actions: []string{"Allow", "Deny"}, ID: "perm_4", Kind: DialogPermission}
+	motion := screen.ApplyKey(ParseKey("\x1b[<32;13;5M"))
+	if motion.Type != ScreenEventNone {
+		t.Fatalf("dialog mouse motion should be ignored: %#v", motion)
+	}
+	if screen.Dialog == nil || screen.Dialog.ID != "perm_4" {
+		t.Fatalf("dialog should remain after mouse motion: %#v", screen.Dialog)
+	}
 }
 
 func TestREPLScreenRedrawEvent(t *testing.T) {
@@ -5112,6 +5121,26 @@ func TestRunInteractionScriptIgnoresDOMButtonlessMouseMove(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsTouchMousePayloads(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"dialog":{"title":"Permission","body":"Allow?","actions":["Allow","Deny"],"id":"perm_touch","kind":"permission"}},
+		{"mouseEvent":{"type":"touchmove","touches":[{"clientX":13,"clientY":5}]},"expectNoEvent":true,"expectDialog":{"active":true,"id":"perm_touch"}},
+		{"mouseEvent":{"type":"touchcancel","changedTouches":[{"clientX":13,"clientY":5}]},"expectNoEvent":true,"expectDialog":{"active":true,"id":"perm_touch"}},
+		{"mouseEvent":{"type":"touchstart","touches":[{"clientX":13,"clientY":5}]},"expectEvent":{"type":"dialog_action","value":"Deny","dialogId":"perm_touch","dialogKind":"permission"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventDialogAction || result.Events[0].DialogID != "perm_touch" || result.Events[0].Value != "Deny" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestScriptMouseAcceptsCoordinateAliases(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -5226,6 +5255,31 @@ func TestScriptMouseMapsDOMMotionButtons(t *testing.T) {
 			}
 			if mouse.Button != tc.button || mouse.X != 13 || mouse.Y != 5 || mouse.Release {
 				t.Fatalf("mouse = %#v, button want %d", mouse, tc.button)
+			}
+		})
+	}
+}
+
+func TestScriptMouseAcceptsTouchPointAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		raw     string
+		button  int
+		release bool
+	}{
+		{name: "touch start point", raw: `{"type":"touchstart","touches":[{"clientX":13,"clientY":5}]}`, button: 0},
+		{name: "touch move drag", raw: `{"type":"touchmove","touches":[{"clientX":13,"clientY":5}]}`, button: 32},
+		{name: "touch end changed point", raw: `{"type":"touchend","changedTouches":[{"clientX":13,"clientY":5}]}`, button: 0, release: true},
+		{name: "touch cancel changed point", raw: `{"type":"touchcancel","changedTouches":[{"clientX":13,"clientY":5}]}`, button: 0, release: true},
+		{name: "wrapped touch point", raw: `{"type":"touchstart","touches":[{"resource":{"attributes":{"pageX":"13","pageY":"5"}}}]}`, button: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mouse ScriptMouse
+			if err := json.Unmarshal([]byte(tc.raw), &mouse); err != nil {
+				t.Fatal(err)
+			}
+			if mouse.Button != tc.button || mouse.X != 13 || mouse.Y != 5 || mouse.Release != tc.release {
+				t.Fatalf("mouse = %#v, button want %d release want %v", mouse, tc.button, tc.release)
 			}
 		})
 	}

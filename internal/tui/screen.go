@@ -389,7 +389,7 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 	if key.MouseRelease {
 		return ScreenEvent{}
 	}
-	if s.Dialog != nil && isPrimaryMouseAction(key.MouseButton) {
+	if s.Dialog != nil && isPrimaryMouseAction(key.MouseButton) && !isMouseMotionAction(key.MouseButton) {
 		if index, ok := s.dialogActionAtMouse(key.MouseX, key.MouseY); ok {
 			dialogID := s.Dialog.ID
 			dialogKind := s.Dialog.Kind
@@ -411,12 +411,17 @@ func (s *REPLScreen) applyMouse(key Key) ScreenEvent {
 }
 
 const (
-	sgrMouseBaseMask  = 3
-	sgrMouseWheelMask = 64
+	sgrMouseBaseMask   = 3
+	sgrMouseMotionMask = 32
+	sgrMouseWheelMask  = 64
 )
 
 func isPrimaryMouseAction(button int) bool {
 	return button&sgrMouseWheelMask == 0 && button&sgrMouseBaseMask == 0
+}
+
+func isMouseMotionAction(button int) bool {
+	return button&sgrMouseWheelMask == 0 && button&sgrMouseMotionMask != 0
 }
 
 func mouseWheelDelta(button int) int {

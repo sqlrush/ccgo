@@ -3928,11 +3928,20 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	} else if button := intPtrJSONField(fields, "Button", "button", "Btn", "btn", "Code", "code", "Mask", "mask"); button != nil {
 		mouse.Button = *button
 	}
-	if x := intPtrJSONField(fields, "X", "x", "Column", "column", "Col", "col", "MouseX", "mouse_x", "mouseX", "ClientX", "client_x", "clientX", "ScreenX", "screen_x", "screenX", "PageX", "page_x", "pageX", "OffsetX", "offset_x", "offsetX", "ViewportX", "viewport_x", "viewportX"); x != nil {
+	touchPoint := scriptMouseTouchPointFields(fields)
+	if x := scriptMouseXJSONField(fields); x != nil {
 		mouse.X = *x
+	} else if touchPoint != nil {
+		if x := scriptMouseXJSONField(touchPoint); x != nil {
+			mouse.X = *x
+		}
 	}
-	if y := intPtrJSONField(fields, "Y", "y", "Row", "row", "Line", "line", "MouseY", "mouse_y", "mouseY", "ClientY", "client_y", "clientY", "ScreenY", "screen_y", "screenY", "PageY", "page_y", "pageY", "OffsetY", "offset_y", "offsetY", "ViewportY", "viewport_y", "viewportY"); y != nil {
+	if y := scriptMouseYJSONField(fields); y != nil {
 		mouse.Y = *y
+	} else if touchPoint != nil {
+		if y := scriptMouseYJSONField(touchPoint); y != nil {
+			mouse.Y = *y
+		}
 	}
 	if release := boolPtrJSONField(fields, "Release", "release", "Released", "released", "IsRelease", "is_release", "isRelease", "MouseRelease", "mouse_release", "mouseRelease", "MouseUp", "mouse_up", "mouseUp", "Up", "up", "ReleaseEvent", "release_event", "releaseEvent", "ReleasedEvent", "released_event", "releasedEvent"); release != nil {
 		mouse.Release = *release
@@ -3944,9 +3953,9 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 
 func scriptMouseReleaseFromType(fields map[string]json.RawMessage) (bool, bool) {
 	switch scriptMouseEventName(fields) {
-	case "mouseup", "mouse-up", "pointerup", "pointer-up", "touchend", "touch-end", "release", "released", "buttonup", "button-up":
+	case "mouseup", "mouse-up", "pointerup", "pointer-up", "touchend", "touch-end", "touchcancel", "touch-cancel", "release", "released", "buttonup", "button-up":
 		return true, true
-	case "mousedown", "mouse-down", "pointerdown", "pointer-down", "touchstart", "touch-start", "click", "mousemove", "mouse-move", "pointermove", "pointer-move", "drag", "dragstart", "drag-start", "dragmove", "drag-move":
+	case "mousedown", "mouse-down", "pointerdown", "pointer-down", "touchstart", "touch-start", "click", "mousemove", "mouse-move", "pointermove", "pointer-move", "touchmove", "touch-move", "drag", "dragstart", "drag-start", "dragmove", "drag-move":
 		return false, true
 	default:
 		return false, false
@@ -4043,11 +4052,76 @@ func scriptMouseIsMotionEvent(fields map[string]json.RawMessage) bool {
 
 func scriptMouseIsDragEvent(fields map[string]json.RawMessage) bool {
 	switch scriptMouseEventName(fields) {
-	case "drag", "dragstart", "drag-start", "dragmove", "drag-move":
+	case "touchmove", "touch-move", "drag", "dragstart", "drag-start", "dragmove", "drag-move":
 		return true
 	default:
 		return false
 	}
+}
+
+func scriptMouseXJSONField(fields map[string]json.RawMessage) *int {
+	return intPtrJSONField(fields, "X", "x", "Column", "column", "Col", "col", "MouseX", "mouse_x", "mouseX", "ClientX", "client_x", "clientX", "ScreenX", "screen_x", "screenX", "PageX", "page_x", "pageX", "OffsetX", "offset_x", "offsetX", "ViewportX", "viewport_x", "viewportX")
+}
+
+func scriptMouseYJSONField(fields map[string]json.RawMessage) *int {
+	return intPtrJSONField(fields, "Y", "y", "Row", "row", "Line", "line", "MouseY", "mouse_y", "mouseY", "ClientY", "client_y", "clientY", "ScreenY", "screen_y", "screenY", "PageY", "page_y", "pageY", "OffsetY", "offset_y", "offsetY", "ViewportY", "viewport_y", "viewportY")
+}
+
+func scriptMouseTouchPointFields(fields map[string]json.RawMessage) map[string]json.RawMessage {
+	eventName := scriptMouseEventName(fields)
+	names := []string{"Touches", "touches", "TargetTouches", "target_touches", "targetTouches", "ChangedTouches", "changed_touches", "changedTouches", "Touch", "touch", "Point", "point", "Contact", "contact"}
+	if eventName == "touchend" || eventName == "touch-end" || eventName == "touchcancel" || eventName == "touch-cancel" {
+		names = []string{"ChangedTouches", "changed_touches", "changedTouches", "Touches", "touches", "TargetTouches", "target_touches", "targetTouches", "Touch", "touch", "Point", "point", "Contact", "contact"}
+	}
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if point, ok := scriptMousePointFieldsFromJSON(raw, 0); ok {
+			return point
+		}
+	}
+	return nil
+}
+
+func scriptMousePointFieldsFromJSON(raw json.RawMessage, depth int) (map[string]json.RawMessage, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || depth >= 8 {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false
+		}
+		for _, item := range items {
+			if point, ok := scriptMousePointFieldsFromJSON(item, depth+1); ok {
+				return point, true
+			}
+		}
+		return nil, false
+	}
+	if raw[0] != '{' {
+		return nil, false
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, false
+	}
+	if scriptMouseXJSONField(fields) != nil || scriptMouseYJSONField(fields) != nil {
+		return fields, true
+	}
+	for _, name := range []string{"value", "payload", "data", "body", "resource", "attributes", "properties", "attrs", "edge", "node", "touch", "point", "contact"} {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		if point, ok := scriptMousePointFieldsFromJSON(nested, depth+1); ok {
+			return point, true
+		}
+	}
+	return nil, false
 }
 
 func scriptMouseWheelDirection(fields map[string]json.RawMessage) int {
