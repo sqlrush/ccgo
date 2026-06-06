@@ -446,7 +446,7 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionInterrupt, nil
 	case "exit", "quit", "eof", "close_app", "exit_app":
 		return ActionExit, nil
-	case "redraw", "clear", "clear_screen", "redraw_screen", "refresh", "refresh_screen":
+	case "redraw", "clear", "clear_screen", "redraw_screen", "refresh", "refresh_screen", "terminal_clear", "clear_terminal":
 		return ActionRedraw, nil
 	case "toggle_transcript", "transcript", "show_transcript", "toggle_history":
 		return ActionToggleTranscript, nil
@@ -466,25 +466,25 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionMoveLeft, nil
 	case "right", "cursor_right", "forward", "move_forward":
 		return ActionMoveRight, nil
-	case "word_left", "word_backward", "backward_word", "previous_word", "prev_word", "move_word_backward", "move_to_previous_word":
+	case "word_left", "word_backward", "backward_word", "previous_word", "prev_word", "move_word_backward", "move_to_previous_word", "cursor_word_left", "cursor_word_backward", "cursor_word_start_left", "cursor_word_end_left":
 		return ActionMoveWordLeft, nil
-	case "word_right", "word_forward", "forward_word", "next_word", "move_word_forward", "move_to_next_word":
+	case "word_right", "word_forward", "forward_word", "next_word", "move_word_forward", "move_to_next_word", "cursor_word_right", "cursor_word_forward", "cursor_word_start_right", "cursor_word_end_right":
 		return ActionMoveWordRight, nil
-	case "home", "start", "line_start", "beginning", "beginning_of_line", "start_of_line", "move_to_start", "move_to_line_start", "move_to_beginning", "move_to_beginning_of_line":
+	case "home", "start", "line_start", "beginning", "beginning_of_line", "start_of_line", "move_to_start", "move_to_line_start", "move_to_beginning", "move_to_beginning_of_line", "cursor_home", "cursor_line_start":
 		return ActionMoveStart, nil
-	case "end", "line_end", "end_of_line", "move_to_end", "move_to_line_end", "move_to_end_of_line":
+	case "end", "line_end", "end_of_line", "move_to_end", "move_to_line_end", "move_to_end_of_line", "cursor_end", "cursor_line_end":
 		return ActionMoveEnd, nil
-	case "backspace", "delete_back", "delete_backward", "backward_delete", "delete_previous", "delete_previous_char", "delete_backward_char", "backward_delete_char":
+	case "backspace", "delete_back", "delete_backward", "backward_delete", "delete_previous", "delete_previous_char", "delete_backward_char", "backward_delete_char", "delete_left":
 		return ActionDeleteBackward, nil
-	case "delete", "del", "delete_forward", "forward_delete", "delete_next", "delete_next_char", "delete_forward_char", "forward_delete_char":
+	case "delete", "del", "delete_forward", "forward_delete", "delete_next", "delete_next_char", "delete_forward_char", "forward_delete_char", "delete_right":
 		return ActionDeleteForward, nil
-	case "delete_start", "delete_line_start", "delete_to_start", "delete_to_beginning", "delete_to_line_start", "delete_to_start_of_line", "delete_to_beginning_of_line":
+	case "delete_start", "delete_line_start", "delete_to_start", "delete_to_beginning", "delete_to_line_start", "delete_to_start_of_line", "delete_to_beginning_of_line", "delete_all_left":
 		return ActionDeleteToStart, nil
-	case "kill_line", "delete_line_end", "delete_to_end", "delete_to_line_end", "delete_to_end_of_line":
+	case "kill_line", "delete_line_end", "delete_to_end", "delete_to_line_end", "delete_to_end_of_line", "delete_all_right":
 		return ActionDeleteToEnd, nil
-	case "delete_word_back", "delete_word_backward", "delete_word_left", "kill_word_backward", "backward_kill_word":
+	case "delete_word_back", "delete_word_backward", "delete_word_left", "delete_word_start_left", "delete_word_end_left", "kill_word_backward", "backward_kill_word":
 		return ActionDeleteWordBack, nil
-	case "delete_word_fwd", "delete_word_forward", "delete_word_right", "kill_word", "kill_word_forward":
+	case "delete_word_fwd", "delete_word_forward", "delete_word_right", "delete_word_start_right", "delete_word_end_right", "kill_word", "kill_word_forward":
 		return ActionDeleteWordFwd, nil
 	case "yank", "paste_yank", "paste_kill_ring":
 		return ActionYank, nil
