@@ -3573,6 +3573,59 @@ func TestREPLScreenVimFirstNonBlankLineMotions(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimScreenLineMotions(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour\nfive")
+	screen.ApplyKey(ParseKey("\x1b"))
+	screen.ApplyKey(ParseKey("H"))
+	if screen.Prompt.Cursor != 0 {
+		t.Fatalf("cursor after H = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("L"))
+	if screen.Prompt.Cursor != len([]rune("one\ntwo\nthree\nfour\n")) {
+		t.Fatalf("cursor after L = %d", screen.Prompt.Cursor)
+	}
+	screen.ApplyKey(ParseKey("M"))
+	if screen.Prompt.Cursor != len([]rune("one\ntwo\n")) {
+		t.Fatalf("cursor after M = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"2", "H"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\n")) {
+		t.Fatalf("cursor after 2H = %d", screen.Prompt.Cursor)
+	}
+	for _, seq := range []string{"2", "L"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Cursor != len([]rune("one\ntwo\nthree\n")) {
+		t.Fatalf("cursor after 2L = %d", screen.Prompt.Cursor)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour\nfive")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "v", "L"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimVisual || screen.Prompt.Cursor != len([]rune("one\ntwo\nthree\nfour\n")) {
+		t.Fatalf("after visual L screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree\nfour\nfive")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"g", "g", "j", "d", "L"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.Prompt.Text != "one" || screen.Prompt.Cursor != len([]rune("one")) || screen.VimRegister != "two\nthree\nfour\nfive\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after dL screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimLastNonBlankGMotion(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)

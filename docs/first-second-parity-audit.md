@@ -245,6 +245,7 @@ M7 progress now includes:
 - `internal/tui`: Vim prompt editing now includes normal-mode `gJ` raw line joins that do not insert or normalize whitespace and can be dot-repeated.
 - `internal/tui`: Vim prompt editing now supports normal, operator, and visual `+`/`-`/`_` first-nonblank line motions, including linewise operator ranges and dot-repeat replay.
 - `internal/tui`: Vim prompt editing now supports normal, operator, and visual `g_` last-nonblank line motions, preserving charwise operator ranges for commands such as `dg_`.
+- `internal/tui`: Vim prompt editing now supports prompt-local `H`/`M`/`L` screen-line motions across normal, visual, and linewise operator paths, including counted top/bottom targeting and dot-repeat replay for operators.
 - `internal/tui`: Vim prompt editing now includes visual and visual-line `J`/`gJ` joins across selected line ranges, sharing the normal whitespace-normalized and raw join semantics plus undo, `gv`, and dot-repeat recording.
 - `internal/tui`: Vim prompt editing now includes visual and visual-line `p`/`P` paste-over-selection behavior for characterwise and linewise registers, updating the unnamed register with the replaced text and avoiding extra trailing blank lines for end-of-buffer line replacements.
 - `internal/tui`: Vim prompt editing now includes visual and visual-line `r{char}` selection replacement, replacing non-newline characters while preserving line structure, supporting undo, and remembering the previous visual range for `gv`.

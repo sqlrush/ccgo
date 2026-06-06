@@ -235,6 +235,8 @@ func (s *REPLScreen) applyVimNormalRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case 'G':
 		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
+	case 'H', 'M', 'L':
+		s.Prompt.goToLine(vimScreenTargetLine(s.Prompt.lineCount(), r, count))
 	case '+', '-', '_':
 		s.Prompt.moveVimFirstNonBlankMotion(r, count)
 	case '/', '?':
@@ -408,7 +410,7 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.applyVimVisualOperator('d')
 	case 's':
 		s.applyVimVisualOperator('c')
-	case 'h', 'l', 'j', 'k', 'w', 'W', 'b', 'B', 'e', 'E', '$', '^', '|', '%', 'G', '+', '-', '_':
+	case 'h', 'l', 'j', 'k', 'w', 'W', 'b', 'B', 'e', 'E', '$', '^', '|', '%', 'G', 'H', 'M', 'L', '+', '-', '_':
 		s.applyVimVisualMotion(r, count)
 	}
 	return ScreenEvent{}
@@ -623,6 +625,8 @@ func (s *REPLScreen) applyVimVisualMotion(motion rune, count int) {
 		s.Prompt.moveMatchingPair()
 	case 'G':
 		s.Prompt.goToLine(vimGTargetLine(s.Prompt.lineCount(), count))
+	case 'H', 'M', 'L':
+		s.Prompt.goToLine(vimScreenTargetLine(s.Prompt.lineCount(), motion, count))
 	case '+', '-', '_':
 		s.Prompt.moveVimFirstNonBlankMotion(motion, count)
 	}
@@ -788,6 +792,8 @@ func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
 		s.enterVimSearchOperator(r == '?', operator, count)
 	case 'G':
 		s.applyVimLineMotionOperator(operator, vimGTargetLine(s.Prompt.lineCount(), count), 'G', count)
+	case 'H', 'M', 'L':
+		s.applyVimLineMotionOperator(operator, vimScreenTargetLine(s.Prompt.lineCount(), r, count), r, count)
 	case '+', '-', '_':
 		s.applyVimLineMotionOperator(operator, s.Prompt.vimFirstNonBlankMotionTargetLine(r, count), r, count)
 	case 'g':
@@ -1492,6 +1498,8 @@ func (s *REPLScreen) replayVimLastChange() {
 		switch change.Motion {
 		case 'G':
 			s.applyVimLineMotionOperator(change.Operator, vimGTargetLine(s.Prompt.lineCount(), change.Count), change.Motion, change.Count)
+		case 'H', 'M', 'L':
+			s.applyVimLineMotionOperator(change.Operator, vimScreenTargetLine(s.Prompt.lineCount(), change.Motion, change.Count), change.Motion, change.Count)
 		case 'g':
 			targetLine := 1
 			if change.Count > 1 {
@@ -1664,6 +1672,25 @@ func vimGTargetLine(lineCount int, count int) int {
 		return lineCount
 	}
 	return count
+}
+
+func vimScreenTargetLine(lineCount int, motion rune, count int) int {
+	if lineCount < 1 {
+		lineCount = 1
+	}
+	if count <= 0 {
+		count = 1
+	}
+	switch motion {
+	case 'H':
+		return count
+	case 'M':
+		return (lineCount + 1) / 2
+	case 'L':
+		return lineCount - count + 1
+	default:
+		return 1
+	}
 }
 
 func (p *PromptState) vimFirstNonBlankMotionTargetLine(motion rune, count int) int {
