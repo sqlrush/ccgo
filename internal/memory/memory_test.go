@@ -1247,6 +1247,50 @@ func TestMemoryAgentExtractsNestedFactResponseShapes(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsFactCollectionAndTextAliases(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_collection_aliases",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"data":{"resource":{"attributes":{"observations":[
+				{"kind":"preference","note":"prefer memory notes","source":{"id":"user_1"}},
+				{"type":"decision","description":"keep collection wrappers","sourceMessage":{"id":"assistant_1"}}
+			]}}},
+			"payload":{"findings":[
+				{"category":"tool-use","body":"Used tool Read","message":{"messageUuid":"assistant_2"}}
+			]},
+			"records":[
+				{"label":"request","message":"continue M6 aliases","source_id":"user_2"},
+				{"label":"preference","message":"keep message text as content"}
+			]
+		}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember memory aliases")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 5 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer memory notes", "user_1") {
+		t.Fatalf("note fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "keep collection wrappers", "assistant_1") {
+		t.Fatalf("description fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactTool, "Used tool Read", "assistant_2") {
+		t.Fatalf("body fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactRequest, "continue M6 aliases", "user_2") {
+		t.Fatalf("message fact missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "keep message text as content", "") {
+		t.Fatalf("message text fact missing = %#v", result.Facts)
+	}
+}
+
 func TestMemoryAgentExtractsNestedFactSourceObjects(t *testing.T) {
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_memory_nested_sources",

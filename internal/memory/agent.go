@@ -2295,7 +2295,7 @@ func parseFactsJSON(raw string) ([]MemoryFact, error) {
 		if !ok {
 			continue
 		}
-		text := strings.TrimSpace(firstNonEmpty(entry.Text, entry.Content, entry.Summary, entry.Value, entry.Detail))
+		text := strings.TrimSpace(firstNonEmpty(entry.Text, entry.Content, entry.Summary, entry.Value, entry.Detail, entry.Note, entry.Description, entry.Body, entry.MessageText, entry.Observation, entry.Finding))
 		if text == "" {
 			continue
 		}
@@ -2343,13 +2343,34 @@ func collectRawMemoryFacts(value any) []rawMemoryFact {
 			"memoryFacts",
 			"extracted_facts",
 			"extractedFacts",
+			"extractions",
 			"extracted_memory",
 			"extractedMemory",
 			"session_memory",
 			"sessionMemory",
+			"memory_items",
+			"memoryItems",
 			"items",
 			"entries",
+			"records",
+			"resources",
 			"results",
+			"observations",
+			"notes",
+			"findings",
+			"data",
+			"payload",
+			"body",
+			"response",
+			"result",
+			"output",
+			"outputs",
+			"resource",
+			"attributes",
+			"properties",
+			"attrs",
+			"node",
+			"edge",
 		} {
 			if child, ok := typed[key]; ok {
 				entries = append(entries, collectRawMemoryFacts(child)...)
@@ -2373,6 +2394,12 @@ func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
 		Summary:              stringMapField(value, "summary"),
 		Value:                stringMapField(value, "value"),
 		Detail:               stringMapField(value, "detail"),
+		Note:                 stringMapField(value, "note", "notes"),
+		Description:          stringMapField(value, "description", "details"),
+		Body:                 stringMapField(value, "body"),
+		MessageText:          stringMapField(value, "message"),
+		Observation:          stringMapField(value, "observation"),
+		Finding:              stringMapField(value, "finding"),
 		SourceUUID:           stringMapField(value, "source_uuid"),
 		SourceUUIDCamel:      stringMapField(value, "sourceUuid"),
 		SourceID:             stringMapField(value, "source_id"),
@@ -2387,15 +2414,20 @@ func rawMemoryFactFromMap(value map[string]any) (rawMemoryFact, bool) {
 		UUID:                 stringMapField(value, "uuid"),
 	}
 	if fact.MessageUUID == "" {
-		fact.MessageUUID = nestedIDFromValue(value["message"])
+		if _, ok := value["message"].(map[string]any); ok {
+			fact.MessageUUID = nestedIDFromValue(value["message"])
+		}
 	}
 	if fact.SourceMessageID == "" {
 		fact.SourceMessageID = nestedIDFromValue(value["source_message"])
 	}
+	if fact.SourceMessageID == "" {
+		fact.SourceMessageID = nestedIDFromValue(value["sourceMessage"])
+	}
 	if firstNonEmpty(fact.Kind, fact.Type, fact.FactType, fact.Category, fact.Label) == "" {
 		return rawMemoryFact{}, false
 	}
-	if firstNonEmpty(fact.Text, fact.Content, fact.Summary, fact.Value, fact.Detail) == "" {
+	if firstNonEmpty(fact.Text, fact.Content, fact.Summary, fact.Value, fact.Detail, fact.Note, fact.Description, fact.Body, fact.MessageText, fact.Observation, fact.Finding) == "" {
 		return rawMemoryFact{}, false
 	}
 	return fact, true
@@ -2435,7 +2467,7 @@ func textFromValue(value any) string {
 		}
 		return strings.Join(parts, "\n")
 	case map[string]any:
-		return stringMapField(typed, "text", "content", "summary", "value", "detail")
+		return stringMapField(typed, "text", "content", "summary", "value", "detail", "note", "description", "body", "message", "observation", "finding")
 	default:
 		return ""
 	}
@@ -2460,6 +2492,12 @@ type rawMemoryFact struct {
 	Summary              string `json:"summary"`
 	Value                string `json:"value"`
 	Detail               string `json:"detail"`
+	Note                 string `json:"note"`
+	Description          string `json:"description"`
+	Body                 string `json:"body"`
+	MessageText          string `json:"message"`
+	Observation          string `json:"observation"`
+	Finding              string `json:"finding"`
 	SourceUUID           string `json:"source_uuid"`
 	SourceUUIDCamel      string `json:"sourceUuid"`
 	SourceID             string `json:"source_id"`
