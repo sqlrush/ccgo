@@ -87,7 +87,7 @@ func (r *MicroResult) UnmarshalJSON(data []byte) error {
 
 func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.RawMessage, overwrite bool, includeSummary bool) error {
 	if includeSummary {
-		if value, ok, err := microSummaryJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output"); err != nil {
+		if value, ok, err := microSummaryJSONField(fields, "Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output", "outputText", "output_text"); err != nil {
 			return err
 		} else if ok && (overwrite || result.Summary == "") {
 			result.Summary = value
@@ -256,7 +256,7 @@ func microResultArrayWrappedJSON(data json.RawMessage) (json.RawMessage, bool) {
 
 func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
 	for _, name := range []string{
-		"Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output",
+		"Summary", "summary", "summaryText", "summary_text", "resultSummary", "result_summary", "summaryMarkdown", "summary_markdown", "compressed", "compressedText", "compressed_text", "content", "parts", "text", "value", "output", "outputText", "output_text",
 	} {
 		raw, ok := fields[name]
 		if !ok {
@@ -667,7 +667,7 @@ func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return "", false, err
 	}
-	for _, name := range []string{"parts", "segments", "message", "delta", "content", "output"} {
+	for _, name := range []string{"parts", "segments", "message", "delta", "content", "output", "outputText", "output_text"} {
 		nested, ok := fields[name]
 		if !ok {
 			continue

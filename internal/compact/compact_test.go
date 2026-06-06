@@ -851,6 +851,18 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 			want: "output message summary",
 		},
 		{
+			digest: "response-output-text",
+			payload: `{
+				"response": {
+					"output_text": "response output text summary"
+				},
+				"cacheDigest": "response-output-text",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "response output text summary",
+		},
+		{
 			digest: "candidate-parts",
 			payload: `{
 				"candidates": [
@@ -1353,6 +1365,9 @@ func TestRunnerAcceptsProviderWrappedSummaryResponses(t *testing.T) {
 					]
 				}
 			}]
+		}`,
+		"output_text": `{
+			"output_text": "provider output text summary"
 		}`,
 	} {
 		t.Run(name, func(t *testing.T) {
