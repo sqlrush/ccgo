@@ -572,7 +572,7 @@ func microSummaryFromRaw(raw json.RawMessage, field string) (string, bool, error
 		if text, ok, err := microSummaryContentBlockText(trimmed); err != nil {
 			return "", false, err
 		} else if ok {
-			return text, true, nil
+			return microSummaryVisibleText(text), true, nil
 		}
 		if nonText, err := microSummaryNonTextContentBlock(trimmed); err != nil {
 			return "", false, err
@@ -632,7 +632,7 @@ func microSummaryArrayItemFromRaw(raw json.RawMessage, field string) (string, bo
 	if text, ok, err := microSummaryContentBlockText(trimmed); err != nil {
 		return "", false, err
 	} else if ok {
-		return text, true, nil
+		return microSummaryVisibleText(text), true, nil
 	}
 	if nonText, err := microSummaryNonTextContentBlock(trimmed); err != nil {
 		return "", false, err
@@ -682,6 +682,13 @@ func microSummaryFromTextPayload(text string) (string, bool) {
 	}
 	summary := strings.TrimSpace(result.Summary)
 	return summary, summary != ""
+}
+
+func microSummaryVisibleText(text string) string {
+	if summary, ok := microSummaryFromTextPayload(text); ok {
+		return summary
+	}
+	return text
 }
 
 func microSummaryTextJSONPayload(text string) (string, bool) {

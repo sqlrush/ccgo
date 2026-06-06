@@ -779,6 +779,18 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 			}`,
 			want: "generation summary",
 		},
+		{
+			digest: "content-json-block",
+			payload: `{
+				"content": [
+					{"type": "text", "text": "{\"summary\":\"content block json summary\",\"messagesSummarized\":3}"}
+				],
+				"cacheKey": "content-json-block",
+				"cacheVersion": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "content block json summary",
+		},
 	} {
 		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
 			t.Fatal(err)
