@@ -75,6 +75,44 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsMessageTypeAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"type":"user_message","uuid":"u1","sessionID":"sess_alias","timestamp":"2026-01-01T00:00:00Z","message":{"type":"userMessage","sessionID":"sess_alias","content":"hi"}}`,
+		`{"type":"progress_update","uuid":"p1","parentUuid":"u1"}`,
+		`{"messageType":"assistant-message","messageUuid":"a1","parentMessageID":"p1","sessionID":"sess_alias","createdAt":"2026-01-01T00:00:01Z","message":{"messageType":"assistantMessage","sessionID":"sess_alias","content":"done"}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := transcript.Messages["u1"]
+	if user == nil || user.Type != "user" || user.Message == nil || user.Message.Type != contracts.MessageUser {
+		t.Fatalf("user alias = %#v", user)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil || assistant.Type != "assistant" || assistant.Message == nil || assistant.Message.Type != contracts.MessageAssistant {
+		t.Fatalf("assistant alias = %#v", assistant)
+	}
+	if assistant.ParentUUID == nil || *assistant.ParentUUID != "u1" {
+		t.Fatalf("assistant parent bridge = %#v", assistant.ParentUUID)
+	}
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref := index.Entries[index.ByUUID["a1"]]; ref.Type != "assistant" || ref.ParentUUID == nil || *ref.ParentUUID != "u1" {
+		t.Fatalf("indexed alias ref = %#v", ref)
+	}
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1" || resume.Messages[0].Type != contracts.MessageUser || resume.Messages[1].Type != contracts.MessageAssistant {
+		t.Fatalf("resume alias = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+}
+
 func TestLoadTranscriptAcceptsSessionIDUpperAlias(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user","uuid":"u1","sessionID":"sess_upper","timestamp":"2026-01-01T00:00:00Z","message":{"type":"user","sessionID":"sess_upper","content":[{"type":"text","text":"hi"}]}}`,

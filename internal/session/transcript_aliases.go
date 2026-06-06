@@ -2,7 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"strings"
 
 	"ccgo/internal/contracts"
 )
@@ -73,8 +72,8 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*m = TranscriptMessage(base)
-	if m.Type == "" {
-		m.Type = firstTranscriptType(aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+	if messageType := firstTranscriptType(m.Type, aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role); messageType != "" {
+		m.Type = messageType
 	}
 	if m.UUID == "" {
 		m.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
@@ -201,10 +200,15 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 
 func firstTranscriptType(values ...string) string {
 	for _, value := range values {
-		normalized := strings.ToLower(strings.TrimSpace(value))
-		switch normalized {
-		case "user", "assistant", "attachment", "system":
-			return normalized
+		switch contracts.CanonicalMessageType(value) {
+		case contracts.MessageUser:
+			return string(contracts.MessageUser)
+		case contracts.MessageAssistant:
+			return string(contracts.MessageAssistant)
+		case contracts.MessageAttachment:
+			return string(contracts.MessageAttachment)
+		case contracts.MessageSystem:
+			return string(contracts.MessageSystem)
 		}
 	}
 	return ""

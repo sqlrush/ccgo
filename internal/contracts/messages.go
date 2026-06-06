@@ -390,8 +390,8 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		Usage:      aux.Usage,
 		Raw:        aux.Raw,
 	}
-	if m.Type == "" {
-		m.Type = firstMessageType(aux.TypeCamel, aux.TypeSnake, aux.Role)
+	if messageType := firstMessageType(string(m.Type), aux.TypeCamel, aux.TypeSnake, aux.Role); messageType != "" {
+		m.Type = messageType
 	}
 	if m.ID == "" {
 		m.ID = string(firstMessageID(aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake))
@@ -504,12 +504,35 @@ func isEmptyJSONRaw(raw json.RawMessage) bool {
 
 func firstMessageType(values ...string) MessageType {
 	for _, value := range values {
-		switch MessageType(strings.ToLower(strings.TrimSpace(value))) {
-		case MessageUser, MessageAssistant, MessageSystem, MessageAttachment, MessageProgress, MessageTombstone:
-			return MessageType(strings.ToLower(strings.TrimSpace(value)))
+		if messageType := CanonicalMessageType(value); messageType != "" {
+			return messageType
 		}
 	}
 	return ""
+}
+
+func CanonicalMessageType(value string) MessageType {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return ""
+	}
+	compact := strings.NewReplacer("_", "", "-", "", " ", "", ".", "").Replace(normalized)
+	switch compact {
+	case "user", "usermessage", "messageuser", "userevent", "eventuser":
+		return MessageUser
+	case "assistant", "assistantmessage", "messageassistant", "assistantevent", "eventassistant":
+		return MessageAssistant
+	case "system", "systemmessage", "messagesystem", "systemevent", "eventsystem":
+		return MessageSystem
+	case "attachment", "attachmentmessage", "messageattachment", "attachmentevent", "eventattachment":
+		return MessageAttachment
+	case "progress", "progressmessage", "messageprogress", "progressevent", "eventprogress", "progressupdate", "updateprogress", "status", "statusmessage", "messagestatus", "statusevent", "eventstatus", "statusupdate", "updatestatus":
+		return MessageProgress
+	case "tombstone", "tombstonemessage", "messagetombstone", "tombstoneevent", "eventtombstone":
+		return MessageTombstone
+	default:
+		return ""
+	}
 }
 
 func firstMessageID(values ...ID) ID {

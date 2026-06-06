@@ -401,7 +401,7 @@ func transcriptLineRef(line []byte, offset int64, progressBridge map[contracts.I
 	if err := json.Unmarshal(trimmed, &envelope); err != nil {
 		return TranscriptLineRef{}, false
 	}
-	if envelope.Type == "progress" && envelope.UUID != "" {
+	if contracts.CanonicalMessageType(envelope.Type) == contracts.MessageProgress && envelope.UUID != "" {
 		progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
 		return TranscriptLineRef{}, false
 	}

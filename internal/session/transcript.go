@@ -186,7 +186,7 @@ func LoadTranscript(path string) (Transcript, error) {
 			if err := json.Unmarshal(line, &envelope); err != nil {
 				continue
 			}
-			if envelope.Type == "progress" && envelope.UUID != "" {
+			if contracts.CanonicalMessageType(envelope.Type) == contracts.MessageProgress && envelope.UUID != "" {
 				progressBridge[envelope.UUID] = resolveProgressParent(progressBridge, envelope.ParentUUID)
 				continue
 			}
@@ -783,8 +783,8 @@ func (t *Transcript) computeLeafUUIDs() {
 }
 
 func isTranscriptType(entryType string) bool {
-	switch entryType {
-	case "user", "assistant", "attachment", "system":
+	switch contracts.CanonicalMessageType(entryType) {
+	case contracts.MessageUser, contracts.MessageAssistant, contracts.MessageAttachment, contracts.MessageSystem:
 		return true
 	default:
 		return false

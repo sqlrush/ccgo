@@ -56,8 +56,8 @@ func (e *SessionEntry) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = SessionEntry(base)
-	if e.Type == "" {
-		e.Type = firstSessionEntryType(aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+	if entryType := firstSessionEntryType(string(e.Type), aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role); entryType != "" {
+		e.Type = entryType
 	}
 	if e.UUID == "" {
 		e.UUID = firstSessionEntryID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake, aux.ID)
@@ -85,9 +85,9 @@ func (e *SessionEntry) UnmarshalJSON(data []byte) error {
 
 func firstSessionEntryType(values ...string) MessageType {
 	for _, value := range values {
-		switch strings.ToLower(strings.TrimSpace(value)) {
-		case string(MessageUser), string(MessageAssistant), string(MessageSystem), string(MessageAttachment):
-			return MessageType(strings.ToLower(strings.TrimSpace(value)))
+		switch messageType := CanonicalMessageType(value); messageType {
+		case MessageUser, MessageAssistant, MessageSystem, MessageAttachment, MessageProgress, MessageTombstone:
+			return messageType
 		}
 	}
 	return ""

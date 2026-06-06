@@ -64,6 +64,52 @@ func TestMessageUnmarshalAcceptsTextBodyAliases(t *testing.T) {
 	}
 }
 
+func TestMessageUnmarshalAcceptsTypeAliases(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw  string
+		want MessageType
+	}{
+		"assistant message": {raw: `{"type":"assistant_message","content":"hello"}`, want: MessageAssistant},
+		"user camel":        {raw: `{"messageType":"userMessage","content":"hi"}`, want: MessageUser},
+		"system event":      {raw: `{"message_type":"system-event","content":"rules"}`, want: MessageSystem},
+		"attachment":        {raw: `{"role":"attachmentMessage","content":"file"}`, want: MessageAttachment},
+		"progress update":   {raw: `{"type":"progress_update","content":"loading"}`, want: MessageProgress},
+		"tombstone event":   {raw: `{"type":"tombstone_event","content":"removed"}`, want: MessageTombstone},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var message Message
+			if err := json.Unmarshal([]byte(tc.raw), &message); err != nil {
+				t.Fatal(err)
+			}
+			if message.Type != tc.want || len(message.Content) != 1 {
+				t.Fatalf("message = %#v, want type %q", message, tc.want)
+			}
+		})
+	}
+}
+
+func TestSessionEntryUnmarshalAcceptsTypeAliases(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw  string
+		want MessageType
+	}{
+		"base type":     {raw: `{"type":"assistant_message","uuid":"a1"}`, want: MessageAssistant},
+		"entry type":    {raw: `{"entryType":"userMessage","uuid":"u1"}`, want: MessageUser},
+		"message type":  {raw: `{"message_type":"system-event","uuid":"s1"}`, want: MessageSystem},
+		"progress type": {raw: `{"entry_type":"progress_update","uuid":"p1"}`, want: MessageProgress},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var entry SessionEntry
+			if err := json.Unmarshal([]byte(tc.raw), &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry.Type != tc.want {
+				t.Fatalf("entry = %#v, want type %q", entry, tc.want)
+			}
+		})
+	}
+}
+
 func TestSDKEventUnmarshalAcceptsTypeAliases(t *testing.T) {
 	for name, tc := range map[string]struct {
 		raw         string
