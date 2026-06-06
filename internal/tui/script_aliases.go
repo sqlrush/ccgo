@@ -3062,7 +3062,7 @@ func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth i
 }
 
 func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bool) {
-	if scriptKeyEventIsRelease(fields) {
+	if scriptKeyEventIsReplayNoop(fields) {
 		return "", true
 	}
 	key := stringJSONField(fields,
@@ -3070,6 +3070,9 @@ func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bo
 		"code", "Code", "keyCodeName", "key_code_name",
 		"keyIdentifier", "key_identifier", "KeyIdentifier",
 	)
+	if scriptKeyEventNoopName(key) {
+		return "", true
+	}
 	if scriptKeyEventUnknownName(key) {
 		key = ""
 	}
@@ -3127,6 +3130,10 @@ func scriptKeyEventNumericNameFromFields(fields map[string]json.RawMessage) (str
 	return "", false
 }
 
+func scriptKeyEventIsReplayNoop(fields map[string]json.RawMessage) bool {
+	return scriptKeyEventIsRelease(fields) || scriptKeyEventIsComposing(fields) || scriptKeyEventIsCompositionEvent(fields)
+}
+
 func scriptKeyEventIsRelease(fields map[string]json.RawMessage) bool {
 	for _, name := range []string{"type", "eventType", "event_type", "event", "kind", "action", "name"} {
 		value := stringJSONField(fields, name)
@@ -3137,6 +3144,37 @@ func scriptKeyEventIsRelease(fields map[string]json.RawMessage) bool {
 		}
 	}
 	return false
+}
+
+func scriptKeyEventIsComposing(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{"isComposing", "is_composing", "composing", "composition", "imeComposing", "ime_composing"} {
+		if value, ok := scriptBoolJSONField(fields, name); ok && value {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptKeyEventIsCompositionEvent(fields map[string]json.RawMessage) bool {
+	for _, name := range []string{"type", "eventType", "event_type", "event", "kind", "action", "name"} {
+		value := stringJSONField(fields, name)
+		normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(value), "_", "-"), " ", "-"))
+		switch normalized {
+		case "compositionstart", "composition-start", "compositionupdate", "composition-update", "compositionend", "composition-end":
+			return true
+		}
+	}
+	return false
+}
+
+func scriptKeyEventNoopName(key string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(key), "_", "-"), " ", "-"))
+	switch normalized {
+	case "dead", "process", "compose", "composition", "ime", "nonconvert", "non-convert", "convert", "modechange", "mode-change":
+		return true
+	default:
+		return false
+	}
 }
 
 func scriptKeyEventWhichUsesCharCode(fields map[string]json.RawMessage) bool {
