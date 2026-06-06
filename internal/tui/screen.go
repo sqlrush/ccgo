@@ -43,42 +43,46 @@ type ScreenEvent struct {
 }
 
 type REPLScreen struct {
-	Width                int
-	Height               int
-	Messages             []Message
-	Status               string
-	Prompt               PromptState
-	Dialog               *Dialog
-	Keymap               Keymap
-	Viewport             Viewport
-	VimEnabled           bool
-	VimMode              VimMode
-	VimPendingOperator   rune
-	VimPendingCharMotion rune
-	VimPendingTextObject rune
-	VimPendingG          bool
-	VimPendingIndent     rune
-	VimLastCharMotion    rune
-	VimLastCharTarget    rune
-	VimRepeatingChar     bool
-	VimCount             int
-	VimPendingCount      int
-	VimPendingReplace    bool
-	VimInsertedText      string
-	VimLastChange        vimRecordedChange
-	VimReplayingChange   bool
-	VimRegister          string
-	VimRegisterLinewise  bool
-	VimUndoStack         []vimPromptSnapshot
-	VimVisualAnchor      int
-	VimVisualLinewise    bool
-	Focused              bool
-	ReverseSearch        ReverseSearchState
-	StashedPrompt        *PromptStash
-	SelectedViewportLine int
-	ExitPendingKey       KeyType
-	ExitPendingAt        time.Time
-	Now                  func() time.Time
+	Width                 int
+	Height                int
+	Messages              []Message
+	Status                string
+	Prompt                PromptState
+	Dialog                *Dialog
+	Keymap                Keymap
+	Viewport              Viewport
+	VimEnabled            bool
+	VimMode               VimMode
+	VimPendingOperator    rune
+	VimPendingCharMotion  rune
+	VimPendingTextObject  rune
+	VimPendingG           bool
+	VimPendingIndent      rune
+	VimLastCharMotion     rune
+	VimLastCharTarget     rune
+	VimRepeatingChar      bool
+	VimCount              int
+	VimPendingCount       int
+	VimPendingReplace     bool
+	VimInsertedText       string
+	VimLastChange         vimRecordedChange
+	VimReplayingChange    bool
+	VimRegister           string
+	VimRegisterLinewise   bool
+	VimUndoStack          []vimPromptSnapshot
+	VimVisualAnchor       int
+	VimVisualLinewise     bool
+	VimLastVisualAnchor   int
+	VimLastVisualCursor   int
+	VimLastVisualLinewise bool
+	VimLastVisualValid    bool
+	Focused               bool
+	ReverseSearch         ReverseSearchState
+	StashedPrompt         *PromptStash
+	SelectedViewportLine  int
+	ExitPendingKey        KeyType
+	ExitPendingAt         time.Time
+	Now                   func() time.Time
 }
 
 func NewREPLScreen(width int, height int, history []string) REPLScreen {

@@ -388,6 +388,7 @@ func (s *REPLScreen) applyVimVisualOperator(operator rune) {
 		s.exitVimVisual()
 		return
 	}
+	s.rememberVimVisualSelection()
 	s.applyVimRangeOperator(operator, start, end, linewise)
 	if operator == 'c' {
 		s.VimVisualAnchor = 0
@@ -395,7 +396,7 @@ func (s *REPLScreen) applyVimVisualOperator(operator rune) {
 		s.clearVimPending()
 		return
 	}
-	s.exitVimVisual()
+	s.clearVimVisualState()
 }
 
 func (s *REPLScreen) applyVimVisualIndent(dir rune) {
@@ -404,12 +405,13 @@ func (s *REPLScreen) applyVimVisualIndent(dir rune) {
 		s.exitVimVisual()
 		return
 	}
+	s.rememberVimVisualSelection()
 	s.recordVimUndo()
 	affected := s.Prompt.indentRange(dir, start, end)
 	if affected > 0 {
 		s.recordVimChange(vimRecordedChange{Kind: "indent", Dir: dir, Count: affected})
 	}
-	s.exitVimVisual()
+	s.clearVimVisualState()
 }
 
 func (s *REPLScreen) applyVimVisualToggleCase() {
@@ -418,12 +420,13 @@ func (s *REPLScreen) applyVimVisualToggleCase() {
 		s.exitVimVisual()
 		return
 	}
+	s.rememberVimVisualSelection()
 	s.recordVimUndo()
 	count := s.Prompt.toggleCaseRange(start, end)
 	if count > 0 {
 		s.recordVimChange(vimRecordedChange{Kind: "toggleCase", Count: count})
 	}
-	s.exitVimVisual()
+	s.clearVimVisualState()
 }
 
 func (s *REPLScreen) applyVimVisualChangeCase(op rune) {
@@ -432,12 +435,13 @@ func (s *REPLScreen) applyVimVisualChangeCase(op rune) {
 		s.exitVimVisual()
 		return
 	}
+	s.rememberVimVisualSelection()
 	s.recordVimUndo()
 	count := s.Prompt.changeCaseRange(start, end, op)
 	if count > 0 {
 		s.recordVimChange(vimRecordedChange{Kind: "changeCase", Target: op, Count: count})
 	}
-	s.exitVimVisual()
+	s.clearVimVisualState()
 }
 
 func (s *REPLScreen) applyVimOperator(r rune) ScreenEvent {
@@ -507,6 +511,10 @@ func (s *REPLScreen) applyVimG(r rune) ScreenEvent {
 			return ScreenEvent{}
 		}
 		s.applyVimLineMotionOperator(operator, targetLine, 'g', count)
+	case 'v':
+		if operator == 0 {
+			s.restoreVimLastVisualSelection()
+		}
 	case 'j':
 		if operator == 0 {
 			s.Prompt.moveLogicalLine(count)
@@ -800,10 +808,39 @@ func (s *REPLScreen) toggleVimVisualActiveEnd() {
 }
 
 func (s *REPLScreen) exitVimVisual() {
+	s.rememberVimVisualSelection()
+	s.clearVimVisualState()
+}
+
+func (s *REPLScreen) clearVimVisualState() {
 	s.clearVimPending()
 	s.VimMode = VimNormal
 	s.VimVisualAnchor = 0
 	s.VimVisualLinewise = false
+}
+
+func (s *REPLScreen) rememberVimVisualSelection() {
+	if s.VimMode != VimVisual && s.VimMode != VimVisualLine {
+		return
+	}
+	s.VimLastVisualAnchor = s.Prompt.clampCursor(s.VimVisualAnchor)
+	s.VimLastVisualCursor = s.Prompt.clampCursor(s.Prompt.Cursor)
+	s.VimLastVisualLinewise = s.VimMode == VimVisualLine || s.VimVisualLinewise
+	s.VimLastVisualValid = true
+}
+
+func (s *REPLScreen) restoreVimLastVisualSelection() {
+	if !s.VimLastVisualValid {
+		return
+	}
+	s.VimVisualAnchor = s.Prompt.clampCursor(s.VimLastVisualAnchor)
+	s.Prompt.Cursor = s.Prompt.clampCursor(s.VimLastVisualCursor)
+	s.VimVisualLinewise = s.VimLastVisualLinewise
+	if s.VimLastVisualLinewise {
+		s.VimMode = VimVisualLine
+		return
+	}
+	s.VimMode = VimVisual
 }
 
 func (s *REPLScreen) trackVimInsertedText(key Key) {
