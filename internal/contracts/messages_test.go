@@ -221,6 +221,35 @@ func TestSDKEventUnmarshalAcceptsTimestampAliases(t *testing.T) {
 	}
 }
 
+func TestSDKEventUnmarshalAcceptsScalarMessagePayload(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw      string
+		wantType MessageType
+		wantText string
+	}{
+		"message string": {
+			raw:      `{"type":"assistant","message":"hello from scalar"}`,
+			wantType: MessageAssistant,
+			wantText: "hello from scalar",
+		},
+		"message blocks": {
+			raw:      `{"type":"user","message":[{"type":"text","text":"hello from block"}]}`,
+			wantType: MessageUser,
+			wantText: "hello from block",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var event SDKEvent
+			if err := json.Unmarshal([]byte(tc.raw), &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Message == nil || event.Message.Type != tc.wantType || len(event.Message.Content) != 1 || event.Message.Content[0].Text != tc.wantText {
+				t.Fatalf("message = %#v", event.Message)
+			}
+		})
+	}
+}
+
 func TestContentBlockUnmarshalAcceptsTextAliases(t *testing.T) {
 	for name, raw := range map[string]string{
 		"body":         `{"type":"text","body":"from body"}`,

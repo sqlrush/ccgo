@@ -198,7 +198,7 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	}
 	base := SDKEventJSON{}
 	aux.SDKEventJSON = &base
-	normalizedData := normalizeSDKEventTimestampJSON(data)
+	normalizedData := normalizeSDKEventJSON(data)
 	if err := json.Unmarshal(normalizedData, &aux); err != nil {
 		return err
 	}
@@ -304,7 +304,7 @@ func firstSDKEventType(values ...string) SDKEventType {
 	return ""
 }
 
-func normalizeSDKEventTimestampJSON(data []byte) []byte {
+func normalizeSDKEventJSON(data []byte) []byte {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return data
@@ -336,6 +336,13 @@ func normalizeSDKEventTimestampJSON(data []byte) []byte {
 		}
 		fields[name] = []byte(strconv.Quote(string(raw)))
 		changed = true
+	}
+	if raw := bytes.TrimSpace(fields["message"]); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) && raw[0] != '{' {
+		wrapped, err := json.Marshal(map[string]json.RawMessage{"content": raw})
+		if err == nil {
+			fields["message"] = wrapped
+			changed = true
+		}
 	}
 	if !changed {
 		return data

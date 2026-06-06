@@ -1940,6 +1940,29 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventTimestampAliases(t *testing.
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsScalarEventMessagePayload(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"type":"user","eventId":"evt_scalar_u","sessionID":"s_scalar","timestamp":"2026-01-01T00:00:01Z","message":[{"type":"text","text":"hello from blocks"}]},
+		{"type":"assistant","eventId":"evt_scalar_a","sessionID":"s_scalar","parentMessageId":"evt_scalar_u","timestamp":"2026-01-01T00:00:02Z","message":"hello from scalar"}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "evt_scalar_u" || messages[1].UUID != "evt_scalar_a" {
+		t.Fatalf("messages = %#v", messages)
+	}
+	if messages[0].Message == nil || messages[0].Message.Type != contracts.MessageUser || messages[0].Message.Content[0].Text != "hello from blocks" {
+		t.Fatalf("user scalar payload = %#v", messages[0].Message)
+	}
+	if messages[1].Message == nil || messages[1].Message.Type != contracts.MessageAssistant || messages[1].Message.Content[0].Text != "hello from scalar" {
+		t.Fatalf("assistant scalar payload = %#v", messages[1].Message)
+	}
+	if messages[1].ParentUUID == nil || *messages[1].ParentUUID != "evt_scalar_u" || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_scalar_u" {
+		t.Fatalf("parent linkage = %#v message=%#v", messages[1].ParentUUID, messages[1].Message)
+	}
+}
+
 func TestRemoteHistoryTranscriptMessagesAcceptsEventPayloadAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[
