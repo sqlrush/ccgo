@@ -9964,6 +9964,95 @@ func TestRunDialogRuntimeScriptAcceptsEventAndResultAliases(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptNormalizesScreenEventAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"text": "go",
+			"key": "enter",
+			"expectEvent": {
+				"eventName": "promptSubmitted",
+				"eventPayload": "go"
+			}
+		},
+		{
+			"text": "again",
+			"key": "enter",
+			"expectEvents": [
+				{
+					"eventType": "messageSubmitted",
+					"eventValue": "again"
+				}
+			]
+		},
+		{
+			"focusOut": true,
+			"expectEvent": {
+				"event": "focusOut"
+			},
+			"expectFocused": false
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(42, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 3 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "go" ||
+		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "again" ||
+		result.Events[2].Type != ScreenEventFocusOut {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunDialogRuntimeScriptNormalizesDialogEventAliases(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{
+			"requestPermission": {"requestID": "perm_event", "tool": "Bash", "actions": "Approve"},
+			"expectDialog": {"active": true, "permissionID": "perm_event", "dialogKind": "permission"}
+		},
+		{
+			"key": "enter",
+			"expectEvent": {
+				"resource": {
+					"attributes": {
+						"eventName": "dialogAction",
+						"actionValue": "Approve",
+						"permissionID": "perm_event",
+						"dialogKind": "permission"
+					}
+				}
+			},
+			"expectDialogResult": {
+				"eventName": "dialogAction",
+				"actionValue": "Approve",
+				"permissionID": "perm_event",
+				"dialogKind": "permission",
+				"result": "allowed",
+				"found": true
+			}
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(42, 8, nil)
+	runtime := NewDialogRuntime()
+	result, err := RunDialogRuntimeScriptChecked(&screen, runtime, "ready", steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventDialogAction || result.Events[0].Value != "Approve" || result.Events[0].DialogID != "perm_event" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	if len(result.DialogResults) != 1 || result.DialogResults[0].Status != DialogResultAllowed {
+		t.Fatalf("dialog results = %#v", result.DialogResults)
+	}
+}
+
 func TestRunDialogRuntimeScriptChecksDialogResultCounts(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{

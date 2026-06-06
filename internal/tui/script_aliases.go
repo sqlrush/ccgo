@@ -4616,10 +4616,30 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 		"event",
 		"Name",
 		"name",
+		"EventName",
+		"event_name",
+		"eventName",
 		"Value",
 		"value",
+		"EventValue",
+		"event_value",
+		"eventValue",
 		"Payload",
 		"payload",
+		"EventPayload",
+		"event_payload",
+		"eventPayload",
+		"ActionValue",
+		"action_value",
+		"actionValue",
+		"Result",
+		"result",
+		"Selection",
+		"selection",
+		"Input",
+		"input",
+		"Prompt",
+		"prompt",
 		"Text",
 		"text",
 		"Message",
@@ -4665,12 +4685,27 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if event.Type == "" {
-		if eventType := stringJSONField(fields, "Type", "type", "EventType", "event_type", "eventType", "Event", "event", "Name", "name"); eventType != "" {
-			event.Type = ScreenEventType(eventType)
+		if eventType := stringJSONField(fields, "Type", "type", "EventType", "event_type", "eventType", "Event", "event", "Name", "name", "EventName", "event_name", "eventName"); eventType != "" {
+			event.Type = normalizeScreenEventType(eventType)
 		}
 	}
+	if event.Type != "" {
+		event.Type = normalizeScreenEventType(string(event.Type))
+	}
 	if event.Value == "" {
-		event.Value = scalarStringJSONField(fields, "Value", "value", "Payload", "payload", "Text", "text", "Message", "message", "Data", "data")
+		event.Value = scalarStringJSONField(fields,
+			"Value", "value",
+			"EventValue", "event_value", "eventValue",
+			"Payload", "payload", "EventPayload", "event_payload", "eventPayload",
+			"ActionValue", "action_value", "actionValue",
+			"Result", "result",
+			"Selection", "selection",
+			"Input", "input",
+			"Prompt", "prompt",
+			"Text", "text",
+			"Message", "message",
+			"Data", "data",
+		)
 	}
 	if event.Display == "" {
 		event.Display = scalarStringJSONField(fields, "Display", "display")
@@ -4684,6 +4719,50 @@ func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
 		}
 	}
 	return nil
+}
+
+func normalizeScreenEventType(raw string) ScreenEventType {
+	name := normalizeActionName(raw)
+	switch name {
+	case "", "none", "no_event", "noop", "no_op":
+		return ScreenEventNone
+	case "prompt_submitted", "prompt_submit", "submit_prompt", "submit", "submitted", "message_submitted", "input_submitted":
+		return ScreenEventPromptSubmitted
+	case "dialog_action", "dialog_action_selected", "dialog_selected", "dialog_submit", "dialog_button", "dialog_button_clicked", "action_selected", "action_clicked":
+		return ScreenEventDialogAction
+	case "cancelled", "canceled", "cancel", "prompt_cancelled", "prompt_canceled", "dismissed", "escape":
+		return ScreenEventCancelled
+	case "interrupted", "interrupt", "stop", "stopped", "stop_generation", "cancel_generation":
+		return ScreenEventInterrupted
+	case "exit_pending", "pending_exit", "confirm_exit":
+		return ScreenEventExitPending
+	case "exit", "quit", "closed":
+		return ScreenEventExit
+	case "redraw", "clear", "clear_screen", "refresh", "refresh_screen":
+		return ScreenEventRedraw
+	case "toggle_transcript", "transcript_toggled", "show_transcript":
+		return ScreenEventToggleTranscript
+	case "toggle_todos", "toggle_todo", "toggle_tasks", "tasks_toggled":
+		return ScreenEventToggleTodos
+	case "external_editor", "open_editor", "editor_opened":
+		return ScreenEventExternalEditor
+	case "stash_prompt", "prompt_stashed", "stash":
+		return ScreenEventStashPrompt
+	case "kill_agents", "agents_killed", "cancel_agents":
+		return ScreenEventKillAgents
+	case "reverse_search", "history_search", "search_history":
+		return ScreenEventReverseSearch
+	case "reverse_search_selected", "history_search_selected", "search_selected":
+		return ScreenEventReverseSelected
+	case "focus_in", "focus", "focused":
+		return ScreenEventFocusIn
+	case "focus_out", "blur", "blurred":
+		return ScreenEventFocusOut
+	case "viewport_selected", "viewport_selection", "selection", "selected":
+		return ScreenEventViewportSelected
+	default:
+		return ScreenEventType(raw)
+	}
 }
 
 func (expect *DialogResultExpectation) UnmarshalJSON(data []byte) error {
