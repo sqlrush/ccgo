@@ -461,6 +461,21 @@ func TestTerminalParserDispatchesWindowResizeReports(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesCursorPositionReports(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" + CSISequence(12, 34, "R") + "b"
+	actions := parser.Feed(input)
+	if len(actions) != 3 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionReport || actions[1].Report.Type != CSIReportActionCursorPosition || actions[1].Report.Row != 12 || actions[1].Report.Column != 34 {
+		t.Fatalf("cursor position report action = %#v", actions[1])
+	}
+	if got := TerminalVisibleText(input); got != "ab" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
 func TestTerminalParserUsesOutputTokenizerForCSIM(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("\x1b[M`rK")

@@ -41,6 +41,7 @@ const (
 	CSICommandEraseField       byte = 'N'
 	CSICommandEraseArea        byte = 'O'
 	CSICommandDeleteCharacters byte = 'P'
+	CSICommandCursorPosReport  byte = 'R'
 	CSICommandEraseCharacters  byte = 'X'
 	CSICommandBackwardTab      byte = 'Z'
 	CSICommandScrollUp         byte = 'S'
@@ -235,6 +236,8 @@ type CSIReportAction struct {
 	Width       int
 	Rows        int
 	Columns     int
+	Row         int
+	Column      int
 }
 
 type CSIScrollActionType string
@@ -456,6 +459,8 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		return csiEdit(CSIEditActionInsertChars, p0), true
 	case CSICommandDeleteCharacters:
 		return csiEdit(CSIEditActionDeleteChars, p0), true
+	case CSICommandCursorPosReport:
+		return csiCursorPositionReport(p0, p1, privateMode), true
 	case CSICommandInsertLines:
 		return csiEdit(CSIEditActionInsertLines, p0), true
 	case CSICommandDeleteLines:
@@ -582,6 +587,18 @@ func csiReport(code int, privateMode byte) CSIAction {
 	return CSIAction{
 		Type:   CSIActionReport,
 		Report: CSIReportAction{Type: actionType, Code: code, PrivateMode: privateMode},
+	}
+}
+
+func csiCursorPositionReport(row int, column int, privateMode byte) CSIAction {
+	return CSIAction{
+		Type: CSIActionReport,
+		Report: CSIReportAction{
+			Type:        CSIReportActionCursorPosition,
+			PrivateMode: privateMode,
+			Row:         row,
+			Column:      column,
+		},
 	}
 }
 
