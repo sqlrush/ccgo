@@ -853,7 +853,28 @@ func parseColonFields(value string) map[string]string {
 }
 
 func TerminalClipboardSequence(text string) string {
-	return OSCSequence(OSCClipboard, "c", base64.StdEncoding.EncodeToString([]byte(text)))
+	return TerminalClipboardSelectionSequence("c", text)
+}
+
+func TerminalClipboardSelectionSequence(selection string, text string) string {
+	return OSCSequence(OSCClipboard, normalizeClipboardSelection(selection), base64.StdEncoding.EncodeToString([]byte(text)))
+}
+
+func ClearTerminalClipboardSequence() string {
+	return ClearTerminalClipboardSelectionSequence("c")
+}
+
+func ClearTerminalClipboardSelectionSequence(selection string) string {
+	return OSCSequence(OSCClipboard, normalizeClipboardSelection(selection), "")
+}
+
+func normalizeClipboardSelection(selection string) string {
+	selection = strings.TrimSpace(selection)
+	selection = strings.ReplaceAll(selection, ";", "")
+	if selection == "" {
+		return "c"
+	}
+	return selection
 }
 
 func TerminalProgressSequence(state TerminalProgressState, percentage int) string {

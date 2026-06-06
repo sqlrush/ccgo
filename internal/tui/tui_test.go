@@ -4865,6 +4865,32 @@ func TestTerminalClipboardSequence(t *testing.T) {
 	if seq != want {
 		t.Fatalf("clipboard = %q, want %q", seq, want)
 	}
+
+	primary := TerminalClipboardSelectionSequence("p", "primary")
+	wantPrimary := OSCPrefix + OSCClipboard + ";p;cHJpbWFyeQ==" + OSCTerminator
+	if primary != wantPrimary {
+		t.Fatalf("primary clipboard = %q, want %q", primary, wantPrimary)
+	}
+	parsed, ok := ParseOSCSequence(primary)
+	if !ok || parsed.Type != OSCActionClipboard || !parsed.Clipboard.Valid || parsed.Clipboard.Selection != "p" || parsed.Clipboard.Text != "primary" {
+		t.Fatalf("parsed primary clipboard = %#v ok=%v", parsed, ok)
+	}
+
+	clear := ClearTerminalClipboardSelectionSequence("p")
+	wantClear := OSCPrefix + OSCClipboard + ";p;" + OSCTerminator
+	if clear != wantClear {
+		t.Fatalf("clear clipboard = %q, want %q", clear, wantClear)
+	}
+	parsedClear, ok := ParseOSCSequence(clear)
+	if !ok || parsedClear.Type != OSCActionClipboard || !parsedClear.Clipboard.Valid || !parsedClear.Clipboard.Clear || parsedClear.Clipboard.Selection != "p" {
+		t.Fatalf("parsed clear clipboard = %#v ok=%v", parsedClear, ok)
+	}
+
+	defaultClear := ClearTerminalClipboardSelectionSequence("")
+	wantDefaultClear := OSCPrefix + OSCClipboard + ";c;" + OSCTerminator
+	if defaultClear != wantDefaultClear {
+		t.Fatalf("default clear clipboard = %q, want %q", defaultClear, wantDefaultClear)
+	}
 }
 
 func TestTerminalProgressSequence(t *testing.T) {

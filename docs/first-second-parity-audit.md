@@ -261,7 +261,7 @@ M7 progress now includes:
 - `internal/tui`: terminal OSC helpers now generate OSC 8 hyperlink start/end sequences with official URL-derived id parameters and explicit param overrides.
 - `internal/tui`: terminal OSC helpers now generate OSC 9;4 progress clear/set/error/indeterminate sequences with official 0..100 percentage clamping.
 - `internal/tui`: terminal OSC helpers now generate iTerm2, Kitty, and Ghostty notification sequences plus raw BEL notifications for caller-managed emission.
-- `internal/tui`: terminal OSC helpers now generate OSC 52 clipboard sequences using clipboard selection `c` and UTF-8 base64 payloads; native clipboard and tmux buffer runtime remain future work.
+- `internal/tui`: terminal OSC helpers now generate OSC 52 clipboard sequences using UTF-8 base64 payloads, support explicit clipboard selections and clear sequences, and still leave native clipboard and tmux buffer runtime for future work.
 - `internal/tui`: terminal OSC helpers now support explicit ST (`ESC \\`) terminators for Kitty-style no-BEL OSC output while preserving BEL as the default.
 - `internal/tui`: terminal OSC helpers now parse `#RRGGBB` and XParseColor-style `rgb:R/G/B` colors, scaling 1-4 digit hex components to 8-bit RGB like the official parser.
 - `internal/tui`: terminal OSC parsing now exposes OSC 10-19 dynamic color set/query sequences as structured color actions, including repeated payload parameters that advance to subsequent dynamic color targets while keeping visible text clean.
