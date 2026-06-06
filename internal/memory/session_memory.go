@@ -117,12 +117,27 @@ func LoadSessionSummary(path string) (SessionSummary, error) {
 		PreTokens:          parseInt(firstFrontmatterField(frontmatter, "pre_tokens", "preTokens", "token_count", "tokenCount")),
 	}
 	return SessionSummary{
-		SessionID:       contracts.ID(firstFrontmatterField(frontmatter, "session_id", "sessionId", "sessionID", "id")),
-		Path:            path,
-		Summary:         strings.TrimSpace(body),
-		UpdatedAt:       updatedAt,
-		LastMessageUUID: contracts.ID(firstFrontmatterField(frontmatter, "last_message_uuid", "lastMessageUuid", "lastMessageUUID", "last_message_id", "lastMessageId")),
-		Metadata:        metadata,
+		SessionID: contracts.ID(firstFrontmatterField(
+			frontmatter,
+			"session_id", "sessionId", "sessionID", "session_uuid", "sessionUuid", "sessionUUID",
+			"conversation_id", "conversationId", "conversationID",
+			"thread_id", "threadId", "threadID",
+			"transcript_id", "transcriptId", "transcriptID",
+			"id",
+		)),
+		Path:      path,
+		Summary:   strings.TrimSpace(body),
+		UpdatedAt: updatedAt,
+		LastMessageUUID: contracts.ID(firstFrontmatterField(
+			frontmatter,
+			"last_message_uuid", "lastMessageUuid", "lastMessageUUID",
+			"last_message_id", "lastMessageId", "lastMessageID",
+			"message_uuid", "messageUuid", "messageUUID",
+			"message_id", "messageId", "messageID",
+			"leaf_uuid", "leafUuid", "leafUUID",
+			"leaf_id", "leafId", "leafID",
+		)),
+		Metadata: metadata,
 	}, nil
 }
 

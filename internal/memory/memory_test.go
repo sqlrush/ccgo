@@ -918,6 +918,47 @@ numeric time summary
 	}
 }
 
+func TestLoadSessionSummaryAcceptsIDAliases(t *testing.T) {
+	tests := []struct {
+		name       string
+		sessionKey string
+		messageKey string
+	}{
+		{
+			name:       "session uuid and message id",
+			sessionKey: "sessionUUID",
+			messageKey: "messageID",
+		},
+		{
+			name:       "conversation id and leaf id",
+			sessionKey: "conversationId",
+			messageKey: "leafID",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, SessionSummaryFilename)
+			if err := os.WriteFile(path, []byte(`---
+type: session
+`+tt.sessionKey+`: sess_alias
+`+tt.messageKey+`: msg_alias
+---
+id alias summary
+`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := LoadSessionSummary(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded.SessionID != "sess_alias" || loaded.LastMessageUUID != "msg_alias" {
+				t.Fatalf("loaded = %#v", loaded)
+			}
+		})
+	}
+}
+
 func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{
