@@ -1038,6 +1038,8 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[13;2u", want: KeyShiftEnter},
 		{seq: "\x1b[13;2:1u", want: KeyShiftEnter},
 		{seq: "\x1b[9;2u", want: KeyShiftTab},
+		{seq: "\x1b[8;2u", want: KeyBackspace},
+		{seq: "\x1b[127;2u", want: KeyBackspace},
 		{seq: "\x1b[90;2u", want: KeyRune, rune: 'Z'},
 		{seq: "\x1b[90:122;2:1u", want: KeyRune, rune: 'Z'},
 		{seq: "\x1b[97;3u", want: KeyUnknown},

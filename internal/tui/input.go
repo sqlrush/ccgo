@@ -420,6 +420,8 @@ func altCSIuKey(codepoint int) (Key, bool) {
 
 func shiftCSIuKey(codepoint int) (Key, bool) {
 	switch codepoint {
+	case 8, 127:
+		return Key{Type: KeyBackspace}, true
 	case 9:
 		return Key{Type: KeyShiftTab}, true
 	case 10, 13:
