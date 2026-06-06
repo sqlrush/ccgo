@@ -2964,8 +2964,15 @@ func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bo
 		"key", "Key", "keyName", "key_name", "name", "value",
 		"code", "Code", "keyCodeName", "key_code_name",
 	)
+	if scriptKeyEventUnknownName(key) {
+		key = ""
+	}
 	if key == "" {
-		return "", false
+		var ok bool
+		key, ok = scriptKeyEventNumericNameFromFields(fields)
+		if !ok {
+			return "", false
+		}
 	}
 	base, modifierOnly := scriptKeyEventBaseName(key)
 	if base == "" || modifierOnly {
@@ -2986,6 +2993,92 @@ func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bo
 	default:
 		return base, true
 	}
+}
+
+func scriptKeyEventUnknownName(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "", "unidentified", "unknown":
+		return true
+	default:
+		return false
+	}
+}
+
+func scriptKeyEventNumericNameFromFields(fields map[string]json.RawMessage) (string, bool) {
+	if value := intPtrJSONField(fields, "charCode", "char_code", "charcode", "CharCode"); value != nil && *value > 0 {
+		return scriptKeyEventCharCodeName(*value)
+	}
+	if value := intPtrJSONField(fields, "keyCode", "key_code", "keycode", "KeyCode"); value != nil && *value > 0 {
+		return scriptKeyEventKeyCodeName(*value)
+	}
+	if value := intPtrJSONField(fields, "which", "Which"); value != nil && *value > 0 {
+		return scriptKeyEventKeyCodeName(*value)
+	}
+	return "", false
+}
+
+func scriptKeyEventCharCodeName(code int) (string, bool) {
+	switch code {
+	case 8:
+		return "backspace", true
+	case 9:
+		return "tab", true
+	case 10, 13:
+		return "enter", true
+	case 27:
+		return "escape", true
+	}
+	if code == 32 {
+		return "space", true
+	}
+	if code >= 32 && code <= 126 {
+		return string(rune(code)), true
+	}
+	return "", false
+}
+
+func scriptKeyEventKeyCodeName(code int) (string, bool) {
+	switch code {
+	case 8:
+		return "backspace", true
+	case 9:
+		return "tab", true
+	case 13:
+		return "enter", true
+	case 16, 17, 18, 91, 92, 93, 224:
+		return "", true
+	case 27:
+		return "escape", true
+	case 32:
+		return "space", true
+	case 33:
+		return "page-up", true
+	case 34:
+		return "page-down", true
+	case 35:
+		return "end", true
+	case 36:
+		return "home", true
+	case 37:
+		return "left", true
+	case 38:
+		return "up", true
+	case 39:
+		return "right", true
+	case 40:
+		return "down", true
+	case 46:
+		return "delete", true
+	}
+	switch {
+	case code >= 65 && code <= 90:
+		return string(rune('a' + code - 65)), true
+	case code >= 48 && code <= 57:
+		return string(rune('0' + code - 48)), true
+	case code >= 96 && code <= 105:
+		return string(rune('0' + code - 96)), true
+	}
+	return "", false
 }
 
 func scriptKeyEventBaseName(key string) (string, bool) {
