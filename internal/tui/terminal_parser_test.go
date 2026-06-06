@@ -83,6 +83,51 @@ func TestTerminalVisibleWidthUsesBaseWidthForCombiningMarks(t *testing.T) {
 	}
 }
 
+func TestTerminalParserSegmentsSpacingAndPrependMarks(t *testing.T) {
+	parser := NewTerminalParser()
+	actions := parser.Feed("\u0915\u093e!\u0600A")
+	if len(actions) != 1 || actions[0].Type != TerminalActionText {
+		t.Fatalf("actions = %#v", actions)
+	}
+	want := []TerminalGrapheme{
+		{Value: "\u0915\u093e", Width: 1},
+		{Value: "!", Width: 1},
+		{Value: "\u0600A", Width: 1},
+	}
+	if len(actions[0].Graphemes) != len(want) {
+		t.Fatalf("graphemes = %#v", actions[0].Graphemes)
+	}
+	for i, got := range actions[0].Graphemes {
+		if got != want[i] {
+			t.Fatalf("grapheme %d = %#v, want %#v", i, got, want[i])
+		}
+	}
+	if got := TerminalActionsVisibleWidth(actions); got != 3 {
+		t.Fatalf("width = %d", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\u0600"); len(actions) != 0 {
+		t.Fatalf("partial prepend actions = %#v", actions)
+	}
+	actions = parser.Feed("B!")
+	if len(actions) != 1 || len(actions[0].Graphemes) != 2 {
+		t.Fatalf("chunked prepend actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\u0600B" || got.Width != 1 {
+		t.Fatalf("chunked prepend grapheme = %#v", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\u0600"); len(actions) != 0 {
+		t.Fatalf("flush prepend feed actions = %#v", actions)
+	}
+	actions = parser.Flush()
+	if len(actions) != 1 || len(actions[0].Graphemes) != 1 || actions[0].Graphemes[0].Value != "\u0600" || actions[0].Graphemes[0].Width != 0 {
+		t.Fatalf("flush prepend actions = %#v", actions)
+	}
+}
+
 func TestTerminalParserKeepsCRLFGraphemeTogether(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed("a\r\nb")

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -267,6 +268,9 @@ func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
 	if value == "\r" {
 		return true
 	}
+	if terminalGraphemeIsOnlyPrepend(value) {
+		return true
+	}
 	last, _ := utf8.DecodeLastRuneInString(value)
 	if last == 0x200d || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeMayContinueHangul(value) {
 		return true
@@ -391,6 +395,7 @@ func nextTerminalGrapheme(text string) (string, int) {
 			return text[:end+nextSize], end + nextSize
 		}
 	}
+	prependPrefix := isTerminalPrepend(first)
 	previousWasZWJ := false
 	regionalCount := 0
 	if isTerminalRegionalIndicator(first) {
@@ -402,7 +407,19 @@ func nextTerminalGrapheme(text string) (string, int) {
 		if r == utf8.RuneError && nextSize == 0 {
 			break
 		}
-		if isTerminalCombiningMark(r) || isTerminalVariationSelector(r) || isTerminalEmojiModifier(r) || isTerminalEmojiTag(r) {
+		if prependPrefix {
+			end += nextSize
+			prependPrefix = isTerminalPrepend(r)
+			if !prependPrefix {
+				hangulClass = terminalHangulClassOf(r)
+				if isTerminalRegionalIndicator(r) {
+					regionalCount = 1
+				}
+			}
+			previousWasZWJ = false
+			continue
+		}
+		if isTerminalCombiningMark(r) || isTerminalSpacingMark(r) || isTerminalVariationSelector(r) || isTerminalEmojiModifier(r) || isTerminalEmojiTag(r) {
 			end += nextSize
 			previousWasZWJ = false
 			continue
@@ -441,6 +458,9 @@ func terminalGraphemeStringWidth(grapheme string) int {
 	hasBase := false
 	hasWidePresentation := false
 	for _, r := range grapheme {
+		if !hasBase && isTerminalPrepend(r) {
+			continue
+		}
 		if !hasBase {
 			hasBase = true
 			if isTerminalEmoji(r) || isTerminalEastAsianWide(r) || isTerminalHangulWideBase(r) {
@@ -462,7 +482,7 @@ func terminalGraphemeStringWidth(grapheme string) int {
 			hasWidePresentation = true
 			continue
 		}
-		if isTerminalCombiningMark(r) {
+		if isTerminalCombiningMark(r) || isTerminalSpacingMark(r) {
 			continue
 		}
 		if isTerminalEmoji(r) || isTerminalEastAsianWide(r) {
@@ -470,7 +490,7 @@ func terminalGraphemeStringWidth(grapheme string) int {
 		}
 	}
 	if !hasBase {
-		return 1
+		return 0
 	}
 	if hasWidePresentation {
 		return 2
@@ -488,6 +508,17 @@ func terminalGraphemeCanStartKeycapSequence(value string) bool {
 
 func isTerminalLineBreakGrapheme(value string) bool {
 	return value == "\n" || value == "\r" || value == "\r\n"
+}
+
+func terminalGraphemeIsOnlyPrepend(value string) bool {
+	seen := false
+	for _, r := range value {
+		if !isTerminalPrepend(r) {
+			return false
+		}
+		seen = true
+	}
+	return seen
 }
 
 func terminalGraphemeMayContinueHangul(value string) bool {
@@ -592,11 +623,27 @@ func isTerminalEastAsianWide(r rune) bool {
 }
 
 func isTerminalCombiningMark(r rune) bool {
-	return (r >= 0x0300 && r <= 0x036f) ||
+	return unicode.Is(unicode.Mn, r) ||
+		unicode.Is(unicode.Me, r) ||
+		(r >= 0x0300 && r <= 0x036f) ||
 		(r >= 0x1ab0 && r <= 0x1aff) ||
 		(r >= 0x1dc0 && r <= 0x1dff) ||
 		(r >= 0x20d0 && r <= 0x20ff) ||
 		(r >= 0xfe20 && r <= 0xfe2f)
+}
+
+func isTerminalSpacingMark(r rune) bool {
+	return unicode.Is(unicode.Mc, r)
+}
+
+func isTerminalPrepend(r rune) bool {
+	return (r >= 0x0600 && r <= 0x0605) ||
+		r == 0x06dd ||
+		r == 0x070f ||
+		(r >= 0x0890 && r <= 0x0891) ||
+		r == 0x08e2 ||
+		r == 0x110bd ||
+		r == 0x110cd
 }
 
 func isTerminalVariationSelector(r rune) bool {
