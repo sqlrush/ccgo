@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -727,6 +728,11 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 				"node",
 				"nodes",
 				"edges",
+				"matches",
+				"memories",
+				"files",
+				"files_list",
+				"filesList",
 				"items",
 				"resources",
 				"included",
@@ -772,8 +778,18 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		FilePathCamel                string            `json:"filePath"`
 		FilePaths                    []string          `json:"file_paths"`
 		FilePathsCamel               []string          `json:"filePaths"`
+		FileURI                      string            `json:"file_uri"`
+		FileURICamel                 string            `json:"fileUri"`
+		FileURL                      string            `json:"file_url"`
+		FileURLCamel                 string            `json:"fileUrl"`
 		Path                         string            `json:"path"`
 		Paths                        []string          `json:"paths"`
+		URI                          string            `json:"uri"`
+		URIs                         []string          `json:"uris"`
+		URL                          string            `json:"url"`
+		URLs                         []string          `json:"urls"`
+		Href                         string            `json:"href"`
+		Hrefs                        []string          `json:"hrefs"`
 		File                         string            `json:"file"`
 		Files                        []string          `json:"files"`
 		ID                           string            `json:"id"`
@@ -836,7 +852,14 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			object.RelevantMemoryPathCamel,
 			object.FilePath,
 			object.FilePathCamel,
+			object.FileURI,
+			object.FileURICamel,
+			object.FileURL,
+			object.FileURLCamel,
 			object.Path,
+			object.URI,
+			object.URL,
+			object.Href,
 			object.File,
 			object.MemoryID,
 			object.MemoryIDCamel,
@@ -852,7 +875,11 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			object.RelevantMemoryPathsCamel,
 			object.FilePaths,
 			object.FilePathsCamel,
+			[]string{object.FileURI, object.FileURICamel, object.FileURL, object.FileURLCamel},
 			object.Paths,
+			object.URIs,
+			object.URLs,
+			object.Hrefs,
 			object.Files,
 			object.MemoryIDs,
 			object.MemoryIDsCamel,
@@ -1316,8 +1343,20 @@ var relevantMemoryItemIDKeys = []string{
 	"filePath",
 	"file_paths",
 	"filePaths",
+	"file_uri",
+	"fileUri",
+	"fileURI",
+	"file_url",
+	"fileUrl",
+	"fileURL",
 	"path",
 	"paths",
+	"uri",
+	"uris",
+	"url",
+	"urls",
+	"href",
+	"hrefs",
 	"file",
 	"files",
 	"id",
@@ -1644,6 +1683,7 @@ func relevantMemorySelectionsByIDs(candidates []relevantMemoryCandidate, ids []s
 			header.Filename,
 			header.Path,
 			filepath.ToSlash(header.Path),
+			relevantMemoryFileURI(header.Path),
 			base,
 			strings.TrimSuffix(base, filepath.Ext(base)),
 			strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename)),
@@ -1661,7 +1701,7 @@ func relevantMemorySelectionsByIDs(candidates []relevantMemoryCandidate, ids []s
 	selected := make([]RelevantMemorySelection, 0, limit)
 	seen := map[string]struct{}{}
 	for _, id := range ids {
-		selection, ok := lookup[strings.TrimSpace(id)]
+		selection, ok := relevantMemoryLookupSelection(lookup, id)
 		if !ok {
 			continue
 		}
@@ -1675,6 +1715,71 @@ func relevantMemorySelectionsByIDs(candidates []relevantMemoryCandidate, ids []s
 		}
 	}
 	return selected
+}
+
+func relevantMemoryLookupSelection(lookup map[string]RelevantMemorySelection, id string) (RelevantMemorySelection, bool) {
+	for _, key := range relevantMemoryLookupKeysForID(id) {
+		if selection, ok := lookup[key]; ok {
+			return selection, true
+		}
+	}
+	return RelevantMemorySelection{}, false
+}
+
+func relevantMemoryLookupKeysForID(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	keys := []string{id}
+	parsed, err := url.Parse(id)
+	if err == nil && parsed.Scheme != "" {
+		if parsed.Scheme == "file" && parsed.Path != "" {
+			path := filepath.FromSlash(parsed.Path)
+			keys = append(keys, path, filepath.ToSlash(path))
+		}
+		if parsed.Path != "" {
+			path := strings.TrimSpace(parsed.Path)
+			keys = append(keys, path, filepath.FromSlash(path), filepath.ToSlash(path))
+			base := filepath.Base(filepath.FromSlash(path))
+			keys = append(keys, base, strings.TrimSuffix(base, filepath.Ext(base)))
+		}
+	}
+	base := filepath.Base(filepath.FromSlash(id))
+	if base != "." && base != string(filepath.Separator) && base != "" {
+		keys = append(keys, base, strings.TrimSuffix(base, filepath.Ext(base)))
+	}
+	return uniqueNonEmptyStrings(keys)
+}
+
+func relevantMemoryFileURI(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if !filepath.IsAbs(path) {
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+	}
+	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func transcriptForMemory(history []contracts.Message) string {

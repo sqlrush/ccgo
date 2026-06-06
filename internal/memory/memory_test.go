@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -513,6 +514,38 @@ func TestMemoryAgentSelectRelevantMemoriesParsesIncludedCollections(t *testing.T
 		t.Fatalf("result = %#v", result)
 	}
 	if len(result.Selected) != 2 || result.Selected[0].Path != opsPath || result.Selected[1].Path != dbPath {
+		t.Fatalf("selected = %#v", result.Selected)
+	}
+}
+
+func TestMemoryAgentSelectRelevantMemoriesParsesURIPathAliases(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	opsPath := filepath.Join(dir, "ops.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_uri",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(fmt.Sprintf(`{
+			"query":"database access",
+			"memories":[
+				{"type":"memory-selection","uri":"%s"},
+				{"type":"memory-selection","href":"https://memory.example.local/api/files/ops.md"}
+			]
+		}`, "file://"+filepath.ToSlash(dbPath)))},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "file://"+filepath.ToSlash(dbPath)+",https://memory.example.local/api/files/ops.md" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Selected) != 2 || result.Selected[0].Path != dbPath || result.Selected[1].Path != opsPath {
 		t.Fatalf("selected = %#v", result.Selected)
 	}
 }
