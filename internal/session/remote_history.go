@@ -1092,17 +1092,43 @@ func remoteHistoryRelTokens(raw map[string]json.RawMessage) []string {
 		}
 		var text string
 		if err := json.Unmarshal(data, &text); err == nil {
-			tokens = append(tokens, strings.Fields(strings.ToLower(text))...)
+			tokens = append(tokens, remoteHistoryRelTextTokens(text)...)
 			continue
 		}
 		var values []string
 		if err := json.Unmarshal(data, &values); err == nil {
 			for _, value := range values {
-				tokens = append(tokens, strings.Fields(strings.ToLower(value))...)
+				tokens = append(tokens, remoteHistoryRelTextTokens(value)...)
 			}
 		}
 	}
 	return tokens
+}
+
+func remoteHistoryRelTextTokens(text string) []string {
+	var tokens []string
+	for _, token := range strings.Fields(text) {
+		if rel := remoteHistoryCanonicalRelToken(token); rel != "" {
+			tokens = append(tokens, rel)
+		}
+	}
+	return tokens
+}
+
+func remoteHistoryCanonicalRelToken(token string) string {
+	compact := strings.NewReplacer("_", "", "-", "", " ", "").Replace(strings.ToLower(strings.TrimSpace(token)))
+	switch compact {
+	case "previous", "previouspage", "previouslink", "previouscursor":
+		return "previous"
+	case "prev", "prevpage", "prevlink", "prevcursor":
+		return "prev"
+	case "older", "olderpage", "olderlink", "oldercursor":
+		return "older"
+	case "next", "nextpage", "nextlink", "nextcursor":
+		return "next"
+	default:
+		return ""
+	}
 }
 
 func remoteHistoryProviderResponseText(raw map[string]json.RawMessage) (string, bool) {
@@ -1633,11 +1659,9 @@ func remoteHistoryLinkHeaderCursor(values []string) string {
 			if cursor == "" {
 				continue
 			}
-			for _, name := range strings.Fields(strings.ToLower(rel)) {
-				if name == "previous" || name == "prev" || name == "older" || name == "next" {
-					if cursors[name] == "" {
-						cursors[name] = cursor
-					}
+			for _, name := range remoteHistoryRelTextTokens(rel) {
+				if cursors[name] == "" {
+					cursors[name] = cursor
 				}
 			}
 		}

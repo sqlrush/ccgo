@@ -822,9 +822,9 @@ func TestFetchRemoteHistoryAcceptsLinkArrayCursors(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"links":[{"rel":"self","href":"/v1/sessions/s/events?cursor=self"},{"rel":"previous","href":"/v1/sessions/s/events?before_id=evt_array"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"links":[{"rel":"self","href":"/v1/sessions/s/events?cursor=self"},{"rel":"previous-page","href":"/v1/sessions/s/events?before_id=evt_array"}]}`))
 		case "evt_array":
-			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":[{"rel":["older"],"url":"/v1/sessions/s/events?cursor=evt_array_old"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":[{"rel":["older_page"],"url":"/v1/sessions/s/events?cursor=evt_array_old"}]}`))
 		case "evt_array_old":
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}],"links":[]}`))
 		default:
@@ -956,10 +956,10 @@ func TestFetchRemoteHistoryAcceptsLinkHeaderCursors(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			w.Header().Set("Link", `</v1/sessions/s/events?cursor=self>; rel="self"; title="latest, self", </v1/sessions/s/events?before_id=evt_header&filter=alpha,beta>; rel="prev"`)
+			w.Header().Set("Link", `</v1/sessions/s/events?cursor=self>; rel="self"; title="latest, self", </v1/sessions/s/events?before_id=evt_header&filter=alpha,beta>; rel="prev-page"`)
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}]}`))
 		case "evt_header":
-			w.Header().Set("Link", `</v1/sessions/s/events?cursor=evt_older&tags=one,two>; rel="older"`)
+			w.Header().Set("Link", `</v1/sessions/s/events?cursor=evt_older&tags=one,two>; rel="older-page"`)
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}]}`))
 		case "evt_older":
 			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}]}`))
