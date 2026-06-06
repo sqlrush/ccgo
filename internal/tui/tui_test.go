@@ -1855,6 +1855,50 @@ func TestParseKeyBindingSpecsAcceptsNestedWrappers(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsWrappedScalarFields(t *testing.T) {
+	specs, err := ParseKeyBindingSpecs([]byte(`{
+		"bindings": [
+			{
+				"key": {"payload": {"value": "ctrl-r"}},
+				"action": {"data": {"commandName": "editor.action.deleteWordLeft"}}
+			},
+			{
+				"keys": [{"value": "ctrl-x"}, {"resource": {"attributes": {"value": "ctrl-k"}}}],
+				"command": {"node": {"value": false}}
+			},
+			{
+				"shortcut": {"resource": {"attributes": {"shortcutKey": "shiftEnter"}}},
+				"commandName": {"resource": {"attributes": {"value": "insertNewline"}}}
+			}
+		]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 3 || specs[0].Key != "ctrl-r" || specs[0].Action != Action("editor.action.deleteWordLeft") || specs[1].Key != "ctrl-x ctrl-k" || specs[1].Action != ActionNone || specs[2].Key != "shiftEnter" || specs[2].Action != Action("insertNewline") {
+		t.Fatalf("specs = %#v", specs)
+	}
+	keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := keymap.Resolve(ParseKey("\x12")); action != ActionDeleteWordBack {
+		t.Fatalf("wrapped ctrl-r action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+		t.Fatalf("wrapped ctrl-x prefix action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionNone {
+		t.Fatalf("wrapped ctrl-x ctrl-k action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x0b")); action != ActionDeleteToEnd {
+		t.Fatalf("wrapped ctrl-k after pending action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[13;2u")); action != ActionInsertNewline {
+		t.Fatalf("wrapped shift-enter action = %q", action)
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsProviderResponseWrappers(t *testing.T) {
 	specArray := []map[string]any{
 		{"key": "ctrl-r", "action": "pageDown"},

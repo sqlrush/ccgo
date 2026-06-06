@@ -349,22 +349,12 @@ func bindingKeyField(fields map[string]json.RawMessage, names ...string) (string
 			continue
 		}
 		data = bytes.TrimSpace(data)
-		if len(data) == 0 || bytes.Equal(data, []byte("null")) {
-			return "", true, nil
+		key, ok, err := bindingKeyValue(data, 0)
+		if err != nil {
+			return "", false, fmt.Errorf("%s: %w", name, err)
 		}
-		if data[0] == '"' {
-			var key string
-			if err := json.Unmarshal(data, &key); err != nil {
-				return "", false, fmt.Errorf("%s: %w", name, err)
-			}
+		if ok {
 			return key, true, nil
-		}
-		if data[0] == '[' {
-			var keys []string
-			if err := json.Unmarshal(data, &keys); err != nil {
-				return "", false, fmt.Errorf("%s: %w", name, err)
-			}
-			return strings.Join(keys, " "), true, nil
 		}
 		return "", false, fmt.Errorf("%s must be a string, string array, or null", name)
 	}
@@ -378,24 +368,138 @@ func bindingActionField(fields map[string]json.RawMessage, names ...string) (Act
 			continue
 		}
 		data = bytes.TrimSpace(data)
-		if len(data) == 0 || bytes.Equal(data, []byte("null")) {
-			return ActionNone, true, nil
+		action, ok, err := bindingActionValue(data, 0)
+		if err != nil {
+			return "", false, fmt.Errorf("%s: %w", name, err)
 		}
-		if data[0] == '"' {
-			var action Action
-			if err := json.Unmarshal(data, &action); err != nil {
-				return "", false, fmt.Errorf("%s: %w", name, err)
-			}
+		if ok {
 			return action, true, nil
 		}
+		return "", false, fmt.Errorf("%s must be an action string, null, or false", name)
+	}
+	return "", false, nil
+}
+
+func bindingKeyValue(data json.RawMessage, depth int) (string, bool, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return "", true, nil
+	}
+	switch data[0] {
+	case '"':
+		var key string
+		if err := json.Unmarshal(data, &key); err != nil {
+			return "", false, err
+		}
+		return key, true, nil
+	case '[':
+		var items []json.RawMessage
+		if err := json.Unmarshal(data, &items); err != nil {
+			return "", false, err
+		}
+		keys := make([]string, 0, len(items))
+		for _, item := range items {
+			key, ok, err := bindingKeyValue(item, depth+1)
+			if err != nil {
+				return "", false, err
+			}
+			if !ok {
+				return "", false, fmt.Errorf("array entries must be strings or wrapped strings")
+			}
+			if key != "" {
+				keys = append(keys, key)
+			}
+		}
+		return strings.Join(keys, " "), true, nil
+	case '{':
+		return bindingWrappedKeyValue(data, depth)
+	default:
+		return "", false, nil
+	}
+}
+
+func bindingActionValue(data json.RawMessage, depth int) (Action, bool, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return ActionNone, true, nil
+	}
+	switch data[0] {
+	case '"':
+		var action Action
+		if err := json.Unmarshal(data, &action); err != nil {
+			return "", false, err
+		}
+		return action, true, nil
+	case '{':
+		return bindingWrappedActionValue(data, depth)
+	default:
 		var enabled bool
 		if err := json.Unmarshal(data, &enabled); err == nil {
 			if !enabled {
 				return ActionNone, true, nil
 			}
-			return "", false, fmt.Errorf("%s boolean true must use an action name", name)
+			return "", false, fmt.Errorf("boolean true must use an action name")
 		}
-		return "", false, fmt.Errorf("%s must be an action string, null, or false", name)
+		return "", false, nil
+	}
+}
+
+func bindingWrappedKeyValue(data json.RawMessage, depth int) (string, bool, error) {
+	if depth >= 8 {
+		return "", false, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return "", false, err
+	}
+	if key, ok, err := bindingKeyField(fields, bindingKeyValueFields()...); ok || err != nil {
+		return key, ok, err
+	}
+	for _, name := range bindingScalarWrapperFields() {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		key, ok, err := bindingKeyValue(raw, depth+1)
+		if ok || err != nil {
+			return key, ok, err
+		}
 	}
 	return "", false, nil
+}
+
+func bindingWrappedActionValue(data json.RawMessage, depth int) (Action, bool, error) {
+	if depth >= 8 {
+		return "", false, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return "", false, err
+	}
+	if action, ok, err := bindingActionField(fields, bindingActionValueFields()...); ok || err != nil {
+		return action, ok, err
+	}
+	for _, name := range bindingScalarWrapperFields() {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		action, ok, err := bindingActionValue(raw, depth+1)
+		if ok || err != nil {
+			return action, ok, err
+		}
+	}
+	return "", false, nil
+}
+
+func bindingKeyValueFields() []string {
+	return []string{"value", "key", "keys", "key_sequence", "keySequence", "shortcut", "shortcut_key", "shortcutKey", "shortcut_keys", "shortcutKeys", "sequence", "accelerator", "accelerators", "keystroke", "keyStroke", "hotkey", "hotKey", "key_combo", "keyCombo", "chord", "keyChord"}
+}
+
+func bindingActionValueFields() []string {
+	return []string{"value", "action", "command", "action_name", "actionName", "command_name", "commandName", "command_id", "commandId"}
+}
+
+func bindingScalarWrapperFields() []string {
+	return []string{"payload", "data", "body", "result", "response", "output", "resource", "attributes", "properties", "attrs", "node", "edge", "record", "entry", "item"}
 }
