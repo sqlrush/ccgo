@@ -1613,6 +1613,51 @@ func TestMemoryAgentRecallParsesSummaryCollectionAliases(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentRecallParsesConversationThreadAliases(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+	}{
+		{id: "prior", summary: "database access policy notes", updated: 300},
+		{id: "other", summary: "credential rotation notes", updated: 200},
+		{id: "third", summary: "deployment runbook notes", updated: 100},
+	} {
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_recall_conversation_aliases",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
+			"query":"database access",
+			"selectedConversations":[{"conversationId":"prior"}],
+			"relevantThreads":[{"threadId":"other"}],
+			"candidateTranscripts":[{"transcript":{"transcriptId":"third"}}]
+		}`)},
+	}}
+
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior,other,third" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Matches) != 3 || result.Matches[0].Summary.SessionID != "prior" || result.Matches[1].Summary.SessionID != "other" || result.Matches[2].Summary.SessionID != "third" {
+		t.Fatalf("matches = %#v", result.Matches)
+	}
+}
+
 func TestMemoryAgentRecallParsesSessionURISelectionAliases(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	prior, err := WriteSessionSummary(SessionSummaryOptions{

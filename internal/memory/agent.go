@@ -487,103 +487,145 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		return parseRecallAgentJSON(text)
 	}
 	var object struct {
-		Query                   string            `json:"query"`
-		SearchQuery             string            `json:"search_query"`
-		SearchQueryCamel        string            `json:"searchQuery"`
-		RewrittenQuery          string            `json:"rewritten_query"`
-		RewrittenQueryCamel     string            `json:"rewrittenQuery"`
-		ExpandedQuery           string            `json:"expanded_query"`
-		ExpandedQueryCamel      string            `json:"expandedQuery"`
-		SessionID               string            `json:"session_id"`
-		SessionIDs              []string          `json:"session_ids"`
-		SessionIDsCamel         []string          `json:"sessionIds"`
-		SelectedSessionID       string            `json:"selected_session_id"`
-		SelectedSessionIDs      []string          `json:"selected_session_ids"`
-		SelectedSessionIDsCamel []string          `json:"selectedSessionIds"`
-		SelectedIDs             []string          `json:"selected_ids"`
-		SelectedIDsCamel        []string          `json:"selectedIds"`
-		RelevantIDs             []string          `json:"relevant_ids"`
-		RelevantIDsCamel        []string          `json:"relevantIds"`
-		RelevantSessionIDs      []string          `json:"relevant_session_ids"`
-		RelevantSessionIDsCamel []string          `json:"relevantSessionIds"`
-		MemoryID                string            `json:"memory_id"`
-		MemoryIDCamel           string            `json:"memoryId"`
-		MemoryIDs               []string          `json:"memory_ids"`
-		MemoryIDsCamel          []string          `json:"memoryIds"`
-		CandidateID             string            `json:"candidate_id"`
-		CandidateIDCamel        string            `json:"candidateId"`
-		CandidateIDs            []string          `json:"candidate_ids"`
-		CandidateIDsCamel       []string          `json:"candidateIds"`
-		SessionURI              string            `json:"session_uri"`
-		SessionURICamel         string            `json:"sessionUri"`
-		SessionURL              string            `json:"session_url"`
-		SessionURLCamel         string            `json:"sessionUrl"`
-		URI                     string            `json:"uri"`
-		URIs                    []string          `json:"uris"`
-		URL                     string            `json:"url"`
-		URLs                    []string          `json:"urls"`
-		Href                    string            `json:"href"`
-		Hrefs                   []string          `json:"hrefs"`
-		Links                   json.RawMessage   `json:"links"`
-		HALLinks                json.RawMessage   `json:"_links"`
-		ID                      string            `json:"id"`
-		IDs                     []string          `json:"ids"`
-		Type                    string            `json:"type"`
-		ResourceType            string            `json:"resource_type"`
-		ResourceTypeCamel       string            `json:"resourceType"`
-		Kind                    string            `json:"kind"`
-		Matches                 []json.RawMessage `json:"matches"`
-		Memories                []json.RawMessage `json:"memories"`
-		Sessions                []json.RawMessage `json:"sessions"`
-		Summaries               []json.RawMessage `json:"summaries"`
-		SelectedSessions        []json.RawMessage `json:"selected_sessions"`
-		SelectedSessionsCamel   []json.RawMessage `json:"selectedSessions"`
-		SelectedMemories        []json.RawMessage `json:"selected_memories"`
-		SelectedMemoriesCamel   []json.RawMessage `json:"selectedMemories"`
-		SelectedSummaries       []json.RawMessage `json:"selected_summaries"`
-		SelectedSummariesCamel  []json.RawMessage `json:"selectedSummaries"`
-		RelevantSessions        []json.RawMessage `json:"relevant_sessions"`
-		RelevantSessionsCamel   []json.RawMessage `json:"relevantSessions"`
-		RelevantMemories        []json.RawMessage `json:"relevant_memories"`
-		RelevantMemoriesCamel   []json.RawMessage `json:"relevantMemories"`
-		RelevantSummaries       []json.RawMessage `json:"relevant_summaries"`
-		RelevantSummariesCamel  []json.RawMessage `json:"relevantSummaries"`
-		CandidateSessions       []json.RawMessage `json:"candidate_sessions"`
-		CandidateSessionsCamel  []json.RawMessage `json:"candidateSessions"`
-		CandidateMemories       []json.RawMessage `json:"candidate_memories"`
-		CandidateMemoriesCamel  []json.RawMessage `json:"candidateMemories"`
-		CandidateSummaries      []json.RawMessage `json:"candidate_summaries"`
-		CandidateSummariesCamel []json.RawMessage `json:"candidateSummaries"`
-		Candidates              []json.RawMessage `json:"candidates"`
-		Results                 []json.RawMessage `json:"results"`
-		Nodes                   []json.RawMessage `json:"nodes"`
-		Edges                   []json.RawMessage `json:"edges"`
-		Items                   []json.RawMessage `json:"items"`
-		Resources               []json.RawMessage `json:"resources"`
-		Included                json.RawMessage   `json:"included"`
-		Collection              json.RawMessage   `json:"collection"`
-		List                    json.RawMessage   `json:"list"`
-		Children                json.RawMessage   `json:"children"`
-		Values                  json.RawMessage   `json:"values"`
-		Records                 json.RawMessage   `json:"records"`
-		Entries                 json.RawMessage   `json:"entries"`
-		Selection               json.RawMessage   `json:"selection"`
-		Selected                json.RawMessage   `json:"selected"`
-		Data                    json.RawMessage   `json:"data"`
-		Payload                 json.RawMessage   `json:"payload"`
-		Body                    json.RawMessage   `json:"body"`
-		Resource                json.RawMessage   `json:"resource"`
-		Attributes              json.RawMessage   `json:"attributes"`
-		Properties              json.RawMessage   `json:"properties"`
-		Attrs                   json.RawMessage   `json:"attrs"`
-		Viewer                  json.RawMessage   `json:"viewer"`
-		Edge                    json.RawMessage   `json:"edge"`
-		Node                    json.RawMessage   `json:"node"`
-		Result                  json.RawMessage   `json:"result"`
-		Response                json.RawMessage   `json:"response"`
-		Recall                  json.RawMessage   `json:"recall"`
-		MemoryRecall            json.RawMessage   `json:"memory_recall"`
-		MemoryRecallCamel       json.RawMessage   `json:"memoryRecall"`
+		Query                        string            `json:"query"`
+		SearchQuery                  string            `json:"search_query"`
+		SearchQueryCamel             string            `json:"searchQuery"`
+		RewrittenQuery               string            `json:"rewritten_query"`
+		RewrittenQueryCamel          string            `json:"rewrittenQuery"`
+		ExpandedQuery                string            `json:"expanded_query"`
+		ExpandedQueryCamel           string            `json:"expandedQuery"`
+		SessionID                    string            `json:"session_id"`
+		SessionIDs                   []string          `json:"session_ids"`
+		SessionIDsCamel              []string          `json:"sessionIds"`
+		ConversationID               string            `json:"conversation_id"`
+		ConversationIDCamel          string            `json:"conversationId"`
+		ThreadID                     string            `json:"thread_id"`
+		ThreadIDCamel                string            `json:"threadId"`
+		TranscriptID                 string            `json:"transcript_id"`
+		TranscriptIDCamel            string            `json:"transcriptId"`
+		SelectedSessionID            string            `json:"selected_session_id"`
+		SelectedSessionIDs           []string          `json:"selected_session_ids"`
+		SelectedSessionIDsCamel      []string          `json:"selectedSessionIds"`
+		SelectedConversationID       string            `json:"selected_conversation_id"`
+		SelectedConversationIDCamel  string            `json:"selectedConversationId"`
+		SelectedThreadID             string            `json:"selected_thread_id"`
+		SelectedThreadIDCamel        string            `json:"selectedThreadId"`
+		SelectedTranscriptID         string            `json:"selected_transcript_id"`
+		SelectedTranscriptIDCamel    string            `json:"selectedTranscriptId"`
+		SelectedIDs                  []string          `json:"selected_ids"`
+		SelectedIDsCamel             []string          `json:"selectedIds"`
+		RelevantIDs                  []string          `json:"relevant_ids"`
+		RelevantIDsCamel             []string          `json:"relevantIds"`
+		RelevantSessionIDs           []string          `json:"relevant_session_ids"`
+		RelevantSessionIDsCamel      []string          `json:"relevantSessionIds"`
+		RelevantConversationID       string            `json:"relevant_conversation_id"`
+		RelevantConversationIDCamel  string            `json:"relevantConversationId"`
+		RelevantThreadID             string            `json:"relevant_thread_id"`
+		RelevantThreadIDCamel        string            `json:"relevantThreadId"`
+		RelevantTranscriptID         string            `json:"relevant_transcript_id"`
+		RelevantTranscriptIDCamel    string            `json:"relevantTranscriptId"`
+		MemoryID                     string            `json:"memory_id"`
+		MemoryIDCamel                string            `json:"memoryId"`
+		MemoryIDs                    []string          `json:"memory_ids"`
+		MemoryIDsCamel               []string          `json:"memoryIds"`
+		CandidateID                  string            `json:"candidate_id"`
+		CandidateIDCamel             string            `json:"candidateId"`
+		CandidateIDs                 []string          `json:"candidate_ids"`
+		CandidateIDsCamel            []string          `json:"candidateIds"`
+		CandidateConversationID      string            `json:"candidate_conversation_id"`
+		CandidateConversationIDCamel string            `json:"candidateConversationId"`
+		CandidateThreadID            string            `json:"candidate_thread_id"`
+		CandidateThreadIDCamel       string            `json:"candidateThreadId"`
+		CandidateTranscriptID        string            `json:"candidate_transcript_id"`
+		CandidateTranscriptIDCamel   string            `json:"candidateTranscriptId"`
+		SessionURI                   string            `json:"session_uri"`
+		SessionURICamel              string            `json:"sessionUri"`
+		SessionURL                   string            `json:"session_url"`
+		SessionURLCamel              string            `json:"sessionUrl"`
+		URI                          string            `json:"uri"`
+		URIs                         []string          `json:"uris"`
+		URL                          string            `json:"url"`
+		URLs                         []string          `json:"urls"`
+		Href                         string            `json:"href"`
+		Hrefs                        []string          `json:"hrefs"`
+		Links                        json.RawMessage   `json:"links"`
+		HALLinks                     json.RawMessage   `json:"_links"`
+		ID                           string            `json:"id"`
+		IDs                          []string          `json:"ids"`
+		Type                         string            `json:"type"`
+		ResourceType                 string            `json:"resource_type"`
+		ResourceTypeCamel            string            `json:"resourceType"`
+		Kind                         string            `json:"kind"`
+		Matches                      []json.RawMessage `json:"matches"`
+		Memories                     []json.RawMessage `json:"memories"`
+		Sessions                     []json.RawMessage `json:"sessions"`
+		Summaries                    []json.RawMessage `json:"summaries"`
+		SelectedSessions             []json.RawMessage `json:"selected_sessions"`
+		SelectedSessionsCamel        []json.RawMessage `json:"selectedSessions"`
+		SelectedConversations        []json.RawMessage `json:"selected_conversations"`
+		SelectedConversationsCamel   []json.RawMessage `json:"selectedConversations"`
+		SelectedThreads              []json.RawMessage `json:"selected_threads"`
+		SelectedThreadsCamel         []json.RawMessage `json:"selectedThreads"`
+		SelectedTranscripts          []json.RawMessage `json:"selected_transcripts"`
+		SelectedTranscriptsCamel     []json.RawMessage `json:"selectedTranscripts"`
+		SelectedMemories             []json.RawMessage `json:"selected_memories"`
+		SelectedMemoriesCamel        []json.RawMessage `json:"selectedMemories"`
+		SelectedSummaries            []json.RawMessage `json:"selected_summaries"`
+		SelectedSummariesCamel       []json.RawMessage `json:"selectedSummaries"`
+		RelevantSessions             []json.RawMessage `json:"relevant_sessions"`
+		RelevantSessionsCamel        []json.RawMessage `json:"relevantSessions"`
+		RelevantConversations        []json.RawMessage `json:"relevant_conversations"`
+		RelevantConversationsCamel   []json.RawMessage `json:"relevantConversations"`
+		RelevantThreads              []json.RawMessage `json:"relevant_threads"`
+		RelevantThreadsCamel         []json.RawMessage `json:"relevantThreads"`
+		RelevantTranscripts          []json.RawMessage `json:"relevant_transcripts"`
+		RelevantTranscriptsCamel     []json.RawMessage `json:"relevantTranscripts"`
+		RelevantMemories             []json.RawMessage `json:"relevant_memories"`
+		RelevantMemoriesCamel        []json.RawMessage `json:"relevantMemories"`
+		RelevantSummaries            []json.RawMessage `json:"relevant_summaries"`
+		RelevantSummariesCamel       []json.RawMessage `json:"relevantSummaries"`
+		CandidateSessions            []json.RawMessage `json:"candidate_sessions"`
+		CandidateSessionsCamel       []json.RawMessage `json:"candidateSessions"`
+		CandidateConversations       []json.RawMessage `json:"candidate_conversations"`
+		CandidateConversationsCamel  []json.RawMessage `json:"candidateConversations"`
+		CandidateThreads             []json.RawMessage `json:"candidate_threads"`
+		CandidateThreadsCamel        []json.RawMessage `json:"candidateThreads"`
+		CandidateTranscripts         []json.RawMessage `json:"candidate_transcripts"`
+		CandidateTranscriptsCamel    []json.RawMessage `json:"candidateTranscripts"`
+		CandidateMemories            []json.RawMessage `json:"candidate_memories"`
+		CandidateMemoriesCamel       []json.RawMessage `json:"candidateMemories"`
+		CandidateSummaries           []json.RawMessage `json:"candidate_summaries"`
+		CandidateSummariesCamel      []json.RawMessage `json:"candidateSummaries"`
+		Candidates                   []json.RawMessage `json:"candidates"`
+		Results                      []json.RawMessage `json:"results"`
+		Nodes                        []json.RawMessage `json:"nodes"`
+		Edges                        []json.RawMessage `json:"edges"`
+		Items                        []json.RawMessage `json:"items"`
+		Resources                    []json.RawMessage `json:"resources"`
+		Included                     json.RawMessage   `json:"included"`
+		Collection                   json.RawMessage   `json:"collection"`
+		List                         json.RawMessage   `json:"list"`
+		Children                     json.RawMessage   `json:"children"`
+		Values                       json.RawMessage   `json:"values"`
+		Records                      json.RawMessage   `json:"records"`
+		Entries                      json.RawMessage   `json:"entries"`
+		Selection                    json.RawMessage   `json:"selection"`
+		Selected                     json.RawMessage   `json:"selected"`
+		Data                         json.RawMessage   `json:"data"`
+		Payload                      json.RawMessage   `json:"payload"`
+		Body                         json.RawMessage   `json:"body"`
+		Resource                     json.RawMessage   `json:"resource"`
+		Attributes                   json.RawMessage   `json:"attributes"`
+		Properties                   json.RawMessage   `json:"properties"`
+		Attrs                        json.RawMessage   `json:"attrs"`
+		Viewer                       json.RawMessage   `json:"viewer"`
+		Edge                         json.RawMessage   `json:"edge"`
+		Node                         json.RawMessage   `json:"node"`
+		Result                       json.RawMessage   `json:"result"`
+		Response                     json.RawMessage   `json:"response"`
+		Recall                       json.RawMessage   `json:"recall"`
+		MemoryRecall                 json.RawMessage   `json:"memory_recall"`
+		MemoryRecallCamel            json.RawMessage   `json:"memoryRecall"`
 	}
 	if err := json.Unmarshal([]byte(raw), &object); err == nil {
 		ids := recallIDs(append([]string{object.SessionID}, object.SessionIDs...))
@@ -591,10 +633,16 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			ids = recallIDs(object.SessionIDsCamel)
 		}
 		if len(ids) == 0 {
+			ids = recallIDs([]string{object.ConversationID, object.ConversationIDCamel, object.ThreadID, object.ThreadIDCamel, object.TranscriptID, object.TranscriptIDCamel})
+		}
+		if len(ids) == 0 {
 			ids = recallIDs(append([]string{object.SelectedSessionID}, object.SelectedSessionIDs...))
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(object.SelectedSessionIDsCamel)
+		}
+		if len(ids) == 0 {
+			ids = recallIDs([]string{object.SelectedConversationID, object.SelectedConversationIDCamel, object.SelectedThreadID, object.SelectedThreadIDCamel, object.SelectedTranscriptID, object.SelectedTranscriptIDCamel})
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append(object.SelectedIDs, object.SelectedIDsCamel...))
@@ -609,10 +657,16 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 			ids = recallIDs(object.RelevantSessionIDsCamel)
 		}
 		if len(ids) == 0 {
+			ids = recallIDs([]string{object.RelevantConversationID, object.RelevantConversationIDCamel, object.RelevantThreadID, object.RelevantThreadIDCamel, object.RelevantTranscriptID, object.RelevantTranscriptIDCamel})
+		}
+		if len(ids) == 0 {
 			ids = recallIDs(append([]string{object.MemoryID, object.MemoryIDCamel}, append(object.MemoryIDs, object.MemoryIDsCamel...)...))
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append([]string{object.CandidateID, object.CandidateIDCamel}, append(object.CandidateIDs, object.CandidateIDsCamel...)...))
+		}
+		if len(ids) == 0 {
+			ids = recallIDs([]string{object.CandidateConversationID, object.CandidateConversationIDCamel, object.CandidateThreadID, object.CandidateThreadIDCamel, object.CandidateTranscriptID, object.CandidateTranscriptIDCamel})
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append(
@@ -636,18 +690,36 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 				object.Summaries,
 				object.SelectedSessions,
 				object.SelectedSessionsCamel,
+				object.SelectedConversations,
+				object.SelectedConversationsCamel,
+				object.SelectedThreads,
+				object.SelectedThreadsCamel,
+				object.SelectedTranscripts,
+				object.SelectedTranscriptsCamel,
 				object.SelectedMemories,
 				object.SelectedMemoriesCamel,
 				object.SelectedSummaries,
 				object.SelectedSummariesCamel,
 				object.RelevantSessions,
 				object.RelevantSessionsCamel,
+				object.RelevantConversations,
+				object.RelevantConversationsCamel,
+				object.RelevantThreads,
+				object.RelevantThreadsCamel,
+				object.RelevantTranscripts,
+				object.RelevantTranscriptsCamel,
 				object.RelevantMemories,
 				object.RelevantMemoriesCamel,
 				object.RelevantSummaries,
 				object.RelevantSummariesCamel,
 				object.CandidateSessions,
 				object.CandidateSessionsCamel,
+				object.CandidateConversations,
+				object.CandidateConversationsCamel,
+				object.CandidateThreads,
+				object.CandidateThreadsCamel,
+				object.CandidateTranscripts,
+				object.CandidateTranscriptsCamel,
 				object.CandidateMemories,
 				object.CandidateMemoriesCamel,
 				object.CandidateSummaries,
@@ -1426,6 +1498,18 @@ var recallItemIDKeys = []string{
 	"session_uuid",
 	"sessionUuid",
 	"sessionUUID",
+	"conversation_id",
+	"conversationId",
+	"conversationID",
+	"conversation_uuid",
+	"conversationUuid",
+	"conversationUUID",
+	"thread_id",
+	"threadId",
+	"threadID",
+	"transcript_id",
+	"transcriptId",
+	"transcriptID",
 	"selected_id",
 	"selectedId",
 	"selectedID",
@@ -1434,6 +1518,27 @@ var recallItemIDKeys = []string{
 	"selectedSessionID",
 	"selected_session",
 	"selectedSession",
+	"selected_conversation_id",
+	"selectedConversationId",
+	"selectedConversationID",
+	"selected_conversation",
+	"selectedConversation",
+	"selected_conversations",
+	"selectedConversations",
+	"selected_thread_id",
+	"selectedThreadId",
+	"selectedThreadID",
+	"selected_thread",
+	"selectedThread",
+	"selected_threads",
+	"selectedThreads",
+	"selected_transcript_id",
+	"selectedTranscriptId",
+	"selectedTranscriptID",
+	"selected_transcript",
+	"selectedTranscript",
+	"selected_transcripts",
+	"selectedTranscripts",
 	"relevant_id",
 	"relevantId",
 	"relevantID",
@@ -1442,6 +1547,27 @@ var recallItemIDKeys = []string{
 	"relevantSessionID",
 	"relevant_session",
 	"relevantSession",
+	"relevant_conversation_id",
+	"relevantConversationId",
+	"relevantConversationID",
+	"relevant_conversation",
+	"relevantConversation",
+	"relevant_conversations",
+	"relevantConversations",
+	"relevant_thread_id",
+	"relevantThreadId",
+	"relevantThreadID",
+	"relevant_thread",
+	"relevantThread",
+	"relevant_threads",
+	"relevantThreads",
+	"relevant_transcript_id",
+	"relevantTranscriptId",
+	"relevantTranscriptID",
+	"relevant_transcript",
+	"relevantTranscript",
+	"relevant_transcripts",
+	"relevantTranscripts",
 	"memory_id",
 	"memoryId",
 	"memoryID",
@@ -1466,6 +1592,27 @@ var recallItemIDKeys = []string{
 	"candidateSessionID",
 	"candidate_session",
 	"candidateSession",
+	"candidate_conversation_id",
+	"candidateConversationId",
+	"candidateConversationID",
+	"candidate_conversation",
+	"candidateConversation",
+	"candidate_conversations",
+	"candidateConversations",
+	"candidate_thread_id",
+	"candidateThreadId",
+	"candidateThreadID",
+	"candidate_thread",
+	"candidateThread",
+	"candidate_threads",
+	"candidateThreads",
+	"candidate_transcript_id",
+	"candidateTranscriptId",
+	"candidateTranscriptID",
+	"candidate_transcript",
+	"candidateTranscript",
+	"candidate_transcripts",
+	"candidateTranscripts",
 	"candidate_memory_id",
 	"candidateMemoryId",
 	"candidateMemoryID",
@@ -1563,12 +1710,30 @@ var relevantMemoryItemIDKeys = []string{
 
 var recallNestedItemKeys = []string{
 	"session",
+	"conversation",
+	"conversations",
+	"thread",
+	"threads",
+	"transcript",
+	"transcripts",
 	"memory",
 	"summary",
 	"summaries",
 	"candidate",
 	"selected_session",
 	"selectedSession",
+	"selected_conversation",
+	"selectedConversation",
+	"selected_conversations",
+	"selectedConversations",
+	"selected_thread",
+	"selectedThread",
+	"selected_threads",
+	"selectedThreads",
+	"selected_transcript",
+	"selectedTranscript",
+	"selected_transcripts",
+	"selectedTranscripts",
 	"selected_memory",
 	"selectedMemory",
 	"selected_summary",
@@ -1577,6 +1742,18 @@ var recallNestedItemKeys = []string{
 	"selectedSummaries",
 	"relevant_session",
 	"relevantSession",
+	"relevant_conversation",
+	"relevantConversation",
+	"relevant_conversations",
+	"relevantConversations",
+	"relevant_thread",
+	"relevantThread",
+	"relevant_threads",
+	"relevantThreads",
+	"relevant_transcript",
+	"relevantTranscript",
+	"relevant_transcripts",
+	"relevantTranscripts",
 	"relevant_memory",
 	"relevantMemory",
 	"relevant_summary",
@@ -1585,6 +1762,18 @@ var recallNestedItemKeys = []string{
 	"relevantSummaries",
 	"candidate_session",
 	"candidateSession",
+	"candidate_conversation",
+	"candidateConversation",
+	"candidate_conversations",
+	"candidateConversations",
+	"candidate_thread",
+	"candidateThread",
+	"candidate_threads",
+	"candidateThreads",
+	"candidate_transcript",
+	"candidateTranscript",
+	"candidate_transcripts",
+	"candidateTranscripts",
 	"candidate_memory",
 	"candidateMemory",
 	"candidate_summary",
