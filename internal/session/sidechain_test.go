@@ -810,6 +810,29 @@ func TestLoadSidechainStateAcceptsExtendedMetadataAliases(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsWrappedMetadataSidecarAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "wrapped_meta", TranscriptMessage{
+		Type: "assistant",
+		UUID: "msg_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metadataPath := SidechainMetadataPath(sessionPath, sessionID, "wrapped_meta")
+	if err := os.WriteFile(metadataPath, []byte(`{"resource":{"id":"meta_1","type":"sidechain-metadata","attributes":{"agentName":"researcher","workspaceRoot":"/tmp/research-worktree","displayTitle":"research wrapped sidecar"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := FindSidechainState(sessionPath, sessionID, "wrapped_meta")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research wrapped sidecar" {
+		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+}
+
 func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

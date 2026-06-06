@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,34 +14,29 @@ type SidechainMetadata struct {
 }
 
 func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
-	type sidechainMetadataJSON SidechainMetadata
-	var canonical sidechainMetadataJSON
-	if err := json.Unmarshal(data, &canonical); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var fields any
+	if err := decoder.Decode(&fields); err != nil {
 		return err
 	}
-	var fields map[string]any
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	metadata := SidechainMetadata(canonical)
+	metadata := SidechainMetadata{}
+	metadata.AgentType = firstStringField(fields, sidechainLifecycleAgentTypeFields...)
 	if metadata.AgentType == "" {
-		metadata.AgentType = firstStringField(fields, appendSidechainMetadataFallbackFields(sidechainLifecycleAgentTypeFields, "type")...)
+		metadata.AgentType = topLevelStringField(fields, "type")
 	}
-	if metadata.WorktreePath == "" {
-		metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
-	}
-	if metadata.Description == "" {
-		metadata.Description = firstStringField(fields, sidechainLifecycleDescriptionFields...)
-	}
+	metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
+	metadata.Description = firstStringField(fields, sidechainLifecycleDescriptionFields...)
 	*m = metadata
 	return nil
 }
 
-func appendSidechainMetadataFallbackFields(fields []string, fallback ...string) []string {
-	out := make([]string, 0, len(fields)+len(fallback))
-	out = append(out, fields...)
-	out = append(out, fallback...)
-	return out
+func topLevelStringField(value any, key string) string {
+	fields, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return scalarStringField(fields[key])
 }
 
 func (m SidechainMetadata) Empty() bool {
