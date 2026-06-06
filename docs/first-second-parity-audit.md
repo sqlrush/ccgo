@@ -305,6 +305,7 @@ M7 progress now includes:
 - `internal/tui`: keybinding config and named-key script input now accept Shift-Tab terminfo aliases such as `backtab`, `back-tab`, and `btab`, mapping them to the existing focus-previous key surface.
 - `internal/tui`: scripted interaction `keys` entries now accept printable text chunks and whitespace-separated named key sequences such as `ctrl-x ctrl-k`.
 - `internal/tui`: scripted interaction key input now accepts press-style aliases such as `press`, `keyPress`, `keypress`, `shortcutKey`, `presses`, `keyPresses`, and `shortcuts`.
+- `internal/tui`: interaction script loading now flattens suite/case arrays such as `cases`, `tests`, `testCases`, `scenarios`, and `fixtures`, expanding nested `steps`, `timeline`, or `scriptSteps` arrays in order while still allowing top-level arrays to mix direct steps and case objects.
 - `internal/tui`: scripted key and key-sequence action payloads now recursively unwrap JSON:API/GraphQL-style wrappers, preserving wrapped single keys and key sequence arrays from API-shaped interaction fixtures.
 - `internal/tui`: direct scripted key alias fields such as `key`, `keyPress`, and `keyPresses` now accept JSON:API/GraphQL-style wrapper objects without failing strong string/list decoding.
 - `internal/tui`: direct scripted string alias fields such as `text`, `pasteText`, `setStatus`, and `snapshotName` now accept JSON:API/GraphQL-style wrapper objects without failing strong scalar decoding.

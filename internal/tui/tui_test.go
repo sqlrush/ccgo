@@ -8614,6 +8614,53 @@ func TestParseInteractionScriptAcceptsWrapperObjects(t *testing.T) {
 	}
 }
 
+func TestParseInteractionScriptAcceptsSuiteCaseArrays(t *testing.T) {
+	for name, script := range map[string]string{
+		"cases": `{"cases":[
+			{"name":"case-one","steps":[
+				{"action":"type","value":"go"},
+				{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"go"}}
+			]}
+		]}`,
+		"data_test_cases": `{"data":{"testCases":[
+			{"id":"test-1","scenario":{"timeline":[
+				{"action":"type","value":"ship"},
+				{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"ship"}}
+			]}}
+		]}}`,
+		"scenarios": `{"scenarios":[
+			{"fixture":{"scriptSteps":[
+				{"action":"type","value":"audit"},
+				{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"audit"}}
+			]}}
+		]}`,
+		"top_level_case_array": `[
+			{"name":"array-case","steps":[
+				{"action":"type","value":"run"},
+				{"type":"press","value":"enter","expectEvent":{"type":"prompt_submitted","value":"run"}}
+			]}
+		]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps, err := ParseInteractionScript([]byte(script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(steps) != 2 {
+				t.Fatalf("steps = %#v", steps)
+			}
+			screen := NewREPLScreen(30, 6, nil)
+			result, err := RunInteractionScriptChecked(&screen, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted {
+				t.Fatalf("events = %#v", result.Events)
+			}
+		})
+	}
+}
+
 func TestParseInteractionScriptAcceptsStepRecordWrappers(t *testing.T) {
 	for name, script := range map[string]string{
 		"array": `[

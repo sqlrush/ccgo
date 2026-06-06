@@ -26,8 +26,8 @@ func ParseInteractionScript(data []byte) ([]ScriptStep, error) {
 		return nil, nil
 	}
 	if data[0] == '[' {
-		var steps []ScriptStep
-		if err := json.Unmarshal(data, &steps); err != nil {
+		steps, err := parseInteractionScriptStepsValue(data)
+		if err != nil {
 			return nil, fmt.Errorf("parse interaction script array: %w", err)
 		}
 		return steps, nil
@@ -84,6 +84,17 @@ func parseInteractionScriptObject(data []byte) ([]ScriptStep, bool, error) {
 		"included",
 		"actions",
 		"timeline",
+		"tests",
+		"test_cases",
+		"testCases",
+		"cases",
+		"scenarios",
+		"fixtures",
+		"recordings",
+		"runs",
+		"operations",
+		"commands",
+		"plays",
 		"collection",
 		"collections",
 		"list",
@@ -183,11 +194,129 @@ func parseInteractionScriptStepsValue(value json.RawMessage) ([]ScriptStep, erro
 			return steps, nil
 		}
 	}
+	if len(value) > 0 && value[0] == '[' {
+		return parseInteractionScriptArrayValue(value)
+	}
 	var steps []ScriptStep
 	if err := json.Unmarshal(value, &steps); err != nil {
 		return nil, err
 	}
 	return steps, nil
+}
+
+func parseInteractionScriptArrayValue(value json.RawMessage) ([]ScriptStep, error) {
+	var items []json.RawMessage
+	if err := json.Unmarshal(value, &items); err != nil {
+		return nil, err
+	}
+	steps := make([]ScriptStep, 0, len(items))
+	for index, item := range items {
+		item = bytes.TrimSpace(item)
+		if len(item) == 0 || bytes.Equal(item, []byte("null")) {
+			continue
+		}
+		if item[0] == '{' && interactionScriptObjectHasContainer(item) {
+			nested, ok, err := parseInteractionScriptObject(item)
+			if err != nil {
+				return nil, fmt.Errorf("item %d: %w", index, err)
+			}
+			if ok {
+				steps = append(steps, nested...)
+				continue
+			}
+		}
+		var step ScriptStep
+		if err := json.Unmarshal(item, &step); err != nil {
+			return nil, fmt.Errorf("item %d: %w", index, err)
+		}
+		steps = append(steps, step)
+	}
+	return steps, nil
+}
+
+func interactionScriptObjectHasContainer(data []byte) bool {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false
+	}
+	for _, name := range []string{
+		"steps",
+		"script",
+		"script_steps",
+		"scriptSteps",
+		"interaction_script",
+		"interactionScript",
+		"interaction_steps",
+		"interactionSteps",
+		"records",
+		"recorded_steps",
+		"recordedSteps",
+		"events",
+		"entries",
+		"items",
+		"included",
+		"actions",
+		"timeline",
+		"tests",
+		"test_cases",
+		"testCases",
+		"cases",
+		"scenarios",
+		"fixtures",
+		"recordings",
+		"runs",
+		"operations",
+		"commands",
+		"plays",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && (raw[0] == '{' || raw[0] == '[') {
+			return true
+		}
+	}
+	if scriptStepJSONHasDirectFields(fields) {
+		return false
+	}
+	for _, name := range []string{
+		"scenario",
+		"test",
+		"case",
+		"fixture",
+		"interaction",
+		"viewer",
+		"connection",
+		"stepConnection",
+		"stepsConnection",
+		"interactionConnection",
+		"recordingConnection",
+		"recording",
+		"session",
+		"run",
+	} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] == '{' {
+			return true
+		}
+	}
+	for _, name := range []string{"data", "payload", "body", "result", "response"} {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] == '{' && interactionScriptObjectHasContainer(raw) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseInteractionScriptOptionalStepsValue(value json.RawMessage) ([]ScriptStep, bool, error) {

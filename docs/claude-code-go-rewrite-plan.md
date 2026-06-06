@@ -324,6 +324,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script 的 per-step keybinding mutation 复用同一套 collection alias、object-map 和 resource wrapper 解析，脚本步骤可直接使用 `keymap`、`keyboardShortcuts`、`hotkeys`、`keyboard`、`preferences` 或 `keybindingConfig` 临时改键位。
 - 本轮补充：interaction script 的 `keys` 字段支持 printable text chunk 和空格分隔 named-key sequence，例如 `ctrl-x ctrl-k`，减少官方脚本把连续输入拆成数组的改写成本。
 - 本轮补充：interaction script key input 接受 press-style aliases，包括 `press`、`keyPress`、`keypress`、`shortcutKey`、`presses`、`keyPresses` 和 `shortcuts`。
+- 本轮补充：interaction script loader 现在会扁平化 `cases`/`tests`/`testCases`/`scenarios`/`fixtures` 等 suite array，每个 case 内的 `steps`/`timeline`/`scriptSteps` 会按顺序展开，顶层数组也可直接混入 case object。
 - 本轮补充：interaction script key/keySequence action payload 现在递归解包 JSON:API/GraphQL-style wrapper，`payload.resource.attributes.key` 和 `edge.node.attrs.sequence` 可直接驱动按键与组合键序列。
 - 本轮补充：interaction script 的直接字符串 alias 字段现在也接受 wrapped object；`text`、`pasteText`、`setStatus`、`snapshotName` 等字段可从 `resource.attributes` 或 `edge.node.attrs` 中恢复正文、paste、status 和 snapshot 名称，避免 direct field fixture 在 scalar decode 阶段失败。
 - 本轮补充：interaction script action/type/kind/name/operation 动作判别字段接受 compact/camel fixture aliases，包括 `typeText`、`inputText`、`insertText`、`keyPress`、`pressKey`、`keySequence`、`pasteText`、`pastedText`、`clipboardText`、`setStatus`、`statusLine`、`terminalSize` 和 `screenSize`。

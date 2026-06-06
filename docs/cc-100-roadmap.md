@@ -596,6 +596,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script key input 现在接受 press-style aliases，包括 `press`、`keyPress`、`keypress`、`shortcutKey`、`presses`、`keyPresses` 和 `shortcuts`。
 
+本轮补充：interaction script loader 现在会扁平化 `cases`/`tests`/`testCases`/`scenarios`/`fixtures` 等 suite array，每个 case 内的 `steps`/`timeline`/`scriptSteps` 会按顺序展开，顶层数组也可直接混入 case object。
+
 本轮补充：interaction script 的 key/keySequence action payload 现在递归解包 JSON:API/GraphQL-style wrapper，wrapped single key 和 key sequence array 可直接驱动按键输入与组合键事件。
 
 本轮补充：interaction script 的 direct key alias 字段现在也接受 wrapped object，`key`、`keyPress`、`keyPresses` 等字段可从 `resource.attributes` 或 `edge.node.attrs` 中恢复单键和 key sequence，避免官方 fixture 直接字段形态在 string/list decode 阶段失败。
