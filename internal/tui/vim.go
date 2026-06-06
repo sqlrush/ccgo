@@ -973,20 +973,24 @@ func (s *REPLScreen) applyVimMacro(target rune) ScreenEvent {
 		if s.VimMacros == nil {
 			s.VimMacros = make(map[rune][]Key)
 		}
-		s.VimMacros[target] = nil
-		s.VimRecordingMacro = target
+		register := normalizeVimMacroRegister(target)
+		if !isVimUpperRegister(target) {
+			s.VimMacros[register] = nil
+		}
+		s.VimRecordingMacro = register
 	case '@':
 		if s.VimReplayingMacro {
 			return ScreenEvent{}
 		}
-		macro := append([]Key(nil), s.VimMacros[target]...)
+		register := normalizeVimMacroRegister(target)
+		macro := append([]Key(nil), s.VimMacros[register]...)
 		if len(macro) == 0 {
 			return ScreenEvent{}
 		}
 		if count <= 0 {
 			count = 1
 		}
-		s.VimLastMacro = target
+		s.VimLastMacro = register
 		s.VimReplayingMacro = true
 		defer func() { s.VimReplayingMacro = false }()
 		var last ScreenEvent
@@ -1623,6 +1627,13 @@ func isVimMarkRune(r rune) bool {
 
 func isVimMacroRegisterRune(r rune) bool {
 	return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9'
+}
+
+func normalizeVimMacroRegister(r rune) rune {
+	if isVimUpperRegister(r) {
+		return unicode.ToLower(r)
+	}
+	return r
 }
 
 func isVimRegisterRune(r rune) bool {

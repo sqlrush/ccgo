@@ -4138,6 +4138,39 @@ func TestREPLScreenVimMacros(t *testing.T) {
 	}
 }
 
+func TestREPLScreenVimMacroUppercaseRegisterAppends(t *testing.T) {
+	screen := NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one")
+	screen.ApplyKey(ParseKey("\x1b"))
+
+	for _, seq := range []string{"q", "a", "A", "!", "\x1b", "q"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	for _, seq := range []string{"q", "A", "A", "?", "\x1b", "q"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.VimRecordingMacro != 0 {
+		t.Fatalf("after append recording screen = %#v", screen)
+	}
+	if len(screen.VimMacros['a']) != 6 {
+		t.Fatalf("appended macro len = %d, want 6", len(screen.VimMacros['a']))
+	}
+	if _, ok := screen.VimMacros['A']; ok {
+		t.Fatalf("uppercase macro register should append to lowercase: %#v", screen.VimMacros)
+	}
+	if screen.Prompt.Text != "one!?" {
+		t.Fatalf("recorded prompt = %q", screen.Prompt.Text)
+	}
+
+	for _, seq := range []string{"0", "@", "a"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one!?!?" || screen.VimLastMacro != 'a' {
+		t.Fatalf("after @a screen = %#v", screen)
+	}
+}
+
 func TestREPLScreenVimSearch(t *testing.T) {
 	screen := NewREPLScreen(40, 8, nil)
 	screen.SetVimEnabled(true)
