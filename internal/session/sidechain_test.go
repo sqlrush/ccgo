@@ -709,6 +709,61 @@ func TestLoadSidechainStateAcceptsNumericLifecycleIDs(t *testing.T) {
 	}
 }
 
+func TestLoadSidechainStateAcceptsRuntimeLifecycleFieldAliases(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	if err := AppendSidechainMessage(sessionPath, sessionID, "runtime-fallback", TranscriptMessage{
+		Type:    "system",
+		UUID:    "runtime_start",
+		Subtype: "task_started",
+		Content: map[string]any{
+			"runtime": map[string]any{
+				"jobID":         "job_77",
+				"workerType":    "investigator",
+				"workspaceRoot": "/tmp/runtime-worktree",
+				"instructions":  "inspect runtime aliases",
+				"startedAtMs":   1700000000000,
+				"jobStatus":     "queued",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSidechainMessage(sessionPath, sessionID, "runtime-fallback", TranscriptMessage{
+		Type:    "system",
+		UUID:    "runtime_finish",
+		Subtype: "task_succeeded",
+		Content: map[string]any{
+			"output": map[string]any{
+				"requestID":    "job_77",
+				"resultState":  "ok",
+				"outputText":   "runtime aliases complete",
+				"finishedAtMs": 1700000010000,
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	states, err := ListSidechainStates(sessionPath, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "job_77" || state.Status != SidechainStatusCompleted || state.Summary != "runtime aliases complete" {
+		t.Fatalf("runtime state = %#v", state)
+	}
+	if state.StartedAt != "1700000000000" || state.EndedAt != "1700000010000" {
+		t.Fatalf("runtime times = started %q ended %q", state.StartedAt, state.EndedAt)
+	}
+	if state.Metadata.AgentType != "investigator" || state.Metadata.WorktreePath != "/tmp/runtime-worktree" || state.Metadata.Description != "inspect runtime aliases" {
+		t.Fatalf("runtime metadata = %#v", state.Metadata)
+	}
+}
+
 func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_1")

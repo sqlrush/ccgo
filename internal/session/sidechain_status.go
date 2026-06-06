@@ -36,6 +36,11 @@ var sidechainLifecycleIDFields = []string{
 	"taskId", "taskID", "task_id",
 	"workerId", "workerID", "worker_id",
 	"runId", "runID", "run_id",
+	"jobId", "jobID", "job_id",
+	"threadId", "threadID", "thread_id",
+	"workflowId", "workflowID", "workflow_id",
+	"operationId", "operationID", "operation_id",
+	"requestId", "requestID", "request_id",
 	"id",
 }
 
@@ -43,6 +48,9 @@ var sidechainLifecycleAgentTypeFields = []string{
 	"agentType", "agent_type",
 	"subagentType", "subagent_type",
 	"agentKind", "agent_kind",
+	"agentRole", "agent_role",
+	"workerType", "worker_type",
+	"taskType", "task_type",
 	"agentName", "agent_name",
 	"kind", "name", "agent",
 }
@@ -53,13 +61,21 @@ var sidechainLifecycleWorktreeFields = []string{
 	"workingDirectory", "working_directory",
 	"cwd",
 	"workspacePath", "workspace_path", "workspace",
-	"path", "directory",
+	"workspaceRoot", "workspace_root",
+	"projectPath", "project_path",
+	"projectDir", "project_dir",
+	"repoPath", "repo_path",
+	"repositoryPath", "repository_path",
+	"root", "path", "directory",
 }
 
 var sidechainLifecycleDescriptionFields = []string{
 	"description", "description_text", "descriptionText",
 	"desc", "summary",
 	"task", "taskDescription", "task_description",
+	"taskPrompt", "task_prompt",
+	"instructions", "instruction",
+	"objective", "goal", "request",
 	"prompt", "input", "command", "title",
 }
 
@@ -68,6 +84,9 @@ var sidechainLifecycleStartTimeFields = []string{
 	"startTime", "start_time",
 	"startedTime", "started_time",
 	"createdAt", "created_at",
+	"startedAtMs", "started_at_ms",
+	"startTimeMs", "start_time_ms",
+	"createdAtMs", "created_at_ms",
 	"timestamp", "time",
 }
 
@@ -77,15 +96,23 @@ var sidechainLifecycleEndTimeFields = []string{
 	"completedAt", "completed_at",
 	"finishedAt", "finished_at",
 	"stoppedAt", "stopped_at",
+	"endedAtMs", "ended_at_ms",
+	"endTimeMs", "end_time_ms",
+	"completedAtMs", "completed_at_ms",
+	"finishedAtMs", "finished_at_ms",
+	"stoppedAtMs", "stopped_at_ms",
 	"timestamp", "time",
 }
 
 var sidechainLifecycleStartStatusFields = []string{
 	"status", "state", "phase", "lifecycle", "lifecycle_state", "lifecycleState",
+	"runStatus", "run_status", "taskStatus", "task_status", "jobStatus", "job_status",
 }
 
 var sidechainLifecycleSummaryStatusFields = []string{
 	"status", "state", "result", "outcome", "phase", "lifecycle", "lifecycle_state", "lifecycleState",
+	"runStatus", "run_status", "taskStatus", "task_status", "jobStatus", "job_status",
+	"resultStatus", "result_status", "resultState", "result_state",
 }
 
 var sidechainLifecycleSummaryFields = []string{
@@ -93,14 +120,19 @@ var sidechainLifecycleSummaryFields = []string{
 	"finalSummary", "final_summary",
 	"resultSummary", "result_summary",
 	"resultText", "result_text",
+	"resultMessage", "result_message",
 	"finalMessage", "final_message",
+	"completion", "completionText", "completion_text",
+	"outputText", "output_text",
+	"messageText", "message_text",
 	"errorMessage", "error_message",
 	"errorText", "error_text",
 	"failureReason", "failure_reason",
 	"failedReason", "failed_reason",
 	"cancelReason", "cancel_reason",
 	"cancellationReason", "cancellation_reason",
-	"message", "text", "output", "value", "final",
+	"message", "text", "body", "output", "value", "final",
+	"detail", "details",
 	"error", "failure", "reason",
 }
 
@@ -385,7 +417,7 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 				}
 			}
 		}
-		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "records", "entry", "entries", "item", "items", "event", "events", "edge", "edges", "node", "nodes", "resource", "resources", "attributes", "properties", "attrs", "metadata", "details", "value", "values", "output", "outputs", "included", "collection", "list", "children"} {
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "records", "entry", "entries", "item", "items", "event", "events", "edge", "edges", "node", "nodes", "resource", "resources", "attributes", "properties", "attrs", "metadata", "details", "runtime", "context", "state", "value", "values", "output", "outputs", "included", "collection", "list", "children"} {
 			if raw, ok := fields[key]; ok {
 				if value := firstStringFieldDepth(raw, keys, depth+1); value != "" {
 					return value
