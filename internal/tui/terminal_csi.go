@@ -379,8 +379,9 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		paramStr = paramStr[:len(paramStr)-1]
 	}
 	params := parseCSIParams(paramStr)
-	p0 := csiParamDefault(params, 0, 1)
-	p1 := csiParamDefault(params, 1, 1)
+	p0 := csiParamPositiveDefault(params, 0, 1)
+	p1 := csiParamPositiveDefault(params, 1, 1)
+	rawP0 := csiParamDefault(params, 0, 0)
 
 	if final == CSICommandSGR && privateMode == 0 {
 		return CSIAction{Type: CSIActionSGR, SGRParams: paramStr}, true
@@ -460,7 +461,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandDeleteLines:
 		return csiEdit(CSIEditActionDeleteLines, p0), true
 	case CSICommandDSR:
-		return csiReport(p0, privateMode), true
+		return csiReport(rawP0, privateMode), true
 	case CSICommandSoftReset:
 		if intermediate == "!" && privateMode == 0 && len(params) == 0 {
 			return CSIAction{Type: CSIActionReset}, true
@@ -500,7 +501,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		if action, ok := csiModeListAction(params, true, final == CSICommandSetMode); ok {
 			return action, true
 		}
-		if action, ok := csiPrivateModeAction(p0, final == CSICommandSetMode); ok {
+		if action, ok := csiPrivateModeAction(rawP0, final == CSICommandSetMode); ok {
 			return action, true
 		}
 	}
@@ -508,7 +509,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 		if action, ok := csiModeListAction(params, false, final == CSICommandSetMode); ok {
 			return action, true
 		}
-		if action, ok := csiModeAction(p0, final == CSICommandSetMode); ok {
+		if action, ok := csiModeAction(rawP0, final == CSICommandSetMode); ok {
 			return action, true
 		}
 	}
@@ -542,6 +543,13 @@ func parseCSIParams(paramStr string) []int {
 
 func csiParamDefault(params []int, index int, defaultValue int) int {
 	if index >= len(params) {
+		return defaultValue
+	}
+	return params[index]
+}
+
+func csiParamPositiveDefault(params []int, index int, defaultValue int) int {
+	if index >= len(params) || params[index] <= 0 {
 		return defaultValue
 	}
 	return params[index]
