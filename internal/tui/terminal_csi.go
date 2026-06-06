@@ -464,7 +464,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandDeleteCharacters:
 		return csiEdit(CSIEditActionDeleteChars, p0), true
 	case CSICommandCursorPosReport:
-		return csiCursorPositionReport(p0, p1, p2, privateMode), true
+		return csiCursorPositionReport(p0, p1, p2, params, privateMode), true
 	case CSICommandInsertLines:
 		return csiEdit(CSIEditActionInsertLines, p0), true
 	case CSICommandDeleteLines:
@@ -600,16 +600,20 @@ func csiReport(code int, params []int, privateMode byte) CSIAction {
 	}
 }
 
-func csiCursorPositionReport(row int, column int, page int, privateMode byte) CSIAction {
+func csiCursorPositionReport(row int, column int, page int, params []int, privateMode byte) CSIAction {
+	report := CSIReportAction{
+		Type:        CSIReportActionCursorPosition,
+		PrivateMode: privateMode,
+		Row:         row,
+		Column:      column,
+		Page:        page,
+	}
+	if len(params) > 1 {
+		report.Params = append([]int(nil), params...)
+	}
 	return CSIAction{
-		Type: CSIActionReport,
-		Report: CSIReportAction{
-			Type:        CSIReportActionCursorPosition,
-			PrivateMode: privateMode,
-			Row:         row,
-			Column:      column,
-			Page:        page,
-		},
+		Type:   CSIActionReport,
+		Report: report,
 	}
 }
 
