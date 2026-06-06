@@ -959,6 +959,52 @@ id alias summary
 	}
 }
 
+func TestLoadSessionSummaryAcceptsSummaryTextAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "frontmatter summary fallback",
+			body: `---
+type: session
+sessionId: sess_summary
+summaryText: frontmatter summary
+---
+`,
+			want: "frontmatter summary",
+		},
+		{
+			name: "body takes precedence",
+			body: `---
+type: session
+sessionId: sess_summary
+summary: frontmatter summary
+---
+body summary
+`,
+			want: "body summary",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, SessionSummaryFilename)
+			if err := os.WriteFile(path, []byte(tt.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := LoadSessionSummary(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded.Summary != tt.want {
+				t.Fatalf("summary = %q, want %q", loaded.Summary, tt.want)
+			}
+		})
+	}
+}
+
 func TestRecallSessionSummariesScoresAndLimits(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	if _, err := WriteSessionSummary(SessionSummaryOptions{

@@ -100,6 +100,7 @@ func LoadSessionSummary(path string) (SessionSummary, error) {
 		return SessionSummary{}, err
 	}
 	frontmatter, body := ParseFrontmatter(string(data))
+	summaryText := sessionSummaryBody(frontmatter, body)
 	updatedAt := firstFrontmatterTime(frontmatter,
 		"updated_at", "updatedAt", "updated", "timestamp", "created_at", "createdAt", "created",
 		"updated_at_ms", "updatedAtMs", "updatedAtMillis", "updated_at_millis",
@@ -126,7 +127,7 @@ func LoadSessionSummary(path string) (SessionSummary, error) {
 			"id",
 		)),
 		Path:      path,
-		Summary:   strings.TrimSpace(body),
+		Summary:   summaryText,
 		UpdatedAt: updatedAt,
 		LastMessageUUID: contracts.ID(firstFrontmatterField(
 			frontmatter,
@@ -386,6 +387,18 @@ func formatSessionSummary(summary SessionSummary) string {
 func parseInt(raw string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(raw))
 	return n
+}
+
+func sessionSummaryBody(frontmatter map[string]string, body string) string {
+	if summary := strings.TrimSpace(body); summary != "" {
+		return summary
+	}
+	return firstFrontmatterField(
+		frontmatter,
+		"summary", "summaryText", "summary_text", "summaryContent", "summary_content",
+		"content", "text", "body", "description", "details",
+		"resultSummary", "result_summary", "finalSummary", "final_summary",
+	)
 }
 
 func firstFrontmatterTime(fields map[string]string, keys ...string) time.Time {
