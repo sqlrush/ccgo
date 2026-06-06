@@ -196,8 +196,8 @@ func resolveCachedImagePath(sessionID contracts.ID, content PastedContent, sourc
 		return localPath, imageMediaTypeFromPath(localPath), true
 	}
 	localPath := ImagePath(sessionID, content.ID, content.MediaType)
-	if _, err := os.Stat(localPath); err == nil {
-		return localPath, imageMediaTypeFromPath(localPath), true
+	if validatedPath, ok := localImageCachePath(sessionID, content.ID, localPath); ok {
+		return validatedPath, imageMediaTypeFromPath(validatedPath), true
 	}
 	matches, err := filepath.Glob(filepath.Join(ImageStoreDir(sessionID), strconv.Itoa(content.ID)+".*"))
 	if err != nil || len(matches) == 0 {
@@ -240,7 +240,34 @@ func localImageCachePath(sessionID contracts.ID, imageID int, sourcePath string)
 	if !strings.HasPrefix(filepath.Base(absPath), strconv.Itoa(imageID)+".") {
 		return "", false
 	}
-	return absPath, true
+	info, err := os.Lstat(absPath)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return "", false
+	}
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return "", false
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return "", false
+	}
+	resolvedPath, err = filepath.Abs(resolvedPath)
+	if err != nil {
+		return "", false
+	}
+	resolvedRoot, err = filepath.Abs(resolvedRoot)
+	if err != nil {
+		return "", false
+	}
+	rel, err = filepath.Rel(resolvedRoot, resolvedPath)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	if !strings.HasPrefix(filepath.Base(resolvedPath), strconv.Itoa(imageID)+".") {
+		return "", false
+	}
+	return resolvedPath, true
 }
 
 func imageMediaTypeFromPath(path string) string {

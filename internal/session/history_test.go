@@ -130,9 +130,10 @@ func TestLogEntryToHistoryEntryRestoresCachedImageContent(t *testing.T) {
 		},
 	}, nil)
 	cached := entry.PastedContents[30]
-	if cached.Content != encoded || cached.SourcePath != storedPath || cached.Filename != "cached.png" {
+	if cached.Content != encoded || cached.Filename != "cached.png" {
 		t.Fatalf("cached image entry = %#v", cached)
 	}
+	requireSameFile(t, cached.SourcePath, storedPath)
 	if outside := entry.PastedContents[31]; outside.Content != "" || outside.SourcePath != unsafePath {
 		t.Fatalf("outside image entry = %#v", outside)
 	}
@@ -173,9 +174,10 @@ func TestLogEntryToHistoryEntryRestoresCachedImageWithoutMediaType(t *testing.T)
 		},
 	}, nil)
 	image := entry.PastedContents[32]
-	if image.Content != encoded || image.MediaType != "image/webp" || image.SourcePath != storedPath {
+	if image.Content != encoded || image.MediaType != "image/webp" {
 		t.Fatalf("cached image without media type = %#v", image)
 	}
+	requireSameFile(t, image.SourcePath, storedPath)
 	messages := PromptMessages(entry.Display, entry.PastedContents)
 	if len(messages) == 0 || len(messages[0].Content) != 2 || messages[0].Content[1].Type != contracts.ContentImage {
 		t.Fatalf("prompt messages = %#v", messages)
@@ -1049,4 +1051,19 @@ func displays(entries []HistoryEntry) []string {
 		out = append(out, entry.Display)
 	}
 	return out
+}
+
+func requireSameFile(t *testing.T, got string, want string) {
+	t.Helper()
+	gotInfo, err := os.Stat(got)
+	if err != nil {
+		t.Fatalf("stat got file %q: %v", got, err)
+	}
+	wantInfo, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("stat want file %q: %v", want, err)
+	}
+	if !os.SameFile(gotInfo, wantInfo) {
+		t.Fatalf("files differ: got %q want %q", got, want)
+	}
 }

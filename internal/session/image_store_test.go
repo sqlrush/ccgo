@@ -157,3 +157,28 @@ func TestImagePathNormalizesMediaTypeParameters(t *testing.T) {
 		t.Fatalf("x-png path = %q, want %q", got, want)
 	}
 }
+
+func TestRestoreCachedImageContentRejectsSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	sessionID := contracts.ID("session-escape")
+	cachePath := ImagePath(sessionID, 40, "image/png")
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outsidePath := filepath.Join(t.TempDir(), "40.png")
+	if err := os.WriteFile(outsidePath, []byte("outside image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsidePath, cachePath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if content, mediaType, restoredPath, ok := RestoreCachedImageContent(sessionID, PastedContent{
+		ID:        40,
+		Type:      PastedContentImage,
+		MediaType: "image/png",
+	}, ""); ok || content != "" || mediaType != "" || restoredPath != "" {
+		t.Fatalf("restore symlink escape = content=%q mediaType=%q path=%q ok=%v", content, mediaType, restoredPath, ok)
+	}
+}
