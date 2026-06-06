@@ -536,6 +536,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal sequence dispatcher 对 tokenizer flush 出来的 OSC partial sequence 使用 `ParseOSCContent` fallback，允许无 BEL/ST terminator 的 title/link/tab-status content 按官方 parser 语义产出 action。
 - 本轮补充：terminal tokenizer 增加明确的 output/input 构造器，output 路径默认不吞 `CSI M` 后续字节，input 路径默认开启 X10 mouse payload 边界消费，避免调用方误用布尔选项导致 output parser 吞文本或 stdin mouse payload 泄漏。
 - 本轮补充：mouse parser 接受 urxvt/xterm 1015 numeric mouse `CSI button;x;yM`，按 legacy offset 还原 button code，左键、释放和滚轮语义与 SGR/X10 mouse 保持一致。
+- 本轮补充：SGR mouse parser 现在拒绝负 button 和 0/负坐标，和 URXVT/X10 parser 的坐标下界 guard 对齐，避免无效 terminal mouse packet 触发点击/滚动事件。
 - 本轮补充：terminal tokenizer 补齐 PM (`ESC ^`) 和 SOS (`ESC X`) string-control 状态，和 OSC/DCS/APC 一样支持 BEL 或 ST terminator，避免这些控制串 payload 泄漏为 text token。
 - 本轮补充：terminal sequence dispatcher/parser 现在把 DCS/APC/PM/SOS string-control 序列分类为 `stringControl` action，保留 payload、terminator 和 incomplete flush 状态，同时 visible text 继续忽略这些不可见控制串。
 - 本轮补充：snapshot/OSC 复用 terminal parser 的 visible-text pipeline，`StripANSI` 不再维护独立手写 scanner；可见文本提取统一覆盖 CSI/OSC/DCS/APC/PM/SOS、flushed partial OSC 和 raw BEL 兼容行为，为后续 ANSI parser 与 renderer/snapshot parity 收口。

@@ -475,6 +475,9 @@ func parseSGRMouse(seq string) (Key, bool) {
 	if err != nil {
 		return Key{}, false
 	}
+	if button < 0 || x < 1 || y < 1 {
+		return Key{}, false
+	}
 	return Key{Type: KeyMouse, MouseButton: button, MouseX: x, MouseY: y, MouseRelease: final == 'm'}, true
 }
 

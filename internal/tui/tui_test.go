@@ -1061,6 +1061,11 @@ func TestParseMouseSequences(t *testing.T) {
 	if release.Type != KeyMouse || release.MouseButton != 0 || release.MouseX != 1 || release.MouseY != 2 || !release.MouseRelease {
 		t.Fatalf("release = %#v", release)
 	}
+	for _, seq := range []string{"\x1b[<0;0;2M", "\x1b[<0;1;0M", "\x1b[<-1;1;2M"} {
+		if key := ParseKey(seq); key.Type != KeyUnknown {
+			t.Fatalf("invalid SGR mouse %q = %#v", seq, key)
+		}
+	}
 	legacyPress := ParseKey("\x1b[M !!")
 	if legacyPress.Type != KeyMouse || legacyPress.MouseButton != 0 || legacyPress.MouseX != 1 || legacyPress.MouseY != 1 || legacyPress.MouseRelease {
 		t.Fatalf("legacy press = %#v", legacyPress)
