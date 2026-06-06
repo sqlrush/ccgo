@@ -1451,6 +1451,49 @@ func TestFetchRemoteHistoryAcceptsSingleObjectEventPages(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsSingularEventContainers(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"event":{"type":"status","event_id":"evt_event","session_id":"s","status":"event"},"hasMore":true,"firstId":"evt_event"}`))
+		case "evt_event":
+			_, _ = w.Write([]byte(`{"item":{"type":"status","eventId":"evt_item","sessionId":"s","status":"item"},"hasMore":true,"firstId":"evt_item"}`))
+		case "evt_item":
+			_, _ = w.Write([]byte(`{"record":{"type":"status","eventId":"evt_record","sessionID":"s","status":"record"},"hasMore":false}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 3 || len(events.Events) != 3 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	for index, want := range []struct {
+		id     string
+		status string
+	}{
+		{id: "evt_event", status: "event"},
+		{id: "evt_item", status: "item"},
+		{id: "evt_record", status: "record"},
+	} {
+		if events.Events[index].ID != contracts.ID(want.id) || events.Events[index].Status != want.status {
+			t.Fatalf("event %d = %#v, want %#v", index, events.Events[index], want)
+		}
+	}
+	if len(seen) != 3 || seen[1].Get("before_id") != "evt_event" || seen[2].Get("before_id") != "evt_item" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryUsesEdgeCursorWhenNodeIDMissing(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
