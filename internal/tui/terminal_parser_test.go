@@ -83,6 +83,57 @@ func TestTerminalVisibleWidthUsesBaseWidthForCombiningMarks(t *testing.T) {
 	}
 }
 
+func TestTerminalParserKeepsCRLFGraphemeTogether(t *testing.T) {
+	parser := NewTerminalParser()
+	actions := parser.Feed("a\r\nb")
+	if len(actions) != 1 || actions[0].Type != TerminalActionText {
+		t.Fatalf("actions = %#v", actions)
+	}
+	want := []TerminalGrapheme{
+		{Value: "a", Width: 1},
+		{Value: "\r\n", Width: 0},
+		{Value: "b", Width: 1},
+	}
+	if len(actions[0].Graphemes) != len(want) {
+		t.Fatalf("graphemes = %#v", actions[0].Graphemes)
+	}
+	for i, got := range actions[0].Graphemes {
+		if got != want[i] {
+			t.Fatalf("grapheme %d = %#v, want %#v", i, got, want[i])
+		}
+	}
+	if got := TerminalActionsVisibleText(actions); got != "a\r\nb" {
+		t.Fatalf("visible = %q", got)
+	}
+	if got := TerminalActionsVisibleWidth(actions); got != 2 {
+		t.Fatalf("width = %d", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\r"); len(actions) != 0 {
+		t.Fatalf("partial cr actions = %#v", actions)
+	}
+	actions = parser.Feed("\nb")
+	if len(actions) != 1 || len(actions[0].Graphemes) != 2 {
+		t.Fatalf("chunked crlf actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\r\n" || got.Width != 0 {
+		t.Fatalf("chunked crlf grapheme = %#v", got)
+	}
+	if got := TerminalActionsVisibleWidth(actions); got != 1 {
+		t.Fatalf("chunked crlf width = %d", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\r"); len(actions) != 0 {
+		t.Fatalf("flush cr feed actions = %#v", actions)
+	}
+	actions = parser.Flush()
+	if len(actions) != 1 || len(actions[0].Graphemes) != 1 || actions[0].Graphemes[0].Value != "\r" || actions[0].Graphemes[0].Width != 0 {
+		t.Fatalf("flush cr actions = %#v", actions)
+	}
+}
+
 func TestTerminalParserDispatchesStringControlActions(t *testing.T) {
 	parser := NewTerminalParser()
 	input := "a" +

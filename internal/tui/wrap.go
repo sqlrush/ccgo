@@ -94,7 +94,7 @@ func graphemesString(graphemes []TerminalGrapheme) string {
 func terminalGraphemesWidth(graphemes []TerminalGrapheme) int {
 	width := 0
 	for _, grapheme := range graphemes {
-		if grapheme.Value == "\n" || grapheme.Value == "\r" {
+		if isTerminalLineBreakGrapheme(grapheme.Value) {
 			continue
 		}
 		width += grapheme.Width
@@ -110,7 +110,7 @@ func trimPlainVisibleWidth(line string, width int) string {
 	var out strings.Builder
 	visible := 0
 	for _, grapheme := range graphemes {
-		if grapheme.Value == "\n" || grapheme.Value == "\r" {
+		if isTerminalLineBreakGrapheme(grapheme.Value) {
 			continue
 		}
 		if visible > 0 && visible+grapheme.Width > width {
@@ -156,7 +156,7 @@ func trimANSIVisibleWidth(line string, width int) string {
 		return out.String()
 	}
 	writeGrapheme := func(grapheme TerminalGrapheme, style TextStyle) bool {
-		if grapheme.Value == "\n" || grapheme.Value == "\r" {
+		if isTerminalLineBreakGrapheme(grapheme.Value) {
 			hasLast = false
 			return true
 		}

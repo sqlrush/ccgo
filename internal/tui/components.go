@@ -95,7 +95,7 @@ func wrapANSIText(text string, width int) []string {
 		switch action.Type {
 		case TerminalActionText:
 			for _, grapheme := range action.Graphemes {
-				if grapheme.Value == "\n" {
+				if grapheme.Value == "\n" || grapheme.Value == "\r\n" {
 					finishLine()
 					endedWithBreak = true
 					hasLast = false

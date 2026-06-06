@@ -160,7 +160,7 @@ func TerminalActionsVisibleWidth(actions []TerminalAction) int {
 		switch action.Type {
 		case TerminalActionText:
 			for _, grapheme := range action.Graphemes {
-				if grapheme.Value != "\n" && grapheme.Value != "\r" {
+				if !isTerminalLineBreakGrapheme(grapheme.Value) {
 					width += grapheme.Width
 				}
 				if isRepeatableTerminalGrapheme(grapheme) {
@@ -263,6 +263,9 @@ func (p *TerminalParser) flushPendingText() []TerminalAction {
 func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
 	if value == "" {
 		return false
+	}
+	if value == "\r" {
+		return true
 	}
 	last, _ := utf8.DecodeLastRuneInString(value)
 	if last == 0x200d || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeMayContinueHangul(value) {
@@ -383,6 +386,11 @@ func nextTerminalGrapheme(text string) (string, int) {
 		return "", 0
 	}
 	end := size
+	if first == '\r' && end < len(text) {
+		if next, nextSize := utf8.DecodeRuneInString(text[end:]); next == '\n' {
+			return text[:end+nextSize], end + nextSize
+		}
+	}
 	previousWasZWJ := false
 	regionalCount := 0
 	if isTerminalRegionalIndicator(first) {
@@ -426,6 +434,9 @@ func nextTerminalGrapheme(text string) (string, int) {
 }
 
 func terminalGraphemeStringWidth(grapheme string) int {
+	if isTerminalLineBreakGrapheme(grapheme) {
+		return 0
+	}
 	baseWidth := 1
 	hasBase := false
 	hasWidePresentation := false
@@ -473,6 +484,10 @@ func terminalGraphemeCanStartKeycapSequence(value string) bool {
 		return isTerminalEmojiKeycapBase(runes[0])
 	}
 	return len(runes) == 2 && isTerminalEmojiKeycapBase(runes[0]) && runes[1] == 0xfe0f
+}
+
+func isTerminalLineBreakGrapheme(value string) bool {
+	return value == "\n" || value == "\r" || value == "\r\n"
 }
 
 func terminalGraphemeMayContinueHangul(value string) bool {
