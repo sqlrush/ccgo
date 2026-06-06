@@ -12,27 +12,41 @@ import (
 )
 
 const (
-	OSCPrefix             = "\x1b]"
-	OSCTerminator         = "\x07"
-	OSCStringTerminator   = "\x1b\\"
-	OSCSetTitleAndIcon    = "0"
-	OSCPaletteColor       = "4"
-	OSCCurrentDirectory   = "7"
-	OSCHyperlink          = "8"
-	OSCITerm2             = "9"
-	OSCForegroundColor    = "10"
-	OSCBackgroundColor    = "11"
-	OSCCursorColor        = "12"
-	OSCResetForeground    = "110"
-	OSCResetBackground    = "111"
-	OSCResetCursor        = "112"
-	OSCResetPalette       = "104"
-	OSCClipboard          = "52"
-	OSCKitty              = "99"
-	OSCShellIntegration   = "133"
-	OSCVSShellIntegration = "633"
-	OSCGhostty            = "777"
-	OSCTabStatus          = "21337"
+	OSCPrefix                   = "\x1b]"
+	OSCTerminator               = "\x07"
+	OSCStringTerminator         = "\x1b\\"
+	OSCSetTitleAndIcon          = "0"
+	OSCPaletteColor             = "4"
+	OSCCurrentDirectory         = "7"
+	OSCHyperlink                = "8"
+	OSCITerm2                   = "9"
+	OSCForegroundColor          = "10"
+	OSCBackgroundColor          = "11"
+	OSCCursorColor              = "12"
+	OSCPointerForeground        = "13"
+	OSCPointerBackground        = "14"
+	OSCTektronixForeground      = "15"
+	OSCTektronixBackground      = "16"
+	OSCHighlightBackground      = "17"
+	OSCTektronixCursor          = "18"
+	OSCHighlightForeground      = "19"
+	OSCResetForeground          = "110"
+	OSCResetBackground          = "111"
+	OSCResetCursor              = "112"
+	OSCResetPointerForeground   = "113"
+	OSCResetPointerBackground   = "114"
+	OSCResetTektronixForeground = "115"
+	OSCResetTektronixBackground = "116"
+	OSCResetHighlightBackground = "117"
+	OSCResetTektronixCursor     = "118"
+	OSCResetHighlightForeground = "119"
+	OSCResetPalette             = "104"
+	OSCClipboard                = "52"
+	OSCKitty                    = "99"
+	OSCShellIntegration         = "133"
+	OSCVSShellIntegration       = "633"
+	OSCGhostty                  = "777"
+	OSCTabStatus                = "21337"
 
 	ITerm2Progress              = "4"
 	ITerm2ProgressClear         = "0"
@@ -122,13 +136,23 @@ type TerminalProgressAction struct {
 	RawCommand string
 }
 
-type TerminalOSCColorAction struct {
+type TerminalOSCColorEntry struct {
 	Target string
 	Color  *RGBColor
 	Query  bool
 	Reset  bool
 	Raw    string
 	Valid  bool
+}
+
+type TerminalOSCColorAction struct {
+	Target  string
+	Color   *RGBColor
+	Query   bool
+	Reset   bool
+	Raw     string
+	Valid   bool
+	Entries []TerminalOSCColorEntry
 }
 
 type TerminalOSCPaletteEntry struct {
@@ -254,7 +278,8 @@ func ParseOSCContent(content string) OSCAction {
 		return OSCAction{Type: OSCActionDirectory, Directory: ParseDirectoryPayload(data)}
 	case OSCHyperlink:
 		return OSCAction{Type: OSCActionLink, Hyperlink: ParseHyperlinkPayload(data)}
-	case OSCForegroundColor, OSCBackgroundColor, OSCCursorColor, OSCResetForeground, OSCResetBackground, OSCResetCursor:
+	case OSCForegroundColor, OSCBackgroundColor, OSCCursorColor, OSCPointerForeground, OSCPointerBackground, OSCTektronixForeground, OSCTektronixBackground, OSCHighlightBackground, OSCTektronixCursor, OSCHighlightForeground,
+		OSCResetForeground, OSCResetBackground, OSCResetCursor, OSCResetPointerForeground, OSCResetPointerBackground, OSCResetTektronixForeground, OSCResetTektronixBackground, OSCResetHighlightBackground, OSCResetTektronixCursor, OSCResetHighlightForeground:
 		return OSCAction{Type: OSCActionColor, Color: ParseOSCColorPayload(strconv.Itoa(commandNumber), data)}
 	case OSCResetPalette:
 		return OSCAction{Type: OSCActionPalette, Palette: ParseOSCPaletteResetPayload(data)}
@@ -382,50 +407,120 @@ func ParseOSCColorPayload(command string, payload string) TerminalOSCColorAction
 		Target: oscColorTarget(command),
 		Raw:    payload,
 	}
-	payload = strings.TrimSpace(payload)
 	if oscColorResetCommand(command) {
-		action.Reset = true
-		action.Valid = payload == ""
+		entry := TerminalOSCColorEntry{
+			Target: action.Target,
+			Reset:  true,
+			Raw:    payload,
+			Valid:  strings.TrimSpace(payload) == "",
+		}
+		applyOSCColorEntry(&action, entry)
 		return action
 	}
-	if payload == "?" {
-		action.Query = true
-		action.Valid = true
+	start, ok := oscDynamicColorIndex(command)
+	if !ok {
 		return action
 	}
-	if color, ok := ParseOSCColor(payload); ok {
-		action.Color = color
+	parts := strings.Split(payload, ";")
+	if len(parts) == 0 {
+		return action
+	}
+	entries := make([]TerminalOSCColorEntry, 0, len(parts))
+	for index, part := range parts {
+		target := oscColorTargetByIndex(start + index)
+		if target == "" {
+			return action
+		}
+		entry := TerminalOSCColorEntry{
+			Target: target,
+			Raw:    part,
+		}
+		spec := strings.TrimSpace(part)
+		if spec == "?" {
+			entry.Query = true
+			entry.Valid = true
+		} else if color, ok := ParseOSCColor(spec); ok {
+			entry.Color = color
+			entry.Valid = true
+		} else {
+			return action
+		}
+		entries = append(entries, entry)
+	}
+	if len(entries) > 0 {
+		applyOSCColorEntry(&action, entries[0])
+		action.Entries = entries
 		action.Valid = true
 	}
 	return action
 }
 
-func oscColorTarget(command string) string {
-	switch command {
-	case OSCForegroundColor:
-		return "foreground"
-	case OSCBackgroundColor:
-		return "background"
-	case OSCCursorColor:
-		return "cursor"
-	case OSCResetForeground:
-		return "foreground"
-	case OSCResetBackground:
-		return "background"
-	case OSCResetCursor:
-		return "cursor"
-	default:
-		return command
+func applyOSCColorEntry(action *TerminalOSCColorAction, entry TerminalOSCColorEntry) {
+	action.Target = entry.Target
+	action.Color = entry.Color
+	action.Query = entry.Query
+	action.Reset = entry.Reset
+	action.Valid = entry.Valid
+	if len(action.Entries) == 0 {
+		action.Entries = []TerminalOSCColorEntry{entry}
 	}
 }
 
-func oscColorResetCommand(command string) bool {
-	switch command {
-	case OSCResetForeground, OSCResetBackground, OSCResetCursor:
-		return true
-	default:
-		return false
+func oscColorTarget(command string) string {
+	if index, ok := oscDynamicColorIndex(command); ok {
+		return oscColorTargetByIndex(index)
 	}
+	if index, ok := oscDynamicColorResetIndex(command); ok {
+		return oscColorTargetByIndex(index)
+	}
+	return command
+}
+
+func oscColorResetCommand(command string) bool {
+	_, ok := oscDynamicColorResetIndex(command)
+	return ok
+}
+
+func oscDynamicColorIndex(command string) (int, bool) {
+	value, err := strconv.Atoi(command)
+	if err != nil || value < 10 || value > 19 {
+		return 0, false
+	}
+	return value, true
+}
+
+func oscDynamicColorResetIndex(command string) (int, bool) {
+	value, err := strconv.Atoi(command)
+	if err != nil || value < 110 || value > 119 {
+		return 0, false
+	}
+	return value - 100, true
+}
+
+func oscColorTargetByIndex(index int) string {
+	switch index {
+	case 10:
+		return "foreground"
+	case 11:
+		return "background"
+	case 12:
+		return "cursor"
+	case 13:
+		return "pointerForeground"
+	case 14:
+		return "pointerBackground"
+	case 15:
+		return "tektronixForeground"
+	case 16:
+		return "tektronixBackground"
+	case 17:
+		return "highlightBackground"
+	case 18:
+		return "tektronixCursor"
+	case 19:
+		return "highlightForeground"
+	}
+	return ""
 }
 
 func ParseOSCPalettePayload(payload string) TerminalOSCPaletteAction {

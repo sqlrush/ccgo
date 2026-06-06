@@ -810,9 +810,9 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：terminal OSC helper 增加 OSC color parser，支持 `#RRGGBB` 和 XParseColor 风格 `rgb:R/G/B`，按官方规则把 1-4 位 hex component 缩放到 8-bit RGB。
 
-本轮补充：terminal OSC parser 把 OSC 10/11/12 前景色、背景色和光标色设置/查询解析为结构化 color action，复用既有 OSC color parser，visible text/snapshot 继续剥离这些控制串。
+本轮补充：terminal OSC parser 把 OSC 10-19 dynamic color 设置/查询解析为结构化 color action，复用既有 OSC color parser，并支持同一序列内按官方递增规则连续设置多个 target；visible text/snapshot 继续剥离这些控制串。
 
-本轮补充：terminal OSC parser 把 OSC 110/111/112 前景色、背景色和光标色 reset 序列解析为结构化 color reset action，覆盖有无尾随分号两种官方兼容路径。
+本轮补充：terminal OSC parser 把 OSC 110-119 dynamic color reset 序列解析为结构化 color reset action，覆盖前景/背景/光标、pointer、Tektronix 和 highlight 动态色 reset。
 
 本轮补充：terminal OSC parser 把 OSC 4 palette color 设置/查询和 OSC 104 palette reset 解析为结构化 palette action，支持同一序列内多组 index/color、index/? 和按 index reset。
 

@@ -393,6 +393,30 @@ func TestTerminalParserDispatchesStructuredOSCActions(t *testing.T) {
 	}
 }
 
+func TestTerminalParserDispatchesMultiDynamicOSCColorActions(t *testing.T) {
+	parser := NewTerminalParser()
+	input := "a" + OSCSequence(OSCBackgroundColor, "#112233", "rgb:f/0/8") + "b" + OSCSequence(OSCResetHighlightForeground) + "c"
+	actions := parser.Feed(input)
+	if len(actions) != 5 {
+		t.Fatalf("actions = %#v", actions)
+	}
+	if actions[1].Type != TerminalActionColor || !actions[1].OSC.Color.Valid || len(actions[1].OSC.Color.Entries) != 2 {
+		t.Fatalf("dynamic color action = %#v", actions[1])
+	}
+	if actions[1].OSC.Color.Target != "background" || actions[1].OSC.Color.Color == nil || *actions[1].OSC.Color.Color != (RGBColor{R: 17, G: 34, B: 51}) {
+		t.Fatalf("dynamic first color = %#v", actions[1].OSC.Color)
+	}
+	if actions[1].OSC.Color.Entries[1].Target != "cursor" || actions[1].OSC.Color.Entries[1].Color == nil || *actions[1].OSC.Color.Entries[1].Color != (RGBColor{R: 255, G: 0, B: 136}) {
+		t.Fatalf("dynamic second color = %#v", actions[1].OSC.Color.Entries[1])
+	}
+	if actions[3].Type != TerminalActionColor || actions[3].OSC.Color.Target != "highlightForeground" || !actions[3].OSC.Color.Valid || !actions[3].OSC.Color.Reset {
+		t.Fatalf("dynamic reset action = %#v", actions[3])
+	}
+	if got := TerminalVisibleText(input); got != "abc" {
+		t.Fatalf("visible = %q", got)
+	}
+}
+
 func TestTerminalParserResetClearsStyle(t *testing.T) {
 	parser := NewTerminalParser()
 	actions := parser.Feed(CSISequence(1, "m") + "bold" + ESCResetSequence + "plain")

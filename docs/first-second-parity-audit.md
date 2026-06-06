@@ -260,8 +260,8 @@ M7 progress now includes:
 - `internal/tui`: terminal OSC helpers now generate OSC 52 clipboard sequences using clipboard selection `c` and UTF-8 base64 payloads; native clipboard and tmux buffer runtime remain future work.
 - `internal/tui`: terminal OSC helpers now support explicit ST (`ESC \\`) terminators for Kitty-style no-BEL OSC output while preserving BEL as the default.
 - `internal/tui`: terminal OSC helpers now parse `#RRGGBB` and XParseColor-style `rgb:R/G/B` colors, scaling 1-4 digit hex components to 8-bit RGB like the official parser.
-- `internal/tui`: terminal OSC parsing now exposes OSC 10/11/12 foreground, background, and cursor color set/query sequences as structured color actions while keeping visible text clean.
-- `internal/tui`: terminal OSC parsing now exposes OSC 110/111/112 foreground, background, and cursor color reset sequences as structured color reset actions, including both empty payload and trailing-semicolon forms.
+- `internal/tui`: terminal OSC parsing now exposes OSC 10-19 dynamic color set/query sequences as structured color actions, including repeated payload parameters that advance to subsequent dynamic color targets while keeping visible text clean.
+- `internal/tui`: terminal OSC parsing now exposes OSC 110-119 dynamic color reset sequences as structured color reset actions for foreground/background/cursor, pointer, Tektronix, and highlight color targets.
 - `internal/tui`: terminal OSC parsing now exposes OSC 4 palette color set/query sequences and OSC 104 palette reset sequences as structured palette actions, including repeated index/color pairs and indexed resets.
 - `internal/tui`: terminal OSC helpers now parse OSC 21337 tab-status payloads with escaped separators, clear/null semantics, unknown-key ignore behavior, and parsed indicator/status colors.
 - `internal/tui`: terminal OSC helpers now parse OSC 8 hyperlink payloads, including params, semicolon-containing URLs, and empty-URL link-end sequences.

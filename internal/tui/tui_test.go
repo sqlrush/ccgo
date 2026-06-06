@@ -4585,9 +4585,23 @@ func TestParseOSCContent(t *testing.T) {
 	if backgroundQuery.Type != OSCActionColor || backgroundQuery.Color.Target != "background" || !backgroundQuery.Color.Valid || !backgroundQuery.Color.Query || backgroundQuery.Color.Color != nil {
 		t.Fatalf("background color query = %#v", backgroundQuery)
 	}
+	pointerQuery := ParseOSCContent("13;?")
+	if pointerQuery.Type != OSCActionColor || pointerQuery.Color.Target != "pointerForeground" || !pointerQuery.Color.Valid || !pointerQuery.Color.Query || len(pointerQuery.Color.Entries) != 1 || pointerQuery.Color.Entries[0].Target != "pointerForeground" {
+		t.Fatalf("pointer color query = %#v", pointerQuery)
+	}
 	cursor := ParseOSCContent("12;#5f87ff")
 	if cursor.Type != OSCActionColor || cursor.Color.Target != "cursor" || !cursor.Color.Valid || cursor.Color.Color == nil || *cursor.Color.Color != (RGBColor{R: 95, G: 135, B: 255}) {
 		t.Fatalf("cursor color = %#v", cursor)
+	}
+	combinedColors := ParseOSCContent("11;#112233;rgb:f/0/8")
+	if combinedColors.Type != OSCActionColor || !combinedColors.Color.Valid || len(combinedColors.Color.Entries) != 2 {
+		t.Fatalf("combined colors = %#v", combinedColors)
+	}
+	if combinedColors.Color.Target != "background" || combinedColors.Color.Color == nil || *combinedColors.Color.Color != (RGBColor{R: 17, G: 34, B: 51}) {
+		t.Fatalf("combined first color = %#v", combinedColors.Color)
+	}
+	if combinedColors.Color.Entries[1].Target != "cursor" || combinedColors.Color.Entries[1].Color == nil || *combinedColors.Color.Entries[1].Color != (RGBColor{R: 255, G: 0, B: 136}) {
+		t.Fatalf("combined second color = %#v", combinedColors.Color.Entries[1])
 	}
 	foregroundReset := ParseOSCContent("110;")
 	if foregroundReset.Type != OSCActionColor || foregroundReset.Color.Target != "foreground" || !foregroundReset.Color.Valid || !foregroundReset.Color.Reset || foregroundReset.Color.Color != nil {
@@ -4596,6 +4610,10 @@ func TestParseOSCContent(t *testing.T) {
 	backgroundReset := ParseOSCContent("111")
 	if backgroundReset.Type != OSCActionColor || backgroundReset.Color.Target != "background" || !backgroundReset.Color.Valid || !backgroundReset.Color.Reset || backgroundReset.Color.Color != nil {
 		t.Fatalf("background color reset = %#v", backgroundReset)
+	}
+	highlightReset := ParseOSCContent("119")
+	if highlightReset.Type != OSCActionColor || highlightReset.Color.Target != "highlightForeground" || !highlightReset.Color.Valid || !highlightReset.Color.Reset || highlightReset.Color.Color != nil {
+		t.Fatalf("highlight color reset = %#v", highlightReset)
 	}
 	palette := ParseOSCContent("4;1;#112233;2;?;260;rgb:f/0/8")
 	if palette.Type != OSCActionPalette || !palette.Palette.Valid || len(palette.Palette.Entries) != 3 {
