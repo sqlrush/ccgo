@@ -5118,6 +5118,31 @@ func TestScriptMouseDerivesReleaseFromEventType(t *testing.T) {
 	}
 }
 
+func TestScriptMouseDerivesWheelButtonFromEventPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		raw    string
+		button int
+	}{
+		{name: "dom wheel down", raw: `{"type":"wheel","button":0,"deltaY":120,"clientX":10,"clientY":4}`, button: 65},
+		{name: "dom wheel up", raw: `{"eventType":"wheel","button":0,"deltaY":-12.5,"clientX":10,"clientY":4}`, button: 64},
+		{name: "legacy wheel delta", raw: `{"event":"mousewheel","wheelDelta":120,"clientX":10,"clientY":4}`, button: 64},
+		{name: "compact scroll down", raw: `{"kind":"scrollDown","x":10,"y":4}`, button: 65},
+		{name: "direction alias", raw: `{"direction":"up","x":10,"y":4}`, button: 64},
+		{name: "terminal mouse button wins", raw: `{"type":"wheel","mouseButton":65,"deltaY":-1,"x":10,"y":4}`, button: 65},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mouse ScriptMouse
+			if err := json.Unmarshal([]byte(tc.raw), &mouse); err != nil {
+				t.Fatal(err)
+			}
+			if mouse.Button != tc.button || mouse.X != 10 || mouse.Y != 4 || mouse.Release {
+				t.Fatalf("mouse = %#v, button want %d", mouse, tc.button)
+			}
+		})
+	}
+}
+
 func TestScriptBooleanAliasesAcceptNonStrictValues(t *testing.T) {
 	var mouse ScriptMouse
 	if err := json.Unmarshal([]byte(`{"button":0,"x":13,"y":5,"mouseUp":"yes"}`), &mouse); err != nil {
@@ -8892,6 +8917,25 @@ func TestRunInteractionScriptChecksViewport(t *testing.T) {
 		{Key: "\x1b[5~", ExpectViewport: &ViewportExpectation{VisibleContains: []string{"system: one"}, VisibleLineCount: 4}},
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunInteractionScriptAcceptsWheelMouseEventPayload(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"message": {"role": "system", "text": "one"}},
+		{"message": {"role": "system", "text": "two"}},
+		{"message": {"role": "system", "text": "three"}},
+		{"message": {"role": "system", "text": "four"}},
+		{"message": {"role": "system", "text": "five"}, "expectViewport": {"scrollOffset": 1, "visibleContains": "system: five"}},
+		{"action": "mouseEvent", "payload": {"type": "wheel", "button": 0, "deltaY": -120, "clientX": 10, "clientY": 4}, "expectViewport": {"scrollOffset": 0, "visibleNotContains": "system: five"}},
+		{"mouseEvent": {"kind": "scrollDown", "x": 10, "y": 4}, "expectViewport": {"scrollOffset": 1, "visibleContains": "system: five"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(22, 6, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -3919,7 +3919,11 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	if button := intPtrJSONField(fields, "Button", "button", "ButtonCode", "button_code", "buttonCode", "ButtonMask", "button_mask", "buttonMask", "MouseButton", "mouse_button", "mouseButton", "Btn", "btn", "Code", "code", "Mask", "mask"); button != nil {
+	if button := intPtrJSONField(fields, "ButtonCode", "button_code", "buttonCode", "ButtonMask", "button_mask", "buttonMask", "MouseButton", "mouse_button", "mouseButton"); button != nil {
+		mouse.Button = *button
+	} else if button, ok := scriptMouseWheelButtonFromFields(fields); ok {
+		mouse.Button = button
+	} else if button := intPtrJSONField(fields, "Button", "button", "Btn", "btn", "Code", "code", "Mask", "mask"); button != nil {
 		mouse.Button = *button
 	}
 	if x := intPtrJSONField(fields, "X", "x", "Column", "column", "Col", "col", "MouseX", "mouse_x", "mouseX", "ClientX", "client_x", "clientX", "ScreenX", "screen_x", "screenX", "PageX", "page_x", "pageX", "OffsetX", "offset_x", "offsetX", "ViewportX", "viewport_x", "viewportX"); x != nil {
@@ -3937,9 +3941,7 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 }
 
 func scriptMouseReleaseFromType(fields map[string]json.RawMessage) (bool, bool) {
-	eventType := stringJSONField(fields, "Type", "type", "Event", "event", "EventType", "event_type", "eventType", "Name", "name", "Kind", "kind", "Action", "action")
-	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(eventType), "_", "-"), " ", "-"))
-	switch normalized {
+	switch scriptMouseEventName(fields) {
 	case "mouseup", "mouse-up", "pointerup", "pointer-up", "touchend", "touch-end", "release", "released", "buttonup", "button-up":
 		return true, true
 	case "mousedown", "mouse-down", "pointerdown", "pointer-down", "touchstart", "touch-start", "click", "mousemove", "mouse-move", "pointermove", "pointer-move", "drag", "dragstart", "drag-start", "dragmove", "drag-move":
@@ -3947,6 +3949,59 @@ func scriptMouseReleaseFromType(fields map[string]json.RawMessage) (bool, bool) 
 	default:
 		return false, false
 	}
+}
+
+func scriptMouseWheelButtonFromFields(fields map[string]json.RawMessage) (int, bool) {
+	switch scriptMouseEventName(fields) {
+	case "wheelup", "wheel-up", "scrollup", "scroll-up", "mousewheelup", "mouse-wheel-up":
+		return sgrMouseWheelMask, true
+	case "wheeldown", "wheel-down", "scrolldown", "scroll-down", "mousewheeldown", "mouse-wheel-down":
+		return sgrMouseWheelMask | 1, true
+	}
+	switch scriptMouseWheelDirection(fields) {
+	case -1:
+		return sgrMouseWheelMask, true
+	case 1:
+		return sgrMouseWheelMask | 1, true
+	default:
+		return 0, false
+	}
+}
+
+func scriptMouseWheelDirection(fields map[string]json.RawMessage) int {
+	direction := stringJSONField(fields, "Direction", "direction", "WheelDirection", "wheel_direction", "wheelDirection", "ScrollDirection", "scroll_direction", "scrollDirection")
+	switch scriptNormalizeName(direction) {
+	case "up", "wheelup", "wheel-up", "scrollup", "scroll-up", "north", "negative":
+		return -1
+	case "down", "wheeldown", "wheel-down", "scrolldown", "scroll-down", "south", "positive":
+		return 1
+	}
+	if value, ok := numberJSONField(fields, "DeltaY", "delta_y", "deltaY", "ScrollDeltaY", "scroll_delta_y", "scrollDeltaY", "YDelta", "y_delta", "yDelta", "DY", "dy", "Detail", "detail", "Delta", "delta"); ok {
+		return scriptMouseWheelDirectionFromDelta(value)
+	}
+	if value, ok := numberJSONField(fields, "WheelDeltaY", "wheel_delta_y", "wheelDeltaY", "WheelDelta", "wheel_delta", "wheelDelta"); ok {
+		return scriptMouseWheelDirectionFromDelta(-value)
+	}
+	return 0
+}
+
+func scriptMouseWheelDirectionFromDelta(value float64) int {
+	switch {
+	case value < 0:
+		return -1
+	case value > 0:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func scriptMouseEventName(fields map[string]json.RawMessage) string {
+	return scriptNormalizeName(stringJSONField(fields, "Type", "type", "Event", "event", "EventType", "event_type", "eventType", "Name", "name", "Kind", "kind", "Action", "action"))
+}
+
+func scriptNormalizeName(value string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(value), "_", "-"), " ", "-"))
 }
 
 func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
@@ -4772,6 +4827,34 @@ func intPtrJSONField(fields map[string]json.RawMessage, names ...string) *int {
 		}
 	}
 	return nil
+}
+
+func numberJSONField(fields map[string]json.RawMessage, names ...string) (float64, bool) {
+	for _, name := range names {
+		raw, ok := fields[name]
+		if !ok {
+			continue
+		}
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			continue
+		}
+		switch value := value.(type) {
+		case json.Number:
+			number, err := strconv.ParseFloat(value.String(), 64)
+			if err == nil {
+				return number, true
+			}
+		case string:
+			number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err == nil {
+				return number, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func imageDimensionsJSONField(fields map[string]json.RawMessage, names ...string) *session.ImageDimensions {
