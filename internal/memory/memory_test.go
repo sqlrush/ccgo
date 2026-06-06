@@ -523,6 +523,10 @@ func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *test
 	opsPath := filepath.Join(dir, "ops.md")
 	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
 	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	selectionContent, err := json.Marshal("```json\n{\"query\":\"database access\",\"memory_paths\":[\"ops.md\",\"db.md\"]}\n```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_memory_provider",
 		Type:  "message",
@@ -531,7 +535,7 @@ func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *test
 		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
 			"choices":[
 				{"finish_reason":"stop"},
-				{"message":{"role":"assistant","content":"{\"query\":\"database access\",\"memory_paths\":[\"ops.md\",\"db.md\"]}"}}
+				{"message":{"role":"assistant","content":` + string(selectionContent) + `}}
 			]
 		}`)},
 	}}
@@ -1163,6 +1167,10 @@ func TestMemoryAgentExtractsStructuredFactText(t *testing.T) {
 }
 
 func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
+	fencedFacts, err := json.Marshal("```json\n{\"facts\":[{\"kind\":\"preference\",\"text\":\"accept provider choices\",\"source_uuid\":\"user_1\"}]}\n```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name     string
 		response string
@@ -1172,7 +1180,7 @@ func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
 	}{
 		{
 			name:     "choices message content",
-			response: `{"choices":[{"message":{"content":"{\"facts\":[{\"kind\":\"preference\",\"text\":\"accept provider choices\",\"source_uuid\":\"user_1\"}]}"}}]}`,
+			response: `{"choices":[{"message":{"content":` + string(fencedFacts) + `}}]}`,
 			kind:     FactPreference,
 			text:     "accept provider choices",
 			source:   "user_1",
@@ -1577,6 +1585,10 @@ func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	recallContent, err := json.Marshal("```json\n{\"query\":\"database access\",\"session_ids\":[\"prior\",\"other\"]}\n```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_recall_provider",
 		Type:  "message",
@@ -1584,7 +1596,7 @@ func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
 		Model: "sonnet",
 		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{
 			"choices":[
-				{"message":{"content":[{"type":"text","text":"{\"query\":\"database access\",\"session_ids\":[\"prior\",\"other\"]}"}]}}
+				{"message":{"content":[{"type":"text","text":` + string(recallContent) + `}]}}
 			]
 		}`)},
 	}}

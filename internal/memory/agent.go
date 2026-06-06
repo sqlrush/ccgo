@@ -1019,8 +1019,23 @@ func selectionProviderResponseText(raw string) (string, bool) {
 			continue
 		}
 		if text, ok := selectionProviderTextFromRaw(value, 0); ok {
+			if payload, ok := selectionProviderJSONPayload(text); ok {
+				return payload, true
+			}
 			return text, true
 		}
+	}
+	return "", false
+}
+
+func selectionProviderJSONPayload(text string) (string, bool) {
+	text = strings.TrimSpace(text)
+	if startsJSONValue(text) {
+		return text, true
+	}
+	payload := stripMarkdownFence(text)
+	if startsJSONValue(payload) {
+		return payload, true
 	}
 	return "", false
 }
