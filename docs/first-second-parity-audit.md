@@ -311,6 +311,7 @@ M7 progress now includes:
 - `internal/tui`: scripted interaction key input now accepts press-style aliases such as `press`, `keyPress`, `keypress`, `shortcutKey`, `presses`, `keyPresses`, and `shortcuts`.
 - `internal/tui`: interaction script loading now flattens suite/case arrays such as `cases`, `tests`, `testCases`, `scenarios`, and `fixtures`, expanding nested `steps`, `timeline`, or `scriptSteps` arrays in order while still allowing top-level arrays to mix direct steps and case objects.
 - `internal/tui`: interaction script loading now also unwraps provider-style `choices`, `outputs`, `candidates`, and `generations` responses, recovering script JSON from nested `message.content`, content-block arrays, and `content.parts[].text`.
+- `internal/tui`: interaction script provider responses now strip fenced `json` code blocks before parsing, so model/SDK-generated scripts do not require manual fence removal.
 - `internal/tui`: scripted key and key-sequence action payloads now recursively unwrap JSON:API/GraphQL-style wrappers, preserving wrapped single keys and key sequence arrays from API-shaped interaction fixtures.
 - `internal/tui`: direct scripted key alias fields such as `key`, `keyPress`, and `keyPresses` now accept JSON:API/GraphQL-style wrapper objects without failing strong string/list decoding.
 - `internal/tui`: direct scripted string alias fields such as `text`, `pasteText`, `setStatus`, and `snapshotName` now accept JSON:API/GraphQL-style wrapper objects without failing strong scalar decoding.
@@ -364,6 +365,7 @@ M7 progress now includes:
 - `internal/tui`: keybinding JSON loading now accepts GraphQL connection-style `edges` binding lists, including `edges[].node` and `edge.node` item wrappers plus nested `viewer`/`node`/`*Connection` containers.
 - `internal/tui`: keybinding JSON loading now accepts collection aliases such as `keymap`, `keymaps`, `keyboardShortcuts`, `hotkeys`, `userKeybindings`, and `customKeybindings`, including both direct object maps and nested `bindings` wrappers.
 - `internal/tui`: keybinding JSON loading now also unwraps provider-style `choices`, `outputs`, `candidates`, and `generations` responses, recovering binding arrays or maps from nested `message.content`, content-block arrays, and `content.parts[].text`.
+- `internal/tui`: keybinding provider responses now strip fenced `json` code blocks before parsing, so model/SDK-generated keybinding configs do not require manual fence removal.
 - `internal/tui`: interaction script keybinding mutation fields now reuse the same collection aliases, object-map parsing, and JSON:API/resource wrapper handling, so scripted steps can set `keymap`, `keyboardShortcuts`, `hotkeys`, `keyboard`, `preferences`, or `keybindingConfig` directly.
 - `internal/tui`: mouse parsing now accepts legacy X10/normal tracking `ESC[M...` press/release/wheel sequences in addition to SGR mouse events.
 - `internal/tui`: mouse parsing now accepts urxvt/xterm 1015 numeric mouse `CSI button;x;yM` sequences and normalizes button codes to the existing SGR/X10 mouse surface.

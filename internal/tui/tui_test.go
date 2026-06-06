@@ -1669,6 +1669,11 @@ func TestParseKeyBindingSpecsAcceptsProviderResponseWrappers(t *testing.T) {
 				"message": map[string]any{"content": string(specArrayData)},
 			}},
 		},
+		"choices_fenced_message_content": map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"content": "```json\n" + string(specArrayData) + "\n```"},
+			}},
+		},
 		"candidate_parts_text": map[string]any{
 			"candidates": []any{map[string]any{
 				"content": map[string]any{
@@ -1692,7 +1697,7 @@ func TestParseKeyBindingSpecsAcceptsProviderResponseWrappers(t *testing.T) {
 				t.Fatal(err)
 			}
 			switch name {
-			case "choices_message_content":
+			case "choices_message_content", "choices_fenced_message_content":
 				if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
 					t.Fatalf("ctrl-r action = %q", action)
 				}
@@ -8697,6 +8702,11 @@ func TestParseInteractionScriptAcceptsProviderResponseWrappers(t *testing.T) {
 		"choices_message_content": map[string]any{
 			"choices": []any{map[string]any{
 				"message": map[string]any{"content": string(scriptArrayData)},
+			}},
+		},
+		"choices_fenced_message_content": map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"content": "```json\n" + string(scriptArrayData) + "\n```"},
 			}},
 		},
 		"candidate_parts_text": map[string]any{

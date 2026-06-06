@@ -164,6 +164,9 @@ func keyBindingProviderResponseText(data []byte) (string, bool) {
 			continue
 		}
 		if text, ok := interactionScriptProviderTextFromRaw(value, 0, false); ok {
+			if payload, ok := interactionScriptProviderJSONPayload(text); ok {
+				return payload, true
+			}
 			return text, true
 		}
 	}

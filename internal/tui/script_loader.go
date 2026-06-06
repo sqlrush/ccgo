@@ -356,6 +356,9 @@ func interactionScriptProviderResponseText(data []byte) (string, bool) {
 			continue
 		}
 		if text, ok := interactionScriptProviderTextFromRaw(value, 0, false); ok {
+			if payload, ok := interactionScriptProviderJSONPayload(text); ok {
+				return payload, true
+			}
 			return text, true
 		}
 	}
@@ -415,6 +418,37 @@ func interactionScriptProviderTextFromRaw(raw json.RawMessage, depth int, allowS
 		}
 	}
 	return "", false
+}
+
+func interactionScriptProviderJSONPayload(text string) (string, bool) {
+	text = strings.TrimSpace(text)
+	if interactionScriptProviderLooksJSON(text) {
+		return text, true
+	}
+	start := strings.Index(text, "```")
+	if start < 0 {
+		return "", false
+	}
+	afterFence := text[start+3:]
+	lineEnd := strings.IndexAny(afterFence, "\r\n")
+	if lineEnd < 0 {
+		return "", false
+	}
+	content := strings.TrimLeft(afterFence[lineEnd:], "\r\n")
+	end := strings.Index(content, "```")
+	if end >= 0 {
+		content = content[:end]
+	}
+	content = strings.TrimSpace(content)
+	if interactionScriptProviderLooksJSON(content) {
+		return content, true
+	}
+	return "", false
+}
+
+func interactionScriptProviderLooksJSON(text string) bool {
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(text, "{") || strings.HasPrefix(text, "[")
 }
 
 func parseInteractionScriptOptionalStepsValue(value json.RawMessage) ([]ScriptStep, bool, error) {
