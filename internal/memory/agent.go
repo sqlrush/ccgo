@@ -523,18 +523,25 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		Matches                 []json.RawMessage `json:"matches"`
 		Memories                []json.RawMessage `json:"memories"`
 		Sessions                []json.RawMessage `json:"sessions"`
+		Summaries               []json.RawMessage `json:"summaries"`
 		SelectedSessions        []json.RawMessage `json:"selected_sessions"`
 		SelectedSessionsCamel   []json.RawMessage `json:"selectedSessions"`
 		SelectedMemories        []json.RawMessage `json:"selected_memories"`
 		SelectedMemoriesCamel   []json.RawMessage `json:"selectedMemories"`
+		SelectedSummaries       []json.RawMessage `json:"selected_summaries"`
+		SelectedSummariesCamel  []json.RawMessage `json:"selectedSummaries"`
 		RelevantSessions        []json.RawMessage `json:"relevant_sessions"`
 		RelevantSessionsCamel   []json.RawMessage `json:"relevantSessions"`
 		RelevantMemories        []json.RawMessage `json:"relevant_memories"`
 		RelevantMemoriesCamel   []json.RawMessage `json:"relevantMemories"`
+		RelevantSummaries       []json.RawMessage `json:"relevant_summaries"`
+		RelevantSummariesCamel  []json.RawMessage `json:"relevantSummaries"`
 		CandidateSessions       []json.RawMessage `json:"candidate_sessions"`
 		CandidateSessionsCamel  []json.RawMessage `json:"candidateSessions"`
 		CandidateMemories       []json.RawMessage `json:"candidate_memories"`
 		CandidateMemoriesCamel  []json.RawMessage `json:"candidateMemories"`
+		CandidateSummaries      []json.RawMessage `json:"candidate_summaries"`
+		CandidateSummariesCamel []json.RawMessage `json:"candidateSummaries"`
 		Candidates              []json.RawMessage `json:"candidates"`
 		Results                 []json.RawMessage `json:"results"`
 		Nodes                   []json.RawMessage `json:"nodes"`
@@ -605,18 +612,25 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 				object.Matches,
 				object.Memories,
 				object.Sessions,
+				object.Summaries,
 				object.SelectedSessions,
 				object.SelectedSessionsCamel,
 				object.SelectedMemories,
 				object.SelectedMemoriesCamel,
+				object.SelectedSummaries,
+				object.SelectedSummariesCamel,
 				object.RelevantSessions,
 				object.RelevantSessionsCamel,
 				object.RelevantMemories,
 				object.RelevantMemoriesCamel,
+				object.RelevantSummaries,
+				object.RelevantSummariesCamel,
 				object.CandidateSessions,
 				object.CandidateSessionsCamel,
 				object.CandidateMemories,
 				object.CandidateMemoriesCamel,
+				object.CandidateSummaries,
+				object.CandidateSummariesCamel,
 				object.Candidates,
 				object.Results,
 				object.Nodes,
@@ -1377,19 +1391,32 @@ var recallNestedItemKeys = []string{
 	"session",
 	"memory",
 	"summary",
+	"summaries",
 	"candidate",
 	"selected_session",
 	"selectedSession",
 	"selected_memory",
 	"selectedMemory",
+	"selected_summary",
+	"selectedSummary",
+	"selected_summaries",
+	"selectedSummaries",
 	"relevant_session",
 	"relevantSession",
 	"relevant_memory",
 	"relevantMemory",
+	"relevant_summary",
+	"relevantSummary",
+	"relevant_summaries",
+	"relevantSummaries",
 	"candidate_session",
 	"candidateSession",
 	"candidate_memory",
 	"candidateMemory",
+	"candidate_summary",
+	"candidateSummary",
+	"candidate_summaries",
+	"candidateSummaries",
 	"data",
 	"payload",
 	"body",
