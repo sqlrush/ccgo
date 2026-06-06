@@ -3751,6 +3751,28 @@ func TestREPLScreenVimVisualCharOperators(t *testing.T) {
 	if screen.VimMode != VimInsert || screen.Prompt.Text != "alpha  gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "beta" || screen.VimRegisterLinewise {
 		t.Fatalf("after visual change screen = %#v", screen)
 	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "alpha  gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "beta" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual x screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "alpha beta gamma")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"0", "w", "v", "e", "s"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "alpha  gamma" || screen.Prompt.Cursor != len([]rune("alpha ")) || screen.VimRegister != "beta" || screen.VimRegisterLinewise {
+		t.Fatalf("after visual s screen = %#v", screen)
+	}
 }
 
 func TestREPLScreenVimVisualLineOperators(t *testing.T) {
@@ -3785,6 +3807,28 @@ func TestREPLScreenVimVisualLineOperators(t *testing.T) {
 	}
 	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
 		t.Fatalf("after visual line change screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"G", "V", "k", "x"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimNormal || screen.Prompt.Text != "one" || screen.Prompt.Cursor != len([]rune("one\n"))-1 || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual line x screen = %#v", screen)
+	}
+
+	screen = NewREPLScreen(40, 8, nil)
+	screen.SetVimEnabled(true)
+	typePromptText(&screen, "one\ntwo\nthree")
+	screen.ApplyKey(ParseKey("\x1b"))
+	for _, seq := range []string{"G", "V", "k", "s"} {
+		screen.ApplyKey(ParseKey(seq))
+	}
+	if screen.VimMode != VimInsert || screen.Prompt.Text != "one\n" || screen.Prompt.Cursor != len([]rune("one\n")) || screen.VimRegister != "two\nthree\n" || !screen.VimRegisterLinewise {
+		t.Fatalf("after visual line s screen = %#v", screen)
 	}
 }
 

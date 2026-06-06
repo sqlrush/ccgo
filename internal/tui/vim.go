@@ -305,6 +305,10 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 		s.VimPendingCount = count
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
+	case 'x':
+		s.applyVimVisualOperator('d')
+	case 's':
+		s.applyVimVisualOperator('c')
 	case 'h', 'l', 'j', 'k', 'w', 'W', 'b', 'B', 'e', 'E', '$', '^', '|', '%', 'G':
 		s.applyVimVisualMotion(r, count)
 	}
