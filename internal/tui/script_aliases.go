@@ -3086,7 +3086,7 @@ func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth i
 		if key == "" {
 			return nil
 		}
-		return []string{key}
+		return repeatScriptKeyEventName(key, fields)
 	}
 	if values := stringListJSONField(fields, names...); len(values) > 0 {
 		return values
@@ -3101,6 +3101,36 @@ func scriptActionStringListFromJSON(raw json.RawMessage, names []string, depth i
 		}
 	}
 	return nil
+}
+
+func repeatScriptKeyEventName(key string, fields map[string]json.RawMessage) []string {
+	count := scriptKeyEventRepeatCount(fields)
+	values := make([]string, count)
+	for i := range values {
+		values[i] = key
+	}
+	return values
+}
+
+func scriptKeyEventRepeatCount(fields map[string]json.RawMessage) int {
+	count := intPtrJSONField(fields,
+		"repeatCount",
+		"repeat_count",
+		"repeated",
+		"count",
+		"times",
+		"pressCount",
+		"press_count",
+		"keyCount",
+		"key_count",
+	)
+	if count == nil || *count < 1 {
+		return 1
+	}
+	if *count > 1000 {
+		return 1000
+	}
+	return *count
 }
 
 func scriptKeyEventNameFromFields(fields map[string]json.RawMessage) (string, bool) {

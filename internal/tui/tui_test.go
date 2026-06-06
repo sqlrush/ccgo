@@ -7546,6 +7546,23 @@ func TestRunInteractionScriptAcceptsKeyEventObjects(t *testing.T) {
 	}
 }
 
+func TestRunInteractionScriptAcceptsRepeatedKeyEventObjects(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"keys":[{"key":"a","repeatCount":3},{"code":"Digit1","count":"2"},{"key":"!","times":2},{"key":"Enter"}],"expectEvent":{"type":"prompt_submitted","value":"aaa11!!"},"expectPrompt":{"empty":true}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "aaa11!!" {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
 func TestRunInteractionScriptAcceptsDOMInputEvents(t *testing.T) {
 	steps, err := ParseInteractionScript([]byte(`[
 		{"type":"beforeinput","inputType":"insertText","data":"hi","expectPrompt":{"text":"hi"}},

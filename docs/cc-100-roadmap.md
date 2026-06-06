@@ -616,6 +616,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：scripted interaction DOM input replay 现在会把 `deleteContentBackward`、`deleteWordBackward`、`deleteHardLineForward`、`insertLineBreak` 等 `inputType` 映射到已有 prompt key action，覆盖浏览器录制的删除和换行事件。
 
+本轮补充：scripted interaction key event object 现在接受 `repeatCount`/`count`/`times` 等数字重复次数字段，可把压缩后的连续 keydown 录制展开为多次按键回放，并设置上限避免异常 fixture 放大。
+
 本轮补充：scripted interaction step 现在接受 `expect`/`expected`/`assertions`/`checks`/`verify`/`then`/`after` 等 expectation wrapper object，可把嵌套的 prompt/event/dialog/snapshot/screen/task/vim/viewport 断言映射到已有 `expect*` 字段。
 
 本轮补充：scripted interaction expectation wrapper 现在也接受 assertion/check 数组，数组元素可用 `type`/`kind`/`name`/`target` 等 discriminator 搭配 `value`/`payload` 声明 prompt/event/dialog/snapshot/screen/task/vim/viewport 断言，减少官方脚本 fixture 的结构改写成本。
