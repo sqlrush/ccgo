@@ -1039,6 +1039,9 @@ func remoteHistoryProviderResponseText(raw map[string]json.RawMessage) (string, 
 		"responses",
 		"result",
 		"results",
+		"message",
+		"content",
+		"text",
 	} {
 		value, ok := raw[name]
 		if !ok {

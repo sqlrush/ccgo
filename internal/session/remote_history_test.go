@@ -551,6 +551,13 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 					},
 				}},
 			}
+		case "content":
+			wrapper = map[string]any{
+				"content": []any{map[string]any{
+					"type": "text",
+					"text": string(pageData),
+				}},
+			}
 		default:
 			t.Fatalf("unknown provider field %q", field)
 		}
@@ -573,7 +580,12 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 			}))
 		case "evt_provider":
 			_, _ = w.Write(providerWrapper(t, "candidates", map[string]any{
-				"items": []any{map[string]any{"type": "status", "eventId": "evt_candidate", "sessionId": "s", "status": "older"}},
+				"items":       []any{map[string]any{"type": "status", "eventId": "evt_candidate", "sessionId": "s", "status": "older"}},
+				"hasPrevious": true,
+			}))
+		case "evt_candidate":
+			_, _ = w.Write(providerWrapper(t, "content", map[string]any{
+				"results": []any{map[string]any{"type": "status", "event_id": "evt_content", "session_id": "s", "status": "content"}},
 			}))
 		default:
 			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
@@ -586,13 +598,13 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !events.Complete || events.Pages != 2 || events.NextBeforeID != "" {
+	if !events.Complete || events.Pages != 3 || events.NextBeforeID != "" {
 		t.Fatalf("events = %#v", events)
 	}
-	if len(events.Events) != 2 || events.Events[0].ID != "evt_provider" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_candidate" || events.Events[1].Status != "older" {
+	if len(events.Events) != 3 || events.Events[0].ID != "evt_provider" || events.Events[0].Status != "latest" || events.Events[1].ID != "evt_candidate" || events.Events[1].Status != "older" || events.Events[2].ID != "evt_content" || events.Events[2].Status != "content" {
 		t.Fatalf("event order = %#v", events.Events)
 	}
-	if len(seen) != 2 || seen[1].Get("before_id") != "evt_provider" {
+	if len(seen) != 3 || seen[1].Get("before_id") != "evt_provider" || seen[2].Get("before_id") != "evt_candidate" {
 		t.Fatalf("queries = %#v", seen)
 	}
 }
