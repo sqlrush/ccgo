@@ -146,6 +146,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlO, nil
 	case "ctrl+p", "ctrl-p", "control+p", "control-p":
 		return KeyCtrlP, nil
+	case "ctrl+q", "ctrl-q", "control+q", "control-q":
+		return KeyCtrlQ, nil
 	case "ctrl+r", "ctrl-r", "control+r", "control-r":
 		return KeyCtrlR, nil
 	case "ctrl+s", "ctrl-s", "control+s", "control-s":
@@ -154,12 +156,16 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlT, nil
 	case "ctrl+u", "ctrl-u", "control+u", "control-u":
 		return KeyCtrlU, nil
+	case "ctrl+v", "ctrl-v", "control+v", "control-v":
+		return KeyCtrlV, nil
 	case "ctrl+w", "ctrl-w", "control+w", "control-w":
 		return KeyCtrlW, nil
 	case "ctrl+x", "ctrl-x", "control+x", "control-x":
 		return KeyCtrlX, nil
 	case "ctrl+y", "ctrl-y", "control+y", "control-y":
 		return KeyCtrlY, nil
+	case "ctrl+z", "ctrl-z", "control+z", "control-z":
+		return KeyCtrlZ, nil
 	case "paste", "bracketed-paste":
 		return KeyPaste, nil
 	case "image-hint", "image":
@@ -226,6 +232,8 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlO, nil
 	case "ctrlp", "controlp":
 		return KeyCtrlP, nil
+	case "ctrlq", "controlq":
+		return KeyCtrlQ, nil
 	case "ctrlr", "controlr":
 		return KeyCtrlR, nil
 	case "ctrls", "controls":
@@ -234,12 +242,16 @@ func ParseKeyName(raw string) (KeyType, error) {
 		return KeyCtrlT, nil
 	case "ctrlu", "controlu":
 		return KeyCtrlU, nil
+	case "ctrlv", "controlv":
+		return KeyCtrlV, nil
 	case "ctrlw", "controlw":
 		return KeyCtrlW, nil
 	case "ctrlx", "controlx":
 		return KeyCtrlX, nil
 	case "ctrly", "controly":
 		return KeyCtrlY, nil
+	case "ctrlz", "controlz":
+		return KeyCtrlZ, nil
 	default:
 		return KeyUnknown, fmt.Errorf("unknown key %q", raw)
 	}
@@ -312,7 +324,7 @@ func compactNavigationKeySuffix(suffix string) string {
 
 func compactCtrlKeySuffix(suffix string) bool {
 	switch suffix {
-	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "w", "x", "y", "[", "?", "left", "right", "arrowleft", "arrowright":
+	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "[", "?", "left", "right", "arrowleft", "arrowright":
 		return true
 	default:
 		return false

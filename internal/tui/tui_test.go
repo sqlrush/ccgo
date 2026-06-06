@@ -1449,7 +1449,7 @@ func TestKeymapFromSpecsOverridesAndRemovesBindings(t *testing.T) {
 			t.Fatalf("ParseActionName(%q) = %q, %v", tc.name, action, err)
 		}
 	}
-	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "backtab", "back-tab", "backTab", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-s", "ctrl-t", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
+	for _, name := range []string{"paste", "image-hint", "mouse", "focus-out", "shift-enter", "shift+return", "shiftEnter", "shiftReturn", "shiftTab", "backtab", "back-tab", "backTab", "btab", "s-tab", "sTab", "s-enter", "sReturn", "page-up", "pgup", "pg-up", "prior", "page-down", "pgdn", "pg-dn", "pgdown", "pg-down", "next", "arrowLeft", "arrowRight", "arrowUp", "arrowDown", "alt-b", "alt-d", "alt-f", "alt-y", "alt-backspace", "alt-left", "alt-right", "alt-arrow-left", "alt-arrow-right", "altB", "metaD", "optionF", "altY", "altBackspace", "altLeft", "optionRight", "altArrowLeft", "metaArrowRight", "optionArrowLeft", "m-b", "mB", "a-d", "aD", "opt-f", "optF", "m-left", "m-arrow-left", "mArrowLeft", "a-right", "aArrowRight", "optRight", "optArrowRight", "meta-b", "meta-d", "meta-f", "meta-y", "meta-backspace", "meta-left", "meta-right", "option-arrow-left", "option-arrow-right", "ctrl-b", "ctrl-d", "ctrl-f", "ctrl-g", "ctrl-u", "ctrl-k", "ctrl-l", "ctrl-n", "ctrl-o", "ctrl-p", "ctrl-q", "ctrl-s", "ctrl-t", "ctrl-v", "ctrl-w", "ctrl-x", "ctrl-y", "ctrl-z", "ctrl-h", "ctrl-i", "ctrl-m", "control-h", "control-i", "control-m", "c-h", "c-i", "c-m", "c-[", "c-?", "ctrlH", "controlI", "ctrlM", "cH", "cI", "cM", "ctrl-left", "ctrl-right", "ctrl-arrow-left", "ctrl-arrow-right", "ctrlArrowLeft", "controlArrowRight", "c-left", "c-arrow-left", "c-right", "c-arrow-right", "ctrlA", "controlX", "ctrlLeft", "controlRight", "cA", "cQ", "cV", "cZ", "cLeft", "cArrowRight", "control-left", "control-right", "control-arrow-left", "control-arrow-right"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -1469,6 +1469,9 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 		{Key: "c?", Action: ActionDeleteWordBack},
 		{Key: "mB", Action: ActionMoveStart},
 		{Key: "sTab", Action: ActionMoveEnd},
+		{Key: "ctrl-q", Action: ActionPageUp},
+		{Key: "cV", Action: ActionPageDown},
+		{Key: "controlZ", Action: ActionReverseSearch},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1488,7 +1491,25 @@ func TestKeymapFromSpecsAcceptsTerminalControlCharacterAliases(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[Z")); action != ActionMoveEnd {
 		t.Fatalf("shift-tab alias action = %q", action)
 	}
-	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab"} {
+	if action := keymap.Resolve(ParseKey("\x11")); action != ActionPageUp {
+		t.Fatalf("ctrl-q alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x16")); action != ActionPageDown {
+		t.Fatalf("ctrl-v alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1a")); action != ActionReverseSearch {
+		t.Fatalf("ctrl-z alias action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[113;5u")); action != ActionPageUp {
+		t.Fatalf("ctrl-q CSI-u action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[86;5u")); action != ActionPageDown {
+		t.Fatalf("ctrl-v CSI-u action = %q", action)
+	}
+	if action := keymap.Resolve(ParseKey("\x1b[122;5u")); action != ActionReverseSearch {
+		t.Fatalf("ctrl-z CSI-u action = %q", action)
+	}
+	for _, name := range []string{"ctrl-j", "control-j", "ctrlJ", "controlJ", "c-j", "cJ", "ctrl-[", "control-[", "ctrl[", "control[", "c-[", "c[", "ctrl-?", "control-?", "ctrl?", "control?", "c-?", "c?", "m-b", "mB", "s-tab", "sTab", "ctrl-q", "controlQ", "cQ", "ctrl-v", "controlV", "cV", "ctrl-z", "controlZ", "cZ"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
@@ -7914,6 +7935,29 @@ func TestRunInteractionScriptAcceptsTerminalControlKeyAliases(t *testing.T) {
 		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "ab" ||
 		result.Events[1].Type != ScreenEventPromptSubmitted || result.Events[1].Value != "line" ||
 		result.Events[2].Type != ScreenEventCancelled {
+		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunInteractionScriptAcceptsAdditionalControlKeybindings(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"keymap":{"ctrl-q":"submitPrompt","cV":"stashPrompt","controlZ":"reverseSearch"}},
+		{"text":"queued","key":"ctrl-q","expect_event":{"type":"prompt_submitted","value":"queued"},"expect_prompt":{"empty":true}},
+		{"text":"stash me","key":"cV","expect_event":{"type":"stash_prompt","value":"stash me"},"expect_prompt":{"empty":true}},
+		{"key":"ctrl-z","expect_event":{"type":"reverse_search"}}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	result, err := RunInteractionScriptChecked(&screen, steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 3 ||
+		result.Events[0].Type != ScreenEventPromptSubmitted || result.Events[0].Value != "queued" ||
+		result.Events[1].Type != ScreenEventStashPrompt || result.Events[1].Value != "stash me" ||
+		result.Events[2].Type != ScreenEventReverseSearch {
 		t.Fatalf("events = %#v", result.Events)
 	}
 }

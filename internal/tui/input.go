@@ -143,6 +143,8 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlO}
 	case "\x10":
 		return Key{Type: KeyCtrlP}
+	case "\x11":
+		return Key{Type: KeyCtrlQ}
 	case "\x12":
 		return Key{Type: KeyCtrlR}
 	case "\x13":
@@ -151,12 +153,16 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlT}
 	case "\x15":
 		return Key{Type: KeyCtrlU}
+	case "\x16":
+		return Key{Type: KeyCtrlV}
 	case "\x17":
 		return Key{Type: KeyCtrlW}
 	case "\x18":
 		return Key{Type: KeyCtrlX}
 	case "\x19":
 		return Key{Type: KeyCtrlY}
+	case "\x1a":
+		return Key{Type: KeyCtrlZ}
 	case "\t":
 		return Key{Type: KeyTab}
 	case "\x1b[Z":
@@ -370,6 +376,8 @@ func ctrlCSIuKey(codepoint int) (Key, bool) {
 		return Key{Type: KeyCtrlO}, true
 	case 'p':
 		return Key{Type: KeyCtrlP}, true
+	case 'q':
+		return Key{Type: KeyCtrlQ}, true
 	case 'r':
 		return Key{Type: KeyCtrlR}, true
 	case 's':
@@ -378,12 +386,16 @@ func ctrlCSIuKey(codepoint int) (Key, bool) {
 		return Key{Type: KeyCtrlT}, true
 	case 'u':
 		return Key{Type: KeyCtrlU}, true
+	case 'v':
+		return Key{Type: KeyCtrlV}, true
 	case 'w':
 		return Key{Type: KeyCtrlW}, true
 	case 'x':
 		return Key{Type: KeyCtrlX}, true
 	case 'y':
 		return Key{Type: KeyCtrlY}, true
+	case 'z':
+		return Key{Type: KeyCtrlZ}, true
 	}
 	switch codepoint {
 	case 27, '[':
