@@ -237,7 +237,7 @@ func canonicalContentBlockType(value string) ContentBlockType {
 	switch normalized {
 	case "":
 		return ""
-	case "text", "input_text", "inputtext", "content_text", "contenttext":
+	case "text", "input_text", "inputtext", "output_text", "outputtext", "content_text", "contenttext":
 		return ContentText
 	case "thinking", "reasoning", "thought", "chain_of_thought", "chainofthought":
 		return ContentThinking

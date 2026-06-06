@@ -863,6 +863,24 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 			want: "response output text summary",
 		},
 		{
+			digest: "responses-output-text-block",
+			payload: `{
+				"output": [
+					{
+						"type": "message",
+						"content": [
+							{"type": "output_text", "text": "responses output text summary"},
+							{"type": "reasoning", "content": "hidden"}
+						]
+					}
+				],
+				"cacheDigest": "responses-output-text-block",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "responses output text summary",
+		},
+		{
 			digest: "candidate-parts",
 			payload: `{
 				"candidates": [

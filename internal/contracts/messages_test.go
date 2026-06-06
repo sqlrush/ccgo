@@ -307,6 +307,7 @@ func TestContentBlockUnmarshalAcceptsTextAliases(t *testing.T) {
 		"contentText":  `{"type":"text","contentText":"from contentText"}`,
 		"content_text": `{"type":"text","content_text":"from content_text"}`,
 		"content":      `{"type":"text","content":"from content"}`,
+		"output_text":  `{"type":"output_text","text":"from output_text"}`,
 		"thinking":     `{"type":"thinking","content":"from thinking"}`,
 		"default_type": `{"body":"from default"}`,
 	} {
