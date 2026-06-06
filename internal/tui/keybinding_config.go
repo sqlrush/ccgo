@@ -390,21 +390,21 @@ func ParseActionName(raw string) (Action, error) {
 		return ActionMoveLeft, nil
 	case "right", "cursor_right", "forward", "move_forward":
 		return ActionMoveRight, nil
-	case "word_left", "word_backward", "backward_word", "move_word_backward":
+	case "word_left", "word_backward", "backward_word", "previous_word", "prev_word", "move_word_backward", "move_to_previous_word":
 		return ActionMoveWordLeft, nil
-	case "word_right", "word_forward", "forward_word", "move_word_forward":
+	case "word_right", "word_forward", "forward_word", "next_word", "move_word_forward", "move_to_next_word":
 		return ActionMoveWordRight, nil
-	case "home", "start", "line_start", "beginning", "move_to_start":
+	case "home", "start", "line_start", "beginning", "beginning_of_line", "start_of_line", "move_to_start", "move_to_line_start", "move_to_beginning", "move_to_beginning_of_line":
 		return ActionMoveStart, nil
-	case "end", "line_end", "move_to_end":
+	case "end", "line_end", "end_of_line", "move_to_end", "move_to_line_end", "move_to_end_of_line":
 		return ActionMoveEnd, nil
 	case "backspace", "delete_back", "delete_backward", "backward_delete", "delete_previous", "delete_previous_char", "delete_backward_char", "backward_delete_char":
 		return ActionDeleteBackward, nil
 	case "delete", "del", "delete_forward", "forward_delete", "delete_next", "delete_next_char", "delete_forward_char", "forward_delete_char":
 		return ActionDeleteForward, nil
-	case "delete_start", "delete_line_start", "delete_to_beginning", "delete_to_line_start":
+	case "delete_start", "delete_line_start", "delete_to_start", "delete_to_beginning", "delete_to_line_start", "delete_to_start_of_line", "delete_to_beginning_of_line":
 		return ActionDeleteToStart, nil
-	case "kill_line", "delete_line_end", "delete_to_line_end":
+	case "kill_line", "delete_line_end", "delete_to_end", "delete_to_line_end", "delete_to_end_of_line":
 		return ActionDeleteToEnd, nil
 	case "delete_word_back", "delete_word_backward", "delete_word_left", "kill_word_backward", "backward_kill_word":
 		return ActionDeleteWordBack, nil
