@@ -238,6 +238,7 @@ type CSIReportAction struct {
 	Columns     int
 	Row         int
 	Column      int
+	Page        int
 }
 
 type CSIScrollActionType string
@@ -384,6 +385,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	params := parseCSIParams(paramStr)
 	p0 := csiParamPositiveDefault(params, 0, 1)
 	p1 := csiParamPositiveDefault(params, 1, 1)
+	p2 := csiParamPositiveDefault(params, 2, 0)
 	rawP0 := csiParamDefault(params, 0, 0)
 
 	if final == CSICommandSGR && privateMode == 0 {
@@ -460,7 +462,7 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	case CSICommandDeleteCharacters:
 		return csiEdit(CSIEditActionDeleteChars, p0), true
 	case CSICommandCursorPosReport:
-		return csiCursorPositionReport(p0, p1, privateMode), true
+		return csiCursorPositionReport(p0, p1, p2, privateMode), true
 	case CSICommandInsertLines:
 		return csiEdit(CSIEditActionInsertLines, p0), true
 	case CSICommandDeleteLines:
@@ -576,11 +578,13 @@ func csiEdit(actionType CSIEditActionType, count int) CSIAction {
 
 func csiReport(code int, privateMode byte) CSIAction {
 	actionType := CSIReportActionUnknown
-	if privateMode == 0 {
-		switch code {
-		case 5:
+	switch code {
+	case 5:
+		if privateMode == 0 {
 			actionType = CSIReportActionDeviceStatus
-		case 6:
+		}
+	case 6:
+		if privateMode == 0 || privateMode == '?' {
 			actionType = CSIReportActionCursorPosition
 		}
 	}
@@ -590,7 +594,7 @@ func csiReport(code int, privateMode byte) CSIAction {
 	}
 }
 
-func csiCursorPositionReport(row int, column int, privateMode byte) CSIAction {
+func csiCursorPositionReport(row int, column int, page int, privateMode byte) CSIAction {
 	return CSIAction{
 		Type: CSIActionReport,
 		Report: CSIReportAction{
@@ -598,6 +602,7 @@ func csiCursorPositionReport(row int, column int, privateMode byte) CSIAction {
 			PrivateMode: privateMode,
 			Row:         row,
 			Column:      column,
+			Page:        page,
 		},
 	}
 }

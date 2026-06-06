@@ -324,6 +324,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now emits structured edit actions for insert/delete chars and insert/delete lines, plus forward/back tab cursor actions; output `CSI M` is parsed as delete-lines while input tokenization still keeps X10 mouse payload handling separate.
 - `internal/tui`: terminal CSI parser now emits report actions for DSR `CSI n`, including device-status, cursor-position, and private-mode unknown reports.
 - `internal/tui`: terminal CSI parser now emits report actions for CPR cursor-position responses such as `CSI row;col R` and DEC private `CSI ? row;col R`, preserving row/column metadata while keeping visible text clean.
+- `internal/tui`: terminal CSI parser now treats DEC private `CSI ?6n` as a cursor-position report query and preserves the optional page field from `CSI ?row;col;page R` CPR responses.
 - `internal/tui`: terminal sequence dispatcher and parser now classify DCS/APC/PM/SOS string-control sequences as `stringControl` actions with payload, terminator, and incomplete-flush state while keeping visible text extraction free of those invisible payloads.
 - `internal/tui`: terminal CSI parser now recognizes DEC X10, highlight, UTF-8, urxvt numeric, and xterm SGR-pixels mouse modes (`?9h/l`, `?1001h/l`, `?1005h/l`, `?1015h/l`, `?1016h/l`) as mouse-tracking mode actions.
 - `internal/tui`: terminal CSI parser now recognizes xterm alternate scroll mode (`?1007h/l`) as a structured mode action instead of an unknown sequence.
