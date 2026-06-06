@@ -1650,6 +1650,72 @@ func TestParseKeyBindingSpecsAcceptsNestedWrappers(t *testing.T) {
 	}
 }
 
+func TestParseKeyBindingSpecsAcceptsProviderResponseWrappers(t *testing.T) {
+	specArray := []map[string]any{
+		{"key": "ctrl-r", "action": "pageDown"},
+		{"keySequence": "ctrl-x ctrl-k", "actionName": "none"},
+	}
+	specArrayData, err := json.Marshal(specArray)
+	if err != nil {
+		t.Fatal(err)
+	}
+	specMapData, err := json.Marshal(map[string]any{"shift-enter": "insertNewline"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string]any{
+		"choices_message_content": map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"content": string(specArrayData)},
+			}},
+		},
+		"candidate_parts_text": map[string]any{
+			"candidates": []any{map[string]any{
+				"content": map[string]any{
+					"parts": []any{map[string]any{"text": string(specMapData)}},
+				},
+			}},
+		},
+	}
+	for name, wrapper := range tests {
+		t.Run(name, func(t *testing.T) {
+			data, err := json.Marshal(wrapper)
+			if err != nil {
+				t.Fatal(err)
+			}
+			specs, err := ParseKeyBindingSpecs(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			keymap, err := KeymapFromSpecs(DefaultKeymap(), specs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch name {
+			case "choices_message_content":
+				if action := keymap.Resolve(ParseKey("\x12")); action != ActionPageDown {
+					t.Fatalf("ctrl-r action = %q", action)
+				}
+				if action := keymap.Resolve(ParseKey("\x18")); action != ActionNone {
+					t.Fatalf("ctrl-x prefix action = %q", action)
+				}
+			case "candidate_parts_text":
+				if action := keymap.Resolve(ParseKey("\x1b[13;2u")); action != ActionInsertNewline {
+					t.Fatalf("shift-enter action = %q", action)
+				}
+			}
+		})
+	}
+
+	specs, err := ParseKeyBindingSpecs([]byte(`{"choices":"none","focus-out":"reverseSearch"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 2 || specs[0].Key != "choices" || specs[0].Action != Action("none") {
+		t.Fatalf("object map choices key was treated as provider response: %#v", specs)
+	}
+}
+
 func TestParseKeyBindingSpecsAcceptsResourceWrappers(t *testing.T) {
 	specs, err := ParseKeyBindingSpecs([]byte(`{
 		"resource": {

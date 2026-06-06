@@ -35,6 +35,13 @@ func ParseKeyBindingSpecs(data []byte) ([]BindingSpec, error) {
 	if specs, ok, err := parseKeyBindingWrapper(data); ok || err != nil {
 		return specs, err
 	}
+	if text, ok := keyBindingProviderResponseText(data); ok {
+		specs, err := ParseKeyBindingSpecs([]byte(text))
+		if err != nil {
+			return nil, fmt.Errorf("parse keybinding provider response: %w", err)
+		}
+		return specs, nil
+	}
 	specs, err := parseKeyBindingMap(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse keybinding spec map: %w", err)
@@ -129,6 +136,38 @@ func parseKeyBindingWrapperDepth(data []byte, depth int) ([]BindingSpec, bool, e
 		return nil, false, nil
 	}
 	return specs, true, nil
+}
+
+func keyBindingProviderResponseText(data []byte) (string, bool) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return "", false
+	}
+	for _, name := range []string{
+		"choice",
+		"choices",
+		"output",
+		"outputs",
+		"candidate",
+		"candidates",
+		"generation",
+		"generations",
+		"completion",
+		"completions",
+		"response",
+		"responses",
+		"result",
+		"results",
+	} {
+		value, ok := raw[name]
+		if !ok {
+			continue
+		}
+		if text, ok := interactionScriptProviderTextFromRaw(value, 0, false); ok {
+			return text, true
+		}
+	}
+	return "", false
 }
 
 func parseKeyBindingOptionalSpecValue(name string, data json.RawMessage, depth int) ([]BindingSpec, bool, error) {
