@@ -303,6 +303,8 @@ func (s *REPLScreen) applyVimVisualRune(r rune) ScreenEvent {
 	case 'g':
 		s.VimPendingG = true
 		s.VimPendingCount = count
+	case 'o':
+		s.toggleVimVisualActiveEnd()
 	case 'y', 'd', 'c':
 		s.applyVimVisualOperator(r)
 	case 'x':
@@ -712,6 +714,12 @@ func (s *REPLScreen) enterVimVisual(linewise bool) {
 		return
 	}
 	s.VimMode = VimVisual
+}
+
+func (s *REPLScreen) toggleVimVisualActiveEnd() {
+	anchor := s.Prompt.clampCursor(s.VimVisualAnchor)
+	s.VimVisualAnchor = s.Prompt.clampCursor(s.Prompt.Cursor)
+	s.Prompt.Cursor = anchor
 }
 
 func (s *REPLScreen) exitVimVisual() {
