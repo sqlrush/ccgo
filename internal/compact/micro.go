@@ -45,7 +45,10 @@ type MicroResult struct {
 var microSummaryFieldAliases = []string{
 	"Summary", "summary", "summaryText", "summary_text", "summaryContent", "summary_content",
 	"resultSummary", "result_summary", "finalSummary", "final_summary",
-	"summaryMarkdown", "summary_markdown", "markdown", "body", "description", "details", "detail",
+	"summaryMarkdown", "summary_markdown", "markdown", "body",
+	"plainText", "plain_text", "displayText", "display_text", "visibleText", "visible_text",
+	"answer", "answerText", "answer_text", "refusal", "refusalText", "refusal_text",
+	"description", "details", "detail",
 	"compressed", "compressedText", "compressed_text", "content", "parts", "text", "value",
 	"output", "outputText", "output_text", "resultText", "result_text",
 	"completionText", "completion_text", "responseText", "response_text", "messageText", "message_text",
@@ -54,10 +57,17 @@ var microSummaryFieldAliases = []string{
 var microProviderSummaryFieldAliases = []string{
 	"summary", "summaryText", "summary_text", "summaryContent", "summary_content",
 	"resultSummary", "result_summary", "finalSummary", "final_summary",
-	"summaryMarkdown", "summary_markdown", "markdown", "body", "description", "details", "detail",
+	"summaryMarkdown", "summary_markdown", "markdown", "body",
+	"plainText", "plain_text", "displayText", "display_text", "visibleText", "visible_text",
+	"answer", "answerText", "answer_text", "refusal", "refusalText", "refusal_text",
+	"description", "details", "detail",
 	"parts", "segments", "message", "delta", "content", "output", "outputText", "output_text",
 	"resultText", "result_text", "completionText", "completion_text",
 	"responseText", "response_text", "messageText", "message_text",
+}
+
+var microProviderWrapperFieldAliases = []string{
+	"value", "values", "payload", "data", "item", "items",
 }
 
 func (r *MicroResult) UnmarshalJSON(data []byte) error {
@@ -691,6 +701,22 @@ func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
 		text, ok, err := microSummaryFromRaw(nested, name)
 		if err != nil {
 			return "", false, err
+		}
+		if ok {
+			if summary, ok := microSummaryFromTextPayload(text); ok {
+				return summary, true, nil
+			}
+			return text, true, nil
+		}
+	}
+	for _, name := range microProviderWrapperFieldAliases {
+		nested, ok := fields[name]
+		if !ok {
+			continue
+		}
+		text, ok, err := microSummaryFromRaw(nested, name)
+		if err != nil {
+			continue
 		}
 		if ok {
 			if summary, ok := microSummaryFromTextPayload(text); ok {

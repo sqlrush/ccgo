@@ -345,6 +345,16 @@ func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
 			want: "# markdown alias summary",
 		},
 		{
+			digest: "summary-display-text",
+			payload: `{
+				"displayText": "display text alias summary",
+				"cacheKey": "summary-display-text",
+				"cacheVersion": "microcompact.v1",
+				"cachedAt": 100
+			}`,
+			want: "display text alias summary",
+		},
+		{
 			digest: "summary-final",
 			payload: `{
 				"cacheEntry": {
@@ -355,6 +365,18 @@ func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
 				}
 			}`,
 			want: "final alias summary",
+		},
+		{
+			digest: "summary-answer-text",
+			payload: `{
+				"cacheEntry": {
+					"answerText": "answer text alias summary",
+					"cacheDigest": "summary-answer-text",
+					"formatVersion": "microcompact.v1",
+					"generatedAt": 100
+				}
+			}`,
+			want: "answer text alias summary",
 		},
 		{
 			digest: "summary-detail-block",
@@ -946,6 +968,54 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 				"storedAt": 100
 			}`,
 			want: "response body summary",
+		},
+		{
+			digest: "response-content-value",
+			payload: `{
+				"response": {
+					"content": {
+						"value": "response content value summary"
+					}
+				},
+				"cacheDigest": "response-content-value",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "response content value summary",
+		},
+		{
+			digest: "response-content-payload",
+			payload: `{
+				"response": {
+					"content": {
+						"payload": {
+							"data": {
+								"plainText": "response content payload summary"
+							}
+						}
+					}
+				},
+				"cacheDigest": "response-content-payload",
+				"formatVersion": "microcompact.v1",
+				"storedAt": 100
+			}`,
+			want: "response content payload summary",
+		},
+		{
+			digest: "choice-refusal",
+			payload: `{
+				"choices": [
+					{
+						"message": {
+							"refusal": "choice refusal summary"
+						}
+					}
+				],
+				"cacheKey": "choice-refusal",
+				"cacheVersion": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "choice refusal summary",
 		},
 		{
 			digest: "result-final-summary",
