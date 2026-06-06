@@ -696,6 +696,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：interaction script key 字段现在接受 DOM-style key event object，可从 `key`/`code`、`ctrlKey`/`altKey`/`metaKey`/`shiftKey` 和 `modifiers` 数组还原现有 key 名，wrapper payload 中的 key event 也可驱动脚本回放。
 
+本轮补充：interaction script mouse payload 现在可从 `mouseup`、`pointerUp`、`touchend` 等 event type 推导 release 状态；显式 release bool 仍优先生效。
+
 本轮补充：prompt/image history 的 `ImageDimensions` 读取 `width`/`height` 或仅 original 尺寸时，会默认 display 尺寸等于 original 尺寸，避免只有单尺寸字段的 image fixture 丢失 source metadata。
 
 本轮补充：prompt history 的 pasted-content 类型现在会归一化 `inputImage`/`pasted-image`/`input_text`/`pasted-text` 等别名，runtime history 和 stored history 恢复都会映射到规范 `image`/`text`。

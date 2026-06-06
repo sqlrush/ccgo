@@ -5095,6 +5095,29 @@ func TestScriptMouseAcceptsCoordinateAliases(t *testing.T) {
 	}
 }
 
+func TestScriptMouseDerivesReleaseFromEventType(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		raw     string
+		release bool
+	}{
+		{name: "mouse up", raw: `{"type":"mouseup","button":0,"clientX":13,"clientY":5}`, release: true},
+		{name: "pointer up camel", raw: `{"eventType":"pointerUp","button":0,"clientX":13,"clientY":5}`, release: true},
+		{name: "mouse down", raw: `{"type":"mousedown","button":0,"clientX":13,"clientY":5}`, release: false},
+		{name: "explicit release wins", raw: `{"type":"mousedown","release":true,"button":0,"clientX":13,"clientY":5}`, release: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mouse ScriptMouse
+			if err := json.Unmarshal([]byte(tc.raw), &mouse); err != nil {
+				t.Fatal(err)
+			}
+			if mouse.X != 13 || mouse.Y != 5 || mouse.Release != tc.release {
+				t.Fatalf("mouse = %#v, release want %v", mouse, tc.release)
+			}
+		})
+	}
+}
+
 func TestScriptBooleanAliasesAcceptNonStrictValues(t *testing.T) {
 	var mouse ScriptMouse
 	if err := json.Unmarshal([]byte(`{"button":0,"x":13,"y":5,"mouseUp":"yes"}`), &mouse); err != nil {

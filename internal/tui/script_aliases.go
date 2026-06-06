@@ -3930,8 +3930,23 @@ func (mouse *ScriptMouse) UnmarshalJSON(data []byte) error {
 	}
 	if release := boolPtrJSONField(fields, "Release", "release", "Released", "released", "IsRelease", "is_release", "isRelease", "MouseRelease", "mouse_release", "mouseRelease", "MouseUp", "mouse_up", "mouseUp", "Up", "up", "ReleaseEvent", "release_event", "releaseEvent", "ReleasedEvent", "released_event", "releasedEvent"); release != nil {
 		mouse.Release = *release
+	} else if release, ok := scriptMouseReleaseFromType(fields); ok {
+		mouse.Release = release
 	}
 	return nil
+}
+
+func scriptMouseReleaseFromType(fields map[string]json.RawMessage) (bool, bool) {
+	eventType := stringJSONField(fields, "Type", "type", "Event", "event", "EventType", "event_type", "eventType", "Name", "name", "Kind", "kind", "Action", "action")
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(eventType), "_", "-"), " ", "-"))
+	switch normalized {
+	case "mouseup", "mouse-up", "pointerup", "pointer-up", "touchend", "touch-end", "release", "released", "buttonup", "button-up":
+		return true, true
+	case "mousedown", "mouse-down", "pointerdown", "pointer-down", "touchstart", "touch-start", "click", "mousemove", "mouse-move", "pointermove", "pointer-move", "drag", "dragstart", "drag-start", "dragmove", "drag-move":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (event *ScreenEvent) UnmarshalJSON(data []byte) error {
