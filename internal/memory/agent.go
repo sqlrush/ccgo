@@ -548,6 +548,12 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		SessionURICamel              string            `json:"sessionUri"`
 		SessionURL                   string            `json:"session_url"`
 		SessionURLCamel              string            `json:"sessionUrl"`
+		SessionPath                  string            `json:"session_path"`
+		SessionPathCamel             string            `json:"sessionPath"`
+		SessionSummaryPath           string            `json:"session_summary_path"`
+		SessionSummaryPathCamel      string            `json:"sessionSummaryPath"`
+		SummaryPath                  string            `json:"summary_path"`
+		SummaryPathCamel             string            `json:"summaryPath"`
 		URI                          string            `json:"uri"`
 		URIs                         []string          `json:"uris"`
 		URL                          string            `json:"url"`
@@ -676,7 +682,7 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append(
-				[]string{object.SessionURI, object.SessionURICamel, object.SessionURL, object.SessionURLCamel, object.URI, object.URL, object.Href},
+				[]string{object.SessionURI, object.SessionURICamel, object.SessionURL, object.SessionURLCamel, object.SessionPath, object.SessionPathCamel, object.SessionSummaryPath, object.SessionSummaryPathCamel, object.SummaryPath, object.SummaryPathCamel, object.URI, object.URL, object.Href},
 				appendManyStringSlices(object.URIs, object.URLs, object.Hrefs)...,
 			))
 		}
@@ -1623,6 +1629,12 @@ var recallItemIDKeys = []string{
 	"session_url",
 	"sessionUrl",
 	"sessionURL",
+	"session_path",
+	"sessionPath",
+	"session_summary_path",
+	"sessionSummaryPath",
+	"summary_path",
+	"summaryPath",
 	"uri",
 	"uris",
 	"url",

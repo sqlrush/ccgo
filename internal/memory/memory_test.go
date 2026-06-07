@@ -2096,6 +2096,64 @@ func TestMemoryAgentRecallParsesSessionURISelectionAliases(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentRecallParsesSessionPathSelectionAliases(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	prior, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "prior",
+		Summary:   "database access policy notes",
+		UpdatedAt: time.Unix(200, 0).UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := WriteSessionSummary(SessionSummaryOptions{
+		Root:      root,
+		SessionID: "other",
+		Summary:   "credential rotation notes",
+		UpdatedAt: time.Unix(100, 0).UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_recall_path",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(fmt.Sprintf(`{
+			"query":"database access",
+			"sessionPath":"%s"
+		}`, filepath.ToSlash(prior.Path)))},
+	}}
+
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != filepath.ToSlash(prior.Path) {
+		t.Fatalf("sessionPath result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("sessionPath matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(fmt.Sprintf(`{
+		"query":"credential rotation",
+		"summaries":[{"summaryPath":"%s"}]
+	}`, filepath.ToSlash(other.Path)))}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credentials?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential rotation" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != filepath.ToSlash(other.Path) {
+		t.Fatalf("summaryPath result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("summaryPath matches = %#v", result.Matches)
+	}
+}
+
 func TestMemoryAgentRecallParsesSessionLinkObjectAliases(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	prior, err := WriteSessionSummary(SessionSummaryOptions{
