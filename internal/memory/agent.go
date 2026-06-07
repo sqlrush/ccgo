@@ -552,8 +552,12 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		SessionPathCamel             string            `json:"sessionPath"`
 		SessionSummaryPath           string            `json:"session_summary_path"`
 		SessionSummaryPathCamel      string            `json:"sessionSummaryPath"`
+		SessionFilePath              string            `json:"session_file_path"`
+		SessionFilePathCamel         string            `json:"sessionFilePath"`
 		SummaryPath                  string            `json:"summary_path"`
 		SummaryPathCamel             string            `json:"summaryPath"`
+		TranscriptPath               string            `json:"transcript_path"`
+		TranscriptPathCamel          string            `json:"transcriptPath"`
 		URI                          string            `json:"uri"`
 		URIs                         []string          `json:"uris"`
 		URL                          string            `json:"url"`
@@ -682,7 +686,12 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		}
 		if len(ids) == 0 {
 			ids = recallIDs(append(
-				[]string{object.SessionURI, object.SessionURICamel, object.SessionURL, object.SessionURLCamel, object.SessionPath, object.SessionPathCamel, object.SessionSummaryPath, object.SessionSummaryPathCamel, object.SummaryPath, object.SummaryPathCamel, object.URI, object.URL, object.Href},
+				[]string{
+					object.SessionURI, object.SessionURICamel, object.SessionURL, object.SessionURLCamel,
+					object.SessionPath, object.SessionPathCamel, object.SessionSummaryPath, object.SessionSummaryPathCamel,
+					object.SessionFilePath, object.SessionFilePathCamel, object.SummaryPath, object.SummaryPathCamel,
+					object.TranscriptPath, object.TranscriptPathCamel, object.URI, object.URL, object.Href,
+				},
 				appendManyStringSlices(object.URIs, object.URLs, object.Hrefs)...,
 			))
 		}
@@ -1633,8 +1642,12 @@ var recallItemIDKeys = []string{
 	"sessionPath",
 	"session_summary_path",
 	"sessionSummaryPath",
+	"session_file_path",
+	"sessionFilePath",
 	"summary_path",
 	"summaryPath",
+	"transcript_path",
+	"transcriptPath",
 	"uri",
 	"uris",
 	"url",
@@ -2102,6 +2115,13 @@ func recallLookupKeysForID(id string) []string {
 		return nil
 	}
 	keys := []string{id}
+	fromSlashID := filepath.FromSlash(id)
+	if base := filepath.Base(fromSlashID); base != "." && base != string(filepath.Separator) && base != "" {
+		keys = append(keys, base, strings.TrimSuffix(base, filepath.Ext(base)))
+	}
+	if dirBase := filepath.Base(filepath.Dir(fromSlashID)); dirBase != "." && dirBase != string(filepath.Separator) && dirBase != "" {
+		keys = append(keys, dirBase)
+	}
 	parsed, err := url.Parse(id)
 	if err == nil && parsed.Scheme != "" && parsed.Path != "" {
 		path := strings.TrimSpace(parsed.Path)

@@ -2152,6 +2152,38 @@ func TestMemoryAgentRecallParsesSessionPathSelectionAliases(t *testing.T) {
 	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
 		t.Fatalf("summaryPath matches = %#v", result.Matches)
 	}
+
+	sessionFilePath := filepath.ToSlash(filepath.Join(t.TempDir(), "transcripts", "prior.jsonl"))
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(fmt.Sprintf(`{
+		"query":"database access",
+		"sessionFilePath":"%s"
+	}`, sessionFilePath))}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != sessionFilePath {
+		t.Fatalf("sessionFilePath result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("sessionFilePath matches = %#v", result.Matches)
+	}
+
+	transcriptPath := filepath.ToSlash(filepath.Join(t.TempDir(), "transcripts", "other.jsonl"))
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(fmt.Sprintf(`{
+		"query":"credential rotation",
+		"selectedTranscripts":[{"transcriptPath":"%s"}]
+	}`, transcriptPath))}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credentials?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential rotation" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != transcriptPath {
+		t.Fatalf("transcriptPath result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("transcriptPath matches = %#v", result.Matches)
+	}
 }
 
 func TestMemoryAgentRecallParsesSessionLinkObjectAliases(t *testing.T) {
