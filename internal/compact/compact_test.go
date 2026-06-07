@@ -969,6 +969,10 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gluedFencedSummary, err := json.Marshal("```json{\"summary\":\"choice glued fenced summary\"}```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		digest      string
 		payload     string
@@ -1046,6 +1050,22 @@ func TestLoadMicroResultAcceptsProviderStyleResponseWrappers(t *testing.T) {
 				"createdAt": 100
 			}`,
 			want: "choice inline fenced summary",
+		},
+		{
+			digest: "choices-glued-fenced-message",
+			payload: `{
+				"choices": [
+					{
+						"message": {
+							"content": ` + string(gluedFencedSummary) + `
+						}
+					}
+				],
+				"cacheKey": "choices-glued-fenced-message",
+				"cacheVersion": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "choice glued fenced summary",
 		},
 		{
 			digest: "output-message",
@@ -1672,6 +1692,7 @@ func TestRunnerAcceptsProviderWrappedSummaryResponses(t *testing.T) {
 			}]
 		}` + "\n```",
 		"choices_inline_fenced_message_content": "```json " + `{"choices":[{"message":{"content":[{"type":"text","text":"provider inline fenced summary"}]}}]}` + " ```",
+		"choices_glued_fenced_message_content":  "```json" + `{"choices":[{"message":{"content":[{"type":"text","text":"provider glued fenced summary"}]}}]}` + "```",
 		"candidate_parts_text": `{
 			"candidates": [{
 				"content": {

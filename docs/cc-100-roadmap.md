@@ -614,7 +614,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：microcompact disk cache loader 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations`/`results` 等响应数组 wrapper，并可从 `message.content`、`output.content`、`content.parts[].text` 和 fenced `json` code block 中恢复 summary，同时保留外层 cache metadata。
 
-本轮补充：microcompact disk cache loader 现在也会解包一行内 fenced JSON summary payload，例如 `json {...}` 与 opening fence 在同一行的 provider/SDK 输出，不再把整段 code fence 当作可见摘要文本。
+本轮补充：microcompact disk cache loader 现在也会解包一行内 fenced JSON summary payload，例如 `json {...}` 或 `json{...}` 与 opening fence 在同一行的 provider/SDK 输出，不再把整段 code fence 当作可见摘要文本。
 
 本轮补充：transcript metadata loader 现在先递归解包 JSON:API/resource、GraphQL edge/node、`included`、collection/list/values 等 wrapper，再做 metadata type 分类；full transcript、lightweight metadata 和 transcript index 都能恢复 wrapped title/task/tag/worktree/content-replacement/context-collapse metadata。
 

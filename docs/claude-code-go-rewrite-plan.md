@@ -332,7 +332,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：microcompact disk cache loader 的 summary array 元素现在也接受完整 contract message object，可把 message list 与 content-block 混合数组恢复成可见摘要文本。
 - 本轮补充：microcompact disk cache loader 现在会把 `value` 字段中的 text content-block object 识别为 direct summary payload，同时继续从同一 `value` object 中补 digest、version、timestamp 等 cache metadata，避免 `value` 作为 summary/cache wrapper 双义字段时丢摘要或 sidecar 信息。
 - 本轮补充：microcompact disk cache loader 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations`/`results` 等响应数组 wrapper，并可从 `message.content`、`output.content`、`content.parts[].text` 和 fenced `json` code block 中恢复 summary，同时保留外层 cache metadata。
-- 本轮补充：microcompact disk cache loader 现在也会解包一行内 fenced JSON summary payload，例如 `json {...}` 与 opening fence 在同一行的 provider/SDK 输出，不再把整段 code fence 当作可见摘要文本。
+- 本轮补充：microcompact disk cache loader 现在也会解包一行内 fenced JSON summary payload，例如 `json {...}` 或 `json{...}` 与 opening fence 在同一行的 provider/SDK 输出，不再把整段 code fence 当作可见摘要文本。
 - 本轮补充：contract content block 与 microcompact cache loader 现在把 provider `output_text`/`outputText` content block 归一为可见 text，OpenAI Responses 风格 `output[].content[].type="output_text"` cache payload 可恢复 summary，而 reasoning/tool/image blocks 继续跳过。
 - 本轮补充：microcompact disk cache loader 的 summary-like 字段现在也接受 `body`、`markdown`、`description`/`details`、`finalSummary`、`summaryContent`、`resultText`、`completionText`、`responseText`、`messageText` 等 direct/provider aliases，并在 nested cache entry、JSON:API/resource 和 provider-style response wrapper 中统一恢复可见摘要文本。
 

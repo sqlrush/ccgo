@@ -779,6 +779,15 @@ func microSummaryTextJSONPayload(text string) (string, bool) {
 			return candidate, true
 		}
 	}
+	for _, language := range []string{"json", "jsonc", "javascript", "js"} {
+		if len(content) <= len(language) || !strings.EqualFold(content[:len(language)], language) {
+			continue
+		}
+		candidate := strings.TrimSpace(content[len(language):])
+		if strings.HasPrefix(candidate, "{") || strings.HasPrefix(candidate, "[") {
+			return candidate, true
+		}
+	}
 	return "", false
 }
 
