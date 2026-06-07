@@ -418,6 +418,10 @@ func TestPromptHandlesBracketedPasteAndImageHints(t *testing.T) {
 	if paste.Type != KeyPaste || paste.Text != "hello\nworld" {
 		t.Fatalf("paste key = %#v", paste)
 	}
+	c1Paste := ParseKey("\x9b200~hello\nworld\x9b201~")
+	if c1Paste.Type != KeyPaste || c1Paste.Text != "hello\nworld" {
+		t.Fatalf("c1 paste key = %#v", c1Paste)
+	}
 	prompt.Apply(paste)
 	if prompt.Text != "hello\nworld" || prompt.Cursor != len([]rune("hello\nworld")) {
 		t.Fatalf("prompt after paste = %#v", prompt)
@@ -931,6 +935,13 @@ func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 		{seq: "\x1bOB", want: KeyDown},
 		{seq: "\x1bOC", want: KeyRight},
 		{seq: "\x1bOD", want: KeyLeft},
+		{seq: "\x9bA", want: KeyUp},
+		{seq: "\x9bB", want: KeyDown},
+		{seq: "\x9bC", want: KeyRight},
+		{seq: "\x9bD", want: KeyLeft},
+		{seq: "\x9bH", want: KeyHome},
+		{seq: "\x9bF", want: KeyEnd},
+		{seq: "\x9bZ", want: KeyShiftTab},
 		{seq: "\x8fA", want: KeyUp},
 		{seq: "\x8fB", want: KeyDown},
 		{seq: "\x8fC", want: KeyRight},
@@ -982,6 +993,12 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 		{seq: "\x1b[1D", want: KeyLeft},
 		{seq: "\x1b[1H", want: KeyHome},
 		{seq: "\x1b[1F", want: KeyEnd},
+		{seq: "\x9b1A", want: KeyUp},
+		{seq: "\x9b1B", want: KeyDown},
+		{seq: "\x9b1C", want: KeyRight},
+		{seq: "\x9b1D", want: KeyLeft},
+		{seq: "\x9b1H", want: KeyHome},
+		{seq: "\x9b1F", want: KeyEnd},
 	}
 	for _, tc := range numberedCases {
 		if key := ParseKey(tc.seq); key.Type != tc.want {
@@ -1027,6 +1044,13 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 		{seq: "\x1b[1;11C", want: KeyAltRight},
 		{seq: "\x1b[1;13D", want: KeyCtrlLeft},
 		{seq: "\x1b[1;16C", want: KeyCtrlRight},
+		{seq: "\x9b1;2A", want: KeyUp},
+		{seq: "\x9b1;3C", want: KeyAltRight},
+		{seq: "\x9b1;5D", want: KeyCtrlLeft},
+		{seq: "\x9b1;5H", want: KeyHome},
+		{seq: "\x9b3;5~", want: KeyDelete},
+		{seq: "\x9b5;5~", want: KeyPageUp},
+		{seq: "\x9b6;5~", want: KeyPageDown},
 	}
 	for _, tc := range arrowCases {
 		if key := ParseKey(tc.seq); key.Type != tc.want {
@@ -1114,6 +1138,9 @@ func TestParseFunctionKeySequences(t *testing.T) {
 		{seq: "\x1b[1;5Q", want: KeyF2},
 		{seq: "\x1b[15;2~", want: KeyF5},
 		{seq: "\x1b[24;5~", want: KeyF12},
+		{seq: "\x9b11~", want: KeyF1},
+		{seq: "\x9b15;2~", want: KeyF5},
+		{seq: "\x9b1;5Q", want: KeyF2},
 	}
 	for _, tc := range cases {
 		if key := ParseKey(tc.seq); key.Type != tc.want {
@@ -1140,6 +1167,8 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[32u", want: KeyRune, rune: ' '},
 		{seq: "\x1b[13u", want: KeyEnter},
 		{seq: "\x1b[13;1u", want: KeyEnter},
+		{seq: "\x9b97u", want: KeyRune, rune: 'a'},
+		{seq: "\x9b13;1u", want: KeyEnter},
 		{seq: "\x1b[9u", want: KeyTab},
 		{seq: "\x1b[27u", want: KeyEsc},
 		{seq: "\x1b[127u", want: KeyBackspace},
@@ -1154,6 +1183,7 @@ func TestParseCSIuKeySequences(t *testing.T) {
 		{seq: "\x1b[30u", want: KeyCtrlCaret},
 		{seq: "\x1b[31u", want: KeyCtrlUnderscore},
 		{seq: "\x1b[97;5u", want: KeyCtrlA},
+		{seq: "\x9b97;5u", want: KeyCtrlA},
 		{seq: "\x1b[65;5u", want: KeyCtrlA},
 		{seq: "\x1b[97:65;5:1u", want: KeyCtrlA},
 		{seq: "\x1b[117;6u", want: KeyCtrlU},
@@ -1203,6 +1233,10 @@ func TestParseMouseSequences(t *testing.T) {
 	if press.Type != KeyMouse || press.MouseButton != 64 || press.MouseX != 10 || press.MouseY != 4 || press.MouseRelease {
 		t.Fatalf("press = %#v", press)
 	}
+	c1Press := ParseKey("\x9b<64;10;4M")
+	if c1Press.Type != KeyMouse || c1Press.MouseButton != 64 || c1Press.MouseX != 10 || c1Press.MouseY != 4 || c1Press.MouseRelease {
+		t.Fatalf("c1 press = %#v", c1Press)
+	}
 	release := ParseKey("\x1b[<0;1;2m")
 	if release.Type != KeyMouse || release.MouseButton != 0 || release.MouseX != 1 || release.MouseY != 2 || !release.MouseRelease {
 		t.Fatalf("release = %#v", release)
@@ -1216,6 +1250,10 @@ func TestParseMouseSequences(t *testing.T) {
 	if legacyPress.Type != KeyMouse || legacyPress.MouseButton != 0 || legacyPress.MouseX != 1 || legacyPress.MouseY != 1 || legacyPress.MouseRelease {
 		t.Fatalf("legacy press = %#v", legacyPress)
 	}
+	c1LegacyPress := ParseKey("\x9bM !!")
+	if c1LegacyPress.Type != KeyMouse || c1LegacyPress.MouseButton != 0 || c1LegacyPress.MouseX != 1 || c1LegacyPress.MouseY != 1 || c1LegacyPress.MouseRelease {
+		t.Fatalf("c1 legacy press = %#v", c1LegacyPress)
+	}
 	legacyRelease := ParseKey("\x1b[M#%&")
 	if legacyRelease.Type != KeyMouse || legacyRelease.MouseButton != 3 || legacyRelease.MouseX != 5 || legacyRelease.MouseY != 6 || !legacyRelease.MouseRelease {
 		t.Fatalf("legacy release = %#v", legacyRelease)
@@ -1227,6 +1265,10 @@ func TestParseMouseSequences(t *testing.T) {
 	urxvtPress := ParseKey("\x1b[32;7;8M")
 	if urxvtPress.Type != KeyMouse || urxvtPress.MouseButton != 0 || urxvtPress.MouseX != 7 || urxvtPress.MouseY != 8 || urxvtPress.MouseRelease {
 		t.Fatalf("urxvt press = %#v", urxvtPress)
+	}
+	c1URXVTPress := ParseKey("\x9b32;7;8M")
+	if c1URXVTPress.Type != KeyMouse || c1URXVTPress.MouseButton != 0 || c1URXVTPress.MouseX != 7 || c1URXVTPress.MouseY != 8 || c1URXVTPress.MouseRelease {
+		t.Fatalf("c1 urxvt press = %#v", c1URXVTPress)
 	}
 	urxvtRelease := ParseKey("\x1b[35;5;6M")
 	if urxvtRelease.Type != KeyMouse || urxvtRelease.MouseButton != 3 || urxvtRelease.MouseX != 5 || urxvtRelease.MouseY != 6 || !urxvtRelease.MouseRelease {
@@ -1244,6 +1286,12 @@ func TestParseFocusEvents(t *testing.T) {
 	}
 	if key := ParseKey("\x1b[O"); key.Type != KeyFocusOut {
 		t.Fatalf("focus out = %#v", key)
+	}
+	if key := ParseKey("\x9bI"); key.Type != KeyFocusIn {
+		t.Fatalf("c1 focus in = %#v", key)
+	}
+	if key := ParseKey("\x9bO"); key.Type != KeyFocusOut {
+		t.Fatalf("c1 focus out = %#v", key)
 	}
 }
 

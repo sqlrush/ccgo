@@ -586,6 +586,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal sequence dispatcher/parser 现在把 DCS/APC/PM/SOS string-control 序列分类为 `stringControl` action，保留 payload、terminator 和 incomplete flush 状态，同时 visible text 继续忽略这些不可见控制串。
 - 本轮补充：snapshot/OSC 复用 terminal parser 的 visible-text pipeline，`StripANSI` 不再维护独立手写 scanner；可见文本提取统一覆盖 CSI/OSC/DCS/APC/PM/SOS、flushed partial OSC 和 raw BEL 兼容行为，为后续 ANSI parser 与 renderer/snapshot parity 收口。
 - 本轮补充：terminal tokenizer、sequence dispatcher、CSI parser 和 visible-text stripping 现在接受 8-bit C1 CSI (`0x9b`) 序列，覆盖分块 SGR 输入以及 input tokenizer 的 X10 mouse payload 边界。
+- 本轮补充：terminal key parser 现在接受 8-bit C1 CSI (`0x9b`) 输入形态，覆盖 bracketed paste、focus、direct/numbered/modified navigation、function-key、CSI-u/Kitty key、SGR/URXVT mouse 和 X10 mouse。
 - 本轮补充：terminal tokenizer、SS3 parser 和 key parser 现在接受 8-bit C1 SS3 (`0x8f`) 序列，覆盖 application cursor、modified SS3 navigation 和 F1-F4 function-key 输入。
 - 本轮补充：terminal tokenizer、OSC parser、string-control dispatcher 和 visible-text stripping 现在接受 8-bit C1 OSC/DCS/APC/PM/SOS 以及 C1 ST (`0x9c`) 终止符，同时保留合法 UTF-8 continuation byte，不会把 emoji/CJK 文本误切成控制串。
 - 本轮补充：message renderer 增加 ANSI-aware wrapping/padding，带 SGR 的 message text 会通过 terminal parser 按 grapheme 可见宽度换行，并把 `TextStyle` action 重新渲染为 SGR 序列，避免 escape bytes 参与 layout 宽度计算；普通文本路径保持不变。

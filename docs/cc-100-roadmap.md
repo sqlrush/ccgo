@@ -1042,6 +1042,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：terminal tokenizer、sequence dispatcher、CSI parser 和 visible-text stripping 现在接受 8-bit C1 CSI (`0x9b`) 序列，覆盖分块 SGR 输入以及 input tokenizer 的 X10 mouse payload 边界。
 
+本轮补充：terminal key parser 现在接受 8-bit C1 CSI (`0x9b`) 输入形态，覆盖 bracketed paste、focus、direct/numbered/modified navigation、function-key、CSI-u/Kitty key、SGR/URXVT mouse 和 X10 mouse。
+
 本轮补充：terminal tokenizer、SS3 parser 和 key parser 现在接受 8-bit C1 SS3 (`0x8f`) 序列，覆盖 application cursor、modified SS3 navigation 和 F1-F4 function-key 输入。
 
 本轮补充：terminal tokenizer、OSC parser、string-control dispatcher 和 visible-text stripping 现在接受 8-bit C1 OSC/DCS/APC/PM/SOS 以及 C1 ST (`0x9c`) 终止符，同时保留合法 UTF-8 continuation byte，不会把 emoji/CJK 文本误切成控制串。

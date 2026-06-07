@@ -387,6 +387,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parsing now exposes ECMA `CSI Ps N` / `CSI Ps O` erase-in-field and erase-in-area actions with the same to-end/to-start/all regions used by other erase operations.
 - `internal/tui`: terminal CSI parsing now treats explicit zero count/position params as ANSI defaults for cursor movement/position/column, insert/repeat/erase chars, and scroll actions while preserving raw zero selector semantics for mode/report/erase selector sequences.
 - `internal/tui`: terminal tokenizer, sequence dispatcher, CSI parser, and visible-text stripping now accept 8-bit C1 CSI (`0x9b`) sequences, including chunked SGR input and X10 mouse payload boundaries.
+- `internal/tui`: terminal key parser now accepts 8-bit C1 CSI (`0x9b`) bracketed paste, focus, direct/numbered/modified navigation, function-key, CSI-u/Kitty key, SGR/URXVT mouse, and X10 mouse input forms.
 - `internal/tui`: terminal tokenizer, SS3 parser, and key parser now accept 8-bit C1 SS3 (`0x8f`) application cursor, modified navigation, and F1-F4 function-key sequences.
 - `internal/tui`: terminal tokenizer, OSC parser, string-control dispatcher, and visible-text stripping now accept 8-bit C1 OSC/DCS/APC/PM/SOS with C1 ST (`0x9c`) terminators while preserving valid UTF-8 text bytes.
 - `internal/tui`: keybinding config, keymap resolution, and interaction script named-key input now accept terminal aliases for `ctrl-h`/`ctrl-i`/`ctrl-j`/`ctrl-m`, `ctrl-[`, and `ctrl-?`, including `control-*` and compact/camel variants.

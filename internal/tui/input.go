@@ -112,7 +112,7 @@ func ParseKey(seq string) Key {
 	switch seq {
 	case "\r", "\n":
 		return Key{Type: KeyEnter}
-	case "\x1b[13;2u", "\x1b[13;2~", "\x1b[27;2;13~":
+	case "\x1b[13;2u", "\x1b[13;2~", "\x1b[27;2;13~", "\x9b13;2~", "\x9b27;2;13~":
 		return Key{Type: KeyShiftEnter}
 	case "\x7f", "\b":
 		return Key{Type: KeyBackspace}
@@ -184,15 +184,15 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlUnderscore}
 	case "\t":
 		return Key{Type: KeyTab}
-	case "\x1b[Z":
+	case "\x1b[Z", "\x9bZ":
 		return Key{Type: KeyShiftTab}
-	case "\x1b[I":
+	case "\x1b[I", "\x9bI":
 		return Key{Type: KeyFocusIn}
-	case "\x1b[O":
+	case "\x1b[O", "\x9bO":
 		return Key{Type: KeyFocusOut}
-	case "\x1b[D", "\x1bOD", "\x1b[d", "\x8fD":
+	case "\x1b[D", "\x1bOD", "\x1b[d", "\x9bD", "\x9bd", "\x8fD":
 		return Key{Type: KeyLeft}
-	case "\x1b[C", "\x1bOC", "\x1b[c", "\x8fC":
+	case "\x1b[C", "\x1bOC", "\x1b[c", "\x9bC", "\x9bc", "\x8fC":
 		return Key{Type: KeyRight}
 	case "\x1b[1;3D", "\x1b[1;9D":
 		return Key{Type: KeyAltLeft}
@@ -202,19 +202,19 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlLeft}
 	case "\x1b[1;5C":
 		return Key{Type: KeyCtrlRight}
-	case "\x1b[A", "\x1bOA", "\x1b[a", "\x8fA":
+	case "\x1b[A", "\x1bOA", "\x1b[a", "\x9bA", "\x9ba", "\x8fA":
 		return Key{Type: KeyUp}
-	case "\x1b[B", "\x1bOB", "\x1b[b", "\x8fB":
+	case "\x1b[B", "\x1bOB", "\x1b[b", "\x9bB", "\x9bb", "\x8fB":
 		return Key{Type: KeyDown}
-	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^", "\x8fH":
+	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^", "\x9bH", "\x9b1~", "\x9b7~", "\x9b7$", "\x9b7^", "\x8fH":
 		return Key{Type: KeyHome}
-	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^", "\x8fF":
+	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^", "\x9bF", "\x9b4~", "\x9b8~", "\x9b8$", "\x9b8^", "\x8fF":
 		return Key{Type: KeyEnd}
-	case "\x1b[3~", "\x1b[3$", "\x1b[3^":
+	case "\x1b[3~", "\x1b[3$", "\x1b[3^", "\x9b3~", "\x9b3$", "\x9b3^":
 		return Key{Type: KeyDelete}
-	case "\x1b[5~", "\x1b[[5~", "\x1b[5$", "\x1b[5^":
+	case "\x1b[5~", "\x1b[[5~", "\x1b[5$", "\x1b[5^", "\x9b5~", "\x9b[5~", "\x9b5$", "\x9b5^":
 		return Key{Type: KeyPageUp}
-	case "\x1b[6~", "\x1b[[6~", "\x1b[6$", "\x1b[6^":
+	case "\x1b[6~", "\x1b[[6~", "\x1b[6$", "\x1b[6^", "\x9b6~", "\x9b[6~", "\x9b6$", "\x9b6^":
 		return Key{Type: KeyPageDown}
 	default:
 		r, size := utf8.DecodeRuneInString(seq)
@@ -226,10 +226,10 @@ func ParseKey(seq string) Key {
 }
 
 func parseNumberedNavigationKey(seq string) (Key, bool) {
-	if !strings.HasPrefix(seq, "\x1b[") || len(seq) < 4 {
+	body, ok := trimCSIPrefix(seq)
+	if !ok || len(body) < 2 {
 		return Key{}, false
 	}
-	body := strings.TrimPrefix(seq, "\x1b[")
 	if strings.ContainsAny(body, ";:~") || len(body) < 2 {
 		return Key{}, false
 	}
@@ -342,10 +342,10 @@ func parseFunctionKey(seq string) (Key, bool) {
 			return Key{}, false
 		}
 	}
-	if !strings.HasPrefix(seq, "\x1b[") {
+	inner, hasCSIPrefix := trimCSIPrefix(seq)
+	if !hasCSIPrefix {
 		return Key{}, false
 	}
-	inner := strings.TrimPrefix(seq, "\x1b[")
 	if strings.HasSuffix(inner, "~") {
 		params := strings.TrimSuffix(inner, "~")
 		code, ok := firstCSIParamNumber(params)
@@ -450,10 +450,16 @@ func isModifiedNavigationSS3(seq, suffix string) bool {
 }
 
 func modifiedNavigationModifier(seq, prefix, suffix string) (int, bool) {
-	if !strings.HasPrefix(seq, prefix) || !strings.HasSuffix(seq, suffix) {
+	body, ok := trimCSIPrefix(seq)
+	if !ok {
 		return 0, false
 	}
-	modifierText := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), suffix)
+	prefix = strings.TrimPrefix(prefix, CSIPrefix)
+	prefix = strings.TrimPrefix(prefix, C1CSIPrefix)
+	if !strings.HasPrefix(body, prefix) || !strings.HasSuffix(body, suffix) {
+		return 0, false
+	}
+	modifierText := strings.TrimSuffix(strings.TrimPrefix(body, prefix), suffix)
 	modifier, err := strconv.Atoi(modifierText)
 	if err != nil {
 		return 0, false
@@ -493,10 +499,11 @@ func modifiedHorizontalArrowKey(modifier int, plain KeyType, alt KeyType, ctrl K
 }
 
 func parseCSIuKey(seq string) (Key, bool) {
-	if !strings.HasPrefix(seq, "\x1b[") || !strings.HasSuffix(seq, "u") {
+	body, ok := trimCSIPrefix(seq)
+	if !ok || !strings.HasSuffix(body, "u") {
 		return Key{}, false
 	}
-	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "u")
+	body = strings.TrimSuffix(body, "u")
 	parts := strings.Split(body, ";")
 	codepoint, ok := parseCSIuNumber(parts[0])
 	if !ok {
@@ -703,15 +710,16 @@ func asciiLower(codepoint int) int {
 }
 
 func parseSGRMouse(seq string) (Key, bool) {
-	if !strings.HasPrefix(seq, "\x1b[<") {
+	body, ok := trimCSIPrefix(seq)
+	if !ok || len(body) < 2 || !strings.HasPrefix(body, "<") {
 		return Key{}, false
 	}
-	final := seq[len(seq)-1]
+	final := body[len(body)-1]
 	if final != 'M' && final != 'm' {
 		return Key{}, false
 	}
-	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b[<"), string(final))
-	parts := strings.Split(body, ";")
+	payload := strings.TrimSuffix(strings.TrimPrefix(body, "<"), string(final))
+	parts := strings.Split(payload, ";")
 	if len(parts) != 3 {
 		return Key{}, false
 	}
@@ -734,10 +742,11 @@ func parseSGRMouse(seq string) (Key, bool) {
 }
 
 func parseURXVTMouse(seq string) (Key, bool) {
-	if !strings.HasPrefix(seq, "\x1b[") || strings.HasPrefix(seq, "\x1b[<") || !strings.HasSuffix(seq, "M") {
+	body, ok := trimCSIPrefix(seq)
+	if !ok || strings.HasPrefix(body, "<") || !strings.HasSuffix(body, "M") {
 		return Key{}, false
 	}
-	body := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "M")
+	body = strings.TrimSuffix(body, "M")
 	parts := strings.Split(body, ";")
 	if len(parts) != 3 {
 		return Key{}, false
@@ -764,12 +773,13 @@ func parseURXVTMouse(seq string) (Key, bool) {
 }
 
 func parseLegacyMouse(seq string) (Key, bool) {
-	if !strings.HasPrefix(seq, "\x1b[M") || len(seq) != 6 {
+	body, ok := trimCSIPrefix(seq)
+	if !ok || len(body) != 4 || body[0] != 'M' {
 		return Key{}, false
 	}
-	button := int(seq[3]) - 32
-	x := int(seq[4]) - 32
-	y := int(seq[5]) - 32
+	button := int(body[1]) - 32
+	x := int(body[2]) - 32
+	y := int(body[3]) - 32
 	if button < 0 || x < 1 || y < 1 {
 		return Key{}, false
 	}
@@ -1336,10 +1346,16 @@ func nextPastedID(contents map[int]session.PastedContent) int {
 }
 
 func parseBracketedPaste(seq string) (string, bool) {
-	const start = "\x1b[200~"
-	const end = "\x1b[201~"
-	if strings.HasPrefix(seq, start) && strings.HasSuffix(seq, end) {
-		return strings.TrimSuffix(strings.TrimPrefix(seq, start), end), true
+	for _, markers := range []struct {
+		start string
+		end   string
+	}{
+		{start: "\x1b[200~", end: "\x1b[201~"},
+		{start: C1CSIPrefix + "200~", end: C1CSIPrefix + "201~"},
+	} {
+		if strings.HasPrefix(seq, markers.start) && strings.HasSuffix(seq, markers.end) {
+			return strings.TrimSuffix(strings.TrimPrefix(seq, markers.start), markers.end), true
+		}
 	}
 	return "", false
 }
