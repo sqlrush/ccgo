@@ -303,6 +303,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：relevant-memory selector 现在接受 `uri`/`url`/`href`、`fileUri`/`fileUrl` 等 memory path aliases，并能从 `file://` URI 或 API URL path basename 恢复候选 memory；顶层 `memories`/`matches`/`filesList` 集合在同时带 `query` 时也会参与 selection 解析，避免 query 快路径丢掉模型选择。
 - 本轮补充：session-memory recall agent 现在接受 `summaries`、`selectedSummaries`、`relevantSummaries`、`candidateSummaries` 等 summary collection aliases，并会继续从嵌套 `summary.sessionId`/`summaryId` 恢复模型排序的 session IDs。
 - 本轮补充：session-memory recall agent 现在也接受 `sessionUri`/`sessionUrl`、`uri`/`url`/`href` 等 summary link aliases，能从 `file://.../summary.md` 或 API URL path 中恢复 session ID 并按模型顺序匹配 summary。
+- 本轮补充：model-backed memory fact extraction 的正文解析现在接受 `fact`、`statement`、`insight`、`result`、`output` 等相邻 text aliases，模型不用 canonical `text`/`content`/`summary` 字段时也能恢复事实内容。
 - 本轮补充：session-memory summary frontmatter 的 `updatedAt`/`createdAt` 时间现在接受 Unix 秒、Unix 毫秒和 `updatedAtMs`/`timestampMs` 等相邻字段别名，recall 排序不再只依赖 RFC3339 字符串。
 - 本轮补充：session-memory summary frontmatter 的 session/message ID 现在接受 `sessionUUID`、`conversationId`、`threadId`、`transcriptId`、`messageID` 和 `leafID` 等相邻别名。
 - 本轮补充：session-memory summary 正文现在在 markdown body 为空时接受 frontmatter `summaryText`、`summary`、`content`、`text`、`resultSummary`、`finalSummary` 等字段兜底，同时保持 body 优先。

@@ -1491,6 +1491,40 @@ func TestMemoryAgentExtractsFactCollectionAndTextAliases(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsAdditionalFactTextAliases(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_text_aliases_more",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"facts":[
+			{"kind":"preference","fact":"prefer fact field text","source_uuid":"user_1"},
+			{"type":"decision","statement":"keep statement facts","source_id":"assistant_1"},
+			{"category":"tool","result":"Used tool Bash","messageUuid":"assistant_2"},
+			{"label":"request","output":"continue memory alias coverage","sourceMessageId":"user_2"}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember more aliases")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 4 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer fact field text", "user_1") {
+		t.Fatalf("fact alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactDecision, "keep statement facts", "assistant_1") {
+		t.Fatalf("statement alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactTool, "Used tool Bash", "assistant_2") {
+		t.Fatalf("result alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactRequest, "continue memory alias coverage", "user_2") {
+		t.Fatalf("output alias missing = %#v", result.Facts)
+	}
+}
+
 func TestMemoryAgentExtractsNestedFactSourceObjects(t *testing.T) {
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_memory_nested_sources",
