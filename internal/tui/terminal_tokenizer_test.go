@@ -23,6 +23,24 @@ func TestTerminalTokenizerFeedsTextAndSequencesAcrossChunks(t *testing.T) {
 	}
 }
 
+func TestTerminalTokenizerFeedsC1CSISequencesAcrossChunks(t *testing.T) {
+	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	tokens := tokenizer.Feed("hi \x9b")
+	want := []TerminalToken{{Type: TerminalTokenText, Value: "hi "}}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "\x9b" {
+		t.Fatalf("first c1 feed tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+
+	tokens = tokenizer.Feed("31mred")
+	want = []TerminalToken{
+		{Type: TerminalTokenSequence, Value: "\x9b31m"},
+		{Type: TerminalTokenText, Value: "red"},
+	}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "" {
+		t.Fatalf("second c1 feed tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+}
+
 func TestTerminalTokenizerFlushesIncompleteSequences(t *testing.T) {
 	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
 	if tokens := tokenizer.Feed("a\x1b[?"); !reflect.DeepEqual(tokens, []TerminalToken{{Type: TerminalTokenText, Value: "a"}}) {

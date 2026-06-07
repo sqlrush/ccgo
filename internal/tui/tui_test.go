@@ -5789,6 +5789,31 @@ func TestParseCSISequenceActions(t *testing.T) {
 	}
 }
 
+func TestParseC1CSISequenceActions(t *testing.T) {
+	const c1CSI = "\x9b"
+
+	erase, ok := ParseCSISequence(c1CSI + "2J")
+	if !ok || erase.Type != CSIActionErase || erase.Erase.Type != CSIEraseActionDisplay || erase.Erase.Region != CSIEraseAll {
+		t.Fatalf("c1 erase action = %#v ok=%v", erase, ok)
+	}
+
+	action, ok := ParseTerminalSequence(c1CSI + "31m")
+	if !ok || action.Type != TerminalSequenceCSI || action.CSI.Type != CSIActionSGR || action.CSI.SGRParams != "31" {
+		t.Fatalf("c1 terminal action = %#v ok=%v", action, ok)
+	}
+
+	parser := NewTerminalParser()
+	actions := parser.Feed("a" + c1CSI)
+	actions = append(actions, parser.Feed("31mb"+c1CSI+"0mc")...)
+	actions = append(actions, parser.Flush()...)
+	if visible := TerminalActionsVisibleText(actions); visible != "abc" {
+		t.Fatalf("c1 visible text = %q actions=%#v", visible, actions)
+	}
+	if visible := StripANSI("a" + c1CSI + "31mb" + c1CSI + "0mc"); visible != "abc" {
+		t.Fatalf("c1 stripped text = %q", visible)
+	}
+}
+
 func TestParseESCSequenceActions(t *testing.T) {
 	if !IsESCFinal('0') || !IsESCFinal('~') || IsESCFinal('/') || IsESCFinal(0x7f) {
 		t.Fatalf("ESC final range mismatch")

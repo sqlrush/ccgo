@@ -34,6 +34,9 @@ type TerminalSequenceAction struct {
 }
 
 func IdentifyTerminalSequence(sequence string) TerminalSequenceType {
+	if strings.HasPrefix(sequence, C1CSIPrefix) {
+		return TerminalSequenceCSI
+	}
 	if len(sequence) < 2 || sequence[0] != ESCPrefix[0] {
 		return TerminalSequenceUnknown
 	}

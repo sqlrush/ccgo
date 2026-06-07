@@ -3,6 +3,7 @@ package tui
 const (
 	terminalBEL = byte(0x07)
 	terminalESC = byte(0x1b)
+	terminalCSI = byte(0x9b)
 
 	escTypeCSI = byte('[')
 	escTypeOSC = byte(']')
@@ -129,6 +130,11 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 				seqStart = i
 				state = terminalTokenizerEscape
 				i++
+			} else if code == terminalCSI {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerCSI
+				i++
 			} else {
 				i++
 			}
@@ -181,7 +187,7 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 				textStart = seqStart
 			}
 		case terminalTokenizerCSI:
-			if x10Mouse && code == 'M' && i-seqStart == 2 && x10MousePayloadLooksPrintable(data, i) {
+			if x10Mouse && code == 'M' && i-seqStart == csiPayloadOffset(data, seqStart) && x10MousePayloadLooksPrintable(data, i) {
 				if i+4 <= len(data) {
 					i += 4
 					emitSequence(data[seqStart:i])
@@ -251,4 +257,11 @@ func x10MousePayloadLooksPrintable(data string, index int) bool {
 		}
 	}
 	return true
+}
+
+func csiPayloadOffset(data string, seqStart int) int {
+	if seqStart >= 0 && seqStart < len(data) && data[seqStart] == terminalCSI {
+		return 1
+	}
+	return 2
 }

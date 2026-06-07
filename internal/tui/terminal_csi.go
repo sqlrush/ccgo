@@ -7,6 +7,7 @@ import (
 
 const (
 	CSIPrefix         = "\x1b["
+	C1CSIPrefix       = "\x9b"
 	CursorLeft        = "\x1b[G"
 	CursorSave        = "\x1b[s"
 	CursorRestore     = "\x1b[u"
@@ -354,10 +355,10 @@ func IsCSIFinal(b byte) bool {
 }
 
 func ParseCSISequence(sequence string) (CSIAction, bool) {
-	if !strings.HasPrefix(sequence, CSIPrefix) {
+	inner, ok := trimCSIPrefix(sequence)
+	if !ok {
 		return CSIAction{}, false
 	}
-	inner := strings.TrimPrefix(sequence, CSIPrefix)
 	if len(inner) == 0 {
 		return CSIAction{}, false
 	}
@@ -524,6 +525,17 @@ func ParseCSISequence(sequence string) (CSIAction, bool) {
 	}
 
 	return CSIAction{Type: CSIActionUnknown, Sequence: sequence}, true
+}
+
+func trimCSIPrefix(sequence string) (string, bool) {
+	switch {
+	case strings.HasPrefix(sequence, CSIPrefix):
+		return strings.TrimPrefix(sequence, CSIPrefix), true
+	case strings.HasPrefix(sequence, C1CSIPrefix):
+		return strings.TrimPrefix(sequence, C1CSIPrefix), true
+	default:
+		return "", false
+	}
 }
 
 func parseCSIParams(paramStr string) []int {
