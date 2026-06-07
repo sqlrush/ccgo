@@ -252,19 +252,32 @@ func ClearTerminalTitleSequence() string {
 }
 
 func ParseOSCSequence(sequence string) (OSCAction, bool) {
-	if !strings.HasPrefix(sequence, OSCPrefix) {
+	content, ok := trimOSCPrefix(sequence)
+	if !ok {
 		return OSCAction{}, false
 	}
-	content := strings.TrimPrefix(sequence, OSCPrefix)
 	switch {
 	case strings.HasSuffix(content, OSCTerminator):
 		content = strings.TrimSuffix(content, OSCTerminator)
 	case strings.HasSuffix(content, OSCStringTerminator):
 		content = strings.TrimSuffix(content, OSCStringTerminator)
+	case strings.HasSuffix(content, C1StringTerminator):
+		content = strings.TrimSuffix(content, C1StringTerminator)
 	default:
 		return OSCAction{}, false
 	}
 	return ParseOSCContent(content), true
+}
+
+func trimOSCPrefix(sequence string) (string, bool) {
+	switch {
+	case strings.HasPrefix(sequence, OSCPrefix):
+		return strings.TrimPrefix(sequence, OSCPrefix), true
+	case strings.HasPrefix(sequence, C1OSCPrefix):
+		return strings.TrimPrefix(sequence, C1OSCPrefix), true
+	default:
+		return "", false
+	}
 }
 
 func ParseOSCContent(content string) OSCAction {

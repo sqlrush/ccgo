@@ -6187,6 +6187,10 @@ func TestParseOSCSequence(t *testing.T) {
 	if !ok || stAction.Type != OSCActionTitle || stAction.Title.Title != "Claude" {
 		t.Fatalf("st action = %#v ok=%v", stAction, ok)
 	}
+	c1Action, ok := ParseOSCSequence("\x9d" + OSCSetTitleAndIcon + ";Claude\x9c")
+	if !ok || c1Action.Type != OSCActionTitle || c1Action.Title.Title != "Claude" {
+		t.Fatalf("c1 action = %#v ok=%v", c1Action, ok)
+	}
 
 	if action, ok := ParseOSCSequence(OSCPrefix + OSCSetTitleAndIcon + ";Claude"); ok || action.Type != "" {
 		t.Fatalf("unterminated action = %#v ok=%v", action, ok)

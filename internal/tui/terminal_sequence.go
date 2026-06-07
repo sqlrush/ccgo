@@ -16,6 +16,15 @@ const (
 	TerminalSequenceUnknown TerminalSequenceType = "unknown"
 )
 
+const (
+	C1DCSPrefix        = "\x90"
+	C1SOSPrefix        = "\x98"
+	C1StringTerminator = "\x9c"
+	C1OSCPrefix        = "\x9d"
+	C1PMPrefix         = "\x9e"
+	C1APCPrefix        = "\x9f"
+)
+
 type TerminalStringControlAction struct {
 	Type       TerminalSequenceType
 	Payload    string
@@ -36,6 +45,21 @@ type TerminalSequenceAction struct {
 func IdentifyTerminalSequence(sequence string) TerminalSequenceType {
 	if strings.HasPrefix(sequence, C1CSIPrefix) {
 		return TerminalSequenceCSI
+	}
+	if strings.HasPrefix(sequence, C1OSCPrefix) {
+		return TerminalSequenceOSC
+	}
+	if strings.HasPrefix(sequence, C1DCSPrefix) {
+		return TerminalSequenceDCS
+	}
+	if strings.HasPrefix(sequence, C1APCPrefix) {
+		return TerminalSequenceAPC
+	}
+	if strings.HasPrefix(sequence, C1PMPrefix) {
+		return TerminalSequencePM
+	}
+	if strings.HasPrefix(sequence, C1SOSPrefix) {
+		return TerminalSequenceSOS
 	}
 	if len(sequence) < 2 || sequence[0] != ESCPrefix[0] {
 		return TerminalSequenceUnknown
@@ -71,10 +95,11 @@ func ParseTerminalSequence(sequence string) (TerminalSequenceAction, bool) {
 	case TerminalSequenceOSC:
 		action, ok := ParseOSCSequence(sequence)
 		if !ok {
-			if !strings.HasPrefix(sequence, OSCPrefix) {
+			content, hasPrefix := trimOSCPrefix(sequence)
+			if !hasPrefix {
 				return TerminalSequenceAction{}, false
 			}
-			action = ParseOSCContent(strings.TrimPrefix(sequence, OSCPrefix))
+			action = ParseOSCContent(content)
 		}
 		return TerminalSequenceAction{Type: TerminalSequenceOSC, OSC: action}, true
 	case TerminalSequenceESC:
@@ -146,10 +171,11 @@ func ParseTerminalStringControl(sequence string) TerminalStringControlAction {
 		Type:     IdentifyTerminalSequence(sequence),
 		Sequence: sequence,
 	}
-	if len(sequence) < 2 || sequence[0] != ESCPrefix[0] {
+	prefixLen, ok := terminalStringControlPrefixLen(sequence)
+	if !ok {
 		return control
 	}
-	payload := sequence[2:]
+	payload := sequence[prefixLen:]
 	switch {
 	case strings.HasSuffix(payload, OSCTerminator):
 		control.Payload = strings.TrimSuffix(payload, OSCTerminator)
@@ -159,8 +185,30 @@ func ParseTerminalStringControl(sequence string) TerminalStringControlAction {
 		control.Payload = strings.TrimSuffix(payload, OSCStringTerminator)
 		control.Terminator = OSCStringTerminator
 		control.Complete = true
+	case strings.HasSuffix(payload, C1StringTerminator):
+		control.Payload = strings.TrimSuffix(payload, C1StringTerminator)
+		control.Terminator = C1StringTerminator
+		control.Complete = true
 	default:
 		control.Payload = payload
 	}
 	return control
+}
+
+func terminalStringControlPrefixLen(sequence string) (int, bool) {
+	if strings.HasPrefix(sequence, C1DCSPrefix) ||
+		strings.HasPrefix(sequence, C1APCPrefix) ||
+		strings.HasPrefix(sequence, C1PMPrefix) ||
+		strings.HasPrefix(sequence, C1SOSPrefix) {
+		return 1, true
+	}
+	if len(sequence) < 2 || sequence[0] != ESCPrefix[0] {
+		return 0, false
+	}
+	switch sequence[1] {
+	case 'P', '_', '^', 'X':
+		return 2, true
+	default:
+		return 0, false
+	}
 }

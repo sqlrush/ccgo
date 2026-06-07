@@ -1,9 +1,17 @@
 package tui
 
+import "unicode/utf8"
+
 const (
 	terminalBEL = byte(0x07)
 	terminalESC = byte(0x1b)
+	terminalDCS = byte(0x90)
 	terminalCSI = byte(0x9b)
+	terminalST  = byte(0x9c)
+	terminalOSC = byte(0x9d)
+	terminalPM  = byte(0x9e)
+	terminalAPC = byte(0x9f)
+	terminalSOS = byte(0x98)
 
 	escTypeCSI = byte('[')
 	escTypeOSC = byte(']')
@@ -125,7 +133,9 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 		code := data[i]
 		switch state {
 		case terminalTokenizerGround:
-			if code == terminalESC {
+			if size := terminalUTF8TextRuneSize(data, i); size > 0 {
+				i += size
+			} else if code == terminalESC {
 				flushText()
 				seqStart = i
 				state = terminalTokenizerEscape
@@ -134,6 +144,31 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 				flushText()
 				seqStart = i
 				state = terminalTokenizerCSI
+				i++
+			} else if code == terminalOSC {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerOSC
+				i++
+			} else if code == terminalDCS {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerDCS
+				i++
+			} else if code == terminalAPC {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerAPC
+				i++
+			} else if code == terminalPM {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerPM
+				i++
+			} else if code == terminalSOS {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerSOS
 				i++
 			} else {
 				i++
@@ -217,6 +252,9 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 			if code == terminalBEL {
 				i++
 				emitSequence(data[seqStart:i])
+			} else if code == terminalST {
+				i++
+				emitSequence(data[seqStart:i])
 			} else if code == terminalESC && i+1 < len(data) && data[i+1] == escTypeST {
 				i += 2
 				emitSequence(data[seqStart:i])
@@ -225,6 +263,9 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 			}
 		case terminalTokenizerDCS, terminalTokenizerAPC, terminalTokenizerPM, terminalTokenizerSOS:
 			if code == terminalBEL {
+				i++
+				emitSequence(data[seqStart:i])
+			} else if code == terminalST {
 				i++
 				emitSequence(data[seqStart:i])
 			} else if code == terminalESC && i+1 < len(data) && data[i+1] == escTypeST {
@@ -264,4 +305,15 @@ func csiPayloadOffset(data string, seqStart int) int {
 		return 1
 	}
 	return 2
+}
+
+func terminalUTF8TextRuneSize(data string, index int) int {
+	if index < 0 || index >= len(data) || data[index] < utf8.RuneSelf {
+		return 0
+	}
+	_, size := utf8.DecodeRuneInString(data[index:])
+	if size <= 1 {
+		return 0
+	}
+	return size
 }

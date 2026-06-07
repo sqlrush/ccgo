@@ -228,6 +228,32 @@ func TestTerminalParserDispatchesStringControlActions(t *testing.T) {
 	}
 
 	parser = NewTerminalParser()
+	c1Input := "a\x90dcs\x9cb\x9fapc\x9cc\x9epm\x9cd\x98sos\x9ce"
+	actions = parser.Feed(c1Input)
+	if len(actions) != 9 {
+		t.Fatalf("c1 actions = %#v", actions)
+	}
+	c1Want := []struct {
+		index   int
+		kind    TerminalSequenceType
+		payload string
+	}{
+		{index: 1, kind: TerminalSequenceDCS, payload: "dcs"},
+		{index: 3, kind: TerminalSequenceAPC, payload: "apc"},
+		{index: 5, kind: TerminalSequencePM, payload: "pm"},
+		{index: 7, kind: TerminalSequenceSOS, payload: "sos"},
+	}
+	for _, tc := range c1Want {
+		action := actions[tc.index]
+		if action.Type != TerminalActionStringControl || action.String.Type != tc.kind || !action.String.Complete || action.String.Payload != tc.payload || action.String.Terminator != "\x9c" {
+			t.Fatalf("c1 string control %d = %#v", tc.index, action)
+		}
+	}
+	if got := TerminalVisibleText(c1Input); got != "abcde" {
+		t.Fatalf("c1 visible = %q", got)
+	}
+
+	parser = NewTerminalParser()
 	if actions := parser.Feed("\x1bPpartial"); len(actions) != 0 {
 		t.Fatalf("partial feed actions = %#v", actions)
 	}

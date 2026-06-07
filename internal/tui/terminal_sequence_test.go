@@ -16,6 +16,11 @@ func TestIdentifyTerminalSequence(t *testing.T) {
 		{sequence: "\x1b_payload" + OSCTerminator, want: TerminalSequenceAPC},
 		{sequence: "\x1b^payload" + OSCStringTerminator, want: TerminalSequencePM},
 		{sequence: "\x1bXpayload" + OSCTerminator, want: TerminalSequenceSOS},
+		{sequence: "\x9d0;title\x9c", want: TerminalSequenceOSC},
+		{sequence: "\x90payload\x9c", want: TerminalSequenceDCS},
+		{sequence: "\x9fpayload\x9c", want: TerminalSequenceAPC},
+		{sequence: "\x9epayload\x9c", want: TerminalSequencePM},
+		{sequence: "\x98payload\x9c", want: TerminalSequenceSOS},
 	}
 	for _, tc := range cases {
 		if got := IdentifyTerminalSequence(tc.sequence); got != tc.want {
@@ -37,6 +42,10 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	partialOSC, ok := ParseTerminalSequence(OSCPrefix + OSCSetTitleAndIcon + ";Partial")
 	if !ok || partialOSC.Type != TerminalSequenceOSC || partialOSC.OSC.Type != OSCActionTitle || partialOSC.OSC.Title.Title != "Partial" {
 		t.Fatalf("partial osc dispatch = %#v ok=%v", partialOSC, ok)
+	}
+	c1OSC, ok := ParseTerminalSequence("\x9d" + OSCSetTitleAndIcon + ";C1\x9c")
+	if !ok || c1OSC.Type != TerminalSequenceOSC || c1OSC.OSC.Type != OSCActionTitle || c1OSC.OSC.Title.Title != "C1" {
+		t.Fatalf("c1 osc dispatch = %#v ok=%v", c1OSC, ok)
 	}
 
 	esc, ok := ParseTerminalSequence(ESCIndex)
@@ -87,6 +96,22 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	sos, ok := ParseTerminalSequence("\x1bXsos" + OSCTerminator)
 	if !ok || sos.Type != TerminalSequenceSOS || sos.StringControl.Type != TerminalSequenceSOS || !sos.StringControl.Complete || sos.StringControl.Payload != "sos" {
 		t.Fatalf("sos dispatch = %#v ok=%v", sos, ok)
+	}
+	c1DCS, ok := ParseTerminalSequence("\x90tmux;" + EnterAlternateScreen + "\x9c")
+	if !ok || c1DCS.Type != TerminalSequenceDCS || c1DCS.StringControl.Type != TerminalSequenceDCS || !c1DCS.StringControl.Complete || c1DCS.StringControl.Terminator != "\x9c" || c1DCS.StringControl.Payload != "tmux;"+EnterAlternateScreen {
+		t.Fatalf("c1 dcs dispatch = %#v ok=%v", c1DCS, ok)
+	}
+	c1APC, ok := ParseTerminalSequence("\x9fpayload\x9c")
+	if !ok || c1APC.Type != TerminalSequenceAPC || c1APC.StringControl.Type != TerminalSequenceAPC || !c1APC.StringControl.Complete || c1APC.StringControl.Terminator != "\x9c" || c1APC.StringControl.Payload != "payload" {
+		t.Fatalf("c1 apc dispatch = %#v ok=%v", c1APC, ok)
+	}
+	c1PM, ok := ParseTerminalSequence("\x9epartial")
+	if !ok || c1PM.Type != TerminalSequencePM || c1PM.StringControl.Type != TerminalSequencePM || c1PM.StringControl.Complete || c1PM.StringControl.Payload != "partial" {
+		t.Fatalf("c1 pm dispatch = %#v ok=%v", c1PM, ok)
+	}
+	c1SOS, ok := ParseTerminalSequence("\x98sos\x9c")
+	if !ok || c1SOS.Type != TerminalSequenceSOS || c1SOS.StringControl.Type != TerminalSequenceSOS || !c1SOS.StringControl.Complete || c1SOS.StringControl.Payload != "sos" {
+		t.Fatalf("c1 sos dispatch = %#v ok=%v", c1SOS, ok)
 	}
 
 	unknown, ok := ParseTerminalSequence("\x1b?")
