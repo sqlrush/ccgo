@@ -410,6 +410,22 @@ func functionKeyFromTerminalCode(code int) (KeyType, bool) {
 		return KeyF11, true
 	case 24:
 		return KeyF12, true
+	case 25:
+		return KeyF13, true
+	case 26:
+		return KeyF14, true
+	case 28:
+		return KeyF15, true
+	case 29:
+		return KeyF16, true
+	case 31:
+		return KeyF17, true
+	case 32:
+		return KeyF18, true
+	case 33:
+		return KeyF19, true
+	case 34:
+		return KeyF20, true
 	default:
 		return KeyUnknown, false
 	}

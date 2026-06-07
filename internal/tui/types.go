@@ -93,6 +93,14 @@ const (
 	KeyF10              KeyType = "f10"
 	KeyF11              KeyType = "f11"
 	KeyF12              KeyType = "f12"
+	KeyF13              KeyType = "f13"
+	KeyF14              KeyType = "f14"
+	KeyF15              KeyType = "f15"
+	KeyF16              KeyType = "f16"
+	KeyF17              KeyType = "f17"
+	KeyF18              KeyType = "f18"
+	KeyF19              KeyType = "f19"
+	KeyF20              KeyType = "f20"
 	KeyAltLeft          KeyType = "alt+left"
 	KeyAltRight         KeyType = "alt+right"
 	KeyAltB             KeyType = "alt+b"
@@ -161,6 +169,22 @@ func functionKeyType(number int) (KeyType, bool) {
 		return KeyF11, true
 	case 12:
 		return KeyF12, true
+	case 13:
+		return KeyF13, true
+	case 14:
+		return KeyF14, true
+	case 15:
+		return KeyF15, true
+	case 16:
+		return KeyF16, true
+	case 17:
+		return KeyF17, true
+	case 18:
+		return KeyF18, true
+	case 19:
+		return KeyF19, true
+	case 20:
+		return KeyF20, true
 	default:
 		return KeyUnknown, false
 	}

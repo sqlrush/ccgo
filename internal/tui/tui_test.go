@@ -1088,6 +1088,14 @@ func TestParseFunctionKeySequences(t *testing.T) {
 		{seq: "\x1b[21~", want: KeyF10},
 		{seq: "\x1b[23~", want: KeyF11},
 		{seq: "\x1b[24~", want: KeyF12},
+		{seq: "\x1b[25~", want: KeyF13},
+		{seq: "\x1b[26~", want: KeyF14},
+		{seq: "\x1b[28~", want: KeyF15},
+		{seq: "\x1b[29~", want: KeyF16},
+		{seq: "\x1b[31~", want: KeyF17},
+		{seq: "\x1b[32~", want: KeyF18},
+		{seq: "\x1b[33~", want: KeyF19},
+		{seq: "\x1b[34~", want: KeyF20},
 		{seq: "\x1b[1;2P", want: KeyF1},
 		{seq: "\x1b[1;5Q", want: KeyF2},
 		{seq: "\x1b[15;2~", want: KeyF5},
@@ -1745,7 +1753,7 @@ func TestKeymapFromSpecsAcceptsFunctionKeys(t *testing.T) {
 	if action := keymap.Resolve(ParseKey("\x1b[24~")); action != ActionScrollToBottom {
 		t.Fatalf("F12 action = %q", action)
 	}
-	for _, name := range []string{"f1", "F2", "f3Key", "function4", "function-key-5", "functionKey6", "fn7", "fn-8"} {
+	for _, name := range []string{"f1", "F2", "f3Key", "function4", "function-key-5", "functionKey6", "fn7", "fn-8", "f13", "function-key-20"} {
 		if key, err := ParseKeyName(name); err != nil || key == KeyUnknown {
 			t.Fatalf("ParseKeyName(%q) = %q, %v", name, key, err)
 		}
