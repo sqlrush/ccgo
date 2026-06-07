@@ -259,6 +259,24 @@ func parseFunctionKey(seq string) (Key, bool) {
 	case "\x1b[[E":
 		return Key{Type: KeyF5}, true
 	}
+	if strings.HasPrefix(seq, "\x1bO") && len(seq) >= 5 && strings.Contains(seq[2:len(seq)-1], ";") {
+		code, ok := firstCSIParamNumber(seq[2 : len(seq)-1])
+		if !ok || code != 1 {
+			return Key{}, false
+		}
+		switch seq[len(seq)-1] {
+		case 'P':
+			return Key{Type: KeyF1}, true
+		case 'Q':
+			return Key{Type: KeyF2}, true
+		case 'R':
+			return Key{Type: KeyF3}, true
+		case 'S':
+			return Key{Type: KeyF4}, true
+		default:
+			return Key{}, false
+		}
+	}
 	if !strings.HasPrefix(seq, "\x1b[") {
 		return Key{}, false
 	}
