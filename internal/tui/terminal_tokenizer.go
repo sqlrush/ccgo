@@ -198,7 +198,9 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 				textStart = seqStart
 			}
 		case terminalTokenizerSS3:
-			if code >= 0x40 && code <= 0x7e {
+			if IsCSIParam(code) {
+				i++
+			} else if IsCSIFinal(code) {
 				i++
 				emitSequence(data[seqStart:i])
 			} else {

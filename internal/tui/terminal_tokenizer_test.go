@@ -81,10 +81,11 @@ func TestTerminalTokenizerHandlesOSCAndStringControls(t *testing.T) {
 
 func TestTerminalTokenizerHandlesESCIntermediateSS3AndInvalidSequences(t *testing.T) {
 	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
-	tokens := tokenizer.Feed("\x1b(B\x1bOA\x1b[31x")
+	tokens := tokenizer.Feed("\x1b(B\x1bOA\x1bO1;2A\x1b[31x")
 	want := []TerminalToken{
 		{Type: TerminalTokenSequence, Value: "\x1b(B"},
 		{Type: TerminalTokenSequence, Value: "\x1bOA"},
+		{Type: TerminalTokenSequence, Value: "\x1bO1;2A"},
 		{Type: TerminalTokenSequence, Value: "\x1b[31x"},
 	}
 	if !reflect.DeepEqual(tokens, want) {
@@ -98,6 +99,16 @@ func TestTerminalTokenizerHandlesESCIntermediateSS3AndInvalidSequences(t *testin
 	}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Fatalf("invalid csi tokens = %#v", tokens)
+	}
+
+	tokens = tokenizer.Feed("\x1bO1;")
+	if len(tokens) != 0 || tokenizer.Buffer() != "\x1bO1;" {
+		t.Fatalf("partial modified ss3 tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+	tokens = tokenizer.Feed("5D")
+	want = []TerminalToken{{Type: TerminalTokenSequence, Value: "\x1bO1;5D"}}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "" {
+		t.Fatalf("completed modified ss3 tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
 	}
 }
 
