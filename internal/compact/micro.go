@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -859,23 +860,57 @@ func microParseJSONBool(raw json.RawMessage, field string) (bool, error) {
 }
 
 func microIntJSONField(fields map[string]json.RawMessage, names ...string) (int, bool, error) {
-	raw, _, ok := microRawJSONField(fields, names...)
+	raw, name, ok := microRawJSONField(fields, names...)
 	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return 0, false, nil
 	}
-	var value int
-	if err := json.Unmarshal(raw, &value); err == nil {
-		return value, true, nil
-	}
-	var text string
-	if err := json.Unmarshal(raw, &text); err != nil {
-		return 0, false, err
-	}
-	parsed, err := strconv.Atoi(text)
+	value, err := microParseJSONInt(raw, name)
 	if err != nil {
 		return 0, false, err
 	}
-	return parsed, true, nil
+	return value, true, nil
+}
+
+func microParseJSONInt(raw json.RawMessage, field string) (int, error) {
+	var value int
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, nil
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return microParseIntText(text, field)
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err == nil {
+		return microParseIntText(number.String(), field)
+	}
+	return 0, fmt.Errorf("invalid int field %q", field)
+}
+
+func microParseIntText(text string, field string) (int, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, fmt.Errorf("empty int field %q", field)
+	}
+	parsed, err := strconv.ParseInt(text, 10, 0)
+	if err == nil {
+		return int(parsed), nil
+	}
+	value, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsInf(value, 0) || math.IsNaN(value) || value != math.Trunc(value) {
+		return 0, fmt.Errorf("invalid int field %q: %q", field, text)
+	}
+	maxInt := int64(^uint(0) >> 1)
+	minInt := -maxInt - 1
+	if value > float64(maxInt) || value < float64(minInt) {
+		return 0, fmt.Errorf("int field %q out of range: %q", field, text)
+	}
+	return int(value), nil
 }
 
 func microTimeJSONField(fields map[string]json.RawMessage, names ...string) (time.Time, bool, error) {

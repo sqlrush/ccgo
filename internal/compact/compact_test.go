@@ -314,6 +314,56 @@ func TestLoadMicroResultAcceptsAdjacentCacheFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsWholeNumberCountFields(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := "whole-number-counts"
+	data := `{
+		"summary": "whole number counts summary",
+		"digest": "whole-number-counts",
+		"messagesSummarized": 7.0,
+		"messagesKept": "2.0",
+		"version": "microcompact.v1",
+		"createdAt": 100
+	}`
+	if err := os.WriteFile(microResultPath(cacheDir, digest), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := LoadMicroResult(cacheDir, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected whole-number count cache result")
+	}
+	if result.MessagesSummarized != 7 || result.MessagesKept != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestLoadMicroResultRejectsFractionalCountFields(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := "fractional-counts"
+	data := `{
+		"summary": "fractional counts summary",
+		"digest": "fractional-counts",
+		"messagesSummarized": 7.5,
+		"version": "microcompact.v1",
+		"createdAt": 100
+	}`
+	if err := os.WriteFile(microResultPath(cacheDir, digest), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadMicroResult(cacheDir, digest); err == nil {
+		t.Fatal("expected fractional count field to fail")
+	}
+}
+
 func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
