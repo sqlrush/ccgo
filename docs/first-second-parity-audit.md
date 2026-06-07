@@ -432,6 +432,7 @@ M7 progress now includes:
 - `internal/tui`: terminal grapheme segmentation now applies Hangul L/V/T jamo joining, keeping decomposed syllables such as `한` as one wide grapheme across full input and streaming chunk boundaries.
 - `internal/tui`: terminal grapheme segmentation now keeps CRLF as a single zero-width line-break grapheme across full input and streaming chunks split between `\r` and `\n`, and wrap/trim/render width paths share the same line-break check.
 - `internal/tui`: terminal grapheme segmentation now uses Unicode mark categories for nonspacing/enclosing/spacing marks and handles Prepend characters, keeping clusters such as Devanagari `का` and Arabic prepend-mark plus base text together while treating a lone prepend mark as zero width.
+- `internal/tui`: terminal grapheme segmentation now keeps common Indic virama conjuncts such as Devanagari `क्ष` as one narrow grapheme across full input and streaming chunks split after the virama.
 - `internal/tui`: image hint parsing now accepts OSC ST terminators and base64 `name=` filenames while preserving prompt pasted-content metadata.
 - `internal/session`: prompt history writing now skips image pasted-content records like official `history.ts`, while the reader still accepts older image metadata entries.
 - `internal/session`: paste-cache now has a best-effort cutoff-mtime cleanup helper for old `.txt` paste files, matching official `cleanupOldPastes` behavior.

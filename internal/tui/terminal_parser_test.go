@@ -239,7 +239,7 @@ func TestTerminalParserDispatchesStringControlActions(t *testing.T) {
 
 func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
 	parser := NewTerminalParser()
-	actions := parser.Feed("e\u0301 \u2764\ufe0f 1\ufe0f\u20e3 2\u20e3 \u1112\u1161\u11ab \U0001f44b\U0001f3fd \U0001f469\u200d\U0001f4bb \U0001f1fa\U0001f1f8 \U0001f3f4\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f")
+	actions := parser.Feed("e\u0301 \u2764\ufe0f 1\ufe0f\u20e3 2\u20e3 \u1112\u1161\u11ab \u0915\u094d\u0937 \U0001f44b\U0001f3fd \U0001f469\u200d\U0001f4bb \U0001f1fa\U0001f1f8 \U0001f3f4\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f")
 	if len(actions) != 1 || actions[0].Type != TerminalActionText {
 		t.Fatalf("actions = %#v", actions)
 	}
@@ -253,6 +253,8 @@ func TestTerminalParserSegmentsCommonGraphemeClusters(t *testing.T) {
 		{Value: "2\u20e3", Width: 2},
 		{Value: " ", Width: 1},
 		{Value: "\u1112\u1161\u11ab", Width: 2},
+		{Value: " ", Width: 1},
+		{Value: "\u0915\u094d\u0937", Width: 1},
 		{Value: " ", Width: 1},
 		{Value: "\U0001f44b\U0001f3fd", Width: 2},
 		{Value: " ", Width: 1},
@@ -376,6 +378,21 @@ func TestTerminalParserKeepsChunkedGraphemeClustersTogether(t *testing.T) {
 	}
 	if got := actions[0].Graphemes[0]; got.Value != "\u1112\u1161\u11ab" || got.Width != 2 {
 		t.Fatalf("hangul trailing grapheme = %#v", got)
+	}
+
+	parser = NewTerminalParser()
+	if actions := parser.Feed("\u0915\u094d"); len(actions) != 0 {
+		t.Fatalf("partial virama actions = %#v", actions)
+	}
+	actions = parser.Feed("\u0937!")
+	if len(actions) != 1 || len(actions[0].Graphemes) != 2 {
+		t.Fatalf("virama actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\u0915\u094d\u0937" || got.Width != 1 {
+		t.Fatalf("virama grapheme = %#v", got)
+	}
+	if width := TerminalActionsVisibleWidth(actions); width != 2 {
+		t.Fatalf("virama width = %d", width)
 	}
 
 	parser = NewTerminalParser()
