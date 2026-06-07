@@ -968,6 +968,26 @@ func TestParseAlternateTerminalNavigationSequences(t *testing.T) {
 }
 
 func TestParseModifiedNavigationKeySequences(t *testing.T) {
+	numberedCases := []struct {
+		seq  string
+		want KeyType
+	}{
+		{seq: "\x1b[1A", want: KeyUp},
+		{seq: "\x1b[1B", want: KeyDown},
+		{seq: "\x1b[1C", want: KeyRight},
+		{seq: "\x1b[1D", want: KeyLeft},
+		{seq: "\x1b[1H", want: KeyHome},
+		{seq: "\x1b[1F", want: KeyEnd},
+	}
+	for _, tc := range numberedCases {
+		if key := ParseKey(tc.seq); key.Type != tc.want {
+			t.Fatalf("ParseKey(%q) = %#v, want %q", tc.seq, key, tc.want)
+		}
+	}
+	if key := ParseKey("\x1b[2A"); key.Type != KeyUnknown {
+		t.Fatalf("CSI 2A should not parse as navigation key: %#v", key)
+	}
+
 	for _, modifier := range []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"} {
 		cases := []struct {
 			seq  string

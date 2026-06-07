@@ -97,6 +97,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseCSIuKey(seq); ok {
 		return key
 	}
+	if key, ok := parseNumberedNavigationKey(seq); ok {
+		return key
+	}
 	if key, ok := parseModifiedNavigationKey(seq); ok {
 		return key
 	}
@@ -216,6 +219,36 @@ func ParseKey(seq string) Key {
 			return Key{Type: KeyRune, Rune: r}
 		}
 		return Key{Type: KeyUnknown}
+	}
+}
+
+func parseNumberedNavigationKey(seq string) (Key, bool) {
+	if !strings.HasPrefix(seq, "\x1b[") || len(seq) < 4 {
+		return Key{}, false
+	}
+	body := strings.TrimPrefix(seq, "\x1b[")
+	if strings.ContainsAny(body, ";:~") || len(body) < 2 {
+		return Key{}, false
+	}
+	code, ok := firstCSIParamNumber(body[:len(body)-1])
+	if !ok || code != 1 {
+		return Key{}, false
+	}
+	switch body[len(body)-1] {
+	case 'A':
+		return Key{Type: KeyUp}, true
+	case 'B':
+		return Key{Type: KeyDown}, true
+	case 'C':
+		return Key{Type: KeyRight}, true
+	case 'D':
+		return Key{Type: KeyLeft}, true
+	case 'H':
+		return Key{Type: KeyHome}, true
+	case 'F':
+		return Key{Type: KeyEnd}, true
+	default:
+		return Key{}, false
 	}
 }
 
