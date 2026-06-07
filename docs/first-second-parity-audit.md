@@ -430,6 +430,7 @@ M7 progress now includes:
 - `internal/tui`: terminal grapheme width now keeps base+combining-mark clusters at the base glyph width while preserving wide treatment for emoji presentation, ZWJ, regional-indicator, and tag sequences.
 - `internal/tui`: terminal grapheme segmentation now keeps emoji tag sequences such as subdivision flags as one wide grapheme across full input and streaming chunks split after the black-flag base or tag characters.
 - `internal/tui`: terminal grapheme segmentation now keeps emoji modifier sequences such as `👋🏽` as one wide grapheme across full input and streaming chunks split after the modifier base.
+- `internal/tui`: terminal grapheme segmentation now keeps VS16 emoji ZWJ sequences such as `❤️‍🔥` as one wide grapheme across streaming chunks split after the emoji presentation base.
 - `internal/tui`: terminal grapheme segmentation now treats emoji keycap sequences such as `1️⃣` and `2⃣` as single wide graphemes, including streaming chunks split after the keycap base or variation selector.
 - `internal/tui`: terminal grapheme segmentation now applies Hangul L/V/T jamo joining, keeping decomposed syllables such as `한` as one wide grapheme across full input and streaming chunk boundaries.
 - `internal/tui`: terminal grapheme segmentation now keeps CRLF as a single zero-width line-break grapheme across full input and streaming chunks split between `\r` and `\n`, and wrap/trim/render width paths share the same line-break check.
