@@ -5,6 +5,7 @@ import "unicode/utf8"
 const (
 	terminalBEL = byte(0x07)
 	terminalESC = byte(0x1b)
+	terminalSS3 = byte(0x8f)
 	terminalDCS = byte(0x90)
 	terminalCSI = byte(0x9b)
 	terminalST  = byte(0x9c)
@@ -144,6 +145,11 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 				flushText()
 				seqStart = i
 				state = terminalTokenizerCSI
+				i++
+			} else if code == terminalSS3 {
+				flushText()
+				seqStart = i
+				state = terminalTokenizerSS3
 				i++
 			} else if code == terminalOSC {
 				flushText()

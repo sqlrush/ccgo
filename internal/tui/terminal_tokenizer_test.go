@@ -150,6 +150,16 @@ func TestTerminalTokenizerHandlesESCIntermediateSS3AndInvalidSequences(t *testin
 	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "" {
 		t.Fatalf("completed modified ss3 tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
 	}
+
+	tokens = tokenizer.Feed("\x8f1;")
+	if len(tokens) != 0 || tokenizer.Buffer() != "\x8f1;" {
+		t.Fatalf("partial c1 modified ss3 tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
+	tokens = tokenizer.Feed("5D")
+	want = []TerminalToken{{Type: TerminalTokenSequence, Value: "\x8f1;5D"}}
+	if !reflect.DeepEqual(tokens, want) || tokenizer.Buffer() != "" {
+		t.Fatalf("completed c1 modified ss3 tokens=%#v buffer=%q", tokens, tokenizer.Buffer())
+	}
 }
 
 func TestTerminalTokenizerX10MouseOption(t *testing.T) {

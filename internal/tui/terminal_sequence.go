@@ -17,6 +17,7 @@ const (
 )
 
 const (
+	C1SS3Prefix        = "\x8f"
 	C1DCSPrefix        = "\x90"
 	C1SOSPrefix        = "\x98"
 	C1StringTerminator = "\x9c"
@@ -48,6 +49,9 @@ func IdentifyTerminalSequence(sequence string) TerminalSequenceType {
 	}
 	if strings.HasPrefix(sequence, C1OSCPrefix) {
 		return TerminalSequenceOSC
+	}
+	if strings.HasPrefix(sequence, C1SS3Prefix) {
+		return TerminalSequenceSS3
 	}
 	if strings.HasPrefix(sequence, C1DCSPrefix) {
 		return TerminalSequenceDCS
@@ -128,16 +132,17 @@ func ParseTerminalSequence(sequence string) (TerminalSequenceAction, bool) {
 }
 
 func ParseSS3Sequence(sequence string) (CSIAction, bool) {
-	if !strings.HasPrefix(sequence, ESCPrefix+"O") {
+	inner, ok := trimSS3Prefix(sequence)
+	if !ok {
 		return CSIAction{}, false
 	}
-	if len(sequence) > 3 {
+	if len(inner) > 1 {
 		return parseModifiedSS3CursorSequence(sequence)
 	}
-	if len(sequence) != 3 {
+	if len(inner) != 1 {
 		return CSIAction{}, false
 	}
-	switch sequence[2] {
+	switch inner[0] {
 	case 'A':
 		return csiCursorMove(CSICursorUp, 1), true
 	case 'B':
@@ -148,6 +153,17 @@ func ParseSS3Sequence(sequence string) (CSIAction, bool) {
 		return csiCursorMove(CSICursorBack, 1), true
 	default:
 		return CSIAction{}, false
+	}
+}
+
+func trimSS3Prefix(sequence string) (string, bool) {
+	switch {
+	case strings.HasPrefix(sequence, ESCPrefix+"O"):
+		return strings.TrimPrefix(sequence, ESCPrefix+"O"), true
+	case strings.HasPrefix(sequence, C1SS3Prefix):
+		return strings.TrimPrefix(sequence, C1SS3Prefix), true
+	default:
+		return "", false
 	}
 }
 

@@ -190,9 +190,9 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyFocusIn}
 	case "\x1b[O":
 		return Key{Type: KeyFocusOut}
-	case "\x1b[D", "\x1bOD", "\x1b[d":
+	case "\x1b[D", "\x1bOD", "\x1b[d", "\x8fD":
 		return Key{Type: KeyLeft}
-	case "\x1b[C", "\x1bOC", "\x1b[c":
+	case "\x1b[C", "\x1bOC", "\x1b[c", "\x8fC":
 		return Key{Type: KeyRight}
 	case "\x1b[1;3D", "\x1b[1;9D":
 		return Key{Type: KeyAltLeft}
@@ -202,13 +202,13 @@ func ParseKey(seq string) Key {
 		return Key{Type: KeyCtrlLeft}
 	case "\x1b[1;5C":
 		return Key{Type: KeyCtrlRight}
-	case "\x1b[A", "\x1bOA", "\x1b[a":
+	case "\x1b[A", "\x1bOA", "\x1b[a", "\x8fA":
 		return Key{Type: KeyUp}
-	case "\x1b[B", "\x1bOB", "\x1b[b":
+	case "\x1b[B", "\x1bOB", "\x1b[b", "\x8fB":
 		return Key{Type: KeyDown}
-	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^":
+	case "\x1b[H", "\x1bOH", "\x1b[1~", "\x1b[7~", "\x1b[7$", "\x1b[7^", "\x8fH":
 		return Key{Type: KeyHome}
-	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^":
+	case "\x1b[F", "\x1bOF", "\x1b[4~", "\x1b[8~", "\x1b[8$", "\x1b[8^", "\x8fF":
 		return Key{Type: KeyEnd}
 	case "\x1b[3~", "\x1b[3$", "\x1b[3^":
 		return Key{Type: KeyDelete}
@@ -313,15 +313,23 @@ func parseFunctionKey(seq string) (Key, bool) {
 		return Key{Type: KeyF3}, true
 	case "\x1bOS", "\x1b[[D":
 		return Key{Type: KeyF4}, true
+	case "\x8fP":
+		return Key{Type: KeyF1}, true
+	case "\x8fQ":
+		return Key{Type: KeyF2}, true
+	case "\x8fR":
+		return Key{Type: KeyF3}, true
+	case "\x8fS":
+		return Key{Type: KeyF4}, true
 	case "\x1b[[E":
 		return Key{Type: KeyF5}, true
 	}
-	if strings.HasPrefix(seq, "\x1bO") && len(seq) >= 5 && strings.Contains(seq[2:len(seq)-1], ";") {
-		code, ok := firstCSIParamNumber(seq[2 : len(seq)-1])
+	if body, hasSS3Prefix := trimSS3Prefix(seq); hasSS3Prefix && len(body) >= 3 && strings.Contains(body[:len(body)-1], ";") {
+		code, ok := firstCSIParamNumber(body[:len(body)-1])
 		if !ok || code != 1 {
 			return Key{}, false
 		}
-		switch seq[len(seq)-1] {
+		switch body[len(body)-1] {
 		case 'P':
 			return Key{Type: KeyF1}, true
 		case 'Q':
@@ -454,10 +462,11 @@ func modifiedNavigationModifier(seq, prefix, suffix string) (int, bool) {
 }
 
 func modifiedSS3NavigationModifier(seq, suffix string) (int, bool) {
-	if !strings.HasPrefix(seq, "\x1bO") || !strings.HasSuffix(seq, suffix) {
+	body, ok := trimSS3Prefix(seq)
+	if !ok || !strings.HasSuffix(body, suffix) {
 		return 0, false
 	}
-	params := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1bO"), suffix)
+	params := strings.TrimSuffix(body, suffix)
 	base, modifierText, ok := strings.Cut(params, ";")
 	if !ok || modifierText == "" {
 		return 0, false
