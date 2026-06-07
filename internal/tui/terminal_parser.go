@@ -358,6 +358,8 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 		switch action.ESC.Type {
 		case ESCActionCursor:
 			return TerminalAction{Type: TerminalActionCursor, Cursor: action.ESC.Cursor}, true
+		case ESCActionMode:
+			return TerminalAction{Type: TerminalActionMode, Mode: action.ESC.Mode}, true
 		case ESCActionReset:
 			p.Reset()
 			return TerminalAction{Type: TerminalActionReset}, true

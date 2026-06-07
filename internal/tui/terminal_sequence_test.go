@@ -91,6 +91,14 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	if !ok || charsetShift.Type != TerminalSequenceESC || charsetShift.ESC.Type != ESCActionCharsetShift || charsetShift.ESC.CharsetShift != "lockingShiftG2" {
 		t.Fatalf("charset shift esc dispatch = %#v ok=%v", charsetShift, ok)
 	}
+	keypadApplication, ok := ParseTerminalSequence("\x1b=")
+	if !ok || keypadApplication.Type != TerminalSequenceESC || keypadApplication.ESC.Type != ESCActionMode || keypadApplication.ESC.Mode.Type != CSIModeActionApplicationKeypad || !keypadApplication.ESC.Mode.Enabled {
+		t.Fatalf("application keypad esc dispatch = %#v ok=%v", keypadApplication, ok)
+	}
+	keypadNumeric, ok := ParseTerminalSequence("\x1b>")
+	if !ok || keypadNumeric.Type != TerminalSequenceESC || keypadNumeric.ESC.Type != ESCActionMode || keypadNumeric.ESC.Mode.Type != CSIModeActionApplicationKeypad || keypadNumeric.ESC.Mode.Enabled {
+		t.Fatalf("numeric keypad esc dispatch = %#v ok=%v", keypadNumeric, ok)
+	}
 	if text, ok := ParseTerminalSequence("plain"); ok || text.Type != "" {
 		t.Fatalf("plain dispatch = %#v ok=%v", text, ok)
 	}

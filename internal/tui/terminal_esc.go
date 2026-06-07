@@ -34,6 +34,7 @@ type ESCActionType string
 
 const (
 	ESCActionCursor       ESCActionType = "cursor"
+	ESCActionMode         ESCActionType = "mode"
 	ESCActionReset        ESCActionType = "reset"
 	ESCActionCharset      ESCActionType = "charset"
 	ESCActionCharsetShift ESCActionType = "charsetShift"
@@ -43,6 +44,7 @@ const (
 type ESCAction struct {
 	Type              ESCActionType
 	Cursor            CSICursorAction
+	Mode              CSIModeAction
 	CharsetSlot       byte
 	CharsetDesignator byte
 	CharsetShift      string
@@ -73,6 +75,10 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 	switch chars[0] {
 	case 'c':
 		return ESCAction{Type: ESCActionReset}, true
+	case '=':
+		return ESCAction{Type: ESCActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationKeypad, Enabled: true}, Sequence: ESCPrefix + chars}, true
+	case '>':
+		return ESCAction{Type: ESCActionMode, Mode: CSIModeAction{Type: CSIModeActionApplicationKeypad, Enabled: false}, Sequence: ESCPrefix + chars}, true
 	case '7':
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionSave}}, true
 	case '8':

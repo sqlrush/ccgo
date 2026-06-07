@@ -5788,6 +5788,20 @@ func TestParseESCSequenceActions(t *testing.T) {
 		t.Fatalf("reset action = %#v", reset)
 	}
 
+	keypadCases := []struct {
+		seq     string
+		enabled bool
+	}{
+		{seq: "\x1b=", enabled: true},
+		{seq: "\x1b>", enabled: false},
+	}
+	for _, tc := range keypadCases {
+		keypad, ok := ParseESCSequence(tc.seq)
+		if !ok || keypad.Type != ESCActionMode || keypad.Mode.Type != CSIModeActionApplicationKeypad || keypad.Mode.Enabled != tc.enabled {
+			t.Fatalf("keypad esc action for %q = %#v ok=%v", tc.seq, keypad, ok)
+		}
+	}
+
 	cursorCases := []struct {
 		seq  string
 		want CSICursorAction
@@ -5804,6 +5818,12 @@ func TestParseESCSequenceActions(t *testing.T) {
 		if !ok || action.Type != ESCActionCursor || !reflect.DeepEqual(action.Cursor, tc.want) {
 			t.Fatalf("esc cursor action for %q = %#v, want %#v", tc.seq, action, tc.want)
 		}
+	}
+
+	parser := NewTerminalParser()
+	actions := parser.Feed("\x1b=\x1b>")
+	if len(actions) != 2 || actions[0].Type != TerminalActionMode || actions[0].Mode.Type != CSIModeActionApplicationKeypad || !actions[0].Mode.Enabled || actions[1].Type != TerminalActionMode || actions[1].Mode.Type != CSIModeActionApplicationKeypad || actions[1].Mode.Enabled {
+		t.Fatalf("terminal parser keypad esc actions = %#v", actions)
 	}
 
 	unknown, ok := ParseESCContent("]not-osc")
