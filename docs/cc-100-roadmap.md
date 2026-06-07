@@ -102,7 +102,7 @@ M6 补充：content-replacement metadata 的 `agentId`、record `toolUseId` 和 
 
 M6 补充：remote history GraphQL/connection 分页现在接受 `hasPrevious`/`hasPreviousPage`、`hasOlder`/`more` 继续分页标记，以及 `previousCursor`/`prevCursor`/`beforeCursor`/`olderCursor` 等 before-id cursor 别名，避免只返回第一页历史。
 
-M6 补充：remote history pagination bool 字段现在除 JSON bool 和 `true`/`false` 字符串外，也接受 `1`/`0`、`yes`/`no`、`on`/`off` 等数值/字符串布尔形态，以及 whole-number 数字字符串如 `"1.0"`/`"0.0"`，避免 wrapper/pageInfo 中的非严格布尔值中断分页。
+M6 补充：remote history pagination bool 字段现在除 JSON bool 和 `true`/`false` 字符串外，也接受 `1`/`0`、`yes`/`no`、`on`/`off` 等数值/字符串布尔形态，以及 whole-number JSON number 或数字字符串如 `1.0`/`"0.0"`，避免 wrapper/pageInfo 中的非严格布尔值中断分页。
 
 M6 补充：remote history pagination cursor/id 字段现在接受 JSON number 并原样转成字符串，覆盖 `next_cursor` 等 page 字段和 `edges[].cursor` 的数字形态。
 

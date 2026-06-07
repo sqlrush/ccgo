@@ -600,6 +600,17 @@ func setBoolField(raw map[string]json.RawMessage, name string, target *bool) err
 		*target = number != 0
 		return nil
 	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var jsonNumber json.Number
+	if err := decoder.Decode(&jsonNumber); err == nil {
+		value, err := strconv.ParseFloat(jsonNumber.String(), 64)
+		if err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		*target = value != 0
+		return nil
+	}
 	var text string
 	if err := json.Unmarshal(data, &text); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
