@@ -99,6 +99,10 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	if !ok || keypadNumeric.Type != TerminalSequenceESC || keypadNumeric.ESC.Type != ESCActionMode || keypadNumeric.ESC.Mode.Type != CSIModeActionApplicationKeypad || keypadNumeric.ESC.Mode.Enabled {
 		t.Fatalf("numeric keypad esc dispatch = %#v ok=%v", keypadNumeric, ok)
 	}
+	screen, ok := ParseTerminalSequence("\x1b#8")
+	if !ok || screen.Type != TerminalSequenceESC || screen.ESC.Type != ESCActionScreen || screen.ESC.Screen.Type != ESCScreenActionAlignmentTest {
+		t.Fatalf("screen esc dispatch = %#v ok=%v", screen, ok)
+	}
 	if text, ok := ParseTerminalSequence("plain"); ok || text.Type != "" {
 		t.Fatalf("plain dispatch = %#v ok=%v", text, ok)
 	}

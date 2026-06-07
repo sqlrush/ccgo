@@ -378,6 +378,7 @@ M7 progress now includes:
 - `internal/tui`: terminal CSI parser now recognizes DEC left/right margin mode (`?69h/l`) as a structured `leftRightMarginMode` action.
 - `internal/tui`: terminal CSI parsing now distinguishes parameterized `CSI Pl;Pr s` left/right horizontal margin regions from bare `CSI s` save-cursor semantics.
 - `internal/tui`: terminal CSI parsing now recognizes intermediate-space `CSI Ps SP @` / `CSI Ps SP A` scroll-left/right sequences instead of misclassifying them as insert-characters or cursor-up.
+- `internal/tui`: terminal ESC parsing now exposes DEC line/screen attribute controls (`ESC # 3/4/5/6/8`) as structured screen actions instead of falling back to unknown.
 - `internal/tui`: terminal CSI parsing now marks DEC selective erase `CSI ? Ps J` / `CSI ? Ps K` separately from ordinary ED/EL erase actions.
 - `internal/tui`: terminal CSI parsing now exposes ECMA `CSI Ps N` / `CSI Ps O` erase-in-field and erase-in-area actions with the same to-end/to-start/all regions used by other erase operations.
 - `internal/tui`: terminal CSI parsing now treats explicit zero count/position params as ANSI defaults for cursor movement/position/column, insert/repeat/erase chars, and scroll actions while preserving raw zero selector semantics for mode/report/erase selector sequences.

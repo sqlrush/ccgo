@@ -5807,6 +5807,23 @@ func TestParseESCSequenceActions(t *testing.T) {
 		}
 	}
 
+	screenCases := []struct {
+		seq  string
+		want ESCScreenActionType
+	}{
+		{seq: "\x1b#3", want: ESCScreenActionDoubleHeightTop},
+		{seq: "\x1b#4", want: ESCScreenActionDoubleHeightBottom},
+		{seq: "\x1b#5", want: ESCScreenActionSingleWidth},
+		{seq: "\x1b#6", want: ESCScreenActionDoubleWidth},
+		{seq: "\x1b#8", want: ESCScreenActionAlignmentTest},
+	}
+	for _, tc := range screenCases {
+		screen, ok := ParseESCSequence(tc.seq)
+		if !ok || screen.Type != ESCActionScreen || screen.Screen.Type != tc.want {
+			t.Fatalf("screen action for %q = %#v ok=%v", tc.seq, screen, ok)
+		}
+	}
+
 	reset, ok := ParseESCSequence(ESCResetSequence)
 	if !ok || reset.Type != ESCActionReset {
 		t.Fatalf("reset action = %#v", reset)
@@ -5848,6 +5865,11 @@ func TestParseESCSequenceActions(t *testing.T) {
 	actions := parser.Feed("\x1b=\x1b>")
 	if len(actions) != 2 || actions[0].Type != TerminalActionMode || actions[0].Mode.Type != CSIModeActionApplicationKeypad || !actions[0].Mode.Enabled || actions[1].Type != TerminalActionMode || actions[1].Mode.Type != CSIModeActionApplicationKeypad || actions[1].Mode.Enabled {
 		t.Fatalf("terminal parser keypad esc actions = %#v", actions)
+	}
+
+	actions = parser.Feed("\x1b#8")
+	if len(actions) != 1 || actions[0].Type != TerminalActionScreen || actions[0].Screen.Type != ESCScreenActionAlignmentTest {
+		t.Fatalf("terminal parser screen actions = %#v", actions)
 	}
 
 	unknown, ok := ParseESCContent("]not-osc")

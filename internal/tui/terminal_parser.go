@@ -29,6 +29,7 @@ const (
 	TerminalActionShell         TerminalActionType = "shellIntegration"
 	TerminalActionBell          TerminalActionType = "bell"
 	TerminalActionReset         TerminalActionType = "reset"
+	TerminalActionScreen        TerminalActionType = "screen"
 	TerminalActionStringControl TerminalActionType = "stringControl"
 	TerminalActionUnknown       TerminalActionType = "unknown"
 )
@@ -49,6 +50,7 @@ type TerminalAction struct {
 	Scroll    CSIScrollAction
 	Mode      CSIModeAction
 	Modes     []CSIModeAction
+	Screen    ESCScreenAction
 	OSC       OSCAction
 	String    TerminalStringControlAction
 	Sequence  string
@@ -363,6 +365,8 @@ func (p *TerminalParser) processSequence(sequence string) (TerminalAction, bool)
 		case ESCActionReset:
 			p.Reset()
 			return TerminalAction{Type: TerminalActionReset}, true
+		case ESCActionScreen:
+			return TerminalAction{Type: TerminalActionScreen, Screen: action.ESC.Screen}, true
 		case ESCActionCharset, ESCActionCharsetShift:
 			return TerminalAction{}, false
 		default:

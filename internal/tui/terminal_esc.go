@@ -11,6 +11,7 @@ const (
 	ESCReverseIndex              = "\x1bM"
 	ESCNextLine                  = "\x1bE"
 	ESCTabSet                    = "\x1bH"
+	ESCScreenAttributes          = '#'
 	ESCFinalStart                = 0x30
 	ESCFinalEnd                  = 0x7e
 	ESCCharsetSingleShift2       = 'N'
@@ -38,13 +39,29 @@ const (
 	ESCActionReset        ESCActionType = "reset"
 	ESCActionCharset      ESCActionType = "charset"
 	ESCActionCharsetShift ESCActionType = "charsetShift"
+	ESCActionScreen       ESCActionType = "screen"
 	ESCActionUnknown      ESCActionType = "unknown"
 )
+
+type ESCScreenActionType string
+
+const (
+	ESCScreenActionDoubleHeightTop    ESCScreenActionType = "doubleHeightTop"
+	ESCScreenActionDoubleHeightBottom ESCScreenActionType = "doubleHeightBottom"
+	ESCScreenActionSingleWidth        ESCScreenActionType = "singleWidth"
+	ESCScreenActionDoubleWidth        ESCScreenActionType = "doubleWidth"
+	ESCScreenActionAlignmentTest      ESCScreenActionType = "alignmentTest"
+)
+
+type ESCScreenAction struct {
+	Type ESCScreenActionType
+}
 
 type ESCAction struct {
 	Type              ESCActionType
 	Cursor            CSICursorAction
 	Mode              CSIModeAction
+	Screen            ESCScreenAction
 	CharsetSlot       byte
 	CharsetDesignator byte
 	CharsetShift      string
@@ -71,6 +88,11 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 	}
 	if shift, ok := escCharsetShift(chars[0]); ok && len(chars) == 1 {
 		return ESCAction{Type: ESCActionCharsetShift, CharsetShift: shift, Sequence: ESCPrefix + chars}, true
+	}
+	if chars[0] == ESCScreenAttributes && len(chars) == 2 {
+		if screenType, ok := escScreenActionType(chars[1]); ok {
+			return ESCAction{Type: ESCActionScreen, Screen: ESCScreenAction{Type: screenType}, Sequence: ESCPrefix + chars}, true
+		}
 	}
 	switch chars[0] {
 	case 'c':
@@ -102,6 +124,23 @@ func isESCCharsetSelector(b byte) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func escScreenActionType(b byte) (ESCScreenActionType, bool) {
+	switch b {
+	case '3':
+		return ESCScreenActionDoubleHeightTop, true
+	case '4':
+		return ESCScreenActionDoubleHeightBottom, true
+	case '5':
+		return ESCScreenActionSingleWidth, true
+	case '6':
+		return ESCScreenActionDoubleWidth, true
+	case '8':
+		return ESCScreenActionAlignmentTest, true
+	default:
+		return "", false
 	}
 }
 
