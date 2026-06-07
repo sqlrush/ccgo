@@ -330,6 +330,18 @@ func TestTerminalParserKeepsChunkedGraphemeClustersTogether(t *testing.T) {
 	}
 
 	parser = NewTerminalParser()
+	if actions := parser.Feed("\U0001f44b"); len(actions) != 0 {
+		t.Fatalf("partial emoji modifier base actions = %#v", actions)
+	}
+	actions = parser.Feed("\U0001f3fd!")
+	if len(actions) != 1 || len(actions[0].Graphemes) != 2 {
+		t.Fatalf("emoji modifier actions = %#v", actions)
+	}
+	if got := actions[0].Graphemes[0]; got.Value != "\U0001f44b\U0001f3fd" || got.Width != 2 {
+		t.Fatalf("emoji modifier grapheme = %#v", got)
+	}
+
+	parser = NewTerminalParser()
 	if actions := parser.Feed("1"); len(actions) != 0 {
 		t.Fatalf("partial keycap base actions = %#v", actions)
 	}

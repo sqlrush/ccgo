@@ -274,7 +274,7 @@ func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
 		return true
 	}
 	last, _ := utf8.DecodeLastRuneInString(value)
-	if last == 0x200d || isTerminalVirama(last) || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeCanStartEmojiTagSequence(value) || terminalGraphemeMayContinueHangul(value) {
+	if last == 0x200d || isTerminalVirama(last) || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeCanStartEmojiModifierSequence(value) || terminalGraphemeCanStartEmojiTagSequence(value) || terminalGraphemeMayContinueHangul(value) {
 		return true
 	}
 	regionalCount := 0
@@ -532,6 +532,14 @@ func terminalGraphemeCanStartEmojiTagSequence(value string) bool {
 	return len(runes) == 1 && isTerminalEmojiTagBase(runes[0])
 }
 
+func terminalGraphemeCanStartEmojiModifierSequence(value string) bool {
+	runes := []rune(value)
+	if len(runes) == 1 {
+		return isTerminalEmojiModifierBase(runes[0])
+	}
+	return len(runes) == 2 && isTerminalEmojiModifierBase(runes[0]) && runes[1] == 0xfe0f
+}
+
 func isTerminalLineBreakGrapheme(value string) bool {
 	return value == "\n" || value == "\r" || value == "\r\n"
 }
@@ -694,6 +702,39 @@ func isTerminalVariationSelector(r rune) bool {
 
 func isTerminalEmojiModifier(r rune) bool {
 	return r >= 0x1f3fb && r <= 0x1f3ff
+}
+
+func isTerminalEmojiModifierBase(r rune) bool {
+	switch {
+	case r == 0x261d || r == 0x26f9:
+		return true
+	case r >= 0x270a && r <= 0x270d:
+		return true
+	case r == 0x1f385 || (r >= 0x1f3c2 && r <= 0x1f3c4) || r == 0x1f3c7 || (r >= 0x1f3ca && r <= 0x1f3cc):
+		return true
+	case (r >= 0x1f442 && r <= 0x1f443) || (r >= 0x1f446 && r <= 0x1f450):
+		return true
+	case (r >= 0x1f466 && r <= 0x1f478) || r == 0x1f47c || (r >= 0x1f481 && r <= 0x1f483):
+		return true
+	case (r >= 0x1f485 && r <= 0x1f487) || r == 0x1f4aa:
+		return true
+	case (r >= 0x1f574 && r <= 0x1f575) || r == 0x1f57a || r == 0x1f590 || (r >= 0x1f595 && r <= 0x1f596):
+		return true
+	case (r >= 0x1f645 && r <= 0x1f647) || (r >= 0x1f64b && r <= 0x1f64f):
+		return true
+	case r == 0x1f6a3 || (r >= 0x1f6b4 && r <= 0x1f6b6) || r == 0x1f6c0 || r == 0x1f6cc:
+		return true
+	case (r >= 0x1f90c && r <= 0x1f91f) || r == 0x1f926 || (r >= 0x1f930 && r <= 0x1f939):
+		return true
+	case (r >= 0x1f93c && r <= 0x1f93e) || (r >= 0x1f9b5 && r <= 0x1f9b6) || (r >= 0x1f9b8 && r <= 0x1f9b9):
+		return true
+	case r == 0x1f9bb || (r >= 0x1f9cd && r <= 0x1f9cf) || (r >= 0x1f9d1 && r <= 0x1f9dd):
+		return true
+	case r >= 0x1faf0 && r <= 0x1faf8:
+		return true
+	default:
+		return false
+	}
 }
 
 func isTerminalEmojiKeycapBase(r rune) bool {
