@@ -218,6 +218,8 @@ M7 补充：keybinding resolver/config 和脚本 named-key 输入已覆盖 `ctrl
 
 M7 补充：terminal input parser 现在把 modified SS3 function-key 序列（如 `ESC O 1;2P`、`ESC O 1;5Q`、`ESC O 1;16S`）归一为现有 F1-F4 key surface，补齐 xterm/kitty 兼容模式下的 F-key 输入形态。
 
+M7 补充：terminal input parser 现在也接受 modified SS3 application-cursor navigation 序列（如 `ESC O 1;2A`、`ESC O 1;5D`、`ESC O 1;16C`），和 CSI modified navigation 一样把 shift 降级为方向键、alt/meta 映射到 word-motion key、ctrl 组合映射到 ctrl word-motion key。
+
 M7 补充：terminal input parser 现在把显式默认参数的 CSI navigation key 序列（如 `ESC [ 1 A`、`ESC [ 1 D`、`ESC [ 1 H`、`ESC [ 1 F`）归一为现有 arrow/Home/End key surface，同时继续让 `ESC [ 2 A` 这类 cursor-count 控制保持 unknown。
 
 M7 补充：task runtime 现在会在状态行、任务面板排序/渲染、批量取消和 scripted task expectation 前把 `active`/`in_progress`、`success`/`done`、`error`、`canceled` 等 task state 别名归一为 canonical 状态。

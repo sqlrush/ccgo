@@ -1029,6 +1029,33 @@ func TestParseModifiedNavigationKeySequences(t *testing.T) {
 			t.Fatalf("ParseKey(%q) = %#v, want %q", tc.seq, key, tc.want)
 		}
 	}
+
+	ss3Cases := []struct {
+		seq  string
+		want KeyType
+	}{
+		{seq: "\x1bO1;2A", want: KeyUp},
+		{seq: "\x1bO1;2B", want: KeyDown},
+		{seq: "\x1bO1;2C", want: KeyRight},
+		{seq: "\x1bO1;2D", want: KeyLeft},
+		{seq: "\x1bO1;3C", want: KeyAltRight},
+		{seq: "\x1bO1;4D", want: KeyAltLeft},
+		{seq: "\x1bO1;5C", want: KeyCtrlRight},
+		{seq: "\x1bO1;8D", want: KeyCtrlLeft},
+		{seq: "\x1bO1;10C", want: KeyAltRight},
+		{seq: "\x1bO1;13D", want: KeyCtrlLeft},
+		{seq: "\x1bO1;16C", want: KeyCtrlRight},
+		{seq: "\x1bO1;2H", want: KeyHome},
+		{seq: "\x1bO1;5F", want: KeyEnd},
+	}
+	for _, tc := range ss3Cases {
+		if key := ParseKey(tc.seq); key.Type != tc.want {
+			t.Fatalf("ParseKey(%q) = %#v, want %q", tc.seq, key, tc.want)
+		}
+	}
+	if key := ParseKey("\x1bO2;3A"); key.Type != KeyUnknown {
+		t.Fatalf("SS3 2;3A should not parse as navigation key: %#v", key)
+	}
 }
 
 func TestParseFunctionKeySequences(t *testing.T) {

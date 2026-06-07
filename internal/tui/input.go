@@ -103,6 +103,9 @@ func ParseKey(seq string) Key {
 	if key, ok := parseModifiedNavigationKey(seq); ok {
 		return key
 	}
+	if key, ok := parseModifiedSS3NavigationKey(seq); ok {
+		return key
+	}
 	if key, ok := parseFunctionKey(seq); ok {
 		return key
 	}
@@ -279,6 +282,27 @@ func parseModifiedNavigationKey(seq string) (Key, bool) {
 	}
 }
 
+func parseModifiedSS3NavigationKey(seq string) (Key, bool) {
+	switch {
+	case isModifiedNavigationSS3(seq, "A"):
+		return Key{Type: KeyUp}, true
+	case isModifiedNavigationSS3(seq, "B"):
+		return Key{Type: KeyDown}, true
+	case isModifiedNavigationSS3(seq, "C"):
+		modifier, _ := modifiedSS3NavigationModifier(seq, "C")
+		return Key{Type: modifiedHorizontalArrowKey(modifier, KeyRight, KeyAltRight, KeyCtrlRight)}, true
+	case isModifiedNavigationSS3(seq, "D"):
+		modifier, _ := modifiedSS3NavigationModifier(seq, "D")
+		return Key{Type: modifiedHorizontalArrowKey(modifier, KeyLeft, KeyAltLeft, KeyCtrlLeft)}, true
+	case isModifiedNavigationSS3(seq, "H"):
+		return Key{Type: KeyHome}, true
+	case isModifiedNavigationSS3(seq, "F"):
+		return Key{Type: KeyEnd}, true
+	default:
+		return Key{}, false
+	}
+}
+
 func parseFunctionKey(seq string) (Key, bool) {
 	switch seq {
 	case "\x1bOP", "\x1b[[A":
@@ -396,11 +420,36 @@ func isModifiedNavigationCSI(seq, prefix, suffix string) bool {
 	return ok
 }
 
+func isModifiedNavigationSS3(seq, suffix string) bool {
+	_, ok := modifiedSS3NavigationModifier(seq, suffix)
+	return ok
+}
+
 func modifiedNavigationModifier(seq, prefix, suffix string) (int, bool) {
 	if !strings.HasPrefix(seq, prefix) || !strings.HasSuffix(seq, suffix) {
 		return 0, false
 	}
 	modifierText := strings.TrimSuffix(strings.TrimPrefix(seq, prefix), suffix)
+	modifier, err := strconv.Atoi(modifierText)
+	if err != nil {
+		return 0, false
+	}
+	return modifier, modifier >= 2 && modifier <= 16
+}
+
+func modifiedSS3NavigationModifier(seq, suffix string) (int, bool) {
+	if !strings.HasPrefix(seq, "\x1bO") || !strings.HasSuffix(seq, suffix) {
+		return 0, false
+	}
+	params := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1bO"), suffix)
+	base, modifierText, ok := strings.Cut(params, ";")
+	if !ok || modifierText == "" {
+		return 0, false
+	}
+	code, ok := firstCSIParamNumber(base)
+	if !ok || code != 1 || strings.ContainsAny(modifierText, ";:") {
+		return 0, false
+	}
 	modifier, err := strconv.Atoi(modifierText)
 	if err != nil {
 		return 0, false
