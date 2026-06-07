@@ -668,6 +668,36 @@ func TestMemoryAgentSelectRelevantMemoriesParsesFileSelectionAliases(t *testing.
 	if len(result.Selected) != 2 || result.Selected[0].Path != opsPath || result.Selected[1].Path != dbPath {
 		t.Fatalf("nested file aliases selected = %#v", result.Selected)
 	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"query":"database access",
+		"sourcePath":"` + filepath.ToSlash(dbPath) + `"
+	}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != filepath.ToSlash(dbPath) {
+		t.Fatalf("sourcePath result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != dbPath {
+		t.Fatalf("sourcePath selected = %#v", result.Selected)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"query":"deployment",
+		"selectedFiles":[{"documentPath":"ops.md"}]
+	}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "deployment", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "deployment" || strings.Join(result.SelectedIDs, ",") != "ops.md" {
+		t.Fatalf("documentPath result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != opsPath {
+		t.Fatalf("documentPath selected = %#v", result.Selected)
+	}
 }
 
 func TestMemoryAgentSelectRelevantMemoriesParsesProviderResponseWrappers(t *testing.T) {

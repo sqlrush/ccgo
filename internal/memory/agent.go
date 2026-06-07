@@ -915,6 +915,14 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 		FileURICamel                 string            `json:"fileUri"`
 		FileURL                      string            `json:"file_url"`
 		FileURLCamel                 string            `json:"fileUrl"`
+		SourcePath                   string            `json:"source_path"`
+		SourcePathCamel              string            `json:"sourcePath"`
+		SourcePaths                  []string          `json:"source_paths"`
+		SourcePathsCamel             []string          `json:"sourcePaths"`
+		DocumentPath                 string            `json:"document_path"`
+		DocumentPathCamel            string            `json:"documentPath"`
+		DocumentPaths                []string          `json:"document_paths"`
+		DocumentPathsCamel           []string          `json:"documentPaths"`
 		Path                         string            `json:"path"`
 		Paths                        []string          `json:"paths"`
 		URI                          string            `json:"uri"`
@@ -991,6 +999,10 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			object.FileURICamel,
 			object.FileURL,
 			object.FileURLCamel,
+			object.SourcePath,
+			object.SourcePathCamel,
+			object.DocumentPath,
+			object.DocumentPathCamel,
 			object.Path,
 			object.URI,
 			object.URL,
@@ -1011,6 +1023,10 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 			object.FilePaths,
 			object.FilePathsCamel,
 			[]string{object.FileURI, object.FileURICamel, object.FileURL, object.FileURLCamel},
+			object.SourcePaths,
+			object.SourcePathsCamel,
+			object.DocumentPaths,
+			object.DocumentPathsCamel,
 			object.Paths,
 			object.URIs,
 			object.URLs,
@@ -1696,6 +1712,16 @@ var relevantMemoryItemIDKeys = []string{
 	"file_url",
 	"fileUrl",
 	"fileURL",
+	"source_path",
+	"sourcePath",
+	"source_paths",
+	"sourcePaths",
+	"document_path",
+	"documentPath",
+	"document_paths",
+	"documentPaths",
+	"doc_path",
+	"docPath",
 	"path",
 	"paths",
 	"uri",
