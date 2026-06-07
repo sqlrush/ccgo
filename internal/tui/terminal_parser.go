@@ -274,7 +274,7 @@ func terminalGraphemeMayContinueAtChunkBoundary(value string) bool {
 		return true
 	}
 	last, _ := utf8.DecodeLastRuneInString(value)
-	if last == 0x200d || isTerminalVirama(last) || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeMayContinueHangul(value) {
+	if last == 0x200d || isTerminalVirama(last) || isTerminalEmojiModifier(last) || terminalGraphemeCanStartKeycapSequence(value) || terminalGraphemeCanStartEmojiTagSequence(value) || terminalGraphemeMayContinueHangul(value) {
 		return true
 	}
 	regionalCount := 0
@@ -527,6 +527,11 @@ func terminalGraphemeCanStartKeycapSequence(value string) bool {
 	return len(runes) == 2 && isTerminalEmojiKeycapBase(runes[0]) && runes[1] == 0xfe0f
 }
 
+func terminalGraphemeCanStartEmojiTagSequence(value string) bool {
+	runes := []rune(value)
+	return len(runes) == 1 && isTerminalEmojiTagBase(runes[0])
+}
+
 func isTerminalLineBreakGrapheme(value string) bool {
 	return value == "\n" || value == "\r" || value == "\r\n"
 }
@@ -701,6 +706,10 @@ func isTerminalEmojiKeycapMark(r rune) bool {
 
 func isTerminalEmojiTag(r rune) bool {
 	return (r >= 0xe0020 && r <= 0xe007e) || r == 0xe007f
+}
+
+func isTerminalEmojiTagBase(r rune) bool {
+	return r == 0x1f3f4
 }
 
 func isTerminalRegionalIndicator(r rune) bool {
