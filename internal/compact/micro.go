@@ -205,7 +205,7 @@ func microResultApplyFieldAliases(result *MicroResult, fields map[string]json.Ra
 }
 
 func microResultApplyNestedFieldAliases(result *MicroResult, fields map[string]json.RawMessage) error {
-	for _, name := range []string{
+	for _, field := range microRawJSONFields(fields,
 		"metadata", "meta",
 		"cacheMetadata", "cache_metadata", "cacheMeta", "cache_meta",
 		"microMetadata", "micro_metadata", "microcompactMetadata", "microCompactMetadata", "microcompact_metadata",
@@ -213,11 +213,8 @@ func microResultApplyNestedFieldAliases(result *MicroResult, fields map[string]j
 		"attributes", "properties", "attrs", "info",
 		"cacheInfo", "cache_info", "cacheDetails", "cache_details",
 		"cacheEntry", "cache_entry", "entry", "record", "cache", "value",
-	} {
-		raw, ok := fields[name]
-		if !ok {
-			continue
-		}
+	) {
+		raw := field.raw
 		trimmed := bytes.TrimSpace(raw)
 		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '{' {
 			continue
@@ -237,18 +234,15 @@ func microResultWrappedJSON(fields map[string]json.RawMessage) (json.RawMessage,
 	if microResultHasDirectPayload(fields) {
 		return nil, false
 	}
-	for _, name := range []string{
+	for _, field := range microRawJSONFields(fields,
 		"result", "data", "cache", "cacheEntry", "cache_entry", "entry", "entries", "record", "records", "item", "items", "resource", "resources", "payload", "response", "body",
 		"viewer", "edge", "edges", "node", "nodes",
 		"choice", "choices", "output", "outputs", "candidate", "candidates", "generation", "generations", "resultList", "result_list", "results", "responseList", "response_list", "responses", "completionChoice", "completion_choice", "completionChoices", "completion_choices", "completions", "alternative", "alternatives", "delta",
 		"microcompact", "microCompact", "micro_compact", "micro_result", "microResult", "microcompactResult", "microCompactResult", "micro_compact_result",
 		"message", "messages", "assistantMessage", "assistant_message", "resultMessage", "result_message", "outputMessage", "output_message", "completion", "completionMessage", "completion_message",
 		"attributes", "properties", "attrs", "value", "values", "included", "collection", "list", "children",
-	} {
-		raw, ok := fields[name]
-		if !ok {
-			continue
-		}
+	) {
+		raw := field.raw
 		trimmed := bytes.TrimSpace(raw)
 		if len(trimmed) > 0 && trimmed[0] == '{' {
 			return raw, true
@@ -901,9 +895,25 @@ func microDurationJSONField(fields map[string]json.RawMessage, names ...string) 
 }
 
 func microRawJSONField(fields map[string]json.RawMessage, names ...string) (json.RawMessage, string, bool) {
+	matches := microRawJSONFields(fields, names...)
+	if len(matches) == 0 {
+		return nil, "", false
+	}
+	return matches[0].raw, matches[0].name, true
+}
+
+type microNamedRawJSONField struct {
+	name string
+	raw  json.RawMessage
+}
+
+func microRawJSONFields(fields map[string]json.RawMessage, names ...string) []microNamedRawJSONField {
+	var matches []microNamedRawJSONField
+	seen := map[string]bool{}
 	for _, name := range names {
 		if raw, ok := fields[name]; ok {
-			return raw, name, true
+			matches = append(matches, microNamedRawJSONField{name: name, raw: raw})
+			seen[name] = true
 		}
 	}
 	keys := make([]string, 0, len(fields))
@@ -914,12 +924,16 @@ func microRawJSONField(fields map[string]json.RawMessage, names ...string) (json
 	for _, name := range names {
 		normalized := microNormalizedJSONFieldName(name)
 		for _, key := range keys {
+			if seen[key] {
+				continue
+			}
 			if microNormalizedJSONFieldName(key) == normalized {
-				return fields[key], key, true
+				matches = append(matches, microNamedRawJSONField{name: key, raw: fields[key]})
+				seen[key] = true
 			}
 		}
 	}
-	return nil, "", false
+	return matches
 }
 
 func microNormalizedJSONFieldName(name string) string {

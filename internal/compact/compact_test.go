@@ -620,6 +620,12 @@ func TestLoadMicroResultAcceptsWrappedCacheObjects(t *testing.T) {
 			wantExpires: true,
 		},
 		{
+			digest:      "hyphenated-cache-entry",
+			body:        `"cache-entry":{"summary-text":"hyphenated wrapper summary","cache-key":"hyphenated-cache-entry","cache-version":"microcompact.v1","created-at":100,"ttl-seconds":3600}`,
+			want:        "hyphenated wrapper summary",
+			wantExpires: true,
+		},
+		{
 			digest: "wrapped-value",
 			body:   `"value":{"text":"value summary","key":"wrapped-value","schemaVersion":"microcompact.v1","createdAt":100}`,
 			want:   "value summary",
