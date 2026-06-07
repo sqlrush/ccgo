@@ -259,9 +259,9 @@ func TestFetchRemoteHistoryAcceptsCursorPageFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("before_id") {
 		case "":
-			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"has_next":true,"next_cursor":"evt_cursor"}`))
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"has_next":"1.0","next_cursor":"evt_cursor"}`))
 		case "evt_cursor":
-			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"hasNext":false,"cursor":"ignored_when_complete"}`))
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"hasNext":"0.0","cursor":"ignored_when_complete"}`))
 		default:
 			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
 		}

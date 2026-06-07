@@ -610,6 +610,11 @@ func setBoolField(raw map[string]json.RawMessage, name string, target *bool) err
 	case "0", "f", "false", "no", "n", "off":
 		*target = false
 	default:
+		number, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+		if err == nil {
+			*target = number != 0
+			return nil
+		}
 		return fmt.Errorf("%s must be a boolean", name)
 	}
 	return nil
