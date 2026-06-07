@@ -100,7 +100,13 @@ func ParseTerminalSequence(sequence string) (TerminalSequenceAction, bool) {
 }
 
 func ParseSS3Sequence(sequence string) (CSIAction, bool) {
-	if !strings.HasPrefix(sequence, ESCPrefix+"O") || len(sequence) != 3 {
+	if !strings.HasPrefix(sequence, ESCPrefix+"O") {
+		return CSIAction{}, false
+	}
+	if len(sequence) > 3 {
+		return parseModifiedSS3CursorSequence(sequence)
+	}
+	if len(sequence) != 3 {
 		return CSIAction{}, false
 	}
 	switch sequence[2] {
@@ -111,6 +117,21 @@ func ParseSS3Sequence(sequence string) (CSIAction, bool) {
 	case 'C':
 		return csiCursorMove(CSICursorForward, 1), true
 	case 'D':
+		return csiCursorMove(CSICursorBack, 1), true
+	default:
+		return CSIAction{}, false
+	}
+}
+
+func parseModifiedSS3CursorSequence(sequence string) (CSIAction, bool) {
+	switch {
+	case isModifiedNavigationSS3(sequence, "A"):
+		return csiCursorMove(CSICursorUp, 1), true
+	case isModifiedNavigationSS3(sequence, "B"):
+		return csiCursorMove(CSICursorDown, 1), true
+	case isModifiedNavigationSS3(sequence, "C"):
+		return csiCursorMove(CSICursorForward, 1), true
+	case isModifiedNavigationSS3(sequence, "D"):
 		return csiCursorMove(CSICursorBack, 1), true
 	default:
 		return CSIAction{}, false

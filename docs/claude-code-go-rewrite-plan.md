@@ -443,6 +443,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 把 TBC tab-clear (`CSI g`/`CSI 3g`) 归入 cursor action，保留 clear-current/all code。
 - 本轮补充：terminal ESC parser 把 HTS horizontal-tab-set (`ESC H`) 归入 cursor/tab-set action，和 CSI tab-clear 控制序列形成闭环。
 - 本轮补充：terminal sequence dispatcher 把 SS3 application cursor (`ESC OA`/`OB`/`OC`/`OD`) 归入结构化 cursor move action，避免 application cursor mode 序列落入 unknown。
+- 本轮补充：terminal sequence dispatcher 现在也把 modified SS3 application cursor (`ESC O 1;2A`/`1;5B`/`1;16D`) 归入结构化 cursor move action，和 input parser 的 modified SS3 navigation 支持保持一致。
 - 本轮补充：terminal CSI parser 把 DEC `?1h/l` application cursor mode 解析成独立 mode action，和 SS3 application cursor key 解析闭环。
 - 本轮补充：terminal CSI parser 把 DEC `?3h/l` 132/80-column mode 解析成结构化 `columnMode` action，覆盖常见列宽状态切换序列。
 - 本轮补充：terminal CSI parser 把 DEC `?40h/l` allow column switching mode 解析成结构化 `allowColumnSwitch` mode action，补齐 `?3h/l` 列宽切换相邻的许可状态序列。

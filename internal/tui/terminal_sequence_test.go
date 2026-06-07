@@ -48,9 +48,28 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	if !ok || ss3.Type != TerminalSequenceSS3 || ss3.CSI.Type != CSIActionCursor || ss3.CSI.Cursor.Type != CSICursorActionMove || ss3.CSI.Cursor.Direction != CSICursorUp || ss3.CSI.Cursor.Count != 1 {
 		t.Fatalf("ss3 dispatch = %#v ok=%v", ss3, ok)
 	}
+	modifiedSS3Cases := []struct {
+		seq       string
+		direction CSICursorDirection
+	}{
+		{seq: "\x1bO1;2A", direction: CSICursorUp},
+		{seq: "\x1bO1;5B", direction: CSICursorDown},
+		{seq: "\x1bO1;9C", direction: CSICursorForward},
+		{seq: "\x1bO1;16D", direction: CSICursorBack},
+	}
+	for _, tc := range modifiedSS3Cases {
+		action, ok := ParseTerminalSequence(tc.seq)
+		if !ok || action.Type != TerminalSequenceSS3 || action.CSI.Type != CSIActionCursor || action.CSI.Cursor.Type != CSICursorActionMove || action.CSI.Cursor.Direction != tc.direction || action.CSI.Cursor.Count != 1 {
+			t.Fatalf("modified ss3 dispatch %q = %#v ok=%v", tc.seq, action, ok)
+		}
+	}
 	unknownSS3, ok := ParseTerminalSequence("\x1bOP")
 	if !ok || unknownSS3.Type != TerminalSequenceUnknown || unknownSS3.Sequence != "\x1bOP" {
 		t.Fatalf("unknown ss3 dispatch = %#v ok=%v", unknownSS3, ok)
+	}
+	unknownModifiedSS3, ok := ParseTerminalSequence("\x1bO2;3A")
+	if !ok || unknownModifiedSS3.Type != TerminalSequenceUnknown || unknownModifiedSS3.Sequence != "\x1bO2;3A" {
+		t.Fatalf("unknown modified ss3 dispatch = %#v ok=%v", unknownModifiedSS3, ok)
 	}
 
 	dcs, ok := ParseTerminalSequence("\x1bPtmux;" + EnterAlternateScreen + OSCStringTerminator)
