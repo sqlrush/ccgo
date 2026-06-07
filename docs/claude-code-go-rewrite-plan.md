@@ -266,6 +266,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：interaction script touch payload 现在可从 `touches`/`targetTouches`/`changedTouches` 的首个 touch point 恢复坐标，`touchmove` 映射为 SGR drag motion，`touchcancel` 映射为 release，减少 DOM touch 录制 fixture 的手工改写。
 - 本轮补充：REPL dialog 鼠标处理现在忽略 SGR motion/drag button，只响应实际 press/click，避免 pointer/touch move 回放关闭 permission/task dialog。
 - 本轮补充：interaction script paste payload 现在接受 DOM `clipboardData`/`dataTransfer` 对象，可从 `text/plain`、`plainText` 和 `items[].text` 恢复 pasted text，减少 ClipboardEvent 录制 fixture 的手工改写。
+- 本轮补充：interaction script paste payload 现在也接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 和相邻 `stringData`/`textData` 文本字段，录制脚本不需要先把 clipboard item 扁平化成 `text`。
 - 本轮补充：interaction script paste payload 现在也可从 DOM `clipboardData.items` 与 `dataTransfer.files` 中恢复 `image/*` file item 为 image paste，并避免把 image file 的 `data`/`base64` 内容误当成普通 pasted text。
 - 本轮补充：interaction script clipboard/dataTransfer image paste 现在优先读取 `items[].file`、`items[].blob`、`items[].getAsFile` 等嵌套 file payload，保留真实 filename、media type、base64 和 source path。
 - 本轮补充：interaction script resize payload 现在接受 DOM/window 尺寸别名 `innerWidth`/`innerHeight`、`clientWidth`/`clientHeight`、`offsetWidth`/`offsetHeight` 和 ResizeObserver 风格 `contentRect`/`target` wrapper。

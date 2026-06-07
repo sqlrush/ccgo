@@ -896,6 +896,12 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 			"plainText",
 			"clipboard_text",
 			"clipboardText",
+			"get_as_string",
+			"getAsString",
+			"string_data",
+			"stringData",
+			"text_data",
+			"textData",
 			"items",
 			"item",
 			"clipboard_items",
@@ -1853,7 +1859,7 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 			step.Image = scriptClipboardImageJSONField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "files", "items", "payload", "data", "value")
 		}
 		if step.Paste == "" {
-			step.Paste = scriptActionStringField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "items", "item", "clipboard_items", "clipboardItems", "text", "content", "body", "message", "data", "payload", "value")
+			step.Paste = scriptActionStringField(fields, "paste", "clipboard", "clipboard_data", "clipboardData", "data_transfer", "dataTransfer", "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "get_as_string", "getAsString", "string_data", "stringData", "text_data", "textData", "items", "item", "clipboard_items", "clipboardItems", "text", "content", "body", "message", "data", "payload", "value")
 		}
 	case "status", "setstatus", "set-status", "statusline", "status-line":
 		if step.Status == "" {
@@ -3752,7 +3758,7 @@ func scriptActionStringSkipsImageLikeObject(fields map[string]json.RawMessage, o
 	if !scriptActionStringNamesIncludeClipboardPayload(objectNames) || !scriptImageLikeFields(fields) {
 		return false
 	}
-	return stringJSONField(fields, "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "text") == ""
+	return stringJSONField(fields, "text/plain", "textPlain", "plain_text", "plainText", "clipboard_text", "clipboardText", "get_as_string", "getAsString", "string_data", "stringData", "text_data", "textData", "text") == ""
 }
 
 func scriptActionStringNamesIncludeClipboardPayload(names []string) bool {
