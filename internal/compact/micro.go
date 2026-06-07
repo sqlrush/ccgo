@@ -279,11 +279,8 @@ func microResultArrayWrappedJSON(data json.RawMessage) (json.RawMessage, bool) {
 }
 
 func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
-	for _, name := range microSummaryFieldAliases {
-		raw, ok := fields[name]
-		if !ok {
-			continue
-		}
+	for _, field := range microRawJSONFields(fields, microSummaryFieldAliases...) {
+		raw := field.raw
 		trimmed := bytes.TrimSpace(raw)
 		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 			continue
@@ -291,7 +288,7 @@ func microResultHasDirectPayload(fields map[string]json.RawMessage) bool {
 		if trimmed[0] != '{' && trimmed[0] != '[' {
 			return true
 		}
-		if _, ok, _ := microSummaryFromRaw(raw, name); ok {
+		if _, ok, _ := microSummaryFromRaw(raw, field.name); ok {
 			return true
 		}
 	}

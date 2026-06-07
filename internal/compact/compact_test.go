@@ -480,6 +480,17 @@ func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
 			}`,
 			want: "hyphenated alias summary",
 		},
+		{
+			digest: "summary-hyphenated-with-sidecar",
+			payload: `{
+				"summary-text": "hyphenated sidecar summary",
+				"data": {"source": "provider-sidecar"},
+				"cache-key": "summary-hyphenated-with-sidecar",
+				"cache-version": "microcompact.v1",
+				"created-at": 100
+			}`,
+			want: "hyphenated sidecar summary",
+		},
 	} {
 		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
 			t.Fatal(err)
