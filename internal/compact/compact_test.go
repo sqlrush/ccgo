@@ -939,6 +939,19 @@ func TestLoadMicroResultAcceptsMessageSummaryPayloads(t *testing.T) {
 			}`,
 			want: "array provider summary\ntail provider line",
 		},
+		{
+			digest: "summary-provider-kebab-array",
+			payload: `{
+				"summary": [
+					{"output-text": "array provider kebab summary"},
+					{"message-text": "tail provider kebab line"}
+				],
+				"digest": "summary-provider-kebab-array",
+				"version": "microcompact.v1",
+				"createdAt": 100
+			}`,
+			want: "array provider kebab summary\ntail provider kebab line",
+		},
 	} {
 		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
 			t.Fatal(err)

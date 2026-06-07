@@ -690,12 +690,8 @@ func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return "", false, err
 	}
-	for _, name := range microProviderSummaryFieldAliases {
-		nested, ok := fields[name]
-		if !ok {
-			continue
-		}
-		text, ok, err := microSummaryFromRaw(nested, name)
+	for _, field := range microRawJSONFields(fields, microProviderSummaryFieldAliases...) {
+		text, ok, err := microSummaryFromRaw(field.raw, field.name)
 		if err != nil {
 			return "", false, err
 		}
@@ -706,12 +702,8 @@ func microSummaryProviderText(raw json.RawMessage) (string, bool, error) {
 			return text, true, nil
 		}
 	}
-	for _, name := range microProviderWrapperFieldAliases {
-		nested, ok := fields[name]
-		if !ok {
-			continue
-		}
-		text, ok, err := microSummaryFromRaw(nested, name)
+	for _, field := range microRawJSONFields(fields, microProviderWrapperFieldAliases...) {
+		text, ok, err := microSummaryFromRaw(field.raw, field.name)
 		if err != nil {
 			continue
 		}
