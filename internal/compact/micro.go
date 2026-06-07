@@ -751,11 +751,7 @@ func microSummaryTextJSONPayload(text string) (string, bool) {
 		return "", false
 	}
 	afterFence := text[start+3:]
-	lineEnd := strings.IndexAny(afterFence, "\r\n")
-	if lineEnd < 0 {
-		return "", false
-	}
-	content := strings.TrimLeft(afterFence[lineEnd:], "\r\n")
+	content := strings.TrimSpace(afterFence)
 	end := strings.Index(content, "```")
 	if end >= 0 {
 		content = content[:end]
@@ -763,6 +759,18 @@ func microSummaryTextJSONPayload(text string) (string, bool) {
 	content = strings.TrimSpace(content)
 	if strings.HasPrefix(content, "{") || strings.HasPrefix(content, "[") {
 		return content, true
+	}
+	if lineEnd := strings.IndexAny(content, "\r\n"); lineEnd >= 0 {
+		candidate := strings.TrimSpace(strings.TrimLeft(content[lineEnd:], "\r\n"))
+		if strings.HasPrefix(candidate, "{") || strings.HasPrefix(candidate, "[") {
+			return candidate, true
+		}
+	}
+	if fieldEnd := strings.IndexAny(content, " \t"); fieldEnd >= 0 {
+		candidate := strings.TrimSpace(content[fieldEnd:])
+		if strings.HasPrefix(candidate, "{") || strings.HasPrefix(candidate, "[") {
+			return candidate, true
+		}
 	}
 	return "", false
 }

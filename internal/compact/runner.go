@@ -168,30 +168,5 @@ func providerWrappedSummaryText(raw string) (string, bool) {
 }
 
 func providerWrappedSummaryPayload(raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", false
-	}
-	if raw[0] == '{' || raw[0] == '[' {
-		return raw, true
-	}
-	start := strings.Index(raw, "```")
-	if start < 0 {
-		return "", false
-	}
-	afterFence := raw[start+3:]
-	lineEnd := strings.IndexAny(afterFence, "\r\n")
-	if lineEnd < 0 {
-		return "", false
-	}
-	content := strings.TrimLeft(afterFence[lineEnd:], "\r\n")
-	end := strings.Index(content, "```")
-	if end >= 0 {
-		content = content[:end]
-	}
-	content = strings.TrimSpace(content)
-	if content == "" || (content[0] != '{' && content[0] != '[') {
-		return "", false
-	}
-	return content, true
+	return microSummaryTextJSONPayload(raw)
 }
