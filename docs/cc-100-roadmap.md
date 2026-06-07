@@ -194,6 +194,8 @@ M6 补充：model-backed memory fact extraction 现在也接受 provider-style `
 
 M6 补充：model-backed memory fact extraction 的正文解析现在接受 `fact`、`statement`、`insight`、`result`、`output` 等相邻 text aliases，模型不用 canonical `text`/`content`/`summary` 字段时也能恢复事实内容。
 
+M6 补充：model-backed memory fact extraction 的 kind 归一化现在接受 `constraint`、`user_rule`、`guideline`、`standing_instruction`、`policy` 等 instruction-like aliases，并归入现有 preference 事实类型。
+
 M6 补充：model-backed memory fact extraction 现在接受更多 fact source aliases，包括 `sourceMessageUUID`/`source_message_uuid`、`sourceEventId`/`source_event_id`、`originId` 以及 `turn`/`event` source object，并保留 numeric source IDs 为字符串。
 
 M6 补充：compact runner 的 summary 响应现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper，可在构建 compact plan 前从 `message.content`、content-block array、`content.parts[].text` 和 fenced `json` code block 中恢复 visible summary text。
@@ -567,6 +569,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：model-backed memory fact extraction 现在会穿透 `observations`/`notes`/`findings`/`records`、`data.resource.attributes` 和 `edge.node` 这类 API 包装集合，并接受 `note`/`description`/`body`/`message`/`observation`/`finding` 作为 fact 正文字段别名。
 
 本轮补充：model-backed memory fact extraction 现在接受更多 kind aliases，包括 `user_pref`、`requirement`、`action_item`、`outcome`、`conclusion`、`tool_usage` 和 `command_run`，并归一到 preference/request/decision/tool。
+
+本轮补充：model-backed memory fact extraction 的 kind 归一化现在也接受 `constraint`、`user_rule`、`guideline`、`standing_instruction`、`policy` 等 instruction-like aliases，并归入现有 preference 事实类型。
 
 本轮补充：compact runner 的 summary 响应现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper，可在构建 compact plan 前从 `message.content`、content-block array、`content.parts[].text` 和 fenced `json` code block 中恢复 visible summary text。
 

@@ -1411,6 +1411,40 @@ func TestMemoryAgentExtractsAdditionalFactKindAliases(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentExtractsInstructionLikeFactKindAliases(t *testing.T) {
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:    "msg_memory_instruction_like_kind_aliases",
+		Type:  "message",
+		Role:  "assistant",
+		Model: "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"facts":[
+			{"kind":"constraint","text":"keep command output concise","source_uuid":"user_1"},
+			{"type":"user_rule","content":"prefer local tests before CI","source_id":"user_2"},
+			{"category":"guideline","summary":"mention failed verification explicitly","uuid":"assistant_1"},
+			{"label":"standing-instruction","detail":"continue M6 and M7 parity work","messageUuid":"user_3"}
+		]}`)},
+	}}
+	result, err := (Agent{Client: client}).Extract(context.Background(), []contracts.Message{msgs.UserText("Remember operating rules")}, ExtractOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || len(result.Facts) != 4 {
+		t.Fatalf("result = %#v", result)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "keep command output concise", "user_1") {
+		t.Fatalf("constraint alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "prefer local tests before CI", "user_2") {
+		t.Fatalf("user_rule alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "mention failed verification explicitly", "assistant_1") {
+		t.Fatalf("guideline alias missing = %#v", result.Facts)
+	}
+	if !hasMemoryFact(result.Facts, FactPreference, "continue M6 and M7 parity work", "user_3") {
+		t.Fatalf("standing-instruction alias missing = %#v", result.Facts)
+	}
+}
+
 func TestMemoryAgentExtractsNestedFactResponseShapes(t *testing.T) {
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_memory_nested_fields",
