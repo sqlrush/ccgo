@@ -319,6 +319,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：microcompact disk cache loader 继续接受相邻 timestamp/expiry aliases，包括 `cachedAt`、`cacheCreatedAt`、`storedAt`、`generatedAt`、`updatedAt`、`timestamp`、`expiry`、`expirationTime`、`validUntil`、`notAfter`，以及 `timeToLiveSeconds`、`validForMs` 等相对 TTL 字段。
 - 本轮补充：microcompact disk cache loader 的相对 TTL 现在也接受分钟、小时和天级别名，例如 `ttlMinutes`、`expiresInHours`、`validForDays` 及 snake/camel 相邻形式，恢复 cached microcompact 过期时间时不再局限于秒/毫秒。
 - 本轮补充：microcompact disk cache loader 的相对 TTL 字符串现在也接受固定单位 ISO-8601 duration，例如 `PT1H30M`、`P1D`、`P1DT2H`，并继续拒绝年/月这类不定长 duration。
+- 本轮补充：microcompact disk cache loader 的字段查找现在接受大小写、snake_case 和 kebab-case 相邻形式归一，例如 `summary-text`、`cache-key`、`cache-version`、`created-at` 和 `ttl-seconds` 可恢复同一 cache entry。
 - 本轮补充：microcompact disk cache loader 和 prune 现在接受 digest 缺失但文件名已 keyed 的 cache entry，会用 `<digest>.json` 文件名作为 digest fallback，同时仍保留显式 digest mismatch 的 invalid-cache guard。
 - 本轮补充：microcompact disk cache loader 的 `cached`/`fromCache`/`cacheHit`/`isCached` 布尔字段现在接受 JSON bool、`true`/`false`、`yes`/`no`、`on`/`off` 和 `1`/`0` 数字/字符串形态。
 - 本轮补充：microcompact disk cache loader 现在会从 `metadata`/`meta`/`cacheInfo`/`cacheDetails`/`cacheEntry`/`entry`/`record`/`cache` 等 sidecar object 中补缺失的 digest、version、cache-hit、timestamp、TTL 和 count aliases；主 summary payload 字段仍保持优先。

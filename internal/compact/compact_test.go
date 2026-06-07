@@ -392,6 +392,17 @@ func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
 			}`,
 			want: "detail block alias summary",
 		},
+		{
+			digest: "summary-hyphenated-fields",
+			payload: `{
+				"summary-text": "hyphenated alias summary",
+				"cache-key": "summary-hyphenated-fields",
+				"cache-version": "microcompact.v1",
+				"created-at": 100,
+				"ttl-seconds": 3600
+			}`,
+			want: "hyphenated alias summary",
+		},
 	} {
 		if err := os.WriteFile(microResultPath(cacheDir, tc.digest), []byte(tc.payload), 0o600); err != nil {
 			t.Fatal(err)
@@ -405,6 +416,9 @@ func TestLoadMicroResultAcceptsSummaryTextAliases(t *testing.T) {
 		}
 		if result.Summary != tc.want || result.Digest != tc.digest || result.Version != DefaultMicroCacheVersion {
 			t.Fatalf("%s result = %#v", tc.digest, result)
+		}
+		if tc.digest == "summary-hyphenated-fields" && (!result.CreatedAt.Equal(time.Unix(100, 0).UTC()) || !result.ExpiresAt.Equal(time.Unix(3700, 0).UTC())) {
+			t.Fatalf("%s times = %#v", tc.digest, result)
 		}
 	}
 }

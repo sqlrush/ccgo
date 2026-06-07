@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -565,33 +566,28 @@ func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
 }
 
 func microStringJSONField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
-	for _, name := range names {
-		raw, ok := fields[name]
-		if !ok || string(raw) == "null" {
-			continue
-		}
-		var value string
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return "", false, err
-		}
-		return value, true, nil
+	raw, _, ok := microRawJSONField(fields, names...)
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", false, nil
 	}
-	return "", false, nil
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false, err
+	}
+	return value, true, nil
 }
 
 func microSummaryJSONField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
-	for _, name := range names {
-		raw, ok := fields[name]
-		if !ok || string(raw) == "null" {
-			continue
-		}
-		value, ok, err := microSummaryFromRaw(raw, name)
-		if err != nil {
-			return "", false, err
-		}
-		if ok {
-			return value, true, nil
-		}
+	raw, name, ok := microRawJSONField(fields, names...)
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", false, nil
+	}
+	value, ok, err := microSummaryFromRaw(raw, name)
+	if err != nil {
+		return "", false, err
+	}
+	if ok {
+		return value, true, nil
 	}
 	return "", false, nil
 }
@@ -813,18 +809,15 @@ func microSummaryMessageText(raw json.RawMessage) (string, bool, error) {
 }
 
 func microBoolJSONField(fields map[string]json.RawMessage, names ...string) (bool, bool, error) {
-	for _, name := range names {
-		raw, ok := fields[name]
-		if !ok || string(raw) == "null" {
-			continue
-		}
-		value, err := microParseJSONBool(raw, name)
-		if err != nil {
-			return false, false, err
-		}
-		return value, true, nil
+	raw, name, ok := microRawJSONField(fields, names...)
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return false, false, nil
 	}
-	return false, false, nil
+	value, err := microParseJSONBool(raw, name)
+	if err != nil {
+		return false, false, err
+	}
+	return value, true, nil
 }
 
 func microParseJSONBool(raw json.RawMessage, field string) (bool, error) {
@@ -864,56 +857,76 @@ func microParseJSONBool(raw json.RawMessage, field string) (bool, error) {
 }
 
 func microIntJSONField(fields map[string]json.RawMessage, names ...string) (int, bool, error) {
-	for _, name := range names {
-		raw, ok := fields[name]
-		if !ok || string(raw) == "null" {
-			continue
-		}
-		var value int
-		if err := json.Unmarshal(raw, &value); err == nil {
-			return value, true, nil
-		}
-		var text string
-		if err := json.Unmarshal(raw, &text); err != nil {
-			return 0, false, err
-		}
-		parsed, err := strconv.Atoi(text)
-		if err != nil {
-			return 0, false, err
-		}
-		return parsed, true, nil
+	raw, _, ok := microRawJSONField(fields, names...)
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return 0, false, nil
 	}
-	return 0, false, nil
+	var value int
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, true, nil
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return 0, false, err
+	}
+	parsed, err := strconv.Atoi(text)
+	if err != nil {
+		return 0, false, err
+	}
+	return parsed, true, nil
 }
 
 func microTimeJSONField(fields map[string]json.RawMessage, names ...string) (time.Time, bool, error) {
-	for _, name := range names {
-		raw, ok := fields[name]
-		if !ok || string(raw) == "null" {
-			continue
-		}
-		value, err := microParseJSONTime(raw, name)
-		if err != nil {
-			return time.Time{}, false, err
-		}
-		return value, true, nil
+	raw, name, ok := microRawJSONField(fields, names...)
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return time.Time{}, false, nil
 	}
-	return time.Time{}, false, nil
+	value, err := microParseJSONTime(raw, name)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return value, true, nil
 }
 
 func microDurationJSONField(fields map[string]json.RawMessage, names ...string) (time.Duration, bool, error) {
-	for _, name := range names {
-		raw, ok := fields[name]
-		if !ok || string(raw) == "null" {
-			continue
-		}
-		value, err := microParseJSONDuration(raw, name)
-		if err != nil {
-			return 0, false, err
-		}
-		return value, true, nil
+	raw, name, ok := microRawJSONField(fields, names...)
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return 0, false, nil
 	}
-	return 0, false, nil
+	value, err := microParseJSONDuration(raw, name)
+	if err != nil {
+		return 0, false, err
+	}
+	return value, true, nil
+}
+
+func microRawJSONField(fields map[string]json.RawMessage, names ...string) (json.RawMessage, string, bool) {
+	for _, name := range names {
+		if raw, ok := fields[name]; ok {
+			return raw, name, true
+		}
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, name := range names {
+		normalized := microNormalizedJSONFieldName(name)
+		for _, key := range keys {
+			if microNormalizedJSONFieldName(key) == normalized {
+				return fields[key], key, true
+			}
+		}
+	}
+	return nil, "", false
+}
+
+func microNormalizedJSONFieldName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	return name
 }
 
 func microParseJSONDuration(raw json.RawMessage, field string) (time.Duration, error) {
