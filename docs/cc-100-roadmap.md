@@ -592,7 +592,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：remote history response parser 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper 以及顶层 `message`/`content`/`text` envelope，可从 `message.content`、content-block array 和 `content.parts[].text` 中恢复 event page JSON（包括 fenced `json` code block），并保留 pagination 继续驱动 `before_id` 续抓。
 
-本轮补充：microcompact disk cache loader 现在读取 Go 默认、camelCase、snake_case 和相邻实现常见字段别名/包装形态，包括 `result`/`data`/`cache`/`value` wrapper、`content`/`text` summary、`cacheKey`/`key`/`hash` digest、cache-hit 别名、计数字段别名/数字字符串/whole-number JSON number、RFC3339/Unix 秒/Unix 毫秒时间字段，以及 `createdAt` + `ttlSeconds`/`ttlMs`/`expiresIn`/`maxAge` 等相对 TTL 推导，提升 cached microcompact 文件在不同实现/版本间的恢复率；fractional count 仍会被拒绝。
+本轮补充：microcompact disk cache loader 现在读取 Go 默认、camelCase、snake_case 和相邻实现常见字段别名/包装形态，包括 `result`/`data`/`cache`/`value` wrapper、`content`/`text` summary、`cacheKey`/`key`/`hash` digest（JSON number 会原样转为字符串）、cache-hit 别名、计数字段别名/数字字符串/whole-number JSON number、RFC3339/Unix 秒/Unix 毫秒时间字段，以及 `createdAt` + `ttlSeconds`/`ttlMs`/`expiresIn`/`maxAge` 等相对 TTL 推导，提升 cached microcompact 文件在不同实现/版本间的恢复率；fractional count 仍会被拒绝。
 
 本轮补充：microcompact disk cache loader 现在也接受 `cacheEntry`/`cache_entry`、`micro_compact`/`micro_compact_result` wrapper，以及 `summaryMarkdown`/`resultSummary`/`compressedText`、`cacheDigest`/`digestHash`/`fingerprint`、`summarizedCount`/`retainedCount`、`formatVersion` 和 `ttlMilliseconds`/`expiresInMilliseconds`/`maxAgeMilliseconds` 等相邻实现字段别名。
 

@@ -343,6 +343,33 @@ func TestLoadMicroResultAcceptsWholeNumberCountFields(t *testing.T) {
 	}
 }
 
+func TestLoadMicroResultAcceptsNumericStringLikeFields(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "micro")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest := "12345"
+	data := `{
+		"summary": "numeric string-like fields summary",
+		"cacheKey": 12345,
+		"cacheVersion": 1,
+		"createdAt": 100
+	}`
+	if err := os.WriteFile(microResultPath(cacheDir, digest), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := LoadMicroResult(cacheDir, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected numeric string-like cache result")
+	}
+	if result.Digest != digest || result.Version != "1" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestLoadMicroResultRejectsFractionalCountFields(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), "micro")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {

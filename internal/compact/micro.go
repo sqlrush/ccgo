@@ -561,15 +561,21 @@ func PruneMicroCache(dir string, options MicroPruneOptions) (int, error) {
 }
 
 func microStringJSONField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
-	raw, _, ok := microRawJSONField(fields, names...)
+	raw, name, ok := microRawJSONField(fields, names...)
 	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return "", false, nil
 	}
 	var value string
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return "", false, err
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, true, nil
 	}
-	return value, true, nil
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var number json.Number
+	if err := decoder.Decode(&number); err == nil {
+		return number.String(), true, nil
+	}
+	return "", false, fmt.Errorf("invalid string field %q", name)
 }
 
 func microSummaryJSONField(fields map[string]json.RawMessage, names ...string) (string, bool, error) {
