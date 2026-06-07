@@ -523,7 +523,9 @@ func TestLoadMicroResultAcceptsAdjacentBoolCacheAliases(t *testing.T) {
 	}{
 		{digest: "cache-hit-string-yes", field: `"cacheHit":"yes"`, want: true},
 		{digest: "from-cache-number-one", field: `"fromCache":1`, want: true},
+		{digest: "from-cache-string-whole-one", field: `"fromCache":"1.0"`, want: true},
 		{digest: "is-cached-string-no", field: `"isCached":"no"`, want: false},
+		{digest: "cache-hit-string-whole-zero", field: `"cacheHit":"0.0"`, want: false},
 	} {
 		payload := fmt.Sprintf(`{
 			"summary": %q,

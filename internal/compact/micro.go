@@ -840,6 +840,15 @@ func microParseJSONBool(raw json.RawMessage, field string) (bool, error) {
 		case "false", "0", "no", "n", "off":
 			return false, nil
 		default:
+			number, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+			if err == nil {
+				switch number {
+				case 1:
+					return true, nil
+				case 0:
+					return false, nil
+				}
+			}
 			return false, fmt.Errorf("invalid bool field %q: %q", field, text)
 		}
 	}
