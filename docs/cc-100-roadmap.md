@@ -136,6 +136,8 @@ M6 补充：remote history `data`/`payload`/`response`/`result`/`body` 等 event
 
 M6 补充：remote history `SDKEvent` 本体现在接受 `eventType`/`event_type`/`role` 类型别名、`createdAt`/`created_at` 时间戳别名，以及 `payload`/`data`/`body`/`serializedMessage` message payload 别名；payload 只有 `role`/`content` 时也能 materialize 成 transcript message。
 
+M6 补充：remote history `SDKEvent` 的 status/error/result 正文字段现在继续接受 `stateMessage`/`updateText`/`messageText`、`failureMessage`/`exceptionMessage`/`diagnosticMessage`、`summaryText`/`finalOutput`/`responseText` 等 provider/export aliases，并把 `summary`/`final` 作为 result object fallback。
+
 M6 补充：remote history REST/link 风格分页现在接受 `links`/`_links` 的 `next`/`previous`/`prev`/`older` 字符串 URL、`{href,url,uri,link}` 对象，或直接携带 `cursor`/`beforeId`/`lastEvaluatedKey` 等 cursor 字段的 link object，并从 `before_id`、`beforeId`、`cursor`、`pageCursor`、`previousCursor`、`prevCursor`、`beforeCursor`、`olderCursor`、`startCursor`、`endCursor` 等 query 参数提取下一页 before-id。
 
 M6 补充：remote history REST/link 风格分页现在也接受 RFC/JSON:API 风格的 `links` 数组，按 `rel`/`relation`/`name`/`type` 中的 `previous`/`prev`/`older`/`next` 选择续抓 URL 或 direct cursor item，并从同一组 before/cursor query 参数或 cursor 字段提取 before-id。
@@ -615,6 +617,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：remote history `SDKEvent` payload materialization 现在会递归解包 `payload`/`data`/`body`/`metadata`/`meta`/`attributes`/`properties` 内的 `record`/`entry`/`item`/`event`/`result`/`response`/`output` wrapper，减少远端事件多层包装导致的消息丢失。
 
 本轮补充：remote history `SDKEvent` type 现在会把 provider-style aliases 归一化为现有 canonical 事件类型，包括 `assistant_message`、`userMessage`、`system-event`、`result_event`、`errorEvent` 和 `status_update`/`progress`，single-object page 与 transcript materialization 不再因事件类型拼写相邻而丢消息。
+
+本轮补充：remote history `SDKEvent` status/error/result 内容字段现在也接受 provider/export 风格正文别名，包括 `stateMessage`/`updateText`/`messageText`、`failureMessage`/`exceptionMessage`/`diagnosticMessage`、`summaryText`/`finalOutput`/`responseText`，并把 `summary`/`final` 作为 result object fallback；这些字段仍只在对应 canonical event type 下补值。
 
 本轮补充：remote history 普通事件数组现在也会解包元素级 `event`/`record`/`entry`/`item`/`resource`/`value` 以及无事件本体字段时的 `data`/`payload`/`body` wrapper，并用元素 `cursor` 作为事件 ID fallback，覆盖非 GraphQL edges 的 wrapper item 响应。
 

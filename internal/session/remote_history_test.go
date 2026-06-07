@@ -2064,15 +2064,20 @@ func TestRemoteHistoryEventsAcceptStatusErrorResultAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[
 		{"type":"status","eventId":"evt_status_alias","sessionID":"s_alias","statusMessage":"queued"},
+		{"type":"status","eventId":"evt_status_update_alias","sessionID":"s_alias","updateText":"running"},
 		{"type":"error","eventId":"evt_error_alias","sessionID":"s_alias","errorMessage":"boom"},
-		{"type":"result","eventId":"evt_result_alias","sessionID":"s_alias","outputText":"done"}
+		{"type":"error","eventId":"evt_failure_alias","sessionID":"s_alias","failureMessage":"denied"},
+		{"type":"result","eventId":"evt_result_alias","sessionID":"s_alias","outputText":"done"},
+		{"type":"result","eventId":"evt_final_alias","sessionID":"s_alias","finalOutput":"final done"}
 	]}`), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Events) != 3 {
+	if len(response.Events) != 6 {
 		t.Fatalf("events = %#v", response.Events)
 	}
-	if response.Events[0].Status != "queued" || response.Events[1].Error != "boom" || response.Events[2].Result != "done" {
+	if response.Events[0].Status != "queued" || response.Events[1].Status != "running" ||
+		response.Events[2].Error != "boom" || response.Events[3].Error != "denied" ||
+		response.Events[4].Result != "done" || response.Events[5].Result != "final done" {
 		t.Fatalf("event aliases = %#v", response.Events)
 	}
 }

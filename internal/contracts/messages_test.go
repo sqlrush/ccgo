@@ -266,6 +266,18 @@ func TestSDKEventUnmarshalAcceptsStatusErrorResultAliases(t *testing.T) {
 			raw:        `{"eventType":"progress","progress_message":"working"}`,
 			wantStatus: "working",
 		},
+		"state message": {
+			raw:        `{"type":"status","stateMessage":"tool queued"}`,
+			wantStatus: "tool queued",
+		},
+		"update text": {
+			raw:        `{"kind":"status_update","update_text":"still running"}`,
+			wantStatus: "still running",
+		},
+		"status message text": {
+			raw:        `{"type":"status","messageText":"status detail"}`,
+			wantStatus: "status detail",
+		},
 		"error message": {
 			raw:       `{"type":"error","errorMessage":"boom"}`,
 			wantError: "boom",
@@ -274,13 +286,41 @@ func TestSDKEventUnmarshalAcceptsStatusErrorResultAliases(t *testing.T) {
 			raw:       `{"eventType":"failureEvent","failure_reason":"denied"}`,
 			wantError: "denied",
 		},
+		"failure message": {
+			raw:       `{"eventType":"failureEvent","failureMessage":"permission denied"}`,
+			wantError: "permission denied",
+		},
+		"exception diagnostic": {
+			raw:       `{"type":"error","diagnostic_message":"stack collapsed"}`,
+			wantError: "stack collapsed",
+		},
+		"error message text": {
+			raw:       `{"type":"error","messageText":"error detail"}`,
+			wantError: "error detail",
+		},
 		"result text": {
 			raw:        `{"type":"result","outputText":"done"}`,
 			wantResult: "done",
 		},
+		"summary text": {
+			raw:        `{"type":"result","summaryText":"summarized done"}`,
+			wantResult: "summarized done",
+		},
+		"final output": {
+			raw:        `{"eventType":"finalResult","final_output":"final done"}`,
+			wantResult: "final done",
+		},
+		"response text": {
+			raw:        `{"type":"result","responseText":"response done"}`,
+			wantResult: "response done",
+		},
 		"result object": {
 			raw:        `{"eventType":"finalResult","response":{"ok":true}}`,
 			wantResult: map[string]any{"ok": true},
+		},
+		"summary object": {
+			raw:        `{"eventType":"finalResult","summary":{"tokens":7}}`,
+			wantResult: map[string]any{"tokens": float64(7)},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

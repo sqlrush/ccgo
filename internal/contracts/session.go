@@ -189,6 +189,14 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		StatusMessageSnake     string          `json:"status_message"`
 		StatusText             string          `json:"statusText"`
 		StatusTextSnake        string          `json:"status_text"`
+		StateMessage           string          `json:"stateMessage"`
+		StateMessageSnake      string          `json:"state_message"`
+		UpdateMessage          string          `json:"updateMessage"`
+		UpdateMessageSnake     string          `json:"update_message"`
+		ProgressText           string          `json:"progressText"`
+		ProgressTextSnake      string          `json:"progress_text"`
+		UpdateText             string          `json:"updateText"`
+		UpdateTextSnake        string          `json:"update_text"`
 		State                  string          `json:"state"`
 		Phase                  string          `json:"phase"`
 		ProgressMessage        string          `json:"progressMessage"`
@@ -197,6 +205,12 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		ErrorMessageSnake      string          `json:"error_message"`
 		ErrorText              string          `json:"errorText"`
 		ErrorTextSnake         string          `json:"error_text"`
+		FailureMessage         string          `json:"failureMessage"`
+		FailureMessageSnake    string          `json:"failure_message"`
+		ExceptionMessage       string          `json:"exceptionMessage"`
+		ExceptionMessageSnake  string          `json:"exception_message"`
+		DiagnosticMessage      string          `json:"diagnosticMessage"`
+		DiagnosticMessageSnake string          `json:"diagnostic_message"`
 		FailureReason          string          `json:"failureReason"`
 		FailureReasonSnake     string          `json:"failure_reason"`
 		Reason                 string          `json:"reason"`
@@ -206,10 +220,22 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 		OutputTextSnake        string          `json:"output_text"`
 		CompletionText         string          `json:"completionText"`
 		CompletionTextSnake    string          `json:"completion_text"`
+		SummaryText            string          `json:"summaryText"`
+		SummaryTextSnake       string          `json:"summary_text"`
+		FinalOutput            string          `json:"finalOutput"`
+		FinalOutputSnake       string          `json:"final_output"`
+		FinalMessage           string          `json:"finalMessage"`
+		FinalMessageSnake      string          `json:"final_message"`
+		ResponseText           string          `json:"responseText"`
+		ResponseTextSnake      string          `json:"response_text"`
+		MessageText            string          `json:"messageText"`
+		MessageTextSnake       string          `json:"message_text"`
 		Output                 json.RawMessage `json:"output"`
 		Response               json.RawMessage `json:"response"`
 		Value                  json.RawMessage `json:"value"`
 		Completion             json.RawMessage `json:"completion"`
+		Summary                json.RawMessage `json:"summary"`
+		Final                  json.RawMessage `json:"final"`
 		MessagePayload         json.RawMessage `json:"message_payload"`
 		MessagePayloadCamel    json.RawMessage `json:"messagePayload"`
 		SerializedMessage      json.RawMessage `json:"serialized_message"`
@@ -291,8 +317,18 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.StatusMessageSnake,
 			aux.StatusText,
 			aux.StatusTextSnake,
+			aux.StateMessage,
+			aux.StateMessageSnake,
+			aux.UpdateMessage,
+			aux.UpdateMessageSnake,
 			aux.ProgressMessage,
 			aux.ProgressMessageSnake,
+			aux.ProgressText,
+			aux.ProgressTextSnake,
+			aux.UpdateText,
+			aux.UpdateTextSnake,
+			aux.MessageText,
+			aux.MessageTextSnake,
 			aux.State,
 			aux.Phase,
 		)
@@ -303,16 +339,41 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.ErrorMessageSnake,
 			aux.ErrorText,
 			aux.ErrorTextSnake,
+			aux.FailureMessage,
+			aux.FailureMessageSnake,
+			aux.ExceptionMessage,
+			aux.ExceptionMessageSnake,
+			aux.DiagnosticMessage,
+			aux.DiagnosticMessageSnake,
 			aux.FailureReason,
 			aux.FailureReasonSnake,
+			aux.MessageText,
+			aux.MessageTextSnake,
 			aux.Reason,
 		)
 	}
 	if e.Type == SDKEventResult && e.Result == nil {
-		if result := firstSDKEventString(aux.ResultText, aux.ResultTextSnake, aux.OutputText, aux.OutputTextSnake, aux.CompletionText, aux.CompletionTextSnake); result != "" {
+		if result := firstSDKEventString(
+			aux.ResultText,
+			aux.ResultTextSnake,
+			aux.OutputText,
+			aux.OutputTextSnake,
+			aux.CompletionText,
+			aux.CompletionTextSnake,
+			aux.SummaryText,
+			aux.SummaryTextSnake,
+			aux.FinalOutput,
+			aux.FinalOutputSnake,
+			aux.FinalMessage,
+			aux.FinalMessageSnake,
+			aux.ResponseText,
+			aux.ResponseTextSnake,
+			aux.MessageText,
+			aux.MessageTextSnake,
+		); result != "" {
 			e.Result = result
 		} else {
-			e.Result = firstSDKEventRawAny(aux.Output, aux.Response, aux.Value, aux.Completion)
+			e.Result = firstSDKEventRawAny(aux.Output, aux.Response, aux.Value, aux.Completion, aux.Summary, aux.Final)
 		}
 	}
 	if e.Message == nil {
