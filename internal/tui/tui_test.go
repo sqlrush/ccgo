@@ -5829,6 +5829,11 @@ func TestParseESCSequenceActions(t *testing.T) {
 		t.Fatalf("reset action = %#v", reset)
 	}
 
+	report, ok := ParseESCSequence(ESCDeviceAttributes)
+	if !ok || report.Type != ESCActionReport || report.Report.Type != CSIReportActionDeviceAttrs {
+		t.Fatalf("device attributes action = %#v", report)
+	}
+
 	keypadCases := []struct {
 		seq     string
 		enabled bool
@@ -5870,6 +5875,11 @@ func TestParseESCSequenceActions(t *testing.T) {
 	actions = parser.Feed("\x1b#8")
 	if len(actions) != 1 || actions[0].Type != TerminalActionScreen || actions[0].Screen.Type != ESCScreenActionAlignmentTest {
 		t.Fatalf("terminal parser screen actions = %#v", actions)
+	}
+
+	actions = parser.Feed(ESCDeviceAttributes)
+	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionDeviceAttrs {
+		t.Fatalf("terminal parser device attributes actions = %#v", actions)
 	}
 
 	unknown, ok := ParseESCContent("]not-osc")

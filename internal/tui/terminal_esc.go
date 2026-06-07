@@ -11,6 +11,7 @@ const (
 	ESCReverseIndex              = "\x1bM"
 	ESCNextLine                  = "\x1bE"
 	ESCTabSet                    = "\x1bH"
+	ESCDeviceAttributes          = "\x1bZ"
 	ESCScreenAttributes          = '#'
 	ESCFinalStart                = 0x30
 	ESCFinalEnd                  = 0x7e
@@ -36,6 +37,7 @@ type ESCActionType string
 const (
 	ESCActionCursor       ESCActionType = "cursor"
 	ESCActionMode         ESCActionType = "mode"
+	ESCActionReport       ESCActionType = "report"
 	ESCActionReset        ESCActionType = "reset"
 	ESCActionCharset      ESCActionType = "charset"
 	ESCActionCharsetShift ESCActionType = "charsetShift"
@@ -61,6 +63,7 @@ type ESCAction struct {
 	Type              ESCActionType
 	Cursor            CSICursorAction
 	Mode              CSIModeAction
+	Report            CSIReportAction
 	Screen            ESCScreenAction
 	CharsetSlot       byte
 	CharsetDesignator byte
@@ -113,6 +116,8 @@ func ParseESCContent(chars string) (ESCAction, bool) {
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}}, true
 	case 'H':
 		return ESCAction{Type: ESCActionCursor, Cursor: CSICursorAction{Type: CSICursorActionTabSet}}, true
+	case 'Z':
+		return ESCAction{Type: ESCActionReport, Report: CSIReportAction{Type: CSIReportActionDeviceAttrs}, Sequence: ESCPrefix + chars}, true
 	}
 	return ESCAction{Type: ESCActionUnknown, Sequence: ESCPrefix + chars}, true
 }

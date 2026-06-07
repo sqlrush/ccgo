@@ -103,6 +103,10 @@ func TestParseTerminalSequenceDispatchesActions(t *testing.T) {
 	if !ok || screen.Type != TerminalSequenceESC || screen.ESC.Type != ESCActionScreen || screen.ESC.Screen.Type != ESCScreenActionAlignmentTest {
 		t.Fatalf("screen esc dispatch = %#v ok=%v", screen, ok)
 	}
+	report, ok := ParseTerminalSequence(ESCDeviceAttributes)
+	if !ok || report.Type != TerminalSequenceESC || report.ESC.Type != ESCActionReport || report.ESC.Report.Type != CSIReportActionDeviceAttrs {
+		t.Fatalf("device attributes esc dispatch = %#v ok=%v", report, ok)
+	}
 	if text, ok := ParseTerminalSequence("plain"); ok || text.Type != "" {
 		t.Fatalf("plain dispatch = %#v ok=%v", text, ok)
 	}

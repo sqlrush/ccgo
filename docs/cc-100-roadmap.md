@@ -342,6 +342,8 @@ M7 补充：terminal ESC parser 现在也把 ISO-2022 charset shift 控制 (`ESC
 
 M7 补充：terminal ESC parser 现在把 DEC line/screen attribute 序列 (`ESC # 3/4/5/6/8`) 解析成结构化 screen action，并在 terminal parser 中透传 alignment-test/line-size 控制，避免 ANSI snapshot 管线落入 unknown。
 
+M7 补充：terminal ESC parser 现在把 DECID identify-terminal (`ESC Z`) 归入现有 device-attributes report action，和 `CSI c` 查询路径保持一致。
+
 M7 补充：terminal CSI parser 现在把 DEC selective erase `CSI ? Ps J` / `CSI ? Ps K` 标记为 selective display/line erase，和普通 ED/EL 区分开。
 
 M7 补充：terminal CSI parser 现在把 ECMA `CSI Ps N` / `CSI Ps O` 解析成 erase-in-field / erase-in-area action，覆盖 to-end/to-start/all 三种 region。
@@ -901,6 +903,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：terminal CSI parser 把 DECSTR soft reset (`CSI !p`) 归入 reset action，并在 terminal parser 中清理 SGR/link 状态。
 
 本轮补充：terminal ESC parser 把 DEC line/screen attribute (`ESC # 3/4/5/6/8`) 归入 screen action，terminal parser 会结构化透传 double-height top/bottom、single/double-width 和 alignment-test 控制，继续减少真实 ANSI 输出里的 unknown fallback。
+
+本轮补充：terminal ESC parser 把 DECID identify-terminal (`ESC Z`) 归入 report action，terminal parser 会像 `CSI c` 一样暴露为 device-attributes report，避免老式终端识别查询落入 unknown。
 
 本轮补充：renderer/snapshot 增加 opt-in DEC 2026 synchronized output 包裹入口，可用官方 BSU/ESU (`CSI ?2026h`/`CSI ?2026l`) 生成整帧 ANSI fixture，同时默认渲染保持不变。
 
