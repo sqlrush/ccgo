@@ -487,6 +487,11 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 	if text, ok := selectionProviderResponseText(raw); ok {
 		return parseRecallAgentJSON(text)
 	}
+	var rawObject map[string]json.RawMessage
+	queryFromAliases := ""
+	if err := json.Unmarshal([]byte(raw), &rawObject); err == nil {
+		queryFromAliases = selectionQueryFromRawObject(rawObject)
+	}
 	var object struct {
 		Query                        string            `json:"query"`
 		SearchQuery                  string            `json:"search_query"`
@@ -752,6 +757,9 @@ func parseRecallAgentJSON(raw string) (string, []contracts.ID, bool) {
 		if query == "" {
 			query = strings.TrimSpace(object.ExpandedQueryCamel)
 		}
+		if query == "" {
+			query = queryFromAliases
+		}
 		if len(ids) == 0 {
 			query, ids = recallSelectionFromNestedPayloads(query,
 				object.Selection,
@@ -818,7 +826,7 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 	}
 	var rawObject map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &rawObject); err == nil {
-		query := relevantMemoryQueryFromRawObject(rawObject)
+		query := selectionQueryFromRawObject(rawObject)
 		ids := relevantMemoryIDsFromRawObject(rawObject)
 		if len(ids) == 0 {
 			query, ids = relevantMemorySelectionFromNestedPayloads(query, rawObjectValues(rawObject,
@@ -1020,25 +1028,7 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 				object.Resources,
 			)
 		}
-		query := strings.TrimSpace(object.Query)
-		if query == "" {
-			query = strings.TrimSpace(object.SearchQuery)
-		}
-		if query == "" {
-			query = strings.TrimSpace(object.SearchQueryCamel)
-		}
-		if query == "" {
-			query = strings.TrimSpace(object.RewrittenQuery)
-		}
-		if query == "" {
-			query = strings.TrimSpace(object.RewrittenQueryCamel)
-		}
-		if query == "" {
-			query = strings.TrimSpace(object.ExpandedQuery)
-		}
-		if query == "" {
-			query = strings.TrimSpace(object.ExpandedQueryCamel)
-		}
+		query := firstNonEmpty(object.Query, object.SearchQuery, object.SearchQueryCamel, object.RewrittenQuery, object.RewrittenQueryCamel, object.ExpandedQuery, object.ExpandedQueryCamel)
 		if len(ids) == 0 {
 			query, ids = relevantMemorySelectionFromNestedPayloads(query,
 				object.Selected,
@@ -1083,7 +1073,7 @@ func parseRelevantMemoryAgentJSON(raw string) (string, []string, bool) {
 	return "", nil, false
 }
 
-func relevantMemoryQueryFromRawObject(object map[string]json.RawMessage) string {
+func selectionQueryFromRawObject(object map[string]json.RawMessage) string {
 	for _, key := range []string{
 		"query",
 		"search_query",
@@ -1092,6 +1082,14 @@ func relevantMemoryQueryFromRawObject(object map[string]json.RawMessage) string 
 		"rewrittenQuery",
 		"expanded_query",
 		"expandedQuery",
+		"user_query",
+		"userQuery",
+		"question",
+		"prompt",
+		"input",
+		"search",
+		"search_text",
+		"searchText",
 	} {
 		if value := stringFromRawJSON(object[key]); value != "" {
 			return value

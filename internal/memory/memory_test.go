@@ -405,6 +405,44 @@ func TestMemoryAgentSelectRelevantMemoriesUsesModelPaths(t *testing.T) {
 	}
 }
 
+func TestMemoryAgentSelectRelevantMemoriesParsesAdditionalQueryAliases(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db.md")
+	opsPath := filepath.Join(dir, "ops.md")
+	writeFile(t, dbPath, "---\ndescription: database permissions migration\n---\ndb rules\n")
+	writeFile(t, opsPath, "---\ndescription: deployment runbook\n---\nops rules\n")
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_memory_query_aliases",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"user_query":"database access","memory_paths":["db.md"]}`)},
+	}}
+
+	result, err := (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "database permissions", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(result.SelectedIDs, ",") != "db.md" {
+		t.Fatalf("user_query result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != dbPath {
+		t.Fatalf("user_query selected = %#v", result.Selected)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{"question":"deployment runbook","memoryPaths":["ops.md"]}`)}
+	result, err = (Agent{Client: client}).SelectRelevantMemories(context.Background(), dir, "deployment", RelevantMemorySelectorOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "deployment runbook" || strings.Join(result.SelectedIDs, ",") != "ops.md" {
+		t.Fatalf("question result = %#v", result)
+	}
+	if len(result.Selected) != 1 || result.Selected[0].Path != opsPath {
+		t.Fatalf("question selected = %#v", result.Selected)
+	}
+}
+
 func TestMemoryAgentSelectRelevantMemoriesParsesNestedAliasesAndFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "db.md")
@@ -1730,6 +1768,56 @@ func TestMemoryAgentRecallParsesAlternateModelResponseKeys(t *testing.T) {
 	}
 	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
 		t.Fatalf("memory id alias matches = %#v", result.Matches)
+	}
+}
+
+func TestMemoryAgentRecallParsesAdditionalQueryAliases(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "session-memory")
+	for _, item := range []struct {
+		id      contracts.ID
+		summary string
+		updated int64
+	}{
+		{id: "prior", summary: "database access policy notes", updated: 200},
+		{id: "other", summary: "credential rotation notes", updated: 100},
+	} {
+		if _, err := WriteSessionSummary(SessionSummaryOptions{
+			Root:      root,
+			SessionID: item.id,
+			Summary:   item.summary,
+			UpdatedAt: time.Unix(item.updated, 0).UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &fakeMemoryClient{response: &anthropic.Response{
+		ID:      "msg_recall_query_aliases",
+		Type:    "message",
+		Role:    "assistant",
+		Model:   "sonnet",
+		Content: []contracts.ContentBlock{contracts.NewTextBlock(`{"user_query":"database access","session_ids":["prior"]}`)},
+	}}
+	result, err := (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about db access?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database access" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior" {
+		t.Fatalf("user_query result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("user_query matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{"question":"credential rotation","selectedSessions":[{"sessionId":"other"}]}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "what did we decide about credential rotation?", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential rotation" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other" {
+		t.Fatalf("question result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("question matches = %#v", result.Matches)
 	}
 }
 
