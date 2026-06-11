@@ -101,13 +101,14 @@ This is evidence that the current strengthened implementation is internally cons
 
 ## M5 Initial Progress
 
-After the first/second batch hardening, the Go rewrite now includes initial `internal/tools/file`, `internal/tools/bash`, and `internal/tools/todo` packages with text-file `Read`, `Write`, `Edit`, search, shell, and session todo tools.
+After the first/second batch hardening, the Go rewrite now includes initial `internal/tools/file`, `internal/tools/bash`, `internal/tools/todo`, and `internal/tools/web` packages with text-file `Read`, `Write`, `Edit`, search, shell, session todo, and web fetch tools.
 
 Covered behavior:
 
 - `Glob`/`Grep` initial pure-Go file search tools, including recursive `**` glob matching, basic ignored directories, modified-time/path sorting, regex grep, glob filtering, and `files_with_matches`/`content`/`count` output modes.
 - `Bash` initial shell execution, including command/timeout/description validation, `/bin/sh -c` execution, stdout/stderr/exit-code/timeout structured results, dynamic read-only/concurrency-safe/destructive classification, and permission-rule matching through the existing tool permission adapter.
 - `TodoWrite` initial in-session todo state, including full-list writes, status/priority validation, duplicate-id rejection, one `in_progress` guard, structured result payloads, and tool metadata state storage.
+- `WebFetch` initial URL fetch behavior, including URL/timeout/max-byte validation, HTTP GET, text/binary detection, truncation, non-2xx error marking, structured result payloads, and `WebFetch(domain:...)` permission-rule adaptation.
 - `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, and read-state recording.
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, and post-edit read-state refresh.
@@ -118,7 +119,7 @@ Still missing from full M5 parity:
 - Image, PDF, notebook, and large-file token-budget behavior in `Read`.
 - Structured diff hunks/git diff/LSP and IDE notifications/file-history integration for `Write`/`Edit`.
 - Settings-file validation, team-memory secret guard, skill activation, and full permission prompt rendering.
-- Complete `Bash` parser/sandbox/background/interrupt/golden parity, web, notebook, PowerShell, and MCP concrete tool semantics, plus full ripgrep parity/pagination/ignore-file behavior for `Glob`/`Grep` and cross-session/TUI/golden compatibility for `TodoWrite`.
+- Complete `Bash` parser/sandbox/background/interrupt/golden parity, `WebFetch` prompt-aware/browser/preflight/golden parity, `WebSearch`, notebook, PowerShell, and MCP concrete tool semantics, plus full ripgrep parity/pagination/ignore-file behavior for `Glob`/`Grep` and cross-session/TUI/golden compatibility for `TodoWrite`.
 
 ## M6/M7 Initial Progress
 
