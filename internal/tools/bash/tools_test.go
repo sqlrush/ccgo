@@ -141,6 +141,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"git stash show -p stash@{0}",
 		"git worktree list --porcelain",
 		"git worktree list --expire 2.weeks.ago",
+		"git merge-base --is-ancestor HEAD~1 HEAD",
+		"git describe --tags --abbrev=8 HEAD",
+		"git cat-file -p HEAD",
+		"git for-each-ref --format=%(refname) refs/heads",
 		"rg TODO internal",
 		"find . -name '*.go' -print",
 		"printf hello",
@@ -174,6 +178,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"git worktree add ../other",
 		"git worktree list ../other",
 		"git worktree list --output=/tmp/worktrees.txt",
+		"git describe --output=/tmp/describe.txt",
+		"git cat-file --batch HEAD",
+		"git cat-file -p HEAD extra",
+		"git for-each-ref --shell",
 		"ls && echo hi > out.txt",
 	}
 	for _, command := range notReadOnly {

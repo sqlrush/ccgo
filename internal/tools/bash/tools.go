@@ -90,6 +90,52 @@ var gitWorktreeListFlagsWithArgs = map[string]bool{
 	"--expire": true,
 }
 
+var gitMergeBaseAllowedFlags = map[string]bool{
+	"--is-ancestor": true,
+	"--fork-point":  true,
+	"--octopus":     true,
+	"--independent": true,
+	"--all":         true,
+}
+
+var gitDescribeAllowedFlags = map[string]bool{
+	"--tags":        true,
+	"--long":        true,
+	"--always":      true,
+	"--contains":    true,
+	"--first-match": true,
+	"--exact-match": true,
+	"--dirty":       true,
+	"--broken":      true,
+}
+
+var gitDescribeFlagsWithArgs = map[string]bool{
+	"--match":      true,
+	"--exclude":    true,
+	"--abbrev":     true,
+	"--candidates": true,
+}
+
+var gitCatFileAllowedFlags = map[string]bool{
+	"-t":                        true,
+	"-s":                        true,
+	"-p":                        true,
+	"-e":                        true,
+	"--batch-check":             true,
+	"--allow-undetermined-type": true,
+}
+
+var gitForEachRefFlagsWithArgs = map[string]bool{
+	"--format":      true,
+	"--sort":        true,
+	"--count":       true,
+	"--contains":    true,
+	"--no-contains": true,
+	"--merged":      true,
+	"--no-merged":   true,
+	"--points-at":   true,
+}
+
 type bashInput struct {
 	Command               string `json:"command"`
 	Timeout               *int   `json:"timeout,omitempty"`
@@ -914,6 +960,14 @@ func readOnlyGit(words []string) bool {
 		return readOnlyGitStash(words[2:])
 	case "worktree":
 		return readOnlyGitWorktree(words[2:])
+	case "merge-base":
+		return argsAllowPositionals(words[2:], gitMergeBaseAllowedFlags, nil, -1)
+	case "describe":
+		return argsAllowPositionals(words[2:], gitDescribeAllowedFlags, gitDescribeFlagsWithArgs, -1)
+	case "cat-file":
+		return argsAllowPositionals(words[2:], gitCatFileAllowedFlags, nil, 1)
+	case "for-each-ref":
+		return argsAllowPositionals(words[2:], nil, gitForEachRefFlagsWithArgs, -1)
 	default:
 		return false
 	}
@@ -986,7 +1040,7 @@ func readOnlyGitStash(args []string) bool {
 	case "list":
 		return argsAreAllowedFlagsOnly(args[1:], gitStashListAllowedFlags, gitStashListFlagsWithArgs)
 	case "show":
-		return argsHaveAtMostOnePositional(args[1:], gitStashShowAllowedFlags, gitStashShowFlagsWithArgs)
+		return argsAllowPositionals(args[1:], gitStashShowAllowedFlags, gitStashShowFlagsWithArgs, 1)
 	default:
 		return false
 	}
@@ -1136,13 +1190,13 @@ func argsAreAllowedFlagsOnly(args []string, allowedFlags map[string]bool, flagsW
 	return true
 }
 
-func argsHaveAtMostOnePositional(args []string, allowedFlags map[string]bool, flagsWithArgs map[string]bool) bool {
+func argsAllowPositionals(args []string, allowedFlags map[string]bool, flagsWithArgs map[string]bool, maxPositionals int) bool {
 	positionals := 0
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
 			positionals += len(args) - i - 1
-			break
+			return maxPositionals < 0 || positionals <= maxPositionals
 		}
 		if strings.HasPrefix(arg, "--") {
 			if strings.Contains(arg, "=") {
@@ -1172,7 +1226,7 @@ func argsHaveAtMostOnePositional(args []string, allowedFlags map[string]bool, fl
 			continue
 		}
 		positionals++
-		if positionals > 1 {
+		if maxPositionals >= 0 && positionals > maxPositionals {
 			return false
 		}
 	}
