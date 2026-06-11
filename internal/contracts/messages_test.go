@@ -222,6 +222,47 @@ func TestSDKEventUnmarshalAcceptsTypeAliases(t *testing.T) {
 	}
 }
 
+func TestSDKEventUnmarshalAcceptsNormalizedFieldAliases(t *testing.T) {
+	var event SDKEvent
+	raw := `{"Event Type":"assistant-message","Event-ID":301,"Session-ID":"sess_norm","Parent Message ID":300,"Created At":"2026-01-01T00:00:03Z","Message-Payload":{"Message-Type":"assistant-message","Message-ID":"msg_301","Message Text":"hello"}}`
+	if err := json.Unmarshal([]byte(raw), &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != SDKEventAssistant || event.ID != "301" || event.SessionID != "sess_norm" || event.Timestamp != "2026-01-01T00:00:03Z" {
+		t.Fatalf("normalized event metadata = %#v", event)
+	}
+	if event.ParentUUID == nil || *event.ParentUUID != "300" {
+		t.Fatalf("normalized event parent = %#v", event.ParentUUID)
+	}
+	if event.Message == nil || event.Message.Type != MessageAssistant || event.Message.ID != "msg_301" || len(event.Message.Content) != 1 || event.Message.Content[0].Text != "hello" {
+		t.Fatalf("normalized event message = %#v", event.Message)
+	}
+
+	for name, tc := range map[string]struct {
+		raw        string
+		wantStatus string
+		wantError  string
+		wantResult string
+	}{
+		"status": {raw: `{"Event Type":"status","Status Message":"queued"}`, wantStatus: "queued"},
+		"error":  {raw: `{"Event Type":"error","Failure Reason":"denied"}`, wantError: "denied"},
+		"result": {raw: `{"Event Type":"result","Final Output":"done"}`, wantResult: "done"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var event SDKEvent
+			if err := json.Unmarshal([]byte(tc.raw), &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Status != tc.wantStatus || event.Error != tc.wantError {
+				t.Fatalf("event status/error = %#v", event)
+			}
+			if tc.wantResult != "" && event.Result != tc.wantResult {
+				t.Fatalf("event result = %#v", event.Result)
+			}
+		})
+	}
+}
+
 func TestSDKEventUnmarshalAcceptsTimestampAliases(t *testing.T) {
 	for name, tc := range map[string]struct {
 		raw  string

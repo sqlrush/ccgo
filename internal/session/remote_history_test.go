@@ -2177,6 +2177,32 @@ func TestRemoteHistoryTranscriptMessagesAcceptsEventTypeAliases(t *testing.T) {
 	}
 }
 
+func TestRemoteHistoryTranscriptMessagesAcceptsNormalizedEventFieldAliases(t *testing.T) {
+	var response sessionEventsResponse
+	if err := json.Unmarshal([]byte(`{"events":[
+		{"Event Type":"user-message","Event-ID":"evt_norm_u","Session-ID":"s_norm","Created At":"2026-01-01T00:00:01Z","Message-Payload":{"Message-Type":"user-message","Message Text":"hi norm"}},
+		{"Event Type":"assistant-message","Event-ID":"evt_norm_a","Session-ID":"s_norm","Parent Message ID":"evt_norm_u","Created At":"2026-01-01T00:00:02Z","Message-Payload":{"Message-Type":"assistant-message","Parent Message ID":"evt_norm_u","Message Text":"hello norm"}}
+	]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Events) != 2 || response.Events[0].Type != contracts.SDKEventUser || response.Events[1].Type != contracts.SDKEventAssistant {
+		t.Fatalf("normalized events = %#v", response.Events)
+	}
+	messages := RemoteHistoryTranscriptMessages(response.Events)
+	if len(messages) != 2 || messages[0].UUID != "evt_norm_u" || messages[1].UUID != "evt_norm_a" {
+		t.Fatalf("normalized messages = %#v", messages)
+	}
+	if messages[0].SessionID != "s_norm" || messages[0].Message == nil || messages[0].Message.Content[0].Text != "hi norm" {
+		t.Fatalf("normalized user message = %#v", messages[0])
+	}
+	if messages[1].SessionID != "s_norm" || messages[1].ParentUUID == nil || *messages[1].ParentUUID != "evt_norm_u" {
+		t.Fatalf("normalized assistant parent = %#v", messages[1])
+	}
+	if messages[1].Message == nil || messages[1].Message.ParentUUID == nil || *messages[1].Message.ParentUUID != "evt_norm_u" || messages[1].Message.Content[0].Text != "hello norm" {
+		t.Fatalf("normalized assistant nested message = %#v", messages[1].Message)
+	}
+}
+
 func TestRemoteHistoryEventsAcceptStatusErrorResultAliases(t *testing.T) {
 	var response sessionEventsResponse
 	if err := json.Unmarshal([]byte(`{"events":[

@@ -261,8 +261,12 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(normalizedData, &aux); err != nil {
 		return err
 	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(normalizedData, &fields); err != nil {
+		return err
+	}
 	*e = SDKEvent(base)
-	if eventType := firstSDKEventType(string(e.Type), aux.EventTypeSnake, aux.EventTypeCamel, aux.Event, aux.Name, aux.Kind, aux.MessageType, aux.MessageTypeSnake, aux.Role); eventType != "" {
+	if eventType := firstSDKEventType(string(e.Type), aux.EventTypeSnake, aux.EventTypeCamel, aux.Event, aux.Name, aux.Kind, aux.MessageType, aux.MessageTypeSnake, aux.Role, stringJSONField(fields, "type", "eventType", "event_type", "event", "name", "kind", "messageType", "message_type", "role")); eventType != "" {
 		e.Type = eventType
 	}
 	if e.ID == "" {
@@ -277,19 +281,11 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.MessageIDUpper,
 			aux.MessageIDSnake,
 			e.UUID,
+			ID(idJSONField(fields, "id", "uuid", "eventId", "eventID", "event_id", "messageUuid", "messageUUID", "message_uuid", "messageId", "messageID", "message_id")),
 		)
 	}
 	if e.SessionID == "" {
-		e.SessionID = aux.SessionIDUpper
-	}
-	if e.SessionID == "" {
-		e.SessionID = aux.SessionUUID
-	}
-	if e.SessionID == "" {
-		e.SessionID = aux.SessionUUIDUpper
-	}
-	if e.SessionID == "" {
-		e.SessionID = aux.SessionUUIDSnake
+		e.SessionID = firstSDKEventID(aux.SessionIDUpper, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake, ID(idJSONField(fields, "sessionId", "sessionID", "session_id", "session", "sessionUuid", "sessionUUID", "session_uuid")))
 	}
 	if e.Timestamp == "" {
 		e.Timestamp = firstSDKEventString(
@@ -306,10 +302,12 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.EventTimeSnake,
 			aux.OccurredAt,
 			aux.OccurredAtSnake,
+			stringJSONField(fields, "timestamp", "createdAt", "created_at", "created", "createdTime", "created_time", "time", "datetime", "dateTime", "date_time", "eventTime", "event_time", "occurredAt", "occurred_at"),
 		)
 	}
 	if e.ParentUUID == nil {
 		e.ParentUUID = firstSDKEventIDPtr(
+			idJSONFieldPtr(fields, "parentUuid", "parentUUID", "parent_uuid", "parentId", "parentID", "parent_id", "parentMessageId", "parentMessageID", "parent_message_id", "parentMessageUuid", "parentMessageUUID", "parent_message_uuid"),
 			aux.ParentUUIDUpper,
 			aux.ParentID,
 			aux.ParentIDUpper,
@@ -339,6 +337,7 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.MessageTextSnake,
 			aux.State,
 			aux.Phase,
+			stringJSONField(fields, "status", "statusMessage", "status_message", "statusText", "status_text", "stateMessage", "state_message", "updateMessage", "update_message", "progressMessage", "progress_message", "progressText", "progress_text", "updateText", "update_text", "messageText", "message_text", "state", "phase"),
 		)
 	}
 	if e.Type == SDKEventError && e.Error == "" {
@@ -358,6 +357,7 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.MessageText,
 			aux.MessageTextSnake,
 			aux.Reason,
+			stringJSONField(fields, "error", "errorMessage", "error_message", "errorText", "error_text", "failureMessage", "failure_message", "exceptionMessage", "exception_message", "diagnosticMessage", "diagnostic_message", "failureReason", "failure_reason", "messageText", "message_text", "reason"),
 		)
 	}
 	if e.Type == SDKEventResult && e.Result == nil {
@@ -378,10 +378,11 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.ResponseTextSnake,
 			aux.MessageText,
 			aux.MessageTextSnake,
+			stringJSONField(fields, "resultText", "result_text", "outputText", "output_text", "completionText", "completion_text", "summaryText", "summary_text", "finalOutput", "final_output", "finalMessage", "final_message", "responseText", "response_text", "messageText", "message_text"),
 		); result != "" {
 			e.Result = result
 		} else {
-			e.Result = firstSDKEventRawAny(aux.Output, aux.Response, aux.Value, aux.Completion, aux.Summary, aux.Final)
+			e.Result = firstSDKEventRawAny(aux.Output, aux.Response, aux.Value, aux.Completion, aux.Summary, aux.Final, rawJSONFieldValue(fields, "output"), rawJSONFieldValue(fields, "response"), rawJSONFieldValue(fields, "value"), rawJSONFieldValue(fields, "completion"), rawJSONFieldValue(fields, "summary"), rawJSONFieldValue(fields, "final"))
 		}
 	}
 	if e.Message == nil {
@@ -396,19 +397,25 @@ func (e *SDKEvent) UnmarshalJSON(data []byte) error {
 			aux.Record,
 			aux.Entry,
 			aux.Item,
+			rawJSONFieldValue(fields, "message"),
+			rawJSONFieldValue(fields, "messagePayload"),
+			rawJSONFieldValue(fields, "serializedMessage"),
+			rawJSONFieldValue(fields, "payload"),
+			rawJSONFieldValue(fields, "data"),
+			rawJSONFieldValue(fields, "body"),
+			rawJSONFieldValue(fields, "record"),
+			rawJSONFieldValue(fields, "entry"),
+			rawJSONFieldValue(fields, "item"),
 		)
 	}
 	if e.Message == nil {
-		fields := map[string]json.RawMessage{}
-		if err := json.Unmarshal(data, &fields); err == nil {
-			e.Message = firstSDKEventSidecarMessage(e.Type,
-				fields["metadata"],
-				fields["meta"],
-				fields["attributes"],
-				fields["properties"],
-				fields["attrs"],
-			)
-		}
+		e.Message = firstSDKEventSidecarMessage(e.Type,
+			rawJSONFieldValue(fields, "metadata"),
+			rawJSONFieldValue(fields, "meta"),
+			rawJSONFieldValue(fields, "attributes"),
+			rawJSONFieldValue(fields, "properties"),
+			rawJSONFieldValue(fields, "attrs"),
+		)
 	}
 	if e.Message == nil {
 		e.Message = sdkEventTopLevelMessage(data, e.Type)
@@ -593,7 +600,7 @@ func sdkEventMessageFromRaw(raw json.RawMessage, eventType SDKEventType) *Messag
 		"response",
 		"output",
 	} {
-		if nested := sdkEventMessageFromRaw(fields[name], eventType); nested != nil {
+		if nested := sdkEventMessageFromRaw(rawJSONFieldValue(fields, name), eventType); nested != nil {
 			return nested
 		}
 	}
@@ -604,7 +611,7 @@ func sdkEventMessageFromRaw(raw json.RawMessage, eventType SDKEventType) *Messag
 		"properties",
 		"attrs",
 	} {
-		if nested := sdkEventMessageFromRaw(fields[name], eventType); nested != nil && sdkEventTopLevelMessageHasData(*nested) {
+		if nested := sdkEventMessageFromRaw(rawJSONFieldValue(fields, name), eventType); nested != nil && sdkEventTopLevelMessageHasData(*nested) {
 			return nested
 		}
 	}

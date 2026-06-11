@@ -238,6 +238,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：transcript metadata 字段查找现在也接受大小写、snake_case、kebab-case 和空格分隔形式归一，`Session-ID`、`Custom-Title`、`Pull-Request-Number` 等相邻字段可在 full loader、lightweight metadata 和 transcript index 中恢复同一 metadata。
 - 本轮补充：transcript message/envelope 和嵌套 contract message 字段查找现在也复用大小写、snake_case、kebab-case 和空格分隔形式归一，`Message-Type`、`Message ID`、`Parent-Message-ID`、`Session-ID`、`Git-Branch`、`Message Text` 等相邻字段可贯通 full loader、progress bridge、line index 和 indexed resume。
 - 本轮补充：legacy session JSONL 的 `SessionEntry` 读取现在也复用同一 normalized 字段查找，`Entry Type`、`Message-ID`、`Parent Message ID`、`Session-ID`、`Created At` 等字段可经 `session.Load` 恢复旧 entry 与嵌套 message。
+- 本轮补充：remote-history `SDKEvent` 读取现在也复用 normalized 字段查找，`Event Type`、`Event-ID`、`Parent Message ID`、`Created At`、`Message-Payload`、`Status Message`/`Failure Reason`/`Final Output` 等字段可恢复事件类型、ID、parent、时间戳、状态/错误/结果和 transcript materialization 所需 message。
 - 本轮补充：transcript message 和嵌套 contract message 接受顶层 `sessionID` 作为 session id 别名，`LoadTranscript`、`LoadTranscriptIndex` 和 indexed resume 会保留该 session id（覆盖测试：`TestLoadTranscriptAcceptsSessionIDUpperAlias`）。
 - 本轮补充：嵌套 contract message 接受 `parentUUID`、`parentId`/`parentID`/`parent_id`、`parentMessageId`/`parentMessageID`/`parent_message_id` 和 parent-message UUID 别名，transcript/remote history payload 自带 parent alias 时不会丢失嵌套 parent。
 - 本轮补充：indexed resume chain 现在区分 byte budget 截断掉的 parent 和 transcript 里真实缺失的 parent，bounded resume 会分别暴露 `TruncatedParent` 与 `MissingParent`。
