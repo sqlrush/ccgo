@@ -188,6 +188,13 @@ func buildSearchURL(endpoint string, query string) (string, error) {
 }
 
 func parseSearchResults(body string, base *url.URL) []searchResult {
+	if results, ok := parseJSONSearchResults(body, base); ok {
+		return results
+	}
+	return parseHTMLSearchResults(body, base)
+}
+
+func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 	anchors := anchorRe.FindAllStringSubmatchIndex(body, -1)
 	results := make([]searchResult, 0, len(anchors))
 	seen := map[string]struct{}{}
@@ -212,6 +219,82 @@ func parseSearchResults(body string, base *url.URL) []searchResult {
 		results = append(results, searchResult{Title: label, URL: resolved, Snippet: searchSnippetAfterAnchor(body, anchors, idx)})
 	}
 	return results
+}
+
+func parseJSONSearchResults(body string, base *url.URL) ([]searchResult, bool) {
+	trimmed := strings.TrimSpace(body)
+	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+		return nil, false
+	}
+	var payload any
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return nil, false
+	}
+	var results []searchResult
+	seen := map[string]struct{}{}
+	collectJSONSearchResults(payload, base, &results, seen)
+	return results, true
+}
+
+func collectJSONSearchResults(value any, base *url.URL, results *[]searchResult, seen map[string]struct{}) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			collectJSONSearchResults(item, base, results, seen)
+		}
+	case map[string]any:
+		if result, ok := searchResultFromJSONObject(typed, base); ok {
+			if _, exists := seen[result.URL]; !exists {
+				seen[result.URL] = struct{}{}
+				*results = append(*results, result)
+			}
+		}
+		for _, key := range []string{"results", "organic_results", "organicResults", "items", "value", "data", "webPages", "web_pages"} {
+			if child, ok := typed[key]; ok {
+				collectJSONSearchResults(child, base, results, seen)
+			}
+		}
+	}
+}
+
+func searchResultFromJSONObject(obj map[string]any, base *url.URL) (searchResult, bool) {
+	rawURL := jsonStringField(obj, "url", "link", "href")
+	resolved := resolveSearchURL(rawURL, base)
+	if resolved == "" || isSearchChromeURL(resolved) {
+		return searchResult{}, false
+	}
+	title := jsonStringField(obj, "title", "name", "headline")
+	if strings.TrimSpace(title) == "" {
+		title = resolved
+	}
+	snippet := jsonStringField(obj, "snippet", "description", "content", "text")
+	return searchResult{
+		Title:   strings.Join(strings.Fields(htmlstd.UnescapeString(title)), " "),
+		URL:     resolved,
+		Snippet: truncateSearchSnippet(strings.Join(strings.Fields(htmlstd.UnescapeString(snippet)), " "), 320),
+	}, true
+}
+
+func jsonStringField(obj map[string]any, names ...string) string {
+	for _, name := range names {
+		if value, ok := obj[name]; ok {
+			if text := jsonScalarString(value); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func jsonScalarString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		return strings.TrimSpace(fmt.Sprintf("%.0f", typed))
+	default:
+		return ""
+	}
 }
 
 var (

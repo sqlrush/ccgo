@@ -67,6 +67,63 @@ func TestWebSearchReturnsParsedResults(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesJSONResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"results": [
+				{"title": "Example JSON", "url": "https://example.com/json", "snippet": "JSON snippet"}
+			],
+			"webPages": {
+				"value": [
+					{"name": "Docs JSON", "url": "https://docs.example.com/guide", "description": "Docs description"}
+				]
+			},
+			"organic_results": [
+				{"title": "Duplicate JSON", "link": "https://example.com/json", "snippet": "duplicate"},
+				{"title": "Blocked JSON", "link": "https://blocked.example.net/nope", "snippet": "blocked"}
+			]
+		}`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL,
+		},
+	}, contracts.ToolUse{
+		ID:   "toolu_search_json",
+		Name: "WebSearch",
+		Input: json.RawMessage(`{
+			"query":"json search",
+			"allowed_domains":["example.com"],
+			"blocked_domains":["blocked.example.net"],
+			"max_results":5
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("result should not be error: %#v", result)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["title"] != "Example JSON" || results[0]["snippet"] != "JSON snippet" || results[0]["url"] != "https://example.com/json" {
+		t.Fatalf("first result = %#v", results[0])
+	}
+	if results[1]["title"] != "Docs JSON" || results[1]["snippet"] != "Docs description" || results[1]["url"] != "https://docs.example.com/guide" {
+		t.Fatalf("second result = %#v", results[1])
+	}
+	content := result.Content.(string)
+	if !strings.Contains(content, "Example JSON") || !strings.Contains(content, "Docs description") || strings.Contains(content, "Duplicate JSON") || strings.Contains(content, "Blocked JSON") {
+		t.Fatalf("content = %#v", content)
+	}
+}
+
 func TestWebSearchBlockedDomainsAndNoResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
