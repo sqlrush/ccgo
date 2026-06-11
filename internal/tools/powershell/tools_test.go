@@ -3,6 +3,7 @@ package powershelltools
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -296,6 +297,54 @@ func TestPowerShellOutputValidationAndMissingTask(t *testing.T) {
 				t.Fatalf("err = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestPowerShellOutputPersistsOversizedBackgroundOutput(t *testing.T) {
+	executor := powerShellExecutor(t)
+	executor.ResultStoreDir = t.TempDir()
+	state := NewBackgroundState()
+	task := &BackgroundTask{
+		ID:          "powershell_large",
+		Command:     "Write-Output large",
+		Description: "large output",
+		StartedAt:   time.Now().Add(-time.Second),
+		EndedAt:     time.Now(),
+		TimeoutMS:   defaultTimeoutMillis,
+		Running:     false,
+		ExitCode:    0,
+	}
+	_, _ = task.stdout.Write([]byte(strings.Repeat("x", 110_000)))
+	state.Add(task)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, state)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_large_output",
+		Name:  "PowerShellOutput",
+		Input: json.RawMessage(`{"powershell_id":"powershell_large"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Meta["truncated"] != true {
+		t.Fatalf("result should be truncated: meta=%#v", result.Meta)
+	}
+	path, _ := result.Meta["full_output_path"].(string)
+	if path == "" {
+		t.Fatalf("full output path missing: meta=%#v", result.Meta)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), strings.Repeat("x", 110_000)) {
+		t.Fatalf("persisted output does not contain full stdout")
+	}
+	if !strings.Contains(result.Content.(string), "Tool output truncated") {
+		t.Fatalf("truncated content marker missing: %#v", result.Content)
 	}
 }
 

@@ -85,12 +85,13 @@ func NewPowerShellTool() tool.Tool {
 func NewPowerShellOutputTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
-			Name:            "PowerShellOutput",
-			Description:     "Read output from a background PowerShell command.",
-			SearchHint:      "read background powershell command output",
-			ReadOnly:        true,
-			ConcurrencySafe: true,
-			Strict:          true,
+			Name:               "PowerShellOutput",
+			Description:        "Read output from a background PowerShell command.",
+			SearchHint:         "read background powershell command output",
+			ReadOnly:           true,
+			ConcurrencySafe:    true,
+			Strict:             true,
+			MaxResultSizeChars: 100_000,
 			InputSchema: contracts.JSONSchema{
 				"type": "object",
 				"properties": map[string]any{
