@@ -816,6 +816,70 @@ func TestGlobToolDefaultNoIgnoreAndHidden(t *testing.T) {
 	}
 }
 
+func TestGlobAndGrepReturnWorkingDirectoryRelativePaths(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"src/a.go":  "Needle go\n",
+		"src/b.txt": "Needle text\n",
+	}
+	mtime := time.Now().Add(-time.Hour)
+	for rel, content := range files {
+		path := filepath.Join(dir, rel)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	pathResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_glob_path_relative_output",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"*.go","path":"src"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pathResult.Content != "src/a.go" {
+		t.Fatalf("glob path output = %#v", pathResult.Content)
+	}
+
+	absolutePattern := filepath.ToSlash(filepath.Join(dir, "src", "*.txt"))
+	absInput, err := json.Marshal(map[string]any{"pattern": absolutePattern})
+	if err != nil {
+		t.Fatal(err)
+	}
+	absResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_glob_absolute_pattern",
+		Name:  "Glob",
+		Input: absInput,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if absResult.Content != "src/b.txt" {
+		t.Fatalf("glob absolute output = %#v", absResult.Content)
+	}
+
+	grepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_path_relative_output",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"src"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grepResult.Content != "src/a.go\nsrc/b.txt" {
+		t.Fatalf("grep path output = %#v", grepResult.Content)
+	}
+}
+
 func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {

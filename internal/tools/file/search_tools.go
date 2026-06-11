@@ -189,9 +189,14 @@ func callGlob(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
+	displayRoot := searchRoot(ctx.WorkingDirectory, ".")
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
+	pattern := input.Pattern
+	if filepath.IsAbs(pattern) {
+		root, pattern = globBaseDirectory(pattern)
+	}
 	limit := inputLimit(input.Limit)
-	matches, truncated, err := collectGlobMatches(root, input.Pattern, limit)
+	matches, truncated, err := collectGlobMatches(root, displayRoot, pattern, limit)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -267,6 +272,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if err != nil {
 		return contracts.ToolResult{}, fmt.Errorf("invalid pattern: %w", err)
 	}
+	displayRoot := searchRoot(ctx.WorkingDirectory, ".")
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	mode := normalizedGrepOutputMode(input)
 	before, after := grepContextLines(input)
@@ -283,7 +289,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		LineNumbers:   grepLineNumbers(input, mode),
 		Multiline:     input.Multiline,
 	}
-	matches, totalMatches, truncated, err := collectGrepMatches(root, input.Glob, input.Type, expr, options)
+	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -351,7 +357,7 @@ func inputLimit(limit *int) int {
 	return *limit
 }
 
-func collectGlobMatches(root string, pattern string, limit int) ([]fileSearchMatch, bool, error) {
+func collectGlobMatches(root string, displayRoot string, pattern string, limit int) ([]fileSearchMatch, bool, error) {
 	var matches []fileSearchMatch
 	err := walkSearchFiles(root, globWalkOptions(), func(path string, rel string, info os.FileInfo) error {
 		ok, err := matchGlobPath(pattern, rel)
@@ -361,7 +367,7 @@ func collectGlobMatches(root string, pattern string, limit int) ([]fileSearchMat
 		if !ok {
 			return nil
 		}
-		matches = append(matches, fileSearchMatch{Path: path, RelPath: rel, ModUnix: info.ModTime().UnixNano()})
+		matches = append(matches, fileSearchMatch{Path: path, RelPath: searchDisplayPath(displayRoot, path, rel), ModUnix: info.ModTime().UnixNano()})
 		return nil
 	})
 	if err != nil {
@@ -380,7 +386,7 @@ func collectGlobMatches(root string, pattern string, limit int) ([]fileSearchMat
 	return matches, truncated, nil
 }
 
-func collectGrepMatches(root string, glob string, typeFilter string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, bool, error) {
+func collectGrepMatches(root string, displayRoot string, glob string, typeFilter string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, bool, error) {
 	typeExtensions, err := grepTypeExtensions(typeFilter)
 	if err != nil {
 		return nil, 0, false, err
@@ -404,15 +410,16 @@ func collectGrepMatches(root string, glob string, typeFilter string, expr *regex
 		if err != nil {
 			return nil
 		}
-		lineMatches := grepFileMatches(rel, content, expr, options)
+		displayRel := searchDisplayPath(displayRoot, path, rel)
+		lineMatches := grepFileMatches(displayRel, content, expr, options)
 		if len(lineMatches) == 0 {
 			return nil
 		}
 		switch options.Mode {
 		case "files_with_matches":
-			matches = append(matches, grepMatch{Path: rel})
+			matches = append(matches, grepMatch{Path: displayRel})
 		case "count":
-			matches = append(matches, grepMatch{Path: rel, Count: countMatchedLines(lineMatches)})
+			matches = append(matches, grepMatch{Path: displayRel, Count: countMatchedLines(lineMatches)})
 		default:
 			matches = append(matches, lineMatches...)
 		}
@@ -442,6 +449,37 @@ func collectGrepMatches(root string, glob string, typeFilter string, expr *regex
 	truncated := end < len(matches)
 	matches = matches[start:end]
 	return matches, totalMatches, truncated, nil
+}
+
+func searchDisplayPath(displayRoot string, path string, fallback string) string {
+	if displayRoot != "" {
+		if rel, err := filepath.Rel(displayRoot, path); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return fallback
+}
+
+func globBaseDirectory(pattern string) (string, string) {
+	index := strings.IndexAny(pattern, "*?[{")
+	if index < 0 {
+		return filepath.Dir(pattern), filepath.Base(pattern)
+	}
+	prefix := pattern[:index]
+	lastSep := strings.LastIndex(prefix, string(filepath.Separator))
+	if filepath.Separator != '/' {
+		if slash := strings.LastIndex(prefix, "/"); slash > lastSep {
+			lastSep = slash
+		}
+	}
+	if lastSep < 0 {
+		return ".", pattern
+	}
+	base := prefix[:lastSep]
+	if base == "" && lastSep == 0 {
+		base = string(filepath.Separator)
+	}
+	return filepath.Clean(base), pattern[lastSep+1:]
 }
 
 func grepFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) []grepMatch {
