@@ -337,6 +337,30 @@ var gitGrepFlagsWithArgs = map[string]bool{
 	"--threads":        true,
 }
 
+var gitRevParseAllowedFlags = map[string]bool{
+	"--verify":                         true,
+	"--abbrev-ref":                     true,
+	"--symbolic":                       true,
+	"--symbolic-full-name":             true,
+	"--show-toplevel":                  true,
+	"--show-cdup":                      true,
+	"--show-prefix":                    true,
+	"--git-dir":                        true,
+	"--git-common-dir":                 true,
+	"--absolute-git-dir":               true,
+	"--show-superproject-working-tree": true,
+	"--is-inside-work-tree":            true,
+	"--is-inside-git-dir":              true,
+	"--is-bare-repository":             true,
+	"--is-shallow-repository":          true,
+	"--is-shallow-update":              true,
+	"--path-prefix":                    true,
+}
+
+var gitRevParseFlagsWithArgs = map[string]bool{
+	"--short": true,
+}
+
 var gitReflogFlagsWithArgs = map[string]bool{
 	"-n":          true,
 	"--max-count": true,
@@ -1398,7 +1422,7 @@ func readOnlyGit(words []string) bool {
 	case "grep":
 		return argsAllowPositionals(words[2:], gitGrepAllowedFlags, gitGrepFlagsWithArgs, -1)
 	case "rev-parse":
-		return true
+		return argsAllowPositionals(words[2:], gitRevParseAllowedFlags, gitRevParseFlagsWithArgs, -1)
 	case "branch":
 		return readOnlyGitBranch(words[2:])
 	case "tag":
@@ -1476,11 +1500,54 @@ func readOnlyGitRemote(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "show", "get-url":
-		return true
+	case "show":
+		return readOnlyGitRemoteShow(args[1:])
+	case "get-url":
+		return readOnlyGitRemoteGetURL(args[1:])
 	default:
 		return false
 	}
+}
+
+func readOnlyGitRemoteShow(args []string) bool {
+	positionals := 0
+	for _, arg := range args {
+		if arg == "-n" {
+			continue
+		}
+		positionals++
+		if positionals > 1 || !safeGitRemoteName(arg) {
+			return false
+		}
+	}
+	return positionals == 1
+}
+
+func readOnlyGitRemoteGetURL(args []string) bool {
+	positionals := 0
+	for _, arg := range args {
+		if arg == "--push" || arg == "--all" {
+			continue
+		}
+		positionals++
+		if positionals > 1 || !safeGitRemoteName(arg) {
+			return false
+		}
+	}
+	return positionals == 1
+}
+
+func safeGitRemoteName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func readOnlyGitReflog(args []string) bool {
