@@ -512,6 +512,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - 文本版 `Read`、`Write`、`Edit` 初版已完成。
 - 已覆盖读前写、mtime stale guard、唯一匹配、`replace_all`、Read 去重、跨 tool round read-state。
 - `Glob`/`Grep` 纯 Go 初版已完成，支持 `**` 递归 glob、基础 ignore、mtime/path 排序、Grep regex、glob 过滤和 `files_with_matches`/`content`/`count` 输出模式。
+- `TodoWrite` 会话内初版已完成，支持完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果和 tool metadata 状态保存。
 
 仍需完成：
 
@@ -519,7 +520,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - `Edit/Write` 的 structured diff、git diff、LSP/IDE notify、file history、settings validation、secret guard。
 - `Bash` parser、sandbox、timeout、background、interrupt、read-only/destructive validation。
 - `Glob/Grep` 完整 ripgrep parity、分页、`.gitignore`/ignore 文件和更多输出参数。
-- `TodoWrite` 状态和 tool result 兼容。
+- `TodoWrite` 跨会话恢复、TUI 同步和官方 golden 兼容。
 - Web、PowerShell、Notebook、MCP concrete tool semantics。
 
 ### M6: Session, Memory, Compact
@@ -1140,7 +1141,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 ## Recommended Next Steps
 
-1. 完成 M5 基础可用工具面：优先 `Glob/Grep`、`TodoWrite`、`Bash`。
+1. 完成 M5 基础可用工具面：优先 `Bash`，并补强 `Glob/Grep`、`TodoWrite` 的官方 golden 兼容。
 2. 补强 `Read/Edit/Write` 高级分支：PDF/image/notebook/diff/LSP/history。
 3. 实现 CLI `--print` 和 SDK JSON/NDJSON，用 golden 对齐官方行为。
 4. 推进 session resume、compact、memory。

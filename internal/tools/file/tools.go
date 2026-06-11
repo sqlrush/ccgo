@@ -13,6 +13,7 @@ import (
 	"ccgo/internal/memory"
 	"ccgo/internal/permissions"
 	"ccgo/internal/tool"
+	todotools "ccgo/internal/tools/todo"
 )
 
 type readInput struct {
@@ -117,7 +118,7 @@ func NewEditTool() tool.Tool {
 }
 
 func BuiltinTools() []tool.Tool {
-	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), NewGlobTool(), NewGrepTool()}
+	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool()}
 }
 
 func validateRead(ctx tool.Context, raw json.RawMessage) error {
