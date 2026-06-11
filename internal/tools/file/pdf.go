@@ -15,7 +15,22 @@ import (
 	"ccgo/internal/contracts"
 )
 
-var pdfPageTypePattern = regexp.MustCompile(`/Type\s*/Page(?:[^A-Za-z]|$)`)
+var (
+	pdfIndirectObjectPattern = regexp.MustCompile(`(?s)(\d+)\s+(\d+)\s+obj\b(.*?)endobj`)
+	pdfIndirectRefPattern    = regexp.MustCompile(`(\d+)\s+(\d+)\s+R`)
+	pdfCatalogTypePattern    = regexp.MustCompile(`/Type\s*/Catalog(?:[^A-Za-z]|$)`)
+	pdfContentsArrayPattern  = regexp.MustCompile(`(?s)/Contents\s*\[(.*?)\]`)
+	pdfContentsRefPattern    = regexp.MustCompile(`/Contents\s+(\d+)\s+(\d+)\s+R`)
+	pdfKidsArrayPattern      = regexp.MustCompile(`(?s)/Kids\s*\[(.*?)\]`)
+	pdfPageTypePattern       = regexp.MustCompile(`/Type\s*/Page(?:[^A-Za-z]|$)`)
+	pdfPagesRootRefPattern   = regexp.MustCompile(`/Pages\s+(\d+)\s+(\d+)\s+R`)
+)
+
+type pdfObject struct {
+	Number     int
+	Generation int
+	Body       []byte
+}
 
 func readPDFResult(displayPath string, path string, pages string) (contracts.ToolResult, error) {
 	data, err := os.ReadFile(path)
@@ -55,6 +70,17 @@ func readPDFResult(displayPath string, path string, pages string) (contracts.Too
 }
 
 func estimatePDFPageCount(data []byte) int {
+	if objects := parsePDFObjects(data); len(objects) > 0 {
+		count := 0
+		for _, object := range objects {
+			if isPDFPageObject(object.Body) {
+				count++
+			}
+		}
+		if count > 0 {
+			return count
+		}
+	}
 	return len(pdfPageTypePattern.FindAll(data, -1))
 }
 
@@ -149,6 +175,9 @@ func formatPDFPages(selectedPages []int, pageTexts []string) (string, string) {
 }
 
 func extractPDFPageTexts(data []byte) []string {
+	if texts := extractPDFPageTextsFromObjects(data); len(texts) > 0 {
+		return texts
+	}
 	streams := extractPDFStreams(data)
 	texts := make([]string, 0, len(streams))
 	for _, stream := range streams {
@@ -162,6 +191,159 @@ func extractPDFPageTexts(data []byte) []string {
 		}
 	}
 	return texts
+}
+
+func extractPDFPageTextsFromObjects(data []byte) []string {
+	objects := parsePDFObjects(data)
+	if len(objects) == 0 {
+		return nil
+	}
+	byRef := make(map[string]pdfObject, len(objects))
+	for _, object := range objects {
+		byRef[pdfObjectRef(object.Number, object.Generation)] = object
+	}
+	pages := orderedPDFPageObjects(objects, byRef)
+	var pageTexts []string
+	for _, page := range pages {
+		pageTexts = append(pageTexts, extractPDFPageText(page.Body, byRef))
+	}
+	return pageTexts
+}
+
+func parsePDFObjects(data []byte) []pdfObject {
+	matches := pdfIndirectObjectPattern.FindAllSubmatch(data, -1)
+	objects := make([]pdfObject, 0, len(matches))
+	for _, match := range matches {
+		if len(match) != 4 {
+			continue
+		}
+		number, err := strconv.Atoi(string(match[1]))
+		if err != nil {
+			continue
+		}
+		generation, err := strconv.Atoi(string(match[2]))
+		if err != nil {
+			continue
+		}
+		objects = append(objects, pdfObject{
+			Number:     number,
+			Generation: generation,
+			Body:       bytes.TrimSpace(match[3]),
+		})
+	}
+	return objects
+}
+
+func pdfObjectRef(number int, generation int) string {
+	return fmt.Sprintf("%d %d", number, generation)
+}
+
+func isPDFPageObject(body []byte) bool {
+	return pdfPageTypePattern.Match(body)
+}
+
+func orderedPDFPageObjects(objects []pdfObject, byRef map[string]pdfObject) []pdfObject {
+	if root, ok := pdfCatalogPagesRef(objects); ok {
+		refs := collectPDFPageRefs(root, byRef, map[string]struct{}{})
+		pages := make([]pdfObject, 0, len(refs))
+		for _, ref := range refs {
+			if object, ok := byRef[ref]; ok {
+				pages = append(pages, object)
+			}
+		}
+		if len(pages) > 0 {
+			return pages
+		}
+	}
+	pages := make([]pdfObject, 0)
+	for _, object := range objects {
+		if isPDFPageObject(object.Body) {
+			pages = append(pages, object)
+		}
+	}
+	return pages
+}
+
+func pdfCatalogPagesRef(objects []pdfObject) (string, bool) {
+	for _, object := range objects {
+		if !pdfCatalogTypePattern.Match(object.Body) {
+			continue
+		}
+		match := pdfPagesRootRefPattern.FindSubmatch(object.Body)
+		if len(match) == 3 {
+			return string(match[1]) + " " + string(match[2]), true
+		}
+	}
+	return "", false
+}
+
+func collectPDFPageRefs(ref string, objects map[string]pdfObject, seen map[string]struct{}) []string {
+	if _, ok := seen[ref]; ok {
+		return nil
+	}
+	seen[ref] = struct{}{}
+	object, ok := objects[ref]
+	if !ok {
+		return nil
+	}
+	if isPDFPageObject(object.Body) {
+		return []string{ref}
+	}
+	var refs []string
+	for _, childRef := range pdfObjectKidsRefs(object.Body) {
+		refs = append(refs, collectPDFPageRefs(childRef, objects, seen)...)
+	}
+	return refs
+}
+
+func extractPDFPageText(pageBody []byte, objects map[string]pdfObject) string {
+	refs := pdfPageContentRefs(pageBody)
+	parts := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		object, ok := objects[ref]
+		if !ok {
+			continue
+		}
+		if stream, ok := extractPDFObjectStream(object.Body); ok {
+			if text := extractPDFText(stream); text != "" {
+				parts = append(parts, text)
+			}
+			continue
+		}
+		if text := extractPDFText(object.Body); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "\n")
+	}
+	if stream, ok := extractPDFObjectStream(pageBody); ok {
+		return extractPDFText(stream)
+	}
+	return ""
+}
+
+func pdfPageContentRefs(body []byte) []string {
+	return pdfObjectRefsForPattern(body, pdfContentsArrayPattern, pdfContentsRefPattern)
+}
+
+func pdfObjectKidsRefs(body []byte) []string {
+	return pdfObjectRefsForPattern(body, pdfKidsArrayPattern, nil)
+}
+
+func pdfObjectRefsForPattern(body []byte, arrayPattern *regexp.Regexp, singlePattern *regexp.Regexp) []string {
+	var refs []string
+	for _, match := range arrayPattern.FindAllSubmatch(body, -1) {
+		for _, refMatch := range pdfIndirectRefPattern.FindAllSubmatch(match[1], -1) {
+			refs = append(refs, string(refMatch[1])+" "+string(refMatch[2]))
+		}
+	}
+	if singlePattern != nil {
+		for _, match := range singlePattern.FindAllSubmatch(body, -1) {
+			refs = append(refs, string(match[1])+" "+string(match[2]))
+		}
+	}
+	return refs
 }
 
 func extractPDFStreams(data []byte) [][]byte {
@@ -187,11 +369,35 @@ func extractPDFStreams(data []byte) [][]byte {
 		}
 		streamEnd := contentStart + streamEndRel
 		raw := bytes.TrimRight(data[contentStart:streamEnd], "\r\n")
-		dict := pdfStreamDictionary(data[:streamStart])
+		dict := pdfStreamDictionary(data[offset:streamStart])
 		streams = append(streams, decodePDFStream(raw, dict))
 		offset = streamEnd + len("endstream")
 	}
 	return streams
+}
+
+func extractPDFObjectStream(body []byte) ([]byte, bool) {
+	streamStart := bytes.Index(body, []byte("stream"))
+	if streamStart < 0 {
+		return nil, false
+	}
+	contentStart := streamStart + len("stream")
+	if contentStart < len(body) && body[contentStart] == '\r' {
+		contentStart++
+		if contentStart < len(body) && body[contentStart] == '\n' {
+			contentStart++
+		}
+	} else if contentStart < len(body) && body[contentStart] == '\n' {
+		contentStart++
+	}
+	streamEndRel := bytes.Index(body[contentStart:], []byte("endstream"))
+	if streamEndRel < 0 {
+		return nil, false
+	}
+	streamEnd := contentStart + streamEndRel
+	raw := bytes.TrimRight(body[contentStart:streamEnd], "\r\n")
+	dictionary := pdfStreamDictionary(body[:streamStart])
+	return decodePDFStream(raw, dictionary), true
 }
 
 func pdfStreamDictionary(prefix []byte) []byte {

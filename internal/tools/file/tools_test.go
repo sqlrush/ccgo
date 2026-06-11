@@ -1,12 +1,15 @@
 package filetools
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +172,49 @@ endobj
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "pages are only supported for PDF files") {
 		t.Fatalf("non-PDF pages err = %v", err)
+	}
+}
+
+func TestReadPDFExtractsReferencedCompressedPageContent(t *testing.T) {
+	dir := t.TempDir()
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	if _, err := writer.Write([]byte("BT\n(Compressed second) Tj\nET")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var pdf bytes.Buffer
+	pdf.WriteString("%PDF-1.4\n")
+	pdf.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	pdf.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n")
+	pdf.WriteString("4 0 obj\n<< /Type /Page /Contents 6 0 R >>\nendobj\n")
+	pdf.WriteString("3 0 obj\n<< /Type /Page /Contents 5 0 R >>\nendobj\n")
+	pdf.WriteString("5 0 obj\n<< /Length 24 >>\nstream\nBT\n(Referenced first) Tj\nET\nendstream\nendobj\n")
+	pdf.WriteString("6 0 obj\n<< /Length ")
+	pdf.WriteString(strconv.Itoa(compressed.Len()))
+	pdf.WriteString(" /Filter /FlateDecode >>\nstream\n")
+	pdf.Write(compressed.Bytes())
+	pdf.WriteString("\nendstream\nendobj\n%%EOF")
+	if err := os.WriteFile(filepath.Join(dir, "referenced.pdf"), pdf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_pdf_referenced",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"referenced.pdf","pages":"1-2"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := result.Content.(string)
+	if !strings.Contains(content, "Page 1:\nReferenced first") || !strings.Contains(content, "Page 2:\nCompressed second") {
+		t.Fatalf("referenced PDF content = %#v", content)
+	}
+	if result.StructuredContent["pageCount"] != 2 || result.StructuredContent["text"] != "Referenced first\n\nCompressed second" {
+		t.Fatalf("referenced PDF structured = %#v", result.StructuredContent)
 	}
 }
 
