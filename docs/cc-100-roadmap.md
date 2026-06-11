@@ -1048,6 +1048,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：terminal tokenizer、OSC parser、string-control dispatcher 和 visible-text stripping 现在接受 8-bit C1 OSC/DCS/APC/PM/SOS 以及 C1 ST (`0x9c`) 终止符，同时保留合法 UTF-8 continuation byte，不会把 emoji/CJK 文本误切成控制串。
 
+本轮补充：terminal tokenizer、sequence dispatcher、ESC parser 和 visible-text stripping 现在接受 C1 `IND`/`NEL`/`HTS`/`RI` (`0x84`/`0x85`/`0x88`/`0x8d`) 单字节控制，按 `ESC D`/`ESC E`/`ESC H`/`ESC M` 等价语义映射到 cursor/tab-set action，避免这些终端控制字节泄漏为可见文本。
+
 本轮补充：message renderer 增加 ANSI-aware wrapping/padding，带 SGR 的 message text 会通过 terminal parser 按 grapheme 可见宽度换行，并把 `TextStyle` action 重新渲染为 SGR 序列，避免 escape bytes 参与 layout 宽度计算；普通文本路径保持不变。
 
 本轮补充：基础 wrap/pad/trim 改为按 terminal grapheme 可见宽度计算，普通 message、status/dialog/viewport/prompt 的 CJK/emoji 宽字符不再按单 rune 宽度参与布局，继续向 terminal column parity 收口。

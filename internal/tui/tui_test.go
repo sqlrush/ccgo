@@ -5980,6 +5980,10 @@ func TestParseESCSequenceActions(t *testing.T) {
 		{seq: ESCReverseIndex, want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorUp, Count: 1}},
 		{seq: ESCNextLine, want: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}},
 		{seq: ESCTabSet, want: CSICursorAction{Type: CSICursorActionTabSet}},
+		{seq: "\x84", want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorDown, Count: 1}},
+		{seq: "\x8d", want: CSICursorAction{Type: CSICursorActionMove, Direction: CSICursorUp, Count: 1}},
+		{seq: "\x85", want: CSICursorAction{Type: CSICursorActionNextLine, Count: 1}},
+		{seq: "\x88", want: CSICursorAction{Type: CSICursorActionTabSet}},
 	}
 	for _, tc := range cursorCases {
 		action, ok := ParseESCSequence(tc.seq)
@@ -6002,6 +6006,11 @@ func TestParseESCSequenceActions(t *testing.T) {
 	actions = parser.Feed(ESCDeviceAttributes)
 	if len(actions) != 1 || actions[0].Type != TerminalActionReport || actions[0].Report.Type != CSIReportActionDeviceAttrs {
 		t.Fatalf("terminal parser device attributes actions = %#v", actions)
+	}
+
+	actions = parser.Feed("a\x84b\x85c\x8dd\x88e")
+	if visible := TerminalActionsVisibleText(actions); visible != "abcde" {
+		t.Fatalf("c1 esc visible text = %q actions=%#v", visible, actions)
 	}
 
 	unknown, ok := ParseESCContent("]not-osc")

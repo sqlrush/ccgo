@@ -13,6 +13,10 @@ const (
 	terminalPM  = byte(0x9e)
 	terminalAPC = byte(0x9f)
 	terminalSOS = byte(0x98)
+	terminalIND = byte(0x84)
+	terminalNEL = byte(0x85)
+	terminalHTS = byte(0x88)
+	terminalRI  = byte(0x8d)
 
 	escTypeCSI = byte('[')
 	escTypeOSC = byte(']')
@@ -136,6 +140,11 @@ func tokenizeTerminal(input string, initialState TerminalTokenizerState, initial
 		case terminalTokenizerGround:
 			if size := terminalUTF8TextRuneSize(data, i); size > 0 {
 				i += size
+			} else if isC1ESCControlByte(code) {
+				flushText()
+				seqStart = i
+				i++
+				emitSequence(data[seqStart:i])
 			} else if code == terminalESC {
 				flushText()
 				seqStart = i
@@ -322,4 +331,13 @@ func terminalUTF8TextRuneSize(data string, index int) int {
 		return 0
 	}
 	return size
+}
+
+func isC1ESCControlByte(code byte) bool {
+	switch code {
+	case terminalIND, terminalNEL, terminalHTS, terminalRI:
+		return true
+	default:
+		return false
+	}
 }

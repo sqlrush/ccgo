@@ -41,6 +41,25 @@ func TestTerminalTokenizerFeedsC1CSISequencesAcrossChunks(t *testing.T) {
 	}
 }
 
+func TestTerminalTokenizerEmitsC1ESCControlBytes(t *testing.T) {
+	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
+	tokens := tokenizer.Feed("a\x84b\x85c\x8dd\x88e")
+	want := []TerminalToken{
+		{Type: TerminalTokenText, Value: "a"},
+		{Type: TerminalTokenSequence, Value: "\x84"},
+		{Type: TerminalTokenText, Value: "b"},
+		{Type: TerminalTokenSequence, Value: "\x85"},
+		{Type: TerminalTokenText, Value: "c"},
+		{Type: TerminalTokenSequence, Value: "\x8d"},
+		{Type: TerminalTokenText, Value: "d"},
+		{Type: TerminalTokenSequence, Value: "\x88"},
+		{Type: TerminalTokenText, Value: "e"},
+	}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Fatalf("c1 esc tokens=%#v", tokens)
+	}
+}
+
 func TestTerminalTokenizerFlushesIncompleteSequences(t *testing.T) {
 	tokenizer := NewTerminalTokenizer(TerminalTokenizerOptions{})
 	if tokens := tokenizer.Feed("a\x1b[?"); !reflect.DeepEqual(tokens, []TerminalToken{{Type: TerminalTokenText, Value: "a"}}) {

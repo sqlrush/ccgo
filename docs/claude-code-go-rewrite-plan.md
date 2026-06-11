@@ -468,6 +468,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：terminal CSI parser 把 DEC `?69h/l` left/right margin mode 解析成结构化 `leftRightMarginMode` mode action，补齐 scroll-region 相邻的 margin 状态序列。
 - 本轮补充：terminal CSI parser 现在把带参数的 `CSI Pl;Pr s` 解析成 left/right horizontal margin region action，同时保留无参数 `CSI s` save-cursor 语义，和 DEC `?69h/l` margin mode 闭环。
 - 本轮补充：terminal CSI parser 现在识别带 intermediate space 的 `CSI Ps SP @` / `CSI Ps SP A` scroll-left/right 序列，避免误解析成 insert-characters 或 cursor-up。
+- 本轮补充：terminal tokenizer/dispatcher/parser 现在接受 C1 单字节 ESC 等价控制 `IND`/`NEL`/`HTS`/`RI` (`0x84`/`0x85`/`0x88`/`0x8d`)，映射到已有 `ESC D`/`ESC E`/`ESC H`/`ESC M` cursor/tab-set 动作，并在 visible-text 提取时消费这些控制字节。
 - 本轮补充：terminal ESC parser 现在把 charset selection (`ESC ( B` / `ESC ) 0` / `ESC * B` / `ESC / A` / `ESC % G` 等) 解析成结构化 charset action，并在 terminal parser 可见文本管线中消费，避免常见终端 charset 选择序列残留为 unknown。
 - 本轮补充：terminal ESC parser 现在也把 ISO-2022 charset shift 控制 (`ESC N`、`ESC n`、`ESC o`、`ESC |`、`ESC }`、`ESC ~`) 解析成结构化 charset-shift action，并在可见文本管线中消费，继续减少真实终端输出里的 unknown 控制序列。
 - 本轮补充：terminal ESC parser 现在把 DEC line/screen attribute (`ESC # 3/4/5/6/8`) 解析成结构化 screen action，terminal parser 会透传 double-height top/bottom、single/double-width 和 alignment-test 控制。

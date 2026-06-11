@@ -47,6 +47,9 @@ func IdentifyTerminalSequence(sequence string) TerminalSequenceType {
 	if strings.HasPrefix(sequence, C1CSIPrefix) {
 		return TerminalSequenceCSI
 	}
+	if _, ok := c1ESCContent(sequence); ok {
+		return TerminalSequenceESC
+	}
 	if strings.HasPrefix(sequence, C1OSCPrefix) {
 		return TerminalSequenceOSC
 	}

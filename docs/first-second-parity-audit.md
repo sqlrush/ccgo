@@ -560,6 +560,7 @@ M7 progress now includes:
 - `internal/compact`: microcompact provider and cache summary extraction now unwraps inline fenced JSON payloads where the fence language and JSON object are on the same line, including glued `json{...}` fences, so SDK/model outputs no longer preserve the whole code fence as visible summary text.
 - `internal/compact`: microcompact count field loading now accepts whole-number JSON numbers and whole-number numeric strings, while fractional count values still fail validation.
 - `internal/compact`: microcompact string-like cache fields such as digest/cache key and version now accept JSON numbers by preserving their original numeric text as the stored string value.
+- `internal/tui`: terminal tokenizer, sequence dispatcher, ESC parser, and visible-text stripping now accept C1 `IND`/`NEL`/`HTS`/`RI` (`0x84`/`0x85`/`0x88`/`0x8d`) single-byte controls, mapping them to the existing `ESC D`/`ESC E`/`ESC H`/`ESC M` cursor/tab-set semantics.
 
 Still missing for full M6/M7 parity:
 

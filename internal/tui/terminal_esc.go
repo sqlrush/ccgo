@@ -11,6 +11,10 @@ const (
 	ESCReverseIndex              = "\x1bM"
 	ESCNextLine                  = "\x1bE"
 	ESCTabSet                    = "\x1bH"
+	C1Index                      = "\x84"
+	C1NextLine                   = "\x85"
+	C1TabSet                     = "\x88"
+	C1ReverseIndex               = "\x8d"
 	ESCDeviceAttributes          = "\x1bZ"
 	ESCScreenAttributes          = '#'
 	ESCFinalStart                = 0x30
@@ -76,10 +80,28 @@ func IsESCFinal(b byte) bool {
 }
 
 func ParseESCSequence(sequence string) (ESCAction, bool) {
+	if chars, ok := c1ESCContent(sequence); ok {
+		return ParseESCContent(chars)
+	}
 	if !strings.HasPrefix(sequence, ESCPrefix) || strings.HasPrefix(sequence, CSIPrefix) || strings.HasPrefix(sequence, OSCPrefix) {
 		return ESCAction{}, false
 	}
 	return ParseESCContent(strings.TrimPrefix(sequence, ESCPrefix))
+}
+
+func c1ESCContent(sequence string) (string, bool) {
+	switch sequence {
+	case C1Index:
+		return "D", true
+	case C1NextLine:
+		return "E", true
+	case C1TabSet:
+		return "H", true
+	case C1ReverseIndex:
+		return "M", true
+	default:
+		return "", false
+	}
 }
 
 func ParseESCContent(chars string) (ESCAction, bool) {
