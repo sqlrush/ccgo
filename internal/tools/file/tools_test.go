@@ -420,6 +420,12 @@ func TestNotebookEditReplacesCodeCellAndClearsOutputs(t *testing.T) {
 	if result.StructuredContent["edit_mode"] != "replace" || result.StructuredContent["cell_id"] != "code-a" || result.StructuredContent["cell_type"] != "code" {
 		t.Fatalf("structured content = %#v", result.StructuredContent)
 	}
+	if diff := result.StructuredContent["diff"].(string); !strings.Contains(diff, "-print('old')") || !strings.Contains(diff, "+print('new')") {
+		t.Fatalf("notebook edit diff = %#v", diff)
+	}
+	if hunks := result.StructuredContent["hunks"].([]map[string]any); len(hunks) != 1 {
+		t.Fatalf("notebook edit hunks = %#v", hunks)
+	}
 	var updated map[string]any
 	if err := readJSONFile(path, &updated); err != nil {
 		t.Fatal(err)

@@ -788,10 +788,12 @@ func callNotebookEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink
 		}
 	}
 	cellType := input.CellType
+	oldSource := ""
 	if mode == "delete" {
 		if cellIndex < 0 || cellIndex >= len(cells) {
 			return contracts.ToolResult{}, fmt.Errorf("Cell with index %d does not exist in notebook.", cellIndex)
 		}
+		oldSource = notebookCellSource(cells[cellIndex])
 		if cell, ok := cells[cellIndex].(map[string]any); ok && cellType == "" {
 			cellType, _ = cell["cell_type"].(string)
 		}
@@ -816,6 +818,7 @@ func callNotebookEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink
 		if !ok {
 			return contracts.ToolResult{}, fmt.Errorf("Cell with index %d is not a notebook cell object.", cellIndex)
 		}
+		oldSource = notebookCellSource(cell)
 		if cellType == "" {
 			cellType, _ = cell["cell_type"].(string)
 			if cellType == "" {
@@ -847,6 +850,15 @@ func callNotebookEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink
 		}
 	}
 	language := notebookLanguage(notebook)
+	diffTarget := targetCellID
+	if diffTarget == "" {
+		diffTarget = fmt.Sprintf("cell-%d", cellIndex)
+	}
+	newDiffSource := input.NewSource
+	if mode == "delete" {
+		newDiffSource = ""
+	}
+	diff := buildTextDiff(fmt.Sprintf("%s:%s", input.NotebookPath, diffTarget), oldSource, newDiffSource)
 	message := fmt.Sprintf("Updated notebook %s cell %s.", input.NotebookPath, targetCellID)
 	if mode == "insert" {
 		message = fmt.Sprintf("Inserted notebook cell %s in %s.", targetCellID, input.NotebookPath)
@@ -865,6 +877,8 @@ func callNotebookEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink
 			"notebook_path": path,
 			"original_file": content,
 			"updated_file":  updated,
+			"diff":          diff.Unified,
+			"hunks":         diff.Hunks,
 		},
 	}, nil
 }
@@ -996,6 +1010,14 @@ func newNotebookCell(cellType string, source string, id string) map[string]any {
 		cell["outputs"] = []any{}
 	}
 	return cell
+}
+
+func notebookCellSource(cellValue any) string {
+	cell, ok := cellValue.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return notebookText(cell["source"])
 }
 
 func notebookSupportsCellID(notebook map[string]any) bool {
