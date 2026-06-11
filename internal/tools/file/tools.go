@@ -13,6 +13,7 @@ import (
 	"ccgo/internal/memory"
 	"ccgo/internal/permissions"
 	"ccgo/internal/tool"
+	bashtools "ccgo/internal/tools/bash"
 	todotools "ccgo/internal/tools/todo"
 )
 
@@ -118,7 +119,7 @@ func NewEditTool() tool.Tool {
 }
 
 func BuiltinTools() []tool.Tool {
-	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool()}
+	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), bashtools.NewBashTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool()}
 }
 
 func validateRead(ctx tool.Context, raw json.RawMessage) error {
