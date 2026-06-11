@@ -56,15 +56,20 @@ func (e *SessionEntry) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
 	*e = SessionEntry(base)
-	if entryType := firstSessionEntryType(string(e.Type), aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role); entryType != "" {
+	if entryType := firstSessionEntryType(string(e.Type), aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role, stringJSONField(fields, "type", "entryType", "entry_type", "messageType", "message_type", "role")); entryType != "" {
 		e.Type = entryType
 	}
 	if e.UUID == "" {
-		e.UUID = firstSessionEntryID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake, aux.ID)
+		e.UUID = firstSessionEntryID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake, aux.ID, ID(idJSONField(fields, "uuid", "messageUuid", "messageUUID", "message_uuid", "messageId", "messageID", "message_id", "id")))
 	}
 	if e.ParentUUID == nil {
 		e.ParentUUID = firstSessionEntryIDPtr(
+			idJSONFieldPtr(fields, "parentUuid", "parentUUID", "parent_uuid", "parentId", "parentID", "parent_id", "parentMessageId", "parentMessageID", "parent_message_id", "parentMessageUuid", "parentMessageUUID", "parent_message_uuid"),
 			aux.ParentUUIDUpper,
 			aux.ParentUUIDSnake,
 			aux.ParentID,
@@ -79,7 +84,10 @@ func (e *SessionEntry) UnmarshalJSON(data []byte) error {
 		)
 	}
 	if e.SessionID == "" {
-		e.SessionID = firstSessionEntryID(aux.SessionIDUpper, aux.SessionIDSnake, aux.Session, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake)
+		e.SessionID = firstSessionEntryID(aux.SessionIDUpper, aux.SessionIDSnake, aux.Session, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake, ID(idJSONField(fields, "sessionId", "sessionID", "session_id", "session", "sessionUuid", "sessionUUID", "session_uuid")))
+	}
+	if e.Timestamp == "" {
+		e.Timestamp = stringJSONField(fields, "timestamp", "createdAt", "created_at", "time")
 	}
 	return nil
 }

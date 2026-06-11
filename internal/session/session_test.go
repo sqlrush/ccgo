@@ -53,3 +53,28 @@ func TestLoadAcceptsSessionEntryAliases(t *testing.T) {
 		t.Fatalf("aliased nested message = %#v", entry.Message)
 	}
 }
+
+func TestLoadAcceptsNormalizedSessionEntryAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	line := `{"Entry Type":"assistant-message","Message-ID":202,"Parent Message ID":201,"Session-ID":"sess_norm","Created At":"2026-01-01T00:00:02Z","message":{"Message-Type":"assistant-message","Message Text":"done"}}`
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v", entries)
+	}
+	entry := entries[0]
+	if entry.Type != contracts.MessageAssistant || entry.UUID != "202" || entry.ParentUUID == nil || *entry.ParentUUID != "201" {
+		t.Fatalf("normalized entry IDs = %#v", entry)
+	}
+	if entry.SessionID != "sess_norm" || entry.Timestamp != "2026-01-01T00:00:02Z" {
+		t.Fatalf("normalized entry metadata = %#v", entry)
+	}
+	if entry.Message == nil || entry.Message.Type != contracts.MessageAssistant || len(entry.Message.Content) != 1 || entry.Message.Content[0].Text != "done" {
+		t.Fatalf("normalized nested message = %#v", entry.Message)
+	}
+}
