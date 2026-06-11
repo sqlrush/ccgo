@@ -21,6 +21,322 @@ const (
 	maxTimeoutMillis     = 600_000
 )
 
+var gitStatAllowedFlags = map[string]bool{
+	"--stat":        true,
+	"--numstat":     true,
+	"--shortstat":   true,
+	"--name-only":   true,
+	"--name-status": true,
+}
+
+var gitColorAllowedFlags = map[string]bool{
+	"--color":    true,
+	"--no-color": true,
+}
+
+var gitPatchAllowedFlags = map[string]bool{
+	"--patch":       true,
+	"-p":            true,
+	"--no-patch":    true,
+	"--no-ext-diff": true,
+	"-s":            true,
+}
+
+var gitRefSelectionAllowedFlags = map[string]bool{
+	"--all":      true,
+	"--branches": true,
+	"--tags":     true,
+	"--remotes":  true,
+}
+
+var gitDateFilterFlagsWithArgs = map[string]bool{
+	"--since":  true,
+	"--after":  true,
+	"--until":  true,
+	"--before": true,
+}
+
+var gitLogDisplayAllowedFlags = map[string]bool{
+	"--oneline":       true,
+	"--graph":         true,
+	"--decorate":      true,
+	"--no-decorate":   true,
+	"--relative-date": true,
+}
+
+var gitLogDisplayFlagsWithArgs = map[string]bool{
+	"--date": true,
+}
+
+var gitCountFlagsWithArgs = map[string]bool{
+	"--max-count": true,
+	"-n":          true,
+}
+
+var gitAuthorFilterFlagsWithArgs = map[string]bool{
+	"--author":    true,
+	"--committer": true,
+	"--grep":      true,
+}
+
+var gitDiffAllowedFlags = mergeBoolMaps(
+	gitStatAllowedFlags,
+	gitColorAllowedFlags,
+	map[string]bool{
+		"--dirstat":             true,
+		"--summary":             true,
+		"--patch-with-stat":     true,
+		"--word-diff":           true,
+		"--color-words":         true,
+		"--no-renames":          true,
+		"--no-ext-diff":         true,
+		"--check":               true,
+		"--full-index":          true,
+		"--binary":              true,
+		"--break-rewrites":      true,
+		"--find-renames":        true,
+		"--find-copies":         true,
+		"--find-copies-harder":  true,
+		"--irreversible-delete": true,
+		"--histogram":           true,
+		"--patience":            true,
+		"--minimal":             true,
+		"--ignore-space-at-eol": true,
+		"--ignore-space-change": true,
+		"--ignore-all-space":    true,
+		"--ignore-blank-lines":  true,
+		"--function-context":    true,
+		"--exit-code":           true,
+		"--quiet":               true,
+		"--cached":              true,
+		"--staged":              true,
+		"--pickaxe-regex":       true,
+		"--pickaxe-all":         true,
+		"--no-index":            true,
+		"-p":                    true,
+		"-u":                    true,
+		"-s":                    true,
+		"-M":                    true,
+		"-C":                    true,
+		"-B":                    true,
+		"-D":                    true,
+		"-l":                    true,
+		"-R":                    true,
+	},
+)
+
+var gitDiffFlagsWithArgs = map[string]bool{
+	"--word-diff-regex":    true,
+	"--ws-error-highlight": true,
+	"--abbrev":             true,
+	"--diff-algorithm":     true,
+	"--inter-hunk-context": true,
+	"--relative":           true,
+	"--diff-filter":        true,
+	"-S":                   true,
+	"-G":                   true,
+	"-O":                   true,
+}
+
+var gitLogAllowedFlags = mergeBoolMaps(
+	gitLogDisplayAllowedFlags,
+	gitRefSelectionAllowedFlags,
+	gitStatAllowedFlags,
+	gitColorAllowedFlags,
+	gitPatchAllowedFlags,
+	map[string]bool{
+		"--abbrev-commit":     true,
+		"--full-history":      true,
+		"--dense":             true,
+		"--sparse":            true,
+		"--simplify-merges":   true,
+		"--ancestry-path":     true,
+		"--source":            true,
+		"--first-parent":      true,
+		"--merges":            true,
+		"--no-merges":         true,
+		"--reverse":           true,
+		"--walk-reflogs":      true,
+		"--no-min-parents":    true,
+		"--no-max-parents":    true,
+		"--follow":            true,
+		"--no-walk":           true,
+		"--left-right":        true,
+		"--cherry-mark":       true,
+		"--cherry-pick":       true,
+		"--boundary":          true,
+		"--topo-order":        true,
+		"--date-order":        true,
+		"--author-date-order": true,
+		"--pickaxe-regex":     true,
+		"--pickaxe-all":       true,
+	},
+)
+
+var gitLogFlagsWithArgs = mergeBoolMaps(
+	gitLogDisplayFlagsWithArgs,
+	gitDateFilterFlagsWithArgs,
+	gitCountFlagsWithArgs,
+	gitAuthorFilterFlagsWithArgs,
+	map[string]bool{
+		"--skip":        true,
+		"--max-age":     true,
+		"--min-age":     true,
+		"--pretty":      true,
+		"--format":      true,
+		"--diff-filter": true,
+		"-S":            true,
+		"-G":            true,
+	},
+)
+
+var gitShowAllowedFlags = mergeBoolMaps(
+	gitLogDisplayAllowedFlags,
+	gitStatAllowedFlags,
+	gitColorAllowedFlags,
+	gitPatchAllowedFlags,
+	map[string]bool{
+		"--abbrev-commit": true,
+		"--word-diff":     true,
+		"--color-words":   true,
+		"--first-parent":  true,
+		"--raw":           true,
+		"-m":              true,
+		"--quiet":         true,
+	},
+)
+
+var gitShowFlagsWithArgs = mergeBoolMaps(
+	gitLogDisplayFlagsWithArgs,
+	map[string]bool{
+		"--word-diff-regex": true,
+		"--pretty":          true,
+		"--format":          true,
+		"--diff-filter":     true,
+	},
+)
+
+var gitStatusAllowedFlags = map[string]bool{
+	"--short":           true,
+	"-s":                true,
+	"--branch":          true,
+	"-b":                true,
+	"--porcelain":       true,
+	"--long":            true,
+	"--verbose":         true,
+	"-v":                true,
+	"--ignored":         true,
+	"--column":          true,
+	"--no-column":       true,
+	"--ahead-behind":    true,
+	"--no-ahead-behind": true,
+	"--renames":         true,
+	"--no-renames":      true,
+}
+
+var gitStatusFlagsWithArgs = map[string]bool{
+	"--untracked-files":   true,
+	"-u":                  true,
+	"--ignore-submodules": true,
+	"--find-renames":      true,
+	"-M":                  true,
+}
+
+var gitLsFilesAllowedFlags = map[string]bool{
+	"--cached":             true,
+	"-c":                   true,
+	"--deleted":            true,
+	"-d":                   true,
+	"--modified":           true,
+	"-m":                   true,
+	"--others":             true,
+	"-o":                   true,
+	"--ignored":            true,
+	"-i":                   true,
+	"--stage":              true,
+	"-s":                   true,
+	"--killed":             true,
+	"-k":                   true,
+	"--unmerged":           true,
+	"-u":                   true,
+	"--directory":          true,
+	"--no-empty-directory": true,
+	"--eol":                true,
+	"--full-name":          true,
+	"--debug":              true,
+	"-z":                   true,
+	"-t":                   true,
+	"-v":                   true,
+	"-f":                   true,
+	"--exclude-standard":   true,
+	"--error-unmatch":      true,
+	"--recurse-submodules": true,
+}
+
+var gitLsFilesFlagsWithArgs = map[string]bool{
+	"--abbrev":                true,
+	"--exclude":               true,
+	"-x":                      true,
+	"--exclude-from":          true,
+	"-X":                      true,
+	"--exclude-per-directory": true,
+}
+
+var gitGrepAllowedFlags = map[string]bool{
+	"-E":                    true,
+	"--extended-regexp":     true,
+	"-G":                    true,
+	"--basic-regexp":        true,
+	"-F":                    true,
+	"--fixed-strings":       true,
+	"-P":                    true,
+	"--perl-regexp":         true,
+	"-i":                    true,
+	"--ignore-case":         true,
+	"-v":                    true,
+	"--invert-match":        true,
+	"-w":                    true,
+	"--word-regexp":         true,
+	"-n":                    true,
+	"--line-number":         true,
+	"-c":                    true,
+	"--count":               true,
+	"-l":                    true,
+	"--files-with-matches":  true,
+	"-L":                    true,
+	"--files-without-match": true,
+	"-h":                    true,
+	"-H":                    true,
+	"--heading":             true,
+	"--break":               true,
+	"--full-name":           true,
+	"--color":               true,
+	"--no-color":            true,
+	"-o":                    true,
+	"--only-matching":       true,
+	"--and":                 true,
+	"--or":                  true,
+	"--not":                 true,
+	"--untracked":           true,
+	"--no-index":            true,
+	"--recurse-submodules":  true,
+	"--cached":              true,
+	"-q":                    true,
+	"--quiet":               true,
+}
+
+var gitGrepFlagsWithArgs = map[string]bool{
+	"-e":               true,
+	"-A":               true,
+	"--after-context":  true,
+	"-B":               true,
+	"--before-context": true,
+	"-C":               true,
+	"--context":        true,
+	"--max-depth":      true,
+	"--threads":        true,
+}
+
 var gitReflogFlagsWithArgs = map[string]bool{
 	"-n":          true,
 	"--max-count": true,
@@ -1069,7 +1385,19 @@ func readOnlyGit(words []string) bool {
 		return false
 	}
 	switch words[1] {
-	case "status", "diff", "log", "show", "rev-parse", "ls-files", "grep":
+	case "diff":
+		return argsAllowPositionals(words[2:], gitDiffAllowedFlags, gitDiffFlagsWithArgs, -1)
+	case "log":
+		return argsAllowPositionals(words[2:], gitLogAllowedFlags, gitLogFlagsWithArgs, -1)
+	case "show":
+		return argsAllowPositionals(words[2:], gitShowAllowedFlags, gitShowFlagsWithArgs, -1)
+	case "status":
+		return argsAllowPositionals(words[2:], gitStatusAllowedFlags, gitStatusFlagsWithArgs, -1)
+	case "ls-files":
+		return argsAllowPositionals(words[2:], gitLsFilesAllowedFlags, gitLsFilesFlagsWithArgs, -1)
+	case "grep":
+		return argsAllowPositionals(words[2:], gitGrepAllowedFlags, gitGrepFlagsWithArgs, -1)
+	case "rev-parse":
 		return true
 	case "branch":
 		return readOnlyGitBranch(words[2:])
@@ -1369,6 +1697,16 @@ func argsAllowPositionals(args []string, allowedFlags map[string]bool, flagsWith
 		}
 	}
 	return true
+}
+
+func mergeBoolMaps(maps ...map[string]bool) map[string]bool {
+	merged := map[string]bool{}
+	for _, entries := range maps {
+		for key, value := range entries {
+			merged[key] = value
+		}
+	}
+	return merged
 }
 
 func hasRecursiveFlag(words []string) bool {
