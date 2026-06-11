@@ -245,9 +245,6 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if before < 0 || after < 0 {
 		return fmt.Errorf("context values must be non-negative")
 	}
-	if mode != "content" && (before > 0 || after > 0) {
-		return fmt.Errorf("context is only supported with output_mode content")
-	}
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	if isBlockedDevicePath(root) {
 		return fmt.Errorf("cannot search %q: this device path would block or produce infinite output", input.Path)
@@ -267,6 +264,10 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	mode := normalizedGrepOutputMode(input)
 	before, after := grepContextLines(input)
+	if mode != "content" {
+		before = 0
+		after = 0
+	}
 	options := grepOptions{
 		Mode:          mode,
 		Limit:         grepLimit(input),

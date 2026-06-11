@@ -993,13 +993,16 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 		t.Fatalf("short case-insensitive result = %#v", shortResult)
 	}
 
-	_, err = executor.Execute(ctx, contracts.ToolUse{
-		ID:    "toolu_grep_bad_context",
+	ignoredContextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignored_context",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"alpha","context":1}`),
+		Input: json.RawMessage(`{"pattern":"Alpha","context":1}`),
 	}, nil)
-	if err == nil || !strings.Contains(err.Error(), "context is only supported with output_mode content") {
-		t.Fatalf("context validation err = %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ignoredContextResult.Content != "mixed.txt" || ignoredContextResult.StructuredContent["before_context"] != 0 || ignoredContextResult.StructuredContent["after_context"] != 0 {
+		t.Fatalf("ignored context result = %#v", ignoredContextResult)
 	}
 }
 
