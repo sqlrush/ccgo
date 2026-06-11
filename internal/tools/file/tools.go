@@ -43,12 +43,13 @@ type editInput struct {
 func NewReadTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
-			Name:            "Read",
-			Description:     "Read a file from the local filesystem.",
-			SearchHint:      "read files",
-			ReadOnly:        true,
-			ConcurrencySafe: true,
-			Strict:          true,
+			Name:               "Read",
+			Description:        "Read a file from the local filesystem.",
+			SearchHint:         "read files",
+			ReadOnly:           true,
+			ConcurrencySafe:    true,
+			Strict:             true,
+			MaxResultSizeChars: 100_000,
 			InputSchema: contracts.JSONSchema{
 				"type":     "object",
 				"required": []any{"file_path"},

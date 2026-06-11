@@ -132,6 +132,38 @@ func TestReadToolRejectsImageOffsetLimit(t *testing.T) {
 	}
 }
 
+func TestReadToolLargeTextUsesResultBudget(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Repeat("0123456789\n", 12_000)
+	if err := os.WriteFile(filepath.Join(dir, "large.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	executor.ResultStoreDir = filepath.Join(dir, "tool-results")
+	result, err := executor.Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_read_large",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"large.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, ok := result.Content.(string)
+	if !ok || !strings.Contains(text, "[Tool output truncated; full output saved to ") {
+		t.Fatalf("large read content = %#v", result.Content)
+	}
+	if result.Meta["truncated"] != true {
+		t.Fatalf("large read meta = %#v", result.Meta)
+	}
+	fullPath, ok := result.Meta["full_output_path"].(string)
+	if !ok || fullPath == "" {
+		t.Fatalf("full output path meta = %#v", result.Meta)
+	}
+	if _, err := os.Stat(fullPath); err != nil {
+		t.Fatalf("full output file missing: %v", err)
+	}
+}
+
 func TestReadToolPrefixesAutoMemoryFreshnessNote(t *testing.T) {
 	dir := t.TempDir()
 	autoMemoryDir := filepath.Join(dir, "memory")
