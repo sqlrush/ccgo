@@ -1234,7 +1234,8 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if noLineNumberResult.Content != "a.txt:Needle first" || noLineNumberResult.StructuredContent["line_numbers"] != false {
+	wantNoLineNumber := "a.txt:Needle first\n\n[Showing results with pagination = limit: 1]"
+	if noLineNumberResult.Content != wantNoLineNumber || noLineNumberResult.StructuredContent["line_numbers"] != false {
 		t.Fatalf("no-line-number content = %#v", noLineNumberResult)
 	}
 
@@ -1246,7 +1247,7 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snakeLineNumberResult.Content != "a.txt:Needle first" || snakeLineNumberResult.StructuredContent["line_numbers"] != false {
+	if snakeLineNumberResult.Content != wantNoLineNumber || snakeLineNumberResult.StructuredContent["line_numbers"] != false {
 		t.Fatalf("line_numbers alias result = %#v", snakeLineNumberResult)
 	}
 
@@ -1258,7 +1259,7 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if camelLineNumberResult.Content != "a.txt:Needle first" || camelLineNumberResult.StructuredContent["line_numbers"] != false {
+	if camelLineNumberResult.Content != wantNoLineNumber || camelLineNumberResult.StructuredContent["line_numbers"] != false {
 		t.Fatalf("lineNumbers alias result = %#v", camelLineNumberResult)
 	}
 
@@ -1286,7 +1287,8 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pagedResult.Content != "a.txt:5:Needle second" {
+	wantPaged := "a.txt:5:Needle second\n\n[Showing results with pagination = offset: 1]"
+	if pagedResult.Content != wantPaged {
 		t.Fatalf("paged content = %#v", pagedResult.Content)
 	}
 	if pagedResult.StructuredContent["total_matches"] != 2 || pagedResult.StructuredContent["offset"] != 1 || pagedResult.StructuredContent["limit"] != 1 || pagedResult.StructuredContent["truncated"] != false {

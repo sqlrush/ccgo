@@ -348,7 +348,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	content := formatGrepMatches(matches, options)
+	content := formatGrepResultContent(matches, options, truncated)
 	if content == "" {
 		content = "No matches found"
 	}
@@ -738,6 +738,32 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated bool) string {
+	content := formatGrepMatches(matches, options)
+	if options.Mode != "content" {
+		return content
+	}
+	limitInfo := grepPaginationInfo(options, truncated)
+	if limitInfo == "" {
+		return content
+	}
+	if content == "" {
+		content = "No matches found"
+	}
+	return content + "\n\n[Showing results with pagination = " + limitInfo + "]"
+}
+
+func grepPaginationInfo(options grepOptions, truncated bool) string {
+	var parts []string
+	if truncated {
+		parts = append(parts, fmt.Sprintf("limit: %d", options.Limit))
+	}
+	if options.Offset > 0 {
+		parts = append(parts, fmt.Sprintf("offset: %d", options.Offset))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
