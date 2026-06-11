@@ -430,11 +430,7 @@ func interactionScriptProviderJSONPayload(text string) (string, bool) {
 		return "", false
 	}
 	afterFence := text[start+3:]
-	lineEnd := strings.IndexAny(afterFence, "\r\n")
-	if lineEnd < 0 {
-		return "", false
-	}
-	content := strings.TrimLeft(afterFence[lineEnd:], "\r\n")
+	content := strings.TrimSpace(afterFence)
 	end := strings.Index(content, "```")
 	if end >= 0 {
 		content = content[:end]
@@ -442,6 +438,27 @@ func interactionScriptProviderJSONPayload(text string) (string, bool) {
 	content = strings.TrimSpace(content)
 	if interactionScriptProviderLooksJSON(content) {
 		return content, true
+	}
+	if lineEnd := strings.IndexAny(content, "\r\n"); lineEnd >= 0 {
+		candidate := strings.TrimSpace(strings.TrimLeft(content[lineEnd:], "\r\n"))
+		if interactionScriptProviderLooksJSON(candidate) {
+			return candidate, true
+		}
+	}
+	if fieldEnd := strings.IndexAny(content, " \t"); fieldEnd >= 0 {
+		candidate := strings.TrimSpace(content[fieldEnd:])
+		if interactionScriptProviderLooksJSON(candidate) {
+			return candidate, true
+		}
+	}
+	for _, language := range []string{"json", "jsonc", "javascript", "js"} {
+		if len(content) <= len(language) || !strings.EqualFold(content[:len(language)], language) {
+			continue
+		}
+		candidate := strings.TrimSpace(content[len(language):])
+		if interactionScriptProviderLooksJSON(candidate) {
+			return candidate, true
+		}
 	}
 	return "", false
 }

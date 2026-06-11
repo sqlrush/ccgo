@@ -254,6 +254,8 @@ M7 补充：keybinding JSON loader 现在也接受 provider-style `choices`/`out
 
 M7 补充：interaction script 和 keybinding provider response 现在会剥离 fenced `json` code block，模型/SDK 返回 code-fenced 脚本或 keybinding 配置时不再需要手工去 fence。
 
+M7 补充：interaction script 和 keybinding provider response 的 fenced JSON 提取现在接受 inline/glued fence 形态，例如语言标记后同一行直接跟脚本数组或 keybinding map，模型输出不换行时仍能加载配置。
+
 M7 补充：interaction script 的 per-step keybinding mutation 现在复用同一套 collection alias、object-map 和 JSON:API/resource wrapper 解析，脚本步骤可直接使用 `keymap`、`keyboardShortcuts`、`hotkeys`、`keyboard`、`preferences` 或 `keybindingConfig` 临时改键位。
 
 M7 补充：interaction script 的 `keys` 字段现在支持 printable text chunk 和空格分隔 named-key sequence，例如 `ctrl-x ctrl-k`，减少官方脚本把连续输入拆成数组的改写成本。
@@ -715,6 +717,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 本轮补充：interaction script loader 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` response wrapper，可从 `message.content`、content-block array 和 `content.parts[].text` 里递归恢复 script JSON。
 
 本轮补充：interaction script 和 keybinding provider response 现在会剥离 fenced `json` code block，模型/SDK 返回 code-fenced 脚本或 keybinding 配置时不再需要手工去 fence。
+
+本轮补充：interaction script 和 keybinding provider response 的 fenced JSON 提取现在接受 inline/glued fence 形态，例如语言标记后同一行直接跟脚本数组或 keybinding map，模型输出不换行时仍能加载配置。
 
 本轮补充：interaction script 的 key/keySequence action payload 现在递归解包 JSON:API/GraphQL-style wrapper，wrapped single key 和 key sequence array 可直接驱动按键输入与组合键事件。
 
