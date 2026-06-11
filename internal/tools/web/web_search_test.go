@@ -22,7 +22,9 @@ func TestWebSearchReturnsParsedResults(t *testing.T) {
 			<html><body>
 				<a class="result__a" href="/redirect">navigation</a>
 				<a class="result__a" href="https://example.com/one">Example &amp; One</a>
+				<a class="result__snippet" href="https://example.com/one">First result &amp; details</a>
 				<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.example.com%2Ftwo">Docs Two</a>
+				<div class="result__snippet">Docs snippet with <b>bold</b> text</div>
 				<a href="https://blocked.example.net/three">Blocked</a>
 			</body></html>`))
 	}))
@@ -52,12 +54,15 @@ func TestWebSearchReturnsParsedResults(t *testing.T) {
 		t.Fatalf("result should not be error: %#v", result)
 	}
 	content := result.Content.(string)
-	if !strings.Contains(content, "Example & One") || !strings.Contains(content, "https://docs.example.com/two") || strings.Contains(content, "Blocked") {
+	if !strings.Contains(content, "Example & One") || !strings.Contains(content, "https://docs.example.com/two") || !strings.Contains(content, "First result & details") || !strings.Contains(content, "Docs snippet with bold text") || strings.Contains(content, "Blocked") {
 		t.Fatalf("content = %#v", content)
 	}
 	results, ok := result.StructuredContent["results"].([]map[string]any)
 	if !ok || len(results) != 2 || results[0]["url"] != "https://example.com/one" {
 		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["snippet"] != "First result & details" || results[1]["snippet"] != "Docs snippet with bold text" {
+		t.Fatalf("structured snippets = %#v", result.StructuredContent["results"])
 	}
 }
 

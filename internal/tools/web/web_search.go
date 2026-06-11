@@ -188,12 +188,15 @@ func buildSearchURL(endpoint string, query string) (string, error) {
 }
 
 func parseSearchResults(body string, base *url.URL) []searchResult {
-	anchors := anchorRe.FindAllStringSubmatch(body, -1)
+	anchors := anchorRe.FindAllStringSubmatchIndex(body, -1)
 	results := make([]searchResult, 0, len(anchors))
 	seen := map[string]struct{}{}
-	for _, anchor := range anchors {
-		attrs := anchor[1]
-		label := strings.TrimSpace(stripHTML(anchor[2]))
+	for idx, anchor := range anchors {
+		attrs := body[anchor[2]:anchor[3]]
+		if isSearchSnippetAnchor(attrs) {
+			continue
+		}
+		label := strings.TrimSpace(stripHTML(body[anchor[4]:anchor[5]]))
 		if label == "" {
 			continue
 		}
@@ -206,15 +209,16 @@ func parseSearchResults(body string, base *url.URL) []searchResult {
 			continue
 		}
 		seen[resolved] = struct{}{}
-		results = append(results, searchResult{Title: label, URL: resolved})
+		results = append(results, searchResult{Title: label, URL: resolved, Snippet: searchSnippetAfterAnchor(body, anchors, idx)})
 	}
 	return results
 }
 
 var (
-	anchorRe = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
-	hrefRe   = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
-	tagRe    = regexp.MustCompile(`(?is)<[^>]+>`)
+	anchorRe  = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
+	hrefRe    = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
+	snippetRe = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
+	tagRe     = regexp.MustCompile(`(?is)<[^>]+>`)
 )
 
 func hrefFromAttrs(attrs string) string {
@@ -234,6 +238,46 @@ func stripHTML(value string) string {
 	plain := tagRe.ReplaceAllString(value, "")
 	plain = htmlstd.UnescapeString(plain)
 	return strings.Join(strings.Fields(plain), " ")
+}
+
+func isSearchSnippetAnchor(attrs string) bool {
+	lower := strings.ToLower(attrs)
+	return strings.Contains(lower, "snippet") && !strings.Contains(lower, "result__a")
+}
+
+func searchSnippetAfterAnchor(body string, anchors [][]int, index int) string {
+	if index < 0 || index >= len(anchors) {
+		return ""
+	}
+	start := anchors[index][1]
+	end := len(body)
+	for next := index + 1; next < len(anchors); next++ {
+		attrs := body[anchors[next][2]:anchors[next][3]]
+		if !isSearchSnippetAnchor(attrs) {
+			end = anchors[next][0]
+			break
+		}
+	}
+	if start >= end {
+		return ""
+	}
+	return extractSearchSnippet(body[start:end])
+}
+
+func extractSearchSnippet(fragment string) string {
+	match := snippetRe.FindStringSubmatch(fragment)
+	if len(match) < 2 {
+		return ""
+	}
+	return truncateSearchSnippet(stripHTML(match[1]), 320)
+}
+
+func truncateSearchSnippet(snippet string, limit int) string {
+	if limit <= 0 || len([]rune(snippet)) <= limit {
+		return snippet
+	}
+	runes := []rune(snippet)
+	return string(runes[:limit]) + "..."
 }
 
 func resolveSearchURL(raw string, base *url.URL) string {
