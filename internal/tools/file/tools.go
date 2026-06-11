@@ -151,6 +151,9 @@ func validateRead(ctx tool.Context, raw json.RawMessage) error {
 	if isBlockedDevicePath(path) {
 		return fmt.Errorf("cannot read %q: this device file would block or produce infinite output", input.FilePath)
 	}
+	if isNotebookPath(path) && (input.Offset != nil || input.Limit != nil) {
+		return fmt.Errorf("offset and limit are only supported for text files")
+	}
 	if hasBinaryExtension(path) {
 		if imageMediaTypeForPath(path) != "" {
 			if input.Offset != nil || input.Limit != nil {
@@ -205,6 +208,9 @@ func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if info.IsDir() {
 		return contracts.ToolResult{}, fmt.Errorf("cannot read directory: %s", input.FilePath)
 	}
+	if isNotebookPath(path) {
+		return readNotebookResult(input.FilePath, path, info, state)
+	}
 	if mediaType := imageMediaTypeForPath(path); mediaType != "" {
 		return readImageResult(input.FilePath, path, mediaType, info)
 	}
@@ -250,6 +256,133 @@ func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}, nil
 }
 
+type notebookDocument struct {
+	Cells []notebookCell `json:"cells"`
+}
+
+type notebookCell struct {
+	CellType       string           `json:"cell_type"`
+	Source         any              `json:"source"`
+	Outputs        []notebookOutput `json:"outputs"`
+	ExecutionCount any              `json:"execution_count"`
+}
+
+type notebookOutput struct {
+	OutputType string         `json:"output_type"`
+	Name       string         `json:"name"`
+	Text       any            `json:"text"`
+	Data       map[string]any `json:"data"`
+	EName      string         `json:"ename"`
+	EValue     string         `json:"evalue"`
+	Traceback  []string       `json:"traceback"`
+}
+
+func readNotebookResult(displayPath string, path string, info os.FileInfo, state *ReadState) (contracts.ToolResult, error) {
+	raw, err := readText(path)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	var doc notebookDocument
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		return contracts.ToolResult{}, fmt.Errorf("invalid notebook JSON: %w", err)
+	}
+	mtime := info.ModTime().UnixMilli()
+	if state != nil {
+		offset := 1
+		state.Set(path, ReadFileState{
+			Content:     strings.ReplaceAll(raw, "\r\n", "\n"),
+			Timestamp:   mtime,
+			Offset:      &offset,
+			PartialView: false,
+		})
+	}
+	rendered, cells := renderNotebook(displayPath, doc)
+	return contracts.ToolResult{
+		Content: rendered,
+		StructuredContent: map[string]any{
+			"type": "notebook",
+			"file": map[string]any{
+				"filePath": displayPath,
+				"cells":    cells,
+			},
+		},
+	}, nil
+}
+
+func renderNotebook(displayPath string, doc notebookDocument) (string, []map[string]any) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Notebook: %s\nCells: %d", displayPath, len(doc.Cells))
+	cells := make([]map[string]any, 0, len(doc.Cells))
+	for i, cell := range doc.Cells {
+		cellType := strings.TrimSpace(cell.CellType)
+		if cellType == "" {
+			cellType = "unknown"
+		}
+		source := strings.TrimRight(notebookText(cell.Source), "\n")
+		outputs := notebookOutputTexts(cell.Outputs)
+		fmt.Fprintf(&b, "\n\nCell %d [%s]", i+1, cellType)
+		if cell.ExecutionCount != nil && cellType == "code" {
+			fmt.Fprintf(&b, " execution_count=%v", cell.ExecutionCount)
+		}
+		if source == "" {
+			b.WriteString(":\n<empty>")
+		} else {
+			fmt.Fprintf(&b, ":\n%s", source)
+		}
+		if len(outputs) > 0 {
+			b.WriteString("\nOutputs:")
+			for _, output := range outputs {
+				fmt.Fprintf(&b, "\n%s", output)
+			}
+		}
+		cells = append(cells, map[string]any{
+			"index":           i + 1,
+			"cell_type":       cellType,
+			"source":          source,
+			"outputs":         outputs,
+			"execution_count": cell.ExecutionCount,
+		})
+	}
+	return b.String(), cells
+}
+
+func notebookOutputTexts(outputs []notebookOutput) []string {
+	out := make([]string, 0, len(outputs))
+	for _, output := range outputs {
+		text := strings.TrimRight(notebookText(output.Text), "\n")
+		if text == "" && output.Data != nil {
+			text = strings.TrimRight(notebookText(output.Data["text/plain"]), "\n")
+		}
+		if text == "" && (output.EName != "" || output.EValue != "") {
+			text = strings.TrimSpace(output.EName + ": " + output.EValue)
+		}
+		if text == "" && len(output.Traceback) > 0 {
+			text = strings.Join(output.Traceback, "\n")
+		}
+		if text != "" {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
+func notebookText(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case []string:
+		return strings.Join(typed, "")
+	case []any:
+		var b strings.Builder
+		for _, item := range typed {
+			b.WriteString(notebookText(item))
+		}
+		return b.String()
+	default:
+		return ""
+	}
+}
+
 func readImageResult(displayPath string, path string, mediaType string, info os.FileInfo) (contracts.ToolResult, error) {
 	if info.Size() > maxReadImageBytes {
 		return contracts.ToolResult{}, fmt.Errorf("image file is too large to read: %d bytes exceeds %d bytes", info.Size(), maxReadImageBytes)
@@ -281,6 +414,10 @@ func readImageResult(displayPath string, path string, mediaType string, info os.
 			},
 		},
 	}, nil
+}
+
+func isNotebookPath(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ".ipynb")
 }
 
 func imageMediaTypeForPath(path string) string {

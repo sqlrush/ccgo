@@ -164,6 +164,62 @@ func TestReadToolLargeTextUsesResultBudget(t *testing.T) {
 	}
 }
 
+func TestReadToolRendersNotebookCells(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{
+  "cells": [
+    {"cell_type": "markdown", "source": ["# Title\n", "body"]},
+    {"cell_type": "code", "execution_count": 1, "source": "print('hi')\n", "outputs": [{"output_type": "stream", "name": "stdout", "text": ["hi\n"]}]}
+  ],
+  "metadata": {},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}`
+	path := filepath.Join(dir, "analysis.ipynb")
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := fileToolContext(dir)
+	result, err := fileExecutor(t).Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_notebook",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"analysis.ipynb"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := result.Content.(string)
+	for _, want := range []string{"Notebook: analysis.ipynb", "Cell 1 [markdown]:\n# Title\nbody", "Cell 2 [code] execution_count=1:\nprint('hi')", "Outputs:\nhi"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("notebook content missing %q:\n%s", want, content)
+		}
+	}
+	file := result.StructuredContent["file"].(map[string]any)
+	cells := file["cells"].([]map[string]any)
+	if len(cells) != 2 || cells[0]["cell_type"] != "markdown" || cells[1]["cell_type"] != "code" {
+		t.Fatalf("structured notebook cells = %#v", cells)
+	}
+	record, ok := EnsureReadState(ctx).Get(path)
+	if !ok || !strings.Contains(record.Content, `"nbformat": 4`) || record.PartialView {
+		t.Fatalf("notebook read state = %#v ok=%v", record, ok)
+	}
+}
+
+func TestReadToolRejectsNotebookOffsetLimit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "analysis.ipynb"), []byte(`{"cells":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_read_notebook_offset",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"analysis.ipynb","limit":1}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "offset and limit are only supported for text files") {
+		t.Fatalf("notebook offset err = %v", err)
+	}
+}
+
 func TestReadToolPrefixesAutoMemoryFreshnessNote(t *testing.T) {
 	dir := t.TempDir()
 	autoMemoryDir := filepath.Join(dir, "memory")
