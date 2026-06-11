@@ -880,6 +880,18 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("structured context matches = %#v", matches)
 	}
 
+	noLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_line_numbers",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","-n":false,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noLineNumberResult.Content != "a.txt:Needle first" || noLineNumberResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("no-line-number content = %#v", noLineNumberResult)
+	}
+
 	shortContextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_short_context",
 		Name:  "Grep",
