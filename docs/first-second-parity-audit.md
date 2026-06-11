@@ -105,6 +105,7 @@ After the first/second batch hardening, the Go rewrite now includes an initial `
 
 Covered behavior:
 
+- `Glob`/`Grep` initial pure-Go file search tools, including recursive `**` glob matching, basic ignored directories, modified-time/path sorting, regex grep, glob filtering, and `files_with_matches`/`content`/`count` output modes.
 - `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, and read-state recording.
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, and post-edit read-state refresh.
@@ -115,7 +116,7 @@ Still missing from full M5 parity:
 - Image, PDF, notebook, and large-file token-budget behavior in `Read`.
 - Structured diff hunks/git diff/LSP and IDE notifications/file-history integration for `Write`/`Edit`.
 - Settings-file validation, team-memory secret guard, skill activation, and full permission prompt rendering.
-- `Bash`, `Glob`, `Grep`, `TodoWrite`, web, notebook, PowerShell, and MCP concrete tool semantics.
+- `Bash`, `TodoWrite`, web, notebook, PowerShell, and MCP concrete tool semantics, plus full ripgrep parity/pagination/ignore-file behavior for `Glob`/`Grep`.
 
 ## M6/M7 Initial Progress
 

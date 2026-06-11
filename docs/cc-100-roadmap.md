@@ -511,13 +511,14 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 - 文本版 `Read`、`Write`、`Edit` 初版已完成。
 - 已覆盖读前写、mtime stale guard、唯一匹配、`replace_all`、Read 去重、跨 tool round read-state。
+- `Glob`/`Grep` 纯 Go 初版已完成，支持 `**` 递归 glob、基础 ignore、mtime/path 排序、Grep regex、glob 过滤和 `files_with_matches`/`content`/`count` 输出模式。
 
 仍需完成：
 
 - `Read` 的 image/PDF/notebook、大文件 token budget、binary edge cases。
 - `Edit/Write` 的 structured diff、git diff、LSP/IDE notify、file history、settings validation、secret guard。
 - `Bash` parser、sandbox、timeout、background、interrupt、read-only/destructive validation。
-- `Glob/Grep` ripgrep 行为、排序、分页、忽略规则。
+- `Glob/Grep` 完整 ripgrep parity、分页、`.gitignore`/ignore 文件和更多输出参数。
 - `TodoWrite` 状态和 tool result 兼容。
 - Web、PowerShell、Notebook、MCP concrete tool semantics。
 

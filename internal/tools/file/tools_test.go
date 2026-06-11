@@ -327,3 +327,104 @@ func TestEditPreservesCurlyQuoteStyle(t *testing.T) {
 		t.Fatalf("edited content = %q", data)
 	}
 }
+
+func TestGlobToolMatchesRecursiveFilesSortedByModifiedTime(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src", "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := filepath.Join(dir, "src", "old.go")
+	newPath := filepath.Join(dir, "src", "nested", "new.go")
+	ignoredPath := filepath.Join(dir, ".git", "hidden.go")
+	if err := os.MkdirAll(filepath.Dir(ignoredPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		oldPath:     "package old\n",
+		newPath:     "package nested\n",
+		ignoredPath: "package ignored\n",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldTime := time.Now().Add(-2 * time.Hour)
+	newTime := time.Now().Add(-1 * time.Hour)
+	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(newPath, newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_glob",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"**/*.go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "src/nested/new.go\nsrc/old.go" {
+		t.Fatalf("glob content = %#v", result.Content)
+	}
+	files := result.StructuredContent["files"].([]string)
+	if len(files) != 2 || files[0] != "src/nested/new.go" || files[1] != "src/old.go" {
+		t.Fatalf("structured files = %#v", files)
+	}
+}
+
+func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"src/a.go":  "package main\nfunc Alpha() {}\n",
+		"src/b.txt": "Alpha text\n",
+		"src/c.go":  "func Beta() {}\nfunc AlphaBeta() {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesResult.Content != "src/a.go\nsrc/c.go" {
+		t.Fatalf("files result = %#v", filesResult.Content)
+	}
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contentResult.Content != "src/a.go:2:func Alpha() {}\nsrc/c.go:2:func AlphaBeta() {}" {
+		t.Fatalf("content result = %#v", contentResult.Content)
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/*.go","output_mode":"count"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if countResult.Content != "src/a.go:1\nsrc/c.go:2" {
+		t.Fatalf("count result = %#v", countResult.Content)
+	}
+}

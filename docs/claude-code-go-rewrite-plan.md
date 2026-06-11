@@ -164,6 +164,11 @@ test/parity/                 # golden tests against TS/official behavior
 - Read-before-write、mtime changed、UNC 防护、team memory secret guard 覆盖。
 - Bash parser/sandbox/timeout/background/interrupt 有回放测试。
 
+当前进度：
+
+- 文本版 Read/Edit/Write 已落地，覆盖 read-before-write、mtime stale guard、唯一匹配、`replace_all`、Read 去重和跨 tool round read-state。
+- Glob/Grep 纯 Go 初版已落地，覆盖 `**` 递归 glob、基础 ignore、mtime/path 排序、Grep regex、glob 过滤和 `files_with_matches`/`content`/`count` 输出模式；完整 ripgrep parity、分页和 `.gitignore`/ignore 文件仍需继续补。
+
 ### M6: Session、memory、compact
 
 产出：
