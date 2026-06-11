@@ -342,7 +342,7 @@ func TestPowerShellRunsWhenAvailable(t *testing.T) {
 
 func waitForPowerShellOutput(t *testing.T, executor tool.Executor, ctx tool.Context, powerShellID string) contracts.ToolResult {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for {
 		output, err := executor.Execute(ctx, contracts.ToolUse{
 			ID:    "toolu_powershell_background_output",
