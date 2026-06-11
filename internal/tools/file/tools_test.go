@@ -1002,6 +1002,50 @@ func TestGrepToolFixedStrings(t *testing.T) {
 	}
 }
 
+func TestGrepToolMultiline(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"alpha start",
+		"middle",
+		"gamma end",
+		"tail",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "multi.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_default_single_line",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha.*gamma","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Content != "No matches found" || defaultResult.StructuredContent["multiline"] != false {
+		t.Fatalf("default single-line result = %#v", defaultResult)
+	}
+
+	multilineResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_multiline",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha.*gamma","output_mode":"content","multiline":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "multi.txt:1:alpha start\nmulti.txt:2:middle\nmulti.txt:3:gamma end"
+	if multilineResult.Content != want || multilineResult.StructuredContent["multiline"] != true {
+		t.Fatalf("multiline result = %#v", multilineResult)
+	}
+	matches := multilineResult.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 3 || matches[0]["matched"] != true || matches[2]["line"] != 3 {
+		t.Fatalf("multiline structured matches = %#v", matches)
+	}
+}
+
 func TestGrepToolTypeFilter(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
