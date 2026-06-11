@@ -27,6 +27,7 @@ type grepInput struct {
 	Glob               string `json:"glob,omitempty"`
 	Type               string `json:"type,omitempty"`
 	OutputMode         string `json:"output_mode,omitempty"`
+	OutputModeAlt      string `json:"outputMode,omitempty"`
 	Limit              *int   `json:"limit,omitempty"`
 	HeadLimit          *int   `json:"head_limit,omitempty"`
 	HeadLimitAlt       *int   `json:"headLimit,omitempty"`
@@ -116,6 +117,7 @@ func NewGrepTool() tool.Tool {
 					"glob":        map[string]any{"type": "string"},
 					"type":        map[string]any{"type": "string"},
 					"output_mode": map[string]any{"type": "string", "enum": []any{"files_with_matches", "content", "count"}},
+					"outputMode":  map[string]any{"type": "string", "enum": []any{"files_with_matches", "content", "count"}},
 					"limit":       map[string]any{"type": "integer"},
 					"head_limit":  map[string]any{"type": "integer"},
 					"headLimit":   map[string]any{"type": "integer"},
@@ -211,7 +213,7 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if _, err := compileGrepPattern(input); err != nil {
 		return fmt.Errorf("invalid pattern: %w", err)
 	}
-	mode := normalizedGrepOutputMode(input.OutputMode)
+	mode := normalizedGrepOutputMode(input)
 	switch mode {
 	case "files_with_matches", "content", "count":
 	default:
@@ -256,7 +258,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		return contracts.ToolResult{}, fmt.Errorf("invalid pattern: %w", err)
 	}
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
-	mode := normalizedGrepOutputMode(input.OutputMode)
+	mode := normalizedGrepOutputMode(input)
 	before, after := grepContextLines(input)
 	options := grepOptions{
 		Mode:          mode,
@@ -306,7 +308,7 @@ func decodeGlob(raw json.RawMessage) (globInput, error) {
 func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	var input grepInput
 	if err := decodeStrict(raw, map[string]struct{}{
-		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "limit": {},
+		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 		"head_limit": {}, "headLimit": {}, "offset": {},
 		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {},
 		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
@@ -496,8 +498,11 @@ func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
 	return out
 }
 
-func normalizedGrepOutputMode(mode string) string {
-	mode = strings.TrimSpace(mode)
+func normalizedGrepOutputMode(input grepInput) string {
+	mode := strings.TrimSpace(input.OutputMode)
+	if mode == "" {
+		mode = strings.TrimSpace(input.OutputModeAlt)
+	}
 	if mode == "" {
 		return "files_with_matches"
 	}

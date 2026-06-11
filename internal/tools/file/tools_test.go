@@ -833,6 +833,18 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if countResult.Content != "src/a.go:1\nsrc/c.go:2" {
 		t.Fatalf("count result = %#v", countResult.Content)
 	}
+
+	camelModeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_camel_output_mode",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/*.go","outputMode":"count"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if camelModeResult.Content != "src/a.go:1\nsrc/c.go:2" || camelModeResult.StructuredContent["output_mode"] != "count" {
+		t.Fatalf("camel outputMode result = %#v", camelModeResult)
+	}
 }
 
 func TestGrepToolContentContextAndPagination(t *testing.T) {
