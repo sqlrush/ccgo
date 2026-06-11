@@ -1688,6 +1688,14 @@ func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	inlineFencedFacts, err := json.Marshal("```json " + `{"facts":[{"kind":"preference","text":"accept inline provider choices","source_uuid":"user_1"}]}` + " ```")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gluedFencedFacts, err := json.Marshal("```json" + `{"facts":[{"kind":"decision","text":"accept glued provider choices","source_uuid":"assistant_1"}]}` + "```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name     string
 		response string
@@ -1701,6 +1709,20 @@ func TestMemoryAgentExtractsProviderResponseWrappedFacts(t *testing.T) {
 			kind:     FactPreference,
 			text:     "accept provider choices",
 			source:   "user_1",
+		},
+		{
+			name:     "choices inline fenced message content",
+			response: `{"choices":[{"message":{"content":` + string(inlineFencedFacts) + `}}]}`,
+			kind:     FactPreference,
+			text:     "accept inline provider choices",
+			source:   "user_1",
+		},
+		{
+			name:     "choices glued fenced message content",
+			response: `{"choices":[{"message":{"content":` + string(gluedFencedFacts) + `}}]}`,
+			kind:     FactDecision,
+			text:     "accept glued provider choices",
+			source:   "assistant_1",
 		},
 		{
 			name:     "candidate parts text",
@@ -2444,6 +2466,14 @@ func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	inlineRecallContent, err := json.Marshal("```json " + `{"query":"credential inline","session_ids":["other"]}` + " ```")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gluedRecallContent, err := json.Marshal("```json" + `{"query":"database glued","session_ids":["prior"]}` + "```")
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := &fakeMemoryClient{response: &anthropic.Response{
 		ID:    "msg_recall_provider",
 		Type:  "message",
@@ -2464,6 +2494,38 @@ func TestMemoryAgentRecallParsesProviderResponseWrappers(t *testing.T) {
 	}
 	if len(result.Matches) != 2 || result.Matches[0].Summary.SessionID != "prior" || result.Matches[1].Summary.SessionID != "other" {
 		t.Fatalf("choice matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"choices":[
+			{"message":{"content":[{"type":"text","text":` + string(inlineRecallContent) + `}]}}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "credential inline", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "credential inline" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "other" {
+		t.Fatalf("inline choice result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "other" {
+		t.Fatalf("inline choice matches = %#v", result.Matches)
+	}
+
+	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{
+		"choices":[
+			{"message":{"content":` + string(gluedRecallContent) + `}}
+		]
+	}`)}
+	result, err = (Agent{Client: client}).Recall(context.Background(), root, "database glued", RecallOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fallback || result.Query != "database glued" || strings.Join(contractIDStrings(result.SelectedIDs), ",") != "prior" {
+		t.Fatalf("glued choice result = %#v", result)
+	}
+	if len(result.Matches) != 1 || result.Matches[0].Summary.SessionID != "prior" {
+		t.Fatalf("glued choice matches = %#v", result.Matches)
 	}
 
 	client.response.Content = []contracts.ContentBlock{contracts.NewTextBlock(`{

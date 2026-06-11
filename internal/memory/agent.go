@@ -1992,15 +1992,37 @@ func stripMarkdownFence(raw string) string {
 	if !strings.HasPrefix(raw, "```") {
 		return raw
 	}
-	lineEnd := strings.IndexByte(raw, '\n')
-	if lineEnd < 0 {
-		return strings.TrimSpace(strings.Trim(raw, "`"))
+	content := strings.TrimSpace(raw[3:])
+	if end := strings.LastIndex(content, "```"); end >= 0 {
+		content = content[:end]
 	}
-	body := raw[lineEnd+1:]
-	if end := strings.LastIndex(body, "```"); end >= 0 {
-		body = body[:end]
+	content = strings.TrimSpace(content)
+	if startsJSONValue(content) {
+		return content
 	}
-	return strings.TrimSpace(body)
+	if lineEnd := strings.IndexAny(content, "\r\n"); lineEnd >= 0 {
+		body := strings.TrimSpace(strings.TrimLeft(content[lineEnd:], "\r\n"))
+		if startsJSONValue(body) {
+			return body
+		}
+		return body
+	}
+	if fieldEnd := strings.IndexAny(content, " \t"); fieldEnd >= 0 {
+		body := strings.TrimSpace(content[fieldEnd:])
+		if startsJSONValue(body) {
+			return body
+		}
+	}
+	for _, language := range []string{"json", "jsonc", "javascript", "js"} {
+		if len(content) <= len(language) || !strings.EqualFold(content[:len(language)], language) {
+			continue
+		}
+		body := strings.TrimSpace(content[len(language):])
+		if startsJSONValue(body) {
+			return body
+		}
+	}
+	return content
 }
 
 func firstJSONValue(raw string) (string, bool) {
