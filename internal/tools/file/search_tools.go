@@ -15,6 +15,7 @@ import (
 
 const defaultSearchLimit = 100
 const defaultGrepHeadLimit = 250
+const fileNotFoundCWDNote = "Note: your current working directory is"
 
 var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
@@ -216,6 +217,9 @@ func validateGlob(ctx tool.Context, raw json.RawMessage) error {
 	if isBlockedDevicePath(root) {
 		return fmt.Errorf("cannot search %q: this device path would block or produce infinite output", input.Path)
 	}
+	if err := validateSearchPath(ctx.WorkingDirectory, input.Path, root, true); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -303,6 +307,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	if isBlockedDevicePath(root) {
 		return fmt.Errorf("cannot search %q: this device path would block or produce infinite output", input.Path)
+	}
+	if err := validateSearchPath(ctx.WorkingDirectory, input.Path, root, false); err != nil {
+		return err
 	}
 	return nil
 }
@@ -440,6 +447,33 @@ func searchRoot(cwd string, path string) string {
 		path = "."
 	}
 	return resolvePath(cwd, path)
+}
+
+func validateSearchPath(cwd string, displayPath string, resolvedPath string, requireDirectory bool) error {
+	if strings.TrimSpace(displayPath) == "" || isUNCSearchPath(displayPath, resolvedPath) {
+		return nil
+	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if requireDirectory {
+				return fmt.Errorf("Directory does not exist: %s. %s %s.", displayPath, fileNotFoundCWDNote, cwd)
+			}
+			return fmt.Errorf("Path does not exist: %s. %s %s.", displayPath, fileNotFoundCWDNote, cwd)
+		}
+		return err
+	}
+	if requireDirectory && !info.IsDir() {
+		return fmt.Errorf("Path is not a directory: %s", displayPath)
+	}
+	return nil
+}
+
+func isUNCSearchPath(rawPath string, resolvedPath string) bool {
+	return strings.HasPrefix(rawPath, `\\`) ||
+		strings.HasPrefix(rawPath, "//") ||
+		strings.HasPrefix(resolvedPath, `\\`) ||
+		strings.HasPrefix(resolvedPath, "//")
 }
 
 func inputLimit(limit *int) int {

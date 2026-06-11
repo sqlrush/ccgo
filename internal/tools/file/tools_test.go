@@ -1015,6 +1015,57 @@ func TestGlobAndGrepReturnWorkingDirectoryRelativePaths(t *testing.T) {
 	if grepResult.Content != "src/a.go\nsrc/b.txt" {
 		t.Fatalf("grep path output = %#v", grepResult.Content)
 	}
+
+	grepFileResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_file_path",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"src/a.go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grepFileResult.Content != "src/a.go" {
+		t.Fatalf("grep file path output = %#v", grepFileResult.Content)
+	}
+}
+
+func TestGlobAndGrepValidatePath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "a.go"), []byte("Needle go\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_glob_missing_path",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"*.go","path":"missing"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "Directory does not exist: missing") || !strings.Contains(err.Error(), "Note: your current working directory is") {
+		t.Fatalf("glob missing path err = %v", err)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_glob_file_path",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"*.go","path":"src/a.go"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "Path is not a directory: src/a.go") {
+		t.Fatalf("glob file path err = %v", err)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_missing_path",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"missing"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "Path does not exist: missing") || !strings.Contains(err.Error(), "Note: your current working directory is") {
+		t.Fatalf("grep missing path err = %v", err)
+	}
 }
 
 func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
