@@ -22,11 +22,22 @@ type globInput struct {
 }
 
 type grepInput struct {
-	Pattern    string `json:"pattern"`
-	Path       string `json:"path,omitempty"`
-	Glob       string `json:"glob,omitempty"`
-	OutputMode string `json:"output_mode,omitempty"`
-	Limit      *int   `json:"limit,omitempty"`
+	Pattern            string `json:"pattern"`
+	Path               string `json:"path,omitempty"`
+	Glob               string `json:"glob,omitempty"`
+	OutputMode         string `json:"output_mode,omitempty"`
+	Limit              *int   `json:"limit,omitempty"`
+	HeadLimit          *int   `json:"head_limit,omitempty"`
+	HeadLimitAlt       *int   `json:"headLimit,omitempty"`
+	Offset             *int   `json:"offset,omitempty"`
+	Context            *int   `json:"context,omitempty"`
+	BeforeContext      *int   `json:"before_context,omitempty"`
+	BeforeContextAlt   *int   `json:"beforeContext,omitempty"`
+	AfterContext       *int   `json:"after_context,omitempty"`
+	AfterContextAlt    *int   `json:"afterContext,omitempty"`
+	CaseInsensitive    bool   `json:"case_insensitive,omitempty"`
+	CaseInsensitiveAlt bool   `json:"caseInsensitive,omitempty"`
+	ShortIgnoreCase    bool   `json:"-i,omitempty"`
 }
 
 type fileSearchMatch struct {
@@ -36,10 +47,19 @@ type fileSearchMatch struct {
 }
 
 type grepMatch struct {
-	Path  string
-	Line  int
-	Text  string
-	Count int
+	Path    string
+	Line    int
+	Text    string
+	Count   int
+	Matched bool
+}
+
+type grepOptions struct {
+	Mode          string
+	Limit         int
+	Offset        int
+	BeforeContext int
+	AfterContext  int
 }
 
 func NewGlobTool() tool.Tool {
@@ -89,11 +109,26 @@ func NewGrepTool() tool.Tool {
 					"glob":        map[string]any{"type": "string"},
 					"output_mode": map[string]any{"type": "string", "enum": []any{"files_with_matches", "content", "count"}},
 					"limit":       map[string]any{"type": "integer"},
+					"head_limit":  map[string]any{"type": "integer"},
+					"headLimit":   map[string]any{"type": "integer"},
+					"offset":      map[string]any{"type": "integer"},
+					"context":     map[string]any{"type": "integer"},
+					"before_context": map[string]any{
+						"type": "integer",
+					},
+					"beforeContext": map[string]any{"type": "integer"},
+					"after_context": map[string]any{
+						"type": "integer",
+					},
+					"afterContext":     map[string]any{"type": "integer"},
+					"case_insensitive": map[string]any{"type": "boolean"},
+					"caseInsensitive":  map[string]any{"type": "boolean"},
+					"-i":               map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob optionally filters file paths.", nil
+			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob optionally filters file paths. content mode supports context, before_context, after_context, offset, and head_limit pagination.", nil
 		},
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
@@ -159,16 +194,33 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if strings.TrimSpace(input.Pattern) == "" {
 		return fmt.Errorf("pattern is required")
 	}
-	if _, err := regexp.Compile(input.Pattern); err != nil {
+	if _, err := compileGrepPattern(input); err != nil {
 		return fmt.Errorf("invalid pattern: %w", err)
 	}
-	switch normalizedGrepOutputMode(input.OutputMode) {
+	mode := normalizedGrepOutputMode(input.OutputMode)
+	switch mode {
 	case "files_with_matches", "content", "count":
 	default:
 		return fmt.Errorf("output_mode must be one of files_with_matches, content, or count")
 	}
 	if input.Limit != nil && *input.Limit <= 0 {
 		return fmt.Errorf("limit must be positive")
+	}
+	if input.HeadLimit != nil && *input.HeadLimit <= 0 {
+		return fmt.Errorf("head_limit must be positive")
+	}
+	if input.HeadLimitAlt != nil && *input.HeadLimitAlt <= 0 {
+		return fmt.Errorf("head_limit must be positive")
+	}
+	if input.Offset != nil && *input.Offset < 0 {
+		return fmt.Errorf("offset must be non-negative")
+	}
+	before, after := grepContextLines(input)
+	if before < 0 || after < 0 {
+		return fmt.Errorf("context values must be non-negative")
+	}
+	if mode != "content" && (before > 0 || after > 0) {
+		return fmt.Errorf("context is only supported with output_mode content")
 	}
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	if isBlockedDevicePath(root) {
@@ -182,14 +234,21 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	expr, err := regexp.Compile(input.Pattern)
+	expr, err := compileGrepPattern(input)
 	if err != nil {
 		return contracts.ToolResult{}, fmt.Errorf("invalid pattern: %w", err)
 	}
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	mode := normalizedGrepOutputMode(input.OutputMode)
-	limit := inputLimit(input.Limit)
-	matches, truncated, err := collectGrepMatches(root, input.Glob, expr, mode, limit)
+	before, after := grepContextLines(input)
+	options := grepOptions{
+		Mode:          mode,
+		Limit:         grepLimit(input),
+		Offset:        grepOffset(input),
+		BeforeContext: before,
+		AfterContext:  after,
+	}
+	matches, totalMatches, truncated, err := collectGrepMatches(root, input.Glob, expr, options)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -200,13 +259,19 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	return contracts.ToolResult{
 		Content: content,
 		StructuredContent: map[string]any{
-			"type":        "grep",
-			"pattern":     input.Pattern,
-			"path":        input.Path,
-			"glob":        input.Glob,
-			"output_mode": mode,
-			"matches":     grepStructuredMatches(matches, mode),
-			"truncated":   truncated,
+			"type":             "grep",
+			"pattern":          input.Pattern,
+			"path":             input.Path,
+			"glob":             input.Glob,
+			"output_mode":      mode,
+			"matches":          grepStructuredMatches(matches, mode),
+			"total_matches":    totalMatches,
+			"offset":           options.Offset,
+			"limit":            options.Limit,
+			"before_context":   options.BeforeContext,
+			"after_context":    options.AfterContext,
+			"case_insensitive": grepCaseInsensitive(input),
+			"truncated":        truncated,
 		},
 	}, nil
 }
@@ -221,7 +286,12 @@ func decodeGlob(raw json.RawMessage) (globInput, error) {
 
 func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	var input grepInput
-	if err := decodeStrict(raw, map[string]struct{}{"pattern": {}, "path": {}, "glob": {}, "output_mode": {}, "limit": {}}, &input); err != nil {
+	if err := decodeStrict(raw, map[string]struct{}{
+		"pattern": {}, "path": {}, "glob": {}, "output_mode": {}, "limit": {},
+		"head_limit": {}, "headLimit": {}, "offset": {},
+		"context": {}, "before_context": {}, "beforeContext": {}, "after_context": {}, "afterContext": {},
+		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
+	}, &input); err != nil {
 		return grepInput{}, err
 	}
 	return input, nil
@@ -270,7 +340,7 @@ func collectGlobMatches(root string, pattern string, limit int) ([]fileSearchMat
 	return matches, truncated, nil
 }
 
-func collectGrepMatches(root string, glob string, expr *regexp.Regexp, mode string, limit int) ([]grepMatch, bool, error) {
+func collectGrepMatches(root string, glob string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, bool, error) {
 	var matches []grepMatch
 	err := walkSearchFiles(root, func(path string, rel string, _ os.FileInfo) error {
 		if glob != "" {
@@ -286,22 +356,22 @@ func collectGrepMatches(root string, glob string, expr *regexp.Regexp, mode stri
 		if err != nil {
 			return nil
 		}
-		lineMatches := grepFileMatches(rel, content, expr)
+		lineMatches := grepFileMatches(rel, content, expr, options.BeforeContext, options.AfterContext)
 		if len(lineMatches) == 0 {
 			return nil
 		}
-		switch mode {
+		switch options.Mode {
 		case "files_with_matches":
 			matches = append(matches, grepMatch{Path: rel})
 		case "count":
-			matches = append(matches, grepMatch{Path: rel, Count: len(lineMatches)})
+			matches = append(matches, grepMatch{Path: rel, Count: countMatchedLines(lineMatches)})
 		default:
 			matches = append(matches, lineMatches...)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].Path != matches[j].Path {
@@ -309,22 +379,58 @@ func collectGrepMatches(root string, glob string, expr *regexp.Regexp, mode stri
 		}
 		return matches[i].Line < matches[j].Line
 	})
-	truncated := len(matches) > limit
-	if truncated {
-		matches = matches[:limit]
+	totalMatches := len(matches)
+	start := options.Offset
+	if start > len(matches) {
+		start = len(matches)
 	}
-	return matches, truncated, nil
+	end := start + options.Limit
+	if end > len(matches) {
+		end = len(matches)
+	}
+	truncated := end < len(matches)
+	matches = matches[start:end]
+	return matches, totalMatches, truncated, nil
 }
 
-func grepFileMatches(path string, content string, expr *regexp.Regexp) []grepMatch {
+func grepFileMatches(path string, content string, expr *regexp.Regexp, beforeContext int, afterContext int) []grepMatch {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	matches := make([]grepMatch, 0)
+	matched := map[int]bool{}
+	included := map[int]bool{}
 	for i, line := range lines {
 		if expr.MatchString(line) {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: line})
+			matched[i] = true
+			start := i - beforeContext
+			if start < 0 {
+				start = 0
+			}
+			end := i + afterContext
+			if end >= len(lines) {
+				end = len(lines) - 1
+			}
+			for n := start; n <= end; n++ {
+				included[n] = true
+			}
 		}
 	}
+	matches := make([]grepMatch, 0, len(included))
+	for i := range lines {
+		if !included[i] {
+			continue
+		}
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: lines[i], Matched: matched[i]})
+	}
 	return matches
+}
+
+func countMatchedLines(matches []grepMatch) int {
+	count := 0
+	for _, match := range matches {
+		if match.Matched {
+			count++
+		}
+	}
+	return count
 }
 
 func formatGrepMatches(matches []grepMatch, mode string) string {
@@ -336,7 +442,11 @@ func formatGrepMatches(matches []grepMatch, mode string) string {
 		case "count":
 			lines = append(lines, fmt.Sprintf("%s:%d", match.Path, match.Count))
 		default:
-			lines = append(lines, fmt.Sprintf("%s:%d:%s", match.Path, match.Line, match.Text))
+			separator := ":"
+			if !match.Matched {
+				separator = "-"
+			}
+			lines = append(lines, fmt.Sprintf("%s%s%d%s%s", match.Path, separator, match.Line, separator, match.Text))
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -350,6 +460,7 @@ func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
 		case "content":
 			item["line"] = match.Line
 			item["text"] = match.Text
+			item["matched"] = match.Matched
 		case "count":
 			item["count"] = match.Count
 		}
@@ -364,6 +475,58 @@ func normalizedGrepOutputMode(mode string) string {
 		return "files_with_matches"
 	}
 	return mode
+}
+
+func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
+	pattern := input.Pattern
+	if grepCaseInsensitive(input) {
+		pattern = "(?i:" + pattern + ")"
+	}
+	return regexp.Compile(pattern)
+}
+
+func grepCaseInsensitive(input grepInput) bool {
+	return input.CaseInsensitive || input.CaseInsensitiveAlt || input.ShortIgnoreCase
+}
+
+func grepLimit(input grepInput) int {
+	if input.Limit != nil {
+		return *input.Limit
+	}
+	if input.HeadLimit != nil {
+		return *input.HeadLimit
+	}
+	if input.HeadLimitAlt != nil {
+		return *input.HeadLimitAlt
+	}
+	return defaultSearchLimit
+}
+
+func grepOffset(input grepInput) int {
+	if input.Offset == nil {
+		return 0
+	}
+	return *input.Offset
+}
+
+func grepContextLines(input grepInput) (int, int) {
+	before := 0
+	after := 0
+	if input.Context != nil {
+		before = *input.Context
+		after = *input.Context
+	}
+	if input.BeforeContext != nil {
+		before = *input.BeforeContext
+	} else if input.BeforeContextAlt != nil {
+		before = *input.BeforeContextAlt
+	}
+	if input.AfterContext != nil {
+		after = *input.AfterContext
+	} else if input.AfterContextAlt != nil {
+		after = *input.AfterContextAlt
+	}
+	return before, after
 }
 
 func walkSearchFiles(root string, visit func(path string, rel string, info os.FileInfo) error) error {

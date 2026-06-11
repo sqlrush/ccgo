@@ -429,6 +429,97 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	}
 }
 
+func TestGrepToolContentContextAndPagination(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"one",
+		"Needle first",
+		"three",
+		"four",
+		"Needle second",
+		"six",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","before_context":1,"after_context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContext := "a.txt-1-one\na.txt:2:Needle first\na.txt-3-three\na.txt-4-four\na.txt:5:Needle second\na.txt-6-six"
+	if contextResult.Content != wantContext {
+		t.Fatalf("context content = %#v", contextResult.Content)
+	}
+	matches := contextResult.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 6 || matches[0]["matched"] != false || matches[1]["matched"] != true {
+		t.Fatalf("structured context matches = %#v", matches)
+	}
+
+	pagedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_paged",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","offset":1,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pagedResult.Content != "a.txt:5:Needle second" {
+		t.Fatalf("paged content = %#v", pagedResult.Content)
+	}
+	if pagedResult.StructuredContent["total_matches"] != 2 || pagedResult.StructuredContent["offset"] != 1 || pagedResult.StructuredContent["limit"] != 1 || pagedResult.StructuredContent["truncated"] != false {
+		t.Fatalf("paged structured content = %#v", pagedResult.StructuredContent)
+	}
+}
+
+func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mixed.txt"), []byte("Alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignore_case",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","case_insensitive":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "mixed.txt" || result.StructuredContent["case_insensitive"] != true {
+		t.Fatalf("case-insensitive result = %#v", result)
+	}
+
+	shortResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_ignore_case",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","-i":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortResult.Content != "mixed.txt" || shortResult.StructuredContent["case_insensitive"] != true {
+		t.Fatalf("short case-insensitive result = %#v", shortResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","context":1}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "context is only supported with output_mode content") {
+		t.Fatalf("context validation err = %v", err)
+	}
+}
+
 func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "ignored"), 0o755); err != nil {
