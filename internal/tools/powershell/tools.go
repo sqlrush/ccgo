@@ -709,7 +709,7 @@ func hasPowerShellMutationSyntax(command string) bool {
 		if inSingle {
 			continue
 		}
-		if ch == '>' || ch == '$' || ch == '=' || ch == '&' {
+		if ch == '>' || ch == '$' || ch == '=' || ch == '&' || ch == '(' || ch == ')' || ch == '{' || ch == '}' {
 			return true
 		}
 	}
@@ -804,12 +804,60 @@ func powerShellWords(command string) []string {
 }
 
 func readOnlyWords(words []string) bool {
-	switch canonicalCommand(words[0]) {
-	case "get-content", "get-item", "test-path", "resolve-path", "get-process", "get-service", "get-childitem", "get-location", "get-filehash", "get-acl", "format-hex", "select-string", "write-output", "write-host":
-		return true
+	command := canonicalCommand(words[0])
+	switch command {
+	case "get-content", "get-item", "test-path", "resolve-path", "get-childitem", "get-filehash", "get-acl", "format-hex", "select-string":
+		return readOnlyFileWords(words[1:])
+	case "get-process", "get-service", "get-location", "write-output", "write-host":
+		return readOnlyNonFileWords(words[1:])
 	default:
 		return false
 	}
+}
+
+func readOnlyFileWords(words []string) bool {
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		if word == "--%" {
+			return false
+		}
+		if strings.HasPrefix(word, "-") {
+			option, value, hasValue := splitPowerShellOption(word)
+			if unsafePowerShellOption(option) {
+				return false
+			}
+			if powerShellPathOption(option) {
+				if !hasValue {
+					i++
+					if i >= len(words) {
+						return false
+					}
+					value = words[i]
+				}
+				if !safeRelativePowerShellPath(value) {
+					return false
+				}
+			}
+			continue
+		}
+		if !safeRelativePowerShellPath(word) {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlyNonFileWords(words []string) bool {
+	for _, word := range words {
+		if word == "--%" {
+			return false
+		}
+		option, _, _ := splitPowerShellOption(word)
+		if unsafePowerShellOption(option) {
+			return false
+		}
+	}
+	return true
 }
 
 func destructiveWords(words []string) bool {
@@ -819,6 +867,64 @@ func destructiveWords(words []string) bool {
 	default:
 		return strings.HasPrefix(canonicalCommand(words[0]), "remove-") || strings.HasPrefix(canonicalCommand(words[0]), "set-") || strings.HasPrefix(canonicalCommand(words[0]), "new-")
 	}
+}
+
+func splitPowerShellOption(word string) (string, string, bool) {
+	if !strings.HasPrefix(word, "-") {
+		return "", "", false
+	}
+	option := strings.TrimLeft(word, "-")
+	for _, sep := range []string{":", "="} {
+		if idx := strings.Index(option, sep); idx >= 0 {
+			return strings.ToLower(strings.TrimSpace(option[:idx])), strings.TrimSpace(option[idx+1:]), true
+		}
+	}
+	return strings.ToLower(strings.TrimSpace(option)), "", false
+}
+
+func unsafePowerShellOption(option string) bool {
+	switch strings.ToLower(strings.TrimSpace(option)) {
+	case "outfile", "out-file", "outvariable", "ov", "pipelinevariable", "pv":
+		return true
+	default:
+		return false
+	}
+}
+
+func powerShellPathOption(option string) bool {
+	switch strings.ToLower(strings.TrimSpace(option)) {
+	case "path", "literalpath", "pspath", "filepath":
+		return true
+	default:
+		return false
+	}
+}
+
+func safeRelativePowerShellPath(path string) bool {
+	path = strings.Trim(strings.TrimSpace(path), `"'`)
+	if path == "" {
+		return false
+	}
+	lower := strings.ToLower(path)
+	if strings.ContainsAny(path, "$`\x00") {
+		return false
+	}
+	if strings.HasPrefix(path, "/") || strings.HasPrefix(path, `\`) || strings.HasPrefix(path, "~") {
+		return false
+	}
+	if len(path) >= 2 && ((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z')) && path[1] == ':' {
+		return false
+	}
+	if strings.Contains(path, ":") || strings.HasPrefix(lower, "env:") || strings.HasPrefix(lower, "hklm:") || strings.HasPrefix(lower, "hkcu:") {
+		return false
+	}
+	normalized := strings.ReplaceAll(path, `\`, "/")
+	for _, part := range strings.Split(normalized, "/") {
+		if part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 func canonicalCommand(command string) string {
