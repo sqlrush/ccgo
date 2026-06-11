@@ -25,6 +25,7 @@ type grepInput struct {
 	Pattern            string `json:"pattern"`
 	Path               string `json:"path,omitempty"`
 	Glob               string `json:"glob,omitempty"`
+	Type               string `json:"type,omitempty"`
 	OutputMode         string `json:"output_mode,omitempty"`
 	Limit              *int   `json:"limit,omitempty"`
 	HeadLimit          *int   `json:"head_limit,omitempty"`
@@ -107,6 +108,7 @@ func NewGrepTool() tool.Tool {
 					"pattern":     map[string]any{"type": "string"},
 					"path":        map[string]any{"type": "string"},
 					"glob":        map[string]any{"type": "string"},
+					"type":        map[string]any{"type": "string"},
 					"output_mode": map[string]any{"type": "string", "enum": []any{"files_with_matches", "content", "count"}},
 					"limit":       map[string]any{"type": "integer"},
 					"head_limit":  map[string]any{"type": "integer"},
@@ -128,7 +130,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob optionally filters file paths. content mode supports context, before_context, after_context, offset, and head_limit pagination.", nil
+			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. content mode supports context, before_context, after_context, offset, and head_limit pagination.", nil
 		},
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
@@ -215,6 +217,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if input.Offset != nil && *input.Offset < 0 {
 		return fmt.Errorf("offset must be non-negative")
 	}
+	if _, err := grepTypeExtensions(input.Type); err != nil {
+		return err
+	}
 	before, after := grepContextLines(input)
 	if before < 0 || after < 0 {
 		return fmt.Errorf("context values must be non-negative")
@@ -248,7 +253,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		BeforeContext: before,
 		AfterContext:  after,
 	}
-	matches, totalMatches, truncated, err := collectGrepMatches(root, input.Glob, expr, options)
+	matches, totalMatches, truncated, err := collectGrepMatches(root, input.Glob, input.Type, expr, options)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -263,6 +268,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"pattern":          input.Pattern,
 			"path":             input.Path,
 			"glob":             input.Glob,
+			"type_filter":      input.Type,
 			"output_mode":      mode,
 			"matches":          grepStructuredMatches(matches, mode),
 			"total_matches":    totalMatches,
@@ -287,7 +293,7 @@ func decodeGlob(raw json.RawMessage) (globInput, error) {
 func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	var input grepInput
 	if err := decodeStrict(raw, map[string]struct{}{
-		"pattern": {}, "path": {}, "glob": {}, "output_mode": {}, "limit": {},
+		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "limit": {},
 		"head_limit": {}, "headLimit": {}, "offset": {},
 		"context": {}, "before_context": {}, "beforeContext": {}, "after_context": {}, "afterContext": {},
 		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
@@ -340,14 +346,21 @@ func collectGlobMatches(root string, pattern string, limit int) ([]fileSearchMat
 	return matches, truncated, nil
 }
 
-func collectGrepMatches(root string, glob string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, bool, error) {
+func collectGrepMatches(root string, glob string, typeFilter string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, bool, error) {
+	typeExtensions, err := grepTypeExtensions(typeFilter)
+	if err != nil {
+		return nil, 0, false, err
+	}
 	var matches []grepMatch
-	err := walkSearchFiles(root, func(path string, rel string, _ os.FileInfo) error {
+	err = walkSearchFiles(root, func(path string, rel string, _ os.FileInfo) error {
 		if glob != "" {
 			ok, err := matchGlobPath(glob, rel)
 			if err != nil || !ok {
 				return err
 			}
+		}
+		if len(typeExtensions) > 0 && !grepTypeMatches(path, typeExtensions) {
+			return nil
 		}
 		if hasBinaryExtension(path) {
 			return nil
@@ -487,6 +500,70 @@ func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
 
 func grepCaseInsensitive(input grepInput) bool {
 	return input.CaseInsensitive || input.CaseInsensitiveAlt || input.ShortIgnoreCase
+}
+
+func grepTypeExtensions(typeFilter string) ([]string, error) {
+	typeFilter = strings.TrimSpace(strings.TrimPrefix(typeFilter, "."))
+	if typeFilter == "" {
+		return nil, nil
+	}
+	if strings.ContainsAny(typeFilter, `/\*?[]`) {
+		return nil, fmt.Errorf("type must be a file type or extension, not a glob")
+	}
+	switch strings.ToLower(typeFilter) {
+	case "c":
+		return []string{".c", ".h"}, nil
+	case "cpp", "c++":
+		return []string{".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"}, nil
+	case "go", "golang":
+		return []string{".go"}, nil
+	case "js", "javascript":
+		return []string{".js", ".jsx", ".mjs", ".cjs"}, nil
+	case "ts", "typescript":
+		return []string{".ts", ".tsx", ".mts", ".cts"}, nil
+	case "py", "python":
+		return []string{".py", ".pyw"}, nil
+	case "rb", "ruby":
+		return []string{".rb"}, nil
+	case "rs", "rust":
+		return []string{".rs"}, nil
+	case "java":
+		return []string{".java"}, nil
+	case "kt", "kotlin":
+		return []string{".kt", ".kts"}, nil
+	case "swift":
+		return []string{".swift"}, nil
+	case "php":
+		return []string{".php"}, nil
+	case "sh", "shell":
+		return []string{".sh", ".bash", ".zsh", ".fish"}, nil
+	case "sql":
+		return []string{".sql"}, nil
+	case "html":
+		return []string{".html", ".htm"}, nil
+	case "css":
+		return []string{".css", ".scss", ".sass", ".less"}, nil
+	case "json":
+		return []string{".json", ".jsonc"}, nil
+	case "yaml", "yml":
+		return []string{".yaml", ".yml"}, nil
+	case "md", "markdown":
+		return []string{".md", ".markdown"}, nil
+	case "txt", "text":
+		return []string{".txt"}, nil
+	default:
+		return []string{"." + strings.ToLower(typeFilter)}, nil
+	}
+}
+
+func grepTypeMatches(path string, extensions []string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, candidate := range extensions {
+		if ext == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func grepLimit(input grepInput) int {

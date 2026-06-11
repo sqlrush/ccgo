@@ -520,6 +520,58 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	}
 }
 
+func TestGrepToolTypeFilter(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"src/a.go":  "Needle go\n",
+		"src/b.txt": "Needle text\n",
+		"src/c.jsx": "Needle jsx\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	goResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_type_go",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","type":"go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if goResult.Content != "src/a.go" || goResult.StructuredContent["type_filter"] != "go" {
+		t.Fatalf("go type result = %#v", goResult)
+	}
+
+	jsResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_type_js",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","type":"javascript"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsResult.Content != "src/c.jsx" {
+		t.Fatalf("javascript type result = %#v", jsResult.Content)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_type",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","type":"*.go"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "type must be a file type or extension") {
+		t.Fatalf("type validation err = %v", err)
+	}
+}
+
 func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "ignored"), 0o755); err != nil {
