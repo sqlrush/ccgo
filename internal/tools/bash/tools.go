@@ -361,6 +361,25 @@ var gitRevParseFlagsWithArgs = map[string]bool{
 	"--short": true,
 }
 
+var gitLsRemoteAllowedFlags = map[string]bool{
+	"--branches":  true,
+	"-b":          true,
+	"--tags":      true,
+	"-t":          true,
+	"--heads":     true,
+	"-h":          true,
+	"--refs":      true,
+	"--quiet":     true,
+	"-q":          true,
+	"--exit-code": true,
+	"--get-url":   true,
+	"--symref":    true,
+}
+
+var gitLsRemoteFlagsWithArgs = map[string]bool{
+	"--sort": true,
+}
+
 var gitBranchAllowedFlags = map[string]bool{
 	"-l":             true,
 	"--list":         true,
@@ -1475,6 +1494,8 @@ func readOnlyGit(words []string) bool {
 		return argsAllowPositionals(words[2:], gitGrepAllowedFlags, gitGrepFlagsWithArgs, -1)
 	case "rev-parse":
 		return argsAllowPositionals(words[2:], gitRevParseAllowedFlags, gitRevParseFlagsWithArgs, -1)
+	case "ls-remote":
+		return readOnlyGitLsRemote(words[2:])
 	case "branch":
 		return readOnlyGitBranch(words[2:])
 	case "tag":
@@ -1514,6 +1535,51 @@ func readOnlyGitBranch(args []string) bool {
 
 func readOnlyGitTag(args []string) bool {
 	return argsAllowListModePositionals(args, gitTagAllowedFlags, gitTagFlagsWithArgs, nil)
+}
+
+func readOnlyGitLsRemote(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			for _, positional := range args[i+1:] {
+				if !safeGitLsRemoteArg(positional) {
+					return false
+				}
+			}
+			return true
+		}
+		if strings.HasPrefix(arg, "--") {
+			if strings.Contains(arg, "=") {
+				name := strings.SplitN(arg, "=", 2)[0]
+				if !gitLsRemoteFlagsWithArgs[name] {
+					return false
+				}
+				continue
+			}
+			if gitLsRemoteFlagsWithArgs[arg] && i+1 < len(args) {
+				i++
+				continue
+			}
+			if !gitLsRemoteAllowedFlags[arg] {
+				return false
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if !gitLsRemoteAllowedFlags[arg] {
+				return false
+			}
+			continue
+		}
+		if !safeGitLsRemoteArg(arg) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeGitLsRemoteArg(arg string) bool {
+	return arg != "" && !strings.Contains(arg, "://") && !strings.Contains(arg, "@") && !strings.Contains(arg, ":") && !strings.Contains(arg, "$")
 }
 
 func readOnlyGitRemote(args []string) bool {
