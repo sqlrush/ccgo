@@ -291,7 +291,7 @@ func resolveSearchURL(raw string, base *url.URL) string {
 	if base != nil {
 		parsed = base.ResolveReference(parsed)
 	}
-	if parsed.Hostname() == "duckduckgo.com" && strings.HasPrefix(parsed.Path, "/l/") {
+	if isDuckDuckGoHost(parsed.Hostname()) && strings.HasPrefix(parsed.Path, "/l/") {
 		if target := parsed.Query().Get("uddg"); target != "" {
 			if unescaped, err := url.QueryUnescape(target); err == nil {
 				parsed, err = url.Parse(unescaped)
@@ -316,10 +316,15 @@ func isSearchChromeURL(raw string) bool {
 	if host == "" {
 		return true
 	}
-	if strings.Contains(host, "duckduckgo.com") && !strings.HasPrefix(parsed.Path, "/l/") {
+	if isDuckDuckGoHost(host) && !strings.HasPrefix(parsed.Path, "/l/") {
 		return true
 	}
 	return false
+}
+
+func isDuckDuckGoHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	return host == "duckduckgo.com" || strings.HasSuffix(host, ".duckduckgo.com")
 }
 
 func filterSearchResults(results []searchResult, allowedDomains []string, blockedDomains []string, limit int) []searchResult {

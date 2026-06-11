@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -92,6 +93,20 @@ func TestWebSearchBlockedDomainsAndNoResults(t *testing.T) {
 	results := result.StructuredContent["results"].([]map[string]any)
 	if len(results) != 0 {
 		t.Fatalf("results = %#v", results)
+	}
+}
+
+func TestWebSearchUnwrapsDuckDuckGoSubdomainRedirects(t *testing.T) {
+	base, err := url.Parse("https://html.duckduckgo.com/html/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resolveSearchURL("/l/?uddg=https%3A%2F%2Fdocs.example.com%2Fguide%3Fq%3Dgo", base)
+	if got != "https://docs.example.com/guide?q=go" {
+		t.Fatalf("resolved URL = %q", got)
+	}
+	if !isSearchChromeURL("https://html.duckduckgo.com/html/?q=claude") {
+		t.Fatalf("DuckDuckGo search chrome should be filtered")
 	}
 }
 
