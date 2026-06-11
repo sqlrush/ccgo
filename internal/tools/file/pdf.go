@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"ccgo/internal/contracts"
 )
@@ -475,7 +476,7 @@ func readPDFLiteralString(data []byte, start int) (string, int, bool) {
 		if c == ')' {
 			depth--
 			if depth == 0 {
-				return string(out), i + 1, true
+				return decodePDFStringBytes(out), i + 1, true
 			}
 			out = append(out, c)
 			continue
@@ -542,7 +543,34 @@ func readPDFHexString(data []byte, start int) (string, int, bool) {
 	if err != nil {
 		return "", end + 1, false
 	}
-	return string(decoded), end + 1, true
+	return decodePDFStringBytes(decoded), end + 1, true
+}
+
+func decodePDFStringBytes(data []byte) string {
+	if len(data) >= 2 {
+		switch {
+		case data[0] == 0xfe && data[1] == 0xff:
+			return decodePDFUTF16(data[2:], false)
+		case data[0] == 0xff && data[1] == 0xfe:
+			return decodePDFUTF16(data[2:], true)
+		}
+	}
+	return string(data)
+}
+
+func decodePDFUTF16(data []byte, littleEndian bool) string {
+	if len(data)%2 == 1 {
+		data = data[:len(data)-1]
+	}
+	values := make([]uint16, 0, len(data)/2)
+	for i := 0; i+1 < len(data); i += 2 {
+		if littleEndian {
+			values = append(values, uint16(data[i])|uint16(data[i+1])<<8)
+			continue
+		}
+		values = append(values, uint16(data[i])<<8|uint16(data[i+1]))
+	}
+	return string(utf16.Decode(values))
 }
 
 func normalizePDFText(text string) string {

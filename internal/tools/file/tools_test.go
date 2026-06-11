@@ -218,6 +218,35 @@ func TestReadPDFExtractsReferencedCompressedPageContent(t *testing.T) {
 	}
 }
 
+func TestReadPDFDecodesUTF16HexStrings(t *testing.T) {
+	dir := t.TempDir()
+	pdf := `%PDF-1.4
+1 0 obj
+<< /Type /Page >>
+stream
+BT
+<FEFF00480065006C006C006F00204E16754C> Tj
+ET
+endstream
+endobj
+%%EOF`
+	if err := os.WriteFile(filepath.Join(dir, "utf16.pdf"), []byte(pdf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_pdf_utf16",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"utf16.pdf"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Hello \u4e16\u754c"
+	if !strings.Contains(result.Content.(string), want) || result.StructuredContent["text"] != want {
+		t.Fatalf("UTF-16 PDF result = %#v structured=%#v", result.Content, result.StructuredContent)
+	}
+}
+
 func TestReadToolReturnsImageContentBlock(t *testing.T) {
 	dir := t.TempDir()
 	data := []byte{0x89, 'P', 'N', 'G', '\r', '\n'}
