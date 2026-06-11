@@ -416,6 +416,47 @@ func TestFetchRemoteHistoryAcceptsPaginationTokenAliases(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsGenericPaginationTokenAliases(t *testing.T) {
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"latest"}],"has_next":true,"paginationToken":"evt_pagination"}`))
+		case "evt_pagination":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"middle"}],"links":{"older":"/v1/sessions/s/events?cursorToken=evt_cursor_token"}}`))
+		case "evt_cursor_token":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"older"}],"links":[{"rel":"previous","token":"evt_link_token"}]}`))
+		case "evt_link_token":
+			_, _ = w.Write([]byte(`{"data":[{"type":"status","session_id":"s","status":"oldest"}],"has_more":false,"token":"ignored_when_complete"}`))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 4 || len(events.Events) != 4 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	for index, want := range []string{"latest", "middle", "older", "oldest"} {
+		if events.Events[index].Status != want {
+			t.Fatalf("events = %#v", events.Events)
+		}
+	}
+	if len(seen) != 4 ||
+		seen[1].Get("before_id") != "evt_pagination" ||
+		seen[2].Get("before_id") != "evt_cursor_token" ||
+		seen[3].Get("before_id") != "evt_link_token" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsPreviousPaginationTokenAliases(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
