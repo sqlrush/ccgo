@@ -14,7 +14,7 @@ import (
 
 func bashExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewBashTool(), NewBashOutputTool())
+	registry, err := tool.NewRegistry(NewBashTool(), NewBashOutputTool(), NewKillBashTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,6 +297,46 @@ func TestBashBackgroundTimeout(t *testing.T) {
 	}
 }
 
+func TestKillBashCancelsBackgroundCommand(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_background_kill_start",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"sleep 5","run_in_background":true,"timeout":5000}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bashID := start.StructuredContent["bash_id"].(string)
+
+	killed, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_background_kill",
+		Name:  "KillBash",
+		Input: json.RawMessage(`{"bash_id":` + strconvQuote(bashID) + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if killed.StructuredContent["killed"] != true || killed.StructuredContent["cancelled"] != true {
+		t.Fatalf("kill structured content = %#v", killed.StructuredContent)
+	}
+
+	output := waitForBashOutput(t, executor, ctx, bashID)
+	if !output.IsError {
+		t.Fatalf("cancelled output should be error: %#v", output)
+	}
+	if output.StructuredContent["cancelled"] != true || output.StructuredContent["timed_out"] != false {
+		t.Fatalf("cancelled structured content = %#v", output.StructuredContent)
+	}
+	if !strings.Contains(output.Content.(string), "was cancelled") {
+		t.Fatalf("cancelled content = %#v", output.Content)
+	}
+}
+
 func TestBashOutputValidationAndMissingTask(t *testing.T) {
 	executor := bashExecutor(t)
 	ctx := WithBackgroundState(tool.Context{
@@ -318,6 +358,35 @@ func TestBashOutputValidationAndMissingTask(t *testing.T) {
 			_, err := executor.Execute(ctx, contracts.ToolUse{
 				ID:    "toolu_output_invalid",
 				Name:  "BashOutput",
+				Input: json.RawMessage(tt.input),
+			}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestKillBashValidationAndMissingTask(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "missing id", input: `{}`, want: "bash_id is required"},
+		{name: "unknown field", input: `{"bash_id":"bash_missing","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing task", input: `{"id":"bash_missing"}`, want: "background bash command not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := executor.Execute(ctx, contracts.ToolUse{
+				ID:    "toolu_kill_invalid",
+				Name:  "KillBash",
 				Input: json.RawMessage(tt.input),
 			}, nil)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {

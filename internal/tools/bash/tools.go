@@ -46,6 +46,11 @@ type bashOutputInput struct {
 	TailLinesAlt *int   `json:"tailLines,omitempty"`
 }
 
+type bashKillInput struct {
+	BashID string `json:"bash_id,omitempty"`
+	ID     string `json:"id,omitempty"`
+}
+
 func NewBashTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
@@ -106,6 +111,31 @@ func NewBashOutputTool() tool.Tool {
 	}
 }
 
+func NewKillBashTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "KillBash",
+			Description:     "Cancel a background Bash command.",
+			SearchHint:      "kill cancel background shell command",
+			ConcurrencySafe: true,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"bash_id": map[string]any{"type": "string"},
+					"id":      map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Cancels a Bash command started with run_in_background. Use BashOutput to read the final output and status.", nil
+		},
+		ValidateFunc:    validateKillBash,
+		CallFunc:        callKillBash,
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
 func validateBash(_ tool.Context, raw json.RawMessage) error {
 	input, err := decodeBash(raw)
 	if err != nil {
@@ -138,6 +168,17 @@ func validateBashOutput(_ tool.Context, raw json.RawMessage) error {
 	}
 	if input.TailLinesAlt != nil && *input.TailLinesAlt <= 0 {
 		return fmt.Errorf("tail_lines must be positive")
+	}
+	return nil
+}
+
+func validateKillBash(_ tool.Context, raw json.RawMessage) error {
+	input, err := decodeKillBash(raw)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.backgroundID()) == "" {
+		return fmt.Errorf("bash_id is required")
 	}
 	return nil
 }
@@ -201,11 +242,44 @@ func callBashOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 			"running":     snapshot.Running,
 			"exit_code":   snapshot.ExitCode,
 			"timed_out":   snapshot.TimedOut,
+			"cancelled":   snapshot.Cancelled,
 			"duration_ms": snapshot.DurationMS,
 			"timeout_ms":  snapshot.TimeoutMS,
 			"started_at":  snapshot.StartedAt.UTC().Format(time.RFC3339Nano),
 			"ended_at":    formatOptionalTime(snapshot.EndedAt),
 			"error":       snapshot.Error,
+		},
+	}, nil
+}
+
+func callKillBash(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeKillBash(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	state := EnsureBackgroundState(ctx)
+	if state == nil {
+		return contracts.ToolResult{}, fmt.Errorf("background bash state is not available")
+	}
+	task, ok := state.Get(input.backgroundID())
+	if !ok {
+		return contracts.ToolResult{}, fmt.Errorf("background bash command not found: %s", input.backgroundID())
+	}
+	killed := task.Cancel()
+	snapshot := task.Snapshot()
+	content := fmt.Sprintf("Kill requested for background command %s.", snapshot.ID)
+	if !killed {
+		content = fmt.Sprintf("Background command %s is not running.", snapshot.ID)
+	}
+	return contracts.ToolResult{
+		Content: content,
+		StructuredContent: map[string]any{
+			"type":      "kill_bash",
+			"bash_id":   snapshot.ID,
+			"command":   snapshot.Command,
+			"running":   snapshot.Running,
+			"killed":    killed,
+			"cancelled": snapshot.Cancelled,
 		},
 	}, nil
 }
@@ -275,6 +349,7 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	}
 	cmd.Stdout = &task.stdout
 	cmd.Stderr = &task.stderr
+	task.SetCancel(cancel)
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return contracts.ToolResult{}, err
@@ -285,6 +360,7 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 		err := cmd.Wait()
 		durationMS := time.Since(task.StartedAt).Milliseconds()
 		timedOut := errors.Is(runCtx.Err(), context.DeadlineExceeded)
+		cancelled := task.IsCancelled()
 		exitCode := 0
 		errText := ""
 		if err != nil {
@@ -292,12 +368,15 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
 				exitCode = exitErr.ExitCode()
-			} else if !timedOut {
+			} else if !timedOut && !cancelled {
 				errText = err.Error()
 			}
-			if timedOut {
+			if timedOut || cancelled {
 				exitCode = -1
 			}
+		}
+		if cancelled && errText == "" {
+			errText = "cancelled"
 		}
 		task.Finish(exitCode, timedOut, durationMS, errText, time.Now())
 	}()
@@ -357,6 +436,8 @@ func formatBackgroundOutput(snapshot BackgroundTaskSnapshot) string {
 	var status string
 	if snapshot.Running {
 		status = fmt.Sprintf("Background command %s is still running.", snapshot.ID)
+	} else if snapshot.Cancelled {
+		status = fmt.Sprintf("Background command %s was cancelled.", snapshot.ID)
 	} else if snapshot.TimedOut {
 		status = fmt.Sprintf("Background command %s timed out after %dms.", snapshot.ID, snapshot.TimeoutMS)
 	} else {
@@ -444,6 +525,29 @@ func decodeBashOutput(raw json.RawMessage) (bashOutputInput, error) {
 	return input, nil
 }
 
+func decodeKillBash(raw json.RawMessage) (bashKillInput, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return bashKillInput{}, err
+	}
+	for key := range obj {
+		switch key {
+		case "bash_id", "id":
+		default:
+			return bashKillInput{}, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	var input bashKillInput
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return bashKillInput{}, err
+	}
+	if err := json.Unmarshal(data, &input); err != nil {
+		return bashKillInput{}, err
+	}
+	return input, nil
+}
+
 func (input bashInput) runInBackground() bool {
 	if input.hasRunInBackground {
 		return input.RunInBackground
@@ -455,6 +559,13 @@ func (input bashInput) runInBackground() bool {
 }
 
 func (input bashOutputInput) backgroundID() string {
+	if strings.TrimSpace(input.BashID) != "" {
+		return strings.TrimSpace(input.BashID)
+	}
+	return strings.TrimSpace(input.ID)
+}
+
+func (input bashKillInput) backgroundID() string {
 	if strings.TrimSpace(input.BashID) != "" {
 		return strings.TrimSpace(input.BashID)
 	}

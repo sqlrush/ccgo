@@ -30,8 +30,10 @@ type BackgroundTask struct {
 	Running    bool
 	ExitCode   int
 	TimedOut   bool
+	Cancelled  bool
 	DurationMS int64
 	Error      string
+	cancel     func()
 }
 
 type BackgroundTaskSnapshot struct {
@@ -46,6 +48,7 @@ type BackgroundTaskSnapshot struct {
 	Running     bool
 	ExitCode    int
 	TimedOut    bool
+	Cancelled   bool
 	DurationMS  int64
 	Error       string
 }
@@ -93,6 +96,42 @@ func (s *BackgroundState) Get(id string) (*BackgroundTask, bool) {
 	return task, ok
 }
 
+func (t *BackgroundTask) SetCancel(cancel func()) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cancel = cancel
+}
+
+func (t *BackgroundTask) Cancel() bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	if !t.Running {
+		t.mu.Unlock()
+		return false
+	}
+	t.Cancelled = true
+	cancel := t.cancel
+	t.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return true
+}
+
+func (t *BackgroundTask) IsCancelled() bool {
+	if t == nil {
+		return false
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.Cancelled
+}
+
 func (t *BackgroundTask) Finish(exitCode int, timedOut bool, durationMS int64, errText string, endedAt time.Time) {
 	if t == nil {
 		return
@@ -105,6 +144,7 @@ func (t *BackgroundTask) Finish(exitCode int, timedOut bool, durationMS int64, e
 	t.DurationMS = durationMS
 	t.Error = errText
 	t.EndedAt = endedAt
+	t.cancel = nil
 }
 
 func (t *BackgroundTask) Snapshot() BackgroundTaskSnapshot {
@@ -125,6 +165,7 @@ func (t *BackgroundTask) Snapshot() BackgroundTaskSnapshot {
 		Running:     t.Running,
 		ExitCode:    t.ExitCode,
 		TimedOut:    t.TimedOut,
+		Cancelled:   t.Cancelled,
 		DurationMS:  t.DurationMS,
 		Error:       t.Error,
 	}

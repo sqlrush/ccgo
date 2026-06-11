@@ -120,7 +120,7 @@ func NewEditTool() tool.Tool {
 }
 
 func BuiltinTools() []tool.Tool {
-	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
+	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), bashtools.NewKillBashTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
 }
 
 func validateRead(ctx tool.Context, raw json.RawMessage) error {
