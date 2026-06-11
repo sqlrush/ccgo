@@ -953,6 +953,40 @@ func TestGlobToolDefaultNoIgnoreAndHidden(t *testing.T) {
 	}
 }
 
+func TestGlobToolTruncationMessage(t *testing.T) {
+	dir := t.TempDir()
+	mtime := time.Now().Add(-time.Hour)
+	for _, rel := range []string{"a.go", "b.go", "c.go"} {
+		path := filepath.Join(dir, rel)
+		if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_glob_truncated",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"*.go","limit":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "a.go\nb.go\n(Results are truncated. Consider using a more specific path or pattern.)"
+	if result.Content != want {
+		t.Fatalf("glob truncated content = %#v", result.Content)
+	}
+	if result.StructuredContent["truncated"] != true {
+		t.Fatalf("glob truncated structured content = %#v", result.StructuredContent)
+	}
+	files := result.StructuredContent["files"].([]string)
+	if len(files) != 2 || files[0] != "a.go" || files[1] != "b.go" {
+		t.Fatalf("glob truncated files = %#v", files)
+	}
+}
+
 func TestGlobAndGrepReturnWorkingDirectoryRelativePaths(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {

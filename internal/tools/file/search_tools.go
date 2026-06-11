@@ -16,6 +16,7 @@ import (
 const defaultSearchLimit = 100
 const defaultGrepHeadLimit = 250
 const fileNotFoundCWDNote = "Note: your current working directory is"
+const globTruncatedMessage = "(Results are truncated. Consider using a more specific path or pattern.)"
 
 var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
@@ -246,6 +247,8 @@ func callGlob(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	content := strings.Join(paths, "\n")
 	if content == "" {
 		content = "No files found"
+	} else if truncated {
+		content += "\n" + globTruncatedMessage
 	}
 	return contracts.ToolResult{
 		Content: content,
