@@ -59,9 +59,13 @@ func validateTodoWrite(_ tool.Context, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
+	return validateTodos(input.Todos)
+}
+
+func validateTodos(todos []Todo) error {
 	seen := map[string]struct{}{}
 	inProgress := 0
-	for i, todo := range input.Todos {
+	for i, todo := range todos {
 		prefix := fmt.Sprintf("todos[%d]", i)
 		if strings.TrimSpace(todo.ID) == "" {
 			return fmt.Errorf("%s.id is required", prefix)
@@ -94,15 +98,29 @@ func callTodoWrite(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	state := EnsureState(ctx)
+	state, err := LoadState(ctx)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
 	if state != nil {
 		state.Set(input.Todos)
+		if err := state.Save(); err != nil {
+			return contracts.ToolResult{}, err
+		}
+	}
+	storePath := ""
+	persisted := false
+	if state != nil {
+		storePath = state.StorePath()
+		persisted = storePath != ""
 	}
 	return contracts.ToolResult{
 		Content: todoWriteSuccess,
 		StructuredContent: map[string]any{
-			"type":  "todo_list",
-			"todos": structuredTodos(input.Todos),
+			"type":      "todo_list",
+			"todos":     structuredTodos(input.Todos),
+			"persisted": persisted,
+			"storePath": storePath,
 		},
 	}, nil
 }

@@ -3,6 +3,8 @@ package todotools
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,6 +26,14 @@ func todoContext() tool.Context {
 		Context:  context.Background(),
 		Metadata: map[string]any{},
 	}, NewState())
+}
+
+func persistentTodoContext(dir string, sessionID contracts.ID) tool.Context {
+	return tool.Context{
+		Context:          context.Background(),
+		WorkingDirectory: dir,
+		SessionID:        sessionID,
+	}
 }
 
 func TestTodoWriteStoresStateAndStructuredContent(t *testing.T) {
@@ -70,6 +80,45 @@ func TestTodoWriteStoresStateAndStructuredContent(t *testing.T) {
 	todos = state.Snapshot()
 	if len(todos) != 1 || todos[0].Status != "completed" {
 		t.Fatalf("updated todos = %#v", todos)
+	}
+}
+
+func TestTodoWritePersistsAndRestoresSessionState(t *testing.T) {
+	dir := t.TempDir()
+	ctx := persistentTodoContext(dir, "session/one")
+	executor := todoExecutor(t)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_todo_persist",
+		Name: "TodoWrite",
+		Input: json.RawMessage(`{"todos":[
+			{"id":"todo-1","content":"Persist todos","status":"in_progress","priority":"high"},
+			{"id":"todo-2","content":"Restore todos","status":"pending","priority":"medium"}
+		]}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storePath := filepath.Join(dir, ".claude", "todos", "session_one.json")
+	if result.StructuredContent["persisted"] != true || result.StructuredContent["storePath"] != storePath {
+		t.Fatalf("persistence structured content = %#v", result.StructuredContent)
+	}
+	data, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"Persist todos"`) {
+		t.Fatalf("store file = %s", data)
+	}
+
+	restoredCtx := persistentTodoContext(dir, "session/one")
+	state, err := LoadState(restoredCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	todos := state.Snapshot()
+	if len(todos) != 2 || todos[0].ID != "todo-1" || todos[0].Status != "in_progress" || todos[1].Content != "Restore todos" {
+		t.Fatalf("restored todos = %#v", todos)
 	}
 }
 
