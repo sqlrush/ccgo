@@ -42,6 +42,9 @@ type grepInput struct {
 	CaseInsensitive    bool   `json:"case_insensitive,omitempty"`
 	CaseInsensitiveAlt bool   `json:"caseInsensitive,omitempty"`
 	ShortIgnoreCase    bool   `json:"-i,omitempty"`
+	FixedStrings       bool   `json:"fixed_strings,omitempty"`
+	FixedStringsAlt    bool   `json:"fixedStrings,omitempty"`
+	ShortFixedStrings  bool   `json:"-F,omitempty"`
 }
 
 type fileSearchMatch struct {
@@ -132,11 +135,14 @@ func NewGrepTool() tool.Tool {
 					"case_insensitive": map[string]any{"type": "boolean"},
 					"caseInsensitive":  map[string]any{"type": "boolean"},
 					"-i":               map[string]any{"type": "boolean"},
+					"fixed_strings":    map[string]any{"type": "boolean"},
+					"fixedStrings":     map[string]any{"type": "boolean"},
+					"-F":               map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. content mode supports context, before_context, after_context, -C, -B, -A, offset, and head_limit pagination.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. content mode supports context, before_context, after_context, -C, -B, -A, offset, and head_limit pagination. Use fixed_strings or -F for literal matching.", nil
 		},
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
@@ -283,6 +289,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"before_context":   options.BeforeContext,
 			"after_context":    options.AfterContext,
 			"case_insensitive": grepCaseInsensitive(input),
+			"fixed_strings":    grepFixedStrings(input),
 			"truncated":        truncated,
 		},
 	}, nil
@@ -303,6 +310,7 @@ func decodeGrep(raw json.RawMessage) (grepInput, error) {
 		"head_limit": {}, "headLimit": {}, "offset": {},
 		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {},
 		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
+		"fixed_strings": {}, "fixedStrings": {}, "-F": {},
 	}, &input); err != nil {
 		return grepInput{}, err
 	}
@@ -498,6 +506,9 @@ func normalizedGrepOutputMode(mode string) string {
 
 func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
 	pattern := input.Pattern
+	if grepFixedStrings(input) {
+		pattern = regexp.QuoteMeta(pattern)
+	}
 	if grepCaseInsensitive(input) {
 		pattern = "(?i:" + pattern + ")"
 	}
@@ -506,6 +517,10 @@ func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
 
 func grepCaseInsensitive(input grepInput) bool {
 	return input.CaseInsensitive || input.CaseInsensitiveAlt || input.ShortIgnoreCase
+}
+
+func grepFixedStrings(input grepInput) bool {
+	return input.FixedStrings || input.FixedStringsAlt || input.ShortFixedStrings
 }
 
 func grepTypeExtensions(typeFilter string) ([]string, error) {

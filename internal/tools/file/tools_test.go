@@ -942,6 +942,42 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	}
 }
 
+func TestGrepToolFixedStrings(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "literal.txt"), []byte("a+b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "regex.txt"), []byte("aaab\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	regexResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_regex_meta",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"a+b","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexResult.Content != "regex.txt:1:aaab" {
+		t.Fatalf("regex result = %#v", regexResult.Content)
+	}
+
+	fixedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_fixed",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"a+b","output_mode":"content","-F":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixedResult.Content != "literal.txt:1:a+b" || fixedResult.StructuredContent["fixed_strings"] != true {
+		t.Fatalf("fixed result = %#v", fixedResult)
+	}
+}
+
 func TestGrepToolTypeFilter(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
