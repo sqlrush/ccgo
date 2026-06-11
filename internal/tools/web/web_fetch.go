@@ -159,6 +159,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 			"rendered":       result.Rendered,
 			"rendered_body":  result.RenderedBody,
 			"prompt_terms":   result.PromptTerms,
+			"prompt_phrases": result.PromptPhrases,
 			"prompt_excerpt": result.PromptExcerpt,
 			"bytes":          result.Bytes,
 			"truncated":      result.Truncated,
@@ -176,6 +177,7 @@ type fetchResult struct {
 	RenderedBody  string
 	Rendered      bool
 	PromptTerms   []string
+	PromptPhrases []string
 	PromptExcerpt string
 	Bytes         int
 	Truncated     bool
@@ -289,8 +291,9 @@ func prepareWebFetchResult(result fetchResult, prompt string) fetchResult {
 	result.RenderedBody = rendered
 	result.Rendered = ok
 	result.PromptTerms = webFetchPromptTerms(prompt)
+	result.PromptPhrases = webFetchPromptPhrases(prompt)
 	if prompt != "" {
-		result.PromptExcerpt = promptFocusedWebFetchExcerpt(rendered, result.PromptTerms)
+		result.PromptExcerpt = promptFocusedWebFetchExcerpt(rendered, result.PromptTerms, result.PromptPhrases)
 	}
 	return result
 }
@@ -488,20 +491,56 @@ func normalizeWebFetchText(text string) string {
 }
 
 func webFetchPromptTerms(prompt string) []string {
-	words := strings.FieldsFunc(strings.ToLower(prompt), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	})
+	words := webFetchPromptWords(prompt)
 	terms := make([]string, 0, len(words))
 	seen := map[string]bool{}
 	for _, word := range words {
-		word = strings.TrimSpace(word)
-		if utf8.RuneCountInString(word) < 3 || isWebFetchStopWord(word) || seen[word] {
+		if seen[word] {
 			continue
 		}
 		seen[word] = true
 		terms = append(terms, word)
 	}
 	return terms
+}
+
+func webFetchPromptWords(prompt string) []string {
+	words := strings.FieldsFunc(strings.ToLower(prompt), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	out := make([]string, 0, len(words))
+	for _, word := range words {
+		word = strings.TrimSpace(word)
+		if utf8.RuneCountInString(word) < 3 || isWebFetchStopWord(word) {
+			continue
+		}
+		out = append(out, word)
+	}
+	return out
+}
+
+func webFetchPromptPhrases(prompt string) []string {
+	words := webFetchPromptWords(prompt)
+	if len(words) < 2 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var phrases []string
+	maxLen := 4
+	if len(words) < maxLen {
+		maxLen = len(words)
+	}
+	for n := maxLen; n >= 2; n-- {
+		for i := 0; i+n <= len(words); i++ {
+			phrase := strings.Join(words[i:i+n], " ")
+			if seen[phrase] {
+				continue
+			}
+			seen[phrase] = true
+			phrases = append(phrases, phrase)
+		}
+	}
+	return phrases
 }
 
 func isWebFetchStopWord(word string) bool {
@@ -519,14 +558,14 @@ type scoredWebFetchPassage struct {
 	Score int
 }
 
-func promptFocusedWebFetchExcerpt(text string, terms []string) string {
-	if len(terms) == 0 || strings.TrimSpace(text) == "" {
+func promptFocusedWebFetchExcerpt(text string, terms []string, phrases []string) string {
+	if (len(terms) == 0 && len(phrases) == 0) || strings.TrimSpace(text) == "" {
 		return ""
 	}
 	passages := splitWebFetchPassages(text)
 	scored := make([]scoredWebFetchPassage, 0, len(passages))
 	for idx, passage := range passages {
-		score := scoreWebFetchPassage(passage, terms)
+		score := scoreWebFetchPassage(passage, terms, phrases)
 		if score > 0 {
 			scored = append(scored, scoredWebFetchPassage{Index: idx, Text: passage, Score: score})
 		}
@@ -587,16 +626,56 @@ func splitLongWebFetchPassage(passage string) []string {
 	return out
 }
 
-func scoreWebFetchPassage(passage string, terms []string) int {
-	lower := strings.ToLower(passage)
+func scoreWebFetchPassage(passage string, terms []string, phrases []string) int {
+	lower := normalizedWebFetchSearchText(passage)
+	termCounts := webFetchSearchWordCounts(lower)
 	score := 0
+	for _, phrase := range phrases {
+		count := countWebFetchPhraseOccurrences(lower, phrase)
+		if count > 0 {
+			score += count * (6 + 2*len(strings.Fields(phrase)))
+		}
+	}
 	for _, term := range terms {
-		count := strings.Count(lower, term)
+		count := termCounts[term]
 		if count > 0 {
 			score += 2 + count
 		}
 	}
 	return score
+}
+
+func normalizedWebFetchSearchText(text string) string {
+	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	return strings.Join(words, " ")
+}
+
+func webFetchSearchWordCounts(normalized string) map[string]int {
+	counts := map[string]int{}
+	for _, word := range strings.Fields(normalized) {
+		counts[word]++
+	}
+	return counts
+}
+
+func countWebFetchPhraseOccurrences(normalized string, phrase string) int {
+	phrase = strings.TrimSpace(strings.ToLower(phrase))
+	if normalized == "" || phrase == "" {
+		return 0
+	}
+	haystack := " " + normalized + " "
+	needle := " " + phrase + " "
+	count := 0
+	for {
+		idx := strings.Index(haystack, needle)
+		if idx < 0 {
+			return count
+		}
+		count++
+		haystack = haystack[idx+len(needle)-1:]
+	}
 }
 
 func truncateWebFetchRunes(text string, limit int) string {

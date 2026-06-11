@@ -127,11 +127,28 @@ func TestWebFetchRendersHTMLAndPromptExcerpt(t *testing.T) {
 	if !ok || len(terms) != 2 || terms[0] != "beta" || terms[1] != "pricing" {
 		t.Fatalf("prompt terms = %#v", result.StructuredContent["prompt_terms"])
 	}
+	phrases, ok := result.StructuredContent["prompt_phrases"].([]string)
+	if !ok || len(phrases) != 1 || phrases[0] != "beta pricing" {
+		t.Fatalf("prompt phrases = %#v", result.StructuredContent["prompt_phrases"])
+	}
 	if result.StructuredContent["rendered"] != true {
 		t.Fatalf("structured content = %#v", result.StructuredContent)
 	}
 	if body, ok := result.StructuredContent["body"].(string); !ok || !strings.Contains(body, "<html>") {
 		t.Fatalf("raw body should be preserved: %#v", result.StructuredContent["body"])
+	}
+}
+
+func TestWebFetchPromptPhraseScoring(t *testing.T) {
+	terms := webFetchPromptTerms("release candidate")
+	phrases := webFetchPromptPhrases("release candidate")
+	separate := scoreWebFetchPassage("Release plans mention candidate owners. Release owners review candidate risks.", terms, phrases)
+	exact := scoreWebFetchPassage("The release candidate is ready.", terms, phrases)
+	if exact <= separate {
+		t.Fatalf("exact phrase score = %d, separate term score = %d", exact, separate)
+	}
+	if score := scoreWebFetchPassage("Trust the process.", []string{"rust"}, nil); score != 0 {
+		t.Fatalf("substring term should not match word-boundary scoring: %d", score)
 	}
 }
 
