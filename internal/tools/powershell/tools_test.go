@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -13,7 +14,7 @@ import (
 
 func powerShellExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewPowerShellTool())
+	registry, err := tool.NewRegistry(NewPowerShellTool(), NewPowerShellOutputTool(), NewKillPowerShellTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,10 +140,183 @@ func TestPowerShellMissingExecutableReturnsStructuredError(t *testing.T) {
 	}
 }
 
-func TestPowerShellRunsWhenAvailable(t *testing.T) {
-	if _, ok := powerShellExecutable(); !ok {
-		t.Skip("PowerShell executable is not installed")
+func TestPowerShellRunInBackgroundAndReadOutput(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Write-Output 'one'; Write-Output 'two'; Write-Output 'three'","run_in_background":true,"description":"background print"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if !strings.Contains(start.Content.(string), "PowerShell command started in background with ID: powershell_") {
+		t.Fatalf("start content = %#v", start.Content)
+	}
+	powerShellID := start.StructuredContent["powershell_id"].(string)
+	if powerShellID == "" || start.StructuredContent["running"] != true {
+		t.Fatalf("start structured content = %#v", start.StructuredContent)
+	}
+
+	output := waitForPowerShellOutput(t, executor, ctx, powerShellID)
+	if output.IsError {
+		t.Fatalf("output should not be error: %#v", output)
+	}
+	if output.StructuredContent["running"] != false || output.StructuredContent["exit_code"] != 0 {
+		t.Fatalf("output structured content = %#v", output.StructuredContent)
+	}
+	if normalizeNewlines(output.StructuredContent["stdout"].(string)) != "one\ntwo\nthree\n" {
+		t.Fatalf("stdout = %#v", output.StructuredContent["stdout"])
+	}
+
+	tail, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_tail",
+		Name:  "PowerShellOutput",
+		Input: json.RawMessage(`{"powershell_id":` + strconvQuote(powerShellID) + `,"tail_lines":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalizeNewlines(tail.StructuredContent["stdout"].(string)) != "two\nthree" {
+		t.Fatalf("tail stdout = %#v", tail.StructuredContent["stdout"])
+	}
+}
+
+func TestPowerShellBackgroundTimeout(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_timeout",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Start-Sleep -Milliseconds 1000","runInBackground":true,"timeout":50}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	powerShellID := start.StructuredContent["powershell_id"].(string)
+	output := waitForPowerShellOutput(t, executor, ctx, powerShellID)
+	if !output.IsError {
+		t.Fatalf("timeout output should be error: %#v", output)
+	}
+	if output.StructuredContent["timed_out"] != true || output.StructuredContent["exit_code"] != -1 {
+		t.Fatalf("timeout structured content = %#v", output.StructuredContent)
+	}
+	if !strings.Contains(output.Content.(string), "timed out after 50ms") {
+		t.Fatalf("timeout content = %#v", output.Content)
+	}
+}
+
+func TestKillPowerShellCancelsBackgroundCommand(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_kill_start",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Start-Sleep -Seconds 5","run_in_background":true,"timeout":5000}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	powerShellID := start.StructuredContent["powershell_id"].(string)
+
+	killed, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_kill",
+		Name:  "KillPowerShell",
+		Input: json.RawMessage(`{"powershell_id":` + strconvQuote(powerShellID) + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if killed.StructuredContent["killed"] != true || killed.StructuredContent["cancelled"] != true {
+		t.Fatalf("kill structured content = %#v", killed.StructuredContent)
+	}
+
+	output := waitForPowerShellOutput(t, executor, ctx, powerShellID)
+	if !output.IsError {
+		t.Fatalf("cancelled output should be error: %#v", output)
+	}
+	if output.StructuredContent["cancelled"] != true || output.StructuredContent["timed_out"] != false {
+		t.Fatalf("cancelled structured content = %#v", output.StructuredContent)
+	}
+	if !strings.Contains(output.Content.(string), "was cancelled") {
+		t.Fatalf("cancelled content = %#v", output.Content)
+	}
+}
+
+func TestPowerShellOutputValidationAndMissingTask(t *testing.T) {
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "missing id", input: `{}`, want: "powershell_id is required"},
+		{name: "bad tail", input: `{"powershell_id":"powershell_missing","tail_lines":0}`, want: "tail_lines must be positive"},
+		{name: "unknown field", input: `{"powershell_id":"powershell_missing","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing task", input: `{"id":"powershell_missing"}`, want: "background powershell command not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := executor.Execute(ctx, contracts.ToolUse{
+				ID:    "toolu_powershell_output_invalid",
+				Name:  "PowerShellOutput",
+				Input: json.RawMessage(tt.input),
+			}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestKillPowerShellValidationAndMissingTask(t *testing.T) {
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "missing id", input: `{}`, want: "powershell_id is required"},
+		{name: "unknown field", input: `{"powershell_id":"powershell_missing","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing task", input: `{"id":"powershell_missing"}`, want: "background powershell command not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := executor.Execute(ctx, contracts.ToolUse{
+				ID:    "toolu_powershell_kill_invalid",
+				Name:  "KillPowerShell",
+				Input: json.RawMessage(tt.input),
+			}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestPowerShellRunsWhenAvailable(t *testing.T) {
+	requirePowerShell(t)
 	executor := powerShellExecutor(t)
 	result, err := executor.Execute(tool.Context{
 		Context:  context.Background(),
@@ -164,6 +338,47 @@ func TestPowerShellRunsWhenAvailable(t *testing.T) {
 	if result.StructuredContent["description"] != "print greeting" {
 		t.Fatalf("description = %#v", result.StructuredContent["description"])
 	}
+}
+
+func waitForPowerShellOutput(t *testing.T, executor tool.Executor, ctx tool.Context, powerShellID string) contracts.ToolResult {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		output, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    "toolu_powershell_background_output",
+			Name:  "PowerShellOutput",
+			Input: json.RawMessage(`{"powershell_id":` + strconvQuote(powerShellID) + `}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if output.StructuredContent["running"] == false {
+			return output
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background PowerShell command %s did not finish; last output = %#v", powerShellID, output.StructuredContent)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func requirePowerShell(t *testing.T) {
+	t.Helper()
+	if _, ok := powerShellExecutable(); !ok {
+		t.Skip("PowerShell executable is not installed")
+	}
+}
+
+func normalizeNewlines(text string) string {
+	return strings.ReplaceAll(text, "\r\n", "\n")
+}
+
+func strconvQuote(value string) string {
+	escaped, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(escaped)
 }
 
 func TestPowerShellExecutableDetectionAllowsMissingBinary(t *testing.T) {

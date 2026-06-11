@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -19,9 +20,13 @@ const (
 )
 
 type powerShellInput struct {
-	Command     string `json:"command"`
-	Timeout     *int   `json:"timeout,omitempty"`
-	Description string `json:"description,omitempty"`
+	Command               string `json:"command"`
+	Timeout               *int   `json:"timeout,omitempty"`
+	Description           string `json:"description,omitempty"`
+	RunInBackground       bool   `json:"run_in_background,omitempty"`
+	RunInBackgroundAlt    bool   `json:"runInBackground,omitempty"`
+	hasRunInBackground    bool
+	hasRunInBackgroundAlt bool
 }
 
 type powerShellResult struct {
@@ -32,6 +37,18 @@ type powerShellResult struct {
 	DurationMS int64
 	TimeoutMS  int
 	Executable string
+}
+
+type powerShellOutputInput struct {
+	PowerShellID string `json:"powershell_id,omitempty"`
+	ID           string `json:"id,omitempty"`
+	TailLines    *int   `json:"tail_lines,omitempty"`
+	TailLinesAlt *int   `json:"tailLines,omitempty"`
+}
+
+type powerShellKillInput struct {
+	PowerShellID string `json:"powershell_id,omitempty"`
+	ID           string `json:"id,omitempty"`
 }
 
 func NewPowerShellTool() tool.Tool {
@@ -46,20 +63,76 @@ func NewPowerShellTool() tool.Tool {
 				"type":     "object",
 				"required": []any{"command"},
 				"properties": map[string]any{
-					"command":     map[string]any{"type": "string"},
-					"timeout":     map[string]any{"type": "integer"},
-					"description": map[string]any{"type": "string"},
+					"command":           map[string]any{"type": "string"},
+					"timeout":           map[string]any{"type": "integer"},
+					"description":       map[string]any{"type": "string"},
+					"run_in_background": map[string]any{"type": "boolean"},
+					"runInBackground":   map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Runs a PowerShell command in the current working directory. Provide command, optional timeout in milliseconds, and optional short description. Background PowerShell execution is not implemented yet.", nil
+			return "Runs a PowerShell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and interrupt controls are not implemented yet.", nil
 		},
 		ValidateFunc:    validatePowerShell,
 		CallFunc:        callPowerShell,
 		ReadOnlyFunc:    powerShellReadOnlyInput,
 		ConcurrencyFunc: powerShellReadOnlyInput,
 		DestructiveFunc: powerShellDestructiveInput,
+	}
+}
+
+func NewPowerShellOutputTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "PowerShellOutput",
+			Description:     "Read output from a background PowerShell command.",
+			SearchHint:      "read background powershell command output",
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"powershell_id": map[string]any{"type": "string"},
+					"id":            map[string]any{"type": "string"},
+					"tail_lines":    map[string]any{"type": "integer"},
+					"tailLines":     map[string]any{"type": "integer"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Reads stdout, stderr, and status for a PowerShell command started with run_in_background.", nil
+		},
+		ValidateFunc:    validatePowerShellOutput,
+		CallFunc:        callPowerShellOutput,
+		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
+func NewKillPowerShellTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "KillPowerShell",
+			Description:     "Cancel a background PowerShell command.",
+			SearchHint:      "kill cancel background powershell command",
+			ConcurrencySafe: true,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"powershell_id": map[string]any{"type": "string"},
+					"id":            map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Cancels a PowerShell command started with run_in_background. Use PowerShellOutput to read the final output and status.", nil
+		},
+		ValidateFunc:    validateKillPowerShell,
+		CallFunc:        callKillPowerShell,
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
 	}
 }
 
@@ -82,10 +155,41 @@ func validatePowerShell(_ tool.Context, raw json.RawMessage) error {
 	return nil
 }
 
+func validatePowerShellOutput(_ tool.Context, raw json.RawMessage) error {
+	input, err := decodePowerShellOutput(raw)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.backgroundID()) == "" {
+		return fmt.Errorf("powershell_id is required")
+	}
+	if input.TailLines != nil && *input.TailLines <= 0 {
+		return fmt.Errorf("tail_lines must be positive")
+	}
+	if input.TailLinesAlt != nil && *input.TailLinesAlt <= 0 {
+		return fmt.Errorf("tail_lines must be positive")
+	}
+	return nil
+}
+
+func validateKillPowerShell(_ tool.Context, raw json.RawMessage) error {
+	input, err := decodeKillPowerShell(raw)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.backgroundID()) == "" {
+		return fmt.Errorf("powershell_id is required")
+	}
+	return nil
+}
+
 func callPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodePowerShell(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
+	}
+	if input.runInBackground() {
+		return startBackgroundPowerShell(ctx, input, powerShellTimeout(input))
 	}
 	result := runPowerShellCommand(ctx, strings.TrimSpace(input.Command), powerShellTimeout(input))
 	return contracts.ToolResult{
@@ -102,6 +206,81 @@ func callPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 			"duration_ms": result.DurationMS,
 			"timeout_ms":  result.TimeoutMS,
 			"executable":  result.Executable,
+		},
+	}, nil
+}
+
+func callPowerShellOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodePowerShellOutput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	state := EnsureBackgroundState(ctx)
+	if state == nil {
+		return contracts.ToolResult{}, fmt.Errorf("background powershell state is not available")
+	}
+	task, ok := state.Get(input.backgroundID())
+	if !ok {
+		return contracts.ToolResult{}, fmt.Errorf("background powershell command not found: %s", input.backgroundID())
+	}
+	snapshot := task.Snapshot()
+	tailLines := powerShellOutputTailLines(input)
+	if tailLines > 0 {
+		snapshot.Stdout = tailText(snapshot.Stdout, tailLines)
+		snapshot.Stderr = tailText(snapshot.Stderr, tailLines)
+	}
+	return contracts.ToolResult{
+		Content: formatBackgroundOutput(snapshot),
+		IsError: !snapshot.Running && (snapshot.TimedOut || snapshot.ExitCode != 0),
+		StructuredContent: map[string]any{
+			"type":          "powershell_output",
+			"powershell_id": snapshot.ID,
+			"command":       snapshot.Command,
+			"description":   snapshot.Description,
+			"stdout":        snapshot.Stdout,
+			"stderr":        snapshot.Stderr,
+			"running":       snapshot.Running,
+			"exit_code":     snapshot.ExitCode,
+			"timed_out":     snapshot.TimedOut,
+			"cancelled":     snapshot.Cancelled,
+			"duration_ms":   snapshot.DurationMS,
+			"timeout_ms":    snapshot.TimeoutMS,
+			"started_at":    snapshot.StartedAt.UTC().Format(time.RFC3339Nano),
+			"ended_at":      formatOptionalTime(snapshot.EndedAt),
+			"error":         snapshot.Error,
+			"executable":    snapshot.Executable,
+		},
+	}, nil
+}
+
+func callKillPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeKillPowerShell(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	state := EnsureBackgroundState(ctx)
+	if state == nil {
+		return contracts.ToolResult{}, fmt.Errorf("background powershell state is not available")
+	}
+	task, ok := state.Get(input.backgroundID())
+	if !ok {
+		return contracts.ToolResult{}, fmt.Errorf("background powershell command not found: %s", input.backgroundID())
+	}
+	killed := task.Cancel()
+	snapshot := task.Snapshot()
+	content := fmt.Sprintf("Kill requested for background PowerShell command %s.", snapshot.ID)
+	if !killed {
+		content = fmt.Sprintf("Background PowerShell command %s is not running.", snapshot.ID)
+	}
+	return contracts.ToolResult{
+		Content: content,
+		StructuredContent: map[string]any{
+			"type":          "kill_powershell",
+			"powershell_id": snapshot.ID,
+			"command":       snapshot.Command,
+			"running":       snapshot.Running,
+			"killed":        killed,
+			"cancelled":     snapshot.Cancelled,
 		},
 	}, nil
 }
@@ -158,6 +337,106 @@ func runPowerShellCommand(ctx tool.Context, command string, timeout time.Duratio
 	return result
 }
 
+func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout time.Duration) (contracts.ToolResult, error) {
+	state := EnsureBackgroundState(ctx)
+	if state == nil {
+		return contracts.ToolResult{}, fmt.Errorf("background powershell state is not available")
+	}
+	name, ok := powerShellExecutable()
+	if !ok {
+		result := powerShellResult{
+			Stderr:     "PowerShell executable not found. Install pwsh or powershell to use this tool.",
+			ExitCode:   -1,
+			TimeoutMS:  int(timeout / time.Millisecond),
+			DurationMS: 0,
+		}
+		return contracts.ToolResult{
+			Content: formatPowerShellContent(result),
+			IsError: true,
+			StructuredContent: map[string]any{
+				"type":        "powershell",
+				"command":     input.Command,
+				"description": input.Description,
+				"stdout":      "",
+				"stderr":      result.Stderr,
+				"exit_code":   result.ExitCode,
+				"timed_out":   false,
+				"duration_ms": result.DurationMS,
+				"timeout_ms":  result.TimeoutMS,
+				"executable":  "",
+			},
+		}, nil
+	}
+	command := strings.TrimSpace(input.Command)
+	runCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	cmd := exec.CommandContext(runCtx, name, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+	configurePowerShellCommand(cmd)
+	if ctx.WorkingDirectory != "" {
+		cmd.Dir = ctx.WorkingDirectory
+	}
+	task := &BackgroundTask{
+		ID:          "powershell_" + string(contracts.NewID()),
+		Command:     command,
+		Description: input.Description,
+		StartedAt:   time.Now(),
+		TimeoutMS:   int(timeout / time.Millisecond),
+		Executable:  name,
+		Running:     true,
+		ExitCode:    0,
+	}
+	cmd.Stdout = &task.stdout
+	cmd.Stderr = &task.stderr
+	task.SetCancel(func() {
+		if cmd.Cancel != nil {
+			_ = cmd.Cancel()
+		}
+		cancel()
+	})
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return contracts.ToolResult{}, err
+	}
+	state.Add(task)
+	go func() {
+		defer cancel()
+		err := cmd.Wait()
+		durationMS := time.Since(task.StartedAt).Milliseconds()
+		timedOut := errors.Is(runCtx.Err(), context.DeadlineExceeded)
+		cancelled := task.IsCancelled()
+		exitCode := 0
+		errText := ""
+		if err != nil {
+			exitCode = 1
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				exitCode = exitErr.ExitCode()
+			} else if !timedOut && !cancelled {
+				errText = err.Error()
+			}
+			if timedOut || cancelled {
+				exitCode = -1
+			}
+		}
+		if cancelled && errText == "" {
+			errText = "cancelled"
+		}
+		task.Finish(exitCode, timedOut, durationMS, errText, time.Now())
+	}()
+	return contracts.ToolResult{
+		Content: fmt.Sprintf("PowerShell command started in background with ID: %s", task.ID),
+		StructuredContent: map[string]any{
+			"type":          "powershell_background",
+			"powershell_id": task.ID,
+			"command":       command,
+			"description":   input.Description,
+			"running":       true,
+			"timeout_ms":    task.TimeoutMS,
+			"started_at":    task.StartedAt.UTC().Format(time.RFC3339Nano),
+			"executable":    task.Executable,
+		},
+	}, nil
+}
+
 func powerShellExecutable() (string, bool) {
 	for _, candidate := range []string{"pwsh", "powershell"} {
 		path, err := exec.LookPath(candidate)
@@ -193,6 +472,40 @@ func formatPowerShellContent(result powerShellResult) string {
 	return status + "\n\n" + output
 }
 
+func formatBackgroundOutput(snapshot BackgroundTaskSnapshot) string {
+	var status string
+	if snapshot.Running {
+		status = fmt.Sprintf("Background PowerShell command %s is still running.", snapshot.ID)
+	} else if snapshot.Cancelled {
+		status = fmt.Sprintf("Background PowerShell command %s was cancelled.", snapshot.ID)
+	} else if snapshot.TimedOut {
+		status = fmt.Sprintf("Background PowerShell command %s timed out after %dms.", snapshot.ID, snapshot.TimeoutMS)
+	} else {
+		status = fmt.Sprintf("Background PowerShell command %s completed with exit code %d.", snapshot.ID, snapshot.ExitCode)
+	}
+	output := formatPowerShellContent(powerShellResult{
+		Stdout:    snapshot.Stdout,
+		Stderr:    snapshot.Stderr,
+		ExitCode:  snapshot.ExitCode,
+		TimedOut:  snapshot.TimedOut,
+		TimeoutMS: snapshot.TimeoutMS,
+	})
+	if snapshot.Running && snapshot.Stdout == "" && snapshot.Stderr == "" {
+		return status
+	}
+	if output == "" {
+		return status
+	}
+	return status + "\n\n" + output
+}
+
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
 func powerShellTimeout(input powerShellInput) time.Duration {
 	if input.Timeout == nil {
 		return time.Duration(defaultTimeoutMillis) * time.Millisecond
@@ -207,7 +520,7 @@ func decodePowerShell(raw json.RawMessage) (powerShellInput, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "command", "timeout", "description":
+		case "command", "timeout", "description", "run_in_background", "runInBackground":
 		default:
 			return powerShellInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -219,6 +532,58 @@ func decodePowerShell(raw json.RawMessage) (powerShellInput, error) {
 	}
 	if err := json.Unmarshal(data, &input); err != nil {
 		return powerShellInput{}, err
+	}
+	if _, ok := obj["run_in_background"]; ok {
+		input.hasRunInBackground = true
+	}
+	if _, ok := obj["runInBackground"]; ok {
+		input.hasRunInBackgroundAlt = true
+	}
+	return input, nil
+}
+
+func decodePowerShellOutput(raw json.RawMessage) (powerShellOutputInput, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return powerShellOutputInput{}, err
+	}
+	for key := range obj {
+		switch key {
+		case "powershell_id", "id", "tail_lines", "tailLines":
+		default:
+			return powerShellOutputInput{}, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	var input powerShellOutputInput
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return powerShellOutputInput{}, err
+	}
+	if err := json.Unmarshal(data, &input); err != nil {
+		return powerShellOutputInput{}, err
+	}
+	return input, nil
+}
+
+func decodeKillPowerShell(raw json.RawMessage) (powerShellKillInput, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return powerShellKillInput{}, err
+	}
+	for key := range obj {
+		switch key {
+		case "powershell_id", "id":
+		default:
+			return powerShellKillInput{}, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	var input powerShellKillInput
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return powerShellKillInput{}, err
+	}
+	if err := json.Unmarshal(data, &input); err != nil {
+		return powerShellKillInput{}, err
 	}
 	return input, nil
 }
@@ -237,6 +602,52 @@ func powerShellDestructiveInput(raw json.RawMessage) bool {
 		return false
 	}
 	return IsDestructiveCommand(input.Command)
+}
+
+func (input powerShellInput) runInBackground() bool {
+	if input.hasRunInBackground {
+		return input.RunInBackground
+	}
+	if input.hasRunInBackgroundAlt {
+		return input.RunInBackgroundAlt
+	}
+	return false
+}
+
+func (input powerShellOutputInput) backgroundID() string {
+	if strings.TrimSpace(input.PowerShellID) != "" {
+		return strings.TrimSpace(input.PowerShellID)
+	}
+	return strings.TrimSpace(input.ID)
+}
+
+func (input powerShellKillInput) backgroundID() string {
+	if strings.TrimSpace(input.PowerShellID) != "" {
+		return strings.TrimSpace(input.PowerShellID)
+	}
+	return strings.TrimSpace(input.ID)
+}
+
+func powerShellOutputTailLines(input powerShellOutputInput) int {
+	if input.TailLines != nil {
+		return *input.TailLines
+	}
+	if input.TailLinesAlt != nil {
+		return *input.TailLinesAlt
+	}
+	return 0
+}
+
+func tailText(text string, lines int) string {
+	if lines <= 0 || text == "" {
+		return text
+	}
+	trimmed := strings.TrimRight(text, "\n")
+	parts := strings.Split(trimmed, "\n")
+	if len(parts) <= lines {
+		return trimmed
+	}
+	return strings.Join(parts[len(parts)-lines:], "\n")
 }
 
 func IsReadOnlyCommand(command string) bool {
