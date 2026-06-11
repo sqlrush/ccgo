@@ -98,7 +98,7 @@ func transcriptMetadataStringValue(fields transcriptMetadataFields, keys []strin
 		return "", false
 	}
 	for _, key := range keys {
-		raw, ok := fields[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok || isNullJSON(raw) {
 			continue
 		}
@@ -125,7 +125,7 @@ func transcriptMetadataIDValue(fields transcriptMetadataFields, keys []string, d
 		return "", false
 	}
 	for _, key := range keys {
-		raw, ok := fields[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok || isNullJSON(raw) {
 			continue
 		}
@@ -152,7 +152,7 @@ func transcriptMetadataIntValue(fields transcriptMetadataFields, keys []string, 
 		return 0, false
 	}
 	for _, key := range keys {
-		raw, ok := fields[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok || isNullJSON(raw) {
 			continue
 		}
@@ -186,7 +186,7 @@ func transcriptMetadataBoolValue(fields transcriptMetadataFields, keys []string,
 		return false, false
 	}
 	for _, key := range keys {
-		raw, ok := fields[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok || isNullJSON(raw) {
 			continue
 		}
@@ -226,7 +226,7 @@ func transcriptMetadataRawValue(fields transcriptMetadataFields, keys []string, 
 		return nil, false
 	}
 	for _, key := range keys {
-		raw, ok := fields[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok || isNullJSON(raw) {
 			continue
 		}
@@ -238,6 +238,30 @@ func transcriptMetadataRawValue(fields transcriptMetadataFields, keys []string, 
 		}
 	}
 	return nil, false
+}
+
+func transcriptMetadataFieldRaw(fields transcriptMetadataFields, key string) (json.RawMessage, bool) {
+	if raw, ok := fields[key]; ok {
+		return raw, true
+	}
+	normalizedKey := transcriptMetadataNormalizedFieldName(key)
+	if normalizedKey == "" {
+		return nil, false
+	}
+	for field, raw := range fields {
+		if transcriptMetadataNormalizedFieldName(field) == normalizedKey {
+			return raw, true
+		}
+	}
+	return nil, false
+}
+
+func transcriptMetadataNormalizedFieldName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	name = strings.ReplaceAll(name, " ", "")
+	return name
 }
 
 func transcriptMetadataNestedFields(raw json.RawMessage) (transcriptMetadataFields, bool) {
@@ -255,7 +279,7 @@ func transcriptMetadataNestedFields(raw json.RawMessage) (transcriptMetadataFiel
 func transcriptMetadataWrapperFields(fields transcriptMetadataFields) []transcriptMetadataFields {
 	nested := make([]transcriptMetadataFields, 0, 2)
 	for _, key := range transcriptMetadataFieldWrapperKeys {
-		raw, ok := fields[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok || isNullJSON(raw) {
 			continue
 		}

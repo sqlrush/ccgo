@@ -1107,6 +1107,12 @@ func TestLoadTranscriptMetadataAcceptsCompactTypeAliases(t *testing.T) {
 		`{"type":"speculationAccept","createdAt":"2026-01-01T00:00:01Z","timeSavedMs":"1200"}`,
 		`{"type":"contextCollapseCommit","sessionId":"alias","collapseId":"collapse_alias","summaryId":"summary_alias","content":"collapsed","firstArchivedId":"u1","lastArchivedId":"u2"}`,
 		`{"type":"contextCollapseSnapshot","sessionId":"alias","armed":true,"lastSpawnTokens":32}`,
+		`{"type":"custom-title","Session-ID":"normalized","Custom-Title":"Normalized Title"}`,
+		`{"type":"ai-title","Session ID":"normalized","AI-Title":"Normalized AI"}`,
+		`{"type":"last-prompt","SESSION-ID":"normalized","LAST-PROMPT":"normalized prompt"}`,
+		`{"type":"task-summary","session id":"normalized","task-summary":"normalized task","Created-At":"2026-01-01T00:00:02Z"}`,
+		`{"type":"pr-link","Session-ID":"normalized","Pull-Request-Number":"48","Pull-Request-URL":"https://github.com/o/r/pull/48","Repo-Full-Name":"o/r"}`,
+		`{"type":"worktree-state","Session-ID":"normalized","Worktree-State":{"worktreePath":"/tmp/normalized","sessionId":"normalized"}}`,
 	})
 
 	transcript, err := LoadTranscript(path)
@@ -1131,6 +1137,12 @@ func TestLoadTranscriptMetadataAcceptsCompactTypeAliases(t *testing.T) {
 	if len(transcript.ContextCollapseCommits) != 1 || transcript.ContextCollapseCommits[0].CollapseID != "collapse_alias" || transcript.ContextCollapseSnapshot == nil || transcript.ContextCollapseSnapshot.SessionID != "alias" || transcript.ContextCollapseSnapshot.LastSpawnTokens != 32 {
 		t.Fatalf("compact context collapse aliases transcript = commits:%#v snapshot:%#v", transcript.ContextCollapseCommits, transcript.ContextCollapseSnapshot)
 	}
+	if transcript.CustomTitles["normalized"] != "Normalized Title" || transcript.AITitles["normalized"] != "Normalized AI" || transcript.LastPrompts["normalized"] != "normalized prompt" || transcript.TaskSummaries["normalized"].Summary != "normalized task" {
+		t.Fatalf("normalized field aliases transcript = titles:%#v ai:%#v prompts:%#v tasks:%#v", transcript.CustomTitles, transcript.AITitles, transcript.LastPrompts, transcript.TaskSummaries)
+	}
+	if transcript.PRLinks["normalized"].PRNumber != 48 || !strings.Contains(string(transcript.WorktreeStates["normalized"].WorktreeSession), "/tmp/normalized") {
+		t.Fatalf("normalized session aliases transcript = pr:%#v worktree:%#v", transcript.PRLinks["normalized"], transcript.WorktreeStates["normalized"])
+	}
 
 	metadata, err := LoadTranscriptMetadata(path)
 	if err != nil {
@@ -1145,6 +1157,12 @@ func TestLoadTranscriptMetadataAcceptsCompactTypeAliases(t *testing.T) {
 	if len(metadata.FileHistoryByMessageID["msg_alias"]) == 0 || len(metadata.AttributionByMessageID["msg_alias"]) == 0 || len(metadata.SpeculationAccepts) != 1 || metadata.SpeculationAccepts[0].TimeSavedMS != 1200 {
 		t.Fatalf("compact raw aliases metadata = file:%#v attr:%#v speculation:%#v", metadata.FileHistoryByMessageID, metadata.AttributionByMessageID, metadata.SpeculationAccepts)
 	}
+	if metadata.CustomTitles["normalized"] != "Normalized Title" || metadata.AITitles["normalized"] != "Normalized AI" || metadata.LastPrompts["normalized"] != "normalized prompt" || metadata.TaskSummaries["normalized"].Summary != "normalized task" {
+		t.Fatalf("normalized field aliases metadata = titles:%#v ai:%#v prompts:%#v tasks:%#v", metadata.CustomTitles, metadata.AITitles, metadata.LastPrompts, metadata.TaskSummaries)
+	}
+	if metadata.PRLinks["normalized"].PRNumber != 48 || !strings.Contains(string(metadata.WorktreeStates["normalized"].WorktreeSession), "/tmp/normalized") {
+		t.Fatalf("normalized metadata session fields = pr:%#v worktree:%#v snapshot:%#v", metadata.PRLinks["normalized"], metadata.WorktreeStates["normalized"], metadata.ContextCollapseSnapshot)
+	}
 
 	index, err := LoadTranscriptIndex(path, "alias")
 	if err != nil {
@@ -1152,6 +1170,14 @@ func TestLoadTranscriptMetadataAcceptsCompactTypeAliases(t *testing.T) {
 	}
 	if index.Title != "Camel Title" || index.AITitle != "Camel AI" || index.LastPrompt != "camel prompt" || index.TaskSummary != "camel task" || index.AgentName != "Camel Agent" || index.Mode != "review" || index.ContentReplacementCount != 1 {
 		t.Fatalf("compact type aliases index = %#v", index)
+	}
+
+	normalizedIndex, err := LoadTranscriptIndex(path, "normalized")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalizedIndex.Title != "Normalized Title" || normalizedIndex.AITitle != "Normalized AI" || normalizedIndex.LastPrompt != "normalized prompt" || normalizedIndex.TaskSummary != "normalized task" || normalizedIndex.PRNumber != 48 || !normalizedIndex.HasWorktreeState {
+		t.Fatalf("normalized field aliases index = %#v", normalizedIndex)
 	}
 }
 

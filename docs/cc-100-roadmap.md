@@ -86,6 +86,8 @@ M6 补充：tombstone metadata target/parent 现在接受 `targetId`/`deletedId`
 
 M6 补充：transcript metadata 现在接受 summary `leafID`/message ID、content-replacement `agentID`/`toolUseID`/`blockID` 和 context-collapse `collapseID`/`summaryID`/archived ID 别名，metadata loader 与 full loader 保持同一兼容面。
 
+M6 补充：transcript metadata 字段查找现在接受大小写、snake_case、kebab-case 和空格分隔形式归一，`Session-ID`、`Custom-Title`、`Pull-Request-Number` 等相邻字段可在 full loader、lightweight metadata 和 transcript index 中恢复同一 metadata。
+
 M6 补充：worktree-state metadata 现在除 `worktreeSession`/`worktree_session` 外，也接受 `worktreeState`/`worktree_state`/`worktree`/`workspace` wrapper，full loader 和 lightweight metadata loader 都会保留旧 worktree payload。
 
 M6 补充：PR link metadata 现在接受 `pullRequestNumber`/`pull_request_number`、`pullRequestURL`/`pull_request_url` 和 `repoFullName`/`repositoryFullName` 别名，full loader 和 lightweight metadata loader 都能恢复旧 PR metadata。
@@ -633,6 +635,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：transcript metadata loader 现在先递归解包 JSON:API/resource、GraphQL edge/node、`included`、collection/list/values 等 wrapper，再做 metadata type 分类；full transcript、lightweight metadata 和 transcript index 都能恢复 wrapped title/task/tag/worktree/content-replacement/context-collapse metadata。
 
 本轮补充：transcript metadata type 现在接受 compact/camel aliases，例如 `aiTitle`、`lastPrompt`、`taskSummary`、`contentReplacement`、`fileHistorySnapshot`、`speculationAccept` 和 `contextCollapseSnapshot`；full transcript、lightweight metadata 和 transcript index 共用同一归一化。
+
+本轮补充：transcript metadata 字段查找现在也接受大小写、snake_case、kebab-case 和空格分隔形式归一，`Session-ID`、`Custom-Title`、`Pull-Request-Number` 等相邻字段可在 full loader、lightweight metadata 和 transcript index 中恢复同一 metadata。
 
 本轮补充：contract content block 解码现在接受文本块字段别名 `body`/`message`/`value`/`output`/`contentText`/`content_text`，并在 `text`/`thinking` block 中从字符串 `content` 回填文本，transcript resume 可恢复这些嵌套文本块格式。
 
