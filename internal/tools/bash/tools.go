@@ -136,6 +136,129 @@ var gitForEachRefFlagsWithArgs = map[string]bool{
 	"--points-at":   true,
 }
 
+var gitRevListAllowedFlags = map[string]bool{
+	"--all":            true,
+	"--branches":       true,
+	"--tags":           true,
+	"--remotes":        true,
+	"--count":          true,
+	"--reverse":        true,
+	"--first-parent":   true,
+	"--ancestry-path":  true,
+	"--merges":         true,
+	"--no-merges":      true,
+	"--no-min-parents": true,
+	"--no-max-parents": true,
+	"--walk-reflogs":   true,
+	"--oneline":        true,
+	"--abbrev-commit":  true,
+	"--full-history":   true,
+	"--dense":          true,
+	"--sparse":         true,
+	"--source":         true,
+	"--graph":          true,
+}
+
+var gitRevListFlagsWithArgs = map[string]bool{
+	"--since":       true,
+	"--after":       true,
+	"--until":       true,
+	"--before":      true,
+	"--max-count":   true,
+	"-n":            true,
+	"--author":      true,
+	"--committer":   true,
+	"--grep":        true,
+	"--min-parents": true,
+	"--max-parents": true,
+	"--skip":        true,
+	"--max-age":     true,
+	"--min-age":     true,
+	"--pretty":      true,
+	"--format":      true,
+	"--abbrev":      true,
+}
+
+var gitBlameAllowedFlags = map[string]bool{
+	"--color":          true,
+	"--no-color":       true,
+	"--porcelain":      true,
+	"-p":               true,
+	"--line-porcelain": true,
+	"--incremental":    true,
+	"--root":           true,
+	"--show-stats":     true,
+	"--show-name":      true,
+	"--show-number":    true,
+	"-n":               true,
+	"--show-email":     true,
+	"-e":               true,
+	"-f":               true,
+	"-w":               true,
+	"-M":               true,
+	"-C":               true,
+	"--score-debug":    true,
+	"-s":               true,
+	"-l":               true,
+	"-t":               true,
+}
+
+var gitBlameFlagsWithArgs = map[string]bool{
+	"-L":                 true,
+	"--date":             true,
+	"--ignore-rev":       true,
+	"--ignore-revs-file": true,
+	"--abbrev":           true,
+}
+
+var gitShortlogAllowedFlags = map[string]bool{
+	"--all":       true,
+	"--branches":  true,
+	"--tags":      true,
+	"--remotes":   true,
+	"-s":          true,
+	"--summary":   true,
+	"-n":          true,
+	"--numbered":  true,
+	"-e":          true,
+	"--email":     true,
+	"-c":          true,
+	"--committer": true,
+	"--no-merges": true,
+}
+
+var gitShortlogFlagsWithArgs = map[string]bool{
+	"--since":  true,
+	"--after":  true,
+	"--until":  true,
+	"--before": true,
+	"--group":  true,
+	"--format": true,
+	"--author": true,
+}
+
+var gitConfigGetAllowedFlags = map[string]bool{
+	"--local":       true,
+	"--global":      true,
+	"--system":      true,
+	"--worktree":    true,
+	"--bool":        true,
+	"--int":         true,
+	"--bool-or-int": true,
+	"--path":        true,
+	"--expiry-date": true,
+	"-z":            true,
+	"--null":        true,
+	"--name-only":   true,
+	"--show-origin": true,
+	"--show-scope":  true,
+}
+
+var gitConfigGetFlagsWithArgs = map[string]bool{
+	"--default": true,
+	"--type":    true,
+}
+
 type bashInput struct {
 	Command               string `json:"command"`
 	Timeout               *int   `json:"timeout,omitempty"`
@@ -968,6 +1091,14 @@ func readOnlyGit(words []string) bool {
 		return argsAllowPositionals(words[2:], gitCatFileAllowedFlags, nil, 1)
 	case "for-each-ref":
 		return argsAllowPositionals(words[2:], nil, gitForEachRefFlagsWithArgs, -1)
+	case "rev-list":
+		return argsAllowPositionals(words[2:], gitRevListAllowedFlags, gitRevListFlagsWithArgs, -1)
+	case "blame":
+		return argsAllowPositionals(words[2:], gitBlameAllowedFlags, gitBlameFlagsWithArgs, -1)
+	case "shortlog":
+		return argsAllowPositionals(words[2:], gitShortlogAllowedFlags, gitShortlogFlagsWithArgs, -1)
+	case "config":
+		return readOnlyGitConfig(words[2:])
 	default:
 		return false
 	}
@@ -1051,6 +1182,13 @@ func readOnlyGitWorktree(args []string) bool {
 		return false
 	}
 	return argsAreAllowedFlagsOnly(args[1:], gitWorktreeListAllowedFlags, gitWorktreeListFlagsWithArgs)
+}
+
+func readOnlyGitConfig(args []string) bool {
+	if len(args) == 0 || args[0] != "--get" {
+		return false
+	}
+	return argsAllowPositionals(args[1:], gitConfigGetAllowedFlags, gitConfigGetFlagsWithArgs, 1)
 }
 
 func destructiveWords(words []string) bool {

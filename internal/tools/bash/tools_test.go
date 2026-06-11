@@ -145,6 +145,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"git describe --tags --abbrev=8 HEAD",
 		"git cat-file -p HEAD",
 		"git for-each-ref --format=%(refname) refs/heads",
+		"git rev-list --count --max-count 5 HEAD",
+		"git blame -L 1,3 --date=iso file.go",
+		"git shortlog -s -n -e --since 2.weeks.ago HEAD",
+		"git config --get --global user.name",
 		"rg TODO internal",
 		"find . -name '*.go' -print",
 		"printf hello",
@@ -182,6 +186,11 @@ func TestBashCommandClassification(t *testing.T) {
 		"git cat-file --batch HEAD",
 		"git cat-file -p HEAD extra",
 		"git for-each-ref --shell",
+		"git rev-list --output=/tmp/revs HEAD",
+		"git blame --contents=/tmp/file.go file.go",
+		"git shortlog --output=/tmp/shortlog HEAD",
+		"git config --set user.name bot",
+		"git config --get --blob HEAD:.gitconfig user.name",
 		"ls && echo hi > out.txt",
 	}
 	for _, command := range notReadOnly {
