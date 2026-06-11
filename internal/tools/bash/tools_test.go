@@ -133,6 +133,7 @@ func TestBashCommandClassification(t *testing.T) {
 		"git remote -v",
 		"git remote show origin",
 		"rg TODO internal",
+		"find . -name '*.go' -print",
 		"printf hello",
 	}
 	for _, command := range readOnly {
@@ -168,6 +169,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"git tag --delete v1.0.0",
 		"git remote remove origin",
 		"git push --force origin main",
+		"find . -name '*.tmp' -delete",
+		"find . -type f -exec rm {} ;",
+		"find . -type f -execdir rmdir {} ;",
+		"printf '%s\n' build | xargs rm -rf",
 		"sudo make install",
 		"chmod -R 777 .",
 	}

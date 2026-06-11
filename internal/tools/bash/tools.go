@@ -902,8 +902,44 @@ func destructiveWords(words []string) bool {
 		return true
 	case "git":
 		return destructiveGit(words)
+	case "find":
+		return destructiveFind(words)
+	case "xargs":
+		return destructiveXargs(words)
 	case "chmod", "chown", "chgrp":
 		return hasRecursiveFlag(words)
+	default:
+		return false
+	}
+}
+
+func destructiveFind(words []string) bool {
+	for i, word := range words[1:] {
+		switch word {
+		case "-delete":
+			return true
+		case "-exec", "-execdir", "-ok", "-okdir":
+			if i+2 < len(words) && destructiveExecutable(words[i+2]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func destructiveXargs(words []string) bool {
+	for _, word := range words[1:] {
+		if destructiveExecutable(word) {
+			return true
+		}
+	}
+	return false
+}
+
+func destructiveExecutable(word string) bool {
+	switch filepathBase(word) {
+	case "rm", "rmdir", "dd", "mkfs", "shutdown", "reboot", "halt", "poweroff", "kill", "pkill", "killall", "sudo", "su":
+		return true
 	default:
 		return false
 	}
