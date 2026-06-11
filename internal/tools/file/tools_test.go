@@ -946,6 +946,19 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if pagedResult.StructuredContent["total_matches"] != 2 || pagedResult.StructuredContent["offset"] != 1 || pagedResult.StructuredContent["limit"] != 1 || pagedResult.StructuredContent["truncated"] != false {
 		t.Fatalf("paged structured content = %#v", pagedResult.StructuredContent)
 	}
+
+	unlimitedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_unlimited_head_limit",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","head_limit":0}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantUnlimited := "a.txt:2:Needle first\na.txt:5:Needle second"
+	if unlimitedResult.Content != wantUnlimited || unlimitedResult.StructuredContent["limit"] != 0 || unlimitedResult.StructuredContent["truncated"] != false {
+		t.Fatalf("unlimited head_limit result = %#v", unlimitedResult)
+	}
 }
 
 func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {

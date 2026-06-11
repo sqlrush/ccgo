@@ -14,6 +14,7 @@ import (
 )
 
 const defaultSearchLimit = 100
+const defaultGrepHeadLimit = 250
 
 type globInput struct {
 	Pattern string `json:"pattern"`
@@ -228,11 +229,11 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if input.Limit != nil && *input.Limit <= 0 {
 		return fmt.Errorf("limit must be positive")
 	}
-	if input.HeadLimit != nil && *input.HeadLimit <= 0 {
-		return fmt.Errorf("head_limit must be positive")
+	if input.HeadLimit != nil && *input.HeadLimit < 0 {
+		return fmt.Errorf("head_limit must be non-negative")
 	}
-	if input.HeadLimitAlt != nil && *input.HeadLimitAlt <= 0 {
-		return fmt.Errorf("head_limit must be positive")
+	if input.HeadLimitAlt != nil && *input.HeadLimitAlt < 0 {
+		return fmt.Errorf("head_limit must be non-negative")
 	}
 	if input.Offset != nil && *input.Offset < 0 {
 		return fmt.Errorf("offset must be non-negative")
@@ -424,9 +425,12 @@ func collectGrepMatches(root string, glob string, typeFilter string, expr *regex
 	if start > len(matches) {
 		start = len(matches)
 	}
-	end := start + options.Limit
-	if end > len(matches) {
-		end = len(matches)
+	end := len(matches)
+	if options.Limit > 0 {
+		end = start + options.Limit
+		if end > len(matches) {
+			end = len(matches)
+		}
 	}
 	truncated := end < len(matches)
 	matches = matches[start:end]
@@ -714,7 +718,7 @@ func grepLimit(input grepInput) int {
 	if input.HeadLimitAlt != nil {
 		return *input.HeadLimitAlt
 	}
-	return defaultSearchLimit
+	return defaultGrepHeadLimit
 }
 
 func grepOffset(input grepInput) int {
