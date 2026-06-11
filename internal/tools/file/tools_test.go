@@ -1153,6 +1153,30 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("no-line-number content = %#v", noLineNumberResult)
 	}
 
+	snakeLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_numbers_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","line_numbers":false,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snakeLineNumberResult.Content != "a.txt:Needle first" || snakeLineNumberResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("line_numbers alias result = %#v", snakeLineNumberResult)
+	}
+
+	camelLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_numbers_camel_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","lineNumbers":false,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if camelLineNumberResult.Content != "a.txt:Needle first" || camelLineNumberResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("lineNumbers alias result = %#v", camelLineNumberResult)
+	}
+
 	shortContextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_short_context",
 		Name:  "Grep",

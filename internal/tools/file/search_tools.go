@@ -44,6 +44,8 @@ type grepInput struct {
 	AfterContext       *int   `json:"after_context,omitempty"`
 	AfterContextAlt    *int   `json:"afterContext,omitempty"`
 	ShortAfterContext  *int   `json:"-A,omitempty"`
+	LineNumbers        *bool  `json:"line_numbers,omitempty"`
+	LineNumbersAlt     *bool  `json:"lineNumbers,omitempty"`
 	ShortLineNumbers   *bool  `json:"-n,omitempty"`
 	IgnoreCase         bool   `json:"ignore_case,omitempty"`
 	CaseInsensitive    bool   `json:"case_insensitive,omitempty"`
@@ -153,6 +155,8 @@ func NewGrepTool() tool.Tool {
 					},
 					"afterContext":     map[string]any{"type": "integer"},
 					"-A":               map[string]any{"type": "integer"},
+					"line_numbers":     map[string]any{"type": "boolean"},
+					"lineNumbers":      map[string]any{"type": "boolean"},
 					"-n":               map[string]any{"type": "boolean"},
 					"ignore_case":      map[string]any{"type": "boolean"},
 					"case_insensitive": map[string]any{"type": "boolean"},
@@ -354,7 +358,7 @@ func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	if err := decodeStrict(raw, map[string]struct{}{
 		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 		"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
-		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "-n": {},
+		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "-n": {},
 		"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
 		"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
 	}, &input); err != nil {
@@ -686,6 +690,12 @@ func grepFixedStrings(input grepInput) bool {
 func grepLineNumbers(input grepInput, mode string) bool {
 	if mode != "content" {
 		return false
+	}
+	if input.LineNumbers != nil {
+		return *input.LineNumbers
+	}
+	if input.LineNumbersAlt != nil {
+		return *input.LineNumbersAlt
 	}
 	if input.ShortLineNumbers == nil {
 		return true
