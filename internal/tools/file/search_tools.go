@@ -16,6 +16,27 @@ import (
 const defaultSearchLimit = 100
 const defaultGrepHeadLimit = 250
 
+var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
+
+var allowedGrepInputKeys = map[string]struct{}{
+	"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "outputMode": {}, "limit": {},
+	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
+	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "-n": {},
+	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
+	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
+}
+
+var grepSemanticNumberKeys = map[string]struct{}{
+	"limit": {}, "head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
+	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {},
+}
+
+var grepSemanticBooleanKeys = map[string]struct{}{
+	"line_numbers": {}, "lineNumbers": {}, "-n": {},
+	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
+	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
+}
+
 type globInput struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path,omitempty"`
@@ -172,6 +193,7 @@ func NewGrepTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, and max_count/-m per-file match limiting. Use fixed_strings or -F for literal matching. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
+		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
@@ -355,16 +377,62 @@ func decodeGlob(raw json.RawMessage) (globInput, error) {
 
 func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	var input grepInput
-	if err := decodeStrict(raw, map[string]struct{}{
-		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "outputMode": {}, "limit": {},
-		"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
-		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "-n": {},
-		"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
-		"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
-	}, &input); err != nil {
+	normalized, err := normalizeGrepRawInput(raw)
+	if err != nil {
+		return grepInput{}, err
+	}
+	if err := json.Unmarshal(normalized, &input); err != nil {
 		return grepInput{}, err
 	}
 	return input, nil
+}
+
+func normalizeGrepRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeStrictObject(raw, allowedGrepInputKeys)
+	if err != nil {
+		return nil, err
+	}
+	coerceSemanticJSONStrings(obj, grepSemanticNumberKeys, grepSemanticBooleanKeys)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func decodeStrictObject(raw json.RawMessage, allowed map[string]struct{}) (map[string]json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		if _, ok := allowed[key]; !ok {
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	return obj, nil
+}
+
+func coerceSemanticJSONStrings(obj map[string]json.RawMessage, numberKeys map[string]struct{}, boolKeys map[string]struct{}) {
+	for key, raw := range obj {
+		if len(raw) == 0 || raw[0] != '"' {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			continue
+		}
+		if _, ok := boolKeys[key]; ok {
+			switch text {
+			case "true", "false":
+				obj[key] = json.RawMessage(text)
+			}
+			continue
+		}
+		if _, ok := numberKeys[key]; ok && semanticNumberLiteralRE.MatchString(text) {
+			obj[key] = json.RawMessage(text)
+		}
+	}
 }
 
 func searchRoot(cwd string, path string) string {

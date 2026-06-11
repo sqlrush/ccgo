@@ -1245,6 +1245,22 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if shortMaxCountResult.Content != "a.txt:1" || shortMaxCountResult.StructuredContent["max_count"] != 1 {
 		t.Fatalf("short max_count result = %#v", shortMaxCountResult)
 	}
+
+	semanticStringResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_semantic_string_inputs",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_count":"1","context":"1","-n":"false"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSemanticString := "a.txt-one\na.txt:Needle first\na.txt-three"
+	if semanticStringResult.Content != wantSemanticString ||
+		semanticStringResult.StructuredContent["max_count"] != 1 ||
+		semanticStringResult.StructuredContent["before_context"] != 1 ||
+		semanticStringResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("semantic string input result = %#v", semanticStringResult)
+	}
 }
 
 func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
@@ -1289,6 +1305,18 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	}
 	if shortResult.Content != "mixed.txt" || shortResult.StructuredContent["case_insensitive"] != true {
 		t.Fatalf("short case-insensitive result = %#v", shortResult)
+	}
+
+	semanticBoolResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_semantic_bool_case_insensitive",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","-i":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if semanticBoolResult.Content != "mixed.txt" || semanticBoolResult.StructuredContent["case_insensitive"] != true {
+		t.Fatalf("semantic bool case-insensitive result = %#v", semanticBoolResult)
 	}
 
 	ignoredContextResult, err := executor.Execute(ctx, contracts.ToolUse{

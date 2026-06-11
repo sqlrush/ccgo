@@ -13,9 +13,11 @@ type ValidateFunc func(Context, json.RawMessage) error
 type PermissionFunc func(Context, json.RawMessage) (contracts.PermissionDecision, error)
 type CallFunc func(Context, json.RawMessage, ProgressSink) (contracts.ToolResult, error)
 type InputPredicate func(json.RawMessage) bool
+type NormalizeInputFunc func(json.RawMessage) (json.RawMessage, error)
 
 type FuncTool struct {
 	DefinitionValue contracts.ToolDefinition
+	NormalizeFunc   NormalizeInputFunc
 	ValidateFunc    ValidateFunc
 	PermissionFunc  PermissionFunc
 	CallFunc        CallFunc
@@ -67,51 +69,83 @@ func (t FuncTool) Prompt(ctx PromptContext) (string, error) {
 }
 
 func (t FuncTool) Validate(ctx Context, raw json.RawMessage) error {
-	if err := ValidateSchema(t.DefinitionValue.InputSchema, raw); err != nil {
+	normalized, err := t.normalizeInput(raw)
+	if err != nil {
+		return err
+	}
+	if err := ValidateSchema(t.DefinitionValue.InputSchema, normalized); err != nil {
 		return err
 	}
 	if t.ValidateFunc != nil {
-		return t.ValidateFunc(ctx, normalizeRawInput(raw))
+		return t.ValidateFunc(ctx, normalized)
 	}
 	return nil
 }
 
 func (t FuncTool) CheckPermissions(ctx Context, raw json.RawMessage) (contracts.PermissionDecision, error) {
+	normalized, err := t.normalizeInput(raw)
+	if err != nil {
+		return contracts.PermissionDecision{}, err
+	}
 	if t.PermissionFunc != nil {
-		return t.PermissionFunc(ctx, normalizeRawInput(raw))
+		return t.PermissionFunc(ctx, normalized)
 	}
 	if ctx.Permissions == nil {
 		return contracts.PermissionDecision{Behavior: contracts.PermissionAllow, DecisionReason: "no permission engine configured"}, nil
 	}
-	return ctx.Permissions.DecideTool(t, normalizeRawInput(raw), ctx)
+	return ctx.Permissions.DecideTool(t, normalized, ctx)
 }
 
 func (t FuncTool) Call(ctx Context, raw json.RawMessage, sink ProgressSink) (contracts.ToolResult, error) {
 	if t.CallFunc == nil {
 		return contracts.ToolResult{}, errors.New("tool has no call function")
 	}
-	return t.CallFunc(ctx, normalizeRawInput(raw), sink)
+	normalized, err := t.normalizeInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	return t.CallFunc(ctx, normalized, sink)
 }
 
 func (t FuncTool) IsReadOnly(raw json.RawMessage) bool {
 	if t.ReadOnlyFunc != nil {
-		return t.ReadOnlyFunc(normalizeRawInput(raw))
+		normalized, err := t.normalizeInput(raw)
+		if err != nil {
+			normalized = normalizeRawInput(raw)
+		}
+		return t.ReadOnlyFunc(normalized)
 	}
 	return t.DefinitionValue.ReadOnly
 }
 
 func (t FuncTool) IsConcurrencySafe(raw json.RawMessage) bool {
 	if t.ConcurrencyFunc != nil {
-		return t.ConcurrencyFunc(normalizeRawInput(raw))
+		normalized, err := t.normalizeInput(raw)
+		if err != nil {
+			normalized = normalizeRawInput(raw)
+		}
+		return t.ConcurrencyFunc(normalized)
 	}
 	return t.DefinitionValue.ConcurrencySafe
 }
 
 func (t FuncTool) IsDestructive(raw json.RawMessage) bool {
 	if t.DestructiveFunc != nil {
-		return t.DestructiveFunc(normalizeRawInput(raw))
+		normalized, err := t.normalizeInput(raw)
+		if err != nil {
+			normalized = normalizeRawInput(raw)
+		}
+		return t.DestructiveFunc(normalized)
 	}
 	return t.DefinitionValue.Destructive
+}
+
+func (t FuncTool) normalizeInput(raw json.RawMessage) (json.RawMessage, error) {
+	normalized := normalizeRawInput(raw)
+	if t.NormalizeFunc == nil {
+		return normalized, nil
+	}
+	return t.NormalizeFunc(normalized)
 }
 
 func (t FuncTool) InterruptBehavior() string {
