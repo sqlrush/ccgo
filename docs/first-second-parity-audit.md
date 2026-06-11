@@ -110,14 +110,14 @@ Covered behavior:
 - `TodoWrite` initial in-session todo state, including full-list writes, status/priority validation, duplicate-id rejection, one `in_progress` guard, structured result payloads, and tool metadata state storage.
 - `WebFetch` initial URL fetch behavior, including URL/timeout/max-byte validation, HTTP GET, text/binary detection, truncation, non-2xx error marking, structured result payloads, and `WebFetch(domain:...)` permission-rule adaptation.
 - `WebSearch` initial HTML-search adapter, including query/max-result/timeout/domain-filter validation, injectable search endpoint, DuckDuckGo HTML link parsing, domain allow/block filtering, structured result payloads, and query-based permission-rule matching.
-- `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, PNG/JPEG/GIF/WebP image content-block reads, Jupyter notebook cell rendering, large text tool-result truncation/persistence, and read-state recording.
+- `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, initial PDF text extraction with page-selection parsing, PNG/JPEG/GIF/WebP image content-block reads, Jupyter notebook cell rendering, large text tool-result truncation/persistence, and read-state recording.
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, `.claude/settings.json` and `settings.local.json` JSON/semantic validation before writes, structured diff hunks, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, `.claude/settings.json` and `settings.local.json` final-content validation before writes, structured diff hunks, and post-edit read-state refresh.
 - `conversation.Runner` now preserves tool metadata across tool rounds so a `Read` in one tool round can authorize a later `Edit`/`Write`.
 
 Still missing from full M5 parity:
 
-- PDF, fuller notebook parity, fuller token-budget parity, and fuller media parity in `Read`.
+- Fuller PDF parity, fuller notebook parity, fuller token-budget parity, and fuller media parity in `Read`.
 - Fuller git diff parity plus LSP/IDE notifications/file-history integration for `Write`/`Edit`.
 - Skill activation, full permission prompt rendering, and broader secret guard parity beyond the current team-memory write guard.
 - Complete `Bash` parser/sandbox/interrupt/background lifecycle/golden parity, `WebFetch` prompt-aware/browser/preflight/golden parity, `WebSearch` official backend/ranking/snippet/golden parity, notebook, PowerShell, and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and cross-session/TUI/golden compatibility for `TodoWrite`.

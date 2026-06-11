@@ -93,6 +93,85 @@ func TestReadToolLineNumbersAndDedup(t *testing.T) {
 	}
 }
 
+func TestReadPDFExtractsTextAndPageSelection(t *testing.T) {
+	dir := t.TempDir()
+	pdf := `%PDF-1.4
+1 0 obj
+<< /Type /Page >>
+stream
+BT
+(First page) Tj
+ET
+endstream
+endobj
+2 0 obj
+<< /Type /Page >>
+stream
+BT
+(Second page) Tj
+ET
+endstream
+endobj
+%%EOF`
+	if err := os.WriteFile(filepath.Join(dir, "doc.pdf"), []byte(pdf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	full, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_pdf_full",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"doc.pdf"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(full.Content.(string), "Page 1:\nFirst page") || !strings.Contains(full.Content.(string), "Page 2:\nSecond page") {
+		t.Fatalf("full PDF content = %#v", full.Content)
+	}
+	if full.StructuredContent["type"] != "pdf" || full.StructuredContent["pageCount"] != 2 {
+		t.Fatalf("full PDF structured = %#v", full.StructuredContent)
+	}
+
+	page, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_pdf_page",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"doc.pdf","pages":"2"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Content != "PDF: doc.pdf\nPages: 2\n\nPage 2:\nSecond page" {
+		t.Fatalf("page PDF content = %#v", page.Content)
+	}
+	selected := page.StructuredContent["selected_pages"].([]int)
+	if len(selected) != 1 || selected[0] != 2 || page.StructuredContent["text"] != "Second page" {
+		t.Fatalf("page PDF structured = %#v", page.StructuredContent)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_pdf_bad_page",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"doc.pdf","pages":"3"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "exceeds PDF page count") {
+		t.Fatalf("bad PDF page err = %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "plain.txt"), []byte("plain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_non_pdf_pages",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"plain.txt","pages":"1"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "pages are only supported for PDF files") {
+		t.Fatalf("non-PDF pages err = %v", err)
+	}
+}
+
 func TestReadToolReturnsImageContentBlock(t *testing.T) {
 	dir := t.TempDir()
 	data := []byte{0x89, 'P', 'N', 'G', '\r', '\n'}

@@ -142,15 +142,24 @@ func validateRead(ctx tool.Context, raw json.RawMessage) error {
 	if input.Limit != nil && *input.Limit <= 0 {
 		return fmt.Errorf("limit must be positive")
 	}
-	if input.Pages != "" {
-		return fmt.Errorf("PDF page ranges are not implemented yet")
-	}
 	path := resolvePath(ctx.WorkingDirectory, input.FilePath)
 	if strings.HasPrefix(path, `\\`) || strings.HasPrefix(path, "//") {
 		return nil
 	}
 	if isBlockedDevicePath(path) {
 		return fmt.Errorf("cannot read %q: this device file would block or produce infinite output", input.FilePath)
+	}
+	if isPDFPath(path) {
+		if input.Offset != nil || input.Limit != nil {
+			return fmt.Errorf("offset and limit are only supported for text files")
+		}
+		if _, err := parsePDFPageSelection(input.Pages, 0); err != nil {
+			return err
+		}
+		return nil
+	}
+	if input.Pages != "" {
+		return fmt.Errorf("pages are only supported for PDF files")
 	}
 	if isNotebookPath(path) && (input.Offset != nil || input.Limit != nil) {
 		return fmt.Errorf("offset and limit are only supported for text files")
@@ -208,6 +217,9 @@ func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}
 	if info.IsDir() {
 		return contracts.ToolResult{}, fmt.Errorf("cannot read directory: %s", input.FilePath)
+	}
+	if isPDFPath(path) {
+		return readPDFResult(input.FilePath, path, input.Pages)
 	}
 	if isNotebookPath(path) {
 		return readNotebookResult(input.FilePath, path, info, state)
@@ -419,6 +431,10 @@ func readImageResult(displayPath string, path string, mediaType string, info os.
 
 func isNotebookPath(path string) bool {
 	return strings.EqualFold(filepath.Ext(path), ".ipynb")
+}
+
+func isPDFPath(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ".pdf")
 }
 
 func imageMediaTypeForPath(path string) string {
