@@ -1146,6 +1146,11 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "sub", "logs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	for _, vcsDir := range []string{".bzr", ".jj", ".sl"} {
+		if err := os.MkdirAll(filepath.Join(dir, vcsDir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n!important.log\nignored/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1164,6 +1169,9 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 		"sub/local.txt":   "Needle hidden by nested gitignore\n",
 		"sub/visible.txt": "Needle visible by nested negation\n",
 		"sub/logs/hit.md": "Needle hidden by nested ignored directory\n",
+		".bzr/hit.log":    "Needle hidden by bzr metadata\n",
+		".jj/hit.log":     "Needle hidden by jj metadata\n",
+		".sl/hit.log":     "Needle hidden by sapling metadata\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {

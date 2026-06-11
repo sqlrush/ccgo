@@ -810,7 +810,7 @@ func walkSearchDir(root string, dir string, ignoreRules searchIgnoreRules, visit
 
 func ignoredSearchDir(name string) bool {
 	switch name {
-	case ".git", ".hg", ".svn", "node_modules", "vendor":
+	case ".git", ".hg", ".svn", ".bzr", ".jj", ".sl", "node_modules", "vendor":
 		return true
 	default:
 		return false
