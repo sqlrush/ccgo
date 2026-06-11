@@ -89,6 +89,23 @@ func TestMessageUnmarshalAcceptsTypeAliases(t *testing.T) {
 	}
 }
 
+func TestMessageUnmarshalAcceptsNormalizedFieldAliases(t *testing.T) {
+	var message Message
+	raw := `{"Message-Type":"assistant-message","Message-ID":101,"Message-UUID":"msg_101","Parent-Message-ID":100,"Session-ID":"sess_norm","Created At":"2026-01-01T00:00:01Z","Is-Meta":true,"Message Text":"done"}`
+	if err := json.Unmarshal([]byte(raw), &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.Type != MessageAssistant || message.ID != "101" || message.UUID != "msg_101" {
+		t.Fatalf("normalized message IDs = %#v", message)
+	}
+	if message.ParentUUID == nil || *message.ParentUUID != "100" || message.SessionID != "sess_norm" || message.Timestamp != "2026-01-01T00:00:01Z" || !message.IsMeta {
+		t.Fatalf("normalized message metadata = %#v", message)
+	}
+	if len(message.Content) != 1 || message.Content[0].Type != ContentText || message.Content[0].Text != "done" {
+		t.Fatalf("normalized message content = %#v", message.Content)
+	}
+}
+
 func TestSessionEntryUnmarshalAcceptsTypeAliases(t *testing.T) {
 	for name, tc := range map[string]struct {
 		raw  string

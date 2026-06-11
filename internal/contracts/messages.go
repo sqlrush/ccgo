@@ -175,7 +175,7 @@ func (e *CacheEdit) UnmarshalJSON(data []byte) error {
 
 func stringJSONField(fields map[string]json.RawMessage, names ...string) string {
 	for _, name := range names {
-		raw, ok := fields[name]
+		raw, ok := rawJSONField(fields, name)
 		if !ok {
 			continue
 		}
@@ -189,7 +189,7 @@ func stringJSONField(fields map[string]json.RawMessage, names ...string) string 
 
 func idJSONField(fields map[string]json.RawMessage, names ...string) string {
 	for _, name := range names {
-		raw, ok := fields[name]
+		raw, ok := rawJSONField(fields, name)
 		if !ok {
 			continue
 		}
@@ -201,9 +201,17 @@ func idJSONField(fields map[string]json.RawMessage, names ...string) string {
 	return ""
 }
 
+func idJSONFieldPtr(fields map[string]json.RawMessage, names ...string) *ID {
+	if value := idJSONField(fields, names...); value != "" {
+		id := ID(value)
+		return &id
+	}
+	return nil
+}
+
 func boolJSONField(fields map[string]json.RawMessage, names ...string) (bool, bool) {
 	for _, name := range names {
-		raw, ok := fields[name]
+		raw, ok := rawJSONField(fields, name)
 		if !ok {
 			continue
 		}
@@ -217,7 +225,7 @@ func boolJSONField(fields map[string]json.RawMessage, names ...string) (bool, bo
 
 func cacheControlJSONField(fields map[string]json.RawMessage, names ...string) *CacheControl {
 	for _, name := range names {
-		raw, ok := fields[name]
+		raw, ok := rawJSONField(fields, name)
 		if !ok {
 			continue
 		}
@@ -227,6 +235,30 @@ func cacheControlJSONField(fields map[string]json.RawMessage, names ...string) *
 		}
 	}
 	return nil
+}
+
+func rawJSONField(fields map[string]json.RawMessage, name string) (json.RawMessage, bool) {
+	if raw, ok := fields[name]; ok {
+		return raw, true
+	}
+	normalizedName := normalizedJSONFieldName(name)
+	if normalizedName == "" {
+		return nil, false
+	}
+	for field, raw := range fields {
+		if normalizedJSONFieldName(field) == normalizedName {
+			return raw, true
+		}
+	}
+	return nil, false
+}
+
+func normalizedJSONFieldName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	name = strings.ReplaceAll(name, " ", "")
+	return name
 }
 
 func canonicalContentBlockType(value string) ContentBlockType {
@@ -256,7 +288,7 @@ func canonicalContentBlockType(value string) ContentBlockType {
 
 func imageSourceJSONField(fields map[string]json.RawMessage, names ...string) *ImageSource {
 	for _, name := range names {
-		raw, ok := fields[name]
+		raw, ok := rawJSONField(fields, name)
 		if !ok {
 			continue
 		}
@@ -369,12 +401,33 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	content, err := contentBlocksFromRaw(aux.Content)
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	contentRaw := aux.Content
+	if isEmptyJSONRaw(contentRaw) {
+		if raw, ok := rawJSONField(fields, "content"); ok {
+			contentRaw = raw
+		} else if raw, ok := rawJSONField(fields, "messageContent"); ok {
+			contentRaw = raw
+		}
+	}
+	content, err := contentBlocksFromRaw(contentRaw)
 	if err != nil {
 		return err
 	}
-	if len(content) == 0 && isEmptyJSONRaw(aux.Content) {
-		content = textContentBlocksFromRaw(aux.Text, aux.Body, aux.MessageText, aux.Value, aux.Output)
+	if len(content) == 0 && isEmptyJSONRaw(contentRaw) {
+		text := rawJSONFieldValue(fields, "text")
+		body := rawJSONFieldValue(fields, "body")
+		message := rawJSONFieldValue(fields, "message")
+		value := rawJSONFieldValue(fields, "value")
+		output := rawJSONFieldValue(fields, "output")
+		messageText := rawJSONFieldValue(fields, "messageText")
+		contentText := rawJSONFieldValue(fields, "contentText")
+		content = textContentBlocksFromRaw(aux.Text, aux.Body, aux.MessageText, aux.Value, aux.Output, text, body, message, value, output, messageText, contentText)
 	}
 	*m = Message{
 		ID:         string(aux.ID),
@@ -393,8 +446,11 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	if messageType := firstMessageType(string(m.Type), aux.TypeCamel, aux.TypeSnake, aux.Role); messageType != "" {
 		m.Type = messageType
 	}
+	if messageType := firstMessageType(stringJSONField(fields, "type", "messageType", "message_type", "role")); m.Type == "" && messageType != "" {
+		m.Type = messageType
+	}
 	if m.ID == "" {
-		m.ID = string(firstMessageID(aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake))
+		m.ID = string(firstMessageID(aux.MessageID, aux.MessageIDUpper, aux.MessageIDSnake, ID(idJSONField(fields, "id", "messageId", "messageID", "message_id"))))
 	}
 	if m.UUID == "" {
 		m.UUID = firstMessageID(
@@ -404,10 +460,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 			aux.MessageID,
 			aux.MessageIDUpper,
 			aux.MessageIDSnake,
+			ID(idJSONField(fields, "uuid", "messageUuid", "messageUUID", "message_uuid", "messageId", "messageID", "message_id", "id")),
 		)
 	}
 	if m.ParentUUID == nil {
 		m.ParentUUID = firstMessageIDPtr(
+			idJSONFieldPtr(fields, "parentUuid", "parentUUID", "parent_uuid", "parentId", "parentID", "parent_id", "parentMessageId", "parentMessageID", "parent_message_id", "parentMessageUuid", "parentMessageUUID", "parent_message_uuid"),
 			aux.ParentUUIDUpper,
 			aux.ParentUUIDSnake,
 			aux.ParentID,
@@ -422,22 +480,22 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		)
 	}
 	if m.SessionID == "" {
-		m.SessionID = aux.SessionIDUpper
+		m.SessionID = firstMessageID(aux.SessionIDUpper, aux.SessionIDSnake, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake, ID(idJSONField(fields, "sessionId", "sessionID", "session_id", "session", "sessionUuid", "sessionUUID", "session_uuid")))
 	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionIDSnake
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionUUID
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionUUIDUpper
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionUUIDSnake
+	if m.Timestamp == "" {
+		m.Timestamp = stringJSONField(fields, "timestamp", "createdAt", "created_at", "time")
 	}
 	if aux.IsMetaSnake != nil {
 		m.IsMeta = *aux.IsMetaSnake
+	} else if value, ok := boolJSONField(fields, "isMeta", "is_meta"); ok {
+		m.IsMeta = value
+	}
+	return nil
+}
+
+func rawJSONFieldValue(fields map[string]json.RawMessage, name string) json.RawMessage {
+	if raw, ok := rawJSONField(fields, name); ok {
+		return raw
 	}
 	return nil
 }

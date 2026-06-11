@@ -79,7 +79,7 @@ func TestLoadTranscriptAcceptsNormalizedMessageFieldAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"Message-Type":"user_message","Message-ID":"u1","Session-ID":"sess_norm","Created At":"2026-01-01T00:00:00Z","message":{"type":"user","content":"hi"}}`,
 		`{"Entry Type":"progress_update","Message-ID":"p1","Parent UUID":"u1"}`,
-		`{"Message Type":"assistant-message","Message ID":"a1","Parent-Message-ID":"p1","Session ID":"sess_norm","Created-At":"2026-01-01T00:00:01Z","Is-Sidechain":true,"Agent-ID":"agent_norm","Working Directory":"/repo","User-Type":"external","Entry-Point":"cli","App-Version":"1.2.3","Session-Slug":"plan-alpha","Git-Branch":"feature/session-alias","Compact-Metadata":{"pre_tokens":12,"user_context":"ctx","messages_summarized":2},"Snip-Metadata":{"removed_uuids":["old_1"]},"message":{"type":"assistant","content":"done"}}`,
+		`{"Message Type":"assistant-message","Message ID":"a1","Parent-Message-ID":"p1","Session ID":"sess_norm","Created-At":"2026-01-01T00:00:01Z","Is-Sidechain":true,"Agent-ID":"agent_norm","Working Directory":"/repo","User-Type":"external","Entry-Point":"cli","App-Version":"1.2.3","Session-Slug":"plan-alpha","Git-Branch":"feature/session-alias","Compact-Metadata":{"pre_tokens":12,"user_context":"ctx","messages_summarized":2},"Snip-Metadata":{"removed_uuids":["old_1"]},"message":{"Message-Type":"assistant-message","Message-ID":"nested_a1","Parent-Message-ID":"u1","Session-ID":"sess_norm","Is-Meta":true,"Message Text":"done"}}`,
 	})
 
 	transcript, err := LoadTranscript(path)
@@ -101,6 +101,12 @@ func TestLoadTranscriptAcceptsNormalizedMessageFieldAliases(t *testing.T) {
 	}
 	if assistant.SnipMetadata == nil || len(assistant.SnipMetadata.RemovedUUIDs) != 1 || assistant.SnipMetadata.RemovedUUIDs[0] != "old_1" {
 		t.Fatalf("normalized snip metadata = %#v", assistant.SnipMetadata)
+	}
+	if assistant.Message == nil || assistant.Message.ID != "nested_a1" || assistant.Message.UUID != "nested_a1" || assistant.Message.ParentUUID == nil || *assistant.Message.ParentUUID != "u1" || assistant.Message.SessionID != "sess_norm" || !assistant.Message.IsMeta {
+		t.Fatalf("normalized nested message metadata = %#v", assistant.Message)
+	}
+	if len(assistant.Message.Content) != 1 || assistant.Message.Content[0].Text != "done" {
+		t.Fatalf("normalized nested message content = %#v", assistant.Message.Content)
 	}
 	chain := transcript.BuildConversationChain("a1")
 	if got := chainIDs(chain); strings.Join(got, ",") != "u1,a1" {
