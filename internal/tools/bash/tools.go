@@ -818,7 +818,7 @@ func readOnlyWords(words []string) bool {
 	case "pwd", "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "printf", "echo", "date", "whoami", "id", "uname", "env", "printenv", "which", "type":
 		return true
 	case "git":
-		return len(words) >= 2 && readOnlyGitSubcommand(words[1])
+		return readOnlyGit(words)
 	case "go":
 		return len(words) >= 2 && words[1] == "list"
 	default:
@@ -826,9 +826,69 @@ func readOnlyWords(words []string) bool {
 	}
 }
 
-func readOnlyGitSubcommand(subcommand string) bool {
-	switch subcommand {
-	case "status", "diff", "log", "show", "branch", "tag", "remote", "rev-parse", "ls-files", "grep":
+func readOnlyGit(words []string) bool {
+	if len(words) < 2 {
+		return false
+	}
+	switch words[1] {
+	case "status", "diff", "log", "show", "rev-parse", "ls-files", "grep":
+		return true
+	case "branch":
+		return readOnlyGitBranch(words[2:])
+	case "tag":
+		return readOnlyGitTag(words[2:])
+	case "remote":
+		return readOnlyGitRemote(words[2:])
+	default:
+		return false
+	}
+}
+
+func readOnlyGitBranch(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, arg := range args {
+		switch arg {
+		case "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "--list", "-l", "--show-current", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--format", "--sort", "--color", "--no-color", "--column", "--no-column":
+			continue
+		default:
+			if strings.HasPrefix(arg, "-") {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlyGitTag(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, arg := range args {
+		switch arg {
+		case "-l", "--list", "-n", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--format", "--sort", "--color", "--no-color", "--column", "--no-column", "--ignore-case":
+			continue
+		default:
+			if strings.HasPrefix(arg, "-") {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlyGitRemote(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	if len(args) == 1 && (args[0] == "-v" || args[0] == "--verbose") {
+		return true
+	}
+	switch args[0] {
+	case "show", "get-url":
 		return true
 	default:
 		return false
@@ -858,6 +918,14 @@ func destructiveGit(words []string) bool {
 		return containsWord(words[2:], "--hard")
 	case "clean":
 		return true
+	case "branch":
+		return containsAnyWord(words[2:], "-d", "-D", "--delete", "--force")
+	case "tag":
+		return containsAnyWord(words[2:], "-d", "--delete")
+	case "remote":
+		return len(words) >= 3 && (words[2] == "remove" || words[2] == "rm")
+	case "push":
+		return containsAnyWord(words[2:], "-f", "--force", "--force-with-lease", "--delete")
 	case "checkout", "restore":
 		return containsWord(words[2:], ".") || containsWord(words[2:], "--")
 	default:
@@ -877,6 +945,15 @@ func hasRecursiveFlag(words []string) bool {
 func containsWord(words []string, want string) bool {
 	for _, word := range words {
 		if word == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyWord(words []string, candidates ...string) bool {
+	for _, candidate := range candidates {
+		if containsWord(words, candidate) {
 			return true
 		}
 	}

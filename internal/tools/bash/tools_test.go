@@ -129,6 +129,9 @@ func TestBashCommandClassification(t *testing.T) {
 		"pwd",
 		"ls -la",
 		"git status --short",
+		"git branch --show-current",
+		"git remote -v",
+		"git remote show origin",
 		"rg TODO internal",
 		"printf hello",
 	}
@@ -146,6 +149,9 @@ func TestBashCommandClassification(t *testing.T) {
 		`echo "$(date)"`,
 		"make build",
 		"git commit -m test",
+		"git branch new-feature",
+		"git tag v1.2.3",
+		"git remote set-url origin git@example.com:repo/project.git",
 		"ls && echo hi > out.txt",
 	}
 	for _, command := range notReadOnly {
@@ -158,6 +164,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"rm -rf build",
 		"git reset --hard",
 		"git clean -fd",
+		"git branch -D old-feature",
+		"git tag --delete v1.0.0",
+		"git remote remove origin",
+		"git push --force origin main",
 		"sudo make install",
 		"chmod -R 777 .",
 	}
