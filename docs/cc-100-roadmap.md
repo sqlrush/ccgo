@@ -516,6 +516,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - `TodoWrite` 初版已完成，支持完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果、tool metadata 状态保存和 session-scoped 本地持久化/恢复。
 - `WebFetch` 初版已完成，支持 URL/timeout/max_bytes 输入校验、HTTP GET、HEAD preflight、metadata/raw `skipWebFetchPreflight` skip-preflight、二进制 preflight 跳过 GET、文本/二进制判定、截断、非 2xx error 标记、结构化结果、HTML-to-text rendering、prompt-focused excerpt 和 `WebFetch(domain:...)` 权限规则适配。
 - `WebSearch` HTML 搜索适配初版已完成，支持 query/max_results/timeout/domain filters 输入校验、可注入搜索 endpoint、DuckDuckGo HTML 链接解析、DuckDuckGo result snippet 抽取、domain allow/block 过滤、结构化结果和 query 权限规则匹配。
+- `PowerShell` 初版已完成，支持 command/timeout/description 输入校验、`pwsh`/`powershell` 前台执行、stdout/stderr/exit code/timeout 结构化结果、缺失可执行文件结构化错误、动态 read-only/concurrency-safe/destructive 分类和默认工具注册。
 
 仍需完成：
 
@@ -525,7 +526,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - `Glob/Grep` 完整 ripgrep parity 和剩余输出参数。
 - `TodoWrite` TUI 同步和官方 golden 兼容。
 - `WebFetch` browser 渲染、完整 prompt-aware summarization 和官方 golden；`WebSearch` 官方搜索后端、ranking parity 和 golden。
-- PowerShell、Notebook、MCP concrete tool semantics。
+- `PowerShell` 完整 parser、权限/path validation、后台生命周期、截断/落盘/session 记录和官方 golden；Notebook、MCP concrete tool semantics。
 
 ### M6: Session, Memory, Compact
 
@@ -1145,7 +1146,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 ## Recommended Next Steps
 
-1. 补强 M5 基础工具兼容：优先 `Bash` shell parser/sandbox/background，继续补 `Glob/Grep`、`TodoWrite`、`WebFetch`、`WebSearch` 的官方 golden 兼容。
+1. 补强 M5 基础工具兼容：优先 `Bash` shell parser/sandbox/background 和 `PowerShell` parser/permission/background，继续补 `Glob/Grep`、`TodoWrite`、`WebFetch`、`WebSearch` 的官方 golden 兼容。
 2. 补强 `Read/Edit/Write` 高级分支：PDF/image/notebook/diff/LSP/history。
 3. 实现 CLI `--print` 和 SDK JSON/NDJSON，用 golden 对齐官方行为。
 4. 推进 session resume、compact、memory。

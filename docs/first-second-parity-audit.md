@@ -101,7 +101,7 @@ This is evidence that the current strengthened implementation is internally cons
 
 ## M5 Initial Progress
 
-After the first/second batch hardening, the Go rewrite now includes initial `internal/tools/file`, `internal/tools/bash`, `internal/tools/todo`, and `internal/tools/web` packages with text-file `Read`, `Write`, `Edit`, search, shell, session todo, and web fetch tools.
+After the first/second batch hardening, the Go rewrite now includes initial `internal/tools/file`, `internal/tools/bash`, `internal/tools/powershell`, `internal/tools/todo`, and `internal/tools/web` packages with text-file `Read`, `Write`, `Edit`, search, shell, PowerShell, session todo, and web fetch tools.
 
 Covered behavior:
 
@@ -110,6 +110,7 @@ Covered behavior:
 - `TodoWrite` initial todo state, including full-list writes, status/priority validation, duplicate-id rejection, one `in_progress` guard, structured result payloads, tool metadata state storage, and session-scoped local persistence/restore.
 - `WebFetch` initial URL fetch behavior, including URL/timeout/max-byte validation, HTTP GET, HEAD preflight, metadata/raw `skipWebFetchPreflight` skip-preflight, binary preflight GET skipping, text/binary detection, truncation, non-2xx error marking, structured result payloads, HTML-to-text rendering, prompt-focused excerpts, and `WebFetch(domain:...)` permission-rule adaptation.
 - `WebSearch` initial HTML-search adapter, including query/max-result/timeout/domain-filter validation, injectable search endpoint, DuckDuckGo HTML link parsing, DuckDuckGo result snippet extraction, domain allow/block filtering, structured result payloads, and query-based permission-rule matching.
+- `PowerShell` initial command execution, including command/timeout/description validation, `pwsh`/`powershell` executable detection, foreground execution, stdout/stderr/exit-code/timeout structured results, missing-executable structured errors, dynamic read-only/concurrency-safe/destructive classification for common inspection and mutating commands, and default built-in tool registration.
 - `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, initial PDF text extraction with page-selection parsing, common Page/Contents indirect-object mapping, Pages/Kids page-order recovery, FlateDecode text streams, UTF-16 BOM PDF string decoding, PNG/JPEG/GIF/WebP image content-block reads, Jupyter notebook cell rendering, large text tool-result truncation/persistence, and read-state recording.
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, `.claude/settings.json` and `settings.local.json` JSON/semantic validation before writes, structured diff hunks, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, `.claude/settings.json` and `settings.local.json` final-content validation before writes, structured diff hunks, and post-edit read-state refresh.
@@ -128,7 +129,7 @@ Still missing from full M5 parity:
 - Fuller PDF parity, fuller notebook parity, fuller token-budget parity, and fuller media parity in `Read`.
 - Fuller git diff parity plus LSP/IDE notifications/file-history integration for `Write`/`Edit`.
 - Skill activation, full permission prompt rendering, and broader secret guard parity beyond the current team-memory write guard.
-- Complete `Bash` parser/sandbox/interrupt/background lifecycle/golden parity, `WebFetch` browser rendering/full prompt-aware summarization/golden parity, `WebSearch` official backend/ranking/golden parity, notebook, PowerShell, and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and TUI/golden compatibility for `TodoWrite`.
+- Complete `Bash` parser/sandbox/interrupt/background lifecycle/golden parity, `PowerShell` full parser/permission/path validation/background lifecycle/golden parity, `WebFetch` browser rendering/full prompt-aware summarization/golden parity, `WebSearch` official backend/ranking/golden parity, notebook and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and TUI/golden compatibility for `TodoWrite`.
 
 ## M6/M7 Initial Progress
 

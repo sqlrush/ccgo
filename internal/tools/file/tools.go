@@ -16,6 +16,7 @@ import (
 	"ccgo/internal/permissions"
 	"ccgo/internal/tool"
 	bashtools "ccgo/internal/tools/bash"
+	powershelltools "ccgo/internal/tools/powershell"
 	todotools "ccgo/internal/tools/todo"
 	webtools "ccgo/internal/tools/web"
 )
@@ -125,7 +126,7 @@ func NewEditTool() tool.Tool {
 }
 
 func BuiltinTools() []tool.Tool {
-	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), bashtools.NewKillBashTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
+	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), bashtools.NewKillBashTool(), powershelltools.NewPowerShellTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
 }
 
 func validateRead(ctx tool.Context, raw json.RawMessage) error {
