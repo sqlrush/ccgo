@@ -225,6 +225,17 @@ func TestEnginePermissionDeciderUsesInternalPathsFromMetadata(t *testing.T) {
 	if decision.Behavior != contracts.PermissionAllow || !strings.Contains(decision.Message, "auto memory") {
 		t.Fatalf("decision = %#v", decision)
 	}
+
+	notebookDecision, err := decider.DecideTool(FuncTool{DefinitionValue: contracts.ToolDefinition{Name: "NotebookEdit"}}, json.RawMessage(fmt.Sprintf(`{"notebook_path":%q}`, filepath.Join(autoMemoryDir, "analysis.ipynb"))), Context{
+		WorkingDirectory: dir,
+		Metadata:         metadata,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notebookDecision.Behavior != contracts.PermissionAllow || !strings.Contains(notebookDecision.Message, "auto memory") {
+		t.Fatalf("notebook decision = %#v", notebookDecision)
+	}
 }
 
 func TestExecutorRunsPermissionDeniedHook(t *testing.T) {

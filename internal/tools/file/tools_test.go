@@ -384,6 +384,137 @@ func TestReadToolRejectsNotebookOffsetLimit(t *testing.T) {
 	}
 }
 
+func TestNotebookEditReplacesCodeCellAndClearsOutputs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "analysis.ipynb")
+	raw := `{
+  "cells": [
+    {"cell_type": "markdown", "id": "intro", "metadata": {}, "source": "# Title\n"},
+    {"cell_type": "code", "id": "code-a", "metadata": {}, "execution_count": 7, "source": "print('old')\n", "outputs": [{"output_type": "stream", "name": "stdout", "text": "old\n"}]}
+  ],
+  "metadata": {"language_info": {"name": "python"}},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := fileToolContext(dir)
+	executor := fileExecutor(t)
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_notebook_before_edit",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"analysis.ipynb"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_notebook_replace",
+		Name:  "NotebookEdit",
+		Input: json.RawMessage(`{"notebook_path":"analysis.ipynb","cell_id":"code-a","new_source":"print('new')\n"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["edit_mode"] != "replace" || result.StructuredContent["cell_id"] != "code-a" || result.StructuredContent["cell_type"] != "code" {
+		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+	var updated map[string]any
+	if err := readJSONFile(path, &updated); err != nil {
+		t.Fatal(err)
+	}
+	cells := updated["cells"].([]any)
+	code := cells[1].(map[string]any)
+	if code["source"] != "print('new')\n" || code["execution_count"] != nil || len(code["outputs"].([]any)) != 0 {
+		t.Fatalf("updated code cell = %#v", code)
+	}
+	record, ok := EnsureReadState(ctx).Get(path)
+	if !ok || !strings.Contains(record.Content, "print('new')") || record.PartialView {
+		t.Fatalf("notebook edit read state = %#v ok=%v", record, ok)
+	}
+}
+
+func TestNotebookEditInsertsAndDeletesCells(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "analysis.ipynb")
+	raw := `{
+  "cells": [
+    {"cell_type": "code", "id": "a", "metadata": {}, "execution_count": null, "source": "a = 1", "outputs": []},
+    {"cell_type": "markdown", "id": "b", "metadata": {}, "source": "old"}
+  ],
+  "metadata": {"language_info": {"name": "python"}},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := fileToolContext(dir)
+	executor := fileExecutor(t)
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_notebook_before_insert",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"analysis.ipynb"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	inserted, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_notebook_insert",
+		Name:  "NotebookEdit",
+		Input: json.RawMessage(`{"notebook_path":"analysis.ipynb","cell_id":"a","new_source":"inserted","cell_type":"markdown","edit_mode":"insert"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inserted.StructuredContent["edit_mode"] != "insert" || inserted.StructuredContent["cell_type"] != "markdown" {
+		t.Fatalf("insert structured content = %#v", inserted.StructuredContent)
+	}
+	var afterInsert map[string]any
+	if err := readJSONFile(path, &afterInsert); err != nil {
+		t.Fatal(err)
+	}
+	cells := afterInsert["cells"].([]any)
+	if len(cells) != 3 || cells[1].(map[string]any)["source"] != "inserted" || cells[1].(map[string]any)["cell_type"] != "markdown" {
+		t.Fatalf("inserted cells = %#v", cells)
+	}
+
+	deleted, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_notebook_delete",
+		Name:  "NotebookEdit",
+		Input: json.RawMessage(`{"notebook_path":"analysis.ipynb","cell_id":"b","new_source":"","edit_mode":"delete"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.StructuredContent["edit_mode"] != "delete" || deleted.StructuredContent["cell_id"] != "b" {
+		t.Fatalf("delete structured content = %#v", deleted.StructuredContent)
+	}
+	var afterDelete map[string]any
+	if err := readJSONFile(path, &afterDelete); err != nil {
+		t.Fatal(err)
+	}
+	cells = afterDelete["cells"].([]any)
+	if len(cells) != 2 || cells[1].(map[string]any)["source"] == "old" {
+		t.Fatalf("deleted cells = %#v", cells)
+	}
+}
+
+func TestNotebookEditRequiresReadFirst(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "analysis.ipynb"), []byte(`{"cells":[],"nbformat":4,"nbformat_minor":5}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_notebook_without_read",
+		Name:  "NotebookEdit",
+		Input: json.RawMessage(`{"notebook_path":"analysis.ipynb","cell_id":"cell-0","new_source":"x"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "Read it first") {
+		t.Fatalf("notebook edit read-first err = %v", err)
+	}
+}
+
 func TestReadToolPrefixesAutoMemoryFreshnessNote(t *testing.T) {
 	dir := t.TempDir()
 	autoMemoryDir := filepath.Join(dir, "memory")
@@ -1306,4 +1437,12 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if grepResult.Content != "important.log\nkeep.txt\nsub/visible.txt" {
 		t.Fatalf("grep content = %#v", grepResult.Content)
 	}
+}
+
+func readJSONFile(path string, out any) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, out)
 }

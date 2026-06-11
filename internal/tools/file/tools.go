@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,14 @@ type editInput struct {
 	OldString  string `json:"old_string"`
 	NewString  string `json:"new_string"`
 	ReplaceAll bool   `json:"replace_all,omitempty"`
+}
+
+type notebookEditInput struct {
+	NotebookPath string `json:"notebook_path"`
+	CellID       string `json:"cell_id,omitempty"`
+	NewSource    string `json:"new_source"`
+	CellType     string `json:"cell_type,omitempty"`
+	EditMode     string `json:"edit_mode,omitempty"`
 }
 
 func NewReadTool() tool.Tool {
@@ -125,8 +134,36 @@ func NewEditTool() tool.Tool {
 	}
 }
 
+func NewNotebookEditTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:               "NotebookEdit",
+			Description:        "Edit a Jupyter notebook cell.",
+			SearchHint:         "edit Jupyter notebook cells ipynb",
+			Strict:             true,
+			MaxResultSizeChars: 100_000,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"notebook_path", "new_source"},
+				"properties": map[string]any{
+					"notebook_path": map[string]any{"type": "string"},
+					"cell_id":       map[string]any{"type": "string"},
+					"new_source":    map[string]any{"type": "string"},
+					"cell_type":     map[string]any{"type": "string", "enum": []any{"code", "markdown"}},
+					"edit_mode":     map[string]any{"type": "string", "enum": []any{"replace", "insert", "delete"}},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Edits a Jupyter notebook cell. notebook_path points to the .ipynb file, cell_id selects a cell ID or cell-N index, new_source is the replacement or inserted source, cell_type is code or markdown, and edit_mode is replace, insert, or delete.", nil
+		},
+		ValidateFunc: validateNotebookEdit,
+		CallFunc:     callNotebookEdit,
+	}
+}
+
 func BuiltinTools() []tool.Tool {
-	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), bashtools.NewKillBashTool(), powershelltools.NewPowerShellTool(), powershelltools.NewPowerShellOutputTool(), powershelltools.NewKillPowerShellTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
+	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), NewNotebookEditTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), bashtools.NewKillBashTool(), powershelltools.NewPowerShellTool(), powershelltools.NewPowerShellOutputTool(), powershelltools.NewKillPowerShellTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
 }
 
 func validateRead(ctx tool.Context, raw json.RawMessage) error {
@@ -670,6 +707,168 @@ func callEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}, nil
 }
 
+func validateNotebookEdit(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeNotebookEdit(raw)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.NotebookPath) == "" {
+		return fmt.Errorf("notebook_path is required")
+	}
+	path := resolvePath(ctx.WorkingDirectory, input.NotebookPath)
+	if !isNotebookPath(path) {
+		return fmt.Errorf("File must be a Jupyter notebook (.ipynb file). For editing other file types, use the FileEdit tool.")
+	}
+	mode := notebookEditMode(input)
+	if mode != "replace" && mode != "insert" && mode != "delete" {
+		return fmt.Errorf("Edit mode must be replace, insert, or delete.")
+	}
+	if input.CellType != "" && input.CellType != "code" && input.CellType != "markdown" {
+		return fmt.Errorf("cell_type must be code or markdown")
+	}
+	if mode == "insert" && input.CellType == "" {
+		return fmt.Errorf("Cell type is required when using edit_mode=insert.")
+	}
+	content, existed, _, _, err := readTextForEdit(path)
+	if err != nil {
+		return err
+	}
+	if !existed {
+		return fmt.Errorf("Notebook file does not exist.")
+	}
+	if err := validateFreshFullReadWithContent(ctx, path, content); err != nil {
+		return err
+	}
+	_, cells, err := parseNotebookJSON(content)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.CellID) == "" {
+		if mode != "insert" {
+			return fmt.Errorf("Cell ID must be specified when not inserting a new cell.")
+		}
+		return nil
+	}
+	_, _, err = findNotebookCellIndex(cells, input.CellID)
+	return err
+}
+
+func callNotebookEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeNotebookEdit(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	path := resolvePath(ctx.WorkingDirectory, input.NotebookPath)
+	content, existed, crlf, modeBits, err := readTextForEdit(path)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if !existed {
+		return contracts.ToolResult{}, fmt.Errorf("Notebook file does not exist.")
+	}
+	if err := validateFreshFullReadWithContent(ctx, path, content); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	notebook, cells, err := parseNotebookJSON(content)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	mode := notebookEditMode(input)
+	cellIndex := 0
+	targetCellID := strings.TrimSpace(input.CellID)
+	if targetCellID != "" {
+		foundIndex, foundID, err := findNotebookCellIndex(cells, targetCellID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		cellIndex = foundIndex
+		targetCellID = foundID
+		if mode == "insert" {
+			cellIndex++
+		}
+	}
+	cellType := input.CellType
+	if mode == "delete" {
+		if cellIndex < 0 || cellIndex >= len(cells) {
+			return contracts.ToolResult{}, fmt.Errorf("Cell with index %d does not exist in notebook.", cellIndex)
+		}
+		if cell, ok := cells[cellIndex].(map[string]any); ok && cellType == "" {
+			cellType, _ = cell["cell_type"].(string)
+		}
+		cells = append(cells[:cellIndex], cells[cellIndex+1:]...)
+	} else if mode == "insert" {
+		if cellType == "" {
+			cellType = "code"
+		}
+		newCellID := ""
+		if notebookSupportsCellID(notebook) {
+			newCellID = "cell-" + string(contracts.NewID())[:12]
+		}
+		cells = append(cells, nil)
+		copy(cells[cellIndex+1:], cells[cellIndex:])
+		cells[cellIndex] = newNotebookCell(cellType, input.NewSource, newCellID)
+		targetCellID = newCellID
+	} else {
+		if cellIndex < 0 || cellIndex >= len(cells) {
+			return contracts.ToolResult{}, fmt.Errorf("Cell with index %d does not exist in notebook.", cellIndex)
+		}
+		cell, ok := cells[cellIndex].(map[string]any)
+		if !ok {
+			return contracts.ToolResult{}, fmt.Errorf("Cell with index %d is not a notebook cell object.", cellIndex)
+		}
+		if cellType == "" {
+			cellType, _ = cell["cell_type"].(string)
+			if cellType == "" {
+				cellType = "code"
+			}
+		}
+		if existingType, _ := cell["cell_type"].(string); existingType == "code" {
+			cell["execution_count"] = nil
+			cell["outputs"] = []any{}
+		}
+		cell["source"] = input.NewSource
+		if input.CellType != "" {
+			cell["cell_type"] = input.CellType
+		}
+		cells[cellIndex] = cell
+	}
+	notebook["cells"] = cells
+	data, err := json.MarshalIndent(notebook, "", " ")
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	updated := string(data)
+	if err := writeNormalizedText(path, updated, crlf, modeBits); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if state := EnsureReadState(ctx); state != nil {
+		if mtime, err := mtimeMillis(path); err == nil {
+			state.Set(path, ReadFileState{Content: updated, Timestamp: mtime})
+		}
+	}
+	language := notebookLanguage(notebook)
+	message := fmt.Sprintf("Updated notebook %s cell %s.", input.NotebookPath, targetCellID)
+	if mode == "insert" {
+		message = fmt.Sprintf("Inserted notebook cell %s in %s.", targetCellID, input.NotebookPath)
+	} else if mode == "delete" {
+		message = fmt.Sprintf("Deleted notebook cell %s from %s.", targetCellID, input.NotebookPath)
+	}
+	return contracts.ToolResult{
+		Content: message,
+		StructuredContent: map[string]any{
+			"new_source":    input.NewSource,
+			"cell_id":       targetCellID,
+			"cell_type":     cellType,
+			"language":      language,
+			"edit_mode":     mode,
+			"error":         "",
+			"notebook_path": path,
+			"original_file": content,
+			"updated_file":  updated,
+		},
+	}, nil
+}
+
 func validateFreshFullRead(ctx tool.Context, path string) error {
 	content, existed, _, _, err := readTextForEdit(path)
 	if err != nil {
@@ -722,6 +921,117 @@ func decodeEdit(raw json.RawMessage) (editInput, error) {
 		return editInput{}, err
 	}
 	return input, nil
+}
+
+func decodeNotebookEdit(raw json.RawMessage) (notebookEditInput, error) {
+	var input notebookEditInput
+	if err := decodeStrict(raw, map[string]struct{}{"notebook_path": {}, "cell_id": {}, "new_source": {}, "cell_type": {}, "edit_mode": {}}, &input); err != nil {
+		return notebookEditInput{}, err
+	}
+	return input, nil
+}
+
+func notebookEditMode(input notebookEditInput) string {
+	mode := strings.TrimSpace(input.EditMode)
+	if mode == "" {
+		return "replace"
+	}
+	return mode
+}
+
+func parseNotebookJSON(content string) (map[string]any, []any, error) {
+	var notebook map[string]any
+	if err := json.Unmarshal([]byte(content), &notebook); err != nil {
+		return nil, nil, fmt.Errorf("Notebook is not valid JSON.")
+	}
+	cells, ok := notebook["cells"].([]any)
+	if !ok {
+		return nil, nil, fmt.Errorf("Notebook JSON must contain a cells array.")
+	}
+	return notebook, cells, nil
+}
+
+func findNotebookCellIndex(cells []any, cellID string) (int, string, error) {
+	cellID = strings.TrimSpace(cellID)
+	for i, cellValue := range cells {
+		cell, ok := cellValue.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id, _ := cell["id"].(string); id == cellID {
+			return i, id, nil
+		}
+	}
+	if index, ok := parseNotebookCellID(cellID); ok {
+		if index < 0 || index >= len(cells) {
+			return 0, "", fmt.Errorf("Cell with index %d does not exist in notebook.", index)
+		}
+		return index, cellID, nil
+	}
+	return 0, "", fmt.Errorf("Cell with ID %q not found in notebook.", cellID)
+}
+
+func parseNotebookCellID(cellID string) (int, bool) {
+	if !strings.HasPrefix(cellID, "cell-") {
+		return 0, false
+	}
+	index, err := strconv.Atoi(strings.TrimPrefix(cellID, "cell-"))
+	if err != nil {
+		return 0, false
+	}
+	return index, true
+}
+
+func newNotebookCell(cellType string, source string, id string) map[string]any {
+	cell := map[string]any{
+		"cell_type": cellType,
+		"metadata":  map[string]any{},
+		"source":    source,
+	}
+	if id != "" {
+		cell["id"] = id
+	}
+	if cellType == "code" {
+		cell["execution_count"] = nil
+		cell["outputs"] = []any{}
+	}
+	return cell
+}
+
+func notebookSupportsCellID(notebook map[string]any) bool {
+	major := jsonNumberAsInt(notebook["nbformat"])
+	minor := jsonNumberAsInt(notebook["nbformat_minor"])
+	return major > 4 || (major == 4 && minor >= 5)
+}
+
+func notebookLanguage(notebook map[string]any) string {
+	metadata, ok := notebook["metadata"].(map[string]any)
+	if !ok {
+		return "python"
+	}
+	languageInfo, ok := metadata["language_info"].(map[string]any)
+	if !ok {
+		return "python"
+	}
+	name, _ := languageInfo["name"].(string)
+	if strings.TrimSpace(name) == "" {
+		return "python"
+	}
+	return name
+}
+
+func jsonNumberAsInt(value any) int {
+	switch v := value.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case json.Number:
+		i, _ := v.Int64()
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 func decodeStrict(raw json.RawMessage, allowed map[string]struct{}, out any) error {

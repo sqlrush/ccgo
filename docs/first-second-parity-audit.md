@@ -114,6 +114,7 @@ Covered behavior:
 - `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, initial PDF text extraction with page-selection parsing, common Page/Contents indirect-object mapping, Pages/Kids page-order recovery, FlateDecode text streams, UTF-16 BOM PDF string decoding, PNG/JPEG/GIF/WebP image content-block reads, Jupyter notebook cell rendering, large text tool-result truncation/persistence, and read-state recording.
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, `.claude/settings.json` and `settings.local.json` JSON/semantic validation before writes, structured diff hunks, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, `.claude/settings.json` and `settings.local.json` final-content validation before writes, structured diff hunks, and post-edit read-state refresh.
+- `NotebookEdit` initial notebook mutation behavior, including official input field names, replace/insert/delete modes, real cell IDs and `cell-N` fallback indexes, code-cell output/execution reset on replace, read-before-edit/stale guards, read-state refresh, `notebook_path` permission path extraction, and structured result payloads.
 - `conversation.Runner` now preserves tool metadata across tool rounds so a `Read` in one tool round can authorize a later `Edit`/`Write`.
 - `Bash` safety classification now treats `git reflog`, `git reflog show`, and ref/date display variants as read-only while keeping `git reflog expire/delete/exists` out of read-only auto-allow and marking `expire/delete` as destructive.
 - `Bash` safety classification now also treats `git stash list`, `git stash show`, and `git worktree list` as read-only while keeping stash/worktree mutating subcommands out of read-only auto-allow and marking `stash drop/pop/clear` plus `worktree remove/prune` as destructive.
@@ -126,10 +127,10 @@ Covered behavior:
 
 Still missing from full M5 parity:
 
-- Fuller PDF parity, fuller notebook parity, fuller token-budget parity, and fuller media parity in `Read`.
-- Fuller git diff parity plus LSP/IDE notifications/file-history integration for `Write`/`Edit`.
+- Fuller PDF parity, fuller notebook render/edit parity, fuller token-budget parity, and fuller media parity in `Read`/`NotebookEdit`.
+- Fuller git/notebook diff parity plus LSP/IDE notifications/file-history integration for `Write`/`Edit`/`NotebookEdit`.
 - Skill activation, full permission prompt rendering, and broader secret guard parity beyond the current team-memory write guard.
-- Complete `Bash` parser/sandbox/interrupt/background lifecycle/golden parity, `PowerShell` full parser/full permission/path validation/background lifecycle edge cases/golden parity, `WebFetch` browser rendering/full prompt-aware summarization/golden parity, `WebSearch` official backend/ranking/golden parity, notebook and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and TUI/golden compatibility for `TodoWrite`.
+- Complete `Bash` parser/sandbox/interrupt/background lifecycle/golden parity, `PowerShell` full parser/full permission/path validation/background lifecycle edge cases/golden parity, `WebFetch` browser rendering/full prompt-aware summarization/golden parity, `WebSearch` official backend/ranking/golden parity, NotebookEdit UI/golden/file-history parity and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and TUI/golden compatibility for `TodoWrite`.
 
 ## M6/M7 Initial Progress
 

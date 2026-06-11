@@ -141,7 +141,7 @@ func (d EnginePermissionDecider) DecideTool(t Tool, raw json.RawMessage, ctx Con
 		ToolName:         t.Name(),
 		Input:            raw,
 		Command:          firstInputString(raw, "command", "cmd"),
-		Path:             firstInputString(raw, "file_path", "path"),
+		Path:             firstInputString(raw, "file_path", "notebook_path", "path"),
 		WorkingDirectory: ctx.WorkingDirectory,
 		ReadOnly:         t.IsReadOnly(raw),
 		WritesFiles:      !t.IsReadOnly(raw) && !t.IsDestructive(raw),
