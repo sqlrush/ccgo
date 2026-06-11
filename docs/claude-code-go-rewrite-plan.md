@@ -167,7 +167,7 @@ test/parity/                 # golden tests against TS/official behavior
 当前进度：
 
 - 文本版 Read/Edit/Write 已落地，覆盖 read-before-write、mtime stale guard、唯一匹配、`replace_all`、Read 去重和跨 tool round read-state。
-- Bash 初版已落地，覆盖 command/timeout/description 输入校验、`/bin/sh -c` 执行、stdout/stderr/exit code/timeout 结构化结果、动态 read-only/concurrency-safe/destructive 分类和权限规则接入；完整 shell parser、真实 sandbox、background、interrupt 和官方 golden 仍需继续补。
+- Bash 初版已落地，覆盖 command/timeout/description 输入校验、`/bin/sh -c` 执行、stdout/stderr/exit code/timeout 结构化结果、动态 read-only/concurrency-safe/destructive 分类、权限规则接入、后台启动和同会话 `BashOutput` 输出读取；完整 shell parser、真实 sandbox、interrupt、后台任务完整生命周期和官方 golden 仍需继续补。
 - Glob/Grep 纯 Go 初版已落地，覆盖 `**` 递归 glob、基础 ignored dirs、层级 `.gitignore`/`.ignore`、mtime/path 排序、Grep regex、glob 过滤和 `files_with_matches`/`content`/`count` 输出模式；完整 ripgrep parity、分页和更多输出参数仍需继续补。
 - TodoWrite 会话内初版已落地，覆盖完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果和 tool metadata 状态保存；跨会话恢复、TUI 同步和官方 golden 仍需继续补。
 - WebFetch 初版已落地，覆盖 URL/timeout/max_bytes 输入校验、HTTP GET、文本/二进制判定、截断、非 2xx error 标记、结构化结果和 `WebFetch(domain:...)` 权限规则适配；prompt-aware rendering、browser 渲染和 preflight 仍需继续补。

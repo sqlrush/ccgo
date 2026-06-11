@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/permissions"
@@ -13,7 +14,7 @@ import (
 
 func bashExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewBashTool())
+	registry, err := tool.NewRegistry(NewBashTool(), NewBashOutputTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,4 +222,137 @@ func TestBashDynamicFlagsFeedPermissionDecision(t *testing.T) {
 	if ruleDecision.Behavior != contracts.PermissionAllow {
 		t.Fatalf("rule decision = %#v", ruleDecision)
 	}
+}
+
+func TestBashRunInBackgroundAndReadOutput(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_background",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"printf 'one\ntwo\nthree\n'","run_in_background":true,"description":"background print"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(start.Content.(string), "Command started in background with ID: bash_") {
+		t.Fatalf("start content = %#v", start.Content)
+	}
+	bashID := start.StructuredContent["bash_id"].(string)
+	if bashID == "" || start.StructuredContent["running"] != true {
+		t.Fatalf("start structured content = %#v", start.StructuredContent)
+	}
+
+	output := waitForBashOutput(t, executor, ctx, bashID)
+	if output.IsError {
+		t.Fatalf("output should not be error: %#v", output)
+	}
+	if output.StructuredContent["running"] != false || output.StructuredContent["exit_code"] != 0 {
+		t.Fatalf("output structured content = %#v", output.StructuredContent)
+	}
+	if output.StructuredContent["stdout"] != "one\ntwo\nthree\n" {
+		t.Fatalf("stdout = %#v", output.StructuredContent["stdout"])
+	}
+
+	tail, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_background_tail",
+		Name:  "BashOutput",
+		Input: json.RawMessage(`{"bash_id":` + strconvQuote(bashID) + `,"tail_lines":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tail.StructuredContent["stdout"] != "two\nthree" {
+		t.Fatalf("tail stdout = %#v", tail.StructuredContent["stdout"])
+	}
+}
+
+func TestBashBackgroundTimeout(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_background_timeout",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"sleep 1","runInBackground":true,"timeout":50}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bashID := start.StructuredContent["bash_id"].(string)
+	output := waitForBashOutput(t, executor, ctx, bashID)
+	if !output.IsError {
+		t.Fatalf("timeout output should be error: %#v", output)
+	}
+	if output.StructuredContent["timed_out"] != true || output.StructuredContent["exit_code"] != -1 {
+		t.Fatalf("timeout structured content = %#v", output.StructuredContent)
+	}
+	if !strings.Contains(output.Content.(string), "timed out after 50ms") {
+		t.Fatalf("timeout content = %#v", output.Content)
+	}
+}
+
+func TestBashOutputValidationAndMissingTask(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "missing id", input: `{}`, want: "bash_id is required"},
+		{name: "bad tail", input: `{"bash_id":"bash_missing","tail_lines":0}`, want: "tail_lines must be positive"},
+		{name: "unknown field", input: `{"bash_id":"bash_missing","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing task", input: `{"id":"bash_missing"}`, want: "background bash command not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := executor.Execute(ctx, contracts.ToolUse{
+				ID:    "toolu_output_invalid",
+				Name:  "BashOutput",
+				Input: json.RawMessage(tt.input),
+			}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func waitForBashOutput(t *testing.T, executor tool.Executor, ctx tool.Context, bashID string) contracts.ToolResult {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		output, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    "toolu_background_output",
+			Name:  "BashOutput",
+			Input: json.RawMessage(`{"bash_id":` + strconvQuote(bashID) + `}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if output.StructuredContent["running"] == false {
+			return output
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background command %s did not finish; last output = %#v", bashID, output.StructuredContent)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func strconvQuote(value string) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
 }
