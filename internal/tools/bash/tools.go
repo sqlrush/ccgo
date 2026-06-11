@@ -21,6 +21,21 @@ const (
 	maxTimeoutMillis     = 600_000
 )
 
+var gitReflogFlagsWithArgs = map[string]bool{
+	"-n":          true,
+	"--max-count": true,
+	"--date":      true,
+	"--format":    true,
+	"--pretty":    true,
+	"--grep":      true,
+	"--author":    true,
+	"--committer": true,
+	"--since":     true,
+	"--after":     true,
+	"--until":     true,
+	"--before":    true,
+}
+
 type bashInput struct {
 	Command               string `json:"command"`
 	Timeout               *int   `json:"timeout,omitempty"`
@@ -839,6 +854,8 @@ func readOnlyGit(words []string) bool {
 		return readOnlyGitTag(words[2:])
 	case "remote":
 		return readOnlyGitRemote(words[2:])
+	case "reflog":
+		return readOnlyGitReflog(words[2:])
 	default:
 		return false
 	}
@@ -893,6 +910,14 @@ func readOnlyGitRemote(args []string) bool {
 	default:
 		return false
 	}
+}
+
+func readOnlyGitReflog(args []string) bool {
+	first, ok := gitReflogFirstPositional(args)
+	if !ok {
+		return true
+	}
+	return first != "expire" && first != "delete" && first != "exists"
 }
 
 func destructiveWords(words []string) bool {
@@ -962,11 +987,43 @@ func destructiveGit(words []string) bool {
 		return len(words) >= 3 && (words[2] == "remove" || words[2] == "rm")
 	case "push":
 		return containsAnyWord(words[2:], "-f", "--force", "--force-with-lease", "--delete")
+	case "reflog":
+		first, ok := gitReflogFirstPositional(words[2:])
+		return ok && (first == "expire" || first == "delete")
 	case "checkout", "restore":
 		return containsWord(words[2:], ".") || containsWord(words[2:], "--")
 	default:
 		return false
 	}
+}
+
+func gitReflogFirstPositional(args []string) (string, bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			if i+1 < len(args) {
+				return args[i+1], true
+			}
+			return "", false
+		}
+		if strings.HasPrefix(arg, "--") {
+			if strings.Contains(arg, "=") {
+				continue
+			}
+			if gitReflogFlagsWithArgs[arg] && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if gitReflogFlagsWithArgs[arg] && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		return arg, true
+	}
+	return "", false
 }
 
 func hasRecursiveFlag(words []string) bool {

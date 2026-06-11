@@ -114,6 +114,7 @@ Covered behavior:
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, `.claude/settings.json` and `settings.local.json` JSON/semantic validation before writes, structured diff hunks, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, `.claude/settings.json` and `settings.local.json` final-content validation before writes, structured diff hunks, and post-edit read-state refresh.
 - `conversation.Runner` now preserves tool metadata across tool rounds so a `Read` in one tool round can authorize a later `Edit`/`Write`.
+- `Bash` safety classification now treats `git reflog`, `git reflog show`, and ref/date display variants as read-only while keeping `git reflog expire/delete/exists` out of read-only auto-allow and marking `expire/delete` as destructive.
 
 Still missing from full M5 parity:
 
