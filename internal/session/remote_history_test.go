@@ -745,6 +745,50 @@ func TestFetchRemoteHistoryAcceptsProviderResponseWrappers(t *testing.T) {
 	}
 }
 
+func TestFetchRemoteHistoryAcceptsInlineFencedProviderPayloads(t *testing.T) {
+	providerChoiceContent := func(t *testing.T, content string) []byte {
+		t.Helper()
+		data, err := json.Marshal(map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"content": content},
+			}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	var seen []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("before_id") {
+		case "":
+			_, _ = w.Write(providerChoiceContent(t, "```json "+`{"events":[{"type":"status","event_id":"evt_inline","session_id":"s","status":"inline"}],"has_more":true,"first_id":"evt_inline"}`+" ```"))
+		case "evt_inline":
+			_, _ = w.Write(providerChoiceContent(t, "```json"+`{"events":[{"type":"status","event_id":"evt_glued","session_id":"s","status":"glued"}],"has_more":false}`+"```"))
+		default:
+			t.Fatalf("unexpected before_id = %q", r.URL.Query().Get("before_id"))
+		}
+	}))
+	defer server.Close()
+
+	authCtx := NewRemoteHistoryAuthContext("s", "token", "", auth.OAuthConfig{BaseAPIURL: server.URL})
+	events, err := FetchRemoteHistory(context.Background(), server.Client(), authCtx, RemoteHistoryFetchOptions{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !events.Complete || events.Pages != 2 || len(events.Events) != 2 || events.NextBeforeID != "" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events.Events[0].ID != "evt_inline" || events.Events[0].Status != "inline" || events.Events[1].ID != "evt_glued" || events.Events[1].Status != "glued" {
+		t.Fatalf("events = %#v", events.Events)
+	}
+	if len(seen) != 2 || seen[1].Get("before_id") != "evt_inline" {
+		t.Fatalf("queries = %#v", seen)
+	}
+}
+
 func TestFetchRemoteHistoryAcceptsLinkURLCursors(t *testing.T) {
 	var seen []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

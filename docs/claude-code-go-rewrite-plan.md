@@ -218,6 +218,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：remote history response parser 现在也接受 JSON:API `included` collection，会过滤非事件资源，并递归解包 `resource`/`attributes`/`properties` 后保留外层 resource id 作为事件 ID fallback。
 - 本轮补充：remote history response parser 会解包 `payload`/`response`/`result`/`body` 等通用响应外壳，外壳内的 event list、pagination、links 会继续递归解析。
 - 本轮补充：remote history response parser 现在也接受 provider-style `choices`/`outputs`/`candidates`/`generations` wrapper 以及顶层 `message`/`content`/`text` envelope，可从 `message.content`、content-block array 和 `content.parts[].text` 中恢复 event page JSON（包括 fenced `json` code block），并保留 pagination 继续驱动 `before_id` 续抓。
+- 本轮补充：remote history provider wrapper 的 fenced JSON 提取现在接受 inline/glued fence 形态，例如语言标记后同一行直接跟 JSON 对象，模型输出不换行时仍能恢复 event page。
 - 本轮补充：remote history pagination 现在接受 `starting_after`/`startingAfter`/`after*` cursor aliases，page 字段和 link URL query 都可驱动下一页 `before_id` 续抓。
 - 本轮补充：remote history `SDKEvent` 本体接受 `eventType`/`event_type`/`role` 类型别名、`createdAt`/`created_at` 时间戳别名，以及 `payload`/`data`/`body`/`metadata`/`meta`/`attributes`/`properties`/`serializedMessage` message payload 别名；payload 只有 `role`/`content` 时也能 materialize 成 transcript message。
 - 本轮补充：sidechain lifecycle 读取现在接受运行时相邻字段别名，包括 `jobId`/`threadId`/`workflowId`/`operationId`/`requestId`、`workerType`/`taskType`、`workspaceRoot`/`projectPath`、`instructions`/`operationName`/`commandName`/`displayTitle`、`jobStatus`、`resultState`、`outputText` 和毫秒级 start/end time 字段，并会递归解包 `runtime`/`context`/`state` 容器。
