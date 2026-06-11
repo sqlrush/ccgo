@@ -775,11 +775,11 @@ func TestGlobToolMatchesRecursiveFilesSortedByModifiedTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Content != "src/nested/new.go\nsrc/old.go\n.git/hidden.go" {
+	if result.Content != ".git/hidden.go\nsrc/old.go\nsrc/nested/new.go" {
 		t.Fatalf("glob content = %#v", result.Content)
 	}
 	files := result.StructuredContent["files"].([]string)
-	if len(files) != 3 || files[0] != "src/nested/new.go" || files[1] != "src/old.go" || files[2] != ".git/hidden.go" {
+	if len(files) != 3 || files[0] != ".git/hidden.go" || files[1] != "src/old.go" || files[2] != "src/nested/new.go" {
 		t.Fatalf("structured files = %#v", files)
 	}
 }

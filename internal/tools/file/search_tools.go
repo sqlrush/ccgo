@@ -375,7 +375,7 @@ func collectGlobMatches(root string, displayRoot string, pattern string, limit i
 	}
 	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].ModUnix != matches[j].ModUnix {
-			return matches[i].ModUnix > matches[j].ModUnix
+			return matches[i].ModUnix < matches[j].ModUnix
 		}
 		return matches[i].RelPath < matches[j].RelPath
 	})
