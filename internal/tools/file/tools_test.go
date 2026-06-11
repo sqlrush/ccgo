@@ -2,6 +2,7 @@ package filetools
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -79,6 +80,55 @@ func TestReadToolLineNumbersAndDedup(t *testing.T) {
 	}
 	if result.Content != fileUnchangedStub {
 		t.Fatalf("dedup content = %#v", result.Content)
+	}
+}
+
+func TestReadToolReturnsImageContentBlock(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte{0x89, 'P', 'N', 'G', '\r', '\n'}
+	if err := os.WriteFile(filepath.Join(dir, "chart.png"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_read_image",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"chart.png"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks, ok := result.Content.([]contracts.ContentBlock)
+	if !ok || len(blocks) != 2 {
+		t.Fatalf("image content = %#v", result.Content)
+	}
+	if blocks[0].Type != contracts.ContentText || !strings.Contains(blocks[0].Text, "Read image file chart.png") {
+		t.Fatalf("image summary block = %#v", blocks[0])
+	}
+	source, ok := blocks[1].Source.(contracts.ImageSource)
+	if blocks[1].Type != contracts.ContentImage || !ok {
+		t.Fatalf("image block = %#v", blocks[1])
+	}
+	if source.Type != "base64" || source.MediaType != "image/png" || source.Data != base64.StdEncoding.EncodeToString(data) {
+		t.Fatalf("image source = %#v", source)
+	}
+	file := result.StructuredContent["file"].(map[string]any)
+	if result.StructuredContent["type"] != "image" || file["mediaType"] != "image/png" || file["bytes"] != len(data) {
+		t.Fatalf("structured image content = %#v", result.StructuredContent)
+	}
+}
+
+func TestReadToolRejectsImageOffsetLimit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "photo.jpg"), []byte("jpeg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_read_image_offset",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"photo.jpg","offset":1}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "offset and limit are only supported for text files") {
+		t.Fatalf("image offset err = %v", err)
 	}
 }
 

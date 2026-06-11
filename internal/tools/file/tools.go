@@ -1,6 +1,7 @@
 package filetools
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 	todotools "ccgo/internal/tools/todo"
 	webtools "ccgo/internal/tools/web"
 )
+
+const maxReadImageBytes = 10 * 1024 * 1024
 
 type readInput struct {
 	FilePath string `json:"file_path"`
@@ -58,7 +61,7 @@ func NewReadTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Reads a text file from the local filesystem. The file_path parameter should be an absolute path. Results include line numbers starting at 1.", nil
+			return "Reads a text or image file from the local filesystem. Text results include line numbers starting at 1; supported images are returned as image content blocks.", nil
 		},
 		ValidateFunc:    validateRead,
 		CallFunc:        callRead,
@@ -148,6 +151,12 @@ func validateRead(ctx tool.Context, raw json.RawMessage) error {
 		return fmt.Errorf("cannot read %q: this device file would block or produce infinite output", input.FilePath)
 	}
 	if hasBinaryExtension(path) {
+		if imageMediaTypeForPath(path) != "" {
+			if input.Offset != nil || input.Limit != nil {
+				return fmt.Errorf("offset and limit are only supported for text files")
+			}
+			return nil
+		}
 		return fmt.Errorf("this tool cannot read binary files: %s", filepath.Ext(path))
 	}
 	return nil
@@ -195,6 +204,9 @@ func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if info.IsDir() {
 		return contracts.ToolResult{}, fmt.Errorf("cannot read directory: %s", input.FilePath)
 	}
+	if mediaType := imageMediaTypeForPath(path); mediaType != "" {
+		return readImageResult(input.FilePath, path, mediaType, info)
+	}
 	content, err := readText(path)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -235,6 +247,54 @@ func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			},
 		},
 	}, nil
+}
+
+func readImageResult(displayPath string, path string, mediaType string, info os.FileInfo) (contracts.ToolResult, error) {
+	if info.Size() > maxReadImageBytes {
+		return contracts.ToolResult{}, fmt.Errorf("image file is too large to read: %d bytes exceeds %d bytes", info.Size(), maxReadImageBytes)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	encoded := base64.StdEncoding.EncodeToString(data)
+	content := []contracts.ContentBlock{
+		contracts.NewTextBlock(fmt.Sprintf("Read image file %s (%s, %d bytes).", displayPath, mediaType, len(data))),
+		{
+			Type: contracts.ContentImage,
+			Source: contracts.ImageSource{
+				Type:      "base64",
+				MediaType: mediaType,
+				Data:      encoded,
+			},
+		},
+	}
+	return contracts.ToolResult{
+		Content: content,
+		StructuredContent: map[string]any{
+			"type": "image",
+			"file": map[string]any{
+				"filePath":  displayPath,
+				"mediaType": mediaType,
+				"bytes":     len(data),
+			},
+		},
+	}, nil
+}
+
+func imageMediaTypeForPath(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return ""
+	}
 }
 
 func validateWrite(ctx tool.Context, raw json.RawMessage) error {
