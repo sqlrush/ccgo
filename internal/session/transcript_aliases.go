@@ -71,15 +71,17 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	fields := transcriptAliasFields(data)
 	*m = TranscriptMessage(base)
-	if messageType := firstTranscriptType(m.Type, aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role); messageType != "" {
+	if messageType := firstTranscriptType(m.Type, aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role, transcriptAliasString(fields, "type", "entryType", "entry_type", "messageType", "message_type", "role")); messageType != "" {
 		m.Type = messageType
 	}
 	if m.UUID == "" {
-		m.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
+		m.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID, transcriptAliasID(fields, "uuid", "messageUuid", "messageUUID", "message_uuid", "messageId", "messageID", "message_id", "id"))
 	}
 	if m.ParentUUID == nil {
 		m.ParentUUID = firstTranscriptIDPtr(
+			transcriptAliasIDPtr(fields, "parentUuid", "parentUUID", "parent_uuid", "parentId", "parentID", "parent_id", "parentMessageUuid", "parentMessageUUID", "parent_message_uuid", "parentMessageId", "parentMessageID", "parent_message_id"),
 			aux.ParentUUIDSnake,
 			aux.ParentMessageUUID,
 			aux.ParentMessageUUIDUpper,
@@ -92,55 +94,51 @@ func (m *TranscriptMessage) UnmarshalJSON(data []byte) error {
 		)
 	}
 	if m.LogicalParentUUID == nil {
-		m.LogicalParentUUID = cloneIDPtr(aux.LogicalParentUUIDSnake)
+		m.LogicalParentUUID = firstTranscriptIDPtr(transcriptAliasIDPtr(fields, "logicalParentUuid", "logicalParentUUID", "logical_parent_uuid", "logicalParentId", "logicalParentID", "logical_parent_id"), aux.LogicalParentUUIDSnake)
 	}
 	if m.SessionID == "" {
-		m.SessionID = aux.SessionIDUpper
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionIDSnake
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionUUID
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionUUIDUpper
-	}
-	if m.SessionID == "" {
-		m.SessionID = aux.SessionUUIDSnake
+		m.SessionID = firstTranscriptID(aux.SessionIDUpper, aux.SessionIDSnake, aux.SessionUUID, aux.SessionUUIDUpper, aux.SessionUUIDSnake, transcriptAliasID(fields, "sessionId", "sessionID", "session_id", "session", "sessionUuid", "sessionUUID", "session_uuid"))
 	}
 	if m.Timestamp == "" {
-		m.Timestamp = firstTranscriptString(aux.CreatedAt, aux.CreatedAtSnake, aux.Time)
+		m.Timestamp = firstTranscriptString(aux.CreatedAt, aux.CreatedAtSnake, aux.Time, transcriptAliasString(fields, "timestamp", "createdAt", "created_at", "time"))
 	}
 	if aux.IsSidechainSnake != nil {
 		m.IsSidechain = *aux.IsSidechainSnake
+	} else if value, ok := transcriptAliasBool(fields, "isSidechain", "is_sidechain"); ok {
+		m.IsSidechain = value
 	}
 	if m.AgentID == "" {
-		m.AgentID = aux.AgentIDSnake
+		m.AgentID = firstTranscriptString(aux.AgentIDSnake, transcriptAliasString(fields, "agentId", "agentID", "agent_id"))
 	}
 	if m.CWD == "" {
-		m.CWD = firstTranscriptString(aux.CWDSnake, aux.WorkingDirectory, aux.WorkingDirectorySnake, aux.ProjectPath, aux.ProjectPathSnake)
+		m.CWD = firstTranscriptString(aux.CWDSnake, aux.WorkingDirectory, aux.WorkingDirectorySnake, aux.ProjectPath, aux.ProjectPathSnake, transcriptAliasString(fields, "cwd", "cwdPath", "cwd_path", "workingDirectory", "working_directory", "projectPath", "project_path"))
 	}
 	if m.UserType == "" {
-		m.UserType = firstTranscriptString(aux.UserTypeSnake, aux.UserKind, aux.UserKindSnake)
+		m.UserType = firstTranscriptString(aux.UserTypeSnake, aux.UserKind, aux.UserKindSnake, transcriptAliasString(fields, "userType", "user_type", "userKind", "user_kind"))
 	}
 	if m.Entrypoint == "" {
-		m.Entrypoint = firstTranscriptString(aux.EntryPoint, aux.EntryPointSnake, aux.Client, aux.Source)
+		m.Entrypoint = firstTranscriptString(aux.EntryPoint, aux.EntryPointSnake, aux.Client, aux.Source, transcriptAliasString(fields, "entrypoint", "entryPoint", "entry_point", "client", "source"))
 	}
 	if m.Version == "" {
-		m.Version = firstTranscriptString(aux.AppVersion, aux.AppVersionSnake, aux.ClaudeCodeVersion, aux.ClaudeCodeVersionSnake)
+		m.Version = firstTranscriptString(aux.AppVersion, aux.AppVersionSnake, aux.ClaudeCodeVersion, aux.ClaudeCodeVersionSnake, transcriptAliasString(fields, "version", "appVersion", "app_version", "claudeCodeVersion", "claude_code_version"))
 	}
 	if m.Slug == "" {
-		m.Slug = firstTranscriptString(aux.SessionSlug, aux.SessionSlugSnake, aux.PlanSlug, aux.PlanSlugSnake)
+		m.Slug = firstTranscriptString(aux.SessionSlug, aux.SessionSlugSnake, aux.PlanSlug, aux.PlanSlugSnake, transcriptAliasString(fields, "slug", "sessionSlug", "session_slug", "planSlug", "plan_slug"))
 	}
 	if m.GitBranch == "" {
-		m.GitBranch = firstTranscriptString(aux.GitBranchSnake, aux.Branch)
+		m.GitBranch = firstTranscriptString(aux.GitBranchSnake, aux.Branch, transcriptAliasString(fields, "gitBranch", "git_branch", "branch"))
 	}
 	if m.CompactMetadata == nil {
 		m.CompactMetadata = aux.CompactMetadataSnake
+		if m.CompactMetadata == nil {
+			m.CompactMetadata = transcriptAliasObject[CompactMetadata](fields, "compactMetadata", "compact_metadata")
+		}
 	}
 	if m.SnipMetadata == nil {
 		m.SnipMetadata = aux.SnipMetadataSnake
+		if m.SnipMetadata == nil {
+			m.SnipMetadata = transcriptAliasObject[SnipMetadata](fields, "snipMetadata", "snip_metadata")
+		}
 	}
 	return nil
 }
@@ -175,15 +173,17 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	fields := transcriptAliasFields(data)
 	*e = transcriptEnvelope(base)
 	if e.Type == "" {
-		e.Type = firstTranscriptType(aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role)
+		e.Type = firstTranscriptType(aux.EntryType, aux.EntryTypeSnake, aux.MessageType, aux.MessageTypeSnake, aux.Role, transcriptAliasString(fields, "type", "entryType", "entry_type", "messageType", "message_type", "role"))
 	}
 	if e.UUID == "" {
-		e.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID)
+		e.UUID = firstTranscriptID(aux.MessageUUID, aux.MessageUUIDUpper, aux.MessageUUIDSnake, aux.MessageID, aux.MessageIDSnake, aux.ID, transcriptAliasID(fields, "uuid", "messageUuid", "messageUUID", "message_uuid", "messageId", "messageID", "message_id", "id"))
 	}
 	if e.ParentUUID == nil {
 		e.ParentUUID = firstTranscriptIDPtr(
+			transcriptAliasIDPtr(fields, "parentUuid", "parentUUID", "parent_uuid", "parentId", "parentID", "parent_id", "parentMessageUuid", "parentMessageUUID", "parent_message_uuid", "parentMessageId", "parentMessageID", "parent_message_id"),
 			aux.ParentUUIDSnake,
 			aux.ParentMessageUUID,
 			aux.ParentMessageUUIDUpper,
@@ -194,6 +194,77 @@ func (e *transcriptEnvelope) UnmarshalJSON(data []byte) error {
 			aux.ParentID,
 			aux.ParentIDSnake,
 		)
+	}
+	return nil
+}
+
+func transcriptAliasFields(data []byte) transcriptMetadataFields {
+	var fields transcriptMetadataFields
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil
+	}
+	return fields
+}
+
+func transcriptAliasString(fields transcriptMetadataFields, names ...string) string {
+	for _, name := range names {
+		raw, ok := transcriptMetadataFieldRaw(fields, name)
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return ""
+}
+
+func transcriptAliasID(fields transcriptMetadataFields, names ...string) contracts.ID {
+	for _, name := range names {
+		raw, ok := transcriptMetadataFieldRaw(fields, name)
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value contracts.ID
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value
+		}
+	}
+	return ""
+}
+
+func transcriptAliasIDPtr(fields transcriptMetadataFields, names ...string) *contracts.ID {
+	if value := transcriptAliasID(fields, names...); value != "" {
+		return &value
+	}
+	return nil
+}
+
+func transcriptAliasBool(fields transcriptMetadataFields, names ...string) (bool, bool) {
+	for _, name := range names {
+		raw, ok := transcriptMetadataFieldRaw(fields, name)
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value bool
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return value, true
+		}
+	}
+	return false, false
+}
+
+func transcriptAliasObject[T any](fields transcriptMetadataFields, names ...string) *T {
+	for _, name := range names {
+		raw, ok := transcriptMetadataFieldRaw(fields, name)
+		if !ok || isNullJSON(raw) {
+			continue
+		}
+		var value T
+		if err := json.Unmarshal(raw, &value); err == nil {
+			return &value
+		}
 	}
 	return nil
 }
@@ -209,6 +280,10 @@ func firstTranscriptType(values ...string) string {
 			return string(contracts.MessageAttachment)
 		case contracts.MessageSystem:
 			return string(contracts.MessageSystem)
+		case contracts.MessageProgress:
+			return string(contracts.MessageProgress)
+		case contracts.MessageTombstone:
+			return string(contracts.MessageTombstone)
 		}
 	}
 	return ""

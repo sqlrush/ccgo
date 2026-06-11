@@ -179,8 +179,9 @@ func transcriptRecordObject(raw json.RawMessage) (map[string]json.RawMessage, bo
 }
 
 func transcriptRecordObjectType(object map[string]json.RawMessage) string {
+	fields := transcriptMetadataFields(object)
 	for _, key := range []string{"type", "entryType", "entry_type", "messageType", "message_type", "role"} {
-		raw, ok := object[key]
+		raw, ok := transcriptMetadataFieldRaw(fields, key)
 		if !ok {
 			continue
 		}

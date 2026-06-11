@@ -75,6 +75,54 @@ func TestLoadTranscriptAcceptsMessageFieldAliases(t *testing.T) {
 	}
 }
 
+func TestLoadTranscriptAcceptsNormalizedMessageFieldAliases(t *testing.T) {
+	path := writeTranscript(t, []string{
+		`{"Message-Type":"user_message","Message-ID":"u1","Session-ID":"sess_norm","Created At":"2026-01-01T00:00:00Z","message":{"type":"user","content":"hi"}}`,
+		`{"Entry Type":"progress_update","Message-ID":"p1","Parent UUID":"u1"}`,
+		`{"Message Type":"assistant-message","Message ID":"a1","Parent-Message-ID":"p1","Session ID":"sess_norm","Created-At":"2026-01-01T00:00:01Z","Is-Sidechain":true,"Agent-ID":"agent_norm","Working Directory":"/repo","User-Type":"external","Entry-Point":"cli","App-Version":"1.2.3","Session-Slug":"plan-alpha","Git-Branch":"feature/session-alias","Compact-Metadata":{"pre_tokens":12,"user_context":"ctx","messages_summarized":2},"Snip-Metadata":{"removed_uuids":["old_1"]},"message":{"type":"assistant","content":"done"}}`,
+	})
+
+	transcript, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assistant := transcript.Messages["a1"]
+	if assistant == nil || assistant.Type != "assistant" || assistant.ParentUUID == nil || *assistant.ParentUUID != "u1" {
+		t.Fatalf("normalized assistant = %#v", assistant)
+	}
+	if assistant.SessionID != "sess_norm" || !assistant.IsSidechain || assistant.AgentID != "agent_norm" || assistant.CWD != "/repo" {
+		t.Fatalf("normalized runtime fields = %#v", assistant)
+	}
+	if assistant.UserType != "external" || assistant.Entrypoint != "cli" || assistant.Version != "1.2.3" || assistant.Slug != "plan-alpha" || assistant.GitBranch != "feature/session-alias" {
+		t.Fatalf("normalized metadata fields = %#v", assistant)
+	}
+	if assistant.CompactMetadata == nil || assistant.CompactMetadata.PreTokens != 12 || assistant.CompactMetadata.UserContext != "ctx" || assistant.CompactMetadata.MessagesSummarized != 2 {
+		t.Fatalf("normalized compact metadata = %#v", assistant.CompactMetadata)
+	}
+	if assistant.SnipMetadata == nil || len(assistant.SnipMetadata.RemovedUUIDs) != 1 || assistant.SnipMetadata.RemovedUUIDs[0] != "old_1" {
+		t.Fatalf("normalized snip metadata = %#v", assistant.SnipMetadata)
+	}
+	chain := transcript.BuildConversationChain("a1")
+	if got := chainIDs(chain); strings.Join(got, ",") != "u1,a1" {
+		t.Fatalf("normalized chain = %#v", got)
+	}
+
+	index, err := BuildTranscriptLineIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref := index.Entries[index.ByUUID["a1"]]; ref.Type != "assistant" || ref.SessionID != "sess_norm" || ref.ParentUUID == nil || *ref.ParentUUID != "u1" {
+		t.Fatalf("normalized line ref = %#v", ref)
+	}
+	resume, err := BuildIndexedResumeConversation(path, "a1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resume.Found || strings.Join(chainIDs(resume.Chain), ",") != "u1,a1" || resume.Chain[1].GitBranch != "feature/session-alias" {
+		t.Fatalf("normalized indexed resume = %#v chain=%#v", resume, chainIDs(resume.Chain))
+	}
+}
+
 func TestLoadTranscriptAcceptsMessageTypeAliases(t *testing.T) {
 	path := writeTranscript(t, []string{
 		`{"type":"user_message","uuid":"u1","sessionID":"sess_alias","timestamp":"2026-01-01T00:00:00Z","message":{"type":"userMessage","sessionID":"sess_alias","content":"hi"}}`,
