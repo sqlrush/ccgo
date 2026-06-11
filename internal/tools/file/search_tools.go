@@ -150,7 +150,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, and head_limit pagination. Use fixed_strings or -F for literal matching. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, and head_limit pagination. Use fixed_strings or -F for literal matching. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
@@ -377,10 +377,11 @@ func collectGrepMatches(root string, glob string, typeFilter string, expr *regex
 	if err != nil {
 		return nil, 0, false, err
 	}
+	globPatterns := splitGrepGlobPatterns(glob)
 	var matches []grepMatch
 	err = walkSearchFiles(root, func(path string, rel string, _ os.FileInfo) error {
-		if glob != "" {
-			ok, err := matchGlobPath(glob, rel)
+		if len(globPatterns) > 0 {
+			ok, err := matchAnyGlobPath(globPatterns, rel)
 			if err != nil || !ok {
 				return err
 			}
@@ -677,6 +678,32 @@ func grepTypeMatches(path string, extensions []string) bool {
 	return false
 }
 
+func splitGrepGlobPatterns(glob string) []string {
+	var patterns []string
+	for _, raw := range strings.Fields(glob) {
+		if strings.Contains(raw, "{") && strings.Contains(raw, "}") {
+			patterns = append(patterns, raw)
+			continue
+		}
+		for _, part := range strings.Split(raw, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				patterns = append(patterns, part)
+			}
+		}
+	}
+	return patterns
+}
+
+func matchAnyGlobPath(patterns []string, path string) (bool, error) {
+	for _, pattern := range patterns {
+		ok, err := matchGlobPath(pattern, path)
+		if err != nil || ok {
+			return ok, err
+		}
+	}
+	return false, nil
+}
+
 func grepLimit(input grepInput) int {
 	if input.Limit != nil {
 		return *input.Limit
@@ -908,6 +935,16 @@ func matchIgnoreBasename(pattern string, rel string) bool {
 }
 
 func matchGlobPath(pattern string, path string) (bool, error) {
+	expanded := expandGlobBraces(pattern)
+	if len(expanded) > 1 {
+		for _, candidate := range expanded {
+			ok, err := matchGlobPath(candidate, path)
+			if err != nil || ok {
+				return ok, err
+			}
+		}
+		return false, nil
+	}
 	pattern = filepath.ToSlash(filepath.Clean(pattern))
 	path = filepath.ToSlash(filepath.Clean(path))
 	if pattern == "." {
@@ -919,6 +956,70 @@ func matchGlobPath(pattern string, path string) (bool, error) {
 		}
 	}
 	return matchGlobSegments(strings.Split(pattern, "/"), strings.Split(path, "/"))
+}
+
+func expandGlobBraces(pattern string) []string {
+	start := strings.Index(pattern, "{")
+	if start < 0 {
+		return []string{pattern}
+	}
+	depth := 0
+	end := -1
+	for i := start; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				end = i
+				i = len(pattern)
+			}
+		}
+	}
+	if end < 0 {
+		return []string{pattern}
+	}
+	body := pattern[start+1 : end]
+	alternatives := splitBraceAlternatives(body)
+	if len(alternatives) == 0 {
+		return []string{pattern}
+	}
+	prefix := pattern[:start]
+	suffixes := expandGlobBraces(pattern[end+1:])
+	out := make([]string, 0, len(alternatives)*len(suffixes))
+	for _, alternative := range alternatives {
+		for _, suffix := range suffixes {
+			out = append(out, prefix+alternative+suffix)
+		}
+	}
+	return out
+}
+
+func splitBraceAlternatives(body string) []string {
+	var alternatives []string
+	depth := 0
+	start := 0
+	for i := 0; i < len(body); i++ {
+		switch body[i] {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				alternatives = append(alternatives, body[start:i])
+				start = i + 1
+			}
+		}
+	}
+	alternatives = append(alternatives, body[start:])
+	if len(alternatives) == 1 && alternatives[0] == body {
+		return nil
+	}
+	return alternatives
 }
 
 func matchGlobSegments(pattern []string, path []string) (bool, error) {

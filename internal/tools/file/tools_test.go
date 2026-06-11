@@ -845,6 +845,30 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if camelModeResult.Content != "src/a.go:1\nsrc/c.go:2" || camelModeResult.StructuredContent["output_mode"] != "count" {
 		t.Fatalf("camel outputMode result = %#v", camelModeResult)
 	}
+
+	multiGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_multi_glob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go,**/*.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if multiGlobResult.Content != "src/a.go\nsrc/b.txt\nsrc/c.go" {
+		t.Fatalf("multi glob result = %#v", multiGlobResult.Content)
+	}
+
+	braceGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_brace_glob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.{go,txt}"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if braceGlobResult.Content != "src/a.go\nsrc/b.txt\nsrc/c.go" {
+		t.Fatalf("brace glob result = %#v", braceGlobResult.Content)
+	}
 }
 
 func TestGrepToolContentContextAndPagination(t *testing.T) {
