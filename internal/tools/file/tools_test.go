@@ -428,3 +428,54 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("count result = %#v", countResult.Content)
 	}
 }
+
+func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ignored"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n!important.log\nignored/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".ignore"), []byte("scratch.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"debug.log":       "Needle hidden by gitignore\n",
+		"important.log":   "Needle visible by negation\n",
+		"keep.txt":        "Needle visible\n",
+		"ignored/hit.txt": "Needle hidden by ignored directory\n",
+		"scratch.txt":     "Needle hidden by ignore file\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	globResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_glob_ignore",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"**/*.log"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if globResult.Content != "important.log" {
+		t.Fatalf("glob content = %#v", globResult.Content)
+	}
+
+	grepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignore",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grepResult.Content != "important.log\nkeep.txt" {
+		t.Fatalf("grep content = %#v", grepResult.Content)
+	}
+}
