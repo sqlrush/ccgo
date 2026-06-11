@@ -1243,6 +1243,18 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 		t.Fatalf("case-insensitive result = %#v", result)
 	}
 
+	ignoreCaseResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignore_case_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","ignore_case":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ignoreCaseResult.Content != "mixed.txt" || ignoreCaseResult.StructuredContent["case_insensitive"] != true {
+		t.Fatalf("ignore_case result = %#v", ignoreCaseResult)
+	}
+
 	shortResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_short_ignore_case",
 		Name:  "Grep",

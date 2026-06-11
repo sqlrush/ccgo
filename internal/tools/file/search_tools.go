@@ -45,6 +45,7 @@ type grepInput struct {
 	AfterContextAlt    *int   `json:"afterContext,omitempty"`
 	ShortAfterContext  *int   `json:"-A,omitempty"`
 	ShortLineNumbers   *bool  `json:"-n,omitempty"`
+	IgnoreCase         bool   `json:"ignore_case,omitempty"`
 	CaseInsensitive    bool   `json:"case_insensitive,omitempty"`
 	CaseInsensitiveAlt bool   `json:"caseInsensitive,omitempty"`
 	ShortIgnoreCase    bool   `json:"-i,omitempty"`
@@ -153,6 +154,7 @@ func NewGrepTool() tool.Tool {
 					"afterContext":     map[string]any{"type": "integer"},
 					"-A":               map[string]any{"type": "integer"},
 					"-n":               map[string]any{"type": "boolean"},
+					"ignore_case":      map[string]any{"type": "boolean"},
 					"case_insensitive": map[string]any{"type": "boolean"},
 					"caseInsensitive":  map[string]any{"type": "boolean"},
 					"-i":               map[string]any{"type": "boolean"},
@@ -353,7 +355,7 @@ func decodeGrep(raw json.RawMessage) (grepInput, error) {
 		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 		"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "-n": {},
-		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
+		"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
 		"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
 	}, &input); err != nil {
 		return grepInput{}, err
@@ -674,7 +676,7 @@ func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
 }
 
 func grepCaseInsensitive(input grepInput) bool {
-	return input.CaseInsensitive || input.CaseInsensitiveAlt || input.ShortIgnoreCase
+	return input.IgnoreCase || input.CaseInsensitive || input.CaseInsensitiveAlt || input.ShortIgnoreCase
 }
 
 func grepFixedStrings(input grepInput) bool {
