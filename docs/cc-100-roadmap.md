@@ -514,7 +514,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - `Bash` 初版已完成，支持 command/timeout/description 输入校验、`/bin/sh -c` 执行、stdout/stderr/exit code/timeout 结构化结果、动态 read-only/concurrency-safe/destructive 分类、权限规则接入、后台启动、同会话 `BashOutput` 输出读取和 `KillBash` 取消。
 - `Glob`/`Grep` 纯 Go 初版已完成，支持 `**` 递归 glob、基础 ignored dirs、层级 `.gitignore`/`.ignore`、mtime/path 排序、Grep regex、glob/type 过滤、`files_with_matches`/`content`/`count` 输出模式、`context`/`before_context`/`after_context` 上下文行、`offset`/`head_limit` 分页和大小写不敏感搜索。
 - `TodoWrite` 初版已完成，支持完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果、tool metadata 状态保存和 session-scoped 本地持久化/恢复。
-- `WebFetch` 初版已完成，支持 URL/timeout/max_bytes 输入校验、HTTP GET、文本/二进制判定、截断、非 2xx error 标记、结构化结果、HTML-to-text rendering、prompt-focused excerpt 和 `WebFetch(domain:...)` 权限规则适配。
+- `WebFetch` 初版已完成，支持 URL/timeout/max_bytes 输入校验、HTTP GET、HEAD preflight、metadata/raw `skipWebFetchPreflight` skip-preflight、二进制 preflight 跳过 GET、文本/二进制判定、截断、非 2xx error 标记、结构化结果、HTML-to-text rendering、prompt-focused excerpt 和 `WebFetch(domain:...)` 权限规则适配。
 - `WebSearch` HTML 搜索适配初版已完成，支持 query/max_results/timeout/domain filters 输入校验、可注入搜索 endpoint、DuckDuckGo HTML 链接解析、domain allow/block 过滤、结构化结果和 query 权限规则匹配。
 
 仍需完成：
@@ -524,7 +524,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - `Bash` 完整 shell parser、真实 sandbox、interrupt、后台任务完整生命周期、更细 read-only/destructive validation 和官方 golden 兼容。
 - `Glob/Grep` 完整 ripgrep parity 和剩余输出参数。
 - `TodoWrite` TUI 同步和官方 golden 兼容。
-- `WebFetch` browser 渲染、preflight、完整 prompt-aware summarization 和官方 golden；`WebSearch` 官方搜索后端、ranking/snippet parity 和 golden。
+- `WebFetch` browser 渲染、完整 prompt-aware summarization 和官方 golden；`WebSearch` 官方搜索后端、ranking/snippet parity 和 golden。
 - PowerShell、Notebook、MCP concrete tool semantics。
 
 ### M6: Session, Memory, Compact

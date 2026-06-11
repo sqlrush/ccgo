@@ -20,6 +20,8 @@ import (
 )
 
 const (
+	MetadataWebFetchSkipPreflightKey = "ccgo.tools.web.fetch.skip_preflight"
+
 	defaultWebFetchTimeoutMillis = 30_000
 	maxWebFetchTimeoutMillis     = 120_000
 	defaultWebFetchMaxBytes      = 200_000
@@ -137,7 +139,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 	}
 	timeout := webFetchTimeout(input)
 	maxBytes := webFetchMaxBytes(input)
-	result, err := fetchURL(ctx.Context, parsed.String(), timeout, maxBytes)
+	result, err := fetchURL(ctx.Context, parsed.String(), timeout, maxBytes, webFetchSkipPreflight(ctx.Metadata))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -162,6 +164,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 			"truncated":      result.Truncated,
 			"binary":         result.Binary,
 			"duration_ms":    result.DurationMS,
+			"preflight":      structuredWebFetchPreflight(result.Preflight),
 		},
 	}, nil
 }
@@ -178,20 +181,44 @@ type fetchResult struct {
 	Truncated     bool
 	Binary        bool
 	DurationMS    int64
+	Preflight     webFetchPreflight
 }
 
-func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxBytes int) (fetchResult, error) {
+type webFetchPreflight struct {
+	Attempted     bool
+	Skipped       bool
+	StatusCode    int
+	ContentType   string
+	ContentLength int64
+	SkippedGET    bool
+	Error         string
+}
+
+func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxBytes int, skipPreflight bool) (fetchResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	start := time.Now()
+	preflight := webFetchPreflight{Skipped: skipPreflight}
+	if !skipPreflight {
+		preflight = runWebFetchPreflight(fetchCtx, rawURL)
+		if preflight.SkippedGET {
+			return fetchResult{
+				StatusCode:  preflight.StatusCode,
+				ContentType: preflight.ContentType,
+				Binary:      true,
+				DurationMS:  time.Since(start).Milliseconds(),
+				Preflight:   preflight,
+			}, nil
+		}
+	}
 	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return fetchResult{}, err
 	}
 	req.Header.Set("User-Agent", "ccgo-webfetch/0.1")
-	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fetchResult{}, err
@@ -223,7 +250,32 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 		Truncated:   truncated,
 		Binary:      binary,
 		DurationMS:  time.Since(start).Milliseconds(),
+		Preflight:   preflight,
 	}, nil
+}
+
+func runWebFetchPreflight(ctx context.Context, rawURL string) webFetchPreflight {
+	preflight := webFetchPreflight{Attempted: true, ContentLength: -1}
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
+	if err != nil {
+		preflight.Error = err.Error()
+		return preflight
+	}
+	req.Header.Set("User-Agent", "ccgo-webfetch/0.1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		preflight.Error = err.Error()
+		return preflight
+	}
+	defer resp.Body.Close()
+	preflight.StatusCode = resp.StatusCode
+	preflight.ContentType = resp.Header.Get("Content-Type")
+	preflight.ContentLength = resp.ContentLength
+	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
+		return preflight
+	}
+	preflight.SkippedGET = isBinaryWebContentType(preflight.ContentType)
+	return preflight
 }
 
 func prepareWebFetchResult(result fetchResult, prompt string) fetchResult {
@@ -258,6 +310,9 @@ func formatWebFetchContent(input webFetchInput, result fetchResult) string {
 		b.WriteString(input.Prompt)
 	}
 	if result.Binary {
+		if result.Preflight.SkippedGET {
+			b.WriteString("\nPreflight identified binary content; GET was skipped.")
+		}
 		b.WriteString("\nResponse body is binary and was not included.")
 		return b.String()
 	}
@@ -606,17 +661,57 @@ func webFetchMaxBytes(input webFetchInput) int {
 	return defaultWebFetchMaxBytes
 }
 
+func webFetchSkipPreflight(metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+	if metadataBool(metadata[MetadataWebFetchSkipPreflightKey]) {
+		return true
+	}
+	return metadataBool(metadata["skipWebFetchPreflight"])
+}
+
+func metadataBool(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "1", "yes", "on":
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+func structuredWebFetchPreflight(preflight webFetchPreflight) map[string]any {
+	return map[string]any{
+		"attempted":      preflight.Attempted,
+		"skipped":        preflight.Skipped,
+		"status_code":    preflight.StatusCode,
+		"content_type":   preflight.ContentType,
+		"content_length": preflight.ContentLength,
+		"skipped_get":    preflight.SkippedGET,
+		"error":          preflight.Error,
+	}
+}
+
+func isBinaryWebContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType == "" {
+		return false
+	}
+	return !isTextualWebMediaType(strings.ToLower(mediaType))
+}
+
 func isBinaryWebContent(contentType string, data []byte) bool {
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err == nil {
 		mediaType = strings.ToLower(mediaType)
-		if strings.HasPrefix(mediaType, "text/") ||
-			strings.Contains(mediaType, "json") ||
-			strings.Contains(mediaType, "xml") ||
-			strings.Contains(mediaType, "javascript") ||
-			strings.Contains(mediaType, "html") {
-			return false
-		}
+		return !isTextualWebMediaType(mediaType)
 	}
 	if !utf8.Valid(data) {
 		return true
@@ -627,4 +722,12 @@ func isBinaryWebContent(contentType string, data []byte) bool {
 		}
 	}
 	return false
+}
+
+func isTextualWebMediaType(mediaType string) bool {
+	return strings.HasPrefix(mediaType, "text/") ||
+		strings.Contains(mediaType, "json") ||
+		strings.Contains(mediaType, "xml") ||
+		strings.Contains(mediaType, "javascript") ||
+		strings.Contains(mediaType, "html")
 }
