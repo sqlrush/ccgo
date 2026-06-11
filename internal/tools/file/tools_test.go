@@ -310,6 +310,13 @@ func TestWriteRequiresReadForExistingFileAndRejectsStaleWrites(t *testing.T) {
 	if result.Content != "The file existing.txt has been updated successfully." {
 		t.Fatalf("write content = %#v", result.Content)
 	}
+	if diff := result.StructuredContent["diff"].(string); !strings.Contains(diff, "-old") || !strings.Contains(diff, "+new") {
+		t.Fatalf("write diff = %#v", diff)
+	}
+	hunks := result.StructuredContent["hunks"].([]map[string]any)
+	if len(hunks) != 1 {
+		t.Fatalf("write hunks = %#v", hunks)
+	}
 
 	if _, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_read_again",
@@ -357,6 +364,13 @@ func TestWriteCreatesNewFileWithoutPriorRead(t *testing.T) {
 	}
 	if string(data) != "created\n" {
 		t.Fatalf("file content = %q", data)
+	}
+	if diff := result.StructuredContent["diff"].(string); !strings.Contains(diff, "--- a/nested/new.txt") || !strings.Contains(diff, "+created") {
+		t.Fatalf("create diff = %#v", diff)
+	}
+	hunks := result.StructuredContent["hunks"].([]map[string]any)
+	if len(hunks) != 1 || hunks[0]["old_lines"] != 0 || hunks[0]["new_lines"] != 1 {
+		t.Fatalf("create hunks = %#v", hunks)
 	}
 }
 
@@ -410,6 +424,17 @@ func TestEditRequiresUniqueMatchUnlessReplaceAll(t *testing.T) {
 	}
 	if !strings.Contains(result.Content.(string), "All occurrences") {
 		t.Fatalf("replace_all content = %#v", result.Content)
+	}
+	if diff := result.StructuredContent["diff"].(string); !strings.Contains(diff, "-foo") || !strings.Contains(diff, "+bar") {
+		t.Fatalf("edit diff = %#v", diff)
+	}
+	hunks := result.StructuredContent["hunks"].([]map[string]any)
+	if len(hunks) != 1 {
+		t.Fatalf("edit hunks = %#v", hunks)
+	}
+	lines := hunks[0]["lines"].([]map[string]any)
+	if len(lines) != 4 || lines[0]["op"] != "delete" || lines[2]["op"] != "insert" {
+		t.Fatalf("edit hunk lines = %#v", lines)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

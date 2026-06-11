@@ -166,7 +166,7 @@ test/parity/                 # golden tests against TS/official behavior
 
 当前进度：
 
-- Read/Edit/Write 初版已落地，覆盖文本 Read、PNG/JPEG/GIF/WebP image Read、Jupyter notebook cell 渲染初版、Read 大文本 tool-result budget 截断/落盘、read-before-write、mtime stale guard、唯一匹配、`replace_all`、Read 去重和跨 tool round read-state。
+- Read/Edit/Write 初版已落地，覆盖文本 Read、PNG/JPEG/GIF/WebP image Read、Jupyter notebook cell 渲染初版、Read 大文本 tool-result budget 截断/落盘、read-before-write、mtime stale guard、唯一匹配、`replace_all`、Write/Edit structured diff hunks、Read 去重和跨 tool round read-state。
 - Bash 初版已落地，覆盖 command/timeout/description 输入校验、`/bin/sh -c` 执行、stdout/stderr/exit code/timeout 结构化结果、动态 read-only/concurrency-safe/destructive 分类、权限规则接入、后台启动、同会话 `BashOutput` 输出读取和 `KillBash` 取消；完整 shell parser、真实 sandbox、interrupt、后台任务完整生命周期和官方 golden 仍需继续补。
 - Glob/Grep 纯 Go 初版已落地，覆盖 `**` 递归 glob、基础 ignored dirs、层级 `.gitignore`/`.ignore`、mtime/path 排序、Grep regex、glob/type 过滤、`files_with_matches`/`content`/`count` 输出模式、`context`/`before_context`/`after_context` 上下文行、`offset`/`head_limit` 分页和大小写不敏感搜索；完整 ripgrep parity 和剩余输出参数仍需继续补。
 - TodoWrite 会话内初版已落地，覆盖完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果和 tool metadata 状态保存；跨会话恢复、TUI 同步和官方 golden 仍需继续补。

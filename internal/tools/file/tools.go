@@ -492,6 +492,7 @@ func callWrite(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (cont
 		message = fmt.Sprintf("The file %s has been updated successfully.", input.FilePath)
 		originalValue = original
 	}
+	diff := buildTextDiff(input.FilePath, original, input.Content)
 	return contracts.ToolResult{
 		Content: message,
 		StructuredContent: map[string]any{
@@ -499,6 +500,8 @@ func callWrite(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (cont
 			"filePath":     input.FilePath,
 			"content":      input.Content,
 			"originalFile": originalValue,
+			"diff":         diff.Unified,
+			"hunks":        diff.Hunks,
 		},
 	}, nil
 }
@@ -591,6 +594,7 @@ func callEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if input.ReplaceAll {
 		message = fmt.Sprintf("The file %s has been updated. All occurrences were successfully replaced.", input.FilePath)
 	}
+	diff := buildTextDiff(input.FilePath, content, updated)
 	return contracts.ToolResult{
 		Content: message,
 		StructuredContent: map[string]any{
@@ -599,6 +603,8 @@ func callEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"newString":    input.NewString,
 			"originalFile": content,
 			"replaceAll":   input.ReplaceAll,
+			"diff":         diff.Unified,
+			"hunks":        diff.Hunks,
 		},
 	}, nil
 }
