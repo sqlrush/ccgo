@@ -434,10 +434,16 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "ignored"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(dir, "sub", "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n!important.log\nignored/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".ignore"), []byte("scratch.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", ".gitignore"), []byte("local.txt\n!visible.txt\nlogs/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
@@ -446,6 +452,9 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 		"keep.txt":        "Needle visible\n",
 		"ignored/hit.txt": "Needle hidden by ignored directory\n",
 		"scratch.txt":     "Needle hidden by ignore file\n",
+		"sub/local.txt":   "Needle hidden by nested gitignore\n",
+		"sub/visible.txt": "Needle visible by nested negation\n",
+		"sub/logs/hit.md": "Needle hidden by nested ignored directory\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
@@ -475,7 +484,7 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if grepResult.Content != "important.log\nkeep.txt" {
+	if grepResult.Content != "important.log\nkeep.txt\nsub/visible.txt" {
 		t.Fatalf("grep content = %#v", grepResult.Content)
 	}
 }

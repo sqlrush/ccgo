@@ -374,37 +374,45 @@ func walkSearchFiles(root string, visit func(path string, rel string, info os.Fi
 	if !info.IsDir() {
 		return visit(root, filepath.Base(root), info)
 	}
-	ignoreRules := loadSearchIgnoreRules(root)
-	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+	ignoreRules := loadSearchIgnoreRules(root, "")
+	return walkSearchDir(root, root, ignoreRules, visit)
+}
+
+func walkSearchDir(root string, dir string, ignoreRules searchIgnoreRules, visit func(path string, rel string, info os.FileInfo) error) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		rel := "."
-		if path != root {
-			rel, err = filepath.Rel(root, path)
-			if err != nil {
+		rel = filepath.ToSlash(rel)
+		if entry.IsDir() {
+			if ignoredSearchDir(entry.Name()) || ignoreRules.Ignored(rel, true) {
+				continue
+			}
+			dirRules := append(searchIgnoreRules(nil), ignoreRules...)
+			dirRules = append(dirRules, loadSearchIgnoreRules(path, rel)...)
+			if err := walkSearchDir(root, path, dirRules, visit); err != nil {
 				return err
 			}
-			rel = filepath.ToSlash(rel)
-		}
-		if entry.IsDir() {
-			if path != root && ignoredSearchDir(entry.Name()) {
-				return filepath.SkipDir
-			}
-			if path != root && ignoreRules.Ignored(rel, true) {
-				return filepath.SkipDir
-			}
-			return nil
+			continue
 		}
 		if ignoreRules.Ignored(rel, false) {
-			return nil
+			continue
 		}
 		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		return visit(path, rel, info)
-	})
+		if err := visit(path, rel, info); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ignoredSearchDir(name string) bool {
@@ -420,25 +428,30 @@ type searchIgnoreRules []searchIgnoreRule
 
 type searchIgnoreRule struct {
 	Pattern       string
+	Base          string
 	Negate        bool
 	DirectoryOnly bool
 	Anchored      bool
 }
 
-func loadSearchIgnoreRules(root string) searchIgnoreRules {
+func loadSearchIgnoreRules(dir string, base string) searchIgnoreRules {
 	var rules searchIgnoreRules
 	for _, name := range []string{".gitignore", ".ignore"} {
-		data, err := os.ReadFile(filepath.Join(root, name))
+		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			continue
 		}
-		rules = append(rules, parseSearchIgnoreRules(string(data))...)
+		rules = append(rules, parseSearchIgnoreRules(string(data), base)...)
 	}
 	return rules
 }
 
-func parseSearchIgnoreRules(content string) searchIgnoreRules {
+func parseSearchIgnoreRules(content string, base string) searchIgnoreRules {
 	var rules searchIgnoreRules
+	base = filepath.ToSlash(filepath.Clean(base))
+	if base == "." {
+		base = ""
+	}
 	for _, rawLine := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
 		line := strings.TrimSpace(rawLine)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -462,6 +475,7 @@ func parseSearchIgnoreRules(content string) searchIgnoreRules {
 		}
 		rules = append(rules, searchIgnoreRule{
 			Pattern:       line,
+			Base:          base,
 			Negate:        negate,
 			DirectoryOnly: directoryOnly,
 			Anchored:      anchored,
@@ -488,16 +502,23 @@ func (rule searchIgnoreRule) Matches(rel string, isDir bool) bool {
 	if rule.Pattern == "" {
 		return false
 	}
-	if rule.DirectoryOnly && !isDir && !pathUnderIgnoreDirectory(rule.Pattern, rel, rule.Anchored) {
+	localRel := rel
+	if rule.Base != "" {
+		if rel == rule.Base || !strings.HasPrefix(rel, rule.Base+"/") {
+			return false
+		}
+		localRel = strings.TrimPrefix(rel, rule.Base+"/")
+	}
+	if rule.DirectoryOnly && !isDir && !pathUnderIgnoreDirectory(rule.Pattern, localRel, rule.Anchored) {
 		return false
 	}
 	if !strings.Contains(rule.Pattern, "/") && !rule.Anchored {
-		return matchIgnoreBasename(rule.Pattern, rel)
+		return matchIgnoreBasename(rule.Pattern, localRel)
 	}
 	if rule.DirectoryOnly {
-		return rel == rule.Pattern || strings.HasPrefix(rel, rule.Pattern+"/")
+		return localRel == rule.Pattern || strings.HasPrefix(localRel, rule.Pattern+"/")
 	}
-	ok, err := matchGlobPath(rule.Pattern, rel)
+	ok, err := matchGlobPath(rule.Pattern, localRel)
 	return err == nil && ok
 }
 
