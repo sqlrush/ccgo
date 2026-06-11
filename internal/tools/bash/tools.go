@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"ccgo/internal/contracts"
@@ -295,6 +296,7 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 
 	name, args := shellCommand(command)
 	cmd := exec.CommandContext(runCtx, name, args...)
+	configureBashCommand(cmd)
 	if ctx.WorkingDirectory != "" {
 		cmd.Dir = ctx.WorkingDirectory
 	}
@@ -335,6 +337,7 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	runCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	name, args := shellCommand(command)
 	cmd := exec.CommandContext(runCtx, name, args...)
+	configureBashCommand(cmd)
 	if ctx.WorkingDirectory != "" {
 		cmd.Dir = ctx.WorkingDirectory
 	}
@@ -349,7 +352,12 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	}
 	cmd.Stdout = &task.stdout
 	cmd.Stderr = &task.stderr
-	task.SetCancel(cancel)
+	task.SetCancel(func() {
+		if cmd.Cancel != nil {
+			_ = cmd.Cancel()
+		}
+		cancel()
+	})
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return contracts.ToolResult{}, err
@@ -399,6 +407,27 @@ func shellCommand(command string) (string, []string) {
 		return "cmd", []string{"/C", command}
 	}
 	return "/bin/sh", []string{"-c", command}
+}
+
+func configureBashCommand(cmd *exec.Cmd) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return killBashProcessGroup(cmd)
+	}
+}
+
+func killBashProcessGroup(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
 }
 
 func formatBashContent(result bashResult) string {
