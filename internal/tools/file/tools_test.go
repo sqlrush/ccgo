@@ -1152,7 +1152,8 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if countResult.Content != "src/a.go:1\nsrc/c.go:2" {
+	wantCount := "src/a.go:1\nsrc/c.go:2\n\nFound 3 total occurrences across 2 files."
+	if countResult.Content != wantCount {
 		t.Fatalf("count result = %#v", countResult.Content)
 	}
 
@@ -1164,7 +1165,7 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if camelModeResult.Content != "src/a.go:1\nsrc/c.go:2" || camelModeResult.StructuredContent["output_mode"] != "count" {
+	if camelModeResult.Content != wantCount || camelModeResult.StructuredContent["output_mode"] != "count" {
 		t.Fatalf("camel outputMode result = %#v", camelModeResult)
 	}
 
@@ -1329,7 +1330,8 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shortMaxCountResult.Content != "a.txt:1" || shortMaxCountResult.StructuredContent["max_count"] != 1 {
+	wantShortMaxCount := "a.txt:1\n\nFound 1 total occurrence across 1 file."
+	if shortMaxCountResult.Content != wantShortMaxCount || shortMaxCountResult.StructuredContent["max_count"] != 1 {
 		t.Fatalf("short max_count result = %#v", shortMaxCountResult)
 	}
 

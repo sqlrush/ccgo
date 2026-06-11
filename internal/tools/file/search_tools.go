@@ -742,9 +742,17 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 
 func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated bool) string {
 	content := formatGrepMatches(matches, options)
-	if options.Mode != "content" {
+	switch options.Mode {
+	case "content":
+		return formatGrepContentResult(content, options, truncated)
+	case "count":
+		return formatGrepCountResult(content, matches, options, truncated)
+	default:
 		return content
 	}
+}
+
+func formatGrepContentResult(content string, options grepOptions, truncated bool) string {
 	limitInfo := grepPaginationInfo(options, truncated)
 	if limitInfo == "" {
 		return content
@@ -753,6 +761,27 @@ func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated
 		content = "No matches found"
 	}
 	return content + "\n\n[Showing results with pagination = " + limitInfo + "]"
+}
+
+func formatGrepCountResult(content string, matches []grepMatch, options grepOptions, truncated bool) string {
+	if content == "" {
+		content = "No matches found"
+	}
+	matchCount := 0
+	for _, match := range matches {
+		matchCount += match.Count
+	}
+	fileCount := len(matches)
+	summary := fmt.Sprintf("Found %d total %s across %d %s.",
+		matchCount,
+		pluralWord(matchCount, "occurrence", "occurrences"),
+		fileCount,
+		pluralWord(fileCount, "file", "files"),
+	)
+	if limitInfo := grepPaginationInfo(options, truncated); limitInfo != "" {
+		summary += " with pagination = " + limitInfo
+	}
+	return content + "\n\n" + summary
 }
 
 func grepPaginationInfo(options grepOptions, truncated bool) string {
@@ -764,6 +793,13 @@ func grepPaginationInfo(options grepOptions, truncated bool) string {
 		parts = append(parts, fmt.Sprintf("offset: %d", options.Offset))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func pluralWord(count int, singular string, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
 }
 
 func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
