@@ -75,6 +75,12 @@ type grepOptions struct {
 	Multiline     bool
 }
 
+type searchWalkOptions struct {
+	UseIgnoreFiles bool
+	IncludeHidden  bool
+	ExcludeVCSDirs bool
+}
+
 func NewGlobTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
@@ -347,7 +353,7 @@ func inputLimit(limit *int) int {
 
 func collectGlobMatches(root string, pattern string, limit int) ([]fileSearchMatch, bool, error) {
 	var matches []fileSearchMatch
-	err := walkSearchFiles(root, func(path string, rel string, info os.FileInfo) error {
+	err := walkSearchFiles(root, globWalkOptions(), func(path string, rel string, info os.FileInfo) error {
 		ok, err := matchGlobPath(pattern, rel)
 		if err != nil {
 			return err
@@ -381,7 +387,7 @@ func collectGrepMatches(root string, glob string, typeFilter string, expr *regex
 	}
 	globPatterns := splitGrepGlobPatterns(glob)
 	var matches []grepMatch
-	err = walkSearchFiles(root, func(path string, rel string, _ os.FileInfo) error {
+	err = walkSearchFiles(root, grepWalkOptions(), func(path string, rel string, _ os.FileInfo) error {
 		if len(globPatterns) > 0 {
 			ok, err := matchAnyGlobPath(globPatterns, rel)
 			if err != nil || !ok {
@@ -759,7 +765,37 @@ func grepContextLines(input grepInput) (int, int) {
 	return before, after
 }
 
-func walkSearchFiles(root string, visit func(path string, rel string, info os.FileInfo) error) error {
+func globWalkOptions() searchWalkOptions {
+	return searchWalkOptions{
+		UseIgnoreFiles: !envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", true),
+		IncludeHidden:  envTruthyDefault("CLAUDE_CODE_GLOB_HIDDEN", true),
+	}
+}
+
+func grepWalkOptions() searchWalkOptions {
+	return searchWalkOptions{
+		UseIgnoreFiles: true,
+		IncludeHidden:  true,
+		ExcludeVCSDirs: true,
+	}
+}
+
+func envTruthyDefault(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func walkSearchFiles(root string, options searchWalkOptions, visit func(path string, rel string, info os.FileInfo) error) error {
 	info, err := os.Stat(root)
 	if err != nil {
 		return err
@@ -767,16 +803,22 @@ func walkSearchFiles(root string, visit func(path string, rel string, info os.Fi
 	if !info.IsDir() {
 		return visit(root, filepath.Base(root), info)
 	}
-	ignoreRules := loadSearchIgnoreRules(root, "")
-	return walkSearchDir(root, root, ignoreRules, visit)
+	var ignoreRules searchIgnoreRules
+	if options.UseIgnoreFiles {
+		ignoreRules = loadSearchIgnoreRules(root, "")
+	}
+	return walkSearchDir(root, root, options, ignoreRules, visit)
 }
 
-func walkSearchDir(root string, dir string, ignoreRules searchIgnoreRules, visit func(path string, rel string, info os.FileInfo) error) error {
+func walkSearchDir(root string, dir string, options searchWalkOptions, ignoreRules searchIgnoreRules, visit func(path string, rel string, info os.FileInfo) error) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
+		if !options.IncludeHidden && strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
 		path := filepath.Join(dir, entry.Name())
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
@@ -784,17 +826,19 @@ func walkSearchDir(root string, dir string, ignoreRules searchIgnoreRules, visit
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if ignoredSearchDir(entry.Name()) || ignoreRules.Ignored(rel, true) {
+			if (options.ExcludeVCSDirs && ignoredVCSDir(entry.Name())) || (options.UseIgnoreFiles && ignoreRules.Ignored(rel, true)) {
 				continue
 			}
 			dirRules := append(searchIgnoreRules(nil), ignoreRules...)
-			dirRules = append(dirRules, loadSearchIgnoreRules(path, rel)...)
-			if err := walkSearchDir(root, path, dirRules, visit); err != nil {
+			if options.UseIgnoreFiles {
+				dirRules = append(dirRules, loadSearchIgnoreRules(path, rel)...)
+			}
+			if err := walkSearchDir(root, path, options, dirRules, visit); err != nil {
 				return err
 			}
 			continue
 		}
-		if ignoreRules.Ignored(rel, false) {
+		if options.UseIgnoreFiles && ignoreRules.Ignored(rel, false) {
 			continue
 		}
 		info, err := entry.Info()
@@ -808,9 +852,9 @@ func walkSearchDir(root string, dir string, ignoreRules searchIgnoreRules, visit
 	return nil
 }
 
-func ignoredSearchDir(name string) bool {
+func ignoredVCSDir(name string) bool {
 	switch name {
-	case ".git", ".hg", ".svn", ".bzr", ".jj", ".sl", "node_modules", "vendor":
+	case ".git", ".hg", ".svn", ".bzr", ".jj", ".sl":
 		return true
 	default:
 		return false

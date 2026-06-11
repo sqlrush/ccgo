@@ -741,14 +741,14 @@ func TestGlobToolMatchesRecursiveFilesSortedByModifiedTime(t *testing.T) {
 	}
 	oldPath := filepath.Join(dir, "src", "old.go")
 	newPath := filepath.Join(dir, "src", "nested", "new.go")
-	ignoredPath := filepath.Join(dir, ".git", "hidden.go")
-	if err := os.MkdirAll(filepath.Dir(ignoredPath), 0o755); err != nil {
+	hiddenPath := filepath.Join(dir, ".git", "hidden.go")
+	if err := os.MkdirAll(filepath.Dir(hiddenPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for path, content := range map[string]string{
-		oldPath:     "package old\n",
-		newPath:     "package nested\n",
-		ignoredPath: "package ignored\n",
+		oldPath:    "package old\n",
+		newPath:    "package nested\n",
+		hiddenPath: "package hidden\n",
 	} {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -756,10 +756,14 @@ func TestGlobToolMatchesRecursiveFilesSortedByModifiedTime(t *testing.T) {
 	}
 	oldTime := time.Now().Add(-2 * time.Hour)
 	newTime := time.Now().Add(-1 * time.Hour)
+	hiddenTime := time.Now().Add(-3 * time.Hour)
 	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chtimes(newPath, newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(hiddenPath, hiddenTime, hiddenTime); err != nil {
 		t.Fatal(err)
 	}
 
@@ -771,12 +775,44 @@ func TestGlobToolMatchesRecursiveFilesSortedByModifiedTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Content != "src/nested/new.go\nsrc/old.go" {
+	if result.Content != "src/nested/new.go\nsrc/old.go\n.git/hidden.go" {
 		t.Fatalf("glob content = %#v", result.Content)
 	}
 	files := result.StructuredContent["files"].([]string)
-	if len(files) != 2 || files[0] != "src/nested/new.go" || files[1] != "src/old.go" {
+	if len(files) != 3 || files[0] != "src/nested/new.go" || files[1] != "src/old.go" || files[2] != ".git/hidden.go" {
 		t.Fatalf("structured files = %#v", files)
+	}
+}
+
+func TestGlobToolDefaultNoIgnoreAndHidden(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_GLOB_NO_IGNORE", "")
+	t.Setenv("CLAUDE_CODE_GLOB_HIDDEN", "")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{".hidden.log", "debug.log", "keep.log"}
+	mtime := time.Now().Add(-time.Hour)
+	for _, rel := range paths {
+		path := filepath.Join(dir, rel)
+		if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_glob_no_ignore_hidden",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"**/*.log"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != ".hidden.log\ndebug.log\nkeep.log" {
+		t.Fatalf("glob no-ignore hidden content = %#v", result.Content)
 	}
 }
 
@@ -1181,6 +1217,8 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	executor := fileExecutor(t)
 	ctx := fileToolContext(dir)
 
+	t.Setenv("CLAUDE_CODE_GLOB_NO_IGNORE", "false")
+	t.Setenv("CLAUDE_CODE_GLOB_HIDDEN", "false")
 	globResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_glob_ignore",
 		Name:  "Glob",
