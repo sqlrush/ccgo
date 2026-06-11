@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -361,6 +363,55 @@ func TestPowerShellOutputPersistsOversizedBackgroundOutput(t *testing.T) {
 	}
 	if !strings.Contains(string(data), strings.Repeat("x", 110_000)) {
 		t.Fatalf("persisted output does not contain full stdout")
+	}
+	if !strings.Contains(result.Content.(string), "Tool output truncated") {
+		t.Fatalf("truncated content marker missing: %#v", result.Content)
+	}
+}
+
+func TestPowerShellForegroundPersistsOversizedOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake pwsh executable test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	fakePwsh := filepath.Join(dir, "pwsh")
+	script := "#!/bin/sh\n" +
+		"i=0\n" +
+		"while [ \"$i\" -lt 110000 ]; do printf x; i=$((i+1)); done\n"
+	if err := os.WriteFile(fakePwsh, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	executor := powerShellExecutor(t)
+	executor.ResultStoreDir = t.TempDir()
+	result, err := executor.Execute(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, contracts.ToolUse{
+		ID:    "toolu_powershell_large_foreground",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Write-Output large"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Meta["truncated"] != true {
+		t.Fatalf("result should be truncated: meta=%#v", result.Meta)
+	}
+	path, _ := result.Meta["full_output_path"].(string)
+	if path == "" {
+		t.Fatalf("full output path missing: meta=%#v", result.Meta)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 110000 {
+		t.Fatalf("stored output length = %d", len(data))
+	}
+	if stdout := result.StructuredContent["stdout"].(string); len(stdout) != 110000 {
+		t.Fatalf("structured stdout length = %d", len(stdout))
 	}
 	if !strings.Contains(result.Content.(string), "Tool output truncated") {
 		t.Fatalf("truncated content marker missing: %#v", result.Content)
