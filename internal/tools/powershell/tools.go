@@ -863,10 +863,11 @@ func readOnlyNonFileWords(words []string) bool {
 
 func destructiveWords(words []string) bool {
 	switch canonicalCommand(words[0]) {
-	case "remove-item", "del", "erase", "set-content", "add-content", "clear-content", "out-file", "new-item", "move-item", "stop-process", "stop-service", "restart-computer", "invoke-expression", "iex", "start-process":
+	case "remove-item", "set-content", "add-content", "clear-content", "clear-item", "out-file", "new-item", "move-item", "copy-item", "rename-item", "set-item", "stop-process", "stop-service", "restart-computer", "invoke-expression", "iex", "start-process", "start-transcript", "stop-transcript":
 		return true
 	default:
-		return strings.HasPrefix(canonicalCommand(words[0]), "remove-") || strings.HasPrefix(canonicalCommand(words[0]), "set-") || strings.HasPrefix(canonicalCommand(words[0]), "new-")
+		command := canonicalCommand(words[0])
+		return strings.HasPrefix(command, "remove-") || strings.HasPrefix(command, "set-") || strings.HasPrefix(command, "new-") || strings.HasPrefix(command, "export-")
 	}
 }
 
@@ -939,8 +940,26 @@ func canonicalCommand(command string) string {
 		return "get-location"
 	case "rm", "rmdir", "ri":
 		return "remove-item"
-	case "mv", "mi":
+	case "rd", "del", "erase":
+		return "remove-item"
+	case "mv", "move", "mi":
 		return "move-item"
+	case "cp", "copy", "cpi":
+		return "copy-item"
+	case "ren", "rni":
+		return "rename-item"
+	case "ni", "mkdir", "md":
+		return "new-item"
+	case "sc":
+		return "set-content"
+	case "ac":
+		return "add-content"
+	case "clc":
+		return "clear-content"
+	case "cli":
+		return "clear-item"
+	case "si":
+		return "set-item"
 	case "echo", "write":
 		return "write-output"
 	default:

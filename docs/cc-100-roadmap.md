@@ -517,7 +517,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - `TodoWrite` 初版已完成，支持完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果、tool metadata 状态保存和 session-scoped 本地持久化/恢复。
 - `WebFetch` 初版已完成，支持 URL/timeout/max_bytes 输入校验、HTTP GET、HEAD preflight、metadata/raw `skipWebFetchPreflight` skip-preflight、二进制 preflight 跳过 GET、文本/二进制判定、截断、非 2xx error 标记、结构化结果、HTML-to-text rendering、prompt-focused excerpt 和 `WebFetch(domain:...)` 权限规则适配。
 - `WebSearch` HTML 搜索适配初版已完成，支持 query/max_results/timeout/domain filters 输入校验、可注入搜索 endpoint、DuckDuckGo HTML 链接解析、DuckDuckGo result snippet 抽取、domain allow/block 过滤、结构化结果和 query 权限规则匹配。
-- `PowerShell` 初版已完成，支持 command/timeout/description/run_in_background 输入校验、`pwsh`/`powershell` 前台执行、后台启动、`PowerShellOutput` 输出读取、`KillPowerShell` 取消、stdout/stderr/exit code/timeout/cancel 结构化结果、后台输出 tool-result 截断/落盘、缺失可执行文件结构化错误、动态 read-only/concurrency-safe/destructive 分类、文件读取类命令基础相对路径 guard 和默认工具注册。
+- `PowerShell` 初版已完成，支持 command/timeout/description/run_in_background 输入校验、`pwsh`/`powershell` 前台执行、后台启动、`PowerShellOutput` 输出读取、`KillPowerShell` 取消、stdout/stderr/exit code/timeout/cancel 结构化结果、后台输出 tool-result 截断/落盘、缺失可执行文件结构化错误、动态 read-only/concurrency-safe/destructive 分类、常见 mutating alias canonicalization、文件读取类命令基础相对路径 guard 和默认工具注册。
 
 仍需完成：
 
