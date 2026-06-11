@@ -32,10 +32,13 @@ type grepInput struct {
 	HeadLimitAlt       *int   `json:"headLimit,omitempty"`
 	Offset             *int   `json:"offset,omitempty"`
 	Context            *int   `json:"context,omitempty"`
+	ShortContext       *int   `json:"-C,omitempty"`
 	BeforeContext      *int   `json:"before_context,omitempty"`
 	BeforeContextAlt   *int   `json:"beforeContext,omitempty"`
+	ShortBeforeContext *int   `json:"-B,omitempty"`
 	AfterContext       *int   `json:"after_context,omitempty"`
 	AfterContextAlt    *int   `json:"afterContext,omitempty"`
+	ShortAfterContext  *int   `json:"-A,omitempty"`
 	CaseInsensitive    bool   `json:"case_insensitive,omitempty"`
 	CaseInsensitiveAlt bool   `json:"caseInsensitive,omitempty"`
 	ShortIgnoreCase    bool   `json:"-i,omitempty"`
@@ -115,14 +118,17 @@ func NewGrepTool() tool.Tool {
 					"headLimit":   map[string]any{"type": "integer"},
 					"offset":      map[string]any{"type": "integer"},
 					"context":     map[string]any{"type": "integer"},
+					"-C":          map[string]any{"type": "integer"},
 					"before_context": map[string]any{
 						"type": "integer",
 					},
 					"beforeContext": map[string]any{"type": "integer"},
+					"-B":            map[string]any{"type": "integer"},
 					"after_context": map[string]any{
 						"type": "integer",
 					},
 					"afterContext":     map[string]any{"type": "integer"},
+					"-A":               map[string]any{"type": "integer"},
 					"case_insensitive": map[string]any{"type": "boolean"},
 					"caseInsensitive":  map[string]any{"type": "boolean"},
 					"-i":               map[string]any{"type": "boolean"},
@@ -130,7 +136,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. content mode supports context, before_context, after_context, offset, and head_limit pagination.", nil
+			return "Searches text files under path using a regular expression. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. content mode supports context, before_context, after_context, -C, -B, -A, offset, and head_limit pagination.", nil
 		},
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
@@ -295,7 +301,7 @@ func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	if err := decodeStrict(raw, map[string]struct{}{
 		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "limit": {},
 		"head_limit": {}, "headLimit": {}, "offset": {},
-		"context": {}, "before_context": {}, "beforeContext": {}, "after_context": {}, "afterContext": {},
+		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {},
 		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
 	}, &input); err != nil {
 		return grepInput{}, err
@@ -589,14 +595,24 @@ func grepOffset(input grepInput) int {
 func grepContextLines(input grepInput) (int, int) {
 	before := 0
 	after := 0
+	if input.ShortContext != nil {
+		before = *input.ShortContext
+		after = *input.ShortContext
+	}
 	if input.Context != nil {
 		before = *input.Context
 		after = *input.Context
+	}
+	if input.ShortBeforeContext != nil {
+		before = *input.ShortBeforeContext
 	}
 	if input.BeforeContext != nil {
 		before = *input.BeforeContext
 	} else if input.BeforeContextAlt != nil {
 		before = *input.BeforeContextAlt
+	}
+	if input.ShortAfterContext != nil {
+		after = *input.ShortAfterContext
 	}
 	if input.AfterContext != nil {
 		after = *input.AfterContext

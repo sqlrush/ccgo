@@ -868,6 +868,22 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("structured context matches = %#v", matches)
 	}
 
+	shortContextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","-B":1,"-A":0}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantShortContext := "a.txt-1-one\na.txt:2:Needle first\na.txt-4-four\na.txt:5:Needle second"
+	if shortContextResult.Content != wantShortContext {
+		t.Fatalf("short context content = %#v", shortContextResult.Content)
+	}
+	if shortContextResult.StructuredContent["before_context"] != 1 || shortContextResult.StructuredContent["after_context"] != 0 {
+		t.Fatalf("short context structured content = %#v", shortContextResult.StructuredContent)
+	}
+
 	pagedResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_paged",
 		Name:  "Grep",
