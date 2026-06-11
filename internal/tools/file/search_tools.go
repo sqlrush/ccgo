@@ -33,6 +33,9 @@ type grepInput struct {
 	HeadLimit          *int   `json:"head_limit,omitempty"`
 	HeadLimitAlt       *int   `json:"headLimit,omitempty"`
 	Offset             *int   `json:"offset,omitempty"`
+	MaxCount           *int   `json:"max_count,omitempty"`
+	MaxCountAlt        *int   `json:"maxCount,omitempty"`
+	ShortMaxCount      *int   `json:"-m,omitempty"`
 	Context            *int   `json:"context,omitempty"`
 	ShortContext       *int   `json:"-C,omitempty"`
 	BeforeContext      *int   `json:"before_context,omitempty"`
@@ -69,6 +72,7 @@ type grepOptions struct {
 	Mode          string
 	Limit         int
 	Offset        int
+	MaxCount      int
 	BeforeContext int
 	AfterContext  int
 	LineNumbers   bool
@@ -133,6 +137,9 @@ func NewGrepTool() tool.Tool {
 					"head_limit":  map[string]any{"type": "integer"},
 					"headLimit":   map[string]any{"type": "integer"},
 					"offset":      map[string]any{"type": "integer"},
+					"max_count":   map[string]any{"type": "integer"},
+					"maxCount":    map[string]any{"type": "integer"},
+					"-m":          map[string]any{"type": "integer"},
 					"context":     map[string]any{"type": "integer"},
 					"-C":          map[string]any{"type": "integer"},
 					"before_context": map[string]any{
@@ -157,7 +164,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, and head_limit pagination. Use fixed_strings or -F for literal matching. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, and max_count/-m per-file match limiting. Use fixed_strings or -F for literal matching. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		ValidateFunc:    validateGrep,
 		CallFunc:        callGrep,
@@ -249,6 +256,15 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if input.Offset != nil && *input.Offset < 0 {
 		return fmt.Errorf("offset must be non-negative")
 	}
+	if input.MaxCount != nil && *input.MaxCount < 0 {
+		return fmt.Errorf("max_count must be non-negative")
+	}
+	if input.MaxCountAlt != nil && *input.MaxCountAlt < 0 {
+		return fmt.Errorf("max_count must be non-negative")
+	}
+	if input.ShortMaxCount != nil && *input.ShortMaxCount < 0 {
+		return fmt.Errorf("max_count must be non-negative")
+	}
 	if _, err := grepTypeExtensions(input.Type); err != nil {
 		return err
 	}
@@ -284,6 +300,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Mode:          mode,
 		Limit:         grepLimit(input),
 		Offset:        grepOffset(input),
+		MaxCount:      grepMaxCount(input),
 		BeforeContext: before,
 		AfterContext:  after,
 		LineNumbers:   grepLineNumbers(input, mode),
@@ -310,6 +327,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"total_matches":    totalMatches,
 			"offset":           options.Offset,
 			"limit":            options.Limit,
+			"max_count":        options.MaxCount,
 			"before_context":   options.BeforeContext,
 			"after_context":    options.AfterContext,
 			"line_numbers":     options.LineNumbers,
@@ -333,7 +351,7 @@ func decodeGrep(raw json.RawMessage) (grepInput, error) {
 	var input grepInput
 	if err := decodeStrict(raw, map[string]struct{}{
 		"pattern": {}, "path": {}, "glob": {}, "type": {}, "output_mode": {}, "outputMode": {}, "limit": {},
-		"head_limit": {}, "headLimit": {}, "offset": {},
+		"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 		"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "-n": {},
 		"case_insensitive": {}, "caseInsensitive": {}, "-i": {},
 		"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
@@ -487,9 +505,9 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 	matched := map[int]bool{}
 	included := map[int]bool{}
 	if options.Multiline {
-		markMultilineMatches(lines, strings.ReplaceAll(content, "\r\n", "\n"), expr, options.BeforeContext, options.AfterContext, matched, included)
+		markMultilineMatches(lines, strings.ReplaceAll(content, "\r\n", "\n"), expr, options.MaxCount, options.BeforeContext, options.AfterContext, matched, included)
 	} else {
-		markLineMatches(lines, expr, options.BeforeContext, options.AfterContext, matched, included)
+		markLineMatches(lines, expr, options.MaxCount, options.BeforeContext, options.AfterContext, matched, included)
 	}
 	matches := make([]grepMatch, 0, len(included))
 	for i := range lines {
@@ -501,15 +519,20 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 	return matches
 }
 
-func markLineMatches(lines []string, expr *regexp.Regexp, beforeContext int, afterContext int, matched map[int]bool, included map[int]bool) {
+func markLineMatches(lines []string, expr *regexp.Regexp, maxCount int, beforeContext int, afterContext int, matched map[int]bool, included map[int]bool) {
+	matches := 0
 	for i, line := range lines {
 		if expr.MatchString(line) {
+			if maxCount > 0 && matches >= maxCount {
+				break
+			}
 			markGrepLineRange(i, i, len(lines), beforeContext, afterContext, matched, included)
+			matches++
 		}
 	}
 }
 
-func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, beforeContext int, afterContext int, matched map[int]bool, included map[int]bool) {
+func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, maxCount int, beforeContext int, afterContext int, matched map[int]bool, included map[int]bool) {
 	if content == "" {
 		return
 	}
@@ -522,7 +545,11 @@ func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, b
 			offset++
 		}
 	}
+	matches := 0
 	for _, span := range expr.FindAllStringIndex(content, -1) {
+		if maxCount > 0 && matches >= maxCount {
+			break
+		}
 		first := -1
 		last := -1
 		for i, lineStart := range starts {
@@ -540,6 +567,7 @@ func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, b
 		}
 		if first >= 0 {
 			markGrepLineRange(first, last, len(lines), beforeContext, afterContext, matched, included)
+			matches++
 		}
 	}
 }
@@ -771,6 +799,19 @@ func grepOffset(input grepInput) int {
 		return 0
 	}
 	return *input.Offset
+}
+
+func grepMaxCount(input grepInput) int {
+	if input.MaxCount != nil {
+		return *input.MaxCount
+	}
+	if input.MaxCountAlt != nil {
+		return *input.MaxCountAlt
+	}
+	if input.ShortMaxCount != nil {
+		return *input.ShortMaxCount
+	}
+	return 0
 }
 
 func grepContextLines(input grepInput) (int, int) {

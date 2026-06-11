@@ -1196,6 +1196,31 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if unlimitedResult.Content != wantUnlimited || unlimitedResult.StructuredContent["limit"] != 0 || unlimitedResult.StructuredContent["truncated"] != false {
 		t.Fatalf("unlimited head_limit result = %#v", unlimitedResult)
 	}
+
+	maxCountResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_count":1,"context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMaxCount := "a.txt-1-one\na.txt:2:Needle first\na.txt-3-three"
+	if maxCountResult.Content != wantMaxCount || maxCountResult.StructuredContent["max_count"] != 1 {
+		t.Fatalf("max_count result = %#v", maxCountResult)
+	}
+
+	shortMaxCountResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_max_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","-m":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortMaxCountResult.Content != "a.txt:1" || shortMaxCountResult.StructuredContent["max_count"] != 1 {
+		t.Fatalf("short max_count result = %#v", shortMaxCountResult)
+	}
 }
 
 func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
@@ -1240,6 +1265,15 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	}
 	if ignoredContextResult.Content != "mixed.txt" || ignoredContextResult.StructuredContent["before_context"] != 0 || ignoredContextResult.StructuredContent["after_context"] != 0 {
 		t.Fatalf("ignored context result = %#v", ignoredContextResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_max_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","max_count":-1}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "max_count must be non-negative") {
+		t.Fatalf("max_count validation err = %v", err)
 	}
 }
 
