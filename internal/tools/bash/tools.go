@@ -361,6 +361,58 @@ var gitRevParseFlagsWithArgs = map[string]bool{
 	"--short": true,
 }
 
+var gitBranchAllowedFlags = map[string]bool{
+	"-l":             true,
+	"--list":         true,
+	"-a":             true,
+	"--all":          true,
+	"-r":             true,
+	"--remotes":      true,
+	"-v":             true,
+	"-vv":            true,
+	"--verbose":      true,
+	"--color":        true,
+	"--no-color":     true,
+	"--column":       true,
+	"--no-column":    true,
+	"--no-abbrev":    true,
+	"--show-current": true,
+	"-i":             true,
+	"--ignore-case":  true,
+}
+
+var gitBranchFlagsWithArgs = map[string]bool{
+	"--contains":    true,
+	"--no-contains": true,
+	"--points-at":   true,
+	"--sort":        true,
+}
+
+var gitBranchOptionalArgFlags = map[string]bool{
+	"--merged":    true,
+	"--no-merged": true,
+}
+
+var gitTagAllowedFlags = map[string]bool{
+	"-l":            true,
+	"--list":        true,
+	"--column":      true,
+	"--no-column":   true,
+	"-i":            true,
+	"--ignore-case": true,
+}
+
+var gitTagFlagsWithArgs = map[string]bool{
+	"-n":            true,
+	"--contains":    true,
+	"--no-contains": true,
+	"--merged":      true,
+	"--no-merged":   true,
+	"--sort":        true,
+	"--format":      true,
+	"--points-at":   true,
+}
+
 var gitReflogFlagsWithArgs = map[string]bool{
 	"-n":          true,
 	"--max-count": true,
@@ -1457,39 +1509,11 @@ func readOnlyGit(words []string) bool {
 }
 
 func readOnlyGitBranch(args []string) bool {
-	if len(args) == 0 {
-		return true
-	}
-	for _, arg := range args {
-		switch arg {
-		case "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "--list", "-l", "--show-current", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--format", "--sort", "--color", "--no-color", "--column", "--no-column":
-			continue
-		default:
-			if strings.HasPrefix(arg, "-") {
-				continue
-			}
-			return false
-		}
-	}
-	return true
+	return argsAllowListModePositionals(args, gitBranchAllowedFlags, gitBranchFlagsWithArgs, gitBranchOptionalArgFlags)
 }
 
 func readOnlyGitTag(args []string) bool {
-	if len(args) == 0 {
-		return true
-	}
-	for _, arg := range args {
-		switch arg {
-		case "-l", "--list", "-n", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--format", "--sort", "--color", "--no-color", "--column", "--no-column", "--ignore-case":
-			continue
-		default:
-			if strings.HasPrefix(arg, "-") {
-				continue
-			}
-			return false
-		}
-	}
-	return true
+	return argsAllowListModePositionals(args, gitTagAllowedFlags, gitTagFlagsWithArgs, nil)
 }
 
 func readOnlyGitRemote(args []string) bool {
@@ -1762,6 +1786,68 @@ func argsAllowPositionals(args []string, allowedFlags map[string]bool, flagsWith
 		if maxPositionals >= 0 && positionals > maxPositionals {
 			return false
 		}
+	}
+	return true
+}
+
+func argsAllowListModePositionals(args []string, allowedFlags map[string]bool, flagsWithArgs map[string]bool, optionalArgFlags map[string]bool) bool {
+	seenListFlag := false
+	optionalArgOpen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return seenListFlag
+		}
+		if strings.HasPrefix(arg, "--") {
+			if strings.Contains(arg, "=") {
+				name := strings.SplitN(arg, "=", 2)[0]
+				switch {
+				case flagsWithArgs[name]:
+					optionalArgOpen = false
+				case allowedFlags[name]:
+					seenListFlag = seenListFlag || name == "--list"
+					optionalArgOpen = false
+				case optionalArgFlags[name]:
+					optionalArgOpen = false
+				default:
+					return false
+				}
+				continue
+			}
+			if flagsWithArgs[arg] && i+1 < len(args) {
+				i++
+				optionalArgOpen = false
+				continue
+			}
+			if optionalArgFlags[arg] {
+				optionalArgOpen = true
+				continue
+			}
+			if allowedFlags[arg] {
+				seenListFlag = seenListFlag || arg == "--list"
+				optionalArgOpen = false
+				continue
+			}
+			return false
+		}
+		if strings.HasPrefix(arg, "-") {
+			if flagsWithArgs[arg] && i+1 < len(args) {
+				i++
+				optionalArgOpen = false
+				continue
+			}
+			if allowedFlags[arg] {
+				seenListFlag = seenListFlag || arg == "-l"
+				optionalArgOpen = false
+				continue
+			}
+			return false
+		}
+		if seenListFlag || optionalArgOpen {
+			optionalArgOpen = false
+			continue
+		}
+		return false
 	}
 	return true
 }
