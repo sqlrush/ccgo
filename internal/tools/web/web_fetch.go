@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"mime"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"ccgo/internal/contracts"
@@ -55,7 +58,7 @@ func NewWebFetchTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Fetches a web URL and returns text content. Provide url and optionally prompt, timeout in milliseconds, and max_bytes. Prompt-aware summarization and browser rendering are not implemented yet.", nil
+			return "Fetches a web URL and returns text content. Provide url and optionally prompt, timeout in milliseconds, and max_bytes. HTML responses are rendered to readable text, and prompts produce a focused excerpt when matching text is found. Browser rendering and model summarization are not implemented yet.", nil
 		},
 		ValidateFunc: validateWebFetch,
 		PermissionFunc: func(ctx tool.Context, raw json.RawMessage) (contracts.PermissionDecision, error) {
@@ -138,34 +141,43 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
+	result = prepareWebFetchResult(result, input.Prompt)
 	content := formatWebFetchContent(input, result)
 	return contracts.ToolResult{
 		Content: content,
 		IsError: result.StatusCode < 200 || result.StatusCode >= 300 || result.Binary,
 		StructuredContent: map[string]any{
-			"type":         "web_fetch",
-			"url":          parsed.String(),
-			"domain":       strings.ToLower(parsed.Hostname()),
-			"prompt":       input.Prompt,
-			"status_code":  result.StatusCode,
-			"content_type": result.ContentType,
-			"body":         result.Body,
-			"bytes":        result.Bytes,
-			"truncated":    result.Truncated,
-			"binary":       result.Binary,
-			"duration_ms":  result.DurationMS,
+			"type":           "web_fetch",
+			"url":            parsed.String(),
+			"domain":         strings.ToLower(parsed.Hostname()),
+			"prompt":         input.Prompt,
+			"status_code":    result.StatusCode,
+			"content_type":   result.ContentType,
+			"body":           result.Body,
+			"rendered":       result.Rendered,
+			"rendered_body":  result.RenderedBody,
+			"prompt_terms":   result.PromptTerms,
+			"prompt_excerpt": result.PromptExcerpt,
+			"bytes":          result.Bytes,
+			"truncated":      result.Truncated,
+			"binary":         result.Binary,
+			"duration_ms":    result.DurationMS,
 		},
 	}, nil
 }
 
 type fetchResult struct {
-	StatusCode  int
-	ContentType string
-	Body        string
-	Bytes       int
-	Truncated   bool
-	Binary      bool
-	DurationMS  int64
+	StatusCode    int
+	ContentType   string
+	Body          string
+	RenderedBody  string
+	Rendered      bool
+	PromptTerms   []string
+	PromptExcerpt string
+	Bytes         int
+	Truncated     bool
+	Binary        bool
+	DurationMS    int64
 }
 
 func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxBytes int) (fetchResult, error) {
@@ -214,6 +226,23 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 	}, nil
 }
 
+func prepareWebFetchResult(result fetchResult, prompt string) fetchResult {
+	if result.Binary || result.Body == "" {
+		return result
+	}
+	rendered, ok := renderWebFetchBody(result.ContentType, result.Body)
+	if strings.TrimSpace(rendered) == "" {
+		rendered = result.Body
+	}
+	result.RenderedBody = rendered
+	result.Rendered = ok
+	result.PromptTerms = webFetchPromptTerms(prompt)
+	if prompt != "" {
+		result.PromptExcerpt = promptFocusedWebFetchExcerpt(rendered, result.PromptTerms)
+	}
+	return result
+}
+
 func formatWebFetchContent(input webFetchInput, result fetchResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Fetched %s with status %d", input.URL, result.StatusCode)
@@ -236,9 +265,294 @@ func formatWebFetchContent(input webFetchInput, result fetchResult) string {
 		b.WriteString("\nResponse body is empty.")
 		return b.String()
 	}
+	body := result.RenderedBody
+	if body == "" {
+		body = result.Body
+	}
+	if input.Prompt != "" && result.PromptExcerpt != "" && result.PromptExcerpt != body {
+		b.WriteString("\n\nRelevant excerpt:\n")
+		b.WriteString(result.PromptExcerpt)
+		b.WriteString("\n\nRendered body:\n")
+		b.WriteString(body)
+		return strings.TrimRight(b.String(), "\n")
+	}
 	b.WriteString("\n\n")
-	b.WriteString(result.Body)
+	b.WriteString(body)
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func renderWebFetchBody(contentType string, body string) (string, bool) {
+	if !isHTMLWebFetchContent(contentType, body) {
+		return body, false
+	}
+	stripped := removeHTMLWebFetchBlocks(body, "script", "style", "noscript", "template", "svg", "canvas")
+	rendered := stripHTMLWebFetchTags(stripped)
+	rendered = html.UnescapeString(rendered)
+	return normalizeWebFetchText(rendered), true
+}
+
+func isHTMLWebFetchContent(contentType string, body string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err == nil {
+		mediaType = strings.ToLower(mediaType)
+		return mediaType == "text/html" || mediaType == "application/xhtml+xml"
+	}
+	prefix := strings.ToLower(strings.TrimSpace(body))
+	return strings.HasPrefix(prefix, "<!doctype html") || strings.HasPrefix(prefix, "<html")
+}
+
+func removeHTMLWebFetchBlocks(body string, names ...string) string {
+	out := body
+	for _, name := range names {
+		for {
+			lower := strings.ToLower(out)
+			start := findHTMLWebFetchBlockStart(lower, name)
+			if start < 0 {
+				break
+			}
+			openEndRel := strings.IndexByte(out[start:], '>')
+			if openEndRel < 0 {
+				out = out[:start]
+				break
+			}
+			contentStart := start + openEndRel + 1
+			closeStartRel := strings.Index(strings.ToLower(out[contentStart:]), "</"+name)
+			if closeStartRel < 0 {
+				out = out[:start]
+				break
+			}
+			closeStart := contentStart + closeStartRel
+			closeEndRel := strings.IndexByte(out[closeStart:], '>')
+			if closeEndRel < 0 {
+				out = out[:start]
+				break
+			}
+			closeEnd := closeStart + closeEndRel + 1
+			out = out[:start] + "\n" + out[closeEnd:]
+		}
+	}
+	return out
+}
+
+func findHTMLWebFetchBlockStart(lower string, name string) int {
+	search := "<" + name
+	offset := 0
+	for {
+		idx := strings.Index(lower[offset:], search)
+		if idx < 0 {
+			return -1
+		}
+		pos := offset + idx
+		after := pos + len(search)
+		if after >= len(lower) {
+			return pos
+		}
+		next := lower[after]
+		if next == '>' || next == '/' || unicode.IsSpace(rune(next)) {
+			return pos
+		}
+		offset = after
+	}
+}
+
+func stripHTMLWebFetchTags(body string) string {
+	var b strings.Builder
+	for i := 0; i < len(body); {
+		if strings.HasPrefix(body[i:], "<!--") {
+			if end := strings.Index(body[i+4:], "-->"); end >= 0 {
+				i += 4 + end + 3
+				continue
+			}
+			break
+		}
+		if body[i] != '<' {
+			b.WriteByte(body[i])
+			i++
+			continue
+		}
+		end := strings.IndexByte(body[i:], '>')
+		if end < 0 {
+			b.WriteByte(body[i])
+			i++
+			continue
+		}
+		tag := htmlWebFetchTagName(body[i+1 : i+end])
+		if tag == "br" || isBlockHTMLWebFetchTag(tag) {
+			b.WriteByte('\n')
+		}
+		i += end + 1
+	}
+	return b.String()
+}
+
+func htmlWebFetchTagName(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimLeft(raw, "/!?")
+	if raw == "" {
+		return ""
+	}
+	for idx, r := range raw {
+		if unicode.IsSpace(r) || r == '/' || r == '>' {
+			return strings.ToLower(raw[:idx])
+		}
+	}
+	return strings.ToLower(raw)
+}
+
+func isBlockHTMLWebFetchTag(name string) bool {
+	switch name {
+	case "address", "article", "aside", "blockquote", "body", "caption", "dd", "details", "dialog", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "li", "main", "nav", "ol", "p", "pre", "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeWebFetchText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	lastBlank := true
+	for _, line := range lines {
+		normalized := strings.Join(strings.Fields(line), " ")
+		if normalized == "" {
+			if !lastBlank {
+				out = append(out, "")
+				lastBlank = true
+			}
+			continue
+		}
+		out = append(out, normalized)
+		lastBlank = false
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func webFetchPromptTerms(prompt string) []string {
+	words := strings.FieldsFunc(strings.ToLower(prompt), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	terms := make([]string, 0, len(words))
+	seen := map[string]bool{}
+	for _, word := range words {
+		word = strings.TrimSpace(word)
+		if utf8.RuneCountInString(word) < 3 || isWebFetchStopWord(word) || seen[word] {
+			continue
+		}
+		seen[word] = true
+		terms = append(terms, word)
+	}
+	return terms
+}
+
+func isWebFetchStopWord(word string) bool {
+	switch word {
+	case "the", "and", "for", "with", "from", "this", "that", "you", "your", "are", "was", "were", "what", "when", "where", "which", "who", "why", "how", "summarize", "summary", "about", "please":
+		return true
+	default:
+		return false
+	}
+}
+
+type scoredWebFetchPassage struct {
+	Index int
+	Text  string
+	Score int
+}
+
+func promptFocusedWebFetchExcerpt(text string, terms []string) string {
+	if len(terms) == 0 || strings.TrimSpace(text) == "" {
+		return ""
+	}
+	passages := splitWebFetchPassages(text)
+	scored := make([]scoredWebFetchPassage, 0, len(passages))
+	for idx, passage := range passages {
+		score := scoreWebFetchPassage(passage, terms)
+		if score > 0 {
+			scored = append(scored, scoredWebFetchPassage{Index: idx, Text: passage, Score: score})
+		}
+	}
+	if len(scored) == 0 {
+		return ""
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].Score == scored[j].Score {
+			return scored[i].Index < scored[j].Index
+		}
+		return scored[i].Score > scored[j].Score
+	})
+	if len(scored) > 3 {
+		scored = scored[:3]
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		return scored[i].Index < scored[j].Index
+	})
+	parts := make([]string, 0, len(scored))
+	for _, passage := range scored {
+		parts = append(parts, passage.Text)
+	}
+	return truncateWebFetchRunes(strings.Join(parts, "\n\n"), 1600)
+}
+
+func splitWebFetchPassages(text string) []string {
+	raw := strings.Split(text, "\n")
+	passages := make([]string, 0, len(raw))
+	for _, passage := range raw {
+		passage = strings.TrimSpace(passage)
+		if passage == "" {
+			continue
+		}
+		if utf8.RuneCountInString(passage) <= 500 {
+			passages = append(passages, passage)
+			continue
+		}
+		passages = append(passages, splitLongWebFetchPassage(passage)...)
+	}
+	return passages
+}
+
+func splitLongWebFetchPassage(passage string) []string {
+	sentences := strings.FieldsFunc(passage, func(r rune) bool {
+		return r == '.' || r == '!' || r == '?' || r == '。' || r == '！' || r == '？'
+	})
+	out := make([]string, 0, len(sentences))
+	for _, sentence := range sentences {
+		sentence = strings.TrimSpace(sentence)
+		if sentence != "" {
+			out = append(out, sentence)
+		}
+	}
+	if len(out) == 0 {
+		return []string{passage}
+	}
+	return out
+}
+
+func scoreWebFetchPassage(passage string, terms []string) int {
+	lower := strings.ToLower(passage)
+	score := 0
+	for _, term := range terms {
+		count := strings.Count(lower, term)
+		if count > 0 {
+			score += 2 + count
+		}
+	}
+	return score
+}
+
+func truncateWebFetchRunes(text string, limit int) string {
+	if limit <= 0 || utf8.RuneCountInString(text) <= limit {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "\n[truncated]"
 }
 
 func decodeWebFetch(raw json.RawMessage) (webFetchInput, error) {
