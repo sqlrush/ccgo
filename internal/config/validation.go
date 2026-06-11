@@ -28,6 +28,10 @@ func LoadSettingsFileWithWarnings(path string) (contracts.Settings, []Validation
 	if err != nil {
 		return contracts.Settings{}, nil, err
 	}
+	return ParseSettingsJSON(data, path)
+}
+
+func ParseSettingsJSON(data []byte, filePath string) (contracts.Settings, []ValidationError, error) {
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return contracts.Settings{}, nil, nil
 	}
@@ -35,7 +39,7 @@ func LoadSettingsFileWithWarnings(path string) (contracts.Settings, []Validation
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return contracts.Settings{}, nil, err
 	}
-	warnings := FilterInvalidPermissionRules(raw, path)
+	warnings := FilterInvalidPermissionRules(raw, filePath)
 	normalized, err := json.Marshal(raw)
 	if err != nil {
 		return contracts.Settings{}, warnings, err
@@ -44,8 +48,13 @@ func LoadSettingsFileWithWarnings(path string) (contracts.Settings, []Validation
 	if err := json.Unmarshal(normalized, &settings); err != nil {
 		return contracts.Settings{}, warnings, err
 	}
-	warnings = append(warnings, ValidateSettings(settings, path)...)
+	warnings = append(warnings, ValidateSettings(settings, filePath)...)
 	return settings, warnings, nil
+}
+
+func ValidateSettingsJSON(data []byte, filePath string) ([]ValidationError, error) {
+	_, warnings, err := ParseSettingsJSON(data, filePath)
+	return warnings, err
 }
 
 func FilterInvalidPermissionRules(data map[string]any, filePath string) []ValidationError {

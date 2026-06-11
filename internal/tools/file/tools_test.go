@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,15 @@ func fileExecutor(t *testing.T) tool.Executor {
 		t.Fatal(err)
 	}
 	return tool.NewExecutor(registry)
+}
+
+func mustToolInput(t *testing.T, input any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func TestReadToolLineNumbersAndDedup(t *testing.T) {
@@ -386,6 +396,85 @@ func TestWriteRejectsTeamMemorySecrets(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "possible secret") {
 		t.Fatalf("secret err = %v", err)
+	}
+}
+
+func TestWriteRejectsInvalidSettingsJSON(t *testing.T) {
+	dir := t.TempDir()
+	ctx := fileToolContext(dir)
+	executor := fileExecutor(t)
+
+	for _, tc := range []struct {
+		name    string
+		path    string
+		content string
+		wantErr string
+	}{
+		{
+			name:    "malformed",
+			path:    ".claude/settings.json",
+			content: `{"model":`,
+			wantErr: "invalid settings file",
+		},
+		{
+			name:    "validation warning",
+			path:    ".claude/settings.local.json",
+			content: `{"permissions":{"defaultMode":"bad-mode"}}`,
+			wantErr: "permissions.defaultMode",
+		},
+	} {
+		_, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_settings_" + strings.ReplaceAll(tc.name, " ", "_")),
+			Name:  "Write",
+			Input: mustToolInput(t, writeInput{FilePath: tc.path, Content: tc.content}),
+		}, nil)
+		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Fatalf("%s err = %v", tc.name, err)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(tc.path))); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("%s file should not be written, stat err = %v", tc.name, statErr)
+		}
+	}
+}
+
+func TestEditRejectsInvalidSettingsJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := `{"model":"opus"}` + "\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := fileToolContext(dir)
+	executor := fileExecutor(t)
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_settings",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":".claude/settings.json"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_edit_settings",
+		Name: "Edit",
+		Input: mustToolInput(t, editInput{
+			FilePath:  ".claude/settings.json",
+			OldString: "opus",
+			NewString: `bad"json`,
+		}),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid settings file") {
+		t.Fatalf("edit err = %v", err)
+	}
+	data, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != original {
+		t.Fatalf("settings file changed after rejected edit: %q", data)
 	}
 }
 

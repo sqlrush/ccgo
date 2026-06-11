@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	"ccgo/internal/permissions"
@@ -447,6 +448,9 @@ func validateWrite(ctx tool.Context, raw json.RawMessage) error {
 	if err := memory.GuardTeamMemoryWrite(path, input.Content); err != nil {
 		return err
 	}
+	if err := validateSettingsFileContent(path, input.Content); err != nil {
+		return err
+	}
 	if info, err := os.Stat(path); err == nil {
 		if info.IsDir() {
 			return fmt.Errorf("cannot write directory: %s", input.FilePath)
@@ -456,6 +460,44 @@ func validateWrite(ctx tool.Context, raw json.RawMessage) error {
 		return err
 	}
 	return nil
+}
+
+func validateSettingsFileContent(path string, content string) error {
+	if !isClaudeSettingsPath(path) {
+		return nil
+	}
+	warnings, err := config.ValidateSettingsJSON([]byte(content), path)
+	if err != nil {
+		return fmt.Errorf("invalid settings file: %w", err)
+	}
+	if len(warnings) > 0 {
+		return fmt.Errorf("invalid settings file: %s", formatSettingsValidationWarning(warnings[0], len(warnings)))
+	}
+	return nil
+}
+
+func isClaudeSettingsPath(path string) bool {
+	clean := filepath.Clean(path)
+	name := filepath.Base(clean)
+	if name != "settings.json" && name != "settings.local.json" {
+		return false
+	}
+	return filepath.Base(filepath.Dir(clean)) == ".claude"
+}
+
+func formatSettingsValidationWarning(warning config.ValidationError, total int) string {
+	path := warning.Path
+	if path == "" {
+		path = filepath.Base(warning.File)
+	}
+	message := warning.Message
+	if message == "" {
+		message = "settings validation failed"
+	}
+	if total > 1 {
+		return fmt.Sprintf("%s: %s (and %d more)", path, message, total-1)
+	}
+	return fmt.Sprintf("%s: %s", path, message)
 }
 
 func callWrite(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
@@ -530,7 +572,7 @@ func validateEdit(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if !existed {
 		if input.OldString == "" {
-			return nil
+			return validateSettingsFileContent(path, input.NewString)
 		}
 		return fmt.Errorf("File does not exist.")
 	}
@@ -538,7 +580,7 @@ func validateEdit(ctx tool.Context, raw json.RawMessage) error {
 		if strings.TrimSpace(content) != "" {
 			return fmt.Errorf("Cannot create new file - file already exists.")
 		}
-		return nil
+		return validateSettingsFileContent(path, input.NewString)
 	}
 	if err := validateFreshFullReadWithContent(ctx, path, content); err != nil {
 		return err
@@ -551,7 +593,9 @@ func validateEdit(ctx tool.Context, raw json.RawMessage) error {
 	if matches > 1 && !input.ReplaceAll {
 		return fmt.Errorf("Found %d matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: %s", matches, input.OldString)
 	}
-	return nil
+	actualNew := preserveQuoteStyle(input.OldString, actualOld, input.NewString)
+	updated := applyEdit(content, actualOld, actualNew, input.ReplaceAll)
+	return validateSettingsFileContent(path, updated)
 }
 
 func callEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
