@@ -109,6 +109,7 @@ Covered behavior:
 - `Bash` initial shell execution, including command/timeout/description validation, `/bin/sh -c` execution, stdout/stderr/exit-code/timeout structured results, dynamic read-only/concurrency-safe/destructive classification, and permission-rule matching through the existing tool permission adapter.
 - `TodoWrite` initial in-session todo state, including full-list writes, status/priority validation, duplicate-id rejection, one `in_progress` guard, structured result payloads, and tool metadata state storage.
 - `WebFetch` initial URL fetch behavior, including URL/timeout/max-byte validation, HTTP GET, text/binary detection, truncation, non-2xx error marking, structured result payloads, and `WebFetch(domain:...)` permission-rule adaptation.
+- `WebSearch` initial HTML-search adapter, including query/max-result/timeout/domain-filter validation, injectable search endpoint, DuckDuckGo HTML link parsing, domain allow/block filtering, structured result payloads, and query-based permission-rule matching.
 - `Read` line-number formatting, offset/limit slicing, mtime-based same-range dedup, text/binary/device guards, and read-state recording.
 - `Write` create/update behavior, read-before-write validation for existing files, mtime stale detection, and post-write read-state refresh.
 - `Edit` exact replacement, nonexistent-file creation with empty `old_string`, unique-match enforcement, `replace_all`, quote-style preservation for curly quotes, CRLF preservation, and post-edit read-state refresh.
@@ -119,7 +120,7 @@ Still missing from full M5 parity:
 - Image, PDF, notebook, and large-file token-budget behavior in `Read`.
 - Structured diff hunks/git diff/LSP and IDE notifications/file-history integration for `Write`/`Edit`.
 - Settings-file validation, team-memory secret guard, skill activation, and full permission prompt rendering.
-- Complete `Bash` parser/sandbox/background/interrupt/golden parity, `WebFetch` prompt-aware/browser/preflight/golden parity, `WebSearch`, notebook, PowerShell, and MCP concrete tool semantics, plus full ripgrep parity/pagination/ignore-file behavior for `Glob`/`Grep` and cross-session/TUI/golden compatibility for `TodoWrite`.
+- Complete `Bash` parser/sandbox/background/interrupt/golden parity, `WebFetch` prompt-aware/browser/preflight/golden parity, `WebSearch` official backend/ranking/snippet/golden parity, notebook, PowerShell, and MCP concrete tool semantics, plus full ripgrep parity/pagination/ignore-file behavior for `Glob`/`Grep` and cross-session/TUI/golden compatibility for `TodoWrite`.
 
 ## M6/M7 Initial Progress
 

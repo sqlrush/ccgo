@@ -15,7 +15,7 @@ import (
 
 func webExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewWebFetchTool())
+	registry, err := tool.NewRegistry(NewWebFetchTool(), NewWebSearchTool())
 	if err != nil {
 		t.Fatal(err)
 	}
