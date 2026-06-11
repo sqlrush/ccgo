@@ -36,6 +36,60 @@ var gitReflogFlagsWithArgs = map[string]bool{
 	"--before":    true,
 }
 
+var gitStashShowFlagsWithArgs = map[string]bool{
+	"--word-diff-regex": true,
+	"--diff-filter":     true,
+	"--abbrev":          true,
+}
+
+var gitStashListAllowedFlags = map[string]bool{
+	"--oneline":       true,
+	"--graph":         true,
+	"--decorate":      true,
+	"--no-decorate":   true,
+	"--relative-date": true,
+	"--all":           true,
+	"--branches":      true,
+	"--tags":          true,
+	"--remotes":       true,
+}
+
+var gitStashListFlagsWithArgs = map[string]bool{
+	"--date":      true,
+	"--max-count": true,
+	"-n":          true,
+	"--since":     true,
+	"--after":     true,
+	"--until":     true,
+	"--before":    true,
+}
+
+var gitStashShowAllowedFlags = map[string]bool{
+	"--stat":        true,
+	"--numstat":     true,
+	"--shortstat":   true,
+	"--name-only":   true,
+	"--name-status": true,
+	"--color":       true,
+	"--no-color":    true,
+	"--patch":       true,
+	"-p":            true,
+	"--no-patch":    true,
+	"--no-ext-diff": true,
+	"-s":            true,
+	"--word-diff":   true,
+}
+
+var gitWorktreeListAllowedFlags = map[string]bool{
+	"--porcelain": true,
+	"-v":          true,
+	"--verbose":   true,
+}
+
+var gitWorktreeListFlagsWithArgs = map[string]bool{
+	"--expire": true,
+}
+
 type bashInput struct {
 	Command               string `json:"command"`
 	Timeout               *int   `json:"timeout,omitempty"`
@@ -856,6 +910,10 @@ func readOnlyGit(words []string) bool {
 		return readOnlyGitRemote(words[2:])
 	case "reflog":
 		return readOnlyGitReflog(words[2:])
+	case "stash":
+		return readOnlyGitStash(words[2:])
+	case "worktree":
+		return readOnlyGitWorktree(words[2:])
 	default:
 		return false
 	}
@@ -918,6 +976,27 @@ func readOnlyGitReflog(args []string) bool {
 		return true
 	}
 	return first != "expire" && first != "delete" && first != "exists"
+}
+
+func readOnlyGitStash(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "list":
+		return argsAreAllowedFlagsOnly(args[1:], gitStashListAllowedFlags, gitStashListFlagsWithArgs)
+	case "show":
+		return argsHaveAtMostOnePositional(args[1:], gitStashShowAllowedFlags, gitStashShowFlagsWithArgs)
+	default:
+		return false
+	}
+}
+
+func readOnlyGitWorktree(args []string) bool {
+	if len(args) == 0 || args[0] != "list" {
+		return false
+	}
+	return argsAreAllowedFlagsOnly(args[1:], gitWorktreeListAllowedFlags, gitWorktreeListFlagsWithArgs)
 }
 
 func destructiveWords(words []string) bool {
@@ -990,6 +1069,10 @@ func destructiveGit(words []string) bool {
 	case "reflog":
 		first, ok := gitReflogFirstPositional(words[2:])
 		return ok && (first == "expire" || first == "delete")
+	case "stash":
+		return len(words) >= 3 && (words[2] == "drop" || words[2] == "pop" || words[2] == "clear")
+	case "worktree":
+		return len(words) >= 3 && (words[2] == "remove" || words[2] == "prune")
 	case "checkout", "restore":
 		return containsWord(words[2:], ".") || containsWord(words[2:], "--")
 	default:
@@ -1024,6 +1107,76 @@ func gitReflogFirstPositional(args []string) (string, bool) {
 		return arg, true
 	}
 	return "", false
+}
+
+func argsAreAllowedFlagsOnly(args []string, allowedFlags map[string]bool, flagsWithArgs map[string]bool) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return i+1 == len(args)
+		}
+		if !strings.HasPrefix(arg, "-") {
+			return false
+		}
+		if strings.HasPrefix(arg, "--") && strings.Contains(arg, "=") {
+			name := strings.SplitN(arg, "=", 2)[0]
+			if !flagsWithArgs[name] {
+				return false
+			}
+			continue
+		}
+		if flagsWithArgs[arg] && i+1 < len(args) {
+			i++
+			continue
+		}
+		if !allowedFlags[arg] {
+			return false
+		}
+	}
+	return true
+}
+
+func argsHaveAtMostOnePositional(args []string, allowedFlags map[string]bool, flagsWithArgs map[string]bool) bool {
+	positionals := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positionals += len(args) - i - 1
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if strings.Contains(arg, "=") {
+				name := strings.SplitN(arg, "=", 2)[0]
+				if !flagsWithArgs[name] {
+					return false
+				}
+				continue
+			}
+			if flagsWithArgs[arg] && i+1 < len(args) {
+				i++
+				continue
+			}
+			if !allowedFlags[arg] {
+				return false
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if flagsWithArgs[arg] && i+1 < len(args) {
+				i++
+				continue
+			}
+			if !allowedFlags[arg] {
+				return false
+			}
+			continue
+		}
+		positionals++
+		if positionals > 1 {
+			return false
+		}
+	}
+	return true
 }
 
 func hasRecursiveFlag(words []string) bool {
