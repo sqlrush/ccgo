@@ -86,6 +86,24 @@ Use ${CLAUDE_SKILL_DIR} when preparing commits.
 	}
 }
 
+func TestLoadSkillDirFiltersNumericArgumentNames(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "argument-filter")
+	writeSkillFile(t, root, `---
+description: test
+arguments: 0, target, 12, mode
+---
+Use $target and $mode.
+`)
+
+	skill, err := LoadSkillDir(root, contracts.CommandSourceSkills)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameStringSlice(skill.Command.ArgumentNames, []string{"target", "mode"}) {
+		t.Fatalf("argument names = %#v", skill.Command.ArgumentNames)
+	}
+}
+
 func TestLoadSkillDirDescriptionFallback(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "fallback")
 	writeSkillFile(t, root, `---

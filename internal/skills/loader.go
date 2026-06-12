@@ -54,7 +54,7 @@ func LoadSkillDir(root string, source contracts.CommandSource) (Skill, error) {
 		DisplayName:             displayName,
 		Description:             description,
 		ArgumentHint:            strings.TrimSpace(frontmatter["argument-hint"]),
-		ArgumentNames:           parseFrontmatterList(frontmatter["arguments"]),
+		ArgumentNames:           parseArgumentNames(frontmatter["arguments"]),
 		Source:                  source,
 		LoadedFrom:              string(source),
 		SkillRoot:               root,
@@ -154,6 +154,30 @@ func parseFrontmatterList(raw string) []string {
 		out = append(out, part)
 	}
 	return out
+}
+
+func parseArgumentNames(raw string) []string {
+	parts := parseFrontmatterList(raw)
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" || allDigits(part) {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func allDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func splitTopLevelComma(raw string) []string {

@@ -10,14 +10,19 @@ import (
 const loadedFromCommandsDeprecated = "commands_DEPRECATED"
 
 type Sources struct {
-	BundledSkills       []contracts.Command
-	BuiltinPluginSkills []contracts.Command
-	ProjectSkills       []contracts.Command
-	WorkflowCommands    []contracts.Command
-	PluginCommands      []contracts.Command
-	PluginSkills        []contracts.Command
-	DynamicSkills       []contracts.Command
-	Builtins            []contracts.Command
+	BundledSkillPrompts       []PromptTemplate
+	BundledSkills             []contracts.Command
+	BuiltinPluginSkillPrompts []PromptTemplate
+	BuiltinPluginSkills       []contracts.Command
+	ProjectSkillPrompts       []PromptTemplate
+	ProjectSkills             []contracts.Command
+	WorkflowCommands          []contracts.Command
+	PluginCommands            []contracts.Command
+	PluginSkillPrompts        []PromptTemplate
+	PluginSkills              []contracts.Command
+	DynamicSkillPrompts       []PromptTemplate
+	DynamicSkills             []contracts.Command
+	Builtins                  []contracts.Command
 }
 
 type Options struct {
@@ -28,13 +33,14 @@ type Options struct {
 }
 
 type Registry struct {
-	commands []contracts.Command
+	commands        []contracts.Command
+	promptTemplates map[string]PromptTemplate
 }
 
 func Load(opts Options) Registry {
 	sources := opts.Sources
-	if !opts.DisableProjectSkills && opts.CWD != "" && len(sources.ProjectSkills) == 0 {
-		sources.ProjectSkills = skills.ProjectSkillCommands(opts.CWD)
+	if !opts.DisableProjectSkills && opts.CWD != "" && len(sources.ProjectSkills) == 0 && len(sources.ProjectSkillPrompts) == 0 {
+		sources.ProjectSkillPrompts = loadProjectSkillPrompts(opts.CWD)
 	}
 	if !opts.DisableBuiltins && sources.Builtins == nil {
 		sources.Builtins = BuiltinCommands()
@@ -43,15 +49,28 @@ func Load(opts Options) Registry {
 }
 
 func FromSources(sources Sources) Registry {
+	promptTemplates := map[string]PromptTemplate{}
 	var base []contracts.Command
+	base = appendPromptCommands(base, promptTemplates, sources.BundledSkillPrompts)
 	base = append(base, cloneCommands(sources.BundledSkills)...)
+	base = appendPromptCommands(base, promptTemplates, sources.BuiltinPluginSkillPrompts)
 	base = append(base, cloneCommands(sources.BuiltinPluginSkills)...)
+	base = appendPromptCommands(base, promptTemplates, sources.ProjectSkillPrompts)
 	base = append(base, cloneCommands(sources.ProjectSkills)...)
 	base = append(base, cloneCommands(sources.WorkflowCommands)...)
 	base = append(base, cloneCommands(sources.PluginCommands)...)
+	base = appendPromptCommands(base, promptTemplates, sources.PluginSkillPrompts)
 	base = append(base, cloneCommands(sources.PluginSkills)...)
 
 	seen := commandNameSet(base)
+	for _, prompt := range sources.DynamicSkillPrompts {
+		if commandKnown(seen, prompt.Command) {
+			continue
+		}
+		markCommand(seen, prompt.Command)
+		base = append(base, cloneCommand(prompt.Command))
+		registerPromptTemplate(promptTemplates, prompt)
+	}
 	for _, cmd := range sources.DynamicSkills {
 		if commandKnown(seen, cmd) {
 			continue
@@ -61,7 +80,7 @@ func FromSources(sources Sources) Registry {
 	}
 
 	base = append(base, cloneCommands(sources.Builtins)...)
-	return Registry{commands: base}
+	return Registry{commands: base, promptTemplates: promptTemplates}
 }
 
 func (r Registry) All() []contracts.Command {
@@ -94,6 +113,19 @@ func (r Registry) SkillToolCommands() []contracts.Command {
 
 func (r Registry) SlashCommandToolSkills() []contracts.Command {
 	return SlashCommandToolSkills(r.commands)
+}
+
+func (r Registry) PromptTemplate(name string) (PromptTemplate, bool) {
+	template, ok := r.promptTemplates[strings.TrimSpace(name)]
+	if !ok {
+		if command, found := r.Find(name); found {
+			template, ok = r.promptTemplates[command.Name]
+		}
+	}
+	if !ok {
+		return PromptTemplate{}, false
+	}
+	return clonePromptTemplate(template), true
 }
 
 func FindCommand(name string, commands []contracts.Command) (contracts.Command, bool) {
@@ -192,6 +224,19 @@ func BuiltinCommands() []contracts.Command {
 	})
 }
 
+func loadProjectSkillPrompts(cwd string) []PromptTemplate {
+	skillDirs := skills.ProjectSkillDirs(cwd)
+	loaded := skills.LoadSkillDirs(skillDirs, contracts.CommandSourceSkills)
+	out := make([]PromptTemplate, 0, len(loaded))
+	for _, skill := range loaded {
+		out = append(out, PromptTemplate{
+			Command: skill.Command,
+			Content: skill.Content,
+		})
+	}
+	return out
+}
+
 func isAlwaysSkillLoadedFrom(loadedFrom string) bool {
 	switch loadedFrom {
 	case "bundled", "skills", loadedFromCommandsDeprecated:
@@ -207,6 +252,27 @@ func commandNameSet(commands []contracts.Command) map[string]struct{} {
 		markCommand(seen, cmd)
 	}
 	return seen
+}
+
+func appendPromptCommands(base []contracts.Command, templates map[string]PromptTemplate, prompts []PromptTemplate) []contracts.Command {
+	for _, prompt := range prompts {
+		base = append(base, cloneCommand(prompt.Command))
+		registerPromptTemplate(templates, prompt)
+	}
+	return base
+}
+
+func registerPromptTemplate(templates map[string]PromptTemplate, prompt PromptTemplate) {
+	if prompt.Command.Name == "" {
+		return
+	}
+	prompt = clonePromptTemplate(prompt)
+	for _, key := range commandKeys(prompt.Command) {
+		if key == "" {
+			continue
+		}
+		templates[key] = prompt
+	}
 }
 
 func commandKnown(seen map[string]struct{}, cmd contracts.Command) bool {
@@ -245,6 +311,13 @@ func cloneCommands(commands []contracts.Command) []contracts.Command {
 		out[i] = cloneCommand(cmd)
 	}
 	return out
+}
+
+func clonePromptTemplate(prompt PromptTemplate) PromptTemplate {
+	return PromptTemplate{
+		Command: cloneCommand(prompt.Command),
+		Content: prompt.Content,
+	}
 }
 
 func cloneCommand(cmd contracts.Command) contracts.Command {
