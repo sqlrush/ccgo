@@ -805,21 +805,117 @@ func powerShellWords(command string) []string {
 	return words
 }
 
+type powerShellReadOnlyConfig struct {
+	allowedFlags                 map[string]bool
+	pathFlags                    map[string]bool
+	valueFlags                   map[string]bool
+	validatePositionalsAsPaths   bool
+	pathPositionalsAfterLiterals int
+}
+
+var powerShellCommonSwitchFlags = stringSet("verbose", "debug")
+
+var powerShellCommonValueFlags = stringSet(
+	"erroraction",
+	"warningaction",
+	"informationaction",
+	"progressaction",
+	"errorvariable",
+	"warningvariable",
+	"informationvariable",
+	"outbuffer",
+)
+
+var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
+	"get-childitem": {
+		allowedFlags:               stringSet("path", "literalpath", "filter", "include", "exclude", "recurse", "depth", "name", "force", "attributes", "directory", "file", "hidden", "readonly", "system"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("filter", "include", "exclude", "depth", "attributes"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-content": {
+		allowedFlags:               stringSet("path", "literalpath", "totalcount", "head", "tail", "raw", "encoding", "delimiter", "readcount"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("totalcount", "head", "tail", "encoding", "delimiter", "readcount"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-item": {
+		allowedFlags:               stringSet("path", "literalpath", "force", "stream"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("stream"),
+		validatePositionalsAsPaths: true,
+	},
+	"test-path": {
+		allowedFlags:               stringSet("path", "literalpath", "pathtype", "filter", "include", "exclude", "isvalid", "newerthan", "olderthan"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("pathtype", "filter", "include", "exclude", "newerthan", "olderthan"),
+		validatePositionalsAsPaths: true,
+	},
+	"resolve-path": {
+		allowedFlags:               stringSet("path", "literalpath", "relative"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-filehash": {
+		allowedFlags:               stringSet("path", "literalpath", "algorithm", "inputstream"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("algorithm", "inputstream"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-acl": {
+		allowedFlags:               stringSet("path", "literalpath", "audit", "filter", "include", "exclude"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("filter", "include", "exclude"),
+		validatePositionalsAsPaths: true,
+	},
+	"format-hex": {
+		allowedFlags:               stringSet("path", "literalpath", "inputobject", "encoding", "count", "offset"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("inputobject", "encoding", "count", "offset"),
+		validatePositionalsAsPaths: true,
+	},
+	"select-string": {
+		allowedFlags:                 stringSet("path", "literalpath", "pattern", "inputobject", "simplematch", "casesensitive", "quiet", "list", "notmatch", "allmatches", "encoding", "context", "raw", "noemphasis"),
+		pathFlags:                    stringSet("path", "literalpath"),
+		valueFlags:                   stringSet("pattern", "inputobject", "encoding", "context"),
+		validatePositionalsAsPaths:   true,
+		pathPositionalsAfterLiterals: 1,
+	},
+	"get-process": {
+		allowedFlags: stringSet("name", "id", "module", "fileversioninfo", "includeusername"),
+		valueFlags:   stringSet("name", "id"),
+	},
+	"get-service": {
+		allowedFlags: stringSet("name", "displayname", "dependentservices", "requiredservices", "include", "exclude"),
+		valueFlags:   stringSet("name", "displayname", "include", "exclude"),
+	},
+	"get-location": {
+		allowedFlags: stringSet("psprovider", "psdrive", "stack", "stackname"),
+		valueFlags:   stringSet("psprovider", "psdrive", "stackname"),
+	},
+	"write-output": {
+		allowedFlags: stringSet("inputobject", "noenumerate"),
+		valueFlags:   stringSet("inputobject"),
+	},
+	"write-host": {
+		allowedFlags: stringSet("object", "nonewline", "separator", "foregroundcolor", "backgroundcolor"),
+		valueFlags:   stringSet("object", "separator", "foregroundcolor", "backgroundcolor"),
+	},
+}
+
 func readOnlyWords(words []string) bool {
 	command := canonicalCommand(words[0])
 	switch command {
 	case "git":
 		return bashtools.IsReadOnlyCommand(powerShellGitCommand(words))
-	case "get-content", "get-item", "test-path", "resolve-path", "get-childitem", "get-filehash", "get-acl", "format-hex", "select-string":
-		return readOnlyFileWords(words[1:])
-	case "get-process", "get-service", "get-location", "write-output", "write-host":
-		return readOnlyNonFileWords(words[1:])
 	default:
-		return false
+		config, ok := powerShellReadOnlyCmdlets[command]
+		return ok && readOnlyPowerShellArgs(words[1:], config)
 	}
 }
 
-func readOnlyFileWords(words []string) bool {
+func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) bool {
+	positionals := 0
 	for i := 0; i < len(words); i++ {
 		word := words[i]
 		if word == "--%" {
@@ -830,7 +926,16 @@ func readOnlyFileWords(words []string) bool {
 			if unsafePowerShellOption(option) {
 				return false
 			}
-			if powerShellPathOption(option) {
+			takesValue := config.pathFlags[option] || config.valueFlags[option] || powerShellCommonValueFlags[option]
+			switch {
+			case config.allowedFlags[option] || powerShellCommonSwitchFlags[option] || powerShellCommonValueFlags[option]:
+			default:
+				return false
+			}
+			if hasValue && !takesValue {
+				return false
+			}
+			if takesValue {
 				if !hasValue {
 					i++
 					if i >= len(words) {
@@ -838,30 +943,41 @@ func readOnlyFileWords(words []string) bool {
 					}
 					value = words[i]
 				}
-				if !safeRelativePowerShellPath(value) {
+				if config.pathFlags[option] {
+					if !safeRelativePowerShellPath(value) {
+						return false
+					}
+					continue
+				}
+				if !safePowerShellParameterValue(value) {
 					return false
 				}
 			}
 			continue
 		}
-		if !safeRelativePowerShellPath(word) {
+		if config.validatePositionalsAsPaths && positionals >= config.pathPositionalsAfterLiterals {
+			if !safeRelativePowerShellPath(word) {
+				return false
+			}
+		} else if !safePowerShellParameterValue(word) {
 			return false
 		}
+		positionals++
 	}
 	return true
 }
 
-func readOnlyNonFileWords(words []string) bool {
-	for _, word := range words {
-		if word == "--%" {
-			return false
-		}
-		option, _, _ := splitPowerShellOption(word)
-		if unsafePowerShellOption(option) {
-			return false
-		}
+func safePowerShellParameterValue(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return value != "" && value != "--%" && !strings.ContainsAny(value, "`\x00")
+}
+
+func stringSet(values ...string) map[string]bool {
+	result := make(map[string]bool, len(values))
+	for _, value := range values {
+		result[strings.ToLower(value)] = true
 	}
-	return true
+	return result
 }
 
 func destructiveWords(words []string) bool {
@@ -901,15 +1017,6 @@ func splitPowerShellOption(word string) (string, string, bool) {
 func unsafePowerShellOption(option string) bool {
 	switch strings.ToLower(strings.TrimSpace(option)) {
 	case "outfile", "out-file", "outvariable", "ov", "pipelinevariable", "pv":
-		return true
-	default:
-		return false
-	}
-}
-
-func powerShellPathOption(option string) bool {
-	switch strings.ToLower(strings.TrimSpace(option)) {
-	case "path", "literalpath", "pspath", "filepath":
 		return true
 	default:
 		return false
