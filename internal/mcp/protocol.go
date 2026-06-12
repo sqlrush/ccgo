@@ -331,6 +331,35 @@ func (c *ProtocolClient) ListResources(ctx context.Context, serverName string) (
 	return nil, fmt.Errorf("mcp resources/list pagination exceeded %d pages", maxListPaginationPages)
 }
 
+func (c *ProtocolClient) ListResourceTemplates(ctx context.Context, serverName string) ([]RemoteResourceTemplate, error) {
+	var templates []RemoteResourceTemplate
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < maxListPaginationPages; page++ {
+		raw, err := c.request(ctx, "resources/templates/list", listPaginationParams(cursor))
+		if err != nil {
+			return nil, err
+		}
+		var response rpcResourceTemplatesListResponse
+		if err := json.Unmarshal(raw, &response); err != nil {
+			return nil, err
+		}
+		for _, item := range response.resourceTemplates() {
+			templates = append(templates, item.remoteResourceTemplate())
+		}
+		nextCursor := listResponseCursor(response.NextCursor, response.NextCursorSnake, response.Cursor)
+		if nextCursor == "" {
+			return templates, nil
+		}
+		if seen[nextCursor] {
+			return nil, fmt.Errorf("mcp resources/templates/list pagination repeated cursor %q", nextCursor)
+		}
+		seen[nextCursor] = true
+		cursor = nextCursor
+	}
+	return nil, fmt.Errorf("mcp resources/templates/list pagination exceeded %d pages", maxListPaginationPages)
+}
+
 func (c *ProtocolClient) ReadResource(ctx context.Context, serverName string, uri string) ([]ResourceContent, error) {
 	raw, err := c.request(ctx, "resources/read", map[string]any{"uri": uri})
 	if err != nil {
@@ -737,6 +766,54 @@ func (r rpcResource) remoteResource() RemoteResource {
 	}
 	return RemoteResource{
 		URI:         r.URI,
+		Name:        r.Name,
+		Description: r.Description,
+		MimeType:    mimeType,
+	}
+}
+
+type rpcResourceTemplatesListResponse struct {
+	ResourceTemplates      []rpcResourceTemplate `json:"resourceTemplates"`
+	ResourceTemplatesSnake []rpcResourceTemplate `json:"resource_templates"`
+	Templates              []rpcResourceTemplate `json:"templates"`
+	NextCursor             string                `json:"nextCursor"`
+	NextCursorSnake        string                `json:"next_cursor"`
+	Cursor                 string                `json:"cursor"`
+}
+
+func (r rpcResourceTemplatesListResponse) resourceTemplates() []rpcResourceTemplate {
+	switch {
+	case len(r.ResourceTemplates) > 0:
+		return r.ResourceTemplates
+	case len(r.ResourceTemplatesSnake) > 0:
+		return r.ResourceTemplatesSnake
+	case len(r.Templates) > 0:
+		return r.Templates
+	default:
+		return nil
+	}
+}
+
+type rpcResourceTemplate struct {
+	URITemplate    string `json:"uriTemplate"`
+	URITemplateAlt string `json:"uri_template"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	MimeType       string `json:"mimeType"`
+	MimeTypeAlt    string `json:"mime_type"`
+}
+
+func (r rpcResourceTemplate) remoteResourceTemplate() RemoteResourceTemplate {
+	uriTemplate := r.URITemplate
+	if uriTemplate == "" {
+		uriTemplate = r.URITemplateAlt
+	}
+	mimeType := r.MimeType
+	if mimeType == "" {
+		mimeType = r.MimeTypeAlt
+	}
+	return RemoteResourceTemplate{
+		URITemplate: uriTemplate,
 		Name:        r.Name,
 		Description: r.Description,
 		MimeType:    mimeType,

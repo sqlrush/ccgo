@@ -34,6 +34,10 @@ func (c *lifecycleMCPClient) ListResources(context.Context, string) ([]RemoteRes
 	return nil, nil
 }
 
+func (c *lifecycleMCPClient) ListResourceTemplates(context.Context, string) ([]RemoteResourceTemplate, error) {
+	return nil, nil
+}
+
 func (c *lifecycleMCPClient) ReadResource(context.Context, string, string) ([]ResourceContent, error) {
 	return nil, nil
 }
@@ -65,7 +69,7 @@ func TestBuildServerToolSetBuildsRemoteAndHelperTools(t *testing.T) {
 	if toolset.ServerName != "github" || toolset.Client != client {
 		t.Fatalf("toolset = %#v", toolset)
 	}
-	if len(toolset.Tools) != 5 {
+	if len(toolset.Tools) != 6 {
 		t.Fatalf("tools = %#v", toolset.Tools)
 	}
 	registry, err := tool.NewRegistry(toolset.Tools...)
@@ -75,6 +79,7 @@ func TestBuildServerToolSetBuildsRemoteAndHelperTools(t *testing.T) {
 	for _, name := range []string{
 		"mcp__github__search",
 		"mcp__github__list_resources",
+		"mcp__github__list_resource_templates",
 		"mcp__github__read_resource",
 		"mcp__github__list_prompts",
 		"mcp__github__get_prompt",

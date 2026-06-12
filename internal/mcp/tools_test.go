@@ -12,15 +12,16 @@ import (
 )
 
 type fakeMCPClient struct {
-	tools        []RemoteTool
-	resources    []RemoteResource
-	contents     []ResourceContent
-	prompts      []RemotePrompt
-	promptResult PromptResult
-	calls        []fakeMCPCall
-	callResult   any
-	listErr      error
-	callErr      error
+	tools             []RemoteTool
+	resources         []RemoteResource
+	resourceTemplates []RemoteResourceTemplate
+	contents          []ResourceContent
+	prompts           []RemotePrompt
+	promptResult      PromptResult
+	calls             []fakeMCPCall
+	callResult        any
+	listErr           error
+	callErr           error
 }
 
 type fakeMCPCall struct {
@@ -46,6 +47,10 @@ func (c *fakeMCPClient) CallTool(_ context.Context, serverName string, toolName 
 
 func (c *fakeMCPClient) ListResources(_ context.Context, serverName string) ([]RemoteResource, error) {
 	return c.resources, nil
+}
+
+func (c *fakeMCPClient) ListResourceTemplates(_ context.Context, serverName string) ([]RemoteResourceTemplate, error) {
+	return c.resourceTemplates, nil
 }
 
 func (c *fakeMCPClient) ReadResource(_ context.Context, serverName string, uri string) ([]ResourceContent, error) {
@@ -197,9 +202,15 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 			MimeType: "text/plain",
 			Text:     "hello",
 		}},
+		resourceTemplates: []RemoteResourceTemplate{{
+			URITemplate: "file:///{path}",
+			Name:        "file by path",
+			Description: "File path template",
+			MimeType:    "text/plain",
+		}},
 	}
 	tools := BuildResourceTools(ToolBuildOptions{ServerName: "files", Client: client})
-	if len(tools) != 2 {
+	if len(tools) != 3 {
 		t.Fatalf("tools = %#v", tools)
 	}
 	registry, err := tool.NewRegistry(tools...)
@@ -221,6 +232,21 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 	}
 	if !strings.Contains(listResult.Content.(string), "file:///tmp/a.txt") {
 		t.Fatalf("list content = %#v", listResult.Content)
+	}
+
+	templatesResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_templates",
+		Name:  "mcp__files__list_resource_templates",
+		Input: json.RawMessage(`{}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if templatesResult.ToolUseID != "toolu_templates" {
+		t.Fatalf("templates result = %#v", templatesResult)
+	}
+	if !strings.Contains(templatesResult.Content.(string), "file:///{path}") {
+		t.Fatalf("templates content = %#v", templatesResult.Content)
 	}
 
 	readResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{

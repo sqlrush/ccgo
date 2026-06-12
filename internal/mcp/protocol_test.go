@@ -230,6 +230,10 @@ func TestProtocolClientPaginatesListMethods(t *testing.T) {
 			json.RawMessage(`{"resources":[{"uri":"file:///first"}],"next_cursor":"resources-page-2"}`),
 			json.RawMessage(`{"resources":[{"uri":"file:///second"}]}`),
 		},
+		"resources/templates/list": {
+			json.RawMessage(`{"resourceTemplates":[{"uriTemplate":"file:///{first}"}],"nextCursor":"templates-page-2"}`),
+			json.RawMessage(`{"resource_templates":[{"uri_template":"file:///{second}"}]}`),
+		},
 		"prompts/list": {
 			json.RawMessage(`{"prompts":[{"name":"first"}],"cursor":"prompts-page-2"}`),
 			json.RawMessage(`{"prompts":[{"name":"second"}]}`),
@@ -251,6 +255,13 @@ func TestProtocolClientPaginatesListMethods(t *testing.T) {
 	if len(resources) != 2 || resources[0].URI != "file:///first" || resources[1].URI != "file:///second" {
 		t.Fatalf("resources = %#v", resources)
 	}
+	templates, err := client.ListResourceTemplates(context.Background(), "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != 2 || templates[0].URITemplate != "file:///{first}" || templates[1].URITemplate != "file:///{second}" {
+		t.Fatalf("templates = %#v", templates)
+	}
 	prompts, err := client.ListPrompts(context.Background(), "server")
 	if err != nil {
 		t.Fatal(err)
@@ -259,13 +270,14 @@ func TestProtocolClientPaginatesListMethods(t *testing.T) {
 		t.Fatalf("prompts = %#v", prompts)
 	}
 
-	if len(transport.requests) != 6 {
+	if len(transport.requests) != 8 {
 		t.Fatalf("requests = %#v", transport.requests)
 	}
 	wantCursors := map[int]string{
 		1: `"cursor":"tools-page-2"`,
 		3: `"cursor":"resources-page-2"`,
-		5: `"cursor":"prompts-page-2"`,
+		5: `"cursor":"templates-page-2"`,
+		7: `"cursor":"prompts-page-2"`,
 	}
 	for index, want := range wantCursors {
 		params := mustJSON(t, transport.requests[index].Params)
@@ -583,10 +595,11 @@ func TestRPCResponseAcceptsNumericIDs(t *testing.T) {
 
 func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
-		"resources/list": json.RawMessage(`{"resources":[{"uri":"file:///a.txt","name":"a.txt","description":"A file","mimeType":"text/plain"}]}`),
-		"resources/read": json.RawMessage(`{"contents":[{"uri":"file:///a.txt","mime_type":"text/plain","text":"hello"}]}`),
-		"prompts/list":   json.RawMessage(`{"prompts":[{"name":"deploy","description":"Deploy","arguments":[{"name":"env","description":"Target","required":true}]}]}`),
-		"prompts/get":    json.RawMessage(`{"description":"Deploy","messages":[{"role":"user","content":{"type":"text","text":"deploy prod"}}]}`),
+		"resources/list":           json.RawMessage(`{"resources":[{"uri":"file:///a.txt","name":"a.txt","description":"A file","mimeType":"text/plain"}]}`),
+		"resources/templates/list": json.RawMessage(`{"resource_templates":[{"uri_template":"file:///{path}","name":"file path","description":"A file template","mime_type":"text/plain"}]}`),
+		"resources/read":           json.RawMessage(`{"contents":[{"uri":"file:///a.txt","mime_type":"text/plain","text":"hello"}]}`),
+		"prompts/list":             json.RawMessage(`{"prompts":[{"name":"deploy","description":"Deploy","arguments":[{"name":"env","description":"Target","required":true}]}]}`),
+		"prompts/get":              json.RawMessage(`{"description":"Deploy","messages":[{"role":"user","content":{"type":"text","text":"deploy prod"}}]}`),
 	}}
 	client := NewProtocolClient(transport)
 
@@ -596,6 +609,13 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	}
 	if len(resources) != 1 || resources[0].URI != "file:///a.txt" || resources[0].MimeType != "text/plain" {
 		t.Fatalf("resources = %#v", resources)
+	}
+	templates, err := client.ListResourceTemplates(context.Background(), "files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != 1 || templates[0].URITemplate != "file:///{path}" || templates[0].MimeType != "text/plain" {
+		t.Fatalf("templates = %#v", templates)
 	}
 	contents, err := client.ReadResource(context.Background(), "files", "file:///a.txt")
 	if err != nil {
@@ -621,11 +641,11 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 		t.Fatalf("prompt = %#v", prompt)
 	}
 
-	if len(transport.requests) != 4 {
+	if len(transport.requests) != 5 {
 		t.Fatalf("requests = %#v", transport.requests)
 	}
-	readParams := mustJSON(t, transport.requests[1].Params)
-	getParams := mustJSON(t, transport.requests[3].Params)
+	readParams := mustJSON(t, transport.requests[2].Params)
+	getParams := mustJSON(t, transport.requests[4].Params)
 	if !strings.Contains(readParams, `"uri":"file:///a.txt"`) || !strings.Contains(getParams, `"env":"prod"`) {
 		t.Fatalf("params = %s / %s", readParams, getParams)
 	}

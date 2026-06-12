@@ -90,6 +90,10 @@ func (f *fakeRunnerMCPClient) ListResources(_ context.Context, serverName string
 	return nil, nil
 }
 
+func (f *fakeRunnerMCPClient) ListResourceTemplates(_ context.Context, serverName string) ([]mcp.RemoteResourceTemplate, error) {
+	return nil, nil
+}
+
 func (f *fakeRunnerMCPClient) ReadResource(_ context.Context, serverName string, uri string) ([]mcp.ResourceContent, error) {
 	return nil, nil
 }

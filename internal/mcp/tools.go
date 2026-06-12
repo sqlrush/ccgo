@@ -25,6 +25,13 @@ type RemoteResource struct {
 	MimeType    string
 }
 
+type RemoteResourceTemplate struct {
+	URITemplate string
+	Name        string
+	Description string
+	MimeType    string
+}
+
 type ResourceContent struct {
 	URI      string
 	MimeType string
@@ -58,6 +65,7 @@ type Client interface {
 	ListTools(ctx context.Context, serverName string) ([]RemoteTool, error)
 	CallTool(ctx context.Context, serverName string, toolName string, input json.RawMessage) (any, error)
 	ListResources(ctx context.Context, serverName string) ([]RemoteResource, error)
+	ListResourceTemplates(ctx context.Context, serverName string) ([]RemoteResourceTemplate, error)
 	ReadResource(ctx context.Context, serverName string, uri string) ([]ResourceContent, error)
 	ListPrompts(ctx context.Context, serverName string) ([]RemotePrompt, error)
 	GetPrompt(ctx context.Context, serverName string, promptName string, arguments map[string]string) (PromptResult, error)
@@ -91,6 +99,7 @@ func BuildTools(ctx context.Context, options ToolBuildOptions) ([]tool.Tool, err
 func BuildResourceTools(options ToolBuildOptions) []tool.Tool {
 	return []tool.Tool{
 		buildListResourcesTool(options),
+		buildListResourceTemplatesTool(options),
 		buildReadResourceTool(options),
 	}
 }
@@ -170,6 +179,38 @@ func buildListResourcesTool(options ToolBuildOptions) tool.Tool {
 	}
 }
 
+func buildListResourceTemplatesTool(options ToolBuildOptions) tool.Tool {
+	name := BuildToolName(options.ServerName, "list_resource_templates")
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            name,
+			Description:     "List MCP resource templates for " + options.ServerName,
+			InputSchema:     contracts.JSONSchema{"type": "object"},
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			MCP: &contracts.MCPToolRef{
+				ServerName: options.ServerName,
+				ToolName:   "list_resource_templates",
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+			if options.Client == nil {
+				return contracts.ToolResult{}, fmt.Errorf("mcp client is nil")
+			}
+			templates, err := options.Client.ListResourceTemplates(ctx.Context, options.ServerName)
+			if err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return ProcessToolResult(map[string]any{"structuredContent": resourceTemplatesToStructuredContent(templates)}, ResultOptions{
+				ServerName:     options.ServerName,
+				ToolName:       "list_resource_templates",
+				MaxChars:       options.MaxResultChars,
+				ResultStoreDir: options.ResultStoreDir,
+			})
+		},
+	}
+}
+
 func buildReadResourceTool(options ToolBuildOptions) tool.Tool {
 	name := BuildToolName(options.ServerName, "read_resource")
 	return tool.FuncTool{
@@ -225,6 +266,19 @@ func resourcesToStructuredContent(resources []RemoteResource) []map[string]any {
 			"name":        resource.Name,
 			"description": resource.Description,
 			"mimeType":    resource.MimeType,
+		})
+	}
+	return out
+}
+
+func resourceTemplatesToStructuredContent(templates []RemoteResourceTemplate) []map[string]any {
+	out := make([]map[string]any, 0, len(templates))
+	for _, template := range templates {
+		out = append(out, map[string]any{
+			"uriTemplate": template.URITemplate,
+			"name":        template.Name,
+			"description": template.Description,
+			"mimeType":    template.MimeType,
 		})
 	}
 	return out
