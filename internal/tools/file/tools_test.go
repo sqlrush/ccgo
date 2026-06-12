@@ -1251,6 +1251,30 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("structured context matches = %#v", matches)
 	}
 
+	contextPrecedenceResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_context_precedence",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","context":1,"before_context":0,"after_context":0}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contextPrecedenceResult.Content != wantContext {
+		t.Fatalf("context precedence content = %#v", contextPrecedenceResult.Content)
+	}
+
+	shortContextPrecedenceResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_context_precedence",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","-C":1,"-B":0,"-A":0}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortContextPrecedenceResult.Content != wantContext {
+		t.Fatalf("short context precedence content = %#v", shortContextPrecedenceResult.Content)
+	}
+
 	noLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_line_numbers",
 		Name:  "Grep",

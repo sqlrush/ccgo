@@ -1021,16 +1021,14 @@ func grepMaxCount(input grepInput) int {
 }
 
 func grepContextLines(input grepInput) (int, int) {
+	if input.Context != nil {
+		return *input.Context, *input.Context
+	}
+	if input.ShortContext != nil {
+		return *input.ShortContext, *input.ShortContext
+	}
 	before := 0
 	after := 0
-	if input.ShortContext != nil {
-		before = *input.ShortContext
-		after = *input.ShortContext
-	}
-	if input.Context != nil {
-		before = *input.Context
-		after = *input.Context
-	}
 	if input.ShortBeforeContext != nil {
 		before = *input.ShortBeforeContext
 	}
