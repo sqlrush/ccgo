@@ -610,6 +610,11 @@ type rpcTool struct {
 	InputSchemaSnake contracts.JSONSchema `json:"input_schema"`
 	ReadOnly         bool                 `json:"readOnly"`
 	ReadOnlySnake    bool                 `json:"read_only"`
+	Annotations      rpcToolAnnotations   `json:"annotations"`
+}
+
+type rpcToolAnnotations struct {
+	ReadOnlyHint bool `json:"readOnlyHint"`
 }
 
 func (t rpcTool) remoteTool() RemoteTool {
@@ -621,7 +626,7 @@ func (t rpcTool) remoteTool() RemoteTool {
 		Name:        t.Name,
 		Description: t.Description,
 		InputSchema: schema,
-		ReadOnly:    t.ReadOnly || t.ReadOnlySnake,
+		ReadOnly:    t.ReadOnly || t.ReadOnlySnake || t.Annotations.ReadOnlyHint,
 	}
 }
 

@@ -47,7 +47,8 @@ func TestBuiltinServerHandlesInitializeListAndCall(t *testing.T) {
 	if !strings.Contains(string(mustMarshal(t, responses[0].Result)), `"protocolVersion":"2025-06-18"`) {
 		t.Fatalf("initialize = %#v", responses[0])
 	}
-	if !strings.Contains(string(mustMarshal(t, responses[1].Result)), `"name":"Echo"`) {
+	listResult := string(mustMarshal(t, responses[1].Result))
+	if !strings.Contains(listResult, `"name":"Echo"`) || !strings.Contains(listResult, `"readOnlyHint":true`) {
 		t.Fatalf("tools/list = %#v", responses[1])
 	}
 	callResult := string(mustMarshal(t, responses[2].Result))

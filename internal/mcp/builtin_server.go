@@ -309,10 +309,15 @@ func (s *BuiltinServer) listTools() (any, *RPCError) {
 		if inputSchema == nil {
 			inputSchema = contracts.JSONSchema{"type": "object"}
 		}
+		annotations := map[string]any{
+			"readOnlyHint":    definition.ReadOnly,
+			"destructiveHint": definition.Destructive,
+		}
 		tools = append(tools, map[string]any{
 			"name":        definition.Name,
 			"description": definition.Description,
 			"inputSchema": inputSchema,
+			"annotations": annotations,
 			"readOnly":    definition.ReadOnly,
 		})
 	}

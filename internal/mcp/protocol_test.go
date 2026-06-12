@@ -145,7 +145,7 @@ func (t *fakeAuthorizationRecoveryTransport) RefreshAuthorization(context.Contex
 
 func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
-		"tools/list": json.RawMessage(`{"tools":[{"name":"search","description":"Search issues","inputSchema":{"type":"object"},"readOnly":true}]}`),
+		"tools/list": json.RawMessage(`{"tools":[{"name":"search","description":"Search issues","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}]}`),
 		"tools/call": json.RawMessage(`{"content":[{"type":"text","text":"ok"}]}`),
 	}}
 	client := NewProtocolClient(transport)
