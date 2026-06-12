@@ -30,11 +30,35 @@ type ResourceContent struct {
 	Blob     string
 }
 
+type RemotePrompt struct {
+	Name        string
+	Description string
+	Arguments   []PromptArgument
+}
+
+type PromptArgument struct {
+	Name        string
+	Description string
+	Required    bool
+}
+
+type PromptResult struct {
+	Description string
+	Messages    []PromptMessage
+}
+
+type PromptMessage struct {
+	Role    string
+	Content any
+}
+
 type Client interface {
 	ListTools(ctx context.Context, serverName string) ([]RemoteTool, error)
 	CallTool(ctx context.Context, serverName string, toolName string, input json.RawMessage) (any, error)
 	ListResources(ctx context.Context, serverName string) ([]RemoteResource, error)
 	ReadResource(ctx context.Context, serverName string, uri string) ([]ResourceContent, error)
+	ListPrompts(ctx context.Context, serverName string) ([]RemotePrompt, error)
+	GetPrompt(ctx context.Context, serverName string, promptName string, arguments map[string]string) (PromptResult, error)
 }
 
 type ToolBuildOptions struct {
@@ -66,6 +90,13 @@ func BuildResourceTools(options ToolBuildOptions) []tool.Tool {
 	return []tool.Tool{
 		buildListResourcesTool(options),
 		buildReadResourceTool(options),
+	}
+}
+
+func BuildPromptTools(options ToolBuildOptions) []tool.Tool {
+	return []tool.Tool{
+		buildListPromptsTool(options),
+		buildGetPromptTool(options),
 	}
 }
 
@@ -214,4 +245,129 @@ func resourceContentsToMCPContent(contents []ResourceContent) []any {
 		})
 	}
 	return out
+}
+
+func buildListPromptsTool(options ToolBuildOptions) tool.Tool {
+	name := BuildToolName(options.ServerName, "list_prompts")
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            name,
+			Description:     "List MCP prompts for " + options.ServerName,
+			InputSchema:     contracts.JSONSchema{"type": "object"},
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			MCP: &contracts.MCPToolRef{
+				ServerName: options.ServerName,
+				ToolName:   "list_prompts",
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+			if options.Client == nil {
+				return contracts.ToolResult{}, fmt.Errorf("mcp client is nil")
+			}
+			prompts, err := options.Client.ListPrompts(ctx.Context, options.ServerName)
+			if err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return ProcessToolResult(map[string]any{"structuredContent": promptsToStructuredContent(prompts)}, ResultOptions{
+				ServerName:     options.ServerName,
+				ToolName:       "list_prompts",
+				MaxChars:       options.MaxResultChars,
+				ResultStoreDir: options.ResultStoreDir,
+			})
+		},
+	}
+}
+
+func buildGetPromptTool(options ToolBuildOptions) tool.Tool {
+	name := BuildToolName(options.ServerName, "get_prompt")
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        name,
+			Description: "Get an MCP prompt from " + options.ServerName,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []string{"name"},
+				"properties": map[string]any{
+					"name": map[string]any{"type": "string"},
+					"arguments": map[string]any{
+						"type":                 "object",
+						"additionalProperties": map[string]any{"type": "string"},
+					},
+				},
+			},
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			MCP: &contracts.MCPToolRef{
+				ServerName: options.ServerName,
+				ToolName:   "get_prompt",
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+			if options.Client == nil {
+				return contracts.ToolResult{}, fmt.Errorf("mcp client is nil")
+			}
+			var input struct {
+				Name      string            `json:"name"`
+				Arguments map[string]string `json:"arguments"`
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			if input.Name == "" {
+				return contracts.ToolResult{}, fmt.Errorf("name is required")
+			}
+			if input.Arguments == nil {
+				input.Arguments = map[string]string{}
+			}
+			result, err := options.Client.GetPrompt(ctx.Context, options.ServerName, input.Name, input.Arguments)
+			if err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return ProcessToolResult(map[string]any{"structuredContent": promptResultToStructuredContent(result)}, ResultOptions{
+				ServerName:     options.ServerName,
+				ToolName:       "get_prompt",
+				MaxChars:       options.MaxResultChars,
+				ResultStoreDir: options.ResultStoreDir,
+			})
+		},
+	}
+}
+
+func promptsToStructuredContent(prompts []RemotePrompt) []map[string]any {
+	out := make([]map[string]any, 0, len(prompts))
+	for _, prompt := range prompts {
+		out = append(out, map[string]any{
+			"name":        prompt.Name,
+			"description": prompt.Description,
+			"arguments":   promptArgumentsToStructuredContent(prompt.Arguments),
+		})
+	}
+	return out
+}
+
+func promptArgumentsToStructuredContent(arguments []PromptArgument) []map[string]any {
+	out := make([]map[string]any, 0, len(arguments))
+	for _, argument := range arguments {
+		out = append(out, map[string]any{
+			"name":        argument.Name,
+			"description": argument.Description,
+			"required":    argument.Required,
+		})
+	}
+	return out
+}
+
+func promptResultToStructuredContent(result PromptResult) map[string]any {
+	messages := make([]map[string]any, 0, len(result.Messages))
+	for _, message := range result.Messages {
+		messages = append(messages, map[string]any{
+			"role":    message.Role,
+			"content": message.Content,
+		})
+	}
+	return map[string]any{
+		"description": result.Description,
+		"messages":    messages,
+	}
 }

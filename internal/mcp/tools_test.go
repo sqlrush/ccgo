@@ -12,13 +12,15 @@ import (
 )
 
 type fakeMCPClient struct {
-	tools      []RemoteTool
-	resources  []RemoteResource
-	contents   []ResourceContent
-	calls      []fakeMCPCall
-	callResult any
-	listErr    error
-	callErr    error
+	tools        []RemoteTool
+	resources    []RemoteResource
+	contents     []ResourceContent
+	prompts      []RemotePrompt
+	promptResult PromptResult
+	calls        []fakeMCPCall
+	callResult   any
+	listErr      error
+	callErr      error
 }
 
 type fakeMCPCall struct {
@@ -49,6 +51,16 @@ func (c *fakeMCPClient) ListResources(_ context.Context, serverName string) ([]R
 func (c *fakeMCPClient) ReadResource(_ context.Context, serverName string, uri string) ([]ResourceContent, error) {
 	c.calls = append(c.calls, fakeMCPCall{ServerName: serverName, ToolName: "read_resource", Input: json.RawMessage(`{"uri":` + quoteJSON(uri) + `}`)})
 	return c.contents, nil
+}
+
+func (c *fakeMCPClient) ListPrompts(_ context.Context, serverName string) ([]RemotePrompt, error) {
+	return c.prompts, nil
+}
+
+func (c *fakeMCPClient) GetPrompt(_ context.Context, serverName string, promptName string, arguments map[string]string) (PromptResult, error) {
+	input, _ := json.Marshal(map[string]any{"name": promptName, "arguments": arguments})
+	c.calls = append(c.calls, fakeMCPCall{ServerName: serverName, ToolName: "get_prompt", Input: input})
+	return c.promptResult, nil
 }
 
 func TestBuildToolsCreatesMCPToolDefinitions(t *testing.T) {
@@ -197,6 +209,75 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 	}
 	if len(client.calls) != 1 || client.calls[0].ToolName != "read_resource" {
 		t.Fatalf("calls = %#v", client.calls)
+	}
+}
+
+func TestBuildPromptToolsListAndGetPrompt(t *testing.T) {
+	client := &fakeMCPClient{
+		prompts: []RemotePrompt{{
+			Name:        "deploy",
+			Description: "Deploy service",
+			Arguments: []PromptArgument{{
+				Name:        "env",
+				Description: "Target environment",
+				Required:    true,
+			}},
+		}},
+		promptResult: PromptResult{
+			Description: "Deploy service",
+			Messages: []PromptMessage{{
+				Role: "user",
+				Content: []any{map[string]any{
+					"type": "text",
+					"text": "deploy prod",
+				}},
+			}},
+		},
+	}
+	tools := BuildPromptTools(ToolBuildOptions{ServerName: "workflow", Client: client})
+	if len(tools) != 2 {
+		t.Fatalf("tools = %#v", tools)
+	}
+	registry, err := tool.NewRegistry(tools...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := tool.Executor{Registry: registry}
+
+	listResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_prompts",
+		Name:  "mcp__workflow__list_prompts",
+		Input: json.RawMessage(`{}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listResult.ToolUseID != "toolu_prompts" {
+		t.Fatalf("list result = %#v", listResult)
+	}
+	if !strings.Contains(listResult.Content.(string), "deploy") {
+		t.Fatalf("list content = %#v", listResult.Content)
+	}
+
+	getResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_get_prompt",
+		Name:  "mcp__workflow__get_prompt",
+		Input: json.RawMessage(`{"name":"deploy","arguments":{"env":"prod"}}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if getResult.ToolUseID != "toolu_get_prompt" {
+		t.Fatalf("get result = %#v", getResult)
+	}
+	if !strings.Contains(getResult.Content.(string), "deploy prod") {
+		t.Fatalf("get content = %#v", getResult.Content)
+	}
+	if len(client.calls) != 1 || client.calls[0].ToolName != "get_prompt" {
+		t.Fatalf("calls = %#v", client.calls)
+	}
+	if !strings.Contains(string(client.calls[0].Input), `"env":"prod"`) {
+		t.Fatalf("get input = %s", client.calls[0].Input)
 	}
 }
 
