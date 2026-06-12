@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 const DefaultHTTPResponseLimitBytes int64 = 10 * 1024 * 1024
@@ -22,6 +24,8 @@ type HTTPTransport struct {
 	Client                HTTPDoer
 	MaxResponseBytes      int64
 	ProtocolVersionHeader string
+	SessionID             string
+	mu                    sync.Mutex
 }
 
 func NewHTTPTransport(rawURL string, headers map[string]string, client HTTPDoer) *HTTPTransport {
@@ -49,6 +53,12 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 	if t.ProtocolVersionHeader != "" {
 		req.Header.Set("mcp-protocol-version", t.ProtocolVersionHeader)
 	}
+	t.mu.Lock()
+	sessionID := t.SessionID
+	t.mu.Unlock()
+	if sessionID != "" {
+		req.Header.Set("mcp-session-id", sessionID)
+	}
 	for key, value := range t.Headers {
 		if strings.TrimSpace(key) != "" {
 			req.Header.Set(key, value)
@@ -64,6 +74,11 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{}, err
 	}
 	defer resp.Body.Close()
+	if nextSessionID := strings.TrimSpace(resp.Header.Get("mcp-session-id")); nextSessionID != "" {
+		t.mu.Lock()
+		t.SessionID = nextSessionID
+		t.mu.Unlock()
+	}
 
 	limit := t.MaxResponseBytes
 	if limit <= 0 {
@@ -82,9 +97,92 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 	if len(bytes.TrimSpace(body)) == 0 {
 		return RPCResponse{ID: request.ID}, nil
 	}
+	if isEventStream(resp.Header.Get("content-type")) {
+		return rpcResponseFromSSE(bytes.NewReader(body), request.ID)
+	}
 	var rpcResponse RPCResponse
 	if err := json.Unmarshal(body, &rpcResponse); err != nil {
 		return RPCResponse{}, fmt.Errorf("decode mcp http response: %w", err)
 	}
 	return rpcResponse, nil
+}
+
+type SSEEvent struct {
+	Event string
+	Data  string
+	ID    string
+}
+
+func ParseSSEEvents(r io.Reader) ([]SSEEvent, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	var events []SSEEvent
+	var current SSEEvent
+	var dataLines []string
+
+	flush := func() {
+		if current.Event == "" && current.ID == "" && len(dataLines) == 0 {
+			return
+		}
+		current.Data = strings.Join(dataLines, "\n")
+		events = append(events, current)
+		current = SSEEvent{}
+		dataLines = nil
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = strings.TrimSuffix(line, "\r")
+		if line == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		field, value, hasValue := strings.Cut(line, ":")
+		if hasValue && strings.HasPrefix(value, " ") {
+			value = strings.TrimPrefix(value, " ")
+		}
+		switch field {
+		case "event":
+			current.Event = value
+		case "data":
+			dataLines = append(dataLines, value)
+		case "id":
+			current.ID = value
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	flush()
+	return events, nil
+}
+
+func rpcResponseFromSSE(r io.Reader, requestID string) (RPCResponse, error) {
+	events, err := ParseSSEEvents(r)
+	if err != nil {
+		return RPCResponse{}, err
+	}
+	for _, event := range events {
+		if strings.TrimSpace(event.Data) == "" {
+			continue
+		}
+		var response RPCResponse
+		if err := json.Unmarshal([]byte(event.Data), &response); err != nil {
+			if event.Event != "" && event.Event != "message" {
+				continue
+			}
+			return RPCResponse{}, fmt.Errorf("decode mcp http event-stream response: %w", err)
+		}
+		if requestID == "" || response.ID == requestID {
+			return response, nil
+		}
+	}
+	return RPCResponse{}, fmt.Errorf("mcp http event-stream response for id %q not found", requestID)
+}
+
+func isEventStream(contentType string) bool {
+	return strings.Contains(strings.ToLower(contentType), "text/event-stream")
 }
