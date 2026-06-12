@@ -627,8 +627,8 @@ func ResponseForInboundRequest(ctx context.Context, request RPCInboundRequest, h
 }
 
 func DefaultRPCRequestHandler(_ context.Context, request RPCInboundRequest) (any, *RPCError) {
-	if request.Method == "elicitation/create" {
-		return map[string]any{"action": "cancel"}, nil
+	if IsElicitationCreateMethod(request.Method) {
+		return CancelElicitationResponse(), nil
 	}
 	return nil, &RPCError{Code: -32601, Message: "method not found"}
 }

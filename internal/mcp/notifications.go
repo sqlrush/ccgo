@@ -25,7 +25,7 @@ type NotificationEvent struct {
 }
 
 func NormalizeNotification(serverName string, notification RPCNotification) NotificationEvent {
-	params := notificationParamMap(notification.Params)
+	params := rawParamMap(notification.Params)
 	channel, operation, eventType := canonicalNotificationMethod(notification.Method)
 	event := NotificationEvent{
 		ServerName: strings.TrimSpace(serverName),
@@ -113,7 +113,7 @@ func normalizeNotificationMethod(method string) string {
 	return normalized
 }
 
-func notificationParamMap(raw json.RawMessage) map[string]any {
+func rawParamMap(raw json.RawMessage) map[string]any {
 	if len(strings.TrimSpace(string(raw))) == 0 {
 		return nil
 	}

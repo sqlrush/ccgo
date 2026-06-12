@@ -522,6 +522,55 @@ func TestDefaultRPCRequestHandlerCancelsElicitation(t *testing.T) {
 	}
 }
 
+func TestParseElicitationRequestAliases(t *testing.T) {
+	request, ok := ParseElicitationRequest(RPCInboundRequest{
+		ID:     "server-1",
+		Method: "elicitation.create",
+		Params: json.RawMessage(`{
+			"prompt":"Deploy to production?",
+			"requested_schema":{"type":"object","properties":{"confirmed":{"type":"boolean"}}}
+		}`),
+	})
+	if !ok {
+		t.Fatal("request was not parsed as elicitation/create")
+	}
+	if request.ID != "server-1" || request.Message != "Deploy to production?" {
+		t.Fatalf("request = %#v", request)
+	}
+	if request.RequestedSchema["type"] != "object" {
+		t.Fatalf("schema = %#v", request.RequestedSchema)
+	}
+
+	result, rpcErr := DefaultRPCRequestHandler(context.Background(), RPCInboundRequest{
+		ID:     "server-2",
+		Method: "elicitation-create",
+	})
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	if got := result.(map[string]any)["action"]; got != "cancel" {
+		t.Fatalf("alias handler result = %#v", result)
+	}
+}
+
+func TestElicitationResponseNormalizesActions(t *testing.T) {
+	accepted := ElicitationResponse("confirmed", map[string]any{"confirmed": true})
+	if accepted["action"] != "accept" || accepted["content"].(map[string]any)["confirmed"] != true {
+		t.Fatalf("accepted = %#v", accepted)
+	}
+	declined := ElicitationResponse("rejected", map[string]any{"ignored": true})
+	if declined["action"] != "decline" {
+		t.Fatalf("declined = %#v", declined)
+	}
+	if _, ok := declined["content"]; ok {
+		t.Fatalf("decline should not include content: %#v", declined)
+	}
+	cancelled := elicitationResponseFromJSON(json.RawMessage(`{"status":"dismissed","content":{"ignored":true}}`))
+	if cancelled["action"] != "cancel" {
+		t.Fatalf("cancelled = %#v", cancelled)
+	}
+}
+
 func TestRPCResponseAcceptsNumericIDs(t *testing.T) {
 	var response RPCResponse
 	if err := json.Unmarshal([]byte(`{"jsonrpc":"2.0","id":42,"result":{"ok":true}}`), &response); err != nil {
