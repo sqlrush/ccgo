@@ -20,6 +20,42 @@ func TestTransformResultSupportsToolResult(t *testing.T) {
 	}
 }
 
+func TestProcessToolResultPreservesMCPErrorFlag(t *testing.T) {
+	result, err := ProcessToolResult(map[string]any{
+		"content": []any{
+			map[string]any{"type": "text", "text": "failed"},
+		},
+		"isError": true,
+	}, ResultOptions{
+		ToolUseID:  "toolu_error",
+		ServerName: "github",
+		ToolName:   "search",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected error result: %#v", result)
+	}
+}
+
+func TestProcessToolResultPreservesMCPErrorAlias(t *testing.T) {
+	result, err := ProcessToolResult(map[string]any{
+		"structuredContent": map[string]any{"message": "failed"},
+		"is_error":          "true",
+	}, ResultOptions{
+		ToolUseID:  "toolu_error_alias",
+		ServerName: "github",
+		ToolName:   "search",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected error alias result: %#v", result)
+	}
+}
+
 func TestProcessToolResultSupportsStructuredContent(t *testing.T) {
 	raw := map[string]any{
 		"structuredContent": map[string]any{

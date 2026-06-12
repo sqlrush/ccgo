@@ -26,6 +26,7 @@ type TransformedResult struct {
 	Type              ResultType
 	Schema            string
 	StructuredContent map[string]any
+	IsError           bool
 }
 
 type ResultOptions struct {
@@ -44,6 +45,7 @@ func ProcessToolResult(raw any, options ResultOptions) (contracts.ToolResult, er
 	result := contracts.ToolResult{
 		ToolUseID:         options.ToolUseID,
 		Content:           transformed.Content,
+		IsError:           transformed.IsError,
 		StructuredContent: transformed.StructuredContent,
 		Meta: map[string]any{
 			"mcp": map[string]any{
@@ -64,10 +66,12 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 	if !ok {
 		return TransformedResult{}, unexpectedResultError(serverName, toolName)
 	}
+	isError := boolValue(firstNonEmpty(obj["isError"], obj["is_error"]))
 	if value, ok := obj["toolResult"]; ok {
 		return TransformedResult{
 			Content: fmt.Sprint(value),
 			Type:    ResultTypeToolResult,
+			IsError: isError,
 		}, nil
 	}
 	if value, ok := obj["structuredContent"]; ok && value != nil {
@@ -80,6 +84,7 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 			Type:              ResultTypeStructuredContent,
 			Schema:            InferCompactSchema(value, 2),
 			StructuredContent: structuredContentMap(value),
+			IsError:           isError,
 		}, nil
 	}
 	if value, ok := obj["content"].([]any); ok {
@@ -91,6 +96,7 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 			Content: blocks,
 			Type:    ResultTypeContentArray,
 			Schema:  InferCompactSchema(blocks, 2),
+			IsError: isError,
 		}, nil
 	}
 	return TransformedResult{}, unexpectedResultError(serverName, toolName)
@@ -268,6 +274,19 @@ func stringValue(value any) string {
 		return text
 	}
 	return fmt.Sprint(value)
+}
+
+func boolValue(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "1", "yes":
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(values ...any) any {
