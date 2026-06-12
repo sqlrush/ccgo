@@ -72,6 +72,46 @@ func TestWebFetchTruncatesBody(t *testing.T) {
 	}
 }
 
+func TestWebFetchDecodesTextCharsets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/utf16le":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-16le")
+			_, _ = w.Write([]byte{'H', 0, 'e', 0, 'l', 0, 'l', 0, 'o', 0, '!', 0})
+		case "/windows1252":
+			w.Header().Set("Content-Type", "text/plain; charset=windows-1252")
+			_, _ = w.Write([]byte{'P', 'r', 'i', 'c', 'e', ' ', 0x80, '9', ' ', 0x93, 'q', 'u', 'o', 't', 'e', 'd', 0x94})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	utf16Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_utf16",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/utf16le") + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if utf16Result.StructuredContent["body"] != "Hello!" || utf16Result.StructuredContent["charset"] != "utf-16le" {
+		t.Fatalf("utf16 structured content = %#v", utf16Result.StructuredContent)
+	}
+	cp1252Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_cp1252",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/windows1252") + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Price \u20ac9 \u201cquoted\u201d"
+	if cp1252Result.StructuredContent["body"] != want || cp1252Result.StructuredContent["charset"] != "windows-1252" {
+		t.Fatalf("windows-1252 structured content = %#v", cp1252Result.StructuredContent)
+	}
+}
+
 func TestWebFetchRendersHTMLAndPromptExcerpt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"ccgo/internal/contracts"
@@ -158,6 +159,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 			"prompt":         input.Prompt,
 			"status_code":    result.StatusCode,
 			"content_type":   result.ContentType,
+			"charset":        result.Charset,
 			"body":           result.Body,
 			"rendered":       result.Rendered,
 			"rendered_body":  result.RenderedBody,
@@ -177,6 +179,7 @@ type fetchResult struct {
 	StatusCode    int
 	FinalURL      string
 	ContentType   string
+	Charset       string
 	Body          string
 	RenderedBody  string
 	Rendered      bool
@@ -247,13 +250,15 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 	}
 	binary := isBinaryWebContent(contentType, data)
 	body := ""
+	charset := ""
 	if !binary {
-		body = string(data)
+		body, charset = decodeWebFetchText(contentType, data)
 	}
 	return fetchResult{
 		StatusCode:  resp.StatusCode,
 		FinalURL:    resp.Request.URL.String(),
 		ContentType: contentType,
+		Charset:     charset,
 		Body:        body,
 		Bytes:       len(data),
 		Truncated:   truncated,
@@ -806,6 +811,165 @@ func truncateWebFetchRunes(text string, limit int) string {
 		return text
 	}
 	return string(runes[:limit]) + "\n[truncated]"
+}
+
+func decodeWebFetchText(contentType string, data []byte) (string, string) {
+	declared := webFetchContentCharset(contentType)
+	if text, detected, ok := decodeWebFetchTextBOM(data); ok {
+		return text, detected
+	}
+	charset := normalizeWebFetchCharset(declared)
+	switch charset {
+	case "", "utf-8", "us-ascii":
+		return string(data), charset
+	case "utf-16":
+		return decodeWebFetchUTF16(data, false), charset
+	case "utf-16le":
+		return decodeWebFetchUTF16(data, true), charset
+	case "utf-16be":
+		return decodeWebFetchUTF16(data, false), charset
+	case "iso-8859-1", "latin-1":
+		return decodeWebFetchSingleByte(data, nil), charset
+	case "windows-1252":
+		return decodeWebFetchSingleByte(data, webFetchWindows1252Rune), charset
+	default:
+		return string(data), charset
+	}
+}
+
+func decodeWebFetchTextBOM(data []byte) (string, string, bool) {
+	if len(data) >= 3 && data[0] == 0xef && data[1] == 0xbb && data[2] == 0xbf {
+		return string(data[3:]), "utf-8", true
+	}
+	if len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe {
+		return decodeWebFetchUTF16(data[2:], true), "utf-16le", true
+	}
+	if len(data) >= 2 && data[0] == 0xfe && data[1] == 0xff {
+		return decodeWebFetchUTF16(data[2:], false), "utf-16be", true
+	}
+	return "", "", false
+}
+
+func webFetchContentCharset(contentType string) string {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return ""
+	}
+	return params["charset"]
+}
+
+func normalizeWebFetchCharset(charset string) string {
+	charset = strings.Trim(strings.ToLower(strings.TrimSpace(charset)), "\"'")
+	charset = strings.ReplaceAll(charset, "_", "-")
+	switch charset {
+	case "utf8":
+		return "utf-8"
+	case "ascii", "usascii":
+		return "us-ascii"
+	case "utf16":
+		return "utf-16"
+	case "utf16le":
+		return "utf-16le"
+	case "utf16be":
+		return "utf-16be"
+	case "latin1", "latin-1", "iso8859-1":
+		return "iso-8859-1"
+	case "cp1252", "windows1252":
+		return "windows-1252"
+	default:
+		return charset
+	}
+}
+
+func decodeWebFetchUTF16(data []byte, littleEndian bool) string {
+	units := make([]uint16, 0, len(data)/2)
+	for i := 0; i+1 < len(data); i += 2 {
+		if littleEndian {
+			units = append(units, uint16(data[i])|uint16(data[i+1])<<8)
+		} else {
+			units = append(units, uint16(data[i])<<8|uint16(data[i+1]))
+		}
+	}
+	return string(utf16.Decode(units))
+}
+
+type webFetchByteDecoder func(byte) rune
+
+func decodeWebFetchSingleByte(data []byte, decode webFetchByteDecoder) string {
+	var b strings.Builder
+	b.Grow(len(data))
+	for _, value := range data {
+		if decode != nil {
+			b.WriteRune(decode(value))
+			continue
+		}
+		b.WriteRune(rune(value))
+	}
+	return b.String()
+}
+
+func webFetchWindows1252Rune(value byte) rune {
+	if value < 0x80 || value > 0x9f {
+		return rune(value)
+	}
+	switch value {
+	case 0x80:
+		return '\u20ac'
+	case 0x82:
+		return '\u201a'
+	case 0x83:
+		return '\u0192'
+	case 0x84:
+		return '\u201e'
+	case 0x85:
+		return '\u2026'
+	case 0x86:
+		return '\u2020'
+	case 0x87:
+		return '\u2021'
+	case 0x88:
+		return '\u02c6'
+	case 0x89:
+		return '\u2030'
+	case 0x8a:
+		return '\u0160'
+	case 0x8b:
+		return '\u2039'
+	case 0x8c:
+		return '\u0152'
+	case 0x8e:
+		return '\u017d'
+	case 0x91:
+		return '\u2018'
+	case 0x92:
+		return '\u2019'
+	case 0x93:
+		return '\u201c'
+	case 0x94:
+		return '\u201d'
+	case 0x95:
+		return '\u2022'
+	case 0x96:
+		return '\u2013'
+	case 0x97:
+		return '\u2014'
+	case 0x98:
+		return '\u02dc'
+	case 0x99:
+		return '\u2122'
+	case 0x9a:
+		return '\u0161'
+	case 0x9b:
+		return '\u203a'
+	case 0x9c:
+		return '\u0153'
+	case 0x9e:
+		return '\u017e'
+	case 0x9f:
+		return '\u0178'
+	default:
+		return rune(value)
+	}
 }
 
 func decodeWebFetch(raw json.RawMessage) (webFetchInput, error) {
