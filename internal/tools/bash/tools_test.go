@@ -179,6 +179,8 @@ func TestBashCommandClassification(t *testing.T) {
 		"rg TODO internal",
 		"find . -name '*.go' -print",
 		"printf hello",
+		"printf '\\'",
+		"printf '\\' | wc -c",
 	}
 	for _, command := range readOnly {
 		if !IsReadOnlyCommand(command) {

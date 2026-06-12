@@ -1366,7 +1366,7 @@ func hasShellMutationSyntax(command string) bool {
 			escaped = false
 			continue
 		}
-		if ch == '\\' {
+		if ch == '\\' && !inSingle {
 			escaped = true
 			continue
 		}
@@ -1409,7 +1409,7 @@ func shellSyntaxComplete(command string) bool {
 			escaped = false
 			continue
 		}
-		if ch == '\\' {
+		if ch == '\\' && !inSingle {
 			escaped = true
 			continue
 		}
@@ -1438,7 +1438,7 @@ func splitCommandSegments(command string) []string {
 			escaped = false
 			continue
 		}
-		if ch == '\\' {
+		if ch == '\\' && !inSingle {
 			current.WriteByte(ch)
 			escaped = true
 			continue
@@ -1500,7 +1500,7 @@ func shellWords(command string) []string {
 			escaped = false
 			continue
 		}
-		if ch == '\\' {
+		if ch == '\\' && !inSingle {
 			escaped = true
 			continue
 		}

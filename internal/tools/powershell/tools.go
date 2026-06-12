@@ -696,7 +696,7 @@ func hasPowerShellMutationSyntax(command string) bool {
 			escaped = false
 			continue
 		}
-		if ch == '`' {
+		if ch == '`' && !inSingle {
 			escaped = true
 			continue
 		}
@@ -728,7 +728,7 @@ func powerShellSyntaxComplete(command string) bool {
 			escaped = false
 			continue
 		}
-		if ch == '`' {
+		if ch == '`' && !inSingle {
 			escaped = true
 			continue
 		}
@@ -757,7 +757,7 @@ func splitPowerShellSegments(command string) []string {
 			escaped = false
 			continue
 		}
-		if ch == '`' {
+		if ch == '`' && !inSingle {
 			current.WriteByte(ch)
 			escaped = true
 			continue
@@ -809,7 +809,7 @@ func powerShellWords(command string) []string {
 			escaped = false
 			continue
 		}
-		if ch == '`' {
+		if ch == '`' && !inSingle {
 			escaped = true
 			continue
 		}
@@ -1281,7 +1281,7 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 
 func safePowerShellParameterValue(value string, rejectExpressions bool) bool {
 	value = strings.Trim(strings.TrimSpace(value), `"'`)
-	if value == "" || value == "--%" || strings.ContainsAny(value, "`\x00") {
+	if value == "" || value == "--%" || strings.ContainsRune(value, '\x00') {
 		return false
 	}
 	return !rejectExpressions || !strings.ContainsAny(value, "$@{[()")
