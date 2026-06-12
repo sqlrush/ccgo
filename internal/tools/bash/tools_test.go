@@ -357,6 +357,9 @@ func TestBashCommandClassification(t *testing.T) {
 		if !IsDestructiveCommand(command) {
 			t.Fatalf("%q should be destructive", command)
 		}
+		if IsReadOnlyCommand(command) {
+			t.Fatalf("%q should not be read-only when destructive", command)
+		}
 	}
 }
 
