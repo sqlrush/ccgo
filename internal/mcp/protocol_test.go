@@ -789,7 +789,7 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	if len(prompts) != 1 || prompts[0].Name != "deploy" || len(prompts[0].Arguments) != 1 || !prompts[0].Arguments[0].Required {
 		t.Fatalf("prompts = %#v", prompts)
 	}
-	prompt, err := client.GetPrompt(context.Background(), "workflow", "deploy", map[string]string{"env": "prod"})
+	prompt, err := client.GetPrompt(context.Background(), "workflow", " deploy ", map[string]string{"env": "prod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -803,8 +803,14 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	}
 	readParams := mustJSON(t, transport.requests[2].Params)
 	getParams := mustJSON(t, transport.requests[4].Params)
-	if !strings.Contains(readParams, `"uri":"file:///a.txt"`) || !strings.Contains(getParams, `"env":"prod"`) {
+	if !strings.Contains(readParams, `"uri":"file:///a.txt"`) || !strings.Contains(getParams, `"name":"deploy"`) || !strings.Contains(getParams, `"env":"prod"`) {
 		t.Fatalf("params = %s / %s", readParams, getParams)
+	}
+	if _, err := client.GetPrompt(context.Background(), "workflow", " ", nil); err == nil {
+		t.Fatal("expected empty prompt name error")
+	}
+	if len(transport.requests) != 5 {
+		t.Fatalf("unexpected validation rpc requests = %#v", transport.requests)
 	}
 }
 

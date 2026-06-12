@@ -466,6 +466,13 @@ func (c *ProtocolClient) ListPrompts(ctx context.Context, serverName string) ([]
 }
 
 func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promptName string, arguments map[string]string) (PromptResult, error) {
+	promptName = strings.TrimSpace(promptName)
+	if promptName == "" {
+		return PromptResult{}, fmt.Errorf("mcp prompt name is required")
+	}
+	if arguments == nil {
+		arguments = map[string]string{}
+	}
 	raw, err := c.request(ctx, "prompts/get", map[string]any{
 		"name":      promptName,
 		"arguments": arguments,
