@@ -172,15 +172,16 @@ type EnginePermissionDecider struct {
 func (d EnginePermissionDecider) DecideTool(t Tool, raw json.RawMessage, ctx Context) (contracts.PermissionDecision, error) {
 	raw = normalizeRawInput(raw)
 	req := permissions.Request{
-		ToolName:         t.Name(),
-		Input:            raw,
-		Command:          firstInputString(raw, "command", "cmd"),
-		Path:             firstInputString(raw, "file_path", "notebook_path", "path"),
-		WorkingDirectory: ctx.WorkingDirectory,
-		ReadOnly:         t.IsReadOnly(raw),
-		WritesFiles:      !t.IsReadOnly(raw) && !t.IsDestructive(raw),
-		Destructive:      t.IsDestructive(raw),
-		InternalPaths:    InternalPathContextFromMetadata(ctx.Metadata),
+		ToolName:                  t.Name(),
+		Input:                     raw,
+		Command:                   firstInputString(raw, "command", "cmd"),
+		Path:                      firstInputString(raw, "file_path", "notebook_path", "path"),
+		WorkingDirectory:          ctx.WorkingDirectory,
+		ReadOnly:                  t.IsReadOnly(raw),
+		WritesFiles:               !t.IsReadOnly(raw) && !t.IsDestructive(raw),
+		Destructive:               t.IsDestructive(raw),
+		DangerouslyDisableSandbox: firstInputBool(raw, "dangerouslyDisableSandbox", "dangerously_disable_sandbox"),
+		InternalPaths:             InternalPathContextFromMetadata(ctx.Metadata),
 	}
 	return d.Engine.Decide(req), nil
 }
@@ -215,6 +216,22 @@ func firstInputString(raw json.RawMessage, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstInputBool(raw json.RawMessage, keys ...string) bool {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return false
+	}
+	for _, key := range keys {
+		if value, ok := obj[key].(bool); ok {
+			return value
+		}
+		if value, ok := obj[key].(string); ok {
+			return value == "true"
+		}
+	}
+	return false
 }
 
 func ErrorResult(use contracts.ToolUse, err error) contracts.ToolResult {

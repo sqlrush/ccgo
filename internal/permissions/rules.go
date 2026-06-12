@@ -11,17 +11,18 @@ import (
 )
 
 type Request struct {
-	ToolUseID        contracts.ID
-	ToolName         string
-	Input            json.RawMessage
-	Command          string
-	Path             string
-	WorkingDirectory string
-	ReadOnly         bool
-	WritesFiles      bool
-	Destructive      bool
-	InternalPaths    InternalPathContext
-	Metadata         map[string]string
+	ToolUseID                 contracts.ID
+	ToolName                  string
+	Input                     json.RawMessage
+	Command                   string
+	Path                      string
+	WorkingDirectory          string
+	ReadOnly                  bool
+	WritesFiles               bool
+	Destructive               bool
+	DangerouslyDisableSandbox bool
+	InternalPaths             InternalPathContext
+	Metadata                  map[string]string
 }
 
 type Rule struct {

@@ -238,6 +238,24 @@ func TestEnginePermissionDeciderUsesInternalPathsFromMetadata(t *testing.T) {
 	}
 }
 
+func TestEnginePermissionDeciderSurfacesSandboxOverride(t *testing.T) {
+	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
+	decider := NewEnginePermissionDecider(engine)
+	bashTool := FuncTool{
+		DefinitionValue: contracts.ToolDefinition{Name: "Bash", ReadOnly: true},
+		NormalizeFunc: func(raw json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{"command":"git status --short","dangerouslyDisableSandbox":true}`), nil
+		},
+	}
+	decision, err := bashTool.CheckPermissions(Context{Permissions: decider}, json.RawMessage(`{"command":"git status --short","dangerouslyDisableSandbox":"true"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Behavior != contracts.PermissionAsk || !strings.Contains(decision.Message, "sandbox override") {
+		t.Fatalf("decision = %#v", decision)
+	}
+}
+
 func TestExecutorRunsPermissionDeniedHook(t *testing.T) {
 	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDontAsk})
 	hookCalled := false

@@ -149,6 +149,9 @@ func (e Engine) Decide(req Request) contracts.PermissionDecision {
 	if rule, ok := firstByBehavior(matched, contracts.PermissionDeny); ok {
 		return decision(contracts.PermissionDeny, req, fmt.Sprintf("denied by %s rule %q", rule.Source, rule.String()), "")
 	}
+	if req.DangerouslyDisableSandbox {
+		return e.sandboxOverrideDecision(req)
+	}
 	if pathDecision, ok := e.pathDecision(req); ok {
 		return pathDecision
 	}
@@ -194,6 +197,16 @@ func (e Engine) Decide(req Request) contracts.PermissionDecision {
 		}
 		return decision(contracts.PermissionAsk, req, "default mode requires confirmation", "")
 	}
+}
+
+func (e Engine) sandboxOverrideDecision(req Request) contracts.PermissionDecision {
+	if e.mode == contracts.PermissionBypassPermissions && e.context.BypassAvailable {
+		return decision(contracts.PermissionAllow, req, "sandbox override allowed in bypassPermissions mode", "")
+	}
+	if e.mode == contracts.PermissionDontAsk {
+		return decision(contracts.PermissionDeny, req, "sandbox override requires confirmation", "")
+	}
+	return decision(contracts.PermissionAsk, req, "sandbox override requires confirmation", "")
 }
 
 func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {

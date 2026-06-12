@@ -94,6 +94,39 @@ func TestModes(t *testing.T) {
 	}
 }
 
+func TestSandboxOverrideRequiresConfirmation(t *testing.T) {
+	tests := []struct {
+		name  string
+		mode  contracts.PermissionMode
+		rules []Rule
+		want  contracts.PermissionBehavior
+	}{
+		{name: "default asks", mode: contracts.PermissionDefault, want: contracts.PermissionAsk},
+		{name: "dont ask denies", mode: contracts.PermissionDontAsk, want: contracts.PermissionDeny},
+		{name: "bypass allows", mode: contracts.PermissionBypassPermissions, want: contracts.PermissionAllow},
+		{
+			name:  "allow rule does not bypass sandbox confirmation",
+			mode:  contracts.PermissionDefault,
+			rules: []Rule{MustParseRule(contracts.PermissionSourceSession, contracts.PermissionAllow, "Bash(git status*)")},
+			want:  contracts.PermissionAsk,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := NewEngine(contracts.PermissionContext{Mode: tt.mode, BypassAvailable: true}, tt.rules...)
+			got := engine.Decide(Request{
+				ToolName:                  "Bash",
+				Command:                   "git status --short",
+				ReadOnly:                  true,
+				DangerouslyDisableSandbox: true,
+			})
+			if got.Behavior != tt.want || !strings.Contains(got.Message, "sandbox override") {
+				t.Fatalf("decision = %#v, want %q sandbox override decision", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEnginePathSafetyRunsBeforeAllowRules(t *testing.T) {
 	root := t.TempDir()
 	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionAcceptEdits},
