@@ -18,6 +18,7 @@ import (
 
 type StdioTransport struct {
 	reader              *bufio.Reader
+	readerCloser        io.Closer
 	writer              io.Writer
 	mu                  sync.Mutex
 	notificationMu      sync.RWMutex
@@ -27,9 +28,11 @@ type StdioTransport struct {
 }
 
 func NewStdioTransport(reader io.Reader, writer io.Writer) *StdioTransport {
+	closer, _ := reader.(io.Closer)
 	return &StdioTransport{
-		reader: bufio.NewReader(reader),
-		writer: writer,
+		reader:       bufio.NewReader(reader),
+		readerCloser: closer,
+		writer:       writer,
 	}
 }
 
@@ -51,12 +54,17 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 	if _, err := t.writer.Write(append(data, '\n')); err != nil {
 		return RPCResponse{}, err
 	}
+	stopReadWatch := t.watchReadContext(ctx)
+	defer stopReadWatch()
 	for {
 		if err := ctx.Err(); err != nil {
 			return RPCResponse{}, err
 		}
 		line, err := t.reader.ReadBytes('\n')
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return RPCResponse{}, ctxErr
+			}
 			return RPCResponse{}, err
 		}
 		trimmed := bytes.TrimSpace(line)
@@ -83,6 +91,23 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 			continue
 		}
 		return response, nil
+	}
+}
+
+func (t *StdioTransport) watchReadContext(ctx context.Context) func() {
+	if t == nil || t.readerCloser == nil || ctx == nil || ctx.Done() == nil {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = t.readerCloser.Close()
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
 	}
 }
 

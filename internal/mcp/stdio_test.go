@@ -4,9 +4,27 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
+
+type signalingWriter struct {
+	bytes.Buffer
+	wrote chan struct{}
+	once  sync.Once
+}
+
+func (w *signalingWriter) Write(p []byte) (int, error) {
+	n, err := w.Buffer.Write(p)
+	w.once.Do(func() {
+		close(w.wrote)
+	})
+	return n, err
+}
 
 func TestStdioTransportRoundTripWritesRequestAndReadsResponse(t *testing.T) {
 	reader := strings.NewReader(`{"jsonrpc":"2.0","id":"1","result":{"ok":true}}` + "\n")
@@ -56,6 +74,38 @@ func TestStdioTransportRejectsInvalidStdout(t *testing.T) {
 	_, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil))
 	if err == nil || !strings.Contains(err.Error(), "decode mcp stdio response") {
 		t.Fatalf("expected decode error, got %v", err)
+	}
+}
+
+func TestStdioTransportRoundTripHonorsContextCancellation(t *testing.T) {
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	requestWriter := &signalingWriter{wrote: make(chan struct{})}
+	transport := NewStdioTransport(reader, requestWriter)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := transport.RoundTrip(ctx, NewRPCRequest("cancel", "tools/list", nil))
+		done <- err
+	}()
+
+	select {
+	case <-requestWriter.wrote:
+	case <-time.After(time.Second):
+		t.Fatal("stdio request was not written")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("round trip did not return after context cancellation")
+	}
+	if !strings.Contains(requestWriter.String(), `"id":"cancel"`) {
+		t.Fatalf("request = %s", requestWriter.String())
 	}
 }
 
