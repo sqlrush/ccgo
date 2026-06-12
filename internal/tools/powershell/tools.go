@@ -994,11 +994,15 @@ type powerShellReadOnlyConfig struct {
 }
 
 type powerShellNativeReadOnlyConfig struct {
-	allowedFlags      map[string]bool
-	valueFlags        map[string]bool
-	allowAllFlags     bool
-	allowPositionals  bool
-	rejectPositionals bool
+	allowedFlags                 map[string]bool
+	pathFlags                    map[string]bool
+	valueFlags                   map[string]bool
+	literalValueFlags            map[string]bool
+	allowAllFlags                bool
+	allowPositionals             bool
+	rejectPositionals            bool
+	validatePositionalsAsPaths   bool
+	pathPositionalsAfterLiterals int
 }
 
 var powerShellCommonSwitchFlags = stringSet("verbose", "debug")
@@ -1328,19 +1332,26 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		valueFlags:   stringSet("/fo"),
 	},
 	"file": {
-		allowedFlags:     stringSet("-b", "--brief", "-i", "--mime", "-l", "--dereference", "--mime-type", "--mime-encoding", "-z", "--uncompress", "-p", "--preserve-date", "-k", "--keep-going", "-r", "--raw", "-v", "--version", "-0", "--print0", "-s", "--special-files", "-l", "-f", "--separator", "-e", "-p", "-n", "--no-pad", "-e", "--extension"),
-		valueFlags:       stringSet("-f", "--separator", "-e", "-p"),
-		allowPositionals: true,
+		allowedFlags:               stringSet("-b", "--brief", "-i", "--mime", "-l", "--dereference", "--mime-type", "--mime-encoding", "-z", "--uncompress", "-p", "--preserve-date", "-k", "--keep-going", "-r", "--raw", "-v", "--version", "-0", "--print0", "-s", "--special-files", "-l", "-f", "--separator", "-e", "-p", "-n", "--no-pad", "-e", "--extension"),
+		pathFlags:                  stringSet("-f"),
+		valueFlags:                 stringSet("-f", "--separator", "-e", "-p"),
+		allowPositionals:           true,
+		validatePositionalsAsPaths: true,
 	},
 	"tree": {
-		allowedFlags:     stringSet("/f", "/a", "/q", "/l"),
-		valueFlags:       stringSet("/l"),
-		allowPositionals: true,
+		allowedFlags:               stringSet("/f", "/a", "/q", "/l"),
+		valueFlags:                 stringSet("/l"),
+		allowPositionals:           true,
+		validatePositionalsAsPaths: true,
 	},
 	"findstr": {
-		allowedFlags:     stringSet("/b", "/e", "/l", "/r", "/s", "/i", "/x", "/v", "/n", "/m", "/o", "/p", "/c", "/g", "/d", "/a"),
-		valueFlags:       stringSet("/c", "/g", "/d", "/a"),
-		allowPositionals: true,
+		allowedFlags:                 stringSet("/b", "/e", "/l", "/r", "/s", "/i", "/x", "/v", "/n", "/m", "/o", "/p", "/c", "/g", "/d", "/a"),
+		pathFlags:                    stringSet("/g", "/d"),
+		valueFlags:                   stringSet("/c", "/g", "/d", "/a"),
+		literalValueFlags:            stringSet("/c"),
+		allowPositionals:             true,
+		validatePositionalsAsPaths:   true,
+		pathPositionalsAfterLiterals: 1,
 	},
 }
 
@@ -1440,6 +1451,7 @@ func safePowerShellParameterValue(value string, rejectExpressions bool) bool {
 }
 
 func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) bool {
+	positionals := 0
 	for i := 0; i < len(words); i++ {
 		word := words[i]
 		if word == "--%" {
@@ -1450,16 +1462,37 @@ func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) b
 			if !nativeFlagAllowed(name, config) {
 				return false
 			}
+			takesValue := config.pathFlags[name] || config.valueFlags[name]
 			if hasValue {
-				if !safeNativeValue(value) {
+				if !takesValue {
 					return false
+				}
+				if config.pathFlags[name] {
+					if !safeRelativePowerShellPath(value) {
+						return false
+					}
+				} else if !safeNativeValue(value) {
+					return false
+				}
+				if config.literalValueFlags[name] && positionals < config.pathPositionalsAfterLiterals {
+					positionals = config.pathPositionalsAfterLiterals
 				}
 				continue
 			}
-			if config.valueFlags[name] && i+1 < len(words) && !looksLikeNativeFlag(words[i+1]) {
+			if takesValue {
 				i++
-				if !safeNativeValue(words[i]) {
+				if i >= len(words) || looksLikeNativeFlag(words[i]) {
 					return false
+				}
+				if config.pathFlags[name] {
+					if !safeRelativePowerShellPath(words[i]) {
+						return false
+					}
+				} else if !safeNativeValue(words[i]) {
+					return false
+				}
+				if config.literalValueFlags[name] && positionals < config.pathPositionalsAfterLiterals {
+					positionals = config.pathPositionalsAfterLiterals
 				}
 			}
 			continue
@@ -1467,9 +1500,14 @@ func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) b
 		if config.rejectPositionals || !config.allowPositionals {
 			return false
 		}
-		if !safeNativeValue(word) {
+		if config.validatePositionalsAsPaths && positionals >= config.pathPositionalsAfterLiterals {
+			if !safeRelativePowerShellPath(word) {
+				return false
+			}
+		} else if !safeNativeValue(word) {
 			return false
 		}
+		positionals++
 	}
 	return true
 }

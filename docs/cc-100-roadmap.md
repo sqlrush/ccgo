@@ -535,6 +535,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` safety 分类现在把 `find -exec`/`-execdir`/`-ok`/`-okdir` 排除出 read-only fast path，并会识别 `find ... -exec sh -c 'rm ...'` 与 `xargs sh -c 'rm ...'` 这类 shell wrapper 内嵌破坏性脚本。
 
+本轮补充：`PowerShell` native/external 文件读取只读命令（`file`/`tree`/`findstr`）现在对路径型 positional、`file -f`、`findstr /G`/`/D` 和 `/C:` pattern 后的文件参数执行相对路径 guard，Windows drive、UNC、URI/provider-like、`..` 以及缺值 path flag 不再进入 read-only fast path。
+
 仍需完成：
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。

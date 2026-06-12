@@ -182,6 +182,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。
 - 本轮补充：Bash safety 分类将 `find -exec*` 形态排除出 read-only fast path，并补 `find`/`xargs` 经 `sh`/`bash`/`zsh`/`dash`/`ksh -c` 包装的嵌套破坏性脚本检测。
+- 本轮补充：PowerShell native/external 文件读取命令（`file`/`tree`/`findstr`）现在也对路径型 positional 和 path flag 使用相对路径 guard，拒绝 Windows drive、UNC、URI/provider-like、父目录和缺值 path flag。
 
 ### M6: Session、memory、compact
 
