@@ -533,6 +533,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` 常见文件读取/搜索类只读命令（`ls`/`cat`/`head`/`tail`/`wc`/`grep`/`rg`/`find`/`stat`/`file`/`du`/`df`）现在增加基础相对路径 guard，绝对路径、home、`..` 和变量/命令替换路径不再自动进入 read-only fast path。
 
+本轮补充：`Bash` safety 分类现在把 `find -exec`/`-execdir`/`-ok`/`-okdir` 排除出 read-only fast path，并会识别 `find ... -exec sh -c 'rm ...'` 与 `xargs sh -c 'rm ...'` 这类 shell wrapper 内嵌破坏性脚本。
+
 仍需完成：
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。

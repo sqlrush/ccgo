@@ -1990,6 +1990,9 @@ func readOnlyWords(words []string) bool {
 }
 
 func readOnlyPathCommand(words []string) bool {
+	if filepathBase(words[0]) == "find" && containsAnyWord(words[1:], "-exec", "-execdir", "-ok", "-okdir") {
+		return false
+	}
 	for _, word := range words[1:] {
 		if word == "--" {
 			continue
@@ -2273,7 +2276,7 @@ func destructiveFind(words []string) bool {
 		case "-delete":
 			return true
 		case "-exec", "-execdir", "-ok", "-okdir":
-			if i+2 < len(words) && destructiveExecutable(words[i+2]) {
+			if i+2 < len(words) && (destructiveExecutable(words[i+2]) || destructiveShellExec(words[i+2:])) {
 				return true
 			}
 		}
@@ -2287,7 +2290,29 @@ func destructiveXargs(words []string) bool {
 			return true
 		}
 	}
+	return destructiveShellExec(words[1:])
+}
+
+func destructiveShellExec(words []string) bool {
+	if len(words) < 3 || !shellExecutable(words[0]) {
+		return false
+	}
+	for i := 1; i < len(words)-1; i++ {
+		word := words[i]
+		if word == "-c" || word == "-lc" || word == "-cl" {
+			return IsDestructiveCommand(words[i+1])
+		}
+	}
 	return false
+}
+
+func shellExecutable(word string) bool {
+	switch filepathBase(word) {
+	case "sh", "bash", "dash", "zsh", "ksh":
+		return true
+	default:
+		return false
+	}
 }
 
 func destructiveExecutable(word string) bool {

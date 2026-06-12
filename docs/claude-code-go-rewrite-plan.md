@@ -181,6 +181,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录和变量路径不再自动允许。
+- 本轮补充：Bash safety 分类将 `find -exec*` 形态排除出 read-only fast path，并补 `find`/`xargs` 经 `sh`/`bash`/`zsh`/`dash`/`ksh -c` 包装的嵌套破坏性脚本检测。
 
 ### M6: Session、memory、compact
 
