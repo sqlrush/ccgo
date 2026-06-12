@@ -536,11 +536,30 @@ func (c *ProtocolClient) rawRequest(ctx context.Context, method string, params a
 }
 
 func (c *ProtocolClient) sendInitialized(ctx context.Context) error {
+	return c.SendNotification(ctx, "notifications/initialized", nil)
+}
+
+func (c *ProtocolClient) SendNotification(ctx context.Context, method string, params any) error {
+	if c == nil || c.Transport == nil {
+		return fmt.Errorf("mcp rpc transport is nil")
+	}
+	method = strings.TrimSpace(method)
+	if method == "" {
+		return fmt.Errorf("mcp notification method is required")
+	}
 	sender, ok := c.Transport.(RPCNotificationSender)
 	if !ok {
-		return fmt.Errorf("mcp rpc transport cannot send initialized notification")
+		return fmt.Errorf("mcp rpc transport cannot send notifications")
 	}
-	return sender.SendNotification(ctx, RPCNotification{JSONRPC: JSONRPCVersion, Method: "notifications/initialized"})
+	var raw json.RawMessage
+	if params != nil {
+		data, err := json.Marshal(params)
+		if err != nil {
+			return err
+		}
+		raw = data
+	}
+	return sender.SendNotification(ctx, RPCNotification{JSONRPC: JSONRPCVersion, Method: method, Params: raw})
 }
 
 func (c *ProtocolClient) recoverExpiredSession(ctx context.Context) error {

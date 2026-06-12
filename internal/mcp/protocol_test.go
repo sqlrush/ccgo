@@ -567,6 +567,29 @@ func TestProtocolClientAdvertisesAndServesRoots(t *testing.T) {
 	}
 }
 
+func TestProtocolClientNotifiesRootsListChanged(t *testing.T) {
+	transport := &fakeLifecycleTransport{}
+	client := NewProtocolClient(transport)
+	client.SetRootsProvider(StaticRootsProvider([]Root{{URI: "file:///workspace"}}), true)
+
+	if err := client.EnsureInitialized(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	params := mustJSON(t, transport.requests[0].Params)
+	if !strings.Contains(params, `"roots":{"listChanged":true}`) {
+		t.Fatalf("initialize params missing roots listChanged capability: %s", params)
+	}
+	if err := client.NotifyRootsListChanged(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.notifications) != 2 {
+		t.Fatalf("notifications = %#v", transport.notifications)
+	}
+	if transport.notifications[1].Method != "notifications/roots/list_changed" {
+		t.Fatalf("roots notification = %#v", transport.notifications[1])
+	}
+}
+
 func TestRootsListRequestHandlerAliasesAndErrors(t *testing.T) {
 	handler := RootsListRequestHandler(StaticRootsProvider([]Root{{URI: "file:///repo"}}), nil)
 	result, rpcErr := handler(context.Background(), RPCInboundRequest{ID: "server-1", Method: "roots.list"})

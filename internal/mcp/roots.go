@@ -71,6 +71,10 @@ func RootsListRequestHandler(provider RootsProvider, fallback RPCRequestHandler)
 	}
 }
 
+func (c *ProtocolClient) NotifyRootsListChanged(ctx context.Context) error {
+	return c.SendNotification(ctx, "notifications/roots/list_changed", nil)
+}
+
 func IsRootsListMethod(method string) bool {
 	normalized := strings.TrimSpace(method)
 	normalized = strings.ReplaceAll(normalized, ".", "/")
