@@ -39,31 +39,34 @@ func LoadSkillDir(root string, source contracts.CommandSource) (Skill, error) {
 	if source == "" {
 		source = contracts.CommandSourceSkills
 	}
-	displayName := strings.TrimSpace(frontmatter["name"])
-	description := strings.TrimSpace(frontmatter["description"])
+	displayName := strings.TrimSpace(frontmatterField(frontmatter, "name"))
+	description := strings.TrimSpace(frontmatterField(frontmatter, "description"))
 	hasDescription := description != ""
 	if description == "" {
 		description = extractDescription(body)
 	}
-	userInvocable := parseBoolDefault(frontmatter["user-invocable"], true)
-	paths := parseSkillPaths(frontmatter["paths"])
+	userInvocable := parseBoolDefault(frontmatterField(frontmatter, "user-invocable", "user_invocable", "userInvocable"), true)
+	paths := parseSkillPaths(frontmatterField(frontmatter, "paths"))
 
 	command := contracts.Command{
 		Type:                    contracts.CommandPrompt,
 		Name:                    filepath.Base(root),
 		DisplayName:             displayName,
 		Description:             description,
-		ArgumentHint:            strings.TrimSpace(frontmatter["argument-hint"]),
-		ArgumentNames:           parseArgumentNames(frontmatter["arguments"]),
+		ArgumentHint:            strings.TrimSpace(frontmatterField(frontmatter, "argument-hint", "argument_hint", "argumentHint")),
+		ArgumentNames:           parseArgumentNames(frontmatterField(frontmatter, "arguments")),
 		Source:                  source,
 		LoadedFrom:              string(source),
 		SkillRoot:               root,
-		DisableModelInvocation:  parseBoolDefault(frontmatter["disable-model-invocation"], false),
+		DisableModelInvocation:  parseBoolDefault(frontmatterField(frontmatter, "disable-model-invocation", "disable_model_invocation", "disableModelInvocation"), false),
 		Hidden:                  !userInvocable,
-		AllowedTools:            parseFrontmatterList(frontmatter["allowed-tools"]),
-		WhenToUse:               strings.TrimSpace(frontmatter["when_to_use"]),
-		Version:                 strings.TrimSpace(frontmatter["version"]),
-		Model:                   strings.TrimSpace(frontmatter["model"]),
+		AllowedTools:            parseFrontmatterList(frontmatterField(frontmatter, "allowed-tools", "allowed_tools", "allowedTools")),
+		WhenToUse:               strings.TrimSpace(frontmatterField(frontmatter, "when_to_use", "when-to-use", "whenToUse")),
+		Version:                 strings.TrimSpace(frontmatterField(frontmatter, "version")),
+		Model:                   parseSkillModel(frontmatterField(frontmatter, "model")),
+		Context:                 parseSkillContext(frontmatterField(frontmatter, "context")),
+		Agent:                   strings.TrimSpace(frontmatterField(frontmatter, "agent")),
+		Effort:                  strings.TrimSpace(frontmatterField(frontmatter, "effort")),
 		Paths:                   paths,
 		ContentLength:           len(body),
 		ProgressMessage:         "running",
@@ -108,6 +111,15 @@ func ProjectSkillCommands(cwd string) []contracts.Command {
 	return commands
 }
 
+func frontmatterField(frontmatter map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := frontmatter[key]; ok {
+			return value
+		}
+	}
+	return ""
+}
+
 func extractDescription(markdown string) string {
 	scanner := bufio.NewScanner(strings.NewReader(markdown))
 	for scanner.Scan() {
@@ -134,6 +146,22 @@ func parseBoolDefault(raw string, fallback bool) bool {
 		return fallback
 	}
 	return value
+}
+
+func parseSkillModel(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.EqualFold(raw, "inherit") {
+		return ""
+	}
+	return raw
+}
+
+func parseSkillContext(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.EqualFold(raw, "fork") {
+		return "fork"
+	}
+	return ""
 }
 
 func parseFrontmatterList(raw string) []string {

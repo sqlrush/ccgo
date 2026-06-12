@@ -18,6 +18,7 @@ func TestExpandPromptSubstitutesArgumentsAndReturnsMetaUserMessage(t *testing.T)
 				Type:          contracts.CommandPrompt,
 				Source:        contracts.CommandSourceSkills,
 				LoadedFrom:    "skills",
+				SkillRoot:     "/tmp/skill",
 				ArgumentNames: []string{"service", "env"},
 			},
 			Content: strings.Join([]string{
@@ -26,6 +27,7 @@ func TestExpandPromptSubstitutesArgumentsAndReturnsMetaUserMessage(t *testing.T)
 				"Deploy $service to $env.",
 				"Raw args: $ARGUMENTS",
 				"First: $0 / indexed: $ARGUMENTS[1]",
+				"Skill dir: ${CLAUDE_SKILL_DIR}",
 				"Session: ${CLAUDE_SESSION_ID}",
 			}, "\n"),
 		}},
@@ -41,6 +43,7 @@ func TestExpandPromptSubstitutesArgumentsAndReturnsMetaUserMessage(t *testing.T)
 		"Deploy api service to prod.",
 		`Raw args: "api service" prod`,
 		"First: api service / indexed: prod",
+		"Skill dir: /tmp/skill",
 		"Session: sess_123",
 	}, "\n")
 	if expanded.Content != want {
@@ -54,6 +57,30 @@ func TestExpandPromptSubstitutesArgumentsAndReturnsMetaUserMessage(t *testing.T)
 	}
 	if len(expanded.Message.Content) != 1 || expanded.Message.Content[0].Text != want {
 		t.Fatalf("message content = %#v", expanded.Message.Content)
+	}
+}
+
+func TestExpandPromptDoesNotSubstituteSkillDirForMCPSkills(t *testing.T) {
+	registry := FromSources(Sources{
+		PluginSkillPrompts: []PromptTemplate{{
+			Command: contracts.Command{
+				Name:       "remote",
+				Type:       contracts.CommandPrompt,
+				Source:     contracts.CommandSourceMCP,
+				LoadedFrom: "mcp",
+				SkillRoot:  "/tmp/remote",
+			},
+			Content: "Use ${CLAUDE_SKILL_DIR} in ${CLAUDE_SESSION_ID}.",
+		}},
+	})
+
+	expanded, err := registry.ExpandPrompt("remote", "", "sess_789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Use ${CLAUDE_SKILL_DIR} in sess_789."
+	if expanded.Content != want {
+		t.Fatalf("content = %q, want %q", expanded.Content, want)
 	}
 }
 

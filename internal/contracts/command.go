@@ -39,6 +39,9 @@ type Command struct {
 	WhenToUse               string        `json:"when_to_use,omitempty"`
 	Version                 string        `json:"version,omitempty"`
 	Model                   string        `json:"model,omitempty"`
+	Context                 string        `json:"context,omitempty"`
+	Agent                   string        `json:"agent,omitempty"`
+	Effort                  string        `json:"effort,omitempty"`
 	Paths                   []string      `json:"paths,omitempty"`
 	ContentLength           int           `json:"content_length,omitempty"`
 	ProgressMessage         string        `json:"progress_message,omitempty"`

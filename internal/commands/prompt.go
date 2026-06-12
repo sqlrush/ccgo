@@ -28,6 +28,9 @@ func (r Registry) ExpandPrompt(name string, args string, sessionID contracts.ID)
 		return PromptExpansion{}, fmt.Errorf("command %q is %q, not prompt", template.Command.Name, template.Command.Type)
 	}
 	content := SubstituteArguments(template.Content, args, true, template.Command.ArgumentNames)
+	if template.Command.SkillRoot != "" && template.Command.LoadedFrom != "mcp" {
+		content = strings.ReplaceAll(content, "${CLAUDE_SKILL_DIR}", template.Command.SkillRoot)
+	}
 	content = strings.ReplaceAll(content, "${CLAUDE_SESSION_ID}", string(sessionID))
 	blocks := []contracts.ContentBlock{contracts.NewTextBlock(content)}
 	message := contracts.Message{

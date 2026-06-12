@@ -58,17 +58,19 @@ M8 补充：新增 `internal/skills` discovery 基础模块，支持从工作目
 
 M8 补充：Read/Write/Edit/NotebookEdit 现在会在处理文件路径时触发嵌套 skill directory discovery，并把新发现的 skill roots 追加到共享 tool metadata 的内部只读路径上下文，后续工具可读取对应 `SKILL.md` 和资源文件；完整 skill activation、SkillTool 调用和 UI 展示仍未完成。
 
-M8 补充：`internal/skills` 现在可以加载目录式 `<skill>/SKILL.md`，解析基础 frontmatter 并生成 prompt command 元数据，包括 display name、description fallback、allowed-tools、argument-hint、arguments、when_to_use、version、model、paths、content length、user-invocable hidden 状态和 disable-model-invocation；项目 skill commands 可按现有 discovery 顺序导出，但 slash command 注册、SkillTool 调用和 UI 激活仍未完成。
+M8 补充：`internal/skills` 现在可以加载目录式 `<skill>/SKILL.md`，解析基础 frontmatter 并生成 prompt command 元数据，包括 display name、description fallback、allowed-tools、argument-hint、arguments、when_to_use/when-to-use、version、model（含 inherit 归一为无覆盖）、context: fork、agent、effort、paths、content length、user-invocable hidden 状态和 disable-model-invocation；项目 skill commands 可按现有 discovery 顺序导出，但 slash command 注册、SkillTool 调用和 UI 激活仍未完成。
 
 M8 补充：新增 `internal/commands` registry 基础层，按官方 `getCommands(cwd)` 的来源顺序合并 bundled/builtin-plugin/project-skill/workflow/plugin/dynamic/builtin command metadata，支持 dynamic skill 去重、display-name/alias 查找、hidden 可见性过滤、SkillTool model-invocable command 过滤、slash-command skill 过滤和 bridge-safe command 判定；当前仍是 metadata/registry 层，local/local-jsx 实际执行、`/help`/`/skills` UI、plugin/MCP/workflow 来源接入仍未完成。
 
-M8 补充：command registry 现在保存本地 skill prompt template，并提供 `ExpandPrompt` 基础调用入口，可按 name/display-name/alias 展开 prompt command，执行 `$ARGUMENTS`、`$ARGUMENTS[n]`、`$n` 和 frontmatter `arguments` named placeholder 替换，注入 `${CLAUDE_SESSION_ID}`，并生成 official shape 的 meta user message；shell command injection、SkillTool wrapper、local/local-jsx 执行和 REPL/UI wiring 仍未完成。
+M8 补充：command registry 现在保存本地 skill prompt template，并提供 `ExpandPrompt` 基础调用入口，可按 name/display-name/alias 展开 prompt command，执行 `$ARGUMENTS`、`$ARGUMENTS[n]`、`$n` 和 frontmatter `arguments` named placeholder 替换，注入 `${CLAUDE_SESSION_ID}`，对非 MCP skill 替换 `${CLAUDE_SKILL_DIR}`，并生成 official shape 的 meta user message；shell command injection、SkillTool wrapper、local/local-jsx 执行和 REPL/UI wiring 仍未完成。
 
 M8 补充：新增基础 `Skill` tool wrapper，已注册到默认内置工具集，可按官方 `skill`/`args` 输入调用项目目录发现到的本地 prompt skill，并兼容 `commandName`/`arguments` 别名；tool result 会返回 `Launching skill: ...`、structured command metadata 和 prompt expansion 生成的 meta user message，conversation runner 现在会把 `ToolResult.NewMessages` 追加进后续模型请求和 transcript。forked skill、remote/MCP/plugin skill、skill prompt shell injection、slash/local command UI wiring 仍未完成。
 
 M8 补充：新增基础 slash command parser/executor，按官方 `/command args` 与 `/mcp:tool (MCP) args` 形态解析，并把本地项目 prompt skill slash 调用接入 conversation runner：`/skill args` 会生成 `<command-name>/<command-message>/<command-args>` metadata user message 和展开后的 meta prompt message，写入 transcript/parent chain 后再请求模型；skill frontmatter `model` 可覆盖本轮请求模型。local/local-jsx 命令目前只返回未实现输出，不会误发给模型；command permissions attachment、forked skill、MCP/plugin/bundled slash 来源和 UI 仍未完成。
 
 M8 补充：本地 prompt skill 的 slash 调用和 `Skill` tool 现在都会生成 `command_permissions` attachment，按官方 `allowed-tools` 解析 comma/space 分隔且保留括号内模式；conversation runner 会在当前 turn 内把这些 `PermissionSourceCommand` allow rules 合并进 engine permission decider，让 skill frontmatter 授权的后续工具调用可在同一轮放行，并继续保留 model override attachment metadata。完整权限 UI 展示、SDK event surface、forked/MCP/plugin/bundled skill 权限继承仍未完成。
+
+M8 补充：skill frontmatter 标量兼容继续补齐，`allowed_tools`/`argument_hint`/`disable_model_invocation`/`user_invocable`/`when-to-use` 等相邻字段会映射到 canonical command metadata；`model: inherit` 不再误触发模型覆盖，`context: fork`、`agent`、`effort` 会保留在 command contract 中，为后续 forked skill/agent 执行接线提供 metadata。
 
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
@@ -1180,7 +1182,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - plugin manifest、marketplace、install/cache/update。
 - plugin hooks/agents/MCP。
 
-当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、command registry metadata/lookup/filter、prompt expansion、基础 `Skill` tool inline 调用，以及本地项目 prompt skill 的基础 slash 调用接入；仍缺 bundled/plugin/MCP/remote skills、local/local-jsx 实际执行、`/help`/`/skills` UI、command permissions attachment、plugin manifest/marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP 接线。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、command registry metadata/lookup/filter、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入，以及本地 prompt skill 的 command permissions attachment/current-turn 权限继承；仍缺 bundled/plugin/MCP/remote skills、forked skill/agent 执行、local/local-jsx 实际执行、`/help`/`/skills` UI、权限 UI/SDK 展示、plugin manifest/marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP 接线。
 
 ### M9: MCP Platform
 
