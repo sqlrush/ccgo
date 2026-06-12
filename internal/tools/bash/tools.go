@@ -1974,7 +1974,9 @@ func readOnlyWords(words []string) bool {
 	}
 	cmd := filepathBase(words[0])
 	switch cmd {
-	case "pwd", "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "printf", "echo", "date", "whoami", "id", "uname", "printenv", "which", "type":
+	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df":
+		return readOnlyPathCommand(words)
+	case "pwd", "printf", "echo", "date", "whoami", "id", "uname", "printenv", "which", "type":
 		return true
 	case "env":
 		return readOnlyEnv(words)
@@ -1985,6 +1987,43 @@ func readOnlyWords(words []string) bool {
 	default:
 		return false
 	}
+}
+
+func readOnlyPathCommand(words []string) bool {
+	for _, word := range words[1:] {
+		if word == "--" {
+			continue
+		}
+		if strings.HasPrefix(word, "-") {
+			if name, value, ok := strings.Cut(word, "="); ok {
+				if name == "" || !safeRelativeShellPathArg(value) {
+					return false
+				}
+			}
+			continue
+		}
+		if !safeRelativeShellPathArg(word) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeRelativeShellPathArg(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	if value == "" || strings.ContainsAny(value, "$`\x00") {
+		return false
+	}
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, "~") {
+		return false
+	}
+	normalized := strings.ReplaceAll(value, `\`, "/")
+	for _, part := range strings.Split(normalized, "/") {
+		if part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 func readOnlyEnv(words []string) bool {

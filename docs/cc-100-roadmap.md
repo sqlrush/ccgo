@@ -531,6 +531,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`PowerShell` destructive 分类现在会递归检查未被 single-quote 保护的括号表达式、`$()` 子表达式和 scriptblock `{...}` 内容，`Write-Output (Remove-Item out.txt)`、`"$(Remove-Item out.txt)"` 和 `& { Remove-Item out.txt }` 这类嵌套破坏性命令会触发 destructive 标记。
 
+本轮补充：`Bash` 常见文件读取/搜索类只读命令（`ls`/`cat`/`head`/`tail`/`wc`/`grep`/`rg`/`find`/`stat`/`file`/`du`/`df`）现在增加基础相对路径 guard，绝对路径、home、`..` 和变量/命令替换路径不再自动进入 read-only fast path。
+
 仍需完成：
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。
