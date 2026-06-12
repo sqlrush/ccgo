@@ -253,6 +253,7 @@ func TestBashCommandClassification(t *testing.T) {
 		"printf hello \\",
 		"cat 'README.md; rm -rf build",
 		"pwd\nmake build",
+		"pwd & ls -la",
 		"ls && echo hi > out.txt",
 	}
 	for _, command := range notReadOnly {
@@ -294,6 +295,7 @@ func TestBashCommandClassification(t *testing.T) {
 		"find . -type f -execdir rmdir {} ;",
 		"pwd\nrm -rf build",
 		"pwd # comment\nrm -rf build",
+		"pwd & rm -rf build",
 		"printf '%s\n' build | xargs rm -rf",
 		"sudo make install",
 		"chmod -R 777 .",

@@ -1515,6 +1515,9 @@ func splitCommandSegments(command string) []string {
 					i++
 					continue
 				}
+				segments = appendNonemptySegment(segments, current.String())
+				current.Reset()
+				continue
 			}
 		}
 		current.WriteByte(ch)
