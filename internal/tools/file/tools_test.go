@@ -1644,6 +1644,71 @@ func TestGrepToolWordRegexp(t *testing.T) {
 	}
 }
 
+func TestGrepToolInvertMatch(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"one.txt": "keep\nNeedle\nplain\nNeedle again\n",
+		"all.txt": "Needle\nNeedle again\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_invert_match_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","invert_match":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "one.txt:1:keep\none.txt:3:plain"
+	if contentResult.Content != wantContent || contentResult.StructuredContent["invert_match"] != true {
+		t.Fatalf("invert_match content result = %#v", contentResult)
+	}
+
+	camelResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_invert_match_camel_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","outputMode":"count","invertMatch":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCount := "one.txt:2\n\nFound 2 total occurrences across 1 file."
+	if camelResult.Content != wantCount || camelResult.StructuredContent["invert_match"] != true {
+		t.Fatalf("invertMatch count result = %#v", camelResult)
+	}
+
+	dashResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_invert_match_dash_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","invert-match":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dashResult.Content != wantCount || dashResult.StructuredContent["invert_match"] != true {
+		t.Fatalf("invert-match count result = %#v", dashResult)
+	}
+
+	shortResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_invert_match_short_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","-v":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortResult.Content != "Found 1 file\none.txt" || shortResult.StructuredContent["invert_match"] != true {
+		t.Fatalf("short invert-match result = %#v", shortResult)
+	}
+}
+
 func TestGrepToolMultiline(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{
@@ -1685,6 +1750,18 @@ func TestGrepToolMultiline(t *testing.T) {
 	matches := multilineResult.StructuredContent["matches"].([]map[string]any)
 	if len(matches) != 3 || matches[0]["matched"] != true || matches[2]["line"] != 3 {
 		t.Fatalf("multiline structured matches = %#v", matches)
+	}
+
+	invertResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_multiline_invert",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha.*gamma","output_mode":"content","multiline":true,"invert_match":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if invertResult.Content != "multi.txt:4:tail" || invertResult.StructuredContent["invert_match"] != true {
+		t.Fatalf("multiline invert result = %#v", invertResult)
 	}
 }
 
