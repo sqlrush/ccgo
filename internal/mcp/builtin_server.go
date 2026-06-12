@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -33,6 +34,9 @@ type BuiltinServer struct {
 	allowMutatingTools  bool
 	promptContext       tool.PromptContext
 	toolContextMetadata map[string]any
+
+	mu        sync.Mutex
+	cancelled map[string]string
 }
 
 type serverRPCRequest struct {
@@ -77,6 +81,7 @@ func NewBuiltinServer(options BuiltinServerOptions) (*BuiltinServer, error) {
 		allowMutatingTools:  options.AllowMutatingTools,
 		promptContext:       promptContext,
 		toolContextMetadata: cloneAnyMap(options.ToolContextMetadata),
+		cancelled:           map[string]string{},
 	}, nil
 }
 
@@ -152,6 +157,17 @@ func (s *BuiltinServer) handleSingle(ctx context.Context, data []byte) (serverRP
 		_ = s.handleNotification(ctx, request)
 		return serverRPCResponse{}, false
 	}
+	if reason, ok := s.consumeCancellation(request.ID); ok {
+		return serverRPCResponse{
+			JSONRPC: JSONRPCVersion,
+			ID:      normalizedResponseID(request.ID),
+			Error: &RPCError{
+				Code:    -32800,
+				Message: "request cancelled",
+				Data:    map[string]any{"reason": reason},
+			},
+		}, true
+	}
 	result, rpcErr := s.handleRequest(ctx, request)
 	response := serverRPCResponse{JSONRPC: JSONRPCVersion, ID: normalizedResponseID(request.ID)}
 	if rpcErr != nil {
@@ -193,7 +209,11 @@ func invalidRequestResponse(id json.RawMessage, message string) serverRPCRespons
 	return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: normalizedResponseID(id), Error: &RPCError{Code: -32600, Message: message}}
 }
 
-func (s *BuiltinServer) handleNotification(context.Context, serverRPCRequest) error {
+func (s *BuiltinServer) handleNotification(_ context.Context, request serverRPCRequest) error {
+	switch request.Method {
+	case "$/cancelRequest", "notifications/cancelled":
+		s.recordCancellation(request.Params)
+	}
 	return nil
 }
 
@@ -293,6 +313,61 @@ func validateNamedParams(raw json.RawMessage, required string, notFoundMessage s
 		return &RPCError{Code: -32602, Message: required + " is required"}
 	}
 	return &RPCError{Code: -32602, Message: notFoundMessage, Data: map[string]any{required: value}}
+}
+
+func (s *BuiltinServer) recordCancellation(raw json.RawMessage) {
+	key, reason := cancellationParams(raw)
+	if key == "" {
+		return
+	}
+	s.mu.Lock()
+	s.cancelled[key] = reason
+	s.mu.Unlock()
+}
+
+func (s *BuiltinServer) consumeCancellation(rawID json.RawMessage) (string, bool) {
+	key := normalizedIDKey(rawID)
+	if key == "" {
+		return "", false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	reason, ok := s.cancelled[key]
+	if ok {
+		delete(s.cancelled, key)
+	}
+	return reason, ok
+}
+
+func cancellationParams(raw json.RawMessage) (string, string) {
+	var params map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return "", ""
+	}
+	var id json.RawMessage
+	for _, name := range []string{"requestId", "requestID", "request_id", "id"} {
+		if value, ok := params[name]; ok {
+			id = value
+			break
+		}
+	}
+	key := normalizedIDKey(id)
+	if key == "" {
+		return "", ""
+	}
+	var reason string
+	for _, name := range []string{"reason", "message"} {
+		if value, ok := params[name]; ok {
+			_ = json.Unmarshal(value, &reason)
+			if strings.TrimSpace(reason) != "" {
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(reason) == "" {
+		reason = "cancelled by client"
+	}
+	return key, reason
 }
 
 func (s *BuiltinServer) toolContext(ctx context.Context) tool.Context {
@@ -426,6 +501,14 @@ func normalizedResponseID(raw json.RawMessage) json.RawMessage {
 		return json.RawMessage(`null`)
 	}
 	return append(json.RawMessage(nil), []byte(trimmed)...)
+}
+
+func normalizedIDKey(raw json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return ""
+	}
+	return trimmed
 }
 
 func firstNonWhitespace(data []byte) byte {

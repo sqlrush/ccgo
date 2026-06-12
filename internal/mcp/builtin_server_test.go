@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -267,6 +268,70 @@ func TestBuiltinServerReportsInvalidRequest(t *testing.T) {
 		if response.Error == nil || response.Error.Code != -32600 {
 			t.Fatalf("response = %#v", response)
 		}
+	}
+}
+
+func TestBuiltinServerRecordsCancellationNotifications(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"requestId":"7","reason":"stopped"}}`,
+		`{"jsonrpc":"2.0","id":"7","method":"ping","params":{}}`,
+		`{"jsonrpc":"2.0","id":"7","method":"ping","params":{}}`,
+		"",
+	}, "\n")
+	var out bytes.Buffer
+	if err := server.Run(context.Background(), strings.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	responses := decodeServerResponses(t, out.String())
+	if len(responses) != 2 {
+		t.Fatalf("responses = %#v output=%s", responses, out.String())
+	}
+	if responses[0].Error == nil || responses[0].Error.Code != -32800 || !strings.Contains(fmt.Sprint(responses[0].Error.Data), "stopped") {
+		t.Fatalf("cancelled response = %#v", responses[0])
+	}
+	if responses[1].Error != nil || string(mustMarshal(t, responses[1].Result)) != "{}" {
+		t.Fatalf("second response = %#v", responses[1])
+	}
+}
+
+func TestBuiltinServerRecordsNumericCancellationIDs(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"request_id":9}}`,
+		`{"jsonrpc":"2.0","id":9,"method":"ping","params":{}}`,
+		"",
+	}, "\n")
+	var out bytes.Buffer
+	if err := server.Run(context.Background(), strings.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	responses := decodeServerResponses(t, out.String())
+	if len(responses) != 1 || responses[0].Error == nil || responses[0].Error.Code != -32800 {
+		t.Fatalf("responses = %#v output=%s", responses, out.String())
+	}
+	if string(responses[0].ID) != "9" {
+		t.Fatalf("id = %s", responses[0].ID)
 	}
 }
 
