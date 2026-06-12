@@ -815,6 +815,14 @@ type powerShellReadOnlyConfig struct {
 	pathPositionalsAfterLiterals int
 }
 
+type powerShellNativeReadOnlyConfig struct {
+	allowedFlags      map[string]bool
+	valueFlags        map[string]bool
+	allowAllFlags     bool
+	allowPositionals  bool
+	rejectPositionals bool
+}
+
 var powerShellCommonSwitchFlags = stringSet("verbose", "debug")
 
 var powerShellCommonValueFlags = stringSet(
@@ -1102,14 +1110,79 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 	},
 }
 
+var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig{
+	"ipconfig": {
+		allowedFlags:      stringSet("/all", "/displaydns", "/allcompartments"),
+		rejectPositionals: true,
+	},
+	"netstat": {
+		allowedFlags: stringSet("-a", "-b", "-e", "-f", "-n", "-o", "-p", "-q", "-r", "-s", "-t", "-x", "-y"),
+	},
+	"systeminfo": {
+		allowedFlags: stringSet("/fo", "/nh"),
+		valueFlags:   stringSet("/fo"),
+	},
+	"tasklist": {
+		allowedFlags: stringSet("/m", "/svc", "/v", "/fi", "/fo", "/nh"),
+		valueFlags:   stringSet("/m", "/fi", "/fo"),
+	},
+	"where.exe": {
+		allowAllFlags:    true,
+		allowPositionals: true,
+	},
+	"hostname": {
+		allowedFlags:      stringSet("-a", "-d", "-f", "-i", "-s", "-y", "-a"),
+		rejectPositionals: true,
+	},
+	"whoami": {
+		allowedFlags: stringSet("/user", "/groups", "/claims", "/priv", "/logonid", "/all", "/fo", "/nh"),
+		valueFlags:   stringSet("/fo"),
+	},
+	"ver": {
+		allowAllFlags: true,
+	},
+	"arp": {
+		allowedFlags: stringSet("-a", "-g", "-v", "-n"),
+		valueFlags:   stringSet("-n"),
+	},
+	"getmac": {
+		allowedFlags: stringSet("/fo", "/nh", "/v"),
+		valueFlags:   stringSet("/fo"),
+	},
+	"file": {
+		allowedFlags:     stringSet("-b", "--brief", "-i", "--mime", "-l", "--dereference", "--mime-type", "--mime-encoding", "-z", "--uncompress", "-p", "--preserve-date", "-k", "--keep-going", "-r", "--raw", "-v", "--version", "-0", "--print0", "-s", "--special-files", "-l", "-f", "--separator", "-e", "-p", "-n", "--no-pad", "-e", "--extension"),
+		valueFlags:       stringSet("-f", "--separator", "-e", "-p"),
+		allowPositionals: true,
+	},
+	"tree": {
+		allowedFlags:     stringSet("/f", "/a", "/q", "/l"),
+		valueFlags:       stringSet("/l"),
+		allowPositionals: true,
+	},
+	"findstr": {
+		allowedFlags:     stringSet("/b", "/e", "/l", "/r", "/s", "/i", "/x", "/v", "/n", "/m", "/o", "/p", "/c", "/g", "/d", "/a"),
+		valueFlags:       stringSet("/c", "/g", "/d", "/a"),
+		allowPositionals: true,
+	},
+}
+
+var powerShellDotnetReadOnlyFlags = stringSet("--version", "--info", "--list-runtimes", "--list-sdks")
+
 func readOnlyWords(words []string) bool {
 	command := canonicalCommand(words[0])
 	switch command {
 	case "git":
 		return bashtools.IsReadOnlyCommand(powerShellGitCommand(words))
+	case "dotnet":
+		return readOnlyDotnet(words[1:])
+	case "route":
+		return readOnlyRoute(words[1:])
 	default:
-		config, ok := powerShellReadOnlyCmdlets[command]
-		return ok && readOnlyPowerShellArgs(words[1:], config)
+		if config, ok := powerShellReadOnlyCmdlets[command]; ok {
+			return readOnlyPowerShellArgs(words[1:], config)
+		}
+		config, ok := powerShellNativeReadOnlyCommands[command]
+		return ok && readOnlyNativeArgs(words[1:], config)
 	}
 }
 
@@ -1184,6 +1257,111 @@ func safePowerShellParameterValue(value string, rejectExpressions bool) bool {
 		return false
 	}
 	return !rejectExpressions || !strings.ContainsAny(value, "$@{[()")
+}
+
+func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) bool {
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		if word == "--%" {
+			return false
+		}
+		name, value, hasValue, isFlag := splitNativeFlag(word)
+		if isFlag {
+			if !nativeFlagAllowed(name, config) {
+				return false
+			}
+			if hasValue {
+				if !safeNativeValue(value) {
+					return false
+				}
+				continue
+			}
+			if config.valueFlags[name] && i+1 < len(words) && !looksLikeNativeFlag(words[i+1]) {
+				i++
+				if !safeNativeValue(words[i]) {
+					return false
+				}
+			}
+			continue
+		}
+		if config.rejectPositionals || !config.allowPositionals {
+			return false
+		}
+		if !safeNativeValue(word) {
+			return false
+		}
+	}
+	return true
+}
+
+func nativeFlagAllowed(name string, config powerShellNativeReadOnlyConfig) bool {
+	if config.allowAllFlags || config.allowedFlags[name] {
+		return true
+	}
+	if len(name) <= 2 || !strings.HasPrefix(name, "-") || strings.HasPrefix(name, "--") {
+		return false
+	}
+	for _, r := range name[1:] {
+		if !config.allowedFlags["-"+string(r)] {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlyDotnet(words []string) bool {
+	if len(words) == 0 {
+		return false
+	}
+	for _, word := range words {
+		if !powerShellDotnetReadOnlyFlags[strings.ToLower(strings.TrimSpace(word))] {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlyRoute(words []string) bool {
+	sawPrint := false
+	for _, word := range words {
+		lower := strings.ToLower(strings.TrimSpace(word))
+		switch {
+		case lower == "-4" || lower == "-6":
+			if sawPrint {
+				return false
+			}
+		case lower == "print":
+			if sawPrint {
+				return false
+			}
+			sawPrint = true
+		default:
+			return false
+		}
+	}
+	return sawPrint
+}
+
+func splitNativeFlag(word string) (name string, value string, hasValue bool, isFlag bool) {
+	word = strings.TrimSpace(word)
+	if !looksLikeNativeFlag(word) {
+		return "", "", false, false
+	}
+	for _, sep := range []string{":", "="} {
+		if idx := strings.Index(word, sep); idx > 0 {
+			return strings.ToLower(word[:idx]), word[idx+1:], true, true
+		}
+	}
+	return strings.ToLower(word), "", false, true
+}
+
+func looksLikeNativeFlag(word string) bool {
+	return strings.HasPrefix(word, "-") || strings.HasPrefix(word, "/")
+}
+
+func safeNativeValue(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return value != "" && value != "--%" && !strings.ContainsAny(value, "$`@{[()\x00")
 }
 
 func stringSet(values ...string) map[string]bool {
@@ -1266,6 +1444,9 @@ func safeRelativePowerShellPath(path string) bool {
 
 func canonicalCommand(command string) string {
 	name := strings.ToLower(strings.Trim(strings.TrimSpace(command), `"'`))
+	if name == "where.exe" {
+		return name
+	}
 	if !strings.ContainsAny(name, `/\`) {
 		for _, suffix := range []string{".exe", ".cmd", ".bat", ".com"} {
 			if strings.HasSuffix(name, suffix) {
