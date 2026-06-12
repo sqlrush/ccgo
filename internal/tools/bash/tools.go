@@ -21,6 +21,25 @@ const (
 	maxTimeoutMillis     = 600_000
 )
 
+var goListAllowedFlags = map[string]bool{
+	"-compiled":  true,
+	"-deps":      true,
+	"-e":         true,
+	"-export":    true,
+	"-find":      true,
+	"-json":      true,
+	"-m":         true,
+	"-retracted": true,
+	"-test":      true,
+	"-u":         true,
+	"-versions":  true,
+}
+
+var goListFlagsWithArgs = map[string]bool{
+	"-f":    true,
+	"-tags": true,
+}
+
 var gitStatAllowedFlags = map[string]bool{
 	"--stat":        true,
 	"--numstat":     true,
@@ -1983,7 +2002,7 @@ func readOnlyWords(words []string) bool {
 	case "git":
 		return readOnlyGit(words)
 	case "go":
-		return len(words) >= 2 && words[1] == "list"
+		return readOnlyGo(words)
 	default:
 		return false
 	}
@@ -2065,6 +2084,86 @@ func readOnlyEnv(words []string) bool {
 		}
 	}
 	return true
+}
+
+func readOnlyGo(words []string) bool {
+	if len(words) < 2 {
+		return false
+	}
+	switch words[1] {
+	case "list":
+		return readOnlyGoList(words[2:])
+	default:
+		return false
+	}
+}
+
+func readOnlyGoList(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			for _, positional := range args[i+1:] {
+				if !safeRelativeShellPathArg(positional) {
+					return false
+				}
+			}
+			return true
+		}
+		if strings.HasPrefix(arg, "-") {
+			if strings.Contains(arg, "=") {
+				name, value, _ := strings.Cut(arg, "=")
+				if !safeGoListFlagValue(name, value) {
+					return false
+				}
+				continue
+			}
+			if arg == "-mod" {
+				i++
+				if i >= len(args) || !safeGoListModValue(args[i]) {
+					return false
+				}
+				continue
+			}
+			if goListFlagsWithArgs[arg] {
+				i++
+				if i >= len(args) || !safeGoListValue(args[i]) {
+					return false
+				}
+				continue
+			}
+			if !goListAllowedFlags[arg] {
+				return false
+			}
+			continue
+		}
+		if !safeRelativeShellPathArg(arg) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeGoListFlagValue(name string, value string) bool {
+	switch name {
+	case "-mod":
+		return safeGoListModValue(value)
+	case "-f", "-tags":
+		return safeGoListValue(value)
+	case "-json":
+		return safeGoListValue(value)
+	default:
+		return false
+	}
+}
+
+func safeGoListModValue(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return value == "readonly" || value == "vendor"
+}
+
+func safeGoListValue(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return value != "" && !strings.ContainsAny(value, "$`\x00")
 }
 
 func readOnlyGit(words []string) bool {
