@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -12,6 +13,8 @@ import (
 
 type fakeMCPClient struct {
 	tools      []RemoteTool
+	resources  []RemoteResource
+	contents   []ResourceContent
 	calls      []fakeMCPCall
 	callResult any
 	listErr    error
@@ -37,6 +40,15 @@ func (c *fakeMCPClient) CallTool(_ context.Context, serverName string, toolName 
 	}
 	c.calls = append(c.calls, fakeMCPCall{ServerName: serverName, ToolName: toolName, Input: append(json.RawMessage(nil), input...)})
 	return c.callResult, nil
+}
+
+func (c *fakeMCPClient) ListResources(_ context.Context, serverName string) ([]RemoteResource, error) {
+	return c.resources, nil
+}
+
+func (c *fakeMCPClient) ReadResource(_ context.Context, serverName string, uri string) ([]ResourceContent, error) {
+	c.calls = append(c.calls, fakeMCPCall{ServerName: serverName, ToolName: "read_resource", Input: json.RawMessage(`{"uri":` + quoteJSON(uri) + `}`)})
+	return c.contents, nil
 }
 
 func TestBuildToolsCreatesMCPToolDefinitions(t *testing.T) {
@@ -127,4 +139,68 @@ func TestBuildToolsRequiresClient(t *testing.T) {
 	if _, err := BuildTools(context.Background(), ToolBuildOptions{ServerName: "github"}); err == nil {
 		t.Fatal("expected nil client error")
 	}
+}
+
+func TestBuildResourceToolsListAndReadResources(t *testing.T) {
+	client := &fakeMCPClient{
+		resources: []RemoteResource{{
+			URI:         "file:///tmp/a.txt",
+			Name:        "a.txt",
+			Description: "A file",
+			MimeType:    "text/plain",
+		}},
+		contents: []ResourceContent{{
+			URI:      "file:///tmp/a.txt",
+			MimeType: "text/plain",
+			Text:     "hello",
+		}},
+	}
+	tools := BuildResourceTools(ToolBuildOptions{ServerName: "files", Client: client})
+	if len(tools) != 2 {
+		t.Fatalf("tools = %#v", tools)
+	}
+	registry, err := tool.NewRegistry(tools...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := tool.Executor{Registry: registry}
+
+	listResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_list",
+		Name:  "mcp__files__list_resources",
+		Input: json.RawMessage(`{}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listResult.ToolUseID != "toolu_list" {
+		t.Fatalf("list result = %#v", listResult)
+	}
+	if !strings.Contains(listResult.Content.(string), "file:///tmp/a.txt") {
+		t.Fatalf("list content = %#v", listResult.Content)
+	}
+
+	readResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_read",
+		Name:  "mcp__files__read_resource",
+		Input: json.RawMessage(`{"uri":"file:///tmp/a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readResult.ToolUseID != "toolu_read" {
+		t.Fatalf("read result = %#v", readResult)
+	}
+	blocks := readResult.Content.([]contracts.ContentBlock)
+	if len(blocks) != 1 || !strings.Contains(blocks[0].Text, "hello") {
+		t.Fatalf("read blocks = %#v", blocks)
+	}
+	if len(client.calls) != 1 || client.calls[0].ToolName != "read_resource" {
+		t.Fatalf("calls = %#v", client.calls)
+	}
+}
+
+func quoteJSON(value string) string {
+	data, _ := json.Marshal(value)
+	return string(data)
 }
