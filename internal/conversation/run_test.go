@@ -839,6 +839,36 @@ func TestRunnerPassesSkillDirsToToolMetadata(t *testing.T) {
 	}
 }
 
+func TestRunnerDiscoversProjectSkillDirsForToolMetadata(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	rootSkill := filepath.Join(repo, ".claude", "skills", "root")
+	nestedSkill := filepath.Join(cwd, ".claude", "skills", "nested")
+	for _, dir := range []string{rootSkill, nestedSkill} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\ndescription: test\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := Runner{WorkingDirectory: cwd}
+	internal := tool.InternalPathContextFromMetadata(runner.toolMetadata())
+	want := []string{nestedSkill, rootSkill}
+	if len(internal.SkillDirs) != len(want) {
+		t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, want)
+	}
+	for i := range want {
+		if internal.SkillDirs[i] != want[i] {
+			t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, want)
+		}
+	}
+}
+
 func TestRunnerExtractsSessionMemoryAfterTurn(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	client := &fakeClient{calls: []fakeCall{

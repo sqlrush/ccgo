@@ -14,6 +14,7 @@ import (
 	msgs "ccgo/internal/messages"
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
+	"ccgo/internal/skills"
 	"ccgo/internal/tool"
 )
 
@@ -159,13 +160,35 @@ func (t *relevantMemoryPrefetchTask) requestContext(ctx context.Context) (releva
 
 func (r Runner) toolMetadata() map[string]any {
 	metadata := map[string]any{}
-	if r.RelevantMemoryDir != "" || len(r.SkillDirs) > 0 {
+	skillDirs := append([]string(nil), r.SkillDirs...)
+	if r.WorkingDirectory != "" {
+		skillDirs = appendUniqueStrings(skillDirs, skills.ProjectSkillDirs(r.WorkingDirectory)...)
+	}
+	if r.RelevantMemoryDir != "" || len(skillDirs) > 0 {
 		metadata[tool.MetadataInternalPathContextKey] = permissions.InternalPathContext{
 			AutoMemoryDir: r.RelevantMemoryDir,
-			SkillDirs:     append([]string(nil), r.SkillDirs...),
+			SkillDirs:     skillDirs,
 		}
 	}
 	return metadata
+}
+
+func appendUniqueStrings(base []string, items ...string) []string {
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		seen[item] = struct{}{}
+	}
+	for _, item := range items {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		base = append(base, item)
+	}
+	return base
 }
 
 func (r Runner) maybeEmitTokenWarning(history []contracts.Message) {
