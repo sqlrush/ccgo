@@ -104,6 +104,28 @@ func TestBuildToolsCreatesMCPToolDefinitions(t *testing.T) {
 	}
 }
 
+func TestBuildToolsPropagatesDestructiveHint(t *testing.T) {
+	client := &fakeMCPClient{tools: []RemoteTool{{
+		Name:        "delete",
+		Description: "Delete an item",
+		Destructive: true,
+	}}}
+	tools, err := BuildTools(context.Background(), ToolBuildOptions{ServerName: "local", Client: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("tools = %#v", tools)
+	}
+	def, err := tool.Definition(tool.PromptContext{}, tools[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !def.Destructive || def.ReadOnly || def.ConcurrencySafe {
+		t.Fatalf("definition flags = %#v", def)
+	}
+}
+
 func TestBuiltMCPToolCallsClientAndProcessesResult(t *testing.T) {
 	client := &fakeMCPClient{
 		tools: []RemoteTool{{

@@ -178,6 +178,21 @@ func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	}
 }
 
+func TestProtocolClientReadsToolAnnotations(t *testing.T) {
+	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
+		"tools/list": json.RawMessage(`{"tools":[{"name":"delete","annotations":{"destructiveHint":true}}]}`),
+	}}
+	client := NewProtocolClient(transport)
+
+	tools, err := client.ListTools(context.Background(), "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 1 || tools[0].Name != "delete" || tools[0].ReadOnly || !tools[0].Destructive {
+		t.Fatalf("tools = %#v", tools)
+	}
+}
+
 func TestProtocolClientInitializeSendsLifecycleMessages(t *testing.T) {
 	transport := &fakeLifecycleTransport{}
 	client := NewProtocolClient(transport)

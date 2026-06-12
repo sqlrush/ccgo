@@ -14,6 +14,7 @@ type RemoteTool struct {
 	Description string
 	InputSchema contracts.JSONSchema
 	ReadOnly    bool
+	Destructive bool
 }
 
 type RemoteResource struct {
@@ -112,6 +113,7 @@ func buildTool(options ToolBuildOptions, remote RemoteTool) tool.Tool {
 			Description:        remote.Description,
 			InputSchema:        schema,
 			ReadOnly:           remote.ReadOnly,
+			Destructive:        remote.Destructive,
 			ConcurrencySafe:    remote.ReadOnly,
 			MaxResultSizeChars: options.MaxResultChars,
 			MCP: &contracts.MCPToolRef{

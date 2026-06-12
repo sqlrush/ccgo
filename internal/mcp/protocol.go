@@ -614,7 +614,8 @@ type rpcTool struct {
 }
 
 type rpcToolAnnotations struct {
-	ReadOnlyHint bool `json:"readOnlyHint"`
+	ReadOnlyHint    bool `json:"readOnlyHint"`
+	DestructiveHint bool `json:"destructiveHint"`
 }
 
 func (t rpcTool) remoteTool() RemoteTool {
@@ -627,6 +628,7 @@ func (t rpcTool) remoteTool() RemoteTool {
 		Description: t.Description,
 		InputSchema: schema,
 		ReadOnly:    t.ReadOnly || t.ReadOnlySnake || t.Annotations.ReadOnlyHint,
+		Destructive: t.Annotations.DestructiveHint,
 	}
 }
 
