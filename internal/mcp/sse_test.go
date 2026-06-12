@@ -174,6 +174,7 @@ func TestSSETransportRespondsToStreamInboundRequests(t *testing.T) {
 func TestSSETransportReconnectsWithLastEventID(t *testing.T) {
 	firstPost := make(chan struct{}, 1)
 	var sseCalls int
+	var postCalls int
 	var secondLastEventID string
 	var secondSessionID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -209,10 +210,14 @@ func TestSSETransportReconnectsWithLastEventID(t *testing.T) {
 				_, _ = w.Write([]byte("event: endpoint\n"))
 				_, _ = w.Write([]byte("data: /message\n\n"))
 				flusher.Flush()
+				_, _ = w.Write([]byte("event: message\n"))
+				_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","id":"41","result":{"tools":[{"name":"after-reconnect"}]}}` + "\n\n"))
+				flusher.Flush()
 			default:
 				t.Fatalf("unexpected sse reconnect %d", sseCalls)
 			}
 		case "/message":
+			postCalls++
 			var request RPCRequest
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Fatal(err)
@@ -222,7 +227,7 @@ func TestSSETransportReconnectsWithLastEventID(t *testing.T) {
 				w.WriteHeader(http.StatusAccepted)
 				return
 			}
-			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + request.ID + `","result":{"tools":[{"name":"after-reconnect"}]}}`))
+			t.Fatalf("unexpected post request = %#v", request)
 		default:
 			t.Fatalf("path = %s", r.URL.Path)
 		}
@@ -232,19 +237,15 @@ func TestSSETransportReconnectsWithLastEventID(t *testing.T) {
 	transport := NewSSETransport(server.URL+"/sse", nil, server.Client())
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if _, err := transport.RoundTrip(ctx, NewRPCRequest("41", "tools/list", nil)); err == nil {
-		t.Fatal("expected first request to fail when stream closes before response")
-	}
-
-	response, err := transport.RoundTrip(context.Background(), NewRPCRequest("42", "tools/list", nil))
+	response, err := transport.RoundTrip(ctx, NewRPCRequest("41", "tools/list", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.ID != "42" || !strings.Contains(string(response.Result), `"after-reconnect"`) {
+	if response.ID != "41" || !strings.Contains(string(response.Result), `"after-reconnect"`) {
 		t.Fatalf("response = %#v", response)
 	}
-	if sseCalls != 2 || secondLastEventID != "evt-1" || secondSessionID != "session-reconnect" {
-		t.Fatalf("sseCalls=%d lastEventID=%q sessionID=%q", sseCalls, secondLastEventID, secondSessionID)
+	if sseCalls != 2 || postCalls != 1 || secondLastEventID != "evt-1" || secondSessionID != "session-reconnect" {
+		t.Fatalf("sseCalls=%d postCalls=%d lastEventID=%q sessionID=%q", sseCalls, postCalls, secondLastEventID, secondSessionID)
 	}
 }
 

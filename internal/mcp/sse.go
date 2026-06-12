@@ -78,15 +78,23 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 		t.unregisterWaiter(request.ID, waiter)
 		return response, nil
 	}
-	select {
-	case result := <-waiter:
-		if result.Err != nil {
-			return RPCResponse{}, result.Err
+	for {
+		select {
+		case result := <-waiter:
+			if result.Err == nil {
+				return result.Response, nil
+			}
+			if result.Err != io.EOF {
+				return RPCResponse{}, result.Err
+			}
+			if _, err := t.endpoint(ctx); err != nil {
+				return RPCResponse{}, err
+			}
+			waiter = t.registerWaiter(request.ID)
+		case <-ctx.Done():
+			t.unregisterWaiter(request.ID, waiter)
+			return RPCResponse{}, ctx.Err()
 		}
-		return result.Response, nil
-	case <-ctx.Done():
-		t.unregisterWaiter(request.ID, waiter)
-		return RPCResponse{}, ctx.Err()
 	}
 }
 
@@ -333,10 +341,12 @@ func (t *SSETransport) readStream(ctx context.Context, streamID uint64, scanner 
 		}
 		event, ok, err := scanSSEEvent(scanner)
 		if err != nil {
+			t.markStreamClosed(streamID)
 			t.failSSEWaiters(err)
 			return
 		}
 		if !ok {
+			t.markStreamClosed(streamID)
 			t.failSSEWaiters(io.EOF)
 			return
 		}

@@ -1203,7 +1203,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - elicitation、channel notifications、session-expired。
 - 内置工具 MCP server。
 
-本轮补充：SSE transport 现在会记录流事件 `id:`，stream 断开后把连接标记为需要重连；下一次请求会重新建立 SSE stream，并携带 `Last-Event-ID` 与已有 `mcp-session-id`，避免传统 SSE async response 在断流后只 POST 不重连。
+本轮补充：SSE transport 现在会记录流事件 `id:`，stream 断开后把连接标记为需要重连；等待 async response 的同一请求遇到 EOF 会重新建立 SSE stream 并继续等待，重连时携带 `Last-Event-ID` 与已有 `mcp-session-id`，避免传统 SSE async response 在断流后只 POST 不重连。
 
 本轮补充：MCP protocol client 现在会在 initialize 协商成功后把 server protocolVersion 回填到支持的 transport，HTTP/SSE 后续请求和 initialized notification 会携带 `mcp-protocol-version` header，WS 重连时也可复用该协商版本。
 
