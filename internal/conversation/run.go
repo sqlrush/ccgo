@@ -47,6 +47,13 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 	if !shouldQuery {
 		return result, nil
 	}
+	r, closeMCP, err := r.withConfiguredMCPTools(ctx)
+	if err != nil {
+		return result, err
+	}
+	if closeMCP != nil {
+		defer func() { _ = closeMCP() }()
+	}
 	r.maybeEmitTokenWarning(history)
 	relevantMemoryPrefetch := r.startRelevantMemoryPrefetch(ctx, history)
 	if relevantMemoryPrefetch != nil {

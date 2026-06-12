@@ -15,6 +15,7 @@ import (
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	"ccgo/internal/messages"
 	"ccgo/internal/permissions"
@@ -33,6 +34,18 @@ type fakeClient struct {
 	calls    []fakeCall
 	requests []anthropic.Request
 	streams  [][]anthropic.StreamEvent
+}
+
+type fakeRunnerMCPClient struct {
+	tools      []mcp.RemoteTool
+	callResult any
+	calls      []fakeRunnerMCPCall
+}
+
+type fakeRunnerMCPCall struct {
+	ServerName string
+	ToolName   string
+	Input      json.RawMessage
 }
 
 func (f *fakeClient) CreateMessage(ctx context.Context, req anthropic.Request) (*anthropic.Response, error) {
@@ -58,6 +71,35 @@ func (f *fakeClient) StreamMessages(ctx context.Context, req anthropic.Request, 
 		}
 	}
 	return nil
+}
+
+func (f *fakeRunnerMCPClient) ListTools(_ context.Context, serverName string) ([]mcp.RemoteTool, error) {
+	return f.tools, nil
+}
+
+func (f *fakeRunnerMCPClient) CallTool(_ context.Context, serverName string, toolName string, input json.RawMessage) (any, error) {
+	f.calls = append(f.calls, fakeRunnerMCPCall{
+		ServerName: serverName,
+		ToolName:   toolName,
+		Input:      append(json.RawMessage(nil), input...),
+	})
+	return f.callResult, nil
+}
+
+func (f *fakeRunnerMCPClient) ListResources(_ context.Context, serverName string) ([]mcp.RemoteResource, error) {
+	return nil, nil
+}
+
+func (f *fakeRunnerMCPClient) ReadResource(_ context.Context, serverName string, uri string) ([]mcp.ResourceContent, error) {
+	return nil, nil
+}
+
+func (f *fakeRunnerMCPClient) ListPrompts(_ context.Context, serverName string) ([]mcp.RemotePrompt, error) {
+	return nil, nil
+}
+
+func (f *fakeRunnerMCPClient) GetPrompt(_ context.Context, serverName string, promptName string, arguments map[string]string) (mcp.PromptResult, error) {
+	return mcp.PromptResult{}, nil
 }
 
 func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
@@ -148,6 +190,114 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 	if entries[1].Message.ParentUUID == nil {
 		t.Fatalf("assistant transcript entry missing parent")
+	}
+}
+
+func TestRunnerAddsConfiguredMCPToolsAndExecutesUse(t *testing.T) {
+	mcpClient := &fakeRunnerMCPClient{
+		tools: []mcp.RemoteTool{{
+			Name:        "ping",
+			Description: "Ping remote MCP server",
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"text": map[string]any{"type": "string"},
+				},
+			},
+			ReadOnly: true,
+		}},
+		callResult: map[string]any{"toolResult": "pong"},
+	}
+	closed := false
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        "Local",
+			Description: "local tool",
+			ReadOnly:    true,
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{Content: "local"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_mcp",
+				Name:  "mcp__remote__ping",
+				Input: json.RawMessage(`{"text":"hello"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 128,
+		MCP: &MCPConfig{
+			UserSettings: contracts.Settings{
+				MCPServers: map[string]contracts.MCPServer{
+					"remote": {Command: "node", Args: []string{"server.js"}},
+				},
+			},
+			ToolOptions: mcp.ServerToolOptions{
+				DisableResources: true,
+				DisablePrompts:   true,
+				OpenClient: func(_ context.Context, name string, server contracts.MCPServer) (mcp.ClientHandle, error) {
+					if name != "remote" || server.Command != "node" {
+						t.Fatalf("opened server %q %#v", name, server)
+					}
+					return mcp.ClientHandle{
+						Client: mcpClient,
+						Close: func() error {
+							closed = true
+							return nil
+						},
+					}, nil
+				},
+			},
+		},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("use mcp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !closed {
+		t.Fatal("configured MCP client was not closed")
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(client.requests))
+	}
+	if !requestHasTool(client.requests[0], "Local") || !requestHasTool(client.requests[0], "mcp__remote__ping") {
+		t.Fatalf("request tools = %#v", client.requests[0].Tools)
+	}
+	if len(mcpClient.calls) != 1 || mcpClient.calls[0].ServerName != "remote" || mcpClient.calls[0].ToolName != "ping" {
+		t.Fatalf("mcp calls = %#v", mcpClient.calls)
+	}
+	if string(mcpClient.calls[0].Input) != `{"text":"hello"}` {
+		t.Fatalf("mcp input = %s", mcpClient.calls[0].Input)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].Content != "pong" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
 	}
 }
 
@@ -311,6 +461,19 @@ func TestRunnerExecutesClearSlashCommandWithoutQuery(t *testing.T) {
 		Model:     "sonnet",
 		MaxTokens: 128,
 		SessionID: "sess_clear",
+		MCP: &MCPConfig{
+			UserSettings: contracts.Settings{
+				MCPServers: map[string]contracts.MCPServer{
+					"remote": {Command: "node"},
+				},
+			},
+			ToolOptions: mcp.ServerToolOptions{
+				OpenClient: func(_ context.Context, name string, _ contracts.MCPServer) (mcp.ClientHandle, error) {
+					t.Fatalf("no-query slash command opened MCP server %q", name)
+					return mcp.ClientHandle{}, nil
+				},
+			},
+		},
 	}
 
 	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old context")}, messages.UserText("/clear"))
@@ -1274,6 +1437,15 @@ func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 func containsEvent(events []EventType, target EventType) bool {
 	for _, event := range events {
 		if event == target {
+			return true
+		}
+	}
+	return false
+}
+
+func requestHasTool(request anthropic.Request, name string) bool {
+	for _, definition := range request.Tools {
+		if definition.Name == name {
 			return true
 		}
 	}

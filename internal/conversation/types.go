@@ -6,6 +6,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -51,6 +52,7 @@ type Event struct {
 type Runner struct {
 	Client                    MessageClient
 	Tools                     tool.Executor
+	MCP                       *MCPConfig
 	Permissions               tool.PermissionDecider
 	Model                     string
 	FallbackModels            []string
@@ -78,6 +80,15 @@ type Runner struct {
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int
 	OnEvent                   func(Event)
+}
+
+type MCPConfig struct {
+	UserSettings    contracts.Settings
+	ProjectSettings contracts.Settings
+	LocalSettings   contracts.Settings
+	CWD             string
+	ParseOptions    mcp.ParseOptions
+	ToolOptions     mcp.ServerToolOptions
 }
 
 type Result struct {
