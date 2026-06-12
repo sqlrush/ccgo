@@ -45,7 +45,6 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 type globInput struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path,omitempty"`
-	Limit   *int   `json:"limit,omitempty"`
 }
 
 type grepInput struct {
@@ -129,7 +128,6 @@ func NewGlobTool() tool.Tool {
 				"properties": map[string]any{
 					"pattern": map[string]any{"type": "string"},
 					"path":    map[string]any{"type": "string"},
-					"limit":   map[string]any{"type": "integer"},
 				},
 			},
 		},
@@ -214,9 +212,6 @@ func validateGlob(ctx tool.Context, raw json.RawMessage) error {
 	if strings.TrimSpace(input.Pattern) == "" {
 		return fmt.Errorf("pattern is required")
 	}
-	if input.Limit != nil && *input.Limit <= 0 {
-		return fmt.Errorf("limit must be positive")
-	}
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	if isBlockedDevicePath(root) {
 		return fmt.Errorf("cannot search %q: this device path would block or produce infinite output", input.Path)
@@ -238,8 +233,7 @@ func callGlob(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if filepath.IsAbs(pattern) {
 		root, pattern = globBaseDirectory(pattern)
 	}
-	limit := inputLimit(input.Limit)
-	matches, truncated, err := collectGlobMatches(root, displayRoot, pattern, limit)
+	matches, truncated, err := collectGlobMatches(root, displayRoot, pattern, defaultSearchLimit)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -382,7 +376,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 
 func decodeGlob(raw json.RawMessage) (globInput, error) {
 	var input globInput
-	if err := decodeStrict(raw, map[string]struct{}{"pattern": {}, "path": {}, "limit": {}}, &input); err != nil {
+	if err := decodeStrict(raw, map[string]struct{}{"pattern": {}, "path": {}}, &input); err != nil {
 		return globInput{}, err
 	}
 	return input, nil
@@ -480,13 +474,6 @@ func isUNCSearchPath(rawPath string, resolvedPath string) bool {
 		strings.HasPrefix(rawPath, "//") ||
 		strings.HasPrefix(resolvedPath, `\\`) ||
 		strings.HasPrefix(resolvedPath, "//")
-}
-
-func inputLimit(limit *int) int {
-	if limit == nil {
-		return defaultSearchLimit
-	}
-	return *limit
 }
 
 func collectGlobMatches(root string, displayRoot string, pattern string, limit int) ([]fileSearchMatch, bool, error) {

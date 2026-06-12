@@ -956,7 +956,8 @@ func TestGlobToolDefaultNoIgnoreAndHidden(t *testing.T) {
 func TestGlobToolTruncationMessage(t *testing.T) {
 	dir := t.TempDir()
 	mtime := time.Now().Add(-time.Hour)
-	for _, rel := range []string{"a.go", "b.go", "c.go"} {
+	for i := 0; i <= defaultSearchLimit; i++ {
+		rel := "f" + strconv.Itoa(1000 + i)[1:] + ".go"
 		path := filepath.Join(dir, rel)
 		if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
 			t.Fatal(err)
@@ -969,12 +970,17 @@ func TestGlobToolTruncationMessage(t *testing.T) {
 	result, err := fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
 		ID:    "toolu_glob_truncated",
 		Name:  "Glob",
-		Input: json.RawMessage(`{"pattern":"*.go","limit":2}`),
+		Input: json.RawMessage(`{"pattern":"*.go"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "a.go\nb.go\n(Results are truncated. Consider using a more specific path or pattern.)"
+	wantFiles := make([]string, 0, defaultSearchLimit)
+	for i := 0; i < defaultSearchLimit; i++ {
+		wantFiles = append(wantFiles, "f"+strconv.Itoa(1000 + i)[1:]+".go")
+	}
+	wantLines := append(append([]string{}, wantFiles...), globTruncatedMessage)
+	want := strings.Join(wantLines, "\n")
 	if result.Content != want {
 		t.Fatalf("glob truncated content = %#v", result.Content)
 	}
@@ -982,8 +988,17 @@ func TestGlobToolTruncationMessage(t *testing.T) {
 		t.Fatalf("glob truncated structured content = %#v", result.StructuredContent)
 	}
 	files := result.StructuredContent["files"].([]string)
-	if len(files) != 2 || files[0] != "a.go" || files[1] != "b.go" {
+	if len(files) != defaultSearchLimit || files[0] != "f000.go" || files[len(files)-1] != "f099.go" {
 		t.Fatalf("glob truncated files = %#v", files)
+	}
+
+	_, err = fileExecutor(t).Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_glob_limit_rejected",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"*.go","limit":2}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "input.limit is not allowed") {
+		t.Fatalf("glob limit err = %v", err)
 	}
 }
 
