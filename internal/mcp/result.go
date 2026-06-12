@@ -1,0 +1,298 @@
+package mcp
+
+import (
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"ccgo/internal/contracts"
+	"ccgo/internal/platform"
+)
+
+const DefaultResultLimitChars = 100_000
+
+type ResultType string
+
+const (
+	ResultTypeToolResult        ResultType = "toolResult"
+	ResultTypeStructuredContent ResultType = "structuredContent"
+	ResultTypeContentArray      ResultType = "contentArray"
+)
+
+type TransformedResult struct {
+	Content           any
+	Type              ResultType
+	Schema            string
+	StructuredContent map[string]any
+}
+
+type ResultOptions struct {
+	ToolUseID      contracts.ID
+	ServerName     string
+	ToolName       string
+	MaxChars       int
+	ResultStoreDir string
+}
+
+func ProcessToolResult(raw any, options ResultOptions) (contracts.ToolResult, error) {
+	transformed, err := TransformResult(raw, options.ServerName, options.ToolName)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	result := contracts.ToolResult{
+		ToolUseID:         options.ToolUseID,
+		Content:           transformed.Content,
+		StructuredContent: transformed.StructuredContent,
+		Meta: map[string]any{
+			"mcp": map[string]any{
+				"server": options.ServerName,
+				"tool":   options.ToolName,
+				"type":   string(transformed.Type),
+			},
+		},
+	}
+	if transformed.Schema != "" {
+		result.Meta["mcp_schema"] = transformed.Schema
+	}
+	return limitMCPResult(result, options), nil
+}
+
+func TransformResult(raw any, serverName string, toolName string) (TransformedResult, error) {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		return TransformedResult{}, unexpectedResultError(serverName, toolName)
+	}
+	if value, ok := obj["toolResult"]; ok {
+		return TransformedResult{
+			Content: fmt.Sprint(value),
+			Type:    ResultTypeToolResult,
+		}, nil
+	}
+	if value, ok := obj["structuredContent"]; ok && value != nil {
+		content, err := json.Marshal(value)
+		if err != nil {
+			return TransformedResult{}, err
+		}
+		return TransformedResult{
+			Content:           string(content),
+			Type:              ResultTypeStructuredContent,
+			Schema:            InferCompactSchema(value, 2),
+			StructuredContent: structuredContentMap(value),
+		}, nil
+	}
+	if value, ok := obj["content"].([]any); ok {
+		blocks := make([]contracts.ContentBlock, 0, len(value))
+		for _, item := range value {
+			blocks = append(blocks, transformContentItem(item, serverName)...)
+		}
+		return TransformedResult{
+			Content: blocks,
+			Type:    ResultTypeContentArray,
+			Schema:  InferCompactSchema(blocks, 2),
+		}, nil
+	}
+	return TransformedResult{}, unexpectedResultError(serverName, toolName)
+}
+
+func InferCompactSchema(value any, depth int) string {
+	if value == nil {
+		return "null"
+	}
+	if depth < 0 {
+		return "..."
+	}
+	switch typed := value.(type) {
+	case []any:
+		if len(typed) == 0 {
+			return "[]"
+		}
+		return "[" + InferCompactSchema(typed[0], depth-1) + "]"
+	case []contracts.ContentBlock:
+		if len(typed) == 0 {
+			return "[]"
+		}
+		return "[" + InferCompactSchema(contentBlockSchemaMap(typed[0]), depth-1) + "]"
+	case map[string]any:
+		if depth <= 0 {
+			return "{...}"
+		}
+		keys := sortedAnyKeys(typed)
+		if len(keys) > 10 {
+			keys = keys[:10]
+		}
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			parts = append(parts, fmt.Sprintf("%s: %s", key, InferCompactSchema(typed[key], depth-1)))
+		}
+		if len(typed) > len(keys) {
+			parts = append(parts, "...")
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case float64, float32, int, int64, int32, uint, uint64, uint32:
+		return "number"
+	default:
+		return fmt.Sprintf("%T", value)
+	}
+}
+
+func transformContentItem(item any, serverName string) []contracts.ContentBlock {
+	obj, ok := item.(map[string]any)
+	if !ok {
+		return nil
+	}
+	switch obj["type"] {
+	case "text":
+		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: stringValue(obj["text"])}}
+	case "image":
+		return []contracts.ContentBlock{{
+			Type: contracts.ContentImage,
+			Source: map[string]any{
+				"type":       "base64",
+				"data":       stringValue(obj["data"]),
+				"media_type": stringValue(firstNonEmpty(obj["mimeType"], obj["mime_type"])),
+			},
+		}}
+	case "resource":
+		return transformResourceContent(obj, serverName)
+	case "resource_link":
+		text := fmt.Sprintf("[Resource link: %s] %s", stringValue(obj["name"]), stringValue(obj["uri"]))
+		if description := stringValue(obj["description"]); description != "" {
+			text += " (" + description + ")"
+		}
+		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: text}}
+	default:
+		return nil
+	}
+}
+
+func transformResourceContent(obj map[string]any, serverName string) []contracts.ContentBlock {
+	resource, ok := obj["resource"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	prefix := fmt.Sprintf("[Resource from %s at %s] ", serverName, stringValue(resource["uri"]))
+	if text := stringValue(resource["text"]); text != "" {
+		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: prefix + text}}
+	}
+	if blob := stringValue(resource["blob"]); blob != "" {
+		mimeType := stringValue(resource["mimeType"])
+		if mimeType == "" {
+			mimeType = stringValue(resource["mime_type"])
+		}
+		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: fmt.Sprintf("%sBinary content (%s, %d base64 characters)", prefix, mimeType, len(blob))}}
+	}
+	return nil
+}
+
+func limitMCPResult(result contracts.ToolResult, options ResultOptions) contracts.ToolResult {
+	limit := options.MaxChars
+	if limit <= 0 {
+		limit = DefaultResultLimitChars
+	}
+	content, serialized, ok := serializableContent(result.Content)
+	if !ok || len(serialized) <= limit {
+		return result
+	}
+	dir := options.ResultStoreDir
+	if dir == "" {
+		dir = filepath.Join(platform.ClaudeHomeDir(), "tool-results")
+	}
+	name := fmt.Sprintf("mcp-%s-%s-%s", normalizeResultName(options.ServerName), normalizeResultName(options.ToolName), string(options.ToolUseID))
+	path := filepath.Join(dir, normalizeResultName(name)+".txt")
+	_ = platform.AtomicWriteFile(path, []byte(serialized), 0o600)
+	preview := serialized[:limit]
+	result.Content = fmt.Sprintf("%s\n\n[MCP tool output truncated; full output saved to %s]", strings.TrimRight(preview, "\n"), path)
+	if result.Meta == nil {
+		result.Meta = map[string]any{}
+	}
+	result.Meta["truncated"] = true
+	result.Meta["full_output_path"] = path
+	result.Meta["full_output_bytes"] = len(serialized)
+	if content != nil {
+		result.Meta["original_content_type"] = fmt.Sprintf("%T", content)
+	}
+	return result
+}
+
+func serializableContent(content any) (any, string, bool) {
+	switch typed := content.(type) {
+	case string:
+		return typed, typed, true
+	default:
+		data, err := json.MarshalIndent(content, "", "  ")
+		if err != nil {
+			return content, "", false
+		}
+		return content, string(data), true
+	}
+}
+
+func structuredContentMap(value any) map[string]any {
+	if obj, ok := value.(map[string]any); ok {
+		return obj
+	}
+	return map[string]any{"value": value}
+}
+
+func contentBlockSchemaMap(block contracts.ContentBlock) map[string]any {
+	out := map[string]any{"type": string(block.Type)}
+	if block.Text != "" {
+		out["text"] = block.Text
+	}
+	if block.Source != nil {
+		out["source"] = block.Source
+	}
+	return out
+}
+
+func sortedAnyKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func stringValue(value any) string {
+	if value == nil {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return fmt.Sprint(value)
+}
+
+func firstNonEmpty(values ...any) any {
+	for _, value := range values {
+		if stringValue(value) != "" {
+			return value
+		}
+	}
+	return nil
+}
+
+func normalizeResultName(value string) string {
+	value = filepath.Base(value)
+	value = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		return '_'
+	}, value)
+	if value == "" || value == "." {
+		return "result"
+	}
+	return value
+}
+
+func unexpectedResultError(serverName string, toolName string) error {
+	return fmt.Errorf("MCP server %q tool %q: unexpected response format", serverName, toolName)
+}
