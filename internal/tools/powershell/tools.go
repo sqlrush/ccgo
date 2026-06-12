@@ -988,6 +988,59 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		allowedFlags: stringSet("name", "id", "listavailable"),
 		valueFlags:   stringSet("name", "id"),
 	},
+	"get-computerinfo": {
+		allowAllFlags: true,
+	},
+	"get-host": {
+		allowAllFlags: true,
+	},
+	"get-culture": {
+		allowAllFlags: true,
+	},
+	"get-uiculture": {
+		allowAllFlags: true,
+	},
+	"get-uptime": {
+		allowAllFlags: true,
+	},
+	"get-netadapter": {
+		allowedFlags: stringSet("name", "interfacedescription", "interfaceindex", "physical"),
+		valueFlags:   stringSet("name", "interfacedescription", "interfaceindex"),
+	},
+	"get-netipaddress": {
+		allowedFlags: stringSet("interfaceindex", "interfacealias", "addressfamily", "type"),
+		valueFlags:   stringSet("interfaceindex", "interfacealias", "addressfamily", "type"),
+	},
+	"get-netipconfiguration": {
+		allowedFlags: stringSet("interfaceindex", "interfacealias", "detailed", "all"),
+		valueFlags:   stringSet("interfaceindex", "interfacealias"),
+	},
+	"get-netroute": {
+		allowedFlags: stringSet("interfaceindex", "interfacealias", "addressfamily", "destinationprefix"),
+		valueFlags:   stringSet("interfaceindex", "interfacealias", "addressfamily", "destinationprefix"),
+	},
+	"get-dnsclientcache": {
+		allowedFlags: stringSet("entry", "name", "type", "status", "section", "data"),
+		valueFlags:   stringSet("entry", "name", "type", "status", "section", "data"),
+	},
+	"get-dnsclient": {
+		allowedFlags: stringSet("interfaceindex", "interfacealias"),
+		valueFlags:   stringSet("interfaceindex", "interfacealias"),
+	},
+	"get-eventlog": {
+		allowedFlags: stringSet("logname", "newest", "after", "before", "entrytype", "index", "instanceid", "message", "source", "username", "asbaseobject", "list"),
+		valueFlags:   stringSet("logname", "newest", "after", "before", "entrytype", "index", "instanceid", "message", "source", "username"),
+	},
+	"get-winevent": {
+		allowedFlags:               stringSet("logname", "listlog", "listprovider", "providername", "path", "maxevents", "filterxpath", "force", "oldest"),
+		pathFlags:                  stringSet("path"),
+		valueFlags:                 stringSet("logname", "listlog", "listprovider", "providername", "maxevents", "filterxpath"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-cimclass": {
+		allowedFlags: stringSet("classname", "namespace", "methodname", "propertyname", "qualifiername"),
+		valueFlags:   stringSet("classname", "namespace", "methodname", "propertyname", "qualifiername"),
+	},
 	"start-sleep": {
 		allowedFlags:           stringSet("seconds", "milliseconds", "duration"),
 		valueFlags:             stringSet("seconds", "milliseconds", "duration"),
