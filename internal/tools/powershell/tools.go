@@ -12,6 +12,7 @@ import (
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
+	bashtools "ccgo/internal/tools/bash"
 )
 
 const (
@@ -807,6 +808,8 @@ func powerShellWords(command string) []string {
 func readOnlyWords(words []string) bool {
 	command := canonicalCommand(words[0])
 	switch command {
+	case "git":
+		return bashtools.IsReadOnlyCommand(powerShellGitCommand(words))
 	case "get-content", "get-item", "test-path", "resolve-path", "get-childitem", "get-filehash", "get-acl", "format-hex", "select-string":
 		return readOnlyFileWords(words[1:])
 	case "get-process", "get-service", "get-location", "write-output", "write-host":
@@ -862,13 +865,24 @@ func readOnlyNonFileWords(words []string) bool {
 }
 
 func destructiveWords(words []string) bool {
-	switch canonicalCommand(words[0]) {
+	command := canonicalCommand(words[0])
+	switch command {
+	case "git":
+		return bashtools.IsDestructiveCommand(powerShellGitCommand(words))
 	case "remove-item", "set-content", "add-content", "clear-content", "clear-item", "out-file", "new-item", "move-item", "copy-item", "rename-item", "set-item", "stop-process", "stop-service", "restart-computer", "invoke-expression", "iex", "start-process", "start-transcript", "stop-transcript":
 		return true
 	default:
-		command := canonicalCommand(words[0])
 		return strings.HasPrefix(command, "remove-") || strings.HasPrefix(command, "set-") || strings.HasPrefix(command, "new-") || strings.HasPrefix(command, "export-")
 	}
+}
+
+func powerShellGitCommand(words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+	normalized := append([]string(nil), words...)
+	normalized[0] = "git"
+	return strings.Join(normalized, " ")
 }
 
 func splitPowerShellOption(word string) (string, string, bool) {
@@ -931,6 +945,14 @@ func safeRelativePowerShellPath(path string) bool {
 
 func canonicalCommand(command string) string {
 	name := strings.ToLower(strings.Trim(strings.TrimSpace(command), `"'`))
+	if !strings.ContainsAny(name, `/\`) {
+		for _, suffix := range []string{".exe", ".cmd", ".bat", ".com"} {
+			if strings.HasSuffix(name, suffix) {
+				name = strings.TrimSuffix(name, suffix)
+				break
+			}
+		}
+	}
 	switch name {
 	case "cat", "gc":
 		return "get-content"

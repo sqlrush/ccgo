@@ -61,6 +61,9 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"Select-String TODO README.md",
 		"Get-Process | Select-String go",
 		"Write-Output hello",
+		"git status --short",
+		"git.exe diff --stat -- README.md",
+		"git.cmd log --oneline --max-count 2",
 	}
 	for _, command := range readOnly {
 		if !IsReadOnlyCommand(command) {
@@ -88,6 +91,10 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"Get-Content --% README.md",
 		"Write-Output (Remove-Item out.txt)",
 		"Invoke-RestMethod https://example.com",
+		"git commit -m test",
+		"git diff --output=/tmp/diff.patch",
+		"git ls-remote https://evil.example/repo.git",
+		`scripts\git.exe status --short`,
 	}
 	for _, command := range notReadOnly {
 		if IsReadOnlyCommand(command) {
@@ -124,6 +131,9 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"Stop-Process -Id 1",
 		"Invoke-Expression $x",
 		"Get-Location && Remove-Item out.txt",
+		"git reset --hard",
+		"git.exe clean -fd",
+		"git.cmd push --force origin main",
 	}
 	for _, command := range destructive {
 		if !IsDestructiveCommand(command) {
