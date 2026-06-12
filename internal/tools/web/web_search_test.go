@@ -171,6 +171,64 @@ func TestWebSearchParsesNestedJSONResultWrappers(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"search": {
+				"organic": [
+					{
+						"htmlTitle": "<b>Alias Result</b>",
+						"pageUrl": {"raw": "https://example.com/alias"},
+						"htmlSnippet": "Alias <b>snippet</b>",
+						"deepLinks": [
+							{"heading": "Deep Link", "targetUrl": "https://docs.example.com/deep", "summary": "Deep summary"}
+						]
+					},
+					{"name": "Source Result", "source_url": "https://example.com/source", "abstract": "Source abstract"},
+					{"headline": "Formatted Result", "formattedUrl": "https://example.com/formatted", "caption": "Formatted caption"},
+					{"title": "Display Only", "displayUrl": "example.com/not-a-real-url", "snippet": "ignored"}
+				]
+			}
+		}`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL,
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_alias_json",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"alias json","max_results":5}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 4 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["title"] != "Alias Result" || results[0]["url"] != "https://example.com/alias" || results[0]["snippet"] != "Alias snippet" {
+		t.Fatalf("first result = %#v", results[0])
+	}
+	if results[1]["title"] != "Deep Link" || results[1]["url"] != "https://docs.example.com/deep" || results[1]["snippet"] != "Deep summary" {
+		t.Fatalf("deep link result = %#v", results[1])
+	}
+	if results[2]["title"] != "Source Result" || results[2]["url"] != "https://example.com/source" || results[2]["snippet"] != "Source abstract" {
+		t.Fatalf("source result = %#v", results[2])
+	}
+	if results[3]["title"] != "Formatted Result" || results[3]["url"] != "https://example.com/formatted" || results[3]["snippet"] != "Formatted caption" {
+		t.Fatalf("formatted result = %#v", results[3])
+	}
+	content := result.Content.(string)
+	if strings.Contains(content, "Display Only") || strings.Contains(content, "<b>") {
+		t.Fatalf("content = %#v", content)
+	}
+}
+
 func TestWebSearchBlockedDomainsAndNoResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

@@ -252,7 +252,8 @@ func collectJSONSearchResults(value any, base *url.URL, results *[]searchResult,
 		for _, key := range []string{
 			"results", "organic_results", "organicResults", "items", "value", "data",
 			"webPages", "web_pages", "web", "response", "search",
-			"hits", "documents", "records", "entries",
+			"hits", "documents", "records", "entries", "organic",
+			"deepLinks", "deep_links", "siteLinks", "sitelinks", "pages", "matches",
 		} {
 			if child, ok := typed[key]; ok {
 				collectJSONSearchResults(child, base, results, seen)
@@ -262,27 +263,54 @@ func collectJSONSearchResults(value any, base *url.URL, results *[]searchResult,
 }
 
 func searchResultFromJSONObject(obj map[string]any, base *url.URL) (searchResult, bool) {
-	rawURL := jsonStringField(obj, "url", "link", "href")
+	rawURL := jsonSearchURLField(obj)
 	resolved := resolveSearchURL(rawURL, base)
 	if resolved == "" || isSearchChromeURL(resolved) {
 		return searchResult{}, false
 	}
-	title := jsonStringField(obj, "title", "name", "headline")
+	title := cleanJSONSearchText(jsonStringField(obj,
+		"title", "name", "headline", "heading",
+		"htmlTitle", "html_title",
+	))
 	if strings.TrimSpace(title) == "" {
 		title = resolved
 	}
-	snippet := jsonStringField(obj, "snippet", "description", "content", "text")
+	snippet := cleanJSONSearchText(jsonStringField(obj,
+		"snippet", "description", "content", "text",
+		"htmlSnippet", "html_snippet",
+		"summary", "extract", "abstract", "body", "caption",
+	))
 	return searchResult{
-		Title:   strings.Join(strings.Fields(htmlstd.UnescapeString(title)), " "),
+		Title:   title,
 		URL:     resolved,
-		Snippet: truncateSearchSnippet(strings.Join(strings.Fields(htmlstd.UnescapeString(snippet)), " "), 320),
+		Snippet: truncateSearchSnippet(snippet, 320),
 	}, true
+}
+
+func jsonSearchURLField(obj map[string]any) string {
+	if raw := jsonStringField(obj,
+		"url", "link", "href",
+		"pageUrl", "pageURL", "page_url",
+		"targetUrl", "targetURL", "target_url",
+		"webUrl", "webURL", "web_url",
+		"sourceUrl", "sourceURL", "source_url",
+	); raw != "" {
+		return raw
+	}
+	raw := jsonStringField(obj,
+		"displayUrl", "displayURL", "display_url",
+		"formattedUrl", "formattedURL", "formatted_url",
+	)
+	if isAbsoluteSearchURL(raw) {
+		return raw
+	}
+	return ""
 }
 
 func jsonStringField(obj map[string]any, names ...string) string {
 	for _, name := range names {
 		if value, ok := obj[name]; ok {
-			if text := jsonScalarString(value); text != "" {
+			if text := jsonSearchString(value); text != "" {
 				return text
 			}
 		}
@@ -290,22 +318,47 @@ func jsonStringField(obj map[string]any, names ...string) string {
 	return ""
 }
 
-func jsonScalarString(value any) string {
+func jsonSearchString(value any) string {
 	switch typed := value.(type) {
 	case string:
 		return strings.TrimSpace(typed)
 	case float64:
 		return strings.TrimSpace(fmt.Sprintf("%.0f", typed))
+	case map[string]any:
+		return jsonStringField(typed,
+			"url", "link", "href",
+			"raw", "value", "text", "content",
+			"title", "name", "headline", "heading",
+		)
+	case []any:
+		for _, item := range typed {
+			if text := jsonSearchString(item); text != "" {
+				return text
+			}
+		}
+		return ""
 	default:
 		return ""
 	}
 }
 
+func cleanJSONSearchText(value string) string {
+	value = htmlstd.UnescapeString(value)
+	value = jsonHTMLTagRe.ReplaceAllString(value, "")
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func isAbsoluteSearchURL(raw string) bool {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	return strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "//")
+}
+
 var (
-	anchorRe  = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
-	hrefRe    = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
-	snippetRe = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
-	tagRe     = regexp.MustCompile(`(?is)<[^>]+>`)
+	anchorRe      = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
+	hrefRe        = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
+	snippetRe     = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
+	tagRe         = regexp.MustCompile(`(?is)<[^>]+>`)
+	jsonHTMLTagRe = regexp.MustCompile(`(?is)</?[a-z][a-z0-9:-]*(?:\s[^>]*)?>`)
 )
 
 func hrefFromAttrs(attrs string) string {
