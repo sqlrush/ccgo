@@ -486,6 +486,19 @@ func (c *ProtocolClient) Ping(ctx context.Context) error {
 }
 
 func (c *ProtocolClient) Complete(ctx context.Context, request CompletionRequest) (CompletionResult, error) {
+	request.Ref.Type = strings.TrimSpace(request.Ref.Type)
+	request.Ref.Name = strings.TrimSpace(request.Ref.Name)
+	request.Ref.URI = strings.TrimSpace(request.Ref.URI)
+	request.Argument.Name = strings.TrimSpace(request.Argument.Name)
+	if request.Ref.Type == "" {
+		return CompletionResult{}, fmt.Errorf("mcp completion ref type is required")
+	}
+	if request.Ref.Name == "" && request.Ref.URI == "" {
+		return CompletionResult{}, fmt.Errorf("mcp completion ref name or uri is required")
+	}
+	if request.Argument.Name == "" {
+		return CompletionResult{}, fmt.Errorf("mcp completion argument name is required")
+	}
 	raw, err := c.request(ctx, "completion/complete", request)
 	if err != nil {
 		return CompletionResult{}, err
@@ -498,7 +511,11 @@ func (c *ProtocolClient) Complete(ctx context.Context, request CompletionRequest
 }
 
 func (c *ProtocolClient) SetLoggingLevel(ctx context.Context, level string) error {
-	_, err := c.request(ctx, "logging/setLevel", map[string]any{"level": strings.TrimSpace(level)})
+	level = strings.TrimSpace(level)
+	if level == "" {
+		return fmt.Errorf("mcp logging level is required")
+	}
+	_, err := c.request(ctx, "logging/setLevel", map[string]any{"level": level})
 	return err
 }
 

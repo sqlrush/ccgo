@@ -895,11 +895,11 @@ func TestProtocolClientCompletesAndSetsLoggingLevel(t *testing.T) {
 
 	completion, err := client.Complete(context.Background(), CompletionRequest{
 		Ref: CompletionReference{
-			Type: "ref/prompt",
-			Name: "deploy",
+			Type: " ref/prompt ",
+			Name: " deploy ",
 		},
 		Argument: CompletionArgument{
-			Name:  "environment",
+			Name:  " environment ",
 			Value: "pr",
 		},
 		Context: &CompletionContext{
@@ -919,12 +919,25 @@ func TestProtocolClientCompletesAndSetsLoggingLevel(t *testing.T) {
 		t.Fatalf("requests = %#v", transport.requests)
 	}
 	completeParams := mustJSON(t, transport.requests[0].Params)
-	if !strings.Contains(completeParams, `"type":"ref/prompt"`) || !strings.Contains(completeParams, `"environment"`) || !strings.Contains(completeParams, `"service":"api"`) {
+	if !strings.Contains(completeParams, `"type":"ref/prompt"`) || !strings.Contains(completeParams, `"name":"deploy"`) || !strings.Contains(completeParams, `"name":"environment"`) || !strings.Contains(completeParams, `"service":"api"`) {
 		t.Fatalf("completion params = %s", completeParams)
 	}
 	loggingParams := mustJSON(t, transport.requests[1].Params)
 	if !strings.Contains(loggingParams, `"level":"warning"`) {
 		t.Fatalf("logging params = %s", loggingParams)
+	}
+
+	if _, err := client.Complete(context.Background(), CompletionRequest{Argument: CompletionArgument{Name: "topic"}}); err == nil {
+		t.Fatal("expected missing completion ref error")
+	}
+	if _, err := client.Complete(context.Background(), CompletionRequest{Ref: CompletionReference{Type: "ref/prompt", Name: "deploy"}}); err == nil {
+		t.Fatal("expected missing completion argument error")
+	}
+	if err := client.SetLoggingLevel(context.Background(), " "); err == nil {
+		t.Fatal("expected empty logging level error")
+	}
+	if len(transport.requests) != 2 {
+		t.Fatalf("unexpected validation rpc requests = %#v", transport.requests)
 	}
 }
 
