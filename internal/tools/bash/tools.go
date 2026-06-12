@@ -2017,7 +2017,13 @@ func safeRelativeShellPathArg(value string) bool {
 	if value == "" || strings.ContainsAny(value, "$`\x00") {
 		return false
 	}
-	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, "~") {
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, `\`) || strings.HasPrefix(value, "~") {
+		return false
+	}
+	if len(value) >= 2 && isASCIIAlpha(value[0]) && value[1] == ':' {
+		return false
+	}
+	if strings.Contains(value, ":") {
 		return false
 	}
 	normalized := strings.ReplaceAll(value, `\`, "/")
@@ -2027,6 +2033,10 @@ func safeRelativeShellPathArg(value string) bool {
 		}
 	}
 	return true
+}
+
+func isASCIIAlpha(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }
 
 func readOnlyEnv(words []string) bool {
