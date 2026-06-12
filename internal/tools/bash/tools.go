@@ -1323,7 +1323,7 @@ func bashDestructiveInput(raw json.RawMessage) bool {
 }
 
 func IsReadOnlyCommand(command string) bool {
-	command = strings.TrimSpace(command)
+	command = strings.TrimSpace(stripShellLineComments(command))
 	if command == "" || !shellSyntaxComplete(command) || hasShellMutationSyntax(command) || IsDestructiveCommand(command) {
 		return false
 	}
@@ -1344,6 +1344,7 @@ func IsReadOnlyCommand(command string) bool {
 }
 
 func IsDestructiveCommand(command string) bool {
+	command = stripShellLineComments(command)
 	for _, segment := range splitCommandSegments(command) {
 		words := shellWords(segment)
 		if len(words) == 0 {
@@ -1425,6 +1426,54 @@ func shellSyntaxComplete(command string) bool {
 	return !inSingle && !inDouble && !escaped
 }
 
+func stripShellLineComments(command string) string {
+	var stripped strings.Builder
+	inSingle := false
+	inDouble := false
+	escaped := false
+	wordStart := true
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			stripped.WriteByte(ch)
+			escaped = false
+			wordStart = false
+			continue
+		}
+		if ch == '\\' && !inSingle {
+			stripped.WriteByte(ch)
+			escaped = true
+			wordStart = false
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			stripped.WriteByte(ch)
+			wordStart = false
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			stripped.WriteByte(ch)
+			wordStart = false
+			continue
+		}
+		if !inSingle && !inDouble && ch == '#' && wordStart {
+			for i+1 < len(command) && command[i+1] != '\n' && command[i+1] != '\r' {
+				i++
+			}
+			continue
+		}
+		stripped.WriteByte(ch)
+		if !inSingle && !inDouble && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == ';' || ch == '|' || ch == '&') {
+			wordStart = true
+		} else {
+			wordStart = false
+		}
+	}
+	return stripped.String()
+}
+
 func splitCommandSegments(command string) []string {
 	var segments []string
 	var current strings.Builder
@@ -1455,7 +1504,7 @@ func splitCommandSegments(command string) []string {
 		}
 		if !inSingle && !inDouble {
 			switch ch {
-			case ';', '|':
+			case ';', '|', '\n', '\r':
 				segments = appendNonemptySegment(segments, current.String())
 				current.Reset()
 				continue

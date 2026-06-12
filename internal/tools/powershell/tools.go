@@ -653,7 +653,7 @@ func tailText(text string, lines int) string {
 }
 
 func IsReadOnlyCommand(command string) bool {
-	command = strings.TrimSpace(command)
+	command = strings.TrimSpace(stripPowerShellLineComments(command))
 	if command == "" || !powerShellSyntaxComplete(command) || hasPowerShellMutationSyntax(command) || IsDestructiveCommand(command) {
 		return false
 	}
@@ -674,6 +674,7 @@ func IsReadOnlyCommand(command string) bool {
 }
 
 func IsDestructiveCommand(command string) bool {
+	command = stripPowerShellLineComments(command)
 	for _, segment := range splitPowerShellSegments(command) {
 		words := powerShellWords(segment)
 		if len(words) == 0 {
@@ -744,6 +745,54 @@ func powerShellSyntaxComplete(command string) bool {
 	return !inSingle && !inDouble && !escaped
 }
 
+func stripPowerShellLineComments(command string) string {
+	var stripped strings.Builder
+	inSingle := false
+	inDouble := false
+	escaped := false
+	wordStart := true
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			stripped.WriteByte(ch)
+			escaped = false
+			wordStart = false
+			continue
+		}
+		if ch == '`' && !inSingle {
+			stripped.WriteByte(ch)
+			escaped = true
+			wordStart = false
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			stripped.WriteByte(ch)
+			wordStart = false
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			stripped.WriteByte(ch)
+			wordStart = false
+			continue
+		}
+		if !inSingle && !inDouble && ch == '#' && wordStart {
+			for i+1 < len(command) && command[i+1] != '\n' && command[i+1] != '\r' {
+				i++
+			}
+			continue
+		}
+		stripped.WriteByte(ch)
+		if !inSingle && !inDouble && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == ';' || ch == '|' || ch == '&') {
+			wordStart = true
+		} else {
+			wordStart = false
+		}
+	}
+	return stripped.String()
+}
+
 func splitPowerShellSegments(command string) []string {
 	var segments []string
 	var current strings.Builder
@@ -772,7 +821,7 @@ func splitPowerShellSegments(command string) []string {
 			current.WriteByte(ch)
 			continue
 		}
-		if !inSingle && !inDouble && (ch == ';' || ch == '|' || ch == '&') {
+		if !inSingle && !inDouble && (ch == ';' || ch == '|' || ch == '&' || ch == '\n' || ch == '\r') {
 			segments = appendNonemptySegment(segments, current.String())
 			current.Reset()
 			continue

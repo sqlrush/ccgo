@@ -181,6 +181,9 @@ func TestBashCommandClassification(t *testing.T) {
 		"printf hello",
 		"printf '\\'",
 		"printf '\\' | wc -c",
+		"pwd # rm -rf build",
+		"printf '# rm -rf build'",
+		"pwd\nls -la",
 	}
 	for _, command := range readOnly {
 		if !IsReadOnlyCommand(command) {
@@ -249,6 +252,7 @@ func TestBashCommandClassification(t *testing.T) {
 		"git status --short \"",
 		"printf hello \\",
 		"cat 'README.md; rm -rf build",
+		"pwd\nmake build",
 		"ls && echo hi > out.txt",
 	}
 	for _, command := range notReadOnly {
@@ -288,6 +292,8 @@ func TestBashCommandClassification(t *testing.T) {
 		"find . -name '*.tmp' -delete",
 		"find . -type f -exec rm {} ;",
 		"find . -type f -execdir rmdir {} ;",
+		"pwd\nrm -rf build",
+		"pwd # comment\nrm -rf build",
 		"printf '%s\n' build | xargs rm -rf",
 		"sudo make install",
 		"chmod -R 777 .",

@@ -523,6 +523,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash`/`PowerShell` 轻量 tokenizer 的 escape 处理现在尊重 single-quoted literal 语义，Bash 单引号内 `\` 和 PowerShell 单引号内 backtick 不再被当作 escape，从而减少合法只读命令的误拒绝。
 
+本轮补充：`Bash`/`PowerShell` read-only/destructive 分类现在会在未引用 newline 处分段，并剥离未引用的行注释；注释后的文本不会误触发拒绝，下一行真实命令仍会被独立分类。
+
 仍需完成：
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。
