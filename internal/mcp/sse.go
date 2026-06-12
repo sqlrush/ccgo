@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,9 +18,18 @@ type SSETransport struct {
 	MaxResponseBytes      int64
 	ProtocolVersionHeader string
 
+	connectMu   sync.Mutex
 	mu          sync.Mutex
 	endpointURL string
 	sessionID   string
+	streamClose context.CancelFunc
+	waiters     map[string]chan sseWaitResult
+	pending     map[string]sseWaitResult
+}
+
+type sseWaitResult struct {
+	Response RPCResponse
+	Err      error
 }
 
 func NewSSETransport(rawURL string, headers map[string]string, client HTTPDoer) *SSETransport {
@@ -37,6 +45,7 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	if err != nil {
 		return RPCResponse{}, err
 	}
+	waiter := t.registerWaiter(request.ID)
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
@@ -47,14 +56,36 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	t.mu.Lock()
 	t.sessionID = httpTransport.SessionID
 	t.mu.Unlock()
-	return response, err
+	if err != nil {
+		t.unregisterWaiter(request.ID, waiter)
+		return RPCResponse{}, err
+	}
+	if response.Error != nil || len(response.Result) > 0 {
+		t.unregisterWaiter(request.ID, waiter)
+		return response, nil
+	}
+	select {
+	case result := <-waiter:
+		if result.Err != nil {
+			return RPCResponse{}, result.Err
+		}
+		return result.Response, nil
+	case <-ctx.Done():
+		t.unregisterWaiter(request.ID, waiter)
+		return RPCResponse{}, ctx.Err()
+	}
 }
 
 func (t *SSETransport) Close() error {
 	t.mu.Lock()
 	endpoint := t.endpointURL
 	sessionID := t.sessionID
+	streamClose := t.streamClose
+	t.streamClose = nil
 	t.mu.Unlock()
+	if streamClose != nil {
+		streamClose()
+	}
 	if endpoint == "" || sessionID == "" {
 		return nil
 	}
@@ -75,20 +106,20 @@ func (t *SSETransport) endpoint(ctx context.Context) (string, error) {
 	if endpoint != "" {
 		return endpoint, nil
 	}
-	discovered, err := t.discoverEndpoint(ctx)
-	if err != nil {
-		return "", err
-	}
-	t.mu.Lock()
-	if t.endpointURL == "" {
-		t.endpointURL = discovered
-	}
-	endpoint = t.endpointURL
-	t.mu.Unlock()
-	return endpoint, nil
+	return t.connect(ctx)
 }
 
-func (t *SSETransport) discoverEndpoint(ctx context.Context) (string, error) {
+func (t *SSETransport) connect(ctx context.Context) (string, error) {
+	t.connectMu.Lock()
+	defer t.connectMu.Unlock()
+	t.mu.Lock()
+	if t.endpointURL != "" {
+		endpoint := t.endpointURL
+		t.mu.Unlock()
+		return endpoint, nil
+	}
+	t.mu.Unlock()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.URL, nil)
 	if err != nil {
 		return "", err
@@ -111,33 +142,144 @@ func (t *SSETransport) discoverEndpoint(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
 	limit := t.MaxResponseBytes
 	if limit <= 0 {
 		limit = DefaultHTTPResponseLimitBytes
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err != nil {
-		return "", err
-	}
-	if int64(len(body)) > limit {
-		return "", fmt.Errorf("mcp sse response exceeds %d bytes", limit)
-	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+		_ = resp.Body.Close()
 		return "", fmt.Errorf("mcp sse status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	events, err := ParseSSEEvents(bytes.NewReader(body))
-	if err != nil {
-		return "", err
+	if nextSessionID := strings.TrimSpace(resp.Header.Get("mcp-session-id")); nextSessionID != "" {
+		t.mu.Lock()
+		t.sessionID = nextSessionID
+		t.mu.Unlock()
 	}
-	for _, event := range events {
+
+	scanner := newSSEScanner(io.LimitReader(resp.Body, limit+1))
+	for {
+		event, ok, err := scanSSEEvent(scanner)
+		if err != nil {
+			_ = resp.Body.Close()
+			return "", err
+		}
+		if !ok {
+			_ = resp.Body.Close()
+			return "", fmt.Errorf("mcp sse endpoint event not found")
+		}
 		if event.Event != "endpoint" {
+			t.dispatchSSEEvent(event)
 			continue
 		}
-		return resolveSSEEndpoint(t.URL, event.Data)
+		endpoint, err := resolveSSEEndpoint(t.URL, event.Data)
+		if err != nil {
+			_ = resp.Body.Close()
+			return "", err
+		}
+		streamCtx, cancel := context.WithCancel(ctx)
+		t.mu.Lock()
+		t.endpointURL = endpoint
+		t.streamClose = cancel
+		t.mu.Unlock()
+		go t.readStream(streamCtx, scanner, resp.Body)
+		return endpoint, nil
 	}
-	return "", fmt.Errorf("mcp sse endpoint event not found")
+}
+
+func (t *SSETransport) readStream(ctx context.Context, scanner *sseScanner, body io.Closer) {
+	defer body.Close()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		event, ok, err := scanSSEEvent(scanner)
+		if err != nil {
+			t.failSSEWaiters(err)
+			return
+		}
+		if !ok {
+			t.failSSEWaiters(io.EOF)
+			return
+		}
+		t.dispatchSSEEvent(event)
+	}
+}
+
+func (t *SSETransport) registerWaiter(id string) chan sseWaitResult {
+	ch := make(chan sseWaitResult, 1)
+	if id == "" {
+		return ch
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.pending != nil {
+		if result, ok := t.pending[id]; ok {
+			delete(t.pending, id)
+			ch <- result
+			return ch
+		}
+	}
+	if t.waiters == nil {
+		t.waiters = map[string]chan sseWaitResult{}
+	}
+	t.waiters[id] = ch
+	return ch
+}
+
+func (t *SSETransport) unregisterWaiter(id string, ch chan sseWaitResult) {
+	if id == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.waiters != nil && t.waiters[id] == ch {
+		delete(t.waiters, id)
+	}
+}
+
+func (t *SSETransport) dispatchSSEEvent(event SSEEvent) {
+	if event.Event != "" && event.Event != "message" {
+		return
+	}
+	if strings.TrimSpace(event.Data) == "" {
+		return
+	}
+	var response RPCResponse
+	if err := json.Unmarshal([]byte(event.Data), &response); err != nil {
+		t.failSSEWaiters(fmt.Errorf("decode mcp sse response: %w", err))
+		return
+	}
+	if response.ID == "" {
+		return
+	}
+	result := sseWaitResult{Response: response}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if waiter := t.waiters[response.ID]; waiter != nil {
+		delete(t.waiters, response.ID)
+		waiter <- result
+		return
+	}
+	if t.pending == nil {
+		t.pending = map[string]sseWaitResult{}
+	}
+	t.pending[response.ID] = result
+}
+
+func (t *SSETransport) failSSEWaiters(err error) {
+	if err == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for id, waiter := range t.waiters {
+		delete(t.waiters, id)
+		waiter <- sseWaitResult{Err: err}
+	}
 }
 
 func resolveSSEEndpoint(baseURL string, data string) (string, error) {

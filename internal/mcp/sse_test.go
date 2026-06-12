@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 )
@@ -46,6 +47,47 @@ func TestSSETransportDiscoversEndpointAndPostsRequests(t *testing.T) {
 	}
 	if endpoint, err := transport.endpoint(context.Background()); err != nil || endpoint != server.URL+"/message" {
 		t.Fatalf("endpoint = %q, %v", endpoint, err)
+	}
+}
+
+func TestSSETransportWaitsForAsyncStreamResponse(t *testing.T) {
+	postReceived := make(chan RPCRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sse":
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("missing flusher")
+			}
+			w.Header().Set("content-type", "text/event-stream")
+			_, _ = w.Write([]byte("event: endpoint\n"))
+			_, _ = w.Write([]byte("data: /message\n\n"))
+			flusher.Flush()
+			request := <-postReceived
+			_, _ = w.Write([]byte("event: message\n"))
+			_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","id":"` + request.ID + `","result":{"tools":[{"name":"async"}]}}` + "\n\n"))
+			flusher.Flush()
+		case "/message":
+			var request RPCRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			postReceived <- request
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	response, err := NewSSETransport(server.URL+"/sse", nil, server.Client()).RoundTrip(ctx, NewRPCRequest("11", "tools/list", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "11" || !strings.Contains(string(response.Result), `"async"`) {
+		t.Fatalf("response = %#v", response)
 	}
 }
 

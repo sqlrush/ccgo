@@ -153,27 +153,49 @@ type SSEEvent struct {
 }
 
 func ParseSSEEvents(r io.Reader) ([]SSEEvent, error) {
+	scanner := newSSEScanner(r)
+	var events []SSEEvent
+	for {
+		event, ok, err := scanSSEEvent(scanner)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return events, nil
+		}
+		events = append(events, event)
+	}
+}
+
+type sseScanner struct {
+	scanner *bufio.Scanner
+}
+
+func newSSEScanner(r io.Reader) *sseScanner {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
-	var events []SSEEvent
+	return &sseScanner{scanner: scanner}
+}
+
+func scanSSEEvent(scanner *sseScanner) (SSEEvent, bool, error) {
 	var current SSEEvent
 	var dataLines []string
 
-	flush := func() {
+	flush := func() (SSEEvent, bool) {
 		if current.Event == "" && current.ID == "" && len(dataLines) == 0 {
-			return
+			return SSEEvent{}, false
 		}
 		current.Data = strings.Join(dataLines, "\n")
-		events = append(events, current)
-		current = SSEEvent{}
-		dataLines = nil
+		return current, true
 	}
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for scanner.scanner.Scan() {
+		line := scanner.scanner.Text()
 		line = strings.TrimSuffix(line, "\r")
 		if line == "" {
-			flush()
+			if event, ok := flush(); ok {
+				return event, true, nil
+			}
 			continue
 		}
 		if strings.HasPrefix(line, ":") {
@@ -192,11 +214,13 @@ func ParseSSEEvents(r io.Reader) ([]SSEEvent, error) {
 			current.ID = value
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	if err := scanner.scanner.Err(); err != nil {
+		return SSEEvent{}, false, err
 	}
-	flush()
-	return events, nil
+	if event, ok := flush(); ok {
+		return event, true, nil
+	}
+	return SSEEvent{}, false, nil
 }
 
 func rpcResponseFromSSE(r io.Reader, requestID string) (RPCResponse, error) {
