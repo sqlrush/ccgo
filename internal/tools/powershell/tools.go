@@ -881,6 +881,75 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		validatePositionalsAsPaths:   true,
 		pathPositionalsAfterLiterals: 1,
 	},
+	"convertto-json": {
+		allowedFlags: stringSet("inputobject", "depth", "compress", "enumsasstrings", "asarray"),
+		valueFlags:   stringSet("inputobject", "depth"),
+	},
+	"convertfrom-json": {
+		allowedFlags: stringSet("inputobject", "depth", "ashashtable", "noenumerate"),
+		valueFlags:   stringSet("inputobject", "depth"),
+	},
+	"convertto-csv": {
+		allowedFlags: stringSet("inputobject", "delimiter", "notypeinformation", "noheader", "usequotes"),
+		valueFlags:   stringSet("inputobject", "delimiter", "usequotes"),
+	},
+	"convertfrom-csv": {
+		allowedFlags: stringSet("inputobject", "delimiter", "header", "useculture"),
+		valueFlags:   stringSet("inputobject", "delimiter", "header"),
+	},
+	"convertto-xml": {
+		allowedFlags: stringSet("inputobject", "depth", "as", "notypeinformation"),
+		valueFlags:   stringSet("inputobject", "depth", "as"),
+	},
+	"convertto-html": {
+		allowedFlags: stringSet("inputobject", "property", "head", "title", "body", "pre", "post", "as", "fragment"),
+		valueFlags:   stringSet("inputobject", "property", "head", "title", "body", "pre", "post", "as"),
+	},
+	"get-member": {
+		allowedFlags: stringSet("inputobject", "membertype", "name", "static", "view", "force"),
+		valueFlags:   stringSet("inputobject", "membertype", "name", "view"),
+	},
+	"get-unique": {
+		allowedFlags: stringSet("inputobject", "asstring", "caseinsensitive", "ontype"),
+		valueFlags:   stringSet("inputobject"),
+	},
+	"compare-object": {
+		allowedFlags: stringSet("referenceobject", "differenceobject", "property", "syncwindow", "casesensitive", "culture", "excludedifferent", "includeequal", "passthru"),
+		valueFlags:   stringSet("referenceobject", "differenceobject", "property", "syncwindow", "culture"),
+	},
+	"join-string": {
+		allowedFlags: stringSet("inputobject", "property", "separator", "outputprefix", "outputsuffix", "singlequote", "doublequote", "formatstring"),
+		valueFlags:   stringSet("inputobject", "property", "separator", "outputprefix", "outputsuffix", "formatstring"),
+	},
+	"get-random": {
+		allowedFlags: stringSet("inputobject", "minimum", "maximum", "count", "setseed", "shuffle"),
+		valueFlags:   stringSet("inputobject", "minimum", "maximum", "count", "setseed"),
+	},
+	"convert-path": {
+		allowedFlags:               stringSet("path", "literalpath"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-itemproperty": {
+		allowedFlags:               stringSet("path", "literalpath", "name"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("name"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-itempropertyvalue": {
+		allowedFlags:               stringSet("path", "literalpath", "name"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		valueFlags:                 stringSet("name"),
+		validatePositionalsAsPaths: true,
+	},
+	"get-hotfix": {
+		allowedFlags: stringSet("id", "description"),
+		valueFlags:   stringSet("id", "description"),
+	},
+	"get-psprovider": {
+		allowedFlags: stringSet("psprovider"),
+		valueFlags:   stringSet("psprovider"),
+	},
 	"get-process": {
 		allowedFlags: stringSet("name", "id", "module", "fileversioninfo", "includeusername"),
 		valueFlags:   stringSet("name", "id"),
@@ -892,6 +961,34 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 	"get-location": {
 		allowedFlags: stringSet("psprovider", "psdrive", "stack", "stackname"),
 		valueFlags:   stringSet("psprovider", "psdrive", "stackname"),
+	},
+	"get-date": {
+		allowedFlags: stringSet("date", "format", "uformat", "displayhint", "asutc"),
+		valueFlags:   stringSet("date", "format", "uformat", "displayhint"),
+	},
+	"get-psdrive": {
+		allowedFlags: stringSet("name", "psprovider", "scope"),
+		valueFlags:   stringSet("name", "psprovider", "scope"),
+	},
+	"get-module": {
+		allowedFlags: stringSet("name", "listavailable", "all", "fullyqualifiedname", "psedition"),
+		valueFlags:   stringSet("name", "fullyqualifiedname", "psedition"),
+	},
+	"get-alias": {
+		allowedFlags: stringSet("name", "definition", "scope", "exclude"),
+		valueFlags:   stringSet("name", "definition", "scope", "exclude"),
+	},
+	"get-history": {
+		allowedFlags: stringSet("id", "count"),
+		valueFlags:   stringSet("id", "count"),
+	},
+	"get-timezone": {
+		allowedFlags: stringSet("name", "id", "listavailable"),
+		valueFlags:   stringSet("name", "id"),
+	},
+	"start-sleep": {
+		allowedFlags: stringSet("seconds", "milliseconds", "duration"),
+		valueFlags:   stringSet("seconds", "milliseconds", "duration"),
 	},
 	"write-output": {
 		allowedFlags: stringSet("inputobject", "noenumerate"),
@@ -1063,17 +1160,33 @@ func canonicalCommand(command string) string {
 	switch name {
 	case "cat", "gc":
 		return "get-content"
+	case "type":
+		return "get-content"
 	case "ls", "dir", "gci":
 		return "get-childitem"
 	case "pwd", "gl":
 		return "get-location"
+	case "gi":
+		return "get-item"
+	case "gp":
+		return "get-itemproperty"
+	case "ps", "gps":
+		return "get-process"
+	case "kill", "spps":
+		return "stop-process"
+	case "start", "saps":
+		return "start-process"
+	case "gsv":
+		return "get-service"
+	case "h", "history":
+		return "get-history"
 	case "rm", "rmdir", "ri":
 		return "remove-item"
 	case "rd", "del", "erase":
 		return "remove-item"
 	case "mv", "move", "mi":
 		return "move-item"
-	case "cp", "copy", "cpi":
+	case "ci", "cp", "copy", "cpi":
 		return "copy-item"
 	case "ren", "rni":
 		return "rename-item"
@@ -1091,6 +1204,8 @@ func canonicalCommand(command string) string {
 		return "set-item"
 	case "echo", "write":
 		return "write-output"
+	case "sleep":
+		return "start-sleep"
 	default:
 		return name
 	}
