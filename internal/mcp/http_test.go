@@ -374,6 +374,24 @@ func TestHTTPTransportParsesEventStreamResponse(t *testing.T) {
 	}
 }
 
+func TestHTTPTransportEventStreamResponseLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			"event: message\n" +
+				"data: {\"jsonrpc\":\"2.0\",\"id\":\"9\",\"result\":{\"text\":\"" + strings.Repeat("x", 80) + "\"}}\n\n",
+		))
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.URL, nil, server.Client())
+	transport.MaxResponseBytes = 32
+	_, err := transport.RoundTrip(context.Background(), NewRPCRequest("9", "tools/list", nil))
+	if err == nil || !strings.Contains(err.Error(), "exceeds 32 bytes") {
+		t.Fatalf("expected event-stream response limit error, got %v", err)
+	}
+}
+
 func TestHTTPTransportCapturesEventStreamNotifications(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "text/event-stream")

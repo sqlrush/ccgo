@@ -83,7 +83,7 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{}, &HTTPStatusError{Prefix: "mcp http", StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	if isEventStream(resp.Header.Get("content-type")) {
-		return rpcResponseFromSSEWithHandlers(io.LimitReader(resp.Body, limit+1), request.ID, t.dispatchNotification, func(response RPCResponse) (bool, error) {
+		return rpcResponseFromSSEWithHandlers(responseLimitReader(resp.Body, limit), request.ID, t.dispatchNotification, func(response RPCResponse) (bool, error) {
 			return t.dispatchInboundRequest(ctx, response)
 		})
 	}
@@ -480,4 +480,34 @@ func rpcResponseFromSSEWithHandlers(r io.Reader, requestID string, notify func(R
 
 func isEventStream(contentType string) bool {
 	return strings.Contains(strings.ToLower(contentType), "text/event-stream")
+}
+
+type maxResponseReader struct {
+	reader    io.Reader
+	limit     int64
+	remaining int64
+}
+
+func responseLimitReader(reader io.Reader, limit int64) io.Reader {
+	if limit <= 0 {
+		return reader
+	}
+	return &maxResponseReader{reader: reader, limit: limit, remaining: limit}
+}
+
+func (r *maxResponseReader) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		var extra [1]byte
+		n, err := r.reader.Read(extra[:])
+		if n > 0 {
+			return 0, fmt.Errorf("mcp http response exceeds %d bytes", r.limit)
+		}
+		return 0, err
+	}
+	if int64(len(p)) > r.remaining {
+		p = p[:r.remaining]
+	}
+	n, err := r.reader.Read(p)
+	r.remaining -= int64(n)
+	return n, err
 }
