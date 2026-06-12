@@ -257,7 +257,7 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 	readResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
 		ID:    "toolu_read",
 		Name:  "mcp__files__read_resource",
-		Input: json.RawMessage(`{"uri":"file:///tmp/a.txt"}`),
+		Input: json.RawMessage(`{"uri":" file:///tmp/a.txt "}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -272,11 +272,14 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 	if len(client.calls) != 1 || client.calls[0].ToolName != "read_resource" {
 		t.Fatalf("calls = %#v", client.calls)
 	}
+	if !strings.Contains(string(client.calls[0].Input), `"uri":"file:///tmp/a.txt"`) {
+		t.Fatalf("read input = %s", client.calls[0].Input)
+	}
 
 	subscribeResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
 		ID:    "toolu_subscribe",
 		Name:  "mcp__files__subscribe_resource",
-		Input: json.RawMessage(`{"uri":"file:///tmp/a.txt"}`),
+		Input: json.RawMessage(`{"uri":" file:///tmp/a.txt "}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -286,6 +289,17 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 	}
 	if len(client.calls) != 2 || client.calls[1].ToolName != "subscribe_resource" {
 		t.Fatalf("calls = %#v", client.calls)
+	}
+	if !strings.Contains(string(client.calls[1].Input), `"uri":"file:///tmp/a.txt"`) {
+		t.Fatalf("subscribe input = %s", client.calls[1].Input)
+	}
+	_, err = executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_bad_subscribe",
+		Name:  "mcp__files__subscribe_resource",
+		Input: json.RawMessage(`{"uri":" "}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "uri is required") {
+		t.Fatalf("expected subscribe uri error, got %v", err)
 	}
 }
 
@@ -339,7 +353,7 @@ func TestBuildPromptToolsListAndGetPrompt(t *testing.T) {
 	getResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
 		ID:    "toolu_get_prompt",
 		Name:  "mcp__workflow__get_prompt",
-		Input: json.RawMessage(`{"name":"deploy","arguments":{"env":"prod"}}`),
+		Input: json.RawMessage(`{"name":" deploy ","arguments":{"env":"prod"}}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -353,8 +367,16 @@ func TestBuildPromptToolsListAndGetPrompt(t *testing.T) {
 	if len(client.calls) != 1 || client.calls[0].ToolName != "get_prompt" {
 		t.Fatalf("calls = %#v", client.calls)
 	}
-	if !strings.Contains(string(client.calls[0].Input), `"env":"prod"`) {
+	if !strings.Contains(string(client.calls[0].Input), `"name":"deploy"`) || !strings.Contains(string(client.calls[0].Input), `"env":"prod"`) {
 		t.Fatalf("get input = %s", client.calls[0].Input)
+	}
+	_, err = executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_bad_prompt",
+		Name:  "mcp__workflow__get_prompt",
+		Input: json.RawMessage(`{"name":" "}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "name is required") {
+		t.Fatalf("expected prompt name error, got %v", err)
 	}
 }
 

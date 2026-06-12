@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -243,6 +244,7 @@ func buildReadResourceTool(options ToolBuildOptions) tool.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return contracts.ToolResult{}, err
 			}
+			input.URI = strings.TrimSpace(input.URI)
 			if input.URI == "" {
 				return contracts.ToolResult{}, fmt.Errorf("uri is required")
 			}
@@ -290,6 +292,7 @@ func buildSubscribeResourceTool(options ToolBuildOptions) tool.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return contracts.ToolResult{}, err
 			}
+			input.URI = strings.TrimSpace(input.URI)
 			if input.URI == "" {
 				return contracts.ToolResult{}, fmt.Errorf("uri is required")
 			}
@@ -425,6 +428,7 @@ func buildGetPromptTool(options ToolBuildOptions) tool.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return contracts.ToolResult{}, err
 			}
+			input.Name = strings.TrimSpace(input.Name)
 			if input.Name == "" {
 				return contracts.ToolResult{}, fmt.Errorf("name is required")
 			}
