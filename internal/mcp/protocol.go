@@ -392,7 +392,7 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return PromptResult{}, err
 	}
-	return response.promptResult(), nil
+	return response.promptResult()
 }
 
 func listPaginationParams(cursor string) any {
@@ -818,18 +818,40 @@ func (a rpcPromptArgument) promptArgument() PromptArgument {
 }
 
 type rpcPromptResult struct {
-	Description string             `json:"description"`
-	Messages    []rpcPromptMessage `json:"messages"`
+	Description         string             `json:"description"`
+	Messages            []rpcPromptMessage `json:"messages"`
+	PromptMessages      []rpcPromptMessage `json:"promptMessages"`
+	PromptMessagesSnake []rpcPromptMessage `json:"prompt_messages"`
+	Message             json.RawMessage    `json:"message"`
 }
 
-func (r rpcPromptResult) promptResult() PromptResult {
-	messages := make([]PromptMessage, 0, len(r.Messages))
-	for _, message := range r.Messages {
+func (r rpcPromptResult) promptResult() (PromptResult, error) {
+	items, err := r.promptMessages()
+	if err != nil {
+		return PromptResult{}, err
+	}
+	messages := make([]PromptMessage, 0, len(items))
+	for _, message := range items {
 		messages = append(messages, message.promptMessage())
 	}
 	return PromptResult{
 		Description: r.Description,
 		Messages:    messages,
+	}, nil
+}
+
+func (r rpcPromptResult) promptMessages() ([]rpcPromptMessage, error) {
+	switch {
+	case len(r.Messages) > 0:
+		return r.Messages, nil
+	case len(r.PromptMessages) > 0:
+		return r.PromptMessages, nil
+	case len(r.PromptMessagesSnake) > 0:
+		return r.PromptMessagesSnake, nil
+	case len(r.Message) > 0:
+		return decodePromptMessageAlias(r.Message)
+	default:
+		return nil, nil
 	}
 }
 
@@ -847,6 +869,21 @@ func (m rpcPromptMessage) promptMessage() PromptMessage {
 		Role:    m.Role,
 		Content: content,
 	}
+}
+
+func decodePromptMessageAlias(raw json.RawMessage) ([]rpcPromptMessage, error) {
+	if firstNonWhitespace(raw) == '[' {
+		var messages []rpcPromptMessage
+		if err := json.Unmarshal(raw, &messages); err != nil {
+			return nil, err
+		}
+		return messages, nil
+	}
+	var message rpcPromptMessage
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return nil, err
+	}
+	return []rpcPromptMessage{message}, nil
 }
 
 func rawObject(raw json.RawMessage) (map[string]any, error) {

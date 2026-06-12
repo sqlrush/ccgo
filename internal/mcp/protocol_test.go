@@ -568,6 +568,38 @@ func TestProtocolClientReadsResourceContentAliases(t *testing.T) {
 	}
 }
 
+func TestProtocolClientReadsPromptMessageAliases(t *testing.T) {
+	single := NewProtocolClient(&fakeRPCTransport{responses: map[string]json.RawMessage{
+		"prompts/get": json.RawMessage(`{"description":"Single","message":{"role":"user","content":{"type":"text","text":"one"}}}`),
+	}})
+	prompt, err := single.GetPrompt(context.Background(), "workflow", "single", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prompt.Description != "Single" || len(prompt.Messages) != 1 || prompt.Messages[0].Role != "user" {
+		t.Fatalf("single prompt = %#v", prompt)
+	}
+	content := prompt.Messages[0].Content.(map[string]any)
+	if content["text"] != "one" {
+		t.Fatalf("single content = %#v", content)
+	}
+
+	wrapped := NewProtocolClient(&fakeRPCTransport{responses: map[string]json.RawMessage{
+		"prompts/get": json.RawMessage(`{"description":"Wrapped","promptMessages":[{"role":"assistant","content":{"type":"text","text":"two"}}]}`),
+	}})
+	prompt, err = wrapped.GetPrompt(context.Background(), "workflow", "wrapped", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prompt.Description != "Wrapped" || len(prompt.Messages) != 1 || prompt.Messages[0].Role != "assistant" {
+		t.Fatalf("wrapped prompt = %#v", prompt)
+	}
+	content = prompt.Messages[0].Content.(map[string]any)
+	if content["text"] != "two" {
+		t.Fatalf("wrapped content = %#v", content)
+	}
+}
+
 func TestProtocolClientRPCErrorAndSessionExpired(t *testing.T) {
 	client := NewProtocolClient(&fakeRPCTransport{rpcErr: &RPCError{
 		Code:    -32001,
