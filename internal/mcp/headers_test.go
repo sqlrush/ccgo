@@ -16,6 +16,22 @@ func (p testAccessTokenProvider) CurrentAccessToken(context.Context) (string, er
 	return p.token, nil
 }
 
+type refreshableTestAccessTokenProvider struct {
+	token     string
+	refreshed string
+	refreshes int
+}
+
+func (p *refreshableTestAccessTokenProvider) CurrentAccessToken(context.Context) (string, error) {
+	return p.token, nil
+}
+
+func (p *refreshableTestAccessTokenProvider) RefreshAccessToken(context.Context) (string, error) {
+	p.refreshes++
+	p.token = p.refreshed
+	return p.token, nil
+}
+
 func TestTransportHeadersAddsAuthTokenAndOAuthBeta(t *testing.T) {
 	headers := TransportHeaders(contracts.MCPServer{
 		AuthToken: "token",

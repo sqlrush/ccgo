@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -82,6 +83,7 @@ func OpenServerClient(ctx context.Context, name string, server contracts.MCPServ
 }
 
 func OpenServerClientWithOptions(ctx context.Context, name string, server contracts.MCPServer, options ServerToolOptions) (ClientHandle, error) {
+	tokenSource := newServerAccessTokenSource(name, server, options.AccessTokenProvider)
 	switch Transport(server) {
 	case TransportStdio:
 		transport, err := StartStdioTransport(ctx, server)
@@ -94,21 +96,24 @@ func OpenServerClientWithOptions(ctx context.Context, name string, server contra
 		}, nil
 	case TransportHTTP:
 		transport := NewHTTPTransport(server.URL, TransportHeaders(server), nil)
-		transport.HeaderProvider = serverHeaderProvider(name, server, options)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options, tokenSource)
+		transport.AuthorizationRefresher = serverAuthorizationRefresher(tokenSource)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportSSE:
 		transport := NewSSETransport(server.URL, TransportHeaders(server), nil)
-		transport.HeaderProvider = serverHeaderProvider(name, server, options)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options, tokenSource)
+		transport.AuthorizationRefresher = serverAuthorizationRefresher(tokenSource)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportWS:
 		transport := NewWSTransport(server.URL, TransportHeaders(server))
-		transport.HeaderProvider = serverHeaderProvider(name, server, options)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options, tokenSource)
+		transport.AuthorizationRefresher = serverAuthorizationRefresher(tokenSource)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
@@ -118,19 +123,77 @@ func OpenServerClientWithOptions(ctx context.Context, name string, server contra
 	}
 }
 
-func serverHeaderProvider(name string, server contracts.MCPServer, options ServerToolOptions) func(context.Context) (map[string]string, error) {
-	oauthProvider := OAuthServerHeaderProvider(options.AccessTokenProvider)
-	if options.HeaderProvider == nil && oauthProvider == nil {
+type serverAccessTokenSource struct {
+	name     string
+	server   contracts.MCPServer
+	provider ServerAccessTokenProvider
+
+	mu     sync.Mutex
+	loaded bool
+	token  AccessTokenProvider
+}
+
+func newServerAccessTokenSource(name string, server contracts.MCPServer, provider ServerAccessTokenProvider) *serverAccessTokenSource {
+	if provider == nil || server.OAuth == nil {
+		return nil
+	}
+	return &serverAccessTokenSource{name: name, server: server, provider: provider}
+}
+
+func (s *serverAccessTokenSource) providerFor(ctx context.Context) (AccessTokenProvider, error) {
+	if s == nil || s.provider == nil {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.loaded {
+		return s.token, nil
+	}
+	token, err := s.provider(ctx, s.name, s.server)
+	if err != nil {
+		return nil, err
+	}
+	s.token = token
+	s.loaded = true
+	return s.token, nil
+}
+
+func (s *serverAccessTokenSource) CurrentAccessToken(ctx context.Context) (string, error) {
+	token, err := s.providerFor(ctx)
+	if err != nil || token == nil {
+		return "", err
+	}
+	return token.CurrentAccessToken(ctx)
+}
+
+func (s *serverAccessTokenSource) RefreshAccessToken(ctx context.Context) (bool, error) {
+	token, err := s.providerFor(ctx)
+	if err != nil || token == nil {
+		return false, err
+	}
+	refresher, ok := token.(RefreshingAccessTokenProvider)
+	if !ok {
+		return false, nil
+	}
+	_, err = refresher.RefreshAccessToken(ctx)
+	return true, err
+}
+
+func serverHeaderProvider(name string, server contracts.MCPServer, options ServerToolOptions, tokenSource *serverAccessTokenSource) func(context.Context) (map[string]string, error) {
+	if options.HeaderProvider == nil && tokenSource == nil {
 		return nil
 	}
 	return func(ctx context.Context) (map[string]string, error) {
 		var headers map[string]string
-		if oauthProvider != nil {
-			oauthHeaders, err := oauthProvider(ctx, name, server)
+		if tokenSource != nil {
+			token, err := tokenSource.CurrentAccessToken(ctx)
 			if err != nil {
 				return nil, err
 			}
-			headers = MergeTransportHeaders(headers, oauthHeaders)
+			token = strings.TrimSpace(token)
+			if token != "" {
+				headers = MergeTransportHeaders(headers, map[string]string{"Authorization": bearerHeaderValue(token)})
+			}
 		}
 		if options.HeaderProvider != nil {
 			explicitHeaders, err := options.HeaderProvider(ctx, name, server)
@@ -140,6 +203,22 @@ func serverHeaderProvider(name string, server contracts.MCPServer, options Serve
 			headers = MergeTransportHeaders(headers, explicitHeaders)
 		}
 		return headers, nil
+	}
+}
+
+func serverAuthorizationRefresher(tokenSource *serverAccessTokenSource) func(context.Context) error {
+	if tokenSource == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		refreshed, err := tokenSource.RefreshAccessToken(ctx)
+		if err != nil {
+			return err
+		}
+		if !refreshed {
+			return fmt.Errorf("mcp oauth access token provider cannot refresh")
+		}
+		return nil
 	}
 }
 

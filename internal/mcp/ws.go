@@ -31,12 +31,13 @@ const (
 )
 
 type WSTransport struct {
-	URL                   string
-	Headers               map[string]string
-	HeaderProvider        func(context.Context) (map[string]string, error)
-	ProtocolVersionHeader string
-	MaxFrameBytes         int64
-	DialContext           func(context.Context, string, string) (net.Conn, error)
+	URL                    string
+	Headers                map[string]string
+	HeaderProvider         func(context.Context) (map[string]string, error)
+	AuthorizationRefresher func(context.Context) error
+	ProtocolVersionHeader  string
+	MaxFrameBytes          int64
+	DialContext            func(context.Context, string, string) (net.Conn, error)
 
 	mu   sync.Mutex
 	conn *wsConn
@@ -141,6 +142,13 @@ func (t *WSTransport) SendNotification(ctx context.Context, notification RPCNoti
 
 func (t *WSTransport) ResetSession() {
 	_ = t.Close()
+}
+
+func (t *WSTransport) RefreshAuthorization(ctx context.Context) (bool, error) {
+	if t == nil || t.AuthorizationRefresher == nil {
+		return false, nil
+	}
+	return true, t.AuthorizationRefresher(ctx)
 }
 
 func (t *WSTransport) SetRequestHandler(handler RPCRequestHandler) {
@@ -272,7 +280,7 @@ func (t *WSTransport) dial(ctx context.Context) (*wsConn, error) {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusSwitchingProtocols {
 		_ = rawConn.Close()
-		return nil, fmt.Errorf("mcp ws status %d", response.StatusCode)
+		return nil, &HTTPStatusError{Prefix: "mcp ws", StatusCode: response.StatusCode}
 	}
 	if !headerContainsToken(response.Header.Get("Upgrade"), "websocket") || !headerContainsToken(response.Header.Get("Connection"), "upgrade") {
 		_ = rawConn.Close()

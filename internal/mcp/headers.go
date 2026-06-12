@@ -16,6 +16,11 @@ type AccessTokenProvider interface {
 	CurrentAccessToken(context.Context) (string, error)
 }
 
+type RefreshingAccessTokenProvider interface {
+	AccessTokenProvider
+	RefreshAccessToken(context.Context) (string, error)
+}
+
 type ServerAccessTokenProvider func(context.Context, string, contracts.MCPServer) (AccessTokenProvider, error)
 
 func TransportHeaders(server contracts.MCPServer) map[string]string {

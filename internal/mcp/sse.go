@@ -12,12 +12,13 @@ import (
 )
 
 type SSETransport struct {
-	URL                   string
-	Headers               map[string]string
-	HeaderProvider        func(context.Context) (map[string]string, error)
-	Client                HTTPDoer
-	MaxResponseBytes      int64
-	ProtocolVersionHeader string
+	URL                    string
+	Headers                map[string]string
+	HeaderProvider         func(context.Context) (map[string]string, error)
+	AuthorizationRefresher func(context.Context) error
+	Client                 HTTPDoer
+	MaxResponseBytes       int64
+	ProtocolVersionHeader  string
 
 	connectMu   sync.Mutex
 	mu          sync.Mutex
@@ -54,6 +55,7 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
+	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
 	t.mu.Unlock()
@@ -90,6 +92,7 @@ func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNot
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
+	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
 	t.mu.Unlock()
@@ -122,6 +125,13 @@ func (t *SSETransport) ResetSession() {
 	}
 }
 
+func (t *SSETransport) RefreshAuthorization(ctx context.Context) (bool, error) {
+	if t == nil || t.AuthorizationRefresher == nil {
+		return false, nil
+	}
+	return true, t.AuthorizationRefresher(ctx)
+}
+
 func (t *SSETransport) Close() error {
 	t.mu.Lock()
 	endpoint := t.endpointURL
@@ -139,6 +149,7 @@ func (t *SSETransport) Close() error {
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
+	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	httpTransport.SessionID = sessionID
 	return httpTransport.Close()
 }
@@ -231,7 +242,7 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 		_ = resp.Body.Close()
-		return "", fmt.Errorf("mcp sse status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", &HTTPStatusError{Prefix: "mcp sse", StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	if nextSessionID := strings.TrimSpace(resp.Header.Get("mcp-session-id")); nextSessionID != "" {
 		t.mu.Lock()

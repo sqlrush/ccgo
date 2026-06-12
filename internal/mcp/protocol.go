@@ -92,6 +92,10 @@ type RPCSessionResetter interface {
 	ResetSession()
 }
 
+type RPCAuthorizationRefresher interface {
+	RefreshAuthorization(context.Context) (bool, error)
+}
+
 type RPCInboundRequest struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      string          `json:"id"`
@@ -194,29 +198,44 @@ func (c *ProtocolClient) Initialize(ctx context.Context, options InitializeOptio
 		return c.initializeResult, nil
 	}
 	options = normalizeInitializeOptions(options)
-	raw, err := c.rawRequest(ctx, "initialize", map[string]any{
-		"protocolVersion": options.ProtocolVersion,
-		"capabilities":    options.Capabilities,
-		"clientInfo":      options.ClientInfo,
-	})
-	if err != nil {
-		return InitializeResult{}, err
-	}
-	var result InitializeResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return InitializeResult{}, err
-	}
-	if !supportsProtocolVersion(result.ProtocolVersion, options.SupportedProtocolVersions) {
-		return InitializeResult{}, fmt.Errorf("mcp server protocol version %q is not supported", result.ProtocolVersion)
-	}
-	if !options.SkipInitializedNotification {
-		if err := c.sendInitialized(ctx); err != nil {
+	for attempt := 0; attempt < 2; attempt++ {
+		raw, err := c.rawRequest(ctx, "initialize", map[string]any{
+			"protocolVersion": options.ProtocolVersion,
+			"capabilities":    options.Capabilities,
+			"clientInfo":      options.ClientInfo,
+		})
+		if err != nil {
+			if attempt == 0 && IsUnauthorizedError(err) {
+				if recoverErr := c.refreshAuthorizationLocked(ctx); recoverErr != nil {
+					return InitializeResult{}, fmt.Errorf("%w; authorization refresh failed: %v", err, recoverErr)
+				}
+				continue
+			}
 			return InitializeResult{}, err
 		}
+		var result InitializeResult
+		if err := json.Unmarshal(raw, &result); err != nil {
+			return InitializeResult{}, err
+		}
+		if !supportsProtocolVersion(result.ProtocolVersion, options.SupportedProtocolVersions) {
+			return InitializeResult{}, fmt.Errorf("mcp server protocol version %q is not supported", result.ProtocolVersion)
+		}
+		if !options.SkipInitializedNotification {
+			if err := c.sendInitialized(ctx); err != nil {
+				if attempt == 0 && IsUnauthorizedError(err) {
+					if recoverErr := c.refreshAuthorizationLocked(ctx); recoverErr != nil {
+						return InitializeResult{}, fmt.Errorf("%w; authorization refresh failed: %v", err, recoverErr)
+					}
+					continue
+				}
+				return InitializeResult{}, err
+			}
+		}
+		c.initialized = true
+		c.initializeResult = result
+		return result, nil
 	}
-	c.initialized = true
-	c.initializeResult = result
-	return result, nil
+	return InitializeResult{}, fmt.Errorf("mcp initialize authorization retry exhausted")
 }
 
 func (c *ProtocolClient) ListTools(ctx context.Context, serverName string) ([]RemoteTool, error) {
@@ -327,13 +346,20 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 
 func (c *ProtocolClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	raw, err := c.rawRequest(ctx, method, params)
-	if !IsSessionExpiredError(err) {
+	switch {
+	case IsSessionExpiredError(err):
+		if recoverErr := c.recoverExpiredSession(ctx); recoverErr != nil {
+			return nil, fmt.Errorf("%w; session recovery failed: %v", err, recoverErr)
+		}
+		return c.rawRequest(ctx, method, params)
+	case IsUnauthorizedError(err):
+		if recoverErr := c.recoverAuthorization(ctx); recoverErr != nil {
+			return nil, fmt.Errorf("%w; authorization refresh failed: %v", err, recoverErr)
+		}
+		return c.rawRequest(ctx, method, params)
+	default:
 		return raw, err
 	}
-	if recoverErr := c.recoverExpiredSession(ctx); recoverErr != nil {
-		return nil, fmt.Errorf("%w; session recovery failed: %v", err, recoverErr)
-	}
-	return c.rawRequest(ctx, method, params)
 }
 
 func (c *ProtocolClient) rawRequest(ctx context.Context, method string, params any) (json.RawMessage, error) {
@@ -376,6 +402,36 @@ func (c *ProtocolClient) recoverExpiredSession(ctx context.Context) error {
 	c.initializeResult = InitializeResult{}
 	c.initMu.Unlock()
 	return c.EnsureInitialized(ctx)
+}
+
+func (c *ProtocolClient) recoverAuthorization(ctx context.Context) error {
+	c.initMu.Lock()
+	err := c.refreshAuthorizationLocked(ctx)
+	c.initMu.Unlock()
+	if err != nil {
+		return err
+	}
+	return c.EnsureInitialized(ctx)
+}
+
+func (c *ProtocolClient) refreshAuthorizationLocked(ctx context.Context) error {
+	refresher, ok := c.Transport.(RPCAuthorizationRefresher)
+	if !ok {
+		return fmt.Errorf("mcp rpc transport cannot refresh authorization")
+	}
+	refreshed, err := refresher.RefreshAuthorization(ctx)
+	if err != nil {
+		return err
+	}
+	if !refreshed {
+		return fmt.Errorf("mcp rpc transport authorization refresh is not configured")
+	}
+	if resetter, ok := c.Transport.(RPCSessionResetter); ok {
+		resetter.ResetSession()
+	}
+	c.initialized = false
+	c.initializeResult = InitializeResult{}
+	return nil
 }
 
 func normalizeInitializeOptions(options InitializeOptions) InitializeOptions {

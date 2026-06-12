@@ -19,16 +19,17 @@ type HTTPDoer interface {
 }
 
 type HTTPTransport struct {
-	URL                   string
-	Headers               map[string]string
-	HeaderProvider        func(context.Context) (map[string]string, error)
-	Client                HTTPDoer
-	MaxResponseBytes      int64
-	ProtocolVersionHeader string
-	SessionID             string
-	mu                    sync.Mutex
-	notificationMu        sync.RWMutex
-	notificationHandler   RPCNotificationHandler
+	URL                    string
+	Headers                map[string]string
+	HeaderProvider         func(context.Context) (map[string]string, error)
+	AuthorizationRefresher func(context.Context) error
+	Client                 HTTPDoer
+	MaxResponseBytes       int64
+	ProtocolVersionHeader  string
+	SessionID              string
+	mu                     sync.Mutex
+	notificationMu         sync.RWMutex
+	notificationHandler    RPCNotificationHandler
 }
 
 func NewHTTPTransport(rawURL string, headers map[string]string, client HTTPDoer) *HTTPTransport {
@@ -83,7 +84,7 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{}, fmt.Errorf("mcp http response exceeds %d bytes", limit)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return RPCResponse{}, fmt.Errorf("mcp http status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return RPCResponse{}, &HTTPStatusError{Prefix: "mcp http", StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return RPCResponse{ID: request.ID}, nil
@@ -136,9 +137,16 @@ func (t *HTTPTransport) SendNotification(ctx context.Context, notification RPCNo
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("mcp http notification status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return &HTTPStatusError{Prefix: "mcp http notification", StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	return nil
+}
+
+func (t *HTTPTransport) RefreshAuthorization(ctx context.Context) (bool, error) {
+	if t == nil || t.AuthorizationRefresher == nil {
+		return false, nil
+	}
+	return true, t.AuthorizationRefresher(ctx)
 }
 
 func (t *HTTPTransport) ResetSession() {
@@ -206,7 +214,7 @@ func (t *HTTPTransport) Close() error {
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
 		return nil
 	default:
-		return fmt.Errorf("mcp http close status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return &HTTPStatusError{Prefix: "mcp http close", StatusCode: resp.StatusCode, Body: string(body)}
 	}
 }
 
