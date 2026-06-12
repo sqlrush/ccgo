@@ -22,12 +22,13 @@ type InitializingClient interface {
 }
 
 type ServerToolOptions struct {
-	OpenClient       ClientOpenFunc
-	HeaderProvider   ServerHeaderProvider
-	ResultStoreDir   string
-	MaxResultChars   int
-	DisableResources bool
-	DisablePrompts   bool
+	OpenClient          ClientOpenFunc
+	HeaderProvider      ServerHeaderProvider
+	AccessTokenProvider ServerAccessTokenProvider
+	ResultStoreDir      string
+	MaxResultChars      int
+	DisableResources    bool
+	DisablePrompts      bool
 }
 
 type ServerToolSet struct {
@@ -93,21 +94,21 @@ func OpenServerClientWithOptions(ctx context.Context, name string, server contra
 		}, nil
 	case TransportHTTP:
 		transport := NewHTTPTransport(server.URL, TransportHeaders(server), nil)
-		transport.HeaderProvider = serverHeaderProvider(name, server, options.HeaderProvider)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportSSE:
 		transport := NewSSETransport(server.URL, TransportHeaders(server), nil)
-		transport.HeaderProvider = serverHeaderProvider(name, server, options.HeaderProvider)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportWS:
 		transport := NewWSTransport(server.URL, TransportHeaders(server))
-		transport.HeaderProvider = serverHeaderProvider(name, server, options.HeaderProvider)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
@@ -117,12 +118,28 @@ func OpenServerClientWithOptions(ctx context.Context, name string, server contra
 	}
 }
 
-func serverHeaderProvider(name string, server contracts.MCPServer, provider ServerHeaderProvider) func(context.Context) (map[string]string, error) {
-	if provider == nil {
+func serverHeaderProvider(name string, server contracts.MCPServer, options ServerToolOptions) func(context.Context) (map[string]string, error) {
+	oauthProvider := OAuthServerHeaderProvider(options.AccessTokenProvider)
+	if options.HeaderProvider == nil && oauthProvider == nil {
 		return nil
 	}
 	return func(ctx context.Context) (map[string]string, error) {
-		return provider(ctx, name, server)
+		var headers map[string]string
+		if oauthProvider != nil {
+			oauthHeaders, err := oauthProvider(ctx, name, server)
+			if err != nil {
+				return nil, err
+			}
+			headers = MergeTransportHeaders(headers, oauthHeaders)
+		}
+		if options.HeaderProvider != nil {
+			explicitHeaders, err := options.HeaderProvider(ctx, name, server)
+			if err != nil {
+				return nil, err
+			}
+			headers = MergeTransportHeaders(headers, explicitHeaders)
+		}
+		return headers, nil
 	}
 }
 

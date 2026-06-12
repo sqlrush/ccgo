@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"time"
 )
 
 type CredentialSource string
@@ -20,6 +21,7 @@ type Credentials struct {
 	AccessToken  string           `json:"access_token,omitempty"`
 	RefreshToken string           `json:"refresh_token,omitempty"`
 	Scopes       []string         `json:"scopes,omitempty"`
+	ExpiresAt    time.Time        `json:"expires_at,omitempty"`
 }
 
 func FromEnv() Credentials {

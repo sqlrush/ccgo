@@ -8,6 +8,14 @@ import (
 	"ccgo/internal/contracts"
 )
 
+type testAccessTokenProvider struct {
+	token string
+}
+
+func (p testAccessTokenProvider) CurrentAccessToken(context.Context) (string, error) {
+	return p.token, nil
+}
+
 func TestTransportHeadersAddsAuthTokenAndOAuthBeta(t *testing.T) {
 	headers := TransportHeaders(contracts.MCPServer{
 		AuthToken: "token",
@@ -60,6 +68,29 @@ func TestAuthTokenHeaderProvider(t *testing.T) {
 	}
 	if headers["Authorization"] != "Bearer fresh" {
 		t.Fatalf("headers = %#v", headers)
+	}
+}
+
+func TestOAuthServerHeaderProviderUsesOAuthServerToken(t *testing.T) {
+	provider := OAuthServerHeaderProvider(func(ctx context.Context, name string, server contracts.MCPServer) (AccessTokenProvider, error) {
+		if name != "remote" || server.OAuth == nil {
+			t.Fatalf("provider input name=%q server=%#v", name, server)
+		}
+		return testAccessTokenProvider{token: "fresh"}, nil
+	})
+	headers, err := provider(context.Background(), "remote", contracts.MCPServer{OAuth: &contracts.MCPOAuthConfig{ClientID: "client"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headers["Authorization"] != "Bearer fresh" {
+		t.Fatalf("headers = %#v", headers)
+	}
+	headers, err = provider(context.Background(), "plain", contracts.MCPServer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headers != nil {
+		t.Fatalf("plain headers = %#v", headers)
 	}
 }
 

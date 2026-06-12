@@ -205,6 +205,62 @@ func TestBuildServerToolSetUsesDynamicHeaders(t *testing.T) {
 	}
 }
 
+func TestBuildServerToolSetUsesOAuthAccessTokenProvider(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if got := r.Header.Get("Authorization"); got != "Bearer fresh" {
+			t.Fatalf("authorization = %q", got)
+		}
+		if got := r.Header.Get("anthropic-beta"); got == "" {
+			t.Fatal("missing oauth beta header")
+		}
+		var raw struct {
+			ID     string `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		switch raw.Method {
+		case "initialize":
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}}}}`))
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"tools":[{"name":"ping","readOnly":true}]}}`))
+		default:
+			t.Fatalf("method = %s", raw.Method)
+		}
+	}))
+	defer server.Close()
+
+	toolset, err := BuildServerToolSet(context.Background(), "remote", contracts.MCPServer{
+		Type:      TransportHTTP,
+		URL:       server.URL,
+		AuthToken: "stale",
+		OAuth:     &contracts.MCPOAuthConfig{ClientID: "client"},
+	}, ServerToolOptions{
+		DisableResources: true,
+		DisablePrompts:   true,
+		AccessTokenProvider: func(ctx context.Context, name string, server contracts.MCPServer) (AccessTokenProvider, error) {
+			if name != "remote" || server.OAuth == nil {
+				t.Fatalf("provider input name=%q server=%#v", name, server)
+			}
+			return testAccessTokenProvider{token: "fresh"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(toolset.Tools) != 1 || toolset.Tools[0].Name() != "mcp__remote__ping" {
+		t.Fatalf("tools = %#v", toolset.Tools)
+	}
+	if calls != 3 {
+		t.Fatalf("calls = %d", calls)
+	}
+}
+
 func TestHTTPTransportReportsNonSuccessStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)

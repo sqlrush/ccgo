@@ -12,6 +12,12 @@ type HeaderProvider func(context.Context, contracts.MCPServer) (map[string]strin
 
 type ServerHeaderProvider func(context.Context, string, contracts.MCPServer) (map[string]string, error)
 
+type AccessTokenProvider interface {
+	CurrentAccessToken(context.Context) (string, error)
+}
+
+type ServerAccessTokenProvider func(context.Context, string, contracts.MCPServer) (AccessTokenProvider, error)
+
 func TransportHeaders(server contracts.MCPServer) map[string]string {
 	headers := cloneStringMap(server.Headers)
 	if headers == nil {
@@ -43,6 +49,42 @@ func AuthTokenHeaderProvider(tokenFunc func(context.Context, contracts.MCPServer
 			return nil, nil
 		}
 		return map[string]string{"Authorization": bearerHeaderValue(token)}, nil
+	}
+}
+
+func OAuthServerHeaderProvider(provider ServerAccessTokenProvider) ServerHeaderProvider {
+	if provider == nil {
+		return nil
+	}
+	return func(ctx context.Context, name string, server contracts.MCPServer) (map[string]string, error) {
+		if server.OAuth == nil {
+			return nil, nil
+		}
+		tokenProvider, err := provider(ctx, name, server)
+		if err != nil {
+			return nil, err
+		}
+		if tokenProvider == nil {
+			return nil, nil
+		}
+		token, err := tokenProvider.CurrentAccessToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		token = strings.TrimSpace(token)
+		if token == "" {
+			return nil, nil
+		}
+		return map[string]string{"Authorization": bearerHeaderValue(token)}, nil
+	}
+}
+
+func StaticServerAccessTokenProvider(provider AccessTokenProvider) ServerAccessTokenProvider {
+	if provider == nil {
+		return nil
+	}
+	return func(context.Context, string, contracts.MCPServer) (AccessTokenProvider, error) {
+		return provider, nil
 	}
 }
 
