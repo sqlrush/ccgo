@@ -74,6 +74,39 @@ Review $target during ${CLAUDE_SESSION_ID}.
 	}
 }
 
+func TestBuiltinCommandsExposeOfficialAliasesAndMetadata(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+
+	config, ok := registry.Find("settings")
+	if !ok || config.Name != "config" {
+		t.Fatalf("settings alias = %#v, %v", config, ok)
+	}
+	resume, ok := registry.Find("continue")
+	if !ok || resume.Name != "resume" || resume.ArgumentHint != "[conversation id or search term]" {
+		t.Fatalf("continue alias = %#v, %v", resume, ok)
+	}
+	clear, ok := registry.Find("reset")
+	if !ok || clear.Name != "clear" {
+		t.Fatalf("reset alias = %#v, %v", clear, ok)
+	}
+	clear, ok = registry.Find("new")
+	if !ok || clear.Name != "clear" {
+		t.Fatalf("new alias = %#v, %v", clear, ok)
+	}
+	mcp, ok := registry.Find("mcp")
+	if !ok || !mcp.Immediate || mcp.ArgumentHint != "[enable|disable [server-name]]" {
+		t.Fatalf("mcp metadata = %#v, %v", mcp, ok)
+	}
+	status, ok := registry.Find("status")
+	if !ok || !status.Immediate {
+		t.Fatalf("status metadata = %#v, %v", status, ok)
+	}
+	model, ok := registry.Find("model")
+	if !ok || !model.Immediate || model.ArgumentHint != "[model]" {
+		t.Fatalf("model metadata = %#v, %v", model, ok)
+	}
+}
+
 func TestFromSourcesUsesCommandOrderAndDedupesDynamicSkills(t *testing.T) {
 	registry := FromSources(Sources{
 		BundledSkills:       []contracts.Command{promptCommand("bundled", "bundled")},

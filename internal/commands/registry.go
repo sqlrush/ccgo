@@ -210,17 +210,17 @@ func IsBridgeSafeCommand(cmd contracts.Command) bool {
 func BuiltinCommands() []contracts.Command {
 	return cloneCommands([]contracts.Command{
 		{Type: contracts.CommandLocalJSX, Name: "help", Description: "Show help and available commands", Source: contracts.CommandSourceBuiltin},
-		{Type: contracts.CommandLocalJSX, Name: "config", Description: "Open configuration", Source: contracts.CommandSourceBuiltin},
-		{Type: contracts.CommandLocalJSX, Name: "mcp", Description: "Manage MCP servers and resources", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "config", Aliases: []string{"settings"}, Description: "Open config panel", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "mcp", Description: "Manage MCP servers", ArgumentHint: "[enable|disable [server-name]]", Source: contracts.CommandSourceBuiltin, Immediate: true},
 		{Type: contracts.CommandLocalJSX, Name: "plugin", Description: "Manage plugins", Source: contracts.CommandSourceBuiltin},
-		{Type: contracts.CommandLocalJSX, Name: "skills", Description: "Browse available skills", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "skills", Description: "List available skills", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "memory", Description: "Edit memory files", Source: contracts.CommandSourceBuiltin},
-		{Type: contracts.CommandLocalJSX, Name: "resume", Description: "Resume a previous session", Source: contracts.CommandSourceBuiltin},
-		{Type: contracts.CommandLocal, Name: "clear", Description: "Clear the current conversation", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocalJSX, Name: "resume", Aliases: []string{"continue"}, Description: "Resume a previous conversation", ArgumentHint: "[conversation id or search term]", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocal, Name: "clear", Aliases: []string{"reset", "new"}, Description: "Clear conversation history and free up context", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "compact", Description: "Compact the current conversation", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
-		{Type: contracts.CommandLocal, Name: "cost", Description: "Show session cost", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
-		{Type: contracts.CommandLocal, Name: "status", Description: "Show current status", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
-		{Type: contracts.CommandLocalJSX, Name: "model", Description: "Select or show the active model", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocal, Name: "cost", Description: "Show the total cost and duration of the current session", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocalJSX, Name: "status", Description: "Show Claude Code status including version, model, account, API connectivity, and tool statuses", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "model", Description: "Set the AI model for Claude Code", ArgumentHint: "[model]", Source: contracts.CommandSourceBuiltin, Immediate: true},
 	})
 }
 
