@@ -26,6 +26,7 @@ type ServerToolOptions struct {
 	OpenClient          ClientOpenFunc
 	HeaderProvider      ServerHeaderProvider
 	AccessTokenProvider ServerAccessTokenProvider
+	ClientRoots         []Root
 	ResultStoreDir      string
 	MaxResultChars      int
 	DisableResources    bool
@@ -90,37 +91,49 @@ func OpenServerClientWithOptions(ctx context.Context, name string, server contra
 		if err != nil {
 			return ClientHandle{}, err
 		}
+		client := newProtocolClientWithOptions(transport, options)
 		return ClientHandle{
-			Client: NewProtocolClient(transport),
+			Client: client,
 			Close:  transport.Close,
 		}, nil
 	case TransportHTTP:
 		transport := NewHTTPTransport(server.URL, TransportHeaders(server), nil)
 		transport.HeaderProvider = serverHeaderProvider(name, server, options, tokenSource)
 		transport.AuthorizationRefresher = serverAuthorizationRefresher(tokenSource)
+		client := newProtocolClientWithOptions(transport, options)
 		return ClientHandle{
-			Client: NewProtocolClient(transport),
+			Client: client,
 			Close:  transport.Close,
 		}, nil
 	case TransportSSE:
 		transport := NewSSETransport(server.URL, TransportHeaders(server), nil)
 		transport.HeaderProvider = serverHeaderProvider(name, server, options, tokenSource)
 		transport.AuthorizationRefresher = serverAuthorizationRefresher(tokenSource)
+		client := newProtocolClientWithOptions(transport, options)
 		return ClientHandle{
-			Client: NewProtocolClient(transport),
+			Client: client,
 			Close:  transport.Close,
 		}, nil
 	case TransportWS:
 		transport := NewWSTransport(server.URL, TransportHeaders(server))
 		transport.HeaderProvider = serverHeaderProvider(name, server, options, tokenSource)
 		transport.AuthorizationRefresher = serverAuthorizationRefresher(tokenSource)
+		client := newProtocolClientWithOptions(transport, options)
 		return ClientHandle{
-			Client: NewProtocolClient(transport),
+			Client: client,
 			Close:  transport.Close,
 		}, nil
 	default:
 		return ClientHandle{}, fmt.Errorf("mcp server %q transport %q is not supported yet", name, Transport(server))
 	}
+}
+
+func newProtocolClientWithOptions(transport RPCTransport, options ServerToolOptions) *ProtocolClient {
+	client := NewProtocolClient(transport)
+	if len(options.ClientRoots) > 0 {
+		client.SetRoots(options.ClientRoots)
+	}
+	return client
 }
 
 type serverAccessTokenSource struct {

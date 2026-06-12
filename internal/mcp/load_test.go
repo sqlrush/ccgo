@@ -2,8 +2,12 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -255,6 +259,51 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 		if _, ok := registry.Lookup(name); !ok {
 			t.Fatalf("missing %q in %#v", name, registry.Names())
 		}
+	}
+}
+
+func TestBuildConfiguredToolSetsAdvertisesCWDRoots(t *testing.T) {
+	root := t.TempDir()
+	var initializeParams string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw RPCRequest
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		switch raw.Method {
+		case "initialize":
+			initializeParams = mustJSON(t, raw.Params)
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}}}}`))
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"tools":[]}}`))
+		default:
+			t.Fatalf("method = %s", raw.Method)
+		}
+	}))
+	defer server.Close()
+
+	result, err := BuildConfiguredToolSets(context.Background(), ConfiguredToolSetOptions{
+		UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"remote": {Type: TransportHTTP, URL: server.URL},
+			},
+		},
+		CWD: root,
+		ToolOptions: ServerToolOptions{
+			DisableResources: true,
+			DisablePrompts:   true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolSets.Errors) != 0 {
+		t.Fatalf("toolset errors = %#v", result.ToolSets.Errors)
+	}
+	if !strings.Contains(initializeParams, `"roots":{}`) {
+		t.Fatalf("initialize params missing cwd roots capability: %s", initializeParams)
 	}
 }
 

@@ -130,6 +130,10 @@ type ProtocolClient struct {
 	notifications       []RPCNotification
 	notificationHandler RPCNotificationHandler
 	requestHandler      RPCRequestHandler
+
+	rootsMu          sync.Mutex
+	rootsProvider    RootsProvider
+	rootsListChanged bool
 }
 
 func NewProtocolClient(transport RPCTransport) *ProtocolClient {
@@ -230,6 +234,9 @@ func (c *ProtocolClient) Initialize(ctx context.Context, options InitializeOptio
 		return c.initializeResult, nil
 	}
 	options = normalizeInitializeOptions(options)
+	if provider, listChanged := c.rootsProviderSnapshot(); provider != nil {
+		options.Capabilities = CapabilitiesWithRoots(options.Capabilities, listChanged)
+	}
 	for attempt := 0; attempt < 2; attempt++ {
 		raw, err := c.rawRequest(ctx, "initialize", map[string]any{
 			"protocolVersion": options.ProtocolVersion,
@@ -649,6 +656,23 @@ func (c *ProtocolClient) SetRequestHandler(handler RPCRequestHandler) {
 	c.notificationMu.Unlock()
 }
 
+func (c *ProtocolClient) SetRoots(roots []Root) {
+	if c == nil {
+		return
+	}
+	c.SetRootsProvider(StaticRootsProvider(roots), false)
+}
+
+func (c *ProtocolClient) SetRootsProvider(provider RootsProvider, listChanged bool) {
+	if c == nil {
+		return
+	}
+	c.rootsMu.Lock()
+	c.rootsProvider = provider
+	c.rootsListChanged = listChanged
+	c.rootsMu.Unlock()
+}
+
 func (c *ProtocolClient) handleNotification(notification RPCNotification) {
 	c.notificationMu.Lock()
 	c.notifications = append(c.notifications, notification)
@@ -666,7 +690,20 @@ func (c *ProtocolClient) handleRequest(ctx context.Context, request RPCInboundRe
 	if handler != nil {
 		return handler(ctx, request)
 	}
+	provider, _ := c.rootsProviderSnapshot()
+	if provider != nil {
+		return RootsListRequestHandler(provider, DefaultRPCRequestHandler)(ctx, request)
+	}
 	return DefaultRPCRequestHandler(ctx, request)
+}
+
+func (c *ProtocolClient) rootsProviderSnapshot() (RootsProvider, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.rootsMu.Lock()
+	defer c.rootsMu.Unlock()
+	return c.rootsProvider, c.rootsListChanged
 }
 
 func NotificationFromRPCResponse(response RPCResponse) (RPCNotification, bool) {

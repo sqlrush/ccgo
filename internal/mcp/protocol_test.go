@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -531,6 +532,68 @@ func TestDefaultRPCRequestHandlerCancelsElicitation(t *testing.T) {
 	_, rpcErr = DefaultRPCRequestHandler(context.Background(), RPCInboundRequest{ID: "server-2", Method: "unknown"})
 	if rpcErr == nil || rpcErr.Code != -32601 {
 		t.Fatalf("rpcErr = %#v", rpcErr)
+	}
+}
+
+func TestProtocolClientAdvertisesAndServesRoots(t *testing.T) {
+	transport := &fakeLifecycleTransport{}
+	client := NewProtocolClient(transport)
+	client.SetRoots([]Root{
+		{URI: "file:///workspace", Name: "workspace"},
+		{URI: "   "},
+	})
+
+	if err := client.EnsureInitialized(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	params := mustJSON(t, transport.requests[0].Params)
+	if !strings.Contains(params, `"roots":{}`) {
+		t.Fatalf("initialize params missing roots capability: %s", params)
+	}
+
+	result, rpcErr := client.handleRequest(context.Background(), RPCInboundRequest{
+		ID:     "server-1",
+		Method: "roots/list",
+	})
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	roots, ok := result.(RootsListResult)
+	if !ok {
+		t.Fatalf("roots/list result = %#v", result)
+	}
+	if len(roots.Roots) != 1 || roots.Roots[0].URI != "file:///workspace" || roots.Roots[0].Name != "workspace" {
+		t.Fatalf("roots = %#v", roots.Roots)
+	}
+}
+
+func TestRootsListRequestHandlerAliasesAndErrors(t *testing.T) {
+	handler := RootsListRequestHandler(StaticRootsProvider([]Root{{URI: "file:///repo"}}), nil)
+	result, rpcErr := handler(context.Background(), RPCInboundRequest{ID: "server-1", Method: "roots.list"})
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	roots := result.(RootsListResult)
+	if len(roots.Roots) != 1 || roots.Roots[0].URI != "file:///repo" {
+		t.Fatalf("roots = %#v", roots.Roots)
+	}
+
+	_, rpcErr = handler(context.Background(), RPCInboundRequest{ID: "server-2", Method: "unknown"})
+	if rpcErr == nil || rpcErr.Code != -32601 {
+		t.Fatalf("fallback rpcErr = %#v", rpcErr)
+	}
+
+	_, rpcErr = RootsListRequestHandler(nil, nil)(context.Background(), RPCInboundRequest{ID: "server-3", Method: "roots/list"})
+	if rpcErr == nil || rpcErr.Code != -32601 {
+		t.Fatalf("nil provider rpcErr = %#v", rpcErr)
+	}
+
+	failing := RootsListRequestHandler(func(context.Context) ([]Root, error) {
+		return nil, errors.New("cannot inspect workspace")
+	}, nil)
+	_, rpcErr = failing(context.Background(), RPCInboundRequest{ID: "server-4", Method: "root/list"})
+	if rpcErr == nil || rpcErr.Code != -32603 || !strings.Contains(rpcErr.Message, "failed to list") {
+		t.Fatalf("provider rpcErr = %#v", rpcErr)
 	}
 }
 

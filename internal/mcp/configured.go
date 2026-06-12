@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"path/filepath"
 
 	"ccgo/internal/contracts"
 )
@@ -56,7 +57,15 @@ func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptio
 		Local:   local.Servers,
 		Policy:  PolicyFromSettings(mergeMCPPolicySettings(options.UserSettings, options.ProjectSettings, options.LocalSettings)),
 	})
-	toolsets := BuildServerToolSets(ctx, manual.Servers, options.ToolOptions)
+	toolOptions := options.ToolOptions
+	if len(toolOptions.ClientRoots) == 0 && options.CWD != "" {
+		root, err := FileRoot(options.CWD, filepath.Base(options.CWD))
+		if err != nil {
+			return ConfiguredToolSetResult{}, err
+		}
+		toolOptions.ClientRoots = []Root{root}
+	}
+	toolsets := BuildServerToolSets(ctx, manual.Servers, toolOptions)
 	return ConfiguredToolSetResult{
 		Servers:    manual.Servers,
 		LoadErrors: loadErrors,
