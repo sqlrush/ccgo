@@ -1577,6 +1577,73 @@ func TestGrepToolFixedStrings(t *testing.T) {
 	}
 }
 
+func TestGrepToolWordRegexp(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"cat",
+		"concatenate",
+		"bobcat",
+		"cat.",
+		"cat_thing",
+		"dog",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "words.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_word_regexp",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"content","word_regexp":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "words.txt:1:cat\nwords.txt:4:cat."
+	if contentResult.Content != wantContent || contentResult.StructuredContent["word_regexp"] != true {
+		t.Fatalf("word_regexp content result = %#v", contentResult)
+	}
+
+	camelResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_word_regexp_camel",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","outputMode":"count","wordRegexp":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCount := "words.txt:2\n\nFound 2 total occurrences across 1 file."
+	if camelResult.Content != wantCount || camelResult.StructuredContent["word_regexp"] != true {
+		t.Fatalf("wordRegexp count result = %#v", camelResult)
+	}
+
+	dashResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_word_regexp_dash",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"count","word-regexp":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dashResult.Content != wantCount || dashResult.StructuredContent["word_regexp"] != true {
+		t.Fatalf("word-regexp count result = %#v", dashResult)
+	}
+
+	shortSemanticResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_word_regexp_short_semantic",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"count","-w":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortSemanticResult.Content != wantCount || shortSemanticResult.StructuredContent["word_regexp"] != true {
+		t.Fatalf("short semantic word regexp result = %#v", shortSemanticResult)
+	}
+}
+
 func TestGrepToolMultiline(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{

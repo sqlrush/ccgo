@@ -29,6 +29,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "-n": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
 	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
+	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 }
 
 var grepSemanticNumberKeys = map[string]struct{}{
@@ -40,6 +41,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"line_numbers": {}, "lineNumbers": {}, "-n": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
 	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
+	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 }
 
 type globInput struct {
@@ -79,6 +81,10 @@ type grepInput struct {
 	FixedStrings       bool   `json:"fixed_strings,omitempty"`
 	FixedStringsAlt    bool   `json:"fixedStrings,omitempty"`
 	ShortFixedStrings  bool   `json:"-F,omitempty"`
+	WordRegexp         bool   `json:"word_regexp,omitempty"`
+	WordRegexpAlt      bool   `json:"wordRegexp,omitempty"`
+	WordRegexpDash     bool   `json:"word-regexp,omitempty"`
+	ShortWordRegexp    bool   `json:"-w,omitempty"`
 	Multiline          bool   `json:"multiline,omitempty"`
 }
 
@@ -189,12 +195,16 @@ func NewGrepTool() tool.Tool {
 					"fixed_strings":    map[string]any{"type": "boolean"},
 					"fixedStrings":     map[string]any{"type": "boolean"},
 					"-F":               map[string]any{"type": "boolean"},
+					"word_regexp":      map[string]any{"type": "boolean"},
+					"wordRegexp":       map[string]any{"type": "boolean"},
+					"word-regexp":      map[string]any{"type": "boolean"},
+					"-w":               map[string]any{"type": "boolean"},
 					"multiline":        map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, and max_count/-m per-file match limiting. Use fixed_strings or -F for literal matching. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, and max_count/-m per-file match limiting. Use fixed_strings or -F for literal matching, and word_regexp or -w for whole-word matches. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -368,6 +378,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"line_numbers":     options.LineNumbers,
 			"case_insensitive": grepCaseInsensitive(input),
 			"fixed_strings":    grepFixedStrings(input),
+			"word_regexp":      grepWordRegexp(input),
 			"multiline":        input.Multiline,
 			"truncated":        truncated,
 		},
@@ -849,6 +860,9 @@ func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
 	if grepFixedStrings(input) {
 		pattern = regexp.QuoteMeta(pattern)
 	}
+	if grepWordRegexp(input) {
+		pattern = `\b(?:` + pattern + `)\b`
+	}
 	switch {
 	case grepCaseInsensitive(input) && input.Multiline:
 		pattern = "(?is:" + pattern + ")"
@@ -866,6 +880,10 @@ func grepCaseInsensitive(input grepInput) bool {
 
 func grepFixedStrings(input grepInput) bool {
 	return input.FixedStrings || input.FixedStringsAlt || input.ShortFixedStrings
+}
+
+func grepWordRegexp(input grepInput) bool {
+	return input.WordRegexp || input.WordRegexpAlt || input.WordRegexpDash || input.ShortWordRegexp
 }
 
 func grepLineNumbers(input grepInput, mode string) bool {

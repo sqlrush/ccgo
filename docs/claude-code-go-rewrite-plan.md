@@ -180,6 +180,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。
 - 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
+- 本轮补充：Grep 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下按词边界过滤匹配，并兼容 quoted boolean 输入。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。
 - 本轮补充：Bash/PowerShell tokenizer 现在按 single-quoted literal 处理单引号内的 escape 字符，Bash 的 `\` 和 PowerShell 的 backtick 在单引号内不再导致错误的 quote/segment/token 状态。
 - 本轮补充：Bash/PowerShell 分类现在把未引用 newline 作为命令分隔符，并支持未引用 `#` 行注释剥离；注释文本不再污染分类，下一行命令仍保留 read-only/destructive 判断。

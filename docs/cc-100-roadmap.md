@@ -531,6 +531,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`WebSearch` JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
 
+本轮补充：`Grep` 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下都会按词边界过滤匹配，并兼容 quoted boolean 输入。
+
 本轮补充：`Bash` 和 `PowerShell` read-only 分类现在会拒绝 tokenizer 视角未闭合的 quote 以及末尾 escape/line-continuation 命令，避免不完整 shell input 被误判为只读。
 
 本轮补充：`Bash`/`PowerShell` 轻量 tokenizer 的 escape 处理现在尊重 single-quoted literal 语义，Bash 单引号内 `\` 和 PowerShell 单引号内 backtick 不再被当作 escape，从而减少合法只读命令的误拒绝。
