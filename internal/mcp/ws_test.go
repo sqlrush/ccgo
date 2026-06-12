@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 )
@@ -144,6 +146,44 @@ func TestWSTransportRejectsBadAccept(t *testing.T) {
 	_, err := NewWSTransport(wsURL(server.URL, "/mcp"), nil).RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil))
 	if err == nil || !strings.Contains(err.Error(), "accept mismatch") {
 		t.Fatalf("expected accept mismatch, got %v", err)
+	}
+}
+
+func TestWSTransportRoundTripHonorsContextCancellation(t *testing.T) {
+	requestRead := make(chan struct{})
+	server := newTestWebSocketServer(t, func(r *http.Request, _ net.Conn, reader *bufio.Reader) {
+		_, _, err := readServerWebSocketFrame(reader)
+		if err != nil {
+			t.Errorf("read frame: %v", err)
+			return
+		}
+		close(requestRead)
+		<-r.Context().Done()
+	})
+	defer server.Close()
+
+	transport := NewWSTransport(wsURL(server.URL, "/mcp"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := transport.RoundTrip(ctx, NewRPCRequest("cancel", "tools/list", nil))
+		done <- err
+	}()
+
+	select {
+	case <-requestRead:
+	case <-time.After(time.Second):
+		t.Fatal("websocket request was not sent")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("round trip did not return after context cancellation")
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -79,10 +80,15 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 		_ = t.closeLocked()
 		return RPCResponse{}, err
 	}
+	stopReadWatch := watchWebSocketReadContext(ctx, conn.Conn)
+	defer stopReadWatch()
 	for {
 		opcode, payload, err := readWebSocketFrame(conn.reader, t.frameLimit())
 		if err != nil {
 			_ = t.closeLocked()
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return RPCResponse{}, ctxErr
+			}
 			return RPCResponse{}, err
 		}
 		switch opcode {
@@ -113,6 +119,24 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 			_ = t.closeLocked()
 			return RPCResponse{}, webSocketCloseError(payload)
 		}
+	}
+}
+
+func watchWebSocketReadContext(ctx context.Context, conn net.Conn) func() {
+	if ctx == nil || ctx.Done() == nil || conn == nil {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.SetReadDeadline(time.Now())
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+		_ = conn.SetReadDeadline(time.Time{})
 	}
 }
 
