@@ -195,6 +195,45 @@ func TestWebFetchPreflightSkipsBinaryGet(t *testing.T) {
 	}
 }
 
+func TestWebFetchPreflightSkipsBinaryAttachmentFilename(t *testing.T) {
+	var heads int
+	var gets int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodHead:
+			heads++
+			w.Header().Set("Content-Disposition", `attachment; filename="report.pdf"`)
+			w.WriteHeader(http.StatusOK)
+		case http.MethodGet:
+			gets++
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write([]byte("%PDF should not be downloaded"))
+		default:
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+		}
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_preflight_attachment",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if heads != 1 || gets != 0 {
+		t.Fatalf("heads=%d gets=%d", heads, gets)
+	}
+	if !result.IsError || result.StructuredContent["binary"] != true {
+		t.Fatalf("result = %#v", result)
+	}
+	preflight, ok := result.StructuredContent["preflight"].(map[string]any)
+	if !ok || preflight["skipped_get"] != true || preflight["content_disposition"] != `attachment; filename="report.pdf"` {
+		t.Fatalf("preflight = %#v", result.StructuredContent["preflight"])
+	}
+}
+
 func TestWebFetchSkipPreflightMetadata(t *testing.T) {
 	var heads int
 	var gets int

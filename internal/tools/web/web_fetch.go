@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -187,13 +188,14 @@ type fetchResult struct {
 }
 
 type webFetchPreflight struct {
-	Attempted     bool
-	Skipped       bool
-	StatusCode    int
-	ContentType   string
-	ContentLength int64
-	SkippedGET    bool
-	Error         string
+	Attempted          bool
+	Skipped            bool
+	StatusCode         int
+	ContentType        string
+	ContentDisposition string
+	ContentLength      int64
+	SkippedGET         bool
+	Error              string
 }
 
 func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxBytes int, skipPreflight bool) (fetchResult, error) {
@@ -272,11 +274,12 @@ func runWebFetchPreflight(ctx context.Context, rawURL string) webFetchPreflight 
 	defer resp.Body.Close()
 	preflight.StatusCode = resp.StatusCode
 	preflight.ContentType = resp.Header.Get("Content-Type")
+	preflight.ContentDisposition = resp.Header.Get("Content-Disposition")
 	preflight.ContentLength = resp.ContentLength
 	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
 		return preflight
 	}
-	preflight.SkippedGET = isBinaryWebContentType(preflight.ContentType)
+	preflight.SkippedGET = isBinaryWebContentType(preflight.ContentType) || isBinaryWebAttachment(preflight.ContentDisposition)
 	return preflight
 }
 
@@ -768,13 +771,14 @@ func metadataBool(value any) bool {
 
 func structuredWebFetchPreflight(preflight webFetchPreflight) map[string]any {
 	return map[string]any{
-		"attempted":      preflight.Attempted,
-		"skipped":        preflight.Skipped,
-		"status_code":    preflight.StatusCode,
-		"content_type":   preflight.ContentType,
-		"content_length": preflight.ContentLength,
-		"skipped_get":    preflight.SkippedGET,
-		"error":          preflight.Error,
+		"attempted":           preflight.Attempted,
+		"skipped":             preflight.Skipped,
+		"status_code":         preflight.StatusCode,
+		"content_type":        preflight.ContentType,
+		"content_disposition": preflight.ContentDisposition,
+		"content_length":      preflight.ContentLength,
+		"skipped_get":         preflight.SkippedGET,
+		"error":               preflight.Error,
 	}
 }
 
@@ -784,6 +788,31 @@ func isBinaryWebContentType(contentType string) bool {
 		return false
 	}
 	return !isTextualWebMediaType(strings.ToLower(mediaType))
+}
+
+func isBinaryWebAttachment(contentDisposition string) bool {
+	disposition, params, err := mime.ParseMediaType(contentDisposition)
+	if err != nil || strings.ToLower(disposition) != "attachment" {
+		return false
+	}
+	filename := strings.TrimSpace(params["filename"])
+	if filename == "" {
+		filename = strings.TrimSpace(params["filename*"])
+	}
+	return isBinaryWebFilename(filename)
+}
+
+func isBinaryWebFilename(filename string) bool {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico",
+		".zip", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar", ".tar",
+		".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+		".mp3", ".mp4", ".mov", ".avi", ".webm", ".wav",
+		".dmg", ".exe", ".dll", ".so", ".dylib", ".wasm":
+		return true
+	default:
+		return false
+	}
 }
 
 func isBinaryWebContent(contentType string, data []byte) bool {
