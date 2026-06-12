@@ -232,6 +232,72 @@ func TestRunnerAppendsToolNewMessagesAfterToolResult(t *testing.T) {
 	}
 }
 
+func TestRunnerExpandsPromptSlashCommandBeforeQuery(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	skillDir := filepath.Join(cwd, ".claude", "skills", "explain")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\ndescription: Explain target\nmodel: opus\n---\nExplain $ARGUMENTS in ${CLAUDE_SESSION_ID}."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+		ID:         "msg_done",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "opus",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+	}}}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_slash",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: cwd,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/explain planner"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FinalRequest.Model != "opus" {
+		t.Fatalf("request model = %q", result.FinalRequest.Model)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(client.requests))
+	}
+	requestMessages := client.requests[0].Messages
+	if len(requestMessages) != 2 {
+		t.Fatalf("request messages = %#v", requestMessages)
+	}
+	if text := requestMessages[0].Content[0].Text; !strings.Contains(text, "<command-name>/explain</command-name>") || strings.Contains(text, "/explain planner") {
+		t.Fatalf("command metadata text = %q", text)
+	}
+	if text := requestMessages[1].Content[0].Text; !strings.Contains(text, "Base directory for this skill: "+skillDir) || !strings.Contains(text, "Explain planner in sess_slash.") {
+		t.Fatalf("expanded skill text = %q", text)
+	}
+	if len(result.Messages) != 3 || !result.Messages[1].IsMeta {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("transcript entries = %d, want 3", len(entries))
+	}
+	if entries[1].Message.ParentUUID == nil || *entries[1].Message.ParentUUID != entries[0].Message.UUID {
+		t.Fatalf("slash prompt parent chain = %#v then %#v", entries[0].Message, entries[1].Message)
+	}
+}
+
 func TestRunnerAppliesToolResultBudgetBeforeNextRequest(t *testing.T) {
 	registry, err := tool.NewRegistry(tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{Name: "Big", ReadOnly: true},

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"ccgo/internal/api/anthropic"
+	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
@@ -31,18 +32,27 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 	if r.SessionID != "" {
 		user.SessionID = r.SessionID
 	}
-	history, user = appendMessage(history, user)
-	if err := r.appendTranscript(user); err != nil {
+	initialMessages, shouldQuery, err := r.initialUserMessages(user)
+	if err != nil {
 		return Result{}, err
 	}
-	r.emit(Event{Type: EventUserMessage, Message: &user})
+	for i := range initialMessages {
+		history, initialMessages[i] = appendMessage(history, initialMessages[i])
+		if err := r.appendTranscript(initialMessages[i]); err != nil {
+			return Result{}, err
+		}
+		r.emit(Event{Type: EventUserMessage, Message: &initialMessages[i]})
+	}
+	result := Result{Messages: append([]contracts.Message(nil), initialMessages...)}
+	if !shouldQuery {
+		return result, nil
+	}
 	r.maybeEmitTokenWarning(history)
 	relevantMemoryPrefetch := r.startRelevantMemoryPrefetch(ctx, history)
 	if relevantMemoryPrefetch != nil {
 		defer relevantMemoryPrefetch.cancel()
 	}
 
-	result := Result{Messages: []contracts.Message{user}}
 	if compactedHistory, compactResult, ok, err := r.maybeAutoCompact(ctx, history); err != nil {
 		return result, err
 	} else if ok {
@@ -101,6 +111,31 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
 	}
+}
+
+func (r *Runner) initialUserMessages(user contracts.Message) ([]contracts.Message, bool, error) {
+	text := msgs.TextContent(user)
+	if text == "" {
+		return []contracts.Message{user}, true, nil
+	}
+	if !commands.IsSlashInput(text) {
+		return []contracts.Message{user}, true, nil
+	}
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
+	slash, handled, err := commands.ExecuteSlashCommand(registry, text, commands.SlashOptions{
+		SessionID: r.SessionID,
+		UUID:      user.UUID,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if !handled {
+		return []contracts.Message{user}, true, nil
+	}
+	if slash.Model != "" {
+		r.Model = slash.Model
+	}
+	return slash.Messages, slash.ShouldQuery, nil
 }
 
 type relevantMemoryPrefetchTask struct {
