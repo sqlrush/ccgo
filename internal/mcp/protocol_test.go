@@ -432,6 +432,44 @@ func TestProtocolClientCapturesTransportNotifications(t *testing.T) {
 	if len(handled) != 1 || handled[0].Method != notifications[0].Method {
 		t.Fatalf("handled = %#v", handled)
 	}
+	events := client.NotificationEvents("stdio")
+	if len(events) != 1 || events[0].ServerName != "stdio" || events[0].Type != "message" || events[0].Message != "hello" {
+		t.Fatalf("events = %#v", events)
+	}
+}
+
+func TestNormalizeNotificationEvents(t *testing.T) {
+	progress := NormalizeNotification("runner", RPCNotification{
+		Method: "notifications/progress",
+		Params: json.RawMessage(`{"progressToken":"tok_1","progress":2,"total":"5","message":"halfway"}`),
+	})
+	if progress.ServerName != "runner" || progress.Type != "progress" || progress.ProgressToken != "tok_1" || progress.Message != "halfway" {
+		t.Fatalf("progress = %#v", progress)
+	}
+	if progress.Progress == nil || *progress.Progress != 2 || progress.Total == nil || *progress.Total != 5 {
+		t.Fatalf("progress numbers = %#v", progress)
+	}
+
+	message := NormalizeNotification("runner", RPCNotification{
+		Method: "notifications/message",
+		Params: json.RawMessage(`{"severity":"warning","loggerName":"mcp.log","data":{"message":"slow server"}}`),
+	})
+	if message.Type != "message" || message.Channel != "logging" || message.Level != "warning" || message.Logger != "mcp.log" || message.Message != "slow server" {
+		t.Fatalf("message = %#v", message)
+	}
+
+	updated := NormalizeNotification("files", RPCNotification{
+		Method: "notifications/resources/updated",
+		Params: json.RawMessage(`{"resource":{"uri":"file:///tmp/a.txt"}}`),
+	})
+	if updated.Type != "resources_updated" || updated.Channel != "resources" || updated.Operation != "updated" || updated.URI != "file:///tmp/a.txt" {
+		t.Fatalf("updated = %#v", updated)
+	}
+
+	listChanged := NormalizeNotification("tools", RPCNotification{Method: "notifications/tools/listChanged"})
+	if listChanged.Type != "tools_list_changed" || listChanged.Operation != "list_changed" {
+		t.Fatalf("listChanged = %#v", listChanged)
+	}
 }
 
 func TestProtocolClientHandlesInboundElicitationRequests(t *testing.T) {
