@@ -153,6 +153,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 		StructuredContent: map[string]any{
 			"type":           "web_fetch",
 			"url":            parsed.String(),
+			"final_url":      result.FinalURL,
 			"domain":         strings.ToLower(parsed.Hostname()),
 			"prompt":         input.Prompt,
 			"status_code":    result.StatusCode,
@@ -174,6 +175,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 
 type fetchResult struct {
 	StatusCode    int
+	FinalURL      string
 	ContentType   string
 	Body          string
 	RenderedBody  string
@@ -212,6 +214,7 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 		if preflight.SkippedGET {
 			return fetchResult{
 				StatusCode:  preflight.StatusCode,
+				FinalURL:    rawURL,
 				ContentType: preflight.ContentType,
 				Binary:      true,
 				DurationMS:  time.Since(start).Milliseconds(),
@@ -249,6 +252,7 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 	}
 	return fetchResult{
 		StatusCode:  resp.StatusCode,
+		FinalURL:    resp.Request.URL.String(),
 		ContentType: contentType,
 		Body:        body,
 		Bytes:       len(data),
@@ -288,7 +292,7 @@ func prepareWebFetchResult(result fetchResult, prompt string) fetchResult {
 	if result.Binary || result.Body == "" {
 		return result
 	}
-	rendered, ok := renderWebFetchBody(result.ContentType, result.Body)
+	rendered, ok := renderWebFetchBody(result.ContentType, result.Body, result.FinalURL)
 	if strings.TrimSpace(rendered) == "" {
 		rendered = result.Body
 	}
@@ -343,12 +347,12 @@ func formatWebFetchContent(input webFetchInput, result fetchResult) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func renderWebFetchBody(contentType string, body string) (string, bool) {
+func renderWebFetchBody(contentType string, body string, baseURL string) (string, bool) {
 	if !isHTMLWebFetchContent(contentType, body) {
 		return body, false
 	}
 	stripped := removeHTMLWebFetchBlocks(body, "script", "style", "noscript", "template", "svg", "canvas")
-	rendered := stripHTMLWebFetchTags(stripped)
+	rendered := stripHTMLWebFetchTags(stripped, baseURL)
 	rendered = html.UnescapeString(rendered)
 	return normalizeWebFetchText(rendered), true
 }
@@ -417,7 +421,7 @@ func findHTMLWebFetchBlockStart(lower string, name string) int {
 	}
 }
 
-func stripHTMLWebFetchTags(body string) string {
+func stripHTMLWebFetchTags(body string, baseURL string) string {
 	var b strings.Builder
 	var anchors []htmlWebFetchAnchor
 	for i := 0; i < len(body); {
@@ -446,11 +450,11 @@ func stripHTMLWebFetchTags(body string) string {
 				anchors, _ = appendHTMLWebFetchAnchorHref(&b, anchors)
 			} else {
 				href := strings.TrimSpace(htmlWebFetchAttr(rawTag, "href"))
-				anchors = append(anchors, htmlWebFetchAnchor{Href: href, Start: b.Len()})
+				anchors = append(anchors, htmlWebFetchAnchor{Href: resolveWebFetchHTMLURL(href, baseURL), Start: b.Len()})
 			}
 		}
 		if tag == "img" && !closing {
-			appendHTMLWebFetchImageText(&b, rawTag)
+			appendHTMLWebFetchImageText(&b, rawTag, baseURL)
 		}
 		if tag == "br" || isBlockHTMLWebFetchTag(tag) {
 			b.WriteByte('\n')
@@ -492,9 +496,9 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 	return anchors, true
 }
 
-func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string) {
+func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string) {
 	label := firstNonEmptyWebFetchAttr(rawTag, "alt", "title", "aria-label")
-	src := strings.TrimSpace(htmlWebFetchAttr(rawTag, "src"))
+	src := resolveWebFetchHTMLURL(strings.TrimSpace(htmlWebFetchAttr(rawTag, "src")), baseURL)
 	if label == "" {
 		return
 	}
@@ -516,6 +520,28 @@ func firstNonEmptyWebFetchAttr(rawTag string, names ...string) string {
 		}
 	}
 	return ""
+}
+
+func resolveWebFetchHTMLURL(raw string, baseURL string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "#") {
+		return raw
+	}
+	if strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if parsed.IsAbs() {
+		return parsed.String()
+	}
+	base, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return raw
+	}
+	return base.ResolveReference(parsed).String()
 }
 
 func htmlWebFetchAttr(rawTag string, name string) string {

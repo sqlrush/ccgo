@@ -169,13 +169,13 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	if !ok {
 		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
 	}
-	if !strings.Contains(rendered, "setup guide (/docs/setup)") {
+	if !strings.Contains(rendered, "setup guide ("+server.URL+"/docs/setup)") {
 		t.Fatalf("rendered body missing link href: %#v", rendered)
 	}
 	if strings.Count(rendered, "https://example.com/reference") != 1 {
 		t.Fatalf("rendered body should not duplicate URL link text: %#v", rendered)
 	}
-	if !strings.Contains(rendered, "Image: Architecture diagram (/assets/diagram.png)") || !strings.Contains(rendered, "Image: Release checklist (/assets/checklist.png)") {
+	if !strings.Contains(rendered, "Image: Architecture diagram ("+server.URL+"/assets/diagram.png)") || !strings.Contains(rendered, "Image: Release checklist ("+server.URL+"/assets/checklist.png)") {
 		t.Fatalf("rendered body missing image text: %#v", rendered)
 	}
 	if strings.Contains(rendered, "javascript:alert") {
@@ -183,6 +183,53 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	}
 	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
 	if !ok || !strings.Contains(excerpt, "Image: Architecture diagram") {
+		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
+func TestWebFetchResolvesHTMLLinksAgainstFinalURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/nested/page.html", http.StatusFound)
+		case "/nested/page.html":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <a href="guide">Nested guide</a>
+  <img alt="Nested diagram" src="../assets/diagram.png">
+</body>
+</html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_final_url",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/start") + `,"prompt":"nested diagram"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["final_url"] != server.URL+"/nested/page.html" {
+		t.Fatalf("final_url = %#v", result.StructuredContent["final_url"])
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	if !strings.Contains(rendered, "Nested guide ("+server.URL+"/nested/guide)") {
+		t.Fatalf("rendered body missing final-url-resolved link: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Nested diagram ("+server.URL+"/assets/diagram.png)") {
+		t.Fatalf("rendered body missing final-url-resolved image: %#v", rendered)
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "Image: Nested diagram ("+server.URL+"/assets/diagram.png)") {
 		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
 	}
 }
