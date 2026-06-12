@@ -1309,7 +1309,9 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		valueFlags:   stringSet("/m", "/fi", "/fo"),
 	},
 	"where.exe": {
-		allowAllFlags:    true,
+		allowedFlags:     stringSet("/r", "/q", "/f", "/t"),
+		pathFlags:        stringSet("/r"),
+		valueFlags:       stringSet("/r"),
 		allowPositionals: true,
 	},
 	"hostname": {
