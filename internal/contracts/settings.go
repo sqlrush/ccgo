@@ -84,9 +84,12 @@ type WorktreeSetting struct {
 }
 
 type MCPServerPolicyEntry struct {
-	Name    string `json:"name,omitempty"`
-	Command string `json:"command,omitempty"`
-	URL     string `json:"url,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	Command       string   `json:"command,omitempty"`
+	URL           string   `json:"url,omitempty"`
+	ServerName    string   `json:"serverName,omitempty"`
+	ServerCommand []string `json:"serverCommand,omitempty"`
+	ServerURL     string   `json:"serverUrl,omitempty"`
 }
 
 type SpinnerVerbsSetting struct {
