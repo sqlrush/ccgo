@@ -101,6 +101,47 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 	return rpcResponse, nil
 }
 
+func (t *HTTPTransport) SendNotification(ctx context.Context, notification RPCNotification) error {
+	if t == nil || t.URL == "" {
+		return fmt.Errorf("mcp http transport url is required")
+	}
+	if notification.JSONRPC == "" {
+		notification.JSONRPC = JSONRPCVersion
+	}
+	data, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.URL, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("content-type", "application/json")
+	t.mu.Lock()
+	sessionID := t.SessionID
+	t.mu.Unlock()
+	t.applyHeaders(req, sessionID)
+	client := t.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if nextSessionID := strings.TrimSpace(resp.Header.Get("mcp-session-id")); nextSessionID != "" {
+		t.mu.Lock()
+		t.SessionID = nextSessionID
+		t.mu.Unlock()
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("mcp http notification status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
 func (t *HTTPTransport) SetNotificationHandler(handler RPCNotificationHandler) {
 	if t == nil {
 		return

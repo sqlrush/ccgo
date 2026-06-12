@@ -79,6 +79,24 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	}
 }
 
+func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNotification) error {
+	endpoint, err := t.endpoint(ctx)
+	if err != nil {
+		return err
+	}
+	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
+	httpTransport.MaxResponseBytes = t.MaxResponseBytes
+	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
+	t.mu.Lock()
+	httpTransport.SessionID = t.sessionID
+	t.mu.Unlock()
+	err = httpTransport.SendNotification(ctx, notification)
+	t.mu.Lock()
+	t.sessionID = httpTransport.SessionID
+	t.mu.Unlock()
+	return err
+}
+
 func (t *SSETransport) Close() error {
 	t.mu.Lock()
 	endpoint := t.endpointURL

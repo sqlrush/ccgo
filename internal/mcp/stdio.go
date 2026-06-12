@@ -86,6 +86,26 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 	}
 }
 
+func (t *StdioTransport) SendNotification(ctx context.Context, notification RPCNotification) error {
+	if t == nil || t.writer == nil {
+		return fmt.Errorf("mcp stdio transport is not initialized")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if notification.JSONRPC == "" {
+		notification.JSONRPC = JSONRPCVersion
+	}
+	data, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	_, err = t.writer.Write(append(data, '\n'))
+	return err
+}
+
 func (t *StdioTransport) SetRequestHandler(handler RPCRequestHandler) {
 	if t == nil {
 		return

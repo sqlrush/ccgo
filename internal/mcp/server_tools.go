@@ -17,6 +17,10 @@ type ClientHandle struct {
 
 type ClientOpenFunc func(context.Context, string, contracts.MCPServer) (ClientHandle, error)
 
+type InitializingClient interface {
+	EnsureInitialized(context.Context) error
+}
+
 type ServerToolOptions struct {
 	OpenClient       ClientOpenFunc
 	ResultStoreDir   string
@@ -135,6 +139,12 @@ func BuildServerToolSet(ctx context.Context, serverName string, server contracts
 	if handle.Client == nil {
 		closeClient(handle)
 		return ServerToolSet{}, fmt.Errorf("mcp server %q client is nil", serverName)
+	}
+	if initializer, ok := handle.Client.(InitializingClient); ok {
+		if err := initializer.EnsureInitialized(ctx); err != nil {
+			closeClient(handle)
+			return ServerToolSet{}, err
+		}
 	}
 
 	toolOptions := ToolBuildOptions{

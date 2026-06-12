@@ -11,6 +11,41 @@ import (
 	"ccgo/internal/tool"
 )
 
+type lifecycleMCPClient struct {
+	initialized bool
+	listedAfter bool
+}
+
+func (c *lifecycleMCPClient) EnsureInitialized(context.Context) error {
+	c.initialized = true
+	return nil
+}
+
+func (c *lifecycleMCPClient) ListTools(context.Context, string) ([]RemoteTool, error) {
+	c.listedAfter = c.initialized
+	return []RemoteTool{{Name: "ping", ReadOnly: true}}, nil
+}
+
+func (c *lifecycleMCPClient) CallTool(context.Context, string, string, json.RawMessage) (any, error) {
+	return map[string]any{"toolResult": "ok"}, nil
+}
+
+func (c *lifecycleMCPClient) ListResources(context.Context, string) ([]RemoteResource, error) {
+	return nil, nil
+}
+
+func (c *lifecycleMCPClient) ReadResource(context.Context, string, string) ([]ResourceContent, error) {
+	return nil, nil
+}
+
+func (c *lifecycleMCPClient) ListPrompts(context.Context, string) ([]RemotePrompt, error) {
+	return nil, nil
+}
+
+func (c *lifecycleMCPClient) GetPrompt(context.Context, string, string, map[string]string) (PromptResult, error) {
+	return PromptResult{}, nil
+}
+
 func TestBuildServerToolSetBuildsRemoteAndHelperTools(t *testing.T) {
 	client := &fakeMCPClient{
 		tools: []RemoteTool{{
@@ -111,6 +146,26 @@ func TestBuildServerToolSetsAggregatesSuccessesAndErrors(t *testing.T) {
 	}
 	if len(closed) != 2 || closed[0] != "alpha" || closed[1] != "zeta" {
 		t.Fatalf("closed = %#v", closed)
+	}
+}
+
+func TestBuildServerToolSetInitializesClientBeforeDiscovery(t *testing.T) {
+	client := &lifecycleMCPClient{}
+	toolset, err := BuildServerToolSet(context.Background(), "remote", contracts.MCPServer{Command: "node"}, ServerToolOptions{
+		DisableResources: true,
+		DisablePrompts:   true,
+		OpenClient: func(context.Context, string, contracts.MCPServer) (ClientHandle, error) {
+			return ClientHandle{Client: client}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !client.initialized || !client.listedAfter {
+		t.Fatalf("initialized=%v listedAfter=%v", client.initialized, client.listedAfter)
+	}
+	if len(toolset.Tools) != 1 || toolset.Tools[0].Name() != "mcp__remote__ping" {
+		t.Fatalf("toolset = %#v", toolset.Tools)
 	}
 }
 

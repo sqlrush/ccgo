@@ -14,6 +14,11 @@ type fakeRPCTransport struct {
 	requests  []RPCRequest
 }
 
+type fakeLifecycleTransport struct {
+	requests      []RPCRequest
+	notifications []RPCNotification
+}
+
 func (t *fakeRPCTransport) RoundTrip(_ context.Context, request RPCRequest) (RPCResponse, error) {
 	t.requests = append(t.requests, request)
 	if t.rpcErr != nil {
@@ -24,6 +29,28 @@ func (t *fakeRPCTransport) RoundTrip(_ context.Context, request RPCRequest) (RPC
 		ID:      request.ID,
 		Result:  t.responses[request.Method],
 	}, nil
+}
+
+func (t *fakeLifecycleTransport) RoundTrip(_ context.Context, request RPCRequest) (RPCResponse, error) {
+	t.requests = append(t.requests, request)
+	if request.Method != "initialize" {
+		return RPCResponse{ID: request.ID, Result: json.RawMessage(`{}`)}, nil
+	}
+	return RPCResponse{
+		JSONRPC: JSONRPCVersion,
+		ID:      request.ID,
+		Result: json.RawMessage(`{
+			"protocolVersion":"2025-06-18",
+			"capabilities":{"tools":{}},
+			"serverInfo":{"name":"test-server","version":"1.2.3"},
+			"instructions":"be useful"
+		}`),
+	}, nil
+}
+
+func (t *fakeLifecycleTransport) SendNotification(_ context.Context, notification RPCNotification) error {
+	t.notifications = append(t.notifications, notification)
+	return nil
 }
 
 func TestProtocolClientListsAndCallsTools(t *testing.T) {
@@ -58,6 +85,54 @@ func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	params := mustJSON(t, transport.requests[1].Params)
 	if !strings.Contains(params, `"name":"search"`) || !strings.Contains(params, `"query":"bugs"`) {
 		t.Fatalf("call params = %s", params)
+	}
+}
+
+func TestProtocolClientInitializeSendsLifecycleMessages(t *testing.T) {
+	transport := &fakeLifecycleTransport{}
+	client := NewProtocolClient(transport)
+
+	if err := client.EnsureInitialized(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	result := client.initializeResult
+	if result.ProtocolVersion != DefaultProtocolVersion || result.ServerInfo.Name != "test-server" || result.Instructions != "be useful" {
+		t.Fatalf("initialize result = %#v", result)
+	}
+	if len(transport.requests) != 1 || transport.requests[0].Method != "initialize" {
+		t.Fatalf("requests = %#v", transport.requests)
+	}
+	params := mustJSON(t, transport.requests[0].Params)
+	for _, want := range []string{`"protocolVersion":"2025-06-18"`, `"clientInfo"`, `"capabilities"`, `"elicitation"`} {
+		if !strings.Contains(params, want) {
+			t.Fatalf("initialize params missing %q in %s", want, params)
+		}
+	}
+	if len(transport.notifications) != 1 || transport.notifications[0].Method != "notifications/initialized" {
+		t.Fatalf("notifications = %#v", transport.notifications)
+	}
+	if err := client.EnsureInitialized(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 1 || len(transport.notifications) != 1 {
+		t.Fatalf("lifecycle repeated requests=%#v notifications=%#v", transport.requests, transport.notifications)
+	}
+}
+
+func TestProtocolClientInitializeRejectsUnsupportedVersion(t *testing.T) {
+	transport := &fakeLifecycleTransport{}
+	client := NewProtocolClient(transport)
+	_, err := client.Initialize(context.Background(), InitializeOptions{
+		ProtocolVersion:           "2024-11-05",
+		SupportedProtocolVersions: []string{"2024-11-05"},
+		Capabilities:              map[string]any{},
+		ClientInfo:                ImplementationInfo{Name: "test", Version: "1"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("expected unsupported version error, got %v", err)
+	}
+	if len(transport.notifications) != 0 {
+		t.Fatalf("notifications = %#v", transport.notifications)
 	}
 }
 

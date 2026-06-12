@@ -13,6 +13,7 @@ import (
 )
 
 const JSONRPCVersion = "2.0"
+const DefaultProtocolVersion = "2025-06-18"
 
 type RPCRequest struct {
 	JSONRPC string `json:"jsonrpc"`
@@ -83,6 +84,10 @@ type RPCNotification struct {
 
 type RPCNotificationHandler func(RPCNotification)
 
+type RPCNotificationSender interface {
+	SendNotification(context.Context, RPCNotification) error
+}
+
 type RPCInboundRequest struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      string          `json:"id"`
@@ -103,6 +108,10 @@ type RPCRequestTransport interface {
 type ProtocolClient struct {
 	Transport RPCTransport
 	nextID    atomic.Uint64
+
+	initMu           sync.Mutex
+	initialized      bool
+	initializeResult InitializeResult
 
 	notificationMu      sync.Mutex
 	notifications       []RPCNotification
@@ -128,6 +137,82 @@ func NewRPCRequest(id string, method string, params any) RPCRequest {
 		Method:  method,
 		Params:  params,
 	}
+}
+
+type ImplementationInfo struct {
+	Name    string `json:"name,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+type InitializeOptions struct {
+	ProtocolVersion             string
+	SupportedProtocolVersions   []string
+	Capabilities                map[string]any
+	ClientInfo                  ImplementationInfo
+	SkipInitializedNotification bool
+}
+
+type InitializeResult struct {
+	ProtocolVersion string             `json:"protocolVersion"`
+	Capabilities    map[string]any     `json:"capabilities,omitempty"`
+	ServerInfo      ImplementationInfo `json:"serverInfo,omitempty"`
+	Instructions    string             `json:"instructions,omitempty"`
+}
+
+func DefaultInitializeOptions() InitializeOptions {
+	return InitializeOptions{
+		ProtocolVersion:           DefaultProtocolVersion,
+		SupportedProtocolVersions: []string{DefaultProtocolVersion},
+		Capabilities: map[string]any{
+			"elicitation": map[string]any{},
+		},
+		ClientInfo: ImplementationInfo{
+			Name:    "ccgo",
+			Title:   "ccgo",
+			Version: "0.0.0-dev",
+		},
+	}
+}
+
+func (c *ProtocolClient) EnsureInitialized(ctx context.Context) error {
+	_, err := c.Initialize(ctx, DefaultInitializeOptions())
+	return err
+}
+
+func (c *ProtocolClient) Initialize(ctx context.Context, options InitializeOptions) (InitializeResult, error) {
+	if c == nil {
+		return InitializeResult{}, fmt.Errorf("mcp protocol client is nil")
+	}
+	c.initMu.Lock()
+	defer c.initMu.Unlock()
+	if c.initialized {
+		return c.initializeResult, nil
+	}
+	options = normalizeInitializeOptions(options)
+	raw, err := c.rawRequest(ctx, "initialize", map[string]any{
+		"protocolVersion": options.ProtocolVersion,
+		"capabilities":    options.Capabilities,
+		"clientInfo":      options.ClientInfo,
+	})
+	if err != nil {
+		return InitializeResult{}, err
+	}
+	var result InitializeResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return InitializeResult{}, err
+	}
+	if !supportsProtocolVersion(result.ProtocolVersion, options.SupportedProtocolVersions) {
+		return InitializeResult{}, fmt.Errorf("mcp server protocol version %q is not supported", result.ProtocolVersion)
+	}
+	if !options.SkipInitializedNotification {
+		if err := c.sendInitialized(ctx); err != nil {
+			return InitializeResult{}, err
+		}
+	}
+	c.initialized = true
+	c.initializeResult = result
+	return result, nil
 }
 
 func (c *ProtocolClient) ListTools(ctx context.Context, serverName string) ([]RemoteTool, error) {
@@ -237,6 +322,10 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 }
 
 func (c *ProtocolClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return c.rawRequest(ctx, method, params)
+}
+
+func (c *ProtocolClient) rawRequest(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	if c == nil || c.Transport == nil {
 		return nil, fmt.Errorf("mcp rpc transport is nil")
 	}
@@ -255,6 +344,46 @@ func (c *ProtocolClient) request(ctx context.Context, method string, params any)
 		return json.RawMessage(`null`), nil
 	}
 	return response.Result, nil
+}
+
+func (c *ProtocolClient) sendInitialized(ctx context.Context) error {
+	sender, ok := c.Transport.(RPCNotificationSender)
+	if !ok {
+		return fmt.Errorf("mcp rpc transport cannot send initialized notification")
+	}
+	return sender.SendNotification(ctx, RPCNotification{JSONRPC: JSONRPCVersion, Method: "notifications/initialized"})
+}
+
+func normalizeInitializeOptions(options InitializeOptions) InitializeOptions {
+	defaults := DefaultInitializeOptions()
+	if options.ProtocolVersion == "" {
+		options.ProtocolVersion = defaults.ProtocolVersion
+	}
+	if len(options.SupportedProtocolVersions) == 0 {
+		options.SupportedProtocolVersions = append([]string(nil), defaults.SupportedProtocolVersions...)
+	}
+	if options.Capabilities == nil {
+		options.Capabilities = defaults.Capabilities
+	}
+	if options.ClientInfo.Name == "" {
+		options.ClientInfo.Name = defaults.ClientInfo.Name
+	}
+	if options.ClientInfo.Title == "" {
+		options.ClientInfo.Title = defaults.ClientInfo.Title
+	}
+	if options.ClientInfo.Version == "" {
+		options.ClientInfo.Version = defaults.ClientInfo.Version
+	}
+	return options
+}
+
+func supportsProtocolVersion(version string, supported []string) bool {
+	for _, item := range supported {
+		if version == item {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *ProtocolClient) SetNotificationHandler(handler RPCNotificationHandler) {

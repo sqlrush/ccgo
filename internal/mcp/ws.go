@@ -114,6 +114,30 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 	}
 }
 
+func (t *WSTransport) SendNotification(ctx context.Context, notification RPCNotification) error {
+	if t == nil || t.URL == "" {
+		return fmt.Errorf("mcp ws transport url is required")
+	}
+	if notification.JSONRPC == "" {
+		notification.JSONRPC = JSONRPCVersion
+	}
+	data, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	conn, err := t.ensureConn(ctx)
+	if err != nil {
+		return err
+	}
+	if err := writeWebSocketFrame(conn.Conn, webSocketOpcodeText, data); err != nil {
+		_ = t.closeLocked()
+		return err
+	}
+	return nil
+}
+
 func (t *WSTransport) SetRequestHandler(handler RPCRequestHandler) {
 	if t == nil {
 		return
