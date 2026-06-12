@@ -189,7 +189,7 @@ func TestProtocolClientListsAndCallsTools(t *testing.T) {
 		t.Fatalf("output schema = %#v", tools[0].OutputSchema)
 	}
 
-	result, err := client.CallTool(context.Background(), "github", "search", json.RawMessage(`{"query":"bugs"}`))
+	result, err := client.CallTool(context.Background(), "github", " search ", json.RawMessage(`{"query":"bugs"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,6 +203,12 @@ func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	params := mustJSON(t, transport.requests[1].Params)
 	if !strings.Contains(params, `"name":"search"`) || !strings.Contains(params, `"query":"bugs"`) {
 		t.Fatalf("call params = %s", params)
+	}
+	if _, err := client.CallTool(context.Background(), "github", "   ", json.RawMessage(`{"query":"bugs"}`)); err == nil || !strings.Contains(err.Error(), "tool name is required") {
+		t.Fatalf("blank tool name err = %v", err)
+	}
+	if len(transport.requests) != 2 {
+		t.Fatalf("blank tool name sent request: %#v", transport.requests)
 	}
 }
 

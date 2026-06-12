@@ -1233,6 +1233,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：MCP protocol client 的 `prompts/get` 现在会 trim prompt name、拒绝空名称，并把 nil arguments 统一为空对象，和 helper tool 的输入校验保持一致。
 
+本轮补充：MCP protocol client 的 `tools/call` 现在会在本地 trim tool name 并拒绝空白名称，确保无效工具调用不会穿透到 MCP server。
+
 本轮补充：MCP protocol client 的 `resources/read` 现在会 trim resource URI 并拒绝空值，和 `resources/subscribe` 及 helper tools 的 resource URI 校验保持一致。
 
 本轮补充：MCP protocol client 现在会在 initialize 协商成功后把 server protocolVersion 回填到支持的 transport，HTTP/SSE 后续请求和 initialized notification 会携带 `mcp-protocol-version` header，WS 重连时也可复用该协商版本。

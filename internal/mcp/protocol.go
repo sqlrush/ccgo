@@ -321,6 +321,10 @@ func (c *ProtocolClient) ListTools(ctx context.Context, serverName string) ([]Re
 }
 
 func (c *ProtocolClient) CallTool(ctx context.Context, serverName string, toolName string, input json.RawMessage) (any, error) {
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return nil, fmt.Errorf("mcp tool name is required")
+	}
 	arguments, err := rawObject(input)
 	if err != nil {
 		return nil, err
