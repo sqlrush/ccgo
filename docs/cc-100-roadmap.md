@@ -533,7 +533,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` 常见文件读取/搜索类只读命令（`ls`/`cat`/`head`/`tail`/`wc`/`grep`/`rg`/`find`/`stat`/`file`/`du`/`df`）现在增加基础相对路径 guard，绝对路径、home、`..`、变量/命令替换路径、Windows drive、UNC 和 URI/provider-like 路径不再自动进入 read-only fast path。
 
-本轮补充：`Bash` safety 分类现在把 `find -exec`/`-execdir`/`-ok`/`-okdir` 排除出 read-only fast path，并会识别 `find ... -exec sh -c 'rm ...'` 与 `xargs sh -c 'rm ...'` 这类 shell wrapper 内嵌破坏性脚本。
+本轮补充：`Bash` safety 分类现在把 `find -exec`/`-execdir`/`-ok`/`-okdir` 排除出 read-only fast path，并会识别 `find ... -exec sh -c 'rm ...'` 与 `xargs sh -c 'rm ...'` 这类 shell wrapper 内嵌破坏性脚本；`find -exec*` 和 `xargs` 的子命令还会复用 safe wrapper/env/assignment 归一化，覆盖 `env rm`、`timeout rm`、`xargs -I{} env sh -c ...` 等形态。
 
 本轮补充：`PowerShell` native/external 文件读取/搜索只读命令（`where.exe`/`file`/`tree`/`findstr`）现在对路径型 positional、`where.exe /R`、`file -f`、`findstr /G`/`/D` 和 `/C:` pattern 后的文件参数执行相对路径 guard，Windows drive、UNC、URI/provider-like、`..` 以及缺值 path flag 不再进入 read-only fast path；`where.exe` flag allowlist 收敛到 `/R`/`/Q`/`/F`/`/T`。
 

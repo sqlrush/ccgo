@@ -2286,7 +2286,7 @@ func destructiveFind(words []string) bool {
 		case "-delete":
 			return true
 		case "-exec", "-execdir", "-ok", "-okdir":
-			if i+2 < len(words) && (destructiveExecutable(words[i+2]) || destructiveShellExec(words[i+2:])) {
+			if i+2 < len(words) && destructiveExecCommand(words[i+2:]) {
 				return true
 			}
 		}
@@ -2295,12 +2295,85 @@ func destructiveFind(words []string) bool {
 }
 
 func destructiveXargs(words []string) bool {
-	for _, word := range words[1:] {
-		if destructiveExecutable(word) {
+	return destructiveExecCommand(xargsCommandWords(words))
+}
+
+func destructiveExecCommand(words []string) bool {
+	words = trimFindExecTerminator(words)
+	if len(words) == 0 {
+		return false
+	}
+	if destructiveWords(words) {
+		return true
+	}
+	words = stripLeadingAssignments(stripSafeWrapperWords(words))
+	return destructiveShellExec(words)
+}
+
+func trimFindExecTerminator(words []string) []string {
+	for i, word := range words {
+		if word == ";" || word == `\;` || word == "+" {
+			return words[:i]
+		}
+	}
+	return words
+}
+
+func xargsCommandWords(words []string) []string {
+	for i := 1; i < len(words); i++ {
+		word := words[i]
+		switch {
+		case word == "--":
+			return words[i+1:]
+		case xargsFlagWithoutValue(word):
+			continue
+		case xargsFlagWithInlineValue(word):
+			continue
+		case xargsFlagWithSeparateValue(word):
+			i++
+			continue
+		case strings.HasPrefix(word, "-"):
+			continue
+		default:
+			return words[i:]
+		}
+	}
+	return nil
+}
+
+func xargsFlagWithoutValue(word string) bool {
+	switch word {
+	case "-0", "--null", "-r", "--no-run-if-empty", "-t", "--verbose", "-p", "--interactive", "-x", "--exit", "--show-limits":
+		return true
+	default:
+		return false
+	}
+}
+
+func xargsFlagWithSeparateValue(word string) bool {
+	switch word {
+	case "-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-i", "--replace-str", "-L", "--max-lines", "-l", "--max-lines-opt", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars":
+		return true
+	default:
+		return false
+	}
+}
+
+func xargsFlagWithInlineValue(word string) bool {
+	for _, prefix := range []string{
+		"--arg-file=", "--delimiter=", "--eof=", "--replace=", "--replace-str=", "--max-lines=", "--max-lines-opt=", "--max-args=", "--max-procs=", "--max-chars=",
+	} {
+		if strings.HasPrefix(word, prefix) {
 			return true
 		}
 	}
-	return destructiveShellExec(words[1:])
+	if len(word) > 2 {
+		switch word[:2] {
+		case "-a", "-d", "-E", "-I", "-i", "-L", "-l", "-n", "-P", "-s":
+			return true
+		}
+	}
+	return false
 }
 
 func destructiveShellExec(words []string) bool {
