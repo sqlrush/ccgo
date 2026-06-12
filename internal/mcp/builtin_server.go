@@ -35,8 +35,10 @@ type BuiltinServer struct {
 	promptContext       tool.PromptContext
 	toolContextMetadata map[string]any
 
-	mu        sync.Mutex
-	cancelled map[string]string
+	mu                 sync.Mutex
+	initializeAccepted bool
+	initialized        bool
+	cancelled          map[string]string
 }
 
 type serverRPCRequest struct {
@@ -157,6 +159,9 @@ func (s *BuiltinServer) handleSingle(ctx context.Context, data []byte) (serverRP
 		_ = s.handleNotification(ctx, request)
 		return serverRPCResponse{}, false
 	}
+	if rpcErr := s.lifecycleError(request.Method); rpcErr != nil {
+		return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: normalizedResponseID(request.ID), Error: rpcErr}, true
+	}
 	if reason, ok := s.consumeCancellation(request.ID); ok {
 		return serverRPCResponse{
 			JSONRPC: JSONRPCVersion,
@@ -175,6 +180,9 @@ func (s *BuiltinServer) handleSingle(ctx context.Context, data []byte) (serverRP
 		return response, true
 	}
 	response.Result = result
+	if request.Method == "initialize" {
+		s.markInitializeAccepted()
+	}
 	return response, true
 }
 
@@ -211,10 +219,48 @@ func invalidRequestResponse(id json.RawMessage, message string) serverRPCRespons
 
 func (s *BuiltinServer) handleNotification(_ context.Context, request serverRPCRequest) error {
 	switch request.Method {
+	case "notifications/initialized":
+		s.markInitialized()
 	case "$/cancelRequest", "notifications/cancelled":
 		s.recordCancellation(request.Params)
 	}
 	return nil
+}
+
+func (s *BuiltinServer) lifecycleError(method string) *RPCError {
+	switch method {
+	case "initialize":
+		s.mu.Lock()
+		alreadyAccepted := s.initializeAccepted
+		s.mu.Unlock()
+		if alreadyAccepted {
+			return &RPCError{Code: -32600, Message: "server already initialized"}
+		}
+		return nil
+	case "ping":
+		return nil
+	}
+	s.mu.Lock()
+	initialized := s.initialized
+	s.mu.Unlock()
+	if !initialized {
+		return &RPCError{Code: -32002, Message: "server not initialized"}
+	}
+	return nil
+}
+
+func (s *BuiltinServer) markInitializeAccepted() {
+	s.mu.Lock()
+	s.initializeAccepted = true
+	s.mu.Unlock()
+}
+
+func (s *BuiltinServer) markInitialized() {
+	s.mu.Lock()
+	if s.initializeAccepted {
+		s.initialized = true
+	}
+	s.mu.Unlock()
 }
 
 func (s *BuiltinServer) handleRequest(ctx context.Context, request serverRPCRequest) (any, *RPCError) {

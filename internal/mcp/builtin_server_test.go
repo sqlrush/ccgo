@@ -79,15 +79,20 @@ func TestBuiltinServerDeniesMutatingToolsByDefault(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err = server.Run(context.Background(), strings.NewReader(`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"Echo","arguments":{"text":"hello"}}}`+"\n"), &out)
+	err = server.Run(context.Background(), strings.NewReader(strings.Join([]string{
+		`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"Echo","arguments":{"text":"hello"}}}`,
+		"",
+	}, "\n")), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	responses := decodeServerResponses(t, out.String())
-	if len(responses) != 1 {
+	if len(responses) != 2 {
 		t.Fatalf("responses = %#v", responses)
 	}
-	result := string(mustMarshal(t, responses[0].Result))
+	result := string(mustMarshal(t, responses[1].Result))
 	if !strings.Contains(result, `"isError":true`) || !strings.Contains(result, "mutating tools are disabled") {
 		t.Fatalf("result = %s", result)
 	}
@@ -108,12 +113,20 @@ func TestBuiltinServerAllowsMutatingToolsWhenConfigured(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err = server.Run(context.Background(), strings.NewReader(`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"Echo","arguments":{"text":"hello"}}}`+"\n"), &out)
+	err = server.Run(context.Background(), strings.NewReader(strings.Join([]string{
+		`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"Echo","arguments":{"text":"hello"}}}`,
+		"",
+	}, "\n")), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	responses := decodeServerResponses(t, out.String())
-	result := string(mustMarshal(t, responses[0].Result))
+	if len(responses) != 2 {
+		t.Fatalf("responses = %#v", responses)
+	}
+	result := string(mustMarshal(t, responses[1].Result))
 	if strings.Contains(result, `"isError":true`) || !strings.Contains(result, `"text":"hello"`) {
 		t.Fatalf("result = %s", result)
 	}
@@ -165,6 +178,8 @@ func TestBuiltinServerReportsEmptyResourcesAndPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":"1","method":"resources/read","params":{"uri":"file:///missing"}}`,
 		`{"jsonrpc":"2.0","id":"2","method":"prompts/get","params":{"name":"missing"}}`,
 		"",
@@ -174,14 +189,14 @@ func TestBuiltinServerReportsEmptyResourcesAndPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 	responses := decodeServerResponses(t, out.String())
-	if len(responses) != 2 {
+	if len(responses) != 3 {
 		t.Fatalf("responses = %#v", responses)
 	}
-	if responses[0].Error == nil || !strings.Contains(responses[0].Error.Message, "resource not found") {
-		t.Fatalf("resource error = %#v", responses[0].Error)
+	if responses[1].Error == nil || !strings.Contains(responses[1].Error.Message, "resource not found") {
+		t.Fatalf("resource error = %#v", responses[1].Error)
 	}
-	if responses[1].Error == nil || !strings.Contains(responses[1].Error.Message, "prompt not found") {
-		t.Fatalf("prompt error = %#v", responses[1].Error)
+	if responses[2].Error == nil || !strings.Contains(responses[2].Error.Message, "prompt not found") {
+		t.Fatalf("prompt error = %#v", responses[2].Error)
 	}
 }
 
@@ -198,7 +213,7 @@ func TestBuiltinServerHandlesJSONRPCBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := `[` +
-		`{"jsonrpc":"2.0","id":"1","method":"ping","params":{}},` +
+		`{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}},` +
 		`{"jsonrpc":"2.0","method":"notifications/initialized"},` +
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},` +
 		`1` +
@@ -241,6 +256,53 @@ func TestBuiltinServerSkipsNotificationOnlyBatch(t *testing.T) {
 	}
 	if strings.TrimSpace(out.String()) != "" {
 		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestBuiltinServerRequiresInitializedLifecycleForRequests(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}`,
+		`{"jsonrpc":"2.0","id":"ping","method":"ping","params":{}}`,
+		`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","id":"2","method":"tools/list","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":"3","method":"tools/list","params":{}}`,
+		`{"jsonrpc":"2.0","id":"again","method":"initialize","params":{}}`,
+		"",
+	}, "\n")
+	var out bytes.Buffer
+	if err := server.Run(context.Background(), strings.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	responses := decodeServerResponses(t, out.String())
+	if len(responses) != 6 {
+		t.Fatalf("responses = %#v output=%s", responses, out.String())
+	}
+	if responses[0].Error == nil || responses[0].Error.Code != -32002 {
+		t.Fatalf("pre-initialize response = %#v", responses[0])
+	}
+	if responses[1].Error != nil || string(mustMarshal(t, responses[1].Result)) != "{}" {
+		t.Fatalf("pre-initialize ping = %#v", responses[1])
+	}
+	if responses[3].Error == nil || responses[3].Error.Code != -32002 {
+		t.Fatalf("pre-initialized response = %#v", responses[3])
+	}
+	if responses[4].Error != nil || !strings.Contains(string(mustMarshal(t, responses[4].Result)), `"name":"Echo"`) {
+		t.Fatalf("post-initialized response = %#v", responses[4])
+	}
+	if responses[5].Error == nil || responses[5].Error.Code != -32600 || !strings.Contains(responses[5].Error.Message, "already initialized") {
+		t.Fatalf("duplicate initialize response = %#v", responses[5])
 	}
 }
 
