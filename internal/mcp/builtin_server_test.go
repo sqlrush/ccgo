@@ -34,6 +34,7 @@ func TestBuiltinServerHandlesInitializeListAndCall(t *testing.T) {
 		`{"jsonrpc":"2.0","id":"4","method":"ping","params":{}}`,
 		`{"jsonrpc":"2.0","id":"5","method":"resources/list","params":{}}`,
 		`{"jsonrpc":"2.0","id":"6","method":"prompts/list","params":{}}`,
+		`{"jsonrpc":"2.0","id":"7","method":"resources/templates/list","params":{}}`,
 		"",
 	}, "\n")
 	var out bytes.Buffer
@@ -41,10 +42,11 @@ func TestBuiltinServerHandlesInitializeListAndCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	responses := decodeServerResponses(t, out.String())
-	if len(responses) != 6 {
+	if len(responses) != 7 {
 		t.Fatalf("responses = %#v output=%s", responses, out.String())
 	}
-	if !strings.Contains(string(mustMarshal(t, responses[0].Result)), `"protocolVersion":"2025-06-18"`) {
+	initialize := string(mustMarshal(t, responses[0].Result))
+	if !strings.Contains(initialize, `"protocolVersion":"2025-06-18"`) || !strings.Contains(initialize, `"completions":{}`) {
 		t.Fatalf("initialize = %#v", responses[0])
 	}
 	listResult := string(mustMarshal(t, responses[1].Result))
@@ -63,6 +65,9 @@ func TestBuiltinServerHandlesInitializeListAndCall(t *testing.T) {
 	}
 	if !strings.Contains(string(mustMarshal(t, responses[5].Result)), `"prompts":[]`) {
 		t.Fatalf("prompts/list = %#v", responses[5].Result)
+	}
+	if !strings.Contains(string(mustMarshal(t, responses[6].Result)), `"resourceTemplates":[]`) {
+		t.Fatalf("resources/templates/list = %#v", responses[6].Result)
 	}
 }
 
@@ -198,6 +203,48 @@ func TestBuiltinServerReportsEmptyResourcesAndPrompts(t *testing.T) {
 	}
 	if responses[2].Error == nil || !strings.Contains(responses[2].Error.Message, "prompt not found") {
 		t.Fatalf("prompt error = %#v", responses[2].Error)
+	}
+}
+
+func TestBuiltinServerHandlesCompletionAndLoggingUtilities(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":"1","method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"missing"},"argument":{"name":"topic","value":"hel"}}}`,
+		`{"jsonrpc":"2.0","id":"2","method":"logging/setLevel","params":{"level":"warning"}}`,
+		`{"jsonrpc":"2.0","id":"3","method":"logging/setLevel","params":{"level":"verbose"}}`,
+		"",
+	}, "\n")
+	var out bytes.Buffer
+	if err := server.Run(context.Background(), strings.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	responses := decodeServerResponses(t, out.String())
+	if len(responses) != 4 {
+		t.Fatalf("responses = %#v output=%s", responses, out.String())
+	}
+	completion := string(mustMarshal(t, responses[1].Result))
+	for _, want := range []string{`"completion"`, `"values":[]`, `"total":0`, `"hasMore":false`} {
+		if !strings.Contains(completion, want) {
+			t.Fatalf("completion result = %s, want %s", completion, want)
+		}
+	}
+	if responses[2].Error != nil || string(mustMarshal(t, responses[2].Result)) != "{}" {
+		t.Fatalf("logging/setLevel result = %#v error=%#v", responses[2].Result, responses[2].Error)
+	}
+	if responses[3].Error == nil || responses[3].Error.Code != -32602 || !strings.Contains(responses[3].Error.Message, "unsupported logging level") {
+		t.Fatalf("invalid logging level = %#v", responses[3])
 	}
 }
 

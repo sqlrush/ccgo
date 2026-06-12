@@ -269,9 +269,10 @@ func (s *BuiltinServer) handleRequest(ctx context.Context, request serverRPCRequ
 		return map[string]any{
 			"protocolVersion": DefaultProtocolVersion,
 			"capabilities": map[string]any{
-				"tools":     map[string]any{},
-				"resources": map[string]any{},
-				"prompts":   map[string]any{},
+				"tools":       map[string]any{},
+				"resources":   map[string]any{},
+				"prompts":     map[string]any{},
+				"completions": map[string]any{},
 			},
 			"serverInfo": map[string]any{
 				"name":    builtinServerName,
@@ -287,12 +288,21 @@ func (s *BuiltinServer) handleRequest(ctx context.Context, request serverRPCRequ
 		return s.callTool(ctx, request.Params)
 	case "resources/list":
 		return map[string]any{"resources": []any{}}, nil
+	case "resources/templates/list":
+		return map[string]any{"resourceTemplates": []any{}}, nil
 	case "resources/read":
 		return nil, validateNamedParams(request.Params, "uri", "resource not found")
 	case "prompts/list":
 		return map[string]any{"prompts": []any{}}, nil
 	case "prompts/get":
 		return nil, validateNamedParams(request.Params, "name", "prompt not found")
+	case "completion/complete":
+		return emptyCompletionResult(request.Params)
+	case "logging/setLevel":
+		if rpcErr := validateLoggingSetLevel(request.Params); rpcErr != nil {
+			return nil, rpcErr
+		}
+		return map[string]any{}, nil
 	default:
 		return nil, &RPCError{Code: -32601, Message: "method not found"}
 	}
@@ -368,6 +378,52 @@ func validateNamedParams(raw json.RawMessage, required string, notFoundMessage s
 		return &RPCError{Code: -32602, Message: required + " is required"}
 	}
 	return &RPCError{Code: -32602, Message: notFoundMessage, Data: map[string]any{required: value}}
+}
+
+func emptyCompletionResult(raw json.RawMessage) (any, *RPCError) {
+	if len(strings.TrimSpace(string(raw))) > 0 {
+		var params map[string]any
+		if err := json.Unmarshal(raw, &params); err != nil {
+			return nil, &RPCError{Code: -32602, Message: "invalid completion params", Data: err.Error()}
+		}
+	}
+	return map[string]any{
+		"completion": map[string]any{
+			"values":  []any{},
+			"total":   0,
+			"hasMore": false,
+		},
+	}, nil
+}
+
+func validateLoggingSetLevel(raw json.RawMessage) *RPCError {
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return &RPCError{Code: -32602, Message: "level is required"}
+	}
+	var params map[string]any
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return &RPCError{Code: -32602, Message: "invalid logging params", Data: err.Error()}
+	}
+	level := stringParam(params, "level", "logLevel", "severity")
+	if level == "" {
+		return &RPCError{Code: -32602, Message: "level is required"}
+	}
+	switch strings.ToLower(level) {
+	case "debug", "info", "notice", "warning", "error", "critical", "alert", "emergency":
+		return nil
+	default:
+		return &RPCError{Code: -32602, Message: "unsupported logging level", Data: map[string]any{"level": level}}
+	}
+}
+
+func stringParam(params map[string]any, names ...string) string {
+	for _, name := range names {
+		value, _ := params[name].(string)
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (s *BuiltinServer) recordCancellation(raw json.RawMessage) {
