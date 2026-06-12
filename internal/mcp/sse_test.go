@@ -171,6 +171,83 @@ func TestSSETransportRespondsToStreamInboundRequests(t *testing.T) {
 	}
 }
 
+func TestSSETransportReconnectsWithLastEventID(t *testing.T) {
+	firstPost := make(chan struct{}, 1)
+	var sseCalls int
+	var secondLastEventID string
+	var secondSessionID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sse":
+			sseCalls++
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("missing flusher")
+			}
+			w.Header().Set("content-type", "text/event-stream")
+			switch sseCalls {
+			case 1:
+				if got := r.Header.Get("Last-Event-ID"); got != "" {
+					t.Fatalf("first last-event-id = %q", got)
+				}
+				w.Header().Set("mcp-session-id", "session-reconnect")
+				_, _ = w.Write([]byte("event: endpoint\n"))
+				_, _ = w.Write([]byte("data: /message\n\n"))
+				flusher.Flush()
+				select {
+				case <-firstPost:
+				case <-time.After(2 * time.Second):
+					t.Fatal("timed out waiting for first post")
+				}
+				_, _ = w.Write([]byte("id: evt-1\n"))
+				_, _ = w.Write([]byte("event: message\n"))
+				_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","method":"notifications/message","params":{"message":"before reconnect"}}` + "\n\n"))
+				flusher.Flush()
+			case 2:
+				secondLastEventID = r.Header.Get("Last-Event-ID")
+				secondSessionID = r.Header.Get("mcp-session-id")
+				_, _ = w.Write([]byte("event: endpoint\n"))
+				_, _ = w.Write([]byte("data: /message\n\n"))
+				flusher.Flush()
+			default:
+				t.Fatalf("unexpected sse reconnect %d", sseCalls)
+			}
+		case "/message":
+			var request RPCRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.ID == "41" {
+				firstPost <- struct{}{}
+				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + request.ID + `","result":{"tools":[{"name":"after-reconnect"}]}}`))
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	transport := NewSSETransport(server.URL+"/sse", nil, server.Client())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := transport.RoundTrip(ctx, NewRPCRequest("41", "tools/list", nil)); err == nil {
+		t.Fatal("expected first request to fail when stream closes before response")
+	}
+
+	response, err := transport.RoundTrip(context.Background(), NewRPCRequest("42", "tools/list", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "42" || !strings.Contains(string(response.Result), `"after-reconnect"`) {
+		t.Fatalf("response = %#v", response)
+	}
+	if sseCalls != 2 || secondLastEventID != "evt-1" || secondSessionID != "session-reconnect" {
+		t.Fatalf("sseCalls=%d lastEventID=%q sessionID=%q", sseCalls, secondLastEventID, secondSessionID)
+	}
+}
+
 func TestOpenServerClientSupportsSSETransport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

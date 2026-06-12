@@ -24,7 +24,9 @@ type SSETransport struct {
 	mu          sync.Mutex
 	endpointURL string
 	sessionID   string
+	lastEventID string
 	streamClose context.CancelFunc
+	streamID    uint64
 	waiters     map[string]chan sseWaitResult
 	pending     map[string]sseWaitResult
 
@@ -120,6 +122,7 @@ func (t *SSETransport) ResetSession() {
 	waiters := t.waiters
 	t.endpointURL = ""
 	t.sessionID = ""
+	t.lastEventID = ""
 	t.streamClose = nil
 	t.waiters = nil
 	t.pending = nil
@@ -210,8 +213,9 @@ func (t *SSETransport) endpoint(ctx context.Context) (string, error) {
 	}
 	t.mu.Lock()
 	endpoint := t.endpointURL
+	streamClose := t.streamClose
 	t.mu.Unlock()
-	if endpoint != "" {
+	if endpoint != "" && streamClose != nil {
 		return endpoint, nil
 	}
 	return t.connect(ctx)
@@ -221,11 +225,14 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 	t.connectMu.Lock()
 	defer t.connectMu.Unlock()
 	t.mu.Lock()
-	if t.endpointURL != "" {
+	if t.endpointURL != "" && t.streamClose != nil {
 		endpoint := t.endpointURL
 		t.mu.Unlock()
 		return endpoint, nil
 	}
+	sessionID := t.sessionID
+	lastEventID := t.lastEventID
+	protocolVersion := t.ProtocolVersionHeader
 	t.mu.Unlock()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.URL, nil)
@@ -233,6 +240,12 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("accept", "text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("mcp-session-id", sessionID)
+	}
+	if lastEventID != "" {
+		req.Header.Set("Last-Event-ID", lastEventID)
+	}
 	for key, value := range t.Headers {
 		if strings.TrimSpace(key) != "" {
 			req.Header.Set(key, value)
@@ -249,9 +262,6 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 			}
 		}
 	}
-	t.mu.Lock()
-	protocolVersion := t.ProtocolVersionHeader
-	t.mu.Unlock()
 	if protocolVersion != "" {
 		req.Header.Set("mcp-protocol-version", protocolVersion)
 	}
@@ -302,16 +312,19 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 		}
 		streamCtx, cancel := context.WithCancel(ctx)
 		t.mu.Lock()
+		t.streamID++
+		streamID := t.streamID
 		t.endpointURL = endpoint
 		t.streamClose = cancel
 		t.mu.Unlock()
-		go t.readStream(streamCtx, scanner, resp.Body)
+		go t.readStream(streamCtx, streamID, scanner, resp.Body)
 		return endpoint, nil
 	}
 }
 
-func (t *SSETransport) readStream(ctx context.Context, scanner *sseScanner, body io.Closer) {
+func (t *SSETransport) readStream(ctx context.Context, streamID uint64, scanner *sseScanner, body io.Closer) {
 	defer body.Close()
+	defer t.markStreamClosed(streamID)
 	for {
 		select {
 		case <-ctx.Done():
@@ -364,6 +377,7 @@ func (t *SSETransport) unregisterWaiter(id string, ch chan sseWaitResult) {
 }
 
 func (t *SSETransport) dispatchSSEEvent(ctx context.Context, event SSEEvent) {
+	t.rememberSSEEventID(event.ID)
 	if event.Event != "" && event.Event != "message" {
 		return
 	}
@@ -399,6 +413,24 @@ func (t *SSETransport) dispatchSSEEvent(ctx context.Context, event SSEEvent) {
 		t.pending = map[string]sseWaitResult{}
 	}
 	t.pending[response.ID] = result
+}
+
+func (t *SSETransport) rememberSSEEventID(id string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return
+	}
+	t.mu.Lock()
+	t.lastEventID = id
+	t.mu.Unlock()
+}
+
+func (t *SSETransport) markStreamClosed(streamID uint64) {
+	t.mu.Lock()
+	if t.streamID == streamID {
+		t.streamClose = nil
+	}
+	t.mu.Unlock()
 }
 
 func (t *SSETransport) dispatchInboundRequest(ctx context.Context, response RPCResponse) (bool, error) {
