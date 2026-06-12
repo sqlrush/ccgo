@@ -101,13 +101,16 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			}
 			return result, nil
 		}
-		toolMessages, toolResults := r.executeToolUses(ctx, uses, toolMetadata)
+		toolMessages, toolResults := r.executeToolUses(ctx, uses, toolMetadata, result.Messages)
 		for i := range toolMessages {
 			history, toolMessages[i] = appendMessage(history, toolMessages[i])
 			result.Messages = append(result.Messages, toolMessages[i])
 			if err := r.appendTranscript(toolMessages[i]); err != nil {
 				return result, err
 			}
+		}
+		if commandPermissions := commands.CommandPermissionsFromMessages(toolMessages); commandPermissions.Model != "" {
+			r.Model = commandPermissions.Model
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
 	}
@@ -409,7 +412,7 @@ func (r Runner) createMessage(ctx context.Context, request anthropic.Request) (*
 	return r.Client.CreateMessage(ctx, request)
 }
 
-func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, metadata map[string]any) ([]contracts.Message, []contracts.ToolResult) {
+func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, metadata map[string]any, turnMessages []contracts.Message) ([]contracts.Message, []contracts.ToolResult) {
 	toolMessages := make([]contracts.Message, 0, len(uses))
 	toolResults := make([]contracts.ToolResult, 0, len(uses))
 	for _, use := range uses {
@@ -420,6 +423,7 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		Context:          ctx,
 		WorkingDirectory: r.WorkingDirectory,
 		SessionID:        r.SessionID,
+		Permissions:      r.permissionsForTurn(turnMessages),
 		Metadata:         metadata,
 	}
 	for update := range tool.RunTools(toolCtx, r.Tools, uses, nil, tool.RunOptions{}) {
@@ -453,6 +457,44 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		toolResults = append(toolResults, result)
 	}
 	return toolMessages, toolResults
+}
+
+func (r Runner) permissionsForTurn(messages []contracts.Message) tool.PermissionDecider {
+	commandPermissions := commands.CommandPermissionsFromMessages(messages)
+	if len(commandPermissions.AllowedTools) == 0 {
+		return r.Permissions
+	}
+	rules := commandPermissionRules(commandPermissions.AllowedTools)
+	if len(rules) == 0 {
+		return r.Permissions
+	}
+	switch decider := r.Permissions.(type) {
+	case tool.EnginePermissionDecider:
+		baseRules := decider.Engine.Rules()
+		baseRules = append(baseRules, rules...)
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(decider.Engine.Context(), baseRules...))
+	case *tool.EnginePermissionDecider:
+		if decider == nil {
+			return r.Permissions
+		}
+		baseRules := decider.Engine.Rules()
+		baseRules = append(baseRules, rules...)
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(decider.Engine.Context(), baseRules...))
+	default:
+		return r.Permissions
+	}
+}
+
+func commandPermissionRules(allowedTools []string) []permissions.Rule {
+	var rules []permissions.Rule
+	for _, raw := range allowedTools {
+		rule, err := permissions.ParseRule(contracts.PermissionSourceCommand, contracts.PermissionAllow, raw)
+		if err != nil {
+			continue
+		}
+		rules = append(rules, rule)
+	}
+	return rules
 }
 
 func ToolUses(message contracts.Message) []contracts.ToolUse {

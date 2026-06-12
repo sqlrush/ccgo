@@ -45,7 +45,7 @@ func TestExecuteSlashPromptCommandBuildsMetadataAndMetaPrompt(t *testing.T) {
 	if result.Model != "opus" || len(result.AllowedTools) != 1 || result.AllowedTools[0] != "Read" {
 		t.Fatalf("result metadata = %#v", result)
 	}
-	if len(result.Messages) != 2 {
+	if len(result.Messages) != 3 {
 		t.Fatalf("messages = %#v", result.Messages)
 	}
 	metadata := result.Messages[0]
@@ -58,6 +58,18 @@ func TestExecuteSlashPromptCommandBuildsMetadataAndMetaPrompt(t *testing.T) {
 	prompt := result.Messages[1]
 	if !prompt.IsMeta || prompt.SessionID != "sess_cmd" || prompt.Content[0].Text != "Deploy api in sess_cmd." {
 		t.Fatalf("prompt message = %#v", prompt)
+	}
+	perms, ok := CommandPermissionsFromMessage(result.Messages[2])
+	if !ok || perms.Model != "opus" || len(perms.AllowedTools) != 1 || perms.AllowedTools[0] != "Read" {
+		t.Fatalf("command permissions = %#v ok=%v", perms, ok)
+	}
+}
+
+func TestParseToolListSplitsCommaAndSpaceOutsideParens(t *testing.T) {
+	got := ParseToolList([]string{"Read, Edit Bash(git status *)", "WebFetch(domain:example.com)"})
+	want := []string{"Read", "Edit", "Bash(git status *)", "WebFetch(domain:example.com)"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("tool list = %#v, want %#v", got, want)
 	}
 }
 

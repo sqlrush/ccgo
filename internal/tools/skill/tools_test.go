@@ -47,7 +47,7 @@ func TestSkillToolExpandsPromptAndReturnsNewMetaMessage(t *testing.T) {
 	if result.StructuredContent["model"] != "opus" {
 		t.Fatalf("model = %#v", result.StructuredContent["model"])
 	}
-	if len(result.NewMessages) != 1 {
+	if len(result.NewMessages) != 2 {
 		t.Fatalf("new messages = %#v", result.NewMessages)
 	}
 	message := result.NewMessages[0]
@@ -56,6 +56,10 @@ func TestSkillToolExpandsPromptAndReturnsNewMetaMessage(t *testing.T) {
 	}
 	if len(message.Content) != 1 || message.Content[0].Text != "Deploy api in sess_skill." {
 		t.Fatalf("new message content = %#v", message.Content)
+	}
+	perms, ok := commands.CommandPermissionsFromMessage(result.NewMessages[1])
+	if !ok || perms.Model != "opus" || len(perms.AllowedTools) != 1 || perms.AllowedTools[0] != "Read" {
+		t.Fatalf("command permissions = %#v ok=%v", perms, ok)
 	}
 }
 

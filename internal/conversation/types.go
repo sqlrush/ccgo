@@ -51,6 +51,7 @@ type Event struct {
 type Runner struct {
 	Client                    MessageClient
 	Tools                     tool.Executor
+	Permissions               tool.PermissionDecider
 	Model                     string
 	FallbackModels            []string
 	MaxTokens                 int

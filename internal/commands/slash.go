@@ -8,6 +8,8 @@ import (
 )
 
 const (
+	CommandPermissionsSubtype = "command_permissions"
+
 	commandNameTag         = "command-name"
 	commandMessageTag      = "command-message"
 	commandArgsTag         = "command-args"
@@ -35,6 +37,11 @@ type SlashResult struct {
 	ResultText   string
 	Unknown      bool
 	Unsupported  bool
+}
+
+type CommandPermissions struct {
+	AllowedTools []string
+	Model        string
 }
 
 func ParseSlashCommand(input string) (SlashCommand, bool) {
@@ -107,13 +114,18 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 		if err != nil {
 			return SlashResult{}, true, err
 		}
+		allowedTools := ParseToolList(cmd.AllowedTools)
 		commandMessage := slashUserText(FormatCommandInputTags(cmd.Name, parsed.Args), opts.SessionID, opts.UUID, false)
+		messages := []contracts.Message{commandMessage, expanded.Message}
+		if attachment := CommandPermissionsAttachment(allowedTools, cmd.Model, opts.SessionID); attachment.Type != "" {
+			messages = append(messages, attachment)
+		}
 		return SlashResult{
 			Command:      cmd,
-			Messages:     []contracts.Message{commandMessage, expanded.Message},
+			Messages:     messages,
 			ShouldQuery:  true,
 			Model:        cmd.Model,
-			AllowedTools: append([]string(nil), cmd.AllowedTools...),
+			AllowedTools: allowedTools,
 		}, true, nil
 	case contracts.CommandLocal, contracts.CommandLocalJSX:
 		args := parsed.Args
@@ -134,6 +146,108 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 	default:
 		return SlashResult{}, true, fmt.Errorf("unsupported slash command type %q", cmd.Type)
 	}
+}
+
+func CommandPermissionsAttachment(allowedTools []string, model string, sessionID contracts.ID) contracts.Message {
+	allowedTools = ParseToolList(allowedTools)
+	model = strings.TrimSpace(model)
+	if len(allowedTools) == 0 && model == "" {
+		return contracts.Message{}
+	}
+	payload := map[string]any{
+		"type":         CommandPermissionsSubtype,
+		"allowedTools": append([]string(nil), allowedTools...),
+	}
+	if model != "" {
+		payload["model"] = model
+	}
+	return contracts.Message{
+		Type:      contracts.MessageAttachment,
+		UUID:      contracts.NewID(),
+		SessionID: sessionID,
+		Subtype:   CommandPermissionsSubtype,
+		Raw: map[string]any{
+			"attachment": payload,
+		},
+	}
+}
+
+func CommandPermissionsFromMessages(messages []contracts.Message) CommandPermissions {
+	var out CommandPermissions
+	seen := map[string]struct{}{}
+	for _, message := range messages {
+		item, ok := CommandPermissionsFromMessage(message)
+		if !ok {
+			continue
+		}
+		for _, tool := range item.AllowedTools {
+			if _, ok := seen[tool]; ok {
+				continue
+			}
+			seen[tool] = struct{}{}
+			out.AllowedTools = append(out.AllowedTools, tool)
+		}
+		if item.Model != "" {
+			out.Model = item.Model
+		}
+	}
+	return out
+}
+
+func CommandPermissionsFromMessage(message contracts.Message) (CommandPermissions, bool) {
+	if message.Type != contracts.MessageAttachment && message.Subtype != CommandPermissionsSubtype {
+		return CommandPermissions{}, false
+	}
+	raw := message.Raw
+	payload, _ := raw["attachment"].(map[string]any)
+	if payload == nil {
+		payload = raw
+	}
+	rawType, _ := payload["type"].(string)
+	if message.Subtype != CommandPermissionsSubtype && rawType != CommandPermissionsSubtype {
+		return CommandPermissions{}, false
+	}
+	result := CommandPermissions{
+		AllowedTools: ParseToolList(firstStringSlice(payload, "allowedTools", "allowed_tools", "tools")),
+		Model:        strings.TrimSpace(firstString(payload, "model")),
+	}
+	if len(result.AllowedTools) == 0 && result.Model == "" {
+		return CommandPermissions{}, false
+	}
+	return result, true
+}
+
+func ParseToolList(tools []string) []string {
+	var result []string
+	for _, toolString := range tools {
+		var current strings.Builder
+		inParens := false
+		for _, r := range toolString {
+			switch r {
+			case '(':
+				inParens = true
+				current.WriteRune(r)
+			case ')':
+				inParens = false
+				current.WriteRune(r)
+			case ',', ' ', '\t', '\n', '\r':
+				if inParens {
+					current.WriteRune(r)
+					continue
+				}
+				if part := strings.TrimSpace(current.String()); part != "" {
+					result = append(result, part)
+				}
+				current.Reset()
+			default:
+				current.WriteRune(r)
+			}
+		}
+		if part := strings.TrimSpace(current.String()); part != "" {
+			result = append(result, part)
+		}
+	}
+	return result
 }
 
 func FormatCommandInputTags(commandName string, args string) string {
@@ -176,4 +290,37 @@ func slashUserText(text string, sessionID contracts.ID, uuid contracts.ID, meta 
 
 func wrapTag(tag string, text string) string {
 	return "<" + tag + ">" + text + "</" + tag + ">"
+}
+
+func firstStringSlice(obj map[string]any, keys ...string) []string {
+	for _, key := range keys {
+		value, ok := obj[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case []string:
+			return append([]string(nil), typed...)
+		case []any:
+			out := make([]string, 0, len(typed))
+			for _, item := range typed {
+				if text, ok := item.(string); ok {
+					out = append(out, text)
+				}
+			}
+			return out
+		case string:
+			return []string{typed}
+		}
+	}
+	return nil
+}
+
+func firstString(obj map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := obj[key].(string); ok {
+			return value
+		}
+	}
+	return ""
 }

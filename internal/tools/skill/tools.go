@@ -128,20 +128,25 @@ func callSkill(registry *commands.Registry) tool.CallFunc {
 		if err != nil {
 			return contracts.ToolResult{}, err
 		}
+		allowedTools := commands.ParseToolList(expanded.Command.AllowedTools)
 		structured := map[string]any{
 			"success":     true,
 			"commandName": expanded.Command.Name,
 			"status":      "inline",
 		}
-		if len(expanded.Command.AllowedTools) > 0 {
-			structured["allowedTools"] = append([]string(nil), expanded.Command.AllowedTools...)
+		if len(allowedTools) > 0 {
+			structured["allowedTools"] = append([]string(nil), allowedTools...)
 		}
 		if expanded.Command.Model != "" {
 			structured["model"] = expanded.Command.Model
 		}
+		newMessages := []contracts.Message{expanded.Message}
+		if attachment := commands.CommandPermissionsAttachment(allowedTools, expanded.Command.Model, ctx.SessionID); attachment.Type != "" {
+			newMessages = append(newMessages, attachment)
+		}
 		return contracts.ToolResult{
 			Content:           "Launching skill: " + expanded.Command.Name,
-			NewMessages:       []contracts.Message{expanded.Message},
+			NewMessages:       newMessages,
 			StructuredContent: structured,
 		}, nil
 	}

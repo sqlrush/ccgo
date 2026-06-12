@@ -12,13 +12,16 @@ import (
 	"time"
 
 	"ccgo/internal/api/anthropic"
+	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	"ccgo/internal/messages"
+	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
+	skilltools "ccgo/internal/tools/skill"
 )
 
 type fakeCall struct {
@@ -283,18 +286,177 @@ func TestRunnerExpandsPromptSlashCommandBeforeQuery(t *testing.T) {
 	if text := requestMessages[1].Content[0].Text; !strings.Contains(text, "Base directory for this skill: "+skillDir) || !strings.Contains(text, "Explain planner in sess_slash.") {
 		t.Fatalf("expanded skill text = %q", text)
 	}
-	if len(result.Messages) != 3 || !result.Messages[1].IsMeta {
+	if len(result.Messages) != 4 || !result.Messages[1].IsMeta || result.Messages[2].Subtype != "command_permissions" {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}
 	entries, err := session.Load(transcriptPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 3 {
-		t.Fatalf("transcript entries = %d, want 3", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("transcript entries = %d, want 4", len(entries))
 	}
 	if entries[1].Message.ParentUUID == nil || *entries[1].Message.ParentUUID != entries[0].Message.UUID {
 		t.Fatalf("slash prompt parent chain = %#v then %#v", entries[0].Message, entries[1].Message)
+	}
+	if entries[2].Message.ParentUUID == nil || *entries[2].Message.ParentUUID != entries[1].Message.UUID {
+		t.Fatalf("command permissions parent chain = %#v then %#v", entries[1].Message, entries[2].Message)
+	}
+}
+
+func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	skillDir := filepath.Join(cwd, ".claude", "skills", "permit")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\ndescription: Permit edit\nallowed-tools: Edit\n---\nUse Edit for $ARGUMENTS."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:   "Edit",
+			Strict: true,
+			InputSchema: contracts.JSONSchema{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{Content: "edited"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_edit",
+				Name:  "Edit",
+				Input: json.RawMessage(`{}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Permissions:      tool.NewEnginePermissionDecider(permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_allowed",
+		WorkingDirectory: cwd,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/permit target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].IsError || result.ToolResults[0].Content != "edited" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+}
+
+func TestRunnerAppliesSkillToolAllowedToolsToFollowingToolRound(t *testing.T) {
+	commandRegistry := commands.FromSources(commands.Sources{
+		ProjectSkillPrompts: []commands.PromptTemplate{{
+			Command: contracts.Command{
+				Name:         "permit",
+				Type:         contracts.CommandPrompt,
+				Source:       contracts.CommandSourceSkills,
+				LoadedFrom:   "skills",
+				AllowedTools: []string{"Edit"},
+			},
+			Content: "Use Edit for $ARGUMENTS.",
+		}},
+	})
+	toolRegistry, err := tool.NewRegistry(skilltools.NewSkillTool(commandRegistry), tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:   "Edit",
+			Strict: true,
+			InputSchema: contracts.JSONSchema{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{Content: "edited"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_skill",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_skill",
+				Name:  "Skill",
+				Input: json.RawMessage(`{"skill":"permit","args":"target"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_edit",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_edit",
+				Name:  "Edit",
+				Input: json.RawMessage(`{}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client: client,
+		Tools:  tool.NewExecutor(toolRegistry),
+		Permissions: tool.NewEnginePermissionDecider(permissions.NewEngine(contracts.PermissionContext{
+			Mode: contracts.PermissionDefault,
+		})),
+		Model:     "sonnet",
+		MaxTokens: 128,
+		SessionID: "sess_skill_allowed",
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("use permit skill"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 2 || result.ToolResults[1].IsError || result.ToolResults[1].Content != "edited" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
 	}
 }
 
