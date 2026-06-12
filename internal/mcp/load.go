@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"path/filepath"
 
 	"ccgo/internal/contracts"
@@ -9,6 +10,48 @@ import (
 type LoadResult struct {
 	Servers map[string]contracts.MCPServer
 	Errors  []ValidationError
+}
+
+type ManualConfigSources struct {
+	User    map[string]contracts.MCPServer
+	Project map[string]contracts.MCPServer
+	Local   map[string]contracts.MCPServer
+	Policy  Policy
+}
+
+type ManualConfigResult struct {
+	Servers map[string]contracts.MCPServer
+	Blocked []string
+}
+
+func LoadSettingsServers(settings contracts.Settings, scope string, options ParseOptions) (LoadResult, error) {
+	if settings.MCPServers == nil {
+		return LoadResult{Servers: map[string]contracts.MCPServer{}}, nil
+	}
+
+	data, err := json.Marshal(Config{MCPServers: settings.MCPServers})
+	if err != nil {
+		return LoadResult{}, err
+	}
+	parseOptions := options
+	parseOptions.Scope = scope
+	parsed, err := ParseConfigJSON(data, parseOptions)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	if parsed.Config == nil {
+		return LoadResult{Servers: map[string]contracts.MCPServer{}, Errors: parsed.Errors}, nil
+	}
+	return LoadResult{Servers: parsed.Config.MCPServers, Errors: parsed.Errors}, nil
+}
+
+func MergeManualConfigSources(sources ManualConfigSources) ManualConfigResult {
+	merged := MergeServers(sources.User, sources.Project, sources.Local)
+	allowed, blocked := FilterServersByPolicy(merged, sources.Policy)
+	return ManualConfigResult{
+		Servers: allowed,
+		Blocked: blocked,
+	}
 }
 
 func LoadProjectConfigChain(cwd string, options ParseOptions) (LoadResult, error) {

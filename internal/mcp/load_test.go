@@ -4,7 +4,78 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"ccgo/internal/contracts"
 )
+
+func TestLoadSettingsServersParsesScopedMCPServers(t *testing.T) {
+	settings := contracts.Settings{
+		MCPServers: map[string]contracts.MCPServer{
+			"user": {
+				Type: TransportHTTP,
+				URL:  "https://${HOST}/mcp",
+			},
+		},
+	}
+
+	result, err := LoadSettingsServers(settings, ScopeUser, ParseOptions{
+		ExpandVars: true,
+		UseEnvMap:  true,
+		Env:        map[string]string{"HOST": "api.example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("errors = %#v", result.Errors)
+	}
+	if got := result.Servers["user"]; got.URL != "https://api.example.com/mcp" || got.Scope != ScopeUser {
+		t.Fatalf("server = %#v", got)
+	}
+}
+
+func TestMergeManualConfigSourcesUsesUserProjectLocalPrecedenceAndPolicy(t *testing.T) {
+	user := AddScopeToServers(map[string]contracts.MCPServer{
+		"shared":  {Command: "user"},
+		"allowed": {Command: "node", Args: []string{"server.js"}},
+	}, ScopeUser)
+	project := AddScopeToServers(map[string]contracts.MCPServer{
+		"shared": {Command: "project"},
+	}, ScopeProject)
+	local := AddScopeToServers(map[string]contracts.MCPServer{
+		"shared": {Command: "local"},
+		"blocked": {
+			Type: TransportHTTP,
+			URL:  "https://blocked.example/mcp",
+		},
+	}, ScopeLocal)
+
+	result := MergeManualConfigSources(ManualConfigSources{
+		User:    user,
+		Project: project,
+		Local:   local,
+		Policy: Policy{
+			AllowlistSet: true,
+			Allowed: []contracts.MCPServerPolicyEntry{
+				{ServerCommand: []string{"local"}},
+				{ServerCommand: []string{"node", "server.js"}},
+			},
+		},
+	})
+
+	if got := result.Servers["shared"]; got.Command != "local" || got.Scope != ScopeLocal {
+		t.Fatalf("shared = %#v", got)
+	}
+	if got := result.Servers["allowed"]; got.Command != "node" || got.Scope != ScopeUser {
+		t.Fatalf("allowed = %#v", got)
+	}
+	if _, ok := result.Servers["blocked"]; ok {
+		t.Fatalf("blocked server kept: %#v", result.Servers)
+	}
+	if len(result.Blocked) != 1 || result.Blocked[0] != "blocked" {
+		t.Fatalf("blocked = %#v", result.Blocked)
+	}
+}
 
 func TestLoadProjectConfigChainMergesFromRootToCWD(t *testing.T) {
 	root := t.TempDir()
