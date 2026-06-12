@@ -106,6 +106,7 @@ type grepMatch struct {
 	Text    string
 	Count   int
 	Matched bool
+	ModUnix int64
 }
 
 type grepOptions struct {
@@ -536,7 +537,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 	}
 	globPatterns := splitGrepGlobPatterns(glob)
 	var matches []grepMatch
-	err = walkSearchFiles(root, grepWalkOptions(), func(path string, rel string, _ os.FileInfo) error {
+	err = walkSearchFiles(root, grepWalkOptions(), func(path string, rel string, info os.FileInfo) error {
 		if len(globPatterns) > 0 {
 			ok, err := matchAnyGlobPath(globPatterns, rel)
 			if err != nil || !ok {
@@ -560,7 +561,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 		}
 		switch options.Mode {
 		case "files_with_matches":
-			matches = append(matches, grepMatch{Path: displayRel})
+			matches = append(matches, grepMatch{Path: displayRel, ModUnix: info.ModTime().UnixNano()})
 		case "count":
 			matches = append(matches, grepMatch{Path: displayRel, Count: countMatchedLines(lineMatches)})
 		default:
@@ -572,6 +573,9 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 		return nil, 0, false, err
 	}
 	sort.Slice(matches, func(i, j int) bool {
+		if options.Mode == "files_with_matches" && matches[i].ModUnix != matches[j].ModUnix {
+			return matches[i].ModUnix > matches[j].ModUnix
+		}
 		if matches[i].Path != matches[j].Path {
 			return matches[i].Path < matches[j].Path
 		}

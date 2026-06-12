@@ -1127,8 +1127,13 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		"src/b.txt": "Alpha text\n",
 		"src/c.go":  "func Beta() {}\nfunc AlphaBeta() {}\n",
 	}
+	mtime := time.Now().Add(-time.Hour)
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1230,6 +1235,41 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	}
 	if braceGlobResult.Content != "Found 3 files\nsrc/a.go\nsrc/b.txt\nsrc/c.go" {
 		t.Fatalf("brace glob result = %#v", braceGlobResult.Content)
+	}
+}
+
+func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Now().Add(-4 * time.Hour)
+	files := map[string]time.Time{
+		"old.txt":   base,
+		"new.txt":   base.Add(3 * time.Hour),
+		"tie-a.txt": base.Add(2 * time.Hour),
+		"tie-b.txt": base.Add(2 * time.Hour),
+	}
+	for name, mtime := range files {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("Needle\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_mtime_sort",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Found 4 files\nnew.txt\ntie-a.txt\ntie-b.txt\nold.txt"
+	if result.Content != want {
+		t.Fatalf("mtime-sorted files result = %#v", result.Content)
 	}
 }
 
@@ -1650,8 +1690,13 @@ func TestGrepToolInvertMatch(t *testing.T) {
 		"one.txt": "keep\nNeedle\nplain\nNeedle again\n",
 		"all.txt": "Needle\nNeedle again\n",
 	}
+	mtime := time.Now().Add(-time.Hour)
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1852,8 +1897,13 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 		".jj/hit.log":     "Needle hidden by jj metadata\n",
 		".sl/hit.log":     "Needle hidden by sapling metadata\n",
 	}
+	mtime := time.Now().Add(-time.Hour)
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
 			t.Fatal(err)
 		}
 	}
