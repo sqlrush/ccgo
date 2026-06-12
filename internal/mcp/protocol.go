@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -202,6 +203,13 @@ type CompletionResult struct {
 	Values  []string `json:"values"`
 	Total   int      `json:"total,omitempty"`
 	HasMore bool     `json:"hasMore"`
+}
+
+type ProgressNotification struct {
+	ProgressToken any      `json:"progressToken"`
+	Progress      float64  `json:"progress"`
+	Total         *float64 `json:"total,omitempty"`
+	Message       string   `json:"message,omitempty"`
 }
 
 func DefaultInitializeOptions() InitializeOptions {
@@ -572,6 +580,84 @@ func (c *ProtocolClient) NotifyRequestCancelled(ctx context.Context, requestID s
 		params["reason"] = reason
 	}
 	return c.SendNotification(ctx, "notifications/cancelled", params)
+}
+
+func (c *ProtocolClient) NotifyProgress(ctx context.Context, notification ProgressNotification) error {
+	token, err := progressTokenValue(notification.ProgressToken)
+	if err != nil {
+		return err
+	}
+	if math.IsNaN(notification.Progress) || math.IsInf(notification.Progress, 0) {
+		return fmt.Errorf("mcp progress value must be finite")
+	}
+	params := map[string]any{
+		"progressToken": token,
+		"progress":      notification.Progress,
+	}
+	if notification.Total != nil {
+		if math.IsNaN(*notification.Total) || math.IsInf(*notification.Total, 0) {
+			return fmt.Errorf("mcp progress total must be finite")
+		}
+		params["total"] = *notification.Total
+	}
+	if message := strings.TrimSpace(notification.Message); message != "" {
+		params["message"] = message
+	}
+	return c.SendNotification(ctx, "notifications/progress", params)
+}
+
+func progressTokenValue(token any) (any, error) {
+	switch value := token.(type) {
+	case string:
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil, fmt.Errorf("mcp progress token is required")
+		}
+		return value, nil
+	case json.Number:
+		parsed, err := value.Int64()
+		if err != nil {
+			return nil, fmt.Errorf("mcp progress token must be a string or integer")
+		}
+		return parsed, nil
+	case int:
+		return value, nil
+	case int8:
+		return value, nil
+	case int16:
+		return value, nil
+	case int32:
+		return value, nil
+	case int64:
+		return value, nil
+	case uint:
+		return value, nil
+	case uint8:
+		return value, nil
+	case uint16:
+		return value, nil
+	case uint32:
+		return value, nil
+	case uint64:
+		return value, nil
+	case float32:
+		float := float64(value)
+		if !validIntegerFloat(float) {
+			return nil, fmt.Errorf("mcp progress token must be a string or integer")
+		}
+		return int64(float), nil
+	case float64:
+		if !validIntegerFloat(value) {
+			return nil, fmt.Errorf("mcp progress token must be a string or integer")
+		}
+		return int64(value), nil
+	default:
+		return nil, fmt.Errorf("mcp progress token must be a string or integer")
+	}
+}
+
+func validIntegerFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && math.Trunc(value) == value && value >= float64(math.MinInt64) && value < float64(math.MaxInt64)
 }
 
 func (c *ProtocolClient) recoverExpiredSession(ctx context.Context) error {

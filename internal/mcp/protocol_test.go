@@ -614,6 +614,39 @@ func TestProtocolClientSendsCancellationNotification(t *testing.T) {
 	}
 }
 
+func TestProtocolClientSendsProgressNotification(t *testing.T) {
+	transport := &fakeLifecycleTransport{}
+	client := NewProtocolClient(transport)
+	total := 10.0
+
+	err := client.NotifyProgress(context.Background(), ProgressNotification{
+		ProgressToken: json.Number("7"),
+		Progress:      3.5,
+		Total:         &total,
+		Message:       " halfway ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.notifications) != 1 {
+		t.Fatalf("notifications = %#v", transport.notifications)
+	}
+	notification := transport.notifications[0]
+	if notification.Method != "notifications/progress" {
+		t.Fatalf("notification = %#v", notification)
+	}
+	params := string(notification.Params)
+	for _, want := range []string{`"progressToken":7`, `"progress":3.5`, `"total":10`, `"message":"halfway"`} {
+		if !strings.Contains(params, want) {
+			t.Fatalf("params missing %s in %s", want, params)
+		}
+	}
+
+	if err := client.NotifyProgress(context.Background(), ProgressNotification{ProgressToken: 1.5}); err == nil {
+		t.Fatal("expected non-integer progress token error")
+	}
+}
+
 func TestRootsListRequestHandlerAliasesAndErrors(t *testing.T) {
 	handler := RootsListRequestHandler(StaticRootsProvider([]Root{{URI: "file:///repo"}}), nil)
 	result, rpcErr := handler(context.Background(), RPCInboundRequest{ID: "server-1", Method: "roots.list"})
