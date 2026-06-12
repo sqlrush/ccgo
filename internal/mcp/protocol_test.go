@@ -227,11 +227,11 @@ func TestProtocolClientPaginatesListMethods(t *testing.T) {
 			json.RawMessage(`{"tools":[{"name":"second"}]}`),
 		},
 		"resources/list": {
-			json.RawMessage(`{"resources":[{"uri":"file:///first"}],"nextCursor":"resources-page-2"}`),
+			json.RawMessage(`{"resources":[{"uri":"file:///first"}],"next_cursor":"resources-page-2"}`),
 			json.RawMessage(`{"resources":[{"uri":"file:///second"}]}`),
 		},
 		"prompts/list": {
-			json.RawMessage(`{"prompts":[{"name":"first"}],"nextCursor":"prompts-page-2"}`),
+			json.RawMessage(`{"prompts":[{"name":"first"}],"cursor":"prompts-page-2"}`),
 			json.RawMessage(`{"prompts":[{"name":"second"}]}`),
 		},
 	}}
