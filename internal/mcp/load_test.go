@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -179,5 +180,143 @@ func TestLoadProjectConfigChainExpandsEnvWarnings(t *testing.T) {
 	}
 	if len(result.Errors) != 1 || result.Errors[0].Severity != "warning" || result.Errors[0].ServerName != "env" {
 		t.Fatalf("errors = %#v", result.Errors)
+	}
+}
+
+func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{
+		"mcpServers": {
+			"shared-project": {"command": "project-chain"},
+			"chain-only": {"command": "chain"}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := BuildConfiguredToolSets(context.Background(), ConfiguredToolSetOptions{
+		UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"user-only":      {Command: "user"},
+				"shared-global":  {Command: "user-shared"},
+				"shared-project": {Command: "user-project"},
+			},
+			AllowedMCPServers: []contracts.MCPServerPolicyEntry{
+				{ServerCommand: []string{"local"}},
+				{ServerCommand: []string{"project-chain"}},
+				{ServerCommand: []string{"chain"}},
+			},
+		},
+		ProjectSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"shared-project": {Command: "project-settings"},
+			},
+		},
+		LocalSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"shared-global": {Command: "local"},
+			},
+		},
+		CWD: root,
+		ToolOptions: ServerToolOptions{
+			DisableResources: true,
+			DisablePrompts:   true,
+			OpenClient: func(_ context.Context, name string, _ contracts.MCPServer) (ClientHandle, error) {
+				return ClientHandle{Client: &fakeMCPClient{tools: []RemoteTool{{Name: "ping", ReadOnly: true}}}}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.LoadErrors) != 0 {
+		t.Fatalf("load errors = %#v", result.LoadErrors)
+	}
+	if got := result.Servers["shared-global"]; got.Command != "local" || got.Scope != ScopeLocal {
+		t.Fatalf("shared global = %#v", got)
+	}
+	if got := result.Servers["shared-project"]; got.Command != "project-chain" || got.Scope != ScopeProject {
+		t.Fatalf("shared project = %#v", got)
+	}
+	if got := result.Servers["chain-only"]; got.Command != "chain" || got.Scope != ScopeProject {
+		t.Fatalf("chain only = %#v", got)
+	}
+	if _, ok := result.Servers["user-only"]; ok {
+		t.Fatalf("blocked user-only kept: %#v", result.Servers)
+	}
+	if len(result.Blocked) != 1 || result.Blocked[0] != "user-only" {
+		t.Fatalf("blocked = %#v", result.Blocked)
+	}
+	registry, err := result.ToolSets.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mcp__chain-only__ping", "mcp__shared-global__ping", "mcp__shared-project__ping"} {
+		if _, ok := registry.Lookup(name); !ok {
+			t.Fatalf("missing %q in %#v", name, registry.Names())
+		}
+	}
+}
+
+func TestBuildConfiguredToolSetsPreservesEmptyAllowlist(t *testing.T) {
+	result, err := BuildConfiguredToolSets(context.Background(), ConfiguredToolSetOptions{
+		UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"blocked": {Command: "node"},
+			},
+			AllowedMCPServers: []contracts.MCPServerPolicyEntry{},
+		},
+		ToolOptions: ServerToolOptions{
+			OpenClient: func(_ context.Context, name string, _ contracts.MCPServer) (ClientHandle, error) {
+				t.Fatalf("blocked server %q should not be opened", name)
+				return ClientHandle{}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Servers) != 0 {
+		t.Fatalf("servers = %#v", result.Servers)
+	}
+	if len(result.Blocked) != 1 || result.Blocked[0] != "blocked" {
+		t.Fatalf("blocked = %#v", result.Blocked)
+	}
+	if len(result.ToolSets.Tools) != 0 {
+		t.Fatalf("toolsets = %#v", result.ToolSets)
+	}
+}
+
+func TestBuildConfiguredToolSetsReturnsProjectConfigErrors(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{
+		"mcpServers": {
+			"bad": {"type": "http"}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := BuildConfiguredToolSets(context.Background(), ConfiguredToolSetOptions{
+		CWD: root,
+		ToolOptions: ServerToolOptions{
+			DisableResources: true,
+			DisablePrompts:   true,
+			OpenClient: func(_ context.Context, name string, _ contracts.MCPServer) (ClientHandle, error) {
+				return ClientHandle{Client: &fakeMCPClient{tools: []RemoteTool{{Name: "ping", ReadOnly: true}}}}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result.Servers["bad"]; ok {
+		t.Fatalf("bad server kept: %#v", result.Servers)
+	}
+	if len(result.LoadErrors) != 1 || result.LoadErrors[0].ServerName != "bad" {
+		t.Fatalf("load errors = %#v", result.LoadErrors)
+	}
+	if len(result.ToolSets.Tools) != 0 {
+		t.Fatalf("toolsets = %#v", result.ToolSets)
 	}
 }
