@@ -331,14 +331,16 @@ func (c *ProtocolClient) ReadResource(ctx context.Context, serverName string, ur
 	if err != nil {
 		return nil, err
 	}
-	var response struct {
-		Contents []rpcResourceContent `json:"contents"`
-	}
+	var response rpcResourceReadResponse
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return nil, err
 	}
-	contents := make([]ResourceContent, 0, len(response.Contents))
-	for _, item := range response.Contents {
+	items, err := response.resourceContents()
+	if err != nil {
+		return nil, err
+	}
+	contents := make([]ResourceContent, 0, len(items))
+	for _, item := range items {
 		contents = append(contents, item.resourceContent())
 	}
 	return contents, nil
@@ -733,6 +735,28 @@ type rpcResourceContent struct {
 	Blob        string `json:"blob"`
 }
 
+type rpcResourceReadResponse struct {
+	Contents              []rpcResourceContent `json:"contents"`
+	ResourceContents      []rpcResourceContent `json:"resourceContents"`
+	ResourceContentsSnake []rpcResourceContent `json:"resource_contents"`
+	Content               json.RawMessage      `json:"content"`
+}
+
+func (r rpcResourceReadResponse) resourceContents() ([]rpcResourceContent, error) {
+	switch {
+	case len(r.Contents) > 0:
+		return r.Contents, nil
+	case len(r.ResourceContents) > 0:
+		return r.ResourceContents, nil
+	case len(r.ResourceContentsSnake) > 0:
+		return r.ResourceContentsSnake, nil
+	case len(r.Content) > 0:
+		return decodeResourceContentAlias(r.Content)
+	default:
+		return nil, nil
+	}
+}
+
 func (c rpcResourceContent) resourceContent() ResourceContent {
 	mimeType := c.MimeType
 	if mimeType == "" {
@@ -744,6 +768,21 @@ func (c rpcResourceContent) resourceContent() ResourceContent {
 		Text:     c.Text,
 		Blob:     c.Blob,
 	}
+}
+
+func decodeResourceContentAlias(raw json.RawMessage) ([]rpcResourceContent, error) {
+	if firstNonWhitespace(raw) == '[' {
+		var contents []rpcResourceContent
+		if err := json.Unmarshal(raw, &contents); err != nil {
+			return nil, err
+		}
+		return contents, nil
+	}
+	var content rpcResourceContent
+	if err := json.Unmarshal(raw, &content); err != nil {
+		return nil, err
+	}
+	return []rpcResourceContent{content}, nil
 }
 
 type rpcPrompt struct {

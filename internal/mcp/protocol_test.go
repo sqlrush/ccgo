@@ -544,6 +544,30 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	}
 }
 
+func TestProtocolClientReadsResourceContentAliases(t *testing.T) {
+	single := NewProtocolClient(&fakeRPCTransport{responses: map[string]json.RawMessage{
+		"resources/read": json.RawMessage(`{"content":{"uri":"file:///one.txt","mimeType":"text/plain","text":"one"}}`),
+	}})
+	contents, err := single.ReadResource(context.Background(), "files", "file:///one.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(contents) != 1 || contents[0].URI != "file:///one.txt" || contents[0].Text != "one" {
+		t.Fatalf("single content = %#v", contents)
+	}
+
+	wrapped := NewProtocolClient(&fakeRPCTransport{responses: map[string]json.RawMessage{
+		"resources/read": json.RawMessage(`{"resourceContents":[{"uri":"file:///two.txt","mimeType":"text/plain","text":"two"}]}`),
+	}})
+	contents, err = wrapped.ReadResource(context.Background(), "files", "file:///two.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(contents) != 1 || contents[0].URI != "file:///two.txt" || contents[0].Text != "two" {
+		t.Fatalf("wrapped content = %#v", contents)
+	}
+}
+
 func TestProtocolClientRPCErrorAndSessionExpired(t *testing.T) {
 	client := NewProtocolClient(&fakeRPCTransport{rpcErr: &RPCError{
 		Code:    -32001,
