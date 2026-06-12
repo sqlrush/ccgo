@@ -809,6 +809,8 @@ type powerShellReadOnlyConfig struct {
 	allowedFlags                 map[string]bool
 	pathFlags                    map[string]bool
 	valueFlags                   map[string]bool
+	allowAllFlags                bool
+	rejectExpressionValues       bool
 	validatePositionalsAsPaths   bool
 	pathPositionalsAfterLiterals int
 }
@@ -987,16 +989,63 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		valueFlags:   stringSet("name", "id"),
 	},
 	"start-sleep": {
-		allowedFlags: stringSet("seconds", "milliseconds", "duration"),
-		valueFlags:   stringSet("seconds", "milliseconds", "duration"),
+		allowedFlags:           stringSet("seconds", "milliseconds", "duration"),
+		valueFlags:             stringSet("seconds", "milliseconds", "duration"),
+		rejectExpressionValues: true,
+	},
+	"format-table": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"format-list": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"format-wide": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"format-custom": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"measure-object": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"select-object": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"sort-object": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"group-object": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"where-object": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"out-string": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
+	},
+	"out-host": {
+		allowAllFlags:          true,
+		rejectExpressionValues: true,
 	},
 	"write-output": {
-		allowedFlags: stringSet("inputobject", "noenumerate"),
-		valueFlags:   stringSet("inputobject"),
+		allowedFlags:           stringSet("inputobject", "noenumerate"),
+		valueFlags:             stringSet("inputobject"),
+		rejectExpressionValues: true,
 	},
 	"write-host": {
-		allowedFlags: stringSet("object", "nonewline", "separator", "foregroundcolor", "backgroundcolor"),
-		valueFlags:   stringSet("object", "separator", "foregroundcolor", "backgroundcolor"),
+		allowedFlags:           stringSet("object", "nonewline", "separator", "foregroundcolor", "backgroundcolor"),
+		valueFlags:             stringSet("object", "separator", "foregroundcolor", "backgroundcolor"),
+		rejectExpressionValues: true,
 	},
 }
 
@@ -1025,12 +1074,24 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 			}
 			takesValue := config.pathFlags[option] || config.valueFlags[option] || powerShellCommonValueFlags[option]
 			switch {
-			case config.allowedFlags[option] || powerShellCommonSwitchFlags[option] || powerShellCommonValueFlags[option]:
+			case config.allowAllFlags || config.allowedFlags[option] || powerShellCommonSwitchFlags[option] || powerShellCommonValueFlags[option]:
 			default:
 				return false
 			}
-			if hasValue && !takesValue {
-				return false
+			if hasValue {
+				if !takesValue && !config.allowAllFlags {
+					return false
+				}
+				if config.pathFlags[option] {
+					if !safeRelativePowerShellPath(value) {
+						return false
+					}
+					continue
+				}
+				if !safePowerShellParameterValue(value, config.rejectExpressionValues) {
+					return false
+				}
+				continue
 			}
 			if takesValue {
 				if !hasValue {
@@ -1046,7 +1107,7 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 					}
 					continue
 				}
-				if !safePowerShellParameterValue(value) {
+				if !safePowerShellParameterValue(value, config.rejectExpressionValues) {
 					return false
 				}
 			}
@@ -1056,7 +1117,7 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 			if !safeRelativePowerShellPath(word) {
 				return false
 			}
-		} else if !safePowerShellParameterValue(word) {
+		} else if !safePowerShellParameterValue(word, config.rejectExpressionValues) {
 			return false
 		}
 		positionals++
@@ -1064,9 +1125,12 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 	return true
 }
 
-func safePowerShellParameterValue(value string) bool {
+func safePowerShellParameterValue(value string, rejectExpressions bool) bool {
 	value = strings.Trim(strings.TrimSpace(value), `"'`)
-	return value != "" && value != "--%" && !strings.ContainsAny(value, "`\x00")
+	if value == "" || value == "--%" || strings.ContainsAny(value, "`\x00") {
+		return false
+	}
+	return !rejectExpressions || !strings.ContainsAny(value, "$@{[()")
 }
 
 func stringSet(values ...string) map[string]bool {
