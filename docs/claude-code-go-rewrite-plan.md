@@ -181,6 +181,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。
+- 本轮补充：Bash `rg` read-only 分类现在拒绝 `--pre`/`--pre=...` 外部预处理命令，避免 ripgrep 调用任意预处理器时仍进入只读快路径。
 - 本轮补充：Bash safety 分类将 `find -exec*` 形态排除出 read-only fast path，并补 `find`/`xargs` 经 `sh`/`bash`/`zsh`/`dash`/`ksh -c` 包装的嵌套破坏性脚本检测；`find -exec*` 和 `xargs` 现在还会复用 safe wrapper/env/assignment 归一化，覆盖 `env rm`、`timeout rm`、`xargs -I{} env sh -c ...` 等形态。
 - 本轮补充：PowerShell native/external 文件读取/搜索命令（`where.exe`/`file`/`tree`/`findstr`）现在也对路径型 positional 和 path flag 使用相对路径 guard，拒绝 Windows drive、UNC、URI/provider-like、父目录和缺值 path flag；`where.exe` 从 allow-all flag 收敛到 `/R`/`/Q`/`/F`/`/T`。
 

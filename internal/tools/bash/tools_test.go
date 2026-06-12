@@ -259,6 +259,8 @@ func TestBashCommandClassification(t *testing.T) {
 		"wc -c $HOME/secret.txt",
 		"grep TODO /etc/passwd",
 		"rg TODO ../secret",
+		"rg --pre 'rm -rf build' TODO internal",
+		"rg --pre=cat TODO internal",
 		`cat 'C:\Users\secret.txt'`,
 		`cat '\\server\share\secret.txt'`,
 		"cat file://README.md",

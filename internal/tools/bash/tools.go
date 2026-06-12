@@ -1990,7 +1990,8 @@ func readOnlyWords(words []string) bool {
 }
 
 func readOnlyPathCommand(words []string) bool {
-	if filepathBase(words[0]) == "find" && containsAnyWord(words[1:], "-exec", "-execdir", "-ok", "-okdir") {
+	command := filepathBase(words[0])
+	if command == "find" && containsAnyWord(words[1:], "-exec", "-execdir", "-ok", "-okdir") {
 		return false
 	}
 	for _, word := range words[1:] {
@@ -1998,6 +1999,9 @@ func readOnlyPathCommand(words []string) bool {
 			continue
 		}
 		if strings.HasPrefix(word, "-") {
+			if unsafeReadOnlyPathFlag(command, word) {
+				return false
+			}
 			if name, value, ok := strings.Cut(word, "="); ok {
 				if name == "" || !safeRelativeShellPathArg(value) {
 					return false
@@ -2010,6 +2014,13 @@ func readOnlyPathCommand(words []string) bool {
 		}
 	}
 	return true
+}
+
+func unsafeReadOnlyPathFlag(command string, word string) bool {
+	if command == "rg" && (word == "--pre" || strings.HasPrefix(word, "--pre=")) {
+		return true
+	}
+	return false
 }
 
 func safeRelativeShellPathArg(value string) bool {
