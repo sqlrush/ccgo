@@ -30,6 +30,31 @@ type RPCResponse struct {
 	Error   *RPCError       `json:"error,omitempty"`
 }
 
+func (r *RPCResponse) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		JSONRPC string          `json:"jsonrpc,omitempty"`
+		ID      json.RawMessage `json:"id,omitempty"`
+		Method  string          `json:"method,omitempty"`
+		Params  json.RawMessage `json:"params,omitempty"`
+		Result  json.RawMessage `json:"result,omitempty"`
+		Error   *RPCError       `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	id, err := decodeRPCID(raw.ID)
+	if err != nil {
+		return err
+	}
+	r.JSONRPC = raw.JSONRPC
+	r.ID = id
+	r.Method = raw.Method
+	r.Params = raw.Params
+	r.Result = raw.Result
+	r.Error = raw.Error
+	return nil
+}
+
 type RPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -58,8 +83,21 @@ type RPCNotification struct {
 
 type RPCNotificationHandler func(RPCNotification)
 
+type RPCInboundRequest struct {
+	JSONRPC string          `json:"jsonrpc,omitempty"`
+	ID      string          `json:"id"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+type RPCRequestHandler func(context.Context, RPCInboundRequest) (any, *RPCError)
+
 type RPCNotificationTransport interface {
 	SetNotificationHandler(RPCNotificationHandler)
+}
+
+type RPCRequestTransport interface {
+	SetRequestHandler(RPCRequestHandler)
 }
 
 type ProtocolClient struct {
@@ -69,12 +107,16 @@ type ProtocolClient struct {
 	notificationMu      sync.Mutex
 	notifications       []RPCNotification
 	notificationHandler RPCNotificationHandler
+	requestHandler      RPCRequestHandler
 }
 
 func NewProtocolClient(transport RPCTransport) *ProtocolClient {
 	client := &ProtocolClient{Transport: transport}
 	if transport, ok := transport.(RPCNotificationTransport); ok {
 		transport.SetNotificationHandler(client.handleNotification)
+	}
+	if transport, ok := transport.(RPCRequestTransport); ok {
+		transport.SetRequestHandler(client.handleRequest)
 	}
 	return client
 }
@@ -233,6 +275,15 @@ func (c *ProtocolClient) Notifications() []RPCNotification {
 	return append([]RPCNotification(nil), c.notifications...)
 }
 
+func (c *ProtocolClient) SetRequestHandler(handler RPCRequestHandler) {
+	if c == nil {
+		return
+	}
+	c.notificationMu.Lock()
+	c.requestHandler = handler
+	c.notificationMu.Unlock()
+}
+
 func (c *ProtocolClient) handleNotification(notification RPCNotification) {
 	c.notificationMu.Lock()
 	c.notifications = append(c.notifications, notification)
@@ -241,6 +292,16 @@ func (c *ProtocolClient) handleNotification(notification RPCNotification) {
 	if handler != nil {
 		handler(notification)
 	}
+}
+
+func (c *ProtocolClient) handleRequest(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+	c.notificationMu.Lock()
+	handler := c.requestHandler
+	c.notificationMu.Unlock()
+	if handler != nil {
+		return handler(ctx, request)
+	}
+	return DefaultRPCRequestHandler(ctx, request)
 }
 
 func NotificationFromRPCResponse(response RPCResponse) (RPCNotification, bool) {
@@ -252,6 +313,63 @@ func NotificationFromRPCResponse(response RPCResponse) (RPCNotification, bool) {
 		Method:  response.Method,
 		Params:  append(json.RawMessage(nil), response.Params...),
 	}, true
+}
+
+func InboundRequestFromRPCResponse(response RPCResponse) (RPCInboundRequest, bool) {
+	if strings.TrimSpace(response.Method) == "" || strings.TrimSpace(response.ID) == "" {
+		return RPCInboundRequest{}, false
+	}
+	return RPCInboundRequest{
+		JSONRPC: response.JSONRPC,
+		ID:      response.ID,
+		Method:  response.Method,
+		Params:  append(json.RawMessage(nil), response.Params...),
+	}, true
+}
+
+func ResponseForInboundRequest(ctx context.Context, request RPCInboundRequest, handler RPCRequestHandler) RPCResponse {
+	if handler == nil {
+		handler = DefaultRPCRequestHandler
+	}
+	result, rpcErr := handler(ctx, request)
+	if rpcErr != nil {
+		return RPCResponse{JSONRPC: JSONRPCVersion, ID: request.ID, Error: rpcErr}
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return RPCResponse{
+			JSONRPC: JSONRPCVersion,
+			ID:      request.ID,
+			Error: &RPCError{
+				Code:    -32603,
+				Message: "failed to encode MCP client response",
+				Data:    err.Error(),
+			},
+		}
+	}
+	return RPCResponse{JSONRPC: JSONRPCVersion, ID: request.ID, Result: raw}
+}
+
+func DefaultRPCRequestHandler(_ context.Context, request RPCInboundRequest) (any, *RPCError) {
+	if request.Method == "elicitation/create" {
+		return map[string]any{"action": "cancel"}, nil
+	}
+	return nil, &RPCError{Code: -32601, Message: "method not found"}
+}
+
+func decodeRPCID(raw json.RawMessage) (string, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return "", nil
+	}
+	if strings.HasPrefix(trimmed, `"`) {
+		var id string
+		if err := json.Unmarshal(raw, &id); err != nil {
+			return "", err
+		}
+		return id, nil
+	}
+	return trimmed, nil
 }
 
 func IsSessionExpiredError(err error) bool {

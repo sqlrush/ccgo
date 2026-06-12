@@ -89,6 +89,66 @@ func TestProtocolClientCapturesTransportNotifications(t *testing.T) {
 	}
 }
 
+func TestProtocolClientHandlesInboundElicitationRequests(t *testing.T) {
+	reader := strings.NewReader(
+		`{"jsonrpc":"2.0","id":"server-1","method":"elicitation/create","params":{"message":"Confirm?"}}` + "\n" +
+			`{"jsonrpc":"2.0","id":"1","result":{"tools":[]}}` + "\n",
+	)
+	var writer bytes.Buffer
+	transport := NewStdioTransport(reader, &writer)
+	client := NewProtocolClient(transport)
+	client.SetRequestHandler(func(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+		if request.Method != "elicitation/create" || !strings.Contains(string(request.Params), "Confirm?") {
+			t.Fatalf("request = %#v", request)
+		}
+		return map[string]any{
+			"action": "accept",
+			"content": map[string]any{
+				"confirmed": true,
+			},
+		}, nil
+	})
+
+	if _, err := client.ListTools(context.Background(), "stdio"); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(writer.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("writer lines = %#v", lines)
+	}
+	if !strings.Contains(lines[1], `"id":"server-1"`) || !strings.Contains(lines[1], `"action":"accept"`) || !strings.Contains(lines[1], `"confirmed":true`) {
+		t.Fatalf("elicitation response = %s", lines[1])
+	}
+}
+
+func TestDefaultRPCRequestHandlerCancelsElicitation(t *testing.T) {
+	result, rpcErr := DefaultRPCRequestHandler(context.Background(), RPCInboundRequest{
+		ID:     "server-1",
+		Method: "elicitation/create",
+	})
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	if got := result.(map[string]any)["action"]; got != "cancel" {
+		t.Fatalf("result = %#v", result)
+	}
+
+	_, rpcErr = DefaultRPCRequestHandler(context.Background(), RPCInboundRequest{ID: "server-2", Method: "unknown"})
+	if rpcErr == nil || rpcErr.Code != -32601 {
+		t.Fatalf("rpcErr = %#v", rpcErr)
+	}
+}
+
+func TestRPCResponseAcceptsNumericIDs(t *testing.T) {
+	var response RPCResponse
+	if err := json.Unmarshal([]byte(`{"jsonrpc":"2.0","id":42,"result":{"ok":true}}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "42" || !strings.Contains(string(response.Result), `"ok":true`) {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
 		"resources/list": json.RawMessage(`{"resources":[{"uri":"file:///a.txt","name":"a.txt","description":"A file","mimeType":"text/plain"}]}`),

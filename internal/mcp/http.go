@@ -277,6 +277,9 @@ func rpcResponseFromSSEWithNotifications(r io.Reader, requestID string, notify f
 			}
 			continue
 		}
+		if _, ok := InboundRequestFromRPCResponse(response); ok {
+			continue
+		}
 		if requestID == "" || response.ID == requestID {
 			return response, nil
 		}

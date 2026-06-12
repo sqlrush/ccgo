@@ -38,6 +38,20 @@ func TestWSTransportRoundTrip(t *testing.T) {
 			return
 		}
 		requests <- request
+		inbound := `{"jsonrpc":"2.0","id":"server-1","method":"elicitation/create","params":{"message":"Proceed?"}}`
+		if err := writeServerWebSocketFrame(conn, webSocketOpcodeText, []byte(inbound)); err != nil {
+			t.Errorf("write inbound request: %v", err)
+			return
+		}
+		_, clientResponse, err := readServerWebSocketFrame(reader)
+		if err != nil {
+			t.Errorf("read inbound response: %v", err)
+			return
+		}
+		if !strings.Contains(string(clientResponse), `"id":"server-1"`) || !strings.Contains(string(clientResponse), `"action":"decline"`) {
+			t.Errorf("client response = %s", clientResponse)
+			return
+		}
 		notification := `{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"debug"}}`
 		if err := writeServerWebSocketFrame(conn, webSocketOpcodeText, []byte(notification)); err != nil {
 			t.Errorf("write notification: %v", err)
@@ -51,6 +65,12 @@ func TestWSTransportRoundTrip(t *testing.T) {
 	defer server.Close()
 
 	transport := NewWSTransport(wsURL(server.URL, "/mcp"), map[string]string{"Authorization": "Bearer token"})
+	transport.SetRequestHandler(func(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+		if request.Method != "elicitation/create" || !strings.Contains(string(request.Params), "Proceed?") {
+			t.Fatalf("request = %#v", request)
+		}
+		return map[string]any{"action": "decline"}, nil
+	})
 	var notifications []RPCNotification
 	transport.SetNotificationHandler(func(notification RPCNotification) {
 		notifications = append(notifications, notification)

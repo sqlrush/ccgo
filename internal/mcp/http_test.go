@@ -164,6 +164,8 @@ func TestRPCResponseFromSSESkipsNotificationsWithoutHandler(t *testing.T) {
 		"event: message\n"+
 			"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\",\"params\":{\"level\":\"info\"}}\n\n"+
 			"event: message\n"+
+			"data: {\"jsonrpc\":\"2.0\",\"id\":\"server-1\",\"method\":\"elicitation/create\",\"params\":{\"message\":\"Confirm?\"}}\n\n"+
+			"event: message\n"+
 			"data: {\"jsonrpc\":\"2.0\",\"id\":\"13\",\"result\":{\"ok\":true}}\n\n",
 	), "13")
 	if err != nil {

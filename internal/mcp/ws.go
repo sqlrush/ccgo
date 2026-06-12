@@ -42,6 +42,8 @@ type WSTransport struct {
 
 	notificationMu      sync.RWMutex
 	notificationHandler RPCNotificationHandler
+	requestMu           sync.RWMutex
+	requestHandler      RPCRequestHandler
 }
 
 type wsConn struct {
@@ -87,6 +89,12 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 			if err := json.Unmarshal(payload, &response); err != nil {
 				return RPCResponse{}, fmt.Errorf("decode mcp ws response: %w", err)
 			}
+			if err := t.handleInboundRequest(ctx, conn.Conn, response); err != nil {
+				return RPCResponse{}, err
+			}
+			if _, ok := InboundRequestFromRPCResponse(response); ok {
+				continue
+			}
 			if t.dispatchNotification(response) {
 				continue
 			}
@@ -104,6 +112,30 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 			return RPCResponse{}, webSocketCloseError(payload)
 		}
 	}
+}
+
+func (t *WSTransport) SetRequestHandler(handler RPCRequestHandler) {
+	if t == nil {
+		return
+	}
+	t.requestMu.Lock()
+	t.requestHandler = handler
+	t.requestMu.Unlock()
+}
+
+func (t *WSTransport) handleInboundRequest(ctx context.Context, conn net.Conn, response RPCResponse) error {
+	request, ok := InboundRequestFromRPCResponse(response)
+	if !ok {
+		return nil
+	}
+	t.requestMu.RLock()
+	handler := t.requestHandler
+	t.requestMu.RUnlock()
+	data, err := json.Marshal(ResponseForInboundRequest(ctx, request, handler))
+	if err != nil {
+		return err
+	}
+	return writeWebSocketFrame(conn, webSocketOpcodeText, data)
 }
 
 func (t *WSTransport) SetNotificationHandler(handler RPCNotificationHandler) {

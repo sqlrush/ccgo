@@ -282,6 +282,9 @@ func (t *SSETransport) dispatchSSEEvent(event SSEEvent) {
 	if t.dispatchNotification(response) {
 		return
 	}
+	if _, ok := InboundRequestFromRPCResponse(response); ok {
+		return
+	}
 	if response.ID == "" {
 		return
 	}

@@ -22,6 +22,8 @@ type StdioTransport struct {
 	mu                  sync.Mutex
 	notificationMu      sync.RWMutex
 	notificationHandler RPCNotificationHandler
+	requestMu           sync.RWMutex
+	requestHandler      RPCRequestHandler
 }
 
 func NewStdioTransport(reader io.Reader, writer io.Writer) *StdioTransport {
@@ -65,6 +67,12 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 		if err := json.Unmarshal(trimmed, &response); err != nil {
 			return RPCResponse{}, fmt.Errorf("decode mcp stdio response: %w", err)
 		}
+		if err := t.handleInboundRequest(ctx, response); err != nil {
+			return RPCResponse{}, err
+		}
+		if _, ok := InboundRequestFromRPCResponse(response); ok {
+			continue
+		}
 		if t.dispatchNotification(response) {
 			continue
 		}
@@ -76,6 +84,31 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 		}
 		return response, nil
 	}
+}
+
+func (t *StdioTransport) SetRequestHandler(handler RPCRequestHandler) {
+	if t == nil {
+		return
+	}
+	t.requestMu.Lock()
+	t.requestHandler = handler
+	t.requestMu.Unlock()
+}
+
+func (t *StdioTransport) handleInboundRequest(ctx context.Context, response RPCResponse) error {
+	request, ok := InboundRequestFromRPCResponse(response)
+	if !ok {
+		return nil
+	}
+	t.requestMu.RLock()
+	handler := t.requestHandler
+	t.requestMu.RUnlock()
+	data, err := json.Marshal(ResponseForInboundRequest(ctx, request, handler))
+	if err != nil {
+		return err
+	}
+	_, err = t.writer.Write(append(data, '\n'))
+	return err
 }
 
 func (t *StdioTransport) SetNotificationHandler(handler RPCNotificationHandler) {
