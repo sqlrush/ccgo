@@ -675,6 +675,9 @@ func IsReadOnlyCommand(command string) bool {
 
 func IsDestructiveCommand(command string) bool {
 	command = stripPowerShellLineComments(command)
+	if hasNestedPowerShellDestructiveCommand(command) {
+		return true
+	}
 	for _, segment := range splitPowerShellSegments(command) {
 		words := powerShellWords(segment)
 		if len(words) == 0 {
@@ -743,6 +746,106 @@ func powerShellSyntaxComplete(command string) bool {
 		}
 	}
 	return !inSingle && !inDouble && !escaped
+}
+
+func hasNestedPowerShellDestructiveCommand(command string) bool {
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '`' && !inSingle {
+			escaped = true
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle {
+			continue
+		}
+		if ch == '$' && i+1 < len(command) && command[i+1] == '(' {
+			end := findPowerShellClosingPair(command, i+1, '(', ')')
+			if end < 0 {
+				return false
+			}
+			if IsDestructiveCommand(command[i+2 : end]) {
+				return true
+			}
+			i = end
+			continue
+		}
+		if !inDouble && ch == '(' {
+			end := findPowerShellClosingPair(command, i, '(', ')')
+			if end < 0 {
+				return false
+			}
+			if IsDestructiveCommand(command[i+1 : end]) {
+				return true
+			}
+			i = end
+			continue
+		}
+		if !inDouble && ch == '{' && (i == 0 || command[i-1] != '$') {
+			end := findPowerShellClosingPair(command, i, '{', '}')
+			if end < 0 {
+				return false
+			}
+			if IsDestructiveCommand(command[i+1 : end]) {
+				return true
+			}
+			i = end
+		}
+	}
+	return false
+}
+
+func findPowerShellClosingPair(command string, open int, openCh byte, closeCh byte) int {
+	depth := 1
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := open + 1; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '`' && !inSingle {
+			escaped = true
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle || inDouble {
+			continue
+		}
+		switch ch {
+		case openCh:
+			depth++
+		case closeCh:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func stripPowerShellLineComments(command string) string {
@@ -1333,7 +1436,7 @@ func safePowerShellParameterValue(value string, rejectExpressions bool) bool {
 	if value == "" || value == "--%" || strings.ContainsRune(value, '\x00') {
 		return false
 	}
-	return !rejectExpressions || !strings.ContainsAny(value, "$@{[()")
+	return !rejectExpressions || !strings.ContainsAny(value, "$@{[")
 }
 
 func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) bool {

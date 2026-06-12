@@ -529,6 +529,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` destructive 分类现在会递归检查未被 single-quote 保护的 command substitution/backtick/subshell 内容，例如 `$(rm -rf build)`、`` `rm -rf build` `` 和 `(rm -rf build)`，避免嵌套破坏性命令只被判为非只读却没有 destructive 标记。
 
+本轮补充：`PowerShell` destructive 分类现在会递归检查未被 single-quote 保护的括号表达式、`$()` 子表达式和 scriptblock `{...}` 内容，`Write-Output (Remove-Item out.txt)`、`"$(Remove-Item out.txt)"` 和 `& { Remove-Item out.txt }` 这类嵌套破坏性命令会触发 destructive 标记。
+
 仍需完成：
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。
