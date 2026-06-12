@@ -96,6 +96,47 @@ func TestReadToolLineNumbersAndDedup(t *testing.T) {
 	}
 }
 
+func TestReadToolDiscoversNestedSkillDirs(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "pkg", "sub", "target.txt")
+	pkgSkill := filepath.Join(dir, "pkg", ".claude", "skills", "pkg-skill")
+	subSkill := filepath.Join(dir, "pkg", "sub", ".claude", "skills", "sub-skill")
+	for _, skillDir := range []string{pkgSkill, subSkill} {
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\ndescription: test\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filePath, []byte("content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := fileToolContext(dir)
+	_, err := fileExecutor(t).Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_read_nested_skill",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"pkg/sub/target.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	internal := tool.InternalPathContextFromMetadata(ctx.Metadata)
+	want := []string{subSkill, pkgSkill}
+	if len(internal.SkillDirs) != len(want) {
+		t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, want)
+	}
+	for i := range want {
+		if internal.SkillDirs[i] != want[i] {
+			t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, want)
+		}
+	}
+	if got := permissions.CheckReadableInternalPath(filepath.Join(subSkill, "SKILL.md"), internal); !got.Allowed {
+		t.Fatalf("discovered skill should be readable: %#v", got)
+	}
+}
+
 func TestReadRejectsFractionalSemanticNumber(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "sample.txt"), []byte("alpha\nbeta\n"), 0o644); err != nil {
@@ -588,6 +629,35 @@ func TestReadToolPrefixesAutoMemoryFreshnessNote(t *testing.T) {
 	}
 	if strings.Contains(regular.Content.(string), "This memory is") {
 		t.Fatalf("regular content = %#v", regular.Content)
+	}
+}
+
+func TestWriteToolDiscoversNestedSkillDirs(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "feature", "note.txt")
+	skillDir := filepath.Join(dir, "feature", ".claude", "skills", "feature-skill")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\ndescription: feature\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := fileToolContext(dir)
+	_, err := fileExecutor(t).Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_write_nested_skill",
+		Name:  "Write",
+		Input: mustToolInput(t, writeInput{FilePath: "feature/note.txt", Content: "new\n"}),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filePath); err != nil {
+		t.Fatal(err)
+	}
+	internal := tool.InternalPathContextFromMetadata(ctx.Metadata)
+	if len(internal.SkillDirs) != 1 || internal.SkillDirs[0] != skillDir {
+		t.Fatalf("skill dirs = %#v, want %q", internal.SkillDirs, skillDir)
 	}
 }
 

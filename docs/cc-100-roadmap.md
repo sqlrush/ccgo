@@ -56,6 +56,8 @@ M5/M8 补充：permission internal path context 现在支持 `SkillDirs`，Runne
 
 M8 补充：新增 `internal/skills` discovery 基础模块，支持从工作目录向上到 git root/home 发现项目 `.claude/skills/<skill>/SKILL.md` 目录，并支持按文件路径动态发现 cwd 以下更深层 `.claude/skills`；Runner 现在会把工作目录发现到的项目 skill roots 自动加入 tool metadata 的只读 allowlist。
 
+M8 补充：Read/Write/Edit/NotebookEdit 现在会在处理文件路径时触发嵌套 skill directory discovery，并把新发现的 skill roots 追加到共享 tool metadata 的内部只读路径上下文，后续工具可读取对应 `SKILL.md` 和资源文件；完整 skill activation、SkillTool 调用和 UI 展示仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

@@ -199,6 +199,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：settings `sandbox.filesystem.allowWrite`/`denyWrite`/`denyRead`/`allowRead` 会合并到 permission context 并参与路径权限判定；`denyRead` 可被更窄的 `allowRead` 覆盖，`denyWrite` 会阻断写入，`allowWrite` 在危险根路径和敏感路径安全检查之后放行额外写目录，同时修正 request cwd-relative path 展开顺序。
 - 本轮补充：permission internal path context 新增 `SkillDirs`，Runner 可把 skill/bundled-skill 目录传入 tool metadata，让 `SKILL.md` 及其资源文件作为内部路径只读访问；该 allowlist 不允许写入，完整 skill discovery/activation/SkillTool 仍未宣称完成。
 - 本轮补充：`internal/skills` 现在提供项目 skill discovery 基础能力，按 `.claude/skills/<skill>/SKILL.md` 目录格式从 cwd 向 git root/home 收集 skill roots，并可按文件路径发现 cwd 以下嵌套 skills；Runner 会把工作目录发现到的项目 skill roots 自动加入工具只读权限上下文。
+- 本轮补充：Read/Write/Edit/NotebookEdit 文件工具会在成功处理文件路径时触发嵌套 skill discovery，把新发现的 skill roots 追加到共享 tool metadata 的内部只读路径上下文；后续工具可读取对应 skill 文件和资源，但完整 skill activation/SkillTool/UI 仍未宣称完成。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。

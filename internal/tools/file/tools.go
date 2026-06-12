@@ -15,6 +15,7 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	"ccgo/internal/permissions"
+	"ccgo/internal/skills"
 	"ccgo/internal/tool"
 	bashtools "ccgo/internal/tools/bash"
 	powershelltools "ccgo/internal/tools/powershell"
@@ -237,12 +238,45 @@ func memoryFreshnessPrefix(ctx tool.Context, path string, info os.FileInfo) stri
 	return memory.MemoryFreshnessNote(info.ModTime(), time.Time{})
 }
 
+func discoverSkillDirsForFile(ctx tool.Context, path string) {
+	if ctx.Metadata == nil || strings.TrimSpace(ctx.WorkingDirectory) == "" {
+		return
+	}
+	discovered := skills.DiscoverSkillDirsForPaths([]string{path}, ctx.WorkingDirectory)
+	if len(discovered) == 0 {
+		return
+	}
+	internal := tool.InternalPathContextFromMetadata(ctx.Metadata)
+	internal.SkillDirs = appendUniquePaths(internal.SkillDirs, discovered...)
+	ctx.Metadata[tool.MetadataInternalPathContextKey] = internal
+}
+
+func appendUniquePaths(base []string, items ...string) []string {
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		seen[filepath.Clean(item)] = struct{}{}
+	}
+	for _, item := range items {
+		if item == "" {
+			continue
+		}
+		clean := filepath.Clean(item)
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		base = append(base, clean)
+	}
+	return base
+}
+
 func callRead(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeRead(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
 	path := resolvePath(ctx.WorkingDirectory, input.FilePath)
+	discoverSkillDirsForFile(ctx, path)
 	offset := 1
 	if input.Offset != nil {
 		offset = *input.Offset
@@ -575,6 +609,7 @@ func callWrite(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (cont
 		return contracts.ToolResult{}, err
 	}
 	path := resolvePath(ctx.WorkingDirectory, input.FilePath)
+	discoverSkillDirsForFile(ctx, path)
 	original, existed, _, mode, err := readTextForEdit(path)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -673,6 +708,7 @@ func callEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		return contracts.ToolResult{}, err
 	}
 	path := resolvePath(ctx.WorkingDirectory, input.FilePath)
+	discoverSkillDirsForFile(ctx, path)
 	content, existed, crlf, mode, err := readTextForEdit(path)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -774,6 +810,7 @@ func callNotebookEdit(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink
 		return contracts.ToolResult{}, err
 	}
 	path := resolvePath(ctx.WorkingDirectory, input.NotebookPath)
+	discoverSkillDirsForFile(ctx, path)
 	content, existed, crlf, modeBits, err := readTextForEdit(path)
 	if err != nil {
 		return contracts.ToolResult{}, err
