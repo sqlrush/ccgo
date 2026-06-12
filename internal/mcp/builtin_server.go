@@ -44,7 +44,7 @@ type serverRPCRequest struct {
 
 type serverRPCResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
+	ID      json.RawMessage `json:"id"`
 	Result  any             `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
 }
@@ -118,9 +118,9 @@ func (s *BuiltinServer) Run(ctx context.Context, in io.Reader, out io.Writer) er
 func (s *BuiltinServer) handleLine(ctx context.Context, data []byte) (serverRPCResponse, bool) {
 	var request serverRPCRequest
 	if err := json.Unmarshal(data, &request); err != nil {
-		return serverRPCResponse{JSONRPC: JSONRPCVersion, Error: &RPCError{Code: -32700, Message: "parse error", Data: err.Error()}}, true
+		return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: json.RawMessage(`null`), Error: &RPCError{Code: -32700, Message: "parse error", Data: err.Error()}}, true
 	}
-	if strings.TrimSpace(request.IDString()) == "" {
+	if !request.HasID() {
 		_ = s.handleNotification(ctx, request)
 		return serverRPCResponse{}, false
 	}
@@ -144,7 +144,9 @@ func (s *BuiltinServer) handleRequest(ctx context.Context, request serverRPCRequ
 		return map[string]any{
 			"protocolVersion": DefaultProtocolVersion,
 			"capabilities": map[string]any{
-				"tools": map[string]any{},
+				"tools":     map[string]any{},
+				"resources": map[string]any{},
+				"prompts":   map[string]any{},
 			},
 			"serverInfo": map[string]any{
 				"name":    builtinServerName,
@@ -152,10 +154,20 @@ func (s *BuiltinServer) handleRequest(ctx context.Context, request serverRPCRequ
 				"version": builtinServerVersion,
 			},
 		}, nil
+	case "ping":
+		return map[string]any{}, nil
 	case "tools/list":
 		return s.listTools()
 	case "tools/call":
 		return s.callTool(ctx, request.Params)
+	case "resources/list":
+		return map[string]any{"resources": []any{}}, nil
+	case "resources/read":
+		return nil, validateNamedParams(request.Params, "uri", "resource not found")
+	case "prompts/list":
+		return map[string]any{"prompts": []any{}}, nil
+	case "prompts/get":
+		return nil, validateNamedParams(request.Params, "name", "prompt not found")
 	default:
 		return nil, &RPCError{Code: -32601, Message: "method not found"}
 	}
@@ -207,6 +219,21 @@ func (s *BuiltinServer) callTool(ctx context.Context, raw json.RawMessage) (any,
 		return nil, &RPCError{Code: -32602, Message: err.Error()}
 	}
 	return toolResultToMCPCallResult(result, err), nil
+}
+
+func validateNamedParams(raw json.RawMessage, required string, notFoundMessage string) *RPCError {
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return &RPCError{Code: -32602, Message: required + " is required"}
+	}
+	var params map[string]any
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return &RPCError{Code: -32602, Message: "invalid params", Data: err.Error()}
+	}
+	value, _ := params[required].(string)
+	if strings.TrimSpace(value) == "" {
+		return &RPCError{Code: -32602, Message: required + " is required"}
+	}
+	return &RPCError{Code: -32602, Message: notFoundMessage, Data: map[string]any{required: value}}
 }
 
 func (s *BuiltinServer) toolContext(ctx context.Context) tool.Context {
@@ -330,21 +357,16 @@ func contractBlockToMCPContent(block contracts.ContentBlock) map[string]any {
 	}
 }
 
-func (r serverRPCRequest) IDString() string {
-	id, _ := decodeRPCID(r.ID)
-	return id
+func (r serverRPCRequest) HasID() bool {
+	return len(r.ID) > 0
 }
 
 func normalizedResponseID(raw json.RawMessage) json.RawMessage {
-	id, err := decodeRPCID(raw)
-	if err != nil || strings.TrimSpace(id) == "" {
-		return nil
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return json.RawMessage(`null`)
 	}
-	data, err := json.Marshal(id)
-	if err != nil {
-		return nil
-	}
-	return data
+	return append(json.RawMessage(nil), []byte(trimmed)...)
 }
 
 func cloneAnyMap(values map[string]any) map[string]any {
