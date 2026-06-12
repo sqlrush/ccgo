@@ -142,6 +142,15 @@ func (t *HTTPTransport) SendNotification(ctx context.Context, notification RPCNo
 	return nil
 }
 
+func (t *HTTPTransport) ResetSession() {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	t.SessionID = ""
+	t.mu.Unlock()
+}
+
 func (t *HTTPTransport) SetNotificationHandler(handler RPCNotificationHandler) {
 	if t == nil {
 		return

@@ -138,6 +138,10 @@ func (t *WSTransport) SendNotification(ctx context.Context, notification RPCNoti
 	return nil
 }
 
+func (t *WSTransport) ResetSession() {
+	_ = t.Close()
+}
+
 func (t *WSTransport) SetRequestHandler(handler RPCRequestHandler) {
 	if t == nil {
 		return

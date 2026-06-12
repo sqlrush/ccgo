@@ -97,6 +97,28 @@ func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNot
 	return err
 }
 
+func (t *SSETransport) ResetSession() {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	streamClose := t.streamClose
+	waiters := t.waiters
+	t.endpointURL = ""
+	t.sessionID = ""
+	t.streamClose = nil
+	t.waiters = nil
+	t.pending = nil
+	t.mu.Unlock()
+	if streamClose != nil {
+		streamClose()
+	}
+	for id, waiter := range waiters {
+		delete(waiters, id)
+		waiter <- sseWaitResult{Err: fmt.Errorf("mcp sse session reset")}
+	}
+}
+
 func (t *SSETransport) Close() error {
 	t.mu.Lock()
 	endpoint := t.endpointURL

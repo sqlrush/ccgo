@@ -88,6 +88,10 @@ type RPCNotificationSender interface {
 	SendNotification(context.Context, RPCNotification) error
 }
 
+type RPCSessionResetter interface {
+	ResetSession()
+}
+
 type RPCInboundRequest struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      string          `json:"id"`
@@ -322,6 +326,13 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 }
 
 func (c *ProtocolClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	raw, err := c.rawRequest(ctx, method, params)
+	if !IsSessionExpiredError(err) {
+		return raw, err
+	}
+	if recoverErr := c.recoverExpiredSession(ctx); recoverErr != nil {
+		return nil, fmt.Errorf("%w; session recovery failed: %v", err, recoverErr)
+	}
 	return c.rawRequest(ctx, method, params)
 }
 
@@ -352,6 +363,19 @@ func (c *ProtocolClient) sendInitialized(ctx context.Context) error {
 		return fmt.Errorf("mcp rpc transport cannot send initialized notification")
 	}
 	return sender.SendNotification(ctx, RPCNotification{JSONRPC: JSONRPCVersion, Method: "notifications/initialized"})
+}
+
+func (c *ProtocolClient) recoverExpiredSession(ctx context.Context) error {
+	resetter, ok := c.Transport.(RPCSessionResetter)
+	if !ok {
+		return fmt.Errorf("mcp rpc transport cannot reset expired session")
+	}
+	resetter.ResetSession()
+	c.initMu.Lock()
+	c.initialized = false
+	c.initializeResult = InitializeResult{}
+	c.initMu.Unlock()
+	return c.EnsureInitialized(ctx)
 }
 
 func normalizeInitializeOptions(options InitializeOptions) InitializeOptions {

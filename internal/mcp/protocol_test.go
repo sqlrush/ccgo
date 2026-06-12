@@ -19,6 +19,13 @@ type fakeLifecycleTransport struct {
 	notifications []RPCNotification
 }
 
+type fakeSessionRecoveryTransport struct {
+	requests      []RPCRequest
+	notifications []RPCNotification
+	resets        int
+	listCalls     int
+}
+
 func (t *fakeRPCTransport) RoundTrip(_ context.Context, request RPCRequest) (RPCResponse, error) {
 	t.requests = append(t.requests, request)
 	if t.rpcErr != nil {
@@ -51,6 +58,43 @@ func (t *fakeLifecycleTransport) RoundTrip(_ context.Context, request RPCRequest
 func (t *fakeLifecycleTransport) SendNotification(_ context.Context, notification RPCNotification) error {
 	t.notifications = append(t.notifications, notification)
 	return nil
+}
+
+func (t *fakeSessionRecoveryTransport) RoundTrip(_ context.Context, request RPCRequest) (RPCResponse, error) {
+	t.requests = append(t.requests, request)
+	switch request.Method {
+	case "initialize":
+		return RPCResponse{
+			JSONRPC: JSONRPCVersion,
+			ID:      request.ID,
+			Result:  json.RawMessage(`{"protocolVersion":"2025-06-18","capabilities":{"tools":{}}}`),
+		}, nil
+	case "tools/list":
+		t.listCalls++
+		if t.listCalls == 1 {
+			return RPCResponse{JSONRPC: JSONRPCVersion, ID: request.ID, Error: &RPCError{
+				Code:    -32001,
+				Message: "session expired",
+				Data:    map[string]any{"type": "session-expired"},
+			}}, nil
+		}
+		return RPCResponse{
+			JSONRPC: JSONRPCVersion,
+			ID:      request.ID,
+			Result:  json.RawMessage(`{"tools":[{"name":"ping","readOnly":true}]}`),
+		}, nil
+	default:
+		return RPCResponse{JSONRPC: JSONRPCVersion, ID: request.ID, Result: json.RawMessage(`{}`)}, nil
+	}
+}
+
+func (t *fakeSessionRecoveryTransport) SendNotification(_ context.Context, notification RPCNotification) error {
+	t.notifications = append(t.notifications, notification)
+	return nil
+}
+
+func (t *fakeSessionRecoveryTransport) ResetSession() {
+	t.resets++
 }
 
 func TestProtocolClientListsAndCallsTools(t *testing.T) {
@@ -133,6 +177,40 @@ func TestProtocolClientInitializeRejectsUnsupportedVersion(t *testing.T) {
 	}
 	if len(transport.notifications) != 0 {
 		t.Fatalf("notifications = %#v", transport.notifications)
+	}
+}
+
+func TestProtocolClientRecoversExpiredSession(t *testing.T) {
+	transport := &fakeSessionRecoveryTransport{}
+	client := NewProtocolClient(transport)
+	if err := client.EnsureInitialized(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	tools, err := client.ListTools(context.Background(), "remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 1 || tools[0].Name != "ping" {
+		t.Fatalf("tools = %#v", tools)
+	}
+	if transport.resets != 1 {
+		t.Fatalf("resets = %d", transport.resets)
+	}
+	if len(transport.notifications) != 2 {
+		t.Fatalf("notifications = %#v", transport.notifications)
+	}
+	var methods []string
+	for _, request := range transport.requests {
+		methods = append(methods, request.Method)
+	}
+	want := []string{"initialize", "tools/list", "initialize", "tools/list"}
+	if len(methods) != len(want) {
+		t.Fatalf("methods = %#v", methods)
+	}
+	for i := range want {
+		if methods[i] != want[i] {
+			t.Fatalf("methods = %#v", methods)
+		}
 	}
 }
 

@@ -253,6 +253,40 @@ func TestHTTPTransportStoresAndSendsSessionID(t *testing.T) {
 	}
 }
 
+func TestHTTPTransportResetSessionClearsSessionHeader(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch calls {
+		case 1:
+			w.Header().Set("mcp-session-id", "session-reset")
+		case 2:
+			if got := r.Header.Get("mcp-session-id"); got != "" {
+				t.Fatalf("session header after reset = %q", got)
+			}
+		default:
+			t.Fatalf("unexpected call %d", calls)
+		}
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"tools":[]}}`))
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.URL, nil, server.Client())
+	if _, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if transport.SessionID != "session-reset" {
+		t.Fatalf("session id = %q", transport.SessionID)
+	}
+	transport.ResetSession()
+	if transport.SessionID != "" {
+		t.Fatalf("session id after reset = %q", transport.SessionID)
+	}
+	if _, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestHTTPTransportCloseDeletesSession(t *testing.T) {
 	var deleted bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
