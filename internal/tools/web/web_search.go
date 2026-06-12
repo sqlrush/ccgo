@@ -38,6 +38,23 @@ type webSearchInput struct {
 	Timeout           *int     `json:"timeout,omitempty"`
 }
 
+var allowedWebSearchInputKeys = map[string]struct{}{
+	"query":           {},
+	"allowed_domains": {},
+	"allowedDomains":  {},
+	"blocked_domains": {},
+	"blockedDomains":  {},
+	"max_results":     {},
+	"maxResults":      {},
+	"timeout":         {},
+}
+
+var webSearchSemanticNumberKeys = map[string]struct{}{
+	"max_results": {},
+	"maxResults":  {},
+	"timeout":     {},
+}
+
 type searchResult struct {
 	Title   string
 	URL     string
@@ -79,6 +96,7 @@ func NewWebSearchTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Searches the web for a query and returns result titles and URLs. Supports optional allowed_domains, blocked_domains, max_results, and timeout. Official search backend parity is not implemented yet.", nil
 		},
+		NormalizeFunc:   normalizeWebSearchRawInput,
 		ValidateFunc:    validateWebSearch,
 		CallFunc:        callWebSearch,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
@@ -109,10 +127,15 @@ func validateWebSearch(_ tool.Context, raw json.RawMessage) error {
 			return fmt.Errorf("timeout must be at most %d milliseconds", maxWebSearchTimeoutMillis)
 		}
 	}
-	if err := validateDomains("allowed_domains", webSearchAllowedDomains(input)); err != nil {
+	allowedDomains := webSearchAllowedDomains(input)
+	blockedDomains := webSearchBlockedDomains(input)
+	if len(allowedDomains) > 0 && len(blockedDomains) > 0 {
+		return fmt.Errorf("Cannot specify both allowed_domains and blocked_domains in the same request")
+	}
+	if err := validateDomains("allowed_domains", allowedDomains); err != nil {
 		return err
 	}
-	return validateDomains("blocked_domains", webSearchBlockedDomains(input))
+	return validateDomains("blocked_domains", blockedDomains)
 }
 
 func callWebSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
@@ -526,17 +549,11 @@ func formatWebSearchContent(query string, results []searchResult) string {
 }
 
 func decodeWebSearch(raw json.RawMessage) (webSearchInput, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
+	obj, err := decodeWebStrictObject(raw, allowedWebSearchInputKeys)
+	if err != nil {
 		return webSearchInput{}, err
 	}
-	for key := range obj {
-		switch key {
-		case "query", "allowed_domains", "allowedDomains", "blocked_domains", "blockedDomains", "max_results", "maxResults", "timeout":
-		default:
-			return webSearchInput{}, fmt.Errorf("input.%s is not allowed", key)
-		}
-	}
+	coerceWebSemanticJSONNumbers(obj, webSearchSemanticNumberKeys)
 	var input webSearchInput
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -546,6 +563,19 @@ func decodeWebSearch(raw json.RawMessage) (webSearchInput, error) {
 		return webSearchInput{}, err
 	}
 	return input, nil
+}
+
+func normalizeWebSearchRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeWebStrictObject(raw, allowedWebSearchInputKeys)
+	if err != nil {
+		return nil, err
+	}
+	coerceWebSemanticJSONNumbers(obj, webSearchSemanticNumberKeys)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func webSearchEndpoint(metadata map[string]any) string {

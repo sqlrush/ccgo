@@ -59,7 +59,7 @@ func TestWebFetchTruncatesBody(t *testing.T) {
 	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_truncate",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"max_bytes":5}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"max_bytes":"5.0","timeout":"1000"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)

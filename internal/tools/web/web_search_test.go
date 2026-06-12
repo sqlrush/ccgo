@@ -42,7 +42,8 @@ func TestWebSearchReturnsParsedResults(t *testing.T) {
 		Input: json.RawMessage(`{
 			"query":"claude go",
 			"allowed_domains":["example.com"],
-			"max_results":2
+			"max_results":"2.0",
+			"timeout":"1000"
 		}`),
 	}, nil)
 	if err != nil {
@@ -98,7 +99,6 @@ func TestWebSearchParsesJSONResults(t *testing.T) {
 		Input: json.RawMessage(`{
 			"query":"json search",
 			"allowed_domains":["example.com"],
-			"blocked_domains":["blocked.example.net"],
 			"max_results":5
 		}`),
 	}, nil)
@@ -285,6 +285,7 @@ func TestWebSearchValidation(t *testing.T) {
 		{name: "too many results", input: `{"query":"x","maxResults":21}`, want: "max_results must be at most 20"},
 		{name: "bad timeout", input: `{"query":"x","timeout":0}`, want: "timeout must be positive"},
 		{name: "bad domain", input: `{"query":"x","allowed_domains":["https://example.com"]}`, want: "allowed_domains[0] must be a domain name"},
+		{name: "allowed and blocked domains", input: `{"query":"x","allowedDomains":["example.com"],"blockedDomains":["blocked.example.net"]}`, want: "Cannot specify both allowed_domains and blocked_domains"},
 		{name: "unknown field", input: `{"query":"x","extra":true}`, want: "input.extra is not allowed"},
 	}
 	for _, tt := range tests {

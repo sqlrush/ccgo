@@ -39,6 +39,20 @@ type webFetchInput struct {
 	MaxBytesAlt *int   `json:"maxBytes,omitempty"`
 }
 
+var allowedWebFetchInputKeys = map[string]struct{}{
+	"url":       {},
+	"prompt":    {},
+	"timeout":   {},
+	"max_bytes": {},
+	"maxBytes":  {},
+}
+
+var webFetchSemanticNumberKeys = map[string]struct{}{
+	"timeout":   {},
+	"max_bytes": {},
+	"maxBytes":  {},
+}
+
 func NewWebFetchTool() tool.Tool {
 	var self tool.Tool
 	self = tool.FuncTool{
@@ -65,7 +79,8 @@ func NewWebFetchTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Fetches a web URL and returns text content. Provide url and optionally prompt, timeout in milliseconds, and max_bytes. HTML responses are rendered to readable text, and prompts produce a focused excerpt when matching text is found. Browser rendering and model summarization are not implemented yet.", nil
 		},
-		ValidateFunc: validateWebFetch,
+		NormalizeFunc: normalizeWebFetchRawInput,
+		ValidateFunc:  validateWebFetch,
 		PermissionFunc: func(ctx tool.Context, raw json.RawMessage) (contracts.PermissionDecision, error) {
 			return checkWebFetchPermissions(self, ctx, raw)
 		},
@@ -1006,17 +1021,11 @@ func webFetchWindows1252Rune(value byte) rune {
 }
 
 func decodeWebFetch(raw json.RawMessage) (webFetchInput, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
+	obj, err := decodeWebStrictObject(raw, allowedWebFetchInputKeys)
+	if err != nil {
 		return webFetchInput{}, err
 	}
-	for key := range obj {
-		switch key {
-		case "url", "prompt", "timeout", "max_bytes", "maxBytes":
-		default:
-			return webFetchInput{}, fmt.Errorf("input.%s is not allowed", key)
-		}
-	}
+	coerceWebSemanticJSONNumbers(obj, webFetchSemanticNumberKeys)
 	var input webFetchInput
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -1026,6 +1035,19 @@ func decodeWebFetch(raw json.RawMessage) (webFetchInput, error) {
 		return webFetchInput{}, err
 	}
 	return input, nil
+}
+
+func normalizeWebFetchRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeWebStrictObject(raw, allowedWebFetchInputKeys)
+	if err != nil {
+		return nil, err
+	}
+	coerceWebSemanticJSONNumbers(obj, webFetchSemanticNumberKeys)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func parseFetchURL(raw string) (*url.URL, error) {

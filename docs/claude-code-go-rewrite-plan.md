@@ -180,6 +180,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。
 - 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
+- 本轮补充：WebFetch/WebSearch 输入解码现在兼容 `timeout`、`max_bytes`/`maxBytes`、`max_results`/`maxResults` 的 quoted semantic string 数值；WebSearch 也会按官方校验拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 - 本轮补充：Grep 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下按词边界过滤匹配，并兼容 quoted boolean 输入。
 - 本轮补充：Grep 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。
 - 本轮补充：Grep 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
