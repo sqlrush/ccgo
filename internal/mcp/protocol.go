@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"ccgo/internal/contracts"
@@ -23,6 +24,8 @@ type RPCRequest struct {
 type RPCResponse struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      string          `json:"id,omitempty"`
+	Method  string          `json:"method,omitempty"`
+	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
 }
@@ -47,13 +50,33 @@ type RPCTransport interface {
 	RoundTrip(ctx context.Context, request RPCRequest) (RPCResponse, error)
 }
 
+type RPCNotification struct {
+	JSONRPC string          `json:"jsonrpc,omitempty"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+type RPCNotificationHandler func(RPCNotification)
+
+type RPCNotificationTransport interface {
+	SetNotificationHandler(RPCNotificationHandler)
+}
+
 type ProtocolClient struct {
 	Transport RPCTransport
 	nextID    atomic.Uint64
+
+	notificationMu      sync.Mutex
+	notifications       []RPCNotification
+	notificationHandler RPCNotificationHandler
 }
 
 func NewProtocolClient(transport RPCTransport) *ProtocolClient {
-	return &ProtocolClient{Transport: transport}
+	client := &ProtocolClient{Transport: transport}
+	if transport, ok := transport.(RPCNotificationTransport); ok {
+		transport.SetNotificationHandler(client.handleNotification)
+	}
+	return client
 }
 
 func NewRPCRequest(id string, method string, params any) RPCRequest {
@@ -190,6 +213,45 @@ func (c *ProtocolClient) request(ctx context.Context, method string, params any)
 		return json.RawMessage(`null`), nil
 	}
 	return response.Result, nil
+}
+
+func (c *ProtocolClient) SetNotificationHandler(handler RPCNotificationHandler) {
+	if c == nil {
+		return
+	}
+	c.notificationMu.Lock()
+	c.notificationHandler = handler
+	c.notificationMu.Unlock()
+}
+
+func (c *ProtocolClient) Notifications() []RPCNotification {
+	if c == nil {
+		return nil
+	}
+	c.notificationMu.Lock()
+	defer c.notificationMu.Unlock()
+	return append([]RPCNotification(nil), c.notifications...)
+}
+
+func (c *ProtocolClient) handleNotification(notification RPCNotification) {
+	c.notificationMu.Lock()
+	c.notifications = append(c.notifications, notification)
+	handler := c.notificationHandler
+	c.notificationMu.Unlock()
+	if handler != nil {
+		handler(notification)
+	}
+}
+
+func NotificationFromRPCResponse(response RPCResponse) (RPCNotification, bool) {
+	if strings.TrimSpace(response.Method) == "" || strings.TrimSpace(response.ID) != "" {
+		return RPCNotification{}, false
+	}
+	return RPCNotification{
+		JSONRPC: response.JSONRPC,
+		Method:  response.Method,
+		Params:  append(json.RawMessage(nil), response.Params...),
+	}, true
 }
 
 func IsSessionExpiredError(err error) bool {

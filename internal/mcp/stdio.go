@@ -17,9 +17,11 @@ import (
 )
 
 type StdioTransport struct {
-	reader *bufio.Reader
-	writer io.Writer
-	mu     sync.Mutex
+	reader              *bufio.Reader
+	writer              io.Writer
+	mu                  sync.Mutex
+	notificationMu      sync.RWMutex
+	notificationHandler RPCNotificationHandler
 }
 
 func NewStdioTransport(reader io.Reader, writer io.Writer) *StdioTransport {
@@ -63,6 +65,9 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 		if err := json.Unmarshal(trimmed, &response); err != nil {
 			return RPCResponse{}, fmt.Errorf("decode mcp stdio response: %w", err)
 		}
+		if t.dispatchNotification(response) {
+			continue
+		}
 		if response.ID == "" {
 			continue
 		}
@@ -71,6 +76,29 @@ func (t *StdioTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPC
 		}
 		return response, nil
 	}
+}
+
+func (t *StdioTransport) SetNotificationHandler(handler RPCNotificationHandler) {
+	if t == nil {
+		return
+	}
+	t.notificationMu.Lock()
+	t.notificationHandler = handler
+	t.notificationMu.Unlock()
+}
+
+func (t *StdioTransport) dispatchNotification(response RPCResponse) bool {
+	notification, ok := NotificationFromRPCResponse(response)
+	if !ok {
+		return false
+	}
+	t.notificationMu.RLock()
+	handler := t.notificationHandler
+	t.notificationMu.RUnlock()
+	if handler != nil {
+		handler(notification)
+	}
+	return true
 }
 
 type StdioProcessTransport struct {

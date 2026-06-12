@@ -65,6 +65,9 @@ func TestSSETransportWaitsForAsyncStreamResponse(t *testing.T) {
 			flusher.Flush()
 			request := <-postReceived
 			_, _ = w.Write([]byte("event: message\n"))
+			_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","method":"notifications/resources/list_changed","params":{"uri":"file:///a"}}` + "\n\n"))
+			flusher.Flush()
+			_, _ = w.Write([]byte("event: message\n"))
 			_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","id":"` + request.ID + `","result":{"tools":[{"name":"async"}]}}` + "\n\n"))
 			flusher.Flush()
 		case "/message":
@@ -82,12 +85,20 @@ func TestSSETransportWaitsForAsyncStreamResponse(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	response, err := NewSSETransport(server.URL+"/sse", nil, server.Client()).RoundTrip(ctx, NewRPCRequest("11", "tools/list", nil))
+	transport := NewSSETransport(server.URL+"/sse", nil, server.Client())
+	var notifications []RPCNotification
+	transport.SetNotificationHandler(func(notification RPCNotification) {
+		notifications = append(notifications, notification)
+	})
+	response, err := transport.RoundTrip(ctx, NewRPCRequest("11", "tools/list", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if response.ID != "11" || !strings.Contains(string(response.Result), `"async"`) {
 		t.Fatalf("response = %#v", response)
+	}
+	if len(notifications) != 1 || notifications[0].Method != "notifications/resources/list_changed" || !strings.Contains(string(notifications[0].Params), `file:///a`) {
+		t.Fatalf("notifications = %#v", notifications)
 	}
 }
 

@@ -39,6 +39,9 @@ type WSTransport struct {
 
 	mu   sync.Mutex
 	conn *wsConn
+
+	notificationMu      sync.RWMutex
+	notificationHandler RPCNotificationHandler
 }
 
 type wsConn struct {
@@ -84,6 +87,9 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 			if err := json.Unmarshal(payload, &response); err != nil {
 				return RPCResponse{}, fmt.Errorf("decode mcp ws response: %w", err)
 			}
+			if t.dispatchNotification(response) {
+				continue
+			}
 			if response.ID == "" || response.ID != request.ID {
 				continue
 			}
@@ -98,6 +104,29 @@ func (t *WSTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRes
 			return RPCResponse{}, webSocketCloseError(payload)
 		}
 	}
+}
+
+func (t *WSTransport) SetNotificationHandler(handler RPCNotificationHandler) {
+	if t == nil {
+		return
+	}
+	t.notificationMu.Lock()
+	t.notificationHandler = handler
+	t.notificationMu.Unlock()
+}
+
+func (t *WSTransport) dispatchNotification(response RPCResponse) bool {
+	notification, ok := NotificationFromRPCResponse(response)
+	if !ok {
+		return false
+	}
+	t.notificationMu.RLock()
+	handler := t.notificationHandler
+	t.notificationMu.RUnlock()
+	if handler != nil {
+		handler(notification)
+	}
+	return true
 }
 
 func (t *WSTransport) Close() error {

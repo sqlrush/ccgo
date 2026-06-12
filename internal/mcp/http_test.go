@@ -130,6 +130,50 @@ func TestHTTPTransportParsesEventStreamResponse(t *testing.T) {
 	}
 }
 
+func TestHTTPTransportCapturesEventStreamNotifications(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			"event: message\n" +
+				"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/tools/list_changed\",\"params\":{\"reason\":\"reload\"}}\n\n" +
+				"event: message\n" +
+				"data: {\"jsonrpc\":\"2.0\",\"id\":\"12\",\"result\":{\"tools\":[]}}\n\n",
+		))
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.URL, nil, server.Client())
+	var notifications []RPCNotification
+	transport.SetNotificationHandler(func(notification RPCNotification) {
+		notifications = append(notifications, notification)
+	})
+	response, err := transport.RoundTrip(context.Background(), NewRPCRequest("12", "tools/list", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "12" {
+		t.Fatalf("response = %#v", response)
+	}
+	if len(notifications) != 1 || notifications[0].Method != "notifications/tools/list_changed" || !strings.Contains(string(notifications[0].Params), `"reload"`) {
+		t.Fatalf("notifications = %#v", notifications)
+	}
+}
+
+func TestRPCResponseFromSSESkipsNotificationsWithoutHandler(t *testing.T) {
+	response, err := rpcResponseFromSSE(strings.NewReader(
+		"event: message\n"+
+			"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\",\"params\":{\"level\":\"info\"}}\n\n"+
+			"event: message\n"+
+			"data: {\"jsonrpc\":\"2.0\",\"id\":\"13\",\"result\":{\"ok\":true}}\n\n",
+	), "13")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "13" || !strings.Contains(string(response.Result), `"ok":true`) {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 func TestHTTPTransportStoresAndSendsSessionID(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -26,6 +26,8 @@ type HTTPTransport struct {
 	ProtocolVersionHeader string
 	SessionID             string
 	mu                    sync.Mutex
+	notificationMu        sync.RWMutex
+	notificationHandler   RPCNotificationHandler
 }
 
 func NewHTTPTransport(rawURL string, headers map[string]string, client HTTPDoer) *HTTPTransport {
@@ -87,13 +89,39 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{ID: request.ID}, nil
 	}
 	if isEventStream(resp.Header.Get("content-type")) {
-		return rpcResponseFromSSE(bytes.NewReader(body), request.ID)
+		return rpcResponseFromSSEWithNotifications(bytes.NewReader(body), request.ID, t.dispatchNotification)
 	}
 	var rpcResponse RPCResponse
 	if err := json.Unmarshal(body, &rpcResponse); err != nil {
 		return RPCResponse{}, fmt.Errorf("decode mcp http response: %w", err)
 	}
+	if t.dispatchNotification(rpcResponse) {
+		return RPCResponse{}, fmt.Errorf("mcp http response for id %q not found", request.ID)
+	}
 	return rpcResponse, nil
+}
+
+func (t *HTTPTransport) SetNotificationHandler(handler RPCNotificationHandler) {
+	if t == nil {
+		return
+	}
+	t.notificationMu.Lock()
+	t.notificationHandler = handler
+	t.notificationMu.Unlock()
+}
+
+func (t *HTTPTransport) dispatchNotification(response RPCResponse) bool {
+	notification, ok := NotificationFromRPCResponse(response)
+	if !ok {
+		return false
+	}
+	t.notificationMu.RLock()
+	handler := t.notificationHandler
+	t.notificationMu.RUnlock()
+	if handler != nil {
+		handler(notification)
+	}
+	return true
 }
 
 func (t *HTTPTransport) Close() error {
@@ -224,6 +252,10 @@ func scanSSEEvent(scanner *sseScanner) (SSEEvent, bool, error) {
 }
 
 func rpcResponseFromSSE(r io.Reader, requestID string) (RPCResponse, error) {
+	return rpcResponseFromSSEWithNotifications(r, requestID, nil)
+}
+
+func rpcResponseFromSSEWithNotifications(r io.Reader, requestID string, notify func(RPCResponse) bool) (RPCResponse, error) {
 	events, err := ParseSSEEvents(r)
 	if err != nil {
 		return RPCResponse{}, err
@@ -238,6 +270,12 @@ func rpcResponseFromSSE(r io.Reader, requestID string) (RPCResponse, error) {
 				continue
 			}
 			return RPCResponse{}, fmt.Errorf("decode mcp http event-stream response: %w", err)
+		}
+		if _, ok := NotificationFromRPCResponse(response); ok {
+			if notify != nil {
+				notify(response)
+			}
+			continue
 		}
 		if requestID == "" || response.ID == requestID {
 			return response, nil

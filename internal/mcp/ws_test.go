@@ -38,6 +38,11 @@ func TestWSTransportRoundTrip(t *testing.T) {
 			return
 		}
 		requests <- request
+		notification := `{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"debug"}}`
+		if err := writeServerWebSocketFrame(conn, webSocketOpcodeText, []byte(notification)); err != nil {
+			t.Errorf("write notification: %v", err)
+			return
+		}
 		response := `{"jsonrpc":"2.0","id":"` + request.ID + `","result":{"tools":[{"name":"ws-tool","readOnly":true}]}}`
 		if err := writeServerWebSocketFrame(conn, webSocketOpcodeText, []byte(response)); err != nil {
 			t.Errorf("write frame: %v", err)
@@ -46,6 +51,10 @@ func TestWSTransportRoundTrip(t *testing.T) {
 	defer server.Close()
 
 	transport := NewWSTransport(wsURL(server.URL, "/mcp"), map[string]string{"Authorization": "Bearer token"})
+	var notifications []RPCNotification
+	transport.SetNotificationHandler(func(notification RPCNotification) {
+		notifications = append(notifications, notification)
+	})
 	response, err := transport.RoundTrip(context.Background(), NewRPCRequest("5", "tools/list", nil))
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +65,9 @@ func TestWSTransportRoundTrip(t *testing.T) {
 	request := <-requests
 	if request.Method != "tools/list" {
 		t.Fatalf("request = %#v", request)
+	}
+	if len(notifications) != 1 || notifications[0].Method != "notifications/message" || !strings.Contains(string(notifications[0].Params), `"debug"`) {
+		t.Fatalf("notifications = %#v", notifications)
 	}
 	if err := transport.Close(); err != nil {
 		t.Fatal(err)

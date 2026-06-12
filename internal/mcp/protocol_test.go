@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -57,6 +58,34 @@ func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	params := mustJSON(t, transport.requests[1].Params)
 	if !strings.Contains(params, `"name":"search"`) || !strings.Contains(params, `"query":"bugs"`) {
 		t.Fatalf("call params = %s", params)
+	}
+}
+
+func TestProtocolClientCapturesTransportNotifications(t *testing.T) {
+	reader := strings.NewReader(
+		`{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info","data":"hello"}}` + "\n" +
+			`{"jsonrpc":"2.0","id":"1","result":{"tools":[]}}` + "\n",
+	)
+	transport := NewStdioTransport(reader, &bytes.Buffer{})
+	client := NewProtocolClient(transport)
+	var handled []RPCNotification
+	client.SetNotificationHandler(func(notification RPCNotification) {
+		handled = append(handled, notification)
+	})
+
+	tools, err := client.ListTools(context.Background(), "stdio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 0 {
+		t.Fatalf("tools = %#v", tools)
+	}
+	notifications := client.Notifications()
+	if len(notifications) != 1 || notifications[0].Method != "notifications/message" || !strings.Contains(string(notifications[0].Params), `"hello"`) {
+		t.Fatalf("notifications = %#v", notifications)
+	}
+	if len(handled) != 1 || handled[0].Method != notifications[0].Method {
+		t.Fatalf("handled = %#v", handled)
 	}
 }
 

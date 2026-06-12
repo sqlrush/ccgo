@@ -25,6 +25,9 @@ type SSETransport struct {
 	streamClose context.CancelFunc
 	waiters     map[string]chan sseWaitResult
 	pending     map[string]sseWaitResult
+
+	notificationMu      sync.RWMutex
+	notificationHandler RPCNotificationHandler
 }
 
 type sseWaitResult struct {
@@ -94,6 +97,29 @@ func (t *SSETransport) Close() error {
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.SessionID = sessionID
 	return httpTransport.Close()
+}
+
+func (t *SSETransport) SetNotificationHandler(handler RPCNotificationHandler) {
+	if t == nil {
+		return
+	}
+	t.notificationMu.Lock()
+	t.notificationHandler = handler
+	t.notificationMu.Unlock()
+}
+
+func (t *SSETransport) dispatchNotification(response RPCResponse) bool {
+	notification, ok := NotificationFromRPCResponse(response)
+	if !ok {
+		return false
+	}
+	t.notificationMu.RLock()
+	handler := t.notificationHandler
+	t.notificationMu.RUnlock()
+	if handler != nil {
+		handler(notification)
+	}
+	return true
 }
 
 func (t *SSETransport) endpoint(ctx context.Context) (string, error) {
@@ -251,6 +277,9 @@ func (t *SSETransport) dispatchSSEEvent(event SSEEvent) {
 	var response RPCResponse
 	if err := json.Unmarshal([]byte(event.Data), &response); err != nil {
 		t.failSSEWaiters(fmt.Errorf("decode mcp sse response: %w", err))
+		return
+	}
+	if t.dispatchNotification(response) {
 		return
 	}
 	if response.ID == "" {
