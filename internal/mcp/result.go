@@ -80,7 +80,7 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 			Meta:    meta,
 		}, nil
 	}
-	if value, ok := obj["structuredContent"]; ok && value != nil {
+	if value, ok := resultValue(obj, "structuredContent", "structured_content"); ok && value != nil {
 		content, err := json.Marshal(value)
 		if err != nil {
 			return TransformedResult{}, err
@@ -94,7 +94,7 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 			Meta:              meta,
 		}, nil
 	}
-	if value, ok := obj["content"].([]any); ok {
+	if value, ok := resultContentItems(obj); ok {
 		blocks := make([]contracts.ContentBlock, 0, len(value))
 		for _, item := range value {
 			blocks = append(blocks, transformContentItem(item, serverName)...)
@@ -252,6 +252,32 @@ func structuredContentMap(value any) map[string]any {
 		return obj
 	}
 	return map[string]any{"value": value}
+}
+
+func resultValue(values map[string]any, keys ...string) (any, bool) {
+	for _, key := range keys {
+		if value, ok := values[key]; ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func resultContentItems(values map[string]any) ([]any, bool) {
+	value, ok := resultValue(values, "content", "contents")
+	if !ok || value == nil {
+		return nil, false
+	}
+	switch typed := value.(type) {
+	case []any:
+		return typed, true
+	case map[string]any:
+		return []any{typed}, true
+	case string:
+		return []any{map[string]any{"type": "text", "text": typed}}, true
+	default:
+		return []any{map[string]any{"type": "text", "text": fmt.Sprint(typed)}}, true
+	}
 }
 
 func resultMeta(values map[string]any) map[string]any {

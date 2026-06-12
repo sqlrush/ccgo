@@ -130,6 +130,24 @@ func TestProcessToolResultSupportsStructuredContent(t *testing.T) {
 	}
 }
 
+func TestProcessToolResultSupportsStructuredContentAlias(t *testing.T) {
+	result, err := ProcessToolResult(map[string]any{
+		"structured_content": map[string]any{
+			"title": "Issue",
+		},
+	}, ResultOptions{
+		ToolUseID:  "toolu_mcp_alias",
+		ServerName: "github",
+		ToolName:   "issues",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["title"] != "Issue" {
+		t.Fatalf("structured content alias = %#v", result.StructuredContent)
+	}
+}
+
 func TestTransformResultContentArray(t *testing.T) {
 	rawJSON := []byte(`{
 		"content": [
@@ -166,6 +184,30 @@ func TestTransformResultContentArray(t *testing.T) {
 	}
 	if blocks[3].Type != contracts.ContentImage {
 		t.Fatalf("image = %#v", blocks[3])
+	}
+}
+
+func TestTransformResultContentAliases(t *testing.T) {
+	single, err := TransformResult(map[string]any{
+		"content": map[string]any{"type": "text", "text": "single"},
+	}, "github", "search")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := single.Content.([]contracts.ContentBlock)
+	if len(blocks) != 1 || blocks[0].Text != "single" {
+		t.Fatalf("single content = %#v", blocks)
+	}
+
+	text, err := TransformResult(map[string]any{
+		"contents": "plain text",
+	}, "github", "search")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks = text.Content.([]contracts.ContentBlock)
+	if len(blocks) != 1 || blocks[0].Text != "plain text" {
+		t.Fatalf("string content = %#v", blocks)
 	}
 }
 
