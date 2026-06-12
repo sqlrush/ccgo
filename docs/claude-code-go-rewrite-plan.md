@@ -183,6 +183,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下按词边界过滤匹配，并兼容 quoted boolean 输入。
 - 本轮补充：Grep 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。
 - 本轮补充：Grep 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
+- 本轮补充：Glob/Grep 搜索遍历现在会读取 permission context 中的 `Read(...)` deny 规则，并把对应 basename/path/directory pattern 作为额外 ignore rule，避免被禁止读取的文件出现在搜索结果中。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。
 - 本轮补充：Bash/PowerShell tokenizer 现在按 single-quoted literal 处理单引号内的 escape 字符，Bash 的 `\` 和 PowerShell 的 backtick 在单引号内不再导致错误的 quote/segment/token 状态。
 - 本轮补充：Bash/PowerShell 分类现在把未引用 newline 作为命令分隔符，并支持未引用 `#` 行注释剥离；注释文本不再污染分类，下一行命令仍保留 read-only/destructive 判断。

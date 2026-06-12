@@ -537,6 +537,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Grep` 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
 
+本轮补充：`Glob`/`Grep` 搜索遍历现在会读取 permission context 中的 `Read(...)` deny 规则，并把对应 basename/path/directory pattern 作为额外 ignore rule，避免被禁止读取的文件出现在搜索结果中。
+
 本轮补充：`Bash` 和 `PowerShell` read-only 分类现在会拒绝 tokenizer 视角未闭合的 quote 以及末尾 escape/line-continuation 命令，避免不完整 shell input 被误判为只读。
 
 本轮补充：`Bash`/`PowerShell` 轻量 tokenizer 的 escape 处理现在尊重 single-quoted literal 语义，Bash 单引号内 `\` 和 PowerShell 单引号内 backtick 不再被当作 escape，从而减少合法只读命令的误拒绝。

@@ -1937,6 +1937,72 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	}
 }
 
+func TestGlobAndGrepRespectReadDenyPermissionRules(t *testing.T) {
+	dir := t.TempDir()
+	for _, subdir := range []string{"sub", "blocked"} {
+		if err := os.MkdirAll(filepath.Join(dir, subdir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := map[string]string{
+		"public.txt":      "Needle visible\n",
+		"secret.txt":      "Needle hidden by basename deny\n",
+		"sub/secret.txt":  "Needle hidden by basename deny in subdir\n",
+		"blocked/hit.txt": "Needle hidden by directory deny\n",
+	}
+	mtime := time.Now().Add(-time.Hour)
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	engine, err := permissions.NewEngineFromSettings(contracts.PermissionSourceProjectSettings, &contracts.PermissionsSetting{
+		Deny: []string{
+			"Read(secret.txt)",
+			"Read(blocked/)",
+			"Bash(rm *)",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+	ctx.Permissions = tool.NewEnginePermissionDecider(engine)
+	extraIgnores := readDenySearchIgnoreRules(ctx, dir)
+	if len(extraIgnores) != 2 {
+		t.Fatalf("read deny extra ignores = %#v", extraIgnores)
+	}
+
+	globResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_glob_read_deny",
+		Name:  "Glob",
+		Input: json.RawMessage(`{"pattern":"**/*.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if globResult.Content != "public.txt" {
+		t.Fatalf("glob read-deny content = %#v", globResult.Content)
+	}
+
+	grepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_read_deny",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grepResult.Content != "Found 1 file\npublic.txt" {
+		t.Fatalf("grep read-deny content = %#v", grepResult.Content)
+	}
+}
+
 func readJSONFile(path string, out any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {

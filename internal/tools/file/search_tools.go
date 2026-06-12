@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/permissions"
 	"ccgo/internal/tool"
 )
 
@@ -125,6 +126,7 @@ type searchWalkOptions struct {
 	UseIgnoreFiles bool
 	IncludeHidden  bool
 	ExcludeVCSDirs bool
+	ExtraIgnores   searchIgnoreRules
 }
 
 func NewGlobTool() tool.Tool {
@@ -255,7 +257,7 @@ func callGlob(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if filepath.IsAbs(pattern) {
 		root, pattern = globBaseDirectory(pattern)
 	}
-	matches, truncated, err := collectGlobMatches(root, displayRoot, pattern, defaultSearchLimit)
+	matches, truncated, err := collectGlobMatches(root, displayRoot, pattern, defaultSearchLimit, globWalkOptions(ctx, root))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -364,7 +366,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Multiline:     input.Multiline,
 		InvertMatch:   grepInvertMatch(input),
 	}
-	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options)
+	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options, grepWalkOptions(ctx, root))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -501,9 +503,9 @@ func isUNCSearchPath(rawPath string, resolvedPath string) bool {
 		strings.HasPrefix(resolvedPath, "//")
 }
 
-func collectGlobMatches(root string, displayRoot string, pattern string, limit int) ([]fileSearchMatch, bool, error) {
+func collectGlobMatches(root string, displayRoot string, pattern string, limit int, walkOptions searchWalkOptions) ([]fileSearchMatch, bool, error) {
 	var matches []fileSearchMatch
-	err := walkSearchFiles(root, globWalkOptions(), func(path string, rel string, info os.FileInfo) error {
+	err := walkSearchFiles(root, walkOptions, func(path string, rel string, info os.FileInfo) error {
 		ok, err := matchGlobPath(pattern, rel)
 		if err != nil {
 			return err
@@ -530,14 +532,14 @@ func collectGlobMatches(root string, displayRoot string, pattern string, limit i
 	return matches, truncated, nil
 }
 
-func collectGrepMatches(root string, displayRoot string, glob string, typeFilter string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, bool, error) {
+func collectGrepMatches(root string, displayRoot string, glob string, typeFilter string, expr *regexp.Regexp, options grepOptions, walkOptions searchWalkOptions) ([]grepMatch, int, bool, error) {
 	typeExtensions, err := grepTypeExtensions(typeFilter)
 	if err != nil {
 		return nil, 0, false, err
 	}
 	globPatterns := splitGrepGlobPatterns(glob)
 	var matches []grepMatch
-	err = walkSearchFiles(root, grepWalkOptions(), func(path string, rel string, info os.FileInfo) error {
+	err = walkSearchFiles(root, walkOptions, func(path string, rel string, info os.FileInfo) error {
 		if len(globPatterns) > 0 {
 			ok, err := matchAnyGlobPath(globPatterns, rel)
 			if err != nil || !ok {
@@ -1100,19 +1102,108 @@ func grepContextLines(input grepInput) (int, int) {
 	return before, after
 }
 
-func globWalkOptions() searchWalkOptions {
+func globWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 	return searchWalkOptions{
 		UseIgnoreFiles: !envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", true),
 		IncludeHidden:  envTruthyDefault("CLAUDE_CODE_GLOB_HIDDEN", true),
+		ExtraIgnores:   readDenySearchIgnoreRules(ctx, root),
 	}
 }
 
-func grepWalkOptions() searchWalkOptions {
+func grepWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 	return searchWalkOptions{
 		UseIgnoreFiles: true,
 		IncludeHidden:  true,
 		ExcludeVCSDirs: true,
+		ExtraIgnores:   readDenySearchIgnoreRules(ctx, root),
 	}
+}
+
+func readDenySearchIgnoreRules(ctx tool.Context, root string) searchIgnoreRules {
+	permissionContext, ok := permissionContextFromToolContext(ctx)
+	if !ok {
+		return nil
+	}
+	var rules searchIgnoreRules
+	for _, rawRules := range permissionContext.AlwaysDenyRules {
+		for _, raw := range rawRules {
+			value := permissions.PermissionRuleValueFromString(raw)
+			if value.ToolName != "Read" {
+				continue
+			}
+			rules = append(rules, searchIgnoreRulesForReadDeny(value.RuleContent, ctx.WorkingDirectory, root)...)
+		}
+	}
+	return rules
+}
+
+func permissionContextFromToolContext(ctx tool.Context) (contracts.PermissionContext, bool) {
+	switch decider := ctx.Permissions.(type) {
+	case tool.EnginePermissionDecider:
+		return decider.Engine.Context(), true
+	case *tool.EnginePermissionDecider:
+		if decider != nil {
+			return decider.Engine.Context(), true
+		}
+	}
+	return contracts.PermissionContext{}, false
+}
+
+func searchIgnoreRulesForReadDeny(pattern string, cwd string, root string) searchIgnoreRules {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" || pattern == "*" {
+		return searchIgnoreRules{{Pattern: "*"}}
+	}
+	pattern = strings.TrimPrefix(pattern, "!")
+	pattern = strings.TrimSpace(pattern)
+	if strings.HasPrefix(pattern, "./") {
+		pattern = strings.TrimPrefix(pattern, "./")
+	}
+	directoryOnly := strings.HasSuffix(pattern, "/") || strings.HasSuffix(pattern, string(filepath.Separator))
+	pattern = strings.TrimRight(pattern, `/\`)
+
+	if filepath.IsAbs(pattern) || pattern == "~" || strings.HasPrefix(pattern, "~/") {
+		rel, ok := searchRelativePatternForAbsoluteDeny(pattern, cwd, root)
+		if !ok {
+			return nil
+		}
+		pattern = "/" + rel
+	}
+
+	anchored := strings.HasPrefix(pattern, "/")
+	pattern = strings.TrimPrefix(pattern, "/")
+	pattern = filepath.ToSlash(filepath.Clean(pattern))
+	if pattern == "" || pattern == "." {
+		return nil
+	}
+	if !anchored && strings.Contains(pattern, "/") && !strings.HasPrefix(pattern, "**/") {
+		pattern = "**/" + pattern
+	}
+	if directoryOnly && strings.Contains(pattern, "/") {
+		pattern = strings.TrimSuffix(pattern, "/") + "/**"
+		directoryOnly = false
+	}
+	return searchIgnoreRules{{
+		Pattern:       pattern,
+		DirectoryOnly: directoryOnly,
+		Anchored:      anchored,
+	}}
+}
+
+func searchRelativePatternForAbsoluteDeny(pattern string, cwd string, root string) (string, bool) {
+	resolved := resolvePath(cwd, pattern)
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." {
+		return "*", true
+	}
+	if rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", false
+	}
+	return rel, true
 }
 
 func envTruthyDefault(name string, fallback bool) bool {
@@ -1142,6 +1233,9 @@ func walkSearchFiles(root string, options searchWalkOptions, visit func(path str
 	if options.UseIgnoreFiles {
 		ignoreRules = loadSearchIgnoreRules(root, "")
 	}
+	if len(options.ExtraIgnores) > 0 {
+		ignoreRules = append(ignoreRules, options.ExtraIgnores...)
+	}
 	return walkSearchDir(root, root, options, ignoreRules, visit)
 }
 
@@ -1161,7 +1255,7 @@ func walkSearchDir(root string, dir string, options searchWalkOptions, ignoreRul
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if (options.ExcludeVCSDirs && ignoredVCSDir(entry.Name())) || (options.UseIgnoreFiles && ignoreRules.Ignored(rel, true)) {
+			if (options.ExcludeVCSDirs && ignoredVCSDir(entry.Name())) || (len(ignoreRules) > 0 && ignoreRules.Ignored(rel, true)) {
 				continue
 			}
 			dirRules := append(searchIgnoreRules(nil), ignoreRules...)
@@ -1173,7 +1267,7 @@ func walkSearchDir(root string, dir string, options searchWalkOptions, ignoreRul
 			}
 			continue
 		}
-		if options.UseIgnoreFiles && ignoreRules.Ignored(rel, false) {
+		if len(ignoreRules) > 0 && ignoreRules.Ignored(rel, false) {
 			continue
 		}
 		info, err := entry.Info()
