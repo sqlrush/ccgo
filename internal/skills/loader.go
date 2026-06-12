@@ -6,6 +6,7 @@ import (
 	"os"
 	slashpath "path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -111,6 +112,176 @@ func ProjectSkillCommands(cwd string) []contracts.Command {
 	return commands
 }
 
+func LoadLegacyCommandSkills(cwd string) []Skill {
+	commandFiles := projectLegacyCommandFiles(cwd)
+	out := make([]Skill, 0, len(commandFiles))
+	for _, commandFile := range commandFiles {
+		skill, err := loadLegacyCommandFile(commandFile)
+		if err != nil {
+			continue
+		}
+		out = append(out, skill)
+	}
+	return out
+}
+
+type legacyCommandFile struct {
+	BaseDir string
+	Path    string
+	IsSkill bool
+}
+
+func projectLegacyCommandFiles(cwd string) []legacyCommandFile {
+	dirs := projectLegacyCommandDirs(cwd)
+	out := make([]legacyCommandFile, 0)
+	for _, dir := range dirs {
+		out = append(out, legacyCommandFilesInDir(dir)...)
+	}
+	return out
+}
+
+func projectLegacyCommandDirs(cwd string) []string {
+	cwd = cleanAbs(cwd)
+	home := cleanAbs(userHomeDir())
+	gitRoot := findGitRoot(cwd)
+	var out []string
+	seen := map[string]struct{}{}
+	for current := cwd; ; current = filepath.Dir(current) {
+		if samePath(current, home) {
+			break
+		}
+		dir := filepath.Join(current, ".claude", "commands")
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			key := normalizePath(dir)
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				out = append(out, dir)
+			}
+		}
+		if gitRoot != "" && samePath(current, gitRoot) {
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+	return out
+}
+
+func legacyCommandFilesInDir(baseDir string) []legacyCommandFile {
+	var markdown []string
+	_ = filepath.WalkDir(baseDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(path), ".md") {
+			markdown = append(markdown, path)
+		}
+		return nil
+	})
+	sort.Strings(markdown)
+	skillDirs := map[string]string{}
+	for _, path := range markdown {
+		if isSkillFile(path) {
+			dir := filepath.Dir(path)
+			if _, ok := skillDirs[dir]; !ok {
+				skillDirs[dir] = path
+			}
+		}
+	}
+	out := make([]legacyCommandFile, 0, len(markdown))
+	for _, path := range markdown {
+		if skillPath, ok := skillDirs[filepath.Dir(path)]; ok && skillPath != path {
+			continue
+		}
+		out = append(out, legacyCommandFile{
+			BaseDir: baseDir,
+			Path:    path,
+			IsSkill: isSkillFile(path),
+		})
+	}
+	return out
+}
+
+func loadLegacyCommandFile(commandFile legacyCommandFile) (Skill, error) {
+	data, err := os.ReadFile(commandFile.Path)
+	if err != nil {
+		return Skill{}, err
+	}
+	frontmatter, body := memory.ParseFrontmatter(string(data))
+	root := ""
+	if commandFile.IsSkill {
+		root = filepath.Dir(commandFile.Path)
+	}
+	name := legacyCommandName(commandFile)
+	description := strings.TrimSpace(frontmatterField(frontmatter, "description"))
+	hasDescription := description != ""
+	if description == "" {
+		description = extractDescription(body)
+	}
+	userInvocable := parseBoolDefault(frontmatterField(frontmatter, "user-invocable", "user_invocable", "userInvocable"), true)
+	content := body
+	if root != "" {
+		content = renderSkillContent(root, body)
+	}
+	command := contracts.Command{
+		Type:                    contracts.CommandPrompt,
+		Name:                    name,
+		DisplayName:             strings.TrimSpace(frontmatterField(frontmatter, "name")),
+		Description:             description,
+		ArgumentHint:            strings.TrimSpace(frontmatterField(frontmatter, "argument-hint", "argument_hint", "argumentHint")),
+		ArgumentNames:           parseArgumentNames(frontmatterField(frontmatter, "arguments")),
+		Source:                  contracts.CommandSourceSkills,
+		LoadedFrom:              "commands_DEPRECATED",
+		SkillRoot:               root,
+		DisableModelInvocation:  parseBoolDefault(frontmatterField(frontmatter, "disable-model-invocation", "disable_model_invocation", "disableModelInvocation"), false),
+		Hidden:                  !userInvocable,
+		AllowedTools:            parseFrontmatterList(frontmatterField(frontmatter, "allowed-tools", "allowed_tools", "allowedTools")),
+		WhenToUse:               strings.TrimSpace(frontmatterField(frontmatter, "when_to_use", "when-to-use", "whenToUse")),
+		Version:                 strings.TrimSpace(frontmatterField(frontmatter, "version")),
+		Model:                   parseSkillModel(frontmatterField(frontmatter, "model")),
+		Context:                 parseSkillContext(frontmatterField(frontmatter, "context")),
+		Agent:                   strings.TrimSpace(frontmatterField(frontmatter, "agent")),
+		Effort:                  strings.TrimSpace(frontmatterField(frontmatter, "effort")),
+		ContentLength:           len(body),
+		ProgressMessage:         "running",
+		HasUserSpecifiedDetails: hasDescription,
+	}
+	return Skill{
+		Root:          root,
+		FilePath:      commandFile.Path,
+		Command:       command,
+		Content:       content,
+		UserInvocable: userInvocable,
+	}, nil
+}
+
+func legacyCommandName(commandFile legacyCommandFile) string {
+	path := commandFile.Path
+	if commandFile.IsSkill {
+		path = filepath.Dir(path)
+	} else {
+		path = strings.TrimSuffix(path, filepath.Ext(path))
+	}
+	rel, err := filepath.Rel(commandFile.BaseDir, path)
+	if err != nil {
+		rel = filepath.Base(path)
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" && part != "." {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, ":")
+}
+
 func frontmatterField(frontmatter map[string]string, keys ...string) string {
 	for _, key := range keys {
 		if value, ok := frontmatter[key]; ok {
@@ -118,6 +289,10 @@ func frontmatterField(frontmatter map[string]string, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func isSkillFile(filePath string) bool {
+	return strings.EqualFold(filepath.Base(filePath), skillFileName)
 }
 
 func extractDescription(markdown string) string {

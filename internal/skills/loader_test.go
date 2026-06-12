@@ -215,12 +215,75 @@ func TestProjectSkillCommandsLoadsDiscoveredSkillDirs(t *testing.T) {
 	}
 }
 
+func TestLoadLegacyCommandSkillsLoadsMarkdownAndSkillFormats(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	commandsDir := filepath.Join(cwd, ".claude", "commands")
+	writeMarkdownFile(t, filepath.Join(commandsDir, "review.md"), `---
+description: Review a target
+arguments: target
+allowed_tools: Read
+---
+Review $target in ${CLAUDE_SESSION_ID}.
+`)
+	writeMarkdownFile(t, filepath.Join(commandsDir, "team", "deploy", "SKILL.md"), `---
+description: Deploy with team context
+context: fork
+agent: deploy-agent
+model: inherit
+---
+Deploy from ${CLAUDE_SKILL_DIR}.
+`)
+	writeMarkdownFile(t, filepath.Join(commandsDir, "team", "deploy", "ignored.md"), `---
+description: ignored sibling
+---
+ignored
+`)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := LoadLegacyCommandSkills(cwd)
+	if len(got) != 2 {
+		t.Fatalf("legacy commands = %#v", got)
+	}
+	if got[0].Command.Name != "review" || got[0].Command.LoadedFrom != "commands_DEPRECATED" {
+		t.Fatalf("first command = %#v", got[0].Command)
+	}
+	if got[0].Root != "" || got[0].Content != "Review $target in ${CLAUDE_SESSION_ID}.\n" {
+		t.Fatalf("first root/content = %q/%q", got[0].Root, got[0].Content)
+	}
+	if !sameStringSlice(got[0].Command.AllowedTools, []string{"Read"}) || !sameStringSlice(got[0].Command.ArgumentNames, []string{"target"}) {
+		t.Fatalf("first metadata = %#v", got[0].Command)
+	}
+	if got[1].Command.Name != "team:deploy" || got[1].Root != filepath.Join(commandsDir, "team", "deploy") {
+		t.Fatalf("second command/root = %#v/%q", got[1].Command, got[1].Root)
+	}
+	if got[1].Command.Context != "fork" || got[1].Command.Agent != "deploy-agent" || got[1].Command.Model != "" {
+		t.Fatalf("second metadata = %#v", got[1].Command)
+	}
+	wantContent := "Base directory for this skill: " + got[1].Root + "\n\nDeploy from " + got[1].Root + ".\n"
+	if got[1].Content != wantContent {
+		t.Fatalf("second content = %q, want %q", got[1].Content, wantContent)
+	}
+}
+
 func writeSkillFile(t *testing.T, dir string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, skillFileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeMarkdownFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -41,6 +41,39 @@ Run deployment checks.
 	}
 }
 
+func TestLoadIncludesLegacyProjectCommands(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	commandPath := filepath.Join(cwd, ".claude", "commands", "team", "review.md")
+	writeCommandMarkdown(t, commandPath, `---
+description: Review command
+arguments: target
+---
+Review $target during ${CLAUDE_SESSION_ID}.
+`)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{CWD: cwd})
+	cmd, ok := registry.Find("team:review")
+	if !ok {
+		t.Fatalf("legacy command not found")
+	}
+	if cmd.LoadedFrom != loadedFromCommandsDeprecated || cmd.Source != contracts.CommandSourceSkills {
+		t.Fatalf("legacy command metadata = %#v", cmd)
+	}
+
+	expanded, err := registry.ExpandPrompt("team:review", "auth", "sess_legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Review auth during sess_legacy.\n"
+	if expanded.Content != want {
+		t.Fatalf("expanded content = %q, want %q", expanded.Content, want)
+	}
+}
+
 func TestFromSourcesUsesCommandOrderAndDedupesDynamicSkills(t *testing.T) {
 	registry := FromSources(Sources{
 		BundledSkills:       []contracts.Command{promptCommand("bundled", "bundled")},
@@ -148,6 +181,16 @@ func writeCommandSkill(t *testing.T, dir string, content string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeCommandMarkdown(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
