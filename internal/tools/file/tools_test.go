@@ -57,7 +57,7 @@ func TestReadToolLineNumbersAndDedup(t *testing.T) {
 	result, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_read",
 		Name:  "Read",
-		Input: json.RawMessage(`{"file_path":"sample.txt","offset":2,"limit":1}`),
+		Input: json.RawMessage(`{"file_path":"sample.txt","offset":"02.0","limit":"1"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -93,6 +93,22 @@ func TestReadToolLineNumbersAndDedup(t *testing.T) {
 	}
 	if result.Content != fileUnchangedStub {
 		t.Fatalf("dedup content = %#v", result.Content)
+	}
+}
+
+func TestReadRejectsFractionalSemanticNumber(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sample.txt"), []byte("alpha\nbeta\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	_, err := executor.Execute(fileToolContext(dir), contracts.ToolUse{
+		ID:    "toolu_read_fractional_offset",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"sample.txt","offset":"1.5"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "input.offset must be integer") {
+		t.Fatalf("err = %v, want integer schema error", err)
 	}
 }
 
@@ -797,7 +813,7 @@ func TestEditRequiresUniqueMatchUnlessReplaceAll(t *testing.T) {
 	result, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_replace_all",
 		Name:  "Edit",
-		Input: json.RawMessage(`{"file_path":"dup.txt","old_string":"foo","new_string":"bar","replace_all":true}`),
+		Input: json.RawMessage(`{"file_path":"dup.txt","old_string":"foo","new_string":"bar","replace_all":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1441,7 +1457,7 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	semanticStringResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_semantic_string_inputs",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_count":"1","context":"1","-n":"false"}`),
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_count":"1.0","context":"1.0","-n":"false"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)

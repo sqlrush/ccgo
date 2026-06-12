@@ -43,6 +43,19 @@ type editInput struct {
 	ReplaceAll bool   `json:"replace_all,omitempty"`
 }
 
+var allowedReadInputKeys = map[string]struct{}{"file_path": {}, "offset": {}, "limit": {}, "pages": {}}
+
+var readSemanticNumberKeys = map[string]struct{}{
+	"offset": {},
+	"limit":  {},
+}
+
+var allowedEditInputKeys = map[string]struct{}{"file_path": {}, "old_string": {}, "new_string": {}, "replace_all": {}}
+
+var editSemanticBooleanKeys = map[string]struct{}{
+	"replace_all": {},
+}
+
 type notebookEditInput struct {
 	NotebookPath string `json:"notebook_path"`
 	CellID       string `json:"cell_id,omitempty"`
@@ -75,6 +88,7 @@ func NewReadTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Reads a text or image file from the local filesystem. Text results include line numbers starting at 1; supported images are returned as image content blocks.", nil
 		},
+		NormalizeFunc:   normalizeReadRawInput,
 		ValidateFunc:    validateRead,
 		CallFunc:        callRead,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
@@ -129,8 +143,9 @@ func NewEditTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Performs exact string replacements in files. The file must be read first, and old_string must uniquely identify the target unless replace_all is true.", nil
 		},
-		ValidateFunc: validateEdit,
-		CallFunc:     callEdit,
+		NormalizeFunc: normalizeEditRawInput,
+		ValidateFunc:  validateEdit,
+		CallFunc:      callEdit,
 	}
 }
 
@@ -915,10 +930,27 @@ func validateFreshFullReadWithContent(ctx tool.Context, path string, currentCont
 
 func decodeRead(raw json.RawMessage) (readInput, error) {
 	var input readInput
-	if err := decodeStrict(raw, map[string]struct{}{"file_path": {}, "offset": {}, "limit": {}, "pages": {}}, &input); err != nil {
+	normalized, err := normalizeReadRawInput(raw)
+	if err != nil {
+		return readInput{}, err
+	}
+	if err := json.Unmarshal(normalized, &input); err != nil {
 		return readInput{}, err
 	}
 	return input, nil
+}
+
+func normalizeReadRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeStrictObject(raw, allowedReadInputKeys)
+	if err != nil {
+		return nil, err
+	}
+	coerceSemanticJSONStrings(obj, readSemanticNumberKeys, nil)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func decodeWrite(raw json.RawMessage) (writeInput, error) {
@@ -931,10 +963,27 @@ func decodeWrite(raw json.RawMessage) (writeInput, error) {
 
 func decodeEdit(raw json.RawMessage) (editInput, error) {
 	var input editInput
-	if err := decodeStrict(raw, map[string]struct{}{"file_path": {}, "old_string": {}, "new_string": {}, "replace_all": {}}, &input); err != nil {
+	normalized, err := normalizeEditRawInput(raw)
+	if err != nil {
+		return editInput{}, err
+	}
+	if err := json.Unmarshal(normalized, &input); err != nil {
 		return editInput{}, err
 	}
 	return input, nil
+}
+
+func normalizeEditRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeStrictObject(raw, allowedEditInputKeys)
+	if err != nil {
+		return nil, err
+	}
+	coerceSemanticJSONStrings(obj, nil, editSemanticBooleanKeys)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func decodeNotebookEdit(raw json.RawMessage) (notebookEditInput, error) {

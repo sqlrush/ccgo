@@ -3,10 +3,12 @@ package filetools
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -464,9 +466,20 @@ func coerceSemanticJSONStrings(obj map[string]json.RawMessage, numberKeys map[st
 			continue
 		}
 		if _, ok := numberKeys[key]; ok && semanticNumberLiteralRE.MatchString(text) {
-			obj[key] = json.RawMessage(text)
+			obj[key] = semanticJSONNumberRaw(text)
 		}
 	}
+}
+
+func semanticJSONNumberRaw(text string) json.RawMessage {
+	number, err := strconv.ParseFloat(text, 64)
+	if err != nil || math.IsInf(number, 0) || math.IsNaN(number) {
+		return json.RawMessage(text)
+	}
+	if math.Trunc(number) == number {
+		return json.RawMessage(strconv.FormatInt(int64(number), 10))
+	}
+	return json.RawMessage(strconv.FormatFloat(number, 'f', -1, 64))
 }
 
 func searchRoot(cwd string, path string) string {
