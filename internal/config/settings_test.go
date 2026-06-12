@@ -65,6 +65,30 @@ func TestLoadSettingsFileWithWarningsFiltersInvalidPermissionRules(t *testing.T)
 	}
 }
 
+func TestValidateSettingsWarnsForInvalidSandboxFilesystem(t *testing.T) {
+	_, warnings, err := ParseSettingsJSON([]byte(`{
+		"sandbox": {
+			"filesystem": {
+				"allowWrite": "../tmp",
+				"denyRead": ["private", 42]
+			}
+		}
+	}`), "settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 2 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	paths := map[string]int{}
+	for _, warning := range warnings {
+		paths[warning.Path]++
+	}
+	if paths["sandbox.filesystem.allowWrite"] != 1 || paths["sandbox.filesystem.denyRead"] != 1 {
+		t.Fatalf("warning paths = %#v warnings=%#v", paths, warnings)
+	}
+}
+
 func TestMergeSettings(t *testing.T) {
 	a := contracts.Settings{
 		Env: map[string]string{"A": "1"},
@@ -95,11 +119,22 @@ func TestMergeSettings(t *testing.T) {
 
 func TestMergeSettingsPreservesSandboxSettings(t *testing.T) {
 	merged := MergeSettings(
-		contracts.Settings{Sandbox: map[string]any{"enabled": true, "allowUnsandboxedCommands": true}},
-		contracts.Settings{Sandbox: map[string]any{"allowUnsandboxedCommands": false}},
+		contracts.Settings{Sandbox: map[string]any{
+			"enabled":                  true,
+			"allowUnsandboxedCommands": true,
+			"filesystem":               map[string]any{"allowWrite": []any{"tmp"}},
+		}},
+		contracts.Settings{Sandbox: map[string]any{
+			"allowUnsandboxedCommands": false,
+			"filesystem":               map[string]any{"denyRead": []any{"private"}},
+		}},
 	)
 	if merged.Sandbox["enabled"] != true || merged.Sandbox["allowUnsandboxedCommands"] != false {
 		t.Fatalf("sandbox = %#v", merged.Sandbox)
+	}
+	filesystem, ok := merged.Sandbox["filesystem"].(map[string]any)
+	if !ok || filesystem["allowWrite"] == nil || filesystem["denyRead"] == nil {
+		t.Fatalf("sandbox filesystem = %#v", merged.Sandbox["filesystem"])
 	}
 }
 

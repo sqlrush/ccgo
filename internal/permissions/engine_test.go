@@ -174,6 +174,112 @@ func TestNewEngineFromSettingsSourcesMergesSandboxAllowUnsandboxedCommands(t *te
 	}
 }
 
+func TestSandboxFilesystemPolicyAffectsPathDecisions(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	policy := &contracts.SandboxFilesystemPolicy{
+		AllowWrite: []string{outside},
+		DenyWrite:  []string{"blocked-write"},
+		DenyRead:   []string{"blocked-read"},
+		AllowRead:  []string{"blocked-read/public"},
+	}
+	engine := NewEngine(contracts.PermissionContext{
+		Mode:              contracts.PermissionDefault,
+		SandboxFilesystem: policy,
+	})
+
+	deniedRead := engine.Decide(Request{
+		ToolName:         "Read",
+		Path:             filepath.Join(root, "blocked-read", "secret.txt"),
+		WorkingDirectory: root,
+		ReadOnly:         true,
+	})
+	if deniedRead.Behavior != contracts.PermissionDeny || !strings.Contains(deniedRead.Message, "denyRead") {
+		t.Fatalf("denied read = %#v", deniedRead)
+	}
+
+	allowedRead := engine.Decide(Request{
+		ToolName:         "Read",
+		Path:             filepath.Join(root, "blocked-read", "public", "note.txt"),
+		WorkingDirectory: root,
+		ReadOnly:         true,
+	})
+	if allowedRead.Behavior != contracts.PermissionAllow {
+		t.Fatalf("allowed read = %#v", allowedRead)
+	}
+
+	deniedWrite := engine.Decide(Request{
+		ToolName:         "Write",
+		Path:             filepath.Join(root, "blocked-write", "out.txt"),
+		WorkingDirectory: root,
+		WritesFiles:      true,
+	})
+	if deniedWrite.Behavior != contracts.PermissionDeny || !strings.Contains(deniedWrite.Message, "denyWrite") {
+		t.Fatalf("denied write = %#v", deniedWrite)
+	}
+
+	allowedWrite := engine.Decide(Request{
+		ToolName:         "Write",
+		Path:             filepath.Join(outside, "out.txt"),
+		WorkingDirectory: root,
+		WritesFiles:      true,
+	})
+	if allowedWrite.Behavior != contracts.PermissionAllow || !strings.Contains(allowedWrite.Message, "allowWrite") {
+		t.Fatalf("allowed write = %#v", allowedWrite)
+	}
+
+	sensitiveWrite := engine.Decide(Request{
+		ToolName:         "Write",
+		Path:             filepath.Join(root, ".git", "config"),
+		WorkingDirectory: root,
+		WritesFiles:      true,
+	})
+	if sensitiveWrite.Behavior != contracts.PermissionAsk || !strings.Contains(sensitiveWrite.Message, "sensitive") {
+		t.Fatalf("sensitive write = %#v", sensitiveWrite)
+	}
+}
+
+func TestSandboxPathMatchesRelativePaths(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "blocked-read", "secret.txt")
+	if !sandboxPathMatches(PathsForPermissionCheck(path), root, []string{"blocked-read"}) {
+		t.Fatalf("expected relative sandbox path to match %q within %q", path, root)
+	}
+	if sandboxPathMatches(PathsForPermissionCheck(path), root, []string{"blocked"}) {
+		t.Fatalf("unexpected partial path match")
+	}
+}
+
+func TestNewEngineFromSettingsSourcesMergesSandboxFilesystem(t *testing.T) {
+	engine, err := NewEngineFromSettingsSources(false,
+		SettingsSource{
+			Source: contracts.PermissionSourcePolicySettings,
+			Sandbox: map[string]any{
+				"filesystem": map[string]any{
+					"allowWrite": []any{"/tmp/policy-write"},
+					"denyRead":   []any{"/tmp/secret"},
+				},
+			},
+		},
+		SettingsSource{
+			Source: contracts.PermissionSourceUserSettings,
+			Sandbox: map[string]any{
+				"filesystem": map[string]any{
+					"allowWrite": []any{"/tmp/user-write"},
+					"allowRead":  []any{"/tmp/secret/public"},
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := engine.Context().SandboxFilesystem
+	if policy == nil || len(policy.AllowWrite) != 2 || len(policy.DenyRead) != 1 || len(policy.AllowRead) != 1 {
+		t.Fatalf("sandbox filesystem = %#v", policy)
+	}
+}
+
 func TestEnginePathSafetyRunsBeforeAllowRules(t *testing.T) {
 	root := t.TempDir()
 	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionAcceptEdits},

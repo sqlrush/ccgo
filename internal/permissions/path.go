@@ -398,7 +398,9 @@ func pathInOptionalDir(path string, dir string) bool {
 }
 
 func expandPathForCwd(path string, cwd string) string {
-	path = platform.ExpandPath(path)
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		path = platform.ExpandPath(path)
+	}
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}

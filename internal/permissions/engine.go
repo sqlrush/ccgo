@@ -56,6 +56,9 @@ func NewEngineFromSettingsSources(managedRulesOnly bool, sources ...SettingsSour
 		if allowUnsandboxed, ok := sandboxAllowUnsandboxedCommands(source.Sandbox); ok {
 			context.AllowUnsandboxedCommands = &allowUnsandboxed
 		}
+		if filesystem, ok := sandboxFilesystemPolicy(source.Sandbox); ok {
+			context.SandboxFilesystem = mergeSandboxFilesystemPolicy(context.SandboxFilesystem, filesystem)
+		}
 		if source.Permissions != nil && source.Permissions.DefaultMode != "" {
 			context.Mode = sourceContext.Mode
 		}
@@ -231,6 +234,83 @@ func sandboxAllowUnsandboxedCommands(sandbox map[string]any) (bool, bool) {
 	return allow, ok
 }
 
+func sandboxFilesystemPolicy(sandbox map[string]any) (contracts.SandboxFilesystemPolicy, bool) {
+	if sandbox == nil {
+		return contracts.SandboxFilesystemPolicy{}, false
+	}
+	raw, ok := sandbox["filesystem"]
+	if !ok {
+		return contracts.SandboxFilesystemPolicy{}, false
+	}
+	filesystem, ok := raw.(map[string]any)
+	if !ok {
+		return contracts.SandboxFilesystemPolicy{}, false
+	}
+	policy := contracts.SandboxFilesystemPolicy{
+		AllowWrite: sandboxStringSlice(filesystem["allowWrite"]),
+		DenyWrite:  sandboxStringSlice(filesystem["denyWrite"]),
+		DenyRead:   sandboxStringSlice(filesystem["denyRead"]),
+		AllowRead:  sandboxStringSlice(filesystem["allowRead"]),
+	}
+	if len(policy.AllowWrite) == 0 && len(policy.DenyWrite) == 0 && len(policy.DenyRead) == 0 && len(policy.AllowRead) == 0 {
+		return contracts.SandboxFilesystemPolicy{}, false
+	}
+	return policy, true
+}
+
+func sandboxStringSlice(value any) []string {
+	switch v := value.(type) {
+	case []string:
+		return append([]string(nil), v...)
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if text, ok := item.(string); ok && text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func mergeSandboxFilesystemPolicy(current *contracts.SandboxFilesystemPolicy, next contracts.SandboxFilesystemPolicy) *contracts.SandboxFilesystemPolicy {
+	if current == nil {
+		cp := next
+		cp.AllowWrite = append([]string(nil), next.AllowWrite...)
+		cp.DenyWrite = append([]string(nil), next.DenyWrite...)
+		cp.DenyRead = append([]string(nil), next.DenyRead...)
+		cp.AllowRead = append([]string(nil), next.AllowRead...)
+		return &cp
+	}
+	out := *current
+	out.AllowWrite = mergeUniqueStrings(out.AllowWrite, next.AllowWrite)
+	out.DenyWrite = mergeUniqueStrings(out.DenyWrite, next.DenyWrite)
+	out.DenyRead = mergeUniqueStrings(out.DenyRead, next.DenyRead)
+	out.AllowRead = mergeUniqueStrings(out.AllowRead, next.AllowRead)
+	return &out
+}
+
+func mergeUniqueStrings(a, b []string) []string {
+	out := append([]string(nil), a...)
+	seen := map[string]struct{}{}
+	for _, item := range out {
+		seen[item] = struct{}{}
+	}
+	for _, item := range b {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
 func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {
 	if req.Path == "" {
 		return contracts.PermissionDecision{}, false
@@ -244,6 +324,10 @@ func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {
 	if req.ReadOnly && !req.WritesFiles && !req.Destructive {
 		operation = FileOperationRead
 	}
+	pathsToCheck := PathsForPermissionCheck(resolved)
+	if sandboxDecision, ok := e.sandboxFilesystemPathDecision(req, resolved, pathsToCheck, operation); ok {
+		return sandboxDecision, true
+	}
 	if operation == FileOperationRead {
 		if internal := CheckReadableInternalPath(resolved, req.InternalPaths); internal.Allowed {
 			return decision(contracts.PermissionAllow, req, internal.Reason, ""), true
@@ -253,7 +337,6 @@ func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {
 	if internal := CheckEditableInternalPath(resolved, req.InternalPaths); internal.Allowed {
 		return decision(contracts.PermissionAllow, req, internal.Reason, ""), true
 	}
-	pathsToCheck := PathsForPermissionCheck(resolved)
 	if IsDangerousRemovalPath(resolved) {
 		got := decision(contracts.PermissionAsk, req, "path targets a dangerous filesystem root", "")
 		got.BlockedPath = resolved
@@ -264,7 +347,57 @@ func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {
 		got.BlockedPath = resolved
 		return got, true
 	}
+	if sandboxAllowsWritePath(e.context.SandboxFilesystem, pathsToCheck, cwd) {
+		return decision(contracts.PermissionAllow, req, "sandbox.filesystem.allowWrite allows path", ""), true
+	}
 	return contracts.PermissionDecision{}, false
+}
+
+func (e Engine) sandboxFilesystemPathDecision(req Request, resolved string, pathsToCheck []string, operation FileOperationType) (contracts.PermissionDecision, bool) {
+	policy := e.context.SandboxFilesystem
+	if policy == nil {
+		return contracts.PermissionDecision{}, false
+	}
+	cwd := req.WorkingDirectory
+	if cwd == "" {
+		cwd = "."
+	}
+	if operation == FileOperationRead {
+		if sandboxPathMatches(pathsToCheck, cwd, policy.DenyRead) && !sandboxPathMatches(pathsToCheck, cwd, policy.AllowRead) {
+			got := decision(contracts.PermissionDeny, req, "sandbox.filesystem.denyRead blocks path", "")
+			got.BlockedPath = resolved
+			return got, true
+		}
+		return contracts.PermissionDecision{}, false
+	}
+	if sandboxPathMatches(pathsToCheck, cwd, policy.DenyWrite) {
+		got := decision(contracts.PermissionDeny, req, "sandbox.filesystem.denyWrite blocks path", "")
+		got.BlockedPath = resolved
+		return got, true
+	}
+	return contracts.PermissionDecision{}, false
+}
+
+func sandboxAllowsWritePath(policy *contracts.SandboxFilesystemPolicy, pathsToCheck []string, cwd string) bool {
+	return policy != nil && sandboxPathMatches(pathsToCheck, cwd, policy.AllowWrite)
+}
+
+func sandboxPathMatches(pathsToCheck []string, cwd string, configured []string) bool {
+	if len(configured) == 0 {
+		return false
+	}
+	for _, configuredPath := range configured {
+		if configuredPath == "" {
+			continue
+		}
+		expanded := expandPathForCwd(configuredPath, cwd)
+		for _, candidate := range pathsToCheck {
+			if PathInWorkingPath(candidate, expanded) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (e Engine) ApplyUpdate(update contracts.PermissionUpdate) (Engine, error) {

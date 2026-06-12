@@ -79,8 +79,16 @@ type PermissionContext struct {
 	BypassAvailable              bool                              `json:"bypass_available,omitempty"`
 	AutoAvailable                bool                              `json:"auto_available,omitempty"`
 	AllowUnsandboxedCommands     *bool                             `json:"allow_unsandboxed_commands,omitempty"`
+	SandboxFilesystem            *SandboxFilesystemPolicy          `json:"sandbox_filesystem,omitempty"`
 	StrippedDangerousRules       map[PermissionRuleSource][]string `json:"stripped_dangerous_rules,omitempty"`
 	ShouldAvoidPermissionPrompts bool                              `json:"should_avoid_permission_prompts,omitempty"`
 	AwaitAutomatedChecks         bool                              `json:"await_automated_checks_before_dialog,omitempty"`
 	PrePlanMode                  PermissionMode                    `json:"pre_plan_mode,omitempty"`
+}
+
+type SandboxFilesystemPolicy struct {
+	AllowWrite []string `json:"allow_write,omitempty"`
+	DenyWrite  []string `json:"deny_write,omitempty"`
+	DenyRead   []string `json:"deny_read,omitempty"`
+	AllowRead  []string `json:"allow_read,omitempty"`
 }

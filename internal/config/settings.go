@@ -151,7 +151,7 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 		if s.SkipWebFetchPreflight != nil {
 			out.SkipWebFetchPreflight = clonePtr(s.SkipWebFetchPreflight)
 		}
-		out.Sandbox = mergeAnyMap(out.Sandbox, s.Sandbox)
+		out.Sandbox = mergeNestedAnyMap(out.Sandbox, s.Sandbox)
 		if s.FeedbackSurveyRate != nil {
 			out.FeedbackSurveyRate = clonePtr(s.FeedbackSurveyRate)
 		}
@@ -326,6 +326,23 @@ func mergeAnyMap(a, b map[string]any) map[string]any {
 		out[k] = v
 	}
 	for k, v := range b {
+		out[k] = v
+	}
+	return out
+}
+
+func mergeNestedAnyMap(a, b map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		if existing, ok := out[k].(map[string]any); ok {
+			if incoming, ok := v.(map[string]any); ok {
+				out[k] = mergeNestedAnyMap(existing, incoming)
+				continue
+			}
+		}
 		out[k] = v
 	}
 	return out

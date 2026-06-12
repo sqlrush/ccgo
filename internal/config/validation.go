@@ -145,6 +145,53 @@ func validateSandboxSetting(setting map[string]any, filePath string) []Validatio
 			})
 		}
 	}
+	if filesystem, ok := setting["filesystem"]; ok {
+		filesystemMap, ok := filesystem.(map[string]any)
+		if !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "sandbox.filesystem",
+				Message:      "Invalid value. Expected object",
+				Expected:     "object",
+				InvalidValue: filesystem,
+			})
+			return errors
+		}
+		errors = append(errors, validateSandboxFilesystemSetting(filesystemMap, filePath)...)
+	}
+	return errors
+}
+
+func validateSandboxFilesystemSetting(setting map[string]any, filePath string) []ValidationError {
+	var errors []ValidationError
+	for _, key := range []string{"allowWrite", "denyWrite", "denyRead", "allowRead"} {
+		value, ok := setting[key]
+		if !ok {
+			continue
+		}
+		items, ok := value.([]any)
+		if !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "sandbox.filesystem." + key,
+				Message:      "Invalid value. Expected string array",
+				Expected:     "string[]",
+				InvalidValue: value,
+			})
+			continue
+		}
+		for _, item := range items {
+			if _, ok := item.(string); !ok {
+				errors = append(errors, ValidationError{
+					File:         filePath,
+					Path:         "sandbox.filesystem." + key,
+					Message:      "Invalid value. Expected string array",
+					Expected:     "string[]",
+					InvalidValue: item,
+				})
+			}
+		}
+	}
 	return errors
 }
 
