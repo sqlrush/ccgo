@@ -14,6 +14,7 @@ import (
 
 const JSONRPCVersion = "2.0"
 const DefaultProtocolVersion = "2025-06-18"
+const maxListPaginationPages = 100
 
 type RPCRequest struct {
 	JSONRPC string `json:"jsonrpc"`
@@ -239,21 +240,34 @@ func (c *ProtocolClient) Initialize(ctx context.Context, options InitializeOptio
 }
 
 func (c *ProtocolClient) ListTools(ctx context.Context, serverName string) ([]RemoteTool, error) {
-	raw, err := c.request(ctx, "tools/list", nil)
-	if err != nil {
-		return nil, err
+	var tools []RemoteTool
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < maxListPaginationPages; page++ {
+		raw, err := c.request(ctx, "tools/list", listPaginationParams(cursor))
+		if err != nil {
+			return nil, err
+		}
+		var response struct {
+			Tools      []rpcTool `json:"tools"`
+			NextCursor string    `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &response); err != nil {
+			return nil, err
+		}
+		for _, item := range response.Tools {
+			tools = append(tools, item.remoteTool())
+		}
+		if response.NextCursor == "" {
+			return tools, nil
+		}
+		if seen[response.NextCursor] {
+			return nil, fmt.Errorf("mcp tools/list pagination repeated cursor %q", response.NextCursor)
+		}
+		seen[response.NextCursor] = true
+		cursor = response.NextCursor
 	}
-	var response struct {
-		Tools []rpcTool `json:"tools"`
-	}
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return nil, err
-	}
-	tools := make([]RemoteTool, 0, len(response.Tools))
-	for _, item := range response.Tools {
-		tools = append(tools, item.remoteTool())
-	}
-	return tools, nil
+	return nil, fmt.Errorf("mcp tools/list pagination exceeded %d pages", maxListPaginationPages)
 }
 
 func (c *ProtocolClient) CallTool(ctx context.Context, serverName string, toolName string, input json.RawMessage) (any, error) {
@@ -276,21 +290,34 @@ func (c *ProtocolClient) CallTool(ctx context.Context, serverName string, toolNa
 }
 
 func (c *ProtocolClient) ListResources(ctx context.Context, serverName string) ([]RemoteResource, error) {
-	raw, err := c.request(ctx, "resources/list", nil)
-	if err != nil {
-		return nil, err
+	var resources []RemoteResource
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < maxListPaginationPages; page++ {
+		raw, err := c.request(ctx, "resources/list", listPaginationParams(cursor))
+		if err != nil {
+			return nil, err
+		}
+		var response struct {
+			Resources  []rpcResource `json:"resources"`
+			NextCursor string        `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &response); err != nil {
+			return nil, err
+		}
+		for _, item := range response.Resources {
+			resources = append(resources, item.remoteResource())
+		}
+		if response.NextCursor == "" {
+			return resources, nil
+		}
+		if seen[response.NextCursor] {
+			return nil, fmt.Errorf("mcp resources/list pagination repeated cursor %q", response.NextCursor)
+		}
+		seen[response.NextCursor] = true
+		cursor = response.NextCursor
 	}
-	var response struct {
-		Resources []rpcResource `json:"resources"`
-	}
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return nil, err
-	}
-	resources := make([]RemoteResource, 0, len(response.Resources))
-	for _, item := range response.Resources {
-		resources = append(resources, item.remoteResource())
-	}
-	return resources, nil
+	return nil, fmt.Errorf("mcp resources/list pagination exceeded %d pages", maxListPaginationPages)
 }
 
 func (c *ProtocolClient) ReadResource(ctx context.Context, serverName string, uri string) ([]ResourceContent, error) {
@@ -312,21 +339,34 @@ func (c *ProtocolClient) ReadResource(ctx context.Context, serverName string, ur
 }
 
 func (c *ProtocolClient) ListPrompts(ctx context.Context, serverName string) ([]RemotePrompt, error) {
-	raw, err := c.request(ctx, "prompts/list", nil)
-	if err != nil {
-		return nil, err
+	var prompts []RemotePrompt
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < maxListPaginationPages; page++ {
+		raw, err := c.request(ctx, "prompts/list", listPaginationParams(cursor))
+		if err != nil {
+			return nil, err
+		}
+		var response struct {
+			Prompts    []rpcPrompt `json:"prompts"`
+			NextCursor string      `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &response); err != nil {
+			return nil, err
+		}
+		for _, item := range response.Prompts {
+			prompts = append(prompts, item.remotePrompt())
+		}
+		if response.NextCursor == "" {
+			return prompts, nil
+		}
+		if seen[response.NextCursor] {
+			return nil, fmt.Errorf("mcp prompts/list pagination repeated cursor %q", response.NextCursor)
+		}
+		seen[response.NextCursor] = true
+		cursor = response.NextCursor
 	}
-	var response struct {
-		Prompts []rpcPrompt `json:"prompts"`
-	}
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return nil, err
-	}
-	prompts := make([]RemotePrompt, 0, len(response.Prompts))
-	for _, item := range response.Prompts {
-		prompts = append(prompts, item.remotePrompt())
-	}
-	return prompts, nil
+	return nil, fmt.Errorf("mcp prompts/list pagination exceeded %d pages", maxListPaginationPages)
 }
 
 func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promptName string, arguments map[string]string) (PromptResult, error) {
@@ -342,6 +382,13 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 		return PromptResult{}, err
 	}
 	return response.promptResult(), nil
+}
+
+func listPaginationParams(cursor string) any {
+	if cursor == "" {
+		return nil
+	}
+	return map[string]any{"cursor": cursor}
 }
 
 func (c *ProtocolClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {

@@ -14,6 +14,12 @@ type fakeRPCTransport struct {
 	requests  []RPCRequest
 }
 
+type fakePaginatedTransport struct {
+	responses map[string][]json.RawMessage
+	requests  []RPCRequest
+	calls     map[string]int
+}
+
 type fakeLifecycleTransport struct {
 	requests      []RPCRequest
 	notifications []RPCNotification
@@ -43,6 +49,24 @@ func (t *fakeRPCTransport) RoundTrip(_ context.Context, request RPCRequest) (RPC
 		JSONRPC: JSONRPCVersion,
 		ID:      request.ID,
 		Result:  t.responses[request.Method],
+	}, nil
+}
+
+func (t *fakePaginatedTransport) RoundTrip(_ context.Context, request RPCRequest) (RPCResponse, error) {
+	t.requests = append(t.requests, request)
+	if t.calls == nil {
+		t.calls = map[string]int{}
+	}
+	index := t.calls[request.Method]
+	t.calls[request.Method] = index + 1
+	pages := t.responses[request.Method]
+	if index >= len(pages) {
+		return RPCResponse{ID: request.ID, Error: &RPCError{Code: -32603, Message: "unexpected page request"}}, nil
+	}
+	return RPCResponse{
+		JSONRPC: JSONRPCVersion,
+		ID:      request.ID,
+		Result:  pages[index],
 	}, nil
 }
 
@@ -193,6 +217,76 @@ func TestProtocolClientReadsToolAnnotations(t *testing.T) {
 	}
 	if len(tools) != 1 || tools[0].Name != "delete" || tools[0].ReadOnly || !tools[0].Destructive {
 		t.Fatalf("tools = %#v", tools)
+	}
+}
+
+func TestProtocolClientPaginatesListMethods(t *testing.T) {
+	transport := &fakePaginatedTransport{responses: map[string][]json.RawMessage{
+		"tools/list": {
+			json.RawMessage(`{"tools":[{"name":"first"}],"nextCursor":"tools-page-2"}`),
+			json.RawMessage(`{"tools":[{"name":"second"}]}`),
+		},
+		"resources/list": {
+			json.RawMessage(`{"resources":[{"uri":"file:///first"}],"nextCursor":"resources-page-2"}`),
+			json.RawMessage(`{"resources":[{"uri":"file:///second"}]}`),
+		},
+		"prompts/list": {
+			json.RawMessage(`{"prompts":[{"name":"first"}],"nextCursor":"prompts-page-2"}`),
+			json.RawMessage(`{"prompts":[{"name":"second"}]}`),
+		},
+	}}
+	client := NewProtocolClient(transport)
+
+	tools, err := client.ListTools(context.Background(), "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 2 || tools[0].Name != "first" || tools[1].Name != "second" {
+		t.Fatalf("tools = %#v", tools)
+	}
+	resources, err := client.ListResources(context.Background(), "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resources) != 2 || resources[0].URI != "file:///first" || resources[1].URI != "file:///second" {
+		t.Fatalf("resources = %#v", resources)
+	}
+	prompts, err := client.ListPrompts(context.Background(), "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prompts) != 2 || prompts[0].Name != "first" || prompts[1].Name != "second" {
+		t.Fatalf("prompts = %#v", prompts)
+	}
+
+	if len(transport.requests) != 6 {
+		t.Fatalf("requests = %#v", transport.requests)
+	}
+	wantCursors := map[int]string{
+		1: `"cursor":"tools-page-2"`,
+		3: `"cursor":"resources-page-2"`,
+		5: `"cursor":"prompts-page-2"`,
+	}
+	for index, want := range wantCursors {
+		params := mustJSON(t, transport.requests[index].Params)
+		if !strings.Contains(params, want) {
+			t.Fatalf("request %d params = %s, want %s", index, params, want)
+		}
+	}
+}
+
+func TestProtocolClientRejectsRepeatedListCursor(t *testing.T) {
+	transport := &fakePaginatedTransport{responses: map[string][]json.RawMessage{
+		"tools/list": {
+			json.RawMessage(`{"tools":[{"name":"first"}],"nextCursor":"again"}`),
+			json.RawMessage(`{"tools":[{"name":"second"}],"nextCursor":"again"}`),
+		},
+	}}
+	client := NewProtocolClient(transport)
+
+	_, err := client.ListTools(context.Background(), "server")
+	if err == nil || !strings.Contains(err.Error(), "repeated cursor") {
+		t.Fatalf("expected repeated cursor error, got %v", err)
 	}
 }
 
