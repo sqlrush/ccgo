@@ -422,6 +422,15 @@ func (c *ProtocolClient) ReadResource(ctx context.Context, serverName string, ur
 	return contents, nil
 }
 
+func (c *ProtocolClient) SubscribeResource(ctx context.Context, serverName string, uri string) error {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return fmt.Errorf("mcp resource uri is required")
+	}
+	_, err := c.request(ctx, "resources/subscribe", map[string]any{"uri": uri})
+	return err
+}
+
 func (c *ProtocolClient) ListPrompts(ctx context.Context, serverName string) ([]RemotePrompt, error) {
 	var prompts []RemotePrompt
 	cursor := ""

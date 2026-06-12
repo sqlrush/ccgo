@@ -832,6 +832,28 @@ func TestProtocolClientReadsResourceContentAliases(t *testing.T) {
 	}
 }
 
+func TestProtocolClientSubscribesToResources(t *testing.T) {
+	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
+		"resources/subscribe": json.RawMessage(`{}`),
+	}}
+	client := NewProtocolClient(transport)
+
+	if err := client.SubscribeResource(context.Background(), "files", " file:///watched.txt "); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 1 || transport.requests[0].Method != "resources/subscribe" {
+		t.Fatalf("requests = %#v", transport.requests)
+	}
+	params := mustJSON(t, transport.requests[0].Params)
+	if !strings.Contains(params, `"uri":"file:///watched.txt"`) {
+		t.Fatalf("params = %s", params)
+	}
+
+	if err := client.SubscribeResource(context.Background(), "files", " "); err == nil {
+		t.Fatal("expected empty uri error")
+	}
+}
+
 func TestProtocolClientReadsPromptMessageAliases(t *testing.T) {
 	single := NewProtocolClient(&fakeRPCTransport{responses: map[string]json.RawMessage{
 		"prompts/get": json.RawMessage(`{"description":"Single","message":{"role":"user","content":{"type":"text","text":"one"}}}`),
