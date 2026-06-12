@@ -562,6 +562,18 @@ func (c *ProtocolClient) SendNotification(ctx context.Context, method string, pa
 	return sender.SendNotification(ctx, RPCNotification{JSONRPC: JSONRPCVersion, Method: method, Params: raw})
 }
 
+func (c *ProtocolClient) NotifyRequestCancelled(ctx context.Context, requestID string, reason string) error {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return fmt.Errorf("mcp cancellation request id is required")
+	}
+	params := map[string]any{"requestId": requestID}
+	if reason = strings.TrimSpace(reason); reason != "" {
+		params["reason"] = reason
+	}
+	return c.SendNotification(ctx, "notifications/cancelled", params)
+}
+
 func (c *ProtocolClient) recoverExpiredSession(ctx context.Context) error {
 	resetter, ok := c.Transport.(RPCSessionResetter)
 	if !ok {

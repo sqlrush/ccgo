@@ -590,6 +590,30 @@ func TestProtocolClientNotifiesRootsListChanged(t *testing.T) {
 	}
 }
 
+func TestProtocolClientSendsCancellationNotification(t *testing.T) {
+	transport := &fakeLifecycleTransport{}
+	client := NewProtocolClient(transport)
+
+	if err := client.NotifyRequestCancelled(context.Background(), " req-7 ", " stopped "); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.notifications) != 1 {
+		t.Fatalf("notifications = %#v", transport.notifications)
+	}
+	notification := transport.notifications[0]
+	if notification.Method != "notifications/cancelled" {
+		t.Fatalf("notification = %#v", notification)
+	}
+	params := string(notification.Params)
+	if !strings.Contains(params, `"requestId":"req-7"`) || !strings.Contains(params, `"reason":"stopped"`) {
+		t.Fatalf("params = %s", params)
+	}
+
+	if err := client.NotifyRequestCancelled(context.Background(), " ", "ignored"); err == nil {
+		t.Fatal("expected empty request id error")
+	}
+}
+
 func TestRootsListRequestHandlerAliasesAndErrors(t *testing.T) {
 	handler := RootsListRequestHandler(StaticRootsProvider([]Root{{URI: "file:///repo"}}), nil)
 	result, rpcErr := handler(context.Background(), RPCInboundRequest{ID: "server-1", Method: "roots.list"})
