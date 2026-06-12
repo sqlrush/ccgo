@@ -471,6 +471,11 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 	return response.promptResult()
 }
 
+func (c *ProtocolClient) Ping(ctx context.Context) error {
+	_, err := c.request(ctx, "ping", nil)
+	return err
+}
+
 func (c *ProtocolClient) Complete(ctx context.Context, request CompletionRequest) (CompletionResult, error) {
 	raw, err := c.request(ctx, "completion/complete", request)
 	if err != nil {

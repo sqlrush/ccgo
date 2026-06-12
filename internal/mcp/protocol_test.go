@@ -736,6 +736,20 @@ func TestRPCResponseAcceptsNumericIDs(t *testing.T) {
 	}
 }
 
+func TestProtocolClientPingsServer(t *testing.T) {
+	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
+		"ping": json.RawMessage(`{}`),
+	}}
+	client := NewProtocolClient(transport)
+
+	if err := client.Ping(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 1 || transport.requests[0].Method != "ping" {
+		t.Fatalf("requests = %#v", transport.requests)
+	}
+}
+
 func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
 		"resources/list":           json.RawMessage(`{"resources":[{"uri":"file:///a.txt","name":"a.txt","description":"A file","mimeType":"text/plain"}]}`),
