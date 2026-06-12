@@ -78,6 +78,7 @@ type PermissionContext struct {
 	AlwaysAskRules               map[PermissionRuleSource][]string `json:"always_ask_rules,omitempty"`
 	BypassAvailable              bool                              `json:"bypass_available,omitempty"`
 	AutoAvailable                bool                              `json:"auto_available,omitempty"`
+	AllowUnsandboxedCommands     *bool                             `json:"allow_unsandboxed_commands,omitempty"`
 	StrippedDangerousRules       map[PermissionRuleSource][]string `json:"stripped_dangerous_rules,omitempty"`
 	ShouldAvoidPermissionPrompts bool                              `json:"should_avoid_permission_prompts,omitempty"`
 	AwaitAutomatedChecks         bool                              `json:"await_automated_checks_before_dialog,omitempty"`

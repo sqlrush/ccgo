@@ -16,6 +16,7 @@ type Engine struct {
 type SettingsSource struct {
 	Source      contracts.PermissionRuleSource
 	Permissions *contracts.PermissionsSetting
+	Sandbox     map[string]any
 }
 
 func NewEngine(context contracts.PermissionContext, rules ...Rule) Engine {
@@ -48,11 +49,14 @@ func NewEngineFromSettingsSources(managedRulesOnly bool, sources ...SettingsSour
 	}
 	var rules []Rule
 	for _, source := range sources {
-		if source.Permissions == nil {
+		if source.Permissions == nil && source.Sandbox == nil {
 			continue
 		}
 		sourceContext := ContextFromSettings(source.Source, source.Permissions)
-		if source.Permissions.DefaultMode != "" {
+		if allowUnsandboxed, ok := sandboxAllowUnsandboxedCommands(source.Sandbox); ok {
+			context.AllowUnsandboxedCommands = &allowUnsandboxed
+		}
+		if source.Permissions != nil && source.Permissions.DefaultMode != "" {
 			context.Mode = sourceContext.Mode
 		}
 		if !sourceContext.BypassAvailable {
@@ -63,6 +67,9 @@ func NewEngineFromSettingsSources(managedRulesOnly bool, sources ...SettingsSour
 		}
 		for dir, dirSource := range sourceContext.AdditionalWorkingDirectories {
 			context.AdditionalWorkingDirectories[dir] = dirSource
+		}
+		if source.Permissions == nil {
+			continue
 		}
 		if managedRulesOnly && source.Source != contracts.PermissionSourcePolicySettings {
 			continue
@@ -200,6 +207,9 @@ func (e Engine) Decide(req Request) contracts.PermissionDecision {
 }
 
 func (e Engine) sandboxOverrideDecision(req Request) contracts.PermissionDecision {
+	if e.context.AllowUnsandboxedCommands != nil && !*e.context.AllowUnsandboxedCommands {
+		return decision(contracts.PermissionDeny, req, "sandbox.allowUnsandboxedCommands disables sandbox override", "")
+	}
 	if e.mode == contracts.PermissionBypassPermissions && e.context.BypassAvailable {
 		return decision(contracts.PermissionAllow, req, "sandbox override allowed in bypassPermissions mode", "")
 	}
@@ -207,6 +217,18 @@ func (e Engine) sandboxOverrideDecision(req Request) contracts.PermissionDecisio
 		return decision(contracts.PermissionDeny, req, "sandbox override requires confirmation", "")
 	}
 	return decision(contracts.PermissionAsk, req, "sandbox override requires confirmation", "")
+}
+
+func sandboxAllowUnsandboxedCommands(sandbox map[string]any) (bool, bool) {
+	if sandbox == nil {
+		return false, false
+	}
+	value, ok := sandbox["allowUnsandboxedCommands"]
+	if !ok {
+		return false, false
+	}
+	allow, ok := value.(bool)
+	return allow, ok
 }
 
 func (e Engine) pathDecision(req Request) (contracts.PermissionDecision, bool) {

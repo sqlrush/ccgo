@@ -36,6 +36,9 @@ func TestLoadSettingsFileWithWarningsFiltersInvalidPermissionRules(t *testing.T)
 			"deny": ["WebFetch(https://example.com)"],
 			"defaultMode": "bad-mode",
 			"disableBypassPermissionsMode": true
+		},
+		"sandbox": {
+			"allowUnsandboxedCommands": "no"
 		}
 	}`), 0o644); err != nil {
 		t.Fatal(err)
@@ -50,14 +53,14 @@ func TestLoadSettingsFileWithWarningsFiltersInvalidPermissionRules(t *testing.T)
 	if len(settings.Permissions.Deny) != 0 {
 		t.Fatalf("deny = %#v", settings.Permissions.Deny)
 	}
-	if len(warnings) != 5 {
+	if len(warnings) != 6 {
 		t.Fatalf("warnings = %#v", warnings)
 	}
 	paths := map[string]int{}
 	for _, warning := range warnings {
 		paths[warning.Path]++
 	}
-	if paths["permissions.allow"] != 2 || paths["permissions.deny"] != 1 || paths["permissions.defaultMode"] != 1 || paths["permissions.disableBypassPermissionsMode"] != 1 {
+	if paths["permissions.allow"] != 2 || paths["permissions.deny"] != 1 || paths["permissions.defaultMode"] != 1 || paths["permissions.disableBypassPermissionsMode"] != 1 || paths["sandbox.allowUnsandboxedCommands"] != 1 {
 		t.Fatalf("warning paths = %#v warnings=%#v", paths, warnings)
 	}
 }
@@ -87,6 +90,16 @@ func TestMergeSettings(t *testing.T) {
 	}
 	if len(merged.Permissions.Allow) != 1 || len(merged.Permissions.Deny) != 1 {
 		t.Fatalf("permissions = %#v", merged.Permissions)
+	}
+}
+
+func TestMergeSettingsPreservesSandboxSettings(t *testing.T) {
+	merged := MergeSettings(
+		contracts.Settings{Sandbox: map[string]any{"enabled": true, "allowUnsandboxedCommands": true}},
+		contracts.Settings{Sandbox: map[string]any{"allowUnsandboxedCommands": false}},
+	)
+	if merged.Sandbox["enabled"] != true || merged.Sandbox["allowUnsandboxedCommands"] != false {
+		t.Fatalf("sandbox = %#v", merged.Sandbox)
 	}
 }
 

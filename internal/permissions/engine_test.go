@@ -127,6 +127,53 @@ func TestSandboxOverrideRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestSandboxAllowUnsandboxedCommandsSettingControlsOverride(t *testing.T) {
+	disallow := false
+	engine := NewEngine(contracts.PermissionContext{
+		Mode:                     contracts.PermissionBypassPermissions,
+		BypassAvailable:          true,
+		AllowUnsandboxedCommands: &disallow,
+	})
+	got := engine.Decide(Request{
+		ToolName:                  "Bash",
+		Command:                   "git status --short",
+		ReadOnly:                  true,
+		DangerouslyDisableSandbox: true,
+	})
+	if got.Behavior != contracts.PermissionDeny || !strings.Contains(got.Message, "allowUnsandboxedCommands") {
+		t.Fatalf("decision = %#v", got)
+	}
+}
+
+func TestNewEngineFromSettingsSourcesMergesSandboxAllowUnsandboxedCommands(t *testing.T) {
+	engine, err := NewEngineFromSettingsSources(false,
+		SettingsSource{
+			Source:  contracts.PermissionSourcePolicySettings,
+			Sandbox: map[string]any{"allowUnsandboxedCommands": true},
+		},
+		SettingsSource{
+			Source:  contracts.PermissionSourceUserSettings,
+			Sandbox: map[string]any{"allowUnsandboxedCommands": false},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := engine.Context().AllowUnsandboxedCommands
+	if value == nil || *value {
+		t.Fatalf("allow unsandboxed commands = %#v", value)
+	}
+	got := engine.Decide(Request{
+		ToolName:                  "Bash",
+		Command:                   "git status --short",
+		ReadOnly:                  true,
+		DangerouslyDisableSandbox: true,
+	})
+	if got.Behavior != contracts.PermissionDeny {
+		t.Fatalf("decision = %#v", got)
+	}
+}
+
 func TestEnginePathSafetyRunsBeforeAllowRules(t *testing.T) {
 	root := t.TempDir()
 	engine := NewEngine(contracts.PermissionContext{Mode: contracts.PermissionAcceptEdits},

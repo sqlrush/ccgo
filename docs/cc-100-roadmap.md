@@ -48,6 +48,8 @@ M5 补充：Bash/PowerShell 现在接受官方 `dangerouslyDisableSandbox` seman
 
 M5 补充：Bash/PowerShell 的 `dangerouslyDisableSandbox` 现在会进入权限引擎；除可用的 `bypassPermissions` 模式外，sandbox override 会要求确认，`dontAsk` 模式下会拒绝，避免显式 allow rule 或 read-only 分类静默放行 sandbox override。
 
+M5 补充：settings 中的 `sandbox.allowUnsandboxedCommands` 现在会进入 permission context；该值为 `false` 时会拒绝 `dangerouslyDisableSandbox`，即使处于 `bypassPermissions` 模式也不会放行，同时 settings validation 会标记该 sandbox 布尔字段的非 bool 值。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

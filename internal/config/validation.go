@@ -113,6 +113,9 @@ func ValidateSettings(settings contracts.Settings, filePath string) []Validation
 	if settings.Permissions != nil {
 		errors = append(errors, validatePermissionsSetting(*settings.Permissions, filePath)...)
 	}
+	if settings.Sandbox != nil {
+		errors = append(errors, validateSandboxSetting(settings.Sandbox, filePath)...)
+	}
 	if settings.CleanupPeriodDays != nil && *settings.CleanupPeriodDays < 0 {
 		errors = append(errors, ValidationError{
 			File:         filePath,
@@ -121,6 +124,26 @@ func ValidateSettings(settings contracts.Settings, filePath string) []Validation
 			Expected:     ">= 0",
 			InvalidValue: *settings.CleanupPeriodDays,
 		})
+	}
+	return errors
+}
+
+func validateSandboxSetting(setting map[string]any, filePath string) []ValidationError {
+	var errors []ValidationError
+	for _, key := range []string{"enabled", "failIfUnavailable", "autoAllowBashIfSandboxed", "allowUnsandboxedCommands", "enableWeakerNestedSandbox", "enableWeakerNetworkIsolation"} {
+		value, ok := setting[key]
+		if !ok {
+			continue
+		}
+		if _, ok := value.(bool); !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "sandbox." + key,
+				Message:      "Invalid value. Expected boolean",
+				Expected:     "boolean",
+				InvalidValue: value,
+			})
+		}
 	}
 	return errors
 }
