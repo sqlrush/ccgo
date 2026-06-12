@@ -612,7 +612,10 @@ func normalizeWebFetchText(text string) string {
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
-var htmlWebFetchAttrRe = regexp.MustCompile("(?is)\\b([a-z_:][a-z0-9_:.:-]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))")
+var (
+	htmlWebFetchAttrRe    = regexp.MustCompile("(?is)\\b([a-z_:][a-z0-9_:.:-]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))")
+	htmlWebFetchMetaTagRe = regexp.MustCompile(`(?is)<meta\b([^>]*)>`)
+)
 
 func webFetchPromptTerms(prompt string) []string {
 	words := webFetchPromptWords(prompt)
@@ -818,6 +821,9 @@ func decodeWebFetchText(contentType string, data []byte) (string, string) {
 	if text, detected, ok := decodeWebFetchTextBOM(data); ok {
 		return text, detected
 	}
+	if declared == "" {
+		declared = webFetchMetaCharset(contentType, data)
+	}
 	charset := normalizeWebFetchCharset(declared)
 	switch charset {
 	case "", "utf-8", "us-ascii":
@@ -856,6 +862,33 @@ func webFetchContentCharset(contentType string) string {
 		return ""
 	}
 	return params["charset"]
+}
+
+func webFetchMetaCharset(contentType string, data []byte) string {
+	if !isHTMLWebFetchContent(contentType, string(data[:min(len(data), 4096)])) {
+		return ""
+	}
+	prefix := string(data)
+	if len(prefix) > 4096 {
+		prefix = prefix[:4096]
+	}
+	for _, match := range htmlWebFetchMetaTagRe.FindAllStringSubmatch(prefix, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		rawTag := match[1]
+		if charset := htmlWebFetchAttr(rawTag, "charset"); charset != "" {
+			return charset
+		}
+		content := htmlWebFetchAttr(rawTag, "content")
+		if content == "" {
+			continue
+		}
+		if _, params, err := mime.ParseMediaType(content); err == nil && params["charset"] != "" {
+			return params["charset"]
+		}
+	}
+	return ""
 }
 
 func normalizeWebFetchCharset(charset string) string {

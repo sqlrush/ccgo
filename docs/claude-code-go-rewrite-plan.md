@@ -177,7 +177,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch HEAD preflight 现在记录 `Content-Disposition`，并会通过 attachment filename 的常见二进制扩展名（如 PDF/image/archive/office/media）跳过 GET，覆盖服务端缺失 `Content-Type` 但通过下载文件名暴露类型的二进制响应。
 - 本轮补充：WebFetch HTML-to-text rendering 现在会保留 anchor `href` 作为链接上下文，并把 `img` 的 `alt`/`title`/`aria-label` 和 `src` 渲染成可见图片说明；prompt-focused excerpt 可以命中图片说明文本，同时避免重复 URL 链接文本和 `javascript:` href。
 - 本轮补充：WebFetch GET 会记录 redirect 后的 `final_url`，HTML rendering 会按 final URL 解析相对 anchor/image URL，确保重定向页面中的相对链接和图片说明指向浏览器实际可见的目标地址。
-- 本轮补充：WebFetch 文本 body 现在会按 BOM 或 `Content-Type` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
+- 本轮补充：WebFetch 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。
 - 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。

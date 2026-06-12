@@ -81,6 +81,12 @@ func TestWebFetchDecodesTextCharsets(t *testing.T) {
 		case "/windows1252":
 			w.Header().Set("Content-Type", "text/plain; charset=windows-1252")
 			_, _ = w.Write([]byte{'P', 'r', 'i', 'c', 'e', ' ', 0x80, '9', ' ', 0x93, 'q', 'u', 'o', 't', 'e', 'd', 0x94})
+		case "/meta-windows1252":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<!doctype html><html><head><meta charset=\"windows-1252\"></head><body><p>Price \x809 \x93quoted\x94</p></body></html>"))
+		case "/meta-http-equiv-latin1":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\"></head><body><p>Caf\xe9</p></body></html>"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -109,6 +115,28 @@ func TestWebFetchDecodesTextCharsets(t *testing.T) {
 	want := "Price \u20ac9 \u201cquoted\u201d"
 	if cp1252Result.StructuredContent["body"] != want || cp1252Result.StructuredContent["charset"] != "windows-1252" {
 		t.Fatalf("windows-1252 structured content = %#v", cp1252Result.StructuredContent)
+	}
+	metaCP1252Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_meta_cp1252",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/meta-windows1252") + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metaCP1252Result.StructuredContent["charset"] != "windows-1252" || !strings.Contains(metaCP1252Result.StructuredContent["rendered_body"].(string), want) {
+		t.Fatalf("meta windows-1252 structured content = %#v", metaCP1252Result.StructuredContent)
+	}
+	metaLatin1Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_meta_latin1",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/meta-http-equiv-latin1") + `}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metaLatin1Result.StructuredContent["charset"] != "iso-8859-1" || !strings.Contains(metaLatin1Result.StructuredContent["rendered_body"].(string), "Caf\u00e9") {
+		t.Fatalf("meta latin1 structured content = %#v", metaLatin1Result.StructuredContent)
 	}
 }
 
