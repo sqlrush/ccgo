@@ -122,12 +122,26 @@ type PermissionsSetting struct {
 }
 
 type MCPServer struct {
-	Type    string            `json:"type,omitempty"`
-	Command string            `json:"command,omitempty"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	URL     string            `json:"url,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Name    string            `json:"name,omitempty"`
-	Scope   string            `json:"scope,omitempty"`
+	Type                string            `json:"type,omitempty"`
+	Command             string            `json:"command,omitempty"`
+	Args                []string          `json:"args,omitempty"`
+	Env                 map[string]string `json:"env,omitempty"`
+	URL                 string            `json:"url,omitempty"`
+	Headers             map[string]string `json:"headers,omitempty"`
+	HeadersHelper       string            `json:"headersHelper,omitempty"`
+	OAuth               *MCPOAuthConfig   `json:"oauth,omitempty"`
+	Name                string            `json:"name,omitempty"`
+	ID                  string            `json:"id,omitempty"`
+	IDEName             string            `json:"ideName,omitempty"`
+	AuthToken           string            `json:"authToken,omitempty"`
+	IDERunningInWindows *bool             `json:"ideRunningInWindows,omitempty"`
+	Scope               string            `json:"scope,omitempty"`
+	PluginSource        string            `json:"pluginSource,omitempty"`
+}
+
+type MCPOAuthConfig struct {
+	ClientID              string `json:"clientId,omitempty"`
+	CallbackPort          *int   `json:"callbackPort,omitempty"`
+	AuthServerMetadataURL string `json:"authServerMetadataUrl,omitempty"`
+	XAA                   *bool  `json:"xaa,omitempty"`
 }

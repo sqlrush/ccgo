@@ -1203,7 +1203,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - elicitation、channel notifications、session-expired。
 - 内置工具 MCP server。
 
-当前状态：`cmd/claude-mcp` 仍是占位；已新增 `internal/mcp` 配置地基，覆盖 transport 归一化、stdio/url server signature、CCR proxy URL 解包、plugin MCP server 去重、allowed/denied MCP policy 的基础判定和过滤、MCP server config 环境变量展开，以及 server scope/merge 基础。真实 transport 连接、list/call/read、OAuth、通知和内置 MCP server 仍未完成。
+当前状态：`cmd/claude-mcp` 仍是占位；已新增 `internal/mcp` 配置地基，覆盖 transport 归一化、stdio/url server signature、CCR proxy URL 解包、plugin MCP server 去重、allowed/denied MCP policy 的基础判定和过滤、MCP server config 环境变量展开、server scope/merge 基础，以及 `.mcp.json` schema 解析/校验基础。真实 transport 连接、list/call/read、OAuth、通知和内置 MCP server 仍未完成。
 
 ### M10: Agents, Tasks, Worktree, Remote
 

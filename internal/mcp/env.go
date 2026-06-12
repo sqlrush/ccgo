@@ -93,6 +93,22 @@ func cloneMCPServer(server contracts.MCPServer) contracts.MCPServer {
 	out.Args = append([]string(nil), server.Args...)
 	out.Env = cloneStringMap(server.Env)
 	out.Headers = cloneStringMap(server.Headers)
+	if server.OAuth != nil {
+		oauth := *server.OAuth
+		if server.OAuth.CallbackPort != nil {
+			callbackPort := *server.OAuth.CallbackPort
+			oauth.CallbackPort = &callbackPort
+		}
+		if server.OAuth.XAA != nil {
+			xaa := *server.OAuth.XAA
+			oauth.XAA = &xaa
+		}
+		out.OAuth = &oauth
+	}
+	if server.IDERunningInWindows != nil {
+		ideRunningInWindows := *server.IDERunningInWindows
+		out.IDERunningInWindows = &ideRunningInWindows
+	}
 	return out
 }
 
