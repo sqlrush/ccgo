@@ -521,6 +521,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`WebFetch` HEAD preflight 现在记录 `Content-Disposition`，并会按 attachment filename 的常见二进制扩展名（PDF/image/archive/office/media 等）跳过 GET，覆盖服务端未给 `Content-Type` 但通过下载文件名暴露类型的二进制响应。
 
+本轮补充：`WebSearch` JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见搜索后端 wrapper，并继续保留 URL 去重和 allowed/blocked domain filter。
+
 本轮补充：`Bash` 和 `PowerShell` read-only 分类现在会拒绝 tokenizer 视角未闭合的 quote 以及末尾 escape/line-continuation 命令，避免不完整 shell input 被误判为只读。
 
 本轮补充：`Bash`/`PowerShell` 轻量 tokenizer 的 escape 处理现在尊重 single-quoted literal 语义，Bash 单引号内 `\` 和 PowerShell 单引号内 backtick 不再被当作 escape，从而减少合法只读命令的误拒绝。

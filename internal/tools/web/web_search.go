@@ -249,7 +249,11 @@ func collectJSONSearchResults(value any, base *url.URL, results *[]searchResult,
 				*results = append(*results, result)
 			}
 		}
-		for _, key := range []string{"results", "organic_results", "organicResults", "items", "value", "data", "webPages", "web_pages"} {
+		for _, key := range []string{
+			"results", "organic_results", "organicResults", "items", "value", "data",
+			"webPages", "web_pages", "web", "response", "search",
+			"hits", "documents", "records", "entries",
+		} {
 			if child, ok := typed[key]; ok {
 				collectJSONSearchResults(child, base, results, seen)
 			}

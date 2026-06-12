@@ -124,6 +124,53 @@ func TestWebSearchParsesJSONResults(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesNestedJSONResultWrappers(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"web": {
+				"results": [
+					{"title": "Web Result", "url": "https://example.com/web", "snippet": "web snippet"}
+				]
+			},
+			"response": {
+				"documents": [
+					{"headline": "Document Result", "href": "https://docs.example.com/doc", "text": "document text"}
+				]
+			},
+			"hits": [
+				{"title": "Duplicate Web", "url": "https://example.com/web", "snippet": "duplicate"},
+				{"name": "Hit Result", "link": "https://example.com/hit", "content": "hit content"}
+			]
+		}`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL,
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_nested_json",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"nested json","allowed_domains":["example.com"],"max_results":5}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 3 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["title"] != "Web Result" || results[1]["title"] != "Document Result" || results[2]["title"] != "Hit Result" {
+		t.Fatalf("results = %#v", results)
+	}
+	if results[1]["snippet"] != "document text" || results[2]["snippet"] != "hit content" {
+		t.Fatalf("snippets = %#v", results)
+	}
+}
+
 func TestWebSearchBlockedDomainsAndNoResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
