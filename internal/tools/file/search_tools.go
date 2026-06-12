@@ -15,8 +15,11 @@ import (
 
 const defaultSearchLimit = 100
 const defaultGrepHeadLimit = 250
+const grepMaxColumns = 500
 const fileNotFoundCWDNote = "Note: your current working directory is"
 const globTruncatedMessage = "(Results are truncated. Consider using a more specific path or pattern.)"
+const grepOmittedLongMatchingLine = "[Omitted long matching line]"
+const grepOmittedLongContextLine = "[Omitted long context line]"
 
 var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
@@ -625,9 +628,19 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 		if !included[i] {
 			continue
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: lines[i], Matched: matched[i]})
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: grepDisplayLine(lines[i], matched[i]), Matched: matched[i]})
 	}
 	return matches
+}
+
+func grepDisplayLine(line string, matched bool) string {
+	if len(line) < grepMaxColumns {
+		return line
+	}
+	if matched {
+		return grepOmittedLongMatchingLine
+	}
+	return grepOmittedLongContextLine
 }
 
 func markLineMatches(lines []string, expr *regexp.Regexp, maxCount int, beforeContext int, afterContext int, matched map[int]bool, included map[int]bool) {

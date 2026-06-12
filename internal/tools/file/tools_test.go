@@ -1376,6 +1376,54 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	}
 }
 
+func TestGrepToolMaxColumnsOmission(t *testing.T) {
+	dir := t.TempDir()
+	longMatch := strings.Repeat("x", grepMaxColumns-len("Needle")) + "Needle"
+	longContext := strings.Repeat("c", grepMaxColumns)
+	if err := os.WriteFile(filepath.Join(dir, "long.txt"), []byte(longMatch+"\n"+longContext+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_columns_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","after_context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "long.txt:1:[Omitted long matching line]\nlong.txt-2-[Omitted long context line]"
+	if contentResult.Content != wantContent {
+		t.Fatalf("max-columns content = %#v", contentResult.Content)
+	}
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_columns_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesResult.Content != "Found 1 file\nlong.txt" {
+		t.Fatalf("max-columns files = %#v", filesResult.Content)
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_columns_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if countResult.Content != "long.txt:1\n\nFound 1 total occurrence across 1 file." {
+		t.Fatalf("max-columns count = %#v", countResult.Content)
+	}
+}
+
 func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "mixed.txt"), []byte("Alpha\n"), 0o644); err != nil {
