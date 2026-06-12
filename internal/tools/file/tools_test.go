@@ -1947,6 +1947,7 @@ func TestGlobAndGrepRespectReadDenyPermissionRules(t *testing.T) {
 	files := map[string]string{
 		"public.txt":      "Needle visible\n",
 		"secret.txt":      "Needle hidden by basename deny\n",
+		"runtime.txt":     "Needle hidden by runtime deny\n",
 		"sub/secret.txt":  "Needle hidden by basename deny in subdir\n",
 		"blocked/hit.txt": "Needle hidden by directory deny\n",
 	}
@@ -1970,11 +1971,12 @@ func TestGlobAndGrepRespectReadDenyPermissionRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	engine.AddRule(permissions.MustParseRule(contracts.PermissionSourceSession, contracts.PermissionDeny, "Read(runtime.txt)"))
 	executor := fileExecutor(t)
 	ctx := fileToolContext(dir)
 	ctx.Permissions = tool.NewEnginePermissionDecider(engine)
 	extraIgnores := readDenySearchIgnoreRules(ctx, dir)
-	if len(extraIgnores) != 2 {
+	if len(extraIgnores) != 3 {
 		t.Fatalf("read deny extra ignores = %#v", extraIgnores)
 	}
 

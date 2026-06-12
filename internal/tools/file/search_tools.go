@@ -1120,33 +1120,30 @@ func grepWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 }
 
 func readDenySearchIgnoreRules(ctx tool.Context, root string) searchIgnoreRules {
-	permissionContext, ok := permissionContextFromToolContext(ctx)
+	engine, ok := permissionEngineFromToolContext(ctx)
 	if !ok {
 		return nil
 	}
 	var rules searchIgnoreRules
-	for _, rawRules := range permissionContext.AlwaysDenyRules {
-		for _, raw := range rawRules {
-			value := permissions.PermissionRuleValueFromString(raw)
-			if value.ToolName != "Read" {
-				continue
-			}
-			rules = append(rules, searchIgnoreRulesForReadDeny(value.RuleContent, ctx.WorkingDirectory, root)...)
+	for _, rule := range engine.Rules() {
+		if rule.Behavior != contracts.PermissionDeny || rule.ToolName != "Read" {
+			continue
 		}
+		rules = append(rules, searchIgnoreRulesForReadDeny(rule.Pattern, ctx.WorkingDirectory, root)...)
 	}
 	return rules
 }
 
-func permissionContextFromToolContext(ctx tool.Context) (contracts.PermissionContext, bool) {
+func permissionEngineFromToolContext(ctx tool.Context) (permissions.Engine, bool) {
 	switch decider := ctx.Permissions.(type) {
 	case tool.EnginePermissionDecider:
-		return decider.Engine.Context(), true
+		return decider.Engine, true
 	case *tool.EnginePermissionDecider:
 		if decider != nil {
-			return decider.Engine.Context(), true
+			return decider.Engine, true
 		}
 	}
-	return contracts.PermissionContext{}, false
+	return permissions.Engine{}, false
 }
 
 func searchIgnoreRulesForReadDeny(pattern string, cwd string, root string) searchIgnoreRules {
