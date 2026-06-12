@@ -1324,7 +1324,7 @@ func bashDestructiveInput(raw json.RawMessage) bool {
 
 func IsReadOnlyCommand(command string) bool {
 	command = strings.TrimSpace(command)
-	if command == "" || hasShellMutationSyntax(command) || IsDestructiveCommand(command) {
+	if command == "" || !shellSyntaxComplete(command) || hasShellMutationSyntax(command) || IsDestructiveCommand(command) {
 		return false
 	}
 	segments := splitCommandSegments(command)
@@ -1397,6 +1397,32 @@ func hasShellMutationSyntax(command string) bool {
 		}
 	}
 	return false
+}
+
+func shellSyntaxComplete(command string) bool {
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+	}
+	return !inSingle && !inDouble && !escaped
 }
 
 func splitCommandSegments(command string) []string {

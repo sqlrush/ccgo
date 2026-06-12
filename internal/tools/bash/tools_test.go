@@ -243,6 +243,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"git shortlog --output=/tmp/shortlog HEAD",
 		"git config --set user.name bot",
 		"git config --get --blob HEAD:.gitconfig user.name",
+		"cat 'README.md",
+		"git status --short \"",
+		"printf hello \\",
+		"cat 'README.md; rm -rf build",
 		"ls && echo hi > out.txt",
 	}
 	for _, command := range notReadOnly {
