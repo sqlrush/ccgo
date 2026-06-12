@@ -139,6 +139,54 @@ func TestWebFetchRendersHTMLAndPromptExcerpt(t *testing.T) {
 	}
 }
 
+func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <main>
+    <p>Read the <a href="/docs/setup">setup guide</a> before deployment.</p>
+    <p>External reference: <a href="https://example.com/reference">https://example.com/reference</a>.</p>
+    <img alt="Architecture diagram" src="/assets/diagram.png">
+    <img title="Release checklist" src="/assets/checklist.png">
+    <a href="javascript:alert(1)">ignored script link</a>
+  </main>
+</body>
+</html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_html_links",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"architecture diagram"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	if !strings.Contains(rendered, "setup guide (/docs/setup)") {
+		t.Fatalf("rendered body missing link href: %#v", rendered)
+	}
+	if strings.Count(rendered, "https://example.com/reference") != 1 {
+		t.Fatalf("rendered body should not duplicate URL link text: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Architecture diagram (/assets/diagram.png)") || !strings.Contains(rendered, "Image: Release checklist (/assets/checklist.png)") {
+		t.Fatalf("rendered body missing image text: %#v", rendered)
+	}
+	if strings.Contains(rendered, "javascript:alert") {
+		t.Fatalf("rendered body kept unsafe href: %#v", rendered)
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "Image: Architecture diagram") {
+		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
 func TestWebFetchPromptPhraseScoring(t *testing.T) {
 	terms := webFetchPromptTerms("release candidate")
 	phrases := webFetchPromptPhrases("release candidate")

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -418,6 +419,7 @@ func findHTMLWebFetchBlockStart(lower string, name string) int {
 
 func stripHTMLWebFetchTags(body string) string {
 	var b strings.Builder
+	var anchors []htmlWebFetchAnchor
 	for i := 0; i < len(body); {
 		if strings.HasPrefix(body[i:], "<!--") {
 			if end := strings.Index(body[i+4:], "-->"); end >= 0 {
@@ -437,7 +439,19 @@ func stripHTMLWebFetchTags(body string) string {
 			i++
 			continue
 		}
-		tag := htmlWebFetchTagName(body[i+1 : i+end])
+		rawTag := body[i+1 : i+end]
+		tag, closing := htmlWebFetchTagInfo(rawTag)
+		if tag == "a" {
+			if closing {
+				anchors, _ = appendHTMLWebFetchAnchorHref(&b, anchors)
+			} else {
+				href := strings.TrimSpace(htmlWebFetchAttr(rawTag, "href"))
+				anchors = append(anchors, htmlWebFetchAnchor{Href: href, Start: b.Len()})
+			}
+		}
+		if tag == "img" && !closing {
+			appendHTMLWebFetchImageText(&b, rawTag)
+		}
 		if tag == "br" || isBlockHTMLWebFetchTag(tag) {
 			b.WriteByte('\n')
 		}
@@ -446,18 +460,92 @@ func stripHTMLWebFetchTags(body string) string {
 	return b.String()
 }
 
-func htmlWebFetchTagName(raw string) string {
+type htmlWebFetchAnchor struct {
+	Href  string
+	Start int
+}
+
+func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnchor) ([]htmlWebFetchAnchor, bool) {
+	if len(anchors) == 0 {
+		return anchors, false
+	}
+	anchor := anchors[len(anchors)-1]
+	anchors = anchors[:len(anchors)-1]
+	href := strings.TrimSpace(anchor.Href)
+	if href == "" || strings.HasPrefix(href, "#") || strings.HasPrefix(strings.ToLower(href), "javascript:") {
+		return anchors, false
+	}
+	text := ""
+	current := b.String()
+	if anchor.Start >= 0 && anchor.Start <= len(current) {
+		text = strings.Join(strings.Fields(current[anchor.Start:]), " ")
+	}
+	if text != "" && (text == href || strings.Contains(text, href)) {
+		return anchors, false
+	}
+	if b.Len() > 0 {
+		b.WriteByte(' ')
+	}
+	b.WriteByte('(')
+	b.WriteString(href)
+	b.WriteByte(')')
+	return anchors, true
+}
+
+func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string) {
+	label := firstNonEmptyWebFetchAttr(rawTag, "alt", "title", "aria-label")
+	src := strings.TrimSpace(htmlWebFetchAttr(rawTag, "src"))
+	if label == "" {
+		return
+	}
+	b.WriteString("\nImage: ")
+	b.WriteString(label)
+	if src != "" {
+		b.WriteString(" (")
+		b.WriteString(src)
+		b.WriteByte(')')
+	}
+	b.WriteByte('\n')
+}
+
+func firstNonEmptyWebFetchAttr(rawTag string, names ...string) string {
+	for _, name := range names {
+		value := strings.TrimSpace(htmlWebFetchAttr(rawTag, name))
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func htmlWebFetchAttr(rawTag string, name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, match := range htmlWebFetchAttrRe.FindAllStringSubmatch(rawTag, -1) {
+		if len(match) < 5 || strings.ToLower(match[1]) != name {
+			continue
+		}
+		for _, value := range match[2:] {
+			if value != "" {
+				return html.UnescapeString(value)
+			}
+		}
+	}
+	return ""
+}
+
+func htmlWebFetchTagInfo(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
+	closing := strings.HasPrefix(raw, "/")
 	raw = strings.TrimLeft(raw, "/!?")
 	if raw == "" {
-		return ""
+		return "", closing
 	}
 	for idx, r := range raw {
 		if unicode.IsSpace(r) || r == '/' || r == '>' {
-			return strings.ToLower(raw[:idx])
+			return strings.ToLower(raw[:idx]), closing
 		}
 	}
-	return strings.ToLower(raw)
+	return strings.ToLower(raw), closing
 }
 
 func isBlockHTMLWebFetchTag(name string) bool {
@@ -492,6 +580,8 @@ func normalizeWebFetchText(text string) string {
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
+
+var htmlWebFetchAttrRe = regexp.MustCompile("(?is)\\b([a-z_:][a-z0-9_:.:-]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))")
 
 func webFetchPromptTerms(prompt string) []string {
 	words := webFetchPromptWords(prompt)
