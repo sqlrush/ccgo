@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 const (
 	defaultTimeoutMillis = 120_000
 	maxTimeoutMillis     = 600_000
+	blockedSleepGuidance = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. For streaming events, use the Monitor tool. If you genuinely need a delay, keep it under 2 seconds."
 )
 
 var powerShellSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
@@ -168,6 +170,11 @@ func validatePowerShell(_ tool.Context, raw json.RawMessage) error {
 		}
 		if *input.Timeout > maxTimeoutMillis {
 			return fmt.Errorf("timeout must be at most %d milliseconds", maxTimeoutMillis)
+		}
+	}
+	if !input.runInBackground() {
+		if sleepPattern := detectBlockedPowerShellSleepPattern(input.Command); sleepPattern != "" {
+			return fmt.Errorf("Blocked: %s. %s", sleepPattern, blockedSleepGuidance)
 		}
 	}
 	return nil
@@ -694,6 +701,56 @@ func (input powerShellInput) runInBackground() bool {
 		return input.RunInBackgroundAlt
 	}
 	return false
+}
+
+func detectBlockedPowerShellSleepPattern(command string) string {
+	segments := splitPowerShellSegments(command)
+	if len(segments) == 0 {
+		return ""
+	}
+	words := powerShellWords(segments[0])
+	if len(words) == 0 {
+		return ""
+	}
+	name := canonicalCommand(words[0])
+	secondsArg := ""
+	switch {
+	case name == "start-sleep" && len(words) == 2:
+		secondsArg = words[1]
+	case name == "start-sleep" && len(words) == 3 && isPowerShellSecondsFlag(words[1]):
+		secondsArg = words[2]
+	default:
+		return ""
+	}
+	if !isUnsignedPowerShellInteger(secondsArg) {
+		return ""
+	}
+	seconds, err := strconv.Atoi(secondsArg)
+	if err != nil || seconds < 2 {
+		return ""
+	}
+	rest := strings.TrimSpace(strings.Join(segments[1:], " "))
+	if rest != "" {
+		return fmt.Sprintf("Start-Sleep %d followed by: %s", seconds, rest)
+	}
+	return fmt.Sprintf("standalone Start-Sleep %d", seconds)
+}
+
+func isPowerShellSecondsFlag(value string) bool {
+	value = strings.ToLower(value)
+	return value == "-s" || value == "-seconds"
+}
+
+func isUnsignedPowerShellInteger(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (input powerShellOutputInput) backgroundID() string {

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +21,7 @@ import (
 const (
 	defaultTimeoutMillis = 120_000
 	maxTimeoutMillis     = 600_000
+	blockedSleepGuidance = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. For streaming events, use the Monitor tool. If you genuinely need a delay, keep it under 2 seconds."
 )
 
 var bashSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
@@ -872,6 +874,11 @@ func validateBash(_ tool.Context, raw json.RawMessage) error {
 			return fmt.Errorf("timeout must be at most %d milliseconds", maxTimeoutMillis)
 		}
 	}
+	if !input.runInBackground() {
+		if sleepPattern := detectBlockedBashSleepPattern(input.Command); sleepPattern != "" {
+			return fmt.Errorf("Blocked: %s. %s", sleepPattern, blockedSleepGuidance)
+		}
+	}
 	return nil
 }
 
@@ -1368,6 +1375,38 @@ func (input bashInput) runInBackground() bool {
 		return input.RunInBackgroundAlt
 	}
 	return false
+}
+
+func detectBlockedBashSleepPattern(command string) string {
+	segments := splitCommandSegments(command)
+	if len(segments) == 0 {
+		return ""
+	}
+	words := shellWords(segments[0])
+	if len(words) != 2 || words[0] != "sleep" || !isUnsignedInteger(words[1]) {
+		return ""
+	}
+	seconds, err := strconv.Atoi(words[1])
+	if err != nil || seconds < 2 {
+		return ""
+	}
+	rest := strings.TrimSpace(strings.Join(segments[1:], " "))
+	if rest != "" {
+		return fmt.Sprintf("sleep %d followed by: %s", seconds, rest)
+	}
+	return fmt.Sprintf("standalone sleep %d", seconds)
+}
+
+func isUnsignedInteger(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (input bashOutputInput) backgroundID() string {

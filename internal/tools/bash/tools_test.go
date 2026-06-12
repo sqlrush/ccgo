@@ -154,6 +154,8 @@ func TestBashValidation(t *testing.T) {
 		{name: "empty command", input: `{"command":"  "}`, want: "command is required"},
 		{name: "invalid timeout", input: `{"command":"pwd","timeout":0}`, want: "timeout must be positive"},
 		{name: "unknown field", input: `{"command":"pwd","extra":true}`, want: "input.extra is not allowed"},
+		{name: "standalone long sleep", input: `{"command":"sleep 2"}`, want: "Blocked: standalone sleep 2"},
+		{name: "leading long sleep", input: `{"command":"sleep 2 && echo done"}`, want: "Blocked: sleep 2 followed by: echo done"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

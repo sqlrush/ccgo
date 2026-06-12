@@ -34,6 +34,8 @@ func TestPowerShellValidation(t *testing.T) {
 		{name: "empty command", input: `{"command":"  "}`, want: "command is required"},
 		{name: "invalid timeout", input: `{"command":"Get-Location","timeout":0}`, want: "timeout must be positive"},
 		{name: "unknown field", input: `{"command":"Get-Location","extra":true}`, want: "input.extra is not allowed"},
+		{name: "standalone long sleep", input: `{"command":"Start-Sleep -Seconds 2"}`, want: "Blocked: standalone Start-Sleep 2"},
+		{name: "leading long sleep alias", input: `{"command":"sleep 2; Get-Process"}`, want: "Blocked: Start-Sleep 2 followed by: Get-Process"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
