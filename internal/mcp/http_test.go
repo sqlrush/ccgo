@@ -64,8 +64,11 @@ func TestOpenServerClientSupportsHTTPTransport(t *testing.T) {
 	if len(tools) != 1 || tools[0].Name != "ping" || !tools[0].ReadOnly {
 		t.Fatalf("tools = %#v", tools)
 	}
-	if handle.Close != nil {
-		t.Fatalf("http close should be nil")
+	if handle.Close == nil {
+		t.Fatalf("http close should be configured")
+	}
+	if err := handle.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -141,6 +144,37 @@ func TestHTTPTransportStoresAndSendsSessionID(t *testing.T) {
 	}
 	if _, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestHTTPTransportCloseDeletesSession(t *testing.T) {
+	var deleted bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("mcp-session-id", "session-close")
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"tools":[]}}`))
+		case http.MethodDelete:
+			if got := r.Header.Get("mcp-session-id"); got != "session-close" {
+				t.Fatalf("delete session header = %q", got)
+			}
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("method = %s", r.Method)
+		}
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.URL, map[string]string{"X-Test": "yes"}, server.Client())
+	if _, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := transport.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("expected delete request")
 	}
 }
 

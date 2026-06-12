@@ -49,21 +49,10 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{}, err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("accept", "application/json, text/event-stream")
-	if t.ProtocolVersionHeader != "" {
-		req.Header.Set("mcp-protocol-version", t.ProtocolVersionHeader)
-	}
 	t.mu.Lock()
 	sessionID := t.SessionID
 	t.mu.Unlock()
-	if sessionID != "" {
-		req.Header.Set("mcp-session-id", sessionID)
-	}
-	for key, value := range t.Headers {
-		if strings.TrimSpace(key) != "" {
-			req.Header.Set(key, value)
-		}
-	}
+	t.applyHeaders(req, sessionID)
 
 	client := t.Client
 	if client == nil {
@@ -105,6 +94,56 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{}, fmt.Errorf("decode mcp http response: %w", err)
 	}
 	return rpcResponse, nil
+}
+
+func (t *HTTPTransport) Close() error {
+	if t == nil || t.URL == "" {
+		return nil
+	}
+	t.mu.Lock()
+	sessionID := t.SessionID
+	t.mu.Unlock()
+	if sessionID == "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, t.URL, nil)
+	if err != nil {
+		return err
+	}
+	t.applyHeaders(req, sessionID)
+	client := t.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		return nil
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
+		return nil
+	default:
+		return fmt.Errorf("mcp http close status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+}
+
+func (t *HTTPTransport) applyHeaders(req *http.Request, sessionID string) {
+	req.Header.Set("accept", "application/json, text/event-stream")
+	if t.ProtocolVersionHeader != "" {
+		req.Header.Set("mcp-protocol-version", t.ProtocolVersionHeader)
+	}
+	if sessionID != "" {
+		req.Header.Set("mcp-session-id", sessionID)
+	}
+	for key, value := range t.Headers {
+		if strings.TrimSpace(key) != "" {
+			req.Header.Set(key, value)
+		}
+	}
 }
 
 type SSEEvent struct {

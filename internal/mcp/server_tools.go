@@ -83,8 +83,10 @@ func OpenServerClient(ctx context.Context, name string, server contracts.MCPServ
 			Close:  transport.Close,
 		}, nil
 	case TransportHTTP:
+		transport := NewHTTPTransport(server.URL, server.Headers, nil)
 		return ClientHandle{
-			Client: NewProtocolClient(NewHTTPTransport(server.URL, server.Headers, nil)),
+			Client: NewProtocolClient(transport),
+			Close:  transport.Close,
 		}, nil
 	default:
 		return ClientHandle{}, fmt.Errorf("mcp server %q transport %q is not supported yet", name, Transport(server))
