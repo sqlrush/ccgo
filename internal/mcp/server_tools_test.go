@@ -138,7 +138,7 @@ func TestBuildServerToolSetClosesClientWhenToolDiscoveryFails(t *testing.T) {
 
 func TestOpenServerClientRejectsUnsupportedTransport(t *testing.T) {
 	_, err := OpenServerClient(context.Background(), "remote", contracts.MCPServer{
-		Type: TransportWS,
+		Type: TransportWSIDE,
 		URL:  "https://example.com/mcp",
 	})
 	if err == nil || !strings.Contains(err.Error(), "not supported yet") {
