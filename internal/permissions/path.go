@@ -39,6 +39,7 @@ type InternalPathContext struct {
 	JobsRoot          string
 	AgentMemoryDir    string
 	AutoMemoryDir     string
+	SkillDirs         []string
 	TasksDir          string
 	TeamsDir          string
 	LaunchConfigPath  string
@@ -224,6 +225,8 @@ func CheckReadableInternalPath(path string, internal InternalPathContext) PathCh
 		return PathCheckResult{Allowed: true, Reason: "agent memory files are allowed for reading", Source: contracts.PermissionSourceSession}
 	case pathInOptionalDir(normalized, internal.AutoMemoryDir):
 		return PathCheckResult{Allowed: true, Reason: "auto memory files are allowed for reading", Source: contracts.PermissionSourceSession}
+	case pathInAnyOptionalDir(normalized, internal.SkillDirs):
+		return PathCheckResult{Allowed: true, Reason: "skill files are allowed for reading", Source: contracts.PermissionSourceSession}
 	case pathInOptionalDir(normalized, internal.TasksDir):
 		return PathCheckResult{Allowed: true, Reason: "task files are allowed for reading", Source: contracts.PermissionSourceSession}
 	case pathInOptionalDir(normalized, internal.TeamsDir):
@@ -395,6 +398,15 @@ func pathInOptionalDir(path string, dir string) bool {
 		return false
 	}
 	return PathInWorkingPath(path, platform.ExpandPath(dir))
+}
+
+func pathInAnyOptionalDir(path string, dirs []string) bool {
+	for _, dir := range dirs {
+		if pathInOptionalDir(path, dir) {
+			return true
+		}
+	}
+	return false
 }
 
 func expandPathForCwd(path string, cwd string) string {

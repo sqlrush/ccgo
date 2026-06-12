@@ -817,6 +817,28 @@ func TestRunnerPassesRelevantMemoryDirToFileTools(t *testing.T) {
 	}
 }
 
+func TestRunnerPassesSkillDirsToToolMetadata(t *testing.T) {
+	memoryDir := filepath.Join(t.TempDir(), "memory")
+	skillDir := filepath.Join(t.TempDir(), "bundled-skill")
+	runner := Runner{
+		RelevantMemoryDir: memoryDir,
+		SkillDirs:         []string{skillDir},
+	}
+
+	internal := tool.InternalPathContextFromMetadata(runner.toolMetadata())
+	if internal.AutoMemoryDir != memoryDir {
+		t.Fatalf("auto memory dir = %q, want %q", internal.AutoMemoryDir, memoryDir)
+	}
+	if len(internal.SkillDirs) != 1 || internal.SkillDirs[0] != skillDir {
+		t.Fatalf("skill dirs = %#v", internal.SkillDirs)
+	}
+	internal.SkillDirs[0] = "mutated"
+	again := tool.InternalPathContextFromMetadata(runner.toolMetadata())
+	if again.SkillDirs[0] != skillDir {
+		t.Fatalf("skill dirs should be copied from runner: %#v", again.SkillDirs)
+	}
+}
+
 func TestRunnerExtractsSessionMemoryAfterTurn(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-memory")
 	client := &fakeClient{calls: []fakeCall{

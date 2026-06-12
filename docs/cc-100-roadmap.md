@@ -52,6 +52,8 @@ M5 补充：settings 中的 `sandbox.allowUnsandboxedCommands` 现在会进入 p
 
 M5 补充：settings 中的 `sandbox.filesystem.allowWrite`/`denyWrite`/`denyRead`/`allowRead` 现在会合并到 permission context 并参与路径权限判定；`denyRead` 可被更窄的 `allowRead` 放行，`denyWrite` 会阻断写入，`allowWrite` 可在危险根路径和敏感文件安全检查之后放行额外写目录，同时修正 request cwd-relative path 展开顺序。
 
+M5/M8 补充：permission internal path context 现在支持 `SkillDirs`，Runner 会把配置的 skill/bundled-skill 目录透传到工具 metadata，使这些目录下的 `SKILL.md` 和资源文件可作为内部路径读取；写入仍不被该 allowlist 放行，完整 skill discovery/activation/SkillTool 仍按 M8 缺口推进。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

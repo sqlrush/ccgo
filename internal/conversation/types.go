@@ -72,6 +72,7 @@ type Runner struct {
 	SessionMemoryRecallLimit  int
 	RelevantMemoryDir         string
 	RelevantMemoryLimit       int
+	SkillDirs                 []string
 	EnableMemoryExtraction    bool
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int

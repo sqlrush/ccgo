@@ -159,9 +159,10 @@ func (t *relevantMemoryPrefetchTask) requestContext(ctx context.Context) (releva
 
 func (r Runner) toolMetadata() map[string]any {
 	metadata := map[string]any{}
-	if r.RelevantMemoryDir != "" {
+	if r.RelevantMemoryDir != "" || len(r.SkillDirs) > 0 {
 		metadata[tool.MetadataInternalPathContextKey] = permissions.InternalPathContext{
 			AutoMemoryDir: r.RelevantMemoryDir,
+			SkillDirs:     append([]string(nil), r.SkillDirs...),
 		}
 	}
 	return metadata

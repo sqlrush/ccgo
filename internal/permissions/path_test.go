@@ -110,15 +110,18 @@ func TestValidatePathBlocksSuspiciousWindowsPatternsOnAllPlatforms(t *testing.T)
 func TestValidatePathAllowsReadableInternalPaths(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "repo")
 	projectDir := filepath.Join(t.TempDir(), "claude-project")
+	skillDir := filepath.Join(t.TempDir(), "bundled-skill")
 	internal := InternalPathContext{
 		ProjectDir:       projectDir,
 		SessionMemoryDir: filepath.Join(projectDir, "sess_1", "session-memory"),
 		ToolResultsDir:   filepath.Join(projectDir, "sess_1", "tool-results"),
+		SkillDirs:        []string{skillDir},
 		TasksDir:         filepath.Join(t.TempDir(), "tasks"),
 	}
 	tests := []string{
 		filepath.Join(internal.SessionMemoryDir, "summary.md"),
 		filepath.Join(internal.ToolResultsDir, "toolu_1.txt"),
+		filepath.Join(skillDir, "SKILL.md"),
 		filepath.Join(internal.TasksDir, "task.json"),
 	}
 	for _, path := range tests {
@@ -126,6 +129,23 @@ func TestValidatePathAllowsReadableInternalPaths(t *testing.T) {
 		if !got.Allowed {
 			t.Fatalf("%s should be internally readable: %#v", path, got)
 		}
+	}
+}
+
+func TestValidatePathOnlyAllowsSkillDirsForReading(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "repo")
+	skillDir := filepath.Join(t.TempDir(), "bundled-skill")
+	path := filepath.Join(skillDir, "assets", "example.md")
+	internal := InternalPathContext{SkillDirs: []string{skillDir}}
+
+	read := ValidatePathWithInternalContext(path, root, FileOperationRead, nil, internal)
+	if !read.Allowed || !strings.Contains(read.Reason, "skill") {
+		t.Fatalf("skill path should be internally readable: %#v", read)
+	}
+
+	write := ValidatePathWithInternalContext(path, root, FileOperationWrite, nil, internal)
+	if write.Allowed {
+		t.Fatalf("skill path should not be internally writable: %#v", write)
 	}
 }
 

@@ -197,6 +197,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash/PowerShell 的 `dangerouslyDisableSandbox` 会传入权限请求，普通/default/auto/plan/acceptEdits 模式要求确认，`dontAsk` 拒绝，只有可用的 `bypassPermissions` 模式会放行；完整 sandbox adapter 仍未宣称完成。
 - 本轮补充：settings `sandbox.allowUnsandboxedCommands` 会合并到 permission context 并约束 `dangerouslyDisableSandbox`；为 `false` 时 sandbox override 直接拒绝，settings validation 会校验相关 sandbox 布尔字段类型。
 - 本轮补充：settings `sandbox.filesystem.allowWrite`/`denyWrite`/`denyRead`/`allowRead` 会合并到 permission context 并参与路径权限判定；`denyRead` 可被更窄的 `allowRead` 覆盖，`denyWrite` 会阻断写入，`allowWrite` 在危险根路径和敏感路径安全检查之后放行额外写目录，同时修正 request cwd-relative path 展开顺序。
+- 本轮补充：permission internal path context 新增 `SkillDirs`，Runner 可把 skill/bundled-skill 目录传入 tool metadata，让 `SKILL.md` 及其资源文件作为内部路径只读访问；该 allowlist 不允许写入，完整 skill discovery/activation/SkillTool 仍未宣称完成。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。
