@@ -124,11 +124,17 @@ func TestBuildServerToolSetInitializesHTTPProtocolClient(t *testing.T) {
 			}
 			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"http-test"}}}`))
 		case "notifications/initialized":
+			if got := r.Header.Get("mcp-protocol-version"); got != "2025-06-18" {
+				t.Fatalf("initialized protocol version = %q", got)
+			}
 			if raw.ID != "" {
 				t.Fatalf("initialized notification id = %q", raw.ID)
 			}
 			w.WriteHeader(http.StatusAccepted)
 		case "tools/list":
+			if got := r.Header.Get("mcp-protocol-version"); got != "2025-06-18" {
+				t.Fatalf("tools/list protocol version = %q", got)
+			}
 			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"tools":[{"name":"ping","readOnly":true}]}}`))
 		default:
 			t.Fatalf("method = %s", raw.Method)

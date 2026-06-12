@@ -97,6 +97,10 @@ type RPCAuthorizationRefresher interface {
 	RefreshAuthorization(context.Context) (bool, error)
 }
 
+type RPCProtocolVersionSetter interface {
+	SetProtocolVersionHeader(string)
+}
+
 type RPCInboundRequest struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      string          `json:"id"`
@@ -221,6 +225,7 @@ func (c *ProtocolClient) Initialize(ctx context.Context, options InitializeOptio
 		if !supportsProtocolVersion(result.ProtocolVersion, options.SupportedProtocolVersions) {
 			return InitializeResult{}, fmt.Errorf("mcp server protocol version %q is not supported", result.ProtocolVersion)
 		}
+		c.setProtocolVersionHeader(result.ProtocolVersion)
 		if !options.SkipInitializedNotification {
 			if err := c.sendInitialized(ctx); err != nil {
 				if attempt == 0 && IsUnauthorizedError(err) {
@@ -499,6 +504,17 @@ func (c *ProtocolClient) refreshAuthorizationLocked(ctx context.Context) error {
 	c.initialized = false
 	c.initializeResult = InitializeResult{}
 	return nil
+}
+
+func (c *ProtocolClient) setProtocolVersionHeader(version string) {
+	if c == nil {
+		return
+	}
+	setter, ok := c.Transport.(RPCProtocolVersionSetter)
+	if !ok {
+		return
+	}
+	setter.SetProtocolVersionHeader(version)
 }
 
 func normalizeInitializeOptions(options InitializeOptions) InitializeOptions {

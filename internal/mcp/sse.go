@@ -55,7 +55,6 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	waiter := t.registerWaiter(request.ID)
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
-	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	t.requestMu.RLock()
@@ -63,6 +62,7 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	t.requestMu.RUnlock()
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
+	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	t.mu.Unlock()
 	response, err := httpTransport.RoundTrip(ctx, request)
 	t.mu.Lock()
@@ -95,7 +95,6 @@ func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNot
 	}
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
-	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	t.requestMu.RLock()
@@ -103,6 +102,7 @@ func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNot
 	t.requestMu.RUnlock()
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
+	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	t.mu.Unlock()
 	err = httpTransport.SendNotification(ctx, notification)
 	t.mu.Lock()
@@ -140,10 +140,20 @@ func (t *SSETransport) RefreshAuthorization(ctx context.Context) (bool, error) {
 	return true, t.AuthorizationRefresher(ctx)
 }
 
+func (t *SSETransport) SetProtocolVersionHeader(version string) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	t.ProtocolVersionHeader = strings.TrimSpace(version)
+	t.mu.Unlock()
+}
+
 func (t *SSETransport) Close() error {
 	t.mu.Lock()
 	endpoint := t.endpointURL
 	sessionID := t.sessionID
+	protocolVersion := t.ProtocolVersionHeader
 	streamClose := t.streamClose
 	t.streamClose = nil
 	t.mu.Unlock()
@@ -155,10 +165,10 @@ func (t *SSETransport) Close() error {
 	}
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
-	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	httpTransport.SessionID = sessionID
+	httpTransport.ProtocolVersionHeader = protocolVersion
 	return httpTransport.Close()
 }
 
@@ -239,8 +249,11 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 			}
 		}
 	}
-	if t.ProtocolVersionHeader != "" {
-		req.Header.Set("mcp-protocol-version", t.ProtocolVersionHeader)
+	t.mu.Lock()
+	protocolVersion := t.ProtocolVersionHeader
+	t.mu.Unlock()
+	if protocolVersion != "" {
+		req.Header.Set("mcp-protocol-version", protocolVersion)
 	}
 
 	client := t.Client
@@ -399,6 +412,7 @@ func (t *SSETransport) dispatchInboundRequest(ctx context.Context, response RPCR
 	t.mu.Lock()
 	endpoint := t.endpointURL
 	sessionID := t.sessionID
+	protocolVersion := t.ProtocolVersionHeader
 	t.mu.Unlock()
 	if endpoint == "" {
 		return true, fmt.Errorf("mcp sse response endpoint is not established")
@@ -409,6 +423,7 @@ func (t *SSETransport) dispatchInboundRequest(ctx context.Context, response RPCR
 	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
 	httpTransport.SessionID = sessionID
+	httpTransport.ProtocolVersionHeader = protocolVersion
 	if err := httpTransport.postRPCResponse(ctx, ResponseForInboundRequest(ctx, request, handler)); err != nil {
 		return true, err
 	}

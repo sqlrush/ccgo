@@ -151,6 +151,15 @@ func (t *WSTransport) RefreshAuthorization(ctx context.Context) (bool, error) {
 	return true, t.AuthorizationRefresher(ctx)
 }
 
+func (t *WSTransport) SetProtocolVersionHeader(version string) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	t.ProtocolVersionHeader = strings.TrimSpace(version)
+	t.mu.Unlock()
+}
+
 func (t *WSTransport) SetRequestHandler(handler RPCRequestHandler) {
 	if t == nil {
 		return

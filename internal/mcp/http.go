@@ -156,6 +156,15 @@ func (t *HTTPTransport) RefreshAuthorization(ctx context.Context) (bool, error) 
 	return true, t.AuthorizationRefresher(ctx)
 }
 
+func (t *HTTPTransport) SetProtocolVersionHeader(version string) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	t.ProtocolVersionHeader = strings.TrimSpace(version)
+	t.mu.Unlock()
+}
+
 func (t *HTTPTransport) ResetSession() {
 	if t == nil {
 		return
@@ -311,8 +320,11 @@ func (t *HTTPTransport) applyHeaders(ctx context.Context, req *http.Request) err
 
 func (t *HTTPTransport) applyHeadersWithSession(ctx context.Context, req *http.Request, sessionID string) error {
 	req.Header.Set("accept", "application/json, text/event-stream")
-	if t.ProtocolVersionHeader != "" {
-		req.Header.Set("mcp-protocol-version", t.ProtocolVersionHeader)
+	t.mu.Lock()
+	protocolVersion := t.ProtocolVersionHeader
+	t.mu.Unlock()
+	if protocolVersion != "" {
+		req.Header.Set("mcp-protocol-version", protocolVersion)
 	}
 	if sessionID != "" {
 		req.Header.Set("mcp-session-id", sessionID)
