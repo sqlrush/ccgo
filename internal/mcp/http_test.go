@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 )
@@ -393,6 +394,73 @@ func TestHTTPTransportCapturesEventStreamNotifications(t *testing.T) {
 	}
 	if len(notifications) != 1 || notifications[0].Method != "notifications/tools/list_changed" || !strings.Contains(string(notifications[0].Params), `"reload"`) {
 		t.Fatalf("notifications = %#v", notifications)
+	}
+}
+
+func TestHTTPTransportRespondsToEventStreamInboundRequests(t *testing.T) {
+	elicitationResponse := make(chan RPCResponse, 1)
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var raw struct {
+			ID     string          `json:"id"`
+			Method string          `json:"method"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		switch raw.Method {
+		case "tools/list":
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("missing flusher")
+			}
+			w.Header().Set("content-type", "text/event-stream")
+			_, _ = w.Write([]byte(
+				"event: message\n" +
+					"data: {\"jsonrpc\":\"2.0\",\"id\":\"server-1\",\"method\":\"elicitation/create\",\"params\":{\"message\":\"Confirm?\"}}\n\n",
+			))
+			flusher.Flush()
+			select {
+			case response := <-elicitationResponse:
+				if response.ID != "server-1" || !strings.Contains(string(response.Result), `"confirmed":true`) {
+					t.Fatalf("elicitation response = %#v", response)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for elicitation response")
+			}
+			_, _ = w.Write([]byte(
+				"event: message\n" +
+					"data: {\"jsonrpc\":\"2.0\",\"id\":\"21\",\"result\":{\"tools\":[]}}\n\n",
+			))
+			flusher.Flush()
+		case "":
+			elicitationResponse <- RPCResponse{ID: raw.ID, Result: append(json.RawMessage(nil), raw.Result...)}
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			t.Fatalf("method = %s", raw.Method)
+		}
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.URL, nil, server.Client())
+	transport.SetRequestHandler(func(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+		parsed, ok := ParseElicitationRequest(request)
+		if !ok || parsed.Message != "Confirm?" {
+			t.Fatalf("request = %#v parsed=%#v", request, parsed)
+		}
+		return ElicitationResponse("accept", map[string]any{"confirmed": true}), nil
+	})
+	response, err := transport.RoundTrip(context.Background(), NewRPCRequest("21", "tools/list", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "21" {
+		t.Fatalf("response = %#v", response)
+	}
+	if calls != 2 {
+		t.Fatalf("calls=%d", calls)
 	}
 }
 

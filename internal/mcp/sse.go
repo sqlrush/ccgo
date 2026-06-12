@@ -30,6 +30,8 @@ type SSETransport struct {
 
 	notificationMu      sync.RWMutex
 	notificationHandler RPCNotificationHandler
+	requestMu           sync.RWMutex
+	requestHandler      RPCRequestHandler
 }
 
 type sseWaitResult struct {
@@ -56,6 +58,9 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
+	t.requestMu.RLock()
+	httpTransport.SetRequestHandler(t.requestHandler)
+	t.requestMu.RUnlock()
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
 	t.mu.Unlock()
@@ -93,6 +98,9 @@ func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNot
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
 	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
+	t.requestMu.RLock()
+	httpTransport.SetRequestHandler(t.requestHandler)
+	t.requestMu.RUnlock()
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
 	t.mu.Unlock()
@@ -175,6 +183,15 @@ func (t *SSETransport) dispatchNotification(response RPCResponse) bool {
 		handler(notification)
 	}
 	return true
+}
+
+func (t *SSETransport) SetRequestHandler(handler RPCRequestHandler) {
+	if t == nil {
+		return
+	}
+	t.requestMu.Lock()
+	t.requestHandler = handler
+	t.requestMu.Unlock()
 }
 
 func (t *SSETransport) endpoint(ctx context.Context) (string, error) {
@@ -262,7 +279,7 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("mcp sse endpoint event not found")
 		}
 		if event.Event != "endpoint" {
-			t.dispatchSSEEvent(event)
+			t.dispatchSSEEvent(ctx, event)
 			continue
 		}
 		endpoint, err := resolveSSEEndpoint(t.URL, event.Data)
@@ -297,7 +314,7 @@ func (t *SSETransport) readStream(ctx context.Context, scanner *sseScanner, body
 			t.failSSEWaiters(io.EOF)
 			return
 		}
-		t.dispatchSSEEvent(event)
+		t.dispatchSSEEvent(ctx, event)
 	}
 }
 
@@ -333,7 +350,7 @@ func (t *SSETransport) unregisterWaiter(id string, ch chan sseWaitResult) {
 	}
 }
 
-func (t *SSETransport) dispatchSSEEvent(event SSEEvent) {
+func (t *SSETransport) dispatchSSEEvent(ctx context.Context, event SSEEvent) {
 	if event.Event != "" && event.Event != "message" {
 		return
 	}
@@ -348,7 +365,10 @@ func (t *SSETransport) dispatchSSEEvent(event SSEEvent) {
 	if t.dispatchNotification(response) {
 		return
 	}
-	if _, ok := InboundRequestFromRPCResponse(response); ok {
+	if handled, err := t.dispatchInboundRequest(ctx, response); err != nil {
+		t.failSSEWaiters(err)
+		return
+	} else if handled {
 		return
 	}
 	if response.ID == "" {
@@ -366,6 +386,36 @@ func (t *SSETransport) dispatchSSEEvent(event SSEEvent) {
 		t.pending = map[string]sseWaitResult{}
 	}
 	t.pending[response.ID] = result
+}
+
+func (t *SSETransport) dispatchInboundRequest(ctx context.Context, response RPCResponse) (bool, error) {
+	request, ok := InboundRequestFromRPCResponse(response)
+	if !ok {
+		return false, nil
+	}
+	t.requestMu.RLock()
+	handler := t.requestHandler
+	t.requestMu.RUnlock()
+	t.mu.Lock()
+	endpoint := t.endpointURL
+	sessionID := t.sessionID
+	t.mu.Unlock()
+	if endpoint == "" {
+		return true, fmt.Errorf("mcp sse response endpoint is not established")
+	}
+	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
+	httpTransport.MaxResponseBytes = t.MaxResponseBytes
+	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
+	httpTransport.HeaderProvider = t.HeaderProvider
+	httpTransport.AuthorizationRefresher = t.AuthorizationRefresher
+	httpTransport.SessionID = sessionID
+	if err := httpTransport.postRPCResponse(ctx, ResponseForInboundRequest(ctx, request, handler)); err != nil {
+		return true, err
+	}
+	t.mu.Lock()
+	t.sessionID = httpTransport.SessionID
+	t.mu.Unlock()
+	return true, nil
 }
 
 func (t *SSETransport) failSSEWaiters(err error) {

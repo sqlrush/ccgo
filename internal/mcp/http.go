@@ -30,6 +30,8 @@ type HTTPTransport struct {
 	mu                     sync.Mutex
 	notificationMu         sync.RWMutex
 	notificationHandler    RPCNotificationHandler
+	requestMu              sync.RWMutex
+	requestHandler         RPCRequestHandler
 }
 
 func NewHTTPTransport(rawURL string, headers map[string]string, client HTTPDoer) *HTTPTransport {
@@ -76,6 +78,15 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 	if limit <= 0 {
 		limit = DefaultHTTPResponseLimitBytes
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+		return RPCResponse{}, &HTTPStatusError{Prefix: "mcp http", StatusCode: resp.StatusCode, Body: string(body)}
+	}
+	if isEventStream(resp.Header.Get("content-type")) {
+		return rpcResponseFromSSEWithHandlers(io.LimitReader(resp.Body, limit+1), request.ID, t.dispatchNotification, func(response RPCResponse) (bool, error) {
+			return t.dispatchInboundRequest(ctx, response)
+		})
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return RPCResponse{}, err
@@ -83,20 +94,19 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 	if int64(len(body)) > limit {
 		return RPCResponse{}, fmt.Errorf("mcp http response exceeds %d bytes", limit)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return RPCResponse{}, &HTTPStatusError{Prefix: "mcp http", StatusCode: resp.StatusCode, Body: string(body)}
-	}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return RPCResponse{ID: request.ID}, nil
-	}
-	if isEventStream(resp.Header.Get("content-type")) {
-		return rpcResponseFromSSEWithNotifications(bytes.NewReader(body), request.ID, t.dispatchNotification)
 	}
 	var rpcResponse RPCResponse
 	if err := json.Unmarshal(body, &rpcResponse); err != nil {
 		return RPCResponse{}, fmt.Errorf("decode mcp http response: %w", err)
 	}
 	if t.dispatchNotification(rpcResponse) {
+		return RPCResponse{}, fmt.Errorf("mcp http response for id %q not found", request.ID)
+	}
+	if handled, err := t.dispatchInboundRequest(ctx, rpcResponse); err != nil {
+		return RPCResponse{}, err
+	} else if handled {
 		return RPCResponse{}, fmt.Errorf("mcp http response for id %q not found", request.ID)
 	}
 	return rpcResponse, nil
@@ -121,10 +131,7 @@ func (t *HTTPTransport) SendNotification(ctx context.Context, notification RPCNo
 	if err := t.applyHeaders(ctx, req); err != nil {
 		return err
 	}
-	client := t.Client
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := t.responsePostClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -179,6 +186,83 @@ func (t *HTTPTransport) dispatchNotification(response RPCResponse) bool {
 		handler(notification)
 	}
 	return true
+}
+
+func (t *HTTPTransport) SetRequestHandler(handler RPCRequestHandler) {
+	if t == nil {
+		return
+	}
+	t.requestMu.Lock()
+	t.requestHandler = handler
+	t.requestMu.Unlock()
+}
+
+func (t *HTTPTransport) dispatchInboundRequest(ctx context.Context, response RPCResponse) (bool, error) {
+	request, ok := InboundRequestFromRPCResponse(response)
+	if !ok {
+		return false, nil
+	}
+	t.requestMu.RLock()
+	handler := t.requestHandler
+	t.requestMu.RUnlock()
+	return true, t.postRPCResponse(ctx, ResponseForInboundRequest(ctx, request, handler))
+}
+
+func (t *HTTPTransport) postRPCResponse(ctx context.Context, response RPCResponse) error {
+	if t == nil || t.URL == "" {
+		return fmt.Errorf("mcp http transport url is required")
+	}
+	data, err := json.Marshal(response)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.URL, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("content-type", "application/json")
+	if err := t.applyHeaders(ctx, req); err != nil {
+		return err
+	}
+	client := t.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if nextSessionID := strings.TrimSpace(resp.Header.Get("mcp-session-id")); nextSessionID != "" {
+		t.mu.Lock()
+		t.SessionID = nextSessionID
+		t.mu.Unlock()
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &HTTPStatusError{Prefix: "mcp http response", StatusCode: resp.StatusCode, Body: string(body)}
+	}
+	return nil
+}
+
+func (t *HTTPTransport) responsePostClient() HTTPDoer {
+	if t == nil || t.Client == nil {
+		return &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
+	}
+	client, ok := t.Client.(*http.Client)
+	if !ok {
+		return t.Client
+	}
+	clone := *client
+	switch transport := client.Transport.(type) {
+	case *http.Transport:
+		if transport != nil {
+			clone.Transport = transport.Clone()
+		}
+	case nil:
+		clone.Transport = http.DefaultTransport.(*http.Transport).Clone()
+	}
+	return &clone
 }
 
 func (t *HTTPTransport) Close() error {
@@ -330,15 +414,23 @@ func scanSSEEvent(scanner *sseScanner) (SSEEvent, bool, error) {
 }
 
 func rpcResponseFromSSE(r io.Reader, requestID string) (RPCResponse, error) {
-	return rpcResponseFromSSEWithNotifications(r, requestID, nil)
+	return rpcResponseFromSSEWithHandlers(r, requestID, nil, nil)
 }
 
 func rpcResponseFromSSEWithNotifications(r io.Reader, requestID string, notify func(RPCResponse) bool) (RPCResponse, error) {
-	events, err := ParseSSEEvents(r)
-	if err != nil {
-		return RPCResponse{}, err
-	}
-	for _, event := range events {
+	return rpcResponseFromSSEWithHandlers(r, requestID, notify, nil)
+}
+
+func rpcResponseFromSSEWithHandlers(r io.Reader, requestID string, notify func(RPCResponse) bool, handleRequest func(RPCResponse) (bool, error)) (RPCResponse, error) {
+	scanner := newSSEScanner(r)
+	for {
+		event, ok, err := scanSSEEvent(scanner)
+		if err != nil {
+			return RPCResponse{}, err
+		}
+		if !ok {
+			break
+		}
 		if strings.TrimSpace(event.Data) == "" {
 			continue
 		}
@@ -354,6 +446,15 @@ func rpcResponseFromSSEWithNotifications(r io.Reader, requestID string, notify f
 				notify(response)
 			}
 			continue
+		}
+		if handleRequest != nil {
+			handled, err := handleRequest(response)
+			if err != nil {
+				return RPCResponse{}, err
+			}
+			if handled {
+				continue
+			}
 		}
 		if _, ok := InboundRequestFromRPCResponse(response); ok {
 			continue

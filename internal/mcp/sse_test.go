@@ -102,6 +102,75 @@ func TestSSETransportWaitsForAsyncStreamResponse(t *testing.T) {
 	}
 }
 
+func TestSSETransportRespondsToStreamInboundRequests(t *testing.T) {
+	postReceived := make(chan RPCRequest, 1)
+	elicitationResponse := make(chan RPCResponse, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sse":
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("missing flusher")
+			}
+			w.Header().Set("content-type", "text/event-stream")
+			_, _ = w.Write([]byte("event: endpoint\n"))
+			_, _ = w.Write([]byte("data: /message\n\n"))
+			flusher.Flush()
+			request := <-postReceived
+			_, _ = w.Write([]byte("event: message\n"))
+			_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","id":"server-1","method":"elicitation/create","params":{"message":"Approve?"}}` + "\n\n"))
+			flusher.Flush()
+			select {
+			case response := <-elicitationResponse:
+				if response.ID != "server-1" || !strings.Contains(string(response.Result), `"approved":true`) {
+					t.Fatalf("elicitation response = %#v", response)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for elicitation response")
+			}
+			_, _ = w.Write([]byte("event: message\n"))
+			_, _ = w.Write([]byte(`data: {"jsonrpc":"2.0","id":"` + request.ID + `","result":{"tools":[{"name":"done"}]}}` + "\n\n"))
+			flusher.Flush()
+		case "/message":
+			var raw struct {
+				ID     string          `json:"id"`
+				Method string          `json:"method"`
+				Result json.RawMessage `json:"result"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+				t.Fatal(err)
+			}
+			if raw.Method != "" {
+				postReceived <- RPCRequest{ID: raw.ID, Method: raw.Method}
+			} else {
+				elicitationResponse <- RPCResponse{ID: raw.ID, Result: raw.Result}
+			}
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	transport := NewSSETransport(server.URL+"/sse", nil, server.Client())
+	transport.SetRequestHandler(func(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+		parsed, ok := ParseElicitationRequest(request)
+		if !ok || parsed.Message != "Approve?" {
+			t.Fatalf("request = %#v parsed=%#v", request, parsed)
+		}
+		return ElicitationResponse("accept", map[string]any{"approved": true}), nil
+	})
+	response, err := transport.RoundTrip(ctx, NewRPCRequest("31", "tools/list", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ID != "31" || !strings.Contains(string(response.Result), `"done"`) {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 func TestOpenServerClientSupportsSSETransport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
