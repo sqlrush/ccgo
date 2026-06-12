@@ -115,10 +115,38 @@ func (s *BuiltinServer) Run(ctx context.Context, in io.Reader, out io.Writer) er
 	return nil
 }
 
-func (s *BuiltinServer) handleLine(ctx context.Context, data []byte) (serverRPCResponse, bool) {
+func (s *BuiltinServer) handleLine(ctx context.Context, data []byte) (any, bool) {
+	if firstNonWhitespace(data) == '[' {
+		return s.handleBatch(ctx, data)
+	}
+	return s.handleSingle(ctx, data)
+}
+
+func (s *BuiltinServer) handleBatch(ctx context.Context, data []byte) (any, bool) {
+	var batch []json.RawMessage
+	if err := json.Unmarshal(data, &batch); err != nil {
+		return parseErrorResponse(err), true
+	}
+	if len(batch) == 0 {
+		return invalidRequestResponse(nil, "invalid request"), true
+	}
+	responses := make([]serverRPCResponse, 0, len(batch))
+	for _, item := range batch {
+		response, ok := s.handleSingle(ctx, item)
+		if ok {
+			responses = append(responses, response)
+		}
+	}
+	if len(responses) == 0 {
+		return nil, false
+	}
+	return responses, true
+}
+
+func (s *BuiltinServer) handleSingle(ctx context.Context, data []byte) (serverRPCResponse, bool) {
 	var request serverRPCRequest
-	if err := json.Unmarshal(data, &request); err != nil {
-		return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: json.RawMessage(`null`), Error: &RPCError{Code: -32700, Message: "parse error", Data: err.Error()}}, true
+	if rpcErr := decodeServerRPCRequest(data, &request); rpcErr != nil {
+		return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: normalizedResponseID(request.ID), Error: rpcErr}, true
 	}
 	if !request.HasID() {
 		_ = s.handleNotification(ctx, request)
@@ -132,6 +160,37 @@ func (s *BuiltinServer) handleLine(ctx context.Context, data []byte) (serverRPCR
 	}
 	response.Result = result
 	return response, true
+}
+
+func decodeServerRPCRequest(data []byte, request *serverRPCRequest) *RPCError {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(data, &object); err != nil {
+		if len(object) == 0 && firstNonWhitespace(data) != '{' {
+			return &RPCError{Code: -32600, Message: "invalid request", Data: err.Error()}
+		}
+		return &RPCError{Code: -32700, Message: "parse error", Data: err.Error()}
+	}
+	if object == nil {
+		return &RPCError{Code: -32600, Message: "invalid request"}
+	}
+	if rawID, ok := object["id"]; ok {
+		request.ID = append(json.RawMessage(nil), rawID...)
+	}
+	if err := json.Unmarshal(data, request); err != nil {
+		return &RPCError{Code: -32600, Message: "invalid request", Data: err.Error()}
+	}
+	if strings.TrimSpace(request.Method) == "" {
+		return &RPCError{Code: -32600, Message: "invalid request"}
+	}
+	return nil
+}
+
+func parseErrorResponse(err error) serverRPCResponse {
+	return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: json.RawMessage(`null`), Error: &RPCError{Code: -32700, Message: "parse error", Data: err.Error()}}
+}
+
+func invalidRequestResponse(id json.RawMessage, message string) serverRPCResponse {
+	return serverRPCResponse{JSONRPC: JSONRPCVersion, ID: normalizedResponseID(id), Error: &RPCError{Code: -32600, Message: message}}
 }
 
 func (s *BuiltinServer) handleNotification(context.Context, serverRPCRequest) error {
@@ -367,6 +426,18 @@ func normalizedResponseID(raw json.RawMessage) json.RawMessage {
 		return json.RawMessage(`null`)
 	}
 	return append(json.RawMessage(nil), []byte(trimmed)...)
+}
+
+func firstNonWhitespace(data []byte) byte {
+	for _, b := range data {
+		switch b {
+		case ' ', '\n', '\r', '\t':
+			continue
+		default:
+			return b
+		}
+	}
+	return 0
 }
 
 func cloneAnyMap(values map[string]any) map[string]any {

@@ -184,6 +184,92 @@ func TestBuiltinServerReportsEmptyResourcesAndPrompts(t *testing.T) {
 	}
 }
 
+func TestBuiltinServerHandlesJSONRPCBatch(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := `[` +
+		`{"jsonrpc":"2.0","id":"1","method":"ping","params":{}},` +
+		`{"jsonrpc":"2.0","method":"notifications/initialized"},` +
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},` +
+		`1` +
+		`]` + "\n"
+	var out bytes.Buffer
+	if err := server.Run(context.Background(), strings.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	var responses []serverRPCResponse
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &responses); err != nil {
+		t.Fatalf("decode batch response %q: %v", out.String(), err)
+	}
+	if len(responses) != 3 {
+		t.Fatalf("responses = %#v output=%s", responses, out.String())
+	}
+	if string(responses[0].ID) != `"1"` || string(responses[1].ID) != `2` || string(responses[2].ID) != `null` {
+		t.Fatalf("ids = %s %s %s", responses[0].ID, responses[1].ID, responses[2].ID)
+	}
+	if responses[2].Error == nil || responses[2].Error.Code != -32600 {
+		t.Fatalf("invalid request response = %#v", responses[2])
+	}
+}
+
+func TestBuiltinServerSkipsNotificationOnlyBatch(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	err = server.Run(context.Background(), strings.NewReader(`[{"jsonrpc":"2.0","method":"notifications/initialized"}]`+"\n"), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != "" {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestBuiltinServerReportsInvalidRequest(t *testing.T) {
+	registry, err := tool.NewRegistry(testMCPServerEchoTool(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewBuiltinServer(BuiltinServerOptions{
+		Registry: registry,
+		Executor: tool.NewExecutor(registry),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := server.Run(context.Background(), strings.NewReader("1\n[]\n"), &out); err != nil {
+		t.Fatal(err)
+	}
+	responses := decodeServerResponses(t, out.String())
+	if len(responses) != 2 {
+		t.Fatalf("responses = %#v output=%s", responses, out.String())
+	}
+	for _, response := range responses {
+		if response.Error == nil || response.Error.Code != -32600 {
+			t.Fatalf("response = %#v", response)
+		}
+	}
+}
+
 func testMCPServerEchoTool(readOnly bool) tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
