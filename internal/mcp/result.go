@@ -160,35 +160,55 @@ func transformContentItem(item any, serverName string) []contracts.ContentBlock 
 	if !ok {
 		return nil
 	}
-	switch obj["type"] {
+	switch mcpContentType(obj["type"]) {
 	case "text":
-		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: stringValue(obj["text"])}}
+		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: stringValue(firstNonEmpty(obj["text"], obj["content"], obj["value"]))}}
 	case "image":
-		return []contracts.ContentBlock{{
-			Type: contracts.ContentImage,
-			Source: map[string]any{
-				"type":       "base64",
-				"data":       stringValue(obj["data"]),
-				"media_type": stringValue(firstNonEmpty(obj["mimeType"], obj["mime_type"])),
-			},
-		}}
+		return []contracts.ContentBlock{{Type: contracts.ContentImage, Source: imageContentSource(obj)}}
 	case "resource":
 		return transformResourceContent(obj, serverName)
 	case "resource_link":
-		text := fmt.Sprintf("[Resource link: %s] %s", stringValue(obj["name"]), stringValue(obj["uri"]))
-		if description := stringValue(obj["description"]); description != "" {
-			text += " (" + description + ")"
-		}
-		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: text}}
+		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: resourceLinkText(obj)}}
 	default:
 		return nil
 	}
 }
 
+func mcpContentType(value any) string {
+	normalized := strings.ToLower(strings.NewReplacer("-", "_", " ", "_").Replace(strings.TrimSpace(stringValue(value))))
+	switch normalized {
+	case "text", "text_content", "textcontent":
+		return "text"
+	case "image", "input_image", "inputimage", "image_content", "imagecontent":
+		return "image"
+	case "resource", "embedded_resource", "embeddedresource":
+		return "resource"
+	case "resource_link", "resourcelink":
+		return "resource_link"
+	default:
+		return normalized
+	}
+}
+
+func imageContentSource(obj map[string]any) map[string]any {
+	source, _ := firstMapValue(obj, "source", "imageSource", "image_source")
+	data := firstNonEmpty(obj["data"], obj["base64"], obj["content"])
+	mimeType := firstNonEmpty(obj["mimeType"], obj["mime_type"], obj["mediaType"], obj["media_type"], obj["mime"])
+	if source != nil {
+		data = firstNonEmpty(source["data"], source["base64"], source["content"], data)
+		mimeType = firstNonEmpty(source["mimeType"], source["mime_type"], source["mediaType"], source["media_type"], source["mime"], mimeType)
+	}
+	return map[string]any{
+		"type":       "base64",
+		"data":       stringValue(data),
+		"media_type": stringValue(mimeType),
+	}
+}
+
 func transformResourceContent(obj map[string]any, serverName string) []contracts.ContentBlock {
-	resource, ok := obj["resource"].(map[string]any)
-	if !ok {
-		return nil
+	resource, _ := firstMapValue(obj, "resource", "embeddedResource", "embedded_resource")
+	if resource == nil {
+		resource = obj
 	}
 	prefix := fmt.Sprintf("[Resource from %s at %s] ", serverName, stringValue(resource["uri"]))
 	if text := stringValue(resource["text"]); text != "" {
@@ -202,6 +222,14 @@ func transformResourceContent(obj map[string]any, serverName string) []contracts
 		return []contracts.ContentBlock{{Type: contracts.ContentText, Text: fmt.Sprintf("%sBinary content (%s, %d base64 characters)", prefix, mimeType, len(blob))}}
 	}
 	return nil
+}
+
+func resourceLinkText(obj map[string]any) string {
+	text := fmt.Sprintf("[Resource link: %s] %s", stringValue(obj["name"]), stringValue(obj["uri"]))
+	if description := stringValue(obj["description"]); description != "" {
+		text += " (" + description + ")"
+	}
+	return text
 }
 
 func limitMCPResult(result contracts.ToolResult, options ResultOptions) contracts.ToolResult {
@@ -287,6 +315,15 @@ func resultMeta(values map[string]any) map[string]any {
 		}
 	}
 	return nil
+}
+
+func firstMapValue(values map[string]any, keys ...string) (map[string]any, bool) {
+	for _, key := range keys {
+		if value, ok := values[key].(map[string]any); ok {
+			return value, true
+		}
+	}
+	return nil, false
 }
 
 func contentBlockSchemaMap(block contracts.ContentBlock) map[string]any {

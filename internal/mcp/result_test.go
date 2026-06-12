@@ -211,6 +211,42 @@ func TestTransformResultContentAliases(t *testing.T) {
 	}
 }
 
+func TestTransformResultContentItemAliases(t *testing.T) {
+	rawJSON := []byte(`{
+		"content": [
+			{"type": "textContent", "content": "alias text"},
+			{"type": "input_image", "source": {"base64": "BBBB", "mimeType": "image/jpeg"}},
+			{"type": "embedded_resource", "uri": "file:///alias.txt", "text": "alias body"},
+			{"type": "resourceLink", "name": "guide", "uri": "https://example.com/guide"}
+		]
+	}`)
+	var raw map[string]any
+	if err := json.Unmarshal(rawJSON, &raw); err != nil {
+		t.Fatal(err)
+	}
+	result, err := TransformResult(raw, "files", "read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := result.Content.([]contracts.ContentBlock)
+	if len(blocks) != 4 {
+		t.Fatalf("blocks = %#v", blocks)
+	}
+	if blocks[0].Text != "alias text" {
+		t.Fatalf("text alias = %#v", blocks[0])
+	}
+	source := blocks[1].Source.(map[string]any)
+	if blocks[1].Type != contracts.ContentImage || source["data"] != "BBBB" || source["media_type"] != "image/jpeg" {
+		t.Fatalf("image alias = %#v", blocks[1])
+	}
+	if !strings.Contains(blocks[2].Text, "[Resource from files at file:///alias.txt] alias body") {
+		t.Fatalf("resource alias = %#v", blocks[2])
+	}
+	if blocks[3].Text != "[Resource link: guide] https://example.com/guide" {
+		t.Fatalf("resource link alias = %#v", blocks[3])
+	}
+}
+
 func TestProcessToolResultPersistsLargeOutput(t *testing.T) {
 	dir := t.TempDir()
 	result, err := ProcessToolResult(map[string]any{"toolResult": "0123456789"}, ResultOptions{
