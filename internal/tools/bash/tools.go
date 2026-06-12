@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -20,6 +21,19 @@ const (
 	defaultTimeoutMillis = 120_000
 	maxTimeoutMillis     = 600_000
 )
+
+var bashSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
+
+var bashSemanticNumberKeys = map[string]struct{}{
+	"timeout":    {},
+	"tail_lines": {},
+	"tailLines":  {},
+}
+
+var bashSemanticBooleanKeys = map[string]struct{}{
+	"run_in_background": {},
+	"runInBackground":   {},
+}
 
 var goListAllowedFlags = map[string]bool{
 	"-compiled":  true,
@@ -778,6 +792,7 @@ func NewBashTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Runs a shell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and interrupt controls are not implemented yet.", nil
 		},
+		NormalizeFunc:   normalizeBashRawInput,
 		ValidateFunc:    validateBash,
 		CallFunc:        callBash,
 		ReadOnlyFunc:    bashReadOnlyInput,
@@ -808,6 +823,7 @@ func NewBashOutputTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Reads stdout, stderr, and status for a Bash command started with run_in_background.", nil
 		},
+		NormalizeFunc:   normalizeBashOutputRawInput,
 		ValidateFunc:    validateBashOutput,
 		CallFunc:        callBashOutput,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
@@ -1217,6 +1233,7 @@ func decodeBash(raw json.RawMessage) (bashInput, error) {
 			return bashInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
 	}
+	coerceBashSemanticJSONStrings(obj, bashSemanticNumberKeys, bashSemanticBooleanKeys)
 	var input bashInput
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -1234,6 +1251,26 @@ func decodeBash(raw json.RawMessage) (bashInput, error) {
 	return input, nil
 }
 
+func normalizeBashRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "command", "timeout", "description", "run_in_background", "runInBackground":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	coerceBashSemanticJSONStrings(obj, bashSemanticNumberKeys, bashSemanticBooleanKeys)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func decodeBashOutput(raw json.RawMessage) (bashOutputInput, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
@@ -1246,6 +1283,7 @@ func decodeBashOutput(raw json.RawMessage) (bashOutputInput, error) {
 			return bashOutputInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
 	}
+	coerceBashSemanticJSONStrings(obj, bashSemanticNumberKeys, nil)
 	var input bashOutputInput
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -1255,6 +1293,48 @@ func decodeBashOutput(raw json.RawMessage) (bashOutputInput, error) {
 		return bashOutputInput{}, err
 	}
 	return input, nil
+}
+
+func normalizeBashOutputRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "bash_id", "id", "tail_lines", "tailLines":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	coerceBashSemanticJSONStrings(obj, bashSemanticNumberKeys, nil)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func coerceBashSemanticJSONStrings(obj map[string]json.RawMessage, numberKeys map[string]struct{}, boolKeys map[string]struct{}) {
+	for key, raw := range obj {
+		if len(raw) == 0 || raw[0] != '"' {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			continue
+		}
+		if _, ok := boolKeys[key]; ok {
+			switch text {
+			case "true", "false":
+				obj[key] = json.RawMessage(text)
+			}
+			continue
+		}
+		if _, ok := numberKeys[key]; ok && bashSemanticNumberLiteralRE.MatchString(text) {
+			obj[key] = json.RawMessage(text)
+		}
+	}
 }
 
 func decodeKillBash(raw json.RawMessage) (bashKillInput, error) {

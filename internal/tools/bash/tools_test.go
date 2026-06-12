@@ -50,6 +50,51 @@ func TestBashRunsCommandAndReturnsStructuredOutput(t *testing.T) {
 	}
 }
 
+func TestBashAcceptsSemanticStringInputs(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_semantic_timeout",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"printf semantic","timeout":"1000"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "semantic" || result.StructuredContent["timeout_ms"] != 1000 {
+		t.Fatalf("semantic timeout result = %#v", result)
+	}
+
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_semantic_background",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"printf 'one\ntwo\nthree\n'","runInBackground":"true","timeout":"1000"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if start.StructuredContent["running"] != true || start.StructuredContent["timeout_ms"] != 1000 {
+		t.Fatalf("semantic background start = %#v", start.StructuredContent)
+	}
+	bashID := start.StructuredContent["bash_id"].(string)
+	_ = waitForBashOutput(t, executor, ctx, bashID)
+
+	tail, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_semantic_tail",
+		Name:  "BashOutput",
+		Input: json.RawMessage(`{"id":` + strconvQuote(bashID) + `,"tailLines":"2"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tail.StructuredContent["stdout"] != "two\nthree" {
+		t.Fatalf("semantic tail stdout = %#v", tail.StructuredContent["stdout"])
+	}
+}
+
 func TestBashCapturesStderrAndExitCode(t *testing.T) {
 	executor := bashExecutor(t)
 	result, err := executor.Execute(tool.Context{
