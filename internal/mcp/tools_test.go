@@ -58,6 +58,11 @@ func (c *fakeMCPClient) ReadResource(_ context.Context, serverName string, uri s
 	return c.contents, nil
 }
 
+func (c *fakeMCPClient) SubscribeResource(_ context.Context, serverName string, uri string) error {
+	c.calls = append(c.calls, fakeMCPCall{ServerName: serverName, ToolName: "subscribe_resource", Input: json.RawMessage(`{"uri":` + quoteJSON(uri) + `}`)})
+	return nil
+}
+
 func (c *fakeMCPClient) ListPrompts(_ context.Context, serverName string) ([]RemotePrompt, error) {
 	return c.prompts, nil
 }
@@ -210,7 +215,7 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 		}},
 	}
 	tools := BuildResourceTools(ToolBuildOptions{ServerName: "files", Client: client})
-	if len(tools) != 3 {
+	if len(tools) != 4 {
 		t.Fatalf("tools = %#v", tools)
 	}
 	registry, err := tool.NewRegistry(tools...)
@@ -265,6 +270,21 @@ func TestBuildResourceToolsListAndReadResources(t *testing.T) {
 		t.Fatalf("read blocks = %#v", blocks)
 	}
 	if len(client.calls) != 1 || client.calls[0].ToolName != "read_resource" {
+		t.Fatalf("calls = %#v", client.calls)
+	}
+
+	subscribeResult, err := executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_subscribe",
+		Name:  "mcp__files__subscribe_resource",
+		Input: json.RawMessage(`{"uri":"file:///tmp/a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subscribeResult.ToolUseID != "toolu_subscribe" || !strings.Contains(subscribeResult.Content.(string), `"subscribed":true`) {
+		t.Fatalf("subscribe result = %#v", subscribeResult)
+	}
+	if len(client.calls) != 2 || client.calls[1].ToolName != "subscribe_resource" {
 		t.Fatalf("calls = %#v", client.calls)
 	}
 }

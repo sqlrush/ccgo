@@ -42,6 +42,10 @@ func (c *lifecycleMCPClient) ReadResource(context.Context, string, string) ([]Re
 	return nil, nil
 }
 
+func (c *lifecycleMCPClient) SubscribeResource(context.Context, string, string) error {
+	return nil
+}
+
 func (c *lifecycleMCPClient) ListPrompts(context.Context, string) ([]RemotePrompt, error) {
 	return nil, nil
 }
@@ -69,7 +73,7 @@ func TestBuildServerToolSetBuildsRemoteAndHelperTools(t *testing.T) {
 	if toolset.ServerName != "github" || toolset.Client != client {
 		t.Fatalf("toolset = %#v", toolset)
 	}
-	if len(toolset.Tools) != 6 {
+	if len(toolset.Tools) != 7 {
 		t.Fatalf("tools = %#v", toolset.Tools)
 	}
 	registry, err := tool.NewRegistry(toolset.Tools...)
@@ -81,6 +85,7 @@ func TestBuildServerToolSetBuildsRemoteAndHelperTools(t *testing.T) {
 		"mcp__github__list_resources",
 		"mcp__github__list_resource_templates",
 		"mcp__github__read_resource",
+		"mcp__github__subscribe_resource",
 		"mcp__github__list_prompts",
 		"mcp__github__get_prompt",
 	} {

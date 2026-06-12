@@ -98,6 +98,10 @@ func (f *fakeRunnerMCPClient) ReadResource(_ context.Context, serverName string,
 	return nil, nil
 }
 
+func (f *fakeRunnerMCPClient) SubscribeResource(_ context.Context, serverName string, uri string) error {
+	return nil
+}
+
 func (f *fakeRunnerMCPClient) ListPrompts(_ context.Context, serverName string) ([]mcp.RemotePrompt, error) {
 	return nil, nil
 }

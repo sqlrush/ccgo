@@ -67,6 +67,7 @@ type Client interface {
 	ListResources(ctx context.Context, serverName string) ([]RemoteResource, error)
 	ListResourceTemplates(ctx context.Context, serverName string) ([]RemoteResourceTemplate, error)
 	ReadResource(ctx context.Context, serverName string, uri string) ([]ResourceContent, error)
+	SubscribeResource(ctx context.Context, serverName string, uri string) error
 	ListPrompts(ctx context.Context, serverName string) ([]RemotePrompt, error)
 	GetPrompt(ctx context.Context, serverName string, promptName string, arguments map[string]string) (PromptResult, error)
 }
@@ -101,6 +102,7 @@ func BuildResourceTools(options ToolBuildOptions) []tool.Tool {
 		buildListResourcesTool(options),
 		buildListResourceTemplatesTool(options),
 		buildReadResourceTool(options),
+		buildSubscribeResourceTool(options),
 	}
 }
 
@@ -251,6 +253,57 @@ func buildReadResourceTool(options ToolBuildOptions) tool.Tool {
 			return ProcessToolResult(map[string]any{"content": resourceContentsToMCPContent(contents)}, ResultOptions{
 				ServerName:     options.ServerName,
 				ToolName:       "read_resource",
+				MaxChars:       options.MaxResultChars,
+				ResultStoreDir: options.ResultStoreDir,
+			})
+		},
+	}
+}
+
+func buildSubscribeResourceTool(options ToolBuildOptions) tool.Tool {
+	name := BuildToolName(options.ServerName, "subscribe_resource")
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        name,
+			Description: "Subscribe to MCP resource updates from " + options.ServerName,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []string{"uri"},
+				"properties": map[string]any{
+					"uri": map[string]any{"type": "string"},
+				},
+			},
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			MCP: &contracts.MCPToolRef{
+				ServerName: options.ServerName,
+				ToolName:   "subscribe_resource",
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+			if options.Client == nil {
+				return contracts.ToolResult{}, fmt.Errorf("mcp client is nil")
+			}
+			var input struct {
+				URI string `json:"uri"`
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			if input.URI == "" {
+				return contracts.ToolResult{}, fmt.Errorf("uri is required")
+			}
+			if err := options.Client.SubscribeResource(ctx.Context, options.ServerName, input.URI); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return ProcessToolResult(map[string]any{
+				"structuredContent": map[string]any{
+					"uri":        input.URI,
+					"subscribed": true,
+				},
+			}, ResultOptions{
+				ServerName:     options.ServerName,
+				ToolName:       "subscribe_resource",
 				MaxChars:       options.MaxResultChars,
 				ResultStoreDir: options.ResultStoreDir,
 			})
