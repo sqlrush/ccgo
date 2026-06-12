@@ -27,6 +27,7 @@ type TransformedResult struct {
 	Schema            string
 	StructuredContent map[string]any
 	IsError           bool
+	Meta              map[string]any
 }
 
 type ResultOptions struct {
@@ -58,6 +59,9 @@ func ProcessToolResult(raw any, options ResultOptions) (contracts.ToolResult, er
 	if transformed.Schema != "" {
 		result.Meta["mcp_schema"] = transformed.Schema
 	}
+	if len(transformed.Meta) > 0 {
+		result.Meta["mcp_result_meta"] = transformed.Meta
+	}
 	return limitMCPResult(result, options), nil
 }
 
@@ -67,11 +71,13 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 		return TransformedResult{}, unexpectedResultError(serverName, toolName)
 	}
 	isError := boolValue(firstNonEmpty(obj["isError"], obj["is_error"]))
+	meta := resultMeta(obj)
 	if value, ok := obj["toolResult"]; ok {
 		return TransformedResult{
 			Content: fmt.Sprint(value),
 			Type:    ResultTypeToolResult,
 			IsError: isError,
+			Meta:    meta,
 		}, nil
 	}
 	if value, ok := obj["structuredContent"]; ok && value != nil {
@@ -85,6 +91,7 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 			Schema:            InferCompactSchema(value, 2),
 			StructuredContent: structuredContentMap(value),
 			IsError:           isError,
+			Meta:              meta,
 		}, nil
 	}
 	if value, ok := obj["content"].([]any); ok {
@@ -97,6 +104,7 @@ func TransformResult(raw any, serverName string, toolName string) (TransformedRe
 			Type:    ResultTypeContentArray,
 			Schema:  InferCompactSchema(blocks, 2),
 			IsError: isError,
+			Meta:    meta,
 		}, nil
 	}
 	return TransformedResult{}, unexpectedResultError(serverName, toolName)
@@ -244,6 +252,15 @@ func structuredContentMap(value any) map[string]any {
 		return obj
 	}
 	return map[string]any{"value": value}
+}
+
+func resultMeta(values map[string]any) map[string]any {
+	for _, key := range []string{"_meta", "meta"} {
+		if meta, ok := values[key].(map[string]any); ok && len(meta) > 0 {
+			return meta
+		}
+	}
+	return nil
 }
 
 func contentBlockSchemaMap(block contracts.ContentBlock) map[string]any {

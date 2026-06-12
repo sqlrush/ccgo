@@ -56,6 +56,48 @@ func TestProcessToolResultPreservesMCPErrorAlias(t *testing.T) {
 	}
 }
 
+func TestProcessToolResultPreservesMCPResultMeta(t *testing.T) {
+	result, err := ProcessToolResult(map[string]any{
+		"content": []any{
+			map[string]any{"type": "text", "text": "ok"},
+		},
+		"_meta": map[string]any{
+			"trace_id": "trace-123",
+		},
+	}, ResultOptions{
+		ToolUseID:  "toolu_meta",
+		ServerName: "github",
+		ToolName:   "search",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, ok := result.Meta["mcp_result_meta"].(map[string]any)
+	if !ok || meta["trace_id"] != "trace-123" {
+		t.Fatalf("mcp result meta = %#v", result.Meta)
+	}
+}
+
+func TestProcessToolResultPreservesMCPResultMetaAlias(t *testing.T) {
+	result, err := ProcessToolResult(map[string]any{
+		"toolResult": "ok",
+		"meta": map[string]any{
+			"cursor": "next",
+		},
+	}, ResultOptions{
+		ToolUseID:  "toolu_meta_alias",
+		ServerName: "github",
+		ToolName:   "search",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, ok := result.Meta["mcp_result_meta"].(map[string]any)
+	if !ok || meta["cursor"] != "next" {
+		t.Fatalf("mcp result meta alias = %#v", result.Meta)
+	}
+}
+
 func TestProcessToolResultSupportsStructuredContent(t *testing.T) {
 	raw := map[string]any{
 		"structuredContent": map[string]any{
