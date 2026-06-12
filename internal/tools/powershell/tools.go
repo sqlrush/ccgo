@@ -1173,6 +1173,8 @@ func readOnlyWords(words []string) bool {
 	switch command {
 	case "git":
 		return bashtools.IsReadOnlyCommand(powerShellGitCommand(words))
+	case "docker":
+		return readOnlyDocker(words[1:])
 	case "dotnet":
 		return readOnlyDotnet(words[1:])
 	case "route":
@@ -1317,6 +1319,82 @@ func readOnlyDotnet(words []string) bool {
 		if !powerShellDotnetReadOnlyFlags[strings.ToLower(strings.TrimSpace(word))] {
 			return false
 		}
+	}
+	return true
+}
+
+func readOnlyDocker(words []string) bool {
+	if len(words) == 0 {
+		return true
+	}
+	for _, word := range words {
+		if strings.Contains(word, "$") {
+			return false
+		}
+	}
+	subcommand := strings.ToLower(strings.TrimSpace(words[0]))
+	args := words[1:]
+	switch subcommand {
+	case "ps", "images":
+		return true
+	case "logs":
+		config := powerShellNativeReadOnlyConfig{
+			allowedFlags:     stringSet("--follow", "-f", "--tail", "-n", "--timestamps", "-t", "--since", "--until", "--details"),
+			valueFlags:       stringSet("--tail", "-n", "--since", "--until"),
+			allowPositionals: true,
+		}
+		return readOnlyNativeArgs(args, config)
+	case "inspect":
+		config := powerShellNativeReadOnlyConfig{
+			allowedFlags:     stringSet("--format", "-f", "--type", "--size", "-s"),
+			valueFlags:       stringSet("--format", "-f", "--type"),
+			allowPositionals: true,
+		}
+		return readOnlyDockerInspectArgs(args, config)
+	default:
+		return false
+	}
+}
+
+func readOnlyDockerInspectArgs(words []string, config powerShellNativeReadOnlyConfig) bool {
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		if word == "--%" {
+			return false
+		}
+		name, value, hasValue, isFlag := splitNativeFlag(word)
+		if isFlag {
+			if !nativeFlagAllowed(name, config) {
+				return false
+			}
+			if hasValue {
+				if !safeDockerInspectValue(name, value) {
+					return false
+				}
+				continue
+			}
+			if config.valueFlags[name] {
+				i++
+				if i >= len(words) || !safeDockerInspectValue(name, words[i]) {
+					return false
+				}
+			}
+			continue
+		}
+		if !safeNativeValue(word) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeDockerInspectValue(flag string, value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	if value == "" || value == "--%" || strings.ContainsAny(value, "$`\x00") {
+		return false
+	}
+	if flag == "--type" {
+		return safeNativeValue(value)
 	}
 	return true
 }
