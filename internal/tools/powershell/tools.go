@@ -32,18 +32,20 @@ var powerShellSemanticNumberKeys = map[string]struct{}{
 }
 
 var powerShellSemanticBooleanKeys = map[string]struct{}{
-	"run_in_background": {},
-	"runInBackground":   {},
+	"run_in_background":         {},
+	"runInBackground":           {},
+	"dangerouslyDisableSandbox": {},
 }
 
 type powerShellInput struct {
-	Command               string `json:"command"`
-	Timeout               *int   `json:"timeout,omitempty"`
-	Description           string `json:"description,omitempty"`
-	RunInBackground       bool   `json:"run_in_background,omitempty"`
-	RunInBackgroundAlt    bool   `json:"runInBackground,omitempty"`
-	hasRunInBackground    bool
-	hasRunInBackgroundAlt bool
+	Command                   string `json:"command"`
+	Timeout                   *int   `json:"timeout,omitempty"`
+	Description               string `json:"description,omitempty"`
+	RunInBackground           bool   `json:"run_in_background,omitempty"`
+	RunInBackgroundAlt        bool   `json:"runInBackground,omitempty"`
+	DangerouslyDisableSandbox bool   `json:"dangerouslyDisableSandbox,omitempty"`
+	hasRunInBackground        bool
+	hasRunInBackgroundAlt     bool
 }
 
 type powerShellResult struct {
@@ -80,11 +82,12 @@ func NewPowerShellTool() tool.Tool {
 				"type":     "object",
 				"required": []any{"command"},
 				"properties": map[string]any{
-					"command":           map[string]any{"type": "string"},
-					"timeout":           map[string]any{"type": "integer"},
-					"description":       map[string]any{"type": "string"},
-					"run_in_background": map[string]any{"type": "boolean"},
-					"runInBackground":   map[string]any{"type": "boolean"},
+					"command":                   map[string]any{"type": "string"},
+					"timeout":                   map[string]any{"type": "integer"},
+					"description":               map[string]any{"type": "string"},
+					"run_in_background":         map[string]any{"type": "boolean"},
+					"runInBackground":           map[string]any{"type": "boolean"},
+					"dangerouslyDisableSandbox": map[string]any{"type": "boolean"},
 				},
 			},
 		},
@@ -221,16 +224,17 @@ func callPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 		Content: formatPowerShellContent(result),
 		IsError: result.TimedOut || result.ExitCode != 0,
 		StructuredContent: map[string]any{
-			"type":        "powershell",
-			"command":     input.Command,
-			"description": input.Description,
-			"stdout":      result.Stdout,
-			"stderr":      result.Stderr,
-			"exit_code":   result.ExitCode,
-			"timed_out":   result.TimedOut,
-			"duration_ms": result.DurationMS,
-			"timeout_ms":  result.TimeoutMS,
-			"executable":  result.Executable,
+			"type":                        "powershell",
+			"command":                     input.Command,
+			"description":                 input.Description,
+			"stdout":                      result.Stdout,
+			"stderr":                      result.Stderr,
+			"exit_code":                   result.ExitCode,
+			"timed_out":                   result.TimedOut,
+			"duration_ms":                 result.DurationMS,
+			"timeout_ms":                  result.TimeoutMS,
+			"executable":                  result.Executable,
+			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 		},
 	}, nil
 }
@@ -379,16 +383,17 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 			Content: formatPowerShellContent(result),
 			IsError: true,
 			StructuredContent: map[string]any{
-				"type":        "powershell",
-				"command":     input.Command,
-				"description": input.Description,
-				"stdout":      "",
-				"stderr":      result.Stderr,
-				"exit_code":   result.ExitCode,
-				"timed_out":   false,
-				"duration_ms": result.DurationMS,
-				"timeout_ms":  result.TimeoutMS,
-				"executable":  "",
+				"type":                        "powershell",
+				"command":                     input.Command,
+				"description":                 input.Description,
+				"stdout":                      "",
+				"stderr":                      result.Stderr,
+				"exit_code":                   result.ExitCode,
+				"timed_out":                   false,
+				"duration_ms":                 result.DurationMS,
+				"timeout_ms":                  result.TimeoutMS,
+				"executable":                  "",
+				"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 			},
 		}, nil
 	}
@@ -450,14 +455,15 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 	return contracts.ToolResult{
 		Content: fmt.Sprintf("PowerShell command started in background with ID: %s", task.ID),
 		StructuredContent: map[string]any{
-			"type":          "powershell_background",
-			"powershell_id": task.ID,
-			"command":       command,
-			"description":   input.Description,
-			"running":       true,
-			"timeout_ms":    task.TimeoutMS,
-			"started_at":    task.StartedAt.UTC().Format(time.RFC3339Nano),
-			"executable":    task.Executable,
+			"type":                        "powershell_background",
+			"powershell_id":               task.ID,
+			"command":                     command,
+			"description":                 input.Description,
+			"running":                     true,
+			"timeout_ms":                  task.TimeoutMS,
+			"started_at":                  task.StartedAt.UTC().Format(time.RFC3339Nano),
+			"executable":                  task.Executable,
+			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 		},
 	}, nil
 }
@@ -545,7 +551,7 @@ func decodePowerShell(raw json.RawMessage) (powerShellInput, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "command", "timeout", "description", "run_in_background", "runInBackground":
+		case "command", "timeout", "description", "run_in_background", "runInBackground", "dangerouslyDisableSandbox":
 		default:
 			return powerShellInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -575,7 +581,7 @@ func normalizePowerShellRawInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "command", "timeout", "description", "run_in_background", "runInBackground":
+		case "command", "timeout", "description", "run_in_background", "runInBackground", "dangerouslyDisableSandbox":
 		default:
 			return nil, fmt.Errorf("input.%s is not allowed", key)
 		}

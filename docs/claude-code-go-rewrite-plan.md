@@ -192,6 +192,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PowerShell/PowerShellOutput 输入解码现在同样兼容 `timeout`、`run_in_background`/`runInBackground`、`tail_lines`/`tailLines` 的 quoted semantic string 形式，和官方 PowerShell tool 的 semantic number/boolean schema 对齐。
 - 本轮补充：Read/Edit 输入解码现在兼容 `offset`/`limit` 和 `replace_all` 的 quoted semantic string 形式；whole-decimal 数字字符串会按官方 `semanticNumber(...int())` 语义归一为整数，fractional 数字继续拒绝。
 - 本轮补充：Bash/PowerShell 输入校验现在会阻断前台首语句长 `sleep`/`Start-Sleep`（2 秒及以上）并提示改用 `run_in_background`；短 sleep、浮点 sleep、PowerShell `-Milliseconds` 和显式后台执行保持允许。
+- 本轮补充：Bash/PowerShell 输入解码现在接受官方 `dangerouslyDisableSandbox` semantic boolean 字段并在 structured content 中记录请求；真实 sandbox adapter/override 执行语义仍未宣称完成。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。

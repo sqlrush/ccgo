@@ -33,8 +33,9 @@ var bashSemanticNumberKeys = map[string]struct{}{
 }
 
 var bashSemanticBooleanKeys = map[string]struct{}{
-	"run_in_background": {},
-	"runInBackground":   {},
+	"run_in_background":         {},
+	"runInBackground":           {},
+	"dangerouslyDisableSandbox": {},
 }
 
 var goListAllowedFlags = map[string]bool{
@@ -741,13 +742,14 @@ var bashSafeEnvVars = map[string]bool{
 }
 
 type bashInput struct {
-	Command               string `json:"command"`
-	Timeout               *int   `json:"timeout,omitempty"`
-	Description           string `json:"description,omitempty"`
-	RunInBackground       bool   `json:"run_in_background,omitempty"`
-	RunInBackgroundAlt    bool   `json:"runInBackground,omitempty"`
-	hasRunInBackground    bool
-	hasRunInBackgroundAlt bool
+	Command                   string `json:"command"`
+	Timeout                   *int   `json:"timeout,omitempty"`
+	Description               string `json:"description,omitempty"`
+	RunInBackground           bool   `json:"run_in_background,omitempty"`
+	RunInBackgroundAlt        bool   `json:"runInBackground,omitempty"`
+	DangerouslyDisableSandbox bool   `json:"dangerouslyDisableSandbox,omitempty"`
+	hasRunInBackground        bool
+	hasRunInBackgroundAlt     bool
 }
 
 type bashResult struct {
@@ -783,11 +785,12 @@ func NewBashTool() tool.Tool {
 				"type":     "object",
 				"required": []any{"command"},
 				"properties": map[string]any{
-					"command":           map[string]any{"type": "string"},
-					"timeout":           map[string]any{"type": "integer"},
-					"description":       map[string]any{"type": "string"},
-					"run_in_background": map[string]any{"type": "boolean"},
-					"runInBackground":   map[string]any{"type": "boolean"},
+					"command":                   map[string]any{"type": "string"},
+					"timeout":                   map[string]any{"type": "integer"},
+					"description":               map[string]any{"type": "string"},
+					"run_in_background":         map[string]any{"type": "boolean"},
+					"runInBackground":           map[string]any{"type": "boolean"},
+					"dangerouslyDisableSandbox": map[string]any{"type": "boolean"},
 				},
 			},
 		},
@@ -924,15 +927,16 @@ func callBash(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Content: formatBashContent(result),
 		IsError: result.TimedOut || result.ExitCode != 0,
 		StructuredContent: map[string]any{
-			"type":        "bash",
-			"command":     input.Command,
-			"description": input.Description,
-			"stdout":      result.Stdout,
-			"stderr":      result.Stderr,
-			"exit_code":   result.ExitCode,
-			"timed_out":   result.TimedOut,
-			"duration_ms": result.DurationMS,
-			"timeout_ms":  result.TimeoutMS,
+			"type":                        "bash",
+			"command":                     input.Command,
+			"description":                 input.Description,
+			"stdout":                      result.Stdout,
+			"stderr":                      result.Stderr,
+			"exit_code":                   result.ExitCode,
+			"timed_out":                   result.TimedOut,
+			"duration_ms":                 result.DurationMS,
+			"timeout_ms":                  result.TimeoutMS,
+			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 		},
 	}, nil
 }
@@ -1117,13 +1121,14 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	return contracts.ToolResult{
 		Content: fmt.Sprintf("Command started in background with ID: %s", task.ID),
 		StructuredContent: map[string]any{
-			"type":        "bash_background",
-			"bash_id":     task.ID,
-			"command":     command,
-			"description": input.Description,
-			"running":     true,
-			"timeout_ms":  task.TimeoutMS,
-			"started_at":  task.StartedAt.UTC().Format(time.RFC3339Nano),
+			"type":                        "bash_background",
+			"bash_id":                     task.ID,
+			"command":                     command,
+			"description":                 input.Description,
+			"running":                     true,
+			"timeout_ms":                  task.TimeoutMS,
+			"started_at":                  task.StartedAt.UTC().Format(time.RFC3339Nano),
+			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 		},
 	}, nil
 }
@@ -1235,7 +1240,7 @@ func decodeBash(raw json.RawMessage) (bashInput, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "command", "timeout", "description", "run_in_background", "runInBackground":
+		case "command", "timeout", "description", "run_in_background", "runInBackground", "dangerouslyDisableSandbox":
 		default:
 			return bashInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -1265,7 +1270,7 @@ func normalizeBashRawInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "command", "timeout", "description", "run_in_background", "runInBackground":
+		case "command", "timeout", "description", "run_in_background", "runInBackground", "dangerouslyDisableSandbox":
 		default:
 			return nil, fmt.Errorf("input.%s is not allowed", key)
 		}

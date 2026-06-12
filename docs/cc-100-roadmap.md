@@ -44,6 +44,8 @@ M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted
 
 M5 补充：Bash/PowerShell 现在会在前台模式阻断首个语句中的长 `sleep`/`Start-Sleep`（2 秒及以上）并提示使用 `run_in_background`；短 sleep、浮点 sleep、`Start-Sleep -Milliseconds` 和显式后台执行保持允许。
 
+M5 补充：Bash/PowerShell 现在接受官方 `dangerouslyDisableSandbox` semantic boolean 输入，并在 structured content 中记录该请求；真实 sandbox adapter/override 行为仍按 sandbox parity 项继续推进。
+
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
 
 M6 补充：microcompact disk cache loader 和 prune 现在接受 digest 缺失但文件名已 keyed 的 cache entry，会用 `<digest>.json` 文件名作为 digest fallback，同时保留显式 digest mismatch 的 invalid-cache guard。

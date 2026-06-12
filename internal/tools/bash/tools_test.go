@@ -59,12 +59,12 @@ func TestBashAcceptsSemanticStringInputs(t *testing.T) {
 	result, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_bash_semantic_timeout",
 		Name:  "Bash",
-		Input: json.RawMessage(`{"command":"printf semantic","timeout":"1000"}`),
+		Input: json.RawMessage(`{"command":"printf semantic","timeout":"1000","dangerouslyDisableSandbox":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Content != "semantic" || result.StructuredContent["timeout_ms"] != 1000 {
+	if result.Content != "semantic" || result.StructuredContent["timeout_ms"] != 1000 || result.StructuredContent["dangerously_disable_sandbox"] != true {
 		t.Fatalf("semantic timeout result = %#v", result)
 	}
 

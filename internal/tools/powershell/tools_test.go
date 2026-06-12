@@ -62,12 +62,12 @@ func TestPowerShellAcceptsSemanticStringInputs(t *testing.T) {
 	result, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_powershell_semantic_timeout",
 		Name:  "PowerShell",
-		Input: json.RawMessage(`{"command":"Write-Output semantic","timeout":"1000"}`),
+		Input: json.RawMessage(`{"command":"Write-Output semantic","timeout":"1000","dangerouslyDisableSandbox":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.IsError || result.StructuredContent["timeout_ms"] != 1000 {
+	if !result.IsError || result.StructuredContent["timeout_ms"] != 1000 || result.StructuredContent["dangerously_disable_sandbox"] != true {
 		t.Fatalf("semantic timeout result = %#v", result)
 	}
 	stderr, _ := result.StructuredContent["stderr"].(string)
