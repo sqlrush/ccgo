@@ -10,11 +10,12 @@ import (
 )
 
 type RemoteTool struct {
-	Name        string
-	Description string
-	InputSchema contracts.JSONSchema
-	ReadOnly    bool
-	Destructive bool
+	Name         string
+	Description  string
+	InputSchema  contracts.JSONSchema
+	OutputSchema contracts.JSONSchema
+	ReadOnly     bool
+	Destructive  bool
 }
 
 type RemoteResource struct {
@@ -112,6 +113,7 @@ func buildTool(options ToolBuildOptions, remote RemoteTool) tool.Tool {
 			Name:               fullName,
 			Description:        remote.Description,
 			InputSchema:        schema,
+			OutputSchema:       remote.OutputSchema,
 			ReadOnly:           remote.ReadOnly,
 			Destructive:        remote.Destructive,
 			ConcurrencySafe:    remote.ReadOnly,

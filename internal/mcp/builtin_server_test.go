@@ -48,7 +48,7 @@ func TestBuiltinServerHandlesInitializeListAndCall(t *testing.T) {
 		t.Fatalf("initialize = %#v", responses[0])
 	}
 	listResult := string(mustMarshal(t, responses[1].Result))
-	if !strings.Contains(listResult, `"name":"Echo"`) || !strings.Contains(listResult, `"readOnlyHint":true`) {
+	if !strings.Contains(listResult, `"name":"Echo"`) || !strings.Contains(listResult, `"readOnlyHint":true`) || !strings.Contains(listResult, `"outputSchema"`) {
 		t.Fatalf("tools/list = %#v", responses[1])
 	}
 	callResult := string(mustMarshal(t, responses[2].Result))
@@ -406,6 +406,12 @@ func testMCPServerEchoTool(readOnly bool) tool.Tool {
 			InputSchema: contracts.JSONSchema{
 				"type":     "object",
 				"required": []any{"text"},
+				"properties": map[string]any{
+					"text": map[string]any{"type": "string"},
+				},
+			},
+			OutputSchema: contracts.JSONSchema{
+				"type": "object",
 				"properties": map[string]any{
 					"text": map[string]any{"type": "string"},
 				},

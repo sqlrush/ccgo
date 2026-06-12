@@ -604,13 +604,15 @@ func IsSessionExpiredError(err error) bool {
 }
 
 type rpcTool struct {
-	Name             string               `json:"name"`
-	Description      string               `json:"description"`
-	InputSchema      contracts.JSONSchema `json:"inputSchema"`
-	InputSchemaSnake contracts.JSONSchema `json:"input_schema"`
-	ReadOnly         bool                 `json:"readOnly"`
-	ReadOnlySnake    bool                 `json:"read_only"`
-	Annotations      rpcToolAnnotations   `json:"annotations"`
+	Name              string               `json:"name"`
+	Description       string               `json:"description"`
+	InputSchema       contracts.JSONSchema `json:"inputSchema"`
+	InputSchemaSnake  contracts.JSONSchema `json:"input_schema"`
+	OutputSchema      contracts.JSONSchema `json:"outputSchema"`
+	OutputSchemaSnake contracts.JSONSchema `json:"output_schema"`
+	ReadOnly          bool                 `json:"readOnly"`
+	ReadOnlySnake     bool                 `json:"read_only"`
+	Annotations       rpcToolAnnotations   `json:"annotations"`
 }
 
 type rpcToolAnnotations struct {
@@ -623,12 +625,17 @@ func (t rpcTool) remoteTool() RemoteTool {
 	if schema == nil {
 		schema = t.InputSchemaSnake
 	}
+	outputSchema := t.OutputSchema
+	if outputSchema == nil {
+		outputSchema = t.OutputSchemaSnake
+	}
 	return RemoteTool{
-		Name:        t.Name,
-		Description: t.Description,
-		InputSchema: schema,
-		ReadOnly:    t.ReadOnly || t.ReadOnlySnake || t.Annotations.ReadOnlyHint,
-		Destructive: t.Annotations.DestructiveHint,
+		Name:         t.Name,
+		Description:  t.Description,
+		InputSchema:  schema,
+		OutputSchema: outputSchema,
+		ReadOnly:     t.ReadOnly || t.ReadOnlySnake || t.Annotations.ReadOnlyHint,
+		Destructive:  t.Annotations.DestructiveHint,
 	}
 }
 

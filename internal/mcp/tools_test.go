@@ -74,6 +74,12 @@ func TestBuildToolsCreatesMCPToolDefinitions(t *testing.T) {
 					"query": map[string]any{"type": "string"},
 				},
 			},
+			OutputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"total": map[string]any{"type": "number"},
+				},
+			},
 			ReadOnly: true,
 		},
 		{Name: ""},
@@ -101,6 +107,9 @@ func TestBuildToolsCreatesMCPToolDefinitions(t *testing.T) {
 	}
 	if !reflect.DeepEqual(def.InputSchema, client.tools[0].InputSchema) {
 		t.Fatalf("schema = %#v", def.InputSchema)
+	}
+	if !reflect.DeepEqual(def.OutputSchema, client.tools[0].OutputSchema) {
+		t.Fatalf("output schema = %#v", def.OutputSchema)
 	}
 }
 

@@ -145,7 +145,7 @@ func (t *fakeAuthorizationRecoveryTransport) RefreshAuthorization(context.Contex
 
 func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
-		"tools/list": json.RawMessage(`{"tools":[{"name":"search","description":"Search issues","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}]}`),
+		"tools/list": json.RawMessage(`{"tools":[{"name":"search","description":"Search issues","inputSchema":{"type":"object"},"outputSchema":{"type":"object","properties":{"total":{"type":"number"}}},"annotations":{"readOnlyHint":true}}]}`),
 		"tools/call": json.RawMessage(`{"content":[{"type":"text","text":"ok"}]}`),
 	}}
 	client := NewProtocolClient(transport)
@@ -159,6 +159,9 @@ func TestProtocolClientListsAndCallsTools(t *testing.T) {
 	}
 	if tools[0].InputSchema["type"] != "object" {
 		t.Fatalf("schema = %#v", tools[0].InputSchema)
+	}
+	if tools[0].OutputSchema["type"] != "object" {
+		t.Fatalf("output schema = %#v", tools[0].OutputSchema)
 	}
 
 	result, err := client.CallTool(context.Background(), "github", "search", json.RawMessage(`{"query":"bugs"}`))

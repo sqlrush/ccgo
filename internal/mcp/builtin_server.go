@@ -313,13 +313,17 @@ func (s *BuiltinServer) listTools() (any, *RPCError) {
 			"readOnlyHint":    definition.ReadOnly,
 			"destructiveHint": definition.Destructive,
 		}
-		tools = append(tools, map[string]any{
+		toolInfo := map[string]any{
 			"name":        definition.Name,
 			"description": definition.Description,
 			"inputSchema": inputSchema,
 			"annotations": annotations,
 			"readOnly":    definition.ReadOnly,
-		})
+		}
+		if definition.OutputSchema != nil {
+			toolInfo["outputSchema"] = definition.OutputSchema
+		}
+		tools = append(tools, toolInfo)
 	}
 	return map[string]any{"tools": tools}, nil
 }
