@@ -292,6 +292,8 @@ func (s *BuiltinServer) handleRequest(ctx context.Context, request serverRPCRequ
 		return map[string]any{"resourceTemplates": []any{}}, nil
 	case "resources/read":
 		return nil, validateNamedParams(request.Params, "uri", "resource not found")
+	case "resources/subscribe":
+		return nil, validateNamedParams(request.Params, "uri", "resource not found")
 	case "prompts/list":
 		return map[string]any{"prompts": []any{}}, nil
 	case "prompts/get":

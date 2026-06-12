@@ -187,7 +187,8 @@ func TestBuiltinServerReportsEmptyResourcesAndPrompts(t *testing.T) {
 		`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{}}`,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":"1","method":"resources/read","params":{"uri":"file:///missing"}}`,
-		`{"jsonrpc":"2.0","id":"2","method":"prompts/get","params":{"name":"missing"}}`,
+		`{"jsonrpc":"2.0","id":"2","method":"resources/subscribe","params":{"uri":"file:///missing"}}`,
+		`{"jsonrpc":"2.0","id":"3","method":"prompts/get","params":{"name":"missing"}}`,
 		"",
 	}, "\n")
 	var out bytes.Buffer
@@ -195,14 +196,17 @@ func TestBuiltinServerReportsEmptyResourcesAndPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 	responses := decodeServerResponses(t, out.String())
-	if len(responses) != 3 {
+	if len(responses) != 4 {
 		t.Fatalf("responses = %#v", responses)
 	}
 	if responses[1].Error == nil || !strings.Contains(responses[1].Error.Message, "resource not found") {
 		t.Fatalf("resource error = %#v", responses[1].Error)
 	}
-	if responses[2].Error == nil || !strings.Contains(responses[2].Error.Message, "prompt not found") {
-		t.Fatalf("prompt error = %#v", responses[2].Error)
+	if responses[2].Error == nil || !strings.Contains(responses[2].Error.Message, "resource not found") {
+		t.Fatalf("resource subscribe error = %#v", responses[2].Error)
+	}
+	if responses[3].Error == nil || !strings.Contains(responses[3].Error.Message, "prompt not found") {
+		t.Fatalf("prompt error = %#v", responses[3].Error)
 	}
 }
 
