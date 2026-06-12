@@ -399,8 +399,23 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 			message.SessionID = r.SessionID
 		}
 		toolMessages = append(toolMessages, message)
-		toolResults = append(toolResults, result)
 		r.emit(Event{Type: EventToolResult, Message: &message, ToolResult: &result})
+		if !result.IsError {
+			for _, newMessage := range result.NewMessages {
+				if newMessage.Type == "" {
+					newMessage.Type = contracts.MessageUser
+				}
+				if newMessage.UUID == "" {
+					newMessage.UUID = contracts.NewID()
+				}
+				if newMessage.SessionID == "" && r.SessionID != "" {
+					newMessage.SessionID = r.SessionID
+				}
+				toolMessages = append(toolMessages, newMessage)
+				r.emit(Event{Type: EventUserMessage, Message: &newMessage})
+			}
+		}
+		toolResults = append(toolResults, result)
 	}
 	return toolMessages, toolResults
 }

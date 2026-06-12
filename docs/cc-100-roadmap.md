@@ -64,6 +64,8 @@ M8 补充：新增 `internal/commands` registry 基础层，按官方 `getComman
 
 M8 补充：command registry 现在保存本地 skill prompt template，并提供 `ExpandPrompt` 基础调用入口，可按 name/display-name/alias 展开 prompt command，执行 `$ARGUMENTS`、`$ARGUMENTS[n]`、`$n` 和 frontmatter `arguments` named placeholder 替换，注入 `${CLAUDE_SESSION_ID}`，并生成 official shape 的 meta user message；shell command injection、SkillTool wrapper、local/local-jsx 执行和 REPL/UI wiring 仍未完成。
 
+M8 补充：新增基础 `Skill` tool wrapper，已注册到默认内置工具集，可按官方 `skill`/`args` 输入调用项目目录发现到的本地 prompt skill，并兼容 `commandName`/`arguments` 别名；tool result 会返回 `Launching skill: ...`、structured command metadata 和 prompt expansion 生成的 meta user message，conversation runner 现在会把 `ToolResult.NewMessages` 追加进后续模型请求和 transcript。forked skill、remote/MCP/plugin skill、skill prompt shell injection、slash/local command UI wiring 仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
@@ -1174,7 +1176,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - plugin manifest、marketplace、install/cache/update。
 - plugin hooks/agents/MCP。
 
-当前状态：未开始完整实现。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、command registry metadata/lookup/filter、prompt expansion 和基础 `Skill` tool inline 调用；仍缺 bundled/plugin/MCP/remote skills、slash/local/local-jsx 实际执行、`/help`/`/skills` UI、plugin manifest/marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP 接线。
 
 ### M9: MCP Platform
 

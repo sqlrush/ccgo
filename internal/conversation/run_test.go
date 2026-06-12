@@ -148,6 +148,90 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 }
 
+func TestRunnerAppendsToolNewMessagesAfterToolResult(t *testing.T) {
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{Name: "Meta", ReadOnly: true},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{
+				Content: "launched",
+				NewMessages: []contracts.Message{{
+					Type:    contracts.MessageUser,
+					IsMeta:  true,
+					Content: []contracts.ContentBlock{contracts.NewTextBlock("meta skill content")},
+				}},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_meta",
+				Name:  "Meta",
+				Input: json.RawMessage(`{}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:      client,
+		Tools:       tool.NewExecutor(registry),
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_meta",
+		SessionPath: transcriptPath,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("run meta"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].Content != "launched" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(client.requests))
+	}
+	second := client.requests[1].Messages
+	if len(second) < 2 {
+		t.Fatalf("second request messages = %#v", second)
+	}
+	toolResult := second[len(second)-2]
+	meta := second[len(second)-1]
+	if toolResult.Role != "user" || toolResult.Content[0].Type != contracts.ContentToolResult || toolResult.Content[0].ToolUseID != "toolu_meta" {
+		t.Fatalf("tool result api message = %#v", toolResult)
+	}
+	if meta.Role != "user" || meta.Content[0].Text != "meta skill content" {
+		t.Fatalf("meta api message = %#v", meta)
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 5 {
+		t.Fatalf("transcript entries = %d, want 5", len(entries))
+	}
+	if !entries[3].Message.IsMeta || entries[3].Message.SessionID != "sess_meta" {
+		t.Fatalf("meta transcript entry = %#v", entries[3].Message)
+	}
+}
+
 func TestRunnerAppliesToolResultBudgetBeforeNextRequest(t *testing.T) {
 	registry, err := tool.NewRegistry(tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{Name: "Big", ReadOnly: true},
