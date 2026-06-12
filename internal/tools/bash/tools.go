@@ -670,6 +670,41 @@ var gitConfigGetFlagsWithArgs = map[string]bool{
 	"--type":    true,
 }
 
+var bashSafeEnvVars = map[string]bool{
+	"GOEXPERIMENT":                   true,
+	"GOOS":                           true,
+	"GOARCH":                         true,
+	"CGO_ENABLED":                    true,
+	"GO111MODULE":                    true,
+	"RUST_BACKTRACE":                 true,
+	"RUST_LOG":                       true,
+	"NODE_ENV":                       true,
+	"PYTHONUNBUFFERED":               true,
+	"PYTHONDONTWRITEBYTECODE":        true,
+	"PYTEST_DISABLE_PLUGIN_AUTOLOAD": true,
+	"PYTEST_DEBUG":                   true,
+	"ANTHROPIC_API_KEY":              true,
+	"LANG":                           true,
+	"LANGUAGE":                       true,
+	"LC_ALL":                         true,
+	"LC_CTYPE":                       true,
+	"LC_TIME":                        true,
+	"CHARSET":                        true,
+	"TERM":                           true,
+	"COLORTERM":                      true,
+	"NO_COLOR":                       true,
+	"FORCE_COLOR":                    true,
+	"TZ":                             true,
+	"LS_COLORS":                      true,
+	"LSCOLORS":                       true,
+	"GREP_COLOR":                     true,
+	"GREP_COLORS":                    true,
+	"GCC_COLORS":                     true,
+	"TIME_STYLE":                     true,
+	"BLOCK_SIZE":                     true,
+	"BLOCKSIZE":                      true,
+}
+
 type bashInput struct {
 	Command               string `json:"command"`
 	Timeout               *int   `json:"timeout,omitempty"`
@@ -1461,11 +1496,288 @@ func shellWords(command string) []string {
 	return words
 }
 
+func stripSafeWrapperWords(words []string) []string {
+	words = stripLeadingSafeAssignments(words)
+	for len(words) > 0 {
+		switch filepathBase(words[0]) {
+		case "time", "nohup":
+			next := 1
+			if len(words) > 1 && words[1] == "--" {
+				next = 2
+			}
+			words = words[next:]
+		case "timeout":
+			duration := timeoutDurationIndex(words)
+			if duration < 0 || duration+1 >= len(words) {
+				return words
+			}
+			words = words[duration+1:]
+		case "nice":
+			commandIndex := niceCommandIndex(words)
+			if commandIndex < 0 {
+				return words
+			}
+			words = words[commandIndex:]
+		case "stdbuf":
+			commandIndex := stdbufCommandIndex(words)
+			if commandIndex < 0 {
+				return words
+			}
+			words = words[commandIndex:]
+		case "env":
+			commandIndex := envCommandIndex(words)
+			if commandIndex < 0 {
+				return words
+			}
+			words = words[commandIndex:]
+		default:
+			return words
+		}
+	}
+	return words
+}
+
+func stripLeadingSafeAssignments(words []string) []string {
+	for len(words) > 0 && isSafeEnvAssignment(words[0]) {
+		words = words[1:]
+	}
+	return words
+}
+
+func stripLeadingAssignments(words []string) []string {
+	for len(words) > 0 && isShellAssignment(words[0]) {
+		words = words[1:]
+	}
+	return words
+}
+
+func timeoutDurationIndex(words []string) int {
+	for i := 1; i < len(words); {
+		arg := words[i]
+		next := ""
+		if i+1 < len(words) {
+			next = words[i+1]
+		}
+		switch {
+		case arg == "--foreground" || arg == "--preserve-status" || arg == "--verbose" || arg == "-v":
+			i++
+		case strings.HasPrefix(arg, "--kill-after=") || strings.HasPrefix(arg, "--signal="):
+			if !isSafeWrapperValue(strings.SplitN(arg, "=", 2)[1]) {
+				return -1
+			}
+			i++
+		case (arg == "--kill-after" || arg == "--signal" || arg == "-k" || arg == "-s") && next != "":
+			if !isSafeWrapperValue(next) {
+				return -1
+			}
+			i += 2
+		case (strings.HasPrefix(arg, "-k") || strings.HasPrefix(arg, "-s")) && len(arg) > 2:
+			if !isSafeWrapperValue(arg[2:]) {
+				return -1
+			}
+			i++
+		case arg == "--":
+			i++
+			if i < len(words) && isTimeoutDuration(words[i]) {
+				return i
+			}
+			return -1
+		case strings.HasPrefix(arg, "-"):
+			return -1
+		default:
+			if isTimeoutDuration(arg) {
+				return i
+			}
+			return -1
+		}
+	}
+	return -1
+}
+
+func niceCommandIndex(words []string) int {
+	i := 1
+	if i < len(words) && words[i] == "-n" {
+		if i+1 >= len(words) || !isSignedInteger(words[i+1]) {
+			return -1
+		}
+		i += 2
+	} else if i < len(words) && strings.HasPrefix(words[i], "-") && isSignedInteger(words[i]) {
+		i++
+	}
+	if i < len(words) && words[i] == "--" {
+		i++
+	}
+	if i < len(words) {
+		return i
+	}
+	return -1
+}
+
+func stdbufCommandIndex(words []string) int {
+	consumed := false
+	i := 1
+	for i < len(words) {
+		arg := words[i]
+		switch {
+		case (arg == "-i" || arg == "-o" || arg == "-e") && i+1 < len(words):
+			consumed = true
+			i += 2
+		case len(arg) > 2 && arg[0] == '-' && (arg[1] == 'i' || arg[1] == 'o' || arg[1] == 'e'):
+			consumed = true
+			i++
+		case strings.HasPrefix(arg, "--input=") || strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--error="):
+			consumed = true
+			i++
+		case strings.HasPrefix(arg, "-"):
+			return -1
+		default:
+			if consumed {
+				return i
+			}
+			return -1
+		}
+	}
+	return -1
+}
+
+func envCommandIndex(words []string) int {
+	for i := 1; i < len(words); {
+		arg := words[i]
+		switch {
+		case isSafeEnvAssignment(arg):
+			i++
+		case arg == "-i" || arg == "-0" || arg == "-v":
+			i++
+		case arg == "-u" && i+1 < len(words):
+			if !isShellIdentifier(words[i+1]) {
+				return -1
+			}
+			i += 2
+		case strings.HasPrefix(arg, "-"):
+			return -1
+		default:
+			return i
+		}
+	}
+	return -1
+}
+
+func isSafeEnvAssignment(word string) bool {
+	name, value, ok := strings.Cut(word, "=")
+	return ok && bashSafeEnvVars[name] && isShellIdentifier(name) && isSafeEnvValue(value)
+}
+
+func isShellAssignment(word string) bool {
+	name, _, ok := strings.Cut(word, "=")
+	return ok && isShellIdentifier(name)
+}
+
+func isShellIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		if i == 0 {
+			if r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
+				continue
+			}
+			return false
+		}
+		if r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isSafeEnvValue(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == '/' || r == ':' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isSafeWrapperValue(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == '+' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isTimeoutDuration(value string) bool {
+	if value == "" {
+		return false
+	}
+	if last := value[len(value)-1]; last == 's' || last == 'm' || last == 'h' || last == 'd' {
+		value = value[:len(value)-1]
+	}
+	if value == "" {
+		return false
+	}
+	if value[0] < '0' || value[0] > '9' {
+		return false
+	}
+	seenDigit := false
+	seenDot := false
+	digitAfterDot := false
+	for _, r := range value {
+		switch {
+		case r >= '0' && r <= '9':
+			seenDigit = true
+			if seenDot {
+				digitAfterDot = true
+			}
+		case r == '.' && !seenDot:
+			seenDot = true
+		default:
+			return false
+		}
+	}
+	return seenDigit && (!seenDot || digitAfterDot)
+}
+
+func isSignedInteger(value string) bool {
+	if value == "" {
+		return false
+	}
+	if value[0] == '-' {
+		value = value[1:]
+	}
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func readOnlyWords(words []string) bool {
+	words = stripSafeWrapperWords(words)
+	if len(words) == 0 {
+		return false
+	}
 	cmd := filepathBase(words[0])
 	switch cmd {
-	case "pwd", "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "printf", "echo", "date", "whoami", "id", "uname", "env", "printenv", "which", "type":
+	case "pwd", "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "printf", "echo", "date", "whoami", "id", "uname", "printenv", "which", "type":
 		return true
+	case "env":
+		return readOnlyEnv(words)
 	case "git":
 		return readOnlyGit(words)
 	case "go":
@@ -1473,6 +1785,23 @@ func readOnlyWords(words []string) bool {
 	default:
 		return false
 	}
+}
+
+func readOnlyEnv(words []string) bool {
+	for i := 1; i < len(words); {
+		arg := words[i]
+		switch {
+		case isSafeEnvAssignment(arg):
+			i++
+		case arg == "-i" || arg == "-0" || arg == "-v":
+			i++
+		case arg == "-u" && i+1 < len(words) && isShellIdentifier(words[i+1]):
+			i += 2
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func readOnlyGit(words []string) bool {
@@ -1677,6 +2006,11 @@ func readOnlyGitConfig(args []string) bool {
 }
 
 func destructiveWords(words []string) bool {
+	words = stripSafeWrapperWords(words)
+	words = stripLeadingAssignments(words)
+	if len(words) == 0 {
+		return false
+	}
 	cmd := filepathBase(words[0])
 	switch cmd {
 	case "rm", "rmdir", "dd", "mkfs", "shutdown", "reboot", "halt", "poweroff", "kill", "pkill", "killall", "sudo", "su":
