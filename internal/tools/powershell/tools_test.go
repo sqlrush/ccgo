@@ -49,6 +49,52 @@ func TestPowerShellValidation(t *testing.T) {
 	}
 }
 
+func TestPowerShellAcceptsSemanticStringInputs(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_semantic_timeout",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Write-Output semantic","timeout":"1000"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError || result.StructuredContent["timeout_ms"] != 1000 {
+		t.Fatalf("semantic timeout result = %#v", result)
+	}
+	stderr, _ := result.StructuredContent["stderr"].(string)
+	if !strings.Contains(stderr, "PowerShell executable not found") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+
+	start, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_semantic_background",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Write-Output semantic","runInBackground":"true","timeout":"1000"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !start.IsError || start.StructuredContent["timeout_ms"] != 1000 {
+		t.Fatalf("semantic background result = %#v", start)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_semantic_tail",
+		Name:  "PowerShellOutput",
+		Input: json.RawMessage(`{"id":"powershell_missing","tailLines":"2"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "background powershell command not found") {
+		t.Fatalf("err = %v, want missing background task", err)
+	}
+}
+
 func TestPowerShellCommandClassification(t *testing.T) {
 	readOnly := []string{
 		"Get-Location",

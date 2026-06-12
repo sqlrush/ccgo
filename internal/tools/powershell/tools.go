@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,6 +20,19 @@ const (
 	defaultTimeoutMillis = 120_000
 	maxTimeoutMillis     = 600_000
 )
+
+var powerShellSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
+
+var powerShellSemanticNumberKeys = map[string]struct{}{
+	"timeout":    {},
+	"tail_lines": {},
+	"tailLines":  {},
+}
+
+var powerShellSemanticBooleanKeys = map[string]struct{}{
+	"run_in_background": {},
+	"runInBackground":   {},
+}
 
 type powerShellInput struct {
 	Command               string `json:"command"`
@@ -75,6 +89,7 @@ func NewPowerShellTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Runs a PowerShell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and interrupt controls are not implemented yet.", nil
 		},
+		NormalizeFunc:   normalizePowerShellRawInput,
 		ValidateFunc:    validatePowerShell,
 		CallFunc:        callPowerShell,
 		ReadOnlyFunc:    powerShellReadOnlyInput,
@@ -106,6 +121,7 @@ func NewPowerShellOutputTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Reads stdout, stderr, and status for a PowerShell command started with run_in_background.", nil
 		},
+		NormalizeFunc:   normalizePowerShellOutputRawInput,
 		ValidateFunc:    validatePowerShellOutput,
 		CallFunc:        callPowerShellOutput,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
@@ -527,6 +543,7 @@ func decodePowerShell(raw json.RawMessage) (powerShellInput, error) {
 			return powerShellInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
 	}
+	coercePowerShellSemanticJSONStrings(obj, powerShellSemanticNumberKeys, powerShellSemanticBooleanKeys)
 	var input powerShellInput
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -544,6 +561,26 @@ func decodePowerShell(raw json.RawMessage) (powerShellInput, error) {
 	return input, nil
 }
 
+func normalizePowerShellRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "command", "timeout", "description", "run_in_background", "runInBackground":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	coercePowerShellSemanticJSONStrings(obj, powerShellSemanticNumberKeys, powerShellSemanticBooleanKeys)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func decodePowerShellOutput(raw json.RawMessage) (powerShellOutputInput, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
@@ -556,6 +593,7 @@ func decodePowerShellOutput(raw json.RawMessage) (powerShellOutputInput, error) 
 			return powerShellOutputInput{}, fmt.Errorf("input.%s is not allowed", key)
 		}
 	}
+	coercePowerShellSemanticJSONStrings(obj, powerShellSemanticNumberKeys, nil)
 	var input powerShellOutputInput
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -565,6 +603,48 @@ func decodePowerShellOutput(raw json.RawMessage) (powerShellOutputInput, error) 
 		return powerShellOutputInput{}, err
 	}
 	return input, nil
+}
+
+func normalizePowerShellOutputRawInput(raw json.RawMessage) (json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "powershell_id", "id", "tail_lines", "tailLines":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	coercePowerShellSemanticJSONStrings(obj, powerShellSemanticNumberKeys, nil)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func coercePowerShellSemanticJSONStrings(obj map[string]json.RawMessage, numberKeys map[string]struct{}, boolKeys map[string]struct{}) {
+	for key, raw := range obj {
+		if len(raw) == 0 || raw[0] != '"' {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			continue
+		}
+		if _, ok := boolKeys[key]; ok {
+			switch text {
+			case "true", "false":
+				obj[key] = json.RawMessage(text)
+			}
+			continue
+		}
+		if _, ok := numberKeys[key]; ok && powerShellSemanticNumberLiteralRE.MatchString(text) {
+			obj[key] = json.RawMessage(text)
+		}
+	}
 }
 
 func decodeKillPowerShell(raw json.RawMessage) (powerShellKillInput, error) {

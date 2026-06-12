@@ -38,6 +38,8 @@ M7 补充：scripted task runtime payload 和 task expectation 现在接受 `tas
 
 M5 补充：Bash/BashOutput 现在接受 `timeout`、`run_in_background`/`runInBackground`、`tail_lines`/`tailLines` 的 quoted semantic string 输入，和官方 SDK 常见的 number/boolean 宽松输入保持一致。
 
+M5 补充：PowerShell/PowerShellOutput 现在接受 `timeout`、`run_in_background`/`runInBackground`、`tail_lines`/`tailLines` 的 quoted semantic string 输入，和官方 PowerShell tool schema 的 semantic number/boolean 行为对齐。
+
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
 
 M6 补充：microcompact disk cache loader 和 prune 现在接受 digest 缺失但文件名已 keyed 的 cache entry，会用 `<digest>.json` 文件名作为 digest fallback，同时保留显式 digest mismatch 的 invalid-cache guard。
