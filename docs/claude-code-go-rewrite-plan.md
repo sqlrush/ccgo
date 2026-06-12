@@ -201,6 +201,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`internal/skills` 现在提供项目 skill discovery 基础能力，按 `.claude/skills/<skill>/SKILL.md` 目录格式从 cwd 向 git root/home 收集 skill roots，并可按文件路径发现 cwd 以下嵌套 skills；Runner 会把工作目录发现到的项目 skill roots 自动加入工具只读权限上下文。
 - 本轮补充：Read/Write/Edit/NotebookEdit 文件工具会在成功处理文件路径时触发嵌套 skill discovery，把新发现的 skill roots 追加到共享 tool metadata 的内部只读路径上下文；后续工具可读取对应 skill 文件和资源，但完整 skill activation/SkillTool/UI 仍未宣称完成。
 - 本轮补充：`internal/skills` 现在可加载目录式 `<skill>/SKILL.md` 并生成 prompt command 元数据，覆盖 description/frontmatter fallback、allowed-tools、argument-hint、arguments、when_to_use、version、model、paths、content length、user-invocable hidden 状态和 disable-model-invocation；项目 skill commands 可按 discovery 顺序导出，slash command 注册、SkillTool 调用和 UI 激活仍未宣称完成。
+- 本轮补充：新增 `internal/commands` registry 基础层，按官方 command 来源顺序合并 bundled/builtin-plugin/project-skill/workflow/plugin/dynamic/builtin metadata，并提供 dynamic 去重、display-name/alias 查找、hidden 过滤、SkillTool/slash-skill 过滤和 bridge-safe 判定；实际 local/local-jsx 执行、`/help`/`/skills` UI、plugin/MCP/workflow 加载仍未宣称完成。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。

@@ -60,6 +60,8 @@ M8 补充：Read/Write/Edit/NotebookEdit 现在会在处理文件路径时触发
 
 M8 补充：`internal/skills` 现在可以加载目录式 `<skill>/SKILL.md`，解析基础 frontmatter 并生成 prompt command 元数据，包括 display name、description fallback、allowed-tools、argument-hint、arguments、when_to_use、version、model、paths、content length、user-invocable hidden 状态和 disable-model-invocation；项目 skill commands 可按现有 discovery 顺序导出，但 slash command 注册、SkillTool 调用和 UI 激活仍未完成。
 
+M8 补充：新增 `internal/commands` registry 基础层，按官方 `getCommands(cwd)` 的来源顺序合并 bundled/builtin-plugin/project-skill/workflow/plugin/dynamic/builtin command metadata，支持 dynamic skill 去重、display-name/alias 查找、hidden 可见性过滤、SkillTool model-invocable command 过滤、slash-command skill 过滤和 bridge-safe command 判定；当前仍是 metadata/registry 层，local/local-jsx 实际执行、`/help`/`/skills` UI、plugin/MCP/workflow 来源接入仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
