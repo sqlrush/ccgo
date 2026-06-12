@@ -83,13 +83,13 @@ func OpenServerClient(ctx context.Context, name string, server contracts.MCPServ
 			Close:  transport.Close,
 		}, nil
 	case TransportHTTP:
-		transport := NewHTTPTransport(server.URL, server.Headers, nil)
+		transport := NewHTTPTransport(server.URL, TransportHeaders(server), nil)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportSSE:
-		transport := NewSSETransport(server.URL, server.Headers, nil)
+		transport := NewSSETransport(server.URL, TransportHeaders(server), nil)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,

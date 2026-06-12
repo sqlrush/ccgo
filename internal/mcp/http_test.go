@@ -46,13 +46,21 @@ func TestHTTPTransportRoundTripPostsJSONRPC(t *testing.T) {
 
 func TestOpenServerClientSupportsHTTPTransport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer token" {
+			t.Fatalf("authorization = %q", got)
+		}
+		if got := r.Header.Get("anthropic-beta"); got == "" {
+			t.Fatal("missing anthropic-beta")
+		}
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"tools":[{"name":"ping","readOnly":true}]}}`))
 	}))
 	defer server.Close()
 
 	handle, err := OpenServerClient(context.Background(), "remote", contracts.MCPServer{
-		Type: TransportHTTP,
-		URL:  server.URL,
+		Type:      TransportHTTP,
+		URL:       server.URL,
+		AuthToken: "token",
+		OAuth:     &contracts.MCPOAuthConfig{ClientID: "client"},
 	})
 	if err != nil {
 		t.Fatal(err)
