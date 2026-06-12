@@ -62,6 +62,58 @@ func TestBuildServerToolSetBuildsRemoteAndHelperTools(t *testing.T) {
 	}
 }
 
+func TestBuildServerToolSetsAggregatesSuccessesAndErrors(t *testing.T) {
+	closed := []string{}
+	result := BuildServerToolSets(context.Background(), map[string]contracts.MCPServer{
+		"zeta":  {Command: "zeta"},
+		"alpha": {Command: "alpha"},
+		"bad":   {Command: "bad"},
+	}, ServerToolOptions{
+		DisableResources: true,
+		DisablePrompts:   true,
+		OpenClient: func(_ context.Context, name string, _ contracts.MCPServer) (ClientHandle, error) {
+			if name == "bad" {
+				return ClientHandle{}, errors.New("cannot start")
+			}
+			return ClientHandle{
+				Client: &fakeMCPClient{tools: []RemoteTool{{
+					Name:     "ping",
+					ReadOnly: true,
+				}}},
+				Close: func() error {
+					closed = append(closed, name)
+					return nil
+				},
+			}, nil
+		},
+	})
+	if len(result.Errors) != 1 || result.Errors[0].ServerName != "bad" {
+		t.Fatalf("errors = %#v", result.Errors)
+	}
+	if len(result.Servers) != 2 || result.Servers[0].ServerName != "alpha" || result.Servers[1].ServerName != "zeta" {
+		t.Fatalf("servers = %#v", result.Servers)
+	}
+	if len(result.Tools) != 2 {
+		t.Fatalf("tools = %#v", result.Tools)
+	}
+	registry, err := result.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := registry.Lookup("mcp__alpha__ping"); !ok {
+		t.Fatalf("missing alpha tool: %#v", registry.Names())
+	}
+	if _, ok := registry.Lookup("mcp__zeta__ping"); !ok {
+		t.Fatalf("missing zeta tool: %#v", registry.Names())
+	}
+	if err := result.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 2 || closed[0] != "alpha" || closed[1] != "zeta" {
+		t.Fatalf("closed = %#v", closed)
+	}
+}
+
 func TestBuildServerToolSetClosesClientWhenToolDiscoveryFails(t *testing.T) {
 	closed := false
 	client := &fakeMCPClient{listErr: errors.New("boom")}

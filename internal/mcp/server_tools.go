@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -31,6 +32,45 @@ type ServerToolSet struct {
 	Close      func() error
 }
 
+type ServerToolError struct {
+	ServerName string
+	Err        error
+}
+
+func (e ServerToolError) Error() string {
+	if e.Err == nil {
+		return fmt.Sprintf("mcp server %q failed", e.ServerName)
+	}
+	return fmt.Sprintf("mcp server %q failed: %v", e.ServerName, e.Err)
+}
+
+func (e ServerToolError) Unwrap() error {
+	return e.Err
+}
+
+type MultiServerToolSet struct {
+	Servers []ServerToolSet
+	Tools   []tool.Tool
+	Errors  []ServerToolError
+}
+
+func (s MultiServerToolSet) Registry() (*tool.Registry, error) {
+	return tool.NewRegistry(s.Tools...)
+}
+
+func (s MultiServerToolSet) Close() error {
+	var errs []error
+	for _, server := range s.Servers {
+		if server.Close == nil {
+			continue
+		}
+		if err := server.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func OpenServerClient(ctx context.Context, name string, server contracts.MCPServer) (ClientHandle, error) {
 	switch Transport(server) {
 	case TransportStdio:
@@ -45,6 +85,20 @@ func OpenServerClient(ctx context.Context, name string, server contracts.MCPServ
 	default:
 		return ClientHandle{}, fmt.Errorf("mcp server %q transport %q is not supported yet", name, Transport(server))
 	}
+}
+
+func BuildServerToolSets(ctx context.Context, servers map[string]contracts.MCPServer, options ServerToolOptions) MultiServerToolSet {
+	result := MultiServerToolSet{}
+	for _, name := range sortedServerNames(servers) {
+		toolset, err := BuildServerToolSet(ctx, name, servers[name], options)
+		if err != nil {
+			result.Errors = append(result.Errors, ServerToolError{ServerName: name, Err: err})
+			continue
+		}
+		result.Servers = append(result.Servers, toolset)
+		result.Tools = append(result.Tools, toolset.Tools...)
+	}
+	return result
 }
 
 func BuildServerToolSet(ctx context.Context, serverName string, server contracts.MCPServer, options ServerToolOptions) (ServerToolSet, error) {
