@@ -173,6 +173,33 @@ type InitializeResult struct {
 	Instructions    string             `json:"instructions,omitempty"`
 }
 
+type CompletionReference struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+	URI  string `json:"uri,omitempty"`
+}
+
+type CompletionArgument struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type CompletionContext struct {
+	Arguments map[string]string `json:"arguments,omitempty"`
+}
+
+type CompletionRequest struct {
+	Ref      CompletionReference `json:"ref"`
+	Argument CompletionArgument  `json:"argument"`
+	Context  *CompletionContext  `json:"context,omitempty"`
+}
+
+type CompletionResult struct {
+	Values  []string `json:"values"`
+	Total   int      `json:"total,omitempty"`
+	HasMore bool     `json:"hasMore"`
+}
+
 func DefaultInitializeOptions() InitializeOptions {
 	return InitializeOptions{
 		ProtocolVersion:           DefaultProtocolVersion,
@@ -427,6 +454,23 @@ func (c *ProtocolClient) GetPrompt(ctx context.Context, serverName string, promp
 		return PromptResult{}, err
 	}
 	return response.promptResult()
+}
+
+func (c *ProtocolClient) Complete(ctx context.Context, request CompletionRequest) (CompletionResult, error) {
+	raw, err := c.request(ctx, "completion/complete", request)
+	if err != nil {
+		return CompletionResult{}, err
+	}
+	var response rpcCompletionResult
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return CompletionResult{}, err
+	}
+	return response.completionResult(), nil
+}
+
+func (c *ProtocolClient) SetLoggingLevel(ctx context.Context, level string) error {
+	_, err := c.request(ctx, "logging/setLevel", map[string]any{"level": strings.TrimSpace(level)})
+	return err
 }
 
 func listPaginationParams(cursor string) any {
@@ -977,6 +1021,29 @@ func decodePromptMessageAlias(raw json.RawMessage) ([]rpcPromptMessage, error) {
 		return nil, err
 	}
 	return []rpcPromptMessage{message}, nil
+}
+
+type rpcCompletionResult struct {
+	Completion rpcCompletion `json:"completion"`
+}
+
+func (r rpcCompletionResult) completionResult() CompletionResult {
+	return r.Completion.completionResult()
+}
+
+type rpcCompletion struct {
+	Values       []string `json:"values"`
+	Total        int      `json:"total"`
+	HasMore      bool     `json:"hasMore"`
+	HasMoreSnake bool     `json:"has_more"`
+}
+
+func (c rpcCompletion) completionResult() CompletionResult {
+	return CompletionResult{
+		Values:  append([]string(nil), c.Values...),
+		Total:   c.Total,
+		HasMore: c.HasMore || c.HasMoreSnake,
+	}
 }
 
 func rawObject(raw json.RawMessage) (map[string]any, error) {

@@ -707,6 +707,48 @@ func TestProtocolClientReadsPromptMessageAliases(t *testing.T) {
 	}
 }
 
+func TestProtocolClientCompletesAndSetsLoggingLevel(t *testing.T) {
+	transport := &fakeRPCTransport{responses: map[string]json.RawMessage{
+		"completion/complete": json.RawMessage(`{"completion":{"values":["production","preview"],"total":2,"has_more":true}}`),
+		"logging/setLevel":    json.RawMessage(`{}`),
+	}}
+	client := NewProtocolClient(transport)
+
+	completion, err := client.Complete(context.Background(), CompletionRequest{
+		Ref: CompletionReference{
+			Type: "ref/prompt",
+			Name: "deploy",
+		},
+		Argument: CompletionArgument{
+			Name:  "environment",
+			Value: "pr",
+		},
+		Context: &CompletionContext{
+			Arguments: map[string]string{"service": "api"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completion.Values) != 2 || completion.Values[0] != "production" || completion.Total != 2 || !completion.HasMore {
+		t.Fatalf("completion = %#v", completion)
+	}
+	if err := client.SetLoggingLevel(context.Background(), " warning "); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 2 || transport.requests[0].Method != "completion/complete" || transport.requests[1].Method != "logging/setLevel" {
+		t.Fatalf("requests = %#v", transport.requests)
+	}
+	completeParams := mustJSON(t, transport.requests[0].Params)
+	if !strings.Contains(completeParams, `"type":"ref/prompt"`) || !strings.Contains(completeParams, `"environment"`) || !strings.Contains(completeParams, `"service":"api"`) {
+		t.Fatalf("completion params = %s", completeParams)
+	}
+	loggingParams := mustJSON(t, transport.requests[1].Params)
+	if !strings.Contains(loggingParams, `"level":"warning"`) {
+		t.Fatalf("logging params = %s", loggingParams)
+	}
+}
+
 func TestProtocolClientRPCErrorAndSessionExpired(t *testing.T) {
 	client := NewProtocolClient(&fakeRPCTransport{rpcErr: &RPCError{
 		Code:    -32001,
