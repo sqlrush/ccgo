@@ -108,3 +108,49 @@ func TestDedupPluginServersSuppressesManualAndEarlierPluginDuplicates(t *testing
 		t.Fatalf("suppressed = %#v, want %#v", got.Suppressed, wantSuppressed)
 	}
 }
+
+func TestAddScopeToServersSetsScopeWithoutMutatingInput(t *testing.T) {
+	servers := map[string]contracts.MCPServer{
+		"github": {
+			Command: "node",
+			Args:    []string{"server.js"},
+			Env:     map[string]string{"TOKEN": "secret"},
+		},
+	}
+
+	scoped := AddScopeToServers(servers, ScopeProject)
+	if scoped["github"].Scope != ScopeProject {
+		t.Fatalf("scope = %q", scoped["github"].Scope)
+	}
+	scoped["github"].Args[0] = "changed.js"
+	scoped["github"].Env["TOKEN"] = "changed"
+
+	if servers["github"].Scope != "" {
+		t.Fatalf("input scope mutated: %#v", servers["github"])
+	}
+	if servers["github"].Args[0] != "server.js" || servers["github"].Env["TOKEN"] != "secret" {
+		t.Fatalf("input server mutated: %#v", servers["github"])
+	}
+}
+
+func TestMergeServersLaterSourcesOverrideEarlierServers(t *testing.T) {
+	root := AddScopeToServers(map[string]contracts.MCPServer{
+		"shared": {Command: "root"},
+		"root":   {Command: "root-only"},
+	}, ScopeProject)
+	closer := AddScopeToServers(map[string]contracts.MCPServer{
+		"shared": {Command: "closer"},
+		"local":  {Command: "local-only"},
+	}, ScopeLocal)
+
+	merged := MergeServers(root, closer)
+	if got := merged["shared"]; got.Command != "closer" || got.Scope != ScopeLocal {
+		t.Fatalf("shared = %#v", got)
+	}
+	if got := merged["root"]; got.Command != "root-only" || got.Scope != ScopeProject {
+		t.Fatalf("root = %#v", got)
+	}
+	if got := merged["local"]; got.Command != "local-only" || got.Scope != ScopeLocal {
+		t.Fatalf("local = %#v", got)
+	}
+}

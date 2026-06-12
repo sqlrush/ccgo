@@ -20,6 +20,13 @@ const (
 	TransportClaudeAIProxy = "claudeai-proxy"
 )
 
+const (
+	ScopeProject    = "project"
+	ScopeUser       = "user"
+	ScopeLocal      = "local"
+	ScopeEnterprise = "enterprise"
+)
+
 var CCRProxyPathMarkers = []string{
 	"/v2/session_ingress/shttp/mcp/",
 	"/v2/ccr-sessions/",
@@ -125,6 +132,25 @@ func DedupPluginServers(pluginServers, manualServers map[string]contracts.MCPSer
 	}
 
 	return result
+}
+
+func AddScopeToServers(servers map[string]contracts.MCPServer, scope string) map[string]contracts.MCPServer {
+	scoped := make(map[string]contracts.MCPServer, len(servers))
+	for name, server := range servers {
+		server.Scope = scope
+		scoped[name] = cloneMCPServer(server)
+	}
+	return scoped
+}
+
+func MergeServers(sources ...map[string]contracts.MCPServer) map[string]contracts.MCPServer {
+	merged := map[string]contracts.MCPServer{}
+	for _, source := range sources {
+		for _, name := range sortedServerNames(source) {
+			merged[name] = cloneMCPServer(source[name])
+		}
+	}
+	return merged
 }
 
 func sortedServerNames(servers map[string]contracts.MCPServer) []string {
