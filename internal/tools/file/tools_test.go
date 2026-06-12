@@ -1046,7 +1046,7 @@ func TestGlobAndGrepReturnWorkingDirectoryRelativePaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if grepResult.Content != "src/a.go\nsrc/b.txt" {
+	if grepResult.Content != "Found 2 files\nsrc/a.go\nsrc/b.txt" {
 		t.Fatalf("grep path output = %#v", grepResult.Content)
 	}
 
@@ -1058,7 +1058,7 @@ func TestGlobAndGrepReturnWorkingDirectoryRelativePaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if grepFileResult.Content != "src/a.go" {
+	if grepFileResult.Content != "Found 1 file\nsrc/a.go" {
 		t.Fatalf("grep file path output = %#v", grepFileResult.Content)
 	}
 }
@@ -1128,8 +1128,32 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filesResult.Content != "src/a.go\nsrc/c.go" {
+	if filesResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.go" {
 		t.Fatalf("files result = %#v", filesResult.Content)
+	}
+
+	filesPagedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_paged",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","head_limit":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesPagedResult.Content != "Found 2 files limit: 2\nsrc/a.go\nsrc/b.txt" || filesPagedResult.StructuredContent["truncated"] != true {
+		t.Fatalf("files paged result = %#v", filesPagedResult)
+	}
+
+	filesOffsetResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_offset",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","offset":1,"head_limit":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesOffsetResult.Content != "Found 2 files offset: 1\nsrc/b.txt\nsrc/c.go" || filesOffsetResult.StructuredContent["offset"] != 1 {
+		t.Fatalf("files offset result = %#v", filesOffsetResult)
 	}
 
 	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
@@ -1177,7 +1201,7 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if multiGlobResult.Content != "src/a.go\nsrc/b.txt\nsrc/c.go" {
+	if multiGlobResult.Content != "Found 3 files\nsrc/a.go\nsrc/b.txt\nsrc/c.go" {
 		t.Fatalf("multi glob result = %#v", multiGlobResult.Content)
 	}
 
@@ -1189,7 +1213,7 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if braceGlobResult.Content != "src/a.go\nsrc/b.txt\nsrc/c.go" {
+	if braceGlobResult.Content != "Found 3 files\nsrc/a.go\nsrc/b.txt\nsrc/c.go" {
 		t.Fatalf("brace glob result = %#v", braceGlobResult.Content)
 	}
 }
@@ -1368,7 +1392,7 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Content != "mixed.txt" || result.StructuredContent["case_insensitive"] != true {
+	if result.Content != "Found 1 file\nmixed.txt" || result.StructuredContent["case_insensitive"] != true {
 		t.Fatalf("case-insensitive result = %#v", result)
 	}
 
@@ -1380,7 +1404,7 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ignoreCaseResult.Content != "mixed.txt" || ignoreCaseResult.StructuredContent["case_insensitive"] != true {
+	if ignoreCaseResult.Content != "Found 1 file\nmixed.txt" || ignoreCaseResult.StructuredContent["case_insensitive"] != true {
 		t.Fatalf("ignore_case result = %#v", ignoreCaseResult)
 	}
 
@@ -1392,7 +1416,7 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shortResult.Content != "mixed.txt" || shortResult.StructuredContent["case_insensitive"] != true {
+	if shortResult.Content != "Found 1 file\nmixed.txt" || shortResult.StructuredContent["case_insensitive"] != true {
 		t.Fatalf("short case-insensitive result = %#v", shortResult)
 	}
 
@@ -1404,7 +1428,7 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if semanticBoolResult.Content != "mixed.txt" || semanticBoolResult.StructuredContent["case_insensitive"] != true {
+	if semanticBoolResult.Content != "Found 1 file\nmixed.txt" || semanticBoolResult.StructuredContent["case_insensitive"] != true {
 		t.Fatalf("semantic bool case-insensitive result = %#v", semanticBoolResult)
 	}
 
@@ -1416,7 +1440,7 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ignoredContextResult.Content != "mixed.txt" || ignoredContextResult.StructuredContent["before_context"] != 0 || ignoredContextResult.StructuredContent["after_context"] != 0 {
+	if ignoredContextResult.Content != "Found 1 file\nmixed.txt" || ignoredContextResult.StructuredContent["before_context"] != 0 || ignoredContextResult.StructuredContent["after_context"] != 0 {
 		t.Fatalf("ignored context result = %#v", ignoredContextResult)
 	}
 
@@ -1536,7 +1560,7 @@ func TestGrepToolTypeFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if goResult.Content != "src/a.go" || goResult.StructuredContent["type_filter"] != "go" {
+	if goResult.Content != "Found 1 file\nsrc/a.go" || goResult.StructuredContent["type_filter"] != "go" {
 		t.Fatalf("go type result = %#v", goResult)
 	}
 
@@ -1548,7 +1572,7 @@ func TestGrepToolTypeFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if jsResult.Content != "src/c.jsx" {
+	if jsResult.Content != "Found 1 file\nsrc/c.jsx" {
 		t.Fatalf("javascript type result = %#v", jsResult.Content)
 	}
 
@@ -1627,7 +1651,7 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if grepResult.Content != "important.log\nkeep.txt\nsub/visible.txt" {
+	if grepResult.Content != "Found 3 files\nimportant.log\nkeep.txt\nsub/visible.txt" {
 		t.Fatalf("grep content = %#v", grepResult.Content)
 	}
 }

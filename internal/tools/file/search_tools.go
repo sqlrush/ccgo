@@ -747,6 +747,8 @@ func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated
 		return formatGrepContentResult(content, options, truncated)
 	case "count":
 		return formatGrepCountResult(content, matches, options, truncated)
+	case "files_with_matches":
+		return formatGrepFilesResult(content, matches, options, truncated)
 	default:
 		return content
 	}
@@ -782,6 +784,18 @@ func formatGrepCountResult(content string, matches []grepMatch, options grepOpti
 		summary += " with pagination = " + limitInfo
 	}
 	return content + "\n\n" + summary
+}
+
+func formatGrepFilesResult(content string, matches []grepMatch, options grepOptions, truncated bool) string {
+	fileCount := len(matches)
+	if fileCount == 0 {
+		return "No files found"
+	}
+	summary := fmt.Sprintf("Found %d %s", fileCount, pluralWord(fileCount, "file", "files"))
+	if limitInfo := grepPaginationInfo(options, truncated); limitInfo != "" {
+		summary += " " + limitInfo
+	}
+	return summary + "\n" + content
 }
 
 func grepPaginationInfo(options grepOptions, truncated bool) string {
