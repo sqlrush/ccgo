@@ -125,3 +125,23 @@ func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
 		t.Fatalf("stderr message = %#v", result.Messages[1])
 	}
 }
+
+func TestExecuteSlashClearReturnsLocalTextResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/clear", SlashOptions{UUID: "user_clear"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultText || result.LocalResult.Value != "" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_clear" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/clear</command-name>") {
+		t.Fatalf("clear command message = %q", text)
+	}
+}

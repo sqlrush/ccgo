@@ -35,8 +35,22 @@ type SlashResult struct {
 	Model        string
 	AllowedTools []string
 	ResultText   string
+	LocalResult  *LocalCommandResult
 	Unknown      bool
 	Unsupported  bool
+}
+
+type LocalCommandResultType string
+
+const (
+	LocalCommandResultText    LocalCommandResultType = "text"
+	LocalCommandResultSkip    LocalCommandResultType = "skip"
+	LocalCommandResultCompact LocalCommandResultType = "compact"
+)
+
+type LocalCommandResult struct {
+	Type  LocalCommandResultType
+	Value string
 }
 
 type CommandPermissions struct {
@@ -132,6 +146,22 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 		if cmd.Sensitive && strings.TrimSpace(args) != "" {
 			args = "***"
 		}
+		if local, ok := ExecuteBuiltinLocalCommand(cmd, parsed.Args); ok {
+			messages := []contracts.Message{}
+			if local.Type != LocalCommandResultSkip {
+				messages = append(messages, slashUserText(FormatCommandInputTags(cmd.Name, args), opts.SessionID, opts.UUID, false))
+				if strings.TrimSpace(local.Value) != "" {
+					messages = append(messages, slashUserText(local.Value, opts.SessionID, "", false))
+				}
+			}
+			return SlashResult{
+				Command:     cmd,
+				Messages:    messages,
+				ShouldQuery: false,
+				ResultText:  local.Value,
+				LocalResult: &local,
+			}, true, nil
+		}
 		errText := fmt.Sprintf("Slash command /%s is not implemented in the Go runtime yet.", cmd.Name)
 		return SlashResult{
 			Command: cmd,
@@ -145,6 +175,18 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 		}, true, nil
 	default:
 		return SlashResult{}, true, fmt.Errorf("unsupported slash command type %q", cmd.Type)
+	}
+}
+
+func ExecuteBuiltinLocalCommand(cmd contracts.Command, args string) (LocalCommandResult, bool) {
+	if cmd.Source != contracts.CommandSourceBuiltin {
+		return LocalCommandResult{}, false
+	}
+	switch cmd.Name {
+	case "clear":
+		return LocalCommandResult{Type: LocalCommandResultText}, true
+	default:
+		return LocalCommandResult{}, false
 	}
 }
 

@@ -76,6 +76,8 @@ M8 补充：project legacy `.claude/commands/**/*.md` 现在会加载为 `comman
 
 M8 补充：现有 Go 内置 slash command metadata 继续贴近官方源快照，补齐 `config`/`resume`/`clear` 的 aliases（`settings`、`continue`、`reset`、`new`），以及 `mcp`/`resume`/`model` 的 argument hint、`mcp`/`status`/`model` 的 immediate 标记和部分官方描述；大量内置 command 的真实 local/local-jsx UI 执行仍未完成。
 
+M8 补充：slash command 现在有基础 local command result 抽象，`/clear` 不再落入 unsupported 分支，会生成 local text result、保留 command metadata message，并且不会请求模型；完整 REPL conversation reset、local command text/compact/skip 全语义、`/cost`/`/status`/`/compact` 和 local-jsx UI 执行仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
@@ -1186,7 +1188,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - plugin manifest、marketplace、install/cache/update。
 - plugin hooks/agents/MCP。
 
-当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入，以及本地 prompt skill 的 command permissions attachment/current-turn 权限继承；仍缺 bundled/plugin/MCP/remote skills、forked skill/agent 执行、local/local-jsx 实际执行、`/help`/`/skills` UI、权限 UI/SDK 展示、plugin manifest/marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP 接线。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/plugin/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、`/help`/`/skills` UI、权限 UI/SDK 展示、plugin manifest/marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP 接线。
 
 ### M9: MCP Platform
 

@@ -304,6 +304,33 @@ func TestRunnerExpandsPromptSlashCommandBeforeQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesClearSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{
+		Client:    client,
+		Model:     "sonnet",
+		MaxTokens: 128,
+		SessionID: "sess_clear",
+	}
+
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old context")}, messages.UserText("/clear"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.FinalRequest.Model != "" || result.Assistant.Type != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 1 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/clear</command-name>") {
+		t.Fatalf("clear message = %q", text)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
