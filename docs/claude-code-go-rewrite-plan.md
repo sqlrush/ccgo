@@ -178,6 +178,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash/PowerShell tokenizer 现在按 single-quoted literal 处理单引号内的 escape 字符，Bash 的 `\` 和 PowerShell 的 backtick 在单引号内不再导致错误的 quote/segment/token 状态。
 - 本轮补充：Bash/PowerShell 分类现在把未引用 newline 作为命令分隔符，并支持未引用 `#` 行注释剥离；注释文本不再污染分类，下一行命令仍保留 read-only/destructive 判断。
 - 本轮补充：Bash destructive 分类把未引用单个 `&` 后台分隔符纳入命令分段，后台后续命令会独立参与 destructive 判断。
+- 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 
 ### M6: Session、memory、compact
 

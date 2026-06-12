@@ -1345,6 +1345,9 @@ func IsReadOnlyCommand(command string) bool {
 
 func IsDestructiveCommand(command string) bool {
 	command = stripShellLineComments(command)
+	if hasNestedShellDestructiveCommand(command) {
+		return true
+	}
 	for _, segment := range splitCommandSegments(command) {
 		words := shellWords(segment)
 		if len(words) == 0 {
@@ -1424,6 +1427,125 @@ func shellSyntaxComplete(command string) bool {
 		}
 	}
 	return !inSingle && !inDouble && !escaped
+}
+
+func hasNestedShellDestructiveCommand(command string) bool {
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && !inSingle {
+			escaped = true
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle {
+			continue
+		}
+		if ch == '`' {
+			end := findShellClosingBacktick(command, i+1)
+			if end < 0 {
+				return false
+			}
+			if IsDestructiveCommand(command[i+1 : end]) {
+				return true
+			}
+			i = end
+			continue
+		}
+		if ch == '$' && i+1 < len(command) && command[i+1] == '(' {
+			end := findShellClosingParen(command, i+1)
+			if end < 0 {
+				return false
+			}
+			if IsDestructiveCommand(command[i+2 : end]) {
+				return true
+			}
+			i = end
+			continue
+		}
+		if !inDouble && ch == '(' {
+			end := findShellClosingParen(command, i)
+			if end < 0 {
+				return false
+			}
+			if IsDestructiveCommand(command[i+1 : end]) {
+				return true
+			}
+			i = end
+		}
+	}
+	return false
+}
+
+func findShellClosingBacktick(command string, start int) int {
+	escaped := false
+	for i := start; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '`' {
+			return i
+		}
+	}
+	return -1
+}
+
+func findShellClosingParen(command string, open int) int {
+	depth := 1
+	inSingle := false
+	inDouble := false
+	escaped := false
+	for i := open + 1; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && !inSingle {
+			escaped = true
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle || inDouble {
+			continue
+		}
+		switch ch {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func stripShellLineComments(command string) string {

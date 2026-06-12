@@ -183,6 +183,7 @@ func TestBashCommandClassification(t *testing.T) {
 		"printf '\\' | wc -c",
 		"pwd # rm -rf build",
 		"printf '# rm -rf build'",
+		"printf '$(rm -rf build)'",
 		"pwd\nls -la",
 	}
 	for _, command := range readOnly {
@@ -296,6 +297,10 @@ func TestBashCommandClassification(t *testing.T) {
 		"pwd\nrm -rf build",
 		"pwd # comment\nrm -rf build",
 		"pwd & rm -rf build",
+		"echo $(rm -rf build)",
+		"printf `rm -rf build`",
+		"echo \"$(rm -rf build)\"",
+		"(rm -rf build)",
 		"printf '%s\n' build | xargs rm -rf",
 		"sudo make install",
 		"chmod -R 777 .",

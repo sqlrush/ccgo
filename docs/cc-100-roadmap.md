@@ -527,6 +527,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` destructive 分类现在也把未引用单个 `&` 后台分隔符作为命令边界，`pwd & rm -rf build` 这类后台后续破坏性命令不再漏过 destructive 标记。
 
+本轮补充：`Bash` destructive 分类现在会递归检查未被 single-quote 保护的 command substitution/backtick/subshell 内容，例如 `$(rm -rf build)`、`` `rm -rf build` `` 和 `(rm -rf build)`，避免嵌套破坏性命令只被判为非只读却没有 destructive 标记。
+
 仍需完成：
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。
