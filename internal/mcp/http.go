@@ -21,6 +21,7 @@ type HTTPDoer interface {
 type HTTPTransport struct {
 	URL                   string
 	Headers               map[string]string
+	HeaderProvider        func(context.Context) (map[string]string, error)
 	Client                HTTPDoer
 	MaxResponseBytes      int64
 	ProtocolVersionHeader string
@@ -51,10 +52,9 @@ func (t *HTTPTransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCR
 		return RPCResponse{}, err
 	}
 	req.Header.Set("content-type", "application/json")
-	t.mu.Lock()
-	sessionID := t.SessionID
-	t.mu.Unlock()
-	t.applyHeaders(req, sessionID)
+	if err := t.applyHeaders(ctx, req); err != nil {
+		return RPCResponse{}, err
+	}
 
 	client := t.Client
 	if client == nil {
@@ -117,10 +117,9 @@ func (t *HTTPTransport) SendNotification(ctx context.Context, notification RPCNo
 		return err
 	}
 	req.Header.Set("content-type", "application/json")
-	t.mu.Lock()
-	sessionID := t.SessionID
-	t.mu.Unlock()
-	t.applyHeaders(req, sessionID)
+	if err := t.applyHeaders(ctx, req); err != nil {
+		return err
+	}
 	client := t.Client
 	if client == nil {
 		client = http.DefaultClient
@@ -188,7 +187,9 @@ func (t *HTTPTransport) Close() error {
 	if err != nil {
 		return err
 	}
-	t.applyHeaders(req, sessionID)
+	if err := t.applyHeadersWithSession(context.Background(), req, sessionID); err != nil {
+		return err
+	}
 	client := t.Client
 	if client == nil {
 		client = http.DefaultClient
@@ -209,7 +210,14 @@ func (t *HTTPTransport) Close() error {
 	}
 }
 
-func (t *HTTPTransport) applyHeaders(req *http.Request, sessionID string) {
+func (t *HTTPTransport) applyHeaders(ctx context.Context, req *http.Request) error {
+	t.mu.Lock()
+	sessionID := t.SessionID
+	t.mu.Unlock()
+	return t.applyHeadersWithSession(ctx, req, sessionID)
+}
+
+func (t *HTTPTransport) applyHeadersWithSession(ctx context.Context, req *http.Request, sessionID string) error {
 	req.Header.Set("accept", "application/json, text/event-stream")
 	if t.ProtocolVersionHeader != "" {
 		req.Header.Set("mcp-protocol-version", t.ProtocolVersionHeader)
@@ -222,6 +230,18 @@ func (t *HTTPTransport) applyHeaders(req *http.Request, sessionID string) {
 			req.Header.Set(key, value)
 		}
 	}
+	if t.HeaderProvider != nil {
+		headers, err := t.HeaderProvider(ctx)
+		if err != nil {
+			return err
+		}
+		for key, value := range headers {
+			if strings.TrimSpace(key) != "" {
+				req.Header.Set(key, value)
+			}
+		}
+	}
+	return nil
 }
 
 type SSEEvent struct {

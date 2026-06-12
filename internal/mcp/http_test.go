@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -41,6 +42,29 @@ func TestHTTPTransportRoundTripPostsJSONRPC(t *testing.T) {
 	}
 	if response.ID != "7" || !strings.Contains(string(response.Result), `"tools":[]`) {
 		t.Fatalf("response = %#v", response)
+	}
+}
+
+func TestHTTPTransportUsesDynamicHeadersPerRequest(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if got, want := r.Header.Get("Authorization"), "Bearer token-"+strconv.Itoa(calls); got != want {
+			t.Fatalf("authorization = %q, want %q", got, want)
+		}
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"tools":[]}}`))
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.URL, map[string]string{"Authorization": "Bearer stale"}, server.Client())
+	transport.HeaderProvider = func(context.Context) (map[string]string, error) {
+		return map[string]string{"Authorization": "Bearer token-" + strconv.Itoa(calls+1)}, nil
+	}
+	if _, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transport.RoundTrip(context.Background(), NewRPCRequest("1", "tools/list", nil)); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -129,6 +153,55 @@ func TestBuildServerToolSetInitializesHTTPProtocolClient(t *testing.T) {
 		if methods[i] != want[i] {
 			t.Fatalf("methods = %#v", methods)
 		}
+	}
+}
+
+func TestBuildServerToolSetUsesDynamicHeaders(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if got, want := r.Header.Get("Authorization"), "Bearer dynamic-"+strconv.Itoa(calls); got != want {
+			t.Fatalf("authorization = %q, want %q", got, want)
+		}
+		var raw struct {
+			ID     string `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		switch raw.Method {
+		case "initialize":
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}}}}`))
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"` + raw.ID + `","result":{"tools":[]}}`))
+		default:
+			t.Fatalf("method = %s", raw.Method)
+		}
+	}))
+	defer server.Close()
+
+	_, err := BuildServerToolSet(context.Background(), "remote", contracts.MCPServer{
+		Type:      TransportHTTP,
+		URL:       server.URL,
+		AuthToken: "stale",
+	}, ServerToolOptions{
+		DisableResources: true,
+		DisablePrompts:   true,
+		HeaderProvider: func(ctx context.Context, name string, server contracts.MCPServer) (map[string]string, error) {
+			if name != "remote" || server.URL == "" {
+				t.Fatalf("provider input name=%q server=%#v", name, server)
+			}
+			return map[string]string{"Authorization": "Bearer dynamic-" + strconv.Itoa(calls+1)}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 3 {
+		t.Fatalf("calls = %d", calls)
 	}
 }
 

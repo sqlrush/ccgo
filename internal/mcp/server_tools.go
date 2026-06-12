@@ -23,6 +23,7 @@ type InitializingClient interface {
 
 type ServerToolOptions struct {
 	OpenClient       ClientOpenFunc
+	HeaderProvider   ServerHeaderProvider
 	ResultStoreDir   string
 	MaxResultChars   int
 	DisableResources bool
@@ -76,6 +77,10 @@ func (s MultiServerToolSet) Close() error {
 }
 
 func OpenServerClient(ctx context.Context, name string, server contracts.MCPServer) (ClientHandle, error) {
+	return OpenServerClientWithOptions(ctx, name, server, ServerToolOptions{})
+}
+
+func OpenServerClientWithOptions(ctx context.Context, name string, server contracts.MCPServer, options ServerToolOptions) (ClientHandle, error) {
 	switch Transport(server) {
 	case TransportStdio:
 		transport, err := StartStdioTransport(ctx, server)
@@ -88,24 +93,36 @@ func OpenServerClient(ctx context.Context, name string, server contracts.MCPServ
 		}, nil
 	case TransportHTTP:
 		transport := NewHTTPTransport(server.URL, TransportHeaders(server), nil)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options.HeaderProvider)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportSSE:
 		transport := NewSSETransport(server.URL, TransportHeaders(server), nil)
+		transport.HeaderProvider = serverHeaderProvider(name, server, options.HeaderProvider)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	case TransportWS:
 		transport := NewWSTransport(server.URL, TransportHeaders(server))
+		transport.HeaderProvider = serverHeaderProvider(name, server, options.HeaderProvider)
 		return ClientHandle{
 			Client: NewProtocolClient(transport),
 			Close:  transport.Close,
 		}, nil
 	default:
 		return ClientHandle{}, fmt.Errorf("mcp server %q transport %q is not supported yet", name, Transport(server))
+	}
+}
+
+func serverHeaderProvider(name string, server contracts.MCPServer, provider ServerHeaderProvider) func(context.Context) (map[string]string, error) {
+	if provider == nil {
+		return nil
+	}
+	return func(ctx context.Context) (map[string]string, error) {
+		return provider(ctx, name, server)
 	}
 }
 
@@ -130,7 +147,9 @@ func BuildServerToolSet(ctx context.Context, serverName string, server contracts
 	}
 	openClient := options.OpenClient
 	if openClient == nil {
-		openClient = OpenServerClient
+		openClient = func(ctx context.Context, name string, server contracts.MCPServer) (ClientHandle, error) {
+			return OpenServerClientWithOptions(ctx, name, server, options)
+		}
 	}
 	handle, err := openClient(ctx, serverName, server)
 	if err != nil {

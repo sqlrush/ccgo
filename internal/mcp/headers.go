@@ -1,11 +1,16 @@
 package mcp
 
 import (
+	"context"
 	"strings"
 
 	"ccgo/internal/auth"
 	"ccgo/internal/contracts"
 )
+
+type HeaderProvider func(context.Context, contracts.MCPServer) (map[string]string, error)
+
+type ServerHeaderProvider func(context.Context, string, contracts.MCPServer) (map[string]string, error)
 
 func TransportHeaders(server contracts.MCPServer) map[string]string {
 	headers := cloneStringMap(server.Headers)
@@ -17,6 +22,44 @@ func TransportHeaders(server contracts.MCPServer) map[string]string {
 	}
 	if server.OAuth != nil {
 		addBetaHeader(headers, auth.OAuthBetaHeader)
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
+}
+
+func AuthTokenHeaderProvider(tokenFunc func(context.Context, contracts.MCPServer) (string, error)) HeaderProvider {
+	if tokenFunc == nil {
+		return nil
+	}
+	return func(ctx context.Context, server contracts.MCPServer) (map[string]string, error) {
+		token, err := tokenFunc(ctx, server)
+		if err != nil {
+			return nil, err
+		}
+		token = strings.TrimSpace(token)
+		if token == "" {
+			return nil, nil
+		}
+		return map[string]string{"Authorization": bearerHeaderValue(token)}, nil
+	}
+}
+
+func MergeTransportHeaders(static map[string]string, dynamic map[string]string) map[string]string {
+	headers := cloneStringMap(static)
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	for key, value := range dynamic {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if existing := headerKey(headers, key); existing != "" && existing != key {
+			delete(headers, existing)
+		}
+		headers[key] = value
 	}
 	if len(headers) == 0 {
 		return nil

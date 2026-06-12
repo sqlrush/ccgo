@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
 	"ccgo/internal/auth"
@@ -43,5 +44,37 @@ func TestBearerHeaderValuePreservesExistingScheme(t *testing.T) {
 	}
 	if got := bearerHeaderValue("raw"); got != "Bearer raw" {
 		t.Fatalf("bearer = %q", got)
+	}
+}
+
+func TestAuthTokenHeaderProvider(t *testing.T) {
+	provider := AuthTokenHeaderProvider(func(ctx context.Context, server contracts.MCPServer) (string, error) {
+		if server.Name != "remote" {
+			t.Fatalf("server = %#v", server)
+		}
+		return "fresh", nil
+	})
+	headers, err := provider(context.Background(), contracts.MCPServer{Name: "remote"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headers["Authorization"] != "Bearer fresh" {
+		t.Fatalf("headers = %#v", headers)
+	}
+}
+
+func TestMergeTransportHeadersAllowsDynamicOverride(t *testing.T) {
+	headers := MergeTransportHeaders(
+		map[string]string{"authorization": "Bearer old", "X-Static": "yes"},
+		map[string]string{"Authorization": "Bearer new", "X-Dynamic": "yes"},
+	)
+	if headers["Authorization"] != "Bearer new" || headers["X-Static"] != "yes" || headers["X-Dynamic"] != "yes" {
+		t.Fatalf("headers = %#v", headers)
+	}
+	if _, ok := headers["authorization"]; ok {
+		t.Fatalf("old authorization key still present: %#v", headers)
+	}
+	if got := MergeTransportHeaders(nil, nil); got != nil {
+		t.Fatalf("empty headers = %#v", got)
 	}
 }

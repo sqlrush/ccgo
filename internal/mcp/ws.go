@@ -33,6 +33,7 @@ const (
 type WSTransport struct {
 	URL                   string
 	Headers               map[string]string
+	HeaderProvider        func(context.Context) (map[string]string, error)
 	ProtocolVersionHeader string
 	MaxFrameBytes         int64
 	DialContext           func(context.Context, string, string) (net.Conn, error)
@@ -249,7 +250,16 @@ func (t *WSTransport) dial(ctx context.Context) (*wsConn, error) {
 		_ = rawConn.Close()
 		return nil, err
 	}
-	if err := writeWebSocketHandshake(rawConn, parsed, key, t.Headers, t.ProtocolVersionHeader); err != nil {
+	headers := t.Headers
+	if t.HeaderProvider != nil {
+		dynamic, err := t.HeaderProvider(ctx)
+		if err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+		headers = MergeTransportHeaders(headers, dynamic)
+	}
+	if err := writeWebSocketHandshake(rawConn, parsed, key, headers, t.ProtocolVersionHeader); err != nil {
 		_ = rawConn.Close()
 		return nil, err
 	}

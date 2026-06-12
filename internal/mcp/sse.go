@@ -14,6 +14,7 @@ import (
 type SSETransport struct {
 	URL                   string
 	Headers               map[string]string
+	HeaderProvider        func(context.Context) (map[string]string, error)
 	Client                HTTPDoer
 	MaxResponseBytes      int64
 	ProtocolVersionHeader string
@@ -52,6 +53,7 @@ func (t *SSETransport) RoundTrip(ctx context.Context, request RPCRequest) (RPCRe
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
+	httpTransport.HeaderProvider = t.HeaderProvider
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
 	t.mu.Unlock()
@@ -87,6 +89,7 @@ func (t *SSETransport) SendNotification(ctx context.Context, notification RPCNot
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
+	httpTransport.HeaderProvider = t.HeaderProvider
 	t.mu.Lock()
 	httpTransport.SessionID = t.sessionID
 	t.mu.Unlock()
@@ -135,6 +138,7 @@ func (t *SSETransport) Close() error {
 	httpTransport := NewHTTPTransport(endpoint, t.Headers, t.Client)
 	httpTransport.MaxResponseBytes = t.MaxResponseBytes
 	httpTransport.ProtocolVersionHeader = t.ProtocolVersionHeader
+	httpTransport.HeaderProvider = t.HeaderProvider
 	httpTransport.SessionID = sessionID
 	return httpTransport.Close()
 }
@@ -194,6 +198,17 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 	for key, value := range t.Headers {
 		if strings.TrimSpace(key) != "" {
 			req.Header.Set(key, value)
+		}
+	}
+	if t.HeaderProvider != nil {
+		headers, err := t.HeaderProvider(ctx)
+		if err != nil {
+			return "", err
+		}
+		for key, value := range headers {
+			if strings.TrimSpace(key) != "" {
+				req.Header.Set(key, value)
+			}
 		}
 	}
 	if t.ProtocolVersionHeader != "" {
