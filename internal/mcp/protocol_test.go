@@ -774,7 +774,7 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	if len(templates) != 1 || templates[0].URITemplate != "file:///{path}" || templates[0].MimeType != "text/plain" {
 		t.Fatalf("templates = %#v", templates)
 	}
-	contents, err := client.ReadResource(context.Background(), "files", "file:///a.txt")
+	contents, err := client.ReadResource(context.Background(), "files", " file:///a.txt ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,6 +808,9 @@ func TestProtocolClientResourcesAndPrompts(t *testing.T) {
 	}
 	if _, err := client.GetPrompt(context.Background(), "workflow", " ", nil); err == nil {
 		t.Fatal("expected empty prompt name error")
+	}
+	if _, err := client.ReadResource(context.Background(), "files", " "); err == nil {
+		t.Fatal("expected empty resource uri error")
 	}
 	if len(transport.requests) != 5 {
 		t.Fatalf("unexpected validation rpc requests = %#v", transport.requests)

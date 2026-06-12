@@ -403,6 +403,10 @@ func (c *ProtocolClient) ListResourceTemplates(ctx context.Context, serverName s
 }
 
 func (c *ProtocolClient) ReadResource(ctx context.Context, serverName string, uri string) ([]ResourceContent, error) {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return nil, fmt.Errorf("mcp resource uri is required")
+	}
 	raw, err := c.request(ctx, "resources/read", map[string]any{"uri": uri})
 	if err != nil {
 		return nil, err
