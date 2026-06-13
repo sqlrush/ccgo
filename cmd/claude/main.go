@@ -409,7 +409,7 @@ func normalizeInputUserMessage(message contracts.Message) (contracts.Message, er
 }
 
 func normalizeInputFormat(raw string) (string, error) {
-	format := strings.TrimSpace(strings.ToLower(raw))
+	format := normalizeCLIFormatValue(raw)
 	if format == "" {
 		format = "text"
 	}
@@ -433,7 +433,7 @@ func effectivePermissionMode(permissionMode string, skipPermissions bool) (strin
 }
 
 func normalizeOutputFormat(raw string) (string, error) {
-	format := strings.TrimSpace(strings.ToLower(raw))
+	format := normalizeCLIFormatValue(raw)
 	if format == "" {
 		format = "text"
 	}
@@ -442,6 +442,18 @@ func normalizeOutputFormat(raw string) (string, error) {
 		return format, nil
 	default:
 		return "", fmt.Errorf("unsupported output format %q", raw)
+	}
+}
+
+func normalizeCLIFormatValue(raw string) string {
+	format := strings.TrimSpace(strings.ToLower(raw))
+	format = strings.ReplaceAll(format, "_", "-")
+	format = strings.ReplaceAll(format, " ", "-")
+	switch format {
+	case "streamjson":
+		return "stream-json"
+	default:
+		return format
 	}
 }
 

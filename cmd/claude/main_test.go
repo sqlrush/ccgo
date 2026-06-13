@@ -1325,6 +1325,50 @@ func TestRunPrintRejectsUnsupportedInputFormat(t *testing.T) {
 	}
 }
 
+func TestNormalizeInputFormatAliases(t *testing.T) {
+	tests := map[string]string{
+		"":            "text",
+		" text ":      "text",
+		"json":        "json",
+		"stream-json": "stream-json",
+		"stream_json": "stream-json",
+		"streamJson":  "stream-json",
+		"stream JSON": "stream-json",
+		"STREAM_JSON": "stream-json",
+	}
+	for raw, want := range tests {
+		got, err := normalizeInputFormat(raw)
+		if err != nil {
+			t.Fatalf("normalizeInputFormat(%q) error: %v", raw, err)
+		}
+		if got != want {
+			t.Fatalf("normalizeInputFormat(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestNormalizeOutputFormatAliases(t *testing.T) {
+	tests := map[string]string{
+		"":            "text",
+		" text ":      "text",
+		"json":        "json",
+		"stream-json": "stream-json",
+		"stream_json": "stream-json",
+		"streamJson":  "stream-json",
+		"stream JSON": "stream-json",
+		"STREAM_JSON": "stream-json",
+	}
+	for raw, want := range tests {
+		got, err := normalizeOutputFormat(raw)
+		if err != nil {
+			t.Fatalf("normalizeOutputFormat(%q) error: %v", raw, err)
+		}
+		if got != want {
+			t.Fatalf("normalizeOutputFormat(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
 func TestRunRejectsInvalidCWD(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
