@@ -81,6 +81,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	flags.Var(&addDirs, "add-dir", "additional working directory")
 	flags.Var(&addDirs, "addDir", "additional working directory")
 	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
 		return 2
 	}
 

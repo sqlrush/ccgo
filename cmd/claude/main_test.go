@@ -92,6 +92,22 @@ func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
 	}
 }
 
+func TestRunHelpExitsSuccessfully(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--help"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage of claude:") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestRunPrintReadsPromptFromStdinAndSettingsModel(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
