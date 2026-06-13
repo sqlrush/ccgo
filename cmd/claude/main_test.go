@@ -190,6 +190,63 @@ func TestRunPrintSystemPromptFlags(t *testing.T) {
 	}
 }
 
+func TestRunPrintMaxTurnsLimitsToolLoop(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_tool_round",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"tool_use","id":"toolu_read","name":"Read","input":{"file_path":"cmd/claude/main.go"}}],
+			"stop_reason":"tool_use"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--max-turns", "1", "read once"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d", requests)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "maximum tool rounds exceeded: 1") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintRejectsNegativeMaxTurns(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--max-turns", "-1", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid --max-turns -1") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	allowed := parseToolRules(`Write, Bash(git status *)`)
 	denied := parseToolRules(`Bash(rm *)`)

@@ -34,6 +34,7 @@ func main() {
 type cliOptions struct {
 	Model          string
 	MaxTokens      int
+	MaxTurns       int
 	PermissionMode string
 	Stream         bool
 	Resume         string
@@ -66,6 +67,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	flags.BoolVar(printMode, "p", false, "print response and exit")
 	modelName := flags.String("model", "", "model to use")
 	maxTokens := flags.Int("max-tokens", 0, "maximum output tokens")
+	maxTurns := flags.Int("max-turns", 0, "maximum tool-use turns in print mode")
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	stream := flags.Bool("stream", false, "use streaming API")
 	outputFormat := flags.String("output-format", "text", "output format: text, json, or stream-json")
@@ -111,6 +113,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		runner, err := headlessRunner(context.Background(), state, cliOptions{
 			Model:          *modelName,
 			MaxTokens:      *maxTokens,
+			MaxTurns:       *maxTurns,
 			PermissionMode: *permissionMode,
 			Stream:         *stream,
 			SystemPrompt:   *systemPrompt,
@@ -211,6 +214,12 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	runner.Model = resolveCLIModel(options.Model, runner.MCP)
 	if options.MaxTokens > 0 {
 		runner.MaxTokens = options.MaxTokens
+	}
+	if options.MaxTurns < 0 {
+		return conversation.Runner{}, fmt.Errorf("invalid --max-turns %d; must be non-negative", options.MaxTurns)
+	}
+	if options.MaxTurns > 0 {
+		runner.MaxToolRounds = options.MaxTurns
 	}
 	runner.UseStreaming = options.Stream
 	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
