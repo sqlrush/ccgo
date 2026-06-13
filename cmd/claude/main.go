@@ -161,6 +161,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
+			_ = writePrintError(stdout, runner, err, outputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -657,6 +658,7 @@ type printJSONResult struct {
 	Subtype     string                 `json:"subtype"`
 	SessionID   contracts.ID           `json:"session_id,omitempty"`
 	Result      string                 `json:"result"`
+	Error       string                 `json:"error,omitempty"`
 	Message     *contracts.Message     `json:"message,omitempty"`
 	StopReason  string                 `json:"stop_reason,omitempty"`
 	Model       string                 `json:"model,omitempty"`
@@ -765,6 +767,39 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 		return err
 	}
 	return nil
+}
+
+func writePrintError(stdout io.Writer, runner conversation.Runner, err error, outputFormat string) error {
+	if err == nil {
+		return nil
+	}
+	switch outputFormat {
+	case "json":
+		return writePrintJSONError(stdout, runner, err)
+	case "stream-json":
+		return writePrintStreamError(stdout, runner, err)
+	default:
+		return nil
+	}
+}
+
+func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error) error {
+	encoder := json.NewEncoder(stdout)
+	return encoder.Encode(printJSONResult{
+		Type:      "result",
+		Subtype:   "error",
+		SessionID: runner.SessionID,
+		Error:     err.Error(),
+	})
+}
+
+func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err error) error {
+	encoder := json.NewEncoder(stdout)
+	return encoder.Encode(printStreamEvent{
+		Type:      "error",
+		SessionID: runner.SessionID,
+		Error:     err.Error(),
+	})
 }
 
 func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string) error {

@@ -604,6 +604,37 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "fail prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "error" || payload["error"] == "" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if !strings.Contains(stderr.String(), "ccgo:") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestRunPrintStreamJSONOutput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
@@ -657,6 +688,41 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 	if events[3]["result"] != "stream ok" {
 		t.Fatalf("result event = %#v", events[3])
+	}
+}
+
+func TestRunPrintStreamJSONOutputIncludesErrorEvent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "stream-json", "fail prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("lines = %#v", lines)
+	}
+	var final map[string]any
+	if err := json.Unmarshal([]byte(lines[2]), &final); err != nil {
+		t.Fatalf("invalid final line %q: %v", lines[2], err)
+	}
+	if final["type"] != "error" || final["error"] == "" {
+		t.Fatalf("final = %#v stdout=%q", final, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "ccgo:") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
