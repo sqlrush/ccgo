@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"ccgo/internal/bootstrap"
 	"ccgo/internal/contracts"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
@@ -222,6 +224,33 @@ func TestRunPrintCWDFlagLoadsProjectSettings(t *testing.T) {
 	requestMessages := requestBody["messages"].([]any)
 	if got := messageTextAt(t, requestMessages, 0); got != "cwd prompt" {
 		t.Fatalf("prompt = %q", got)
+	}
+}
+
+func TestHeadlessRunnerLoadsCLIProvidedMCPConfig(t *testing.T) {
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "mcp.json"), []byte(`{
+		"mcpServers": {
+			"cli": {"command": "cli-server", "args": ["--stdio"]}
+		}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SetCWD(project)
+	runner, err := headlessRunner(context.Background(), state, cliOptions{MCPConfig: "mcp.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := runner.MCP.LocalSettings.MCPServers["cli"]
+	if server.Command != "cli-server" || len(server.Args) != 1 || server.Args[0] != "--stdio" {
+		t.Fatalf("server = %#v", server)
 	}
 }
 
@@ -856,6 +885,23 @@ func TestRunRejectsInvalidCWD(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "invalid --cwd") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintRejectsMissingMCPConfig(t *testing.T) {
+	project := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "--print", "--mcp-config", "missing.json", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "load --mcp-config") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

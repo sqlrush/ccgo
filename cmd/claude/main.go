@@ -37,6 +37,7 @@ type cliOptions struct {
 	MaxTokens      int
 	MaxTurns       int
 	PermissionMode string
+	MCPConfig      string
 	Stream         bool
 	Resume         string
 	Continue       bool
@@ -74,6 +75,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	flags.IntVar(maxTurns, "maxTurns", 0, "maximum tool-use turns in print mode")
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	flags.StringVar(permissionMode, "permissionMode", "", "permission mode")
+	mcpConfig := flags.String("mcp-config", "", "MCP configuration JSON file")
+	flags.StringVar(mcpConfig, "mcpConfig", "", "MCP configuration JSON file")
 	stream := flags.Bool("stream", false, "use streaming API")
 	inputFormat := flags.String("input-format", "text", "input format: text, json, or stream-json")
 	flags.StringVar(inputFormat, "inputFormat", "text", "input format: text, json, or stream-json")
@@ -134,6 +137,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			MaxTokens:      *maxTokens,
 			MaxTurns:       *maxTurns,
 			PermissionMode: *permissionMode,
+			MCPConfig:      *mcpConfig,
 			Stream:         *stream,
 			SystemPrompt:   *systemPrompt,
 			AppendSystem:   *appendSystemPrompt,
@@ -374,6 +378,9 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	if err != nil {
 		return conversation.Runner{}, err
 	}
+	if err := applyMCPConfigFlag(&runner, options.MCPConfig); err != nil {
+		return conversation.Runner{}, err
+	}
 	registry, err := tool.NewRegistry(filetools.BuiltinTools()...)
 	if err != nil {
 		return conversation.Runner{}, err
@@ -414,6 +421,29 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 	runner.Client = client
 	return runner, nil
+}
+
+func applyMCPConfigFlag(runner *conversation.Runner, raw string) error {
+	path := strings.TrimSpace(raw)
+	if path == "" {
+		return nil
+	}
+	if !filepath.IsAbs(path) {
+		base := runner.WorkingDirectory
+		if base == "" {
+			base = "."
+		}
+		path = filepath.Join(base, path)
+	}
+	settings, err := config.LoadSettingsFile(path)
+	if err != nil {
+		return fmt.Errorf("load --mcp-config %s: %w", path, err)
+	}
+	if runner.MCP == nil {
+		runner.MCP = &conversation.MCPConfig{CWD: runner.WorkingDirectory}
+	}
+	runner.MCP.LocalSettings = config.MergeSettings(runner.MCP.LocalSettings, settings)
+	return nil
 }
 
 func combineSystemPrompt(systemPrompt string, appendSystem string) string {
