@@ -532,8 +532,14 @@ func (r Runner) betaHeadersText() string {
 
 func (r Runner) formatPluginSummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
-	if len(args) > 0 && args[0] != "list" && args[0] != "status" {
-		return "Plugin subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	if len(args) > 0 {
+		switch args[0] {
+		case "list", "status":
+		case "enable", "disable":
+			return r.setPluginEnabledSummary(args)
+		default:
+			return "Plugin subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		}
 	}
 	merged := r.mergedSettings()
 	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
@@ -629,6 +635,56 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) setPluginEnabledSummary(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /plugin " + args[0] + " <plugin-name>"
+	}
+	name := strings.TrimSpace(args[1])
+	enabled := args[0] == "enable"
+	if err := setUserPluginEnabled(name, enabled); err != nil {
+		return fmt.Sprintf("Failed to %s plugin %s: %v", args[0], name, err)
+	}
+	if r.MCP != nil {
+		if r.MCP.UserSettings.EnabledPlugins == nil {
+			r.MCP.UserSettings.EnabledPlugins = map[string]any{}
+		}
+		r.MCP.UserSettings.EnabledPlugins[name] = enabled
+	}
+	state := "disabled"
+	if enabled {
+		state = "enabled"
+	}
+	return fmt.Sprintf("Plugin %s %s.", name, state)
+}
+
+func setUserPluginEnabled(name string, enabled bool) error {
+	path := config.UserSettingsPath()
+	document := map[string]any{}
+	data, err := os.ReadFile(path)
+	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &document); err != nil {
+			return fmt.Errorf("decode %s: %w", path, err)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	enabledPlugins, _ := document["enabledPlugins"].(map[string]any)
+	if enabledPlugins == nil {
+		enabledPlugins = map[string]any{}
+	}
+	enabledPlugins[name] = enabled
+	document["enabledPlugins"] = enabledPlugins
+	data, err = json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }
 
 func (r Runner) formatMemorySummary(raw string) string {

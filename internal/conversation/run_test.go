@@ -936,6 +936,68 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesPluginEnableDisableWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	runner := Runner{
+		Client:    client,
+		SessionID: "sess_plugin_toggle",
+		MCP:       &MCPConfig{},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin enable market/plugin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Plugin market/plugin enabled." {
+		t.Fatalf("enable text = %q", got)
+	}
+	if got := runner.MCP.UserSettings.EnabledPlugins["market/plugin"]; got != true {
+		t.Fatalf("enabled state = %#v", runner.MCP.UserSettings.EnabledPlugins)
+	}
+	var settings map[string]any
+	data, err := os.ReadFile(filepath.Join(configHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	enabledPlugins := settings["enabledPlugins"].(map[string]any)
+	if enabledPlugins["market/plugin"] != true {
+		t.Fatalf("settings after enable = %#v", settings)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin disable market/plugin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Plugin market/plugin disabled." {
+		t.Fatalf("disable text = %q", got)
+	}
+	if got := runner.MCP.UserSettings.EnabledPlugins["market/plugin"]; got != false {
+		t.Fatalf("disabled state = %#v", runner.MCP.UserSettings.EnabledPlugins)
+	}
+	data, err = os.ReadFile(filepath.Join(configHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	enabledPlugins = settings["enabledPlugins"].(map[string]any)
+	if enabledPlugins["market/plugin"] != false {
+		t.Fatalf("settings after disable = %#v", settings)
+	}
+}
+
 func TestRunnerExecutesMemorySlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	sessionRoot := t.TempDir()
