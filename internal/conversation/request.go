@@ -38,6 +38,9 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 		MaxTokens: r.maxTokens(),
 		Messages:  msgs.NormalizeForAPI(history),
 	}
+	if r.SystemPrompt != "" {
+		request.System = r.SystemPrompt
+	}
 	if r.Tools.Registry != nil {
 		definitions, err := r.Tools.Registry.Definitions(toolPromptContext(r))
 		if err != nil {

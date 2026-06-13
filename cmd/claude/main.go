@@ -37,6 +37,8 @@ type cliOptions struct {
 	Stream         bool
 	Resume         string
 	Continue       bool
+	SystemPrompt   string
+	AppendSystem   string
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -54,6 +56,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	outputFormat := flags.String("output-format", "text", "output format: text, json, or stream-json")
 	resume := flags.String("resume", "", "resume a session by ID or transcript path")
 	continueMode := flags.Bool("continue", false, "continue the most recent session")
+	systemPrompt := flags.String("system-prompt", "", "system prompt for the model request")
+	appendSystemPrompt := flags.String("append-system-prompt", "", "additional system prompt text")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -84,6 +88,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			MaxTokens:      *maxTokens,
 			PermissionMode: *permissionMode,
 			Stream:         *stream,
+			SystemPrompt:   *systemPrompt,
+			AppendSystem:   *appendSystemPrompt,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -173,6 +179,7 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.MaxTokens = options.MaxTokens
 	}
 	runner.UseStreaming = options.Stream
+	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
 	if runner.SessionPath == "" && runner.SessionID != "" {
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
@@ -183,6 +190,19 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 	runner.Client = client
 	return runner, nil
+}
+
+func combineSystemPrompt(systemPrompt string, appendSystem string) string {
+	base := strings.TrimSpace(systemPrompt)
+	extra := strings.TrimSpace(appendSystem)
+	switch {
+	case base != "" && extra != "":
+		return base + "\n\n" + extra
+	case base != "":
+		return base
+	default:
+		return extra
+	}
 }
 
 func resumeHistory(state *bootstrap.State, runner *conversation.Runner, options cliOptions) ([]contracts.Message, error) {

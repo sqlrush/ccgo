@@ -58,6 +58,7 @@ type Runner struct {
 	Permissions               tool.PermissionDecider
 	Model                     string
 	FallbackModels            []string
+	SystemPrompt              string
 	MaxTokens                 int
 	MaxToolRounds             int
 	UseStreaming              bool

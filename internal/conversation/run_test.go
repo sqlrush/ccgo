@@ -1486,6 +1486,21 @@ func TestBuildRequestIncludesToolDefinitions(t *testing.T) {
 	}
 }
 
+func TestBuildRequestIncludesSystemPrompt(t *testing.T) {
+	runner := Runner{
+		Model:        "sonnet",
+		MaxTokens:    100,
+		SystemPrompt: "Use terse answers.",
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.System != "Use terse answers." {
+		t.Fatalf("system = %#v", req.System)
+	}
+}
+
 func TestRunnerCanUseStreamingClient(t *testing.T) {
 	client := &fakeClient{streams: [][]anthropic.StreamEvent{{
 		{Type: "message_start", Message: &anthropic.Response{ID: "msg_1", Type: "message", Role: "assistant", Model: "sonnet"}},
