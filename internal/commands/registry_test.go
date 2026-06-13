@@ -205,6 +205,42 @@ func TestLoadDiscoversProjectPluginCommandDirectory(t *testing.T) {
 	}
 }
 
+func TestLoadDiscoversProjectPluginSkillDirectory(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "skills", "review"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "skills", "review", "SKILL.md"), []byte("---\ndescription: Review code\n---\nReview $ARGUMENTS from ${CLAUDE_SKILL_DIR}."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{CWD: cwd})
+	command, ok := registry.Find("demo:review")
+	if !ok || command.Source != contracts.CommandSourcePlugin || command.LoadedFrom != "plugin" {
+		t.Fatalf("plugin skill command = %#v ok=%v", command, ok)
+	}
+	expanded, err := registry.ExpandPrompt("demo:review", "api", "sess_plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillRoot := filepath.Join(pluginDir, "skills", "review")
+	want := "Base directory for this skill: " + skillRoot + "\n\nReview api from " + skillRoot + "."
+	if expanded.Content != want {
+		t.Fatalf("expanded = %q, want %q", expanded.Content, want)
+	}
+}
+
 func TestSkillToolCommandsMatchesModelInvocablePromptSkills(t *testing.T) {
 	commands := []contracts.Command{
 		builtinCommand("help"),

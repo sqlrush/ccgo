@@ -44,16 +44,16 @@ type LoadedPlugin struct {
 }
 
 type manifest struct {
-	Name            string          `json:"name"`
-	DisplayName     string          `json:"displayName"`
-	Description     string          `json:"description"`
-	Version         string          `json:"version"`
-	Commands        any             `json:"commands"`
-	Skills          []skillManifest `json:"skills"`
-	Agents          any             `json:"agents"`
-	Hooks           any             `json:"hooks"`
-	MCPServers      any             `json:"mcpServers"`
-	MCPServersSnake any             `json:"mcp_servers"`
+	Name            string `json:"name"`
+	DisplayName     string `json:"displayName"`
+	Description     string `json:"description"`
+	Version         string `json:"version"`
+	Commands        any    `json:"commands"`
+	Skills          any    `json:"skills"`
+	Agents          any    `json:"agents"`
+	Hooks           any    `json:"hooks"`
+	MCPServers      any    `json:"mcpServers"`
+	MCPServersSnake any    `json:"mcp_servers"`
 }
 
 type commandManifest struct {
@@ -129,13 +129,7 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 	commands, prompts := pluginCommands(root, name, parsed.Commands)
 	loaded.Commands = append(loaded.Commands, commands...)
 	loaded.PromptTemplates = append(loaded.PromptTemplates, prompts...)
-	for _, item := range parsed.Skills {
-		skill, ok := skillFromManifest(root, item)
-		if !ok {
-			continue
-		}
-		loaded.PromptTemplates = append(loaded.PromptTemplates, PromptTemplate{Command: skill.Command, Content: skill.Content})
-	}
+	loaded.PromptTemplates = append(loaded.PromptTemplates, pluginSkillPrompts(root, name, parsed.Skills)...)
 	loaded.MCPServers = pluginMCPServers(root, name, parsed.MCPServers, parsed.MCPServersSnake)
 	loaded.Agents = pluginAgents(root, name, parsed.Agents)
 	loaded.HookEvents = pluginHookEvents(root, parsed.Hooks)
@@ -494,6 +488,114 @@ func skillFromManifest(root string, item skillManifest) (skills.Skill, bool) {
 	skill.Command.Source = contracts.CommandSourcePlugin
 	skill.Command.LoadedFrom = "plugin"
 	return skill, true
+}
+
+func pluginSkillPrompts(root string, pluginName string, raw any) []PromptTemplate {
+	seen := map[string]struct{}{}
+	if raw == nil {
+		return loadPluginSkillPromptsFromPath(filepath.Join(root, "skills"), pluginName, seen)
+	}
+	return pluginSkillPromptsFromSpec(root, pluginName, raw, seen)
+}
+
+func pluginSkillPromptsFromSpec(root string, pluginName string, raw any, seen map[string]struct{}) []PromptTemplate {
+	switch value := raw.(type) {
+	case nil:
+		return nil
+	case string:
+		return loadPluginSkillPromptsFromPath(safeJoin(root, value), pluginName, seen)
+	case []any:
+		var out []PromptTemplate
+		for _, item := range value {
+			out = append(out, pluginSkillPromptsFromSpec(root, pluginName, item, seen)...)
+		}
+		return out
+	case map[string]any:
+		skill, ok := skillFromManifestRaw(root, value)
+		if !ok {
+			return nil
+		}
+		key := normalizePath(skill.FilePath)
+		if _, exists := seen[key]; exists {
+			return nil
+		}
+		seen[key] = struct{}{}
+		applyPluginSkillName(pluginName, &skill)
+		return []PromptTemplate{{Command: skill.Command, Content: skill.Content}}
+	default:
+		return nil
+	}
+}
+
+func skillFromManifestRaw(root string, raw any) (skills.Skill, bool) {
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return skills.Skill{}, false
+	}
+	var item skillManifest
+	if err := json.Unmarshal(data, &item); err != nil {
+		return skills.Skill{}, false
+	}
+	return skillFromManifest(root, item)
+}
+
+func loadPluginSkillPromptsFromPath(path string, pluginName string, seen map[string]struct{}) []PromptTemplate {
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err == nil {
+		skill, ok := loadPluginSkillDir(path, pluginName, seen)
+		if !ok {
+			return nil
+		}
+		return []PromptTemplate{{Command: skill.Command, Content: skill.Content}}
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+	var out []PromptTemplate
+	for _, entry := range entries {
+		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		skill, ok := loadPluginSkillDir(filepath.Join(path, entry.Name()), pluginName, seen)
+		if ok {
+			out = append(out, PromptTemplate{Command: skill.Command, Content: skill.Content})
+		}
+	}
+	return out
+}
+
+func loadPluginSkillDir(path string, pluginName string, seen map[string]struct{}) (skills.Skill, bool) {
+	skill, err := skills.LoadSkillDir(path, contracts.CommandSourcePlugin)
+	if err != nil {
+		return skills.Skill{}, false
+	}
+	key := normalizePath(skill.FilePath)
+	if _, ok := seen[key]; ok {
+		return skills.Skill{}, false
+	}
+	seen[key] = struct{}{}
+	applyPluginSkillName(pluginName, &skill)
+	return skill, true
+}
+
+func applyPluginSkillName(pluginName string, skill *skills.Skill) {
+	name := strings.TrimSpace(skill.Command.Name)
+	if name == "" {
+		name = filepath.Base(skill.Root)
+	}
+	if !strings.Contains(name, ":") && !strings.HasPrefix(name, pluginName+":") {
+		name = pluginName + ":" + name
+	}
+	skill.Command.Name = name
+	skill.Command.Source = contracts.CommandSourcePlugin
+	skill.Command.LoadedFrom = "plugin"
 }
 
 func pluginMCPServers(root string, pluginName string, specs ...any) map[string]contracts.MCPServer {

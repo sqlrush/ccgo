@@ -264,3 +264,60 @@ func TestLoadPluginDirLoadsCommandObjectMapping(t *testing.T) {
 		t.Fatalf("inline prompt = %#v content=%q", inline.Command, inline.Content)
 	}
 }
+
+func TestLoadPluginDirLoadsDefaultAndManifestSkillDirectories(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "demo")
+	if err := os.MkdirAll(filepath.Join(root, "skills", "review"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "skills", "review", "SKILL.md"), []byte("---\ndescription: Review code\nallowed-tools: Read\n---\nReview from ${CLAUDE_SKILL_DIR}."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ManifestFileName), []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := LoadPluginDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.PromptTemplates) != 1 {
+		t.Fatalf("default skill prompts = %#v", plugin.PromptTemplates)
+	}
+	skill := plugin.PromptTemplates[0]
+	if skill.Command.Name != "demo:review" || skill.Command.Description != "Review code" || skill.Command.LoadedFrom != "plugin" || skill.Command.Source != contracts.CommandSourcePlugin {
+		t.Fatalf("default skill command = %#v", skill.Command)
+	}
+
+	overrideRoot := filepath.Join(t.TempDir(), "override")
+	if err := os.MkdirAll(filepath.Join(overrideRoot, "skills", "ignored"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "skills", "ignored", "SKILL.md"), []byte("---\ndescription: Ignored\n---\nIgnored."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(overrideRoot, "extra-skills", "audit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "extra-skills", "audit", "SKILL.md"), []byte("---\ndescription: Audit code\n---\nAudit."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(overrideRoot, "direct-skill"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "direct-skill", "SKILL.md"), []byte("---\ndescription: Direct skill\n---\nDirect."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, ManifestFileName), []byte(`{"name":"demo","skills":["extra-skills","direct-skill"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err = LoadPluginDir(overrideRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.PromptTemplates) != 2 {
+		t.Fatalf("manifest skill prompts = %#v", plugin.PromptTemplates)
+	}
+	if plugin.PromptTemplates[0].Command.Name != "demo:audit" || plugin.PromptTemplates[1].Command.Name != "demo:direct-skill" {
+		t.Fatalf("manifest skill names = %#v %#v", plugin.PromptTemplates[0].Command, plugin.PromptTemplates[1].Command)
+	}
+}
