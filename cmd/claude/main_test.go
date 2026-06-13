@@ -843,6 +843,12 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	if payload["stop_reason"] != "end_turn" || payload["model"] != "claude-sonnet-4-6" {
 		t.Fatalf("metadata = %#v", payload)
 	}
+	if _, ok := payload["duration_ms"].(float64); !ok {
+		t.Fatalf("duration_ms = %#v", payload["duration_ms"])
+	}
+	if _, ok := payload["duration_api_ms"].(float64); !ok {
+		t.Fatalf("duration_api_ms = %#v", payload["duration_api_ms"])
+	}
 	if cost, ok := payload["total_cost_usd"].(float64); !ok || cost <= 0 {
 		t.Fatalf("total_cost_usd = %#v", payload["total_cost_usd"])
 	}
@@ -881,6 +887,12 @@ func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
 	}
 	if payload["type"] != "result" || payload["subtype"] != "error" || payload["is_error"] != true || payload["error"] == "" {
 		t.Fatalf("payload = %#v", payload)
+	}
+	if _, ok := payload["duration_ms"].(float64); !ok {
+		t.Fatalf("duration_ms = %#v", payload["duration_ms"])
+	}
+	if _, ok := payload["duration_api_ms"].(float64); !ok {
+		t.Fatalf("duration_api_ms = %#v", payload["duration_api_ms"])
 	}
 	if !strings.Contains(stderr.String(), "ccgo:") {
 		t.Fatalf("stderr = %q", stderr.String())
@@ -941,6 +953,12 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if events[3]["result"] != "stream ok" || events[3]["is_error"] != false || events[3]["num_turns"] != float64(1) {
 		t.Fatalf("result event = %#v", events[3])
 	}
+	if _, ok := events[3]["duration_ms"].(float64); !ok {
+		t.Fatalf("result duration_ms = %#v", events[3]["duration_ms"])
+	}
+	if _, ok := events[3]["duration_api_ms"].(float64); !ok {
+		t.Fatalf("result duration_api_ms = %#v", events[3]["duration_api_ms"])
+	}
 }
 
 func TestResultNumTurnsCountsAssistantMessages(t *testing.T) {
@@ -986,6 +1004,12 @@ func TestRunPrintStreamJSONOutputIncludesErrorEvent(t *testing.T) {
 	}
 	if final["type"] != "error" || final["is_error"] != true || final["error"] == "" {
 		t.Fatalf("final = %#v stdout=%q", final, stdout.String())
+	}
+	if _, ok := final["duration_ms"].(float64); !ok {
+		t.Fatalf("duration_ms = %#v", final["duration_ms"])
+	}
+	if _, ok := final["duration_api_ms"].(float64); !ok {
+		t.Fatalf("duration_api_ms = %#v", final["duration_api_ms"])
 	}
 	if !strings.Contains(stderr.String(), "ccgo:") {
 		t.Fatalf("stderr = %q", stderr.String())

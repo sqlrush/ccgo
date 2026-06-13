@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"time"
 
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
@@ -100,6 +101,7 @@ type Result struct {
 	ToolResults   []contracts.ToolResult
 	StopReason    string
 	Usage         contracts.Usage
+	APIDuration   time.Duration
 	FinalRequest  anthropic.Request
 	ModelsAttempt []string
 	Compacted     bool

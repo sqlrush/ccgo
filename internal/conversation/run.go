@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/commands"
@@ -83,9 +84,10 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			relevantMemoryPrefetch = nil
 		}
 
-		request, attempts, response, err := r.send(ctx, history, roundRelevantMemoryPrefetch)
+		request, attempts, response, apiDuration, err := r.send(ctx, history, roundRelevantMemoryPrefetch)
 		result.FinalRequest = request
 		result.ModelsAttempt = append(result.ModelsAttempt, attempts...)
+		result.APIDuration += apiDuration
 		if err != nil {
 			return result, err
 		}
@@ -348,37 +350,40 @@ func (r Runner) maybeExtractSessionMemory(ctx context.Context, messages []contra
 	return err
 }
 
-func (r Runner) send(ctx context.Context, history []contracts.Message, relevantMemoryPrefetch *relevantMemoryPrefetchTask) (anthropic.Request, []string, *anthropic.Response, error) {
+func (r Runner) send(ctx context.Context, history []contracts.Message, relevantMemoryPrefetch *relevantMemoryPrefetchTask) (anthropic.Request, []string, *anthropic.Response, time.Duration, error) {
 	models := append([]string{r.model()}, r.FallbackModels...)
 	var attempts []string
 	var lastRequest anthropic.Request
 	var lastErr error
+	var apiDuration time.Duration
 	relevantMemory, err := relevantMemoryPrefetch.requestContext(ctx)
 	if err != nil {
-		return anthropic.Request{}, attempts, nil, err
+		return anthropic.Request{}, attempts, nil, apiDuration, err
 	}
 	for i, model := range models {
 		historyForRequest, err := r.applyToolResultBudget(history)
 		if err != nil {
-			return anthropic.Request{}, attempts, nil, err
+			return anthropic.Request{}, attempts, nil, apiDuration, err
 		}
 		request, err := r.buildRequest(historyForRequest, model, relevantMemory)
 		if err != nil {
-			return anthropic.Request{}, attempts, nil, err
+			return anthropic.Request{}, attempts, nil, apiDuration, err
 		}
 		lastRequest = request
 		attempts = append(attempts, model)
+		startedAt := time.Now()
 		response, err := r.createMessage(ctx, request)
+		apiDuration += time.Since(startedAt)
 		if err == nil {
-			return request, attempts, response, nil
+			return request, attempts, response, apiDuration, nil
 		}
 		lastErr = err
 		if i == len(models)-1 || !isFallbackEligible(err) {
-			return request, attempts, nil, err
+			return request, attempts, nil, apiDuration, err
 		}
 		r.emit(Event{Type: EventRetry, Model: model, Error: err})
 	}
-	return lastRequest, attempts, nil, lastErr
+	return lastRequest, attempts, nil, apiDuration, lastErr
 }
 
 func (r Runner) applyToolResultBudget(history []contracts.Message) ([]contracts.Message, error) {

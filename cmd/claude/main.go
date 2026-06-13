@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/auth"
@@ -128,21 +129,22 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		startedAt := time.Now()
 		format, err := normalizeInputFormat(*inputFormat)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		userMessage, err := promptMessageFromArgsOrStdin(flags.Args(), stdin, format)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		effectiveMode, err := effectivePermissionMode(*permissionMode, *skipPermissions)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -161,13 +163,13 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			AddDirs:         append([]string(nil), addDirs...),
 		})
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, normalizedOutputFormat)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, normalizedOutputFormat)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -177,7 +179,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, normalizedOutputFormat)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), result.APIDuration)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -185,7 +187,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
-		if err := writePrintResult(stdout, result, normalizedOutputFormat); err != nil {
+		if err := writePrintResult(stdout, result, normalizedOutputFormat, time.Since(startedAt)); err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -739,6 +741,8 @@ type printJSONResult struct {
 	Type        string                 `json:"type"`
 	Subtype     string                 `json:"subtype"`
 	IsError     bool                   `json:"is_error"`
+	DurationMS  int64                  `json:"duration_ms"`
+	DurationAPI int64                  `json:"duration_api_ms"`
 	NumTurns    int                    `json:"num_turns,omitempty"`
 	TotalCost   float64                `json:"total_cost_usd,omitempty"`
 	SessionID   contracts.ID           `json:"session_id,omitempty"`
@@ -767,6 +771,8 @@ type printStreamEvent struct {
 	Model        string                     `json:"model,omitempty"`
 	Error        string                     `json:"error,omitempty"`
 	IsError      bool                       `json:"is_error,omitempty"`
+	DurationMS   *int64                     `json:"duration_ms,omitempty"`
+	DurationAPI  *int64                     `json:"duration_api_ms,omitempty"`
 }
 
 func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
@@ -829,7 +835,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 	return encoder.Encode(out)
 }
 
-func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat string) error {
+func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat string, duration time.Duration) error {
 	text := messages.TextContent(result.Assistant)
 	if text == "" {
 		for i := len(result.Messages) - 1; i >= 0; i-- {
@@ -843,7 +849,7 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 		return nil
 	}
 	if outputFormat == "json" || outputFormat == "stream-json" {
-		return writePrintJSONResult(stdout, result, text)
+		return writePrintJSONResult(stdout, result, text, duration)
 	}
 	if _, err := fmt.Fprint(stdout, text); err != nil {
 		return err
@@ -855,42 +861,48 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 	return nil
 }
 
-func writePrintError(stdout io.Writer, runner conversation.Runner, err error, outputFormat string) error {
+func writePrintError(stdout io.Writer, runner conversation.Runner, err error, outputFormat string, duration time.Duration, apiDuration time.Duration) error {
 	if err == nil {
 		return nil
 	}
 	switch outputFormat {
 	case "json":
-		return writePrintJSONError(stdout, runner, err)
+		return writePrintJSONError(stdout, runner, err, duration, apiDuration)
 	case "stream-json":
-		return writePrintStreamError(stdout, runner, err)
+		return writePrintStreamError(stdout, runner, err, duration, apiDuration)
 	default:
 		return nil
 	}
 }
 
-func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error) error {
+func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration) error {
 	encoder := json.NewEncoder(stdout)
 	return encoder.Encode(printJSONResult{
-		Type:      "result",
-		Subtype:   "error",
-		IsError:   true,
-		SessionID: runner.SessionID,
-		Error:     err.Error(),
+		Type:        "result",
+		Subtype:     "error",
+		IsError:     true,
+		DurationMS:  durationMillis(duration),
+		DurationAPI: durationMillis(apiDuration),
+		SessionID:   runner.SessionID,
+		Error:       err.Error(),
 	})
 }
 
-func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err error) error {
+func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration) error {
 	encoder := json.NewEncoder(stdout)
+	durationMS := durationMillis(duration)
+	durationAPI := durationMillis(apiDuration)
 	return encoder.Encode(printStreamEvent{
-		Type:      "error",
-		SessionID: runner.SessionID,
-		Error:     err.Error(),
-		IsError:   true,
+		Type:        "error",
+		SessionID:   runner.SessionID,
+		Error:       err.Error(),
+		IsError:     true,
+		DurationMS:  &durationMS,
+		DurationAPI: &durationAPI,
 	})
 }
 
-func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string) error {
+func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string, duration time.Duration) error {
 	message := result.Assistant
 	var messagePtr *contracts.Message
 	if message.Type != "" {
@@ -913,6 +925,8 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Type:        "result",
 		Subtype:     "success",
 		IsError:     false,
+		DurationMS:  durationMillis(duration),
+		DurationAPI: durationMillis(result.APIDuration),
 		NumTurns:    resultNumTurns(result),
 		TotalCost:   usageCostUSD(usage),
 		SessionID:   sessionID,
@@ -925,6 +939,13 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 	}
 	encoder := json.NewEncoder(stdout)
 	return encoder.Encode(envelope)
+}
+
+func durationMillis(duration time.Duration) int64 {
+	if duration <= 0 {
+		return 0
+	}
+	return duration.Milliseconds()
 }
 
 func resultNumTurns(result conversation.Result) int {
