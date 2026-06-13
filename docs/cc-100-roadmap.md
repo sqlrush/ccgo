@@ -1207,6 +1207,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：`cmd/claude-mcp --help` 现在沿用 Go flag usage 输出并成功退出，和主 `cmd/claude --help` 入口保持一致。
 
+本轮补充：`cmd/claude-mcp --cwd` 现在会在启动阶段解析绝对路径、校验目录存在并解析 symlink，缺失或非目录路径会直接返回 `invalid --cwd` 错误，避免内置 MCP server 带坏 working directory 进入工具调用阶段。
+
 本轮补充：SSE transport 现在会记录流事件 `id:`，stream 断开后把连接标记为需要重连；等待 async response 的同一请求遇到 EOF 会重新建立 SSE stream 并继续等待，重连时携带 `Last-Event-ID` 与已有 `mcp-session-id`，避免传统 SSE async response 在断流后只 POST 不重连。
 
 本轮补充：`cmd/claude-mcp` 内置 stdio server 现在补齐 `resources/templates/list` 空列表响应、`completion/complete` 空 completion 响应和 `completions` capability 声明，以及 `logging/setLevel` level 校验和 no-op 成功路径，减少 MCP 客户端调用常见 utility/template 方法时落入 method-not-found。

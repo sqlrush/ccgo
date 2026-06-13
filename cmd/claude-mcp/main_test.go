@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -40,5 +41,19 @@ func TestRunServesInitializeRequest(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"protocolVersion":"2025-06-18"`) || !strings.Contains(stdout.String(), `"serverInfo"`) {
 		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestRunRejectsInvalidCWD(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", filepath.Join(t.TempDir(), "missing")}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("code=%d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid --cwd") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

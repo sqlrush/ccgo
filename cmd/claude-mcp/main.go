@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"ccgo/internal/mcp"
 	"ccgo/internal/tool"
@@ -35,14 +37,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintf(stdout, "%s (ccgo mcp)\n", version)
 		return 0
 	}
-	workingDirectory := *cwd
-	if workingDirectory == "" {
-		var err error
-		workingDirectory, err = os.Getwd()
-		if err != nil {
-			fmt.Fprintf(stderr, "claude-mcp: %v\n", err)
-			return 1
-		}
+	workingDirectory, err := resolveWorkingDirectory(*cwd)
+	if err != nil {
+		fmt.Fprintf(stderr, "claude-mcp: %v\n", err)
+		return 1
 	}
 	registry, err := tool.NewRegistry(filetools.BuiltinTools()...)
 	if err != nil {
@@ -64,4 +62,30 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return 1
 	}
 	return 0
+}
+
+func resolveWorkingDirectory(raw string) (string, error) {
+	cwd := strings.TrimSpace(raw)
+	if cwd == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		cwd = wd
+	}
+	abs, err := filepath.Abs(cwd)
+	if err != nil {
+		return "", fmt.Errorf("invalid --cwd %q: %w", raw, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("invalid --cwd %q: %w", raw, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("invalid --cwd %q: not a directory", raw)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	return abs, nil
 }
