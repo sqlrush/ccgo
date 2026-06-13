@@ -50,6 +50,24 @@ func TestSSETransportDiscoversEndpointAndPostsRequests(t *testing.T) {
 	}
 }
 
+func TestSSETransportEndpointDiscoveryResponseLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			"event: message\n" +
+				"data: " + strings.Repeat("x", 80) + "\n\n",
+		))
+	}))
+	defer server.Close()
+
+	transport := NewSSETransport(server.URL+"/sse", nil, server.Client())
+	transport.MaxResponseBytes = 24
+	_, err := transport.RoundTrip(context.Background(), NewRPCRequest("3", "tools/list", nil))
+	if err == nil || !strings.Contains(err.Error(), "exceeds 24 bytes") {
+		t.Fatalf("expected endpoint discovery response limit error, got %v", err)
+	}
+}
+
 func TestSSETransportWaitsForAsyncStreamResponse(t *testing.T) {
 	postReceived := make(chan RPCRequest, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

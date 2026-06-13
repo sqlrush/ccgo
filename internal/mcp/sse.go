@@ -298,7 +298,7 @@ func (t *SSETransport) connect(ctx context.Context) (string, error) {
 		t.mu.Unlock()
 	}
 
-	scanner := newSSEScanner(io.LimitReader(resp.Body, limit+1))
+	scanner := newSSEScanner(responseLimitReader(resp.Body, limit))
 	for {
 		event, ok, err := scanSSEEvent(scanner)
 		if err != nil {
