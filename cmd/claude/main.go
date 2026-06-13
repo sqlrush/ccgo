@@ -121,24 +121,26 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return 1
 	}
 	if *printMode {
+		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
 		format, err := normalizeInputFormat(*inputFormat)
 		if err != nil {
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		userMessage, err := promptMessageFromArgsOrStdin(flags.Args(), stdin, format)
 		if err != nil {
-			fmt.Fprintf(stderr, "ccgo: %v\n", err)
-			return 1
-		}
-		outputFormat, err := normalizeOutputFormat(*outputFormat)
-		if err != nil {
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		effectiveMode, err := effectivePermissionMode(*permissionMode, *skipPermissions)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, outputFormat)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -157,23 +159,23 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			AddDirs:         append([]string(nil), addDirs...),
 		})
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, outputFormat)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, outputFormat)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		streamErr := func() error { return nil }
-		if outputFormat == "stream-json" {
+		if normalizedOutputFormat == "stream-json" {
 			runner, streamErr = attachStreamJSON(stdout, runner)
 		}
 		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, outputFormat)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -181,7 +183,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
-		if err := writePrintResult(stdout, result, outputFormat); err != nil {
+		if err := writePrintResult(stdout, result, normalizedOutputFormat); err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}

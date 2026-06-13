@@ -972,6 +972,46 @@ func TestRunPrintJSONOutputsSetupError(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONOutputsInputFormatError(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "--input-format", "xml", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "error" || !strings.Contains(fmt.Sprint(payload["error"]), "unsupported input format") {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if !strings.Contains(stderr.String(), "unsupported input format") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintJSONOutputsPromptError(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "error" || !strings.Contains(fmt.Sprint(payload["error"]), "--print requires a prompt") {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if !strings.Contains(stderr.String(), "--print requires a prompt") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestRunPrintRejectsPermissionModeSkipConflict(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
