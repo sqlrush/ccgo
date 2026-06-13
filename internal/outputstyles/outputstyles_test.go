@@ -56,3 +56,16 @@ func TestResolveDefaultHasNoStyleSection(t *testing.T) {
 		t.Fatalf("default style = %#v ok=%v", style, ok)
 	}
 }
+
+func TestNamesIncludesDefaultAndBuiltins(t *testing.T) {
+	names := Names("", nil)
+	want := []string{"default", "Explanatory", "Learning"}
+	if len(names) != len(want) {
+		t.Fatalf("names = %#v", names)
+	}
+	for i, name := range want {
+		if names[i] != name {
+			t.Fatalf("names = %#v", names)
+		}
+	}
+}

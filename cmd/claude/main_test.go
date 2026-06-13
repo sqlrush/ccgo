@@ -1010,7 +1010,11 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	t.Setenv("ANTHROPIC_MODEL", "")
 	t.Setenv("CLAUDE_MODEL", "")
 	t.Setenv("ANTHROPIC_BETA", "")
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--print", "--output-format", "stream-json", "stream prompt"}, strings.NewReader(""), &stdout, &stderr)
@@ -1034,6 +1038,13 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 	if events[0]["session_id"] == "" || events[0]["cwd"] == "" {
 		t.Fatalf("init metadata = %#v", events[0])
+	}
+	if events[0]["output_style"] != "Explanatory" {
+		t.Fatalf("init output style = %#v", events[0])
+	}
+	outputStyles, ok := events[0]["available_output_styles"].([]any)
+	if !ok || len(outputStyles) < 3 || outputStyles[0] != "default" {
+		t.Fatalf("init available output styles = %#v", events[0]["available_output_styles"])
 	}
 	tools, ok := events[0]["tools"].([]any)
 	if !ok || len(tools) == 0 {

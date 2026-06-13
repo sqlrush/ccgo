@@ -60,6 +60,19 @@ func EffectiveName(cwd string, settings contracts.Settings, plugins []pluginpkg.
 	return DefaultName
 }
 
+func Names(cwd string, plugins []pluginpkg.LoadedPlugin) []string {
+	styles := All(cwd, plugins)
+	names := make([]string, 0, len(styles)+1)
+	names = append(names, DefaultName)
+	for name := range styles {
+		if strings.TrimSpace(name) != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names[1:])
+	return names
+}
+
 func Section(style Config) string {
 	prompt := strings.TrimSpace(style.Prompt)
 	if prompt == "" {

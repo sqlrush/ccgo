@@ -655,6 +655,14 @@ func (r Runner) outputStyleConfig() (outputstyles.Config, bool) {
 	return outputstyles.Resolve(r.WorkingDirectory, r.mergedSettings(), r.outputStylePlugins())
 }
 
+func (r Runner) AvailableOutputStyleNames() []string {
+	return outputstyles.Names(r.WorkingDirectory, r.outputStylePlugins())
+}
+
+func (r Runner) EffectiveOutputStyleName() string {
+	return r.effectiveOutputStyleName()
+}
+
 func (r Runner) effectiveOutputStyleName() string {
 	return outputstyles.EffectiveName(r.WorkingDirectory, r.mergedSettings(), r.outputStylePlugins())
 }

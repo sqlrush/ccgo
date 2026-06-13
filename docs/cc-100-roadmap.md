@@ -122,6 +122,8 @@ M8 补充：本地 plugin output style discovery 现在支持默认 `output-styl
 
 M8 补充：output style 运行时基础已接入系统提示构建，支持内置 `Explanatory`/`Learning`、用户/项目 `.claude/output-styles/*.md`、本地 plugin output style 和 `force-for-plugin` 优先级；`/status`、`/config` 也会显示当前解析到的 output style。完整 TUI picker、settings 写回、managed policy 来源、状态栏附件和 prompt-cache 分类仍未完成。
 
+M8/CLI 补充：`--output-format stream-json` 的 init event 现在会暴露 `output_style` 和 `available_output_styles`，与当前 settings/custom/plugin output style 解析结果保持一致；完整状态栏附件、prompt category/cache key 和 TUI picker 仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

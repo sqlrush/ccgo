@@ -765,6 +765,8 @@ type printStreamEvent struct {
 	CWD          string                     `json:"cwd,omitempty"`
 	Tools        []string                   `json:"tools,omitempty"`
 	MCPServers   []string                   `json:"mcp_servers,omitempty"`
+	OutputStyle  string                     `json:"output_style,omitempty"`
+	OutputStyles []string                   `json:"available_output_styles,omitempty"`
 	Message      *contracts.Message         `json:"message,omitempty"`
 	ToolUse      *contracts.ToolUse         `json:"tool_use,omitempty"`
 	ToolResult   *contracts.ToolResult      `json:"tool_result,omitempty"`
@@ -782,13 +784,15 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
 	eventErr = encoder.Encode(printStreamEvent{
-		Type:       "system",
-		Subtype:    "init",
-		SessionID:  runner.SessionID,
-		CWD:        runner.WorkingDirectory,
-		Tools:      runnerToolNames(runner),
-		MCPServers: runnerMCPServerNames(runner),
-		Model:      runner.Model,
+		Type:         "system",
+		Subtype:      "init",
+		SessionID:    runner.SessionID,
+		CWD:          runner.WorkingDirectory,
+		Tools:        runnerToolNames(runner),
+		MCPServers:   runnerMCPServerNames(runner),
+		OutputStyle:  runner.EffectiveOutputStyleName(),
+		OutputStyles: runner.AvailableOutputStyleNames(),
+		Model:        runner.Model,
 	})
 	runner.OnEvent = func(event conversation.Event) {
 		if eventErr != nil {
