@@ -757,6 +757,9 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	if payload["stop_reason"] != "end_turn" || payload["model"] != "claude-sonnet-4-6" {
 		t.Fatalf("metadata = %#v", payload)
 	}
+	if cost, ok := payload["total_cost_usd"].(float64); !ok || cost <= 0 {
+		t.Fatalf("total_cost_usd = %#v", payload["total_cost_usd"])
+	}
 	usage, ok := payload["usage"].(map[string]any)
 	if !ok || usage["input_tokens"] != float64(3) || usage["output_tokens"] != float64(4) {
 		t.Fatalf("usage = %#v", payload["usage"])

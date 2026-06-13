@@ -685,6 +685,7 @@ type printJSONResult struct {
 	Subtype     string                 `json:"subtype"`
 	IsError     bool                   `json:"is_error"`
 	NumTurns    int                    `json:"num_turns,omitempty"`
+	TotalCost   float64                `json:"total_cost_usd,omitempty"`
 	SessionID   contracts.ID           `json:"session_id,omitempty"`
 	Result      string                 `json:"result"`
 	Error       string                 `json:"error,omitempty"`
@@ -858,6 +859,7 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Subtype:     "success",
 		IsError:     false,
 		NumTurns:    resultNumTurns(result),
+		TotalCost:   usageCostUSD(usage),
 		SessionID:   sessionID,
 		Result:      text,
 		Message:     messagePtr,
@@ -881,6 +883,13 @@ func resultNumTurns(result conversation.Result) int {
 		return 1
 	}
 	return turns
+}
+
+func usageCostUSD(usage *contracts.Usage) float64 {
+	if usage == nil {
+		return 0
+	}
+	return usage.CostUSD
 }
 
 func hasUsage(usage contracts.Usage) bool {
