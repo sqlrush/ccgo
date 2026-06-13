@@ -13,6 +13,7 @@ import (
 
 	"ccgo/internal/bootstrap"
 	"ccgo/internal/contracts"
+	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -717,6 +718,25 @@ func TestRunPrintStreamJSONIncludesRawStreamingEvents(t *testing.T) {
 	}
 	if final == nil || final["result"] != "delta ok" {
 		t.Fatalf("final = %#v stdout=%q", final, stdout.String())
+	}
+}
+
+func TestRunnerMCPServerNamesMergesSettings(t *testing.T) {
+	runner := conversation.Runner{MCP: &conversation.MCPConfig{
+		UserSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
+			"zeta": {Command: "user"},
+		}},
+		ProjectSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
+			"alpha": {Command: "project"},
+		}},
+		LocalSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
+			"beta": {Command: "local"},
+		}},
+	}}
+	got := runnerMCPServerNames(runner)
+	want := []string{"alpha", "beta", "zeta"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("names = %#v", got)
 	}
 }
 
