@@ -748,7 +748,7 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
 	}
-	if payload["type"] != "result" || payload["subtype"] != "success" || payload["result"] != "json ok" {
+	if payload["type"] != "result" || payload["subtype"] != "success" || payload["is_error"] != false || payload["result"] != "json ok" {
 		t.Fatalf("payload = %#v", payload)
 	}
 	if payload["session_id"] == "" {
@@ -790,7 +790,7 @@ func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
 	}
-	if payload["type"] != "result" || payload["subtype"] != "error" || payload["error"] == "" {
+	if payload["type"] != "result" || payload["subtype"] != "error" || payload["is_error"] != true || payload["error"] == "" {
 		t.Fatalf("payload = %#v", payload)
 	}
 	if !strings.Contains(stderr.String(), "ccgo:") {
@@ -849,7 +849,7 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if events[1]["type"] != "user_message" || events[2]["type"] != "assistant_message" || events[3]["type"] != "result" {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[3]["result"] != "stream ok" {
+	if events[3]["result"] != "stream ok" || events[3]["is_error"] != false {
 		t.Fatalf("result event = %#v", events[3])
 	}
 }
@@ -881,7 +881,7 @@ func TestRunPrintStreamJSONOutputIncludesErrorEvent(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[2]), &final); err != nil {
 		t.Fatalf("invalid final line %q: %v", lines[2], err)
 	}
-	if final["type"] != "error" || final["error"] == "" {
+	if final["type"] != "error" || final["is_error"] != true || final["error"] == "" {
 		t.Fatalf("final = %#v stdout=%q", final, stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "ccgo:") {

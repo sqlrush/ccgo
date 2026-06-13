@@ -683,6 +683,7 @@ func firstNonEmpty(values ...string) string {
 type printJSONResult struct {
 	Type        string                 `json:"type"`
 	Subtype     string                 `json:"subtype"`
+	IsError     bool                   `json:"is_error"`
 	SessionID   contracts.ID           `json:"session_id,omitempty"`
 	Result      string                 `json:"result"`
 	Error       string                 `json:"error,omitempty"`
@@ -708,6 +709,7 @@ type printStreamEvent struct {
 	StreamEvent  *anthropic.StreamEvent     `json:"stream_event,omitempty"`
 	Model        string                     `json:"model,omitempty"`
 	Error        string                     `json:"error,omitempty"`
+	IsError      bool                       `json:"is_error,omitempty"`
 }
 
 func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
@@ -815,6 +817,7 @@ func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error
 	return encoder.Encode(printJSONResult{
 		Type:      "result",
 		Subtype:   "error",
+		IsError:   true,
 		SessionID: runner.SessionID,
 		Error:     err.Error(),
 	})
@@ -826,6 +829,7 @@ func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err err
 		Type:      "error",
 		SessionID: runner.SessionID,
 		Error:     err.Error(),
+		IsError:   true,
 	})
 }
 
@@ -851,6 +855,7 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 	envelope := printJSONResult{
 		Type:        "result",
 		Subtype:     "success",
+		IsError:     false,
 		SessionID:   sessionID,
 		Result:      text,
 		Message:     messagePtr,
