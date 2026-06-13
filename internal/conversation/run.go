@@ -508,6 +508,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 	pluginCommands := pluginCommandNames(registry.Visible())
 	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
 	pluginAgents := pluginAgentNames(localPlugins)
+	pluginMCPServers := pluginMCPServerNames(localPlugins)
 	pluginHookEvents := pluginHookEventLines(localPlugins)
 	totalPluginHooks := pluginHookCount(localPlugins)
 	lines := []string{
@@ -521,6 +522,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 		fmt.Sprintf("Local plugin manifests: %d", len(localPlugins)),
 		fmt.Sprintf("Registered plugin commands: %d", len(pluginCommands)),
 		fmt.Sprintf("Plugin agents: %d", len(pluginAgents)),
+		fmt.Sprintf("Plugin MCP servers: %d", len(pluginMCPServers)),
 		fmt.Sprintf("Plugin hooks: %d", totalPluginHooks),
 	}
 	if len(localPlugins) > 0 {
@@ -552,6 +554,15 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 		if len(pluginAgents) > 10 {
 			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin agents.", len(pluginAgents)))
+		}
+	}
+	if len(pluginMCPServers) > 0 {
+		lines = append(lines, "Plugin MCP servers:")
+		for _, name := range firstStrings(pluginMCPServers, 10) {
+			lines = append(lines, "- "+name)
+		}
+		if len(pluginMCPServers) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin MCP servers.", len(pluginMCPServers)))
 		}
 	}
 	if len(pluginHookEvents) > 0 {
@@ -652,6 +663,19 @@ func pluginAgentNames(plugins []pluginpkg.LoadedPlugin) []string {
 		for _, agent := range plugin.Agents {
 			if strings.TrimSpace(agent.Name) != "" {
 				names = append(names, agent.Name)
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func pluginMCPServerNames(plugins []pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for _, plugin := range plugins {
+		for name := range plugin.MCPServers {
+			if strings.TrimSpace(name) != "" {
+				names = append(names, name)
 			}
 		}
 	}

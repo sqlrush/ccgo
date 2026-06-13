@@ -832,7 +832,10 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 			"name": "plugin:deploy",
 			"description": "Deploy plugin",
 			"prompt": "Deploy $ARGUMENTS."
-		}]
+		}],
+		"mcpServers": {
+			"plugin:docs": {"type": "http", "url": "https://docs.example/mcp"}
+		}
 	}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -876,6 +879,7 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"Local plugin manifests: 1",
 		"Registered plugin commands: 1",
 		"Plugin agents: 1",
+		"Plugin MCP servers: 1",
 		"Plugin hooks: 1",
 		"Local plugins:",
 		"- demo@1.2.3",
@@ -883,6 +887,8 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"- /plugin:deploy",
 		"Plugin agents:",
 		"- demo:reviewer",
+		"Plugin MCP servers:",
+		"- plugin:docs",
 		"Plugin hook events:",
 		"- PreToolUse (1)",
 	} {
