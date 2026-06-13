@@ -410,7 +410,11 @@ func (r Runner) createMessage(ctx context.Context, request anthropic.Request) (*
 		if streamer, ok := r.Client.(StreamingMessageClient); ok {
 			request.Stream = true
 			acc := anthropic.NewStreamAccumulator()
-			if err := streamer.StreamMessages(ctx, request, acc.Add); err != nil {
+			if err := streamer.StreamMessages(ctx, request, func(event anthropic.StreamEvent) error {
+				eventCopy := event
+				r.emit(Event{Type: EventStreamEvent, StreamEvent: &eventCopy, Model: request.Model})
+				return acc.Add(event)
+			}); err != nil {
 				return nil, err
 			}
 			return acc.Finish(), nil

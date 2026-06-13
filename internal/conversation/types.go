@@ -30,6 +30,7 @@ const (
 	EventRetry            EventType = "retry"
 	EventTokenWarning     EventType = "token_warning"
 	EventCompact          EventType = "compact"
+	EventStreamEvent      EventType = "stream_event"
 )
 
 type TokenWarning struct {
@@ -45,6 +46,7 @@ type Event struct {
 	ToolResult   *contracts.ToolResult
 	TokenWarning *TokenWarning
 	Compact      *compactpkg.Result
+	StreamEvent  *anthropic.StreamEvent
 	Model        string
 	Error        error
 }

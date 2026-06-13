@@ -1499,11 +1499,20 @@ func TestRunnerCanUseStreamingClient(t *testing.T) {
 		MaxTokens:    64,
 		UseStreaming: true,
 	}
+	var streamEvents []Event
+	runner.OnEvent = func(event Event) {
+		if event.Type == EventStreamEvent {
+			streamEvents = append(streamEvents, event)
+		}
+	}
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("hello"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Assistant.Content[0].Text != "streamed" || !client.requests[0].Stream {
 		t.Fatalf("result = %#v request = %#v", result, client.requests[0])
+	}
+	if len(streamEvents) != 4 || streamEvents[2].StreamEvent == nil || streamEvents[2].StreamEvent.TextDelta() != "streamed" {
+		t.Fatalf("stream events = %#v", streamEvents)
 	}
 }

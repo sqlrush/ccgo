@@ -296,6 +296,7 @@ type printStreamEvent struct {
 	ToolResult   *contracts.ToolResult      `json:"tool_result,omitempty"`
 	TokenWarning *conversation.TokenWarning `json:"token_warning,omitempty"`
 	Compact      any                        `json:"compact,omitempty"`
+	StreamEvent  *anthropic.StreamEvent     `json:"stream_event,omitempty"`
 	Model        string                     `json:"model,omitempty"`
 	Error        string                     `json:"error,omitempty"`
 }
@@ -319,6 +320,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		ToolUse:      event.ToolUse,
 		ToolResult:   event.ToolResult,
 		TokenWarning: event.TokenWarning,
+		StreamEvent:  event.StreamEvent,
 		Model:        event.Model,
 	}
 	if event.Compact != nil {

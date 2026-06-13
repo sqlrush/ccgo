@@ -228,6 +228,67 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPrintStreamJSONIncludesRawStreamingEvents(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream_delta\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-6\",\"content\":[]}}\n\n"))
+		_, _ = w.Write([]byte("event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\"}}\n\n"))
+		_, _ = w.Write([]byte("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"delta ok\"}}\n\n"))
+		_, _ = w.Write([]byte("event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\n"))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--stream", "--output-format", "stream-json", "stream prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if requestBody["stream"] != true {
+		t.Fatalf("stream flag = %#v", requestBody["stream"])
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var sawDelta bool
+	var final map[string]any
+	for _, line := range lines {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("invalid json line %q: %v", line, err)
+		}
+		if event["type"] == "stream_event" {
+			streamEvent, ok := event["stream_event"].(map[string]any)
+			if !ok {
+				t.Fatalf("stream event = %#v", event)
+			}
+			if streamEvent["type"] == "content_block_delta" {
+				delta := streamEvent["delta"].(map[string]any)
+				if delta["text"] == "delta ok" {
+					sawDelta = true
+				}
+			}
+		}
+		if event["type"] == "result" {
+			final = event
+		}
+	}
+	if !sawDelta {
+		t.Fatalf("missing content_block_delta in %q", stdout.String())
+	}
+	if final == nil || final["result"] != "delta ok" {
+		t.Fatalf("final = %#v stdout=%q", final, stdout.String())
+	}
+}
+
 func TestRunPrintRequiresCredentials(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
