@@ -818,6 +818,7 @@ type printStreamPlugin struct {
 type printStreamMCPServer struct {
 	Name         string `json:"name"`
 	Status       string `json:"status"`
+	Reason       string `json:"reason,omitempty"`
 	Type         string `json:"type,omitempty"`
 	Scope        string `json:"scope,omitempty"`
 	Source       string `json:"source,omitempty"`
@@ -866,22 +867,24 @@ func runnerMCPServerSummaries(runner conversation.Runner) []printStreamMCPServer
 	if runner.MCP == nil {
 		return nil
 	}
-	servers := runnerMCPConfiguredServers(runner.MCP)
-	names := make([]string, 0, len(servers))
-	for name := range servers {
+	states := runnerMCPServerStates(runner.MCP)
+	names := make([]string, 0, len(states))
+	for name := range states {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	out := make([]printStreamMCPServer, 0, len(names))
 	for _, name := range names {
-		server := servers[name]
+		state := states[name]
+		server := state.Server
 		source := server.Scope
 		if server.PluginSource != "" {
 			source = "plugin"
 		}
 		out = append(out, printStreamMCPServer{
 			Name:         name,
-			Status:       "configured",
+			Status:       state.Status,
+			Reason:       state.Reason,
 			Type:         mcp.Transport(server),
 			Scope:        server.Scope,
 			Source:       source,
@@ -891,7 +894,13 @@ func runnerMCPServerSummaries(runner conversation.Runner) []printStreamMCPServer
 	return out
 }
 
-func runnerMCPConfiguredServers(config *conversation.MCPConfig) map[string]contracts.MCPServer {
+type mcpServerInitState struct {
+	Server contracts.MCPServer
+	Status string
+	Reason string
+}
+
+func runnerMCPServerStates(config *conversation.MCPConfig) map[string]mcpServerInitState {
 	if config == nil {
 		return nil
 	}
@@ -904,14 +913,26 @@ func runnerMCPConfiguredServers(config *conversation.MCPConfig) map[string]contr
 		}
 	}
 	policySettings := mergeMCPPolicySettingsForInit(config.UserSettings, config.ProjectSettings, config.LocalSettings)
-	merged := mcp.MergeManualConfigSources(mcp.ManualConfigSources{
-		User:    user,
-		Project: project,
-		Local:   local,
-		Plugin:  config.PluginServers,
-		Policy:  mcp.PolicyFromSettings(policySettings),
-	})
-	return merged.Servers
+	manual := mcp.MergeServers(user, project, local)
+	plugin := mcp.DedupPluginServers(config.PluginServers, manual).Servers
+	for name := range plugin {
+		if _, exists := manual[name]; exists {
+			delete(plugin, name)
+		}
+	}
+	servers := mcp.MergeServers(manual, plugin)
+	policy := mcp.PolicyFromSettings(policySettings)
+	out := make(map[string]mcpServerInitState, len(servers))
+	for name, server := range servers {
+		decision := mcp.EvaluatePolicy(name, server, policy)
+		state := mcpServerInitState{Server: server, Status: "configured"}
+		if !decision.Allowed {
+			state.Status = "blocked"
+			state.Reason = decision.Reason
+		}
+		out[name] = state
+	}
+	return out
 }
 
 func loadMCPServersForInit(settings contracts.Settings, scope string, options mcp.ParseOptions) map[string]contracts.MCPServer {

@@ -1298,14 +1298,17 @@ func TestRunnerMCPServerSummariesMergesSettingsAndPluginServers(t *testing.T) {
 			"alpha": {Command: "project"},
 		}},
 		LocalSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
-			"beta": {Command: "local"},
+			"beta":    {Command: "local"},
+			"blocked": {Command: "blocked"},
+		}, DeniedMCPServers: []contracts.MCPServerPolicyEntry{
+			{ServerName: "blocked"},
 		}},
 		PluginServers: map[string]contracts.MCPServer{
 			"plugin:docs": {Type: "http", URL: "https://example.com/mcp", PluginSource: "demo"},
 		},
 	}}
 	got := runnerMCPServerSummaries(runner)
-	if len(got) != 4 {
+	if len(got) != 5 {
 		t.Fatalf("summaries = %#v", got)
 	}
 	if got[0].Name != "alpha" || got[0].Status != "configured" || got[0].Type != "stdio" || got[0].Scope != "project" || got[0].Source != "project" {
@@ -1314,11 +1317,14 @@ func TestRunnerMCPServerSummariesMergesSettingsAndPluginServers(t *testing.T) {
 	if got[1].Name != "beta" || got[1].Scope != "local" || got[1].Source != "local" {
 		t.Fatalf("beta = %#v", got[1])
 	}
-	if got[2].Name != "plugin:docs" || got[2].Type != "http" || got[2].Source != "plugin" || got[2].PluginSource != "demo" {
-		t.Fatalf("plugin = %#v", got[2])
+	if got[2].Name != "blocked" || got[2].Status != "blocked" || got[2].Reason != "denied" {
+		t.Fatalf("blocked = %#v", got[2])
 	}
-	if got[3].Name != "zeta" || got[3].Scope != "user" || got[3].Source != "user" {
-		t.Fatalf("zeta = %#v", got[3])
+	if got[3].Name != "plugin:docs" || got[3].Type != "http" || got[3].Source != "plugin" || got[3].PluginSource != "demo" {
+		t.Fatalf("plugin = %#v", got[3])
+	}
+	if got[4].Name != "zeta" || got[4].Scope != "user" || got[4].Source != "user" {
+		t.Fatalf("zeta = %#v", got[4])
 	}
 }
 
