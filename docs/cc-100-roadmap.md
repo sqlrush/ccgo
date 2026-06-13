@@ -1277,6 +1277,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：CLI `--input-format json` 现在接受 `text`、`messageText`、`message_text` 作为 prompt 文本字段别名，`--input-format stream-json` 的用户事件回归覆盖 `type:"user_message"`，和自身 NDJSON 输出事件名保持一致。
 
+本轮补充：CLI `--input-format json` 现在会解包 `message`/`payload`/`data`/`body` wrapper 中的 user message 或字符串 prompt，兼容常见 SDK/event 外壳输入。
+
 本轮补充：CLI JSON/NDJSON result envelope 现在带 `is_error` 布尔字段，成功 result 输出 `false`，JSON error result 和 stream-json 早期 error event 输出 `true`，方便 SDK 消费端按官方常见字段判断失败。
 
 本轮补充：CLI JSON/NDJSON success result envelope 现在带 `num_turns` 字段，按本轮 assistant message 数量统计 headless turn count，补齐 SDK/CLI result 常见元数据。
