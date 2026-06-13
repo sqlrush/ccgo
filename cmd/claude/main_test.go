@@ -108,6 +108,27 @@ func TestRunHelpExitsSuccessfully(t *testing.T) {
 	}
 }
 
+func TestRunCWDFlagSetsScaffoldWorkingDirectory(t *testing.T) {
+	project := t.TempDir()
+	resolvedProject, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "cwd="+resolvedProject) {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestRunPrintReadsPromptFromStdinAndSettingsModel(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +173,55 @@ func TestRunPrintReadsPromptFromStdinAndSettingsModel(t *testing.T) {
 	content := messages[0].(map[string]any)["content"].([]any)
 	if got := content[0].(map[string]any)["text"]; got != "from stdin" {
 		t.Fatalf("prompt = %#v", got)
+	}
+}
+
+func TestRunPrintCWDFlagLoadsProjectSettings(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_cwd",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-haiku-4-5-20251001",
+			"content":[{"type":"text","text":"cwd ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".claude", "settings.json"), []byte(`{"model":"haiku"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "--print", "cwd prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := stdout.String(); got != "cwd ok\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	if requestBody["model"] != "claude-haiku-4-5-20251001" {
+		t.Fatalf("model = %#v", requestBody["model"])
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "cwd prompt" {
+		t.Fatalf("prompt = %q", got)
 	}
 }
 
@@ -695,6 +765,22 @@ func TestRunPrintRejectsUnsupportedInputFormat(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "unsupported input format") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunRejectsInvalidCWD(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", filepath.Join(t.TempDir(), "missing")}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid --cwd") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

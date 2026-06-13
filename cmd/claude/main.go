@@ -64,6 +64,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 
 	showVersion := flags.Bool("version", false, "print version")
 	flags.BoolVar(showVersion, "v", false, "print version")
+	cwd := flags.String("cwd", "", "working directory")
 	printMode := flags.Bool("print", false, "print response and exit")
 	flags.BoolVar(printMode, "p", false, "print response and exit")
 	modelName := flags.String("model", "", "model to use")
@@ -98,6 +99,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 
 	state, err := bootstrap.New()
 	if err != nil {
+		fmt.Fprintf(stderr, "ccgo: %v\n", err)
+		return 1
+	}
+	if err := applyCWDFlag(state, *cwd); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
@@ -164,6 +169,29 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 
 	fmt.Fprintf(stdout, "ccgo scaffold ready\nsession_id=%s\ncwd=%s\n", state.SessionID(), state.CWD())
 	return 0
+}
+
+func applyCWDFlag(state *bootstrap.State, raw string) error {
+	cwd := strings.TrimSpace(raw)
+	if cwd == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(cwd)
+	if err != nil {
+		return fmt.Errorf("invalid --cwd %q: %w", raw, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return fmt.Errorf("invalid --cwd %q: %w", raw, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("invalid --cwd %q: not a directory", raw)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	state.SetCWD(abs)
+	return nil
 }
 
 func promptFromArgsOrStdin(args []string, stdin io.Reader) (string, error) {
