@@ -431,6 +431,9 @@ func TestRunnerExpandsPromptSlashCommandBeforeQuery(t *testing.T) {
 	if result.FinalRequest.Model != "opus" {
 		t.Fatalf("request model = %q", result.FinalRequest.Model)
 	}
+	if runner.Model != "sonnet" {
+		t.Fatalf("runner model = %q", runner.Model)
+	}
 	if len(client.requests) != 1 {
 		t.Fatalf("requests = %d, want 1", len(client.requests))
 	}
@@ -908,6 +911,9 @@ func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
 	text := result.Messages[1].Content[0].Text
 	if !strings.Contains(text, "Selected model: claude-opus-4-6") || !strings.Contains(text, "Display name: Opus 4.6") {
 		t.Fatalf("model text = %q", text)
+	}
+	if runner.Model != "claude-opus-4-6" {
+		t.Fatalf("runner model = %q", runner.Model)
 	}
 }
 

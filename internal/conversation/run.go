@@ -25,10 +25,14 @@ import (
 	"ccgo/internal/tool"
 )
 
-func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user contracts.Message) (Result, error) {
+func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user contracts.Message) (Result, error) {
+	if r == nil {
+		return Result{}, fmt.Errorf("conversation runner is nil")
+	}
 	if r.Client == nil {
 		return Result{}, fmt.Errorf("conversation runner missing client")
 	}
+	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
 	}
@@ -94,35 +98,39 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		}
 		return result, nil
 	}
-	r, closeMCP, err := r.withConfiguredMCPTools(ctx)
+	turnModel := r.Model
+	r.Model = persistentModel
+	runner := *r
+	runner.Model = turnModel
+	runner, closeMCP, err := runner.withConfiguredMCPTools(ctx)
 	if err != nil {
 		return result, err
 	}
 	if closeMCP != nil {
 		defer func() { _ = closeMCP() }()
 	}
-	r.maybeEmitTokenWarning(history)
-	relevantMemoryPrefetch := r.startRelevantMemoryPrefetch(ctx, history)
+	runner.maybeEmitTokenWarning(history)
+	relevantMemoryPrefetch := runner.startRelevantMemoryPrefetch(ctx, history)
 	if relevantMemoryPrefetch != nil {
 		defer relevantMemoryPrefetch.cancel()
 	}
 
-	if compactedHistory, compactResult, ok, err := r.maybeAutoCompact(ctx, history); err != nil {
+	if compactedHistory, compactResult, ok, err := runner.maybeAutoCompact(ctx, history); err != nil {
 		return result, err
 	} else if ok {
 		history = compactedHistory
 		result.Compacted = true
 		result.Compact = &compactResult
 		result.Messages = append(result.Messages, compactResult.Plan.Boundary, compactResult.Plan.Summary)
-		if err := r.appendCompactTranscript(compactResult.Plan); err != nil {
+		if err := runner.appendCompactTranscript(compactResult.Plan); err != nil {
 			return result, err
 		}
-		r.emit(Event{Type: EventCompact, Compact: &compactResult})
+		runner.emit(Event{Type: EventCompact, Compact: &compactResult})
 	}
-	toolMetadata := r.toolMetadata()
+	toolMetadata := runner.toolMetadata()
 	for round := 0; ; round++ {
-		if round >= r.maxToolRounds() {
-			return result, fmt.Errorf("maximum tool rounds exceeded: %d", r.maxToolRounds())
+		if round >= runner.maxToolRounds() {
+			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
 		}
 		var roundRelevantMemoryPrefetch *relevantMemoryPrefetchTask
 		if round == 0 {
@@ -130,7 +138,7 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			relevantMemoryPrefetch = nil
 		}
 
-		request, attempts, response, apiDuration, err := r.send(ctx, history, roundRelevantMemoryPrefetch)
+		request, attempts, response, apiDuration, err := runner.send(ctx, history, roundRelevantMemoryPrefetch)
 		result.FinalRequest = request
 		result.ModelsAttempt = append(result.ModelsAttempt, attempts...)
 		result.APIDuration += apiDuration
@@ -138,34 +146,34 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			return result, err
 		}
 
-		assistant := messageFromResponse(r.SessionID, response)
+		assistant := messageFromResponse(runner.SessionID, response)
 		history, assistant = appendMessage(history, assistant)
 		result.Messages = append(result.Messages, assistant)
 		result.Assistant = assistant
 		result.StopReason = response.StopReason
 		result.Usage = response.Usage
-		if err := r.appendTranscript(assistant); err != nil {
+		if err := runner.appendTranscript(assistant); err != nil {
 			return result, err
 		}
-		r.emit(Event{Type: EventAssistantMessage, Message: &assistant, Model: response.Model})
+		runner.emit(Event{Type: EventAssistantMessage, Message: &assistant, Model: response.Model})
 
 		uses := ToolUses(assistant)
 		if len(uses) == 0 {
-			if err := r.maybeExtractSessionMemory(ctx, result.Messages); err != nil {
+			if err := runner.maybeExtractSessionMemory(ctx, result.Messages); err != nil {
 				return result, err
 			}
 			return result, nil
 		}
-		toolMessages, toolResults := r.executeToolUses(ctx, uses, toolMetadata, result.Messages)
+		toolMessages, toolResults := runner.executeToolUses(ctx, uses, toolMetadata, result.Messages)
 		for i := range toolMessages {
 			history, toolMessages[i] = appendMessage(history, toolMessages[i])
 			result.Messages = append(result.Messages, toolMessages[i])
-			if err := r.appendTranscript(toolMessages[i]); err != nil {
+			if err := runner.appendTranscript(toolMessages[i]); err != nil {
 				return result, err
 			}
 		}
 		if commandPermissions := commands.CommandPermissionsFromMessages(toolMessages); commandPermissions.Model != "" {
-			r.Model = commandPermissions.Model
+			runner.Model = commandPermissions.Model
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
 	}
@@ -656,18 +664,20 @@ func (r Runner) mcpServerNames() []string {
 	return names
 }
 
-func (r Runner) formatModelSummary(raw string) string {
+func (r *Runner) formatModelSummary(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "Current model: " + r.model()
 	}
 	if capability, ok := modelpkg.DefaultRegistry().Resolve(raw); ok {
+		r.Model = capability.Name
 		display := strings.TrimSpace(capability.DisplayName)
 		if display == "" {
 			display = capability.Name
 		}
 		return fmt.Sprintf("Selected model: %s\nDisplay name: %s", capability.Name, display)
 	}
+	r.Model = raw
 	return "Selected model: " + raw
 }
 

@@ -88,6 +88,8 @@ M8 补充：`/help` 和 `/skills` built-in local-jsx command 现在有基础 tex
 
 M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 text result：无参数显示当前 runner model，有参数会按模型 registry 解析 alias 并展示 resolved model/display name，不请求模型；完整交互式模型选择、持久设置写回和 TUI 状态同步仍未完成。
 
+M8 补充：`/model` headless/local 命令现在会把解析后的模型写入 runner 的默认 `Model` 状态，后续同一 runner 的 turn 会使用新模型；prompt skill frontmatter 的 `model` 仍只作为当前请求的临时 override，不会污染默认模型。完整 TUI 模型选择和 settings 持久化仍未完成。
+
 M8/M9 补充：`/mcp` built-in local-jsx command 现在有 headless/local 基础 text result：无参数或 `list` 会列出 settings-derived MCP server、transport 和 target，未配置时返回空状态，enable/disable 等状态变更仍返回未实现提示且不会连接远端或请求模型；完整 MCP 管理 UI、启停持久化和健康检查仍未完成。
 
 M8/M6 补充：`/resume` built-in local-jsx command 现在有 headless/local 基础 text result：无参数列出当前项目最近 session，有参数按现有 transcript search 查找匹配 session，空结果返回明确提示且不会请求模型；完整 resume picker UI、选择后恢复主循环和远端历史融合仍未完成。
