@@ -147,11 +147,13 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			AddDirs:        append([]string(nil), addDirs...),
 		})
 		if err != nil {
+			_ = writePrintError(stdout, runner, err, outputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 		if err != nil {
+			_ = writePrintError(stdout, runner, err, outputFormat)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}

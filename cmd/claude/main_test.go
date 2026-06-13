@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -931,6 +932,30 @@ func TestRunPrintRequiresCredentials(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "missing Anthropic credentials") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintJSONOutputsSetupError(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "error" || !strings.Contains(fmt.Sprint(payload["error"]), "missing Anthropic credentials") {
+		t.Fatalf("payload = %#v", payload)
 	}
 	if !strings.Contains(stderr.String(), "missing Anthropic credentials") {
 		t.Fatalf("stderr = %q", stderr.String())
