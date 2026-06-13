@@ -309,6 +309,63 @@ func TestRunPrintReadsStreamJSONInputFormatUserEvent(t *testing.T) {
 	}
 }
 
+func TestRunPrintAcceptsCamelCaseFlagAliases(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_camel",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"camel ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--print",
+		"--inputFormat", "json",
+		"--outputFormat", "json",
+		"--maxTokens", "23",
+		"--systemPrompt", "Base",
+		"--appendSystemPrompt", "Extra",
+		`{"prompt":"camel prompt"}`,
+	}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["result"] != "camel ok" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if requestBody["max_tokens"] != float64(23) {
+		t.Fatalf("max_tokens = %#v", requestBody["max_tokens"])
+	}
+	if requestBody["system"] != "Base\n\nExtra" {
+		t.Fatalf("system = %#v", requestBody["system"])
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "camel prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
 func TestRunPrintSystemPromptFlags(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
