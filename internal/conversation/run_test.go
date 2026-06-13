@@ -815,6 +815,41 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesConfigOutputStyleWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	runner := Runner{
+		Client:    client,
+		SessionID: "sess_config_style",
+		MCP:       &MCPConfig{},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config output-style learning"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Output style set to Learning." {
+		t.Fatalf("output style text = %q", got)
+	}
+	if runner.MCP.UserSettings.OutputStyle != "Learning" {
+		t.Fatalf("runner output style = %q", runner.MCP.UserSettings.OutputStyle)
+	}
+	var settings map[string]any
+	data, err := os.ReadFile(filepath.Join(configHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["outputStyle"] != "Learning" {
+		t.Fatalf("settings = %#v", settings)
+	}
+}
+
 func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	repo := filepath.Join(t.TempDir(), "repo")

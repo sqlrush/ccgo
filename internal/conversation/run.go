@@ -477,8 +477,14 @@ func (r Runner) formatStatusSummary() string {
 
 func (r Runner) formatConfigSummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
-	if len(args) > 0 && args[0] != "show" && args[0] != "list" {
-		return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	if len(args) > 0 {
+		switch args[0] {
+		case "show", "list":
+		case "output-style", "outputStyle":
+			return r.setOutputStyleSummary(args)
+		default:
+			return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		}
 	}
 	cwd := strings.TrimSpace(r.WorkingDirectory)
 	if cwd == "" {
@@ -507,6 +513,38 @@ func (r Runner) formatConfigSummary(raw string) string {
 		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) setOutputStyleSummary(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /config output-style <style-name>"
+	}
+	rawName := strings.TrimSpace(args[1])
+	name, ok := resolveOutputStyleName(rawName, r.AvailableOutputStyleNames())
+	if !ok {
+		return fmt.Sprintf("Unknown output style %q. Available output styles: %s", rawName, strings.Join(r.AvailableOutputStyleNames(), ", "))
+	}
+	if err := setUserOutputStyle(name); err != nil {
+		return fmt.Sprintf("Failed to set output style %s: %v", name, err)
+	}
+	if r.MCP != nil {
+		r.MCP.UserSettings.OutputStyle = name
+	}
+	return "Output style set to " + name + "."
+}
+
+func resolveOutputStyleName(raw string, available []string) (string, bool) {
+	for _, name := range available {
+		if raw == name {
+			return name, true
+		}
+	}
+	for _, name := range available {
+		if strings.EqualFold(raw, name) {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 func (r Runner) authSourceText() string {
@@ -669,14 +707,8 @@ func (r Runner) setPluginEnabledSummary(args []string) string {
 }
 
 func setUserPluginEnabled(name string, enabled bool) error {
-	path := config.UserSettingsPath()
-	document := map[string]any{}
-	data, err := os.ReadFile(path)
-	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
-		if err := json.Unmarshal(data, &document); err != nil {
-			return fmt.Errorf("decode %s: %w", path, err)
-		}
-	} else if err != nil && !os.IsNotExist(err) {
+	document, err := readUserSettingsDocument()
+	if err != nil {
 		return err
 	}
 	enabledPlugins, _ := document["enabledPlugins"].(map[string]any)
@@ -685,7 +717,35 @@ func setUserPluginEnabled(name string, enabled bool) error {
 	}
 	enabledPlugins[name] = enabled
 	document["enabledPlugins"] = enabledPlugins
-	data, err = json.MarshalIndent(document, "", "  ")
+	return writeUserSettingsDocument(document)
+}
+
+func setUserOutputStyle(name string) error {
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		return err
+	}
+	document["outputStyle"] = name
+	return writeUserSettingsDocument(document)
+}
+
+func readUserSettingsDocument() (map[string]any, error) {
+	path := config.UserSettingsPath()
+	document := map[string]any{}
+	data, err := os.ReadFile(path)
+	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &document); err != nil {
+			return nil, fmt.Errorf("decode %s: %w", path, err)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	return document, nil
+}
+
+func writeUserSettingsDocument(document map[string]any) error {
+	path := config.UserSettingsPath()
+	data, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
 		return err
 	}
