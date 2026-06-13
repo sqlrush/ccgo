@@ -505,7 +505,9 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - API key、OAuth、secure storage。
 - model aliases/capabilities/cost/provider registry。
 
-当前状态：bootstrap/config/auth/model 基础已完成；CLI 仍是 scaffold，未完整兼容 CC。
+本轮补充：`cmd/claude --print/-p` 现在接入真实 `conversation.Runner.RunTurn` 单轮 headless 路径，可从参数或 stdin 读取 prompt，读取 `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`/`ANTHROPIC_MODEL`/`CLAUDE_MODEL`/settings model，解析模型别名，装配 builtin tools、settings-derived permission engine、settings-derived MCP config，并把最终 assistant text 写到 stdout。
+
+当前状态：bootstrap/config/auth/model 基础已完成；CLI 已有 `--version`、scaffold settings 校验和基础 `--print` headless 单轮执行路径，但完整参数矩阵、交互 TUI 主循环、resume/continue、SDK JSON/NDJSON/control protocol 和官方 stdout/stderr/exit-code parity 仍未完整兼容 CC。
 
 ### M3: API Client And Conversation Loop
 
@@ -1297,7 +1299,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 1. 补强 M5 基础工具兼容：优先 `Bash` shell parser/sandbox/background 和 `PowerShell` parser/permission/golden，继续补 `Glob/Grep`、`TodoWrite`、`WebFetch`、`WebSearch` 的官方 golden 兼容。
 2. 补强 `Read/Edit/Write` 高级分支：PDF/image/notebook/diff/LSP/history。
-3. 实现 CLI `--print` 和 SDK JSON/NDJSON，用 golden 对齐官方行为。
+3. 扩展 CLI `--print` 和 SDK JSON/NDJSON，用 golden 对齐官方行为。
 4. 推进 session resume、compact、memory。
 5. 再进入 TUI、MCP、plugins、skills、agents、remote。
 
