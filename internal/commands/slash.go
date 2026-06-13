@@ -49,6 +49,7 @@ const (
 	LocalCommandResultCost    LocalCommandResultType = "cost"
 	LocalCommandResultStatus  LocalCommandResultType = "status"
 	LocalCommandResultModel   LocalCommandResultType = "model"
+	LocalCommandResultMCP     LocalCommandResultType = "mcp"
 )
 
 type LocalCommandResult struct {
@@ -188,6 +189,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	switch cmd.Name {
 	case "help":
 		return LocalCommandResult{Type: LocalCommandResultText, Value: formatHelpText(registry)}, true
+	case "mcp":
+		return LocalCommandResult{Type: LocalCommandResultMCP, Value: strings.TrimSpace(args)}, true
 	case "clear":
 		return LocalCommandResult{Type: LocalCommandResultText}, true
 	case "compact":

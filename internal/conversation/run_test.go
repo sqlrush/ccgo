@@ -760,6 +760,67 @@ func TestRunnerModelSlashCommandReportsCurrentModel(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"zeta":  {URL: "https://example.com/mcp"},
+				"alpha": {Command: "python", Args: []string{"server.py"}},
+			},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("/mcp list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP servers:",
+		"- alpha (stdio): python server.py",
+		"- zeta (http): https://example.com/mcp",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp text missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerMCPSlashCommandReportsNoServers(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_empty"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No MCP servers configured." {
+		t.Fatalf("mcp text = %q", got)
+	}
+}
+
+func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_subcommand"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp enable alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: enable alpha" {
+		t.Fatalf("mcp text = %q", got)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

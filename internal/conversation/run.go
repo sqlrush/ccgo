@@ -72,6 +72,9 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		if localResult != nil && localResult.Type == commands.LocalCommandResultModel {
 			return r.appendLocalTextResult(result, history, r.formatModelSummary(localResult.Value))
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultMCP {
+			return r.appendLocalTextResult(result, history, r.formatMCPCommandSummary(localResult.Value))
+		}
 		return result, nil
 	}
 	r, closeMCP, err := r.withConfiguredMCPTools(ctx)
@@ -436,15 +439,11 @@ func (r Runner) formatStatusSummary() string {
 }
 
 func (r Runner) mcpServerNames() []string {
-	if r.MCP == nil {
-		return nil
+	servers := r.mcpServers()
+	names := make([]string, 0, len(servers))
+	for _, server := range servers {
+		names = append(names, server.Name)
 	}
-	merged := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
-	names := make([]string, 0, len(merged.MCPServers))
-	for name := range merged.MCPServers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	return names
 }
 
@@ -461,6 +460,66 @@ func (r Runner) formatModelSummary(raw string) string {
 		return fmt.Sprintf("Selected model: %s\nDisplay name: %s", capability.Name, display)
 	}
 	return "Selected model: " + raw
+}
+
+func (r Runner) formatMCPCommandSummary(raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) > 0 && args[0] != "list" {
+		return "MCP subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	}
+	servers := r.mcpServers()
+	if len(servers) == 0 {
+		return "No MCP servers configured."
+	}
+	var lines []string
+	lines = append(lines, "MCP servers:")
+	for _, server := range servers {
+		lines = append(lines, fmt.Sprintf("- %s (%s): %s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+type mcpServerSummary struct {
+	Name   string
+	Config contracts.MCPServer
+}
+
+func (r Runner) mcpServers() []mcpServerSummary {
+	if r.MCP == nil {
+		return nil
+	}
+	merged := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+	servers := make([]mcpServerSummary, 0, len(merged.MCPServers))
+	for name, server := range merged.MCPServers {
+		servers = append(servers, mcpServerSummary{Name: name, Config: server})
+	}
+	sort.Slice(servers, func(i, j int) bool {
+		return servers[i].Name < servers[j].Name
+	})
+	return servers
+}
+
+func mcpServerTransport(server contracts.MCPServer) string {
+	if server.Type != "" {
+		return server.Type
+	}
+	if strings.TrimSpace(server.URL) != "" {
+		return "http"
+	}
+	return "stdio"
+}
+
+func mcpServerTarget(server contracts.MCPServer) string {
+	if url := strings.TrimSpace(server.URL); url != "" {
+		return url
+	}
+	if command := strings.TrimSpace(server.Command); command != "" {
+		if len(server.Args) == 0 {
+			return command
+		}
+		return command + " " + strings.Join(server.Args, " ")
+	}
+	return "(no target)"
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {

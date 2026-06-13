@@ -166,6 +166,26 @@ func TestExecuteSlashHelpReturnsLocalTextResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashMCPReturnsLocalMCPResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/mcp list", SlashOptions{UUID: "user_mcp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultMCP || result.LocalResult.Value != "list" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_mcp" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/mcp</command-name>") || !strings.Contains(text, "<command-args>list</command-args>") {
+		t.Fatalf("mcp command message = %q", text)
+	}
+}
+
 func TestExecuteSlashCompactReturnsLocalCompactResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/compact focus on API", SlashOptions{UUID: "user_compact"})
