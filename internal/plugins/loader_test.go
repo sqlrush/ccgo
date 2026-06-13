@@ -168,3 +168,52 @@ func TestProjectPluginDirsWalksToGitRoot(t *testing.T) {
 		t.Fatalf("dirs = %#v", dirs)
 	}
 }
+
+func TestLoadPluginDirLoadsCommandMarkdownDirectoryAndManifestPaths(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "demo")
+	if err := os.MkdirAll(filepath.Join(root, "commands", "team"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "commands", "team", "release.md"), []byte("---\ndescription: Release service\nargument-hint: [service]\nallowed-tools: Read, Bash(git status:*)\n---\nRelease $ARGUMENTS from ${CLAUDE_SKILL_DIR}."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ManifestFileName), []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plugin, err := LoadPluginDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.PromptTemplates) != 1 {
+		t.Fatalf("prompt templates = %#v", plugin.PromptTemplates)
+	}
+	command := plugin.PromptTemplates[0].Command
+	if command.Name != "demo:team:release" || command.Description != "Release service" || command.ArgumentHint != "[service]" {
+		t.Fatalf("command = %#v", command)
+	}
+	if len(command.AllowedTools) != 2 || command.AllowedTools[0] != "Read" || command.AllowedTools[1] != "Bash(git status:*)" {
+		t.Fatalf("allowed tools = %#v", command.AllowedTools)
+	}
+
+	overrideRoot := filepath.Join(t.TempDir(), "override")
+	if err := os.MkdirAll(filepath.Join(overrideRoot, "commands"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "commands", "ignored.md"), []byte("Ignored."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "extra.md"), []byte("---\ndescription: Extra command\n---\nExtra $ARGUMENTS."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, ManifestFileName), []byte(`{"name":"demo","commands":["extra.md"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err = LoadPluginDir(overrideRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.PromptTemplates) != 1 || plugin.PromptTemplates[0].Command.Name != "demo:extra" {
+		t.Fatalf("manifest command templates = %#v", plugin.PromptTemplates)
+	}
+}

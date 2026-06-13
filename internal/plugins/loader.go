@@ -44,16 +44,16 @@ type LoadedPlugin struct {
 }
 
 type manifest struct {
-	Name            string            `json:"name"`
-	DisplayName     string            `json:"displayName"`
-	Description     string            `json:"description"`
-	Version         string            `json:"version"`
-	Commands        []commandManifest `json:"commands"`
-	Skills          []skillManifest   `json:"skills"`
-	Agents          any               `json:"agents"`
-	Hooks           any               `json:"hooks"`
-	MCPServers      any               `json:"mcpServers"`
-	MCPServersSnake any               `json:"mcp_servers"`
+	Name            string          `json:"name"`
+	DisplayName     string          `json:"displayName"`
+	Description     string          `json:"description"`
+	Version         string          `json:"version"`
+	Commands        any             `json:"commands"`
+	Skills          []skillManifest `json:"skills"`
+	Agents          any             `json:"agents"`
+	Hooks           any             `json:"hooks"`
+	MCPServers      any             `json:"mcpServers"`
+	MCPServersSnake any             `json:"mcp_servers"`
 }
 
 type commandManifest struct {
@@ -126,17 +126,9 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 		Version:     strings.TrimSpace(parsed.Version),
 		Description: strings.TrimSpace(parsed.Description),
 	}
-	for _, item := range parsed.Commands {
-		command, content, ok := commandFromManifest(root, item)
-		if !ok {
-			continue
-		}
-		if command.Type == contracts.CommandPrompt && content != "" {
-			loaded.PromptTemplates = append(loaded.PromptTemplates, PromptTemplate{Command: command, Content: content})
-			continue
-		}
-		loaded.Commands = append(loaded.Commands, command)
-	}
+	commands, prompts := pluginCommands(root, name, parsed.Commands)
+	loaded.Commands = append(loaded.Commands, commands...)
+	loaded.PromptTemplates = append(loaded.PromptTemplates, prompts...)
 	for _, item := range parsed.Skills {
 		skill, ok := skillFromManifest(root, item)
 		if !ok {
@@ -183,6 +175,244 @@ func ProjectPluginDirs(cwd string) []string {
 		}
 	}
 	return out
+}
+
+func pluginCommands(root string, pluginName string, raw any) ([]contracts.Command, []PromptTemplate) {
+	seen := map[string]struct{}{}
+	return pluginCommandsWithSeen(root, pluginName, raw, seen)
+}
+
+func pluginCommandsWithSeen(root string, pluginName string, raw any, seen map[string]struct{}) ([]contracts.Command, []PromptTemplate) {
+	if raw == nil {
+		return loadPluginCommandsFromPath(filepath.Join(root, "commands"), filepath.Join(root, "commands"), pluginName, "", seen)
+	}
+	switch value := raw.(type) {
+	case []any:
+		var commands []contracts.Command
+		var prompts []PromptTemplate
+		for _, item := range value {
+			itemCommands, itemPrompts := pluginCommandsWithSeen(root, pluginName, item, seen)
+			commands = append(commands, itemCommands...)
+			prompts = append(prompts, itemPrompts...)
+		}
+		return commands, prompts
+	case string:
+		path := safeJoin(root, value)
+		baseDir := path
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			baseDir = filepath.Dir(path)
+		}
+		return loadPluginCommandsFromPath(path, baseDir, pluginName, "", seen)
+	case map[string]any:
+		if _, ok := value["name"]; ok {
+			command, content, ok := commandFromManifestRaw(root, value)
+			if !ok {
+				return nil, nil
+			}
+			if command.Type == contracts.CommandPrompt && content != "" {
+				return nil, []PromptTemplate{{Command: command, Content: content}}
+			}
+			return []contracts.Command{command}, nil
+		}
+		return pluginCommandsFromMapping(root, pluginName, value, seen)
+	default:
+		return nil, nil
+	}
+}
+
+func commandFromManifestRaw(root string, raw any) (contracts.Command, string, bool) {
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return contracts.Command{}, "", false
+	}
+	var item commandManifest
+	if err := json.Unmarshal(data, &item); err != nil {
+		return contracts.Command{}, "", false
+	}
+	return commandFromManifest(root, item)
+}
+
+func pluginCommandsFromMapping(root string, pluginName string, object map[string]any, seen map[string]struct{}) ([]contracts.Command, []PromptTemplate) {
+	var prompts []PromptTemplate
+	for name, raw := range object {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		metadata, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		commandName := pluginName + ":" + name
+		if content, ok := metadata["content"].(string); ok && strings.TrimSpace(content) != "" {
+			prompts = append(prompts, PromptTemplate{
+				Command: pluginCommandFromMetadata(commandName, root, metadata, len(content)),
+				Content: content,
+			})
+			continue
+		}
+		source, ok := metadata["source"].(string)
+		if !ok || strings.TrimSpace(source) == "" {
+			continue
+		}
+		_, sourcePrompts := loadPluginCommandsFromPath(safeJoin(root, source), filepath.Dir(safeJoin(root, source)), pluginName, commandName, seen)
+		if len(sourcePrompts) == 0 {
+			continue
+		}
+		prompt := sourcePrompts[0]
+		prompt.Command = mergePluginCommandMetadata(prompt.Command, metadata)
+		prompts = append(prompts, prompt)
+	}
+	return nil, prompts
+}
+
+func loadPluginCommandsFromPath(path string, baseDir string, pluginName string, explicitName string, seen map[string]struct{}) ([]contracts.Command, []PromptTemplate) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, nil
+	}
+	if info.IsDir() {
+		return loadPluginCommandsFromDir(path, baseDir, pluginName, seen)
+	}
+	if !strings.EqualFold(filepath.Ext(path), ".md") {
+		return nil, nil
+	}
+	prompt, ok := loadPluginCommandFile(path, baseDir, pluginName, explicitName, seen)
+	if !ok {
+		return nil, nil
+	}
+	return nil, []PromptTemplate{prompt}
+}
+
+func loadPluginCommandsFromDir(dir string, baseDir string, pluginName string, seen map[string]struct{}) ([]contracts.Command, []PromptTemplate) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.EqualFold(entry.Name(), "SKILL.md") {
+			prompt, ok := loadPluginCommandFile(filepath.Join(dir, entry.Name()), baseDir, pluginName, "", seen)
+			if ok {
+				return nil, []PromptTemplate{prompt}
+			}
+			return nil, nil
+		}
+	}
+	var prompts []PromptTemplate
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			_, nested := loadPluginCommandsFromDir(path, baseDir, pluginName, seen)
+			prompts = append(prompts, nested...)
+			continue
+		}
+		if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			continue
+		}
+		prompt, ok := loadPluginCommandFile(path, baseDir, pluginName, "", seen)
+		if ok {
+			prompts = append(prompts, prompt)
+		}
+	}
+	return nil, prompts
+}
+
+func loadPluginCommandFile(path string, baseDir string, pluginName string, explicitName string, seen map[string]struct{}) (PromptTemplate, bool) {
+	key := normalizePath(path)
+	if _, ok := seen[key]; ok {
+		return PromptTemplate{}, false
+	}
+	seen[key] = struct{}{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return PromptTemplate{}, false
+	}
+	frontmatter, body := memory.ParseFrontmatter(string(data))
+	name := strings.TrimSpace(explicitName)
+	if name == "" {
+		name = pluginCommandNameFromFile(path, baseDir, pluginName)
+	}
+	command := contracts.Command{
+		Type:            contracts.CommandPrompt,
+		Name:            name,
+		DisplayName:     strings.TrimSpace(frontmatter["name"]),
+		Description:     firstNonEmpty(frontmatter["description"], extractFirstMarkdownLine(body)),
+		ArgumentHint:    strings.TrimSpace(frontmatter["argument-hint"]),
+		ArgumentNames:   parseFrontmatterWords(frontmatter["arguments"]),
+		Source:          contracts.CommandSourcePlugin,
+		LoadedFrom:      "plugin",
+		SkillRoot:       filepath.Dir(path),
+		Hidden:          parseFrontmatterFalse(frontmatter["user-invocable"]),
+		AllowedTools:    parseFrontmatterWords(frontmatter["allowed-tools"]),
+		WhenToUse:       firstNonEmpty(frontmatter["when_to_use"], frontmatter["when-to-use"], frontmatter["whenToUse"]),
+		Version:         strings.TrimSpace(frontmatter["version"]),
+		Model:           parsePluginCommandModel(frontmatter["model"]),
+		Effort:          strings.TrimSpace(frontmatter["effort"]),
+		ContentLength:   len(body),
+		ProgressMessage: "running",
+		HasUserSpecifiedDetails: strings.TrimSpace(frontmatter["description"]) != "" ||
+			firstNonEmpty(frontmatter["when_to_use"], frontmatter["when-to-use"], frontmatter["whenToUse"]) != "",
+	}
+	if strings.EqualFold(filepath.Base(path), "SKILL.md") {
+		command.ProgressMessage = "loading"
+	}
+	return PromptTemplate{Command: command, Content: body}, true
+}
+
+func pluginCommandFromMetadata(name string, root string, metadata map[string]any, contentLength int) contracts.Command {
+	return mergePluginCommandMetadata(contracts.Command{
+		Type:          contracts.CommandPrompt,
+		Name:          name,
+		Source:        contracts.CommandSourcePlugin,
+		LoadedFrom:    "plugin",
+		SkillRoot:     root,
+		ContentLength: contentLength,
+	}, metadata)
+}
+
+func mergePluginCommandMetadata(command contracts.Command, metadata map[string]any) contracts.Command {
+	if description := metadataString(metadata, "description"); description != "" {
+		command.Description = description
+		command.HasUserSpecifiedDetails = true
+	}
+	if hint := firstNonEmpty(metadataString(metadata, "argumentHint"), metadataString(metadata, "argument-hint")); hint != "" {
+		command.ArgumentHint = hint
+	}
+	if model := metadataString(metadata, "model"); model != "" {
+		command.Model = parsePluginCommandModel(model)
+	}
+	if allowed := metadataStringSlice(metadata, "allowedTools", "allowed_tools"); len(allowed) > 0 {
+		command.AllowedTools = allowed
+	}
+	if when := firstNonEmpty(metadataString(metadata, "whenToUse"), metadataString(metadata, "when_to_use")); when != "" {
+		command.WhenToUse = when
+		command.HasUserSpecifiedDetails = true
+	}
+	return command
+}
+
+func pluginCommandNameFromFile(path string, baseDir string, pluginName string) string {
+	namePath := path
+	if strings.EqualFold(filepath.Base(namePath), "SKILL.md") {
+		namePath = filepath.Dir(namePath)
+	} else {
+		namePath = strings.TrimSuffix(namePath, filepath.Ext(namePath))
+	}
+	rel, err := filepath.Rel(baseDir, namePath)
+	if err != nil {
+		rel = filepath.Base(namePath)
+	}
+	parts := []string{pluginName}
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		part = strings.TrimSpace(part)
+		if part != "" && part != "." {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(compactStrings(parts), ":")
 }
 
 func commandFromManifest(root string, item commandManifest) (contracts.Command, string, bool) {
@@ -684,6 +914,69 @@ func compactStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func parseFrontmatterWords(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var parts []string
+	if strings.Contains(raw, ",") {
+		parts = strings.Split(raw, ",")
+	} else {
+		parts = strings.Fields(raw)
+	}
+	return compactStrings(parts)
+}
+
+func parseFrontmatterFalse(raw string) bool {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	return raw == "false" || raw == "0" || raw == "no" || raw == "off"
+}
+
+func parsePluginCommandModel(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.EqualFold(raw, "inherit") {
+		return ""
+	}
+	return raw
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	value, ok := metadata[key]
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
+}
+
+func metadataStringSlice(metadata map[string]any, keys ...string) []string {
+	for _, key := range keys {
+		value, ok := metadata[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case []any:
+			var out []string
+			for _, item := range typed {
+				if text, ok := item.(string); ok {
+					out = append(out, text)
+				}
+			}
+			return compactStrings(out)
+		case []string:
+			return compactStrings(typed)
+		case string:
+			return parseFrontmatterWords(typed)
+		}
+	}
+	return nil
 }
 
 func extractFirstMarkdownLine(markdown string) string {
