@@ -797,9 +797,33 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 
 func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"version": "1.2.3",
+		"commands": [{
+			"name": "plugin:deploy",
+			"description": "Deploy plugin",
+			"prompt": "Deploy $ARGUMENTS."
+		}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	runner := Runner{
-		Client:    client,
-		SessionID: "sess_plugin",
+		Client:           client,
+		SessionID:        "sess_plugin",
+		WorkingDirectory: cwd,
 		MCP: &MCPConfig{UserSettings: contracts.Settings{
 			EnabledPlugins:         map[string]any{"market/plugin": true},
 			PluginConfigs:          map[string]contracts.PluginConfig{"market/plugin": {Options: map[string]any{"flag": true}}},
@@ -833,7 +857,12 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"Extra known marketplaces: 1",
 		"Strict known marketplaces: 1",
 		"Blocked marketplaces: 1",
-		"Registered plugin commands: 0",
+		"Local plugin manifests: 1",
+		"Registered plugin commands: 1",
+		"Local plugins:",
+		"- demo@1.2.3",
+		"Plugin commands:",
+		"- /plugin:deploy",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("plugin text missing %q: %q", want, text)

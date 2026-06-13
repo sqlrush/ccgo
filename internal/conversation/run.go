@@ -20,6 +20,7 @@ import (
 	msgs "ccgo/internal/messages"
 	modelpkg "ccgo/internal/model"
 	"ccgo/internal/permissions"
+	pluginpkg "ccgo/internal/plugins"
 	"ccgo/internal/session"
 	"ccgo/internal/skills"
 	"ccgo/internal/tool"
@@ -504,6 +505,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 	merged := r.mergedSettings()
 	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
 	pluginCommands := pluginCommandNames(registry.Visible())
+	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
 	lines := []string{
 		"Plugins",
 		fmt.Sprintf("Enabled plugins: %d", len(merged.EnabledPlugins)),
@@ -512,7 +514,21 @@ func (r Runner) formatPluginSummary(raw string) string {
 		fmt.Sprintf("Extra known marketplaces: %d", len(merged.ExtraKnownMarketplaces)),
 		fmt.Sprintf("Strict known marketplaces: %d", len(merged.StrictKnownMarketplaces)),
 		fmt.Sprintf("Blocked marketplaces: %d", len(merged.BlockedMarketplaces)),
+		fmt.Sprintf("Local plugin manifests: %d", len(localPlugins)),
 		fmt.Sprintf("Registered plugin commands: %d", len(pluginCommands)),
+	}
+	if len(localPlugins) > 0 {
+		lines = append(lines, "Local plugins:")
+		for _, plugin := range firstLoadedPlugins(localPlugins, 10) {
+			name := plugin.Name
+			if plugin.Version != "" {
+				name += "@" + plugin.Version
+			}
+			lines = append(lines, "- "+name)
+		}
+		if len(localPlugins) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d local plugins.", len(localPlugins)))
+		}
 	}
 	if len(pluginCommands) > 0 {
 		lines = append(lines, "Plugin commands:")
@@ -607,6 +623,13 @@ func pluginCommandNames(commandsList []contracts.Command) []string {
 }
 
 func firstStrings(values []string, limit int) []string {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func firstLoadedPlugins(values []pluginpkg.LoadedPlugin, limit int) []pluginpkg.LoadedPlugin {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}
