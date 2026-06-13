@@ -57,6 +57,10 @@ type Runner struct {
 	Tools                     tool.Executor
 	MCP                       *MCPConfig
 	Permissions               tool.PermissionDecider
+	PermissionMode            contracts.PermissionMode
+	APIKeySource              string
+	BetaHeaders               []string
+	FastMode                  bool
 	Model                     string
 	FallbackModels            []string
 	SystemPrompt              string

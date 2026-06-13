@@ -483,7 +483,12 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	if err != nil {
 		return conversation.Runner{}, err
 	}
+	runner.PermissionMode = runnerPermissionModeFromDecider(runner.Permissions)
 	runner.Model = resolveCLIModel(options.Model, runner.MCP)
+	if runner.MCP != nil {
+		merged := config.MergeSettings(runner.MCP.UserSettings, runner.MCP.ProjectSettings, runner.MCP.LocalSettings)
+		runner.FastMode = merged.FastMode != nil && *merged.FastMode
+	}
 	if options.MaxTokens < 0 {
 		return conversation.Runner{}, fmt.Errorf("invalid --max-tokens %d; must be non-negative", options.MaxTokens)
 	}
@@ -502,12 +507,26 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
 
-	client, err := anthropicClientFromEnv(ctx)
+	client, apiKeySource, err := anthropicClientFromEnv(ctx)
 	if err != nil {
 		return conversation.Runner{}, err
 	}
 	runner.Client = client
+	runner.APIKeySource = apiKeySource
+	runner.BetaHeaders = append([]string(nil), client.Beta...)
 	return runner, nil
+}
+
+func runnerPermissionModeFromDecider(decider tool.PermissionDecider) contracts.PermissionMode {
+	switch value := decider.(type) {
+	case tool.EnginePermissionDecider:
+		return value.Engine.Mode()
+	case *tool.EnginePermissionDecider:
+		if value != nil {
+			return value.Engine.Mode()
+		}
+	}
+	return ""
 }
 
 func applyMCPConfigFlag(runner *conversation.Runner, raw string) error {
@@ -687,21 +706,21 @@ func resolveCLIModel(flagValue string, mcpConfig *conversation.MCPConfig) string
 	return strings.TrimSpace(raw)
 }
 
-func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, error) {
+func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, string, error) {
 	credentials := auth.FromEnv()
 	if credentials.Source == auth.SourceNone {
-		return nil, fmt.Errorf("missing Anthropic credentials; set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_REFRESH_TOKEN")
+		return nil, "", fmt.Errorf("missing Anthropic credentials; set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_REFRESH_TOKEN")
 	}
 	if credentials.Source == auth.SourceOAuth && strings.TrimSpace(credentials.AccessToken) == "" && strings.TrimSpace(credentials.RefreshToken) != "" {
 		provider := auth.NewOAuthTokenProvider(auth.OAuthTokenProviderOptions{Credentials: credentials})
 		token, err := provider.CurrentAccessToken(ctx)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		credentials.AccessToken = token
 	}
 	if err := credentials.Validate(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	options := []anthropic.Option{
 		anthropic.WithCredentials(credentials),
@@ -713,7 +732,7 @@ func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, error) {
 	if beta := splitEnvList(os.Getenv("ANTHROPIC_BETA")); len(beta) > 0 {
 		options = append(options, anthropic.WithBeta(beta...))
 	}
-	return anthropic.NewClient(options...), nil
+	return anthropic.NewClient(options...), string(credentials.Source), nil
 }
 
 func splitEnvList(value string) []string {
@@ -760,29 +779,33 @@ type printJSONResult struct {
 }
 
 type printStreamEvent struct {
-	Type          conversation.EventType     `json:"type"`
-	Subtype       string                     `json:"subtype,omitempty"`
-	SessionID     contracts.ID               `json:"session_id,omitempty"`
-	CWD           string                     `json:"cwd,omitempty"`
-	Tools         []string                   `json:"tools,omitempty"`
-	MCPServers    []string                   `json:"mcp_servers,omitempty"`
-	SlashCommands []string                   `json:"slash_commands,omitempty"`
-	Agents        []string                   `json:"agents,omitempty"`
-	Skills        []string                   `json:"skills,omitempty"`
-	Plugins       []printStreamPlugin        `json:"plugins,omitempty"`
-	OutputStyle   string                     `json:"output_style,omitempty"`
-	OutputStyles  []string                   `json:"available_output_styles,omitempty"`
-	Message       *contracts.Message         `json:"message,omitempty"`
-	ToolUse       *contracts.ToolUse         `json:"tool_use,omitempty"`
-	ToolResult    *contracts.ToolResult      `json:"tool_result,omitempty"`
-	TokenWarning  *conversation.TokenWarning `json:"token_warning,omitempty"`
-	Compact       any                        `json:"compact,omitempty"`
-	StreamEvent   *anthropic.StreamEvent     `json:"stream_event,omitempty"`
-	Model         string                     `json:"model,omitempty"`
-	Error         string                     `json:"error,omitempty"`
-	IsError       bool                       `json:"is_error,omitempty"`
-	DurationMS    *int64                     `json:"duration_ms,omitempty"`
-	DurationAPI   *int64                     `json:"duration_api_ms,omitempty"`
+	Type           conversation.EventType     `json:"type"`
+	Subtype        string                     `json:"subtype,omitempty"`
+	SessionID      contracts.ID               `json:"session_id,omitempty"`
+	CWD            string                     `json:"cwd,omitempty"`
+	Tools          []string                   `json:"tools,omitempty"`
+	MCPServers     []string                   `json:"mcp_servers,omitempty"`
+	SlashCommands  []string                   `json:"slash_commands,omitempty"`
+	Agents         []string                   `json:"agents,omitempty"`
+	Skills         []string                   `json:"skills,omitempty"`
+	Plugins        []printStreamPlugin        `json:"plugins,omitempty"`
+	PermissionMode string                     `json:"permission_mode,omitempty"`
+	APIKeySource   string                     `json:"api_key_source,omitempty"`
+	Betas          []string                   `json:"betas,omitempty"`
+	FastMode       bool                       `json:"fast_mode,omitempty"`
+	OutputStyle    string                     `json:"output_style,omitempty"`
+	OutputStyles   []string                   `json:"available_output_styles,omitempty"`
+	Message        *contracts.Message         `json:"message,omitempty"`
+	ToolUse        *contracts.ToolUse         `json:"tool_use,omitempty"`
+	ToolResult     *contracts.ToolResult      `json:"tool_result,omitempty"`
+	TokenWarning   *conversation.TokenWarning `json:"token_warning,omitempty"`
+	Compact        any                        `json:"compact,omitempty"`
+	StreamEvent    *anthropic.StreamEvent     `json:"stream_event,omitempty"`
+	Model          string                     `json:"model,omitempty"`
+	Error          string                     `json:"error,omitempty"`
+	IsError        bool                       `json:"is_error,omitempty"`
+	DurationMS     *int64                     `json:"duration_ms,omitempty"`
+	DurationAPI    *int64                     `json:"duration_api_ms,omitempty"`
 }
 
 type printStreamPlugin struct {
@@ -795,19 +818,23 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
 	eventErr = encoder.Encode(printStreamEvent{
-		Type:          "system",
-		Subtype:       "init",
-		SessionID:     runner.SessionID,
-		CWD:           runner.WorkingDirectory,
-		Tools:         runnerToolNames(runner),
-		MCPServers:    runnerMCPServerNames(runner),
-		SlashCommands: runnerSlashCommandNames(runner),
-		Agents:        runnerAgentNames(runner),
-		Skills:        runnerSkillNames(runner),
-		Plugins:       runnerPluginSummaries(runner),
-		OutputStyle:   runner.EffectiveOutputStyleName(),
-		OutputStyles:  runner.AvailableOutputStyleNames(),
-		Model:         runner.Model,
+		Type:           "system",
+		Subtype:        "init",
+		SessionID:      runner.SessionID,
+		CWD:            runner.WorkingDirectory,
+		Tools:          runnerToolNames(runner),
+		MCPServers:     runnerMCPServerNames(runner),
+		SlashCommands:  runnerSlashCommandNames(runner),
+		Agents:         runnerAgentNames(runner),
+		Skills:         runnerSkillNames(runner),
+		Plugins:        runnerPluginSummaries(runner),
+		PermissionMode: string(runner.PermissionMode),
+		APIKeySource:   runner.APIKeySource,
+		Betas:          append([]string(nil), runner.BetaHeaders...),
+		FastMode:       runner.FastMode,
+		OutputStyle:    runner.EffectiveOutputStyleName(),
+		OutputStyles:   runner.AvailableOutputStyleNames(),
+		Model:          runner.Model,
 	})
 	runner.OnEvent = func(event conversation.Event) {
 		if eventErr != nil {

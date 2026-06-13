@@ -1009,10 +1009,10 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
 	t.Setenv("ANTHROPIC_MODEL", "")
 	t.Setenv("CLAUDE_MODEL", "")
-	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("ANTHROPIC_BETA", "beta-one beta-two,beta-one")
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
-	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory","fastMode":true,"permissions":{"defaultMode":"plan"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	project := t.TempDir()
@@ -1065,6 +1065,13 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 	if events[0]["output_style"] != "Explanatory" {
 		t.Fatalf("init output style = %#v", events[0])
+	}
+	if events[0]["permission_mode"] != "plan" || events[0]["api_key_source"] != "api_key" || events[0]["fast_mode"] != true {
+		t.Fatalf("init runtime metadata = %#v", events[0])
+	}
+	betas, ok := events[0]["betas"].([]any)
+	if !ok || len(betas) != 2 || betas[0] != "beta-one" || betas[1] != "beta-two" {
+		t.Fatalf("init betas = %#v", events[0]["betas"])
 	}
 	outputStyles, ok := events[0]["available_output_styles"].([]any)
 	if !ok || len(outputStyles) < 3 || outputStyles[0] != "default" {
