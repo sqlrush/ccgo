@@ -47,7 +47,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	maxTokens := flags.Int("max-tokens", 0, "maximum output tokens")
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	stream := flags.Bool("stream", false, "use streaming API")
-	outputFormat := flags.String("output-format", "text", "output format: text or json")
+	outputFormat := flags.String("output-format", "text", "output format: text, json, or stream-json")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -83,8 +83,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		streamErr := func() error { return nil }
+		if format == "stream-json" {
+			runner, streamErr = attachStreamJSON(stdout, runner)
+		}
 		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
 		if err != nil {
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
+		if err := streamErr(); err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -128,7 +136,7 @@ func normalizeOutputFormat(raw string) (string, error) {
 		format = "text"
 	}
 	switch format {
-	case "text", "json":
+	case "text", "json", "stream-json":
 		return format, nil
 	default:
 		return "", fmt.Errorf("unsupported output format %q", raw)
@@ -281,6 +289,47 @@ type printJSONResult struct {
 	ToolResults []contracts.ToolResult `json:"tool_results,omitempty"`
 }
 
+type printStreamEvent struct {
+	Type         conversation.EventType     `json:"type"`
+	Message      *contracts.Message         `json:"message,omitempty"`
+	ToolUse      *contracts.ToolUse         `json:"tool_use,omitempty"`
+	ToolResult   *contracts.ToolResult      `json:"tool_result,omitempty"`
+	TokenWarning *conversation.TokenWarning `json:"token_warning,omitempty"`
+	Compact      any                        `json:"compact,omitempty"`
+	Model        string                     `json:"model,omitempty"`
+	Error        string                     `json:"error,omitempty"`
+}
+
+func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
+	encoder := json.NewEncoder(stdout)
+	var eventErr error
+	runner.OnEvent = func(event conversation.Event) {
+		if eventErr != nil {
+			return
+		}
+		eventErr = writePrintStreamEvent(encoder, event)
+	}
+	return runner, func() error { return eventErr }
+}
+
+func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {
+	out := printStreamEvent{
+		Type:         event.Type,
+		Message:      event.Message,
+		ToolUse:      event.ToolUse,
+		ToolResult:   event.ToolResult,
+		TokenWarning: event.TokenWarning,
+		Model:        event.Model,
+	}
+	if event.Compact != nil {
+		out.Compact = event.Compact
+	}
+	if event.Error != nil {
+		out.Error = event.Error.Error()
+	}
+	return encoder.Encode(out)
+}
+
 func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat string) error {
 	text := messages.TextContent(result.Assistant)
 	if text == "" {
@@ -294,7 +343,7 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 	if text == "" {
 		return nil
 	}
-	if outputFormat == "json" {
+	if outputFormat == "json" || outputFormat == "stream-json" {
 		return writePrintJSONResult(stdout, result, text)
 	}
 	if _, err := fmt.Fprint(stdout, text); err != nil {

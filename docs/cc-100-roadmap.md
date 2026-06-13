@@ -505,9 +505,9 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - API key、OAuth、secure storage。
 - model aliases/capabilities/cost/provider registry。
 
-本轮补充：`cmd/claude --print/-p` 现在接入真实 `conversation.Runner.RunTurn` 单轮 headless 路径，可从参数或 stdin 读取 prompt，读取 `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`/`ANTHROPIC_MODEL`/`CLAUDE_MODEL`/settings model，解析模型别名，装配 builtin tools、settings-derived permission engine、settings-derived MCP config，并把最终 assistant text 写到 stdout；`--output-format json` 现在会输出基础 result envelope，包含 result text、session id、assistant message、stop reason、model、usage 和 tool results。
+本轮补充：`cmd/claude --print/-p` 现在接入真实 `conversation.Runner.RunTurn` 单轮 headless 路径，可从参数或 stdin 读取 prompt，读取 `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`/`ANTHROPIC_MODEL`/`CLAUDE_MODEL`/settings model，解析模型别名，装配 builtin tools、settings-derived permission engine、settings-derived MCP config，并把最终 assistant text 写到 stdout；`--output-format json` 现在会输出基础 result envelope，`--output-format stream-json` 会输出基础 NDJSON event stream 并以 result 行收尾，包含 result text、session id、assistant message、stop reason、model、usage 和 tool results。
 
-当前状态：bootstrap/config/auth/model 基础已完成；CLI 已有 `--version`、scaffold settings 校验、基础 `--print` headless 单轮执行路径和基础 JSON result 输出，但完整参数矩阵、交互 TUI 主循环、resume/continue、`stream-json`/SDK NDJSON/control protocol 和官方 stdout/stderr/exit-code parity 仍未完整兼容 CC。
+当前状态：bootstrap/config/auth/model 基础已完成；CLI 已有 `--version`、scaffold settings 校验、基础 `--print` headless 单轮执行路径、基础 JSON result 输出和基础 stream-json event 输出，但完整参数矩阵、交互 TUI 主循环、resume/continue、token-delta streaming、SDK NDJSON/control protocol 和官方 stdout/stderr/exit-code parity 仍未完整兼容 CC。
 
 ### M3: API Client And Conversation Loop
 

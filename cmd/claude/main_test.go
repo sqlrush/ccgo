@@ -182,6 +182,52 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPrintStreamJSONOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_stream",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"stream ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "stream-json", "stream prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("lines = %#v", lines)
+	}
+	var events []map[string]any
+	for _, line := range lines {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("invalid json line %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	if events[0]["type"] != "user_message" || events[1]["type"] != "assistant_message" || events[2]["type"] != "result" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events[2]["result"] != "stream ok" {
+		t.Fatalf("result event = %#v", events[2])
+	}
+}
+
 func TestRunPrintRequiresCredentials(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
@@ -206,7 +252,7 @@ func TestRunPrintRejectsUnsupportedOutputFormat(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"--print", "--output-format", "stream-json", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	code := run([]string{"--print", "--output-format", "xml", "hello"}, strings.NewReader(""), &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("exit = %d", code)
 	}
