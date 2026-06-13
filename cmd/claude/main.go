@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -46,6 +47,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	maxTokens := flags.Int("max-tokens", 0, "maximum output tokens")
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	stream := flags.Bool("stream", false, "use streaming API")
+	outputFormat := flags.String("output-format", "text", "output format: text or json")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -66,6 +68,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		format, err := normalizeOutputFormat(*outputFormat)
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
 		runner, err := headlessRunner(context.Background(), state, cliOptions{
 			Model:          *modelName,
 			MaxTokens:      *maxTokens,
@@ -81,7 +88,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
-		if err := writePrintResult(stdout, result); err != nil {
+		if err := writePrintResult(stdout, result, format); err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -113,6 +120,19 @@ func promptFromArgsOrStdin(args []string, stdin io.Reader) (string, error) {
 		return "", fmt.Errorf("--print requires a prompt via arguments or stdin")
 	}
 	return prompt, nil
+}
+
+func normalizeOutputFormat(raw string) (string, error) {
+	format := strings.TrimSpace(strings.ToLower(raw))
+	if format == "" {
+		format = "text"
+	}
+	switch format {
+	case "text", "json":
+		return format, nil
+	default:
+		return "", fmt.Errorf("unsupported output format %q", raw)
+	}
 }
 
 func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOptions) (conversation.Runner, error) {
@@ -249,7 +269,19 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func writePrintResult(stdout io.Writer, result conversation.Result) error {
+type printJSONResult struct {
+	Type        string                 `json:"type"`
+	Subtype     string                 `json:"subtype"`
+	SessionID   contracts.ID           `json:"session_id,omitempty"`
+	Result      string                 `json:"result"`
+	Message     *contracts.Message     `json:"message,omitempty"`
+	StopReason  string                 `json:"stop_reason,omitempty"`
+	Model       string                 `json:"model,omitempty"`
+	Usage       *contracts.Usage       `json:"usage,omitempty"`
+	ToolResults []contracts.ToolResult `json:"tool_results,omitempty"`
+}
+
+func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat string) error {
 	text := messages.TextContent(result.Assistant)
 	if text == "" {
 		for i := len(result.Messages) - 1; i >= 0; i-- {
@@ -262,6 +294,9 @@ func writePrintResult(stdout io.Writer, result conversation.Result) error {
 	if text == "" {
 		return nil
 	}
+	if outputFormat == "json" {
+		return writePrintJSONResult(stdout, result, text)
+	}
 	if _, err := fmt.Fprint(stdout, text); err != nil {
 		return err
 	}
@@ -270,4 +305,55 @@ func writePrintResult(stdout io.Writer, result conversation.Result) error {
 		return err
 	}
 	return nil
+}
+
+func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string) error {
+	message := result.Assistant
+	var messagePtr *contracts.Message
+	if message.Type != "" {
+		messagePtr = &message
+	}
+	sessionID := message.SessionID
+	if sessionID == "" {
+		for _, msg := range result.Messages {
+			if msg.SessionID != "" {
+				sessionID = msg.SessionID
+				break
+			}
+		}
+	}
+	usage := message.Usage
+	if usage == nil && hasUsage(result.Usage) {
+		usage = &result.Usage
+	}
+	envelope := printJSONResult{
+		Type:        "result",
+		Subtype:     "success",
+		SessionID:   sessionID,
+		Result:      text,
+		Message:     messagePtr,
+		StopReason:  result.StopReason,
+		Model:       message.Model,
+		Usage:       usage,
+		ToolResults: result.ToolResults,
+	}
+	encoder := json.NewEncoder(stdout)
+	return encoder.Encode(envelope)
+}
+
+func hasUsage(usage contracts.Usage) bool {
+	return usage.InputTokens != 0 ||
+		usage.OutputTokens != 0 ||
+		usage.CacheCreationInputTokens != 0 ||
+		usage.CacheReadInputTokens != 0 ||
+		usage.CacheDeletedInputTokens != 0 ||
+		usage.ServerToolUse.WebSearchRequests != 0 ||
+		usage.ServerToolUse.WebFetchRequests != 0 ||
+		usage.ServiceTier != "" ||
+		usage.CacheCreation.Ephemeral1hInputTokens != 0 ||
+		usage.CacheCreation.Ephemeral5mInputTokens != 0 ||
+		usage.InferenceGeo != "" ||
+		usage.Iterations != 0 ||
+		usage.Speed != "" ||
+		usage.CostUSD != 0
 }

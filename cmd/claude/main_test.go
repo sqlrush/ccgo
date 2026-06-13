@@ -132,6 +132,56 @@ func TestRunPrintReadsPromptFromStdinAndSettingsModel(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_json",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"json ok"}],
+			"stop_reason":"end_turn",
+			"usage":{"input_tokens":3,"output_tokens":4}
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "json prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "success" || payload["result"] != "json ok" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if payload["session_id"] == "" {
+		t.Fatalf("missing session_id: %#v", payload)
+	}
+	if payload["stop_reason"] != "end_turn" || payload["model"] != "claude-sonnet-4-6" {
+		t.Fatalf("metadata = %#v", payload)
+	}
+	usage, ok := payload["usage"].(map[string]any)
+	if !ok || usage["input_tokens"] != float64(3) || usage["output_tokens"] != float64(4) {
+		t.Fatalf("usage = %#v", payload["usage"])
+	}
+	message, ok := payload["message"].(map[string]any)
+	if !ok || message["type"] != "assistant" {
+		t.Fatalf("message = %#v", payload["message"])
+	}
+}
+
 func TestRunPrintRequiresCredentials(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
@@ -148,6 +198,22 @@ func TestRunPrintRequiresCredentials(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "missing Anthropic credentials") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintRejectsUnsupportedOutputFormat(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "stream-json", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "unsupported output format") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
