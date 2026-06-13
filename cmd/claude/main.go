@@ -738,22 +738,24 @@ func firstNonEmpty(values ...string) string {
 }
 
 type printJSONResult struct {
-	Type        string                 `json:"type"`
-	Subtype     string                 `json:"subtype"`
-	IsError     bool                   `json:"is_error"`
-	DurationMS  int64                  `json:"duration_ms"`
-	DurationAPI int64                  `json:"duration_api_ms"`
-	NumTurns    int                    `json:"num_turns,omitempty"`
-	TotalCost   float64                `json:"total_cost_usd,omitempty"`
-	SessionID   contracts.ID           `json:"session_id,omitempty"`
-	Result      string                 `json:"result"`
-	Error       string                 `json:"error,omitempty"`
-	Message     *contracts.Message     `json:"message,omitempty"`
-	StopReason  string                 `json:"stop_reason,omitempty"`
-	Model       string                 `json:"model,omitempty"`
-	Usage       *contracts.Usage       `json:"usage,omitempty"`
-	ToolResults []contracts.ToolResult `json:"tool_results,omitempty"`
-	Cleared     bool                   `json:"cleared,omitempty"`
+	Type        string                   `json:"type"`
+	Subtype     string                   `json:"subtype"`
+	IsError     bool                     `json:"is_error"`
+	DurationMS  int64                    `json:"duration_ms"`
+	DurationAPI int64                    `json:"duration_api_ms"`
+	NumTurns    int                      `json:"num_turns,omitempty"`
+	TotalCost   float64                  `json:"total_cost_usd,omitempty"`
+	SessionID   contracts.ID             `json:"session_id,omitempty"`
+	Result      string                   `json:"result"`
+	Error       string                   `json:"error,omitempty"`
+	Message     *contracts.Message       `json:"message,omitempty"`
+	StopReason  string                   `json:"stop_reason,omitempty"`
+	Model       string                   `json:"model,omitempty"`
+	Usage       *contracts.Usage         `json:"usage,omitempty"`
+	ToolResults []contracts.ToolResult   `json:"tool_results,omitempty"`
+	Cleared     bool                     `json:"cleared,omitempty"`
+	Compacted   bool                     `json:"compacted,omitempty"`
+	Compact     *session.CompactMetadata `json:"compact,omitempty"`
 }
 
 type printStreamEvent struct {
@@ -953,6 +955,11 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Usage:       usage,
 		ToolResults: result.ToolResults,
 		Cleared:     result.Cleared,
+		Compacted:   result.Compacted,
+	}
+	if result.Compact != nil {
+		metadata := result.Compact.Plan.Metadata
+		envelope.Compact = &metadata
 	}
 	encoder := json.NewEncoder(stdout)
 	return encoder.Encode(envelope)

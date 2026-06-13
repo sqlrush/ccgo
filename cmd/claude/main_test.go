@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"ccgo/internal/bootstrap"
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
@@ -1067,6 +1068,38 @@ func TestResultNumTurnsCountsAssistantMessages(t *testing.T) {
 	}
 	if turns := resultNumTurns(result); turns != 2 {
 		t.Fatalf("turns = %d", turns)
+	}
+}
+
+func TestWritePrintJSONResultIncludesCompactMetadata(t *testing.T) {
+	plan := compactpkg.BuildPlan(
+		[]contracts.Message{messages.UserText("old")},
+		compactpkg.PlanOptions{
+			Trigger:     compactpkg.TriggerManual,
+			PreTokens:   42,
+			UserContext: "keep API details",
+			Summary:     "summary",
+		},
+	)
+	result := conversation.Result{
+		Messages:  []contracts.Message{plan.Summary},
+		Compacted: true,
+		Compact:   &compactpkg.Result{Plan: plan},
+	}
+	var stdout bytes.Buffer
+	if err := writePrintJSONResult(&stdout, result, messages.TextContent(plan.Summary), 10); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	compactPayload, ok := payload["compact"].(map[string]any)
+	if payload["compacted"] != true || !ok {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if compactPayload["trigger"] != "manual" || compactPayload["preTokens"] != float64(42) || compactPayload["userContext"] != "keep API details" {
+		t.Fatalf("compact payload = %#v", compactPayload)
 	}
 }
 
