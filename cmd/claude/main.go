@@ -42,6 +42,18 @@ type cliOptions struct {
 	AppendSystem   string
 	AllowedTools   string
 	DeniedTools    string
+	AddDirs        []string
+}
+
+type repeatedStringFlag []string
+
+func (f *repeatedStringFlag) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *repeatedStringFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -65,6 +77,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	flags.StringVar(allowedTools, "allowed-tools", "", "allowed tool rules")
 	deniedTools := flags.String("disallowedTools", "", "disallowed tool rules")
 	flags.StringVar(deniedTools, "disallowed-tools", "", "disallowed tool rules")
+	var addDirs repeatedStringFlag
+	flags.Var(&addDirs, "add-dir", "additional working directory")
+	flags.Var(&addDirs, "addDir", "additional working directory")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -99,6 +114,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			AppendSystem:   *appendSystemPrompt,
 			AllowedTools:   *allowedTools,
 			DeniedTools:    *deniedTools,
+			AddDirs:        append([]string(nil), addDirs...),
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -184,6 +200,7 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		strings.TrimSpace(options.PermissionMode),
 		parseToolRules(options.AllowedTools),
 		parseToolRules(options.DeniedTools),
+		parsePathList(options.AddDirs),
 	)
 	if err != nil {
 		return conversation.Runner{}, err
@@ -273,7 +290,25 @@ func parseToolRules(raw string) []string {
 	return commands.ParseToolList([]string{raw})
 }
 
-func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permissionMode string, allowedTools []string, deniedTools []string) (tool.PermissionDecider, error) {
+func parsePathList(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		for _, field := range strings.FieldsFunc(value, func(r rune) bool {
+			return r == ',' || r == '\n' || r == '\r'
+		}) {
+			trimmed := strings.TrimSpace(field)
+			if trimmed == "" || seen[trimmed] {
+				continue
+			}
+			seen[trimmed] = true
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permissionMode string, allowedTools []string, deniedTools []string, additionalDirs []string) (tool.PermissionDecider, error) {
 	var sources []permissions.SettingsSource
 	var managedRulesOnly bool
 	if mcpConfig != nil {
@@ -292,12 +327,12 @@ func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permission
 		}
 		sources = append(sources, permissions.SettingsSource{
 			Source:      contracts.PermissionSourceCLIArg,
-			Permissions: cliPermissionsSetting(mode, allowedTools, deniedTools),
+			Permissions: cliPermissionsSetting(mode, allowedTools, deniedTools, additionalDirs),
 		})
-	} else if len(allowedTools) > 0 || len(deniedTools) > 0 {
+	} else if len(allowedTools) > 0 || len(deniedTools) > 0 || len(additionalDirs) > 0 {
 		sources = append(sources, permissions.SettingsSource{
 			Source:      contracts.PermissionSourceCLIArg,
-			Permissions: cliPermissionsSetting("", allowedTools, deniedTools),
+			Permissions: cliPermissionsSetting("", allowedTools, deniedTools, additionalDirs),
 		})
 	}
 	engine, err := permissions.NewEngineFromSettingsSources(managedRulesOnly, sources...)
@@ -307,11 +342,12 @@ func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permission
 	return tool.NewEnginePermissionDecider(engine), nil
 }
 
-func cliPermissionsSetting(mode contracts.PermissionMode, allowedTools []string, deniedTools []string) *contracts.PermissionsSetting {
+func cliPermissionsSetting(mode contracts.PermissionMode, allowedTools []string, deniedTools []string, additionalDirs []string) *contracts.PermissionsSetting {
 	return &contracts.PermissionsSetting{
-		DefaultMode: mode,
-		Allow:       append([]string(nil), allowedTools...),
-		Deny:        append([]string(nil), deniedTools...),
+		DefaultMode:           mode,
+		Allow:                 append([]string(nil), allowedTools...),
+		Deny:                  append([]string(nil), deniedTools...),
+		AdditionalDirectories: append([]string(nil), additionalDirs...),
 	}
 }
 

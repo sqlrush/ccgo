@@ -177,7 +177,7 @@ func TestRunPrintSystemPromptFlags(t *testing.T) {
 func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	allowed := parseToolRules(`Write, Bash(git status *)`)
 	denied := parseToolRules(`Bash(rm *)`)
-	decider, err := permissionDeciderFromSettings(nil, "dontAsk", allowed, denied)
+	decider, err := permissionDeciderFromSettings(nil, "dontAsk", allowed, denied, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +195,30 @@ func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	}
 	if bashDecision.Behavior != contracts.PermissionDeny {
 		t.Fatalf("bash decision = %#v", bashDecision)
+	}
+}
+
+func TestPermissionDeciderFromCLIAdditionalDirectories(t *testing.T) {
+	base := t.TempDir()
+	extra1 := filepath.Join(base, "extra 1")
+	extra2 := filepath.Join(base, "extra2")
+	decider, err := permissionDeciderFromSettings(nil, "", nil, nil, parsePathList([]string{extra1 + "," + extra2, extra1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	engineDecider, ok := decider.(tool.EnginePermissionDecider)
+	if !ok {
+		t.Fatalf("decider = %T", decider)
+	}
+	dirs := engineDecider.Engine.Context().AdditionalWorkingDirectories
+	if dirs[extra1] != contracts.PermissionSourceCLIArg {
+		t.Fatalf("extra1 source = %q dirs=%#v", dirs[extra1], dirs)
+	}
+	if dirs[extra2] != contracts.PermissionSourceCLIArg {
+		t.Fatalf("extra2 source = %q dirs=%#v", dirs[extra2], dirs)
+	}
+	if len(dirs) != 2 {
+		t.Fatalf("dirs = %#v", dirs)
 	}
 }
 
