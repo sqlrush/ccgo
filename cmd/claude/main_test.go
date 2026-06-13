@@ -458,6 +458,24 @@ func TestRunPrintRejectsNegativeMaxTurns(t *testing.T) {
 	}
 }
 
+func TestRunPrintRejectsNegativeMaxTokens(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--max-tokens", "-1", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid --max-tokens -1") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	allowed := parseToolRules(`Write, Bash(git status *)`)
 	denied := parseToolRules(`Bash(rm *)`)

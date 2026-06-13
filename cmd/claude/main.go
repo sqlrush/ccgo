@@ -390,6 +390,9 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		return conversation.Runner{}, err
 	}
 	runner.Model = resolveCLIModel(options.Model, runner.MCP)
+	if options.MaxTokens < 0 {
+		return conversation.Runner{}, fmt.Errorf("invalid --max-tokens %d; must be non-negative", options.MaxTokens)
+	}
 	if options.MaxTokens > 0 {
 		runner.MaxTokens = options.MaxTokens
 	}
