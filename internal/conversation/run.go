@@ -16,6 +16,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
+	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
 	modelpkg "ccgo/internal/model"
@@ -735,8 +736,9 @@ func (r Runner) mcpServers() []mcpServerSummary {
 		return nil
 	}
 	merged := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
-	servers := make([]mcpServerSummary, 0, len(merged.MCPServers))
-	for name, server := range merged.MCPServers {
+	mcpServers := mcp.MergeServers(merged.MCPServers, r.MCP.PluginServers)
+	servers := make([]mcpServerSummary, 0, len(mcpServers))
+	for name, server := range mcpServers {
 		servers = append(servers, mcpServerSummary{Name: name, Config: server})
 	}
 	sort.Slice(servers, func(i, j int) bool {

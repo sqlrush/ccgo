@@ -26,15 +26,18 @@ type LoadedPlugin struct {
 	Description     string
 	Commands        []contracts.Command
 	PromptTemplates []PromptTemplate
+	MCPServers      map[string]contracts.MCPServer
 }
 
 type manifest struct {
-	Name        string            `json:"name"`
-	DisplayName string            `json:"displayName"`
-	Description string            `json:"description"`
-	Version     string            `json:"version"`
-	Commands    []commandManifest `json:"commands"`
-	Skills      []skillManifest   `json:"skills"`
+	Name            string                         `json:"name"`
+	DisplayName     string                         `json:"displayName"`
+	Description     string                         `json:"description"`
+	Version         string                         `json:"version"`
+	Commands        []commandManifest              `json:"commands"`
+	Skills          []skillManifest                `json:"skills"`
+	MCPServers      map[string]contracts.MCPServer `json:"mcpServers"`
+	MCPServersSnake map[string]contracts.MCPServer `json:"mcp_servers"`
 }
 
 type commandManifest struct {
@@ -125,7 +128,21 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 		}
 		loaded.PromptTemplates = append(loaded.PromptTemplates, PromptTemplate{Command: skill.Command, Content: skill.Content})
 	}
+	loaded.MCPServers = pluginMCPServers(name, parsed.MCPServers, parsed.MCPServersSnake)
 	return loaded, nil
+}
+
+func LoadMCPServers(roots []string) map[string]contracts.MCPServer {
+	servers := map[string]contracts.MCPServer{}
+	for _, plugin := range LoadPluginDirs(roots) {
+		for name, server := range plugin.MCPServers {
+			servers[name] = server
+		}
+	}
+	if len(servers) == 0 {
+		return nil
+	}
+	return servers
 }
 
 func ProjectPluginDirs(cwd string) []string {
@@ -222,6 +239,27 @@ func skillFromManifest(root string, item skillManifest) (skills.Skill, bool) {
 	skill.Command.Source = contracts.CommandSourcePlugin
 	skill.Command.LoadedFrom = "plugin"
 	return skill, true
+}
+
+func pluginMCPServers(pluginName string, groups ...map[string]contracts.MCPServer) map[string]contracts.MCPServer {
+	out := map[string]contracts.MCPServer{}
+	for _, group := range groups {
+		for name, server := range group {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			if server.Name == "" {
+				server.Name = name
+			}
+			server.PluginSource = pluginName
+			out[name] = server
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func appendPluginRoots(out []string, seen map[string]struct{}, pluginsDir string) []string {

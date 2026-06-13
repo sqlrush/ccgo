@@ -976,6 +976,8 @@ func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
 				"zeta":  {URL: "https://example.com/mcp"},
 				"alpha": {Command: "python", Args: []string{"server.py"}},
 			},
+		}, PluginServers: map[string]contracts.MCPServer{
+			"plugin-docs": {Type: "http", URL: "https://plugin.example/mcp", PluginSource: "demo"},
 		}},
 	}
 	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("/mcp list"))
@@ -992,6 +994,7 @@ func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
 	for _, want := range []string{
 		"MCP servers:",
 		"- alpha (stdio): python server.py",
+		"- plugin-docs (http): https://plugin.example/mcp",
 		"- zeta (http): https://example.com/mcp",
 	} {
 		if !strings.Contains(text, want) {

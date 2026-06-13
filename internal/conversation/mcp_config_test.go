@@ -18,6 +18,10 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(project, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	pluginDir := filepath.Join(project, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(claudeHome, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +39,12 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 	writeSettingsFile(t, filepath.Join(project, ".claude", "settings.local.json"), `{
 		"mcpServers": {
 			"local": {"command": "local-server"}
+		}
+	}`)
+	writeSettingsFile(t, filepath.Join(pluginDir, "plugin.json"), `{
+		"name": "demo",
+		"mcpServers": {
+			"plugin:docs": {"type": "http", "url": "https://example.com/mcp"}
 		}
 	}`)
 	store := auth.NewFileCredentialStore(mcp.DefaultMCPServerCredentialsPath("remote"))
@@ -61,6 +71,9 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 	}
 	if config.LocalSettings.MCPServers["local"].Command != "local-server" {
 		t.Fatalf("local settings = %#v", config.LocalSettings.MCPServers)
+	}
+	if config.PluginServers["plugin:docs"].URL != "https://example.com/mcp" || config.PluginServers["plugin:docs"].PluginSource != "demo" {
+		t.Fatalf("plugin servers = %#v", config.PluginServers)
 	}
 	if config.ToolOptions.AccessTokenProvider == nil {
 		t.Fatal("missing default MCP OAuth access token provider")

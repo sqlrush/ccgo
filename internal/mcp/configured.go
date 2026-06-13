@@ -11,6 +11,7 @@ type ConfiguredToolSetOptions struct {
 	UserSettings    contracts.Settings
 	ProjectSettings contracts.Settings
 	LocalSettings   contracts.Settings
+	PluginServers   map[string]contracts.MCPServer
 	CWD             string
 	ParseOptions    ParseOptions
 	ToolOptions     ServerToolOptions
@@ -55,6 +56,7 @@ func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptio
 		User:    user.Servers,
 		Project: projectServers,
 		Local:   local.Servers,
+		Plugin:  options.PluginServers,
 		Policy:  PolicyFromSettings(mergeMCPPolicySettings(options.UserSettings, options.ProjectSettings, options.LocalSettings)),
 	})
 	toolOptions := options.ToolOptions

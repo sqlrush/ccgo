@@ -16,6 +16,7 @@ type ManualConfigSources struct {
 	User    map[string]contracts.MCPServer
 	Project map[string]contracts.MCPServer
 	Local   map[string]contracts.MCPServer
+	Plugin  map[string]contracts.MCPServer
 	Policy  Policy
 }
 
@@ -46,12 +47,28 @@ func LoadSettingsServers(settings contracts.Settings, scope string, options Pars
 }
 
 func MergeManualConfigSources(sources ManualConfigSources) ManualConfigResult {
-	merged := MergeServers(sources.User, sources.Project, sources.Local)
+	manual := MergeServers(sources.User, sources.Project, sources.Local)
+	plugin := pluginServersWithoutManualNameConflicts(DedupPluginServers(sources.Plugin, manual).Servers, manual)
+	merged := MergeServers(manual, plugin)
 	allowed, blocked := FilterServersByPolicy(merged, sources.Policy)
 	return ManualConfigResult{
 		Servers: allowed,
 		Blocked: blocked,
 	}
+}
+
+func pluginServersWithoutManualNameConflicts(plugin map[string]contracts.MCPServer, manual map[string]contracts.MCPServer) map[string]contracts.MCPServer {
+	if len(plugin) == 0 {
+		return nil
+	}
+	out := map[string]contracts.MCPServer{}
+	for _, name := range sortedServerNames(plugin) {
+		if _, exists := manual[name]; exists {
+			continue
+		}
+		out[name] = plugin[name]
+	}
+	return out
 }
 
 func LoadProjectConfigChain(cwd string, options ParseOptions) (LoadResult, error) {

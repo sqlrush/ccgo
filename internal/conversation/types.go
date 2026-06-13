@@ -90,6 +90,7 @@ type MCPConfig struct {
 	UserSettings    contracts.Settings
 	ProjectSettings contracts.Settings
 	LocalSettings   contracts.Settings
+	PluginServers   map[string]contracts.MCPServer
 	CWD             string
 	ParseOptions    mcp.ParseOptions
 	ToolOptions     mcp.ServerToolOptions

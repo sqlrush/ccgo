@@ -110,6 +110,8 @@ M8 补充：新增 `internal/plugins` 本地 manifest loader 地基，支持从 
 
 M8 补充：`/plugin list|status` headless/local summary 现在会复用本地 plugin manifest loader，显示发现到的 local plugin manifest 数量、名称/版本，以及 registry 中已注册的 plugin command 列表；仍不执行 marketplace/install/update，也不激活 plugin hooks/agents/MCP。
 
+M8/M9 补充：本地 plugin manifest 现在可声明 `mcpServers`/`mcp_servers`，`LoadMCPConfigFromSettingsFiles` 会把 cwd 发现到的 plugin MCP servers 传入 runner；configured MCP toolset merge 会对 plugin servers 做手工配置同名/同签名去重，并继续套用现有 MCP allow/deny policy，`/mcp list` 也会显示 plugin MCP server。完整 plugin MCP lifecycle、启停 UI、marketplace 安装来源和 health check 仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

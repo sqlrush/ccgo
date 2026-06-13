@@ -9,6 +9,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/mcp"
+	pluginpkg "ccgo/internal/plugins"
 )
 
 func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
@@ -32,6 +33,7 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 		UserSettings:    userSettings,
 		ProjectSettings: projectSettings,
 		LocalSettings:   localSettings,
+		PluginServers:   pluginpkg.LoadMCPServers(pluginpkg.ProjectPluginDirs(resolvedCWD)),
 		CWD:             resolvedCWD,
 		ToolOptions: mcp.ServerToolOptions{
 			AccessTokenProvider: mcp.FileOAuthAccessTokenProvider(mcp.FileOAuthAccessTokenProviderOptions{}),

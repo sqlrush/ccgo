@@ -34,7 +34,13 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 		"skills": [{
 			"path": "skills/audit",
 			"name": "plugin:audit"
-		}]
+		}],
+		"mcpServers": {
+			"plugin:docs": {
+				"type": "http",
+				"url": "https://example.com/mcp"
+			}
+		}
 	}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +65,10 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	skillCommand := plugin.PromptTemplates[1].Command
 	if skillCommand.Name != "plugin:audit" || skillCommand.Source != contracts.CommandSourcePlugin || skillCommand.LoadedFrom != "plugin" || skillCommand.SkillRoot == "" {
 		t.Fatalf("skill command = %#v", skillCommand)
+	}
+	server, ok := plugin.MCPServers["plugin:docs"]
+	if !ok || server.PluginSource != "demo" || server.Name != "plugin:docs" || server.URL != "https://example.com/mcp" {
+		t.Fatalf("mcp servers = %#v", plugin.MCPServers)
 	}
 }
 

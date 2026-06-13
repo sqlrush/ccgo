@@ -82,6 +82,62 @@ func TestMergeManualConfigSourcesUsesUserProjectLocalPrecedenceAndPolicy(t *test
 	}
 }
 
+func TestMergeManualConfigSourcesAddsPluginServersAfterDedupAndPolicy(t *testing.T) {
+	user := AddScopeToServers(map[string]contracts.MCPServer{
+		"manual": {Command: "node", Args: []string{"manual.js"}},
+		"same-name": {
+			Type: TransportHTTP,
+			URL:  "https://manual.example/mcp",
+		},
+	}, ScopeUser)
+	plugin := map[string]contracts.MCPServer{
+		"plugin:unique": {
+			Command:      "python",
+			Args:         []string{"plugin.py"},
+			PluginSource: "demo",
+		},
+		"plugin:duplicate": {
+			Command:      "node",
+			Args:         []string{"manual.js"},
+			PluginSource: "demo",
+		},
+		"same-name": {
+			Type:         TransportHTTP,
+			URL:          "https://plugin.example/mcp",
+			PluginSource: "demo",
+		},
+		"plugin:blocked": {
+			Type:         TransportHTTP,
+			URL:          "https://blocked.example/mcp",
+			PluginSource: "demo",
+		},
+	}
+
+	result := MergeManualConfigSources(ManualConfigSources{
+		User:   user,
+		Plugin: plugin,
+		Policy: Policy{
+			Denied: []contracts.MCPServerPolicyEntry{{ServerURL: "https://blocked.example/*"}},
+		},
+	})
+
+	if _, ok := result.Servers["plugin:unique"]; !ok {
+		t.Fatalf("unique plugin server missing: %#v", result.Servers)
+	}
+	if _, ok := result.Servers["plugin:duplicate"]; ok {
+		t.Fatalf("duplicate plugin server kept: %#v", result.Servers)
+	}
+	if got := result.Servers["same-name"]; got.URL != "https://manual.example/mcp" {
+		t.Fatalf("same-name = %#v", got)
+	}
+	if _, ok := result.Servers["plugin:blocked"]; ok {
+		t.Fatalf("blocked plugin server kept: %#v", result.Servers)
+	}
+	if len(result.Blocked) != 1 || result.Blocked[0] != "plugin:blocked" {
+		t.Fatalf("blocked = %#v", result.Blocked)
+	}
+}
+
 func TestLoadProjectConfigChainMergesFromRootToCWD(t *testing.T) {
 	root := t.TempDir()
 	parent := filepath.Join(root, "project")
@@ -209,6 +265,7 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 				{ServerCommand: []string{"local"}},
 				{ServerCommand: []string{"project-chain"}},
 				{ServerCommand: []string{"chain"}},
+				{ServerCommand: []string{"plugin"}},
 			},
 		},
 		ProjectSettings: contracts.Settings{
@@ -220,6 +277,9 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 			MCPServers: map[string]contracts.MCPServer{
 				"shared-global": {Command: "local"},
 			},
+		},
+		PluginServers: map[string]contracts.MCPServer{
+			"plugin-only": {Command: "plugin", PluginSource: "demo"},
 		},
 		CWD: root,
 		ToolOptions: ServerToolOptions{
@@ -245,6 +305,9 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 	if got := result.Servers["chain-only"]; got.Command != "chain" || got.Scope != ScopeProject {
 		t.Fatalf("chain only = %#v", got)
 	}
+	if got := result.Servers["plugin-only"]; got.Command != "plugin" || got.PluginSource != "demo" {
+		t.Fatalf("plugin only = %#v", got)
+	}
 	if _, ok := result.Servers["user-only"]; ok {
 		t.Fatalf("blocked user-only kept: %#v", result.Servers)
 	}
@@ -255,7 +318,7 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"mcp__chain-only__ping", "mcp__shared-global__ping", "mcp__shared-project__ping"} {
+	for _, name := range []string{"mcp__chain-only__ping", "mcp__plugin-only__ping", "mcp__shared-global__ping", "mcp__shared-project__ping"} {
 		if _, ok := registry.Lookup(name); !ok {
 			t.Fatalf("missing %q in %#v", name, registry.Names())
 		}
