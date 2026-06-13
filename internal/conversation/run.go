@@ -475,13 +475,15 @@ func (r Runner) formatStatusSummary() string {
 	)
 }
 
-func (r Runner) formatConfigSummary(raw string) string {
+func (r *Runner) formatConfigSummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) > 0 {
 		switch args[0] {
 		case "show", "list":
 		case "output-style", "outputStyle":
 			return r.setOutputStyleSummary(args)
+		case "fast-mode", "fastMode":
+			return r.setFastModeSummary(args)
 		default:
 			return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
@@ -515,7 +517,7 @@ func (r Runner) formatConfigSummary(raw string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (r Runner) setOutputStyleSummary(args []string) string {
+func (r *Runner) setOutputStyleSummary(args []string) string {
 	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
 		return "Usage: /config output-style <style-name>"
 	}
@@ -545,6 +547,39 @@ func resolveOutputStyleName(raw string, available []string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (r *Runner) setFastModeSummary(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /config fast-mode <on|off>"
+	}
+	enabled, ok := parseOnOff(args[1])
+	if !ok {
+		return "Usage: /config fast-mode <on|off>"
+	}
+	if err := setUserFastMode(enabled); err != nil {
+		return fmt.Sprintf("Failed to set fast mode: %v", err)
+	}
+	if r.MCP != nil {
+		r.MCP.UserSettings.FastMode = &enabled
+	}
+	r.FastMode = enabled
+	state := "disabled"
+	if enabled {
+		state = "enabled"
+	}
+	return "Fast mode " + state + "."
+}
+
+func parseOnOff(raw string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "on", "true", "enabled", "enable", "1":
+		return true, true
+	case "off", "false", "disabled", "disable", "0":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (r Runner) authSourceText() string {
@@ -726,6 +761,15 @@ func setUserOutputStyle(name string) error {
 		return err
 	}
 	document["outputStyle"] = name
+	return writeUserSettingsDocument(document)
+}
+
+func setUserFastMode(enabled bool) error {
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		return err
+	}
+	document["fastMode"] = enabled
 	return writeUserSettingsDocument(document)
 }
 

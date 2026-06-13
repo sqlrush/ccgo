@@ -146,6 +146,8 @@ M8 补充：headless `/plugin list|status` 现在会按 `enabledPlugins` 的 tru
 
 M8 补充：headless `/config output-style <name>` 现在会校验可用 output style、写入用户 `settings.json` 的 `outputStyle`，并同步当前 runner settings；完整 TUI picker 和状态栏附件仍待补齐。
 
+M8 补充：headless `/config fast-mode <on|off>` 现在会写入用户 `settings.json` 的 `fastMode` 并同步当前 runner 状态；完整 fast-mode TUI 切换、状态栏提示和模型请求 beta 行为仍待补齐。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

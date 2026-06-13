@@ -850,6 +850,52 @@ func TestRunnerExecutesConfigOutputStyleWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesConfigFastModeWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	runner := Runner{
+		Client:    client,
+		SessionID: "sess_config_fast",
+		MCP:       &MCPConfig{},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config fast-mode on"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Fast mode enabled." {
+		t.Fatalf("fast mode text = %q", got)
+	}
+	if !runner.FastMode || runner.MCP.UserSettings.FastMode == nil || !*runner.MCP.UserSettings.FastMode {
+		t.Fatalf("runner fast mode = %#v settings=%#v", runner.FastMode, runner.MCP.UserSettings.FastMode)
+	}
+	var settings map[string]any
+	data, err := os.ReadFile(filepath.Join(configHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["fastMode"] != true {
+		t.Fatalf("settings = %#v", settings)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config fast-mode off"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Fast mode disabled." {
+		t.Fatalf("fast mode disable text = %q", got)
+	}
+	if runner.FastMode || runner.MCP.UserSettings.FastMode == nil || *runner.MCP.UserSettings.FastMode {
+		t.Fatalf("runner fast mode after disable = %#v settings=%#v", runner.FastMode, runner.MCP.UserSettings.FastMode)
+	}
+}
+
 func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	repo := filepath.Join(t.TempDir(), "repo")
