@@ -25,6 +25,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ccgo: %v\n", err)
 		os.Exit(1)
 	}
+	if _, err := state.ConversationRunner(); err != nil {
+		fmt.Fprintf(os.Stderr, "ccgo: %v\n", err)
+		os.Exit(1)
+	}
 
 	fmt.Fprintf(os.Stdout, "ccgo scaffold ready\nsession_id=%s\ncwd=%s\n", state.SessionID(), state.CWD())
 }

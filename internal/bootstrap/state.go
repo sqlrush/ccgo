@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/conversation"
 )
 
 type State struct {
@@ -75,4 +76,21 @@ func (s *State) ClientType() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.clientType
+}
+
+func (s *State) ConversationRunner() (conversation.Runner, error) {
+	s.mu.RLock()
+	sessionID := s.sessionID
+	cwd := s.cwd
+	s.mu.RUnlock()
+
+	mcpConfig, err := conversation.LoadMCPConfigFromSettingsFiles(cwd)
+	if err != nil {
+		return conversation.Runner{}, err
+	}
+	return conversation.Runner{
+		SessionID:        sessionID,
+		WorkingDirectory: cwd,
+		MCP:              mcpConfig,
+	}, nil
 }
