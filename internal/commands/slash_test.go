@@ -146,6 +146,26 @@ func TestExecuteSlashClearReturnsLocalTextResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashHelpReturnsLocalTextResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/help", SlashOptions{UUID: "user_help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultText || !strings.Contains(result.LocalResult.Value, "Available commands:") {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_help" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "/help - Show help") || !strings.Contains(text, "/status - Show Claude Code status") {
+		t.Fatalf("help text = %q", text)
+	}
+}
+
 func TestExecuteSlashCompactReturnsLocalCompactResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/compact focus on API", SlashOptions{UUID: "user_compact"})
@@ -164,6 +184,37 @@ func TestExecuteSlashCompactReturnsLocalCompactResult(t *testing.T) {
 	text := result.Messages[0].Content[0].Text
 	if !strings.Contains(text, "<command-name>/compact</command-name>") || !strings.Contains(text, "<command-args>focus on API</command-args>") {
 		t.Fatalf("compact command message = %q", text)
+	}
+}
+
+func TestExecuteSlashSkillsReturnsLocalTextResult(t *testing.T) {
+	registry := FromSources(Sources{
+		ProjectSkillPrompts: []PromptTemplate{{
+			Command: contracts.Command{
+				Name:        "deploy",
+				Type:        contracts.CommandPrompt,
+				Source:      contracts.CommandSourceSkills,
+				Description: "Deploy service",
+			},
+			Content: "Deploy $ARGUMENTS.",
+		}},
+		Builtins: BuiltinCommands(),
+	})
+	result, handled, err := ExecuteSlashCommand(registry, "/skills", SlashOptions{UUID: "user_skills"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultText {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_skills" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "Available skills:") || !strings.Contains(text, "/deploy - Deploy service") {
+		t.Fatalf("skills text = %q", text)
 	}
 }
 

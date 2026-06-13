@@ -148,7 +148,7 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 		if cmd.Sensitive && strings.TrimSpace(args) != "" {
 			args = "***"
 		}
-		if local, ok := ExecuteBuiltinLocalCommand(cmd, parsed.Args); ok {
+		if local, ok := ExecuteBuiltinLocalCommand(registry, cmd, parsed.Args); ok {
 			messages := []contracts.Message{}
 			if local.Type != LocalCommandResultSkip {
 				messages = append(messages, slashUserText(FormatCommandInputTags(cmd.Name, args), opts.SessionID, opts.UUID, false))
@@ -180,11 +180,13 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 	}
 }
 
-func ExecuteBuiltinLocalCommand(cmd contracts.Command, args string) (LocalCommandResult, bool) {
+func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args string) (LocalCommandResult, bool) {
 	if cmd.Source != contracts.CommandSourceBuiltin {
 		return LocalCommandResult{}, false
 	}
 	switch cmd.Name {
+	case "help":
+		return LocalCommandResult{Type: LocalCommandResultText, Value: formatHelpText(registry)}, true
 	case "clear":
 		return LocalCommandResult{Type: LocalCommandResultText}, true
 	case "compact":
@@ -193,9 +195,59 @@ func ExecuteBuiltinLocalCommand(cmd contracts.Command, args string) (LocalComman
 		return LocalCommandResult{Type: LocalCommandResultCost}, true
 	case "status":
 		return LocalCommandResult{Type: LocalCommandResultStatus}, true
+	case "skills":
+		return LocalCommandResult{Type: LocalCommandResultText, Value: formatSkillsText(registry)}, true
 	default:
 		return LocalCommandResult{}, false
 	}
+}
+
+func formatHelpText(registry Registry) string {
+	commands := registry.Visible()
+	if len(commands) == 0 {
+		return "No commands available."
+	}
+	var lines []string
+	lines = append(lines, "Available commands:")
+	for _, cmd := range commands {
+		name := "/" + UserFacingName(cmd)
+		description := strings.TrimSpace(cmd.Description)
+		if description == "" {
+			lines = append(lines, name)
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s - %s", name, description))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatSkillsText(registry Registry) string {
+	var lines []string
+	for _, cmd := range registry.Visible() {
+		if cmd.Type != contracts.CommandPrompt || cmd.Source == contracts.CommandSourceBuiltin {
+			continue
+		}
+		name := "/" + UserFacingName(cmd)
+		description := strings.TrimSpace(firstNonEmptyString(cmd.Description, cmd.WhenToUse))
+		if description == "" {
+			lines = append(lines, name)
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s - %s", name, description))
+	}
+	if len(lines) == 0 {
+		return "No skills available."
+	}
+	return "Available skills:\n" + strings.Join(lines, "\n")
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func CommandPermissionsAttachment(allowedTools []string, model string, sessionID contracts.ID) contracts.Message {
