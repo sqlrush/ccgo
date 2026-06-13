@@ -295,6 +295,45 @@ func TestRunPrintReadsJSONInputFormatPrompt(t *testing.T) {
 	}
 }
 
+func TestRunPrintReadsJSONInputFormatTextAlias(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_json_text_input",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"json text input ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--input-format", "json"}, strings.NewReader(`{"text":"text alias prompt"}`), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := stdout.String(); got != "json text input ok\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "text alias prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
 func TestRunPrintReadsStreamJSONInputFormatUserEvent(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -336,6 +375,50 @@ func TestRunPrintReadsStreamJSONInputFormatUserEvent(t *testing.T) {
 	}
 	requestMessages := requestBody["messages"].([]any)
 	if got := messageTextAt(t, requestMessages, 0); got != "latest prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
+func TestRunPrintReadsStreamJSONInputFormatUserMessageEventAlias(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_stream_alias_input",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"stream alias input ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	input := strings.Join([]string{
+		`{"type":"status","status":"ready"}`,
+		`{"type":"user_message","message":{"content":[{"type":"text","text":"alias latest prompt"}]}}`,
+	}, "\n")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--input-format", "stream-json"}, strings.NewReader(input), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := stdout.String(); got != "stream alias input ok\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "alias latest prompt" {
 		t.Fatalf("prompt = %q", got)
 	}
 }

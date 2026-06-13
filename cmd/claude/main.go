@@ -300,7 +300,7 @@ func userMessageFromJSON(data []byte) (contracts.Message, error) {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return contracts.Message{}, err
 	}
-	for _, name := range []string{"prompt", "query", "input"} {
+	for _, name := range []string{"prompt", "query", "input", "text", "messageText", "message_text"} {
 		if raw, ok := fields[name]; ok {
 			var text string
 			if err := json.Unmarshal(raw, &text); err != nil {
