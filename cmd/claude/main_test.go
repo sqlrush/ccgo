@@ -507,6 +507,16 @@ func TestRunPrintRejectsNegativeMaxTokens(t *testing.T) {
 	}
 }
 
+func TestEffectivePermissionModeDangerouslySkipsPermissions(t *testing.T) {
+	mode, err := effectivePermissionMode("", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode != string(contracts.PermissionBypassPermissions) {
+		t.Fatalf("mode = %q", mode)
+	}
+}
+
 func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	allowed := parseToolRules(`Write, Bash(git status *)`)
 	denied := parseToolRules(`Bash(rm *)`)
@@ -958,6 +968,32 @@ func TestRunPrintJSONOutputsSetupError(t *testing.T) {
 		t.Fatalf("payload = %#v", payload)
 	}
 	if !strings.Contains(stderr.String(), "missing Anthropic credentials") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintRejectsPermissionModeSkipConflict(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--print",
+		"--output-format", "json",
+		"--permission-mode", "plan",
+		"--dangerously-skip-permissions",
+		"hello",
+	}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["subtype"] != "error" || !strings.Contains(fmt.Sprint(payload["error"]), "dangerously-skip-permissions") {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if !strings.Contains(stderr.String(), "dangerously-skip-permissions") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

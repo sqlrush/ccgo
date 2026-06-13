@@ -34,19 +34,20 @@ func main() {
 }
 
 type cliOptions struct {
-	Model          string
-	MaxTokens      int
-	MaxTurns       int
-	PermissionMode string
-	MCPConfig      string
-	Stream         bool
-	Resume         string
-	Continue       bool
-	SystemPrompt   string
-	AppendSystem   string
-	AllowedTools   string
-	DeniedTools    string
-	AddDirs        []string
+	Model           string
+	MaxTokens       int
+	MaxTurns        int
+	PermissionMode  string
+	SkipPermissions bool
+	MCPConfig       string
+	Stream          bool
+	Resume          string
+	Continue        bool
+	SystemPrompt    string
+	AppendSystem    string
+	AllowedTools    string
+	DeniedTools     string
+	AddDirs         []string
 }
 
 type repeatedStringFlag []string
@@ -76,6 +77,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	flags.IntVar(maxTurns, "maxTurns", 0, "maximum tool-use turns in print mode")
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	flags.StringVar(permissionMode, "permissionMode", "", "permission mode")
+	skipPermissions := flags.Bool("dangerously-skip-permissions", false, "bypass tool permission prompts")
+	flags.BoolVar(skipPermissions, "dangerouslySkipPermissions", false, "bypass tool permission prompts")
 	mcpConfig := flags.String("mcp-config", "", "MCP configuration JSON file")
 	flags.StringVar(mcpConfig, "mcpConfig", "", "MCP configuration JSON file")
 	stream := flags.Bool("stream", false, "use streaming API")
@@ -133,18 +136,25 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		effectiveMode, err := effectivePermissionMode(*permissionMode, *skipPermissions)
+		if err != nil {
+			_ = writePrintError(stdout, conversation.Runner{}, err, outputFormat)
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
 		runner, err := headlessRunner(context.Background(), state, cliOptions{
-			Model:          *modelName,
-			MaxTokens:      *maxTokens,
-			MaxTurns:       *maxTurns,
-			PermissionMode: *permissionMode,
-			MCPConfig:      *mcpConfig,
-			Stream:         *stream,
-			SystemPrompt:   *systemPrompt,
-			AppendSystem:   *appendSystemPrompt,
-			AllowedTools:   *allowedTools,
-			DeniedTools:    *deniedTools,
-			AddDirs:        append([]string(nil), addDirs...),
+			Model:           *modelName,
+			MaxTokens:       *maxTokens,
+			MaxTurns:        *maxTurns,
+			PermissionMode:  effectiveMode,
+			SkipPermissions: *skipPermissions,
+			MCPConfig:       *mcpConfig,
+			Stream:          *stream,
+			SystemPrompt:    *systemPrompt,
+			AppendSystem:    *appendSystemPrompt,
+			AllowedTools:    *allowedTools,
+			DeniedTools:     *deniedTools,
+			AddDirs:         append([]string(nil), addDirs...),
 		})
 		if err != nil {
 			_ = writePrintError(stdout, runner, err, outputFormat)
@@ -362,6 +372,17 @@ func normalizeInputFormat(raw string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported input format %q", raw)
 	}
+}
+
+func effectivePermissionMode(permissionMode string, skipPermissions bool) (string, error) {
+	mode := strings.TrimSpace(permissionMode)
+	if !skipPermissions {
+		return mode, nil
+	}
+	if mode != "" && mode != string(contracts.PermissionBypassPermissions) {
+		return "", fmt.Errorf("--dangerously-skip-permissions cannot be combined with --permission-mode %q", permissionMode)
+	}
+	return string(contracts.PermissionBypassPermissions), nil
 }
 
 func normalizeOutputFormat(raw string) (string, error) {
