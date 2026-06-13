@@ -92,6 +92,8 @@ M8/M9 补充：`/mcp` built-in local-jsx command 现在有 headless/local 基础
 
 M8/M6 补充：`/resume` built-in local-jsx command 现在有 headless/local 基础 text result：无参数列出当前项目最近 session，有参数按现有 transcript search 查找匹配 session，空结果返回明确提示且不会请求模型；完整 resume picker UI、选择后恢复主循环和远端历史融合仍未完成。
 
+M8/M6 补充：`/config`、`/plugin`、`/memory` built-in local-jsx command 现在有 headless/local 基础 text result：`/config` 汇总工作目录、模型、settings 文件存在性和合并后 env/MCP/permissions/hooks/plugin 规模，`/plugin` 汇总 plugin settings/marketplace/registered plugin command 计数，`/memory` 汇总 session memory root、summary 数、relevant memory dir、memory 文件数和 recall/extraction 开关；这些命令不会请求模型或写回配置，完整 local-jsx 面板、plugin marketplace/install/update 和 memory editor 仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

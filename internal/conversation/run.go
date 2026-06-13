@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -69,11 +70,20 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		if localResult != nil && localResult.Type == commands.LocalCommandResultStatus {
 			return r.appendLocalTextResult(result, history, r.formatStatusSummary())
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultConfig {
+			return r.appendLocalTextResult(result, history, r.formatConfigSummary(localResult.Value))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultPlugin {
+			return r.appendLocalTextResult(result, history, r.formatPluginSummary(localResult.Value))
+		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultModel {
 			return r.appendLocalTextResult(result, history, r.formatModelSummary(localResult.Value))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultMCP {
 			return r.appendLocalTextResult(result, history, r.formatMCPCommandSummary(localResult.Value))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultMemory {
+			return r.appendLocalTextResult(result, history, r.formatMemorySummary(localResult.Value))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultResume {
 			text, err := r.formatResumeSummary(localResult.Value)
@@ -443,6 +453,198 @@ func (r Runner) formatStatusSummary() string {
 		toolCount,
 		mcpText,
 	)
+}
+
+func (r Runner) formatConfigSummary(raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) > 0 && args[0] != "show" && args[0] != "list" {
+		return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	}
+	cwd := strings.TrimSpace(r.WorkingDirectory)
+	if cwd == "" {
+		cwd = "."
+	}
+	merged := r.mergedSettings()
+	permissionsText := settingsPermissionsSummary(merged.Permissions)
+	lines := []string{
+		"Config",
+		"Working directory: " + cwd,
+		"Model: " + r.model(),
+		"Settings files:",
+		fmt.Sprintf("- user: %s (%s)", config.UserSettingsPath(), fileStatusText(config.UserSettingsPath())),
+		fmt.Sprintf("- project: %s (%s)", config.ProjectSettingsPath(cwd), fileStatusText(config.ProjectSettingsPath(cwd))),
+		fmt.Sprintf("- local: %s (%s)", config.LocalSettingsPath(cwd), fileStatusText(config.LocalSettingsPath(cwd))),
+		"Merged settings:",
+		fmt.Sprintf("- env vars: %d", len(merged.Env)),
+		fmt.Sprintf("- MCP servers: %d", len(merged.MCPServers)),
+		"- permission rules: " + permissionsText,
+		fmt.Sprintf("- hooks: %d", len(merged.Hooks)),
+		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatPluginSummary(raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) > 0 && args[0] != "list" && args[0] != "status" {
+		return "Plugin subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	}
+	merged := r.mergedSettings()
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
+	pluginCommands := pluginCommandNames(registry.Visible())
+	lines := []string{
+		"Plugins",
+		fmt.Sprintf("Enabled plugins: %d", len(merged.EnabledPlugins)),
+		fmt.Sprintf("Plugin configs: %d", len(merged.PluginConfigs)),
+		fmt.Sprintf("Plugin settings entries: %d", len(merged.Plugins)),
+		fmt.Sprintf("Extra known marketplaces: %d", len(merged.ExtraKnownMarketplaces)),
+		fmt.Sprintf("Strict known marketplaces: %d", len(merged.StrictKnownMarketplaces)),
+		fmt.Sprintf("Blocked marketplaces: %d", len(merged.BlockedMarketplaces)),
+		fmt.Sprintf("Registered plugin commands: %d", len(pluginCommands)),
+	}
+	if len(pluginCommands) > 0 {
+		lines = append(lines, "Plugin commands:")
+		for _, name := range firstStrings(pluginCommands, 10) {
+			lines = append(lines, "- /"+name)
+		}
+		if len(pluginCommands) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin commands.", len(pluginCommands)))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMemorySummary(raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) > 0 && args[0] != "list" && args[0] != "status" {
+		return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	}
+	sessionRoot := r.SessionMemoryRoot
+	if sessionRoot == "" {
+		sessionRoot = memory.DefaultSessionMemoryRoot(r.SessionPath)
+	}
+	sessionRootText := sessionRoot
+	if sessionRootText == "" {
+		sessionRootText = "(not configured)"
+	}
+	relevantRoot := strings.TrimSpace(r.RelevantMemoryDir)
+	relevantRootText := relevantRoot
+	if relevantRootText == "" {
+		relevantRootText = "(not configured)"
+	}
+	return strings.Join([]string{
+		"Memory",
+		"Session memory root: " + sessionRootText,
+		fmt.Sprintf("Session summaries: %d", countSessionSummaries(sessionRoot)),
+		"Relevant memory directory: " + relevantRootText,
+		fmt.Sprintf("Relevant memory files: %d", countMarkdownFiles(relevantRoot)),
+		"Session memory recall: " + boolEnabledText(r.EnableSessionMemoryRecall),
+		"Turn-end memory extraction: " + boolEnabledText(r.EnableMemoryExtraction),
+	}, "\n")
+}
+
+func (r Runner) mergedSettings() contracts.Settings {
+	if r.MCP == nil {
+		return contracts.Settings{}
+	}
+	return config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+}
+
+func settingsPermissionsSummary(setting *contracts.PermissionsSetting) string {
+	if setting == nil {
+		return "none"
+	}
+	parts := []string{
+		fmt.Sprintf("allow %d", len(setting.Allow)),
+		fmt.Sprintf("deny %d", len(setting.Deny)),
+		fmt.Sprintf("ask %d", len(setting.Ask)),
+	}
+	if setting.DefaultMode != "" {
+		parts = append(parts, "default "+string(setting.DefaultMode))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func fileStatusText(path string) string {
+	if path == "" {
+		return "missing"
+	}
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.IsDir() {
+			return "directory"
+		}
+		return "present"
+	}
+	if os.IsNotExist(err) {
+		return "missing"
+	}
+	return "unreadable"
+}
+
+func pluginCommandNames(commandsList []contracts.Command) []string {
+	var names []string
+	for _, cmd := range commandsList {
+		if cmd.Source != contracts.CommandSourcePlugin && cmd.LoadedFrom != "plugin" {
+			continue
+		}
+		names = append(names, commands.UserFacingName(cmd))
+	}
+	sort.Strings(names)
+	return names
+}
+
+func firstStrings(values []string, limit int) []string {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func countSessionSummaries(root string) int {
+	if root == "" {
+		return 0
+	}
+	var count int
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || entry.Name() != memory.SessionSummaryFilename {
+			return nil
+		}
+		count++
+		return nil
+	})
+	return count
+}
+
+func countMarkdownFiles(root string) int {
+	if root == "" {
+		return 0
+	}
+	var count int
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			name := entry.Name()
+			if name == ".git" || name == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(path), ".md") {
+			count++
+		}
+		return nil
+	})
+	return count
+}
+
+func boolEnabledText(value bool) string {
+	if value {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 func (r Runner) mcpServerNames() []string {

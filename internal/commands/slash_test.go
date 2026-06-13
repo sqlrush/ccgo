@@ -110,15 +110,19 @@ func TestExecuteSlashNonCommandPathFallsThrough(t *testing.T) {
 }
 
 func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
-	registry := FromSources(Sources{Builtins: BuiltinCommands()})
-	result, handled, err := ExecuteSlashCommand(registry, "/config", SlashOptions{UUID: "user_config"})
+	registry := FromSources(Sources{Builtins: []contracts.Command{{
+		Type:   contracts.CommandLocalJSX,
+		Name:   "unsupported",
+		Source: contracts.CommandSourceBuiltin,
+	}}})
+	result, handled, err := ExecuteSlashCommand(registry, "/unsupported", SlashOptions{UUID: "user_unsupported"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !handled || result.ShouldQuery || !result.Unsupported {
 		t.Fatalf("handled=%v result=%#v", handled, result)
 	}
-	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_config" {
+	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_unsupported" {
 		t.Fatalf("messages = %#v", result.Messages)
 	}
 	if !strings.Contains(result.Messages[1].Content[0].Text, "<local-command-stderr>") {
@@ -183,6 +187,66 @@ func TestExecuteSlashMCPReturnsLocalMCPResult(t *testing.T) {
 	}
 	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/mcp</command-name>") || !strings.Contains(text, "<command-args>list</command-args>") {
 		t.Fatalf("mcp command message = %q", text)
+	}
+}
+
+func TestExecuteSlashConfigReturnsLocalConfigResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/settings show", SlashOptions{UUID: "user_config"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultConfig || result.LocalResult.Value != "show" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_config" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/config</command-name>") || !strings.Contains(text, "<command-args>show</command-args>") {
+		t.Fatalf("config command message = %q", text)
+	}
+}
+
+func TestExecuteSlashPluginReturnsLocalPluginResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/plugin list", SlashOptions{UUID: "user_plugin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultPlugin || result.LocalResult.Value != "list" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_plugin" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/plugin</command-name>") || !strings.Contains(text, "<command-args>list</command-args>") {
+		t.Fatalf("plugin command message = %q", text)
+	}
+}
+
+func TestExecuteSlashMemoryReturnsLocalMemoryResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/memory status", SlashOptions{UUID: "user_memory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultMemory || result.LocalResult.Value != "status" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_memory" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/memory</command-name>") || !strings.Contains(text, "<command-args>status</command-args>") {
+		t.Fatalf("memory command message = %q", text)
 	}
 }
 

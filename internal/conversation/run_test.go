@@ -720,6 +720,175 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	cwd := t.TempDir()
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"model":"sonnet"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(cwd, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, ".claude", "settings.json"), []byte(`{"env":{"PROJECT":"1"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_config",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{
+			UserSettings: contracts.Settings{
+				Env: map[string]string{"USER_ENV": "1"},
+				MCPServers: map[string]contracts.MCPServer{
+					"alpha": {Command: "python"},
+				},
+			},
+			ProjectSettings: contracts.Settings{
+				Permissions: &contracts.PermissionsSetting{
+					Allow: []string{"Read"},
+					Deny:  []string{"Bash(rm *)"},
+					Ask:   []string{"Edit"},
+				},
+			},
+			LocalSettings: contracts.Settings{
+				Hooks: map[string]any{"PreToolUse": []any{}},
+			},
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Config",
+		"Working directory: " + cwd,
+		"Model: sonnet",
+		"- user: " + filepath.Join(configHome, "settings.json") + " (present)",
+		"- project: " + filepath.Join(cwd, ".claude", "settings.json") + " (present)",
+		"- env vars: 1",
+		"- MCP servers: 1",
+		"- permission rules: allow 1, deny 1, ask 1",
+		"- hooks: 1",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("config text missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{
+		Client:    client,
+		SessionID: "sess_plugin",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins:         map[string]any{"market/plugin": true},
+			PluginConfigs:          map[string]contracts.PluginConfig{"market/plugin": {Options: map[string]any{"flag": true}}},
+			Plugins:                map[string]any{"legacy": map[string]any{}},
+			ExtraKnownMarketplaces: map[string]any{"internal": map[string]any{}},
+			StrictKnownMarketplaces: []any{
+				"internal",
+			},
+			BlockedMarketplaces: []any{"blocked"},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugins",
+		"Enabled plugins: 1",
+		"Plugin configs: 1",
+		"Plugin settings entries: 1",
+		"Extra known marketplaces: 1",
+		"Strict known marketplaces: 1",
+		"Blocked marketplaces: 1",
+		"Registered plugin commands: 0",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin text missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerExecutesMemorySlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	sessionRoot := t.TempDir()
+	relevantRoot := t.TempDir()
+	if _, err := memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:      sessionRoot,
+		SessionID: "sess_old",
+		Summary:   "remember deployment flow",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(relevantRoot, "db.md"), []byte("database rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(relevantRoot, "notes.txt"), []byte("not memory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:                    client,
+		SessionID:                 "sess_memory",
+		SessionMemoryRoot:         sessionRoot,
+		RelevantMemoryDir:         relevantRoot,
+		EnableSessionMemoryRecall: true,
+		EnableMemoryExtraction:    true,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/memory status"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory",
+		"Session memory root: " + sessionRoot,
+		"Session summaries: 1",
+		"Relevant memory directory: " + relevantRoot,
+		"Relevant memory files: 1",
+		"Session memory recall: enabled",
+		"Turn-end memory extraction: enabled",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory text missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},

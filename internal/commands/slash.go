@@ -51,6 +51,9 @@ const (
 	LocalCommandResultModel   LocalCommandResultType = "model"
 	LocalCommandResultMCP     LocalCommandResultType = "mcp"
 	LocalCommandResultResume  LocalCommandResultType = "resume"
+	LocalCommandResultConfig  LocalCommandResultType = "config"
+	LocalCommandResultPlugin  LocalCommandResultType = "plugin"
+	LocalCommandResultMemory  LocalCommandResultType = "memory"
 )
 
 type LocalCommandResult struct {
@@ -190,8 +193,12 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	switch cmd.Name {
 	case "help":
 		return LocalCommandResult{Type: LocalCommandResultText, Value: formatHelpText(registry)}, true
+	case "config":
+		return LocalCommandResult{Type: LocalCommandResultConfig, Value: strings.TrimSpace(args)}, true
 	case "mcp":
 		return LocalCommandResult{Type: LocalCommandResultMCP, Value: strings.TrimSpace(args)}, true
+	case "plugin":
+		return LocalCommandResult{Type: LocalCommandResultPlugin, Value: strings.TrimSpace(args)}, true
 	case "clear":
 		return LocalCommandResult{Type: LocalCommandResultText}, true
 	case "compact":
@@ -206,6 +213,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultResume, Value: strings.TrimSpace(args)}, true
 	case "skills":
 		return LocalCommandResult{Type: LocalCommandResultText, Value: formatSkillsText(registry)}, true
+	case "memory":
+		return LocalCommandResult{Type: LocalCommandResultMemory, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}
