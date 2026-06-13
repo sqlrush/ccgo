@@ -685,6 +685,7 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 		SessionPath:      transcriptPath,
 		WorkingDirectory: "/tmp/project",
 		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			OutputStyle: "Explanatory",
 			MCPServers: map[string]contracts.MCPServer{
 				"zeta":  {Command: "node"},
 				"alpha": {Command: "python"},
@@ -710,6 +711,7 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 		"Session ID: sess_status",
 		"Working directory: /tmp/project",
 		"Model: sonnet",
+		"Output style: Explanatory",
 		"Tools: 1",
 		"MCP servers: alpha, zeta",
 	} {
@@ -747,7 +749,8 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 		WorkingDirectory: cwd,
 		MCP: &MCPConfig{
 			UserSettings: contracts.Settings{
-				Env: map[string]string{"USER_ENV": "1"},
+				OutputStyle: "Explanatory",
+				Env:         map[string]string{"USER_ENV": "1"},
 				MCPServers: map[string]contracts.MCPServer{
 					"alpha": {Command: "python"},
 				},
@@ -786,6 +789,7 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 		"- project: " + filepath.Join(cwd, ".claude", "settings.json") + " (present)",
 		"- env vars: 1",
 		"- MCP servers: 1",
+		"- output style: Explanatory",
 		"- permission rules: allow 1, deny 1, ask 1",
 		"- hooks: 1",
 	} {
@@ -2146,6 +2150,38 @@ func TestBuildRequestIncludesSystemPrompt(t *testing.T) {
 	}
 	if req.System != "Use terse answers." {
 		t.Fatalf("system = %#v", req.System)
+	}
+}
+
+func TestBuildRequestIncludesOutputStyleSystemSection(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	cwd := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cwd, ".claude", "output-styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, ".claude", "output-styles", "brief.md"), []byte("---\ndescription: Brief\n---\nUse short answers."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Model:            "sonnet",
+		MaxTokens:        100,
+		SystemPrompt:     "Base system.",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			OutputStyle: "brief",
+		}},
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	system, ok := req.System.(string)
+	if !ok {
+		t.Fatalf("system type = %#v", req.System)
+	}
+	if !strings.Contains(system, "Base system.\n\n# Output Style: brief\nUse short answers.") {
+		t.Fatalf("system = %q", system)
 	}
 }
 

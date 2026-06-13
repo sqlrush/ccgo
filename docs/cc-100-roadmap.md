@@ -120,6 +120,8 @@ M8 补充：本地 plugin skill discovery 现在支持默认 `skills/` 目录和
 
 M8 补充：本地 plugin output style discovery 现在支持默认 `output-styles/` 目录和 manifest `outputStyles` path/path-array 形态，递归加载 markdown output style metadata，并在 `/plugin list|status` headless summary 中只读展示；运行时 output style 切换、UI 面板、marketplace 来源和 plugin refresh lifecycle 仍未完成。
 
+M8 补充：output style 运行时基础已接入系统提示构建，支持内置 `Explanatory`/`Learning`、用户/项目 `.claude/output-styles/*.md`、本地 plugin output style 和 `force-for-plugin` 优先级；`/status`、`/config` 也会显示当前解析到的 output style。完整 TUI picker、settings 写回、managed policy 来源、状态栏附件和 prompt-cache 分类仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
@@ -1232,7 +1234,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - plugin manifest、marketplace、install/cache/update。
 - plugin hooks/agents/MCP。
 
-当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的只读 manifest discovery，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、`/help`/`/skills` UI、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP/output-style 运行时接线。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的只读 manifest discovery，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、`/help`/`/skills` UI、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP/output-style UI 接线。
 
 ### M9: MCP Platform
 

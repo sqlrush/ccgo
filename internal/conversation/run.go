@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
 	modelpkg "ccgo/internal/model"
+	"ccgo/internal/outputstyles"
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
 	"ccgo/internal/session"
@@ -460,10 +461,11 @@ func (r Runner) formatStatusSummary() string {
 		mcpText = strings.Join(mcpServers, ", ")
 	}
 	return fmt.Sprintf(
-		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nTools: %d\nMCP servers: %s",
+		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nOutput style: %s\nTools: %d\nMCP servers: %s",
 		sessionID,
 		cwd,
 		model,
+		r.effectiveOutputStyleName(),
 		toolCount,
 		mcpText,
 	)
@@ -491,6 +493,7 @@ func (r Runner) formatConfigSummary(raw string) string {
 		"Merged settings:",
 		fmt.Sprintf("- env vars: %d", len(merged.Env)),
 		fmt.Sprintf("- MCP servers: %d", len(merged.MCPServers)),
+		"- output style: " + r.effectiveOutputStyleName(),
 		"- permission rules: " + permissionsText,
 		fmt.Sprintf("- hooks: %d", len(merged.Hooks)),
 		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
@@ -633,6 +636,34 @@ func (r Runner) mergedSettings() contracts.Settings {
 		return contracts.Settings{}
 	}
 	return config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+}
+
+func (r Runner) systemPromptWithOutputStyle() string {
+	base := strings.TrimSpace(r.SystemPrompt)
+	style, ok := r.outputStyleConfig()
+	if !ok {
+		return base
+	}
+	section := outputstyles.Section(style)
+	if base == "" {
+		return section
+	}
+	return base + "\n\n" + section
+}
+
+func (r Runner) outputStyleConfig() (outputstyles.Config, bool) {
+	return outputstyles.Resolve(r.WorkingDirectory, r.mergedSettings(), r.outputStylePlugins())
+}
+
+func (r Runner) effectiveOutputStyleName() string {
+	return outputstyles.EffectiveName(r.WorkingDirectory, r.mergedSettings(), r.outputStylePlugins())
+}
+
+func (r Runner) outputStylePlugins() []pluginpkg.LoadedPlugin {
+	if strings.TrimSpace(r.WorkingDirectory) == "" {
+		return nil
+	}
+	return pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
 }
 
 func settingsPermissionsSummary(setting *contracts.PermissionsSetting) string {
