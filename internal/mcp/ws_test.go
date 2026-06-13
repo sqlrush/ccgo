@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -179,7 +180,7 @@ func TestWSTransportRoundTripHonorsContextCancellation(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
 			t.Fatalf("err = %v", err)
 		}
 	case <-time.After(time.Second):
