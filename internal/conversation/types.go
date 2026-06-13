@@ -106,6 +106,7 @@ type Result struct {
 	ModelsAttempt []string
 	Compacted     bool
 	Compact       *compactpkg.Result
+	Cleared       bool
 }
 
 func (r Runner) maxTokens() int {

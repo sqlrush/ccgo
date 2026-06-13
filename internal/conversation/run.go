@@ -56,6 +56,10 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	}
 	result := Result{Messages: append([]contracts.Message(nil), initialMessages...)}
 	if !shouldQuery {
+		if localResult != nil && localResult.Type == commands.LocalCommandResultClear {
+			result.Cleared = true
+			return result, nil
+		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultCompact {
 			startedAt := time.Now()
 			compactResult, err := r.manualCompact(ctx, originalHistory, localResult.Value)

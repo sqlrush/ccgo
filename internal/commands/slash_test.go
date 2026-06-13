@@ -130,7 +130,7 @@ func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
 	}
 }
 
-func TestExecuteSlashClearReturnsLocalTextResult(t *testing.T) {
+func TestExecuteSlashClearReturnsLocalClearResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/clear", SlashOptions{UUID: "user_clear"})
 	if err != nil {
@@ -139,7 +139,7 @@ func TestExecuteSlashClearReturnsLocalTextResult(t *testing.T) {
 	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
 		t.Fatalf("handled=%v result=%#v", handled, result)
 	}
-	if result.LocalResult.Type != LocalCommandResultText || result.LocalResult.Value != "" {
+	if result.LocalResult.Type != LocalCommandResultClear || result.LocalResult.Value != "" {
 		t.Fatalf("local result = %#v", result.LocalResult)
 	}
 	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_clear" {

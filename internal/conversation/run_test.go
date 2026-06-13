@@ -497,6 +497,9 @@ func TestRunnerExecutesClearSlashCommandWithoutQuery(t *testing.T) {
 	if result.FinalRequest.Model != "" || result.Assistant.Type != "" {
 		t.Fatalf("unexpected model result = %#v", result)
 	}
+	if !result.Cleared {
+		t.Fatalf("clear result did not set Cleared: %#v", result)
+	}
 	if len(result.Messages) != 1 {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}

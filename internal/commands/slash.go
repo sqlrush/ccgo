@@ -45,6 +45,7 @@ type LocalCommandResultType string
 const (
 	LocalCommandResultText    LocalCommandResultType = "text"
 	LocalCommandResultSkip    LocalCommandResultType = "skip"
+	LocalCommandResultClear   LocalCommandResultType = "clear"
 	LocalCommandResultCompact LocalCommandResultType = "compact"
 	LocalCommandResultCost    LocalCommandResultType = "cost"
 	LocalCommandResultStatus  LocalCommandResultType = "status"
@@ -200,7 +201,7 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	case "plugin":
 		return LocalCommandResult{Type: LocalCommandResultPlugin, Value: strings.TrimSpace(args)}, true
 	case "clear":
-		return LocalCommandResult{Type: LocalCommandResultText}, true
+		return LocalCommandResult{Type: LocalCommandResultClear}, true
 	case "compact":
 		return LocalCommandResult{Type: LocalCommandResultCompact, Value: strings.TrimSpace(args)}, true
 	case "cost":
