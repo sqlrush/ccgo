@@ -134,6 +134,8 @@ M8/CLI 补充：stream-json init event 的 `mcp_servers` 现在输出只读 stat
 
 M8/CLI 补充：stream-json init 的 MCP status object 现在也会保留被 allow/deny policy 阻断的 server，并以 `status: "blocked"` 和 reason 暴露阻断原因，避免 headless 客户端把配置丢失误判为空。
 
+M4/M8 补充：headless CLI 认证现在在环境变量缺失时会读取 `${CLAUDE_CONFIG_DIR}/credentials.json` 的 OAuth 凭据，并用 stored access token 发起 Anthropic 请求；OAuth refresh 持久化复用现有 credential store。完整登录/账号 profile/org 展示仍待补齐。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

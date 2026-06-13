@@ -708,12 +708,18 @@ func resolveCLIModel(flagValue string, mcpConfig *conversation.MCPConfig) string
 }
 
 func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, string, error) {
-	credentials := auth.FromEnv()
+	credentials, credentialStore, err := credentialsFromEnvOrStore(ctx)
+	if err != nil {
+		return nil, "", err
+	}
 	if credentials.Source == auth.SourceNone {
 		return nil, "", fmt.Errorf("missing Anthropic credentials; set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_REFRESH_TOKEN")
 	}
 	if credentials.Source == auth.SourceOAuth && strings.TrimSpace(credentials.AccessToken) == "" && strings.TrimSpace(credentials.RefreshToken) != "" {
-		provider := auth.NewOAuthTokenProvider(auth.OAuthTokenProviderOptions{Credentials: credentials})
+		provider := auth.NewOAuthTokenProvider(auth.OAuthTokenProviderOptions{
+			Credentials:     credentials,
+			CredentialStore: credentialStore,
+		})
 		token, err := provider.CurrentAccessToken(ctx)
 		if err != nil {
 			return nil, "", err
@@ -734,6 +740,22 @@ func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, string, err
 		options = append(options, anthropic.WithBeta(beta...))
 	}
 	return anthropic.NewClient(options...), string(credentials.Source), nil
+}
+
+func credentialsFromEnvOrStore(ctx context.Context) (auth.Credentials, auth.CredentialStore, error) {
+	credentials := auth.FromEnv()
+	if credentials.Source != auth.SourceNone {
+		return credentials, nil, nil
+	}
+	store := auth.NewFileCredentialStore("")
+	stored, err := store.Load(ctx)
+	if err != nil {
+		return auth.Credentials{}, nil, err
+	}
+	if stored.Source == auth.SourceNone {
+		return stored, nil, nil
+	}
+	return stored, store, nil
 }
 
 func splitEnvList(value string) []string {
