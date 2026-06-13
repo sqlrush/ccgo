@@ -111,14 +111,14 @@ func TestExecuteSlashNonCommandPathFallsThrough(t *testing.T) {
 
 func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
-	result, handled, err := ExecuteSlashCommand(registry, "/status now", SlashOptions{UUID: "user_status"})
+	result, handled, err := ExecuteSlashCommand(registry, "/model opus", SlashOptions{UUID: "user_model"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !handled || result.ShouldQuery || !result.Unsupported {
 		t.Fatalf("handled=%v result=%#v", handled, result)
 	}
-	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_status" {
+	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_model" {
 		t.Fatalf("messages = %#v", result.Messages)
 	}
 	if !strings.Contains(result.Messages[1].Content[0].Text, "<local-command-stderr>") {
@@ -184,5 +184,25 @@ func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 	}
 	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/cost</command-name>") {
 		t.Fatalf("cost command message = %q", text)
+	}
+}
+
+func TestExecuteSlashStatusReturnsLocalStatusResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/status", SlashOptions{UUID: "user_status"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultStatus {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_status" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/status</command-name>") {
+		t.Fatalf("status command message = %q", text)
 	}
 }

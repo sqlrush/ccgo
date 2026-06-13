@@ -657,6 +657,69 @@ func TestRunnerCostSlashCommandReportsMissingUsage(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{Name: "Read", InputSchema: contracts.JSONSchema{"type": "object"}},
+		CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
+			t.Fatal("status should not call tools")
+			return contracts.ToolResult{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_status",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: "/tmp/project",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"zeta":  {Command: "node"},
+				"alpha": {Command: "python"},
+			},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("/status"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Status",
+		"Session ID: sess_status",
+		"Working directory: /tmp/project",
+		"Model: sonnet",
+		"Tools: 1",
+		"MCP servers: alpha, zeta",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("status text missing %q: %q", want, text)
+		}
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || !strings.Contains(entries[1].Message.Content[0].Text, "Session ID: sess_status") {
+		t.Fatalf("transcript entries = %#v", entries)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

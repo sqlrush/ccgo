@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
@@ -60,17 +63,10 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			return result, nil
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultCost {
-			costMessage := msgs.UserText(formatCostSummary(originalHistory))
-			if r.SessionID != "" {
-				costMessage.SessionID = r.SessionID
-			}
-			history, costMessage = appendMessage(history, costMessage)
-			result.Messages = append(result.Messages, costMessage)
-			if err := r.appendTranscript(costMessage); err != nil {
-				return result, err
-			}
-			r.emit(Event{Type: EventUserMessage, Message: &costMessage})
-			return result, nil
+			return r.appendLocalTextResult(result, history, formatCostSummary(originalHistory))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultStatus {
+			return r.appendLocalTextResult(result, history, r.formatStatusSummary())
 		}
 		return result, nil
 	}
@@ -348,6 +344,20 @@ func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, 
 	return result, nil
 }
 
+func (r Runner) appendLocalTextResult(result Result, history []contracts.Message, text string) (Result, error) {
+	message := msgs.UserText(text)
+	if r.SessionID != "" {
+		message.SessionID = r.SessionID
+	}
+	history, message = appendMessage(history, message)
+	result.Messages = append(result.Messages, message)
+	if err := r.appendTranscript(message); err != nil {
+		return result, err
+	}
+	r.emit(Event{Type: EventUserMessage, Message: &message})
+	return result, nil
+}
+
 func formatCostSummary(history []contracts.Message) string {
 	usage, found := historyUsage(history)
 	if !found {
@@ -390,6 +400,48 @@ func usageHasValues(usage contracts.Usage) bool {
 		usage.CacheCreation.Ephemeral5mInputTokens != 0 ||
 		usage.Iterations != 0 ||
 		usage.CostUSD != 0
+}
+
+func (r Runner) formatStatusSummary() string {
+	model := r.model()
+	cwd := strings.TrimSpace(r.WorkingDirectory)
+	if cwd == "" {
+		cwd = "(unknown)"
+	}
+	sessionID := string(r.SessionID)
+	if sessionID == "" {
+		sessionID = "(none)"
+	}
+	toolCount := 0
+	if r.Tools.Registry != nil {
+		toolCount = len(r.Tools.Registry.Names())
+	}
+	mcpServers := r.mcpServerNames()
+	mcpText := "none"
+	if len(mcpServers) > 0 {
+		mcpText = strings.Join(mcpServers, ", ")
+	}
+	return fmt.Sprintf(
+		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nTools: %d\nMCP servers: %s",
+		sessionID,
+		cwd,
+		model,
+		toolCount,
+		mcpText,
+	)
+}
+
+func (r Runner) mcpServerNames() []string {
+	if r.MCP == nil {
+		return nil
+	}
+	merged := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+	names := make([]string, 0, len(merged.MCPServers))
+	for name := range merged.MCPServers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {

@@ -82,6 +82,8 @@ M8 补充：`/compact` built-in local command 现在会产生 compact local resu
 
 M8 补充：`/cost` built-in local command 现在会在 conversation runner 中按当前 history 的 message usage 汇总 total cost、input/output/cache token 和 web search/fetch 请求数，作为 local text result 写入 result/transcript，且不会请求模型或打开 MCP；完整 TUI cost panel、session duration 和 account/billing 细节仍未完成。
 
+M8 补充：`/status` built-in local-jsx command 现在在 headless/local runner 中返回基础 status text，包含 session id、working directory、model、tool count 和 settings-derived MCP server list，写入 result/transcript 且不会请求模型；完整 TUI status panel、account/API connectivity、tool health 和插件状态仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
