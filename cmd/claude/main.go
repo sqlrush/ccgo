@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
 	"ccgo/internal/permissions"
@@ -784,7 +785,7 @@ type printStreamEvent struct {
 	SessionID      contracts.ID               `json:"session_id,omitempty"`
 	CWD            string                     `json:"cwd,omitempty"`
 	Tools          []string                   `json:"tools,omitempty"`
-	MCPServers     []string                   `json:"mcp_servers,omitempty"`
+	MCPServers     []printStreamMCPServer     `json:"mcp_servers,omitempty"`
 	SlashCommands  []string                   `json:"slash_commands,omitempty"`
 	Agents         []string                   `json:"agents,omitempty"`
 	Skills         []string                   `json:"skills,omitempty"`
@@ -814,6 +815,15 @@ type printStreamPlugin struct {
 	Source string `json:"source"`
 }
 
+type printStreamMCPServer struct {
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Type         string `json:"type,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+	Source       string `json:"source,omitempty"`
+	PluginSource string `json:"plugin_source,omitempty"`
+}
+
 func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
@@ -823,7 +833,7 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 		SessionID:      runner.SessionID,
 		CWD:            runner.WorkingDirectory,
 		Tools:          runnerToolNames(runner),
-		MCPServers:     runnerMCPServerNames(runner),
+		MCPServers:     runnerMCPServerSummaries(runner),
 		SlashCommands:  runnerSlashCommandNames(runner),
 		Agents:         runnerAgentNames(runner),
 		Skills:         runnerSkillNames(runner),
@@ -852,17 +862,76 @@ func runnerToolNames(runner conversation.Runner) []string {
 	return runner.Tools.Registry.Names()
 }
 
-func runnerMCPServerNames(runner conversation.Runner) []string {
+func runnerMCPServerSummaries(runner conversation.Runner) []printStreamMCPServer {
 	if runner.MCP == nil {
 		return nil
 	}
-	merged := config.MergeSettings(runner.MCP.UserSettings, runner.MCP.ProjectSettings, runner.MCP.LocalSettings)
-	names := make([]string, 0, len(merged.MCPServers))
-	for name := range merged.MCPServers {
+	servers := runnerMCPConfiguredServers(runner.MCP)
+	names := make([]string, 0, len(servers))
+	for name := range servers {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	return names
+	out := make([]printStreamMCPServer, 0, len(names))
+	for _, name := range names {
+		server := servers[name]
+		source := server.Scope
+		if server.PluginSource != "" {
+			source = "plugin"
+		}
+		out = append(out, printStreamMCPServer{
+			Name:         name,
+			Status:       "configured",
+			Type:         mcp.Transport(server),
+			Scope:        server.Scope,
+			Source:       source,
+			PluginSource: server.PluginSource,
+		})
+	}
+	return out
+}
+
+func runnerMCPConfiguredServers(config *conversation.MCPConfig) map[string]contracts.MCPServer {
+	if config == nil {
+		return nil
+	}
+	user := loadMCPServersForInit(config.UserSettings, mcp.ScopeUser, config.ParseOptions)
+	project := loadMCPServersForInit(config.ProjectSettings, mcp.ScopeProject, config.ParseOptions)
+	local := loadMCPServersForInit(config.LocalSettings, mcp.ScopeLocal, config.ParseOptions)
+	if config.CWD != "" {
+		if chain, err := mcp.LoadProjectConfigChain(config.CWD, config.ParseOptions); err == nil {
+			project = mcp.MergeServers(project, chain.Servers)
+		}
+	}
+	policySettings := mergeMCPPolicySettingsForInit(config.UserSettings, config.ProjectSettings, config.LocalSettings)
+	merged := mcp.MergeManualConfigSources(mcp.ManualConfigSources{
+		User:    user,
+		Project: project,
+		Local:   local,
+		Plugin:  config.PluginServers,
+		Policy:  mcp.PolicyFromSettings(policySettings),
+	})
+	return merged.Servers
+}
+
+func loadMCPServersForInit(settings contracts.Settings, scope string, options mcp.ParseOptions) map[string]contracts.MCPServer {
+	result, err := mcp.LoadSettingsServers(settings, scope, options)
+	if err != nil {
+		return nil
+	}
+	return result.Servers
+}
+
+func mergeMCPPolicySettingsForInit(settings ...contracts.Settings) contracts.Settings {
+	var out contracts.Settings
+	for _, setting := range settings {
+		if setting.AllowedMCPServers != nil && out.AllowedMCPServers == nil {
+			out.AllowedMCPServers = []contracts.MCPServerPolicyEntry{}
+		}
+		out.AllowedMCPServers = append(out.AllowedMCPServers, setting.AllowedMCPServers...)
+		out.DeniedMCPServers = append(out.DeniedMCPServers, setting.DeniedMCPServers...)
+	}
+	return out
 }
 
 func runnerSlashCommandNames(runner conversation.Runner) []string {

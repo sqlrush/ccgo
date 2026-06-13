@@ -1012,7 +1012,7 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	t.Setenv("ANTHROPIC_BETA", "beta-one beta-two,beta-one")
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
-	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory","fastMode":true,"permissions":{"defaultMode":"plan"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory","fastMode":true,"permissions":{"defaultMode":"plan"},"mcpServers":{"docs":{"type":"http","url":"https://docs.example/mcp"}}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	project := t.TempDir()
@@ -1092,6 +1092,10 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	plugins, ok := events[0]["plugins"].([]any)
 	if !ok || !containsPluginSummary(plugins, "demo", expectedPluginRoot, "local") {
 		t.Fatalf("init plugins = %#v", events[0]["plugins"])
+	}
+	mcpServers, ok := events[0]["mcp_servers"].([]any)
+	if !ok || !containsMCPServerSummary(mcpServers, "docs", "configured", "http", "user", "user", "") {
+		t.Fatalf("init mcp servers = %#v", events[0]["mcp_servers"])
 	}
 	tools, ok := events[0]["tools"].([]any)
 	if !ok || len(tools) == 0 {
@@ -1285,7 +1289,7 @@ func TestRunPrintStreamJSONIncludesRawStreamingEvents(t *testing.T) {
 	}
 }
 
-func TestRunnerMCPServerNamesMergesSettings(t *testing.T) {
+func TestRunnerMCPServerSummariesMergesSettingsAndPluginServers(t *testing.T) {
 	runner := conversation.Runner{MCP: &conversation.MCPConfig{
 		UserSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
 			"zeta": {Command: "user"},
@@ -1296,11 +1300,25 @@ func TestRunnerMCPServerNamesMergesSettings(t *testing.T) {
 		LocalSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
 			"beta": {Command: "local"},
 		}},
+		PluginServers: map[string]contracts.MCPServer{
+			"plugin:docs": {Type: "http", URL: "https://example.com/mcp", PluginSource: "demo"},
+		},
 	}}
-	got := runnerMCPServerNames(runner)
-	want := []string{"alpha", "beta", "zeta"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("names = %#v", got)
+	got := runnerMCPServerSummaries(runner)
+	if len(got) != 4 {
+		t.Fatalf("summaries = %#v", got)
+	}
+	if got[0].Name != "alpha" || got[0].Status != "configured" || got[0].Type != "stdio" || got[0].Scope != "project" || got[0].Source != "project" {
+		t.Fatalf("alpha = %#v", got[0])
+	}
+	if got[1].Name != "beta" || got[1].Scope != "local" || got[1].Source != "local" {
+		t.Fatalf("beta = %#v", got[1])
+	}
+	if got[2].Name != "plugin:docs" || got[2].Type != "http" || got[2].Source != "plugin" || got[2].PluginSource != "demo" {
+		t.Fatalf("plugin = %#v", got[2])
+	}
+	if got[3].Name != "zeta" || got[3].Scope != "user" || got[3].Source != "user" {
+		t.Fatalf("zeta = %#v", got[3])
 	}
 }
 
@@ -1695,6 +1713,23 @@ func containsPluginSummary(values []any, name string, path string, source string
 		if object["name"] == name && object["path"] == path && object["source"] == source {
 			return true
 		}
+	}
+	return false
+}
+
+func containsMCPServerSummary(values []any, name string, status string, typ string, scope string, source string, pluginSource string) bool {
+	for _, value := range values {
+		object, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if object["name"] != name || object["status"] != status || object["type"] != typ || object["scope"] != scope || object["source"] != source {
+			continue
+		}
+		if pluginSource != "" && object["plugin_source"] != pluginSource {
+			continue
+		}
+		return true
 	}
 	return false
 }

@@ -130,6 +130,8 @@ M8/CLI 补充：stream-json init event 继续补齐 slash command、skill、agen
 
 M8/CLI 补充：stream-json init event 现在会暴露当前 permission mode、API key source、ANTHROPIC_BETA 去重列表和 settings-derived fast mode，使 headless/SDK 客户端能渲染基础运行状态；完整账户 profile/org 详情和 MCP server status object 仍待补齐。
 
+M8/CLI 补充：stream-json init event 的 `mcp_servers` 现在输出只读 status object，包含 name、configured status、transport type、scope/source 和 plugin_source，并复用 settings/project-chain/plugin/policy 合并结果；真实连接中/已连接/失败的运行时状态仍需和 MCP lifecycle 接线。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
