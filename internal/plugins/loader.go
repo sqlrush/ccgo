@@ -31,6 +31,14 @@ type PluginHookEvent struct {
 	Count int
 }
 
+type PluginOutputStyle struct {
+	Name           string
+	Path           string
+	Description    string
+	Prompt         string
+	ForceForPlugin *bool
+}
+
 type LoadedPlugin struct {
 	Root            string
 	Name            string
@@ -42,6 +50,7 @@ type LoadedPlugin struct {
 	MCPServers      map[string]contracts.MCPServer
 	Agents          []PluginAgent
 	HookEvents      []PluginHookEvent
+	OutputStyles    []PluginOutputStyle
 }
 
 type manifest struct {
@@ -53,6 +62,7 @@ type manifest struct {
 	Skills          any    `json:"skills"`
 	Agents          any    `json:"agents"`
 	Hooks           any    `json:"hooks"`
+	OutputStyles    any    `json:"outputStyles"`
 	MCPServers      any    `json:"mcpServers"`
 	MCPServersSnake any    `json:"mcp_servers"`
 }
@@ -138,6 +148,7 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 	loaded.MCPServers = pluginMCPServers(root, name, parsed.MCPServers, parsed.MCPServersSnake)
 	loaded.Agents = pluginAgents(root, name, parsed.Agents)
 	loaded.HookEvents = pluginHookEvents(root, parsed.Hooks)
+	loaded.OutputStyles = pluginOutputStyles(root, name, parsed.OutputStyles)
 	return loaded, nil
 }
 
@@ -731,6 +742,93 @@ func pluginAgents(root string, pluginName string, manifestAgents any) []PluginAg
 	return out
 }
 
+func pluginOutputStyles(root string, pluginName string, raw any) []PluginOutputStyle {
+	seen := map[string]struct{}{}
+	if raw == nil {
+		return loadPluginOutputStylesFromPath(filepath.Join(root, "output-styles"), pluginName, seen)
+	}
+	var out []PluginOutputStyle
+	for _, path := range manifestPathSpecs(raw) {
+		out = append(out, loadPluginOutputStylesFromPath(safeJoin(root, path), pluginName, seen)...)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Name == out[j].Name {
+			return out[i].Path < out[j].Path
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func loadPluginOutputStylesFromPath(path string, pluginName string, seen map[string]struct{}) []PluginOutputStyle {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	if info.IsDir() {
+		return loadPluginOutputStylesFromDir(path, pluginName, seen)
+	}
+	if !strings.EqualFold(filepath.Ext(path), ".md") {
+		return nil
+	}
+	style, ok := loadPluginOutputStyleFile(path, pluginName, seen)
+	if !ok {
+		return nil
+	}
+	return []PluginOutputStyle{style}
+}
+
+func loadPluginOutputStylesFromDir(dir string, pluginName string, seen map[string]struct{}) []PluginOutputStyle {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+	var out []PluginOutputStyle
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			out = append(out, loadPluginOutputStylesFromDir(path, pluginName, seen)...)
+			continue
+		}
+		if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			continue
+		}
+		style, ok := loadPluginOutputStyleFile(path, pluginName, seen)
+		if ok {
+			out = append(out, style)
+		}
+	}
+	return out
+}
+
+func loadPluginOutputStyleFile(path string, pluginName string, seen map[string]struct{}) (PluginOutputStyle, bool) {
+	key := normalizePath(path)
+	if _, ok := seen[key]; ok {
+		return PluginOutputStyle{}, false
+	}
+	seen[key] = struct{}{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return PluginOutputStyle{}, false
+	}
+	frontmatter, body := memory.ParseFrontmatter(string(data))
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	name := firstNonEmpty(frontmatter["name"], base)
+	if !strings.Contains(name, ":") {
+		name = pluginName + ":" + name
+	}
+	return PluginOutputStyle{
+		Name:           name,
+		Path:           path,
+		Description:    firstNonEmpty(frontmatter["description"], extractFirstMarkdownLine(body), "Output style from "+pluginName+" plugin"),
+		Prompt:         strings.TrimSpace(body),
+		ForceForPlugin: parseOptionalBool(frontmatter["force-for-plugin"]),
+	}, true
+}
+
 func manifestAgentPaths(raw any) []string {
 	switch value := raw.(type) {
 	case string:
@@ -1030,6 +1128,25 @@ func compactStrings(values []string) []string {
 	return out
 }
 
+func manifestPathSpecs(raw any) []string {
+	switch value := raw.(type) {
+	case string:
+		return compactStrings([]string{value})
+	case []any:
+		var out []string
+		for _, item := range value {
+			if text, ok := item.(string); ok {
+				out = append(out, text)
+			}
+		}
+		return compactStrings(out)
+	case []string:
+		return compactStrings(value)
+	default:
+		return nil
+	}
+}
+
 func parseFrontmatterWords(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -1047,6 +1164,19 @@ func parseFrontmatterWords(raw string) []string {
 func parseFrontmatterFalse(raw string) bool {
 	raw = strings.TrimSpace(strings.ToLower(raw))
 	return raw == "false" || raw == "0" || raw == "no" || raw == "off"
+}
+
+func parseOptionalBool(raw string) *bool {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "true", "1", "yes", "on":
+		value := true
+		return &value
+	case "false", "0", "no", "off":
+		value := false
+		return &value
+	default:
+		return nil
+	}
 }
 
 func parsePluginCommandModel(raw string) string {

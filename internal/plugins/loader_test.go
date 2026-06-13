@@ -321,3 +321,56 @@ func TestLoadPluginDirLoadsDefaultAndManifestSkillDirectories(t *testing.T) {
 		t.Fatalf("manifest skill names = %#v %#v", plugin.PromptTemplates[0].Command, plugin.PromptTemplates[1].Command)
 	}
 }
+
+func TestLoadPluginDirLoadsOutputStyles(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "demo")
+	if err := os.MkdirAll(filepath.Join(root, "output-styles", "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "output-styles", "concise.md"), []byte("---\ndescription: Concise style\nforce-for-plugin: true\n---\nBe concise."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "output-styles", "nested", "named.md"), []byte("---\nname: Formal\n---\n# Formal style\nBe formal."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ManifestFileName), []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := LoadPluginDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.OutputStyles) != 2 {
+		t.Fatalf("output styles = %#v", plugin.OutputStyles)
+	}
+	if plugin.OutputStyles[0].Name != "demo:concise" || plugin.OutputStyles[0].Description != "Concise style" || plugin.OutputStyles[0].ForceForPlugin == nil || !*plugin.OutputStyles[0].ForceForPlugin {
+		t.Fatalf("concise style = %#v", plugin.OutputStyles[0])
+	}
+	if plugin.OutputStyles[1].Name != "demo:Formal" || plugin.OutputStyles[1].Description != "Formal style" {
+		t.Fatalf("formal style = %#v", plugin.OutputStyles[1])
+	}
+
+	overrideRoot := filepath.Join(t.TempDir(), "override")
+	if err := os.MkdirAll(filepath.Join(overrideRoot, "output-styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "output-styles", "ignored.md"), []byte("Ignored."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(overrideRoot, "styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, "styles", "focused.md"), []byte("---\ndescription: Focused style\n---\nFocus."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overrideRoot, ManifestFileName), []byte(`{"name":"demo","outputStyles":["styles"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err = LoadPluginDir(overrideRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.OutputStyles) != 1 || plugin.OutputStyles[0].Name != "demo:focused" {
+		t.Fatalf("manifest output styles = %#v", plugin.OutputStyles)
+	}
+}

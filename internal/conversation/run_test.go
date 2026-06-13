@@ -831,6 +831,12 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(pluginDir, "skills", "audit", "SKILL.md"), []byte("---\ndescription: Audit code\n---\nAudit."), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "output-styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "output-styles", "brief.md"), []byte("---\ndescription: Brief style\n---\nBrief."), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
 		"name": "demo",
 		"version": "1.2.3",
@@ -887,6 +893,7 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"Plugin skills: 1",
 		"Plugin agents: 1",
 		"Plugin MCP servers: 1",
+		"Plugin output styles: 1",
 		"Plugin hooks: 1",
 		"Local plugins:",
 		"- demo@1.2.3",
@@ -898,6 +905,8 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"- demo:reviewer",
 		"Plugin MCP servers:",
 		"- plugin:docs",
+		"Plugin output styles:",
+		"- demo:brief",
 		"Plugin hook events:",
 		"- PreToolUse (1)",
 	} {
