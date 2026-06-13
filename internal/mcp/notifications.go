@@ -24,6 +24,24 @@ type NotificationEvent struct {
 	Params        map[string]any `json:"params,omitempty"`
 }
 
+type NotificationEventHandler func(NotificationEvent)
+
+func NotificationEventRPCHandler(serverName string, handler NotificationEventHandler) RPCNotificationHandler {
+	if handler == nil {
+		return nil
+	}
+	return func(notification RPCNotification) {
+		handler(NormalizeNotification(serverName, notification))
+	}
+}
+
+func (c *ProtocolClient) SetNotificationEventHandler(serverName string, handler NotificationEventHandler) {
+	if c == nil {
+		return
+	}
+	c.SetNotificationHandler(NotificationEventRPCHandler(serverName, handler))
+}
+
 func NormalizeNotification(serverName string, notification RPCNotification) NotificationEvent {
 	params := rawParamMap(notification.Params)
 	channel, operation, eventType := canonicalNotificationMethod(notification.Method)

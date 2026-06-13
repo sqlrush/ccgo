@@ -457,6 +457,49 @@ func TestProtocolClientCapturesTransportNotifications(t *testing.T) {
 	}
 }
 
+func TestProtocolClientNotificationEventHandlerSurface(t *testing.T) {
+	reader := strings.NewReader(
+		`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"tok_1","progress":3,"total":9,"message":"working"}}` + "\n" +
+			`{"jsonrpc":"2.0","id":"1","result":{"tools":[]}}` + "\n",
+	)
+	transport := NewStdioTransport(reader, &bytes.Buffer{})
+	client := NewProtocolClient(transport)
+	var events []NotificationEvent
+	client.SetNotificationEventHandler("runner", func(event NotificationEvent) {
+		events = append(events, event)
+	})
+
+	tools, err := client.ListTools(context.Background(), "stdio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 0 {
+		t.Fatalf("tools = %#v", tools)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %#v", events)
+	}
+	event := events[0]
+	if event.ServerName != "runner" || event.Type != "progress" || event.ProgressToken != "tok_1" || event.Message != "working" {
+		t.Fatalf("event = %#v", event)
+	}
+	if event.Progress == nil || *event.Progress != 3 || event.Total == nil || *event.Total != 9 {
+		t.Fatalf("event progress = %#v", event)
+	}
+	if notifications := client.Notifications(); len(notifications) != 1 || notifications[0].Method != "notifications/progress" {
+		t.Fatalf("notifications = %#v", notifications)
+	}
+
+	if NotificationEventRPCHandler("runner", nil) != nil {
+		t.Fatal("nil notification event handler should not install an RPC handler")
+	}
+	client.SetNotificationEventHandler("runner", nil)
+	client.handleNotification(RPCNotification{Method: "notifications/message"})
+	if notifications := client.Notifications(); len(notifications) != 2 {
+		t.Fatalf("notifications after nil handler = %#v", notifications)
+	}
+}
+
 func TestNormalizeNotificationEvents(t *testing.T) {
 	progress := NormalizeNotification("runner", RPCNotification{
 		Method: "notifications/progress",
