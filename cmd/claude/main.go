@@ -187,7 +187,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
-		if err := writePrintResult(stdout, result, normalizedOutputFormat, time.Since(startedAt)); err != nil {
+		if err := writePrintResult(stdout, runner, result, normalizedOutputFormat, time.Since(startedAt)); err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -838,7 +838,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 	return encoder.Encode(out)
 }
 
-func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat string, duration time.Duration) error {
+func writePrintResult(stdout io.Writer, runner conversation.Runner, result conversation.Result, outputFormat string, duration time.Duration) error {
 	text := resultOutputText(result)
 	if text == "" {
 		if (outputFormat != "json" && outputFormat != "stream-json") || !result.Cleared {
@@ -846,7 +846,7 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 		}
 	}
 	if outputFormat == "json" || outputFormat == "stream-json" {
-		return writePrintJSONResult(stdout, result, text, duration)
+		return writePrintJSONResult(stdout, result, text, duration, runner.Model)
 	}
 	if _, err := fmt.Fprint(stdout, text); err != nil {
 		return err
@@ -920,7 +920,7 @@ func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err err
 	})
 }
 
-func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string, duration time.Duration) error {
+func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string, duration time.Duration, modelFallback string) error {
 	message := result.Assistant
 	var messagePtr *contracts.Message
 	if message.Type != "" {
@@ -939,6 +939,10 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 	if usage == nil && hasUsage(result.Usage) {
 		usage = &result.Usage
 	}
+	model := message.Model
+	if model == "" {
+		model = strings.TrimSpace(modelFallback)
+	}
 	envelope := printJSONResult{
 		Type:        "result",
 		Subtype:     "success",
@@ -951,7 +955,7 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Result:      text,
 		Message:     messagePtr,
 		StopReason:  result.StopReason,
-		Model:       message.Model,
+		Model:       model,
 		Usage:       usage,
 		ToolResults: result.ToolResults,
 		Cleared:     result.Cleared,

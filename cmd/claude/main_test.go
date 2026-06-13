@@ -932,6 +932,28 @@ func TestRunPrintTextLocalTextResult(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONModelCommandIncludesSelectedModel(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "/model opus"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["model"] != "claude-opus-4-6" || !strings.Contains(fmt.Sprint(payload["result"]), "Selected model: claude-opus-4-6") {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
 func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
@@ -1087,7 +1109,7 @@ func TestWritePrintJSONResultIncludesCompactMetadata(t *testing.T) {
 		Compact:   &compactpkg.Result{Plan: plan},
 	}
 	var stdout bytes.Buffer
-	if err := writePrintJSONResult(&stdout, result, messages.TextContent(plan.Summary), 10); err != nil {
+	if err := writePrintJSONResult(&stdout, result, messages.TextContent(plan.Summary), 10, "sonnet"); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any

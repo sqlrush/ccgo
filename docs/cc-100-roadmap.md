@@ -84,6 +84,8 @@ M8/CLI 补充：`--print --output-format json|stream-json` 现在会为 `/clear`
 
 M8/CLI 补充：`--print` 输出选择现在支持本地文本 slash result：当没有 assistant message 时，会从 result messages 尾部选择最后一个非 command-metadata 文本作为 stdout/JSON `result`，使 `/status`、`/cost`、`/config` 等 headless local command 在 CLI 中可见；普通 assistant 输出优先级不变。
 
+M8/CLI 补充：final JSON/stream-json result envelope 现在会在没有 assistant message 的本地命令结果中使用 runner 当前模型作为 `model` fallback，使 `/model opus` 这类 headless local command 能在结构化输出里暴露选中的模型；assistant response model 仍保持优先。
+
 M6/CLI 补充：final JSON/stream-json result envelope 现在会在发生 manual/auto compact 时输出 `compacted: true`，并用轻量 `compact` metadata 暴露 trigger、pre_tokens、user_context 和 messages_summarized；避免把完整 compact request/response 历史放进最终 JSON。
 
 M8 补充：`/compact` built-in local command 现在会产生 compact local result，并在 conversation runner 中触发现有手动 compact runner；命令 metadata 会写入 transcript，但摘要输入使用命令前 history，compact boundary/summary、session memory 和 compact event 复用现有 compact pipeline。完整 TUI compact UI、progress/status 展示和 `/cost`/`/status` 仍未完成。
