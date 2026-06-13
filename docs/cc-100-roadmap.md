@@ -126,6 +126,8 @@ M8/CLI 补充：`--output-format stream-json` 的 init event 现在会暴露 `ou
 
 M8 补充：补齐 deprecated `/output-style` built-in local-jsx 命令，当前会返回迁移到 `/config` 或 settings 文件的提示且不请求模型；完整 output style picker/settings 写回仍走 `/config` 缺口。
 
+M8/CLI 补充：stream-json init event 继续补齐 slash command、skill、agent 和 plugin 只读元数据字段，供 SDK/headless 客户端渲染命令/扩展列表；完整 permission mode、account、betas、fast mode 和 MCP server status shape 仍待补齐。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

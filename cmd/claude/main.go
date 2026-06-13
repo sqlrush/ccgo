@@ -23,6 +23,7 @@ import (
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
 	"ccgo/internal/permissions"
+	pluginpkg "ccgo/internal/plugins"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
@@ -759,40 +760,54 @@ type printJSONResult struct {
 }
 
 type printStreamEvent struct {
-	Type         conversation.EventType     `json:"type"`
-	Subtype      string                     `json:"subtype,omitempty"`
-	SessionID    contracts.ID               `json:"session_id,omitempty"`
-	CWD          string                     `json:"cwd,omitempty"`
-	Tools        []string                   `json:"tools,omitempty"`
-	MCPServers   []string                   `json:"mcp_servers,omitempty"`
-	OutputStyle  string                     `json:"output_style,omitempty"`
-	OutputStyles []string                   `json:"available_output_styles,omitempty"`
-	Message      *contracts.Message         `json:"message,omitempty"`
-	ToolUse      *contracts.ToolUse         `json:"tool_use,omitempty"`
-	ToolResult   *contracts.ToolResult      `json:"tool_result,omitempty"`
-	TokenWarning *conversation.TokenWarning `json:"token_warning,omitempty"`
-	Compact      any                        `json:"compact,omitempty"`
-	StreamEvent  *anthropic.StreamEvent     `json:"stream_event,omitempty"`
-	Model        string                     `json:"model,omitempty"`
-	Error        string                     `json:"error,omitempty"`
-	IsError      bool                       `json:"is_error,omitempty"`
-	DurationMS   *int64                     `json:"duration_ms,omitempty"`
-	DurationAPI  *int64                     `json:"duration_api_ms,omitempty"`
+	Type          conversation.EventType     `json:"type"`
+	Subtype       string                     `json:"subtype,omitempty"`
+	SessionID     contracts.ID               `json:"session_id,omitempty"`
+	CWD           string                     `json:"cwd,omitempty"`
+	Tools         []string                   `json:"tools,omitempty"`
+	MCPServers    []string                   `json:"mcp_servers,omitempty"`
+	SlashCommands []string                   `json:"slash_commands,omitempty"`
+	Agents        []string                   `json:"agents,omitempty"`
+	Skills        []string                   `json:"skills,omitempty"`
+	Plugins       []printStreamPlugin        `json:"plugins,omitempty"`
+	OutputStyle   string                     `json:"output_style,omitempty"`
+	OutputStyles  []string                   `json:"available_output_styles,omitempty"`
+	Message       *contracts.Message         `json:"message,omitempty"`
+	ToolUse       *contracts.ToolUse         `json:"tool_use,omitempty"`
+	ToolResult    *contracts.ToolResult      `json:"tool_result,omitempty"`
+	TokenWarning  *conversation.TokenWarning `json:"token_warning,omitempty"`
+	Compact       any                        `json:"compact,omitempty"`
+	StreamEvent   *anthropic.StreamEvent     `json:"stream_event,omitempty"`
+	Model         string                     `json:"model,omitempty"`
+	Error         string                     `json:"error,omitempty"`
+	IsError       bool                       `json:"is_error,omitempty"`
+	DurationMS    *int64                     `json:"duration_ms,omitempty"`
+	DurationAPI   *int64                     `json:"duration_api_ms,omitempty"`
+}
+
+type printStreamPlugin struct {
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Source string `json:"source"`
 }
 
 func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
 	eventErr = encoder.Encode(printStreamEvent{
-		Type:         "system",
-		Subtype:      "init",
-		SessionID:    runner.SessionID,
-		CWD:          runner.WorkingDirectory,
-		Tools:        runnerToolNames(runner),
-		MCPServers:   runnerMCPServerNames(runner),
-		OutputStyle:  runner.EffectiveOutputStyleName(),
-		OutputStyles: runner.AvailableOutputStyleNames(),
-		Model:        runner.Model,
+		Type:          "system",
+		Subtype:       "init",
+		SessionID:     runner.SessionID,
+		CWD:           runner.WorkingDirectory,
+		Tools:         runnerToolNames(runner),
+		MCPServers:    runnerMCPServerNames(runner),
+		SlashCommands: runnerSlashCommandNames(runner),
+		Agents:        runnerAgentNames(runner),
+		Skills:        runnerSkillNames(runner),
+		Plugins:       runnerPluginSummaries(runner),
+		OutputStyle:   runner.EffectiveOutputStyleName(),
+		OutputStyles:  runner.AvailableOutputStyleNames(),
+		Model:         runner.Model,
 	})
 	runner.OnEvent = func(event conversation.Event) {
 		if eventErr != nil {
@@ -821,6 +836,61 @@ func runnerMCPServerNames(runner conversation.Runner) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func runnerSlashCommandNames(runner conversation.Runner) []string {
+	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory})
+	var names []string
+	for _, cmd := range registry.Visible() {
+		name := strings.TrimSpace(commands.UserFacingName(cmd))
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func runnerSkillNames(runner conversation.Runner) []string {
+	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory})
+	var names []string
+	for _, cmd := range registry.Visible() {
+		if cmd.Type != contracts.CommandPrompt || cmd.Source == contracts.CommandSourceBuiltin {
+			continue
+		}
+		name := strings.TrimSpace(commands.UserFacingName(cmd))
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func runnerAgentNames(runner conversation.Runner) []string {
+	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory))
+	var names []string
+	for _, plugin := range plugins {
+		for _, agent := range plugin.Agents {
+			name := strings.TrimSpace(agent.Name)
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func runnerPluginSummaries(runner conversation.Runner) []printStreamPlugin {
+	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory))
+	out := make([]printStreamPlugin, 0, len(plugins))
+	for _, plugin := range plugins {
+		out = append(out, printStreamPlugin{
+			Name:   plugin.Name,
+			Path:   plugin.Root,
+			Source: "local",
+		})
+	}
+	return out
 }
 
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {

@@ -1015,9 +1015,33 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	project := t.TempDir()
+	pluginRoot := filepath.Join(project, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginRoot, "skills", "review"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginRoot, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.json"), []byte(`{"name":"demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "skills", "review", "SKILL.md"), []byte("---\ndescription: Review code\n---\nReview ${CLAUDE_SKILL_DIR}."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "agents", "reviewer.md"), []byte("---\nname: reviewer\ndescription: Review changes\n---\nReview."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expectedPluginRoot, err := filepath.EvalSymlinks(pluginRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"--print", "--output-format", "stream-json", "stream prompt"}, strings.NewReader(""), &stdout, &stderr)
+	code := run([]string{"--cwd", project, "--print", "--output-format", "stream-json", "stream prompt"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
 	}
@@ -1045,6 +1069,22 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	outputStyles, ok := events[0]["available_output_styles"].([]any)
 	if !ok || len(outputStyles) < 3 || outputStyles[0] != "default" {
 		t.Fatalf("init available output styles = %#v", events[0]["available_output_styles"])
+	}
+	slashCommands, ok := events[0]["slash_commands"].([]any)
+	if !ok || !containsAnyString(slashCommands, "help") || !containsAnyString(slashCommands, "output-style") {
+		t.Fatalf("init slash commands = %#v", events[0]["slash_commands"])
+	}
+	skills, ok := events[0]["skills"].([]any)
+	if !ok || !containsAnyString(skills, "demo:review") {
+		t.Fatalf("init skills = %#v", events[0]["skills"])
+	}
+	agents, ok := events[0]["agents"].([]any)
+	if !ok || !containsAnyString(agents, "demo:reviewer") {
+		t.Fatalf("init agents = %#v", events[0]["agents"])
+	}
+	plugins, ok := events[0]["plugins"].([]any)
+	if !ok || !containsPluginSummary(plugins, "demo", expectedPluginRoot, "local") {
+		t.Fatalf("init plugins = %#v", events[0]["plugins"])
 	}
 	tools, ok := events[0]["tools"].([]any)
 	if !ok || len(tools) == 0 {
@@ -1628,4 +1668,26 @@ func messageTextAt(t *testing.T, requestMessages []any, index int) string {
 	content := message["content"].([]any)
 	block := content[0].(map[string]any)
 	return block["text"].(string)
+}
+
+func containsAnyString(values []any, want string) bool {
+	for _, value := range values {
+		if text, ok := value.(string); ok && text == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPluginSummary(values []any, name string, path string, source string) bool {
+	for _, value := range values {
+		object, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if object["name"] == name && object["path"] == path && object["source"] == source {
+			return true
+		}
+	}
+	return false
 }
