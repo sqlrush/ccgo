@@ -748,7 +748,7 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
 	}
-	if payload["type"] != "result" || payload["subtype"] != "success" || payload["is_error"] != false || payload["result"] != "json ok" {
+	if payload["type"] != "result" || payload["subtype"] != "success" || payload["is_error"] != false || payload["num_turns"] != float64(1) || payload["result"] != "json ok" {
 		t.Fatalf("payload = %#v", payload)
 	}
 	if payload["session_id"] == "" {
@@ -849,8 +849,22 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if events[1]["type"] != "user_message" || events[2]["type"] != "assistant_message" || events[3]["type"] != "result" {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[3]["result"] != "stream ok" || events[3]["is_error"] != false {
+	if events[3]["result"] != "stream ok" || events[3]["is_error"] != false || events[3]["num_turns"] != float64(1) {
 		t.Fatalf("result event = %#v", events[3])
+	}
+}
+
+func TestResultNumTurnsCountsAssistantMessages(t *testing.T) {
+	result := conversation.Result{
+		Messages: []contracts.Message{
+			messages.UserText("one"),
+			messages.AssistantText("two", "sonnet", nil),
+			messages.UserText("three"),
+			messages.AssistantText("four", "sonnet", nil),
+		},
+	}
+	if turns := resultNumTurns(result); turns != 2 {
+		t.Fatalf("turns = %d", turns)
 	}
 }
 

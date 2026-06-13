@@ -684,6 +684,7 @@ type printJSONResult struct {
 	Type        string                 `json:"type"`
 	Subtype     string                 `json:"subtype"`
 	IsError     bool                   `json:"is_error"`
+	NumTurns    int                    `json:"num_turns,omitempty"`
 	SessionID   contracts.ID           `json:"session_id,omitempty"`
 	Result      string                 `json:"result"`
 	Error       string                 `json:"error,omitempty"`
@@ -856,6 +857,7 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Type:        "result",
 		Subtype:     "success",
 		IsError:     false,
+		NumTurns:    resultNumTurns(result),
 		SessionID:   sessionID,
 		Result:      text,
 		Message:     messagePtr,
@@ -866,6 +868,19 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 	}
 	encoder := json.NewEncoder(stdout)
 	return encoder.Encode(envelope)
+}
+
+func resultNumTurns(result conversation.Result) int {
+	var turns int
+	for _, message := range result.Messages {
+		if message.Type == contracts.MessageAssistant {
+			turns++
+		}
+	}
+	if turns == 0 && result.Assistant.Type == contracts.MessageAssistant {
+		return 1
+	}
+	return turns
 }
 
 func hasUsage(usage contracts.Usage) bool {
