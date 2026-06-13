@@ -374,6 +374,52 @@ func TestRunPrintReadsJSONInputFormatMessageWrapper(t *testing.T) {
 	}
 }
 
+func TestRunPrintReadsJSONInputFormatMessagesArray(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_json_messages_input",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"json messages input ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	input := strings.Join([]string{
+		`{"messages":[`,
+		`{"role":"user","content":[{"type":"text","text":"older prompt"}]},`,
+		`{"role":"assistant","content":[{"type":"text","text":"old answer"}]},`,
+		`{"role":"user","content":[{"type":"text","text":"latest array prompt"}]}`,
+		`]}`,
+	}, "")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--input-format", "json"}, strings.NewReader(input), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := stdout.String(); got != "json messages input ok\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "latest array prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
 func TestRunPrintReadsStreamJSONInputFormatUserEvent(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

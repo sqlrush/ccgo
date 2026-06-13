@@ -300,6 +300,11 @@ func userMessageFromJSON(data []byte) (contracts.Message, error) {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return contracts.Message{}, err
 	}
+	if raw, ok := fields["messages"]; ok {
+		if message, err := userMessageFromMessagesJSON(raw); err == nil {
+			return message, nil
+		}
+	}
 	for _, name := range []string{"message", "payload", "data", "body"} {
 		raw, ok := fields[name]
 		if !ok {
@@ -328,6 +333,29 @@ func userMessageFromJSON(data []byte) (contracts.Message, error) {
 		}
 	}
 	return contracts.Message{}, fmt.Errorf("JSON input must contain a user message or prompt")
+}
+
+func userMessageFromMessagesJSON(data []byte) (contracts.Message, error) {
+	var messages []contracts.Message
+	if err := json.Unmarshal(data, &messages); err == nil {
+		for i := len(messages) - 1; i >= 0; i-- {
+			if normalized, err := normalizeInputUserMessage(messages[i]); err == nil {
+				return normalized, nil
+			}
+		}
+	}
+	var events []contracts.SDKEvent
+	if err := json.Unmarshal(data, &events); err == nil {
+		for i := len(events) - 1; i >= 0; i-- {
+			if events[i].Type != contracts.SDKEventUser || events[i].Message == nil {
+				continue
+			}
+			if normalized, err := normalizeInputUserMessage(*events[i].Message); err == nil {
+				return normalized, nil
+			}
+		}
+	}
+	return contracts.Message{}, fmt.Errorf("messages must contain a user message")
 }
 
 func userMessageFromStreamJSON(data []byte) (contracts.Message, error) {
