@@ -132,6 +132,44 @@ func TestFromSourcesUsesCommandOrderAndDedupesDynamicSkills(t *testing.T) {
 	}
 }
 
+func TestLoadDiscoversProjectPluginPromptCommands(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"commands": [{
+			"name": "plugin:deploy",
+			"description": "Deploy plugin",
+			"prompt": "Deploy $ARGUMENTS from plugin."
+		}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{CWD: cwd})
+	command, ok := registry.Find("plugin:deploy")
+	if !ok || command.Source != contracts.CommandSourcePlugin || command.LoadedFrom != "plugin" {
+		t.Fatalf("plugin command = %#v ok=%v", command, ok)
+	}
+	expanded, err := registry.ExpandPrompt("plugin:deploy", "api", "sess_plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expanded.Content != "Deploy api from plugin." {
+		t.Fatalf("expanded = %q", expanded.Content)
+	}
+}
+
 func TestSkillToolCommandsMatchesModelInvocablePromptSkills(t *testing.T) {
 	commands := []contracts.Command{
 		builtinCommand("help"),

@@ -106,6 +106,8 @@ M8/M6 补充：`/resume` built-in local-jsx command 现在有 headless/local 基
 
 M8/M6 补充：`/config`、`/plugin`、`/memory` built-in local-jsx command 现在有 headless/local 基础 text result：`/config` 汇总工作目录、模型、settings 文件存在性和合并后 env/MCP/permissions/hooks/plugin 规模，`/plugin` 汇总 plugin settings/marketplace/registered plugin command 计数，`/memory` 汇总 session memory root、summary 数、relevant memory dir、memory 文件数和 recall/extraction 开关；这些命令不会请求模型或写回配置，完整 local-jsx 面板、plugin marketplace/install/update 和 memory editor 仍未完成。
 
+M8 补充：新增 `internal/plugins` 本地 manifest loader 地基，支持从 cwd 向上到 git root/home 发现 `.claude/plugins/<plugin>/plugin.json`，解析基础 plugin metadata、prompt command、local/local-jsx command metadata 和 manifest 指向的 `SKILL.md` skill，并接入 command registry 的 plugin source 顺序；当前只读加载本地 manifest，不包含 marketplace、install/cache/update、hooks/agents/MCP plugin 激活。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

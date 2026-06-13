@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"ccgo/internal/contracts"
+	pluginpkg "ccgo/internal/plugins"
 	"ccgo/internal/skills"
 )
 
@@ -41,6 +42,9 @@ func Load(opts Options) Registry {
 	sources := opts.Sources
 	if !opts.DisableProjectSkills && opts.CWD != "" && len(sources.ProjectSkills) == 0 && len(sources.ProjectSkillPrompts) == 0 {
 		sources.ProjectSkillPrompts = loadProjectSkillPrompts(opts.CWD)
+	}
+	if opts.CWD != "" && len(sources.PluginCommands) == 0 && len(sources.PluginSkillPrompts) == 0 && len(sources.PluginSkills) == 0 {
+		sources.PluginSkillPrompts, sources.PluginCommands = loadProjectPluginCommands(opts.CWD)
 	}
 	if !opts.DisableBuiltins && sources.Builtins == nil {
 		sources.Builtins = BuiltinCommands()
@@ -236,6 +240,22 @@ func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 		})
 	}
 	return out
+}
+
+func loadProjectPluginCommands(cwd string) ([]PromptTemplate, []contracts.Command) {
+	loaded := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(cwd))
+	var prompts []PromptTemplate
+	var commands []contracts.Command
+	for _, plugin := range loaded {
+		for _, prompt := range plugin.PromptTemplates {
+			prompts = append(prompts, PromptTemplate{
+				Command: prompt.Command,
+				Content: prompt.Content,
+			})
+		}
+		commands = append(commands, plugin.Commands...)
+	}
+	return prompts, commands
 }
 
 func isAlwaysSkillLoadedFrom(loadedFrom string) bool {
