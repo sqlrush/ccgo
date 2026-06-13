@@ -502,6 +502,82 @@ func TestRunnerExecutesClearSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesCompactSlashCommandWithoutMainQuery(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+		ID:         "msg_manual_compact",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "sonnet",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("manual summary")},
+	}}}}
+	var events []EventType
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_manual_compact",
+		SessionPath: transcriptPath,
+		OnEvent: func(event Event) {
+			events = append(events, event.Type)
+		},
+	}
+	history := []contracts.Message{
+		messages.UserText("old one"),
+		messages.AssistantText("old two", "sonnet", nil),
+	}
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("/compact focus on API"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Compacted || result.Compact == nil || result.Assistant.Type != "" {
+		t.Fatalf("manual compact result = %#v", result)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d, want compact only", len(client.requests))
+	}
+	for _, message := range client.requests[0].Messages {
+		if strings.Contains(message.Content[0].Text, "<command-name>/compact</command-name>") {
+			t.Fatalf("compact request included command metadata: %#v", client.requests[0].Messages)
+		}
+	}
+	if len(result.Messages) != 3 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if !strings.Contains(result.Messages[0].Content[0].Text, "<command-name>/compact</command-name>") {
+		t.Fatalf("compact command message = %#v", result.Messages[0])
+	}
+	if result.Messages[1].Subtype != "compact_boundary" || !strings.Contains(result.Messages[2].Content[0].Text, "manual summary") {
+		t.Fatalf("compact messages = %#v", result.Messages)
+	}
+	if result.Compact.Plan.Metadata.Trigger != string(compactpkg.TriggerManual) ||
+		result.Compact.Plan.Metadata.UserContext != "focus on API" ||
+		result.Compact.Plan.Metadata.MessagesSummarized != 2 {
+		t.Fatalf("compact metadata = %#v", result.Compact.Plan.Metadata)
+	}
+	if !containsEvent(events, EventCompact) {
+		t.Fatalf("events = %#v", events)
+	}
+	transcript, err := session.LoadTranscript(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundBoundary bool
+	for _, id := range transcript.Order {
+		msg := transcript.Messages[id]
+		if msg != nil && msg.IsCompactBoundary() && msg.CompactMetadata != nil &&
+			msg.CompactMetadata.Trigger == string(compactpkg.TriggerManual) &&
+			msg.CompactMetadata.UserContext == "focus on API" {
+			foundBoundary = true
+			break
+		}
+	}
+	if !foundBoundary {
+		t.Fatalf("transcript missing manual compact boundary: %#v", transcript.Order)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

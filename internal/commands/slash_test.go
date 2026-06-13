@@ -145,3 +145,24 @@ func TestExecuteSlashClearReturnsLocalTextResult(t *testing.T) {
 		t.Fatalf("clear command message = %q", text)
 	}
 }
+
+func TestExecuteSlashCompactReturnsLocalCompactResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/compact focus on API", SlashOptions{UUID: "user_compact"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultCompact || result.LocalResult.Value != "focus on API" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_compact" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	text := result.Messages[0].Content[0].Text
+	if !strings.Contains(text, "<command-name>/compact</command-name>") || !strings.Contains(text, "<command-args>focus on API</command-args>") {
+		t.Fatalf("compact command message = %q", text)
+	}
+}

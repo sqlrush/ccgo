@@ -33,10 +33,11 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 	if r.SessionID != "" {
 		user.SessionID = r.SessionID
 	}
-	initialMessages, shouldQuery, err := r.initialUserMessages(user)
+	initialMessages, shouldQuery, localResult, err := r.initialUserMessages(user)
 	if err != nil {
 		return Result{}, err
 	}
+	originalHistory := append([]contracts.Message(nil), history...)
 	for i := range initialMessages {
 		history, initialMessages[i] = appendMessage(history, initialMessages[i])
 		if err := r.appendTranscript(initialMessages[i]); err != nil {
@@ -46,6 +47,18 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 	}
 	result := Result{Messages: append([]contracts.Message(nil), initialMessages...)}
 	if !shouldQuery {
+		if localResult != nil && localResult.Type == commands.LocalCommandResultCompact {
+			startedAt := time.Now()
+			compactResult, err := r.manualCompact(ctx, originalHistory, localResult.Value)
+			result.APIDuration += time.Since(startedAt)
+			if err != nil {
+				return result, err
+			}
+			result.Compacted = true
+			result.Compact = &compactResult
+			result.Messages = append(result.Messages, compactResult.Plan.Boundary, compactResult.Plan.Summary)
+			return result, nil
+		}
 		return result, nil
 	}
 	r, closeMCP, err := r.withConfiguredMCPTools(ctx)
@@ -125,13 +138,13 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 	}
 }
 
-func (r *Runner) initialUserMessages(user contracts.Message) ([]contracts.Message, bool, error) {
+func (r *Runner) initialUserMessages(user contracts.Message) ([]contracts.Message, bool, *commands.LocalCommandResult, error) {
 	text := msgs.TextContent(user)
 	if text == "" {
-		return []contracts.Message{user}, true, nil
+		return []contracts.Message{user}, true, nil, nil
 	}
 	if !commands.IsSlashInput(text) {
-		return []contracts.Message{user}, true, nil
+		return []contracts.Message{user}, true, nil, nil
 	}
 	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
 	slash, handled, err := commands.ExecuteSlashCommand(registry, text, commands.SlashOptions{
@@ -139,15 +152,15 @@ func (r *Runner) initialUserMessages(user contracts.Message) ([]contracts.Messag
 		UUID:      user.UUID,
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
 	if !handled {
-		return []contracts.Message{user}, true, nil
+		return []contracts.Message{user}, true, nil, nil
 	}
 	if slash.Model != "" {
 		r.Model = slash.Model
 	}
-	return slash.Messages, slash.ShouldQuery, nil
+	return slash.Messages, slash.ShouldQuery, slash.LocalResult, nil
 }
 
 type relevantMemoryPrefetchTask struct {
@@ -290,6 +303,36 @@ func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Messag
 	}
 	compactpkg.RecordSuccess(r.AutoCompact)
 	return result.Plan.Output, result, true, nil
+}
+
+func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, userContext string) (compactpkg.Result, error) {
+	client := r.CompactClient
+	if client == nil {
+		client = r.Client
+	}
+	keepLast := 0
+	extraInstructions := ""
+	if r.AutoCompact != nil {
+		keepLast = r.AutoCompact.KeepLast
+		extraInstructions = r.AutoCompact.ExtraInstructions
+	}
+	tokenUsage := compactpkg.EstimateTokens(history)
+	result, err := compactpkg.Runner{
+		Client:            client,
+		Model:             r.model(),
+		MaxTokens:         r.CompactMaxTokens,
+		KeepLast:          keepLast,
+		ExtraInstructions: extraInstructions,
+	}.Compact(ctx, history, compactpkg.TriggerManual, tokenUsage, userContext)
+	if err != nil {
+		r.emit(Event{Type: EventCompact, Compact: &result, Error: err})
+		return result, err
+	}
+	if err := r.appendCompactTranscript(result.Plan); err != nil {
+		return result, err
+	}
+	r.emit(Event{Type: EventCompact, Compact: &result})
+	return result, nil
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {

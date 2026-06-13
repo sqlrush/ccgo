@@ -150,7 +150,7 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 			messages := []contracts.Message{}
 			if local.Type != LocalCommandResultSkip {
 				messages = append(messages, slashUserText(FormatCommandInputTags(cmd.Name, args), opts.SessionID, opts.UUID, false))
-				if strings.TrimSpace(local.Value) != "" {
+				if local.Type == LocalCommandResultText && strings.TrimSpace(local.Value) != "" {
 					messages = append(messages, slashUserText(local.Value, opts.SessionID, "", false))
 				}
 			}
@@ -185,6 +185,8 @@ func ExecuteBuiltinLocalCommand(cmd contracts.Command, args string) (LocalComman
 	switch cmd.Name {
 	case "clear":
 		return LocalCommandResult{Type: LocalCommandResultText}, true
+	case "compact":
+		return LocalCommandResult{Type: LocalCommandResultCompact, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}
