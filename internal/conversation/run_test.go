@@ -418,6 +418,7 @@ func TestRunnerExpandsPromptSlashCommandBeforeQuery(t *testing.T) {
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
+		APIKeySource:     "oauth",
 		MaxTokens:        128,
 		SessionID:        "sess_slash",
 		SessionPath:      transcriptPath,
@@ -680,6 +681,7 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 		Client:           client,
 		Tools:            tool.NewExecutor(registry),
 		Model:            "sonnet",
+		APIKeySource:     "oauth",
 		MaxTokens:        128,
 		SessionID:        "sess_status",
 		SessionPath:      transcriptPath,
@@ -712,6 +714,7 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 		"Working directory: /tmp/project",
 		"Model: sonnet",
 		"Output style: Explanatory",
+		"Auth source: oauth",
 		"Tools: 1",
 		"MCP servers: alpha, zeta",
 	} {
@@ -745,6 +748,7 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
+		APIKeySource:     "api_key",
 		SessionID:        "sess_config",
 		WorkingDirectory: cwd,
 		MCP: &MCPConfig{
@@ -790,6 +794,7 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 		"- env vars: 1",
 		"- MCP servers: 1",
 		"- output style: Explanatory",
+		"- auth source: api_key",
 		"- permission rules: allow 1, deny 1, ask 1",
 		"- hooks: 1",
 	} {

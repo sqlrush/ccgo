@@ -461,11 +461,12 @@ func (r Runner) formatStatusSummary() string {
 		mcpText = strings.Join(mcpServers, ", ")
 	}
 	return fmt.Sprintf(
-		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nOutput style: %s\nTools: %d\nMCP servers: %s",
+		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nOutput style: %s\nAuth source: %s\nTools: %d\nMCP servers: %s",
 		sessionID,
 		cwd,
 		model,
 		r.effectiveOutputStyleName(),
+		r.authSourceText(),
 		toolCount,
 		mcpText,
 	)
@@ -494,11 +495,19 @@ func (r Runner) formatConfigSummary(raw string) string {
 		fmt.Sprintf("- env vars: %d", len(merged.Env)),
 		fmt.Sprintf("- MCP servers: %d", len(merged.MCPServers)),
 		"- output style: " + r.effectiveOutputStyleName(),
+		"- auth source: " + r.authSourceText(),
 		"- permission rules: " + permissionsText,
 		fmt.Sprintf("- hooks: %d", len(merged.Hooks)),
 		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) authSourceText() string {
+	if strings.TrimSpace(r.APIKeySource) == "" {
+		return "(unknown)"
+	}
+	return r.APIKeySource
 }
 
 func (r Runner) formatPluginSummary(raw string) string {
