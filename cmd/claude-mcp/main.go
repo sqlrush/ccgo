@@ -26,6 +26,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	cwd := flags.String("cwd", "", "working directory for local tools")
 	allowMutating := flags.Bool("allow-mutating-tools", false, "allow write and command tools")
 	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
 		return 2
 	}
 	if *showVersion {

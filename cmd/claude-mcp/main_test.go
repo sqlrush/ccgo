@@ -17,6 +17,20 @@ func TestRunPrintsVersion(t *testing.T) {
 	}
 }
 
+func TestRunHelpExitsSuccessfully(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--help"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage of claude-mcp:") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestRunServesInitializeRequest(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	input := `{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}` + "\n"
