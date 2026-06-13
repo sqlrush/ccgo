@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -70,6 +71,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	maxTurns := flags.Int("max-turns", 0, "maximum tool-use turns in print mode")
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	stream := flags.Bool("stream", false, "use streaming API")
+	inputFormat := flags.String("input-format", "text", "input format: text, json, or stream-json")
 	outputFormat := flags.String("output-format", "text", "output format: text, json, or stream-json")
 	resume := flags.String("resume", "", "resume a session by ID or transcript path")
 	continueMode := flags.Bool("continue", false, "continue the most recent session")
@@ -100,12 +102,17 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return 1
 	}
 	if *printMode {
-		prompt, err := promptFromArgsOrStdin(flags.Args(), stdin)
+		format, err := normalizeInputFormat(*inputFormat)
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
-		format, err := normalizeOutputFormat(*outputFormat)
+		userMessage, err := promptMessageFromArgsOrStdin(flags.Args(), stdin, format)
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
+		outputFormat, err := normalizeOutputFormat(*outputFormat)
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
@@ -132,10 +139,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return 1
 		}
 		streamErr := func() error { return nil }
-		if format == "stream-json" {
+		if outputFormat == "stream-json" {
 			runner, streamErr = attachStreamJSON(stdout, runner)
 		}
-		result, err := runner.RunTurn(context.Background(), history, messages.UserText(prompt))
+		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
@@ -144,7 +151,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
-		if err := writePrintResult(stdout, result, format); err != nil {
+		if err := writePrintResult(stdout, result, outputFormat); err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -176,6 +183,142 @@ func promptFromArgsOrStdin(args []string, stdin io.Reader) (string, error) {
 		return "", fmt.Errorf("--print requires a prompt via arguments or stdin")
 	}
 	return prompt, nil
+}
+
+func promptMessageFromArgsOrStdin(args []string, stdin io.Reader, inputFormat string) (contracts.Message, error) {
+	switch inputFormat {
+	case "text":
+		prompt, err := promptFromArgsOrStdin(args, stdin)
+		if err != nil {
+			return contracts.Message{}, err
+		}
+		return messages.UserText(prompt), nil
+	case "json":
+		data, err := rawStructuredInputFromArgsOrStdin(args, stdin, "--input-format json requires JSON input via arguments or stdin")
+		if err != nil {
+			return contracts.Message{}, err
+		}
+		return userMessageFromJSON(data)
+	case "stream-json":
+		data, err := rawStructuredInputFromArgsOrStdin(args, stdin, "--input-format stream-json requires NDJSON input via arguments or stdin")
+		if err != nil {
+			return contracts.Message{}, err
+		}
+		return userMessageFromStreamJSON(data)
+	default:
+		return contracts.Message{}, fmt.Errorf("unsupported input format %q", inputFormat)
+	}
+}
+
+func rawStructuredInputFromArgsOrStdin(args []string, stdin io.Reader, emptyMessage string) ([]byte, error) {
+	var data []byte
+	var err error
+	if len(args) > 0 {
+		data = []byte(strings.TrimSpace(strings.Join(args, " ")))
+	} else {
+		data, err = io.ReadAll(stdin)
+		if err != nil {
+			return nil, err
+		}
+		data = []byte(strings.TrimSpace(string(data)))
+	}
+	if len(data) == 0 {
+		return nil, errors.New(emptyMessage)
+	}
+	return data, nil
+}
+
+func userMessageFromJSON(data []byte) (contracts.Message, error) {
+	var event contracts.SDKEvent
+	if err := json.Unmarshal(data, &event); err == nil && event.Type == contracts.SDKEventUser && event.Message != nil {
+		return normalizeInputUserMessage(*event.Message)
+	}
+	var message contracts.Message
+	if err := json.Unmarshal(data, &message); err == nil {
+		if normalized, err := normalizeInputUserMessage(message); err == nil {
+			return normalized, nil
+		}
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return contracts.Message{}, err
+	}
+	for _, name := range []string{"prompt", "query", "input"} {
+		if raw, ok := fields[name]; ok {
+			var text string
+			if err := json.Unmarshal(raw, &text); err != nil {
+				return contracts.Message{}, fmt.Errorf("%s must be a string", name)
+			}
+			text = strings.TrimSpace(text)
+			if text != "" {
+				return messages.UserText(text), nil
+			}
+		}
+	}
+	return contracts.Message{}, fmt.Errorf("JSON input must contain a user message or prompt")
+}
+
+func userMessageFromStreamJSON(data []byte) (contracts.Message, error) {
+	var last contracts.Message
+	var found bool
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var event contracts.SDKEvent
+		if err := json.Unmarshal([]byte(line), &event); err == nil && event.Type != "" {
+			if event.Type != contracts.SDKEventUser {
+				continue
+			}
+			if event.Message == nil {
+				return contracts.Message{}, fmt.Errorf("stream-json user event must contain a message")
+			}
+			message, err := normalizeInputUserMessage(*event.Message)
+			if err != nil {
+				return contracts.Message{}, err
+			}
+			last = message
+			found = true
+			continue
+		}
+		message, err := userMessageFromJSON([]byte(line))
+		if err != nil {
+			return contracts.Message{}, err
+		}
+		last = message
+		found = true
+	}
+	if !found {
+		return contracts.Message{}, fmt.Errorf("stream-json input must contain a user message")
+	}
+	return last, nil
+}
+
+func normalizeInputUserMessage(message contracts.Message) (contracts.Message, error) {
+	if message.Type == "" {
+		message.Type = contracts.MessageUser
+	}
+	if message.Type != contracts.MessageUser {
+		return contracts.Message{}, fmt.Errorf("input message must be a user message")
+	}
+	if len(message.Content) == 0 {
+		return contracts.Message{}, fmt.Errorf("input user message must contain content")
+	}
+	return message, nil
+}
+
+func normalizeInputFormat(raw string) (string, error) {
+	format := strings.TrimSpace(strings.ToLower(raw))
+	if format == "" {
+		format = "text"
+	}
+	switch format {
+	case "text", "json", "stream-json":
+		return format, nil
+	default:
+		return "", fmt.Errorf("unsupported input format %q", raw)
+	}
 }
 
 func normalizeOutputFormat(raw string) (string, error) {

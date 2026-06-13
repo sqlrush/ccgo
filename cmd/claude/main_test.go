@@ -155,6 +155,90 @@ func TestRunPrintReadsPromptFromStdinAndSettingsModel(t *testing.T) {
 	}
 }
 
+func TestRunPrintReadsJSONInputFormatPrompt(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_json_input",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"json input ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--input-format", "json"}, strings.NewReader(`{"prompt":"json prompt"}`), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := stdout.String(); got != "json input ok\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "json prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
+func TestRunPrintReadsStreamJSONInputFormatUserEvent(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_stream_input",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"stream input ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	input := strings.Join([]string{
+		`{"type":"system","status":"ready"}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"first prompt"}]}}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"latest prompt"}]}}`,
+	}, "\n")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--input-format", "stream-json"}, strings.NewReader(input), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := stdout.String(); got != "stream input ok\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "latest prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
 func TestRunPrintSystemPromptFlags(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -595,6 +679,22 @@ func TestRunPrintRejectsUnsupportedOutputFormat(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "unsupported output format") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestRunPrintRejectsUnsupportedInputFormat(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--input-format", "xml", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "unsupported input format") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
