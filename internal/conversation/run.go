@@ -553,7 +553,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 	totalPluginHooks := pluginHookCount(localPlugins)
 	lines := []string{
 		"Plugins",
-		fmt.Sprintf("Enabled plugins: %d", len(merged.EnabledPlugins)),
+		fmt.Sprintf("Enabled plugins: %d", countEnabledPlugins(merged.EnabledPlugins)),
 		fmt.Sprintf("Plugin configs: %d", len(merged.PluginConfigs)),
 		fmt.Sprintf("Plugin settings entries: %d", len(merged.Plugins)),
 		fmt.Sprintf("Extra known marketplaces: %d", len(merged.ExtraKnownMarketplaces)),
@@ -566,6 +566,15 @@ func (r Runner) formatPluginSummary(raw string) string {
 		fmt.Sprintf("Plugin MCP servers: %d", len(pluginMCPServers)),
 		fmt.Sprintf("Plugin output styles: %d", len(pluginOutputStyles)),
 		fmt.Sprintf("Plugin hooks: %d", totalPluginHooks),
+	}
+	if len(merged.EnabledPlugins) > 0 {
+		lines = append(lines, "Plugin enabled states:")
+		for _, line := range firstStrings(pluginEnabledStateLines(merged.EnabledPlugins), 10) {
+			lines = append(lines, "- "+line)
+		}
+		if len(merged.EnabledPlugins) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin enabled states.", len(merged.EnabledPlugins)))
+		}
 	}
 	if len(localPlugins) > 0 {
 		lines = append(lines, "Local plugins:")
@@ -809,6 +818,38 @@ func pluginCommandNames(commandsList []contracts.Command, pluginSkills []string)
 	}
 	sort.Strings(names)
 	return names
+}
+
+func countEnabledPlugins(values map[string]any) int {
+	count := 0
+	for _, value := range values {
+		if enabled, ok := value.(bool); ok && !enabled {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+func pluginEnabledStateLines(values map[string]any) []string {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	lines := make([]string, 0, len(names))
+	for _, name := range names {
+		state := "configured"
+		if enabled, ok := values[name].(bool); ok {
+			if enabled {
+				state = "enabled"
+			} else {
+				state = "disabled"
+			}
+		}
+		lines = append(lines, name+": "+state)
+	}
+	return lines
 }
 
 func pluginSkillNames(plugins []pluginpkg.LoadedPlugin) []string {

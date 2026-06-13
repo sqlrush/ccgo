@@ -876,7 +876,7 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		SessionID:        "sess_plugin",
 		WorkingDirectory: cwd,
 		MCP: &MCPConfig{UserSettings: contracts.Settings{
-			EnabledPlugins:         map[string]any{"market/plugin": true},
+			EnabledPlugins:         map[string]any{"market/disabled": false, "market/plugin": true},
 			PluginConfigs:          map[string]contracts.PluginConfig{"market/plugin": {Options: map[string]any{"flag": true}}},
 			Plugins:                map[string]any{"legacy": map[string]any{}},
 			ExtraKnownMarketplaces: map[string]any{"internal": map[string]any{}},
@@ -915,6 +915,9 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"Plugin MCP servers: 1",
 		"Plugin output styles: 1",
 		"Plugin hooks: 1",
+		"Plugin enabled states:",
+		"- market/disabled: disabled",
+		"- market/plugin: enabled",
 		"Local plugins:",
 		"- demo@1.2.3",
 		"Plugin commands:",
