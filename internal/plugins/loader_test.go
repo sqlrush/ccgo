@@ -217,3 +217,50 @@ func TestLoadPluginDirLoadsCommandMarkdownDirectoryAndManifestPaths(t *testing.T
 		t.Fatalf("manifest command templates = %#v", plugin.PromptTemplates)
 	}
 }
+
+func TestLoadPluginDirLoadsCommandObjectMapping(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "demo")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "about.md"), []byte("---\ndescription: File fallback\n---\nAbout $ARGUMENTS."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ManifestFileName), []byte(`{
+		"name": "demo",
+		"commands": {
+			"about": {
+				"source": "about.md",
+				"description": "About plugin",
+				"argumentHint": "[topic]",
+				"allowedTools": ["Read"],
+				"model": "inherit"
+			},
+			"inline": {
+				"content": "Inline $ARGUMENTS.",
+				"description": "Inline command"
+			}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plugin, err := LoadPluginDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugin.PromptTemplates) != 2 {
+		t.Fatalf("prompt templates = %#v", plugin.PromptTemplates)
+	}
+	about := plugin.PromptTemplates[0]
+	if about.Command.Name != "demo:about" || about.Command.Description != "About plugin" || about.Command.ArgumentHint != "[topic]" || about.Command.Model != "" {
+		t.Fatalf("about command = %#v", about.Command)
+	}
+	if len(about.Command.AllowedTools) != 1 || about.Command.AllowedTools[0] != "Read" || strings.TrimSpace(about.Content) != "About $ARGUMENTS." {
+		t.Fatalf("about prompt = %#v content=%q", about.Command.AllowedTools, about.Content)
+	}
+	inline := plugin.PromptTemplates[1]
+	if inline.Command.Name != "demo:inline" || inline.Command.Description != "Inline command" || inline.Content != "Inline $ARGUMENTS." {
+		t.Fatalf("inline prompt = %#v content=%q", inline.Command, inline.Content)
+	}
+}

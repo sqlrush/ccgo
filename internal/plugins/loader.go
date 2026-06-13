@@ -234,7 +234,13 @@ func commandFromManifestRaw(root string, raw any) (contracts.Command, string, bo
 
 func pluginCommandsFromMapping(root string, pluginName string, object map[string]any, seen map[string]struct{}) ([]contracts.Command, []PromptTemplate) {
 	var prompts []PromptTemplate
-	for name, raw := range object {
+	names := make([]string, 0, len(object))
+	for name := range object {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		raw := object[name]
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
@@ -364,12 +370,13 @@ func loadPluginCommandFile(path string, baseDir string, pluginName string, expli
 
 func pluginCommandFromMetadata(name string, root string, metadata map[string]any, contentLength int) contracts.Command {
 	return mergePluginCommandMetadata(contracts.Command{
-		Type:          contracts.CommandPrompt,
-		Name:          name,
-		Source:        contracts.CommandSourcePlugin,
-		LoadedFrom:    "plugin",
-		SkillRoot:     root,
-		ContentLength: contentLength,
+		Type:            contracts.CommandPrompt,
+		Name:            name,
+		Source:          contracts.CommandSourcePlugin,
+		LoadedFrom:      "plugin",
+		SkillRoot:       root,
+		ContentLength:   contentLength,
+		ProgressMessage: "running",
 	}, metadata)
 }
 

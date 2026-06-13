@@ -114,7 +114,7 @@ M8/M9 补充：本地 plugin manifest 现在可声明 `mcpServers`/`mcp_servers`
 
 M8 补充：本地 plugin manifest loader 现在会只读发现默认 `agents/`、manifest `agents` 额外 markdown 文件/目录、默认 `hooks/hooks.json` 和 manifest `hooks` inline/path 配置，并在 `/plugin list|status` headless summary 中显示 plugin agent、MCP server 和 hook event/hook count；这些 hooks/agents 目前仅作为 manifest 元数据暴露，尚未接入 agent runtime 或 hook executor。
 
-M8 补充：本地 plugin prompt command discovery 现在除 manifest command object 外，也支持默认 `commands/` markdown 目录和 manifest `commands` path/path-array 形态，按 plugin 名称生成 `plugin:path:name` 命名空间并复用现有 prompt expansion/transcript/slash command 管线；object-mapping metadata、shell expansion、user_config substitution 和 marketplace command 来源仍未完成。
+M8 补充：本地 plugin prompt command discovery 现在除 manifest command object 外，也支持默认 `commands/` markdown 目录、manifest `commands` path/path-array 形态，以及基础 object-mapping `source`/`content` metadata，按 plugin 名称生成 `plugin:path:name` 命名空间并复用现有 prompt expansion/transcript/slash command 管线；shell expansion、user_config substitution、完整 metadata 细节和 marketplace command 来源仍未完成。
 
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
