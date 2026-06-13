@@ -13,6 +13,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/auth"
 	"ccgo/internal/bootstrap"
+	"ccgo/internal/commands"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
@@ -39,6 +40,8 @@ type cliOptions struct {
 	Continue       bool
 	SystemPrompt   string
 	AppendSystem   string
+	AllowedTools   string
+	DeniedTools    string
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -58,6 +61,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	continueMode := flags.Bool("continue", false, "continue the most recent session")
 	systemPrompt := flags.String("system-prompt", "", "system prompt for the model request")
 	appendSystemPrompt := flags.String("append-system-prompt", "", "additional system prompt text")
+	allowedTools := flags.String("allowedTools", "", "allowed tool rules")
+	flags.StringVar(allowedTools, "allowed-tools", "", "allowed tool rules")
+	deniedTools := flags.String("disallowedTools", "", "disallowed tool rules")
+	flags.StringVar(deniedTools, "disallowed-tools", "", "disallowed tool rules")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -90,6 +97,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Stream:         *stream,
 			SystemPrompt:   *systemPrompt,
 			AppendSystem:   *appendSystemPrompt,
+			AllowedTools:   *allowedTools,
+			DeniedTools:    *deniedTools,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -170,7 +179,12 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		return conversation.Runner{}, err
 	}
 	runner.Tools = tool.NewExecutor(registry)
-	runner.Permissions, err = permissionDeciderFromSettings(runner.MCP, strings.TrimSpace(options.PermissionMode))
+	runner.Permissions, err = permissionDeciderFromSettings(
+		runner.MCP,
+		strings.TrimSpace(options.PermissionMode),
+		parseToolRules(options.AllowedTools),
+		parseToolRules(options.DeniedTools),
+	)
 	if err != nil {
 		return conversation.Runner{}, err
 	}
@@ -255,7 +269,11 @@ func resolveResumeTarget(cwd string, resumeValue string, continueMode bool) (con
 	return id, session.TranscriptPath(cwd, id), nil
 }
 
-func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permissionMode string) (tool.PermissionDecider, error) {
+func parseToolRules(raw string) []string {
+	return commands.ParseToolList([]string{raw})
+}
+
+func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permissionMode string, allowedTools []string, deniedTools []string) (tool.PermissionDecider, error) {
 	var sources []permissions.SettingsSource
 	var managedRulesOnly bool
 	if mcpConfig != nil {
@@ -274,7 +292,12 @@ func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permission
 		}
 		sources = append(sources, permissions.SettingsSource{
 			Source:      contracts.PermissionSourceCLIArg,
-			Permissions: &contracts.PermissionsSetting{DefaultMode: mode},
+			Permissions: cliPermissionsSetting(mode, allowedTools, deniedTools),
+		})
+	} else if len(allowedTools) > 0 || len(deniedTools) > 0 {
+		sources = append(sources, permissions.SettingsSource{
+			Source:      contracts.PermissionSourceCLIArg,
+			Permissions: cliPermissionsSetting("", allowedTools, deniedTools),
 		})
 	}
 	engine, err := permissions.NewEngineFromSettingsSources(managedRulesOnly, sources...)
@@ -282,6 +305,14 @@ func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permission
 		return nil, err
 	}
 	return tool.NewEnginePermissionDecider(engine), nil
+}
+
+func cliPermissionsSetting(mode contracts.PermissionMode, allowedTools []string, deniedTools []string) *contracts.PermissionsSetting {
+	return &contracts.PermissionsSetting{
+		DefaultMode: mode,
+		Allow:       append([]string(nil), allowedTools...),
+		Deny:        append([]string(nil), deniedTools...),
+	}
 }
 
 func validPermissionMode(mode contracts.PermissionMode) bool {

@@ -13,6 +13,9 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
+	"ccgo/internal/tool"
+	bashtools "ccgo/internal/tools/bash"
+	filetools "ccgo/internal/tools/file"
 )
 
 func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
@@ -168,6 +171,30 @@ func TestRunPrintSystemPromptFlags(t *testing.T) {
 	}
 	if requestBody["system"] != "Base system\n\nExtra system" {
 		t.Fatalf("system = %#v", requestBody["system"])
+	}
+}
+
+func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
+	allowed := parseToolRules(`Write, Bash(git status *)`)
+	denied := parseToolRules(`Bash(rm *)`)
+	decider, err := permissionDeciderFromSettings(nil, "dontAsk", allowed, denied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := tool.Context{Permissions: decider, WorkingDirectory: t.TempDir()}
+	writeDecision, err := filetools.NewWriteTool().CheckPermissions(ctx, json.RawMessage(`{"file_path":"allowed.txt","content":"hi"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if writeDecision.Behavior != contracts.PermissionAllow {
+		t.Fatalf("write decision = %#v", writeDecision)
+	}
+	bashDecision, err := bashtools.NewBashTool().CheckPermissions(ctx, json.RawMessage(`{"command":"rm -rf tmp"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bashDecision.Behavior != contracts.PermissionDeny {
+		t.Fatalf("bash decision = %#v", bashDecision)
 	}
 }
 
