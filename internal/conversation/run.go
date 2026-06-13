@@ -507,6 +507,9 @@ func (r Runner) formatPluginSummary(raw string) string {
 	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
 	pluginCommands := pluginCommandNames(registry.Visible())
 	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	pluginAgents := pluginAgentNames(localPlugins)
+	pluginHookEvents := pluginHookEventLines(localPlugins)
+	totalPluginHooks := pluginHookCount(localPlugins)
 	lines := []string{
 		"Plugins",
 		fmt.Sprintf("Enabled plugins: %d", len(merged.EnabledPlugins)),
@@ -517,6 +520,8 @@ func (r Runner) formatPluginSummary(raw string) string {
 		fmt.Sprintf("Blocked marketplaces: %d", len(merged.BlockedMarketplaces)),
 		fmt.Sprintf("Local plugin manifests: %d", len(localPlugins)),
 		fmt.Sprintf("Registered plugin commands: %d", len(pluginCommands)),
+		fmt.Sprintf("Plugin agents: %d", len(pluginAgents)),
+		fmt.Sprintf("Plugin hooks: %d", totalPluginHooks),
 	}
 	if len(localPlugins) > 0 {
 		lines = append(lines, "Local plugins:")
@@ -538,6 +543,24 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 		if len(pluginCommands) > 10 {
 			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin commands.", len(pluginCommands)))
+		}
+	}
+	if len(pluginAgents) > 0 {
+		lines = append(lines, "Plugin agents:")
+		for _, name := range firstStrings(pluginAgents, 10) {
+			lines = append(lines, "- "+name)
+		}
+		if len(pluginAgents) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin agents.", len(pluginAgents)))
+		}
+	}
+	if len(pluginHookEvents) > 0 {
+		lines = append(lines, "Plugin hook events:")
+		for _, event := range firstStrings(pluginHookEvents, 10) {
+			lines = append(lines, "- "+event)
+		}
+		if len(pluginHookEvents) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin hook events.", len(pluginHookEvents)))
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -621,6 +644,50 @@ func pluginCommandNames(commandsList []contracts.Command) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func pluginAgentNames(plugins []pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for _, plugin := range plugins {
+		for _, agent := range plugin.Agents {
+			if strings.TrimSpace(agent.Name) != "" {
+				names = append(names, agent.Name)
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func pluginHookCount(plugins []pluginpkg.LoadedPlugin) int {
+	count := 0
+	for _, plugin := range plugins {
+		for _, event := range plugin.HookEvents {
+			count += event.Count
+		}
+	}
+	return count
+}
+
+func pluginHookEventLines(plugins []pluginpkg.LoadedPlugin) []string {
+	counts := map[string]int{}
+	for _, plugin := range plugins {
+		for _, event := range plugin.HookEvents {
+			if strings.TrimSpace(event.Event) != "" && event.Count > 0 {
+				counts[event.Event] += event.Count
+			}
+		}
+	}
+	events := make([]string, 0, len(counts))
+	for event := range counts {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+	lines := make([]string, 0, len(events))
+	for _, event := range events {
+		lines = append(lines, fmt.Sprintf("%s (%d)", event, counts[event]))
+	}
+	return lines
 }
 
 func firstStrings(values []string, limit int) []string {

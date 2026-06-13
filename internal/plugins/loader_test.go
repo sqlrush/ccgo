@@ -14,10 +14,32 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "skills", "audit"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "prompt.md"), []byte("Run plugin prompt for $ARGUMENTS."), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "skills", "audit", "SKILL.md"), []byte("---\ndescription: Audit code\nallowed-tools: Read\n---\nAudit ${CLAUDE_SKILL_DIR}."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "agents", "review.md"), []byte("---\nname: reviewer\ndescription: Review changes\npermissionMode: bypassPermissions\n---\nReview."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "extra-agent.md"), []byte("# Extra agent\nHelp with extra tasks."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "hooks", "hooks.json"), []byte(`{
+		"hooks": {
+			"PreToolUse": [{
+				"matcher": "Bash",
+				"hooks": [{"type": "command", "command": "echo pre"}]
+			}]
+		}
+	}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, ManifestFileName), []byte(`{
@@ -35,6 +57,12 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 			"path": "skills/audit",
 			"name": "plugin:audit"
 		}],
+		"agents": "extra-agent.md",
+		"hooks": {
+			"PostToolUse": [{
+				"hooks": [{"type": "command", "command": "echo post"}]
+			}]
+		},
 		"mcpServers": {
 			"plugin:docs": {
 				"type": "http",
@@ -69,6 +97,12 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	server, ok := plugin.MCPServers["plugin:docs"]
 	if !ok || server.PluginSource != "demo" || server.Name != "plugin:docs" || server.URL != "https://example.com/mcp" {
 		t.Fatalf("mcp servers = %#v", plugin.MCPServers)
+	}
+	if len(plugin.Agents) != 2 || plugin.Agents[0].Name != "demo:extra-agent" || plugin.Agents[1].Name != "demo:reviewer" {
+		t.Fatalf("agents = %#v", plugin.Agents)
+	}
+	if len(plugin.HookEvents) != 2 || plugin.HookEvents[0].Event != "PostToolUse" || plugin.HookEvents[0].Count != 1 || plugin.HookEvents[1].Event != "PreToolUse" || plugin.HookEvents[1].Count != 1 {
+		t.Fatalf("hook events = %#v", plugin.HookEvents)
 	}
 }
 

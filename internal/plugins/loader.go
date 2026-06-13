@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/memory"
 	"ccgo/internal/skills"
 )
 
@@ -19,6 +20,17 @@ type PromptTemplate struct {
 	Content string
 }
 
+type PluginAgent struct {
+	Name        string
+	Path        string
+	Description string
+}
+
+type PluginHookEvent struct {
+	Event string
+	Count int
+}
+
 type LoadedPlugin struct {
 	Root            string
 	Name            string
@@ -27,6 +39,8 @@ type LoadedPlugin struct {
 	Commands        []contracts.Command
 	PromptTemplates []PromptTemplate
 	MCPServers      map[string]contracts.MCPServer
+	Agents          []PluginAgent
+	HookEvents      []PluginHookEvent
 }
 
 type manifest struct {
@@ -36,6 +50,8 @@ type manifest struct {
 	Version         string                         `json:"version"`
 	Commands        []commandManifest              `json:"commands"`
 	Skills          []skillManifest                `json:"skills"`
+	Agents          any                            `json:"agents"`
+	Hooks           any                            `json:"hooks"`
 	MCPServers      map[string]contracts.MCPServer `json:"mcpServers"`
 	MCPServersSnake map[string]contracts.MCPServer `json:"mcp_servers"`
 }
@@ -129,6 +145,8 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 		loaded.PromptTemplates = append(loaded.PromptTemplates, PromptTemplate{Command: skill.Command, Content: skill.Content})
 	}
 	loaded.MCPServers = pluginMCPServers(name, parsed.MCPServers, parsed.MCPServersSnake)
+	loaded.Agents = pluginAgents(root, name, parsed.Agents)
+	loaded.HookEvents = pluginHookEvents(root, parsed.Hooks)
 	return loaded, nil
 }
 
@@ -262,6 +280,259 @@ func pluginMCPServers(pluginName string, groups ...map[string]contracts.MCPServe
 	return out
 }
 
+func pluginAgents(root string, pluginName string, manifestAgents any) []PluginAgent {
+	seen := map[string]struct{}{}
+	var out []PluginAgent
+	defaultDir := filepath.Join(root, "agents")
+	if info, err := os.Stat(defaultDir); err == nil && info.IsDir() {
+		out = append(out, loadPluginAgentsFromPath(defaultDir, pluginName, nil, seen)...)
+	}
+	for _, path := range manifestAgentPaths(manifestAgents) {
+		out = append(out, loadPluginAgentsFromPath(safeJoin(root, path), pluginName, nil, seen)...)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Name == out[j].Name {
+			return out[i].Path < out[j].Path
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func manifestAgentPaths(raw any) []string {
+	switch value := raw.(type) {
+	case string:
+		return compactStrings([]string{value})
+	case []any:
+		var out []string
+		for _, item := range value {
+			if text, ok := item.(string); ok {
+				out = append(out, text)
+			}
+		}
+		return compactStrings(out)
+	case []string:
+		return compactStrings(value)
+	default:
+		return nil
+	}
+}
+
+func loadPluginAgentsFromPath(path string, pluginName string, namespace []string, seen map[string]struct{}) []PluginAgent {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	if info.IsDir() {
+		return loadPluginAgentsFromDir(path, pluginName, namespace, seen)
+	}
+	if !strings.EqualFold(filepath.Ext(path), ".md") {
+		return nil
+	}
+	agent, ok := loadPluginAgentFile(path, pluginName, namespace, seen)
+	if !ok {
+		return nil
+	}
+	return []PluginAgent{agent}
+}
+
+func loadPluginAgentsFromDir(dir string, pluginName string, namespace []string, seen map[string]struct{}) []PluginAgent {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+	var out []PluginAgent
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			out = append(out, loadPluginAgentsFromDir(path, pluginName, append(namespace, entry.Name()), seen)...)
+			continue
+		}
+		if !entry.Type().IsRegular() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			continue
+		}
+		agent, ok := loadPluginAgentFile(path, pluginName, namespace, seen)
+		if ok {
+			out = append(out, agent)
+		}
+	}
+	return out
+}
+
+func loadPluginAgentFile(path string, pluginName string, namespace []string, seen map[string]struct{}) (PluginAgent, bool) {
+	key := normalizePath(path)
+	if _, ok := seen[key]; ok {
+		return PluginAgent{}, false
+	}
+	seen[key] = struct{}{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return PluginAgent{}, false
+	}
+	frontmatter, body := memory.ParseFrontmatter(string(data))
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	name := firstNonEmpty(frontmatter["name"], base)
+	parts := append([]string{pluginName}, namespace...)
+	parts = append(parts, name)
+	description := firstNonEmpty(
+		frontmatter["description"],
+		frontmatter["when-to-use"],
+		frontmatter["when_to_use"],
+		frontmatter["whenToUse"],
+		extractFirstMarkdownLine(body),
+		"Agent from "+pluginName+" plugin",
+	)
+	return PluginAgent{
+		Name:        strings.Join(compactStrings(parts), ":"),
+		Path:        path,
+		Description: description,
+	}, true
+}
+
+func pluginHookEvents(root string, manifestHooks any) []PluginHookEvent {
+	counts := map[string]int{}
+	seenFiles := map[string]struct{}{}
+	mergeHookCounts(counts, loadPluginHookFileOnce(filepath.Join(root, "hooks", "hooks.json"), seenFiles))
+	for _, spec := range manifestHookSpecs(manifestHooks) {
+		switch value := spec.(type) {
+		case string:
+			mergeHookCounts(counts, loadPluginHookFileOnce(safeJoin(root, value), seenFiles))
+		default:
+			mergeHookCounts(counts, hookCountsFromRaw(value))
+		}
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	events := make([]string, 0, len(counts))
+	for event := range counts {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+	out := make([]PluginHookEvent, 0, len(events))
+	for _, event := range events {
+		out = append(out, PluginHookEvent{Event: event, Count: counts[event]})
+	}
+	return out
+}
+
+func manifestHookSpecs(raw any) []any {
+	if raw == nil {
+		return nil
+	}
+	if list, ok := raw.([]any); ok {
+		return list
+	}
+	return []any{raw}
+}
+
+func loadPluginHookFileOnce(path string, seen map[string]struct{}) map[string]int {
+	key := normalizePath(path)
+	if _, ok := seen[key]; ok {
+		return nil
+	}
+	seen[key] = struct{}{}
+	return loadPluginHookFile(path)
+}
+
+func loadPluginHookFile(path string) map[string]int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	return hookCountsFromRaw(raw)
+}
+
+func hookCountsFromRaw(raw any) map[string]int {
+	object, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if hooks, ok := object["hooks"]; ok {
+		object, ok = hooks.(map[string]any)
+		if !ok {
+			return nil
+		}
+	}
+	counts := map[string]int{}
+	for event, value := range object {
+		event = strings.TrimSpace(event)
+		if event == "" || event == "description" {
+			continue
+		}
+		if count := countHookMatchers(value); count > 0 {
+			counts[event] += count
+		}
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	return counts
+}
+
+func countHookMatchers(raw any) int {
+	switch value := raw.(type) {
+	case []any:
+		count := 0
+		for _, item := range value {
+			count += countHookMatcher(item)
+		}
+		return count
+	default:
+		return countHookMatcher(value)
+	}
+}
+
+func countHookMatcher(raw any) int {
+	switch value := raw.(type) {
+	case map[string]any:
+		if hooks, ok := value["hooks"]; ok {
+			return countHookCommands(hooks)
+		}
+		return countHookCommands(value)
+	case string:
+		if strings.TrimSpace(value) != "" {
+			return 1
+		}
+	}
+	return 0
+}
+
+func countHookCommands(raw any) int {
+	switch value := raw.(type) {
+	case []any:
+		count := 0
+		for _, item := range value {
+			count += countHookCommands(item)
+		}
+		return count
+	case map[string]any:
+		if len(value) > 0 {
+			return 1
+		}
+	case string:
+		if strings.TrimSpace(value) != "" {
+			return 1
+		}
+	}
+	return 0
+}
+
+func mergeHookCounts(dst map[string]int, src map[string]int) {
+	for event, count := range src {
+		if count > 0 {
+			dst[event] += count
+		}
+	}
+}
+
 func appendPluginRoots(out []string, seen map[string]struct{}, pluginsDir string) []string {
 	entries, err := os.ReadDir(pluginsDir)
 	if err != nil {
@@ -325,6 +596,20 @@ func compactStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func extractFirstMarkdownLine(markdown string) string {
+	for _, line := range strings.Split(markdown, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			line = strings.TrimSpace(strings.TrimLeft(line, "#"))
+		}
+		return line
+	}
+	return ""
 }
 
 func findGitRoot(cwd string) string {

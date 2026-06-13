@@ -806,7 +806,23 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "agents", "review.md"), []byte("---\nname: reviewer\ndescription: Review changes\n---\nReview."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "hooks", "hooks.json"), []byte(`{
+		"hooks": {
+			"PreToolUse": [{"hooks": [{"type": "command", "command": "echo pre"}]}]
+		}
+	}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
@@ -859,10 +875,16 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"Blocked marketplaces: 1",
 		"Local plugin manifests: 1",
 		"Registered plugin commands: 1",
+		"Plugin agents: 1",
+		"Plugin hooks: 1",
 		"Local plugins:",
 		"- demo@1.2.3",
 		"Plugin commands:",
 		"- /plugin:deploy",
+		"Plugin agents:",
+		"- demo:reviewer",
+		"Plugin hook events:",
+		"- PreToolUse (1)",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("plugin text missing %q: %q", want, text)
