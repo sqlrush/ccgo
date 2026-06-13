@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 )
@@ -11,6 +12,28 @@ type ElicitationRequest struct {
 	Message         string         `json:"message,omitempty"`
 	RequestedSchema map[string]any `json:"requested_schema,omitempty"`
 	Params          map[string]any `json:"params,omitempty"`
+}
+
+type ElicitationHandler func(context.Context, ElicitationRequest) (map[string]any, error)
+
+func ElicitationRequestHandler(handler ElicitationHandler, fallback RPCRequestHandler) RPCRequestHandler {
+	return func(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+		parsed, ok := ParseElicitationRequest(request)
+		if !ok {
+			if fallback != nil {
+				return fallback(ctx, request)
+			}
+			return DefaultRPCRequestHandler(ctx, request)
+		}
+		if handler == nil {
+			return CancelElicitationResponse(), nil
+		}
+		response, err := handler(ctx, parsed)
+		if err != nil {
+			return nil, &RPCError{Code: -32603, Message: "failed to handle elicitation request", Data: err.Error()}
+		}
+		return NormalizeElicitationResponse(response), nil
+	}
 }
 
 func ParseElicitationRequest(request RPCInboundRequest) (ElicitationRequest, bool) {
@@ -51,6 +74,11 @@ func ElicitationResponse(action string, content map[string]any) map[string]any {
 	return response
 }
 
+func NormalizeElicitationResponse(response map[string]any) map[string]any {
+	content, _ := firstMapValue(response, "content", "values", "value")
+	return ElicitationResponse(stringValue(firstNonEmpty(response["action"], response["type"], response["status"])), content)
+}
+
 func CancelElicitationResponse() map[string]any {
 	return ElicitationResponse("cancel", nil)
 }
@@ -71,6 +99,5 @@ func normalizeElicitationAction(action string) string {
 
 func elicitationResponseFromJSON(raw json.RawMessage) map[string]any {
 	params := rawParamMap(raw)
-	content, _ := firstMapValue(params, "content", "values", "value")
-	return ElicitationResponse(stringValue(firstNonEmpty(params["action"], params["type"], params["status"])), content)
+	return NormalizeElicitationResponse(params)
 }

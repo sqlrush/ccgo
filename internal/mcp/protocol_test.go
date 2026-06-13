@@ -732,6 +732,51 @@ func TestElicitationResponseNormalizesActions(t *testing.T) {
 	}
 }
 
+func TestElicitationRequestHandlerSurface(t *testing.T) {
+	handler := ElicitationRequestHandler(func(ctx context.Context, request ElicitationRequest) (map[string]any, error) {
+		if request.ID != "server-1" || request.Message != "Confirm?" {
+			t.Fatalf("request = %#v", request)
+		}
+		return map[string]any{
+			"status": "confirmed",
+			"values": map[string]any{
+				"confirmed": true,
+			},
+		}, nil
+	}, func(ctx context.Context, request RPCInboundRequest) (any, *RPCError) {
+		return map[string]any{"fallback": request.Method}, nil
+	})
+
+	result, rpcErr := handler(context.Background(), RPCInboundRequest{
+		ID:     "server-1",
+		Method: "elicitation/create",
+		Params: json.RawMessage(`{"message":"Confirm?"}`),
+	})
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	response := result.(map[string]any)
+	if response["action"] != "accept" || response["content"].(map[string]any)["confirmed"] != true {
+		t.Fatalf("response = %#v", response)
+	}
+
+	result, rpcErr = handler(context.Background(), RPCInboundRequest{ID: "server-2", Method: "unknown"})
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	if result.(map[string]any)["fallback"] != "unknown" {
+		t.Fatalf("fallback result = %#v", result)
+	}
+
+	failing := ElicitationRequestHandler(func(context.Context, ElicitationRequest) (map[string]any, error) {
+		return nil, errors.New("boom")
+	}, nil)
+	_, rpcErr = failing(context.Background(), RPCInboundRequest{ID: "server-3", Method: "elicitation/create"})
+	if rpcErr == nil || rpcErr.Code != -32603 || !strings.Contains(rpcErr.Message, "failed to handle elicitation") {
+		t.Fatalf("rpcErr = %#v", rpcErr)
+	}
+}
+
 func TestRPCResponseAcceptsNumericIDs(t *testing.T) {
 	var response RPCResponse
 	if err := json.Unmarshal([]byte(`{"jsonrpc":"2.0","id":42,"result":{"ok":true}}`), &response); err != nil {
