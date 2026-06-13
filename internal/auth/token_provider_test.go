@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -67,6 +68,41 @@ func TestOAuthTokenProviderRefreshesAccessToken(t *testing.T) {
 	}
 	if token != "fresh" || calls != 1 {
 		t.Fatalf("token=%q calls=%d", token, calls)
+	}
+}
+
+func TestOAuthTokenProviderPersistsRefreshedCredentials(t *testing.T) {
+	now := time.Date(2026, 6, 13, 10, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  "fresh",
+			"refresh_token": "next-refresh",
+			"expires_in":    3600,
+		})
+	}))
+	defer server.Close()
+
+	store := NewFileCredentialStore(filepath.Join(t.TempDir(), "credentials.json"))
+	provider := NewOAuthTokenProvider(OAuthTokenProviderOptions{
+		Credentials:     Credentials{Source: SourceOAuth, RefreshToken: "refresh"},
+		Config:          OAuthConfig{TokenURL: server.URL, ClientID: "client"},
+		HTTPClient:      server.Client(),
+		Now:             func() time.Time { return now },
+		CredentialStore: store,
+	})
+	token, err := provider.CurrentAccessToken(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "fresh" {
+		t.Fatalf("token = %q", token)
+	}
+	loaded, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.AccessToken != "fresh" || loaded.RefreshToken != "next-refresh" || !loaded.ExpiresAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("loaded = %#v", loaded)
 	}
 }
 

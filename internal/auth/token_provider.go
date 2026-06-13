@@ -22,6 +22,7 @@ type OAuthTokenProviderOptions struct {
 	Now              func() time.Time
 	RefreshMargin    time.Duration
 	OnCredentials    func(Credentials)
+	CredentialStore  CredentialStore
 	MaxResponseBytes int64
 }
 
@@ -31,6 +32,7 @@ type OAuthTokenProvider struct {
 	now              func() time.Time
 	refreshMargin    time.Duration
 	onCredentials    func(Credentials)
+	credentialStore  CredentialStore
 	maxResponseBytes int64
 
 	mu          sync.Mutex
@@ -78,6 +80,7 @@ func NewOAuthTokenProvider(options OAuthTokenProviderOptions) *OAuthTokenProvide
 		now:              now,
 		refreshMargin:    refreshMargin,
 		onCredentials:    options.OnCredentials,
+		credentialStore:  options.CredentialStore,
 		maxResponseBytes: maxResponseBytes,
 		credentials:      options.Credentials,
 	}
@@ -179,6 +182,11 @@ func (p *OAuthTokenProvider) refreshAccessTokenLocked(ctx context.Context) (stri
 		p.credentials.ExpiresAt = p.now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
 	} else {
 		p.credentials.ExpiresAt = time.Time{}
+	}
+	if p.credentialStore != nil {
+		if err := p.credentialStore.Save(ctx, p.credentials); err != nil {
+			return "", err
+		}
 	}
 	if p.onCredentials != nil {
 		p.onCredentials(p.credentials)
