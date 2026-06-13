@@ -45,8 +45,8 @@ type cliOptions struct {
 	Continue        bool
 	SystemPrompt    string
 	AppendSystem    string
-	AllowedTools    string
-	DeniedTools     string
+	AllowedTools    []string
+	DeniedTools     []string
 	AddDirs         []string
 }
 
@@ -92,10 +92,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	flags.StringVar(systemPrompt, "systemPrompt", "", "system prompt for the model request")
 	appendSystemPrompt := flags.String("append-system-prompt", "", "additional system prompt text")
 	flags.StringVar(appendSystemPrompt, "appendSystemPrompt", "", "additional system prompt text")
-	allowedTools := flags.String("allowedTools", "", "allowed tool rules")
-	flags.StringVar(allowedTools, "allowed-tools", "", "allowed tool rules")
-	deniedTools := flags.String("disallowedTools", "", "disallowed tool rules")
-	flags.StringVar(deniedTools, "disallowed-tools", "", "disallowed tool rules")
+	var allowedTools repeatedStringFlag
+	flags.Var(&allowedTools, "allowedTools", "allowed tool rules")
+	flags.Var(&allowedTools, "allowed-tools", "allowed tool rules")
+	var deniedTools repeatedStringFlag
+	flags.Var(&deniedTools, "disallowedTools", "disallowed tool rules")
+	flags.Var(&deniedTools, "disallowed-tools", "disallowed tool rules")
 	var addDirs repeatedStringFlag
 	flags.Var(&addDirs, "add-dir", "additional working directory")
 	flags.Var(&addDirs, "addDir", "additional working directory")
@@ -154,8 +156,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Stream:          *stream,
 			SystemPrompt:    *systemPrompt,
 			AppendSystem:    *appendSystemPrompt,
-			AllowedTools:    *allowedTools,
-			DeniedTools:     *deniedTools,
+			AllowedTools:    append([]string(nil), allowedTools...),
+			DeniedTools:     append([]string(nil), deniedTools...),
 			AddDirs:         append([]string(nil), addDirs...),
 		})
 		if err != nil {
@@ -416,8 +418,8 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	runner.Permissions, err = permissionDeciderFromSettings(
 		runner.MCP,
 		strings.TrimSpace(options.PermissionMode),
-		parseToolRules(options.AllowedTools),
-		parseToolRules(options.DeniedTools),
+		parseToolRules(options.AllowedTools...),
+		parseToolRules(options.DeniedTools...),
 		parsePathList(options.AddDirs),
 	)
 	if err != nil {
@@ -536,8 +538,8 @@ func resolveResumeTarget(cwd string, resumeValue string, continueMode bool) (con
 	return id, session.TranscriptPath(cwd, id), nil
 }
 
-func parseToolRules(raw string) []string {
-	return commands.ParseToolList([]string{raw})
+func parseToolRules(raw ...string) []string {
+	return commands.ParseToolList(raw)
 }
 
 func parsePathList(values []string) []string {

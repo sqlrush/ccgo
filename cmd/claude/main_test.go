@@ -541,6 +541,75 @@ func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	}
 }
 
+func TestParseToolRulesAcceptsRepeatedFlagValues(t *testing.T) {
+	got := parseToolRules("Write", "Bash(git status *)", "Read, Edit")
+	want := []string{"Write", "Bash(git status *)", "Read", "Edit"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("rules = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunPrintAccumulatesRepeatedAllowedToolFlags(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("content-type", "application/json")
+		if requests == 1 {
+			_, _ = w.Write([]byte(`{
+				"id":"msg_write_request",
+				"type":"message",
+				"role":"assistant",
+				"model":"claude-sonnet-4-6",
+				"content":[{"type":"tool_use","id":"toolu_write","name":"Write","input":{"file_path":"flag-write.txt","content":"written by repeated allow"}}],
+				"stop_reason":"tool_use"
+			}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{
+			"id":"msg_write_done",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"rules ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	project := t.TempDir()
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--cwd", project,
+		"--print",
+		"--permission-mode", "dontAsk",
+		"--allowed-tools", "Write",
+		"--allowedTools", "Bash(git status *)",
+		"--disallowed-tools", "Bash(rm *)",
+		"--disallowedTools", "Edit",
+		"write with repeated flags",
+	}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if stdout.String() != "rules ok\n" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	data, err := os.ReadFile(filepath.Join(project, "flag-write.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "written by repeated allow" {
+		t.Fatalf("written file = %q", string(data))
+	}
+}
+
 func TestPermissionDeciderFromCLIAdditionalDirectories(t *testing.T) {
 	base := t.TempDir()
 	extra1 := filepath.Join(base, "extra 1")
