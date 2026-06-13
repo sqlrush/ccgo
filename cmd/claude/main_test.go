@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"ccgo/internal/contracts"
+	"ccgo/internal/messages"
+	"ccgo/internal/session"
 )
 
 func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
@@ -289,6 +293,117 @@ func TestRunPrintStreamJSONIncludesRawStreamingEvents(t *testing.T) {
 	}
 }
 
+func TestRunPrintResumeLoadsTranscriptHistory(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_resume",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"resume ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	claudeHome := t.TempDir()
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID := contracts.ID("resume-session")
+	transcriptPath := session.TranscriptPath(cwd, sessionID)
+	writeTestTranscript(t, transcriptPath, sessionID, "old question", "old answer")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--resume", string(sessionID), "new question"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if stdout.String() != "resume ok\n" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "old question" {
+		t.Fatalf("old user = %q", got)
+	}
+	if got := messageTextAt(t, requestMessages, 1); got != "old answer" {
+		t.Fatalf("old assistant = %q", got)
+	}
+	if got := messageTextAt(t, requestMessages, 2); got != "new question" {
+		t.Fatalf("new user = %q", got)
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 4 {
+		t.Fatalf("entries = %#v", entries)
+	}
+}
+
+func TestRunPrintContinueUsesMostRecentSession(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_continue",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"continue ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	claudeHome := t.TempDir()
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID := contracts.ID("continue-session")
+	writeTestTranscript(t, session.TranscriptPath(cwd, sessionID), sessionID, "continue old", "continue answer")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--continue", "continue new"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if stdout.String() != "continue ok\n" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	requestMessages := requestBody["messages"].([]any)
+	if got := messageTextAt(t, requestMessages, 0); got != "continue old" {
+		t.Fatalf("continued old user = %q", got)
+	}
+	if got := messageTextAt(t, requestMessages, 2); got != "continue new" {
+		t.Fatalf("continued new user = %q", got)
+	}
+}
+
 func TestRunPrintRequiresCredentials(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
@@ -339,4 +454,31 @@ func TestRunPrintRejectsEmptyPrompt(t *testing.T) {
 	if !strings.Contains(stderr.String(), "--print requires a prompt") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
+}
+
+func writeTestTranscript(t *testing.T, path string, sessionID contracts.ID, userText string, assistantText string) {
+	t.Helper()
+	user := messages.UserText(userText)
+	user.SessionID = sessionID
+	assistant := messages.AssistantText(assistantText, "sonnet", nil)
+	assistant.SessionID = sessionID
+	parent := user.UUID
+	assistant.ParentUUID = &parent
+	if err := session.Append(path, session.EntryFromMessage(sessionID, user)); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Append(path, session.EntryFromMessage(sessionID, assistant)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func messageTextAt(t *testing.T, requestMessages []any, index int) string {
+	t.Helper()
+	if index >= len(requestMessages) {
+		t.Fatalf("messages = %#v", requestMessages)
+	}
+	message := requestMessages[index].(map[string]any)
+	content := message["content"].([]any)
+	block := content[0].(map[string]any)
+	return block["text"].(string)
 }

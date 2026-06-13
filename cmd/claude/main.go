@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"ccgo/internal/api/anthropic"
@@ -18,6 +19,7 @@ import (
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
 	"ccgo/internal/permissions"
+	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
 )
@@ -33,6 +35,8 @@ type cliOptions struct {
 	MaxTokens      int
 	PermissionMode string
 	Stream         bool
+	Resume         string
+	Continue       bool
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -48,6 +52,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	permissionMode := flags.String("permission-mode", "", "permission mode")
 	stream := flags.Bool("stream", false, "use streaming API")
 	outputFormat := flags.String("output-format", "text", "output format: text, json, or stream-json")
+	resume := flags.String("resume", "", "resume a session by ID or transcript path")
+	continueMode := flags.Bool("continue", false, "continue the most recent session")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -83,11 +89,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
 		streamErr := func() error { return nil }
 		if format == "stream-json" {
 			runner, streamErr = attachStreamJSON(stdout, runner)
 		}
-		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		result, err := runner.RunTurn(context.Background(), history, messages.UserText(prompt))
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
@@ -162,6 +173,9 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.MaxTokens = options.MaxTokens
 	}
 	runner.UseStreaming = options.Stream
+	if runner.SessionPath == "" && runner.SessionID != "" {
+		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
+	}
 
 	client, err := anthropicClientFromEnv(ctx)
 	if err != nil {
@@ -169,6 +183,56 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 	runner.Client = client
 	return runner, nil
+}
+
+func resumeHistory(state *bootstrap.State, runner *conversation.Runner, options cliOptions) ([]contracts.Message, error) {
+	if strings.TrimSpace(options.Resume) == "" && !options.Continue {
+		return nil, nil
+	}
+	if strings.TrimSpace(options.Resume) != "" && options.Continue {
+		return nil, fmt.Errorf("--resume and --continue cannot be used together")
+	}
+	sessionID, transcriptPath, err := resolveResumeTarget(state.CWD(), options.Resume, options.Continue)
+	if err != nil {
+		return nil, err
+	}
+	resumed, err := session.BuildResumeConversation(transcriptPath, "")
+	if err != nil {
+		return nil, err
+	}
+	if !resumed.Found {
+		return nil, fmt.Errorf("resume session %q has no resumable messages", sessionID)
+	}
+	runner.SessionID = sessionID
+	runner.SessionPath = transcriptPath
+	return resumed.Messages, nil
+}
+
+func resolveResumeTarget(cwd string, resumeValue string, continueMode bool) (contracts.ID, string, error) {
+	if continueMode {
+		sessions, err := session.ListProjectSessions(cwd)
+		if err != nil {
+			return "", "", err
+		}
+		if len(sessions) == 0 {
+			return "", "", fmt.Errorf("no sessions found for %s", cwd)
+		}
+		return sessions[0].ID, sessions[0].Path, nil
+	}
+	resumeValue = strings.TrimSpace(resumeValue)
+	if resumeValue == "" {
+		return "", "", nil
+	}
+	if strings.HasSuffix(resumeValue, ".jsonl") || strings.ContainsAny(resumeValue, `/\`) {
+		path := resumeValue
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(cwd, path)
+		}
+		id := contracts.ID(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
+		return id, path, nil
+	}
+	id := contracts.ID(resumeValue)
+	return id, session.TranscriptPath(cwd, id), nil
 }
 
 func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permissionMode string) (tool.PermissionDecider, error) {
