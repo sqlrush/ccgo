@@ -75,6 +75,13 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		if localResult != nil && localResult.Type == commands.LocalCommandResultMCP {
 			return r.appendLocalTextResult(result, history, r.formatMCPCommandSummary(localResult.Value))
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultResume {
+			text, err := r.formatResumeSummary(localResult.Value)
+			if err != nil {
+				return result, err
+			}
+			return r.appendLocalTextResult(result, history, text)
+		}
 		return result, nil
 	}
 	r, closeMCP, err := r.withConfiguredMCPTools(ctx)
@@ -520,6 +527,57 @@ func mcpServerTarget(server contracts.MCPServer) string {
 		return command + " " + strings.Join(server.Args, " ")
 	}
 	return "(no target)"
+}
+
+func (r Runner) formatResumeSummary(raw string) (string, error) {
+	query := strings.TrimSpace(raw)
+	cwd := r.WorkingDirectory
+	if cwd == "" {
+		cwd = "."
+	}
+	if query != "" {
+		results, err := session.SearchProjectSessions(cwd, query, 10)
+		if err != nil {
+			return "", err
+		}
+		if len(results) == 0 {
+			return fmt.Sprintf("No sessions found for %q.", query), nil
+		}
+		var lines []string
+		lines = append(lines, fmt.Sprintf("Matching sessions for %q:", query))
+		for _, result := range results {
+			lines = append(lines, formatSessionInfoLine(result.SessionInfo))
+		}
+		return strings.Join(lines, "\n"), nil
+	}
+	page, err := session.ListProjectSessionsPage(cwd, 0, 10)
+	if err != nil {
+		return "", err
+	}
+	if len(page.Sessions) == 0 {
+		return "No sessions found for " + cwd + ".", nil
+	}
+	var lines []string
+	lines = append(lines, "Recent sessions:")
+	for _, info := range page.Sessions {
+		lines = append(lines, formatSessionInfoLine(info))
+	}
+	if page.HasMore {
+		lines = append(lines, fmt.Sprintf("Showing %d of %d sessions.", len(page.Sessions), page.Total))
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func formatSessionInfoLine(info session.SessionInfo) string {
+	title := strings.TrimSpace(info.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+	modified := "unknown time"
+	if !info.Modified.IsZero() {
+		modified = info.Modified.Format(time.RFC3339)
+	}
+	return fmt.Sprintf("- %s - %s - %s", info.ID, title, modified)
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {

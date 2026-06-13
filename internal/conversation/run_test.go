@@ -821,6 +821,79 @@ func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesResumeSlashCommandWithoutQuery(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	path := session.TranscriptPath(cwd, "sess_resume_list")
+	if err := session.Append(path, session.EntryFromMessage("sess_resume_list", messages.UserText("deploy question"))); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_resume_current",
+		WorkingDirectory: cwd,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/resume"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Recent sessions:") || !strings.Contains(text, "sess_resume_list") {
+		t.Fatalf("resume text = %q", text)
+	}
+}
+
+func TestRunnerResumeSlashCommandSearchesSessions(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	path := session.TranscriptPath(cwd, "sess_resume_search")
+	if err := session.Append(path, session.EntryFromMessage("sess_resume_search", messages.UserText("deploy searchable question"))); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_resume_search_current",
+		WorkingDirectory: cwd,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/resume searchable"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, `Matching sessions for "searchable":`) || !strings.Contains(text, "sess_resume_search") {
+		t.Fatalf("resume search text = %q", text)
+	}
+}
+
+func TestRunnerResumeSlashCommandReportsNoSessions(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_resume_empty",
+		WorkingDirectory: cwd,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/resume"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if got := result.Messages[1].Content[0].Text; !strings.Contains(got, "No sessions found for ") {
+		t.Fatalf("resume text = %q", got)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

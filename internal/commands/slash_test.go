@@ -297,3 +297,23 @@ func TestExecuteSlashModelReturnsLocalModelResult(t *testing.T) {
 		t.Fatalf("model command message = %q", text)
 	}
 }
+
+func TestExecuteSlashResumeReturnsLocalResumeResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/resume deploy", SlashOptions{UUID: "user_resume"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultResume || result.LocalResult.Value != "deploy" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_resume" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/resume</command-name>") || !strings.Contains(text, "<command-args>deploy</command-args>") {
+		t.Fatalf("resume command message = %q", text)
+	}
+}
