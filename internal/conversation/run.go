@@ -461,12 +461,15 @@ func (r Runner) formatStatusSummary() string {
 		mcpText = strings.Join(mcpServers, ", ")
 	}
 	return fmt.Sprintf(
-		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nOutput style: %s\nAuth source: %s\nTools: %d\nMCP servers: %s",
+		"Status\nSession ID: %s\nWorking directory: %s\nModel: %s\nOutput style: %s\nAuth source: %s\nPermission mode: %s\nFast mode: %s\nBetas: %s\nTools: %d\nMCP servers: %s",
 		sessionID,
 		cwd,
 		model,
 		r.effectiveOutputStyleName(),
 		r.authSourceText(),
+		r.permissionModeText(),
+		boolEnabledText(r.FastMode),
+		r.betaHeadersText(),
 		toolCount,
 		mcpText,
 	)
@@ -496,6 +499,9 @@ func (r Runner) formatConfigSummary(raw string) string {
 		fmt.Sprintf("- MCP servers: %d", len(merged.MCPServers)),
 		"- output style: " + r.effectiveOutputStyleName(),
 		"- auth source: " + r.authSourceText(),
+		"- permission mode: " + r.permissionModeText(),
+		"- fast mode: " + boolEnabledText(r.FastMode),
+		fmt.Sprintf("- beta headers: %d", len(r.BetaHeaders)),
 		"- permission rules: " + permissionsText,
 		fmt.Sprintf("- hooks: %d", len(merged.Hooks)),
 		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
@@ -508,6 +514,20 @@ func (r Runner) authSourceText() string {
 		return "(unknown)"
 	}
 	return r.APIKeySource
+}
+
+func (r Runner) permissionModeText() string {
+	if strings.TrimSpace(string(r.PermissionMode)) == "" {
+		return "(unknown)"
+	}
+	return string(r.PermissionMode)
+}
+
+func (r Runner) betaHeadersText() string {
+	if len(r.BetaHeaders) == 0 {
+		return "none"
+	}
+	return strings.Join(r.BetaHeaders, ", ")
 }
 
 func (r Runner) formatPluginSummary(raw string) string {

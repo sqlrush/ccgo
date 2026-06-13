@@ -138,6 +138,8 @@ M4/M8 补充：headless CLI 认证现在在环境变量缺失时会读取 `${CLA
 
 M8 补充：headless `/status` 和 `/config` 现在会显示当前认证来源（如 `api_key`/`oauth`），与 stream-json init 的 `api_key_source` 对齐；完整 account profile、org、订阅/额度状态仍待补齐。
 
+M8 补充：headless `/status` 和 `/config` 现在也会显示 permission mode、fast mode 和 beta header 状态，与 stream-json init 的运行态 metadata 对齐；完整 TUI status panel 状态栏接线仍待补齐。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

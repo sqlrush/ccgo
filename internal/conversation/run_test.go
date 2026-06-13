@@ -682,6 +682,9 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 		Tools:            tool.NewExecutor(registry),
 		Model:            "sonnet",
 		APIKeySource:     "oauth",
+		PermissionMode:   contracts.PermissionPlan,
+		BetaHeaders:      []string{"beta-one", "beta-two"},
+		FastMode:         true,
 		MaxTokens:        128,
 		SessionID:        "sess_status",
 		SessionPath:      transcriptPath,
@@ -715,6 +718,9 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 		"Model: sonnet",
 		"Output style: Explanatory",
 		"Auth source: oauth",
+		"Permission mode: plan",
+		"Fast mode: enabled",
+		"Betas: beta-one, beta-two",
 		"Tools: 1",
 		"MCP servers: alpha, zeta",
 	} {
@@ -749,6 +755,8 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 		Client:           client,
 		Model:            "sonnet",
 		APIKeySource:     "api_key",
+		PermissionMode:   contracts.PermissionDefault,
+		BetaHeaders:      []string{"beta-one"},
 		SessionID:        "sess_config",
 		WorkingDirectory: cwd,
 		MCP: &MCPConfig{
@@ -795,6 +803,9 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 		"- MCP servers: 1",
 		"- output style: Explanatory",
 		"- auth source: api_key",
+		"- permission mode: default",
+		"- fast mode: disabled",
+		"- beta headers: 1",
 		"- permission rules: allow 1, deny 1, ask 1",
 		"- hooks: 1",
 	} {
