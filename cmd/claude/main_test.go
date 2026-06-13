@@ -630,7 +630,7 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
 	}
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-	if len(lines) != 3 {
+	if len(lines) != 4 {
 		t.Fatalf("lines = %#v", lines)
 	}
 	var events []map[string]any
@@ -641,11 +641,21 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 		}
 		events = append(events, event)
 	}
-	if events[0]["type"] != "user_message" || events[1]["type"] != "assistant_message" || events[2]["type"] != "result" {
+	if events[0]["type"] != "system" || events[0]["subtype"] != "init" {
+		t.Fatalf("init event = %#v", events[0])
+	}
+	if events[0]["session_id"] == "" || events[0]["cwd"] == "" {
+		t.Fatalf("init metadata = %#v", events[0])
+	}
+	tools, ok := events[0]["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("init tools = %#v", events[0]["tools"])
+	}
+	if events[1]["type"] != "user_message" || events[2]["type"] != "assistant_message" || events[3]["type"] != "result" {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[2]["result"] != "stream ok" {
-		t.Fatalf("result event = %#v", events[2])
+	if events[3]["result"] != "stream ok" {
+		t.Fatalf("result event = %#v", events[3])
 	}
 }
 

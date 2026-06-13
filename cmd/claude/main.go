@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"ccgo/internal/api/anthropic"
@@ -665,6 +666,11 @@ type printJSONResult struct {
 
 type printStreamEvent struct {
 	Type         conversation.EventType     `json:"type"`
+	Subtype      string                     `json:"subtype,omitempty"`
+	SessionID    contracts.ID               `json:"session_id,omitempty"`
+	CWD          string                     `json:"cwd,omitempty"`
+	Tools        []string                   `json:"tools,omitempty"`
+	MCPServers   []string                   `json:"mcp_servers,omitempty"`
 	Message      *contracts.Message         `json:"message,omitempty"`
 	ToolUse      *contracts.ToolUse         `json:"tool_use,omitempty"`
 	ToolResult   *contracts.ToolResult      `json:"tool_result,omitempty"`
@@ -678,6 +684,15 @@ type printStreamEvent struct {
 func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
+	eventErr = encoder.Encode(printStreamEvent{
+		Type:       "system",
+		Subtype:    "init",
+		SessionID:  runner.SessionID,
+		CWD:        runner.WorkingDirectory,
+		Tools:      runnerToolNames(runner),
+		MCPServers: runnerMCPServerNames(runner),
+		Model:      runner.Model,
+	})
 	runner.OnEvent = func(event conversation.Event) {
 		if eventErr != nil {
 			return
@@ -685,6 +700,26 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 		eventErr = writePrintStreamEvent(encoder, event)
 	}
 	return runner, func() error { return eventErr }
+}
+
+func runnerToolNames(runner conversation.Runner) []string {
+	if runner.Tools.Registry == nil {
+		return nil
+	}
+	return runner.Tools.Registry.Names()
+}
+
+func runnerMCPServerNames(runner conversation.Runner) []string {
+	if runner.MCP == nil {
+		return nil
+	}
+	merged := config.MergeSettings(runner.MCP.UserSettings, runner.MCP.ProjectSettings, runner.MCP.LocalSettings)
+	names := make([]string, 0, len(merged.MCPServers))
+	for name := range merged.MCPServers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {
