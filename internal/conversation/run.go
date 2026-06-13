@@ -59,6 +59,19 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 			result.Messages = append(result.Messages, compactResult.Plan.Boundary, compactResult.Plan.Summary)
 			return result, nil
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultCost {
+			costMessage := msgs.UserText(formatCostSummary(originalHistory))
+			if r.SessionID != "" {
+				costMessage.SessionID = r.SessionID
+			}
+			history, costMessage = appendMessage(history, costMessage)
+			result.Messages = append(result.Messages, costMessage)
+			if err := r.appendTranscript(costMessage); err != nil {
+				return result, err
+			}
+			r.emit(Event{Type: EventUserMessage, Message: &costMessage})
+			return result, nil
+		}
 		return result, nil
 	}
 	r, closeMCP, err := r.withConfiguredMCPTools(ctx)
@@ -333,6 +346,50 @@ func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, 
 	}
 	r.emit(Event{Type: EventCompact, Compact: &result})
 	return result, nil
+}
+
+func formatCostSummary(history []contracts.Message) string {
+	usage, found := historyUsage(history)
+	if !found {
+		return "No cost data available for this session."
+	}
+	return fmt.Sprintf(
+		"Total cost: $%.6f\nInput tokens: %d\nOutput tokens: %d\nCache creation input tokens: %d\nCache read input tokens: %d\nWeb search requests: %d\nWeb fetch requests: %d",
+		usage.CostUSD,
+		usage.InputTokens,
+		usage.OutputTokens,
+		usage.CacheCreationInputTokens,
+		usage.CacheReadInputTokens,
+		usage.ServerToolUse.WebSearchRequests,
+		usage.ServerToolUse.WebFetchRequests,
+	)
+}
+
+func historyUsage(history []contracts.Message) (contracts.Usage, bool) {
+	var total contracts.Usage
+	var found bool
+	for _, message := range history {
+		if message.Usage == nil || !usageHasValues(*message.Usage) {
+			continue
+		}
+		total = anthropic.AccumulateUsage(total, *message.Usage)
+		found = true
+	}
+	return total, found
+}
+
+func usageHasValues(usage contracts.Usage) bool {
+	return usage.InputTokens != 0 ||
+		usage.OutputTokens != 0 ||
+		usage.CacheCreationInputTokens != 0 ||
+		usage.CacheReadInputTokens != 0 ||
+		usage.CacheDeletedInputTokens != 0 ||
+		usage.ServerToolUse.WebSearchRequests != 0 ||
+		usage.ServerToolUse.WebFetchRequests != 0 ||
+		usage.CacheCreation.Ephemeral1hInputTokens != 0 ||
+		usage.CacheCreation.Ephemeral5mInputTokens != 0 ||
+		usage.Iterations != 0 ||
+		usage.CostUSD != 0
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {

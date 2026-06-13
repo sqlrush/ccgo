@@ -46,6 +46,7 @@ const (
 	LocalCommandResultText    LocalCommandResultType = "text"
 	LocalCommandResultSkip    LocalCommandResultType = "skip"
 	LocalCommandResultCompact LocalCommandResultType = "compact"
+	LocalCommandResultCost    LocalCommandResultType = "cost"
 )
 
 type LocalCommandResult struct {
@@ -187,6 +188,8 @@ func ExecuteBuiltinLocalCommand(cmd contracts.Command, args string) (LocalComman
 		return LocalCommandResult{Type: LocalCommandResultText}, true
 	case "compact":
 		return LocalCommandResult{Type: LocalCommandResultCompact, Value: strings.TrimSpace(args)}, true
+	case "cost":
+		return LocalCommandResult{Type: LocalCommandResultCost}, true
 	default:
 		return LocalCommandResult{}, false
 	}

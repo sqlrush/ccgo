@@ -166,3 +166,23 @@ func TestExecuteSlashCompactReturnsLocalCompactResult(t *testing.T) {
 		t.Fatalf("compact command message = %q", text)
 	}
 }
+
+func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/cost", SlashOptions{UUID: "user_cost"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultCost {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_cost" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/cost</command-name>") {
+		t.Fatalf("cost command message = %q", text)
+	}
+}

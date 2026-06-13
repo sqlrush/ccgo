@@ -578,6 +578,85 @@ func TestRunnerExecutesCompactSlashCommandWithoutMainQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesCostSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_cost",
+		SessionPath: transcriptPath,
+	}
+	firstUsage := contracts.Usage{
+		InputTokens:              10,
+		OutputTokens:             20,
+		CacheCreationInputTokens: 3,
+		CacheReadInputTokens:     4,
+		ServerToolUse:            contracts.ToolUseUsage{WebSearchRequests: 1},
+		CostUSD:                  0.123456,
+	}
+	secondUsage := contracts.Usage{
+		InputTokens:   5,
+		OutputTokens:  7,
+		ServerToolUse: contracts.ToolUseUsage{WebFetchRequests: 2},
+		CostUSD:       0.5,
+	}
+	history := []contracts.Message{
+		messages.UserText("old one"),
+		messages.AssistantText("old two", "sonnet", &firstUsage),
+		messages.AssistantText("old three", "sonnet", &secondUsage),
+	}
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("/cost"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Total cost: $0.623456",
+		"Input tokens: 15",
+		"Output tokens: 27",
+		"Cache creation input tokens: 3",
+		"Cache read input tokens: 4",
+		"Web search requests: 1",
+		"Web fetch requests: 2",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("cost text missing %q: %q", want, text)
+		}
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || !strings.Contains(entries[1].Message.Content[0].Text, "Total cost: $0.623456") {
+		t.Fatalf("transcript entries = %#v", entries)
+	}
+}
+
+func TestRunnerCostSlashCommandReportsMissingUsage(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_cost_empty"}
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("/cost"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No cost data available for this session." {
+		t.Fatalf("cost text = %q", got)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
