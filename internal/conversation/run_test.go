@@ -812,6 +812,9 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(pluginDir, "hooks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "skills", "audit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -823,6 +826,9 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 			"PreToolUse": [{"hooks": [{"type": "command", "command": "echo pre"}]}]
 		}
 	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "skills", "audit", "SKILL.md"), []byte("---\ndescription: Audit code\n---\nAudit."), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
@@ -878,6 +884,7 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"Blocked marketplaces: 1",
 		"Local plugin manifests: 1",
 		"Registered plugin commands: 1",
+		"Plugin skills: 1",
 		"Plugin agents: 1",
 		"Plugin MCP servers: 1",
 		"Plugin hooks: 1",
@@ -885,6 +892,8 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 		"- demo@1.2.3",
 		"Plugin commands:",
 		"- /plugin:deploy",
+		"Plugin skills:",
+		"- /demo:audit",
 		"Plugin agents:",
 		"- demo:reviewer",
 		"Plugin MCP servers:",

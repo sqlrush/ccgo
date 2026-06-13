@@ -505,8 +505,9 @@ func (r Runner) formatPluginSummary(raw string) string {
 	}
 	merged := r.mergedSettings()
 	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
-	pluginCommands := pluginCommandNames(registry.Visible())
 	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	pluginSkills := pluginSkillNames(localPlugins)
+	pluginCommands := pluginCommandNames(registry.Visible(), pluginSkills)
 	pluginAgents := pluginAgentNames(localPlugins)
 	pluginMCPServers := pluginMCPServerNames(localPlugins)
 	pluginHookEvents := pluginHookEventLines(localPlugins)
@@ -521,6 +522,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 		fmt.Sprintf("Blocked marketplaces: %d", len(merged.BlockedMarketplaces)),
 		fmt.Sprintf("Local plugin manifests: %d", len(localPlugins)),
 		fmt.Sprintf("Registered plugin commands: %d", len(pluginCommands)),
+		fmt.Sprintf("Plugin skills: %d", len(pluginSkills)),
 		fmt.Sprintf("Plugin agents: %d", len(pluginAgents)),
 		fmt.Sprintf("Plugin MCP servers: %d", len(pluginMCPServers)),
 		fmt.Sprintf("Plugin hooks: %d", totalPluginHooks),
@@ -545,6 +547,15 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 		if len(pluginCommands) > 10 {
 			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin commands.", len(pluginCommands)))
+		}
+	}
+	if len(pluginSkills) > 0 {
+		lines = append(lines, "Plugin skills:")
+		for _, name := range firstStrings(pluginSkills, 10) {
+			lines = append(lines, "- /"+name)
+		}
+		if len(pluginSkills) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin skills.", len(pluginSkills)))
 		}
 	}
 	if len(pluginAgents) > 0 {
@@ -645,13 +656,35 @@ func fileStatusText(path string) string {
 	return "unreadable"
 }
 
-func pluginCommandNames(commandsList []contracts.Command) []string {
+func pluginCommandNames(commandsList []contracts.Command, pluginSkills []string) []string {
+	skillNames := map[string]struct{}{}
+	for _, name := range pluginSkills {
+		skillNames[name] = struct{}{}
+	}
 	var names []string
 	for _, cmd := range commandsList {
 		if cmd.Source != contracts.CommandSourcePlugin && cmd.LoadedFrom != "plugin" {
 			continue
 		}
-		names = append(names, commands.UserFacingName(cmd))
+		name := commands.UserFacingName(cmd)
+		if _, ok := skillNames[name]; ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func pluginSkillNames(plugins []pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for _, plugin := range plugins {
+		for _, skill := range plugin.SkillCommands {
+			name := commands.UserFacingName(skill)
+			if strings.TrimSpace(name) != "" {
+				names = append(names, name)
+			}
+		}
 	}
 	sort.Strings(names)
 	return names

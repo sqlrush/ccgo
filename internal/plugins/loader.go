@@ -38,6 +38,7 @@ type LoadedPlugin struct {
 	Description     string
 	Commands        []contracts.Command
 	PromptTemplates []PromptTemplate
+	SkillCommands   []contracts.Command
 	MCPServers      map[string]contracts.MCPServer
 	Agents          []PluginAgent
 	HookEvents      []PluginHookEvent
@@ -129,7 +130,11 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 	commands, prompts := pluginCommands(root, name, parsed.Commands)
 	loaded.Commands = append(loaded.Commands, commands...)
 	loaded.PromptTemplates = append(loaded.PromptTemplates, prompts...)
-	loaded.PromptTemplates = append(loaded.PromptTemplates, pluginSkillPrompts(root, name, parsed.Skills)...)
+	skillPrompts := pluginSkillPrompts(root, name, parsed.Skills)
+	loaded.PromptTemplates = append(loaded.PromptTemplates, skillPrompts...)
+	for _, prompt := range skillPrompts {
+		loaded.SkillCommands = append(loaded.SkillCommands, prompt.Command)
+	}
 	loaded.MCPServers = pluginMCPServers(root, name, parsed.MCPServers, parsed.MCPServersSnake)
 	loaded.Agents = pluginAgents(root, name, parsed.Agents)
 	loaded.HookEvents = pluginHookEvents(root, parsed.Hooks)
