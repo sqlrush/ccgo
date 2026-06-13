@@ -753,6 +753,7 @@ type printJSONResult struct {
 	Model       string                 `json:"model,omitempty"`
 	Usage       *contracts.Usage       `json:"usage,omitempty"`
 	ToolResults []contracts.ToolResult `json:"tool_results,omitempty"`
+	Cleared     bool                   `json:"cleared,omitempty"`
 }
 
 type printStreamEvent struct {
@@ -846,7 +847,9 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 		}
 	}
 	if text == "" {
-		return nil
+		if (outputFormat != "json" && outputFormat != "stream-json") || !result.Cleared {
+			return nil
+		}
 	}
 	if outputFormat == "json" || outputFormat == "stream-json" {
 		return writePrintJSONResult(stdout, result, text, duration)
@@ -936,6 +939,7 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Model:       message.Model,
 		Usage:       usage,
 		ToolResults: result.ToolResults,
+		Cleared:     result.Cleared,
 	}
 	encoder := json.NewEncoder(stdout)
 	return encoder.Encode(envelope)

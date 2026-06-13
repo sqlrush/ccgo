@@ -862,6 +862,31 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONClearIncludesCleared(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "/clear"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "success" || payload["is_error"] != false || payload["cleared"] != true {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if payload["result"] != "" || payload["num_turns"] != nil {
+		t.Fatalf("clear result metadata = %#v", payload)
+	}
+}
+
 func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
@@ -958,6 +983,32 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 	if _, ok := events[3]["duration_api_ms"].(float64); !ok {
 		t.Fatalf("result duration_api_ms = %#v", events[3]["duration_api_ms"])
+	}
+}
+
+func TestRunPrintStreamJSONClearIncludesCleared(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "stream-json", "/clear"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("lines = %#v stdout=%q", lines, stdout.String())
+	}
+	var final map[string]any
+	if err := json.Unmarshal([]byte(lines[2]), &final); err != nil {
+		t.Fatalf("invalid final line %q: %v", lines[2], err)
+	}
+	if final["type"] != "result" || final["subtype"] != "success" || final["cleared"] != true || final["result"] != "" {
+		t.Fatalf("final = %#v", final)
 	}
 }
 
