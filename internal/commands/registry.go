@@ -225,6 +225,7 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocal, Name: "cost", Description: "Show the total cost and duration of the current session", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocalJSX, Name: "status", Description: "Show Claude Code status including version, model, account, API connectivity, and tool statuses", Source: contracts.CommandSourceBuiltin, Immediate: true},
 		{Type: contracts.CommandLocalJSX, Name: "model", Description: "Set the AI model for Claude Code", ArgumentHint: "[model]", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "output-style", Description: "Deprecated: use /config to change output style", Source: contracts.CommandSourceBuiltin},
 	})
 }
 

@@ -302,6 +302,26 @@ func TestExecuteSlashSkillsReturnsLocalTextResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashOutputStyleReturnsDeprecatedTextResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/output-style", SlashOptions{UUID: "user_output_style"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultText {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_output_style" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "/output-style has been deprecated") || !strings.Contains(text, "/config") {
+		t.Fatalf("output-style text = %q", text)
+	}
+}
+
 func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/cost", SlashOptions{UUID: "user_cost"})

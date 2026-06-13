@@ -210,6 +210,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultStatus}, true
 	case "model":
 		return LocalCommandResult{Type: LocalCommandResultModel, Value: strings.TrimSpace(args)}, true
+	case "output-style":
+		return LocalCommandResult{Type: LocalCommandResultText, Value: "/output-style has been deprecated. Use /config to change your output style, or set it in your settings file. Changes take effect on the next session."}, true
 	case "resume":
 		return LocalCommandResult{Type: LocalCommandResultResume, Value: strings.TrimSpace(args)}, true
 	case "skills":
