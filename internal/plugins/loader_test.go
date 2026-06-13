@@ -32,6 +32,25 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "extra-agent.md"), []byte("# Extra agent\nHelp with extra tasks."), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{
+		"mcpServers": {
+			"plugin:default": {
+				"command": "default-mcp"
+			}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "mcp-extra.json"), []byte(`{
+		"mcpServers": {
+			"plugin:extra": {
+				"type": "http",
+				"url": "https://extra.example/mcp"
+			}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "hooks", "hooks.json"), []byte(`{
 		"hooks": {
 			"PreToolUse": [{
@@ -63,10 +82,18 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 				"hooks": [{"type": "command", "command": "echo post"}]
 			}]
 		},
-		"mcpServers": {
-			"plugin:docs": {
-				"type": "http",
-				"url": "https://example.com/mcp"
+		"mcpServers": [
+			"mcp-extra.json",
+			{
+				"plugin:docs": {
+					"type": "http",
+					"url": "https://example.com/mcp"
+				}
+			}
+		],
+		"mcp_servers": {
+			"plugin:snake": {
+				"command": "snake-mcp"
 			}
 		}
 	}`), 0o644); err != nil {
@@ -97,6 +124,15 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	server, ok := plugin.MCPServers["plugin:docs"]
 	if !ok || server.PluginSource != "demo" || server.Name != "plugin:docs" || server.URL != "https://example.com/mcp" {
 		t.Fatalf("mcp servers = %#v", plugin.MCPServers)
+	}
+	if server := plugin.MCPServers["plugin:default"]; server.Command != "default-mcp" || server.PluginSource != "demo" {
+		t.Fatalf("default mcp server = %#v", server)
+	}
+	if server := plugin.MCPServers["plugin:extra"]; server.URL != "https://extra.example/mcp" || server.PluginSource != "demo" {
+		t.Fatalf("extra mcp server = %#v", server)
+	}
+	if server := plugin.MCPServers["plugin:snake"]; server.Command != "snake-mcp" || server.PluginSource != "demo" {
+		t.Fatalf("snake mcp server = %#v", server)
 	}
 	if len(plugin.Agents) != 2 || plugin.Agents[0].Name != "demo:extra-agent" || plugin.Agents[1].Name != "demo:reviewer" {
 		t.Fatalf("agents = %#v", plugin.Agents)

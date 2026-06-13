@@ -44,16 +44,16 @@ type LoadedPlugin struct {
 }
 
 type manifest struct {
-	Name            string                         `json:"name"`
-	DisplayName     string                         `json:"displayName"`
-	Description     string                         `json:"description"`
-	Version         string                         `json:"version"`
-	Commands        []commandManifest              `json:"commands"`
-	Skills          []skillManifest                `json:"skills"`
-	Agents          any                            `json:"agents"`
-	Hooks           any                            `json:"hooks"`
-	MCPServers      map[string]contracts.MCPServer `json:"mcpServers"`
-	MCPServersSnake map[string]contracts.MCPServer `json:"mcp_servers"`
+	Name            string            `json:"name"`
+	DisplayName     string            `json:"displayName"`
+	Description     string            `json:"description"`
+	Version         string            `json:"version"`
+	Commands        []commandManifest `json:"commands"`
+	Skills          []skillManifest   `json:"skills"`
+	Agents          any               `json:"agents"`
+	Hooks           any               `json:"hooks"`
+	MCPServers      any               `json:"mcpServers"`
+	MCPServersSnake any               `json:"mcp_servers"`
 }
 
 type commandManifest struct {
@@ -144,7 +144,7 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 		}
 		loaded.PromptTemplates = append(loaded.PromptTemplates, PromptTemplate{Command: skill.Command, Content: skill.Content})
 	}
-	loaded.MCPServers = pluginMCPServers(name, parsed.MCPServers, parsed.MCPServersSnake)
+	loaded.MCPServers = pluginMCPServers(root, name, parsed.MCPServers, parsed.MCPServersSnake)
 	loaded.Agents = pluginAgents(root, name, parsed.Agents)
 	loaded.HookEvents = pluginHookEvents(root, parsed.Hooks)
 	return loaded, nil
@@ -259,25 +259,113 @@ func skillFromManifest(root string, item skillManifest) (skills.Skill, bool) {
 	return skill, true
 }
 
-func pluginMCPServers(pluginName string, groups ...map[string]contracts.MCPServer) map[string]contracts.MCPServer {
+func pluginMCPServers(root string, pluginName string, specs ...any) map[string]contracts.MCPServer {
 	out := map[string]contracts.MCPServer{}
-	for _, group := range groups {
-		for name, server := range group {
-			name = strings.TrimSpace(name)
-			if name == "" {
-				continue
-			}
-			if server.Name == "" {
-				server.Name = name
-			}
-			server.PluginSource = pluginName
-			out[name] = server
-		}
+	mergePluginMCPServers(out, pluginName, loadPluginMCPServerFile(filepath.Join(root, ".mcp.json")))
+	for _, spec := range specs {
+		mergePluginMCPServers(out, pluginName, pluginMCPServersFromSpec(root, spec))
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+func pluginMCPServersFromSpec(root string, spec any) map[string]contracts.MCPServer {
+	switch value := spec.(type) {
+	case nil:
+		return nil
+	case string:
+		if strings.TrimSpace(value) == "" || isExternalOrMCPBSource(value) {
+			return nil
+		}
+		return loadPluginMCPServerFile(safeJoin(root, value))
+	case []any:
+		out := map[string]contracts.MCPServer{}
+		for _, item := range value {
+			mergePluginMCPServers(out, "", pluginMCPServersFromSpec(root, item))
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	case map[string]any:
+		return pluginMCPServersFromObject(value)
+	default:
+		return nil
+	}
+}
+
+func loadPluginMCPServerFile(path string) map[string]contracts.MCPServer {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	return pluginMCPServersFromSpec(filepath.Dir(path), raw)
+}
+
+func pluginMCPServersFromObject(object map[string]any) map[string]contracts.MCPServer {
+	if nested, ok := object["mcpServers"]; ok {
+		if nestedObject, ok := nested.(map[string]any); ok {
+			object = nestedObject
+		}
+	}
+	out := map[string]contracts.MCPServer{}
+	for name, raw := range object {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		server, ok := pluginMCPServer(raw)
+		if !ok {
+			continue
+		}
+		out[name] = server
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func pluginMCPServer(raw any) (contracts.MCPServer, bool) {
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return contracts.MCPServer{}, false
+	}
+	var server contracts.MCPServer
+	if err := json.Unmarshal(data, &server); err != nil {
+		return contracts.MCPServer{}, false
+	}
+	if server.Type == "" && server.Command == "" && server.URL == "" && len(server.Args) == 0 {
+		return contracts.MCPServer{}, false
+	}
+	return server, true
+}
+
+func mergePluginMCPServers(dst map[string]contracts.MCPServer, pluginName string, src map[string]contracts.MCPServer) {
+	for name, server := range src {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if server.Name == "" {
+			server.Name = name
+		}
+		if pluginName != "" {
+			server.PluginSource = pluginName
+		}
+		dst[name] = server
+	}
+}
+
+func isExternalOrMCPBSource(path string) bool {
+	path = strings.TrimSpace(strings.ToLower(path))
+	return strings.HasSuffix(path, ".mcpb") || strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://")
 }
 
 func pluginAgents(root string, pluginName string, manifestAgents any) []PluginAgent {
