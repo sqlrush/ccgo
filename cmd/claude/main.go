@@ -837,15 +837,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 }
 
 func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat string, duration time.Duration) error {
-	text := messages.TextContent(result.Assistant)
-	if text == "" {
-		for i := len(result.Messages) - 1; i >= 0; i-- {
-			if result.Messages[i].Type == contracts.MessageAssistant {
-				text = messages.TextContent(result.Messages[i])
-				break
-			}
-		}
-	}
+	text := resultOutputText(result)
 	if text == "" {
 		if (outputFormat != "json" && outputFormat != "stream-json") || !result.Cleared {
 			return nil
@@ -862,6 +854,27 @@ func writePrintResult(stdout io.Writer, result conversation.Result, outputFormat
 		return err
 	}
 	return nil
+}
+
+func resultOutputText(result conversation.Result) string {
+	if text := messages.TextContent(result.Assistant); text != "" {
+		return text
+	}
+	for i := len(result.Messages) - 1; i >= 0; i-- {
+		message := result.Messages[i]
+		text := messages.TextContent(message)
+		if text == "" || isCommandMetadataText(text) {
+			continue
+		}
+		if message.Type == contracts.MessageAssistant || result.Assistant.Type == "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func isCommandMetadataText(text string) bool {
+	return strings.Contains(text, "<command-name>") && strings.Contains(text, "</command-name>")
 }
 
 func writePrintError(stdout io.Writer, runner conversation.Runner, err error, outputFormat string, duration time.Duration, apiDuration time.Duration) error {

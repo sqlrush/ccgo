@@ -82,6 +82,8 @@ M8/M7 补充：`/clear` local command 现在返回专用 clear result，并在 c
 
 M8/CLI 补充：`--print --output-format json|stream-json` 现在会为 `/clear` 这类空文本本地结果输出 final result envelope，并用 `cleared: true` 暴露清空信号；普通空文本结果仍保持不输出，完整 SDK/control protocol clear event parity 仍需后续补齐。
 
+M8/CLI 补充：`--print` 输出选择现在支持本地文本 slash result：当没有 assistant message 时，会从 result messages 尾部选择最后一个非 command-metadata 文本作为 stdout/JSON `result`，使 `/status`、`/cost`、`/config` 等 headless local command 在 CLI 中可见；普通 assistant 输出优先级不变。
+
 M8 补充：`/compact` built-in local command 现在会产生 compact local result，并在 conversation runner 中触发现有手动 compact runner；命令 metadata 会写入 transcript，但摘要输入使用命令前 history，compact boundary/summary、session memory 和 compact event 复用现有 compact pipeline。完整 TUI compact UI、progress/status 展示和 `/cost`/`/status` 仍未完成。
 
 M8 补充：`/cost` built-in local command 现在会在 conversation runner 中按当前 history 的 message usage 汇总 total cost、input/output/cache token 和 web search/fetch 请求数，作为 local text result 写入 result/transcript，且不会请求模型或打开 MCP；完整 TUI cost panel、session duration 和 account/billing 细节仍未完成。

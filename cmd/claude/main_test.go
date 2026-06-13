@@ -887,6 +887,50 @@ func TestRunPrintJSONClearIncludesCleared(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONLocalTextResult(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "--output-format", "json", "/status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	result, ok := payload["result"].(string)
+	if !ok || !strings.Contains(result, "Status") || !strings.Contains(result, "Session ID:") {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if payload["num_turns"] != nil || payload["cleared"] != nil {
+		t.Fatalf("local result metadata = %#v", payload)
+	}
+}
+
+func TestRunPrintTextLocalTextResult(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--print", "/status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if text := stdout.String(); !strings.Contains(text, "Status") || !strings.Contains(text, "Session ID:") {
+		t.Fatalf("stdout = %q", text)
+	}
+}
+
 func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
