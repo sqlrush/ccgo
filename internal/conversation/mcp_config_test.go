@@ -1,9 +1,14 @@
 package conversation
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"ccgo/internal/auth"
+	"ccgo/internal/contracts"
+	"ccgo/internal/mcp"
 )
 
 func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
@@ -32,6 +37,13 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 			"local": {"command": "local-server"}
 		}
 	}`)
+	store := auth.NewFileCredentialStore(mcp.DefaultMCPServerCredentialsPath("remote"))
+	if err := store.Save(context.Background(), auth.Credentials{
+		Source:      auth.SourceOAuth,
+		AccessToken: "cached",
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	config, err := LoadMCPConfigFromSettingsFiles(project)
 	if err != nil {
@@ -49,6 +61,22 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 	}
 	if config.LocalSettings.MCPServers["local"].Command != "local-server" {
 		t.Fatalf("local settings = %#v", config.LocalSettings.MCPServers)
+	}
+	if config.ToolOptions.AccessTokenProvider == nil {
+		t.Fatal("missing default MCP OAuth access token provider")
+	}
+	tokenProvider, err := config.ToolOptions.AccessTokenProvider(context.Background(), "remote", contracts.MCPServer{
+		OAuth: &contracts.MCPOAuthConfig{ClientID: "client"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := tokenProvider.CurrentAccessToken(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "cached" {
+		t.Fatalf("token = %q", token)
 	}
 }
 
