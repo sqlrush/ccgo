@@ -111,14 +111,14 @@ func TestExecuteSlashNonCommandPathFallsThrough(t *testing.T) {
 
 func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
-	result, handled, err := ExecuteSlashCommand(registry, "/model opus", SlashOptions{UUID: "user_model"})
+	result, handled, err := ExecuteSlashCommand(registry, "/config", SlashOptions{UUID: "user_config"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !handled || result.ShouldQuery || !result.Unsupported {
 		t.Fatalf("handled=%v result=%#v", handled, result)
 	}
-	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_model" {
+	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_config" {
 		t.Fatalf("messages = %#v", result.Messages)
 	}
 	if !strings.Contains(result.Messages[1].Content[0].Text, "<local-command-stderr>") {
@@ -255,5 +255,25 @@ func TestExecuteSlashStatusReturnsLocalStatusResult(t *testing.T) {
 	}
 	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/status</command-name>") {
 		t.Fatalf("status command message = %q", text)
+	}
+}
+
+func TestExecuteSlashModelReturnsLocalModelResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/model opus", SlashOptions{UUID: "user_model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultModel || result.LocalResult.Value != "opus" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_model" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/model</command-name>") || !strings.Contains(text, "<command-args>opus</command-args>") {
+		t.Fatalf("model command message = %q", text)
 	}
 }

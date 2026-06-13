@@ -720,6 +720,46 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		Model:     "sonnet",
+		SessionID: "sess_model",
+	}
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{messages.UserText("old")}, messages.UserText("/model opus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Selected model: claude-opus-4-6") || !strings.Contains(text, "Display name: Opus 4.6") {
+		t.Fatalf("model text = %q", text)
+	}
+}
+
+func TestRunnerModelSlashCommandReportsCurrentModel(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		Model:     "claude-sonnet-4-6",
+		SessionID: "sess_model_current",
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/model"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Current model: claude-sonnet-4-6" {
+		t.Fatalf("model text = %q", got)
+	}
+}
+
 func TestRunnerAppliesSlashCommandAllowedToolsToToolPermissions(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

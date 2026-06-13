@@ -86,6 +86,8 @@ M8 补充：`/status` built-in local-jsx command 现在在 headless/local runner
 
 M8 补充：`/help` 和 `/skills` built-in local-jsx command 现在有基础 text result：`/help` 从 command registry 输出可见命令列表，`/skills` 输出可见 prompt skill 列表或空状态；二者不会请求模型，完整 TUI help/skills 面板、筛选、分组和 plugin/MCP skill 展示仍未完成。
 
+M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 text result：无参数显示当前 runner model，有参数会按模型 registry 解析 alias 并展示 resolved model/display name，不请求模型；完整交互式模型选择、持久设置写回和 TUI 状态同步仍未完成。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。

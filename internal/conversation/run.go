@@ -17,6 +17,7 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
+	modelpkg "ccgo/internal/model"
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/skills"
@@ -67,6 +68,9 @@ func (r Runner) RunTurn(ctx context.Context, history []contracts.Message, user c
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultStatus {
 			return r.appendLocalTextResult(result, history, r.formatStatusSummary())
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultModel {
+			return r.appendLocalTextResult(result, history, r.formatModelSummary(localResult.Value))
 		}
 		return result, nil
 	}
@@ -442,6 +446,21 @@ func (r Runner) mcpServerNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func (r Runner) formatModelSummary(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "Current model: " + r.model()
+	}
+	if capability, ok := modelpkg.DefaultRegistry().Resolve(raw); ok {
+		display := strings.TrimSpace(capability.DisplayName)
+		if display == "" {
+			display = capability.Name
+		}
+		return fmt.Sprintf("Selected model: %s\nDisplay name: %s", capability.Name, display)
+	}
+	return "Selected model: " + raw
 }
 
 func (r Runner) appendCompactTranscript(plan compactpkg.Plan) error {

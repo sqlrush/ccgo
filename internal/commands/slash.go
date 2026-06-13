@@ -48,6 +48,7 @@ const (
 	LocalCommandResultCompact LocalCommandResultType = "compact"
 	LocalCommandResultCost    LocalCommandResultType = "cost"
 	LocalCommandResultStatus  LocalCommandResultType = "status"
+	LocalCommandResultModel   LocalCommandResultType = "model"
 )
 
 type LocalCommandResult struct {
@@ -195,6 +196,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultCost}, true
 	case "status":
 		return LocalCommandResult{Type: LocalCommandResultStatus}, true
+	case "model":
+		return LocalCommandResult{Type: LocalCommandResultModel, Value: strings.TrimSpace(args)}, true
 	case "skills":
 		return LocalCommandResult{Type: LocalCommandResultText, Value: formatSkillsText(registry)}, true
 	default:
