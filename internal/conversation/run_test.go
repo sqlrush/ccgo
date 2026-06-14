@@ -1268,6 +1268,50 @@ func TestRunnerExecutesMemorySlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerMemoryShowListsMemoryFiles(t *testing.T) {
+	client := &fakeClient{}
+	sessionRoot := t.TempDir()
+	relevantRoot := t.TempDir()
+	if _, err := memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:      sessionRoot,
+		SessionID: "sess_show",
+		Summary:   "remember deployment flow",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(relevantRoot, "team"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(relevantRoot, "team", "db.md"), []byte("---\ntitle: DB\n---\n# Database rules\nKeep migrations small.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:            client,
+		SessionID:         "sess_memory_show",
+		SessionMemoryRoot: sessionRoot,
+		RelevantMemoryDir: relevantRoot,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/memory show"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory files",
+		"Session memory root: " + sessionRoot,
+		"sess_show/" + memory.SessionSummaryFilename + ": remember deployment flow",
+		"Relevant memory directory: " + relevantRoot,
+		"team/db.md: Database rules",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory show missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},

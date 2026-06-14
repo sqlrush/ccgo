@@ -1017,8 +1017,14 @@ func writeUserSettingsDocument(document map[string]any) error {
 
 func (r Runner) formatMemorySummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
-	if len(args) > 0 && args[0] != "list" && args[0] != "status" {
-		return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	if len(args) > 0 {
+		switch args[0] {
+		case "list", "status":
+		case "show":
+			return r.formatMemoryShow()
+		default:
+			return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		}
 	}
 	sessionRoot := r.SessionMemoryRoot
 	if sessionRoot == "" {
@@ -1042,6 +1048,33 @@ func (r Runner) formatMemorySummary(raw string) string {
 		"Session memory recall: " + boolEnabledText(r.EnableSessionMemoryRecall),
 		"Turn-end memory extraction: " + boolEnabledText(r.EnableMemoryExtraction),
 	}, "\n")
+}
+
+func (r Runner) formatMemoryShow() string {
+	sessionRoot := r.SessionMemoryRoot
+	if sessionRoot == "" {
+		sessionRoot = memory.DefaultSessionMemoryRoot(r.SessionPath)
+	}
+	relevantRoot := strings.TrimSpace(r.RelevantMemoryDir)
+	lines := []string{"Memory files"}
+	appendMemoryFileSection := func(title string, root string) {
+		rootText := root
+		if strings.TrimSpace(rootText) == "" {
+			rootText = "(not configured)"
+		}
+		lines = append(lines, title+": "+rootText)
+		files := collectMarkdownFilePreviews(root, 10)
+		if len(files) == 0 {
+			lines = append(lines, "- none")
+			return
+		}
+		for _, file := range files {
+			lines = append(lines, "- "+file.RelPath+": "+file.Preview)
+		}
+	}
+	appendMemoryFileSection("Session memory root", sessionRoot)
+	appendMemoryFileSection("Relevant memory directory", relevantRoot)
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) mergedSettings() contracts.Settings {
@@ -1306,6 +1339,98 @@ func countMarkdownFiles(root string) int {
 		return nil
 	})
 	return count
+}
+
+type markdownFilePreview struct {
+	Path    string
+	RelPath string
+	Preview string
+	ModTime time.Time
+}
+
+func collectMarkdownFilePreviews(root string, limit int) []markdownFilePreview {
+	if strings.TrimSpace(root) == "" || limit <= 0 {
+		return nil
+	}
+	var files []markdownFilePreview
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			name := entry.Name()
+			if name == ".git" || name == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.EqualFold(filepath.Ext(path), ".md") {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			rel = path
+		}
+		files = append(files, markdownFilePreview{
+			Path:    path,
+			RelPath: filepath.ToSlash(rel),
+			Preview: markdownPreview(path),
+			ModTime: info.ModTime(),
+		})
+		return nil
+	})
+	sort.Slice(files, func(i, j int) bool {
+		if !files[i].ModTime.Equal(files[j].ModTime) {
+			return files[i].ModTime.After(files[j].ModTime)
+		}
+		return files[i].RelPath < files[j].RelPath
+	})
+	if len(files) > limit {
+		files = files[:limit]
+	}
+	return files
+}
+
+func markdownPreview(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "(unreadable)"
+	}
+	lines := strings.Split(string(data), "\n")
+	inFrontmatter := false
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		inFrontmatter = true
+		lines = lines[1:]
+	}
+	for _, line := range lines {
+		text := strings.TrimSpace(line)
+		if inFrontmatter {
+			if text == "---" {
+				inFrontmatter = false
+			}
+			continue
+		}
+		if text == "" {
+			continue
+		}
+		return truncatePreviewLine(strings.TrimLeft(text, "# "))
+	}
+	return "(empty)"
+}
+
+func truncatePreviewLine(text string) string {
+	const limit = 96
+	if len(text) <= limit {
+		return text
+	}
+	if limit <= 3 {
+		return text[:limit]
+	}
+	return text[:limit-3] + "..."
 }
 
 func boolEnabledText(value bool) string {

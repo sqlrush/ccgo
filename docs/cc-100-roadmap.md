@@ -104,7 +104,7 @@ M8/M9 补充：`/mcp` built-in local-jsx command 现在有 headless/local 基础
 
 M8/M6 补充：`/resume` built-in local-jsx command 现在有 headless/local 基础 text result：无参数列出当前项目最近 session，有参数按现有 transcript search 查找匹配 session，空结果返回明确提示且不会请求模型；完整 resume picker UI、选择后恢复主循环和远端历史融合仍未完成。
 
-M8/M6 补充：`/config`、`/plugin`、`/memory` built-in local-jsx command 现在有 headless/local 基础 text result：`/config` 汇总工作目录、模型、settings 文件存在性和合并后 env/MCP/permissions/hooks/plugin 规模，`/plugin` 汇总 plugin settings/marketplace/registered plugin command 计数，`/memory` 汇总 session memory root、summary 数、relevant memory dir、memory 文件数和 recall/extraction 开关；这些命令不会请求模型或写回配置，完整 local-jsx 面板、plugin marketplace/install/update 和 memory editor 仍未完成。
+M8/M6 补充：`/config`、`/plugin`、`/memory` built-in local-jsx command 现在有 headless/local 基础 text result：`/config` 汇总工作目录、模型、settings 文件存在性和合并后 env/MCP/permissions/hooks/plugin 规模，`/plugin` 汇总 plugin settings/marketplace/registered plugin command 计数，`/memory` 汇总 session memory root、summary 数、relevant memory dir、memory 文件数和 recall/extraction 开关；`/memory show` 会只读列出 session summary 与 relevant memory markdown 文件预览。这些命令不会请求模型，完整 local-jsx 面板、plugin marketplace/install/update 和 memory editor 仍未完成。
 
 M8 补充：新增 `internal/plugins` 本地 manifest loader 地基，支持从 cwd 向上到 git root/home 发现 `.claude/plugins/<plugin>/plugin.json`，解析基础 plugin metadata、prompt command、local/local-jsx command metadata 和 manifest 指向的 `SKILL.md` skill，并接入 command registry 的 plugin source 顺序；当前只读加载本地 manifest，不包含 marketplace、install/cache/update、hooks/agents/MCP plugin 激活。
 
