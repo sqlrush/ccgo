@@ -757,6 +757,121 @@ func setUserPluginEnabled(name string, enabled bool) error {
 	return writeUserSettingsDocument(document)
 }
 
+func setUserMCPServerEnabled(name string, enabled bool, allowlistActive bool) error {
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		return err
+	}
+	if enabled {
+		if denied, ok := removeMCPPolicyEntryValue(document["deniedMcpServers"], name, false); ok {
+			document["deniedMcpServers"] = denied
+		} else {
+			delete(document, "deniedMcpServers")
+		}
+		if allowed, exists := document["allowedMcpServers"]; exists || allowlistActive {
+			document["allowedMcpServers"] = appendMCPPolicyEntryValue(allowed, name)
+		}
+	} else {
+		if allowed, exists := document["allowedMcpServers"]; exists {
+			if next, ok := removeMCPPolicyEntryValue(allowed, name, true); ok {
+				document["allowedMcpServers"] = next
+			} else {
+				document["allowedMcpServers"] = []any{}
+			}
+		}
+		document["deniedMcpServers"] = appendMCPPolicyEntryValue(document["deniedMcpServers"], name)
+	}
+	return writeUserSettingsDocument(document)
+}
+
+func setMCPServerEnabledInSettings(settings *contracts.Settings, name string, enabled bool, allowlistActive bool) {
+	if settings == nil {
+		return
+	}
+	if enabled {
+		settings.DeniedMCPServers = removeMCPPolicyEntries(settings.DeniedMCPServers, name)
+		if settings.AllowedMCPServers != nil || allowlistActive {
+			settings.AllowedMCPServers = appendMCPPolicyEntry(settings.AllowedMCPServers, name)
+		}
+		return
+	}
+	if settings.AllowedMCPServers != nil {
+		settings.AllowedMCPServers = removeMCPPolicyEntries(settings.AllowedMCPServers, name)
+	}
+	settings.DeniedMCPServers = appendMCPPolicyEntry(settings.DeniedMCPServers, name)
+}
+
+func removeMCPPolicyEntries(entries []contracts.MCPServerPolicyEntry, name string) []contracts.MCPServerPolicyEntry {
+	var out []contracts.MCPServerPolicyEntry
+	for _, entry := range entries {
+		if mcpPolicyEntryNameMatches(entry, name) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	if out == nil && entries != nil {
+		return []contracts.MCPServerPolicyEntry{}
+	}
+	return out
+}
+
+func appendMCPPolicyEntry(entries []contracts.MCPServerPolicyEntry, name string) []contracts.MCPServerPolicyEntry {
+	for _, entry := range entries {
+		if mcpPolicyEntryNameMatches(entry, name) {
+			return entries
+		}
+	}
+	return append(entries, contracts.MCPServerPolicyEntry{ServerName: name})
+}
+
+func mcpPolicyEntryNameMatches(entry contracts.MCPServerPolicyEntry, name string) bool {
+	name = strings.TrimSpace(name)
+	return strings.TrimSpace(entry.ServerName) == name || strings.TrimSpace(entry.Name) == name
+}
+
+func appendMCPPolicyEntryValue(value any, name string) []any {
+	entries, _ := value.([]any)
+	out := append([]any(nil), entries...)
+	for _, entry := range out {
+		if mcpPolicyEntryValueMatches(entry, name) {
+			return out
+		}
+	}
+	return append(out, map[string]any{"serverName": name})
+}
+
+func removeMCPPolicyEntryValue(value any, name string, keepEmpty bool) ([]any, bool) {
+	entries, _ := value.([]any)
+	out := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		if mcpPolicyEntryValueMatches(entry, name) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	if len(out) == 0 && !keepEmpty {
+		return nil, false
+	}
+	return out, true
+}
+
+func mcpPolicyEntryValueMatches(value any, name string) bool {
+	name = strings.TrimSpace(name)
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text) == name
+	}
+	entry, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"serverName", "server_name", "name"} {
+		if text, ok := entry[key].(string); ok && strings.TrimSpace(text) == name {
+			return true
+		}
+	}
+	return false
+}
+
 func setUserOutputStyle(name string) error {
 	document, err := readUserSettingsDocument()
 	if err != nil {
@@ -1130,8 +1245,14 @@ func (r *Runner) formatModelSummary(raw string) string {
 
 func (r Runner) formatMCPCommandSummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
-	if len(args) > 0 && args[0] != "list" {
-		return "MCP subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	if len(args) > 0 {
+		switch args[0] {
+		case "list":
+		case "enable", "disable":
+			return r.setMCPServerEnabledSummary(args)
+		default:
+			return "MCP subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		}
 	}
 	servers := r.mcpServers()
 	if len(servers) == 0 {
@@ -1143,6 +1264,26 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		lines = append(lines, fmt.Sprintf("- %s (%s): %s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config)))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) setMCPServerEnabledSummary(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /mcp " + args[0] + " <server-name>"
+	}
+	name := strings.TrimSpace(args[1])
+	enabled := args[0] == "enable"
+	allowlistActive := r.mergedSettings().AllowedMCPServers != nil
+	if err := setUserMCPServerEnabled(name, enabled, allowlistActive); err != nil {
+		return fmt.Sprintf("Failed to %s MCP server %s: %v", args[0], name, err)
+	}
+	if r.MCP != nil {
+		setMCPServerEnabledInSettings(&r.MCP.UserSettings, name, enabled, allowlistActive)
+	}
+	state := "disabled"
+	if enabled {
+		state = "enabled"
+	}
+	return fmt.Sprintf("MCP server %s %s.", name, state)
 }
 
 type mcpServerSummary struct {

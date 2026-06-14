@@ -1279,16 +1279,133 @@ func TestRunnerMCPSlashCommandReportsNoServers(t *testing.T) {
 
 func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
 	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_subcommand"}
-	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp enable alpha"))
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp restart alpha"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Messages) != 2 {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}
-	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: enable alpha" {
+	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: restart alpha" {
 		t.Fatalf("mcp text = %q", got)
 	}
+}
+
+func TestRunnerMCPSlashCommandUpdatesPolicySettings(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.MkdirAll(configHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(configHome, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(`{
+		"allowedMcpServers": [
+			{"serverName": "alpha"},
+			{"serverName": "beta"}
+		]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_policy",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			AllowedMCPServers: []contracts.MCPServerPolicyEntry{
+				{ServerName: "alpha"},
+				{ServerName: "beta"},
+			},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp disable alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "MCP server alpha disabled." {
+		t.Fatalf("disable text = %q", got)
+	}
+	if hasMCPPolicyEntry(runner.MCP.UserSettings.AllowedMCPServers, "alpha") || !hasMCPPolicyEntry(runner.MCP.UserSettings.DeniedMCPServers, "alpha") {
+		t.Fatalf("runner policy after disable = %#v %#v", runner.MCP.UserSettings.AllowedMCPServers, runner.MCP.UserSettings.DeniedMCPServers)
+	}
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasMCPPolicyDocumentEntry(document["allowedMcpServers"], "alpha") || !hasMCPPolicyDocumentEntry(document["deniedMcpServers"], "alpha") {
+		t.Fatalf("settings document after disable = %#v", document)
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/mcp enable alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[len(result.Messages)-1].Content[0].Text; got != "MCP server alpha enabled." {
+		t.Fatalf("enable text = %q", got)
+	}
+	if !hasMCPPolicyEntry(runner.MCP.UserSettings.AllowedMCPServers, "alpha") || hasMCPPolicyEntry(runner.MCP.UserSettings.DeniedMCPServers, "alpha") {
+		t.Fatalf("runner policy after enable = %#v %#v", runner.MCP.UserSettings.AllowedMCPServers, runner.MCP.UserSettings.DeniedMCPServers)
+	}
+	document, err = readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasMCPPolicyDocumentEntry(document["allowedMcpServers"], "alpha") || hasMCPPolicyDocumentEntry(document["deniedMcpServers"], "alpha") {
+		t.Fatalf("settings document after enable = %#v", document)
+	}
+}
+
+func TestRunnerMCPEnableCreatesUserAllowEntryWhenProjectAllowlistActive(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_project_allowlist",
+		MCP: &MCPConfig{
+			UserSettings: contracts.Settings{
+				DeniedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "alpha"}},
+			},
+			ProjectSettings: contracts.Settings{
+				AllowedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "beta"}},
+			},
+		},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp enable alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "MCP server alpha enabled." {
+		t.Fatalf("enable text = %q", got)
+	}
+	if !hasMCPPolicyEntry(runner.MCP.UserSettings.AllowedMCPServers, "alpha") || hasMCPPolicyEntry(runner.MCP.UserSettings.DeniedMCPServers, "alpha") {
+		t.Fatalf("runner user policy = %#v %#v", runner.MCP.UserSettings.AllowedMCPServers, runner.MCP.UserSettings.DeniedMCPServers)
+	}
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasMCPPolicyDocumentEntry(document["allowedMcpServers"], "alpha") || hasMCPPolicyDocumentEntry(document["deniedMcpServers"], "alpha") {
+		t.Fatalf("settings document = %#v", document)
+	}
+}
+
+func hasMCPPolicyEntry(entries []contracts.MCPServerPolicyEntry, name string) bool {
+	for _, entry := range entries {
+		if mcpPolicyEntryNameMatches(entry, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPPolicyDocumentEntry(value any, name string) bool {
+	entries, _ := value.([]any)
+	for _, entry := range entries {
+		if mcpPolicyEntryValueMatches(entry, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRunnerExecutesResumeSlashCommandWithoutQuery(t *testing.T) {
