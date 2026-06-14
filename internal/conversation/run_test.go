@@ -933,6 +933,53 @@ func TestRunnerExecutesConfigModelWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesConfigPermissionModeWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.MkdirAll(configHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{
+		"permissions": {
+			"allow": ["Bash(git status:*)"]
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:         client,
+		PermissionMode: contracts.PermissionDefault,
+		SessionID:      "sess_config_permission_mode",
+		MCP:            &MCPConfig{},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config permission-mode dont-ask"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Permission mode set to dontAsk." {
+		t.Fatalf("permission mode text = %q", got)
+	}
+	if runner.PermissionMode != contracts.PermissionDontAsk || runner.MCP.UserSettings.Permissions == nil || runner.MCP.UserSettings.Permissions.DefaultMode != contracts.PermissionDontAsk {
+		t.Fatalf("runner permission mode = %#v settings=%#v", runner.PermissionMode, runner.MCP.UserSettings.Permissions)
+	}
+	var settings map[string]any
+	data, err := os.ReadFile(filepath.Join(configHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	permissions := settings["permissions"].(map[string]any)
+	if permissions["defaultMode"] != "dontAsk" || len(permissions["allow"].([]any)) != 1 {
+		t.Fatalf("settings = %#v", settings)
+	}
+}
+
 func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	repo := filepath.Join(t.TempDir(), "repo")

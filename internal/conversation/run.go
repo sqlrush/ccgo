@@ -488,6 +488,8 @@ func (r *Runner) formatConfigSummary(raw string) string {
 			return r.setFastModeSummary(args)
 		case "model":
 			return r.setConfigModelSummary(args)
+		case "permission-mode", "permissionMode":
+			return r.setPermissionModeSummary(args)
 		default:
 			return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
@@ -591,6 +593,59 @@ func (r *Runner) setConfigModelSummary(args []string) string {
 		return fmt.Sprintf("Model set to %s.\nDisplay name: %s", name, display)
 	}
 	return "Model set to " + name + "."
+}
+
+func (r *Runner) setPermissionModeSummary(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return permissionModeUsage()
+	}
+	mode, ok := parsePermissionMode(args[1])
+	if !ok {
+		return permissionModeUsage()
+	}
+	if err := setUserPermissionMode(mode); err != nil {
+		return fmt.Sprintf("Failed to set permission mode %s: %v", mode, err)
+	}
+	r.PermissionMode = mode
+	if r.MCP != nil {
+		if r.MCP.UserSettings.Permissions == nil {
+			r.MCP.UserSettings.Permissions = &contracts.PermissionsSetting{}
+		}
+		r.MCP.UserSettings.Permissions.DefaultMode = mode
+	}
+	return "Permission mode set to " + string(mode) + "."
+}
+
+func permissionModeUsage() string {
+	return "Usage: /config permission-mode <default|acceptEdits|bypassPermissions|dontAsk|plan|auto|bubble>"
+}
+
+func parsePermissionMode(raw string) (contracts.PermissionMode, bool) {
+	switch strings.TrimSpace(raw) {
+	case string(contracts.PermissionDefault):
+		return contracts.PermissionDefault, true
+	case string(contracts.PermissionAcceptEdits):
+		return contracts.PermissionAcceptEdits, true
+	case string(contracts.PermissionBypassPermissions):
+		return contracts.PermissionBypassPermissions, true
+	case string(contracts.PermissionDontAsk):
+		return contracts.PermissionDontAsk, true
+	case string(contracts.PermissionPlan):
+		return contracts.PermissionPlan, true
+	case string(contracts.PermissionAuto):
+		return contracts.PermissionAuto, true
+	case string(contracts.PermissionBubble):
+		return contracts.PermissionBubble, true
+	}
+	switch strings.ToLower(strings.ReplaceAll(strings.TrimSpace(raw), "_", "-")) {
+	case "accept-edits":
+		return contracts.PermissionAcceptEdits, true
+	case "bypass", "bypass-permissions":
+		return contracts.PermissionBypassPermissions, true
+	case "dontask", "dont-ask":
+		return contracts.PermissionDontAsk, true
+	}
+	return "", false
 }
 
 func parseOnOff(raw string) (bool, bool) {
@@ -916,6 +971,20 @@ func setUserModel(name string) error {
 		return err
 	}
 	document["model"] = name
+	return writeUserSettingsDocument(document)
+}
+
+func setUserPermissionMode(mode contracts.PermissionMode) error {
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		return err
+	}
+	permissions, _ := document["permissions"].(map[string]any)
+	if permissions == nil {
+		permissions = map[string]any{}
+	}
+	permissions["defaultMode"] = string(mode)
+	document["permissions"] = permissions
 	return writeUserSettingsDocument(document)
 }
 
