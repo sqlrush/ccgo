@@ -1104,6 +1104,131 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginShowReportsLocalPluginDetails(t *testing.T) {
+	client := &fakeClient{}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "skills", "audit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "output-styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "agents", "review.md"), []byte("---\nname: reviewer\ndescription: Review changes\n---\nReview."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "hooks", "hooks.json"), []byte(`{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"echo pre"}]}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "skills", "audit", "SKILL.md"), []byte("---\ndescription: Audit code\n---\nAudit."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "output-styles", "brief.md"), []byte("---\ndescription: Brief style\n---\nBrief."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"version": "1.2.3",
+		"description": "Demo plugin",
+		"commands": [{"name": "plugin:deploy", "description": "Deploy plugin", "prompt": "Deploy."}],
+		"mcpServers": {"plugin:docs": {"type": "http", "url": "https://docs.example/mcp"}}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_show",
+		WorkingDirectory: cwd,
+		MCP:              &MCPConfig{},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin show demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin demo",
+		"State: enabled",
+		"Path: " + pluginDir,
+		"Version: 1.2.3",
+		"Description: Demo plugin",
+		"Commands: 1",
+		"Skills: 1",
+		"Agents: 1",
+		"MCP servers: 1",
+		"Output styles: 1",
+		"Hooks: 1",
+		"Commands:",
+		"- /plugin:deploy",
+		"Skills:",
+		"- /demo:audit",
+		"Agents:",
+		"- demo:reviewer",
+		"MCP servers:",
+		"- plugin:docs",
+		"Output styles:",
+		"- demo:brief",
+		"Hook events:",
+		"- PreToolUse (1)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin show missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo","commands":[{"name":"demo:deploy","prompt":"Deploy."}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_plugin_show_disabled",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins: map[string]any{"demo": false},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin show demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Plugin demo") || !strings.Contains(text, "State: disabled") || !strings.Contains(text, "- /demo:deploy") {
+		t.Fatalf("plugin show disabled text = %q", text)
+	}
+}
+
 func TestRunnerExecutesPluginEnableDisableWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()

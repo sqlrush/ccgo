@@ -688,6 +688,8 @@ func (r Runner) formatPluginSummary(raw string) string {
 	if len(args) > 0 {
 		switch args[0] {
 		case "list", "status":
+		case "show", "info":
+			return r.formatPluginShow(args)
 		case "enable", "disable":
 			return r.setPluginEnabledSummary(args)
 		default:
@@ -796,6 +798,62 @@ func (r Runner) formatPluginSummary(raw string) string {
 			lines = append(lines, fmt.Sprintf("Showing 10 of %d plugin hook events.", len(pluginHookEvents)))
 		}
 	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatPluginShow(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /plugin " + args[0] + " <plugin-name>"
+	}
+	name := strings.TrimSpace(args[1])
+	merged := r.mergedSettings()
+	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	plugin, ok := findLoadedPlugin(localPlugins, name)
+	if !ok {
+		return "Plugin " + name + " was not found in local plugin manifests."
+	}
+	state := "enabled"
+	if !pluginpkg.PluginEnabled(plugin, merged.EnabledPlugins) {
+		state = "disabled"
+	}
+	lines := []string{
+		"Plugin " + plugin.Name,
+		"State: " + state,
+		"Path: " + plugin.Root,
+	}
+	if strings.TrimSpace(plugin.Version) != "" {
+		lines = append(lines, "Version: "+plugin.Version)
+	}
+	if strings.TrimSpace(plugin.Description) != "" {
+		lines = append(lines, "Description: "+plugin.Description)
+	}
+	commandNames := loadedPluginCommandNames(plugin)
+	lines = append(lines,
+		fmt.Sprintf("Commands: %d", len(commandNames)),
+		fmt.Sprintf("Skills: %d", len(plugin.SkillCommands)),
+		fmt.Sprintf("Agents: %d", len(plugin.Agents)),
+		fmt.Sprintf("MCP servers: %d", len(plugin.MCPServers)),
+		fmt.Sprintf("Output styles: %d", len(plugin.OutputStyles)),
+		fmt.Sprintf("Hooks: %d", pluginHookCount([]pluginpkg.LoadedPlugin{plugin})),
+	)
+	appendPluginShowSection := func(title string, values []string) {
+		if len(values) == 0 {
+			return
+		}
+		lines = append(lines, title+":")
+		for _, value := range firstStrings(values, 20) {
+			lines = append(lines, "- "+value)
+		}
+		if len(values) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d %s.", len(values), strings.ToLower(title)))
+		}
+	}
+	appendPluginShowSection("Commands", commandNames)
+	appendPluginShowSection("Skills", loadedPluginSkillNames(plugin))
+	appendPluginShowSection("Agents", loadedPluginAgentNames(plugin))
+	appendPluginShowSection("MCP servers", loadedPluginMCPServerNames(plugin))
+	appendPluginShowSection("Output styles", loadedPluginOutputStyleNames(plugin))
+	appendPluginShowSection("Hook events", loadedPluginHookEventLines(plugin))
 	return strings.Join(lines, "\n")
 }
 
@@ -1173,6 +1231,105 @@ func pluginCommandNames(commandsList []contracts.Command, pluginSkills []string)
 	}
 	sort.Strings(names)
 	return names
+}
+
+func findLoadedPlugin(plugins []pluginpkg.LoadedPlugin, name string) (pluginpkg.LoadedPlugin, bool) {
+	name = strings.TrimSpace(name)
+	for _, plugin := range plugins {
+		for _, candidate := range []string{plugin.Name, filepath.Base(plugin.Root), plugin.Root} {
+			if strings.TrimSpace(candidate) == name {
+				return plugin, true
+			}
+		}
+	}
+	return pluginpkg.LoadedPlugin{}, false
+}
+
+func loadedPluginCommandNames(plugin pluginpkg.LoadedPlugin) []string {
+	skillNames := map[string]struct{}{}
+	for _, command := range plugin.SkillCommands {
+		for _, key := range []string{command.Name, commands.UserFacingName(command)} {
+			key = strings.TrimSpace(key)
+			if key != "" {
+				skillNames[key] = struct{}{}
+			}
+		}
+	}
+	var names []string
+	for _, command := range plugin.Commands {
+		name := strings.TrimSpace(commands.UserFacingName(command))
+		if name != "" {
+			names = append(names, "/"+name)
+		}
+	}
+	for _, prompt := range plugin.PromptTemplates {
+		name := strings.TrimSpace(commands.UserFacingName(prompt.Command))
+		if name == "" {
+			continue
+		}
+		if _, ok := skillNames[name]; ok {
+			continue
+		}
+		names = append(names, "/"+name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func loadedPluginSkillNames(plugin pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for _, command := range plugin.SkillCommands {
+		name := strings.TrimSpace(commands.UserFacingName(command))
+		if name != "" {
+			names = append(names, "/"+name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func loadedPluginAgentNames(plugin pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for _, agent := range plugin.Agents {
+		if strings.TrimSpace(agent.Name) != "" {
+			names = append(names, agent.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func loadedPluginMCPServerNames(plugin pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for name := range plugin.MCPServers {
+		if strings.TrimSpace(name) != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func loadedPluginOutputStyleNames(plugin pluginpkg.LoadedPlugin) []string {
+	var names []string
+	for _, style := range plugin.OutputStyles {
+		if strings.TrimSpace(style.Name) != "" {
+			names = append(names, style.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func loadedPluginHookEventLines(plugin pluginpkg.LoadedPlugin) []string {
+	var lines []string
+	for _, event := range plugin.HookEvents {
+		if strings.TrimSpace(event.Event) != "" && event.Count > 0 {
+			lines = append(lines, fmt.Sprintf("%s (%d)", event.Event, event.Count))
+		}
+	}
+	sort.Strings(lines)
+	return lines
 }
 
 func countEnabledPlugins(values map[string]any) int {
