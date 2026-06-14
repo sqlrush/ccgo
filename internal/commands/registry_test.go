@@ -342,6 +342,47 @@ func TestLoadDiscoversProjectPluginCommandDirectory(t *testing.T) {
 	}
 }
 
+func TestLoadInjectsPluginUserConfigIntoPromptExpansion(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"commands": [{
+			"name": "demo:deploy",
+			"description": "Deploy plugin",
+			"prompt": "Deploy ${user_config.env} to $user_config.region."
+		}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{
+		CWD: cwd,
+		Settings: contracts.Settings{
+			PluginConfigs: map[string]contracts.PluginConfig{
+				"demo": {Options: map[string]any{"env": "prod", "region": "iad"}},
+			},
+		},
+	})
+	expanded, err := registry.ExpandPrompt("demo:deploy", "", "sess_plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expanded.Content != "Deploy prod to iad." {
+		t.Fatalf("expanded plugin command = %q", expanded.Content)
+	}
+}
+
 func TestLoadDiscoversProjectPluginSkillDirectory(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

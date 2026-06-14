@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -19,6 +21,13 @@ type PromptExpansion struct {
 	Message       contracts.Message
 }
 
+var (
+	userConfigPathPattern     = `[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*`
+	bracedUserConfigPattern   = regexp.MustCompile(`\$\{(user_config|userConfig|USER_CONFIG)\.(` + userConfigPathPattern + `)\}`)
+	dollarUserConfigPattern   = regexp.MustCompile(`\$(user_config|userConfig|USER_CONFIG)\.(` + userConfigPathPattern + `)`)
+	mustacheUserConfigPattern = regexp.MustCompile(`\{\{\s*(user_config|userConfig|USER_CONFIG)\.(` + userConfigPathPattern + `)\s*\}\}`)
+)
+
 func (r Registry) ExpandPrompt(name string, args string, sessionID contracts.ID) (PromptExpansion, error) {
 	template, ok := r.PromptTemplate(name)
 	if !ok {
@@ -28,6 +37,7 @@ func (r Registry) ExpandPrompt(name string, args string, sessionID contracts.ID)
 		return PromptExpansion{}, fmt.Errorf("command %q is %q, not prompt", template.Command.Name, template.Command.Type)
 	}
 	content := SubstituteArguments(template.Content, args, true, template.Command.ArgumentNames)
+	content = SubstituteUserConfig(content, template.Command.UserConfig)
 	if template.Command.SkillRoot != "" && template.Command.LoadedFrom != "mcp" {
 		content = strings.ReplaceAll(content, "${CLAUDE_SKILL_DIR}", template.Command.SkillRoot)
 	}
@@ -68,6 +78,80 @@ func SubstituteArguments(content string, args string, appendIfNoPlaceholder bool
 		content += "\n\nARGUMENTS: " + args
 	}
 	return content
+}
+
+func SubstituteUserConfig(content string, userConfig map[string]any) string {
+	replacer := func(matches []string) string {
+		if len(matches) < 2 {
+			return ""
+		}
+		value, _ := userConfigValue(userConfig, matches[len(matches)-1])
+		return value
+	}
+	content = bracedUserConfigPattern.ReplaceAllStringFunc(content, func(match string) string {
+		return replacer(bracedUserConfigPattern.FindStringSubmatch(match))
+	})
+	content = mustacheUserConfigPattern.ReplaceAllStringFunc(content, func(match string) string {
+		return replacer(mustacheUserConfigPattern.FindStringSubmatch(match))
+	})
+	return dollarUserConfigPattern.ReplaceAllStringFunc(content, func(match string) string {
+		return replacer(dollarUserConfigPattern.FindStringSubmatch(match))
+	})
+}
+
+func userConfigValue(userConfig map[string]any, path string) (string, bool) {
+	if len(userConfig) == 0 || strings.TrimSpace(path) == "" {
+		return "", false
+	}
+	if value, ok := userConfig[path]; ok {
+		return formatUserConfigValue(value), true
+	}
+	var current any = userConfig
+	for _, part := range strings.Split(path, ".") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return "", false
+		}
+		switch typed := current.(type) {
+		case map[string]any:
+			value, ok := typed[part]
+			if !ok {
+				return "", false
+			}
+			current = value
+		case map[string]string:
+			value, ok := typed[part]
+			if !ok {
+				return "", false
+			}
+			current = value
+		default:
+			return "", false
+		}
+	}
+	return formatUserConfigValue(current), true
+}
+
+func formatUserConfigValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	case map[string]any, []any, []string, map[string]string:
+		data, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprint(typed)
+		}
+		return string(data)
+	default:
+		return fmt.Sprint(typed)
+	}
 }
 
 func ParseArguments(args string) []string {

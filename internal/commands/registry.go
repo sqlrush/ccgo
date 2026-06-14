@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"path/filepath"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -251,15 +252,82 @@ func loadProjectPluginCommands(cwd string, settings contracts.Settings) ([]Promp
 	var prompts []PromptTemplate
 	var commands []contracts.Command
 	for _, plugin := range loaded {
+		userConfig := pluginUserConfig(settings, plugin)
 		for _, prompt := range plugin.PromptTemplates {
+			command := prompt.Command
+			command.UserConfig = cloneAnyMap(userConfig)
 			prompts = append(prompts, PromptTemplate{
-				Command: prompt.Command,
+				Command: command,
 				Content: prompt.Content,
 			})
 		}
-		commands = append(commands, plugin.Commands...)
+		for _, command := range plugin.Commands {
+			command.UserConfig = cloneAnyMap(userConfig)
+			commands = append(commands, command)
+		}
 	}
 	return prompts, commands
+}
+
+func pluginUserConfig(settings contracts.Settings, plugin pluginpkg.LoadedPlugin) map[string]any {
+	out := map[string]any{}
+	for _, key := range pluginConfigKeys(plugin) {
+		if config, ok := settings.PluginConfigs[key]; ok {
+			mergeAnyInto(out, config.Options)
+		}
+		if value, ok := settings.Plugins[key]; ok {
+			mergeLegacyPluginConfig(out, value)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func pluginConfigKeys(plugin pluginpkg.LoadedPlugin) []string {
+	seen := map[string]struct{}{}
+	var keys []string
+	for _, key := range []string{
+		strings.TrimSpace(plugin.Name),
+		strings.TrimSpace(filepath.Base(plugin.Root)),
+		strings.TrimSpace(plugin.Root),
+	} {
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func mergeLegacyPluginConfig(dst map[string]any, value any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if options, ok := typed["options"].(map[string]any); ok {
+			mergeAnyInto(dst, options)
+			return
+		}
+		mergeAnyInto(dst, typed)
+	case map[string]string:
+		for key, value := range typed {
+			dst[key] = value
+		}
+	}
+}
+
+func mergeAnyInto(dst map[string]any, src map[string]any) {
+	for key, value := range src {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		dst[key] = cloneAny(value)
+	}
 }
 
 func isAlwaysSkillLoadedFrom(loadedFrom string) bool {
@@ -354,5 +422,40 @@ func cloneCommand(cmd contracts.Command) contracts.Command {
 	cmd.AllowedTools = append([]string(nil), cmd.AllowedTools...)
 	cmd.Paths = append([]string(nil), cmd.Paths...)
 	cmd.Availability = append([]string(nil), cmd.Availability...)
+	cmd.UserConfig = cloneAnyMap(cmd.UserConfig)
 	return cmd
+}
+
+func cloneAnyMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = cloneAny(value)
+	}
+	return out
+}
+
+func cloneAny(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneAnyMap(typed)
+	case map[string]string:
+		out := make(map[string]string, len(typed))
+		for key, value := range typed {
+			out[key] = value
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = cloneAny(item)
+		}
+		return out
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return value
+	}
 }

@@ -84,6 +84,48 @@ func TestExpandPromptDoesNotSubstituteSkillDirForMCPSkills(t *testing.T) {
 	}
 }
 
+func TestExpandPromptSubstitutesPluginUserConfig(t *testing.T) {
+	registry := FromSources(Sources{
+		PluginSkillPrompts: []PromptTemplate{{
+			Command: contracts.Command{
+				Name:       "demo:deploy",
+				Type:       contracts.CommandPrompt,
+				Source:     contracts.CommandSourcePlugin,
+				LoadedFrom: "plugin",
+				UserConfig: map[string]any{
+					"env":     "prod",
+					"enabled": true,
+					"count":   2,
+					"nested":  map[string]any{"region": "iad"},
+					"labels":  []any{"api", "blue"},
+				},
+			},
+			Content: strings.Join([]string{
+				"Deploy ${user_config.env} to $user_config.nested.region.",
+				"Enabled: {{ userConfig.enabled }}.",
+				"Count: $USER_CONFIG.count.",
+				"Labels: {{user_config.labels}}.",
+				"Missing: ${user_config.missing}.",
+			}, "\n"),
+		}},
+	})
+
+	expanded, err := registry.ExpandPrompt("demo:deploy", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"Deploy prod to iad.",
+		"Enabled: true.",
+		"Count: 2.",
+		`Labels: ["api","blue"].`,
+		"Missing: .",
+	}, "\n")
+	if expanded.Content != want {
+		t.Fatalf("content = %q, want %q", expanded.Content, want)
+	}
+}
+
 func TestLoadProjectSkillCanExpandPrompt(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
@@ -136,6 +178,7 @@ func TestPromptTemplateLookupUsesAliasAndDefensiveClone(t *testing.T) {
 				AllowedTools: []string{"Read"},
 				Source:       contracts.CommandSourceSkills,
 				LoadedFrom:   "skills",
+				UserConfig:   map[string]any{"env": "prod"},
 			},
 			Content: "Use $ARGUMENTS.",
 		}},
@@ -146,6 +189,7 @@ func TestPromptTemplateLookupUsesAliasAndDefensiveClone(t *testing.T) {
 		t.Fatalf("expected template by alias")
 	}
 	template.Command.AllowedTools[0] = "Write"
+	template.Command.UserConfig["env"] = "dev"
 
 	again, ok := registry.PromptTemplate("skill")
 	if !ok {
@@ -153,6 +197,9 @@ func TestPromptTemplateLookupUsesAliasAndDefensiveClone(t *testing.T) {
 	}
 	if again.Command.AllowedTools[0] != "Read" {
 		t.Fatalf("template was mutated: %#v", again.Command)
+	}
+	if again.Command.UserConfig["env"] != "prod" {
+		t.Fatalf("template user config was mutated: %#v", again.Command.UserConfig)
 	}
 }
 

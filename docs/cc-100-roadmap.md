@@ -114,9 +114,9 @@ M8/M9 补充：本地 plugin manifest 现在可声明 `mcpServers`/`mcp_servers`
 
 M8 补充：本地 plugin manifest loader 现在会只读发现默认 `agents/`、manifest `agents` 额外 markdown 文件/目录、默认 `hooks/hooks.json` 和 manifest `hooks` inline/path 配置，并在 `/plugin list|status` headless summary 中显示 plugin command、skill、agent、MCP server 和 hook event/hook count；这些 hooks/agents 目前仅作为 manifest 元数据暴露，尚未接入 agent runtime 或 hook executor。
 
-M8 补充：本地 plugin prompt command discovery 现在除 manifest command object 外，也支持默认 `commands/` markdown 目录、manifest `commands` path/path-array 形态，以及基础 object-mapping `source`/`content` metadata，按 plugin 名称生成 `plugin:path:name` 命名空间并复用现有 prompt expansion/transcript/slash command 管线；shell expansion、user_config substitution、完整 metadata 细节和 marketplace command 来源仍未完成。
+M8 补充：本地 plugin prompt command discovery 现在除 manifest command object 外，也支持默认 `commands/` markdown 目录、manifest `commands` path/path-array 形态，以及基础 object-mapping `source`/`content` metadata，按 plugin 名称生成 `plugin:path:name` 命名空间并复用现有 prompt expansion/transcript/slash command 管线；prompt expansion 会从 `pluginConfigs[plugin].options`/legacy `plugins[plugin]` 注入并替换 `${user_config.key}`、`$user_config.key` 和 `{{ user_config.key }}`。shell expansion、完整 metadata 细节和 marketplace command 来源仍未完成。
 
-M8 补充：本地 plugin skill discovery 现在支持默认 `skills/` 目录和 manifest `skills` path/path-array 形态，加载 `<skill>/SKILL.md` 为 plugin prompt skill，并按 plugin 名称生成 `plugin:skill` 命名空间，继续复用现有 SkillTool、slash prompt expansion 和 command permission attachment 管线；marketplace skill 来源、user_config substitution 和完整 plugin refresh lifecycle 仍未完成。
+M8 补充：本地 plugin skill discovery 现在支持默认 `skills/` 目录和 manifest `skills` path/path-array 形态，加载 `<skill>/SKILL.md` 为 plugin prompt skill，并按 plugin 名称生成 `plugin:skill` 命名空间，继续复用现有 SkillTool、slash prompt expansion、user_config substitution 和 command permission attachment 管线；marketplace skill 来源和完整 plugin refresh lifecycle 仍未完成。
 
 M8 补充：本地 plugin output style discovery 现在支持默认 `output-styles/` 目录和 manifest `outputStyles` path/path-array 形态，递归加载 markdown output style metadata，并在 `/plugin list|status` headless summary 中只读展示；运行时 output style 切换、UI 面板、marketplace 来源和 plugin refresh lifecycle 仍未完成。
 
