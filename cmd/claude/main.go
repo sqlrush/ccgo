@@ -508,7 +508,7 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
 
-	client, apiKeySource, err := anthropicClientFromEnv(ctx)
+	client, apiKeySource, err := anthropicClientFromEnv(ctx, runner.FastMode)
 	if err != nil {
 		return conversation.Runner{}, err
 	}
@@ -707,7 +707,7 @@ func resolveCLIModel(flagValue string, mcpConfig *conversation.MCPConfig) string
 	return strings.TrimSpace(raw)
 }
 
-func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, string, error) {
+func anthropicClientFromEnv(ctx context.Context, fastMode bool) (*anthropic.Client, string, error) {
 	credentials, credentialStore, err := credentialsFromEnvOrStore(ctx)
 	if err != nil {
 		return nil, "", err
@@ -736,7 +736,11 @@ func anthropicClientFromEnv(ctx context.Context) (*anthropic.Client, string, err
 	if baseURL := strings.TrimSpace(os.Getenv("ANTHROPIC_BASE_URL")); baseURL != "" {
 		options = append(options, anthropic.WithBaseURL(baseURL))
 	}
-	if beta := splitEnvList(os.Getenv("ANTHROPIC_BETA")); len(beta) > 0 {
+	beta := splitEnvList(os.Getenv("ANTHROPIC_BETA"))
+	if fastMode {
+		beta = anthropic.MergeBetaHeaders(beta, []string{anthropic.FastModeBetaHeader})
+	}
+	if len(beta) > 0 {
 		options = append(options, anthropic.WithBeta(beta...))
 	}
 	return anthropic.NewClient(options...), string(credentials.Source), nil

@@ -992,7 +992,9 @@ func TestRunPrintJSONOutputIncludesErrorResult(t *testing.T) {
 }
 
 func TestRunPrintStreamJSONOutput(t *testing.T) {
+	var betaHeader string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		betaHeader = r.Header.Get("anthropic-beta")
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id":"msg_stream",
@@ -1045,6 +1047,9 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
 	}
+	if betaHeader != "beta-one,beta-two,fast-mode-2025-01-24" {
+		t.Fatalf("anthropic-beta = %q", betaHeader)
+	}
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	if len(lines) != 4 {
 		t.Fatalf("lines = %#v", lines)
@@ -1070,7 +1075,7 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 		t.Fatalf("init runtime metadata = %#v", events[0])
 	}
 	betas, ok := events[0]["betas"].([]any)
-	if !ok || len(betas) != 2 || betas[0] != "beta-one" || betas[1] != "beta-two" {
+	if !ok || len(betas) != 3 || betas[0] != "beta-one" || betas[1] != "beta-two" || betas[2] != "fast-mode-2025-01-24" {
 		t.Fatalf("init betas = %#v", events[0]["betas"])
 	}
 	outputStyles, ok := events[0]["available_output_styles"].([]any)

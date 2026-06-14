@@ -148,6 +148,8 @@ M8 补充：headless `/config output-style <name>` 现在会校验可用 output 
 
 M8 补充：headless `/config fast-mode <on|off>` 现在会写入用户 `settings.json` 的 `fastMode` 并同步当前 runner 状态；完整 fast-mode TUI 切换、状态栏提示和模型请求 beta 行为仍待补齐。
 
+M4/M8 补充：headless fastMode=true 现在会把 `fast-mode-2025-01-24` 合并进 Anthropic beta header，并在 stream-json init 的 `betas` 列表中暴露；完整 fast-mode 订阅/资格校验和 TUI 切换仍待补齐。
+
 M5 补充：WebFetch/WebSearch 现在接受本地数值参数的 quoted semantic string 输入，包括 `timeout`、`max_bytes`/`maxBytes` 和 `max_results`/`maxResults`；WebSearch 现在也按官方行为拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
