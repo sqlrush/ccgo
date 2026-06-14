@@ -72,7 +72,7 @@ M8 补充：本地 prompt skill 的 slash 调用和 `Skill` tool 现在都会生
 
 M8 补充：skill frontmatter 标量兼容继续补齐，`allowed_tools`/`argument_hint`/`disable_model_invocation`/`user_invocable`/`when-to-use` 等相邻字段会映射到 canonical command metadata；`model: inherit` 不再误触发模型覆盖，`context: fork`、`agent`、`effort` 会保留在 command contract 中，为后续 forked skill/agent 执行接线提供 metadata。
 
-M8 补充：project legacy `.claude/commands/**/*.md` 和 user legacy `${CLAUDE_CONFIG_DIR}/commands/**/*.md` 现在会加载为 `commands_DEPRECATED` prompt command，并支持目录式 `SKILL.md` 命名空间（例如 `team/deploy/SKILL.md` -> `team:deploy`）、普通 markdown 命名空间、frontmatter metadata、SkillTool 可见性过滤和 prompt expansion；目录式 legacy command 会保留 base directory 前缀和 `${CLAUDE_SKILL_DIR}` 替换，完整 managed/remote commands、plugin command shell expansion、local/local-jsx 执行仍未完成。
+M8 补充：project legacy `.claude/commands/**/*.md` 和 user legacy `${CLAUDE_CONFIG_DIR}/commands/**/*.md` 现在会加载为 `commands_DEPRECATED` prompt command，并支持目录式 `SKILL.md` 命名空间（例如 `team/deploy/SKILL.md` -> `team:deploy`）、普通 markdown 命名空间、frontmatter metadata、SkillTool 可见性过滤和 prompt expansion；目录式 legacy command 会保留 base directory 前缀和 `${CLAUDE_SKILL_DIR}` 替换，并把对应 skill root 纳入工具内部只读 allowlist。完整 managed/remote commands、plugin command shell expansion、local/local-jsx 执行仍未完成。
 
 M8 补充：现有 Go 内置 slash command metadata 继续贴近官方源快照，补齐 `config`/`resume`/`clear` 的 aliases（`settings`、`continue`、`reset`、`new`），以及 `mcp`/`resume`/`model` 的 argument hint、`mcp`/`status`/`model` 的 immediate 标记和部分官方描述；大量内置 command 的真实 local/local-jsx UI 执行仍未完成。
 

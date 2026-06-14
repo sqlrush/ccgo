@@ -268,6 +268,32 @@ ignored
 	}
 }
 
+func TestProjectLegacyCommandSkillDirsReturnsDirectorySkillRoots(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	commandsDir := filepath.Join(cwd, ".claude", "commands")
+	skillDir := filepath.Join(commandsDir, "team", "deploy")
+	writeMarkdownFile(t, filepath.Join(skillDir, "SKILL.md"), `---
+description: Deploy
+---
+Deploy.
+`)
+	writeMarkdownFile(t, filepath.Join(commandsDir, "plain.md"), `---
+description: Plain
+---
+Plain.
+`)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ProjectLegacyCommandSkillDirs(cwd)
+	want := []string{skillDir}
+	if !sameStringSlice(got, want) {
+		t.Fatalf("legacy command skill dirs = %#v, want %#v", got, want)
+	}
+}
+
 func writeSkillFile(t *testing.T, dir string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -2496,6 +2496,42 @@ func TestRunnerDiscoversUserSkillDirsForToolMetadata(t *testing.T) {
 	}
 }
 
+func TestRunnerDiscoversLegacyCommandSkillDirsForToolMetadata(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	userCommandSkill := filepath.Join(configHome, "commands", "personal")
+	if err := os.MkdirAll(userCommandSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userCommandSkill, "SKILL.md"), []byte("---\ndescription: test\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	projectCommandSkill := filepath.Join(cwd, ".claude", "commands", "team", "deploy")
+	if err := os.MkdirAll(projectCommandSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectCommandSkill, "SKILL.md"), []byte("---\ndescription: test\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := Runner{WorkingDirectory: cwd}
+	internal := tool.InternalPathContextFromMetadata(runner.toolMetadata())
+	want := []string{userCommandSkill, projectCommandSkill}
+	if len(internal.SkillDirs) != len(want) {
+		t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, want)
+	}
+	for i := range want {
+		if internal.SkillDirs[i] != want[i] {
+			t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, want)
+		}
+	}
+}
+
 func TestRunnerDiscoversProjectSkillDirsForToolMetadata(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	repo := filepath.Join(t.TempDir(), "repo")

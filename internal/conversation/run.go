@@ -272,8 +272,10 @@ func (r Runner) toolMetadata() map[string]any {
 	}
 	skillDirs := append([]string(nil), r.SkillDirs...)
 	skillDirs = appendUniqueStrings(skillDirs, skills.UserSkillDirs()...)
+	skillDirs = appendUniqueStrings(skillDirs, skills.UserLegacyCommandSkillDirs()...)
 	if r.WorkingDirectory != "" {
 		skillDirs = appendUniqueStrings(skillDirs, skills.ProjectSkillDirs(r.WorkingDirectory)...)
+		skillDirs = appendUniqueStrings(skillDirs, skills.ProjectLegacyCommandSkillDirs(r.WorkingDirectory)...)
 	}
 	if r.RelevantMemoryDir != "" || len(skillDirs) > 0 {
 		metadata[tool.MetadataInternalPathContextKey] = permissions.InternalPathContext{

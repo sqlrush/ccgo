@@ -126,6 +126,10 @@ func LoadLegacyCommandSkills(cwd string) []Skill {
 	return out
 }
 
+func ProjectLegacyCommandSkillDirs(cwd string) []string {
+	return legacyCommandSkillDirs(projectLegacyCommandFiles(cwd))
+}
+
 func LoadUserLegacyCommandSkills() []Skill {
 	commandFiles := legacyCommandFilesInDir(filepath.Join(platform.ClaudeHomeDir(), "commands"))
 	out := make([]Skill, 0, len(commandFiles))
@@ -135,6 +139,28 @@ func LoadUserLegacyCommandSkills() []Skill {
 			continue
 		}
 		out = append(out, skill)
+	}
+	return out
+}
+
+func UserLegacyCommandSkillDirs() []string {
+	return legacyCommandSkillDirs(legacyCommandFilesInDir(filepath.Join(platform.ClaudeHomeDir(), "commands")))
+}
+
+func legacyCommandSkillDirs(commandFiles []legacyCommandFile) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	for _, commandFile := range commandFiles {
+		if !commandFile.IsSkill {
+			continue
+		}
+		dir := filepath.Dir(commandFile.Path)
+		key := normalizePath(dir)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, dir)
 	}
 	return out
 }
