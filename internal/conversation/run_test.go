@@ -2456,6 +2456,7 @@ func TestRunnerPassesRelevantMemoryDirToFileTools(t *testing.T) {
 }
 
 func TestRunnerPassesSkillDirsToToolMetadata(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	memoryDir := filepath.Join(t.TempDir(), "memory")
 	skillDir := filepath.Join(t.TempDir(), "bundled-skill")
 	runner := Runner{
@@ -2477,7 +2478,26 @@ func TestRunnerPassesSkillDirsToToolMetadata(t *testing.T) {
 	}
 }
 
+func TestRunnerDiscoversUserSkillDirsForToolMetadata(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	userSkill := filepath.Join(configHome, "skills", "personal")
+	if err := os.MkdirAll(userSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userSkill, "SKILL.md"), []byte("---\ndescription: test\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := Runner{}
+	internal := tool.InternalPathContextFromMetadata(runner.toolMetadata())
+	if len(internal.SkillDirs) != 1 || internal.SkillDirs[0] != userSkill {
+		t.Fatalf("skill dirs = %#v, want %#v", internal.SkillDirs, []string{userSkill})
+	}
+}
+
 func TestRunnerDiscoversProjectSkillDirsForToolMetadata(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
 	rootSkill := filepath.Join(repo, ".claude", "skills", "root")

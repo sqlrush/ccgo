@@ -232,6 +232,7 @@ func BuiltinCommands() []contracts.Command {
 
 func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 	skillDirs := skills.ProjectSkillDirs(cwd)
+	skillDirs = append(skillDirs, skills.UserSkillDirs()...)
 	loaded := skills.LoadSkillDirs(skillDirs, contracts.CommandSourceSkills)
 	loaded = append(loaded, skills.LoadLegacyCommandSkills(cwd)...)
 	loaded = append(loaded, skills.LoadUserLegacyCommandSkills()...)
@@ -293,6 +294,9 @@ func registerPromptTemplate(templates map[string]PromptTemplate, prompt PromptTe
 	prompt = clonePromptTemplate(prompt)
 	for _, key := range commandKeys(prompt.Command) {
 		if key == "" {
+			continue
+		}
+		if _, exists := templates[key]; exists {
 			continue
 		}
 		templates[key] = prompt

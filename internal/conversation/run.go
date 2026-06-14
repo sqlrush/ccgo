@@ -271,6 +271,7 @@ func (r Runner) toolMetadata() map[string]any {
 		tool.MetadataSettingsKey: r.mergedSettings(),
 	}
 	skillDirs := append([]string(nil), r.SkillDirs...)
+	skillDirs = appendUniqueStrings(skillDirs, skills.UserSkillDirs()...)
 	if r.WorkingDirectory != "" {
 		skillDirs = appendUniqueStrings(skillDirs, skills.ProjectSkillDirs(r.WorkingDirectory)...)
 	}

@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -106,6 +107,73 @@ Personal $target for ${CLAUDE_SESSION_ID}.
 		t.Fatal(err)
 	}
 	if expanded.Content != "Personal docs for sess_user.\n" {
+		t.Fatalf("expanded content = %q", expanded.Content)
+	}
+}
+
+func TestLoadIncludesUserSkills(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	skillDir := filepath.Join(configHome, "skills", "personal")
+	writeCommandSkill(t, skillDir, `---
+name: Personal Skill
+description: Personal skill
+---
+Use personal skill for $ARGUMENTS.
+`)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{CWD: cwd})
+	cmd, ok := registry.Find("Personal Skill")
+	if !ok {
+		t.Fatalf("user skill not found")
+	}
+	if cmd.Name != "personal" || cmd.Source != contracts.CommandSourceSkills || cmd.LoadedFrom != "skills" {
+		t.Fatalf("user skill metadata = %#v", cmd)
+	}
+	expanded, err := registry.ExpandPrompt("personal", "docs", "sess_user_skill")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(expanded.Content, "Use personal skill for docs.") {
+		t.Fatalf("expanded content = %q", expanded.Content)
+	}
+}
+
+func TestLoadProjectSkillPromptWinsOverUserSkillPrompt(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	projectSkill := filepath.Join(cwd, ".claude", "skills", "deploy")
+	userSkill := filepath.Join(configHome, "skills", "deploy")
+	writeCommandSkill(t, projectSkill, `---
+description: Project deploy
+---
+Project deploy $ARGUMENTS.
+`)
+	writeCommandSkill(t, userSkill, `---
+description: User deploy
+---
+User deploy $ARGUMENTS.
+`)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{CWD: cwd})
+	expanded, err := registry.ExpandPrompt("deploy", "api", "sess_project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(expanded.Content, "Project deploy api.") || strings.Contains(expanded.Content, "User deploy") {
 		t.Fatalf("expanded content = %q", expanded.Content)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ccgo/internal/platform"
 )
 
 func ProjectSkillDirs(cwd string) []string {
@@ -26,6 +28,12 @@ func ProjectSkillDirs(cwd string) []string {
 		}
 	}
 	return out
+}
+
+func UserSkillDirs() []string {
+	var out []string
+	seen := map[string]struct{}{}
+	return appendSkillRoots(out, seen, filepath.Join(platform.ClaudeHomeDir(), "skills"))
 }
 
 func DiscoverSkillDirsForPaths(paths []string, cwd string) []string {

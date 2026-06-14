@@ -30,6 +30,22 @@ func TestProjectSkillDirsWalksToGitRootMostSpecificFirst(t *testing.T) {
 	}
 }
 
+func TestUserSkillDirsUsesClaudeConfigDir(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	userSkill := filepath.Join(configHome, "skills", "personal")
+	writeSkill(t, userSkill)
+	if err := os.WriteFile(filepath.Join(configHome, "skills", "README.md"), []byte("ignored"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := UserSkillDirs()
+	want := []string{userSkill}
+	if !sameStringSlice(got, want) {
+		t.Fatalf("user skill dirs = %#v, want %#v", got, want)
+	}
+}
+
 func TestDiscoverSkillDirsForPathsExcludesCwdLevelAndSortsDeepestFirst(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	rootSkill := filepath.Join(repo, ".claude", "skills", "root")

@@ -54,7 +54,7 @@ M5 补充：settings 中的 `sandbox.filesystem.allowWrite`/`denyWrite`/`denyRea
 
 M5/M8 补充：permission internal path context 现在支持 `SkillDirs`，Runner 会把配置的 skill/bundled-skill 目录透传到工具 metadata，使这些目录下的 `SKILL.md` 和资源文件可作为内部路径读取；写入仍不被该 allowlist 放行，完整 skill discovery/activation/SkillTool 仍按 M8 缺口推进。
 
-M8 补充：新增 `internal/skills` discovery 基础模块，支持从工作目录向上到 git root/home 发现项目 `.claude/skills/<skill>/SKILL.md` 目录，并支持按文件路径动态发现 cwd 以下更深层 `.claude/skills`；Runner 现在会把工作目录发现到的项目 skill roots 自动加入 tool metadata 的只读 allowlist。
+M8 补充：新增 `internal/skills` discovery 基础模块，支持从工作目录向上到 git root/home 发现项目 `.claude/skills/<skill>/SKILL.md` 目录，也支持发现 user-level `${CLAUDE_CONFIG_DIR}/skills/<skill>/SKILL.md`，并支持按文件路径动态发现 cwd 以下更深层 `.claude/skills`；Runner 现在会把 user/project skill roots 自动加入 tool metadata 的只读 allowlist。
 
 M8 补充：Read/Write/Edit/NotebookEdit 现在会在处理文件路径时触发嵌套 skill directory discovery，并把新发现的 skill roots 追加到共享 tool metadata 的内部只读路径上下文，后续工具可读取对应 `SKILL.md` 和资源文件；完整 skill activation、SkillTool 调用和 UI 展示仍未完成。
 
