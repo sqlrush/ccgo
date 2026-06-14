@@ -170,6 +170,32 @@ func TestExecuteSlashHelpReturnsLocalTextResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashHelpWithCommandReturnsDetail(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/help status", SlashOptions{UUID: "user_help_status"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultText {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Command /status",
+		"Type: local-jsx",
+		"Source: builtin",
+		"Description: Show Claude Code status",
+		"Immediate: true",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help detail missing %q in %q", want, text)
+		}
+	}
+}
+
 func TestExecuteSlashMCPReturnsLocalMCPResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/mcp list", SlashOptions{UUID: "user_mcp"})
@@ -299,6 +325,55 @@ func TestExecuteSlashSkillsReturnsLocalTextResult(t *testing.T) {
 	}
 	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "Available skills:") || !strings.Contains(text, "/deploy - Deploy service") {
 		t.Fatalf("skills text = %q", text)
+	}
+}
+
+func TestExecuteSlashSkillsShowReturnsDetail(t *testing.T) {
+	registry := FromSources(Sources{
+		ProjectSkillPrompts: []PromptTemplate{{
+			Command: contracts.Command{
+				Name:          "deploy",
+				DisplayName:   "Deploy Helper",
+				Type:          contracts.CommandPrompt,
+				Source:        contracts.CommandSourceSkills,
+				LoadedFrom:    "skills",
+				Description:   "Deploy service",
+				ArgumentHint:  "[service]",
+				ArgumentNames: []string{"service"},
+				AllowedTools:  []string{"Read", "Bash(git status:*)"},
+				Model:         "opus",
+				SkillRoot:     "/tmp/deploy",
+				UserConfig:    map[string]any{"env": "prod", "region": "iad"},
+			},
+			Content: "Deploy $service.",
+		}},
+		Builtins: BuiltinCommands(),
+	})
+	result, handled, err := ExecuteSlashCommand(registry, "/skills show deploy", SlashOptions{UUID: "user_skill_detail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Skill /Deploy Helper",
+		"Name: /deploy",
+		"Type: prompt",
+		"Source: skills",
+		"Loaded from: skills",
+		"Description: Deploy service",
+		"Argument hint: [service]",
+		"Arguments: service",
+		"Allowed tools: Read, Bash(git status:*)",
+		"Model: opus",
+		"Skill root: /tmp/deploy",
+		"User config keys: env, region",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("skill detail missing %q in %q", want, text)
+		}
 	}
 }
 

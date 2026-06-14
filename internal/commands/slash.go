@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -193,7 +194,7 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	}
 	switch cmd.Name {
 	case "help":
-		return LocalCommandResult{Type: LocalCommandResultText, Value: formatHelpText(registry)}, true
+		return LocalCommandResult{Type: LocalCommandResultText, Value: formatHelpText(registry, args)}, true
 	case "config":
 		return LocalCommandResult{Type: LocalCommandResultConfig, Value: strings.TrimSpace(args)}, true
 	case "mcp":
@@ -215,7 +216,7 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	case "resume":
 		return LocalCommandResult{Type: LocalCommandResultResume, Value: strings.TrimSpace(args)}, true
 	case "skills":
-		return LocalCommandResult{Type: LocalCommandResultText, Value: formatSkillsText(registry)}, true
+		return LocalCommandResult{Type: LocalCommandResultText, Value: formatSkillsText(registry, args)}, true
 	case "memory":
 		return LocalCommandResult{Type: LocalCommandResultMemory, Value: strings.TrimSpace(args)}, true
 	default:
@@ -223,7 +224,14 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	}
 }
 
-func formatHelpText(registry Registry) string {
+func formatHelpText(registry Registry, raw string) string {
+	if target, ok := detailTarget(raw); ok {
+		cmd, found := registry.Find(target)
+		if !found {
+			return "Command " + target + " was not found."
+		}
+		return formatCommandDetail("Command /"+UserFacingName(cmd), cmd)
+	}
 	commands := registry.Visible()
 	if len(commands) == 0 {
 		return "No commands available."
@@ -242,10 +250,17 @@ func formatHelpText(registry Registry) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatSkillsText(registry Registry) string {
+func formatSkillsText(registry Registry, raw string) string {
+	if target, ok := detailTarget(raw); ok {
+		cmd, found := registry.Find(target)
+		if !found || !isSkillCommand(cmd) {
+			return "Skill " + target + " was not found."
+		}
+		return formatCommandDetail("Skill /"+UserFacingName(cmd), cmd)
+	}
 	var lines []string
 	for _, cmd := range registry.Visible() {
-		if cmd.Type != contracts.CommandPrompt || cmd.Source == contracts.CommandSourceBuiltin {
+		if !isSkillCommand(cmd) {
 			continue
 		}
 		name := "/" + UserFacingName(cmd)
@@ -260,6 +275,112 @@ func formatSkillsText(registry Registry) string {
 		return "No skills available."
 	}
 	return "Available skills:\n" + strings.Join(lines, "\n")
+}
+
+func detailTarget(raw string) (string, bool) {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return "", false
+	}
+	switch strings.ToLower(args[0]) {
+	case "list", "ls":
+		return "", false
+	case "show", "info", "detail", "details":
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+			return "", false
+		}
+		return strings.TrimSpace(strings.TrimPrefix(args[1], "/")), true
+	default:
+		return strings.TrimSpace(strings.TrimPrefix(args[0], "/")), true
+	}
+}
+
+func isSkillCommand(cmd contracts.Command) bool {
+	return cmd.Type == contracts.CommandPrompt && cmd.Source != contracts.CommandSourceBuiltin
+}
+
+func formatCommandDetail(title string, cmd contracts.Command) string {
+	lines := []string{title}
+	if cmd.Name != "" && UserFacingName(cmd) != cmd.Name {
+		lines = append(lines, "Name: /"+cmd.Name)
+	}
+	lines = append(lines, "Type: "+string(cmd.Type))
+	if cmd.Source != "" {
+		lines = append(lines, "Source: "+string(cmd.Source))
+	}
+	if cmd.LoadedFrom != "" {
+		lines = append(lines, "Loaded from: "+cmd.LoadedFrom)
+	}
+	if cmd.Description != "" {
+		lines = append(lines, "Description: "+strings.TrimSpace(cmd.Description))
+	}
+	if cmd.WhenToUse != "" {
+		lines = append(lines, "When to use: "+strings.TrimSpace(cmd.WhenToUse))
+	}
+	if cmd.ArgumentHint != "" {
+		lines = append(lines, "Argument hint: "+cmd.ArgumentHint)
+	}
+	if len(cmd.ArgumentNames) > 0 {
+		lines = append(lines, "Arguments: "+strings.Join(cmd.ArgumentNames, ", "))
+	}
+	if len(cmd.Aliases) > 0 {
+		lines = append(lines, "Aliases: "+strings.Join(cmd.Aliases, ", "))
+	}
+	if len(cmd.AllowedTools) > 0 {
+		lines = append(lines, "Allowed tools: "+strings.Join(cmd.AllowedTools, ", "))
+	}
+	if cmd.Model != "" {
+		lines = append(lines, "Model: "+cmd.Model)
+	}
+	if cmd.Context != "" {
+		lines = append(lines, "Context: "+cmd.Context)
+	}
+	if cmd.Agent != "" {
+		lines = append(lines, "Agent: "+cmd.Agent)
+	}
+	if cmd.Effort != "" {
+		lines = append(lines, "Effort: "+cmd.Effort)
+	}
+	if cmd.SkillRoot != "" {
+		lines = append(lines, "Skill root: "+cmd.SkillRoot)
+	}
+	if cmd.Version != "" {
+		lines = append(lines, "Version: "+cmd.Version)
+	}
+	if len(cmd.Paths) > 0 {
+		lines = append(lines, "Paths: "+strings.Join(cmd.Paths, ", "))
+	}
+	if len(cmd.Availability) > 0 {
+		lines = append(lines, "Availability: "+strings.Join(cmd.Availability, ", "))
+	}
+	if len(cmd.UserConfig) > 0 {
+		lines = append(lines, "User config keys: "+strings.Join(sortedMapKeys(cmd.UserConfig), ", "))
+	}
+	if cmd.Immediate {
+		lines = append(lines, "Immediate: true")
+	}
+	if cmd.SupportsNonInteractive {
+		lines = append(lines, "Supports non-interactive: true")
+	}
+	if cmd.DisableModelInvocation {
+		lines = append(lines, "Disable model invocation: true")
+	}
+	if cmd.Hidden {
+		lines = append(lines, "Hidden: true")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func sortedMapKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func firstNonEmptyString(values ...string) string {

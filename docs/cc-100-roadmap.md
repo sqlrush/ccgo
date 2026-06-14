@@ -96,6 +96,8 @@ M8 补充：`/status` built-in local-jsx command 现在在 headless/local runner
 
 M8 补充：`/help` 和 `/skills` built-in local-jsx command 现在有基础 text result：`/help` 从 command registry 输出可见命令列表，`/skills` 输出可见 prompt skill 列表或空状态；二者不会请求模型，完整 TUI help/skills 面板、筛选、分组和 plugin/MCP skill 展示仍未完成。
 
+M8 补充：`/help <command>` 现在会输出单个命令的 headless 详情，`/skills show <name>`/`/skills <name>` 会输出单个 prompt skill 的来源、参数、allowed tools、模型、root 和 user_config key 列表；仍未实现完整 TUI help/skills 面板、筛选和分组交互。
+
 M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 text result：无参数显示当前 runner model，有参数会按模型 registry 解析 alias 并展示 resolved model/display name，不请求模型；完整交互式模型选择、持久设置写回和 TUI 状态同步仍未完成。
 
 M8 补充：`/model` headless/local 命令现在会把解析后的模型写入 runner 的默认 `Model` 状态，后续同一 runner 的 turn 会使用新模型；`/config model <name>` 会解析模型 alias、写入用户 `settings.json` 的 `model` 并同步当前 runner settings；prompt skill frontmatter 的 `model` 仍只作为当前请求的临时 override，不会污染默认模型。完整 TUI 模型选择仍未完成。
@@ -1266,7 +1268,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - plugin manifest、marketplace、install/cache/update。
 - plugin hooks/agents/MCP。
 
-当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的只读 manifest discovery，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、`/help`/`/skills` UI、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP/output-style UI 接线。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的只读 manifest discovery，headless `/help`/`/skills` 列表与单项详情，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、TUI `/help`/`/skills` 面板、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 hooks/agents/MCP/output-style UI 接线。
 
 ### M9: MCP Platform
 
