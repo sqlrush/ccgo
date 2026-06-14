@@ -74,6 +74,42 @@ Review $target during ${CLAUDE_SESSION_ID}.
 	}
 }
 
+func TestLoadIncludesUserLegacyCommands(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	commandPath := filepath.Join(configHome, "commands", "personal.md")
+	writeCommandMarkdown(t, commandPath, `---
+description: Personal command
+arguments: target
+---
+Personal $target for ${CLAUDE_SESSION_ID}.
+`)
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{CWD: cwd})
+	cmd, ok := registry.Find("personal")
+	if !ok {
+		t.Fatalf("user command not found")
+	}
+	if cmd.LoadedFrom != loadedFromCommandsDeprecated || cmd.Source != contracts.CommandSourceSkills {
+		t.Fatalf("user command metadata = %#v", cmd)
+	}
+	expanded, err := registry.ExpandPrompt("personal", "docs", "sess_user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expanded.Content != "Personal docs for sess_user.\n" {
+		t.Fatalf("expanded content = %q", expanded.Content)
+	}
+}
+
 func TestBuiltinCommandsExposeOfficialAliasesAndMetadata(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 

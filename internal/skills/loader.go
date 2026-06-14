@@ -12,6 +12,7 @@ import (
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
+	"ccgo/internal/platform"
 )
 
 const skillFileName = "SKILL.md"
@@ -114,6 +115,19 @@ func ProjectSkillCommands(cwd string) []contracts.Command {
 
 func LoadLegacyCommandSkills(cwd string) []Skill {
 	commandFiles := projectLegacyCommandFiles(cwd)
+	out := make([]Skill, 0, len(commandFiles))
+	for _, commandFile := range commandFiles {
+		skill, err := loadLegacyCommandFile(commandFile)
+		if err != nil {
+			continue
+		}
+		out = append(out, skill)
+	}
+	return out
+}
+
+func LoadUserLegacyCommandSkills() []Skill {
+	commandFiles := legacyCommandFilesInDir(filepath.Join(platform.ClaudeHomeDir(), "commands"))
 	out := make([]Skill, 0, len(commandFiles))
 	for _, commandFile := range commandFiles {
 		skill, err := loadLegacyCommandFile(commandFile)

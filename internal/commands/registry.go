@@ -234,6 +234,7 @@ func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 	skillDirs := skills.ProjectSkillDirs(cwd)
 	loaded := skills.LoadSkillDirs(skillDirs, contracts.CommandSourceSkills)
 	loaded = append(loaded, skills.LoadLegacyCommandSkills(cwd)...)
+	loaded = append(loaded, skills.LoadUserLegacyCommandSkills()...)
 	out := make([]PromptTemplate, 0, len(loaded))
 	for _, skill := range loaded {
 		out = append(out, PromptTemplate{

@@ -72,7 +72,7 @@ M8 补充：本地 prompt skill 的 slash 调用和 `Skill` tool 现在都会生
 
 M8 补充：skill frontmatter 标量兼容继续补齐，`allowed_tools`/`argument_hint`/`disable_model_invocation`/`user_invocable`/`when-to-use` 等相邻字段会映射到 canonical command metadata；`model: inherit` 不再误触发模型覆盖，`context: fork`、`agent`、`effort` 会保留在 command contract 中，为后续 forked skill/agent 执行接线提供 metadata。
 
-M8 补充：project legacy `.claude/commands/**/*.md` 现在会加载为 `commands_DEPRECATED` prompt command，并支持目录式 `SKILL.md` 命名空间（例如 `team/deploy/SKILL.md` -> `team:deploy`）、普通 markdown 命名空间、frontmatter metadata、SkillTool 可见性过滤和 prompt expansion；目录式 legacy command 会保留 base directory 前缀和 `${CLAUDE_SKILL_DIR}` 替换，完整 user/managed commands、plugin commands、local/local-jsx 执行仍未完成。
+M8 补充：project legacy `.claude/commands/**/*.md` 和 user legacy `${CLAUDE_CONFIG_DIR}/commands/**/*.md` 现在会加载为 `commands_DEPRECATED` prompt command，并支持目录式 `SKILL.md` 命名空间（例如 `team/deploy/SKILL.md` -> `team:deploy`）、普通 markdown 命名空间、frontmatter metadata、SkillTool 可见性过滤和 prompt expansion；目录式 legacy command 会保留 base directory 前缀和 `${CLAUDE_SKILL_DIR}` 替换，完整 managed/remote commands、plugin command shell expansion、local/local-jsx 执行仍未完成。
 
 M8 补充：现有 Go 内置 slash command metadata 继续贴近官方源快照，补齐 `config`/`resume`/`clear` 的 aliases（`settings`、`continue`、`reset`、`new`），以及 `mcp`/`resume`/`model` 的 argument hint、`mcp`/`status`/`model` 的 immediate 标记和部分官方描述；大量内置 command 的真实 local/local-jsx UI 执行仍未完成。
 
@@ -126,9 +126,9 @@ M8/CLI 补充：`--output-format stream-json` 的 init event 现在会暴露 `ou
 
 M8 补充：补齐 deprecated `/output-style` built-in local-jsx 命令，当前会返回迁移到 `/config` 或 settings 文件的提示且不请求模型；完整 output style picker/settings 写回仍走 `/config` 缺口。
 
-M8/CLI 补充：stream-json init event 继续补齐 slash command、skill、agent 和 plugin 只读元数据字段，供 SDK/headless 客户端渲染命令/扩展列表；完整 permission mode、account、betas、fast mode 和 MCP server status shape 仍待补齐。
+M8/CLI 补充：stream-json init event 继续补齐 slash command、skill、agent 和 plugin 只读元数据字段，供 SDK/headless 客户端渲染命令/扩展列表；permission mode、API key source、betas、fast mode 和 MCP server status object 已接入，完整 account profile/org 详情与真实 MCP 连接态仍待补齐。
 
-M8/CLI 补充：stream-json init event 现在会暴露当前 permission mode、API key source、ANTHROPIC_BETA 去重列表和 settings-derived fast mode，使 headless/SDK 客户端能渲染基础运行状态；完整账户 profile/org 详情和 MCP server status object 仍待补齐。
+M8/CLI 补充：stream-json init event 现在会暴露当前 permission mode、API key source、ANTHROPIC_BETA 去重列表和 settings-derived fast mode，使 headless/SDK 客户端能渲染基础运行状态；完整账户 profile/org 详情仍待补齐。
 
 M8/CLI 补充：stream-json init event 的 `mcp_servers` 现在输出只读 status object，包含 name、configured status、transport type、scope/source 和 plugin_source，并复用 settings/project-chain/plugin/policy 合并结果；真实连接中/已连接/失败的运行时状态仍需和 MCP lifecycle 接线。
 
