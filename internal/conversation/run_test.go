@@ -1082,6 +1082,54 @@ func TestRunnerExecutesPluginEnableDisableWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginSummarySkipsDisabledLocalPlugin(t *testing.T) {
+	client := &fakeClient{}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"commands": [{"name": "demo:deploy", "prompt": "Deploy."}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_disabled",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins: map[string]any{"demo": false},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Enabled plugins: 0",
+		"Local plugin manifests: 0",
+		"Registered plugin commands: 0",
+		"- demo: disabled",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin disabled text missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "/demo:deploy") {
+		t.Fatalf("disabled plugin command should not be listed: %q", text)
+	}
+}
+
 func TestRunnerExecutesMemorySlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	sessionRoot := t.TempDir()
@@ -2344,6 +2392,51 @@ func TestBuildRequestIncludesOutputStyleSystemSection(t *testing.T) {
 	}
 	if !strings.Contains(system, "Base system.\n\n# Output Style: brief\nUse short answers.") {
 		t.Fatalf("system = %q", system)
+	}
+}
+
+func TestDisabledPluginDoesNotProvideOutputStyle(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "output-styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "output-styles", "brief.md"), []byte("---\ndescription: Brief\n---\nBrief."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins: map[string]any{"demo": false},
+			OutputStyle:    "demo:brief",
+		}},
+	}
+	if got := runner.EffectiveOutputStyleName(); got != "demo:brief" {
+		t.Fatalf("effective output style should preserve configured name, got %q", got)
+	}
+	for _, name := range runner.AvailableOutputStyleNames() {
+		if name == "demo:brief" {
+			t.Fatalf("disabled plugin style was available: %#v", runner.AvailableOutputStyleNames())
+		}
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if system, ok := req.System.(string); ok && strings.Contains(system, "Brief.") {
+		t.Fatalf("disabled plugin output style injected into system: %q", system)
 	}
 }
 

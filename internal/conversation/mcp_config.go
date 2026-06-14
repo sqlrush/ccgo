@@ -29,11 +29,12 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	mergedSettings := config.MergeSettings(userSettings, projectSettings, localSettings)
 	return &MCPConfig{
 		UserSettings:    userSettings,
 		ProjectSettings: projectSettings,
 		LocalSettings:   localSettings,
-		PluginServers:   pluginpkg.LoadMCPServers(pluginpkg.ProjectPluginDirs(resolvedCWD)),
+		PluginServers:   pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(resolvedCWD), mergedSettings),
 		CWD:             resolvedCWD,
 		ToolOptions: mcp.ServerToolOptions{
 			AccessTokenProvider: mcp.FileOAuthAccessTokenProvider(mcp.FileOAuthAccessTokenProviderOptions{}),

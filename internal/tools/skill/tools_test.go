@@ -114,6 +114,64 @@ func TestSkillToolLoadsProjectSkillsFromWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestSkillToolSkipsDisabledPluginSkillsFromMetadataSettings(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"commands": [{
+			"name": "demo:deploy",
+			"description": "Deploy plugin",
+			"prompt": "Deploy $ARGUMENTS."
+		}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := skillExecutor(t)
+	ctx := tool.Context{
+		Context:          context.Background(),
+		WorkingDirectory: cwd,
+		Metadata: map[string]any{
+			tool.MetadataSettingsKey: contracts.Settings{EnabledPlugins: map[string]any{"demo": false}},
+		},
+	}
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_skill_disabled_plugin",
+		Name:  "Skill",
+		Input: json.RawMessage(`{"skill":"demo:deploy","args":"api"}`),
+	}, nil)
+	if err == nil {
+		t.Fatal("expected disabled plugin skill error")
+	}
+	if !result.IsError || !strings.Contains(result.Content.(string), `skill "demo:deploy" not found`) {
+		t.Fatalf("result = %#v", result)
+	}
+	skillTool := NewSkillTool()
+	prompt, err := skillTool.Prompt(tool.PromptContext{
+		WorkingDirectory: cwd,
+		Metadata: map[string]any{
+			tool.MetadataSettingsKey: contracts.Settings{EnabledPlugins: map[string]any{"demo": false}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(prompt, "demo:deploy") {
+		t.Fatalf("prompt listed disabled plugin skill: %q", prompt)
+	}
+}
+
 func TestSkillToolRejectsDisabledModelInvocation(t *testing.T) {
 	registry := commands.FromSources(commands.Sources{
 		ProjectSkillPrompts: []commands.PromptTemplate{{

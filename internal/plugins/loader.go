@@ -117,6 +117,84 @@ func LoadPluginDirs(roots []string) []LoadedPlugin {
 	return out
 }
 
+func LoadPluginDirsWithSettings(roots []string, settings contracts.Settings) []LoadedPlugin {
+	return FilterEnabledPlugins(LoadPluginDirs(roots), settings.EnabledPlugins)
+}
+
+func FilterEnabledPlugins(plugins []LoadedPlugin, enabledPlugins map[string]any) []LoadedPlugin {
+	if len(enabledPlugins) == 0 {
+		return plugins
+	}
+	out := make([]LoadedPlugin, 0, len(plugins))
+	for _, plugin := range plugins {
+		if PluginEnabled(plugin, enabledPlugins) {
+			out = append(out, plugin)
+		}
+	}
+	return out
+}
+
+func PluginEnabled(plugin LoadedPlugin, enabledPlugins map[string]any) bool {
+	for _, key := range pluginEnabledKeys(plugin) {
+		if value, ok := enabledPlugins[key]; ok {
+			enabled, recognized := pluginEnabledValue(value)
+			if recognized && !enabled {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func pluginEnabledKeys(plugin LoadedPlugin) []string {
+	seen := map[string]struct{}{}
+	var keys []string
+	for _, key := range []string{
+		strings.TrimSpace(plugin.Name),
+		strings.TrimSpace(filepath.Base(plugin.Root)),
+		strings.TrimSpace(plugin.Root),
+	} {
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func pluginEnabledValue(value any) (bool, bool) {
+	switch typed := value.(type) {
+	case bool:
+		return typed, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "enabled", "enable", "on", "1":
+			return true, true
+		case "false", "disabled", "disable", "off", "0":
+			return false, true
+		}
+	case float64:
+		if typed == 0 {
+			return false, true
+		}
+		if typed == 1 {
+			return true, true
+		}
+	case int:
+		if typed == 0 {
+			return false, true
+		}
+		if typed == 1 {
+			return true, true
+		}
+	}
+	return true, false
+}
+
 func LoadPluginDir(root string) (LoadedPlugin, error) {
 	if strings.TrimSpace(root) == "" {
 		return LoadedPlugin{}, fmt.Errorf("plugin root is empty")
@@ -153,8 +231,12 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 }
 
 func LoadMCPServers(roots []string) map[string]contracts.MCPServer {
+	return LoadMCPServersWithSettings(roots, contracts.Settings{})
+}
+
+func LoadMCPServersWithSettings(roots []string, settings contracts.Settings) map[string]contracts.MCPServer {
 	servers := map[string]contracts.MCPServer{}
-	for _, plugin := range LoadPluginDirs(roots) {
+	for _, plugin := range LoadPluginDirsWithSettings(roots, settings) {
 		for name, server := range plugin.MCPServers {
 			servers[name] = server
 		}

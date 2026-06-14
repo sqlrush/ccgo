@@ -982,7 +982,7 @@ func mergeMCPPolicySettingsForInit(settings ...contracts.Settings) contracts.Set
 }
 
 func runnerSlashCommandNames(runner conversation.Runner) []string {
-	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory})
+	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory, Settings: runnerMergedSettings(runner)})
 	var names []string
 	for _, cmd := range registry.Visible() {
 		name := strings.TrimSpace(commands.UserFacingName(cmd))
@@ -994,7 +994,7 @@ func runnerSlashCommandNames(runner conversation.Runner) []string {
 }
 
 func runnerSkillNames(runner conversation.Runner) []string {
-	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory})
+	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory, Settings: runnerMergedSettings(runner)})
 	var names []string
 	for _, cmd := range registry.Visible() {
 		if cmd.Type != contracts.CommandPrompt || cmd.Source == contracts.CommandSourceBuiltin {
@@ -1009,7 +1009,7 @@ func runnerSkillNames(runner conversation.Runner) []string {
 }
 
 func runnerAgentNames(runner conversation.Runner) []string {
-	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory))
+	plugins := runnerLocalPlugins(runner)
 	var names []string
 	for _, plugin := range plugins {
 		for _, agent := range plugin.Agents {
@@ -1024,7 +1024,7 @@ func runnerAgentNames(runner conversation.Runner) []string {
 }
 
 func runnerPluginSummaries(runner conversation.Runner) []printStreamPlugin {
-	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory))
+	plugins := runnerLocalPlugins(runner)
 	out := make([]printStreamPlugin, 0, len(plugins))
 	for _, plugin := range plugins {
 		out = append(out, printStreamPlugin{
@@ -1034,6 +1034,17 @@ func runnerPluginSummaries(runner conversation.Runner) []printStreamPlugin {
 		})
 	}
 	return out
+}
+
+func runnerLocalPlugins(runner conversation.Runner) []pluginpkg.LoadedPlugin {
+	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory), runnerMergedSettings(runner))
+}
+
+func runnerMergedSettings(runner conversation.Runner) contracts.Settings {
+	if runner.MCP == nil {
+		return contracts.Settings{}
+	}
+	return config.MergeSettings(runner.MCP.UserSettings, runner.MCP.ProjectSettings, runner.MCP.LocalSettings)
 }
 
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {

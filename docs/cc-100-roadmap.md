@@ -144,6 +144,8 @@ M8 补充：headless `/plugin enable <name>` 与 `/plugin disable <name>` 现在
 
 M8 补充：headless `/plugin list|status` 现在会按 `enabledPlugins` 的 true/false 统计 enabled 数量并列出 enabled/disabled/configured 状态明细，方便验证本地 plugin lifecycle 状态。
 
+M8 补充：`enabledPlugins` 的 disabled 状态现在会过滤本地 plugin manifest 产生的 slash command、Skill tool prompt、agent/MCP/output-style/status/stream-init metadata，`/plugin disable <name>` 写入配置后不再只影响展示层；marketplace 下载/安装、版本解析、动态 refresh lifecycle 和完整 UI 管理仍待补齐。
+
 M8 补充：headless `/config output-style <name>` 现在会校验可用 output style、写入用户 `settings.json` 的 `outputStyle`，并同步当前 runner settings；完整 TUI picker 和状态栏附件仍待补齐。
 
 M8 补充：headless `/config fast-mode <on|off>` 现在会写入用户 `settings.json` 的 `fastMode` 并同步当前 runner 状态；完整 fast-mode TUI 切换、状态栏提示和模型请求 beta 行为仍待补齐。

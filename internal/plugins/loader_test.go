@@ -142,6 +142,37 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	}
 }
 
+func TestLoadPluginDirsWithSettingsSkipsDisabledPlugins(t *testing.T) {
+	root := t.TempDir()
+	enabledRoot := filepath.Join(root, "enabled")
+	disabledRoot := filepath.Join(root, "disabled")
+	baseDisabledRoot := filepath.Join(root, "base-disabled")
+	for _, dir := range []string{enabledRoot, disabledRoot, baseDisabledRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(enabledRoot, ManifestFileName), []byte(`{"name":"enabled"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(disabledRoot, ManifestFileName), []byte(`{"name":"disabled"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(baseDisabledRoot, ManifestFileName), []byte(`{"name":"different-name"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins := LoadPluginDirsWithSettings([]string{enabledRoot, disabledRoot, baseDisabledRoot}, contracts.Settings{
+		EnabledPlugins: map[string]any{
+			"disabled":      false,
+			"base-disabled": "off",
+		},
+	})
+	if len(plugins) != 1 || plugins[0].Name != "enabled" {
+		t.Fatalf("plugins = %#v", plugins)
+	}
+}
+
 func TestProjectPluginDirsWalksToGitRoot(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg", "sub")

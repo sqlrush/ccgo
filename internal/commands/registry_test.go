@@ -170,6 +170,39 @@ func TestLoadDiscoversProjectPluginPromptCommands(t *testing.T) {
 	}
 }
 
+func TestLoadSkipsDisabledProjectPluginCommands(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"commands": [{
+			"name": "demo:deploy",
+			"description": "Deploy plugin",
+			"prompt": "Deploy $ARGUMENTS."
+		}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{
+		CWD:      cwd,
+		Settings: contracts.Settings{EnabledPlugins: map[string]any{"demo": false}},
+	})
+	if command, ok := registry.Find("demo:deploy"); ok {
+		t.Fatalf("disabled plugin command loaded: %#v", command)
+	}
+}
+
 func TestLoadDiscoversProjectPluginCommandDirectory(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

@@ -194,7 +194,7 @@ func (r *Runner) initialUserMessages(user contracts.Message) ([]contracts.Messag
 	if !commands.IsSlashInput(text) {
 		return []contracts.Message{user}, true, nil, nil
 	}
-	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: r.mergedSettings()})
 	slash, handled, err := commands.ExecuteSlashCommand(registry, text, commands.SlashOptions{
 		SessionID: r.SessionID,
 		UUID:      user.UUID,
@@ -267,7 +267,9 @@ func (t *relevantMemoryPrefetchTask) requestContext(ctx context.Context) (releva
 }
 
 func (r Runner) toolMetadata() map[string]any {
-	metadata := map[string]any{}
+	metadata := map[string]any{
+		tool.MetadataSettingsKey: r.mergedSettings(),
+	}
 	skillDirs := append([]string(nil), r.SkillDirs...)
 	if r.WorkingDirectory != "" {
 		skillDirs = appendUniqueStrings(skillDirs, skills.ProjectSkillDirs(r.WorkingDirectory)...)
@@ -615,8 +617,8 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 	}
 	merged := r.mergedSettings()
-	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory})
-	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: merged})
+	localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), merged)
 	pluginSkills := pluginSkillNames(localPlugins)
 	pluginCommands := pluginCommandNames(registry.Visible(), pluginSkills)
 	pluginAgents := pluginAgentNames(localPlugins)
@@ -869,7 +871,7 @@ func (r Runner) outputStylePlugins() []pluginpkg.LoadedPlugin {
 	if strings.TrimSpace(r.WorkingDirectory) == "" {
 		return nil
 	}
-	return pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), r.mergedSettings())
 }
 
 func settingsPermissionsSummary(setting *contracts.PermissionsSetting) string {

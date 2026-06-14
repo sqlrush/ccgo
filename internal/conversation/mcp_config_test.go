@@ -114,6 +114,37 @@ func TestLoadMCPConfigFromSettingsFilesIgnoresMissingFiles(t *testing.T) {
 	}
 }
 
+func TestLoadMCPConfigFromSettingsFilesSkipsDisabledPluginServers(t *testing.T) {
+	root := t.TempDir()
+	claudeHome := filepath.Join(root, "home")
+	project := filepath.Join(root, "project")
+	pluginDir := filepath.Join(project, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(claudeHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	writeSettingsFile(t, filepath.Join(project, ".claude", "settings.json"), `{
+		"enabledPlugins": {"demo": false}
+	}`)
+	writeSettingsFile(t, filepath.Join(pluginDir, "plugin.json"), `{
+		"name": "demo",
+		"mcpServers": {
+			"plugin:docs": {"type": "http", "url": "https://example.com/mcp"}
+		}
+	}`)
+
+	config, err := LoadMCPConfigFromSettingsFiles(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.PluginServers) != 0 {
+		t.Fatalf("plugin servers = %#v", config.PluginServers)
+	}
+}
+
 func writeSettingsFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

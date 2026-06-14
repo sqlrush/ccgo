@@ -31,6 +31,7 @@ type Options struct {
 	Sources              Sources
 	DisableProjectSkills bool
 	DisableBuiltins      bool
+	Settings             contracts.Settings
 }
 
 type Registry struct {
@@ -44,7 +45,7 @@ func Load(opts Options) Registry {
 		sources.ProjectSkillPrompts = loadProjectSkillPrompts(opts.CWD)
 	}
 	if opts.CWD != "" && len(sources.PluginCommands) == 0 && len(sources.PluginSkillPrompts) == 0 && len(sources.PluginSkills) == 0 {
-		sources.PluginSkillPrompts, sources.PluginCommands = loadProjectPluginCommands(opts.CWD)
+		sources.PluginSkillPrompts, sources.PluginCommands = loadProjectPluginCommands(opts.CWD, opts.Settings)
 	}
 	if !opts.DisableBuiltins && sources.Builtins == nil {
 		sources.Builtins = BuiltinCommands()
@@ -243,8 +244,8 @@ func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 	return out
 }
 
-func loadProjectPluginCommands(cwd string) ([]PromptTemplate, []contracts.Command) {
-	loaded := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(cwd))
+func loadProjectPluginCommands(cwd string, settings contracts.Settings) ([]PromptTemplate, []contracts.Command) {
+	loaded := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(cwd), settings)
 	var prompts []PromptTemplate
 	var commands []contracts.Command
 	for _, plugin := range loaded {
