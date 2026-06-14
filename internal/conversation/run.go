@@ -486,6 +486,8 @@ func (r *Runner) formatConfigSummary(raw string) string {
 			return r.setOutputStyleSummary(args)
 		case "fast-mode", "fastMode":
 			return r.setFastModeSummary(args)
+		case "model":
+			return r.setConfigModelSummary(args)
 		default:
 			return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
@@ -571,6 +573,24 @@ func (r *Runner) setFastModeSummary(args []string) string {
 		state = "enabled"
 	}
 	return "Fast mode " + state + "."
+}
+
+func (r *Runner) setConfigModelSummary(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /config model <model-name>"
+	}
+	name, display := resolveModelSelection(args[1])
+	if err := setUserModel(name); err != nil {
+		return fmt.Sprintf("Failed to set model %s: %v", name, err)
+	}
+	r.Model = name
+	if r.MCP != nil {
+		r.MCP.UserSettings.Model = name
+	}
+	if display != "" && display != name {
+		return fmt.Sprintf("Model set to %s.\nDisplay name: %s", name, display)
+	}
+	return "Model set to " + name + "."
 }
 
 func parseOnOff(raw string) (bool, bool) {
@@ -887,6 +907,15 @@ func setUserFastMode(enabled bool) error {
 		return err
 	}
 	document["fastMode"] = enabled
+	return writeUserSettingsDocument(document)
+}
+
+func setUserModel(name string) error {
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		return err
+	}
+	document["model"] = name
 	return writeUserSettingsDocument(document)
 }
 
@@ -1231,16 +1260,24 @@ func (r *Runner) formatModelSummary(raw string) string {
 	if raw == "" {
 		return "Current model: " + r.model()
 	}
+	name, display := resolveModelSelection(raw)
+	r.Model = name
+	if display != "" && display != name {
+		return fmt.Sprintf("Selected model: %s\nDisplay name: %s", name, display)
+	}
+	return "Selected model: " + name
+}
+
+func resolveModelSelection(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
 	if capability, ok := modelpkg.DefaultRegistry().Resolve(raw); ok {
-		r.Model = capability.Name
 		display := strings.TrimSpace(capability.DisplayName)
 		if display == "" {
 			display = capability.Name
 		}
-		return fmt.Sprintf("Selected model: %s\nDisplay name: %s", capability.Name, display)
+		return capability.Name, display
 	}
-	r.Model = raw
-	return "Selected model: " + raw
+	return raw, raw
 }
 
 func (r Runner) formatMCPCommandSummary(raw string) string {

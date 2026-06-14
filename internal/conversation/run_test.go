@@ -896,6 +896,43 @@ func TestRunnerExecutesConfigFastModeWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesConfigModelWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	runner := Runner{
+		Client:    client,
+		Model:     "sonnet",
+		SessionID: "sess_config_model",
+		MCP:       &MCPConfig{},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config model opus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Model set to claude-opus-4-6.") || !strings.Contains(text, "Display name: Opus 4.6") {
+		t.Fatalf("model text = %q", text)
+	}
+	if runner.Model != "claude-opus-4-6" || runner.MCP.UserSettings.Model != "claude-opus-4-6" {
+		t.Fatalf("runner model = %q settings=%q", runner.Model, runner.MCP.UserSettings.Model)
+	}
+	var settings map[string]any
+	data, err := os.ReadFile(filepath.Join(configHome, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["model"] != "claude-opus-4-6" {
+		t.Fatalf("settings = %#v", settings)
+	}
+}
+
 func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	repo := filepath.Join(t.TempDir(), "repo")

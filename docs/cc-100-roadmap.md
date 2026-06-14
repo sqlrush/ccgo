@@ -98,7 +98,7 @@ M8 补充：`/help` 和 `/skills` built-in local-jsx command 现在有基础 tex
 
 M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 text result：无参数显示当前 runner model，有参数会按模型 registry 解析 alias 并展示 resolved model/display name，不请求模型；完整交互式模型选择、持久设置写回和 TUI 状态同步仍未完成。
 
-M8 补充：`/model` headless/local 命令现在会把解析后的模型写入 runner 的默认 `Model` 状态，后续同一 runner 的 turn 会使用新模型；prompt skill frontmatter 的 `model` 仍只作为当前请求的临时 override，不会污染默认模型。完整 TUI 模型选择和 settings 持久化仍未完成。
+M8 补充：`/model` headless/local 命令现在会把解析后的模型写入 runner 的默认 `Model` 状态，后续同一 runner 的 turn 会使用新模型；`/config model <name>` 会解析模型 alias、写入用户 `settings.json` 的 `model` 并同步当前 runner settings；prompt skill frontmatter 的 `model` 仍只作为当前请求的临时 override，不会污染默认模型。完整 TUI 模型选择仍未完成。
 
 M8/M9 补充：`/mcp` built-in local-jsx command 现在有 headless/local 基础 text result：无参数或 `list` 会列出 settings-derived MCP server、transport 和 target，并对被 allow/deny policy 阻断的 server 标注 blocked reason，未配置时返回空状态；`enable`/`disable` 会写回用户 `settings.json` 的 MCP allow/deny policy 并同步当前 runner 内存状态，但仍不会连接/断开远端或请求模型。完整 MCP 管理 UI、实时启停 lifecycle 和健康检查仍未完成。
 
