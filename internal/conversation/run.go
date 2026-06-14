@@ -1261,7 +1261,11 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 	var lines []string
 	lines = append(lines, "MCP servers:")
 	for _, server := range servers {
-		lines = append(lines, fmt.Sprintf("- %s (%s): %s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config)))
+		status := ""
+		if !server.Policy.Allowed {
+			status = fmt.Sprintf(" [blocked: %s]", server.Policy.Reason)
+		}
+		lines = append(lines, fmt.Sprintf("- %s (%s): %s%s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config), status))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1289,6 +1293,7 @@ func (r Runner) setMCPServerEnabledSummary(args []string) string {
 type mcpServerSummary struct {
 	Name   string
 	Config contracts.MCPServer
+	Policy mcp.PolicyDecision
 }
 
 func (r Runner) mcpServers() []mcpServerSummary {
@@ -1297,9 +1302,10 @@ func (r Runner) mcpServers() []mcpServerSummary {
 	}
 	merged := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
 	mcpServers := mcp.MergeServers(merged.MCPServers, r.MCP.PluginServers)
+	policy := mcp.PolicyFromSettings(merged)
 	servers := make([]mcpServerSummary, 0, len(mcpServers))
 	for name, server := range mcpServers {
-		servers = append(servers, mcpServerSummary{Name: name, Config: server})
+		servers = append(servers, mcpServerSummary{Name: name, Config: server, Policy: mcp.EvaluatePolicy(name, server, policy)})
 	}
 	sort.Slice(servers, func(i, j int) bool {
 		return servers[i].Name < servers[j].Name

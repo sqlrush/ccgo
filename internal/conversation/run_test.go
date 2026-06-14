@@ -1263,6 +1263,27 @@ func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerMCPSlashCommandMarksPolicyBlockedServers(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_blocked",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {Command: "python", Args: []string{"server.py"}},
+			},
+			DeniedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "alpha"}},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "- alpha (stdio): python server.py [blocked: denied]") {
+		t.Fatalf("mcp text = %q", text)
+	}
+}
+
 func TestRunnerMCPSlashCommandReportsNoServers(t *testing.T) {
 	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_empty"}
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp"))
