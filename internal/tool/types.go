@@ -14,10 +14,13 @@ type PromptContext struct {
 }
 
 type AgentInfo struct {
-	Name        string
-	Description string
-	Path        string
-	Prompt      string
+	Name           string
+	Description    string
+	Path           string
+	Prompt         string
+	Model          string
+	PermissionMode contracts.PermissionMode
+	AllowedTools   []string
 }
 
 type Context struct {

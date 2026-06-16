@@ -101,10 +101,13 @@ func TestTaskToolStartsSidechainAndStoresPrompt(t *testing.T) {
 
 func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
-		Name:        "demo:reviewer",
-		Description: "Review changes",
-		Path:        "/tmp/reviewer.md",
-		Prompt:      "Review with plugin instructions.",
+		Name:           "demo:reviewer",
+		Description:    "Review changes",
+		Path:           "/tmp/reviewer.md",
+		Prompt:         "Review with plugin instructions.",
+		Model:          "opus",
+		PermissionMode: contracts.PermissionBypassPermissions,
+		AllowedTools:   []string{"Read", "Edit"},
 	}})
 	task := NewTaskTool()
 
@@ -138,6 +141,13 @@ func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
 	if result.StructuredContent["agent_path"] != "/tmp/reviewer.md" || result.StructuredContent["agent_prompt_chars"] != len("Review with plugin instructions.") {
 		t.Fatalf("structured agent metadata = %#v", result.StructuredContent)
 	}
+	if result.StructuredContent["agent_model"] != "opus" || result.StructuredContent["agent_permission_mode"] != string(contracts.PermissionBypassPermissions) {
+		t.Fatalf("structured agent runtime metadata = %#v", result.StructuredContent)
+	}
+	allowedTools, ok := result.StructuredContent["agent_allowed_tools"].([]string)
+	if !ok || len(allowedTools) != 2 || allowedTools[0] != "Read" || allowedTools[1] != "Edit" {
+		t.Fatalf("structured allowed tools = %#v", result.StructuredContent["agent_allowed_tools"])
+	}
 	states, err := session.ListSidechainStates(transcriptPath, ctx.SessionID)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +155,7 @@ func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
 	if len(states) != 1 || states[0].MessageCount != 3 {
 		t.Fatalf("states = %#v", states)
 	}
-	if states[0].Metadata.AgentPath != "/tmp/reviewer.md" || states[0].Metadata.AgentPrompt != "Review with plugin instructions." {
+	if states[0].Metadata.AgentPath != "/tmp/reviewer.md" || states[0].Metadata.AgentPrompt != "Review with plugin instructions." || states[0].Metadata.AgentModel != "opus" || states[0].Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(states[0].Metadata.AgentAllowedTools) != 2 {
 		t.Fatalf("metadata = %#v", states[0].Metadata)
 	}
 	transcript, err := session.LoadTranscript(states[0].Path)

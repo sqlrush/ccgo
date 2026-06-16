@@ -705,6 +705,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：conversation runner 会把本地 plugin manifest 发现到的 agent 名称/描述透传给工具 metadata；`Task` tool 的 prompt/schema 会列出 `general-purpose` 和可用 plugin agents，并在存在明确 agent 清单时拒绝未知 `subagent_type`，减少 subagent 类型拼写错误落成孤立 sidechain。
 - 本轮补充：plugin agent loader 保留 agent markdown 正文，runner 将 agent path/prompt 传入 `Task` tool；Task 启动 plugin agent sidechain 时会把 agent prompt 写入 sidechain system message，并在 metadata sidecar/lifecycle payload 中持久化 agent path/prompt，后续执行器可直接从 sidechain 恢复 agent 指令。
 - 本轮补充：sidechain resume context 现在会在 tail 窗口截断了原始 agent prompt 时，从 metadata 合成一个 deterministic 的 `agent_prompt` system meta message 前置到恢复消息中，避免后续恢复/执行缺失 agent 指令。
+- 本轮补充：plugin agent frontmatter 的 `model`、`permissionMode` 和 `tools`/`allowed-tools` 会进入 runner tool metadata，并由 `Task` 写入 sidechain metadata/lifecycle payload 与 structured content，为后续 subagent 执行器接入模型选择、权限模式和工具 allowlist 打地基。
 
 ### M11: Bridge 和高级集成
 

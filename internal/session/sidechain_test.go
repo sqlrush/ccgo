@@ -120,13 +120,16 @@ func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
 	sessionID := contracts.ID("sess_1")
 	runtime := SidechainRuntime{SessionPath: sessionPath, SessionID: sessionID}
 	run, err := runtime.Start(SidechainOptions{
-		ID:           "agent/meta",
-		StartedAt:    time.Unix(100, 0).UTC(),
-		AgentType:    "researcher",
-		WorktreePath: "/tmp/research-worktree",
-		Description:  "research the migration",
-		AgentPath:    "/tmp/agents/researcher.md",
-		AgentPrompt:  "Research carefully.",
+		ID:                  "agent/meta",
+		StartedAt:           time.Unix(100, 0).UTC(),
+		AgentType:           "researcher",
+		WorktreePath:        "/tmp/research-worktree",
+		Description:         "research the migration",
+		AgentPath:           "/tmp/agents/researcher.md",
+		AgentPrompt:         "Research carefully.",
+		AgentModel:          "opus",
+		AgentPermissionMode: string(contracts.PermissionBypassPermissions),
+		AgentAllowedTools:   []string{"Read", "Edit"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -142,11 +145,11 @@ func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
 	if state.Status != SidechainStatusRunning {
 		t.Fatalf("state = %#v", state)
 	}
-	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research the migration" || state.Metadata.AgentPath != "/tmp/agents/researcher.md" || state.Metadata.AgentPrompt != "Research carefully." {
+	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research the migration" || state.Metadata.AgentPath != "/tmp/agents/researcher.md" || state.Metadata.AgentPrompt != "Research carefully." || state.Metadata.AgentModel != "opus" || state.Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(state.Metadata.AgentAllowedTools) != 2 || state.Metadata.AgentAllowedTools[0] != "Read" || state.Metadata.AgentAllowedTools[1] != "Edit" {
 		t.Fatalf("metadata recovered from lifecycle payload = %#v", state.Metadata)
 	}
 	resumed, ok := ResumeSidechainRunFromState(state)
-	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || resumed.Metadata.Description != "research the migration" || resumed.Metadata.AgentPath != "/tmp/agents/researcher.md" || resumed.Metadata.AgentPrompt != "Research carefully." {
+	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || resumed.Metadata.Description != "research the migration" || resumed.Metadata.AgentPath != "/tmp/agents/researcher.md" || resumed.Metadata.AgentPrompt != "Research carefully." || resumed.Metadata.AgentModel != "opus" || resumed.Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(resumed.Metadata.AgentAllowedTools) != 2 {
 		t.Fatalf("resumed = %#v ok=%v", resumed, ok)
 	}
 }

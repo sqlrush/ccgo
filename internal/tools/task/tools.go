@@ -192,12 +192,15 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	runtime := session.SidechainRuntime{SessionPath: sessionPath, SessionID: ctx.SessionID}
 	agent, hasAgent := taskAgentForType(input.SubagentType, availableTaskAgents(ctx.Metadata))
 	run, err := runtime.Start(session.SidechainOptions{
-		ID:           input.ID,
-		AgentType:    input.SubagentType,
-		WorktreePath: ctx.WorkingDirectory,
-		Description:  input.Description,
-		AgentPath:    agent.Path,
-		AgentPrompt:  agent.Prompt,
+		ID:                  input.ID,
+		AgentType:           input.SubagentType,
+		WorktreePath:        ctx.WorkingDirectory,
+		Description:         input.Description,
+		AgentPath:           agent.Path,
+		AgentPrompt:         agent.Prompt,
+		AgentModel:          agent.Model,
+		AgentPermissionMode: string(agent.PermissionMode),
+		AgentAllowedTools:   append([]string(nil), agent.AllowedTools...),
 	})
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -215,9 +218,12 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			AgentID:     run.ID,
 			Message:     &agentMessage,
 			Content: map[string]any{
-				"agentType":   input.SubagentType,
-				"agentPath":   agent.Path,
-				"agentPrompt": agent.Prompt,
+				"agentType":           input.SubagentType,
+				"agentPath":           agent.Path,
+				"agentPrompt":         agent.Prompt,
+				"agentModel":          agent.Model,
+				"agentPermissionMode": string(agent.PermissionMode),
+				"agentAllowedTools":   append([]string(nil), agent.AllowedTools...),
 			},
 		}); err != nil {
 			return contracts.ToolResult{}, err
@@ -249,6 +255,15 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}
 	if hasAgent && agent.Prompt != "" {
 		structured["agent_prompt_chars"] = len(agent.Prompt)
+	}
+	if hasAgent && agent.Model != "" {
+		structured["agent_model"] = agent.Model
+	}
+	if hasAgent && agent.PermissionMode != "" {
+		structured["agent_permission_mode"] = string(agent.PermissionMode)
+	}
+	if hasAgent && len(agent.AllowedTools) > 0 {
+		structured["agent_allowed_tools"] = append([]string(nil), agent.AllowedTools...)
 	}
 	return contracts.ToolResult{
 		Content:           fmt.Sprintf("Task started: %s\nSubagent type: %s\nSidechain ID: %s", input.Description, input.SubagentType, run.ID),
@@ -307,10 +322,13 @@ func taskAgentsFromMetadata(metadata map[string]any) []tool.AgentInfo {
 		agents := make([]tool.AgentInfo, 0, len(raw))
 		for _, item := range raw {
 			agents = append(agents, tool.AgentInfo{
-				Name:        item["name"],
-				Description: item["description"],
-				Path:        item["path"],
-				Prompt:      item["prompt"],
+				Name:           item["name"],
+				Description:    item["description"],
+				Path:           item["path"],
+				Prompt:         item["prompt"],
+				Model:          item["model"],
+				PermissionMode: contracts.PermissionMode(item["permission_mode"]),
+				AllowedTools:   splitTaskAgentTools(item["allowed_tools"]),
 			})
 		}
 		return cleanTaskAgents(agents)
@@ -318,10 +336,13 @@ func taskAgentsFromMetadata(metadata map[string]any) []tool.AgentInfo {
 		agents := make([]tool.AgentInfo, 0, len(raw))
 		for _, item := range raw {
 			agents = append(agents, tool.AgentInfo{
-				Name:        firstTaskAgentField(item, "name", "id", "agent"),
-				Description: firstTaskAgentField(item, "description", "desc", "summary", "whenToUse", "when_to_use", "when-to-use"),
-				Path:        firstTaskAgentField(item, "path", "file", "source"),
-				Prompt:      firstTaskAgentField(item, "prompt", "agentPrompt", "agent_prompt", "instructions", "body"),
+				Name:           firstTaskAgentField(item, "name", "id", "agent"),
+				Description:    firstTaskAgentField(item, "description", "desc", "summary", "whenToUse", "when_to_use", "when-to-use"),
+				Path:           firstTaskAgentField(item, "path", "file", "source"),
+				Prompt:         firstTaskAgentField(item, "prompt", "agentPrompt", "agent_prompt", "instructions", "body"),
+				Model:          firstTaskAgentField(item, "model", "agentModel", "agent_model"),
+				PermissionMode: contracts.PermissionMode(firstTaskAgentField(item, "permissionMode", "permission_mode", "permission-mode", "agentPermissionMode", "agent_permission_mode")),
+				AllowedTools:   firstTaskAgentStringList(item, "allowedTools", "allowed_tools", "allowed-tools", "tools", "agentAllowedTools", "agent_allowed_tools"),
 			})
 		}
 		return cleanTaskAgents(agents)
@@ -346,10 +367,63 @@ func cleanTaskAgents(agents []tool.AgentInfo) []tool.AgentInfo {
 		agent.Description = strings.TrimSpace(agent.Description)
 		agent.Path = strings.TrimSpace(agent.Path)
 		agent.Prompt = strings.TrimSpace(agent.Prompt)
+		agent.Model = strings.TrimSpace(agent.Model)
+		agent.PermissionMode = contracts.PermissionMode(strings.TrimSpace(string(agent.PermissionMode)))
+		agent.AllowedTools = cleanTaskAgentStrings(agent.AllowedTools)
 		if agent.Name == "" {
 			continue
 		}
 		out = append(out, agent)
+	}
+	return out
+}
+
+func firstTaskAgentStringList(fields map[string]any, keys ...string) []string {
+	for _, key := range keys {
+		raw, ok := fields[key]
+		if !ok {
+			continue
+		}
+		switch value := raw.(type) {
+		case []string:
+			return cleanTaskAgentStrings(value)
+		case []any:
+			values := make([]string, 0, len(value))
+			for _, item := range value {
+				if text, ok := item.(string); ok {
+					values = append(values, text)
+				}
+			}
+			return cleanTaskAgentStrings(values)
+		case string:
+			return splitTaskAgentTools(value)
+		}
+	}
+	return nil
+}
+
+func splitTaskAgentTools(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var parts []string
+	if strings.Contains(raw, ",") {
+		parts = strings.Split(raw, ",")
+	} else {
+		parts = strings.Fields(raw)
+	}
+	return cleanTaskAgentStrings(parts)
+}
+
+func cleanTaskAgentStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
 	}
 	return out
 }

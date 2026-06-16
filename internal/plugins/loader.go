@@ -21,10 +21,13 @@ type PromptTemplate struct {
 }
 
 type PluginAgent struct {
-	Name        string
-	Path        string
-	Description string
-	Prompt      string
+	Name           string
+	Path           string
+	Description    string
+	Prompt         string
+	Model          string
+	PermissionMode contracts.PermissionMode
+	AllowedTools   []string
 }
 
 type PluginHookEvent struct {
@@ -999,10 +1002,13 @@ func loadPluginAgentFile(path string, pluginName string, namespace []string, see
 		"Agent from "+pluginName+" plugin",
 	)
 	return PluginAgent{
-		Name:        strings.Join(compactStrings(parts), ":"),
-		Path:        path,
-		Description: description,
-		Prompt:      strings.TrimSpace(body),
+		Name:           strings.Join(compactStrings(parts), ":"),
+		Path:           path,
+		Description:    description,
+		Prompt:         strings.TrimSpace(body),
+		Model:          strings.TrimSpace(frontmatter["model"]),
+		PermissionMode: contracts.PermissionMode(firstNonEmpty(frontmatter["permissionMode"], frontmatter["permission_mode"], frontmatter["permission-mode"])),
+		AllowedTools:   parseFrontmatterWords(firstNonEmpty(frontmatter["tools"], frontmatter["allowed-tools"], frontmatter["allowed_tools"], frontmatter["allowedTools"])),
 	}, true
 }
 

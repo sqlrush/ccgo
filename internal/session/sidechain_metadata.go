@@ -8,11 +8,14 @@ import (
 )
 
 type SidechainMetadata struct {
-	AgentType    string `json:"agentType,omitempty"`
-	WorktreePath string `json:"worktreePath,omitempty"`
-	Description  string `json:"description,omitempty"`
-	AgentPath    string `json:"agentPath,omitempty"`
-	AgentPrompt  string `json:"agentPrompt,omitempty"`
+	AgentType           string   `json:"agentType,omitempty"`
+	WorktreePath        string   `json:"worktreePath,omitempty"`
+	Description         string   `json:"description,omitempty"`
+	AgentPath           string   `json:"agentPath,omitempty"`
+	AgentPrompt         string   `json:"agentPrompt,omitempty"`
+	AgentModel          string   `json:"agentModel,omitempty"`
+	AgentPermissionMode string   `json:"agentPermissionMode,omitempty"`
+	AgentAllowedTools   []string `json:"agentAllowedTools,omitempty"`
 }
 
 func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
@@ -31,6 +34,9 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 	metadata.Description = firstTextField(fields, sidechainLifecycleDescriptionFields...)
 	metadata.AgentPath = firstStringField(fields, sidechainLifecycleAgentPathFields...)
 	metadata.AgentPrompt = firstTextField(fields, sidechainLifecycleAgentPromptFields...)
+	metadata.AgentModel = firstStringField(fields, sidechainLifecycleAgentModelFields...)
+	metadata.AgentPermissionMode = firstStringField(fields, sidechainLifecycleAgentPermissionModeFields...)
+	metadata.AgentAllowedTools = firstStringSliceField(fields, sidechainLifecycleAgentAllowedToolsFields...)
 	*m = metadata
 	return nil
 }
@@ -44,7 +50,14 @@ func topLevelStringField(value any, key string) string {
 }
 
 func (m SidechainMetadata) Empty() bool {
-	return m.AgentType == "" && m.WorktreePath == "" && m.Description == "" && m.AgentPath == "" && m.AgentPrompt == ""
+	return m.AgentType == "" &&
+		m.WorktreePath == "" &&
+		m.Description == "" &&
+		m.AgentPath == "" &&
+		m.AgentPrompt == "" &&
+		m.AgentModel == "" &&
+		m.AgentPermissionMode == "" &&
+		len(m.AgentAllowedTools) == 0
 }
 
 func WriteSidechainMetadata(path string, metadata SidechainMetadata) error {

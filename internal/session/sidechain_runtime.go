@@ -35,15 +35,18 @@ type SidechainRun struct {
 }
 
 type SidechainOptions struct {
-	ID           string
-	Subdir       string
-	ParentUUID   *contracts.ID
-	StartedAt    time.Time
-	AgentType    string
-	WorktreePath string
-	Description  string
-	AgentPath    string
-	AgentPrompt  string
+	ID                  string
+	Subdir              string
+	ParentUUID          *contracts.ID
+	StartedAt           time.Time
+	AgentType           string
+	WorktreePath        string
+	Description         string
+	AgentPath           string
+	AgentPrompt         string
+	AgentModel          string
+	AgentPermissionMode string
+	AgentAllowedTools   []string
 }
 
 func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) {
@@ -73,11 +76,14 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 		Status:       SidechainStatusRunning,
 		StartedAt:    startedAt.UTC().Format(time.RFC3339Nano),
 		Metadata: SidechainMetadata{
-			AgentType:    options.AgentType,
-			WorktreePath: options.WorktreePath,
-			Description:  options.Description,
-			AgentPath:    options.AgentPath,
-			AgentPrompt:  options.AgentPrompt,
+			AgentType:           options.AgentType,
+			WorktreePath:        options.WorktreePath,
+			Description:         options.Description,
+			AgentPath:           options.AgentPath,
+			AgentPrompt:         options.AgentPrompt,
+			AgentModel:          options.AgentModel,
+			AgentPermissionMode: options.AgentPermissionMode,
+			AgentAllowedTools:   append([]string(nil), options.AgentAllowedTools...),
 		},
 	}
 	if !run.Metadata.Empty() {
@@ -94,14 +100,17 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 		Subtype:     "sidechain_start",
 		IsSidechain: true,
 		Content: map[string]any{
-			"sidechainId":  id,
-			"agentId":      id,
-			"status":       run.Status,
-			"agentType":    options.AgentType,
-			"worktreePath": options.WorktreePath,
-			"description":  options.Description,
-			"agentPath":    options.AgentPath,
-			"agentPrompt":  options.AgentPrompt,
+			"sidechainId":         id,
+			"agentId":             id,
+			"status":              run.Status,
+			"agentType":           options.AgentType,
+			"worktreePath":        options.WorktreePath,
+			"description":         options.Description,
+			"agentPath":           options.AgentPath,
+			"agentPrompt":         options.AgentPrompt,
+			"agentModel":          options.AgentModel,
+			"agentPermissionMode": options.AgentPermissionMode,
+			"agentAllowedTools":   append([]string(nil), options.AgentAllowedTools...),
 		},
 	}); err != nil {
 		return SidechainRun{}, err

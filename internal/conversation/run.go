@@ -306,10 +306,13 @@ func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInf
 				continue
 			}
 			agents = append(agents, tool.AgentInfo{
-				Name:        name,
-				Description: strings.TrimSpace(agent.Description),
-				Path:        agent.Path,
-				Prompt:      strings.TrimSpace(agent.Prompt),
+				Name:           name,
+				Description:    strings.TrimSpace(agent.Description),
+				Path:           agent.Path,
+				Prompt:         strings.TrimSpace(agent.Prompt),
+				Model:          strings.TrimSpace(agent.Model),
+				PermissionMode: agent.PermissionMode,
+				AllowedTools:   append([]string(nil), agent.AllowedTools...),
 			})
 		}
 	}

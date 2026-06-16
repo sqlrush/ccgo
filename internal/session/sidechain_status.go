@@ -105,6 +105,25 @@ var sidechainLifecycleAgentPromptFields = []string{
 	"subagentInstructions", "subagent_instructions",
 }
 
+var sidechainLifecycleAgentModelFields = []string{
+	"agentModel", "agent_model",
+	"subagentModel", "subagent_model",
+	"model",
+}
+
+var sidechainLifecycleAgentPermissionModeFields = []string{
+	"agentPermissionMode", "agent_permission_mode",
+	"subagentPermissionMode", "subagent_permission_mode",
+	"permissionMode", "permission_mode", "permission-mode",
+}
+
+var sidechainLifecycleAgentAllowedToolsFields = []string{
+	"agentAllowedTools", "agent_allowed_tools",
+	"subagentAllowedTools", "subagent_allowed_tools",
+	"allowedTools", "allowed_tools", "allowed-tools",
+	"tools", "toolList", "tool_list",
+}
+
 var sidechainLifecycleStartTimeFields = []string{
 	"startedAt", "started_at",
 	"startTime", "start_time",
@@ -248,6 +267,15 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			}
 			if agentPrompt := firstTextField(msg.Content, sidechainLifecycleAgentPromptFields...); agentPrompt != "" && state.Metadata.AgentPrompt == "" {
 				state.Metadata.AgentPrompt = agentPrompt
+			}
+			if agentModel := firstStringField(msg.Content, sidechainLifecycleAgentModelFields...); agentModel != "" && state.Metadata.AgentModel == "" {
+				state.Metadata.AgentModel = agentModel
+			}
+			if permissionMode := firstStringField(msg.Content, sidechainLifecycleAgentPermissionModeFields...); permissionMode != "" && state.Metadata.AgentPermissionMode == "" {
+				state.Metadata.AgentPermissionMode = permissionMode
+			}
+			if allowedTools := firstStringSliceField(msg.Content, sidechainLifecycleAgentAllowedToolsFields...); len(allowedTools) > 0 && len(state.Metadata.AgentAllowedTools) == 0 {
+				state.Metadata.AgentAllowedTools = allowedTools
 			}
 			if status := sidechainStatusField(msg.Content, sidechainLifecycleStartStatusFields...); status != "" {
 				state.Status = status
@@ -463,6 +491,10 @@ func firstTextField(value any, keys ...string) string {
 	return firstTextFieldDepth(value, keys, 0)
 }
 
+func firstStringSliceField(value any, keys ...string) []string {
+	return firstStringSliceFieldDepth(value, keys, 0)
+}
+
 func firstStringFieldDepth(value any, keys []string, depth int) string {
 	if depth > 4 {
 		return ""
@@ -498,6 +530,43 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 	default:
 	}
 	return ""
+}
+
+func firstStringSliceFieldDepth(value any, keys []string, depth int) []string {
+	if depth > 4 {
+		return nil
+	}
+	switch fields := value.(type) {
+	case map[string]any:
+		for _, key := range keys {
+			if raw, ok := fields[key]; ok {
+				if values := scalarStringSliceField(raw); len(values) > 0 {
+					return values
+				}
+			}
+		}
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "records", "entry", "entries", "item", "items", "event", "events", "edge", "edges", "node", "nodes", "resource", "resources", "attributes", "properties", "attrs", "metadata", "details", "runtime", "context", "state", "value", "values", "output", "outputs", "included", "collection", "list", "children"} {
+			if raw, ok := fields[key]; ok {
+				if values := firstStringSliceFieldDepth(raw, keys, depth+1); len(values) > 0 {
+					return values
+				}
+			}
+		}
+	case []any:
+		for _, item := range fields {
+			if values := firstStringSliceFieldDepth(item, keys, depth+1); len(values) > 0 {
+				return values
+			}
+		}
+	case map[string]string:
+		for _, key := range keys {
+			if values := splitStringList(fields[key]); len(values) > 0 {
+				return values
+			}
+		}
+	default:
+	}
+	return nil
 }
 
 func firstTextFieldDepth(value any, keys []string, depth int) string {
@@ -664,6 +733,54 @@ func scalarStringField(value any) string {
 	default:
 		return ""
 	}
+}
+
+func scalarStringSliceField(value any) []string {
+	switch raw := value.(type) {
+	case []string:
+		return compactStringList(raw)
+	case []any:
+		values := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if text := scalarStringField(item); text != "" {
+				values = append(values, text)
+			}
+		}
+		return compactStringList(values)
+	case string:
+		return splitStringList(raw)
+	default:
+		if text := scalarStringField(value); text != "" {
+			return []string{text}
+		}
+	}
+	return nil
+}
+
+func splitStringList(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var parts []string
+	if strings.Contains(raw, ",") {
+		parts = strings.Split(raw, ",")
+	} else {
+		parts = strings.Fields(raw)
+	}
+	return compactStringList(parts)
+}
+
+func compactStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
 }
 
 func formatScalarFloat(value float64, bitSize int) string {
