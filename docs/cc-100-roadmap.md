@@ -63,6 +63,8 @@ M10 补充：`run:true` subagent 的错误路径现在会收敛 sidechain 终态
 
 M10 补充：新增 `SendMessage`/`TaskSendMessage` 工具入口，可向 running sidechain task 追加 user message，并返回更新后的 message_count、message_uuid 和 structured task state；这为后续 coordinator/team agent 编排提供了最小通信原语。完整 TeamCreate/TeamDelete/team scheduling 仍未完成。
 
+M10 补充：新增 `TeamCreate`/`TeamDelete` 工具入口和 session-scoped `teams.json` manifest；TeamCreate 可把已有 sidechain task ID 归组成 team，TeamDelete 删除 team 记录但不取消底层 task，structured result 会返回 team_id、task_ids、task_count 和 team_count。完整 team scheduling、coordinator 策略和远端协作仍未完成。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。
@@ -1418,9 +1420,9 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - local agent、async/background task、task output。
 - worktree isolation、cleanup、resume。
 - remote CCR agent、team/swarm/coordinator。
-- TeamCreate、TeamDelete、Task*。
+- Task*。
 
-当前状态：已有 Task/TaskOutput/KillTask/SendMessage/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式与 settings 默认 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 编排、远端协作和团队编排仍未完成。
+当前状态：已有 Task/TaskOutput/KillTask/SendMessage/TeamCreate/TeamDelete/ResumeTask 入口、sidechain metadata/lifecycle、team manifest、task progress event、显式与 settings 默认 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 调度、coordinator、远端协作和团队调度仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 

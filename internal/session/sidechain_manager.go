@@ -27,6 +27,18 @@ func (m SidechainManager) Manifest() (SidechainManifest, error) {
 	return BuildSidechainManifest(m.Runtime.SessionPath, m.Runtime.SessionID)
 }
 
+func (m SidechainManager) TeamManifest() (TeamManifest, error) {
+	return LoadTeamManifest(m.Runtime.SessionPath, m.Runtime.SessionID)
+}
+
+func (m SidechainManager) CreateTeam(options TeamOptions) (TeamState, TeamManifest, error) {
+	return CreateTeam(m.Runtime.SessionPath, m.Runtime.SessionID, options)
+}
+
+func (m SidechainManager) DeleteTeam(teamID string) (TeamState, TeamManifest, error) {
+	return DeleteTeam(m.Runtime.SessionPath, m.Runtime.SessionID, teamID)
+}
+
 func (m SidechainManager) Resume(sidechainID string) (SidechainRun, bool, error) {
 	return ResumeSidechainRun(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 }

@@ -41,6 +41,16 @@ type taskSendMessageInput struct {
 	Message string `json:"message,omitempty"`
 }
 
+type teamCreateInput struct {
+	TeamID      string   `json:"team_id,omitempty"`
+	Description string   `json:"description,omitempty"`
+	TaskIDs     []string `json:"task_ids,omitempty"`
+}
+
+type teamDeleteInput struct {
+	TeamID string `json:"team_id,omitempty"`
+}
+
 type taskResumeInput struct {
 	TaskID string `json:"task_id,omitempty"`
 	Limit  *int   `json:"limit,omitempty"`
@@ -180,6 +190,60 @@ func NewSendMessageTool() tool.Tool {
 		NormalizeFunc:   normalizeSendMessageInput,
 		ValidateFunc:    validateSendMessage,
 		CallFunc:        callSendMessage,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
+func NewTeamCreateTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "TeamCreate",
+			Description:     "Create or update a team of subagent tasks.",
+			SearchHint:      "create team subagent tasks coordinator",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"team_id"},
+				"properties": map[string]any{
+					"team_id":     map[string]any{"type": "string"},
+					"description": map[string]any{"type": "string"},
+					"task_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Creates or updates a named team of existing subagent tasks by team_id. task_ids should reference sidechain task IDs that already exist.", nil
+		},
+		NormalizeFunc:   normalizeTeamCreateInput,
+		ValidateFunc:    validateTeamCreate,
+		CallFunc:        callTeamCreate,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
+func NewTeamDeleteTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "TeamDelete",
+			Description:     "Delete a subagent task team.",
+			SearchHint:      "delete team subagent tasks",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"team_id"},
+				"properties": map[string]any{
+					"team_id": map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Deletes a named subagent task team by team_id. This does not cancel or delete the underlying tasks.", nil
+		},
+		NormalizeFunc:   normalizeTeamDeleteInput,
+		ValidateFunc:    validateTeamDelete,
+		CallFunc:        callTeamDelete,
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
@@ -400,6 +464,46 @@ func validateSendMessage(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if input.Message == "" {
 		return fmt.Errorf("message is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
+func validateTeamCreate(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeTeamCreateInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TeamID == "" {
+		return fmt.Errorf("team_id is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	for _, taskID := range input.TaskIDs {
+		if _, err := findTaskState(manager, taskID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateTeamDelete(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeTeamDeleteInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TeamID == "" {
+		return fmt.Errorf("team_id is required")
 	}
 	if ctx.SessionID == "" {
 		return fmt.Errorf("session id is required")
@@ -751,6 +855,59 @@ func callSendMessage(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSi
 	}, nil
 }
 
+func callTeamCreate(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeTeamCreateInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, manifest, err := manager.CreateTeam(session.TeamOptions{
+		ID:          input.TeamID,
+		Description: input.Description,
+		TaskIDs:     input.TaskIDs,
+	})
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	structured := structuredTeamState(team)
+	structured["type"] = "team_create"
+	structured["team_count"] = len(manifest.Teams)
+	_ = tool.SendProgress(sink, "", "team_created", map[string]any{
+		"team_id":    team.ID,
+		"task_count": len(team.TaskIDs),
+		"team_count": len(manifest.Teams),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Team %s created with %d task(s).", team.ID, len(team.TaskIDs)),
+		StructuredContent: structured,
+	}, nil
+}
+
+func callTeamDelete(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeTeamDeleteInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, manifest, err := manager.DeleteTeam(input.TeamID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	structured := structuredTeamState(team)
+	structured["type"] = "team_delete"
+	structured["deleted"] = true
+	structured["team_count"] = len(manifest.Teams)
+	_ = tool.SendProgress(sink, "", "team_deleted", map[string]any{
+		"team_id":    team.ID,
+		"task_count": len(team.TaskIDs),
+		"team_count": len(manifest.Teams),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Team %s deleted.", team.ID),
+		StructuredContent: structured,
+	}, nil
+}
+
 func callResumeTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeResumeTaskInput(raw)
 	if err != nil {
@@ -839,6 +996,26 @@ func decodeSendMessageInput(raw json.RawMessage) (taskSendMessageInput, error) {
 	return input, nil
 }
 
+func decodeTeamCreateInput(raw json.RawMessage) (teamCreateInput, error) {
+	var input teamCreateInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return teamCreateInput{}, err
+	}
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	input.Description = strings.TrimSpace(input.Description)
+	input.TaskIDs = cleanTaskAgentStrings(input.TaskIDs)
+	return input, nil
+}
+
+func decodeTeamDeleteInput(raw json.RawMessage) (teamDeleteInput, error) {
+	var input teamDeleteInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return teamDeleteInput{}, err
+	}
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	return input, nil
+}
+
 func decodeResumeTaskInput(raw json.RawMessage) (taskResumeInput, error) {
 	var input taskResumeInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -911,6 +1088,50 @@ func normalizeSendMessageInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input"); ok {
 		normalized["message"] = value
+	}
+	return json.Marshal(normalized)
+}
+
+func normalizeTeamCreateInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "team_id", "teamId", "id", "name", "description", "desc", "summary", "task_ids", "taskIds", "tasks", "members", "agents":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
+		normalized["team_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "description", "desc", "summary"); ok {
+		normalized["description"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "task_ids", "taskIds", "tasks", "members", "agents"); ok {
+		normalized["task_ids"] = value
+	}
+	return json.Marshal(normalized)
+}
+
+func normalizeTeamDeleteInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "team_id", "teamId", "id", "name":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
+		normalized["team_id"] = value
 	}
 	return json.Marshal(normalized)
 }
@@ -1050,6 +1271,18 @@ func structuredTaskState(state session.SidechainState) map[string]any {
 		structured["agent_allowed_tools"] = append([]string(nil), state.Metadata.AgentAllowedTools...)
 	}
 	return structured
+}
+
+func structuredTeamState(team session.TeamState) map[string]any {
+	return map[string]any{
+		"team_id":     team.ID,
+		"session_id":  string(team.SessionID),
+		"description": team.Description,
+		"task_ids":    append([]string(nil), team.TaskIDs...),
+		"task_count":  len(team.TaskIDs),
+		"created_at":  team.CreatedAt,
+		"updated_at":  team.UpdatedAt,
+	}
 }
 
 func taskOutputTailLines(input taskOutputInput) int {

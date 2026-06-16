@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewResumeTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewResumeTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,6 +451,63 @@ func TestSendMessageAppendsToRunningSidechain(t *testing.T) {
 	}
 }
 
+func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
+	ctx, transcriptPath := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/team-one", "agent/team-two"} {
+		_, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Team member","prompt":"Work as a team member","subagent_type":"general-purpose"}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	created, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_create",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"review/team","description":"Review team","members":["agent/team-one","agent/team-two","agent/team-one"]}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskIDs, ok := created.StructuredContent["task_ids"].([]string)
+	if !ok || len(taskIDs) != 2 || taskIDs[0] != "agent_team-one" || taskIDs[1] != "agent_team-two" {
+		t.Fatalf("team task ids = %#v", created.StructuredContent)
+	}
+	if created.StructuredContent["team_id"] != "review_team" || created.StructuredContent["task_count"] != 2 || created.StructuredContent["team_count"] != 1 {
+		t.Fatalf("team create structured content = %#v", created.StructuredContent)
+	}
+	manifest, err := session.LoadTeamManifest(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Teams) != 1 || manifest.Teams[0].ID != "review_team" || len(manifest.Teams[0].TaskIDs) != 2 {
+		t.Fatalf("team manifest = %#v", manifest)
+	}
+
+	deleted, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_delete",
+		Name:  "TeamDelete",
+		Input: json.RawMessage(`{"team_id":"review/team"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.StructuredContent["deleted"] != true || deleted.StructuredContent["team_id"] != "review_team" || deleted.StructuredContent["team_count"] != 0 {
+		t.Fatalf("team delete structured content = %#v", deleted.StructuredContent)
+	}
+	manifest, err = session.LoadTeamManifest(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Teams) != 0 {
+		t.Fatalf("team manifest after delete = %#v", manifest)
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -635,6 +692,11 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing send message", tool: "SendMessage", input: `{"task_id":"missing"}`, want: "message is required"},
 		{name: "unknown send field", tool: "SendMessage", input: `{"task_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
 		{name: "missing send task", tool: "SendMessage", input: `{"task_id":"missing","message":"hello"}`, want: "task not found: missing"},
+		{name: "missing team id", tool: "TeamCreate", input: `{}`, want: "team_id is required"},
+		{name: "unknown team field", tool: "TeamCreate", input: `{"team_id":"team","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team task", tool: "TeamCreate", input: `{"team_id":"team","task_ids":["missing"]}`, want: "task not found: missing"},
+		{name: "missing delete team id", tool: "TeamDelete", input: `{}`, want: "team_id is required"},
+		{name: "missing delete team", tool: "TeamDelete", input: `{"team_id":"missing"}`, want: "team not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
 	}
