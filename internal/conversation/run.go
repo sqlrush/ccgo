@@ -270,6 +270,9 @@ func (r Runner) toolMetadata() map[string]any {
 	metadata := map[string]any{
 		tool.MetadataSettingsKey: r.mergedSettings(),
 	}
+	if r.SessionPath != "" {
+		metadata[tool.MetadataSessionPathKey] = r.SessionPath
+	}
 	skillDirs := append([]string(nil), r.SkillDirs...)
 	skillDirs = appendUniqueStrings(skillDirs, skills.UserSkillDirs()...)
 	skillDirs = appendUniqueStrings(skillDirs, skills.UserLegacyCommandSkillDirs()...)

@@ -23,6 +23,7 @@ import (
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
 	skilltools "ccgo/internal/tools/skill"
+	tasktools "ccgo/internal/tools/task"
 )
 
 type fakeCall struct {
@@ -198,6 +199,81 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 	if entries[1].Message.ParentUUID == nil {
 		t.Fatalf("assistant transcript entry missing parent")
+	}
+}
+
+func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/api","description":"Review API","prompt":"Inspect the API changes","subagent_type":"general-purpose"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task recorded")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	cwd := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_runner",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: cwd,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if result.ToolResults[0].StructuredContent["sidechain_id"] != "agent_api" ||
+		result.ToolResults[0].StructuredContent["status"] != session.SidechainStatusRunning {
+		t.Fatalf("structured content = %#v", result.ToolResults[0].StructuredContent)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(client.requests))
+	}
+	last := client.requests[1].Messages[len(client.requests[1].Messages)-1]
+	if last.Role != "user" || last.Content[0].Type != contracts.ContentToolResult || last.Content[0].ToolUseID != "toolu_task" {
+		t.Fatalf("last api message = %#v", last)
+	}
+
+	states, err := session.ListSidechainStates(transcriptPath, "sess_task_runner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %#v", states)
+	}
+	state := states[0]
+	if state.ID != "agent_api" || state.Status != session.SidechainStatusRunning || state.MessageCount != 2 {
+		t.Fatalf("state = %#v", state)
+	}
+	if state.Metadata.AgentType != "general-purpose" || state.Metadata.Description != "Review API" || state.Metadata.WorktreePath != cwd {
+		t.Fatalf("metadata = %#v", state.Metadata)
 	}
 }
 

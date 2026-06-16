@@ -699,6 +699,10 @@ test/parity/                 # golden tests against TS/official behavior
 
 - subagent transcript、permission propagation、task progress、kill/resume、worktree cleanup 有 golden。
 
+当前进度：
+
+- 已有 sidechain transcript/runtime 地基，新增基础 `Task` tool 入口，可按 description/prompt/subagent_type 启动 sidechain、写入 task prompt，并返回 running 状态的 structured content；conversation runner 会把 session transcript path 透传给工具，确保 Task tool 能落到当前 session。完整 AgentTool 执行循环、内置/自定义 agent 选择、task progress/output、kill/resume、worktree isolation/cleanup、remote/team/swarm 仍未完成。
+
 ### M11: Bridge 和高级集成
 
 产出：
