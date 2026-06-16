@@ -4919,6 +4919,47 @@ func TestBuildRequestIncludesToolDefinitions(t *testing.T) {
 	}
 }
 
+func TestRunnerGatesAdvancedLSPDiagnosticsTool(t *testing.T) {
+	requestForAdvancedSetting := func(t *testing.T, advanced *contracts.AdvancedSetting) anthropic.Request {
+		t.Helper()
+		client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}}}}
+		registry, err := tool.NewRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		runner := Runner{
+			Client:    client,
+			Tools:     tool.NewExecutor(registry),
+			Model:     "sonnet",
+			MaxTokens: 128,
+			MCP:       &MCPConfig{UserSettings: contracts.Settings{Advanced: advanced}},
+		}
+		if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("check diagnostics")); err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 1 {
+			t.Fatalf("requests = %#v", client.requests)
+		}
+		return client.requests[0]
+	}
+
+	disabled := false
+	if requestHasTool(requestForAdvancedSetting(t, &contracts.AdvancedSetting{LSP: &disabled}), "LSPDiagnostics") {
+		t.Fatalf("LSPDiagnostics should not be exposed when advanced.lsp is disabled")
+	}
+	enabled := true
+	if !requestHasTool(requestForAdvancedSetting(t, &contracts.AdvancedSetting{LSP: &enabled}), "LSPDiagnostics") {
+		t.Fatalf("LSPDiagnostics should be exposed when advanced.lsp is enabled")
+	}
+}
+
 func TestBuildRequestIncludesSystemPrompt(t *testing.T) {
 	runner := Runner{
 		Model:        "sonnet",

@@ -116,6 +116,10 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if closeMCP != nil {
 		defer func() { _ = closeMCP() }()
 	}
+	runner, err = runner.withAdvancedTools()
+	if err != nil {
+		return result, err
+	}
 	runner.maybeEmitTokenWarning(history)
 	relevantMemoryPrefetch := runner.startRelevantMemoryPrefetch(ctx, history)
 	if relevantMemoryPrefetch != nil {
