@@ -2382,6 +2382,13 @@ func firstMCPSummaries(values []mcpServerSummary, limit int) []mcpServerSummary 
 	return values[:limit]
 }
 
+func firstMCPServerSearchResults(values []mcpServerSearchResult, limit int) []mcpServerSearchResult {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
 func firstLoadedPlugins(values []pluginpkg.LoadedPlugin, limit int) []pluginpkg.LoadedPlugin {
 	if limit <= 0 || len(values) <= limit {
 		return values
@@ -2884,6 +2891,12 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		case "list", "status":
 		case "show", "info":
 			return r.formatMCPServerShow(args)
+		case "search", "find":
+			query := subcommandRemainder(raw, args[0])
+			if strings.TrimSpace(query) == "" {
+				return "Usage: /mcp " + args[0] + " <query>"
+			}
+			return r.formatMCPServerSearch(query)
 		case "enable", "disable":
 			return r.setMCPServerEnabledSummary(args)
 		default:
@@ -2902,6 +2915,36 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 			status = fmt.Sprintf(" [blocked: %s]", server.Policy.Reason)
 		}
 		lines = append(lines, fmt.Sprintf("- %s (%s): %s%s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config), status))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMCPServerSearch(query string) string {
+	query = strings.TrimSpace(query)
+	results := mcpServerSearchResults(r.mcpServers(), query)
+	if len(results) == 0 {
+		return "No MCP servers matched " + query + "."
+	}
+	lines := []string{
+		"MCP search: " + query,
+		fmt.Sprintf("Matches: %d", len(results)),
+	}
+	for _, result := range firstMCPServerSearchResults(results, 20) {
+		status := "configured"
+		if !result.Server.Policy.Allowed {
+			status = "blocked: " + result.Server.Policy.Reason
+		}
+		lines = append(lines, fmt.Sprintf(
+			"- %s (%s, %s, %s): %s",
+			result.Server.Name,
+			mcpServerTransport(result.Server.Config),
+			status,
+			mcpServerSource(result.Server.Config),
+			result.Match,
+		))
+	}
+	if len(results) > 20 {
+		lines = append(lines, fmt.Sprintf("Showing 20 of %d MCP server matches.", len(results)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3020,6 +3063,76 @@ type mcpServerSummary struct {
 	Name   string
 	Config contracts.MCPServer
 	Policy mcp.PolicyDecision
+}
+
+type mcpServerSearchResult struct {
+	Server mcpServerSummary
+	Match  string
+}
+
+func mcpServerSearchResults(servers []mcpServerSummary, query string) []mcpServerSearchResult {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+	var results []mcpServerSearchResult
+	for _, server := range servers {
+		for _, match := range mcpServerSearchMatches(server, query) {
+			results = append(results, mcpServerSearchResult{Server: server, Match: match})
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Server.Name != results[j].Server.Name {
+			return results[i].Server.Name < results[j].Server.Name
+		}
+		return results[i].Match < results[j].Match
+	})
+	return results
+}
+
+func mcpServerSearchMatches(server mcpServerSummary, query string) []string {
+	config := server.Config
+	seen := map[string]struct{}{}
+	var matches []string
+	add := func(label string, values ...string) {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			return
+		}
+		for _, value := range values {
+			if strings.Contains(strings.ToLower(value), query) {
+				if _, ok := seen[label]; !ok {
+					seen[label] = struct{}{}
+					matches = append(matches, label)
+				}
+				return
+			}
+		}
+	}
+	add("server metadata", server.Name, config.Name, config.ID, config.IDEName, config.Scope, config.PluginSource)
+	add("transport "+mcpServerTransport(config), mcpServerTransport(config))
+	add("source "+mcpServerSource(config), mcpServerSource(config))
+	add("target "+mcpServerTarget(config), mcpServerTarget(config), config.Command, strings.Join(config.Args, " "), config.URL)
+	for _, key := range sortedStringMapKeys(config.Env) {
+		add("env "+key, key)
+	}
+	for _, key := range sortedStringMapKeys(config.Headers) {
+		add("header "+key, key)
+	}
+	if strings.TrimSpace(config.HeadersHelper) != "" {
+		add("headers helper configured", "headers helper", config.HeadersHelper)
+	}
+	if strings.TrimSpace(config.AuthToken) != "" {
+		add("auth token configured", "auth token")
+	}
+	if config.OAuth != nil {
+		add("OAuth configured", "oauth", config.OAuth.ClientID, config.OAuth.AuthServerMetadataURL)
+	}
+	if !server.Policy.Allowed {
+		add("policy "+server.Policy.Reason, "blocked", server.Policy.Reason)
+	}
+	sort.Strings(matches)
+	return matches
 }
 
 func (r Runner) mcpServers() []mcpServerSummary {

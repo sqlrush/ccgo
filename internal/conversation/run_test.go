@@ -2126,6 +2126,89 @@ func TestRunnerMCPSlashCommandShowsServerDetails(t *testing.T) {
 	}
 }
 
+func TestRunnerMCPSlashCommandSearchesServers(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_search",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {
+					Command: "python",
+					Args:    []string{"server.py"},
+					Env:     map[string]string{"API_TOKEN": "secret-token"},
+				},
+				"zeta": {URL: "https://example.com/mcp"},
+			},
+			DeniedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "zeta"}},
+		}, PluginServers: map[string]contracts.MCPServer{
+			"plugin-docs": {
+				Type:         "http",
+				URL:          "https://plugin.example/mcp",
+				Headers:      map[string]string{"Authorization": "Bearer secret", "X-Trace": "1"},
+				PluginSource: "demo",
+			},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp search API_TOKEN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP search: API_TOKEN",
+		"Matches: 1",
+		"- alpha (stdio, configured, settings): env API_TOKEN",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp search missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "secret-token") {
+		t.Fatalf("mcp search leaked env value: %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/mcp search Authorization"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP search: Authorization",
+		"- plugin-docs (http, configured, plugin): header Authorization",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp header search missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "Bearer secret") {
+		t.Fatalf("mcp search leaked header value: %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/mcp search denied"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "- zeta (http, blocked: denied, settings): policy denied") {
+		t.Fatalf("mcp denied search = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/mcp search"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /mcp search <query>" {
+		t.Fatalf("mcp search usage = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/mcp search nowhere"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No MCP servers matched nowhere." {
+		t.Fatalf("mcp search missing = %q", got)
+	}
+}
+
 func TestRunnerMCPSlashCommandShowsPluginServerDetails(t *testing.T) {
 	callbackPort := 3999
 	runner := Runner{

@@ -102,7 +102,7 @@ M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 
 
 M8 补充：`/model` headless/local 命令现在会把解析后的模型写入 runner 的默认 `Model` 状态，后续同一 runner 的 turn 会使用新模型；`/config model <name>` 会解析模型 alias、写入用户 `settings.json` 的 `model` 并同步当前 runner settings；prompt skill frontmatter 的 `model` 仍只作为当前请求的临时 override，不会污染默认模型。完整 TUI 模型选择仍未完成。
 
-M8/M9 补充：`/mcp` built-in local-jsx command 现在有 headless/local 基础 text result：无参数或 `list` 会列出 settings-derived MCP server、transport 和 target，并对被 allow/deny policy 阻断的 server 标注 blocked reason，未配置时返回空状态；`show`/`info <server>` 会只读展示单个 server 的 status/policy/transport/source/target 和 env/header/OAuth 配置概要且不泄露 secret 值；`enable`/`disable` 会写回用户 `settings.json` 的 MCP allow/deny policy 并同步当前 runner 内存状态，但仍不会连接/断开远端或请求模型。完整 MCP 管理 UI、实时启停 lifecycle 和健康检查仍未完成。
+M8/M9 补充：`/mcp` built-in local-jsx command 现在有 headless/local 基础 text result：无参数或 `list` 会列出 settings-derived MCP server、transport 和 target，并对被 allow/deny policy 阻断的 server 标注 blocked reason，未配置时返回空状态；`show`/`info <server>` 会只读展示单个 server 的 status/policy/transport/source/target 和 env/header/OAuth 配置概要且不泄露 secret 值；`search/find <query>` 会按 server name、transport、source、target、env/header 名称、scope/plugin source 和 policy reason 做安全搜索；`enable`/`disable` 会写回用户 `settings.json` 的 MCP allow/deny policy 并同步当前 runner 内存状态，但仍不会连接/断开远端或请求模型。完整 MCP 管理 UI、实时启停 lifecycle 和健康检查仍未完成。
 
 M8/M6 补充：`/resume` built-in local-jsx command 现在有 headless/local 基础 text result：无参数或 `list` 列出当前项目最近 session，有参数按现有 transcript search 查找匹配 session，`show/info <session-id>` 只读展示单个 session 的标题、路径、消息计数、首尾消息预览、项目/分支和 transcript metadata，空结果返回明确提示且不会请求模型；完整 resume picker UI、选择后恢复主循环和远端历史融合仍未完成。
 
