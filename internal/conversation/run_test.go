@@ -1866,6 +1866,39 @@ func TestRunnerModelSlashCommandReportsCurrentModel(t *testing.T) {
 	}
 }
 
+func TestRunnerModelSlashCommandListsModelsWithoutSelecting(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{
+		Client:    client,
+		Model:     "sonnet",
+		SessionID: "sess_model_list",
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/model list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Available models",
+		"Current model: sonnet",
+		"Models: 11",
+		"Aliases: ",
+		"- Opus 4.6: claude-opus-4-6",
+		"Alias names: ",
+		"sonnet4.6",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("model list missing %q: %q", want, text)
+		}
+	}
+	if runner.Model != "sonnet" {
+		t.Fatalf("runner model changed to %q", runner.Model)
+	}
+}
+
 func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},

@@ -2553,12 +2553,76 @@ func (r *Runner) formatModelSummary(raw string) string {
 	if raw == "" {
 		return "Current model: " + r.model()
 	}
+	switch strings.ToLower(raw) {
+	case "list", "status", "available", "models":
+		return formatModelList(r.model())
+	}
 	name, display := resolveModelSelection(raw)
 	r.Model = name
 	if display != "" && display != name {
 		return fmt.Sprintf("Selected model: %s\nDisplay name: %s", name, display)
 	}
 	return "Selected model: " + name
+}
+
+func formatModelList(current string) string {
+	registry := modelpkg.DefaultRegistry()
+	names := make([]string, 0, len(registry.Models))
+	for name := range registry.Models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	aliases := make([]string, 0, len(registry.Aliases))
+	for alias := range registry.Aliases {
+		aliases = append(aliases, alias)
+	}
+	sort.Strings(aliases)
+	lines := []string{
+		"Available models",
+		"Current model: " + current,
+		fmt.Sprintf("Models: %d", len(names)),
+		fmt.Sprintf("Aliases: %d", len(aliases)),
+	}
+	for _, name := range names {
+		capability := registry.Models[name]
+		display := strings.TrimSpace(capability.DisplayName)
+		if display == "" {
+			display = capability.Name
+		}
+		flags := modelCapabilityFlags(capability)
+		if flags != "" {
+			flags = ", " + flags
+		}
+		lines = append(lines, fmt.Sprintf(
+			"- %s: %s (context %d, max output %d%s)",
+			display,
+			capability.Name,
+			capability.ContextWindowTokens,
+			capability.MaxOutputTokens,
+			flags,
+		))
+	}
+	if len(aliases) > 0 {
+		lines = append(lines, "Alias names: "+strings.Join(aliases, ", "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func modelCapabilityFlags(capability modelpkg.Capability) string {
+	var flags []string
+	if capability.SupportsThinking {
+		flags = append(flags, "thinking")
+	}
+	if capability.SupportsEffort {
+		flags = append(flags, "effort")
+	}
+	if capability.Supports1MContext {
+		flags = append(flags, "1m")
+	}
+	if capability.AlwaysOnThinking {
+		flags = append(flags, "always-on-thinking")
+	}
+	return strings.Join(flags, ", ")
 }
 
 func resolveModelSelection(raw string) (string, string) {

@@ -98,7 +98,7 @@ M8 补充：`/help` 和 `/skills` built-in local-jsx command 现在有基础 tex
 
 M8 补充：`/help <command>` 现在会输出单个命令的 headless 详情，`/skills show <name>`/`/skills <name>` 会输出单个 prompt skill 的来源、参数、allowed tools、模型、root 和 user_config key 列表；仍未实现完整 TUI help/skills 面板、筛选和分组交互。
 
-M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 text result：无参数显示当前 runner model，有参数会按模型 registry 解析 alias 并展示 resolved model/display name，不请求模型；完整交互式模型选择、持久设置写回和 TUI 状态同步仍未完成。
+M8 补充：`/model` built-in local-jsx command 现在有 headless/local 基础 text result：无参数显示当前 runner model，`list/status` 会只读列出模型 registry、display name、context/max-output 和 capability flags，其他参数会按模型 registry 解析 alias 并展示 resolved model/display name，不请求模型；完整交互式模型选择、持久设置写回和 TUI 状态同步仍未完成。
 
 M8 补充：`/model` headless/local 命令现在会把解析后的模型写入 runner 的默认 `Model` 状态，后续同一 runner 的 turn 会使用新模型；`/config model <name>` 会解析模型 alias、写入用户 `settings.json` 的 `model` 并同步当前 runner settings；prompt skill frontmatter 的 `model` 仍只作为当前请求的临时 override，不会污染默认模型。完整 TUI 模型选择仍未完成。
 
