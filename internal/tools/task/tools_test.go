@@ -528,6 +528,30 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	if !strings.Contains(read.Content.(string), "Coordinator: agent_coordinator: running") {
 		t.Fatalf("team read content = %#v", read.Content)
 	}
+	coordinatorSent, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_send_coordinator",
+		Name:  "TeamSendMessage",
+		Input: json.RawMessage(`{"team_id":"review/team","recipient":"coordinator","message":"Please coordinate the review plan."}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinatorRecipients, ok := coordinatorSent.StructuredContent["sent"].([]map[string]any)
+	if !ok || len(coordinatorRecipients) != 1 || coordinatorRecipients[0]["task_id"] != "agent_coordinator" || coordinatorSent.StructuredContent["target"] != "coordinator" {
+		t.Fatalf("team coordinator send structured content = %#v", coordinatorSent.StructuredContent)
+	}
+	coordinatorResume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_resume_coordinator",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/coordinator","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinatorMessages, ok := coordinatorResume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(coordinatorMessages) != 3 || coordinatorMessages[2]["text"] != "Please coordinate the review plan." {
+		t.Fatalf("team coordinator resume messages = %#v", coordinatorResume.StructuredContent["resume_messages"])
+	}
 	sent, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_team_send",
 		Name:  "TeamSendMessage",
@@ -536,7 +560,7 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sent.StructuredContent["sent_count"] != 2 || sent.StructuredContent["message_chars"] != len("Please coordinate the review.") {
+	if sent.StructuredContent["target"] != "members" || sent.StructuredContent["sent_count"] != 2 || sent.StructuredContent["message_chars"] != len("Please coordinate the review.") {
 		t.Fatalf("team send structured content = %#v", sent.StructuredContent)
 	}
 	for _, taskID := range []string{"agent/team-one", "agent/team-two"} {
@@ -552,6 +576,18 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 		if !ok || len(messages) != 3 || messages[2]["text"] != "Please coordinate the review." {
 			t.Fatalf("team broadcast resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
 		}
+	}
+	coordinatorResume, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_resume_coordinator_after_members",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/coordinator","limit":4}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinatorMessages, ok = coordinatorResume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(coordinatorMessages) != 3 || coordinatorMessages[2]["text"] != "Please coordinate the review plan." {
+		t.Fatalf("team coordinator messages after member broadcast = %#v", coordinatorResume.StructuredContent["resume_messages"])
 	}
 	if _, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_team_cancel_member",
@@ -585,6 +621,43 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	}
 	if len(manifest.Teams) != 0 {
 		t.Fatalf("team manifest after delete = %#v", manifest)
+	}
+}
+
+func TestTeamSendMessageSupportsCoordinatorOnlyTeam(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinator_only_task",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/coordinator-only","description":"Coordinator","prompt":"Coordinate work","subagent_type":"general-purpose"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinator_only_team",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"lead/team","coordinator":"agent/coordinator-only"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	sent, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinator_only_send",
+		Name:  "TeamSendMessage",
+		Input: json.RawMessage(`{"team_id":"lead/team","target":"coordinator","message":"Lead the next step."}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent.StructuredContent["target"] != "coordinator" || sent.StructuredContent["sent_count"] != 1 {
+		t.Fatalf("coordinator-only send structured content = %#v", sent.StructuredContent)
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinator_only_members",
+		Name:  "TeamSendMessage",
+		Input: json.RawMessage(`{"team_id":"lead/team","message":"Members only."}`),
+	}, nil); err == nil || !strings.Contains(err.Error(), "team lead_team has no tasks") {
+		t.Fatalf("coordinator-only members err = %v", err)
 	}
 }
 
@@ -782,6 +855,7 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing team send id", tool: "TeamSendMessage", input: `{"message":"hello"}`, want: "team_id is required"},
 		{name: "missing team send message", tool: "TeamSendMessage", input: `{"team_id":"missing"}`, want: "message is required"},
 		{name: "unknown team send field", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
+		{name: "bad team send target", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","target":"leaders"}`, want: "target must be one of members, coordinator, all"},
 		{name: "missing team send team", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},

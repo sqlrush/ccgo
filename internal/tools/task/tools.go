@@ -16,6 +16,12 @@ import (
 
 const builtInGeneralPurposeAgent = "general-purpose"
 
+const (
+	teamSendTargetMembers     = "members"
+	teamSendTargetCoordinator = "coordinator"
+	teamSendTargetAll         = "all"
+)
+
 type taskInput struct {
 	ID           string `json:"id,omitempty"`
 	Description  string `json:"description"`
@@ -59,6 +65,7 @@ type teamOutputInput struct {
 type teamSendMessageInput struct {
 	TeamID  string `json:"team_id,omitempty"`
 	Message string `json:"message,omitempty"`
+	Target  string `json:"target,omitempty"`
 }
 
 type taskResumeInput struct {
@@ -292,8 +299,8 @@ func NewTeamSendMessageTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
 			Name:            "TeamSendMessage",
-			Description:     "Append the same user message to every running task in a subagent team.",
-			SearchHint:      "broadcast message team subagent tasks",
+			Description:     "Append the same user message to running task recipients in a subagent team.",
+			SearchHint:      "broadcast message team subagent tasks coordinator",
 			ConcurrencySafe: false,
 			Strict:          true,
 			InputSchema: contracts.JSONSchema{
@@ -302,11 +309,12 @@ func NewTeamSendMessageTool() tool.Tool {
 				"properties": map[string]any{
 					"team_id": map[string]any{"type": "string"},
 					"message": map[string]any{"type": "string"},
+					"target":  map[string]any{"type": "string", "enum": []any{teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll}},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Sends the same user message to every running task in a subagent team. The operation validates all member tasks are running before appending any message.", nil
+			return "Sends the same user message to running task recipients in a subagent team. target defaults to members; use coordinator to message only the coordinator task, or all for coordinator plus members. The operation validates every selected task is running before appending any message.", nil
 		},
 		NormalizeFunc:   normalizeTeamSendMessageInput,
 		ValidateFunc:    validateTeamSendMessage,
@@ -610,6 +618,9 @@ func validateTeamSendMessage(ctx tool.Context, raw json.RawMessage) error {
 	if input.Message == "" {
 		return fmt.Errorf("message is required")
 	}
+	if err := validateTeamSendTarget(input.Target); err != nil {
+		return err
+	}
 	if ctx.SessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
@@ -621,7 +632,11 @@ func validateTeamSendMessage(ctx tool.Context, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	if err := validateTeamTasksRunning(manager, team); err != nil {
+	taskIDs, err := teamSendMessageTaskIDs(team, resolvedTeamSendTarget(input.Target))
+	if err != nil {
+		return err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
 		return err
 	}
 	return nil
@@ -1081,11 +1096,16 @@ func callTeamSendMessage(ctx tool.Context, raw json.RawMessage, sink tool.Progre
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	if err := validateTeamTasksRunning(manager, team); err != nil {
+	target := resolvedTeamSendTarget(input.Target)
+	taskIDs, err := teamSendMessageTaskIDs(team, target)
+	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	sent := make([]map[string]any, 0, len(team.TaskIDs))
-	for _, taskID := range team.TaskIDs {
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	sent := make([]map[string]any, 0, len(taskIDs))
+	for _, taskID := range taskIDs {
 		message := msgs.UserText(input.Message)
 		message.SessionID = ctx.SessionID
 		if err := manager.Append(taskID, session.TranscriptMessage{
@@ -1107,11 +1127,13 @@ func callTeamSendMessage(ctx tool.Context, raw json.RawMessage, sink tool.Progre
 	}
 	structured := structuredTeamState(team)
 	structured["type"] = "team_send_message"
+	structured["target"] = target
 	structured["message_chars"] = len(input.Message)
 	structured["sent_count"] = len(sent)
 	structured["sent"] = sent
 	_ = tool.SendProgress(sink, "", "team_message_sent", map[string]any{
 		"team_id":       team.ID,
+		"target":        target,
 		"task_count":    len(team.TaskIDs),
 		"sent_count":    len(sent),
 		"message_chars": len(input.Message),
@@ -1247,6 +1269,7 @@ func decodeTeamSendMessageInput(raw json.RawMessage) (teamSendMessageInput, erro
 	}
 	input.TeamID = strings.TrimSpace(input.TeamID)
 	input.Message = strings.TrimSpace(input.Message)
+	input.Target = normalizeTeamSendTarget(input.Target)
 	return input, nil
 }
 
@@ -1399,7 +1422,7 @@ func normalizeTeamSendMessageInput(raw json.RawMessage) (json.RawMessage, error)
 	}
 	for key := range obj {
 		switch key {
-		case "team_id", "teamId", "id", "name", "message", "text", "content", "prompt", "input":
+		case "team_id", "teamId", "id", "name", "message", "text", "content", "prompt", "input", "target", "recipient", "recipients", "audience", "scope":
 		default:
 			return nil, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -1410,6 +1433,9 @@ func normalizeTeamSendMessageInput(raw json.RawMessage) (json.RawMessage, error)
 	}
 	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input"); ok {
 		normalized["message"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "target", "recipient", "recipients", "audience", "scope"); ok {
+		normalized["target"] = value
 	}
 	return json.Marshal(normalized)
 }
@@ -1586,14 +1612,11 @@ func loadTeamForMessage(manager session.SidechainManager, teamID string) (sessio
 	if !ok {
 		return session.TeamState{}, fmt.Errorf("team not found: %s", teamID)
 	}
-	if len(team.TaskIDs) == 0 {
-		return session.TeamState{}, fmt.Errorf("team %s has no tasks", team.ID)
-	}
 	return team, nil
 }
 
-func validateTeamTasksRunning(manager session.SidechainManager, team session.TeamState) error {
-	for _, taskID := range team.TaskIDs {
+func validateTaskIDsRunning(manager session.SidechainManager, taskIDs []string) error {
+	for _, taskID := range taskIDs {
 		state, err := findTaskState(manager, taskID)
 		if err != nil {
 			return err
@@ -1603,6 +1626,62 @@ func validateTeamTasksRunning(manager session.SidechainManager, team session.Tea
 		}
 	}
 	return nil
+}
+
+func normalizeTeamSendTarget(target string) string {
+	return strings.ToLower(strings.TrimSpace(target))
+}
+
+func resolvedTeamSendTarget(target string) string {
+	target = normalizeTeamSendTarget(target)
+	if target == "" {
+		return teamSendTargetMembers
+	}
+	return target
+}
+
+func validateTeamSendTarget(target string) error {
+	switch resolvedTeamSendTarget(target) {
+	case teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll:
+		return nil
+	default:
+		return fmt.Errorf("target must be one of %s, %s, %s", teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll)
+	}
+}
+
+func teamSendMessageTaskIDs(team session.TeamState, target string) ([]string, error) {
+	switch resolvedTeamSendTarget(target) {
+	case teamSendTargetMembers:
+		if len(team.TaskIDs) == 0 {
+			return nil, fmt.Errorf("team %s has no tasks", team.ID)
+		}
+		return append([]string(nil), team.TaskIDs...), nil
+	case teamSendTargetCoordinator:
+		if team.CoordinatorTaskID == "" {
+			return nil, fmt.Errorf("team %s has no coordinator task", team.ID)
+		}
+		return []string{team.CoordinatorTaskID}, nil
+	case teamSendTargetAll:
+		taskIDs := make([]string, 0, len(team.TaskIDs)+1)
+		seen := map[string]struct{}{}
+		if team.CoordinatorTaskID != "" {
+			seen[team.CoordinatorTaskID] = struct{}{}
+			taskIDs = append(taskIDs, team.CoordinatorTaskID)
+		}
+		for _, taskID := range team.TaskIDs {
+			if _, ok := seen[taskID]; ok {
+				continue
+			}
+			seen[taskID] = struct{}{}
+			taskIDs = append(taskIDs, taskID)
+		}
+		if len(taskIDs) == 0 {
+			return nil, fmt.Errorf("team %s has no tasks", team.ID)
+		}
+		return taskIDs, nil
+	default:
+		return nil, fmt.Errorf("target must be one of %s, %s, %s", teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll)
+	}
 }
 
 func structuredTeamTaskStates(manager session.SidechainManager, team session.TeamState) []map[string]any {

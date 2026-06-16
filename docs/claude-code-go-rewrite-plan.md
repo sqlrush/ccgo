@@ -725,6 +725,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：新增 `TeamOutput` 工具入口，可列出当前 session 所有 team，或按 team_id 读取单个 team 并附带成员 task 的当前 status/summary/message_count 等 structured task 摘要。完整 team scheduling、coordinator 策略和远端协作仍未完成。
 - 本轮补充：新增 `TeamSendMessage` 工具入口，可向 team 内所有 running task 广播同一条 user message；执行前会验证 team 存在且所有成员 task 仍为 running，避免部分成员收到消息的半成功状态。完整 team scheduling、coordinator 策略和远端协作仍未完成。
 - 本轮补充：`TeamCreate`/team manifest 现在可记录可选 `coordinator_task_id`，会校验 coordinator task 已存在并归一化 ID；`TeamOutput` 单队伍读取会返回 coordinator 的当前 task status/summary/message_count，同时列表输出保留 coordinator_task_id。完整 coordinator 调度策略和自动分派仍未完成。
+- 本轮补充：`TeamSendMessage` 现在支持 `target` 路由，默认 `members` 仍只广播成员任务，也可显式选择 `coordinator` 或 `all`；发送前会对选中 recipient 做全量 running 校验，避免 coordinator/成员半成功。完整自动任务分派和 coordinator 决策循环仍未完成。
 
 ### M11: Bridge 和高级集成
 
