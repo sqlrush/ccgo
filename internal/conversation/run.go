@@ -711,6 +711,12 @@ func (r *Runner) formatConfigSummary(raw string) string {
 			if len(args) > 1 && strings.TrimSpace(args[1]) != "" {
 				return r.formatConfigShow(args[1])
 			}
+		case "search", "find":
+			query := subcommandRemainder(raw, args[0])
+			if strings.TrimSpace(query) == "" {
+				return "Usage: /config " + args[0] + " <query>"
+			}
+			return r.formatConfigSearch(query)
 		case "output-style", "outputStyle":
 			return r.setOutputStyleSummary(args)
 		case "fast-mode", "fastMode":
@@ -932,6 +938,25 @@ func (r *Runner) formatConfigShow(raw string) string {
 	}
 }
 
+func (r Runner) formatConfigSearch(query string) string {
+	query = strings.TrimSpace(query)
+	results := configSearchResults(r, query)
+	if len(results) == 0 {
+		return "No config matched " + query + "."
+	}
+	lines := []string{
+		"Config search: " + query,
+		fmt.Sprintf("Matches: %d", len(results)),
+	}
+	for _, result := range firstConfigSearchResults(results, 30) {
+		lines = append(lines, fmt.Sprintf("- %s: %s", result.Section, result.Match))
+	}
+	if len(results) > 30 {
+		lines = append(lines, fmt.Sprintf("Showing 30 of %d config matches.", len(results)))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func normalizeConfigSection(raw string) string {
 	value := strings.TrimSpace(raw)
 	value = strings.TrimPrefix(value, "--")
@@ -965,6 +990,173 @@ func normalizeConfigSection(raw string) string {
 		return "sandbox"
 	default:
 		return compact
+	}
+}
+
+type configSearchResult struct {
+	Section string
+	Match   string
+}
+
+func configSearchResults(r Runner, query string) []configSearchResult {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+	merged := r.mergedSettings()
+	seen := map[string]struct{}{}
+	var results []configSearchResult
+	add := func(section string, label string, values ...string) {
+		section = strings.TrimSpace(section)
+		label = strings.TrimSpace(label)
+		if section == "" || label == "" {
+			return
+		}
+		haystacks := append([]string{section, label}, values...)
+		for _, value := range haystacks {
+			if !strings.Contains(strings.ToLower(value), query) {
+				continue
+			}
+			key := section + "\x00" + label
+			if _, ok := seen[key]; ok {
+				return
+			}
+			seen[key] = struct{}{}
+			results = append(results, configSearchResult{Section: section, Match: label})
+			return
+		}
+	}
+
+	add("settings", "user settings file", config.UserSettingsPath())
+	cwd := strings.TrimSpace(r.WorkingDirectory)
+	if cwd == "" {
+		cwd = "."
+	}
+	add("settings", "project settings file", config.ProjectSettingsPath(cwd))
+	add("settings", "local settings file", config.LocalSettingsPath(cwd))
+	add("runtime", "working directory", r.WorkingDirectory)
+	add("model", "current model "+r.model(), r.model())
+	add("model", "configured model", merged.Model)
+	for _, name := range merged.AvailableModels {
+		add("model", "available model "+name, name)
+	}
+	for _, name := range sortedStringMapKeys(merged.ModelOverrides) {
+		add("model", "model override "+name, name, merged.ModelOverrides[name])
+	}
+	add("output-style", "effective output style "+r.effectiveOutputStyleName(), r.effectiveOutputStyleName())
+	add("output-style", "configured output style", merged.OutputStyle)
+	add("auth", "auth source "+r.authSourceText(), r.authSourceText())
+	add("auth", "force login method", merged.ForceLoginMethod)
+	add("fast-mode", "runtime fast mode "+boolEnabledText(r.FastMode), boolEnabledText(r.FastMode))
+	add("fast-mode", "configured fast mode "+boolPtrEnabledText(merged.FastMode), boolPtrEnabledText(merged.FastMode))
+	for _, beta := range r.BetaHeaders {
+		add("betas", "beta "+beta, beta)
+	}
+	for _, name := range sortedStringMapKeys(merged.Env) {
+		add("env", "env name "+name, name)
+	}
+	addConfigPermissionsSearchResults(add, merged.Permissions)
+	for _, server := range r.mcpServers() {
+		addConfigMCPServerSearchResults(add, server)
+	}
+	for _, event := range sortedAnyMapKeys(merged.Hooks) {
+		add("hooks", "hook event "+event, event)
+	}
+	add("hooks", "disable all hooks "+boolPtrEnabledText(merged.DisableAllHooks), boolPtrEnabledText(merged.DisableAllHooks))
+	add("hooks", "allow managed hooks only "+boolPtrEnabledText(merged.AllowManagedHooksOnly), boolPtrEnabledText(merged.AllowManagedHooksOnly))
+	for _, name := range merged.HTTPHookAllowedEnvVars {
+		add("hooks", "HTTP hook env name "+name, name)
+	}
+	for _, name := range pluginEnabledStateLines(merged.EnabledPlugins) {
+		add("plugins", "plugin "+name, name)
+	}
+	for _, name := range pluginConfigNames(merged) {
+		add("plugins", "plugin config "+name, name)
+	}
+	for name, pluginConfig := range merged.PluginConfigs {
+		for _, key := range sortedAnyMapKeys(pluginConfig.Options) {
+			add("plugins", fmt.Sprintf("%s option key %s", name, key), name, key)
+		}
+		for _, serverName := range sortedNestedAnyMapKeys(pluginConfig.MCPServers) {
+			add("plugins", fmt.Sprintf("%s MCP server config %s", name, serverName), name, serverName)
+		}
+	}
+	for name, legacy := range merged.Plugins {
+		for _, key := range legacyPluginSettingKeys(legacy) {
+			add("plugins", fmt.Sprintf("%s legacy setting %s", name, key), name, key)
+		}
+	}
+	for _, name := range sortedAnyMapKeys(merged.ExtraKnownMarketplaces) {
+		add("marketplaces", "extra marketplace "+name, name)
+	}
+	for _, name := range pluginAnyListLabels(merged.StrictKnownMarketplaces) {
+		add("marketplaces", "strict marketplace "+name, name)
+	}
+	for _, name := range pluginAnyListLabels(merged.BlockedMarketplaces) {
+		add("marketplaces", "blocked marketplace "+name, name)
+	}
+	for _, key := range sortedAnyMapKeys(merged.Sandbox) {
+		add("sandbox", "sandbox key "+key, key)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Section != results[j].Section {
+			return results[i].Section < results[j].Section
+		}
+		return results[i].Match < results[j].Match
+	})
+	return results
+}
+
+func addConfigPermissionsSearchResults(add func(string, string, ...string), permissions *contracts.PermissionsSetting) {
+	if permissions == nil {
+		return
+	}
+	if permissions.DefaultMode != "" {
+		add("permissions", "default mode "+string(permissions.DefaultMode), string(permissions.DefaultMode))
+	}
+	for _, rule := range permissions.Allow {
+		add("permissions", "allow rule "+rule, rule)
+	}
+	for _, rule := range permissions.Deny {
+		add("permissions", "deny rule "+rule, rule)
+	}
+	for _, rule := range permissions.Ask {
+		add("permissions", "ask rule "+rule, rule)
+	}
+	for _, dir := range permissions.AdditionalDirectories {
+		add("permissions", "additional directory", dir)
+	}
+	add("permissions", "disable bypass mode "+configuredValueText(permissions.DisableBypassMode), configuredValueText(permissions.DisableBypassMode))
+	add("permissions", "disable auto mode "+configuredValueText(permissions.DisableAutoMode), configuredValueText(permissions.DisableAutoMode))
+}
+
+func addConfigMCPServerSearchResults(add func(string, string, ...string), server mcpServerSummary) {
+	config := server.Config
+	name := server.Name
+	add("mcp", "MCP server "+name, name, config.Name, config.ID, config.IDEName)
+	add("mcp", fmt.Sprintf("%s transport %s", name, mcpServerTransport(config)), mcpServerTransport(config))
+	add("mcp", fmt.Sprintf("%s source %s", name, mcpServerSource(config)), mcpServerSource(config), config.Scope, config.PluginSource)
+	if mcpServerTarget(config) != "(no target)" {
+		add("mcp", name+" target configured", name, "target")
+	}
+	for _, key := range sortedStringMapKeys(config.Env) {
+		add("mcp", fmt.Sprintf("%s env name %s", name, key), name, key)
+	}
+	for _, key := range sortedStringMapKeys(config.Headers) {
+		add("mcp", fmt.Sprintf("%s header name %s", name, key), name, key)
+	}
+	if strings.TrimSpace(config.HeadersHelper) != "" {
+		add("mcp", name+" headers helper configured", name, "headers helper")
+	}
+	if strings.TrimSpace(config.AuthToken) != "" {
+		add("mcp", name+" auth token configured", name, "auth token")
+	}
+	if config.OAuth != nil {
+		add("mcp", name+" OAuth configured", name, "oauth")
+	}
+	if !server.Policy.Allowed {
+		add("mcp", fmt.Sprintf("%s policy %s", name, server.Policy.Reason), name, "blocked", server.Policy.Reason)
 	}
 }
 
@@ -2383,6 +2575,13 @@ func firstMCPSummaries(values []mcpServerSummary, limit int) []mcpServerSummary 
 }
 
 func firstMCPServerSearchResults(values []mcpServerSearchResult, limit int) []mcpServerSearchResult {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func firstConfigSearchResults(values []configSearchResult, limit int) []configSearchResult {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}

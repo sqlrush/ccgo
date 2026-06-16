@@ -1063,6 +1063,106 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 	}, nil)
 }
 
+func TestRunnerConfigSearchFindsSettingsWithoutLeakingValues(t *testing.T) {
+	client := &fakeClient{}
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		APIKeySource:     "api_key",
+		PermissionMode:   contracts.PermissionPlan,
+		BetaHeaders:      []string{"beta-token-name"},
+		SessionID:        "sess_config_search",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Env: map[string]string{
+				"PUBLIC_FLAG":  "1",
+				"SECRET_TOKEN": "hidden-token",
+			},
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {
+					Command: "node",
+					Args:    []string{"--token=hidden-token"},
+					Env:     map[string]string{"TOKEN": "hidden-token"},
+					Headers: map[string]string{"X-Token": "secret-header"},
+				},
+			},
+			Hooks:                  map[string]any{"PreToolUse": []any{}},
+			HTTPHookAllowedEnvVars: []string{"HOOK_TOKEN"},
+			EnabledPlugins:         map[string]any{"market/plugin": true},
+			PluginConfigs: map[string]contracts.PluginConfig{
+				"market/plugin": {
+					Options: map[string]any{
+						"apiKey": "secret-value",
+						"region": "iad",
+					},
+					MCPServers: map[string]map[string]any{
+						"docs": {"enabled": true},
+					},
+				},
+			},
+			Plugins: map[string]any{
+				"market/plugin": map[string]any{"legacyToken": "legacy-secret"},
+			},
+			ExtraKnownMarketplaces: map[string]any{"internal-market": map[string]any{"url": "https://market.example"}},
+			Sandbox:                map[string]any{"allowUnsandboxedCommands": false},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config search token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Config search: token",
+		"- betas: beta beta-token-name",
+		"- env: env name SECRET_TOKEN",
+		"- hooks: HTTP hook env name HOOK_TOKEN",
+		"- mcp: alpha env name TOKEN",
+		"- mcp: alpha header name X-Token",
+		"- plugins: market/plugin legacy setting legacyToken",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("config search missing %q: %q", want, text)
+		}
+	}
+	for _, leaked := range []string{"hidden-token", "secret-header", "secret-value", "legacy-secret"} {
+		if strings.Contains(text, leaked) {
+			t.Fatalf("config search leaked value %q: %q", leaked, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config find apikey"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "- plugins: market/plugin option key apiKey") || strings.Contains(text, "secret-value") {
+		t.Fatalf("config find option key text = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config search hidden-token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No config matched hidden-token." {
+		t.Fatalf("config search should not match secret values = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config search"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /config search <query>" {
+		t.Fatalf("config search usage = %q", got)
+	}
+}
+
 func TestRunnerExecutesConfigOutputStyleWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()
