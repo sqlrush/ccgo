@@ -11,6 +11,7 @@ import (
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
+	tasktools "ccgo/internal/tools/task"
 )
 
 func (r Runner) maybeRunTaskSubagent(ctx context.Context, use contracts.ToolUse, result *contracts.ToolResult) {
@@ -55,6 +56,13 @@ func (r Runner) maybeRunTaskSubagent(ctx context.Context, use contracts.ToolUse,
 	result.StructuredContent["summary"] = outcome.Summary
 	result.StructuredContent["agent_model"] = outcome.Model
 	result.StructuredContent["agent_stop_reason"] = outcome.StopReason
+	if outcome.WorktreeCleanupAttempted {
+		result.StructuredContent["worktree_cleanup_attempted"] = true
+		result.StructuredContent["worktree_cleanup_status"] = outcome.WorktreeCleanupStatus
+		if outcome.WorktreeCleanupReason != "" {
+			result.StructuredContent["worktree_cleanup_reason"] = outcome.WorktreeCleanupReason
+		}
+	}
 	r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
 		ToolUseID: use.ID,
 		Type:      "task_agent_completed",
@@ -65,12 +73,27 @@ func (r Runner) maybeRunTaskSubagent(ctx context.Context, use contracts.ToolUse,
 			"summary":      outcome.Summary,
 		},
 	}})
+	if outcome.WorktreeCleanupAttempted {
+		r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
+			ToolUseID: use.ID,
+			Type:      "task_worktree_cleanup",
+			Data: map[string]any{
+				"task_id":        sidechainID,
+				"sidechain_id":   sidechainID,
+				"cleanup_status": outcome.WorktreeCleanupStatus,
+				"cleanup_reason": outcome.WorktreeCleanupReason,
+			},
+		}})
+	}
 }
 
 type taskSubagentOutcome struct {
-	Summary    string
-	Model      string
-	StopReason string
+	Summary                  string
+	Model                    string
+	StopReason               string
+	WorktreeCleanupAttempted bool
+	WorktreeCleanupStatus    string
+	WorktreeCleanupReason    string
 }
 
 func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (taskSubagentOutcome, error) {
@@ -94,6 +117,9 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 	}
 	subRunner := r
 	subRunner.MCP = nil
+	if worktreePath := strings.TrimSpace(state.Metadata.WorktreePath); worktreePath != "" {
+		subRunner.WorkingDirectory = worktreePath
+	}
 	subRunner.SystemPrompt = taskSubagentSystemPrompt(r.SystemPrompt, state.Metadata.AgentPrompt)
 	if len(state.Metadata.AgentAllowedTools) > 0 {
 		executor, err := taskSubagentAllowedToolExecutor(subRunner.Tools, state.Metadata.AgentAllowedTools)
@@ -142,7 +168,22 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 			if _, err := manager.Finish(state.ID, session.SidechainStatusCompleted, summary, time.Now().UTC()); err != nil {
 				return taskSubagentOutcome{}, err
 			}
-			return taskSubagentOutcome{Summary: summary, Model: response.Model, StopReason: response.StopReason}, nil
+			outcome := taskSubagentOutcome{Summary: summary, Model: response.Model, StopReason: response.StopReason}
+			cleanup, err := tasktools.CleanupOwnedWorktree(tool.Context{
+				Context:          ctx,
+				WorkingDirectory: r.WorkingDirectory,
+				SessionID:        r.SessionID,
+				Metadata:         r.toolMetadata(),
+			}, manager, state, "subagent completed")
+			if err != nil {
+				return taskSubagentOutcome{}, err
+			}
+			if cleanup.Attempted {
+				outcome.WorktreeCleanupAttempted = true
+				outcome.WorktreeCleanupStatus = cleanup.Status
+				outcome.WorktreeCleanupReason = cleanup.Reason
+			}
+			return outcome, nil
 		}
 		toolMessages, _ := subRunner.executeToolUses(ctx, uses, subRunner.toolMetadata(), history)
 		for i := range toolMessages {

@@ -576,7 +576,7 @@ func callKillTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink)
 			return contracts.ToolResult{}, err
 		}
 	}
-	cleanup, err := cleanupOwnedTaskWorktree(ctx, manager, state, input.Reason)
+	cleanup, err := CleanupOwnedWorktree(ctx, manager, state, input.Reason)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}

@@ -21,7 +21,7 @@ type taskWorktree struct {
 	SymlinkDirectories []string
 }
 
-type taskWorktreeCleanup struct {
+type WorktreeCleanup struct {
 	Attempted bool
 	Status    string
 	Reason    string
@@ -105,11 +105,11 @@ func removePreparedTaskWorktree(ctx tool.Context, path string) error {
 	return nil
 }
 
-func cleanupOwnedTaskWorktree(ctx tool.Context, manager session.SidechainManager, state session.SidechainState, reason string) (taskWorktreeCleanup, error) {
+func CleanupOwnedWorktree(ctx tool.Context, manager session.SidechainManager, state session.SidechainState, reason string) (WorktreeCleanup, error) {
 	if !taskShouldCleanupOwnedWorktree(state) {
-		return taskWorktreeCleanup{}, nil
+		return WorktreeCleanup{}, nil
 	}
-	cleanup := taskWorktreeCleanup{Attempted: true}
+	cleanup := WorktreeCleanup{Attempted: true}
 	path := strings.TrimSpace(state.Metadata.WorktreePath)
 	safe, safeErr := taskIsManagedWorktreePath(ctx, path)
 	switch {

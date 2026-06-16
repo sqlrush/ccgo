@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -588,6 +589,113 @@ func TestRunnerTaskSubagentHonorsAgentAllowedTools(t *testing.T) {
 	}
 	if !requestHasTool(client.requests[2], "Echo") || requestHasTool(client.requests[2], "Secret") || requestHasTool(client.requests[2], "Task") {
 		t.Fatalf("subagent follow-up tools = %#v", client.requests[2].Tools)
+	}
+}
+
+func TestRunnerTaskSubagentUsesAndCleansOwnedWorktree(t *testing.T) {
+	var toolCWDs []string
+	cwdTool := tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "CWD",
+			Description:     "Return cwd",
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			InputSchema:     contracts.JSONSchema{"type": "object"},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			toolCWDs = append(toolCWDs, ctx.WorkingDirectory)
+			return contracts.ToolResult{Content: ctx.WorkingDirectory}, nil
+		},
+	}
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), cwdTool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := initConversationGitRepo(t)
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/worktree-run","description":"Run in worktree","prompt":"Report cwd","subagent_type":"general-purpose","worktree":true,"run":true}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_cwd",
+				Name:  "CWD",
+				Input: json.RawMessage(`{}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("worktree done")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task completed")},
+		}},
+	}}
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_worktree_run",
+		SessionPath:      sessionPath,
+		WorkingDirectory: repo,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	toolResult := result.ToolResults[0]
+	worktreePath, ok := toolResult.StructuredContent["worktree_path"].(string)
+	if !ok || worktreePath == "" || worktreePath == repo {
+		t.Fatalf("worktree path structured content = %#v", toolResult.StructuredContent)
+	}
+	if len(toolCWDs) != 1 || filepath.Clean(toolCWDs[0]) != filepath.Clean(worktreePath) {
+		t.Fatalf("subagent tool cwd = %#v, want %s", toolCWDs, worktreePath)
+	}
+	if toolResult.StructuredContent["worktree_cleanup_attempted"] != true ||
+		toolResult.StructuredContent["worktree_cleanup_status"] != "removed" ||
+		toolResult.StructuredContent["worktree_cleanup_reason"] != "subagent completed" {
+		t.Fatalf("cleanup structured content = %#v", toolResult.StructuredContent)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists after subagent completion: %v", err)
+	}
+	state, err := session.FindSidechainState(sessionPath, runner.SessionID, "agent/worktree-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.WorktreeCleanupStatus != "removed" || state.Metadata.WorktreeCleanupReason != "subagent completed" {
+		t.Fatalf("cleanup metadata = %#v", state.Metadata)
 	}
 }
 
@@ -4311,6 +4419,34 @@ func hasToolProgress(progress []contracts.ToolProgress, toolUseID contracts.ID, 
 		}
 	}
 	return false
+}
+
+func initConversationGitRepo(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is required for worktree tests")
+	}
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runConversationGitTest(t, repo, "init")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runConversationGitTest(t, repo, "add", "README.md")
+	runConversationGitTest(t, repo, "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "init")
+	return repo
+}
+
+func runConversationGitTest(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
 }
 
 func namedTextTool(name string, prefix string) tool.Tool {
