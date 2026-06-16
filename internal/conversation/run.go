@@ -690,6 +690,10 @@ func (r Runner) formatPluginSummary(raw string) string {
 		case "list", "status":
 		case "show", "info":
 			return r.formatPluginShow(args)
+		case "marketplaces", "marketplace":
+			return r.formatPluginMarketplaces()
+		case "config", "settings":
+			return r.formatPluginConfig(args)
 		case "enable", "disable":
 			return r.setPluginEnabledSummary(args)
 		default:
@@ -854,6 +858,93 @@ func (r Runner) formatPluginShow(args []string) string {
 	appendPluginShowSection("MCP servers", loadedPluginMCPServerNames(plugin))
 	appendPluginShowSection("Output styles", loadedPluginOutputStyleNames(plugin))
 	appendPluginShowSection("Hook events", loadedPluginHookEventLines(plugin))
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatPluginMarketplaces() string {
+	merged := r.mergedSettings()
+	lines := []string{
+		"Plugin marketplaces",
+		fmt.Sprintf("Extra known marketplaces: %d", len(merged.ExtraKnownMarketplaces)),
+		fmt.Sprintf("Strict known marketplaces: %d", len(merged.StrictKnownMarketplaces)),
+		fmt.Sprintf("Blocked marketplaces: %d", len(merged.BlockedMarketplaces)),
+	}
+	if len(merged.ExtraKnownMarketplaces) > 0 {
+		lines = append(lines, "Extra known marketplaces:")
+		for _, name := range firstStrings(sortedAnyMapKeys(merged.ExtraKnownMarketplaces), 20) {
+			lines = append(lines, "- "+name)
+		}
+		if len(merged.ExtraKnownMarketplaces) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d extra known marketplaces.", len(merged.ExtraKnownMarketplaces)))
+		}
+	}
+	if len(merged.StrictKnownMarketplaces) > 0 {
+		lines = append(lines, "Strict known marketplaces:")
+		for _, name := range firstStrings(pluginAnyListLabels(merged.StrictKnownMarketplaces), 20) {
+			lines = append(lines, "- "+name)
+		}
+		if len(merged.StrictKnownMarketplaces) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d strict known marketplaces.", len(merged.StrictKnownMarketplaces)))
+		}
+	}
+	if len(merged.BlockedMarketplaces) > 0 {
+		lines = append(lines, "Blocked marketplaces:")
+		for _, name := range firstStrings(pluginAnyListLabels(merged.BlockedMarketplaces), 20) {
+			lines = append(lines, "- "+name)
+		}
+		if len(merged.BlockedMarketplaces) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d blocked marketplaces.", len(merged.BlockedMarketplaces)))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatPluginConfig(args []string) string {
+	merged := r.mergedSettings()
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		names := pluginConfigNames(merged)
+		if len(names) == 0 {
+			return "No plugin configs configured."
+		}
+		lines := []string{"Plugin configs:"}
+		for _, name := range firstStrings(names, 20) {
+			lines = append(lines, "- "+name)
+		}
+		if len(names) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d plugin configs.", len(names)))
+		}
+		return strings.Join(lines, "\n")
+	}
+	name := strings.TrimSpace(args[1])
+	canonical, configValue, hasConfig := findPluginConfig(merged.PluginConfigs, name)
+	legacyName, legacyValue, hasLegacy := findLegacyPluginSettings(merged.Plugins, name)
+	if !hasConfig && !hasLegacy {
+		return "Plugin config " + name + " was not found."
+	}
+	if canonical == "" {
+		canonical = legacyName
+	}
+	lines := []string{"Plugin config " + canonical}
+	if state, ok := pluginEnabledState(merged.EnabledPlugins, canonical); ok {
+		lines = append(lines, "State: "+state)
+	}
+	if hasConfig {
+		lines = append(lines, fmt.Sprintf("Option keys: %d", len(configValue.Options)))
+		if len(configValue.Options) > 0 {
+			lines = append(lines, "Options: "+strings.Join(sortedAnyMapKeys(configValue.Options), ", "))
+		}
+		lines = append(lines, fmt.Sprintf("MCP server configs: %d", len(configValue.MCPServers)))
+		if len(configValue.MCPServers) > 0 {
+			lines = append(lines, "MCP server config names: "+strings.Join(sortedNestedAnyMapKeys(configValue.MCPServers), ", "))
+		}
+	}
+	if hasLegacy {
+		keys := legacyPluginSettingKeys(legacyValue)
+		lines = append(lines, fmt.Sprintf("Legacy settings keys: %d", len(keys)))
+		if len(keys) > 0 {
+			lines = append(lines, "Legacy settings: "+strings.Join(keys, ", "))
+		}
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -1362,6 +1453,170 @@ func pluginEnabledStateLines(values map[string]any) []string {
 		lines = append(lines, name+": "+state)
 	}
 	return lines
+}
+
+func pluginEnabledState(values map[string]any, name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	for key, value := range values {
+		if strings.TrimSpace(key) != name && !strings.EqualFold(strings.TrimSpace(key), name) {
+			continue
+		}
+		if enabled, ok := pluginEnabledValueText(value); ok {
+			return enabled, true
+		}
+		return "configured", true
+	}
+	return "", false
+}
+
+func pluginEnabledValueText(value any) (string, bool) {
+	switch typed := value.(type) {
+	case bool:
+		if typed {
+			return "enabled", true
+		}
+		return "disabled", true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "enabled", "enable", "on", "1":
+			return "enabled", true
+		case "false", "disabled", "disable", "off", "0":
+			return "disabled", true
+		}
+	case float64:
+		if typed == 0 {
+			return "disabled", true
+		}
+		if typed == 1 {
+			return "enabled", true
+		}
+	case int:
+		if typed == 0 {
+			return "disabled", true
+		}
+		if typed == 1 {
+			return "enabled", true
+		}
+	}
+	return "", false
+}
+
+func pluginConfigNames(settings contracts.Settings) []string {
+	seen := map[string]struct{}{}
+	var names []string
+	for name := range settings.PluginConfigs {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	for name := range settings.Plugins {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func findPluginConfig(values map[string]contracts.PluginConfig, name string) (string, contracts.PluginConfig, bool) {
+	name = strings.TrimSpace(name)
+	if value, ok := values[name]; ok {
+		return name, value, true
+	}
+	for key, value := range values {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			return key, value, true
+		}
+	}
+	return "", contracts.PluginConfig{}, false
+}
+
+func findLegacyPluginSettings(values map[string]any, name string) (string, any, bool) {
+	name = strings.TrimSpace(name)
+	if value, ok := values[name]; ok {
+		return name, value, true
+	}
+	for key, value := range values {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			return key, value, true
+		}
+	}
+	return "", nil, false
+}
+
+func legacyPluginSettingKeys(value any) []string {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sortedAnyMapKeys(typed)
+	case map[string]string:
+		return sortedStringMapKeys(typed)
+	default:
+		return nil
+	}
+}
+
+func sortedAnyMapKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedNestedAnyMapKeys(values map[string]map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func pluginAnyListLabels(values []any) []string {
+	labels := make([]string, 0, len(values))
+	for _, value := range values {
+		label := pluginAnyLabel(value)
+		if label != "" {
+			labels = append(labels, label)
+		}
+	}
+	sort.Strings(labels)
+	return labels
+}
+
+func pluginAnyLabel(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case map[string]any:
+		for _, key := range []string{"name", "id", "url", "source", "marketplace"} {
+			if text, ok := typed[key].(string); ok && strings.TrimSpace(text) != "" {
+				return strings.TrimSpace(text)
+			}
+		}
+	case map[string]string:
+		for _, key := range []string{"name", "id", "url", "source", "marketplace"} {
+			if text := strings.TrimSpace(typed[key]); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
 }
 
 func pluginSkillNames(plugins []pluginpkg.LoadedPlugin) []string {

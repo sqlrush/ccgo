@@ -1229,6 +1229,95 @@ func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginReportsMarketplacesAndConfigDetails(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_plugin_marketplace",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins: map[string]any{"market/plugin": true},
+			PluginConfigs: map[string]contracts.PluginConfig{
+				"market/plugin": {
+					Options: map[string]any{
+						"apiKey": "secret-value",
+						"region": "iad",
+					},
+					MCPServers: map[string]map[string]any{
+						"docs": {"enabled": true},
+					},
+				},
+			},
+			Plugins: map[string]any{
+				"market/plugin": map[string]any{"legacyToken": "legacy-secret"},
+				"legacy/only":   map[string]any{"legacyFlag": true},
+			},
+			ExtraKnownMarketplaces: map[string]any{
+				"internal": map[string]any{"url": "https://market.example"},
+			},
+			StrictKnownMarketplaces: []any{
+				"official",
+				map[string]any{"name": "enterprise"},
+			},
+			BlockedMarketplaces: []any{"blocked"},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin marketplaces"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin marketplaces",
+		"Extra known marketplaces: 1",
+		"Strict known marketplaces: 2",
+		"Blocked marketplaces: 1",
+		"Extra known marketplaces:",
+		"- internal",
+		"Strict known marketplaces:",
+		"- enterprise",
+		"- official",
+		"Blocked marketplaces:",
+		"- blocked",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin marketplaces missing %q: %q", want, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin config market/plugin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin config market/plugin",
+		"State: enabled",
+		"Option keys: 2",
+		"Options: apiKey, region",
+		"MCP server configs: 1",
+		"MCP server config names: docs",
+		"Legacy settings keys: 1",
+		"Legacy settings: legacyToken",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin config missing %q: %q", want, text)
+		}
+	}
+	for _, leaked := range []string{"secret-value", "legacy-secret"} {
+		if strings.Contains(text, leaked) {
+			t.Fatalf("plugin config leaked value %q: %q", leaked, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin config missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Plugin config missing was not found." {
+		t.Fatalf("plugin missing config = %q", got)
+	}
+}
+
 func TestRunnerExecutesPluginEnableDisableWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()
