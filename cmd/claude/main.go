@@ -510,7 +510,7 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 
 	client, apiKeySource, err := anthropicClientFromEnv(ctx, runner.FastMode)
 	if err != nil {
-		return conversation.Runner{}, err
+		return runner, err
 	}
 	runner.Client = client
 	runner.APIKeySource = apiKeySource

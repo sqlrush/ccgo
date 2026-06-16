@@ -1554,9 +1554,14 @@ func TestRunPrintJSONOutputsSetupError(t *testing.T) {
 	t.Setenv("ANTHROPIC_MODEL", "")
 	t.Setenv("CLAUDE_MODEL", "")
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	project := t.TempDir()
+	expectedCWD, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"--print", "--output-format", "json", "hello"}, strings.NewReader(""), &stdout, &stderr)
+	code := run([]string{"--cwd", project, "--print", "--output-format", "json", "hello"}, strings.NewReader(""), &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("exit = %d", code)
 	}
@@ -1566,6 +1571,9 @@ func TestRunPrintJSONOutputsSetupError(t *testing.T) {
 	}
 	if payload["type"] != "result" || payload["subtype"] != "error" || !strings.Contains(fmt.Sprint(payload["error"]), "missing Anthropic credentials") {
 		t.Fatalf("payload = %#v", payload)
+	}
+	if payload["cwd"] != expectedCWD || payload["session_id"] == "" {
+		t.Fatalf("setup error metadata = %#v", payload)
 	}
 	if !strings.Contains(stderr.String(), "missing Anthropic credentials") {
 		t.Fatalf("stderr = %q", stderr.String())
