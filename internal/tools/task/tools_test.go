@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -732,6 +732,47 @@ func TestSleepToolWaitsForBoundedDuration(t *testing.T) {
 	}
 }
 
+func TestBriefToolCreatesStructuredHandoff(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_brief",
+		Name: "Brief",
+		Input: json.RawMessage(`{
+			"topic":"Release handoff",
+			"state":"ready",
+			"body":"CI is green and the branch is pushed.",
+			"detail":"Latest commit passed Go CI.",
+			"actions":["Watch deployment","Notify team"],
+			"risk":"Deployment window is short."
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "brief" || result.StructuredContent["title"] != "Release handoff" || result.StructuredContent["status"] != "ready" || result.StructuredContent["summary"] != "CI is green and the branch is pushed." {
+		t.Fatalf("brief structured content = %#v", result.StructuredContent)
+	}
+	details, ok := result.StructuredContent["details"].([]string)
+	if !ok || len(details) != 1 || details[0] != "Latest commit passed Go CI." {
+		t.Fatalf("brief details = %#v", result.StructuredContent["details"])
+	}
+	nextSteps, ok := result.StructuredContent["next_steps"].([]string)
+	if !ok || len(nextSteps) != 2 || nextSteps[1] != "Notify team" {
+		t.Fatalf("brief next steps = %#v", result.StructuredContent["next_steps"])
+	}
+	risks, ok := result.StructuredContent["risks"].([]string)
+	if !ok || len(risks) != 1 || risks[0] != "Deployment window is short." {
+		t.Fatalf("brief risks = %#v", result.StructuredContent["risks"])
+	}
+	content, _ := result.Content.(string)
+	for _, want := range []string{"Brief: Release handoff", "Status: ready", "Summary: CI is green", "Details:\n- Latest commit passed Go CI.", "Next steps:\n- Watch deployment\n- Notify team", "Risks:\n- Deployment window is short."} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("brief content missing %q: %q", want, content)
+		}
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -939,6 +980,9 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "bad sleep duration", tool: "Sleep", input: `{"duration":"soon"}`, want: "duration must be a valid Go duration"},
 		{name: "conflicting sleep duration", tool: "Sleep", input: `{"duration_ms":1,"seconds":1}`, want: "provide exactly one of duration_ms, seconds, or duration"},
 		{name: "long sleep duration", tool: "Sleep", input: `{"duration_ms":60001}`, want: "duration must be <= 60000ms"},
+		{name: "missing brief summary", tool: "Brief", input: `{}`, want: "summary is required"},
+		{name: "unknown brief field", tool: "Brief", input: `{"summary":"hello","extra":true}`, want: "input.extra is not allowed"},
+		{name: "bad brief list", tool: "Brief", input: `{"summary":"hello","details":12}`, want: "details must be a string or string array"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

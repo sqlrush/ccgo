@@ -87,6 +87,15 @@ type sleepInput struct {
 	Duration   string   `json:"duration,omitempty"`
 }
 
+type briefInput struct {
+	Title     string   `json:"title,omitempty"`
+	Status    string   `json:"status,omitempty"`
+	Summary   string   `json:"summary,omitempty"`
+	Details   []string `json:"details,omitempty"`
+	NextSteps []string `json:"next_steps,omitempty"`
+	Risks     []string `json:"risks,omitempty"`
+}
+
 func NewTaskTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
@@ -420,6 +429,39 @@ func NewSleepTool() tool.Tool {
 		NormalizeFunc:   normalizeSleepInput,
 		ValidateFunc:    validateSleep,
 		CallFunc:        callSleep,
+		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
+func NewBriefTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "Brief",
+			Description:     "Create a structured handoff brief.",
+			SearchHint:      "brief handoff summary status next steps risks",
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"summary"},
+				"properties": map[string]any{
+					"title":      map[string]any{"type": "string"},
+					"status":     map[string]any{"type": "string"},
+					"summary":    map[string]any{"type": "string"},
+					"details":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"next_steps": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"risks":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Creates a structured handoff brief from a summary plus optional title, status, details, next_steps, and risks. Use it when a concise state snapshot should be machine-readable for later UI, team, or remote handoff surfaces.", nil
+		},
+		NormalizeFunc:   normalizeBriefInput,
+		ValidateFunc:    validateBrief,
+		CallFunc:        callBrief,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
 		ConcurrencyFunc: func(json.RawMessage) bool { return true },
 	}
@@ -767,6 +809,25 @@ func validateSleep(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if _, err := sleepDuration(input); err != nil {
 		return err
+	}
+	if ctx.Context != nil {
+		if err := ctx.Context.Err(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateBrief(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeBriefInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.Summary == "" {
+		return fmt.Errorf("summary is required")
+	}
+	if briefCharCount(input) > 20_000 {
+		return fmt.Errorf("brief content must be <= 20000 characters")
 	}
 	if ctx.Context != nil {
 		if err := ctx.Context.Err(); err != nil {
@@ -1396,6 +1457,40 @@ func callSleep(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (c
 	}, nil
 }
 
+func callBrief(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeBriefInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	content := formatBrief(input)
+	structured := map[string]any{
+		"type":             "brief",
+		"title":            input.Title,
+		"status":           input.Status,
+		"summary":          input.Summary,
+		"details":          append([]string(nil), input.Details...),
+		"next_steps":       append([]string(nil), input.NextSteps...),
+		"risks":            append([]string(nil), input.Risks...),
+		"detail_count":     len(input.Details),
+		"next_step_count":  len(input.NextSteps),
+		"risk_count":       len(input.Risks),
+		"content_chars":    len(content),
+		"brief_body_chars": briefCharCount(input),
+	}
+	_ = tool.SendProgress(sink, "", "brief_created", map[string]any{
+		"title":           input.Title,
+		"status":          input.Status,
+		"detail_count":    len(input.Details),
+		"next_step_count": len(input.NextSteps),
+		"risk_count":      len(input.Risks),
+		"content_chars":   len(content),
+	})
+	return contracts.ToolResult{
+		Content:           content,
+		StructuredContent: structured,
+	}, nil
+}
+
 func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	var input taskInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -1517,6 +1612,20 @@ func decodeSleepInput(raw json.RawMessage) (sleepInput, error) {
 		return sleepInput{}, err
 	}
 	input.Duration = strings.TrimSpace(input.Duration)
+	return input, nil
+}
+
+func decodeBriefInput(raw json.RawMessage) (briefInput, error) {
+	var input briefInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return briefInput{}, err
+	}
+	input.Title = strings.TrimSpace(input.Title)
+	input.Status = strings.TrimSpace(input.Status)
+	input.Summary = strings.TrimSpace(input.Summary)
+	input.Details = cleanBriefStrings(input.Details)
+	input.NextSteps = cleanBriefStrings(input.NextSteps)
+	input.Risks = cleanBriefStrings(input.Risks)
 	return input, nil
 }
 
@@ -1749,6 +1858,45 @@ func normalizeSleepInput(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(normalized)
 }
 
+func normalizeBriefInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "title", "name", "topic", "status", "state", "summary", "message", "content", "body", "brief", "details", "detail", "bullets", "context", "next_steps", "nextSteps", "actions", "action_items", "actionItems", "todos", "risks", "risk", "blockers", "blocker":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "title", "name", "topic"); ok {
+		normalized["title"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "status", "state"); ok {
+		normalized["status"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "summary", "message", "content", "body", "brief"); ok {
+		normalized["summary"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "details", "detail", "bullets", "context"); ok {
+		normalized["details"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "next_steps", "nextSteps", "actions", "action_items", "actionItems", "todos"); ok {
+		normalized["next_steps"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "risks", "risk", "blockers", "blocker"); ok {
+		normalized["risks"] = value
+	}
+	for _, key := range []string{"details", "next_steps", "risks"} {
+		if err := normalizeBriefStringList(normalized, key); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(normalized)
+}
+
 func decodeRawTaskObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
@@ -1783,6 +1931,30 @@ func coerceTaskSemanticNumberStrings(obj map[string]json.RawMessage, keys ...str
 			obj[key] = json.RawMessage(text)
 		}
 	}
+}
+
+func normalizeBriefStringList(obj map[string]json.RawMessage, key string) error {
+	raw, ok := obj[key]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	if raw[0] == '"' {
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return err
+		}
+		encoded, err := json.Marshal([]string{text})
+		if err != nil {
+			return err
+		}
+		obj[key] = encoded
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return fmt.Errorf("%s must be a string or string array", key)
+	}
+	return nil
 }
 
 func sessionPathFromMetadata(metadata map[string]any) string {
@@ -2096,6 +2268,33 @@ func formatTeamCoordinateMessage(team session.TeamState, tasks []map[string]any,
 	return builder.String()
 }
 
+func formatBrief(input briefInput) string {
+	var builder strings.Builder
+	if input.Title != "" {
+		fmt.Fprintf(&builder, "Brief: %s", input.Title)
+	} else {
+		builder.WriteString("Brief")
+	}
+	if input.Status != "" {
+		fmt.Fprintf(&builder, "\nStatus: %s", input.Status)
+	}
+	fmt.Fprintf(&builder, "\nSummary: %s", input.Summary)
+	writeBriefSection(&builder, "Details", input.Details)
+	writeBriefSection(&builder, "Next steps", input.NextSteps)
+	writeBriefSection(&builder, "Risks", input.Risks)
+	return builder.String()
+}
+
+func writeBriefSection(builder *strings.Builder, label string, values []string) {
+	if len(values) == 0 {
+		return
+	}
+	fmt.Fprintf(builder, "\n%s:", label)
+	for _, value := range values {
+		fmt.Fprintf(builder, "\n- %s", value)
+	}
+}
+
 func taskOutputTailLines(input taskOutputInput) int {
 	if input.TailLines == nil {
 		return 0
@@ -2151,6 +2350,28 @@ func sleepDuration(input sleepInput) (time.Duration, error) {
 		return 0, fmt.Errorf("duration must be <= %dms", maxSleepDuration.Milliseconds())
 	}
 	return duration, nil
+}
+
+func cleanBriefStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func briefCharCount(input briefInput) int {
+	total := len(input.Title) + len(input.Status) + len(input.Summary)
+	for _, values := range [][]string{input.Details, input.NextSteps, input.Risks} {
+		for _, value := range values {
+			total += len(value)
+		}
+	}
+	return total
 }
 
 func taskTranscriptOutput(state session.SidechainState, tailLines int) (string, error) {

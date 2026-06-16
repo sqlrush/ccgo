@@ -727,7 +727,8 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`TeamCreate`/team manifest 现在可记录可选 `coordinator_task_id`，会校验 coordinator task 已存在并归一化 ID；`TeamOutput` 单队伍读取会返回 coordinator 的当前 task status/summary/message_count，同时列表输出保留 coordinator_task_id。完整 coordinator 调度策略和自动分派仍未完成。
 - 本轮补充：`TeamSendMessage` 现在支持 `target` 路由，默认 `members` 仍只广播成员任务，也可显式选择 `coordinator` 或 `all`；发送前会对选中 recipient 做全量 running 校验，避免 coordinator/成员半成功。完整自动任务分派和 coordinator 决策循环仍未完成。
 - 本轮补充：新增 `TeamCoordinate` 工具入口，可把 team description、成员 task status/summary 和用户 objective 组装为 deterministic briefing，发送给 running coordinator task；这提供了 coordinator 驱动团队协作的最小上下文注入能力。完整自动调度循环和远端协作仍未完成。
-- 本轮补充：新增 `Sleep` 工具入口，支持 `duration_ms`/`seconds`/Go duration 字符串，最大 60 秒，并使用 tool context cancellation 中断等待；这补齐了 proactive/gated 工具中的安全 wait 原语。完整 ScheduleCron/RemoteTrigger/Brief 仍未完成。
+- 本轮补充：新增 `Sleep` 工具入口，支持 `duration_ms`/`seconds`/Go duration 字符串，最大 60 秒，并使用 tool context cancellation 中断等待；这补齐了 proactive/gated 工具中的安全 wait 原语。完整 ScheduleCron/RemoteTrigger 仍未完成。
+- 本轮补充：新增 `Brief` 工具入口，可把 summary/title/status/details/next_steps/risks 规范为 structured handoff brief，并支持常见字段别名与单字符串列表项归一化；这为后续远端协作/UI brief surface 提供稳定 payload。完整 remote brief UI/调度接线仍未完成。
 
 ### M11: Bridge 和高级集成
 
