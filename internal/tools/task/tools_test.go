@@ -938,7 +938,7 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 }
 
 func TestRemoteTriggerSendsEventToCoordinatorByDefault(t *testing.T) {
-	ctx, _ := taskContext(t)
+	ctx, transcriptPath := taskContext(t)
 	executor := taskExecutor(t)
 	for _, id := range []string{"agent/remote-lead", "agent/remote-member"} {
 		if _, err := executor.Execute(ctx, contracts.ToolUse{
@@ -961,6 +961,7 @@ func TestRemoteTriggerSendsEventToCoordinatorByDefault(t *testing.T) {
 		Name: "RemoteTrigger",
 		Input: json.RawMessage(`{
 			"team":"remote/team",
+			"event_id":"delivery-123",
 			"source":"github",
 			"event_type":"workflow_failed",
 			"payload":"Investigate the failed CI run."
@@ -969,8 +970,15 @@ func TestRemoteTriggerSendsEventToCoordinatorByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if triggered.StructuredContent["type"] != "remote_trigger" || triggered.StructuredContent["target"] != "coordinator" || triggered.StructuredContent["sent_count"] != 1 || triggered.StructuredContent["source"] != "github" || triggered.StructuredContent["event"] != "workflow_failed" {
+	if triggered.StructuredContent["type"] != "remote_trigger" || triggered.StructuredContent["target"] != "coordinator" || triggered.StructuredContent["event_id"] != "delivery-123" || triggered.StructuredContent["sent_count"] != 1 || triggered.StructuredContent["source"] != "github" || triggered.StructuredContent["event"] != "workflow_failed" || triggered.StructuredContent["duplicate"] != false {
 		t.Fatalf("remote trigger structured content = %#v", triggered.StructuredContent)
+	}
+	manifest, err := session.LoadRemoteTriggerManifest(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Receipts) != 1 || manifest.Receipts[0].EventID != "delivery-123" || manifest.Receipts[0].SentCount != 1 {
+		t.Fatalf("remote trigger manifest = %#v", manifest)
 	}
 	resume, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_remote_resume_lead",
@@ -985,8 +993,37 @@ func TestRemoteTriggerSendsEventToCoordinatorByDefault(t *testing.T) {
 		t.Fatalf("remote trigger resume messages = %#v", resume.StructuredContent["resume_messages"])
 	}
 	text, _ := messages[2]["text"].(string)
-	if !strings.Contains(text, "Remote trigger received.") || !strings.Contains(text, "Source: github") || !strings.Contains(text, "Event: workflow_failed") || !strings.Contains(text, "Investigate the failed CI run.") {
+	if !strings.Contains(text, "Remote trigger received.") || !strings.Contains(text, "Source: github") || !strings.Contains(text, "Event: workflow_failed") || !strings.Contains(text, "Event ID: delivery-123") || !strings.Contains(text, "Investigate the failed CI run.") {
 		t.Fatalf("remote trigger message = %q", text)
+	}
+	duplicate, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_remote_trigger_duplicate",
+		Name: "RemoteTrigger",
+		Input: json.RawMessage(`{
+			"team":"remote/team",
+			"event_id":"delivery-123",
+			"source":"github",
+			"event_type":"workflow_failed",
+			"payload":"Investigate the failed CI run."
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicate.StructuredContent["duplicate"] != true || duplicate.StructuredContent["sent_count"] != 0 || duplicate.StructuredContent["duplicate_count"] != 1 {
+		t.Fatalf("remote trigger duplicate structured content = %#v", duplicate.StructuredContent)
+	}
+	resume, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_remote_resume_lead_duplicate",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/remote-lead","limit":4}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, ok = resume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(messages) != 3 {
+		t.Fatalf("remote trigger duplicate resume messages = %#v", resume.StructuredContent["resume_messages"])
 	}
 	memberResume, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_remote_resume_member",

@@ -55,6 +55,18 @@ func (m SidechainManager) RecordScheduleRun(scheduleID string, options ScheduleR
 	return RecordScheduleRun(m.Runtime.SessionPath, m.Runtime.SessionID, scheduleID, options)
 }
 
+func (m SidechainManager) RemoteTriggerReceipt(eventID string) (RemoteTriggerReceipt, bool, error) {
+	return FindRemoteTriggerReceipt(m.Runtime.SessionPath, m.Runtime.SessionID, eventID)
+}
+
+func (m SidechainManager) RecordRemoteTriggerReceipt(options RemoteTriggerReceiptOptions) (RemoteTriggerReceipt, RemoteTriggerManifest, error) {
+	return RecordRemoteTriggerReceipt(m.Runtime.SessionPath, m.Runtime.SessionID, options)
+}
+
+func (m SidechainManager) RecordRemoteTriggerDuplicate(eventID string, timestamp time.Time) (RemoteTriggerReceipt, RemoteTriggerManifest, error) {
+	return RecordRemoteTriggerDuplicate(m.Runtime.SessionPath, m.Runtime.SessionID, eventID, timestamp)
+}
+
 func (m SidechainManager) Resume(sidechainID string) (SidechainRun, bool, error) {
 	return ResumeSidechainRun(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 }
