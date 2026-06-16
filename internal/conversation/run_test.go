@@ -2676,6 +2676,23 @@ func TestRunnerResumeSlashCommandSearchesSessions(t *testing.T) {
 	if !strings.Contains(text, `Matching sessions for "searchable":`) || !strings.Contains(text, "sess_resume_search") {
 		t.Fatalf("resume search text = %q", text)
 	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/resume search searchable"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, `Matching sessions for "searchable":`) || !strings.Contains(text, "sess_resume_search") {
+		t.Fatalf("resume explicit search text = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/resume search"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /resume search <query>" {
+		t.Fatalf("resume search usage = %q", got)
+	}
 }
 
 func TestRunnerResumeSlashCommandShowsSessionDetails(t *testing.T) {

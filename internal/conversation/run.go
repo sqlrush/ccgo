@@ -3503,6 +3503,11 @@ func (r Runner) formatResumeSummary(raw string) (string, error) {
 		switch args[0] {
 		case "list", "status":
 			query = ""
+		case "search", "find":
+			query = subcommandRemainder(query, args[0])
+			if strings.TrimSpace(query) == "" {
+				return "Usage: /resume " + args[0] + " <query>", nil
+			}
 		case "show", "info":
 			target := subcommandRemainder(query, args[0])
 			if strings.TrimSpace(target) == "" {
