@@ -22,9 +22,10 @@ const (
 	teamSendTargetCoordinator = "coordinator"
 	teamSendTargetAll         = "all"
 
-	scheduleCronActionCreate = "create"
-	scheduleCronActionList   = "list"
-	scheduleCronActionDelete = "delete"
+	scheduleCronActionCreate  = "create"
+	scheduleCronActionList    = "list"
+	scheduleCronActionDelete  = "delete"
+	scheduleCronActionTrigger = "trigger"
 
 	maxSleepDuration = 60 * time.Second
 )
@@ -501,7 +502,7 @@ func NewScheduleCronTool() tool.Tool {
 			InputSchema: contracts.JSONSchema{
 				"type": "object",
 				"properties": map[string]any{
-					"action":      map[string]any{"type": "string", "enum": []any{scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete}},
+					"action":      map[string]any{"type": "string", "enum": []any{scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger}},
 					"schedule_id": map[string]any{"type": "string"},
 					"description": map[string]any{"type": "string"},
 					"cron":        map[string]any{"type": "string"},
@@ -513,7 +514,7 @@ func NewScheduleCronTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Creates, lists, or deletes session-scoped cron schedules. This records deterministic schedule metadata for later proactive execution; it does not start a background daemon yet. action defaults to create. create requires cron and message, and can optionally bind the schedule to a team_id and target.", nil
+			return "Creates, lists, deletes, or manually triggers session-scoped cron schedules. action defaults to create. create requires cron and message, and can optionally bind the schedule to a team_id and target. trigger sends the saved schedule message to the bound team's running recipients.", nil
 		},
 		NormalizeFunc:   normalizeScheduleCronInput,
 		ValidateFunc:    validateScheduleCron,
@@ -969,6 +970,35 @@ func validateScheduleCron(ctx tool.Context, raw json.RawMessage) error {
 			return err
 		} else if !ok {
 			return fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
+		}
+	case scheduleCronActionTrigger:
+		if input.ScheduleID == "" {
+			return fmt.Errorf("schedule_id is required")
+		}
+		manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+		schedule, ok, err := findScheduleState(manager, input.ScheduleID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
+		}
+		if !schedule.Enabled {
+			return fmt.Errorf("schedule %s is disabled", schedule.ID)
+		}
+		if schedule.TeamID == "" {
+			return fmt.Errorf("schedule %s has no team", schedule.ID)
+		}
+		team, err := loadTeamForMessage(manager, schedule.TeamID)
+		if err != nil {
+			return err
+		}
+		taskIDs, err := teamSendMessageTaskIDs(team, schedule.Target)
+		if err != nil {
+			return err
+		}
+		if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1706,6 +1736,63 @@ func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 		})
 		return contracts.ToolResult{
 			Content:           fmt.Sprintf("Schedule %s deleted.", deleted.ID),
+			StructuredContent: structured,
+		}, nil
+	case scheduleCronActionTrigger:
+		schedule, ok, err := findScheduleState(manager, input.ScheduleID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		if !ok {
+			return contracts.ToolResult{}, fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
+		}
+		team, err := loadTeamForMessage(manager, schedule.TeamID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		taskIDs, err := teamSendMessageTaskIDs(team, schedule.Target)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+			return contracts.ToolResult{}, err
+		}
+		triggerMessage := formatScheduleTriggerMessage(schedule)
+		sent := make([]map[string]any, 0, len(taskIDs))
+		for _, taskID := range taskIDs {
+			message := msgs.UserText(triggerMessage)
+			message.SessionID = ctx.SessionID
+			if err := manager.Append(taskID, session.TranscriptMessage{
+				Type:        string(contracts.MessageUser),
+				UUID:        message.UUID,
+				SessionID:   ctx.SessionID,
+				Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+				IsSidechain: true,
+				AgentID:     taskID,
+				Message:     &message,
+			}); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			sent = append(sent, map[string]any{
+				"task_id":      taskID,
+				"sidechain_id": taskID,
+				"message_uuid": string(message.UUID),
+			})
+		}
+		structured := structuredScheduleState(schedule)
+		structured["type"] = "schedule_cron"
+		structured["action"] = action
+		structured["sent_count"] = len(sent)
+		structured["sent"] = sent
+		structured["trigger_message_chars"] = len(triggerMessage)
+		_ = tool.SendProgress(sink, "", "schedule_triggered", map[string]any{
+			"schedule_id": schedule.ID,
+			"team_id":     schedule.TeamID,
+			"target":      schedule.Target,
+			"sent_count":  len(sent),
+		})
+		return contracts.ToolResult{
+			Content:           fmt.Sprintf("Schedule %s triggered for %d task(s).", schedule.ID, len(sent)),
 			StructuredContent: structured,
 		}, nil
 	default:
@@ -2586,15 +2673,19 @@ func resolvedScheduleCronAction(action string) string {
 	if action == "" {
 		return scheduleCronActionCreate
 	}
+	switch action {
+	case "run", "fire", "execute":
+		return scheduleCronActionTrigger
+	}
 	return action
 }
 
 func validateScheduleCronAction(action string) error {
 	switch resolvedScheduleCronAction(action) {
-	case scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete:
+	case scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger:
 		return nil
 	default:
-		return fmt.Errorf("action must be one of %s, %s, %s", scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete)
+		return fmt.Errorf("action must be one of %s, %s, %s, %s", scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger)
 	}
 }
 
@@ -2826,6 +2917,17 @@ func formatRemoteTriggerMessage(input remoteTriggerInput) string {
 	}
 	builder.WriteString("\nMessage:\n")
 	builder.WriteString(input.Message)
+	return builder.String()
+}
+
+func formatScheduleTriggerMessage(schedule session.ScheduleState) string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "Scheduled cron trigger received.\nSchedule: %s\nCron: %s", schedule.ID, schedule.Cron)
+	if schedule.Description != "" {
+		fmt.Fprintf(&builder, "\nDescription: %s", schedule.Description)
+	}
+	builder.WriteString("\nMessage:\n")
+	builder.WriteString(schedule.Message)
 	return builder.String()
 }
 

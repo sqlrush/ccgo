@@ -777,9 +777,16 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 	ctx, transcriptPath := taskContext(t)
 	executor := taskExecutor(t)
 	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_member",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/schedule-member","description":"Scheduled task","prompt":"Handle scheduled work","subagent_type":"general-purpose"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_schedule_team",
 		Name:  "TeamCreate",
-		Input: json.RawMessage(`{"name":"ops/team","description":"Ops team"}`),
+		Input: json.RawMessage(`{"name":"ops/team","description":"Ops team","members":["agent/schedule-member"]}`),
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -792,14 +799,13 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 			"cron":"0 9 * * MON-FRI",
 			"message":"Check the deployment status.",
 			"team":"ops/team",
-			"target":"all",
-			"enabled":false
+			"target":"all"
 		}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.StructuredContent["schedule_id"] != "daily_check" || created.StructuredContent["cron"] != "0 9 * * MON-FRI" || created.StructuredContent["team_id"] != "ops_team" || created.StructuredContent["target"] != "all" || created.StructuredContent["enabled"] != false || created.StructuredContent["schedule_count"] != 1 {
+	if created.StructuredContent["schedule_id"] != "daily_check" || created.StructuredContent["cron"] != "0 9 * * MON-FRI" || created.StructuredContent["team_id"] != "ops_team" || created.StructuredContent["target"] != "all" || created.StructuredContent["enabled"] != true || created.StructuredContent["schedule_count"] != 1 {
 		t.Fatalf("schedule create structured content = %#v", created.StructuredContent)
 	}
 	manifest, err := session.LoadScheduleManifest(transcriptPath, ctx.SessionID)
@@ -820,6 +826,33 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 	schedules, ok := listed.StructuredContent["schedules"].([]map[string]any)
 	if !ok || len(schedules) != 1 || schedules[0]["schedule_id"] != "daily_check" {
 		t.Fatalf("schedule list = %#v", listed.StructuredContent)
+	}
+	triggered, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_trigger",
+		Name:  "ScheduleCron",
+		Input: json.RawMessage(`{"action":"trigger","schedule_id":"daily/check"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if triggered.StructuredContent["action"] != "trigger" || triggered.StructuredContent["sent_count"] != 1 {
+		t.Fatalf("schedule trigger structured content = %#v", triggered.StructuredContent)
+	}
+	resume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_resume",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/schedule-member","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(messages) != 3 {
+		t.Fatalf("schedule trigger resume messages = %#v", resume.StructuredContent["resume_messages"])
+	}
+	text, _ := messages[2]["text"].(string)
+	if !strings.Contains(text, "Scheduled cron trigger received.") || !strings.Contains(text, "Schedule: daily_check") || !strings.Contains(text, "Cron: 0 9 * * MON-FRI") || !strings.Contains(text, "Check the deployment status.") {
+		t.Fatalf("schedule trigger message = %q", text)
 	}
 	deleted, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_schedule_delete",
@@ -1116,7 +1149,7 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing brief summary", tool: "Brief", input: `{}`, want: "summary is required"},
 		{name: "unknown brief field", tool: "Brief", input: `{"summary":"hello","extra":true}`, want: "input.extra is not allowed"},
 		{name: "bad brief list", tool: "Brief", input: `{"summary":"hello","details":12}`, want: "details must be a string or string array"},
-		{name: "bad schedule action", tool: "ScheduleCron", input: `{"action":"run"}`, want: "action must be one of create, list, delete"},
+		{name: "bad schedule action", tool: "ScheduleCron", input: `{"action":"invalid"}`, want: "action must be one of create, list, delete, trigger"},
 		{name: "missing schedule cron", tool: "ScheduleCron", input: `{"message":"hello"}`, want: "cron is required"},
 		{name: "bad schedule cron", tool: "ScheduleCron", input: `{"cron":"bad","message":"hello"}`, want: "cron must be a supported 5-field expression"},
 		{name: "missing schedule message", tool: "ScheduleCron", input: `{"cron":"@daily"}`, want: "message is required"},
