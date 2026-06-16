@@ -1477,6 +1477,85 @@ func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginSearchFindsLocalPluginMetadata(t *testing.T) {
+	client := &fakeClient{}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	demoDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	disabledDir := filepath.Join(repo, ".claude", "plugins", "disabled")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(demoDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(disabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(demoDir, "agents", "review.md"), []byte("---\nname: reviewer\ndescription: Review changes\n---\nReview."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(demoDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"version": "1.2.3",
+		"description": "Demo release plugin",
+		"commands": [{"name": "plugin:deploy", "description": "Deploy plugin", "prompt": "Deploy."}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(disabledDir, "plugin.json"), []byte(`{
+		"name": "disabled",
+		"description": "Review disabled workflows"
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_search",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins: map[string]any{"disabled": false},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin search review"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin search: review",
+		"Matches: 2",
+		"- demo@1.2.3 (enabled): agent demo:reviewer",
+		"- disabled (disabled): plugin metadata",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin search missing %q: %q", want, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin search"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /plugin search <query>" {
+		t.Fatalf("plugin search usage = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin search nowhere"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No plugins matched nowhere." {
+		t.Fatalf("plugin search missing = %q", got)
+	}
+}
+
 func TestRunnerPluginReportsMarketplacesAndConfigDetails(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},

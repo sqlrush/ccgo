@@ -1164,6 +1164,12 @@ func (r Runner) formatPluginSummary(raw string) string {
 		case "list", "status":
 		case "show", "info":
 			return r.formatPluginShow(args)
+		case "search", "find":
+			query := subcommandRemainder(raw, args[0])
+			if strings.TrimSpace(query) == "" {
+				return "Usage: /plugin " + args[0] + " <query>"
+			}
+			return r.formatPluginSearch(query)
 		case "marketplaces", "marketplace":
 			return r.formatPluginMarketplaces()
 		case "config", "settings":
@@ -1332,6 +1338,31 @@ func (r Runner) formatPluginShow(args []string) string {
 	appendPluginShowSection("MCP servers", loadedPluginMCPServerNames(plugin))
 	appendPluginShowSection("Output styles", loadedPluginOutputStyleNames(plugin))
 	appendPluginShowSection("Hook events", loadedPluginHookEventLines(plugin))
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatPluginSearch(query string) string {
+	query = strings.TrimSpace(query)
+	merged := r.mergedSettings()
+	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	results := pluginSearchResults(plugins, merged.EnabledPlugins, query)
+	if len(results) == 0 {
+		return "No plugins matched " + query + "."
+	}
+	lines := []string{
+		"Plugin search: " + query,
+		fmt.Sprintf("Matches: %d", len(results)),
+	}
+	for _, result := range firstPluginSearchResults(results, 20) {
+		name := result.Plugin
+		if result.Version != "" {
+			name += "@" + result.Version
+		}
+		lines = append(lines, fmt.Sprintf("- %s (%s): %s", name, result.State, result.Match))
+	}
+	if len(results) > 20 {
+		lines = append(lines, fmt.Sprintf("Showing 20 of %d plugin matches.", len(results)))
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -2051,6 +2082,90 @@ func pluginEnabledValueText(value any) (string, bool) {
 	return "", false
 }
 
+type pluginSearchResult struct {
+	Plugin  string
+	Version string
+	State   string
+	Match   string
+}
+
+func pluginSearchResults(plugins []pluginpkg.LoadedPlugin, enabledPlugins map[string]any, query string) []pluginSearchResult {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+	var results []pluginSearchResult
+	for _, plugin := range plugins {
+		state := "enabled"
+		if !pluginpkg.PluginEnabled(plugin, enabledPlugins) {
+			state = "disabled"
+		}
+		for _, match := range pluginSearchMatches(plugin, query) {
+			results = append(results, pluginSearchResult{
+				Plugin:  plugin.Name,
+				Version: plugin.Version,
+				State:   state,
+				Match:   match,
+			})
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Plugin != results[j].Plugin {
+			return results[i].Plugin < results[j].Plugin
+		}
+		if results[i].State != results[j].State {
+			return results[i].State < results[j].State
+		}
+		return results[i].Match < results[j].Match
+	})
+	return results
+}
+
+func pluginSearchMatches(plugin pluginpkg.LoadedPlugin, query string) []string {
+	seen := map[string]struct{}{}
+	var matches []string
+	add := func(label string, values ...string) {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			return
+		}
+		for _, value := range values {
+			if strings.Contains(strings.ToLower(value), query) {
+				if _, ok := seen[label]; !ok {
+					seen[label] = struct{}{}
+					matches = append(matches, label)
+				}
+				return
+			}
+		}
+	}
+	add("plugin metadata", plugin.Name, plugin.Version, plugin.Description, plugin.Root)
+	for _, command := range plugin.Commands {
+		add("command /"+commands.UserFacingName(command), command.Name, command.DisplayName, command.Description, command.WhenToUse, command.ArgumentHint)
+	}
+	for _, prompt := range plugin.PromptTemplates {
+		command := prompt.Command
+		add("command /"+commands.UserFacingName(command), command.Name, command.DisplayName, command.Description, command.WhenToUse, command.ArgumentHint, prompt.Content)
+	}
+	for _, command := range plugin.SkillCommands {
+		add("skill /"+commands.UserFacingName(command), command.Name, command.DisplayName, command.Description, command.WhenToUse, command.ArgumentHint)
+	}
+	for _, agent := range plugin.Agents {
+		add("agent "+agent.Name, agent.Name, agent.Description, agent.Path)
+	}
+	for name, server := range plugin.MCPServers {
+		add("MCP server "+name, name, server.Name, server.ID, server.Command, server.URL, server.PluginSource)
+	}
+	for _, style := range plugin.OutputStyles {
+		add("output style "+style.Name, style.Name, style.Description, style.Path)
+	}
+	for _, event := range plugin.HookEvents {
+		add("hook "+event.Event, event.Event)
+	}
+	sort.Strings(matches)
+	return matches
+}
+
 func pluginConfigNames(settings contracts.Settings) []string {
 	seen := map[string]struct{}{}
 	var names []string
@@ -2268,6 +2383,13 @@ func firstMCPSummaries(values []mcpServerSummary, limit int) []mcpServerSummary 
 }
 
 func firstLoadedPlugins(values []pluginpkg.LoadedPlugin, limit int) []pluginpkg.LoadedPlugin {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func firstPluginSearchResults(values []pluginSearchResult, limit int) []pluginSearchResult {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}
