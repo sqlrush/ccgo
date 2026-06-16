@@ -419,7 +419,7 @@ func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 
 func TestExecuteSlashStatusReturnsLocalStatusResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
-	result, handled, err := ExecuteSlashCommand(registry, "/status", SlashOptions{UUID: "user_status"})
+	result, handled, err := ExecuteSlashCommand(registry, "/status show tools", SlashOptions{UUID: "user_status"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,6 +428,9 @@ func TestExecuteSlashStatusReturnsLocalStatusResult(t *testing.T) {
 	}
 	if result.LocalResult.Type != LocalCommandResultStatus {
 		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if result.LocalResult.Value != "show tools" {
+		t.Fatalf("local result value = %q", result.LocalResult.Value)
 	}
 	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_status" {
 		t.Fatalf("messages = %#v", result.Messages)

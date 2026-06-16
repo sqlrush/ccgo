@@ -79,7 +79,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			return r.appendLocalTextResult(result, history, formatCostSummary(originalHistory))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultStatus {
-			return r.appendLocalTextResult(result, history, r.formatStatusSummary())
+			return r.appendLocalTextResult(result, history, r.formatStatusSummary(localResult.Value))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultConfig {
 			return r.appendLocalTextResult(result, history, r.formatConfigSummary(localResult.Value))
@@ -446,7 +446,21 @@ func usageHasValues(usage contracts.Usage) bool {
 		usage.CostUSD != 0
 }
 
-func (r Runner) formatStatusSummary() string {
+func (r Runner) formatStatusSummary(raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) > 0 {
+		switch args[0] {
+		case "show", "info":
+			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins>"
+			}
+			return r.formatStatusShow(args[1])
+		case "session", "model", "auth", "tools", "mcp", "plugins":
+			return r.formatStatusShow(args[0])
+		default:
+			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		}
+	}
 	model := r.model()
 	cwd := strings.TrimSpace(r.WorkingDirectory)
 	if cwd == "" {
@@ -478,6 +492,133 @@ func (r Runner) formatStatusSummary() string {
 		toolCount,
 		mcpText,
 	)
+}
+
+func (r Runner) formatStatusShow(raw string) string {
+	switch normalizeStatusSection(raw) {
+	case "session":
+		cwd := strings.TrimSpace(r.WorkingDirectory)
+		if cwd == "" {
+			cwd = "(unknown)"
+		}
+		sessionID := string(r.SessionID)
+		if sessionID == "" {
+			sessionID = "(none)"
+		}
+		sessionPath := strings.TrimSpace(r.SessionPath)
+		if sessionPath == "" {
+			sessionPath = "(not configured)"
+		}
+		return strings.Join([]string{
+			"Status session",
+			"Session ID: " + sessionID,
+			"Working directory: " + cwd,
+			"Transcript path: " + sessionPath,
+		}, "\n")
+	case "model":
+		return strings.Join([]string{
+			"Status model",
+			"Model: " + r.model(),
+			"Output style: " + r.effectiveOutputStyleName(),
+			fmt.Sprintf("Max tokens: %d", r.MaxTokens),
+			"Fast mode: " + boolEnabledText(r.FastMode),
+			"Betas: " + r.betaHeadersText(),
+		}, "\n")
+	case "auth":
+		return strings.Join([]string{
+			"Status auth",
+			"Auth source: " + r.authSourceText(),
+			"Permission mode: " + r.permissionModeText(),
+			"Fast mode: " + boolEnabledText(r.FastMode),
+			"Betas: " + r.betaHeadersText(),
+		}, "\n")
+	case "tools":
+		names := r.toolNames()
+		lines := []string{
+			"Status tools",
+			fmt.Sprintf("Tools: %d", len(names)),
+		}
+		if len(names) > 0 {
+			lines = append(lines, "Tool names: "+strings.Join(firstStrings(names, 40), ", "))
+			if len(names) > 40 {
+				lines = append(lines, fmt.Sprintf("Showing 40 of %d tools.", len(names)))
+			}
+		}
+		return strings.Join(lines, "\n")
+	case "mcp":
+		servers := r.mcpServers()
+		if len(servers) == 0 {
+			return "No MCP servers configured."
+		}
+		lines := []string{
+			"Status MCP servers",
+			fmt.Sprintf("MCP servers: %d", len(servers)),
+		}
+		for _, server := range firstMCPSummaries(servers, 40) {
+			status := "configured"
+			if !server.Policy.Allowed {
+				status = "blocked: " + server.Policy.Reason
+			}
+			lines = append(lines, fmt.Sprintf("- %s: %s (%s, %s)", server.Name, status, mcpServerTransport(server.Config), mcpServerSource(server.Config)))
+		}
+		if len(servers) > 40 {
+			lines = append(lines, fmt.Sprintf("Showing 40 of %d MCP servers.", len(servers)))
+		}
+		return strings.Join(lines, "\n")
+	case "plugins":
+		merged := r.mergedSettings()
+		localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), merged)
+		lines := []string{
+			"Status plugins",
+			fmt.Sprintf("Enabled plugin entries: %d", len(merged.EnabledPlugins)),
+			fmt.Sprintf("Enabled plugins: %d", countEnabledPlugins(merged.EnabledPlugins)),
+			fmt.Sprintf("Plugin configs: %d", len(merged.PluginConfigs)),
+			fmt.Sprintf("Local plugin manifests: %d", len(localPlugins)),
+		}
+		if len(merged.EnabledPlugins) > 0 {
+			lines = append(lines, "Plugin enabled states:")
+			for _, line := range firstStrings(pluginEnabledStateLines(merged.EnabledPlugins), 20) {
+				lines = append(lines, "- "+line)
+			}
+			if len(merged.EnabledPlugins) > 20 {
+				lines = append(lines, fmt.Sprintf("Showing 20 of %d plugin enabled states.", len(merged.EnabledPlugins)))
+			}
+		}
+		if len(localPlugins) > 0 {
+			lines = append(lines, "Local plugins:")
+			for _, plugin := range firstLoadedPlugins(localPlugins, 20) {
+				lines = append(lines, "- "+plugin.Name)
+			}
+			if len(localPlugins) > 20 {
+				lines = append(lines, fmt.Sprintf("Showing 20 of %d local plugins.", len(localPlugins)))
+			}
+		}
+		return strings.Join(lines, "\n")
+	default:
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins"
+	}
+}
+
+func normalizeStatusSection(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.TrimPrefix(value, "--")
+	compact := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(value, "_", "-"), " ", "-"))
+	switch compact {
+	case "session", "conversation", "transcript":
+		return "session"
+	case "model", "models", "output-style", "outputstyle":
+		return "model"
+	case "auth", "authentication", "login", "permission", "permissions", "permission-mode":
+		return "auth"
+	case "tool", "tools":
+		return "tools"
+	case "mcp", "mcp-server", "mcp-servers", "mcpservers":
+		return "mcp"
+	case "plugin", "plugins":
+		return "plugins"
+	default:
+		return compact
+	}
 }
 
 func (r *Runner) formatConfigSummary(raw string) string {
@@ -2305,6 +2446,15 @@ func boolEnabledText(value bool) string {
 		return "enabled"
 	}
 	return "disabled"
+}
+
+func (r Runner) toolNames() []string {
+	if r.Tools.Registry == nil {
+		return nil
+	}
+	names := append([]string(nil), r.Tools.Registry.Names()...)
+	sort.Strings(names)
+	return names
 }
 
 func (r Runner) mcpServerNames() []string {

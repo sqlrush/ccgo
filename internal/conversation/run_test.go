@@ -737,6 +737,106 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	registry, err := tool.NewRegistry(
+		tool.FuncTool{
+			DefinitionValue: contracts.ToolDefinition{Name: "Write", InputSchema: contracts.JSONSchema{"type": "object"}},
+			CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
+				t.Fatal("status should not call tools")
+				return contracts.ToolResult{}, nil
+			},
+		},
+		tool.FuncTool{
+			DefinitionValue: contracts.ToolDefinition{Name: "Read", InputSchema: contracts.JSONSchema{"type": "object"}},
+			CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
+				t.Fatal("status should not call tools")
+				return contracts.ToolResult{}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		APIKeySource:     "oauth",
+		PermissionMode:   contracts.PermissionPlan,
+		BetaHeaders:      []string{"beta-one"},
+		FastMode:         true,
+		MaxTokens:        128,
+		SessionID:        "sess_status_show",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: t.TempDir(),
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"zeta":  {Command: "node"},
+				"alpha": {Command: "python"},
+			},
+			DeniedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "zeta"}},
+			EnabledPlugins:   map[string]any{"market/a": true, "market/b": false},
+			PluginConfigs: map[string]contracts.PluginConfig{
+				"market/a": {Options: map[string]any{"token": "plugin-secret"}},
+			},
+		}},
+	}
+
+	assertStatusShow := func(prompt string, wants []string, rejects []string) {
+		t.Helper()
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("model should not be queried, requests = %#v", client.requests)
+		}
+		text := result.Messages[1].Content[0].Text
+		for _, want := range wants {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q: %q", prompt, want, text)
+			}
+		}
+		for _, reject := range rejects {
+			if strings.Contains(text, reject) {
+				t.Fatalf("%s leaked %q: %q", prompt, reject, text)
+			}
+		}
+	}
+
+	assertStatusShow("/status show session", []string{
+		"Status session",
+		"Session ID: sess_status_show",
+		"Transcript path: " + transcriptPath,
+	}, nil)
+	assertStatusShow("/status show tools", []string{
+		"Status tools",
+		"Tools: 2",
+		"Tool names: Read, Write",
+	}, nil)
+	assertStatusShow("/status show mcp", []string{
+		"Status MCP servers",
+		"MCP servers: 2",
+		"- alpha: configured (stdio, settings)",
+		"- zeta: blocked:",
+	}, nil)
+	assertStatusShow("/status show plugins", []string{
+		"Status plugins",
+		"Enabled plugin entries: 2",
+		"Enabled plugins: 1",
+		"Plugin configs: 1",
+		"- market/a: enabled",
+		"- market/b: disabled",
+	}, []string{"plugin-secret"})
+	assertStatusShow("/status show unknown", []string{
+		"Unknown status section unknown.",
+		"Available sections:",
+	}, nil)
+}
+
 func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()

@@ -92,7 +92,7 @@ M8 补充：`/compact` built-in local command 现在会产生 compact local resu
 
 M8 补充：`/cost` built-in local command 现在会在 conversation runner 中按当前 history 的 message usage 汇总 total cost、input/output/cache token 和 web search/fetch 请求数，作为 local text result 写入 result/transcript，且不会请求模型或打开 MCP；完整 TUI cost panel、session duration 和 account/billing 细节仍未完成。
 
-M8 补充：`/status` built-in local-jsx command 现在在 headless/local runner 中返回基础 status text，包含 session id、working directory、model、tool count 和 settings-derived MCP server list，写入 result/transcript 且不会请求模型；完整 TUI status panel、account/API connectivity、tool health 和插件状态仍未完成。
+M8 补充：`/status` built-in local-jsx command 现在在 headless/local runner 中返回基础 status text，包含 session id、working directory、model、tool count 和 settings-derived MCP server list，写入 result/transcript 且不会请求模型；`/status show <section>` 可只读展示 session/model/auth/tools/MCP/plugins 等运行态 section 详情，status local result 也会保留 slash args 供 runner 分派。完整 TUI status panel、account/API connectivity、tool health 和插件状态仍未完成。
 
 M8 补充：`/help` 和 `/skills` built-in local-jsx command 现在有基础 text result：`/help` 从 command registry 输出可见命令列表，`/skills` 输出可见 prompt skill 列表或空状态；二者不会请求模型，完整 TUI help/skills 面板、筛选、分组和 plugin/MCP skill 展示仍未完成。
 
