@@ -720,6 +720,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：agent metadata 的 `permissionMode` 现在会在 `run:true` subagent 执行时覆盖子 runner permission engine mode；例如 `bypassPermissions` agent 可以执行基础 default mode 下会 ask 的 mutating tool，同时保留原 engine context/rules 以及随后叠加的 agent allowed-tools 限制。
 - 本轮补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。团队编排仍未完成。
 - 本轮补充：`run:true` subagent 的错误路径现在会收敛 sidechain 终态：context cancel 标记 `cancelled`，其它执行错误标记 `failed`；两类终态都会尝试清理 owned worktree，并把 cleanup marker 透出到主 Task structured result。更细的外部中断 UI/进度呈现仍未完成。
+- 本轮补充：新增 `SendMessage`/`TaskSendMessage` 工具入口，可向 running sidechain task 追加 user message，并返回更新后的 message_count、message_uuid 和 structured task state；这为后续 coordinator/team agent 编排提供了最小通信原语。完整 TeamCreate/TeamDelete/team scheduling 仍未完成。
 
 ### M11: Bridge 和高级集成
 

@@ -36,6 +36,11 @@ type taskKillInput struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type taskSendMessageInput struct {
+	TaskID  string `json:"task_id,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 type taskResumeInput struct {
 	TaskID string `json:"task_id,omitempty"`
 	Limit  *int   `json:"limit,omitempty"`
@@ -148,6 +153,34 @@ func NewKillTaskTool() tool.Tool {
 		ValidateFunc:    validateKillTask,
 		CallFunc:        callKillTask,
 		DestructiveFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
+func NewSendMessageTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "SendMessage",
+			Aliases:         []string{"TaskSendMessage"},
+			Description:     "Append a user message to a running subagent task.",
+			SearchHint:      "send message to subagent task",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"task_id", "message"},
+				"properties": map[string]any{
+					"task_id": map[string]any{"type": "string"},
+					"message": map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Sends an additional user message to a running subagent task by task_id. Use ResumeTask or TaskOutput afterwards to inspect the updated sidechain context.", nil
+		},
+		NormalizeFunc:   normalizeSendMessageInput,
+		ValidateFunc:    validateSendMessage,
+		CallFunc:        callSendMessage,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
 
@@ -347,6 +380,26 @@ func validateKillTask(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if input.TaskID == "" {
 		return fmt.Errorf("task_id is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
+func validateSendMessage(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeSendMessageInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TaskID == "" {
+		return fmt.Errorf("task_id is required")
+	}
+	if input.Message == "" {
+		return fmt.Errorf("message is required")
 	}
 	if ctx.SessionID == "" {
 		return fmt.Errorf("session id is required")
@@ -651,6 +704,53 @@ func callKillTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink)
 	}, nil
 }
 
+func callSendMessage(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeSendMessageInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	state, err := findTaskState(manager, input.TaskID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if state.Status != session.SidechainStatusRunning {
+		return contracts.ToolResult{}, fmt.Errorf("task %s is not running", state.ID)
+	}
+	message := msgs.UserText(input.Message)
+	message.SessionID = ctx.SessionID
+	if err := manager.Append(state.ID, session.TranscriptMessage{
+		Type:        string(contracts.MessageUser),
+		UUID:        message.UUID,
+		SessionID:   ctx.SessionID,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+		IsSidechain: true,
+		AgentID:     state.ID,
+		Message:     &message,
+	}); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	state, err = findTaskState(manager, state.ID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	structured := structuredTaskState(state)
+	structured["type"] = "send_message"
+	structured["message_uuid"] = string(message.UUID)
+	structured["message_chars"] = len(input.Message)
+	_ = tool.SendProgress(sink, "", "task_message_sent", map[string]any{
+		"task_id":       state.ID,
+		"sidechain_id":  state.ID,
+		"status":        state.Status,
+		"message_uuid":  string(message.UUID),
+		"message_chars": len(input.Message),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Message sent to task %s.", state.ID),
+		StructuredContent: structured,
+	}, nil
+}
+
 func callResumeTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeResumeTaskInput(raw)
 	if err != nil {
@@ -729,6 +829,16 @@ func decodeKillTaskInput(raw json.RawMessage) (taskKillInput, error) {
 	return input, nil
 }
 
+func decodeSendMessageInput(raw json.RawMessage) (taskSendMessageInput, error) {
+	var input taskSendMessageInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return taskSendMessageInput{}, err
+	}
+	input.TaskID = strings.TrimSpace(input.TaskID)
+	input.Message = strings.TrimSpace(input.Message)
+	return input, nil
+}
+
 func decodeResumeTaskInput(raw json.RawMessage) (taskResumeInput, error) {
 	var input taskResumeInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -779,6 +889,28 @@ func normalizeKillTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	if value, ok := firstRawTaskField(obj, "reason", "summary", "message"); ok {
 		normalized["reason"] = value
+	}
+	return json.Marshal(normalized)
+}
+
+func normalizeSendMessageInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "task_id", "taskId", "sidechain_id", "sidechainId", "id", "message", "text", "content", "prompt", "input":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "task_id", "taskId", "sidechain_id", "sidechainId", "id"); ok {
+		normalized["task_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input"); ok {
+		normalized["message"] = value
 	}
 	return json.Marshal(normalized)
 }

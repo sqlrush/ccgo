@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewResumeTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewResumeTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,6 +406,51 @@ func TestKillTaskCancelsRunningSidechain(t *testing.T) {
 	}
 }
 
+func TestSendMessageAppendsToRunningSidechain(t *testing.T) {
+	ctx, transcriptPath := taskContext(t)
+	executor := taskExecutor(t)
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_send_start",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/send","description":"Interactive task","prompt":"Initial prompt","subagent_type":"general-purpose"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_send",
+		Name:  "SendMessage",
+		Input: json.RawMessage(`{"sidechain_id":"agent/send","text":"Please continue with more detail."}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent.StructuredContent["type"] != "send_message" ||
+		sent.StructuredContent["status"] != session.SidechainStatusRunning ||
+		sent.StructuredContent["message_chars"] != len("Please continue with more detail.") {
+		t.Fatalf("send structured content = %#v", sent.StructuredContent)
+	}
+	state, err := session.FindSidechainState(transcriptPath, ctx.SessionID, "agent/send")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.MessageCount != 3 {
+		t.Fatalf("message count = %d", state.MessageCount)
+	}
+	resume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_send_resume",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/send","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(messages) != 3 || messages[2]["type"] != contracts.MessageUser || messages[2]["text"] != "Please continue with more detail." {
+		t.Fatalf("resume messages = %#v", resume.StructuredContent["resume_messages"])
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -586,6 +631,10 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing kill id", tool: "KillTask", input: `{}`, want: "task_id is required"},
 		{name: "unknown kill field", tool: "KillTask", input: `{"task_id":"missing","extra":true}`, want: "input.extra is not allowed"},
 		{name: "missing kill task", tool: "KillTask", input: `{"id":"missing"}`, want: "task not found: missing"},
+		{name: "missing send id", tool: "SendMessage", input: `{"message":"hello"}`, want: "task_id is required"},
+		{name: "missing send message", tool: "SendMessage", input: `{"task_id":"missing"}`, want: "message is required"},
+		{name: "unknown send field", tool: "SendMessage", input: `{"task_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing send task", tool: "SendMessage", input: `{"task_id":"missing","message":"hello"}`, want: "task not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
 	}

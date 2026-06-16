@@ -198,6 +198,7 @@ func BuiltinTools() []tool.Tool {
 		tasktools.NewTaskTool(),
 		tasktools.NewTaskOutputTool(),
 		tasktools.NewKillTaskTool(),
+		tasktools.NewSendMessageTool(),
 		tasktools.NewResumeTaskTool(),
 		skilltools.NewSkillTool(),
 		webtools.NewWebFetchTool(),

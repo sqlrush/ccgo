@@ -61,6 +61,8 @@ M10 补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `w
 
 M10 补充：`run:true` subagent 的错误路径现在会收敛 sidechain 终态：context cancel 标记 `cancelled`，其它执行错误标记 `failed`；两类终态都会尝试清理 owned worktree，并把 cleanup marker 透出到主 Task structured result。更细的外部中断 UI/进度呈现仍未完成。
 
+M10 补充：新增 `SendMessage`/`TaskSendMessage` 工具入口，可向 running sidechain task 追加 user message，并返回更新后的 message_count、message_uuid 和 structured task state；这为后续 coordinator/team agent 编排提供了最小通信原语。完整 TeamCreate/TeamDelete/team scheduling 仍未完成。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。
@@ -1416,9 +1418,9 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - local agent、async/background task、task output。
 - worktree isolation、cleanup、resume。
 - remote CCR agent、team/swarm/coordinator。
-- SendMessage、TeamCreate、TeamDelete、Task*。
+- TeamCreate、TeamDelete、Task*。
 
-当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式与 settings 默认 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 编排、远端协作和团队编排仍未完成。
+当前状态：已有 Task/TaskOutput/KillTask/SendMessage/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式与 settings 默认 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 编排、远端协作和团队编排仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 
