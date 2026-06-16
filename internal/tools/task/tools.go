@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,16 @@ type taskInput struct {
 	Description  string `json:"description"`
 	Prompt       string `json:"prompt"`
 	SubagentType string `json:"subagent_type"`
+}
+
+type taskOutputInput struct {
+	TaskID    string `json:"task_id,omitempty"`
+	TailLines *int   `json:"tail_lines,omitempty"`
+}
+
+type taskKillInput struct {
+	TaskID string `json:"task_id,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 func NewTaskTool() tool.Tool {
@@ -63,6 +74,64 @@ func NewTaskTool() tool.Tool {
 		CallFunc:        callTask,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
+func NewTaskOutputTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:               "TaskOutput",
+			Aliases:            []string{"AgentOutputTool", "TaskOutputTool"},
+			Description:        "Read subagent task status and output.",
+			SearchHint:         "read subagent task output status progress",
+			ReadOnly:           true,
+			ConcurrencySafe:    true,
+			Strict:             true,
+			MaxResultSizeChars: 100_000,
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"task_id":    map[string]any{"type": "string"},
+					"tail_lines": map[string]any{"type": "integer"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Reads subagent task status and transcript output. Provide task_id to inspect one task, or omit it to list all known tasks for the current session.", nil
+		},
+		NormalizeFunc:   normalizeTaskOutputInput,
+		ValidateFunc:    validateTaskOutput,
+		PermissionFunc:  allowTaskOutput,
+		CallFunc:        callTaskOutput,
+		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
+func NewKillTaskTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "KillTask",
+			Aliases:         []string{"TaskStop"},
+			Description:     "Cancel a running subagent task.",
+			SearchHint:      "kill cancel stop subagent task",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"task_id"},
+				"properties": map[string]any{
+					"task_id": map[string]any{"type": "string"},
+					"reason":  map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Cancels a running subagent task by task_id. Use TaskOutput afterwards to read the final status and cancellation summary.", nil
+		},
+		NormalizeFunc: normalizeKillTaskInput,
+		ValidateFunc:  validateKillTask,
+		CallFunc:      callKillTask,
 	}
 }
 
@@ -176,10 +245,51 @@ func validateTask(ctx tool.Context, raw json.RawMessage) error {
 	return nil
 }
 
+func validateTaskOutput(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeTaskOutputInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TailLines != nil && *input.TailLines <= 0 {
+		return fmt.Errorf("tail_lines must be positive")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
+func validateKillTask(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeKillTaskInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TaskID == "" {
+		return fmt.Errorf("task_id is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
 func allowTask(tool.Context, json.RawMessage) (contracts.PermissionDecision, error) {
 	return contracts.PermissionDecision{
 		Behavior:       contracts.PermissionAllow,
 		DecisionReason: "starting a subagent task records runtime metadata; subagent tool calls are permissioned separately",
+	}, nil
+}
+
+func allowTaskOutput(tool.Context, json.RawMessage) (contracts.PermissionDecision, error) {
+	return contracts.PermissionDecision{
+		Behavior:       contracts.PermissionAllow,
+		DecisionReason: "reading subagent task status is read-only",
 	}, nil
 }
 
@@ -271,6 +381,89 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}, nil
 }
 
+func callTaskOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeTaskOutputInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	if input.TaskID == "" {
+		states, err := manager.List()
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		tasks := make([]map[string]any, 0, len(states))
+		for _, state := range states {
+			tasks = append(tasks, structuredTaskState(state))
+		}
+		return contracts.ToolResult{
+			Content: formatTaskList(states),
+			StructuredContent: map[string]any{
+				"type":  "task_output",
+				"tasks": tasks,
+				"count": len(tasks),
+			},
+		}, nil
+	}
+	state, err := findTaskState(manager, input.TaskID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	output, err := taskTranscriptOutput(state, taskOutputTailLines(input))
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	structured := structuredTaskState(state)
+	structured["type"] = "task_output"
+	structured["output"] = output
+	if input.TailLines != nil {
+		structured["tail_lines"] = *input.TailLines
+	}
+	return contracts.ToolResult{
+		Content:           formatTaskOutput(state, output),
+		StructuredContent: structured,
+	}, nil
+}
+
+func callKillTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeKillTaskInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	state, err := findTaskState(manager, input.TaskID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	killed := false
+	if state.Status == session.SidechainStatusRunning {
+		reason := input.Reason
+		if reason == "" {
+			reason = "cancelled by KillTask"
+		}
+		if _, err := manager.Cancel(state.ID, reason, time.Now().UTC()); err != nil {
+			return contracts.ToolResult{}, err
+		}
+		killed = true
+		state, err = findTaskState(manager, state.ID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+	}
+	content := fmt.Sprintf("Task %s is not running.", state.ID)
+	if killed {
+		content = fmt.Sprintf("Cancel requested for task %s.", state.ID)
+	}
+	structured := structuredTaskState(state)
+	structured["type"] = "kill_task"
+	structured["killed"] = killed
+	structured["cancelled"] = state.Status == session.SidechainStatusCancelled
+	return contracts.ToolResult{
+		Content:           content,
+		StructuredContent: structured,
+	}, nil
+}
+
 func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	var input taskInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -283,6 +476,106 @@ func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	return input, nil
 }
 
+func decodeTaskOutputInput(raw json.RawMessage) (taskOutputInput, error) {
+	var input taskOutputInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return taskOutputInput{}, err
+	}
+	input.TaskID = strings.TrimSpace(input.TaskID)
+	return input, nil
+}
+
+func decodeKillTaskInput(raw json.RawMessage) (taskKillInput, error) {
+	var input taskKillInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return taskKillInput{}, err
+	}
+	input.TaskID = strings.TrimSpace(input.TaskID)
+	input.Reason = strings.TrimSpace(input.Reason)
+	return input, nil
+}
+
+func normalizeTaskOutputInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "task_id", "taskId", "sidechain_id", "sidechainId", "id", "tail_lines", "tailLines":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "task_id", "taskId", "sidechain_id", "sidechainId", "id"); ok {
+		normalized["task_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "tail_lines", "tailLines"); ok {
+		normalized["tail_lines"] = value
+	}
+	coerceTaskSemanticNumberStrings(normalized, "tail_lines")
+	return json.Marshal(normalized)
+}
+
+func normalizeKillTaskInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "task_id", "taskId", "sidechain_id", "sidechainId", "id", "reason", "summary", "message":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "task_id", "taskId", "sidechain_id", "sidechainId", "id"); ok {
+		normalized["task_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "reason", "summary", "message"); ok {
+		normalized["reason"] = value
+	}
+	return json.Marshal(normalized)
+}
+
+func decodeRawTaskObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		obj = map[string]json.RawMessage{}
+	}
+	return obj, nil
+}
+
+func firstRawTaskField(obj map[string]json.RawMessage, keys ...string) (json.RawMessage, bool) {
+	for _, key := range keys {
+		if value, ok := obj[key]; ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func coerceTaskSemanticNumberStrings(obj map[string]json.RawMessage, keys ...string) {
+	for _, key := range keys {
+		raw, ok := obj[key]
+		if !ok || len(raw) == 0 || raw[0] != '"' {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			continue
+		}
+		if _, err := strconv.Atoi(text); err == nil {
+			obj[key] = json.RawMessage(text)
+		}
+	}
+}
+
 func sessionPathFromMetadata(metadata map[string]any) string {
 	if metadata == nil {
 		return ""
@@ -291,6 +584,193 @@ func sessionPathFromMetadata(metadata map[string]any) string {
 		return strings.TrimSpace(value)
 	}
 	return ""
+}
+
+func findTaskState(manager session.SidechainManager, taskID string) (session.SidechainState, error) {
+	state, err := session.FindSidechainState(manager.Runtime.SessionPath, manager.Runtime.SessionID, taskID)
+	if err != nil {
+		return session.SidechainState{}, err
+	}
+	if state.MessageCount == 0 && state.Metadata.Empty() {
+		return session.SidechainState{}, fmt.Errorf("task not found: %s", strings.TrimSpace(taskID))
+	}
+	if state.SessionID == "" {
+		state.SessionID = manager.Runtime.SessionID
+	}
+	return state, nil
+}
+
+func structuredTaskState(state session.SidechainState) map[string]any {
+	structured := map[string]any{
+		"task_id":       state.ID,
+		"sidechain_id":  state.ID,
+		"status":        state.Status,
+		"running":       state.Status == session.SidechainStatusRunning,
+		"summary":       state.Summary,
+		"started_at":    state.StartedAt,
+		"ended_at":      state.EndedAt,
+		"message_count": state.MessageCount,
+		"path":          state.Path,
+	}
+	if state.Metadata.AgentType != "" {
+		structured["subagent_type"] = state.Metadata.AgentType
+	}
+	if state.Metadata.Description != "" {
+		structured["description"] = state.Metadata.Description
+	}
+	if state.Metadata.WorktreePath != "" {
+		structured["worktree_path"] = state.Metadata.WorktreePath
+	}
+	if state.Metadata.AgentPath != "" {
+		structured["agent_path"] = state.Metadata.AgentPath
+	}
+	if state.Metadata.AgentModel != "" {
+		structured["agent_model"] = state.Metadata.AgentModel
+	}
+	if state.Metadata.AgentPermissionMode != "" {
+		structured["agent_permission_mode"] = state.Metadata.AgentPermissionMode
+	}
+	if len(state.Metadata.AgentAllowedTools) > 0 {
+		structured["agent_allowed_tools"] = append([]string(nil), state.Metadata.AgentAllowedTools...)
+	}
+	return structured
+}
+
+func taskOutputTailLines(input taskOutputInput) int {
+	if input.TailLines == nil {
+		return 0
+	}
+	return *input.TailLines
+}
+
+func taskTranscriptOutput(state session.SidechainState, tailLines int) (string, error) {
+	transcript, err := session.LoadTranscript(state.Path)
+	if err != nil {
+		return "", err
+	}
+	var lines []string
+	for _, id := range transcript.Order {
+		entry := transcript.Messages[id]
+		if entry == nil || skipTaskOutputEntry(entry) {
+			continue
+		}
+		text := taskEntryText(entry)
+		if text == "" {
+			continue
+		}
+		label := strings.TrimSpace(entry.Type)
+		if entry.Message != nil && entry.Message.Type != "" {
+			label = string(entry.Message.Type)
+		}
+		if entry.Subtype != "" && label == "" {
+			label = entry.Subtype
+		}
+		if label == "" {
+			label = "message"
+		}
+		lines = append(lines, fmt.Sprintf("[%s] %s", label, text))
+	}
+	output := strings.Join(lines, "\n")
+	if tailLines > 0 {
+		output = tailTaskText(output, tailLines)
+	}
+	return output, nil
+}
+
+func skipTaskOutputEntry(entry *session.TranscriptMessage) bool {
+	switch entry.Subtype {
+	case "sidechain_start", "agent_prompt":
+		return true
+	default:
+		return false
+	}
+}
+
+func taskEntryText(entry *session.TranscriptMessage) string {
+	if entry.Message != nil {
+		return strings.TrimSpace(msgs.TextContent(*entry.Message))
+	}
+	return strings.TrimSpace(taskVisibleText(entry.Content))
+}
+
+func taskVisibleText(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := strings.TrimSpace(taskVisibleText(item)); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		for _, key := range []string{"summary", "finalSummary", "final_summary", "resultText", "result_text", "finalMessage", "final_message", "outputText", "output_text", "message", "text", "body", "output", "value", "content"} {
+			if text := strings.TrimSpace(taskVisibleText(typed[key])); text != "" {
+				return text
+			}
+		}
+	case map[string]string:
+		for _, key := range []string{"summary", "message", "text", "body", "output", "value", "content"} {
+			if text := strings.TrimSpace(typed[key]); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func tailTaskText(text string, lines int) string {
+	if lines <= 0 {
+		return text
+	}
+	parts := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	if len(parts) <= lines {
+		return strings.Join(parts, "\n")
+	}
+	return strings.Join(parts[len(parts)-lines:], "\n")
+}
+
+func formatTaskList(states []session.SidechainState) string {
+	if len(states) == 0 {
+		return "No subagent tasks recorded for this session."
+	}
+	lines := make([]string, 0, len(states)+1)
+	lines = append(lines, "Subagent tasks:")
+	for _, state := range states {
+		description := state.Metadata.Description
+		if description == "" {
+			description = state.ID
+		}
+		agentType := state.Metadata.AgentType
+		if agentType == "" {
+			agentType = "unknown"
+		}
+		lines = append(lines, fmt.Sprintf("- %s [%s] %s: %s", state.ID, state.Status, agentType, description))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatTaskOutput(state session.SidechainState, output string) string {
+	status := fmt.Sprintf("Task %s is %s.", state.ID, state.Status)
+	var lines []string
+	lines = append(lines, status)
+	if state.Metadata.AgentType != "" {
+		lines = append(lines, "Subagent type: "+state.Metadata.AgentType)
+	}
+	if state.Metadata.Description != "" {
+		lines = append(lines, "Description: "+state.Metadata.Description)
+	}
+	if state.Summary != "" {
+		lines = append(lines, "Summary: "+state.Summary)
+	}
+	if strings.TrimSpace(output) == "" {
+		lines = append(lines, "No task output recorded yet.")
+	} else {
+		lines = append(lines, "Output:\n"+output)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func firstString(obj map[string]any, keys ...string) (string, bool) {

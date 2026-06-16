@@ -285,8 +285,8 @@ func normalizeLegacyToolName(name string) string {
 	switch name {
 	case "Task":
 		return "Agent"
-	case "KillShell":
-		return "TaskStop"
+	case "KillShell", "TaskStop":
+		return "KillTask"
 	case "AgentOutputTool", "BashOutputTool":
 		return "TaskOutput"
 	default:

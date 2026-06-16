@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
@@ -15,7 +16,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +97,131 @@ func TestTaskToolStartsSidechainAndStoresPrompt(t *testing.T) {
 	}
 	if !foundPrompt {
 		t.Fatalf("sidechain transcript missing prompt: %#v", transcript.Order)
+	}
+}
+
+func TestTaskOutputListsAndReadsSidechainOutput(t *testing.T) {
+	ctx, transcriptPath := taskContext(t)
+	executor := taskExecutor(t)
+
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_output_start",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/output","description":"Review API","prompt":"Inspect API changes","subagent_type":"general-purpose"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := session.NewSidechainManager(transcriptPath, ctx.SessionID)
+	assistant := msgs.AssistantText("Investigated files\nFound issue", "sonnet", nil)
+	assistant.SessionID = ctx.SessionID
+	if err := manager.Append("agent_output", session.TranscriptMessage{
+		Type:      string(contracts.MessageAssistant),
+		UUID:      assistant.UUID,
+		SessionID: ctx.SessionID,
+		Timestamp: time.Unix(100, 0).UTC().Format(time.RFC3339Nano),
+		Message:   &assistant,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_output_list",
+		Name:  "TaskOutput",
+		Input: json.RawMessage(`{}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(list.Content.(string), "agent_output [running] general-purpose: Review API") {
+		t.Fatalf("list content = %#v", list.Content)
+	}
+	if list.StructuredContent["count"] != 1 {
+		t.Fatalf("list structured content = %#v", list.StructuredContent)
+	}
+
+	output, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_output_read",
+		Name:  "AgentOutputTool",
+		Input: json.RawMessage(`{"sidechainId":"agent/output"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.StructuredContent["status"] != session.SidechainStatusRunning || output.StructuredContent["subagent_type"] != "general-purpose" {
+		t.Fatalf("output structured content = %#v", output.StructuredContent)
+	}
+	text, ok := output.StructuredContent["output"].(string)
+	if !ok || !strings.Contains(text, "[user] Inspect API changes") || !strings.Contains(text, "[assistant] Investigated files\nFound issue") {
+		t.Fatalf("output text = %#v", output.StructuredContent["output"])
+	}
+
+	tail, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_output_tail",
+		Name:  "TaskOutput",
+		Input: json.RawMessage(`{"taskId":"agent/output","tailLines":"1"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tail.StructuredContent["tail_lines"] != 1 || strings.TrimSpace(tail.StructuredContent["output"].(string)) != "Found issue" {
+		t.Fatalf("tail structured content = %#v", tail.StructuredContent)
+	}
+}
+
+func TestKillTaskCancelsRunningSidechain(t *testing.T) {
+	ctx, transcriptPath := taskContext(t)
+	executor := taskExecutor(t)
+
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_kill_start",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/kill","description":"Long task","prompt":"Keep working","subagent_type":"general-purpose"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	killed, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_kill",
+		Name:  "TaskStop",
+		Input: json.RawMessage(`{"sidechain_id":"agent/kill","message":"user stopped it"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if killed.StructuredContent["killed"] != true || killed.StructuredContent["cancelled"] != true || killed.StructuredContent["status"] != session.SidechainStatusCancelled {
+		t.Fatalf("kill structured content = %#v", killed.StructuredContent)
+	}
+
+	state, err := session.FindSidechainState(transcriptPath, ctx.SessionID, "agent/kill")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != session.SidechainStatusCancelled || state.Summary != "user stopped it" {
+		t.Fatalf("cancelled state = %#v", state)
+	}
+	output, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_kill_output",
+		Name:  "TaskOutput",
+		Input: json.RawMessage(`{"id":"agent/kill"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.StructuredContent["status"] != session.SidechainStatusCancelled || output.StructuredContent["summary"] != "user stopped it" {
+		t.Fatalf("cancelled output = %#v", output.StructuredContent)
+	}
+
+	again, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_kill_again",
+		Name:  "KillTask",
+		Input: json.RawMessage(`{"task_id":"agent/kill"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.StructuredContent["killed"] != false || !strings.Contains(again.Content.(string), "is not running") {
+		t.Fatalf("second kill = %#v", again)
 	}
 }
 
@@ -207,6 +333,36 @@ func TestTaskToolValidatesRuntimeContext(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "prompt is required") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTaskOutputAndKillValidation(t *testing.T) {
+	executor := taskExecutor(t)
+	ctx, _ := taskContext(t)
+	tests := []struct {
+		name  string
+		tool  string
+		input string
+		want  string
+	}{
+		{name: "bad output tail", tool: "TaskOutput", input: `{"tail_lines":0}`, want: "tail_lines must be positive"},
+		{name: "unknown output field", tool: "TaskOutput", input: `{"extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing task", tool: "TaskOutput", input: `{"task_id":"missing"}`, want: "task not found: missing"},
+		{name: "missing kill id", tool: "KillTask", input: `{}`, want: "task_id is required"},
+		{name: "unknown kill field", tool: "KillTask", input: `{"task_id":"missing","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing kill task", tool: "KillTask", input: `{"id":"missing"}`, want: "task not found: missing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := executor.Execute(ctx, contracts.ToolUse{
+				ID:    "toolu_task_invalid",
+				Name:  tt.tool,
+				Input: json.RawMessage(tt.input),
+			}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

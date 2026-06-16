@@ -34,6 +34,12 @@ func TestParseRuleEscapesAndLegacyNames(t *testing.T) {
 	if legacy.ToolName != "Agent" {
 		t.Fatalf("legacy tool = %q", legacy.ToolName)
 	}
+	if got := PermissionRuleValueFromString("TaskStop"); got.ToolName != "KillTask" {
+		t.Fatalf("task stop tool = %q", got.ToolName)
+	}
+	if got := PermissionRuleValueFromString("AgentOutputTool"); got.ToolName != "TaskOutput" {
+		t.Fatalf("agent output tool = %q", got.ToolName)
+	}
 }
 
 func TestShellRuleMatching(t *testing.T) {

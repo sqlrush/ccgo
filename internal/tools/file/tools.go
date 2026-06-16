@@ -181,7 +181,27 @@ func NewNotebookEditTool() tool.Tool {
 }
 
 func BuiltinTools() []tool.Tool {
-	return []tool.Tool{NewReadTool(), NewEditTool(), NewWriteTool(), NewNotebookEditTool(), bashtools.NewBashTool(), bashtools.NewBashOutputTool(), bashtools.NewKillBashTool(), powershelltools.NewPowerShellTool(), powershelltools.NewPowerShellOutputTool(), powershelltools.NewKillPowerShellTool(), NewGlobTool(), NewGrepTool(), todotools.NewTodoWriteTool(), tasktools.NewTaskTool(), skilltools.NewSkillTool(), webtools.NewWebFetchTool(), webtools.NewWebSearchTool()}
+	return []tool.Tool{
+		NewReadTool(),
+		NewEditTool(),
+		NewWriteTool(),
+		NewNotebookEditTool(),
+		bashtools.NewBashTool(),
+		bashtools.NewBashOutputTool(),
+		bashtools.NewKillBashTool(),
+		powershelltools.NewPowerShellTool(),
+		powershelltools.NewPowerShellOutputTool(),
+		powershelltools.NewKillPowerShellTool(),
+		NewGlobTool(),
+		NewGrepTool(),
+		todotools.NewTodoWriteTool(),
+		tasktools.NewTaskTool(),
+		tasktools.NewTaskOutputTool(),
+		tasktools.NewKillTaskTool(),
+		skilltools.NewSkillTool(),
+		webtools.NewWebFetchTool(),
+		webtools.NewWebSearchTool(),
+	}
 }
 
 func validateRead(ctx tool.Context, raw json.RawMessage) error {

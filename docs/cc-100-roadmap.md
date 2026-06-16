@@ -35,6 +35,8 @@
 
 M10 补充：plugin command/agent 的 allowed tool frontmatter 解析现在只在顶层逗号或空白处分隔，保留括号、方括号和引号内的逗号/空白，避免 `Bash(git commit -m "x,y")` 这类 tool pattern 被误拆。
 
+M10 补充：新增 `TaskOutput`/`AgentOutputTool` 和 `KillTask`/`TaskStop` 内置工具；`TaskOutput` 可列出当前 session 的 sidechain task，或按 task/sidechain ID 读取状态、summary、tail 输出和 agent metadata，`KillTask` 会通过 sidechain manager 写入 cancelled lifecycle summary。完整 AgentTool 执行循环、progress event streaming、resume command UI 和 worktree isolation 仍未完成。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。
