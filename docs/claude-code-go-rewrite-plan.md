@@ -716,6 +716,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`Task` 支持显式 `run: true`，conversation runner 会读取 sidechain conversation，用同一 model client 驱动 subagent 多轮工具循环；subagent assistant/tool_result 都写回 sidechain transcript，最终通过 `SidechainManager.Finish` 标记 completed，主对话收到的 tool result 会更新为 completed summary 并发 `task_agent_started`/`task_agent_completed` progress。完整多 agent 编排和取消传播仍未完成。
 - 本轮补充：subagent nested tool loop 会读取 agent metadata 的 `agentAllowedTools`，构造过滤后的 tool registry；子 agent 请求只暴露允许的工具，未列入 allowlist 的工具不会进入 request tools，也不能被 registry lookup 执行。完整 MCP/tool permission UI 展示和团队编排仍未完成。
 - 本轮补充：agent `allowedTools` 现在也会注入 subagent permission decider：`Bash(git status:*)` 这类 scoped rule 既会把 Bash 暴露给子 agent，又会拒绝不匹配 pattern 的 Bash 调用；匹配 pattern 的调用继续走基础 permission engine，因此仍保留更高优先级 deny/sandbox 判断。
+- 本轮补充：agent metadata 的 `permissionMode` 现在会在 `run:true` subagent 执行时覆盖子 runner permission engine mode；例如 `bypassPermissions` agent 可以执行基础 default mode 下会 ask 的 mutating tool，同时保留原 engine context/rules 以及随后叠加的 agent allowed-tools 限制。
 - 本轮补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。默认 worktree 策略、取消传播 cleanup 和团队编排仍未完成。
 
 ### M11: Bridge 和高级集成

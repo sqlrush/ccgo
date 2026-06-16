@@ -123,6 +123,9 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 		subRunner.WorkingDirectory = worktreePath
 	}
 	subRunner.SystemPrompt = taskSubagentSystemPrompt(r.SystemPrompt, state.Metadata.AgentPrompt)
+	if mode := strings.TrimSpace(state.Metadata.AgentPermissionMode); mode != "" {
+		subRunner.Permissions = taskSubagentPermissionMode(subRunner.Permissions, mode)
+	}
 	if len(state.Metadata.AgentAllowedTools) > 0 {
 		executor, err := taskSubagentAllowedToolExecutor(subRunner.Tools, state.Metadata.AgentAllowedTools)
 		if err != nil {
@@ -287,6 +290,30 @@ func taskSubagentAllowedToolPermissions(base tool.PermissionDecider, allowedTool
 	}
 	next := taskPermissionDeciderWithRules(base, rules)
 	return taskSubagentScopedPermissionDecider{Base: next, Rules: rules}
+}
+
+func taskSubagentPermissionMode(base tool.PermissionDecider, rawMode string) tool.PermissionDecider {
+	mode, ok := parsePermissionMode(rawMode)
+	if !ok {
+		return base
+	}
+	switch decider := base.(type) {
+	case tool.EnginePermissionDecider:
+		context := decider.Engine.Context()
+		context.Mode = mode
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(context, decider.Engine.Rules()...))
+	case *tool.EnginePermissionDecider:
+		if decider == nil {
+			break
+		}
+		context := decider.Engine.Context()
+		context.Mode = mode
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(context, decider.Engine.Rules()...))
+	}
+	if base == nil {
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(contracts.PermissionContext{Mode: mode}))
+	}
+	return base
 }
 
 func taskSubagentAllowedToolPermissionRules(allowedTools []string) []permissions.Rule {
