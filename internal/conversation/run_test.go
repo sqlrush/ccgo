@@ -933,6 +933,79 @@ func TestRunnerTaskSubagentUsesAndCleansOwnedWorktree(t *testing.T) {
 	}
 }
 
+func TestRunnerTaskSubagentCancelCleansOwnedWorktree(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := initConversationGitRepo(t)
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/cancel-worktree","description":"Cancel in worktree","prompt":"Run until cancelled","subagent_type":"general-purpose","worktree":true,"run":true}`),
+			}},
+		}},
+		{err: context.Canceled},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task cancelled")},
+		}},
+	}}
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_cancel_worktree",
+		SessionPath:      sessionPath,
+		WorkingDirectory: repo,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	toolResult := result.ToolResults[0]
+	worktreePath, ok := toolResult.StructuredContent["worktree_path"].(string)
+	if !ok || worktreePath == "" || worktreePath == repo {
+		t.Fatalf("worktree path structured content = %#v", toolResult.StructuredContent)
+	}
+	if !toolResult.IsError ||
+		toolResult.StructuredContent["status"] != session.SidechainStatusCancelled ||
+		toolResult.StructuredContent["cancelled"] != true ||
+		toolResult.StructuredContent["worktree_cleanup_status"] != "removed" {
+		t.Fatalf("cancel structured content = %#v", toolResult.StructuredContent)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists after subagent cancellation: %v", err)
+	}
+	state, err := session.FindSidechainState(sessionPath, runner.SessionID, "agent/cancel-worktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != session.SidechainStatusCancelled ||
+		state.Metadata.WorktreeCleanupStatus != "removed" ||
+		state.Metadata.WorktreeCleanupReason != "subagent cancelled" {
+		t.Fatalf("cancelled state = %#v metadata=%#v", state, state.Metadata)
+	}
+}
+
 func TestRunnerTaskToolUsesPluginAgentMetadata(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

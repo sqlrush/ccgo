@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -36,11 +37,17 @@ func (r Runner) maybeRunTaskSubagent(ctx context.Context, use contracts.ToolUse,
 	}})
 	outcome, err := r.runTaskSubagentOnce(ctx, sidechainID)
 	if err != nil {
+		status := session.SidechainStatusFailed
+		if errors.Is(err, context.Canceled) {
+			status = session.SidechainStatusCancelled
+			result.StructuredContent["cancelled"] = true
+		}
 		result.IsError = true
 		result.Content = fmt.Sprintf("Task subagent failed: %v", err)
-		result.StructuredContent["status"] = session.SidechainStatusFailed
+		result.StructuredContent["status"] = status
 		result.StructuredContent["running"] = false
 		result.StructuredContent["error"] = err.Error()
+		r.copyTaskSubagentWorktreeCleanup(sidechainID, result.StructuredContent)
 		r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
 			ToolUseID: use.ID,
 			Type:      "task_agent_failed",
@@ -141,13 +148,11 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 	for round := 0; ; round++ {
 		if round >= subRunner.maxToolRounds() {
 			err := fmt.Errorf("task %s exceeded maximum subagent tool rounds: %d", state.ID, subRunner.maxToolRounds())
-			_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
-			return taskSubagentOutcome{}, err
+			return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
 		}
 		_, _, response, _, err := subRunner.send(ctx, history, nil)
 		if err != nil {
-			_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
-			return taskSubagentOutcome{}, err
+			return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
 		}
 		assistant := messageFromResponse(r.SessionID, response)
 		if err := manager.Append(state.ID, session.TranscriptMessage{
@@ -159,7 +164,7 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 			AgentID:     state.ID,
 			Message:     &assistant,
 		}); err != nil {
-			return taskSubagentOutcome{}, err
+			return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
 		}
 		history, assistant = appendMessage(history, assistant)
 		uses := ToolUses(assistant)
@@ -192,6 +197,9 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 			return outcome, nil
 		}
 		toolMessages, _ := subRunner.executeToolUses(ctx, uses, subRunner.toolMetadata(), history)
+		if err := ctx.Err(); err != nil {
+			return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
+		}
 		for i := range toolMessages {
 			history, toolMessages[i] = appendMessage(history, toolMessages[i])
 			if err := manager.Append(state.ID, session.TranscriptMessage{
@@ -204,9 +212,59 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 				AgentID:     state.ID,
 				Message:     &toolMessages[i],
 			}); err != nil {
-				return taskSubagentOutcome{}, err
+				return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
 			}
 		}
+	}
+}
+
+func (r Runner) finishTaskSubagentError(ctx context.Context, manager session.SidechainManager, state session.SidechainState, err error) error {
+	status := session.SidechainStatusFailed
+	reason := err.Error()
+	if errors.Is(err, context.Canceled) {
+		status = session.SidechainStatusCancelled
+		if strings.TrimSpace(reason) == "" {
+			reason = "subagent cancelled"
+		}
+	}
+	if status == session.SidechainStatusCancelled {
+		_, _ = manager.Cancel(state.ID, reason, time.Now().UTC())
+	} else {
+		_, _ = manager.Fail(state.ID, reason, time.Now().UTC())
+	}
+	cleanup, cleanupErr := tasktools.CleanupOwnedWorktree(tool.Context{
+		Context:          ctx,
+		WorkingDirectory: r.WorkingDirectory,
+		SessionID:        r.SessionID,
+		Metadata:         r.toolMetadata(),
+	}, manager, state, "subagent "+status)
+	if cleanupErr != nil {
+		return fmt.Errorf("%w; worktree cleanup failed: %v", err, cleanupErr)
+	}
+	if cleanup.Attempted && cleanup.Status == "failed" {
+		return fmt.Errorf("%w; worktree cleanup failed: %s", err, cleanup.Reason)
+	}
+	return err
+}
+
+func (r Runner) copyTaskSubagentWorktreeCleanup(sidechainID string, structured map[string]any) {
+	if structured == nil || r.SessionPath == "" || r.SessionID == "" {
+		return
+	}
+	state, err := session.FindSidechainState(r.SessionPath, r.SessionID, sidechainID)
+	if err != nil {
+		return
+	}
+	if state.Metadata.WorktreeCleanupStatus == "" {
+		return
+	}
+	structured["worktree_cleanup_attempted"] = true
+	structured["worktree_cleanup_status"] = state.Metadata.WorktreeCleanupStatus
+	if state.Metadata.WorktreeCleanupReason != "" {
+		structured["worktree_cleanup_reason"] = state.Metadata.WorktreeCleanupReason
+	}
+	if state.Metadata.WorktreeCleanupAt != "" {
+		structured["worktree_cleanup_at"] = state.Metadata.WorktreeCleanupAt
 	}
 }
 

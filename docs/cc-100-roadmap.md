@@ -55,7 +55,9 @@ M10 补充：agent `allowedTools` 现在也会注入 subagent permission decider
 
 M10 补充：agent metadata 的 `permissionMode` 现在会在 `run:true` subagent 执行时覆盖子 runner permission engine mode；例如 `bypassPermissions` agent 可以执行基础 default mode 下会 ask 的 mutating tool，同时保留原 engine context/rules 以及随后叠加的 agent allowed-tools 限制。
 
-M10 补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。默认 worktree 策略、取消传播 cleanup 和团队编排仍未完成。
+M10 补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。默认 worktree 策略和团队编排仍未完成。
+
+M10 补充：`run:true` subagent 的错误路径现在会收敛 sidechain 终态：context cancel 标记 `cancelled`，其它执行错误标记 `failed`；两类终态都会尝试清理 owned worktree，并把 cleanup marker 透出到主 Task structured result。更细的外部中断 UI/进度呈现仍未完成。
 
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
@@ -1414,7 +1416,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - remote CCR agent、team/swarm/coordinator。
 - SendMessage、TeamCreate、TeamDelete、Task*。
 
-当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及完成态 owned worktree 自动清理；完整多 agent 编排、默认 worktree 策略、远端协作和团队编排仍未完成。
+当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 编排、默认 worktree 策略、远端协作和团队编排仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 
