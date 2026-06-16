@@ -62,3 +62,20 @@ func TestWriteAndLoadManifest(t *testing.T) {
 		t.Fatalf("loaded manifest = %#v", loaded)
 	}
 }
+
+func TestManifestFindCommandNormalizesSlashNamesAndAliases(t *testing.T) {
+	manifest := Manifest{Commands: []Command{
+		{Name: "compact", Type: contracts.CommandLocal},
+		{Name: "ask", DisplayName: "Ask", Type: contracts.CommandPrompt, Aliases: []string{"question"}},
+	}}
+	for _, raw := range []string{"/compact now", "compact now", "/question deploy", "Ask"} {
+		if _, ok := manifest.FindCommand(raw); !ok {
+			t.Fatalf("FindCommand(%q) = false", raw)
+		}
+	}
+	for _, raw := range []string{"", "/", "/status", "model opus"} {
+		if manifest.AllowsCommand(raw) {
+			t.Fatalf("AllowsCommand(%q) = true, want false", raw)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ccgo/internal/commands"
@@ -100,4 +101,47 @@ func LoadManifest(path string) (Manifest, error) {
 		return Manifest{}, err
 	}
 	return manifest, nil
+}
+
+func (m Manifest) FindCommand(raw string) (Command, bool) {
+	name := normalizeCommandName(raw)
+	if name == "" {
+		return Command{}, false
+	}
+	for _, command := range m.Commands {
+		if commandMatches(command, name) {
+			return command, true
+		}
+	}
+	return Command{}, false
+}
+
+func (m Manifest) AllowsCommand(raw string) bool {
+	_, ok := m.FindCommand(raw)
+	return ok
+}
+
+func commandMatches(command Command, name string) bool {
+	if strings.EqualFold(command.Name, name) || strings.EqualFold(command.DisplayName, name) {
+		return true
+	}
+	for _, alias := range command.Aliases {
+		if strings.EqualFold(alias, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeCommandName(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "/")
+	if raw == "" {
+		return ""
+	}
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(fields[0])
 }
