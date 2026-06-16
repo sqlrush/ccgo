@@ -21,6 +21,7 @@ import (
 	"ccgo/internal/messages"
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
+	telemetrypkg "ccgo/internal/telemetry"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
 	skilltools "ccgo/internal/tools/skill"
@@ -1673,6 +1674,71 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	}
 	if len(entries) != 2 || !strings.Contains(entries[1].Message.Content[0].Text, "Session ID: sess_status") {
 		t.Fatalf("transcript entries = %#v", entries)
+	}
+}
+
+func TestRunnerTelemetryDisabledByDefault(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_telemetry_disabled",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	path := telemetrypkg.SessionPath(transcriptPath, "sess_telemetry_disabled")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("telemetry file exists with disabled telemetry: %v", err)
+	}
+}
+
+func TestRunnerRecordsGatedTelemetrySummaries(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	telemetryEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_telemetry",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{Telemetry: &telemetryEnabled},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(telemetrypkg.SessionPath(transcriptPath, "sess_telemetry"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(data)
+	for _, reject := range []string{"/status", "Status", "Session ID"} {
+		if strings.Contains(raw, reject) {
+			t.Fatalf("telemetry leaked message content %q: %q", reject, raw)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(raw), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("telemetry lines = %d, want at least 2: %q", len(lines), raw)
+	}
+	var first telemetrypkg.Event
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.Timestamp == "" ||
+		first.SessionID != "sess_telemetry" ||
+		first.Type != string(EventUserMessage) ||
+		first.MessageType != string(contracts.MessageUser) ||
+		first.MessageUUID == "" {
+		t.Fatalf("telemetry summary = %#v", first)
 	}
 }
 

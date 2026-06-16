@@ -745,7 +745,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 每个 gated feature 独立开关测试。
 - 不启用 feature 时二进制行为和可见 schema 不泄露 gated 工具/命令。
 
-- 本轮补充：新增 `advanced` settings gate 地基，覆盖 bridge/LSP/telemetry/Chrome/voice/computer-use/native integrations 的独立 bool 开关解析、settings merge、headless `/config show advanced` 和 `/config search` 审计；未启用时仍不注册或泄露 gated 工具 schema。实际 repl bridge、session websocket/direct connect、LSP manager/tool、telemetry exporter/tracing、Chrome/voice/computer-use/native runtime 仍未完成。
+- 本轮补充：新增 `advanced` settings gate 地基，覆盖 bridge/LSP/telemetry/Chrome/voice/computer-use/native integrations 的独立 bool 开关解析、settings merge、headless `/config show advanced` 和 `/config search` 审计；`advanced.telemetry=true` 时会在 session 目录写入安全摘要 JSONL 诊断事件，记录事件类型、session/model、tool/progress keys、token/compact/error 摘要，不写入用户/助手正文或工具结果内容；未启用时仍不注册或泄露 gated 工具 schema。实际 repl bridge、session websocket/direct connect、LSP manager/tool、telemetry exporter/tracing、Chrome/voice/computer-use/native runtime 仍未完成。
 
 ### M12: Parity hardening
 

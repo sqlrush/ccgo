@@ -138,6 +138,7 @@ func (r Runner) maxToolRounds() int {
 }
 
 func (r Runner) emit(event Event) {
+	r.recordTelemetry(event)
 	if r.OnEvent != nil {
 		r.OnEvent(event)
 	}
