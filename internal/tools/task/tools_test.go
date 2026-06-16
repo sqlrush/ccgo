@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewResumeTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewResumeTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,6 +487,30 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	if len(manifest.Teams) != 1 || manifest.Teams[0].ID != "review_team" || len(manifest.Teams[0].TaskIDs) != 2 {
 		t.Fatalf("team manifest = %#v", manifest)
 	}
+	listed, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_output_list",
+		Name:  "TeamOutput",
+		Input: json.RawMessage(`{}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	teams, ok := listed.StructuredContent["teams"].([]map[string]any)
+	if !ok || len(teams) != 1 || teams[0]["team_id"] != "review_team" {
+		t.Fatalf("team list = %#v", listed.StructuredContent)
+	}
+	read, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_output_read",
+		Name:  "TeamOutput",
+		Input: json.RawMessage(`{"id":"review/team"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks, ok := read.StructuredContent["tasks"].([]map[string]any)
+	if !ok || len(tasks) != 2 || tasks[0]["status"] != session.SidechainStatusRunning || tasks[1]["task_id"] != "agent_team-two" {
+		t.Fatalf("team read = %#v", read.StructuredContent)
+	}
 
 	deleted, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_team_delete",
@@ -697,6 +721,8 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing team task", tool: "TeamCreate", input: `{"team_id":"team","task_ids":["missing"]}`, want: "task not found: missing"},
 		{name: "missing delete team id", tool: "TeamDelete", input: `{}`, want: "team_id is required"},
 		{name: "missing delete team", tool: "TeamDelete", input: `{"team_id":"missing"}`, want: "team not found: missing"},
+		{name: "unknown team output field", tool: "TeamOutput", input: `{"extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team output team", tool: "TeamOutput", input: `{"team_id":"missing"}`, want: "team not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
 	}
