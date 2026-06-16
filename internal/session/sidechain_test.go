@@ -1016,7 +1016,13 @@ func TestSidechainManagerOrchestratesRunningSidechains(t *testing.T) {
 	sessionID := contracts.ID("sess_1")
 	parent := contracts.ID("parent_1")
 	manager := NewSidechainManager(sessionPath, sessionID)
-	run, err := manager.Start(SidechainOptions{ID: "agent/one", ParentUUID: &parent, StartedAt: time.Unix(200, 0).UTC()})
+	run, err := manager.Start(SidechainOptions{
+		ID:          "agent/one",
+		ParentUUID:  &parent,
+		StartedAt:   time.Unix(200, 0).UTC(),
+		AgentPath:   "/tmp/agents/reviewer.md",
+		AgentPrompt: "Review carefully.",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1181,7 +1187,13 @@ func TestBuildSidechainResumeContext(t *testing.T) {
 	sessionID := contracts.ID("sess_1")
 	parent := contracts.ID("parent_1")
 	manager := NewSidechainManager(sessionPath, sessionID)
-	run, err := manager.Start(SidechainOptions{ID: "agent/one", ParentUUID: &parent, StartedAt: time.Unix(200, 0).UTC()})
+	run, err := manager.Start(SidechainOptions{
+		ID:          "agent/one",
+		ParentUUID:  &parent,
+		StartedAt:   time.Unix(200, 0).UTC(),
+		AgentPath:   "/tmp/agents/reviewer.md",
+		AgentPrompt: "Review carefully.",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1214,7 +1226,7 @@ func TestBuildSidechainResumeContext(t *testing.T) {
 	if !context.CanResume || context.Run.ID != run.ID || context.State.LastUUID != "agent_msg" || !context.Truncated {
 		t.Fatalf("context = %#v", context)
 	}
-	if len(context.Tail) != 2 || context.Tail[0].UUID != "agent_user" || len(context.Messages) != 2 || context.Messages[1].Content[0].Text != "done" {
+	if len(context.Tail) != 2 || context.Tail[0].UUID != "agent_user" || len(context.Messages) != 3 || context.Messages[0].Subtype != "agent_prompt" || context.Messages[0].Content[0].Text != "Review carefully." || context.Messages[2].Content[0].Text != "done" {
 		t.Fatalf("context tail/messages = %#v %#v", context.Tail, context.Messages)
 	}
 	if _, err := manager.Finish("agent/one", SidechainStatusCompleted, "finished", time.Unix(210, 0).UTC()); err != nil {
