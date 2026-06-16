@@ -8,6 +8,7 @@ import (
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -92,9 +93,15 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 		return taskSubagentOutcome{}, fmt.Errorf("task %s has no prompt messages", state.ID)
 	}
 	subRunner := r
-	subRunner.Tools = tool.Executor{}
 	subRunner.MCP = nil
 	subRunner.SystemPrompt = taskSubagentSystemPrompt(r.SystemPrompt, state.Metadata.AgentPrompt)
+	if len(state.Metadata.AgentAllowedTools) > 0 {
+		executor, err := taskSubagentAllowedToolExecutor(subRunner.Tools, state.Metadata.AgentAllowedTools)
+		if err != nil {
+			return taskSubagentOutcome{}, err
+		}
+		subRunner.Tools = executor
+	}
 	if state.Metadata.AgentModel != "" {
 		subRunner.Model = state.Metadata.AgentModel
 	}
@@ -187,4 +194,57 @@ func taskToolResultString(structured map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func taskSubagentAllowedToolExecutor(executor tool.Executor, allowedTools []string) (tool.Executor, error) {
+	if executor.Registry == nil || len(allowedTools) == 0 {
+		return executor, nil
+	}
+	var tools []tool.Tool
+	seen := map[string]struct{}{}
+	for _, raw := range allowedTools {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if raw == "*" {
+			return executor, nil
+		}
+		candidates := taskAllowedToolNameCandidates(raw)
+		for _, name := range candidates {
+			t, ok := executor.Registry.Lookup(name)
+			if !ok {
+				continue
+			}
+			key := strings.ToLower(strings.TrimSpace(t.Name()))
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			tools = append(tools, t)
+			break
+		}
+	}
+	registry, err := tool.NewRegistry(tools...)
+	if err != nil {
+		return tool.Executor{}, err
+	}
+	executor.Registry = registry
+	return executor, nil
+}
+
+func taskAllowedToolNameCandidates(raw string) []string {
+	value := permissions.PermissionRuleValueFromString(raw)
+	var candidates []string
+	if value.ToolName != "" {
+		candidates = append(candidates, value.ToolName)
+	}
+	if open := strings.Index(raw, "("); open > 0 {
+		candidates = append(candidates, strings.TrimSpace(raw[:open]))
+	}
+	candidates = append(candidates, raw)
+	return candidates
 }

@@ -358,7 +358,7 @@ func TestRunnerTaskToolRunExecutesOneShotSubagent(t *testing.T) {
 		t.Fatalf("requests = %d, want 3", len(client.requests))
 	}
 	subagentRequest := client.requests[1]
-	if len(subagentRequest.Tools) != 0 {
+	if !requestHasTool(subagentRequest, "Task") {
 		t.Fatalf("subagent tools = %#v", subagentRequest.Tools)
 	}
 	if len(subagentRequest.Messages) != 1 || subagentRequest.Messages[0].Role != "user" || subagentRequest.Messages[0].Content[0].Text != "Investigate and answer" {
@@ -493,6 +493,101 @@ func TestRunnerTaskSubagentExecutesNestedToolLoop(t *testing.T) {
 	}
 	if !foundEchoResult {
 		t.Fatalf("sidechain transcript missing nested tool result: %#v", output.Order)
+	}
+}
+
+func TestRunnerTaskSubagentHonorsAgentAllowedTools(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), namedTextTool("Echo", "echo:"), namedTextTool("Secret", "secret:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "agents", "runner.md"), []byte("---\nname: runner\ndescription: Run with echo\ntools: Echo\n---\nUse only Echo."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/allowed","description":"Allowed tools","prompt":"Use echo","subagent_type":"demo:runner","run":true}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_echo",
+				Name:  "Echo",
+				Input: json.RawMessage(`{"text":"hello"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("Echo allowed")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task completed")},
+		}},
+	}}
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_allowed",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: cwd,
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].StructuredContent["summary"] != "Echo allowed" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if len(client.requests) != 4 {
+		t.Fatalf("requests = %d, want 4", len(client.requests))
+	}
+	if !requestHasTool(client.requests[1], "Echo") || requestHasTool(client.requests[1], "Secret") || requestHasTool(client.requests[1], "Task") {
+		t.Fatalf("subagent allowed tools = %#v", client.requests[1].Tools)
+	}
+	if !requestHasTool(client.requests[2], "Echo") || requestHasTool(client.requests[2], "Secret") || requestHasTool(client.requests[2], "Task") {
+		t.Fatalf("subagent follow-up tools = %#v", client.requests[2].Tools)
 	}
 }
 
@@ -4216,6 +4311,30 @@ func hasToolProgress(progress []contracts.ToolProgress, toolUseID contracts.ID, 
 		}
 	}
 	return false
+}
+
+func namedTextTool(name string, prefix string) tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            name,
+			Description:     name + " text",
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			InputSchema: contracts.JSONSchema{
+				"type":       "object",
+				"properties": map[string]any{"text": map[string]any{"type": "string"}},
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			var input struct {
+				Text string `json:"text"`
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return contracts.ToolResult{Content: prefix + input.Text}, nil
+		},
+	}
 }
 
 func requestHasTool(request anthropic.Request, name string) bool {
