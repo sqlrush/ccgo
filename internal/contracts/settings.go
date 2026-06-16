@@ -62,6 +62,7 @@ type Settings struct {
 	CompanyAnnouncements            []string                    `json:"companyAnnouncements,omitempty"`
 	PluginConfigs                   map[string]PluginConfig     `json:"pluginConfigs,omitempty"`
 	Remote                          *RemoteSetting              `json:"remote,omitempty"`
+	Advanced                        *AdvancedSetting            `json:"advanced,omitempty"`
 	AutoUpdatesChannel              string                      `json:"autoUpdatesChannel,omitempty"`
 	Plugins                         map[string]any              `json:"plugins,omitempty"`
 	Extra                           map[string]any              `json:"-"`
@@ -112,6 +113,16 @@ type PluginConfig struct {
 
 type RemoteSetting struct {
 	DefaultEnvironmentID string `json:"defaultEnvironmentId,omitempty"`
+}
+
+type AdvancedSetting struct {
+	Bridge             *bool `json:"bridge,omitempty"`
+	LSP                *bool `json:"lsp,omitempty"`
+	Telemetry          *bool `json:"telemetry,omitempty"`
+	Chrome             *bool `json:"chrome,omitempty"`
+	Voice              *bool `json:"voice,omitempty"`
+	ComputerUse        *bool `json:"computerUse,omitempty"`
+	NativeIntegrations *bool `json:"nativeIntegrations,omitempty"`
 }
 
 type PermissionsSetting struct {

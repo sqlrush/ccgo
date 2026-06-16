@@ -972,8 +972,10 @@ func (r *Runner) formatConfigShow(raw string) string {
 			lines = append(lines, "Keys: "+strings.Join(sortedAnyMapKeys(merged.Sandbox), ", "))
 		}
 		return strings.Join(lines, "\n")
+	case "advanced":
+		return formatAdvancedSettings(merged.Advanced)
 	default:
-		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: settings, model, output-style, auth, fast-mode, betas, env, permissions, mcp, hooks, plugins, marketplaces, sandbox"
+		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: settings, model, output-style, auth, fast-mode, betas, env, permissions, mcp, hooks, plugins, marketplaces, sandbox, advanced"
 	}
 }
 
@@ -1027,6 +1029,8 @@ func normalizeConfigSection(raw string) string {
 		return "auth"
 	case "sandbox":
 		return "sandbox"
+	case "advanced", "advance", "adv", "gated", "gates", "feature", "features", "integration", "integrations":
+		return "advanced"
 	default:
 		return compact
 	}
@@ -1137,6 +1141,7 @@ func configSearchResults(r Runner, query string) []configSearchResult {
 	for _, key := range sortedAnyMapKeys(merged.Sandbox) {
 		add("sandbox", "sandbox key "+key, key)
 	}
+	addConfigAdvancedSearchResults(add, merged.Advanced)
 
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].Section != results[j].Section {
@@ -1145,6 +1150,61 @@ func configSearchResults(r Runner, query string) []configSearchResult {
 		return results[i].Match < results[j].Match
 	})
 	return results
+}
+
+func formatAdvancedSettings(setting *contracts.AdvancedSetting) string {
+	return strings.Join([]string{
+		"Config advanced integrations",
+		"Bridge: " + boolPtrEnabledText(advancedBool(setting, "bridge")),
+		"LSP: " + boolPtrEnabledText(advancedBool(setting, "lsp")),
+		"Telemetry: " + boolPtrEnabledText(advancedBool(setting, "telemetry")),
+		"Chrome: " + boolPtrEnabledText(advancedBool(setting, "chrome")),
+		"Voice: " + boolPtrEnabledText(advancedBool(setting, "voice")),
+		"Computer use: " + boolPtrEnabledText(advancedBool(setting, "computerUse")),
+		"Native integrations: " + boolPtrEnabledText(advancedBool(setting, "nativeIntegrations")),
+	}, "\n")
+}
+
+func addConfigAdvancedSearchResults(add func(string, string, ...string), setting *contracts.AdvancedSetting) {
+	for _, item := range []struct {
+		Name  string
+		Value *bool
+	}{
+		{Name: "bridge", Value: advancedBool(setting, "bridge")},
+		{Name: "lsp", Value: advancedBool(setting, "lsp")},
+		{Name: "telemetry", Value: advancedBool(setting, "telemetry")},
+		{Name: "chrome", Value: advancedBool(setting, "chrome")},
+		{Name: "voice", Value: advancedBool(setting, "voice")},
+		{Name: "computer use", Value: advancedBool(setting, "computerUse")},
+		{Name: "native integrations", Value: advancedBool(setting, "nativeIntegrations")},
+	} {
+		state := boolPtrEnabledText(item.Value)
+		add("advanced", item.Name+" "+state, item.Name, state)
+	}
+}
+
+func advancedBool(setting *contracts.AdvancedSetting, name string) *bool {
+	if setting == nil {
+		return nil
+	}
+	switch name {
+	case "bridge":
+		return setting.Bridge
+	case "lsp":
+		return setting.LSP
+	case "telemetry":
+		return setting.Telemetry
+	case "chrome":
+		return setting.Chrome
+	case "voice":
+		return setting.Voice
+	case "computerUse":
+		return setting.ComputerUse
+	case "nativeIntegrations":
+		return setting.NativeIntegrations
+	default:
+		return nil
+	}
 }
 
 func addConfigPermissionsSearchResults(add func(string, string, ...string), permissions *contracts.PermissionsSetting) {

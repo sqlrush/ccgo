@@ -31,6 +31,26 @@ func TestSettingsPreservesUnknownFields(t *testing.T) {
 	}
 }
 
+func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
+	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true}}`)
+	var settings Settings
+	if err := json.Unmarshal(input, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings.Advanced == nil || settings.Advanced.Bridge == nil || !*settings.Advanced.Bridge {
+		t.Fatalf("advanced bridge = %#v", settings.Advanced)
+	}
+	if settings.Advanced.LSP == nil || *settings.Advanced.LSP {
+		t.Fatalf("advanced lsp = %#v", settings.Advanced)
+	}
+	if settings.Advanced.Telemetry == nil || !*settings.Advanced.Telemetry || settings.Advanced.ComputerUse == nil || !*settings.Advanced.ComputerUse {
+		t.Fatalf("advanced gates = %#v", settings.Advanced)
+	}
+	if settings.Extra["advanced"] != nil {
+		t.Fatalf("advanced should be a known setting, extra = %#v", settings.Extra)
+	}
+}
+
 func TestSettingsParsesOfficialMCPPolicyEntries(t *testing.T) {
 	input := []byte(`{
 		"allowedMcpServers": [

@@ -1859,6 +1859,9 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	cwd := t.TempDir()
 	disableBypass := true
+	bridgeEnabled := true
+	lspDisabled := false
+	telemetryEnabled := true
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
@@ -1893,6 +1896,11 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 				"market/a": {Options: map[string]any{"token": "plugin-secret"}},
 			},
 			Sandbox: map[string]any{"allowUnsandboxedCommands": false},
+			Advanced: &contracts.AdvancedSetting{
+				Bridge:    &bridgeEnabled,
+				LSP:       &lspDisabled,
+				Telemetry: &telemetryEnabled,
+			},
 		}},
 	}
 
@@ -1949,9 +1957,19 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"- market/b: disabled",
 		"Plugin config names: market/a",
 	}, []string{"plugin-secret"})
+	assertConfigShow("/config show advanced", []string{
+		"Config advanced integrations",
+		"Bridge: enabled",
+		"LSP: disabled",
+		"Telemetry: enabled",
+		"Chrome: (unset)",
+		"Computer use: (unset)",
+		"Native integrations: (unset)",
+	}, nil)
 	assertConfigShow("/config show unknown", []string{
 		"Unknown config section unknown.",
 		"Available sections:",
+		"advanced",
 	}, nil)
 }
 
@@ -1959,6 +1977,7 @@ func TestRunnerConfigSearchFindsSettingsWithoutLeakingValues(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	cwd := t.TempDir()
+	telemetryEnabled := true
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
@@ -1999,6 +2018,7 @@ func TestRunnerConfigSearchFindsSettingsWithoutLeakingValues(t *testing.T) {
 			},
 			ExtraKnownMarketplaces: map[string]any{"internal-market": map[string]any{"url": "https://market.example"}},
 			Sandbox:                map[string]any{"allowUnsandboxedCommands": false},
+			Advanced:               &contracts.AdvancedSetting{Telemetry: &telemetryEnabled},
 		}},
 	}
 
@@ -2036,6 +2056,15 @@ func TestRunnerConfigSearchFindsSettingsWithoutLeakingValues(t *testing.T) {
 	text = result.Messages[1].Content[0].Text
 	if !strings.Contains(text, "- plugins: market/plugin option key apiKey") || strings.Contains(text, "secret-value") {
 		t.Fatalf("config find option key text = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config search telemetry"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "- advanced: telemetry enabled") {
+		t.Fatalf("config search advanced text = %q", text)
 	}
 
 	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config search hidden-token"))

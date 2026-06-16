@@ -223,6 +223,9 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 			cp := *s.Remote
 			out.Remote = &cp
 		}
+		if s.Advanced != nil {
+			out.Advanced = mergeAdvancedSetting(out.Advanced, s.Advanced)
+		}
 		if s.AutoUpdatesChannel != "" {
 			out.AutoUpdatesChannel = s.AutoUpdatesChannel
 		}
@@ -260,6 +263,78 @@ func MergeSettingsSources(sources ...SourceSettings) contracts.Settings {
 	merged.Permissions.Deny = append([]string(nil), policyDeny...)
 	merged.Permissions.Ask = append([]string(nil), policyAsk...)
 	return merged
+}
+
+func mergeAdvancedSetting(a, b *contracts.AdvancedSetting) *contracts.AdvancedSetting {
+	if a == nil {
+		cp := *b
+		if b.Bridge != nil {
+			cp.Bridge = clonePtr(b.Bridge)
+		}
+		if b.LSP != nil {
+			cp.LSP = clonePtr(b.LSP)
+		}
+		if b.Telemetry != nil {
+			cp.Telemetry = clonePtr(b.Telemetry)
+		}
+		if b.Chrome != nil {
+			cp.Chrome = clonePtr(b.Chrome)
+		}
+		if b.Voice != nil {
+			cp.Voice = clonePtr(b.Voice)
+		}
+		if b.ComputerUse != nil {
+			cp.ComputerUse = clonePtr(b.ComputerUse)
+		}
+		if b.NativeIntegrations != nil {
+			cp.NativeIntegrations = clonePtr(b.NativeIntegrations)
+		}
+		return &cp
+	}
+	out := *a
+	if a.Bridge != nil {
+		out.Bridge = clonePtr(a.Bridge)
+	}
+	if a.LSP != nil {
+		out.LSP = clonePtr(a.LSP)
+	}
+	if a.Telemetry != nil {
+		out.Telemetry = clonePtr(a.Telemetry)
+	}
+	if a.Chrome != nil {
+		out.Chrome = clonePtr(a.Chrome)
+	}
+	if a.Voice != nil {
+		out.Voice = clonePtr(a.Voice)
+	}
+	if a.ComputerUse != nil {
+		out.ComputerUse = clonePtr(a.ComputerUse)
+	}
+	if a.NativeIntegrations != nil {
+		out.NativeIntegrations = clonePtr(a.NativeIntegrations)
+	}
+	if b.Bridge != nil {
+		out.Bridge = clonePtr(b.Bridge)
+	}
+	if b.LSP != nil {
+		out.LSP = clonePtr(b.LSP)
+	}
+	if b.Telemetry != nil {
+		out.Telemetry = clonePtr(b.Telemetry)
+	}
+	if b.Chrome != nil {
+		out.Chrome = clonePtr(b.Chrome)
+	}
+	if b.Voice != nil {
+		out.Voice = clonePtr(b.Voice)
+	}
+	if b.ComputerUse != nil {
+		out.ComputerUse = clonePtr(b.ComputerUse)
+	}
+	if b.NativeIntegrations != nil {
+		out.NativeIntegrations = clonePtr(b.NativeIntegrations)
+	}
+	return &out
 }
 
 func mergePermissions(a, b *contracts.PermissionsSetting) *contracts.PermissionsSetting {

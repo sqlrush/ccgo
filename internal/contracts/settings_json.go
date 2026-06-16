@@ -98,6 +98,7 @@ var knownSettingsJSONKeys = []string{
 	"companyAnnouncements",
 	"pluginConfigs",
 	"remote",
+	"advanced",
 	"autoUpdatesChannel",
 	"plugins",
 }

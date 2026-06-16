@@ -92,6 +92,9 @@ func TestValidateSettingsWarnsForInvalidSandboxFilesystem(t *testing.T) {
 func TestMergeSettings(t *testing.T) {
 	defaultWorktree := true
 	overrideWorktree := false
+	bridgeEnabled := true
+	telemetryDisabled := false
+	telemetryEnabled := true
 	a := contracts.Settings{
 		Env: map[string]string{"A": "1"},
 		Permissions: &contracts.PermissionsSetting{
@@ -102,6 +105,10 @@ func TestMergeSettings(t *testing.T) {
 			Enabled:            &defaultWorktree,
 			SparsePaths:        []string{"README.md"},
 			SymlinkDirectories: []string{"cache"},
+		},
+		Advanced: &contracts.AdvancedSetting{
+			Bridge:    &bridgeEnabled,
+			Telemetry: &telemetryDisabled,
 		},
 	}
 	b := contracts.Settings{
@@ -115,6 +122,9 @@ func TestMergeSettings(t *testing.T) {
 			Enabled:            &overrideWorktree,
 			SparsePaths:        []string{"docs"},
 			SymlinkDirectories: []string{"node_modules"},
+		},
+		Advanced: &contracts.AdvancedSetting{
+			Telemetry: &telemetryEnabled,
 		},
 	}
 	merged := MergeSettings(a, b)
@@ -135,6 +145,9 @@ func TestMergeSettings(t *testing.T) {
 	}
 	if len(merged.Worktree.SymlinkDirectories) != 2 || merged.Worktree.SymlinkDirectories[0] != "cache" || merged.Worktree.SymlinkDirectories[1] != "node_modules" {
 		t.Fatalf("worktree symlink dirs = %#v", merged.Worktree.SymlinkDirectories)
+	}
+	if merged.Advanced == nil || merged.Advanced.Bridge == nil || !*merged.Advanced.Bridge || merged.Advanced.Telemetry == nil || !*merged.Advanced.Telemetry {
+		t.Fatalf("advanced = %#v", merged.Advanced)
 	}
 }
 

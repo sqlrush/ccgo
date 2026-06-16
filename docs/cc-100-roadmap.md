@@ -1456,7 +1456,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - Chrome/computer-use/voice/native integrations。
 - enterprise/gated/platform-specific behavior。
 
-当前状态：未开始完整实现。
+当前状态：已新增 `advanced` settings gate 地基，覆盖 bridge/LSP/telemetry/Chrome/voice/computer-use/native integrations 的独立 bool 开关解析、settings merge、headless `/config show advanced` 和 `/config search` 审计；未启用时仍不注册或泄露 gated 工具 schema。实际 repl bridge、session websocket/direct connect、LSP manager/tool、telemetry exporter/tracing、Chrome/voice/computer-use/native runtime 仍未完成。
 
 ## Recommended Next Steps
 
