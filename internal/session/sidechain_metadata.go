@@ -8,14 +8,18 @@ import (
 )
 
 type SidechainMetadata struct {
-	AgentType           string   `json:"agentType,omitempty"`
-	WorktreePath        string   `json:"worktreePath,omitempty"`
-	Description         string   `json:"description,omitempty"`
-	AgentPath           string   `json:"agentPath,omitempty"`
-	AgentPrompt         string   `json:"agentPrompt,omitempty"`
-	AgentModel          string   `json:"agentModel,omitempty"`
-	AgentPermissionMode string   `json:"agentPermissionMode,omitempty"`
-	AgentAllowedTools   []string `json:"agentAllowedTools,omitempty"`
+	AgentType             string   `json:"agentType,omitempty"`
+	WorktreePath          string   `json:"worktreePath,omitempty"`
+	WorktreeOwned         bool     `json:"worktreeOwned,omitempty"`
+	WorktreeCleanupStatus string   `json:"worktreeCleanupStatus,omitempty"`
+	WorktreeCleanupReason string   `json:"worktreeCleanupReason,omitempty"`
+	WorktreeCleanupAt     string   `json:"worktreeCleanupAt,omitempty"`
+	Description           string   `json:"description,omitempty"`
+	AgentPath             string   `json:"agentPath,omitempty"`
+	AgentPrompt           string   `json:"agentPrompt,omitempty"`
+	AgentModel            string   `json:"agentModel,omitempty"`
+	AgentPermissionMode   string   `json:"agentPermissionMode,omitempty"`
+	AgentAllowedTools     []string `json:"agentAllowedTools,omitempty"`
 }
 
 func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
@@ -31,6 +35,10 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 		metadata.AgentType = topLevelStringField(fields, "type")
 	}
 	metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
+	metadata.WorktreeOwned = firstBoolField(fields, sidechainLifecycleWorktreeOwnedFields...)
+	metadata.WorktreeCleanupStatus = firstStringField(fields, sidechainLifecycleWorktreeCleanupStatusFields...)
+	metadata.WorktreeCleanupReason = firstTextField(fields, sidechainLifecycleWorktreeCleanupReasonFields...)
+	metadata.WorktreeCleanupAt = firstStringField(fields, sidechainLifecycleWorktreeCleanupTimeFields...)
 	metadata.Description = firstTextField(fields, sidechainLifecycleDescriptionFields...)
 	metadata.AgentPath = firstStringField(fields, sidechainLifecycleAgentPathFields...)
 	metadata.AgentPrompt = firstTextField(fields, sidechainLifecycleAgentPromptFields...)
@@ -52,6 +60,10 @@ func topLevelStringField(value any, key string) string {
 func (m SidechainMetadata) Empty() bool {
 	return m.AgentType == "" &&
 		m.WorktreePath == "" &&
+		!m.WorktreeOwned &&
+		m.WorktreeCleanupStatus == "" &&
+		m.WorktreeCleanupReason == "" &&
+		m.WorktreeCleanupAt == "" &&
 		m.Description == "" &&
 		m.AgentPath == "" &&
 		m.AgentPrompt == "" &&

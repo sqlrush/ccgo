@@ -124,6 +124,9 @@ func TestTaskOutputListsAndReadsSidechainOutput(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := manager.MarkWorktreeCleanup("agent_output", "requested", "cleanup queued", time.Unix(101, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
 
 	list, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_task_output_list",
@@ -150,6 +153,12 @@ func TestTaskOutputListsAndReadsSidechainOutput(t *testing.T) {
 	}
 	if output.StructuredContent["status"] != session.SidechainStatusRunning || output.StructuredContent["subagent_type"] != "general-purpose" {
 		t.Fatalf("output structured content = %#v", output.StructuredContent)
+	}
+	if output.StructuredContent["worktree_path"] != ctx.WorkingDirectory ||
+		output.StructuredContent["worktree_cleanup_status"] != "requested" ||
+		output.StructuredContent["worktree_cleanup_reason"] != "cleanup queued" ||
+		output.StructuredContent["worktree_cleanup_at"] != time.Unix(101, 0).UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("output worktree structured content = %#v", output.StructuredContent)
 	}
 	text, ok := output.StructuredContent["output"].(string)
 	if !ok || !strings.Contains(text, "[user] Inspect API changes") || !strings.Contains(text, "[assistant] Investigated files\nFound issue") {

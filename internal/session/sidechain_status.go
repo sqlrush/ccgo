@@ -70,6 +70,36 @@ var sidechainLifecycleWorktreeFields = []string{
 	"root", "path", "directory",
 }
 
+var sidechainLifecycleWorktreeOwnedFields = []string{
+	"worktreeOwned", "worktree_owned",
+	"ownsWorktree", "owns_worktree",
+	"ownedWorktree", "owned_worktree",
+	"workspaceOwned", "workspace_owned",
+	"ownedWorkspace", "owned_workspace",
+}
+
+var sidechainLifecycleWorktreeCleanupStatusFields = []string{
+	"worktreeCleanupStatus", "worktree_cleanup_status",
+	"cleanupStatus", "cleanup_status",
+	"worktreeCleanupState", "worktree_cleanup_state",
+	"cleanupState", "cleanup_state",
+}
+
+var sidechainLifecycleWorktreeCleanupReasonFields = []string{
+	"worktreeCleanupReason", "worktree_cleanup_reason",
+	"cleanupReason", "cleanup_reason",
+	"reason", "message", "summary", "details",
+}
+
+var sidechainLifecycleWorktreeCleanupTimeFields = []string{
+	"worktreeCleanupAt", "worktree_cleanup_at",
+	"cleanupAt", "cleanup_at",
+	"cleanedAt", "cleaned_at",
+	"deletedAt", "deleted_at",
+	"removedAt", "removed_at",
+	"timestamp", "time",
+}
+
 var sidechainLifecycleDescriptionFields = []string{
 	"description", "description_text", "descriptionText",
 	"desc", "summary",
@@ -259,6 +289,9 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			if worktreePath := firstStringField(msg.Content, sidechainLifecycleWorktreeFields...); worktreePath != "" && state.Metadata.WorktreePath == "" {
 				state.Metadata.WorktreePath = worktreePath
 			}
+			if firstBoolField(msg.Content, sidechainLifecycleWorktreeOwnedFields...) {
+				state.Metadata.WorktreeOwned = true
+			}
 			if description := firstTextField(msg.Content, sidechainLifecycleDescriptionFields...); description != "" && state.Metadata.Description == "" {
 				state.Metadata.Description = description
 			}
@@ -298,6 +331,24 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			}
 			state.Summary = firstTextField(msg.Content, sidechainLifecycleSummaryFields...)
 		}
+		if isSidechainWorktreeCleanupSubtype(msg.Subtype) {
+			if sidechainID := firstStringField(msg.Content, sidechainLifecycleIDFields...); sidechainID != "" {
+				state.ID = sidechainID
+			}
+			if worktreePath := firstStringField(msg.Content, sidechainLifecycleWorktreeFields...); worktreePath != "" && state.Metadata.WorktreePath == "" {
+				state.Metadata.WorktreePath = worktreePath
+			}
+			if firstBoolField(msg.Content, sidechainLifecycleWorktreeOwnedFields...) {
+				state.Metadata.WorktreeOwned = true
+			}
+			if status := firstStringField(msg.Content, sidechainLifecycleWorktreeCleanupStatusFields...); status != "" {
+				state.Metadata.WorktreeCleanupStatus = status
+			}
+			if reason := firstTextField(msg.Content, sidechainLifecycleWorktreeCleanupReasonFields...); reason != "" {
+				state.Metadata.WorktreeCleanupReason = reason
+			}
+			state.Metadata.WorktreeCleanupAt = firstNonEmptyString(firstStringField(msg.Content, sidechainLifecycleWorktreeCleanupTimeFields...), msg.Timestamp)
+		}
 	}
 	if state.Status == SidechainStatusUnknown {
 		switch {
@@ -311,6 +362,11 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 		return SidechainState{}, fmt.Errorf("sidechain state missing id for %s", info.Path)
 	}
 	return state, nil
+}
+
+func isSidechainWorktreeCleanupSubtype(subtype string) bool {
+	normalized := normalizeSidechainSubtype(subtype)
+	return strings.Contains(normalized, "worktree") && strings.Contains(normalized, "cleanup")
 }
 
 func isSidechainStartSubtype(subtype string) bool {
@@ -491,6 +547,10 @@ func firstTextField(value any, keys ...string) string {
 	return firstTextFieldDepth(value, keys, 0)
 }
 
+func firstBoolField(value any, keys ...string) bool {
+	return firstBoolFieldDepth(value, keys, 0)
+}
+
 func firstStringSliceField(value any, keys ...string) []string {
 	return firstStringSliceFieldDepth(value, keys, 0)
 }
@@ -530,6 +590,38 @@ func firstStringFieldDepth(value any, keys []string, depth int) string {
 	default:
 	}
 	return ""
+}
+
+func firstBoolFieldDepth(value any, keys []string, depth int) bool {
+	if depth > 4 {
+		return false
+	}
+	switch fields := value.(type) {
+	case map[string]any:
+		for _, key := range keys {
+			if raw, ok := fields[key]; ok && scalarBoolField(raw) {
+				return true
+			}
+		}
+		for _, key := range []string{"payload", "data", "body", "content", "result", "response", "record", "records", "entry", "entries", "item", "items", "event", "events", "edge", "edges", "node", "nodes", "resource", "resources", "attributes", "properties", "attrs", "metadata", "details", "runtime", "context", "state", "value", "values", "output", "outputs", "included", "collection", "list", "children"} {
+			if raw, ok := fields[key]; ok && firstBoolFieldDepth(raw, keys, depth+1) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range fields {
+			if firstBoolFieldDepth(item, keys, depth+1) {
+				return true
+			}
+		}
+	case map[string]string:
+		for _, key := range keys {
+			if scalarBoolField(fields[key]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func firstStringSliceFieldDepth(value any, keys []string, depth int) []string {
@@ -698,6 +790,48 @@ func visibleMessageText(value any) string {
 		return ""
 	}
 	return msgs.TextContent(message)
+}
+
+func scalarBoolField(value any) bool {
+	switch raw := value.(type) {
+	case bool:
+		return raw
+	case string:
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case "true", "1", "yes", "on":
+			return true
+		default:
+			return false
+		}
+	case json.Number:
+		return raw.String() == "1"
+	case int:
+		return raw == 1
+	case int8:
+		return raw == 1
+	case int16:
+		return raw == 1
+	case int32:
+		return raw == 1
+	case int64:
+		return raw == 1
+	case uint:
+		return raw == 1
+	case uint8:
+		return raw == 1
+	case uint16:
+		return raw == 1
+	case uint32:
+		return raw == 1
+	case uint64:
+		return raw == 1
+	case float32:
+		return raw == 1
+	case float64:
+		return raw == 1
+	default:
+		return false
+	}
 }
 
 func scalarStringField(value any) string {

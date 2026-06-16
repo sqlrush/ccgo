@@ -124,6 +124,7 @@ func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
 		StartedAt:           time.Unix(100, 0).UTC(),
 		AgentType:           "researcher",
 		WorktreePath:        "/tmp/research-worktree",
+		WorktreeOwned:       true,
 		Description:         "research the migration",
 		AgentPath:           "/tmp/agents/researcher.md",
 		AgentPrompt:         "Research carefully.",
@@ -145,11 +146,11 @@ func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
 	if state.Status != SidechainStatusRunning {
 		t.Fatalf("state = %#v", state)
 	}
-	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research the migration" || state.Metadata.AgentPath != "/tmp/agents/researcher.md" || state.Metadata.AgentPrompt != "Research carefully." || state.Metadata.AgentModel != "opus" || state.Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(state.Metadata.AgentAllowedTools) != 2 || state.Metadata.AgentAllowedTools[0] != "Read" || state.Metadata.AgentAllowedTools[1] != "Edit" {
+	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || !state.Metadata.WorktreeOwned || state.Metadata.Description != "research the migration" || state.Metadata.AgentPath != "/tmp/agents/researcher.md" || state.Metadata.AgentPrompt != "Research carefully." || state.Metadata.AgentModel != "opus" || state.Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(state.Metadata.AgentAllowedTools) != 2 || state.Metadata.AgentAllowedTools[0] != "Read" || state.Metadata.AgentAllowedTools[1] != "Edit" {
 		t.Fatalf("metadata recovered from lifecycle payload = %#v", state.Metadata)
 	}
 	resumed, ok := ResumeSidechainRunFromState(state)
-	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || resumed.Metadata.Description != "research the migration" || resumed.Metadata.AgentPath != "/tmp/agents/researcher.md" || resumed.Metadata.AgentPrompt != "Research carefully." || resumed.Metadata.AgentModel != "opus" || resumed.Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(resumed.Metadata.AgentAllowedTools) != 2 {
+	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || !resumed.Metadata.WorktreeOwned || resumed.Metadata.Description != "research the migration" || resumed.Metadata.AgentPath != "/tmp/agents/researcher.md" || resumed.Metadata.AgentPrompt != "Research carefully." || resumed.Metadata.AgentModel != "opus" || resumed.Metadata.AgentPermissionMode != string(contracts.PermissionBypassPermissions) || len(resumed.Metadata.AgentAllowedTools) != 2 {
 		t.Fatalf("resumed = %#v ok=%v", resumed, ok)
 	}
 }
@@ -916,7 +917,7 @@ func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadataPath := SidechainMetadataPath(sessionPath, sessionID, "legacy")
-	if err := os.WriteFile(metadataPath, []byte(`{"agent_type":"reviewer","working_directory":"/tmp/agent-worktree","desc":"legacy sidechain metadata"}`), 0o644); err != nil {
+	if err := os.WriteFile(metadataPath, []byte(`{"agent_type":"reviewer","working_directory":"/tmp/agent-worktree","owns_worktree":"true","cleanup_status":"requested","cleanup_reason":"test cleanup","cleanup_at":"2026-01-01T00:00:00Z","desc":"legacy sidechain metadata"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -924,7 +925,7 @@ func TestLoadSidechainStateAcceptsMetadataFieldAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Metadata.AgentType != "reviewer" || state.Metadata.WorktreePath != "/tmp/agent-worktree" || state.Metadata.Description != "legacy sidechain metadata" {
+	if state.Metadata.AgentType != "reviewer" || state.Metadata.WorktreePath != "/tmp/agent-worktree" || !state.Metadata.WorktreeOwned || state.Metadata.WorktreeCleanupStatus != "requested" || state.Metadata.WorktreeCleanupReason != "test cleanup" || state.Metadata.WorktreeCleanupAt != "2026-01-01T00:00:00Z" || state.Metadata.Description != "legacy sidechain metadata" {
 		t.Fatalf("metadata = %#v", state.Metadata)
 	}
 }
@@ -1148,6 +1149,37 @@ func TestSidechainManagerCancelAndFailLifecycle(t *testing.T) {
 	}
 	if manifest.Cancelled != 1 || manifest.Failed != 1 || manifest.Running != 0 || len(manifest.Summaries) != 2 {
 		t.Fatalf("manifest = %#v", manifest)
+	}
+}
+
+func TestSidechainManagerMarksWorktreeCleanupLifecycle(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_1")
+	manager := NewSidechainManager(sessionPath, sessionID)
+	if _, err := manager.Start(SidechainOptions{
+		ID:            "cleanup-me",
+		StartedAt:     time.Unix(100, 0).UTC(),
+		WorktreePath:  "/tmp/agent-worktree",
+		WorktreeOwned: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	message, err := manager.MarkWorktreeCleanup("cleanup-me", "requested", "cleanup after completion", time.Unix(110, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message.Subtype != "worktree_cleanup" || stringField(message.Content, "worktreeCleanupStatus") != "requested" {
+		t.Fatalf("cleanup message = %#v", message)
+	}
+	state, err := FindSidechainState(sessionPath, sessionID, "cleanup-me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.WorktreePath != "/tmp/agent-worktree" || !state.Metadata.WorktreeOwned {
+		t.Fatalf("worktree metadata = %#v", state.Metadata)
+	}
+	if state.Metadata.WorktreeCleanupStatus != "requested" || state.Metadata.WorktreeCleanupReason != "cleanup after completion" || state.Metadata.WorktreeCleanupAt != time.Unix(110, 0).UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("cleanup metadata = %#v", state.Metadata)
 	}
 }
 

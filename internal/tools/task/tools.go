@@ -773,6 +773,18 @@ func structuredTaskState(state session.SidechainState) map[string]any {
 	if state.Metadata.WorktreePath != "" {
 		structured["worktree_path"] = state.Metadata.WorktreePath
 	}
+	if state.Metadata.WorktreeOwned {
+		structured["worktree_owned"] = true
+	}
+	if state.Metadata.WorktreeCleanupStatus != "" {
+		structured["worktree_cleanup_status"] = state.Metadata.WorktreeCleanupStatus
+	}
+	if state.Metadata.WorktreeCleanupReason != "" {
+		structured["worktree_cleanup_reason"] = state.Metadata.WorktreeCleanupReason
+	}
+	if state.Metadata.WorktreeCleanupAt != "" {
+		structured["worktree_cleanup_at"] = state.Metadata.WorktreeCleanupAt
+	}
 	if state.Metadata.AgentPath != "" {
 		structured["agent_path"] = state.Metadata.AgentPath
 	}

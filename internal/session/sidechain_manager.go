@@ -91,6 +91,42 @@ func (m SidechainManager) Fail(sidechainID string, summary string, endedAt time.
 	return m.Finish(sidechainID, SidechainStatusFailed, summary, endedAt)
 }
 
+func (m SidechainManager) MarkWorktreeCleanup(sidechainID string, status string, reason string, timestamp time.Time) (TranscriptMessage, error) {
+	state, err := m.loadState(sidechainID)
+	if err != nil {
+		return TranscriptMessage{}, err
+	}
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	}
+	parent := state.LastUUID
+	message := TranscriptMessage{
+		Type:        "system",
+		UUID:        contracts.NewID(),
+		SessionID:   m.Runtime.SessionID,
+		Timestamp:   timestamp.UTC().Format(time.RFC3339Nano),
+		Subtype:     "worktree_cleanup",
+		IsSidechain: true,
+		AgentID:     state.ID,
+		Content: map[string]any{
+			"sidechainId":           state.ID,
+			"agentId":               state.ID,
+			"worktreePath":          state.Metadata.WorktreePath,
+			"worktreeOwned":         state.Metadata.WorktreeOwned,
+			"worktreeCleanupStatus": status,
+			"worktreeCleanupReason": reason,
+			"worktreeCleanupAt":     timestamp.UTC().Format(time.RFC3339Nano),
+		},
+	}
+	if parent != "" {
+		message.ParentUUID = &parent
+	}
+	if err := AppendSidechainMessageInSubdir(m.Runtime.SessionPath, m.Runtime.SessionID, state.ID, state.Subdir, message); err != nil {
+		return TranscriptMessage{}, err
+	}
+	return message, nil
+}
+
 func (m SidechainManager) loadState(sidechainID string) (SidechainState, error) {
 	state, err := FindSidechainState(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 	if err != nil {

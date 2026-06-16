@@ -41,6 +41,7 @@ type SidechainOptions struct {
 	StartedAt           time.Time
 	AgentType           string
 	WorktreePath        string
+	WorktreeOwned       bool
 	Description         string
 	AgentPath           string
 	AgentPrompt         string
@@ -78,6 +79,7 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 		Metadata: SidechainMetadata{
 			AgentType:           options.AgentType,
 			WorktreePath:        options.WorktreePath,
+			WorktreeOwned:       options.WorktreeOwned,
 			Description:         options.Description,
 			AgentPath:           options.AgentPath,
 			AgentPrompt:         options.AgentPrompt,
@@ -105,6 +107,7 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 			"status":              run.Status,
 			"agentType":           options.AgentType,
 			"worktreePath":        options.WorktreePath,
+			"worktreeOwned":       options.WorktreeOwned,
 			"description":         options.Description,
 			"agentPath":           options.AgentPath,
 			"agentPrompt":         options.AgentPrompt,

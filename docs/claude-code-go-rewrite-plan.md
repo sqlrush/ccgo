@@ -710,6 +710,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：新增 `TaskOutput`/`AgentOutputTool` 和 `KillTask`/`TaskStop` 工具入口；`TaskOutput` 可列出当前 session 的 sidechain task，或按 task/sidechain ID 读取状态、summary、tail 输出和 agent metadata；`KillTask` 会通过 `SidechainManager.Cancel` 写入 cancelled lifecycle summary，已接入默认内置工具集。真实 AgentTool 执行循环、progress event streaming、resume command UI 和 worktree isolation 仍未完成。
 - 本轮补充：新增 `ResumeTask`/`TaskResume` 只读工具入口，复用 `BuildSidechainResumeContext` 返回 `can_resume`、截断状态、message limit、agent metadata 和恢复用 tail message 摘要；当 tail 截断原始 plugin agent prompt 时，会沿用已有 deterministic `agent_prompt` system meta message 注入。完整恢复后的 agent 执行循环和 UI picker 仍未完成。
 - 本轮补充：tool executor 会为工具内部发出的空-ID progress 自动补当前 `tool_use_id`，conversation runner 新增 `tool_progress` 事件并透出 `contracts.ToolProgress`；`Task`/`TaskOutput`/`KillTask`/`ResumeTask` 现在分别发 `task_started`、`task_listed`/`task_output`、`task_cancelled`/`task_not_running`、`task_resume_context` 进度事件，带 task ID、status、resume/输出摘要字段。完整 agent 执行期间的 step-level streaming 和 TUI task 面板接线仍未完成。
+- 本轮补充：sidechain metadata/lifecycle 现在记录 `worktreeOwned` 与 worktree cleanup status/reason/timestamp，`SidechainManager.MarkWorktreeCleanup` 可写入 `worktree_cleanup` lifecycle marker，`TaskOutput` structured content 也会透出 cleanup 状态。真实 worktree 创建、隔离、删除和 ownership enforcement 仍未完成。
 
 ### M11: Bridge 和高级集成
 
