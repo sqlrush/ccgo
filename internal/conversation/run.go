@@ -485,6 +485,9 @@ func (r *Runner) formatConfigSummary(raw string) string {
 	if len(args) > 0 {
 		switch args[0] {
 		case "show", "list":
+			if len(args) > 1 && strings.TrimSpace(args[1]) != "" {
+				return r.formatConfigShow(args[1])
+			}
 		case "output-style", "outputStyle":
 			return r.setOutputStyleSummary(args)
 		case "fast-mode", "fastMode":
@@ -524,6 +527,254 @@ func (r *Runner) formatConfigSummary(raw string) string {
 		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r *Runner) formatConfigShow(raw string) string {
+	target := normalizeConfigSection(raw)
+	merged := r.mergedSettings()
+	switch target {
+	case "settings":
+		cwd := strings.TrimSpace(r.WorkingDirectory)
+		if cwd == "" {
+			cwd = "."
+		}
+		return strings.Join([]string{
+			"Config settings files",
+			fmt.Sprintf("User: %s (%s)", config.UserSettingsPath(), fileStatusText(config.UserSettingsPath())),
+			fmt.Sprintf("Project: %s (%s)", config.ProjectSettingsPath(cwd), fileStatusText(config.ProjectSettingsPath(cwd))),
+			fmt.Sprintf("Local: %s (%s)", config.LocalSettingsPath(cwd), fileStatusText(config.LocalSettingsPath(cwd))),
+		}, "\n")
+	case "model":
+		lines := []string{
+			"Config model",
+			"Current model: " + r.model(),
+			"Configured model: " + unsetText(merged.Model),
+			fmt.Sprintf("Available models: %d", len(merged.AvailableModels)),
+			fmt.Sprintf("Model overrides: %d", len(merged.ModelOverrides)),
+		}
+		if len(merged.AvailableModels) > 0 {
+			lines = append(lines, "Available model names: "+strings.Join(firstStrings(merged.AvailableModels, 20), ", "))
+		}
+		return strings.Join(lines, "\n")
+	case "output-style":
+		available := r.AvailableOutputStyleNames()
+		lines := []string{
+			"Config output style",
+			"Effective output style: " + r.effectiveOutputStyleName(),
+			"Configured output style: " + unsetText(merged.OutputStyle),
+			fmt.Sprintf("Available output styles: %d", len(available)),
+		}
+		if len(available) > 0 {
+			lines = append(lines, "Available output style names: "+strings.Join(firstStrings(available, 20), ", "))
+		}
+		return strings.Join(lines, "\n")
+	case "auth":
+		return strings.Join([]string{
+			"Config auth",
+			"Auth source: " + r.authSourceText(),
+			"Force login method: " + unsetText(merged.ForceLoginMethod),
+			"Force login org UUID: " + unsetText(merged.ForceLoginOrgUUID),
+		}, "\n")
+	case "fast-mode":
+		return strings.Join([]string{
+			"Config fast mode",
+			"Runtime fast mode: " + boolEnabledText(r.FastMode),
+			"Configured fast mode: " + boolPtrEnabledText(merged.FastMode),
+			"Per-session opt-in: " + boolPtrEnabledText(merged.FastModePerSessionOptIn),
+		}, "\n")
+	case "betas":
+		lines := []string{
+			"Config betas",
+			fmt.Sprintf("Beta headers: %d", len(r.BetaHeaders)),
+			"Betas: " + r.betaHeadersText(),
+		}
+		return strings.Join(lines, "\n")
+	case "env":
+		lines := []string{
+			"Config env",
+			fmt.Sprintf("Env vars: %d", len(merged.Env)),
+		}
+		if len(merged.Env) > 0 {
+			lines = append(lines, "Env names: "+strings.Join(sortedStringMapKeys(merged.Env), ", "))
+		}
+		return strings.Join(lines, "\n")
+	case "permissions":
+		lines := []string{
+			"Config permissions",
+			"Summary: " + settingsPermissionsSummary(merged.Permissions),
+		}
+		if merged.Permissions != nil {
+			lines = append(lines,
+				"Default mode: "+unsetText(string(merged.Permissions.DefaultMode)),
+				fmt.Sprintf("Allow rules: %d", len(merged.Permissions.Allow)),
+				fmt.Sprintf("Deny rules: %d", len(merged.Permissions.Deny)),
+				fmt.Sprintf("Ask rules: %d", len(merged.Permissions.Ask)),
+				fmt.Sprintf("Additional directories: %d", len(merged.Permissions.AdditionalDirectories)),
+				"Disable bypass mode: "+configuredValueText(merged.Permissions.DisableBypassMode),
+				"Disable auto mode: "+configuredValueText(merged.Permissions.DisableAutoMode),
+			)
+			appendConfigRuleSection := func(title string, values []string) {
+				if len(values) == 0 {
+					return
+				}
+				lines = append(lines, title+":")
+				for _, value := range firstStrings(values, 20) {
+					lines = append(lines, "- "+value)
+				}
+				if len(values) > 20 {
+					lines = append(lines, fmt.Sprintf("Showing 20 of %d %s.", len(values), strings.ToLower(title)))
+				}
+			}
+			appendConfigRuleSection("Allow", merged.Permissions.Allow)
+			appendConfigRuleSection("Deny", merged.Permissions.Deny)
+			appendConfigRuleSection("Ask", merged.Permissions.Ask)
+		}
+		return strings.Join(lines, "\n")
+	case "mcp":
+		servers := r.mcpServers()
+		if len(servers) == 0 {
+			return "No MCP servers configured."
+		}
+		lines := []string{
+			"Config MCP servers",
+			fmt.Sprintf("MCP servers: %d", len(servers)),
+			fmt.Sprintf("Allowed MCP policy entries: %d", len(merged.AllowedMCPServers)),
+			fmt.Sprintf("Denied MCP policy entries: %d", len(merged.DeniedMCPServers)),
+			fmt.Sprintf("Enabled .mcp.json servers: %d", len(merged.EnabledMCPJSONServers)),
+			fmt.Sprintf("Disabled .mcp.json servers: %d", len(merged.DisabledMCPJSONServers)),
+		}
+		for _, server := range firstMCPSummaries(servers, 20) {
+			status := "configured"
+			if !server.Policy.Allowed {
+				status = "blocked: " + server.Policy.Reason
+			}
+			lines = append(lines, fmt.Sprintf("- %s (%s, %s, %s)", server.Name, mcpServerTransport(server.Config), status, mcpServerSource(server.Config)))
+		}
+		if len(servers) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d MCP servers.", len(servers)))
+		}
+		return strings.Join(lines, "\n")
+	case "hooks":
+		lines := []string{
+			"Config hooks",
+			fmt.Sprintf("Hooks: %d", len(merged.Hooks)),
+			"Disable all hooks: " + boolPtrEnabledText(merged.DisableAllHooks),
+			"Allow managed hooks only: " + boolPtrEnabledText(merged.AllowManagedHooksOnly),
+			fmt.Sprintf("Allowed HTTP hook URLs: %d", len(merged.AllowedHTTPHookURLs)),
+			fmt.Sprintf("HTTP hook env var names: %d", len(merged.HTTPHookAllowedEnvVars)),
+		}
+		if len(merged.Hooks) > 0 {
+			lines = append(lines, "Hook events: "+strings.Join(sortedAnyMapKeys(merged.Hooks), ", "))
+		}
+		if len(merged.HTTPHookAllowedEnvVars) > 0 {
+			lines = append(lines, "HTTP hook env names: "+strings.Join(merged.HTTPHookAllowedEnvVars, ", "))
+		}
+		return strings.Join(lines, "\n")
+	case "plugins":
+		names := pluginConfigNames(merged)
+		lines := []string{
+			"Config plugins",
+			fmt.Sprintf("Enabled plugin entries: %d", len(merged.EnabledPlugins)),
+			fmt.Sprintf("Enabled plugins: %d", countEnabledPlugins(merged.EnabledPlugins)),
+			fmt.Sprintf("Plugin configs: %d", len(merged.PluginConfigs)),
+			fmt.Sprintf("Legacy plugin settings: %d", len(merged.Plugins)),
+			fmt.Sprintf("Configured plugin names: %d", len(names)),
+		}
+		if len(merged.EnabledPlugins) > 0 {
+			lines = append(lines, "Plugin enabled states:")
+			for _, line := range firstStrings(pluginEnabledStateLines(merged.EnabledPlugins), 20) {
+				lines = append(lines, "- "+line)
+			}
+			if len(merged.EnabledPlugins) > 20 {
+				lines = append(lines, fmt.Sprintf("Showing 20 of %d plugin enabled states.", len(merged.EnabledPlugins)))
+			}
+		}
+		if len(names) > 0 {
+			lines = append(lines, "Plugin config names: "+strings.Join(firstStrings(names, 20), ", "))
+		}
+		return strings.Join(lines, "\n")
+	case "marketplaces":
+		return r.formatPluginMarketplaces()
+	case "sandbox":
+		lines := []string{
+			"Config sandbox",
+			fmt.Sprintf("Sandbox keys: %d", len(merged.Sandbox)),
+		}
+		if len(merged.Sandbox) > 0 {
+			lines = append(lines, "Keys: "+strings.Join(sortedAnyMapKeys(merged.Sandbox), ", "))
+		}
+		return strings.Join(lines, "\n")
+	default:
+		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: settings, model, output-style, auth, fast-mode, betas, env, permissions, mcp, hooks, plugins, marketplaces, sandbox"
+	}
+}
+
+func normalizeConfigSection(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.TrimPrefix(value, "--")
+	compact := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(value, "_", "-"), " ", "-"))
+	switch compact {
+	case "file", "files", "setting", "settings", "settings-file", "settings-files":
+		return "settings"
+	case "outputstyle", "output-style", "style", "styles":
+		return "output-style"
+	case "permission", "permissions", "permission-mode", "permissionmode":
+		return "permissions"
+	case "mcp", "mcp-server", "mcp-servers", "mcpservers":
+		return "mcp"
+	case "hook", "hooks":
+		return "hooks"
+	case "plugin", "plugins", "enabled-plugin", "enabled-plugins", "plugin-config", "plugin-configs":
+		return "plugins"
+	case "marketplace", "marketplaces":
+		return "marketplaces"
+	case "env", "environment", "environment-variables":
+		return "env"
+	case "beta", "betas", "beta-header", "beta-headers":
+		return "betas"
+	case "fast", "fastmode", "fast-mode":
+		return "fast-mode"
+	case "model", "models":
+		return "model"
+	case "auth", "authentication", "login":
+		return "auth"
+	case "sandbox":
+		return "sandbox"
+	default:
+		return compact
+	}
+}
+
+func unsetText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "(unset)"
+	}
+	return value
+}
+
+func boolPtrEnabledText(value *bool) string {
+	if value == nil {
+		return "(unset)"
+	}
+	return boolEnabledText(*value)
+}
+
+func configuredValueText(value any) string {
+	if value == nil {
+		return "(unset)"
+	}
+	switch typed := value.(type) {
+	case bool:
+		return boolEnabledText(typed)
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return "(unset)"
+		}
+		return "configured"
+	default:
+		return "configured"
+	}
 }
 
 func (r *Runner) setOutputStyleSummary(args []string) string {
@@ -1755,6 +2006,13 @@ func pluginHookEventLines(plugins []pluginpkg.LoadedPlugin) []string {
 }
 
 func firstStrings(values []string, limit int) []string {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func firstMCPSummaries(values []mcpServerSummary, limit int) []mcpServerSummary {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}

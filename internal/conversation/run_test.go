@@ -815,6 +815,107 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	disableBypass := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		APIKeySource:     "oauth",
+		PermissionMode:   contracts.PermissionPlan,
+		BetaHeaders:      []string{"beta-one"},
+		SessionID:        "sess_config_show",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Env: map[string]string{
+				"PUBLIC_FLAG":  "1",
+				"SECRET_TOKEN": "secret-value",
+			},
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {
+					Command: "node",
+					Args:    []string{"server.js"},
+					Env:     map[string]string{"TOKEN": "hidden-token"},
+				},
+			},
+			Permissions: &contracts.PermissionsSetting{
+				Allow:                 []string{"Read"},
+				Deny:                  []string{"Bash(rm *)"},
+				Ask:                   []string{"Edit"},
+				DefaultMode:           contracts.PermissionPlan,
+				DisableBypassMode:     disableBypass,
+				AdditionalDirectories: []string{cwd},
+			},
+			Hooks:          map[string]any{"PreToolUse": []any{}},
+			EnabledPlugins: map[string]any{"market/a": true, "market/b": false},
+			PluginConfigs: map[string]contracts.PluginConfig{
+				"market/a": {Options: map[string]any{"token": "plugin-secret"}},
+			},
+			Sandbox: map[string]any{"allowUnsandboxedCommands": false},
+		}},
+	}
+
+	assertConfigShow := func(prompt string, wants []string, rejects []string) {
+		t.Helper()
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("model should not be queried, requests = %#v", client.requests)
+		}
+		text := result.Messages[1].Content[0].Text
+		for _, want := range wants {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q: %q", prompt, want, text)
+			}
+		}
+		for _, reject := range rejects {
+			if strings.Contains(text, reject) {
+				t.Fatalf("%s leaked %q: %q", prompt, reject, text)
+			}
+		}
+	}
+
+	assertConfigShow("/config show env", []string{
+		"Config env",
+		"Env vars: 2",
+		"Env names: PUBLIC_FLAG, SECRET_TOKEN",
+	}, []string{"secret-value"})
+	assertConfigShow("/config show permissions", []string{
+		"Config permissions",
+		"Default mode: plan",
+		"Allow rules: 1",
+		"- Read",
+		"Deny rules: 1",
+		"- Bash(rm *)",
+		"Ask rules: 1",
+		"- Edit",
+		"Additional directories: 1",
+		"Disable bypass mode: enabled",
+	}, nil)
+	assertConfigShow("/config show mcp", []string{
+		"Config MCP servers",
+		"MCP servers: 1",
+		"- alpha (stdio, configured, settings)",
+	}, []string{"hidden-token", "server.js"})
+	assertConfigShow("/config show plugins", []string{
+		"Config plugins",
+		"Enabled plugin entries: 2",
+		"Enabled plugins: 1",
+		"Plugin configs: 1",
+		"- market/a: enabled",
+		"- market/b: disabled",
+		"Plugin config names: market/a",
+	}, []string{"plugin-secret"})
+	assertConfigShow("/config show unknown", []string{
+		"Unknown config section unknown.",
+		"Available sections:",
+	}, nil)
+}
+
 func TestRunnerExecutesConfigOutputStyleWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()
