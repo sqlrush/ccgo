@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ccgo/internal/api/anthropic"
+	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
@@ -1739,6 +1740,61 @@ func TestRunnerRecordsGatedTelemetrySummaries(t *testing.T) {
 		first.MessageType != string(contracts.MessageUser) ||
 		first.MessageUUID == "" {
 		t.Fatalf("telemetry summary = %#v", first)
+	}
+}
+
+func TestRunnerBridgeManifestDisabledByDefault(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_bridge_disabled",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	path := bridgepkg.SessionManifestPath(transcriptPath, "sess_bridge_disabled")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("bridge manifest exists with disabled bridge: %v", err)
+	}
+}
+
+func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	bridgeEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_bridge",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{Bridge: &bridgeEnabled},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := bridgepkg.LoadManifest(bridgepkg.SessionManifestPath(transcriptPath, "sess_bridge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SessionID != "sess_bridge" || manifest.WorkingDirectory != dir || manifest.GeneratedAt == "" {
+		t.Fatalf("manifest metadata = %#v", manifest)
+	}
+	if !bridgeManifestHasCommand(manifest, "compact") || !bridgeManifestHasCommand(manifest, "clear") {
+		t.Fatalf("manifest missing bridge-safe commands: %#v", manifest.Commands)
+	}
+	if bridgeManifestHasCommand(manifest, "status") || bridgeManifestHasCommand(manifest, "model") {
+		t.Fatalf("manifest leaked unsafe commands: %#v", manifest.Commands)
 	}
 }
 
@@ -4878,6 +4934,15 @@ func namedTextTool(name string, prefix string) tool.Tool {
 func requestHasTool(request anthropic.Request, name string) bool {
 	for _, definition := range request.Tools {
 		if definition.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func bridgeManifestHasCommand(manifest bridgepkg.Manifest, name string) bool {
+	for _, command := range manifest.Commands {
+		if command.Name == name {
 			return true
 		}
 	}

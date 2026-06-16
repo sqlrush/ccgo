@@ -35,6 +35,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if r.Client == nil {
 		return Result{}, fmt.Errorf("conversation runner missing client")
 	}
+	r.maybeWriteBridgeManifest()
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser

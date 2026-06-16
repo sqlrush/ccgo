@@ -1456,7 +1456,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - Chrome/computer-use/voice/native integrations。
 - enterprise/gated/platform-specific behavior。
 
-当前状态：已新增 `advanced` settings gate 地基，覆盖 bridge/LSP/telemetry/Chrome/voice/computer-use/native integrations 的独立 bool 开关解析、settings merge、headless `/config show advanced` 和 `/config search` 审计；`advanced.telemetry=true` 时会在 session 目录写入安全摘要 JSONL 诊断事件，记录事件类型、session/model、tool/progress keys、token/compact/error 摘要，不写入用户/助手正文或工具结果内容；`advanced.lsp=true` 时才向模型暴露只读 `LSPDiagnostics` 工具，用于读取 session-scoped diagnostics snapshot，并支持 file/severity/limit 过滤；未启用时仍不注册或泄露 gated 工具 schema。实际 repl bridge、session websocket/direct connect、LSP server manager、diagnostic producer、telemetry exporter/tracing、Chrome/voice/computer-use/native runtime 仍未完成。
+当前状态：已新增 `advanced` settings gate 地基，覆盖 bridge/LSP/telemetry/Chrome/voice/computer-use/native integrations 的独立 bool 开关解析、settings merge、headless `/config show advanced` 和 `/config search` 审计；`advanced.telemetry=true` 时会在 session 目录写入安全摘要 JSONL 诊断事件，记录事件类型、session/model、tool/progress keys、token/compact/error 摘要，不写入用户/助手正文或工具结果内容；`advanced.lsp=true` 时才向模型暴露只读 `LSPDiagnostics` 工具，用于读取 session-scoped diagnostics snapshot，并支持 file/severity/limit 过滤；`advanced.bridge=true` 时会写出 session-scoped bridge manifest，列出 bridge-safe slash/local command 元数据；未启用时仍不注册或泄露 gated 工具 schema。实际 repl bridge server、session websocket/direct connect、LSP server manager、diagnostic producer、telemetry exporter/tracing、Chrome/voice/computer-use/native runtime 仍未完成。
 
 ## Recommended Next Steps
 
