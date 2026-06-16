@@ -78,6 +78,19 @@ var sidechainLifecycleWorktreeOwnedFields = []string{
 	"ownedWorkspace", "owned_workspace",
 }
 
+var sidechainLifecycleWorktreeSparsePathFields = []string{
+	"worktreeSparsePaths", "worktree_sparse_paths",
+	"sparsePaths", "sparse_paths",
+	"sparseCheckoutPaths", "sparse_checkout_paths",
+}
+
+var sidechainLifecycleWorktreeSymlinkDirectoryFields = []string{
+	"worktreeSymlinkDirectories", "worktree_symlink_directories",
+	"worktreeSymlinkDirs", "worktree_symlink_dirs",
+	"symlinkDirectories", "symlink_directories",
+	"symlinkDirs", "symlink_dirs",
+}
+
 var sidechainLifecycleWorktreeCleanupStatusFields = []string{
 	"worktreeCleanupStatus", "worktree_cleanup_status",
 	"cleanupStatus", "cleanup_status",
@@ -291,6 +304,12 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			}
 			if firstBoolField(msg.Content, sidechainLifecycleWorktreeOwnedFields...) {
 				state.Metadata.WorktreeOwned = true
+			}
+			if sparsePaths := firstStringSliceField(msg.Content, sidechainLifecycleWorktreeSparsePathFields...); len(sparsePaths) > 0 && len(state.Metadata.WorktreeSparsePaths) == 0 {
+				state.Metadata.WorktreeSparsePaths = sparsePaths
+			}
+			if symlinkDirs := firstStringSliceField(msg.Content, sidechainLifecycleWorktreeSymlinkDirectoryFields...); len(symlinkDirs) > 0 && len(state.Metadata.WorktreeSymlinkDirs) == 0 {
+				state.Metadata.WorktreeSymlinkDirs = symlinkDirs
 			}
 			if description := firstTextField(msg.Content, sidechainLifecycleDescriptionFields...); description != "" && state.Metadata.Description == "" {
 				state.Metadata.Description = description

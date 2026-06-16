@@ -45,6 +45,8 @@ M10 补充：sidechain metadata/lifecycle 现在会保存 `worktreeOwned` 和 wo
 
 M10 补充：`Task` 支持显式 `worktree: true`，会基于当前 git HEAD 创建 ccgo 受管 detached worktree，写入 sidechain metadata 和 structured output；`KillTask` 会校验 owned worktree 处于受管目录后执行 `git worktree remove --force` 并记录 cleanup marker。默认 Task 仍保持原工作目录，完整自动 agent 执行循环、worktree settings/sparse/symlink 语义和完成后自动 cleanup 仍未完成。
 
+M10 补充：显式 owned worktree 创建后会应用 settings `worktree.sparsePaths` 和 `worktree.symlinkDirectories`：前者通过 git sparse-checkout 限定 checkout，后者把主 repo 中存在的目录 symlink 到 isolated worktree；应用后的 sparse/symlink 列表会写入 sidechain metadata/lifecycle 并由 `TaskOutput` 返回。完整默认策略、settings 更多别名、完成态自动清理和 agent 执行闭环仍未完成。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。
@@ -1402,7 +1404,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - remote CCR agent、team/swarm/coordinator。
 - SendMessage、TeamCreate、TeamDelete、Task*。
 
-当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event 和 worktree cleanup 状态记录地基；完整 AgentTool 执行循环、真实 worktree 创建/隔离/删除、远端协作和团队编排仍未完成。
+当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式 owned worktree 创建/清理和 sparse/symlink settings 应用地基；完整 AgentTool 执行循环、默认 worktree 策略、完成态自动清理、远端协作和团队编排仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 

@@ -189,7 +189,19 @@ func TestTaskToolCreatesAndKillCleansOwnedWorktree(t *testing.T) {
 		SessionID:        "sess_task",
 		Metadata: map[string]any{
 			tool.MetadataSessionPathKey: transcriptPath,
+			tool.MetadataSettingsKey: contracts.Settings{
+				Worktree: &contracts.WorktreeSetting{
+					SparsePaths:        []string{"README.md"},
+					SymlinkDirectories: []string{"cache"},
+				},
+			},
 		},
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "cache", "data.txt"), []byte("cached\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	executor := taskExecutor(t)
 
@@ -211,6 +223,22 @@ func TestTaskToolCreatesAndKillCleansOwnedWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(worktreePath, "README.md")); err != nil {
 		t.Fatalf("created worktree missing checkout: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(worktreePath, "other.txt")); !os.IsNotExist(err) {
+		t.Fatalf("sparse checkout kept excluded file: %v", err)
+	}
+	expectedCachePath, err := filepath.EvalSymlinks(filepath.Join(repo, "cache"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target, err := os.Readlink(filepath.Join(worktreePath, "cache")); err != nil || filepath.Clean(target) != filepath.Clean(expectedCachePath) {
+		t.Fatalf("worktree cache symlink = %q err=%v", target, err)
+	}
+	if sparsePaths, ok := result.StructuredContent["worktree_sparse_paths"].([]string); !ok || len(sparsePaths) != 1 || sparsePaths[0] != "README.md" {
+		t.Fatalf("worktree sparse result = %#v", result.StructuredContent)
+	}
+	if symlinkDirs, ok := result.StructuredContent["worktree_symlink_directories"].([]string); !ok || len(symlinkDirs) != 1 || symlinkDirs[0] != "cache" {
+		t.Fatalf("worktree symlink result = %#v", result.StructuredContent)
+	}
 
 	state, err := session.FindSidechainState(transcriptPath, ctx.SessionID, "agent/worktree")
 	if err != nil {
@@ -218,6 +246,9 @@ func TestTaskToolCreatesAndKillCleansOwnedWorktree(t *testing.T) {
 	}
 	if state.Metadata.WorktreePath != worktreePath || !state.Metadata.WorktreeOwned {
 		t.Fatalf("worktree metadata = %#v", state.Metadata)
+	}
+	if len(state.Metadata.WorktreeSparsePaths) != 1 || state.Metadata.WorktreeSparsePaths[0] != "README.md" || len(state.Metadata.WorktreeSymlinkDirs) != 1 || state.Metadata.WorktreeSymlinkDirs[0] != "cache" {
+		t.Fatalf("worktree settings metadata = %#v", state.Metadata)
 	}
 
 	killed, err := executor.Execute(ctx, contracts.ToolUse{
@@ -248,6 +279,12 @@ func TestTaskToolCreatesAndKillCleansOwnedWorktree(t *testing.T) {
 	if output.StructuredContent["worktree_cleanup_status"] != "removed" ||
 		output.StructuredContent["worktree_cleanup_reason"] != "done testing cleanup" {
 		t.Fatalf("output cleanup structured content = %#v", output.StructuredContent)
+	}
+	if sparsePaths, ok := output.StructuredContent["worktree_sparse_paths"].([]string); !ok || len(sparsePaths) != 1 || sparsePaths[0] != "README.md" {
+		t.Fatalf("output sparse structured content = %#v", output.StructuredContent)
+	}
+	if symlinkDirs, ok := output.StructuredContent["worktree_symlink_directories"].([]string); !ok || len(symlinkDirs) != 1 || symlinkDirs[0] != "cache" {
+		t.Fatalf("output symlink structured content = %#v", output.StructuredContent)
 	}
 }
 
@@ -542,7 +579,10 @@ func initTaskGitRepo(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	runTaskGitTest(t, repo, "add", "README.md")
+	if err := os.WriteFile(filepath.Join(repo, "other.txt"), []byte("other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runTaskGitTest(t, repo, "add", "README.md", "other.txt")
 	runTaskGitTest(t, repo, "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "init")
 	return repo
 }

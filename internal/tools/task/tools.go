@@ -380,6 +380,8 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		AgentType:           input.SubagentType,
 		WorktreePath:        worktree.Path,
 		WorktreeOwned:       worktree.Owned,
+		WorktreeSparsePaths: append([]string(nil), worktree.SparsePaths...),
+		WorktreeSymlinkDirs: append([]string(nil), worktree.SymlinkDirectories...),
 		Description:         input.Description,
 		AgentPath:           agent.Path,
 		AgentPrompt:         agent.Prompt,
@@ -441,6 +443,12 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	}
 	if worktree.Owned {
 		structured["worktree_owned"] = true
+	}
+	if len(worktree.SparsePaths) > 0 {
+		structured["worktree_sparse_paths"] = append([]string(nil), worktree.SparsePaths...)
+	}
+	if len(worktree.SymlinkDirectories) > 0 {
+		structured["worktree_symlink_directories"] = append([]string(nil), worktree.SymlinkDirectories...)
 	}
 	if hasAgent && agent.Path != "" {
 		structured["agent_path"] = agent.Path
@@ -834,6 +842,12 @@ func structuredTaskState(state session.SidechainState) map[string]any {
 	}
 	if state.Metadata.WorktreeOwned {
 		structured["worktree_owned"] = true
+	}
+	if len(state.Metadata.WorktreeSparsePaths) > 0 {
+		structured["worktree_sparse_paths"] = append([]string(nil), state.Metadata.WorktreeSparsePaths...)
+	}
+	if len(state.Metadata.WorktreeSymlinkDirs) > 0 {
+		structured["worktree_symlink_directories"] = append([]string(nil), state.Metadata.WorktreeSymlinkDirs...)
 	}
 	if state.Metadata.WorktreeCleanupStatus != "" {
 		structured["worktree_cleanup_status"] = state.Metadata.WorktreeCleanupStatus

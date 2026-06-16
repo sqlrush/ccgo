@@ -42,6 +42,8 @@ type SidechainOptions struct {
 	AgentType           string
 	WorktreePath        string
 	WorktreeOwned       bool
+	WorktreeSparsePaths []string
+	WorktreeSymlinkDirs []string
 	Description         string
 	AgentPath           string
 	AgentPrompt         string
@@ -80,6 +82,8 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 			AgentType:           options.AgentType,
 			WorktreePath:        options.WorktreePath,
 			WorktreeOwned:       options.WorktreeOwned,
+			WorktreeSparsePaths: append([]string(nil), options.WorktreeSparsePaths...),
+			WorktreeSymlinkDirs: append([]string(nil), options.WorktreeSymlinkDirs...),
 			Description:         options.Description,
 			AgentPath:           options.AgentPath,
 			AgentPrompt:         options.AgentPrompt,
@@ -102,18 +106,20 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 		Subtype:     "sidechain_start",
 		IsSidechain: true,
 		Content: map[string]any{
-			"sidechainId":         id,
-			"agentId":             id,
-			"status":              run.Status,
-			"agentType":           options.AgentType,
-			"worktreePath":        options.WorktreePath,
-			"worktreeOwned":       options.WorktreeOwned,
-			"description":         options.Description,
-			"agentPath":           options.AgentPath,
-			"agentPrompt":         options.AgentPrompt,
-			"agentModel":          options.AgentModel,
-			"agentPermissionMode": options.AgentPermissionMode,
-			"agentAllowedTools":   append([]string(nil), options.AgentAllowedTools...),
+			"sidechainId":                id,
+			"agentId":                    id,
+			"status":                     run.Status,
+			"agentType":                  options.AgentType,
+			"worktreePath":               options.WorktreePath,
+			"worktreeOwned":              options.WorktreeOwned,
+			"worktreeSparsePaths":        append([]string(nil), options.WorktreeSparsePaths...),
+			"worktreeSymlinkDirectories": append([]string(nil), options.WorktreeSymlinkDirs...),
+			"description":                options.Description,
+			"agentPath":                  options.AgentPath,
+			"agentPrompt":                options.AgentPrompt,
+			"agentModel":                 options.AgentModel,
+			"agentPermissionMode":        options.AgentPermissionMode,
+			"agentAllowedTools":          append([]string(nil), options.AgentAllowedTools...),
 		},
 	}); err != nil {
 		return SidechainRun{}, err

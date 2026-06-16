@@ -11,6 +11,8 @@ type SidechainMetadata struct {
 	AgentType             string   `json:"agentType,omitempty"`
 	WorktreePath          string   `json:"worktreePath,omitempty"`
 	WorktreeOwned         bool     `json:"worktreeOwned,omitempty"`
+	WorktreeSparsePaths   []string `json:"worktreeSparsePaths,omitempty"`
+	WorktreeSymlinkDirs   []string `json:"worktreeSymlinkDirectories,omitempty"`
 	WorktreeCleanupStatus string   `json:"worktreeCleanupStatus,omitempty"`
 	WorktreeCleanupReason string   `json:"worktreeCleanupReason,omitempty"`
 	WorktreeCleanupAt     string   `json:"worktreeCleanupAt,omitempty"`
@@ -36,6 +38,8 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 	}
 	metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
 	metadata.WorktreeOwned = firstBoolField(fields, sidechainLifecycleWorktreeOwnedFields...)
+	metadata.WorktreeSparsePaths = firstStringSliceField(fields, sidechainLifecycleWorktreeSparsePathFields...)
+	metadata.WorktreeSymlinkDirs = firstStringSliceField(fields, sidechainLifecycleWorktreeSymlinkDirectoryFields...)
 	metadata.WorktreeCleanupStatus = firstStringField(fields, sidechainLifecycleWorktreeCleanupStatusFields...)
 	metadata.WorktreeCleanupReason = firstTextField(fields, sidechainLifecycleWorktreeCleanupReasonFields...)
 	metadata.WorktreeCleanupAt = firstStringField(fields, sidechainLifecycleWorktreeCleanupTimeFields...)
@@ -61,6 +65,8 @@ func (m SidechainMetadata) Empty() bool {
 	return m.AgentType == "" &&
 		m.WorktreePath == "" &&
 		!m.WorktreeOwned &&
+		len(m.WorktreeSparsePaths) == 0 &&
+		len(m.WorktreeSymlinkDirs) == 0 &&
 		m.WorktreeCleanupStatus == "" &&
 		m.WorktreeCleanupReason == "" &&
 		m.WorktreeCleanupAt == "" &&
