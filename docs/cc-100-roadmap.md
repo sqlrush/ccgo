@@ -49,7 +49,9 @@ M10 补充：显式 owned worktree 创建后会应用 settings `worktree.sparseP
 
 M10 补充：`Task` 支持显式 `run: true`，conversation runner 会读取 sidechain conversation，用同一 model client 驱动 subagent 多轮工具循环；subagent assistant/tool_result 都写回 sidechain transcript，最终通过 `SidechainManager.Finish` 标记 completed，主对话收到的 tool result 会更新为 completed summary 并发 `task_agent_started`/`task_agent_completed` progress。完整多 agent 编排和取消传播仍未完成。
 
-M10 补充：subagent nested tool loop 会读取 agent metadata 的 `agentAllowedTools`，构造过滤后的 tool registry；子 agent 请求只暴露允许的工具，未列入 allowlist 的工具不会进入 request tools，也不能被 registry lookup 执行。完整 Bash pattern 级限制、MCP/tool permission UI 展示和团队编排仍未完成。
+M10 补充：subagent nested tool loop 会读取 agent metadata 的 `agentAllowedTools`，构造过滤后的 tool registry；子 agent 请求只暴露允许的工具，未列入 allowlist 的工具不会进入 request tools，也不能被 registry lookup 执行。完整 MCP/tool permission UI 展示和团队编排仍未完成。
+
+M10 补充：agent `allowedTools` 现在也会注入 subagent permission decider：`Bash(git status:*)` 这类 scoped rule 既会把 Bash 暴露给子 agent，又会拒绝不匹配 pattern 的 Bash 调用；匹配 pattern 的调用继续走基础 permission engine，因此仍保留更高优先级 deny/sandbox 判断。
 
 M10 补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。默认 worktree 策略、取消传播 cleanup 和团队编排仍未完成。
 
@@ -1410,7 +1412,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - remote CCR agent、team/swarm/coordinator。
 - SendMessage、TeamCreate、TeamDelete、Task*。
 
-当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent tool allowlist registry 过滤，以及完成态 owned worktree 自动清理；完整多 agent 编排、默认 worktree 策略、远端协作和团队编排仍未完成。
+当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent tool allowlist registry/permission pattern 过滤，以及完成态 owned worktree 自动清理；完整多 agent 编排、默认 worktree 策略、远端协作和团队编排仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 

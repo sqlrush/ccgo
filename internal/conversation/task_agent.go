@@ -2,7 +2,9 @@ package conversation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -127,6 +129,7 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 			return taskSubagentOutcome{}, err
 		}
 		subRunner.Tools = executor
+		subRunner.Permissions = taskSubagentAllowedToolPermissions(subRunner.Permissions, state.Metadata.AgentAllowedTools)
 	}
 	if state.Metadata.AgentModel != "" {
 		subRunner.Model = state.Metadata.AgentModel
@@ -275,6 +278,151 @@ func taskSubagentAllowedToolExecutor(executor tool.Executor, allowedTools []stri
 	}
 	executor.Registry = registry
 	return executor, nil
+}
+
+func taskSubagentAllowedToolPermissions(base tool.PermissionDecider, allowedTools []string) tool.PermissionDecider {
+	rules := taskSubagentAllowedToolPermissionRules(allowedTools)
+	if len(rules) == 0 {
+		return base
+	}
+	next := taskPermissionDeciderWithRules(base, rules)
+	return taskSubagentScopedPermissionDecider{Base: next, Rules: rules}
+}
+
+func taskSubagentAllowedToolPermissionRules(allowedTools []string) []permissions.Rule {
+	var rules []permissions.Rule
+	for _, raw := range allowedTools {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || raw == "*" {
+			continue
+		}
+		rule, err := permissions.ParseRule(contracts.PermissionSourceSession, contracts.PermissionAllow, raw)
+		if err != nil {
+			continue
+		}
+		rules = append(rules, rule)
+	}
+	return rules
+}
+
+func taskPermissionDeciderWithRules(base tool.PermissionDecider, rules []permissions.Rule) tool.PermissionDecider {
+	if len(rules) == 0 {
+		return base
+	}
+	switch decider := base.(type) {
+	case tool.EnginePermissionDecider:
+		baseRules := decider.Engine.Rules()
+		baseRules = append(baseRules, rules...)
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(decider.Engine.Context(), baseRules...))
+	case *tool.EnginePermissionDecider:
+		if decider == nil {
+			break
+		}
+		baseRules := decider.Engine.Rules()
+		baseRules = append(baseRules, rules...)
+		return tool.NewEnginePermissionDecider(permissions.NewEngine(decider.Engine.Context(), baseRules...))
+	}
+	return base
+}
+
+type taskSubagentScopedPermissionDecider struct {
+	Base  tool.PermissionDecider
+	Rules []permissions.Rule
+}
+
+func (d taskSubagentScopedPermissionDecider) DecideTool(t tool.Tool, raw json.RawMessage, ctx tool.Context) (contracts.PermissionDecision, error) {
+	req := taskPermissionRequest(t, raw, ctx)
+	if taskPermissionToolHasScopedRules(d.Rules, req.ToolName) && !taskPermissionAnyRuleMatches(d.Rules, req) {
+		return contracts.PermissionDecision{
+			Behavior:       contracts.PermissionDeny,
+			Message:        fmt.Sprintf("%s is not allowed by this agent's tool allowlist", req.ToolName),
+			DecisionReason: "agent allowed-tools pattern did not match",
+		}, nil
+	}
+	if d.Base != nil {
+		return d.Base.DecideTool(t, raw, ctx)
+	}
+	return contracts.PermissionDecision{Behavior: contracts.PermissionAllow, DecisionReason: "agent tool allowlist matched"}, nil
+}
+
+func taskPermissionRequest(t tool.Tool, raw json.RawMessage, ctx tool.Context) permissions.Request {
+	return permissions.Request{
+		ToolName:                  t.Name(),
+		Input:                     raw,
+		Command:                   taskFirstInputString(raw, "command", "cmd"),
+		Path:                      taskFirstInputString(raw, "file_path", "notebook_path", "path"),
+		WorkingDirectory:          ctx.WorkingDirectory,
+		ReadOnly:                  t.IsReadOnly(raw),
+		WritesFiles:               !t.IsReadOnly(raw) && !t.IsDestructive(raw),
+		Destructive:               t.IsDestructive(raw),
+		DangerouslyDisableSandbox: taskFirstInputBool(raw, "dangerouslyDisableSandbox", "dangerously_disable_sandbox"),
+		InternalPaths:             tool.InternalPathContextFromMetadata(ctx.Metadata),
+	}
+}
+
+func taskPermissionToolHasScopedRules(rules []permissions.Rule, toolName string) bool {
+	scoped := false
+	for _, rule := range rules {
+		if !taskPermissionRuleMatchesTool(rule, toolName) {
+			continue
+		}
+		if rule.Pattern == "" || rule.Pattern == "*" {
+			return false
+		}
+		scoped = true
+	}
+	return scoped
+}
+
+func taskPermissionAnyRuleMatches(rules []permissions.Rule, req permissions.Request) bool {
+	for _, rule := range rules {
+		if rule.Matches(req) {
+			return true
+		}
+	}
+	return false
+}
+
+func taskPermissionRuleMatchesTool(rule permissions.Rule, toolName string) bool {
+	pattern := strings.TrimSpace(rule.ToolName)
+	toolName = strings.TrimSpace(toolName)
+	if pattern == "*" {
+		return true
+	}
+	if strings.EqualFold(pattern, toolName) {
+		return true
+	}
+	ok, err := filepath.Match(pattern, toolName)
+	return err == nil && ok
+}
+
+func taskFirstInputString(raw json.RawMessage, keys ...string) string {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value, ok := obj[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func taskFirstInputBool(raw json.RawMessage, keys ...string) bool {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return false
+	}
+	for _, key := range keys {
+		switch value := obj[key].(type) {
+		case bool:
+			return value
+		case string:
+			return strings.EqualFold(strings.TrimSpace(value), "true")
+		}
+	}
+	return false
 }
 
 func taskAllowedToolNameCandidates(raw string) []string {
