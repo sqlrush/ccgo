@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewResumeTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,6 +661,58 @@ func TestTeamSendMessageSupportsCoordinatorOnlyTeam(t *testing.T) {
 	}
 }
 
+func TestTeamCoordinateSendsBriefingToCoordinator(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/lead", "agent/member"} {
+		if _, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_coordinate_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Team task","prompt":"Work with the team","subagent_type":"general-purpose"}`),
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinate_team",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"coordinate/team","description":"Coordinate team","coordinator":"agent/lead","members":["agent/member"]}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinate_request",
+		Name:  "TeamCoordinate",
+		Input: json.RawMessage(`{"team_id":"coordinate/team","objective":"Plan the next review step."}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "team_coordinate" || result.StructuredContent["coordinator_task_id"] != "agent_lead" || result.StructuredContent["message_chars"] != len("Plan the next review step.") {
+		t.Fatalf("team coordinate structured content = %#v", result.StructuredContent)
+	}
+	coordinator, ok := result.StructuredContent["coordinator"].(map[string]any)
+	if !ok || coordinator["task_id"] != "agent_lead" || coordinator["status"] != session.SidechainStatusRunning {
+		t.Fatalf("team coordinate coordinator = %#v", result.StructuredContent)
+	}
+	resume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_coordinate_resume",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/lead","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(messages) != 3 {
+		t.Fatalf("coordinate resume messages = %#v", resume.StructuredContent["resume_messages"])
+	}
+	text, _ := messages[2]["text"].(string)
+	if !strings.Contains(text, "Team coordination request for coordinate_team.") || !strings.Contains(text, "- agent_member: running") || !strings.Contains(text, "Objective:\nPlan the next review step.") {
+		t.Fatalf("coordinate briefing = %q", text)
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -857,6 +909,10 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "unknown team send field", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
 		{name: "bad team send target", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","target":"leaders"}`, want: "target must be one of members, coordinator, all"},
 		{name: "missing team send team", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
+		{name: "missing team coordinate id", tool: "TeamCoordinate", input: `{"message":"hello"}`, want: "team_id is required"},
+		{name: "missing team coordinate message", tool: "TeamCoordinate", input: `{"team_id":"missing"}`, want: "message is required"},
+		{name: "unknown team coordinate field", tool: "TeamCoordinate", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team coordinate team", tool: "TeamCoordinate", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
 	}

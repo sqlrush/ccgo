@@ -203,6 +203,7 @@ func BuiltinTools() []tool.Tool {
 		tasktools.NewTeamDeleteTool(),
 		tasktools.NewTeamOutputTool(),
 		tasktools.NewTeamSendMessageTool(),
+		tasktools.NewTeamCoordinateTool(),
 		tasktools.NewResumeTaskTool(),
 		skilltools.NewSkillTool(),
 		webtools.NewWebFetchTool(),
