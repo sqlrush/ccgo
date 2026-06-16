@@ -1516,6 +1516,102 @@ func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerMCPSlashCommandShowsServerDetails(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_show",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {
+					Command: "python",
+					Args:    []string{"server.py"},
+					Env: map[string]string{
+						"API_TOKEN": "secret-token",
+						"HOST":      "localhost",
+					},
+				},
+			},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp show alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP server alpha",
+		"Status: configured",
+		"Policy: allowlist-unset",
+		"Transport: stdio",
+		"Target: python server.py",
+		"Source: settings",
+		"Command: python",
+		"Args: server.py",
+		"Env vars: 2",
+		"Env names: API_TOKEN, HOST",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp show missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "secret-token") {
+		t.Fatalf("mcp show leaked env value: %q", text)
+	}
+}
+
+func TestRunnerMCPSlashCommandShowsPluginServerDetails(t *testing.T) {
+	callbackPort := 3999
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_plugin_show",
+		MCP: &MCPConfig{PluginServers: map[string]contracts.MCPServer{
+			"plugin-docs": {
+				Type:          "http",
+				URL:           "https://plugin.example/mcp",
+				Headers:       map[string]string{"Authorization": "Bearer secret", "X-Trace": "1"},
+				HeadersHelper: "headers-helper",
+				AuthToken:     "static-secret",
+				OAuth: &contracts.MCPOAuthConfig{
+					ClientID:              "client-id",
+					CallbackPort:          &callbackPort,
+					AuthServerMetadataURL: "https://plugin.example/.well-known/oauth",
+				},
+				PluginSource: "demo",
+			},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp info plugin-docs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP server plugin-docs",
+		"Status: configured",
+		"Transport: http",
+		"Target: https://plugin.example/mcp",
+		"Source: plugin",
+		"Plugin source: demo",
+		"Headers: 2",
+		"Header names: Authorization, X-Trace",
+		"Headers helper: configured",
+		"Auth token: configured",
+		"OAuth: configured",
+		"OAuth client ID: client-id",
+		"OAuth callback port: 3999",
+		"OAuth metadata URL: https://plugin.example/.well-known/oauth",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp plugin show missing %q: %q", want, text)
+		}
+	}
+	for _, leaked := range []string{"Bearer secret", "static-secret"} {
+		if strings.Contains(text, leaked) {
+			t.Fatalf("mcp show leaked secret %q: %q", leaked, text)
+		}
+	}
+}
+
 func TestRunnerMCPSlashCommandMarksPolicyBlockedServers(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},
@@ -1537,6 +1633,33 @@ func TestRunnerMCPSlashCommandMarksPolicyBlockedServers(t *testing.T) {
 	}
 }
 
+func TestRunnerMCPSlashCommandShowsBlockedServerPolicy(t *testing.T) {
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_show_blocked",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {Command: "python", Args: []string{"server.py"}},
+			},
+			DeniedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "alpha"}},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp show alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP server alpha",
+		"Status: blocked",
+		"Policy: denied",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp blocked show missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerMCPSlashCommandReportsNoServers(t *testing.T) {
 	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_empty"}
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp"))
@@ -1547,6 +1670,19 @@ func TestRunnerMCPSlashCommandReportsNoServers(t *testing.T) {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}
 	if got := result.Messages[1].Content[0].Text; got != "No MCP servers configured." {
+		t.Fatalf("mcp text = %q", got)
+	}
+}
+
+func TestRunnerMCPSlashCommandReportsMissingServerDetails(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_missing", MCP: &MCPConfig{UserSettings: contracts.Settings{
+		MCPServers: map[string]contracts.MCPServer{"alpha": {Command: "python"}},
+	}}}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp show missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "MCP server missing was not found." {
 		t.Fatalf("mcp text = %q", got)
 	}
 }

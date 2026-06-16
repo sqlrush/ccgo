@@ -1638,7 +1638,9 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) > 0 {
 		switch args[0] {
-		case "list":
+		case "list", "status":
+		case "show", "info":
+			return r.formatMCPServerShow(args)
 		case "enable", "disable":
 			return r.setMCPServerEnabledSummary(args)
 		default:
@@ -1659,6 +1661,96 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		lines = append(lines, fmt.Sprintf("- %s (%s): %s%s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config), status))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMCPServerShow(args []string) string {
+	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /mcp " + args[0] + " <server-name>"
+	}
+	name := strings.TrimSpace(args[1])
+	server, ok := findMCPServerSummary(r.mcpServers(), name)
+	if !ok {
+		return "MCP server " + name + " was not found."
+	}
+	config := server.Config
+	status := "configured"
+	if !server.Policy.Allowed {
+		status = "blocked"
+	}
+	lines := []string{
+		"MCP server " + server.Name,
+		"Status: " + status,
+		"Policy: " + server.Policy.Reason,
+		"Transport: " + mcpServerTransport(config),
+		"Target: " + mcpServerTarget(config),
+		"Source: " + mcpServerSource(config),
+	}
+	if scope := strings.TrimSpace(config.Scope); scope != "" {
+		lines = append(lines, "Scope: "+scope)
+	}
+	if pluginSource := strings.TrimSpace(config.PluginSource); pluginSource != "" {
+		lines = append(lines, "Plugin source: "+pluginSource)
+	}
+	if configuredName := strings.TrimSpace(config.Name); configuredName != "" && configuredName != server.Name {
+		lines = append(lines, "Configured name: "+configuredName)
+	}
+	if id := strings.TrimSpace(config.ID); id != "" {
+		lines = append(lines, "ID: "+id)
+	}
+	if ideName := strings.TrimSpace(config.IDEName); ideName != "" {
+		lines = append(lines, "IDE name: "+ideName)
+	}
+	if command := strings.TrimSpace(config.Command); command != "" {
+		lines = append(lines, "Command: "+command)
+	}
+	if len(config.Args) > 0 {
+		lines = append(lines, "Args: "+strings.Join(config.Args, " "))
+	}
+	if url := strings.TrimSpace(config.URL); url != "" {
+		lines = append(lines, "URL: "+url)
+	}
+	if len(config.Env) > 0 {
+		lines = append(lines, fmt.Sprintf("Env vars: %d", len(config.Env)))
+		lines = append(lines, "Env names: "+strings.Join(sortedStringMapKeys(config.Env), ", "))
+	}
+	if len(config.Headers) > 0 {
+		lines = append(lines, fmt.Sprintf("Headers: %d", len(config.Headers)))
+		lines = append(lines, "Header names: "+strings.Join(sortedStringMapKeys(config.Headers), ", "))
+	}
+	if strings.TrimSpace(config.HeadersHelper) != "" {
+		lines = append(lines, "Headers helper: configured")
+	}
+	if strings.TrimSpace(config.AuthToken) != "" {
+		lines = append(lines, "Auth token: configured")
+	}
+	if config.OAuth != nil {
+		lines = append(lines, "OAuth: configured")
+		if clientID := strings.TrimSpace(config.OAuth.ClientID); clientID != "" {
+			lines = append(lines, "OAuth client ID: "+clientID)
+		}
+		if config.OAuth.CallbackPort != nil {
+			lines = append(lines, fmt.Sprintf("OAuth callback port: %d", *config.OAuth.CallbackPort))
+		}
+		if metadataURL := strings.TrimSpace(config.OAuth.AuthServerMetadataURL); metadataURL != "" {
+			lines = append(lines, "OAuth metadata URL: "+metadataURL)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func findMCPServerSummary(servers []mcpServerSummary, name string) (mcpServerSummary, bool) {
+	name = strings.TrimSpace(name)
+	for _, server := range servers {
+		if server.Name == name {
+			return server, true
+		}
+	}
+	for _, server := range servers {
+		if strings.EqualFold(server.Name, name) {
+			return server, true
+		}
+	}
+	return mcpServerSummary{}, false
 }
 
 func (r Runner) setMCPServerEnabledSummary(args []string) string {
@@ -1725,6 +1817,28 @@ func mcpServerTarget(server contracts.MCPServer) string {
 		return command + " " + strings.Join(server.Args, " ")
 	}
 	return "(no target)"
+}
+
+func mcpServerSource(server contracts.MCPServer) string {
+	if strings.TrimSpace(server.PluginSource) != "" {
+		return "plugin"
+	}
+	if scope := strings.TrimSpace(server.Scope); scope != "" {
+		return scope
+	}
+	return "settings"
+}
+
+func sortedStringMapKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (r Runner) formatResumeSummary(raw string) (string, error) {
