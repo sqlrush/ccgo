@@ -206,7 +206,7 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 	case "compact":
 		return LocalCommandResult{Type: LocalCommandResultCompact, Value: strings.TrimSpace(args)}, true
 	case "cost":
-		return LocalCommandResult{Type: LocalCommandResultCost}, true
+		return LocalCommandResult{Type: LocalCommandResultCost, Value: strings.TrimSpace(args)}, true
 	case "status":
 		return LocalCommandResult{Type: LocalCommandResultStatus, Value: strings.TrimSpace(args)}, true
 	case "model":

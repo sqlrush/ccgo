@@ -664,6 +664,53 @@ func TestRunnerCostSlashCommandReportsMissingUsage(t *testing.T) {
 	}
 }
 
+func TestRunnerCostSlashCommandReportsBreakdown(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{Client: client, SessionID: "sess_cost_breakdown"}
+	firstUsage := contracts.Usage{
+		InputTokens:              10,
+		OutputTokens:             20,
+		CacheCreationInputTokens: 3,
+		CacheReadInputTokens:     4,
+		ServerToolUse:            contracts.ToolUseUsage{WebSearchRequests: 1},
+		CostUSD:                  0.123456,
+	}
+	secondUsage := contracts.Usage{
+		InputTokens:   5,
+		OutputTokens:  7,
+		ServerToolUse: contracts.ToolUseUsage{WebFetchRequests: 2},
+		CostUSD:       0.5,
+	}
+	first := messages.AssistantText("old two", "sonnet", &firstUsage)
+	first.UUID = "cost_one"
+	second := messages.AssistantText("old three", "opus", &secondUsage)
+	second.UUID = "cost_two"
+	history := []contracts.Message{
+		messages.UserText("old one"),
+		first,
+		second,
+	}
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("/cost breakdown"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Cost breakdown",
+		"Total cost: $0.623456",
+		"- assistant cost_one (sonnet): cost $0.123456, input 10, output 20, cache create 3, cache read 4, web search 1, web fetch 0",
+		"- assistant cost_two (opus): cost $0.500000, input 5, output 7, cache create 0, cache read 0, web search 0, web fetch 2",
+		"Messages with usage: 2",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("cost breakdown missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	registry, err := tool.NewRegistry(tool.FuncTool{

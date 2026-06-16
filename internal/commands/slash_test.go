@@ -399,7 +399,7 @@ func TestExecuteSlashOutputStyleReturnsDeprecatedTextResult(t *testing.T) {
 
 func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
-	result, handled, err := ExecuteSlashCommand(registry, "/cost", SlashOptions{UUID: "user_cost"})
+	result, handled, err := ExecuteSlashCommand(registry, "/cost breakdown", SlashOptions{UUID: "user_cost"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,6 +408,9 @@ func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 	}
 	if result.LocalResult.Type != LocalCommandResultCost {
 		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if result.LocalResult.Value != "breakdown" {
+		t.Fatalf("local result value = %q", result.LocalResult.Value)
 	}
 	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_cost" {
 		t.Fatalf("messages = %#v", result.Messages)

@@ -76,7 +76,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			return result, nil
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultCost {
-			return r.appendLocalTextResult(result, history, formatCostSummary(originalHistory))
+			return r.appendLocalTextResult(result, history, formatCostSummary(localResult.Value, originalHistory))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultStatus {
 			return r.appendLocalTextResult(result, history, r.formatStatusSummary(localResult.Value))
@@ -402,7 +402,21 @@ func (r Runner) appendLocalTextResult(result Result, history []contracts.Message
 	return result, nil
 }
 
-func formatCostSummary(history []contracts.Message) string {
+func formatCostSummary(raw string, history []contracts.Message) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) > 0 {
+		switch args[0] {
+		case "summary", "total", "totals":
+		case "show", "breakdown", "details", "detail":
+			return formatCostBreakdown(history)
+		default:
+			return "Cost subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		}
+	}
+	return formatCostTotals(history)
+}
+
+func formatCostTotals(history []contracts.Message) string {
 	usage, found := historyUsage(history)
 	if !found {
 		return "No cost data available for this session."
@@ -417,6 +431,74 @@ func formatCostSummary(history []contracts.Message) string {
 		usage.ServerToolUse.WebSearchRequests,
 		usage.ServerToolUse.WebFetchRequests,
 	)
+}
+
+func formatCostBreakdown(history []contracts.Message) string {
+	total, found := historyUsage(history)
+	if !found {
+		return "No cost data available for this session."
+	}
+	lines := []string{
+		"Cost breakdown",
+		fmt.Sprintf("Total cost: $%.6f", total.CostUSD),
+	}
+	var withUsage int
+	for index, message := range history {
+		if message.Usage == nil || !usageHasValues(*message.Usage) {
+			continue
+		}
+		withUsage++
+		usage := *message.Usage
+		lines = append(lines, fmt.Sprintf(
+			"- %s: cost $%.6f, input %d, output %d, cache create %d, cache read %d, web search %d, web fetch %d",
+			costMessageLabel(message, index),
+			usage.CostUSD,
+			usage.InputTokens,
+			usage.OutputTokens,
+			usage.CacheCreationInputTokens,
+			usage.CacheReadInputTokens,
+			usage.ServerToolUse.WebSearchRequests,
+			usage.ServerToolUse.WebFetchRequests,
+		))
+		if withUsage == 20 {
+			break
+		}
+	}
+	lines = append(lines, fmt.Sprintf("Messages with usage: %d", countUsageMessages(history)))
+	if countUsageMessages(history) > 20 {
+		lines = append(lines, fmt.Sprintf("Showing 20 of %d messages with usage.", countUsageMessages(history)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func costMessageLabel(message contracts.Message, index int) string {
+	messageType := strings.TrimSpace(string(message.Type))
+	if messageType == "" {
+		messageType = "message"
+	}
+	id := strings.TrimSpace(string(message.UUID))
+	if id == "" {
+		id = strings.TrimSpace(message.ID)
+	}
+	if id != "" {
+		messageType += " " + id
+	} else {
+		messageType += fmt.Sprintf(" #%d", index+1)
+	}
+	if model := strings.TrimSpace(message.Model); model != "" {
+		messageType += " (" + model + ")"
+	}
+	return messageType
+}
+
+func countUsageMessages(history []contracts.Message) int {
+	count := 0
+	for _, message := range history {
+		if message.Usage != nil && usageHasValues(*message.Usage) {
+			count++
+		}
+	}
+	return count
 }
 
 func historyUsage(history []contracts.Message) (contracts.Usage, bool) {
