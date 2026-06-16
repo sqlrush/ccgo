@@ -22,6 +22,10 @@ const (
 	teamSendTargetCoordinator = "coordinator"
 	teamSendTargetAll         = "all"
 
+	scheduleCronActionCreate = "create"
+	scheduleCronActionList   = "list"
+	scheduleCronActionDelete = "delete"
+
 	maxSleepDuration = 60 * time.Second
 )
 
@@ -94,6 +98,17 @@ type briefInput struct {
 	Details   []string `json:"details,omitempty"`
 	NextSteps []string `json:"next_steps,omitempty"`
 	Risks     []string `json:"risks,omitempty"`
+}
+
+type scheduleCronInput struct {
+	Action      string `json:"action,omitempty"`
+	ScheduleID  string `json:"schedule_id,omitempty"`
+	Description string `json:"description,omitempty"`
+	Cron        string `json:"cron,omitempty"`
+	Message     string `json:"message,omitempty"`
+	TeamID      string `json:"team_id,omitempty"`
+	Target      string `json:"target,omitempty"`
+	Enabled     *bool  `json:"enabled,omitempty"`
 }
 
 func NewTaskTool() tool.Tool {
@@ -467,6 +482,38 @@ func NewBriefTool() tool.Tool {
 	}
 }
 
+func NewScheduleCronTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "ScheduleCron",
+			Description:     "Create, list, or delete session-scoped cron schedules.",
+			SearchHint:      "schedule cron proactive reminder team message",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"action":      map[string]any{"type": "string", "enum": []any{scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete}},
+					"schedule_id": map[string]any{"type": "string"},
+					"description": map[string]any{"type": "string"},
+					"cron":        map[string]any{"type": "string"},
+					"message":     map[string]any{"type": "string"},
+					"team_id":     map[string]any{"type": "string"},
+					"target":      map[string]any{"type": "string", "enum": []any{teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll}},
+					"enabled":     map[string]any{"type": "boolean"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Creates, lists, or deletes session-scoped cron schedules. This records deterministic schedule metadata for later proactive execution; it does not start a background daemon yet. action defaults to create. create requires cron and message, and can optionally bind the schedule to a team_id and target.", nil
+		},
+		NormalizeFunc:   normalizeScheduleCronInput,
+		ValidateFunc:    validateScheduleCron,
+		CallFunc:        callScheduleCron,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
 func taskPrompt(ctx tool.PromptContext) (string, error) {
 	prompt := "Starts a subagent task with a short description, full prompt, and subagent_type. The task is recorded as a sidechain so it can be listed or resumed by the runtime. Set run=true only when the runtime should immediately execute a synchronous subagent pass."
 	agents := availableTaskAgents(ctx.Metadata)
@@ -832,6 +879,58 @@ func validateBrief(ctx tool.Context, raw json.RawMessage) error {
 	if ctx.Context != nil {
 		if err := ctx.Context.Err(); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateScheduleCron(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeScheduleCronInput(raw)
+	if err != nil {
+		return err
+	}
+	if err := validateScheduleCronAction(input.Action); err != nil {
+		return err
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	switch resolvedScheduleCronAction(input.Action) {
+	case scheduleCronActionCreate:
+		if input.Cron == "" {
+			return fmt.Errorf("cron is required")
+		}
+		if !validScheduleCronSpec(input.Cron) {
+			return fmt.Errorf("cron must be a supported 5-field expression or @hourly/@daily/@weekly/@monthly/@yearly")
+		}
+		if input.Message == "" {
+			return fmt.Errorf("message is required")
+		}
+		if err := validateTeamSendTarget(input.Target); err != nil {
+			return err
+		}
+		if input.TeamID != "" {
+			manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+			manifest, err := manager.TeamManifest()
+			if err != nil {
+				return err
+			}
+			if _, ok := findTeamState(manifest, input.TeamID); !ok {
+				return fmt.Errorf("team not found: %s", input.TeamID)
+			}
+		}
+	case scheduleCronActionDelete:
+		if input.ScheduleID == "" {
+			return fmt.Errorf("schedule_id is required")
+		}
+		manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+		if _, ok, err := findScheduleState(manager, input.ScheduleID); err != nil {
+			return err
+		} else if !ok {
+			return fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
 		}
 	}
 	return nil
@@ -1491,6 +1590,85 @@ func callBrief(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (c
 	}, nil
 }
 
+func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeScheduleCronInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	action := resolvedScheduleCronAction(input.Action)
+	switch action {
+	case scheduleCronActionList:
+		manifest, err := manager.ScheduleManifest()
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		schedules := structuredScheduleStates(manifest.Schedules)
+		_ = tool.SendProgress(sink, "", "schedule_listed", map[string]any{
+			"schedule_count": len(schedules),
+		})
+		return contracts.ToolResult{
+			Content: formatScheduleList(manifest.Schedules),
+			StructuredContent: map[string]any{
+				"type":           "schedule_cron",
+				"action":         action,
+				"schedules":      schedules,
+				"schedule_count": len(schedules),
+			},
+		}, nil
+	case scheduleCronActionDelete:
+		deleted, manifest, err := manager.DeleteSchedule(input.ScheduleID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		structured := structuredScheduleState(deleted)
+		structured["type"] = "schedule_cron"
+		structured["action"] = action
+		structured["deleted"] = true
+		structured["schedule_count"] = len(manifest.Schedules)
+		_ = tool.SendProgress(sink, "", "schedule_deleted", map[string]any{
+			"schedule_id":    deleted.ID,
+			"schedule_count": len(manifest.Schedules),
+		})
+		return contracts.ToolResult{
+			Content:           fmt.Sprintf("Schedule %s deleted.", deleted.ID),
+			StructuredContent: structured,
+		}, nil
+	default:
+		enabled := true
+		if input.Enabled != nil {
+			enabled = *input.Enabled
+		}
+		target := resolvedTeamSendTarget(input.Target)
+		schedule, manifest, err := manager.UpsertSchedule(session.ScheduleOptions{
+			ID:          input.ScheduleID,
+			Description: input.Description,
+			Cron:        input.Cron,
+			Message:     input.Message,
+			TeamID:      input.TeamID,
+			Target:      target,
+			Enabled:     enabled,
+		})
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		structured := structuredScheduleState(schedule)
+		structured["type"] = "schedule_cron"
+		structured["action"] = action
+		structured["schedule_count"] = len(manifest.Schedules)
+		_ = tool.SendProgress(sink, "", "schedule_saved", map[string]any{
+			"schedule_id":    schedule.ID,
+			"cron":           schedule.Cron,
+			"enabled":        schedule.Enabled,
+			"schedule_count": len(manifest.Schedules),
+		})
+		return contracts.ToolResult{
+			Content:           fmt.Sprintf("Schedule %s saved for %s.", schedule.ID, schedule.Cron),
+			StructuredContent: structured,
+		}, nil
+	}
+}
+
 func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	var input taskInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -1626,6 +1804,21 @@ func decodeBriefInput(raw json.RawMessage) (briefInput, error) {
 	input.Details = cleanBriefStrings(input.Details)
 	input.NextSteps = cleanBriefStrings(input.NextSteps)
 	input.Risks = cleanBriefStrings(input.Risks)
+	return input, nil
+}
+
+func decodeScheduleCronInput(raw json.RawMessage) (scheduleCronInput, error) {
+	var input scheduleCronInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return scheduleCronInput{}, err
+	}
+	input.Action = strings.ToLower(strings.TrimSpace(input.Action))
+	input.ScheduleID = strings.TrimSpace(input.ScheduleID)
+	input.Description = strings.TrimSpace(input.Description)
+	input.Cron = strings.TrimSpace(input.Cron)
+	input.Message = strings.TrimSpace(input.Message)
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	input.Target = normalizeTeamSendTarget(input.Target)
 	return input, nil
 }
 
@@ -1897,6 +2090,46 @@ func normalizeBriefInput(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(normalized)
 }
 
+func normalizeScheduleCronInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "action", "op", "operation", "schedule_id", "scheduleId", "id", "name", "description", "desc", "summary", "cron", "expression", "schedule", "message", "text", "content", "prompt", "input", "team_id", "teamId", "team", "target", "recipient", "recipients", "audience", "scope", "enabled", "enable":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "action", "op", "operation"); ok {
+		normalized["action"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "schedule_id", "scheduleId", "id", "name"); ok {
+		normalized["schedule_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "description", "desc", "summary"); ok {
+		normalized["description"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "cron", "expression", "schedule"); ok {
+		normalized["cron"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input"); ok {
+		normalized["message"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "team"); ok {
+		normalized["team_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "target", "recipient", "recipients", "audience", "scope"); ok {
+		normalized["target"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "enabled", "enable"); ok {
+		normalized["enabled"] = value
+	}
+	return json.Marshal(normalized)
+}
+
 func decodeRawTaskObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
@@ -2156,6 +2389,70 @@ func teamSendMessageTaskIDs(team session.TeamState, target string) ([]string, er
 	}
 }
 
+func resolvedScheduleCronAction(action string) string {
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action == "" {
+		return scheduleCronActionCreate
+	}
+	return action
+}
+
+func validateScheduleCronAction(action string) error {
+	switch resolvedScheduleCronAction(action) {
+	case scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete:
+		return nil
+	default:
+		return fmt.Errorf("action must be one of %s, %s, %s", scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete)
+	}
+}
+
+func validScheduleCronSpec(spec string) bool {
+	spec = strings.TrimSpace(spec)
+	switch spec {
+	case "@hourly", "@daily", "@weekly", "@monthly", "@yearly", "@annually":
+		return true
+	}
+	fields := strings.Fields(spec)
+	if len(fields) != 5 {
+		return false
+	}
+	for _, field := range fields {
+		if field == "" {
+			return false
+		}
+		for _, r := range field {
+			if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				continue
+			}
+			switch r {
+			case '*', '/', ',', '-', '?', '#', 'L', 'W':
+				continue
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func sanitizeTaskLikeID(id string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", ":", "_", "\x00", "").Replace(strings.TrimSpace(id))
+}
+
+func findScheduleState(manager session.SidechainManager, scheduleID string) (session.ScheduleState, bool, error) {
+	manifest, err := manager.ScheduleManifest()
+	if err != nil {
+		return session.ScheduleState{}, false, err
+	}
+	id := sanitizeTaskLikeID(scheduleID)
+	for _, schedule := range manifest.Schedules {
+		if schedule.ID == id {
+			return schedule, true, nil
+		}
+	}
+	return session.ScheduleState{}, false, nil
+}
+
 func structuredTeamTaskStates(manager session.SidechainManager, team session.TeamState) []map[string]any {
 	out := make([]map[string]any, 0, len(team.TaskIDs))
 	for _, taskID := range team.TaskIDs {
@@ -2207,6 +2504,47 @@ func formatTeamList(teams []session.TeamState) string {
 		builder.WriteByte('\n')
 	}
 	return strings.TrimRight(builder.String(), "\n")
+}
+
+func structuredScheduleState(schedule session.ScheduleState) map[string]any {
+	return map[string]any{
+		"schedule_id": schedule.ID,
+		"session_id":  string(schedule.SessionID),
+		"description": schedule.Description,
+		"cron":        schedule.Cron,
+		"message":     schedule.Message,
+		"team_id":     schedule.TeamID,
+		"target":      schedule.Target,
+		"enabled":     schedule.Enabled,
+		"created_at":  schedule.CreatedAt,
+		"updated_at":  schedule.UpdatedAt,
+	}
+}
+
+func structuredScheduleStates(schedules []session.ScheduleState) []map[string]any {
+	out := make([]map[string]any, 0, len(schedules))
+	for _, schedule := range schedules {
+		out = append(out, structuredScheduleState(schedule))
+	}
+	return out
+}
+
+func formatScheduleList(schedules []session.ScheduleState) string {
+	if len(schedules) == 0 {
+		return "No schedules found."
+	}
+	var builder strings.Builder
+	builder.WriteString("Schedules:")
+	for _, schedule := range schedules {
+		fmt.Fprintf(&builder, "\n- %s: %s", schedule.ID, schedule.Cron)
+		if !schedule.Enabled {
+			builder.WriteString(" (disabled)")
+		}
+		if schedule.Description != "" {
+			fmt.Fprintf(&builder, " - %s", schedule.Description)
+		}
+	}
+	return builder.String()
 }
 
 func formatTeamOutput(team session.TeamState, coordinator map[string]any, tasks []map[string]any) string {

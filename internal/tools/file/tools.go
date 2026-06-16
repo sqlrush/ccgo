@@ -207,6 +207,7 @@ func BuiltinTools() []tool.Tool {
 		tasktools.NewResumeTaskTool(),
 		tasktools.NewSleepTool(),
 		tasktools.NewBriefTool(),
+		tasktools.NewScheduleCronTool(),
 		skilltools.NewSkillTool(),
 		webtools.NewWebFetchTool(),
 		webtools.NewWebSearchTool(),

@@ -39,6 +39,18 @@ func (m SidechainManager) DeleteTeam(teamID string) (TeamState, TeamManifest, er
 	return DeleteTeam(m.Runtime.SessionPath, m.Runtime.SessionID, teamID)
 }
 
+func (m SidechainManager) ScheduleManifest() (ScheduleManifest, error) {
+	return LoadScheduleManifest(m.Runtime.SessionPath, m.Runtime.SessionID)
+}
+
+func (m SidechainManager) UpsertSchedule(options ScheduleOptions) (ScheduleState, ScheduleManifest, error) {
+	return UpsertSchedule(m.Runtime.SessionPath, m.Runtime.SessionID, options)
+}
+
+func (m SidechainManager) DeleteSchedule(scheduleID string) (ScheduleState, ScheduleManifest, error) {
+	return DeleteSchedule(m.Runtime.SessionPath, m.Runtime.SessionID, scheduleID)
+}
+
 func (m SidechainManager) Resume(sidechainID string) (SidechainRun, bool, error) {
 	return ResumeSidechainRun(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 }

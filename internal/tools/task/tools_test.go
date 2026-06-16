@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -773,6 +773,74 @@ func TestBriefToolCreatesStructuredHandoff(t *testing.T) {
 	}
 }
 
+func TestScheduleCronPersistsManifest(t *testing.T) {
+	ctx, transcriptPath := taskContext(t)
+	executor := taskExecutor(t)
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_team",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"ops/team","description":"Ops team"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	created, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_schedule_create",
+		Name: "ScheduleCron",
+		Input: json.RawMessage(`{
+			"name":"daily/check",
+			"description":"Daily ops check",
+			"cron":"0 9 * * MON-FRI",
+			"message":"Check the deployment status.",
+			"team":"ops/team",
+			"target":"all",
+			"enabled":false
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.StructuredContent["schedule_id"] != "daily_check" || created.StructuredContent["cron"] != "0 9 * * MON-FRI" || created.StructuredContent["team_id"] != "ops_team" || created.StructuredContent["target"] != "all" || created.StructuredContent["enabled"] != false || created.StructuredContent["schedule_count"] != 1 {
+		t.Fatalf("schedule create structured content = %#v", created.StructuredContent)
+	}
+	manifest, err := session.LoadScheduleManifest(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Schedules) != 1 || manifest.Schedules[0].ID != "daily_check" || manifest.Schedules[0].Message != "Check the deployment status." {
+		t.Fatalf("schedule manifest = %#v", manifest)
+	}
+	listed, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_list",
+		Name:  "ScheduleCron",
+		Input: json.RawMessage(`{"action":"list"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedules, ok := listed.StructuredContent["schedules"].([]map[string]any)
+	if !ok || len(schedules) != 1 || schedules[0]["schedule_id"] != "daily_check" {
+		t.Fatalf("schedule list = %#v", listed.StructuredContent)
+	}
+	deleted, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_delete",
+		Name:  "ScheduleCron",
+		Input: json.RawMessage(`{"action":"delete","id":"daily/check"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.StructuredContent["deleted"] != true || deleted.StructuredContent["schedule_id"] != "daily_check" || deleted.StructuredContent["schedule_count"] != 0 {
+		t.Fatalf("schedule delete structured content = %#v", deleted.StructuredContent)
+	}
+	manifest, err = session.LoadScheduleManifest(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Schedules) != 0 {
+		t.Fatalf("schedule manifest after delete = %#v", manifest)
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -983,6 +1051,14 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing brief summary", tool: "Brief", input: `{}`, want: "summary is required"},
 		{name: "unknown brief field", tool: "Brief", input: `{"summary":"hello","extra":true}`, want: "input.extra is not allowed"},
 		{name: "bad brief list", tool: "Brief", input: `{"summary":"hello","details":12}`, want: "details must be a string or string array"},
+		{name: "bad schedule action", tool: "ScheduleCron", input: `{"action":"run"}`, want: "action must be one of create, list, delete"},
+		{name: "missing schedule cron", tool: "ScheduleCron", input: `{"message":"hello"}`, want: "cron is required"},
+		{name: "bad schedule cron", tool: "ScheduleCron", input: `{"cron":"bad","message":"hello"}`, want: "cron must be a supported 5-field expression"},
+		{name: "missing schedule message", tool: "ScheduleCron", input: `{"cron":"@daily"}`, want: "message is required"},
+		{name: "bad schedule target", tool: "ScheduleCron", input: `{"cron":"@daily","message":"hello","target":"leaders"}`, want: "target must be one of members, coordinator, all"},
+		{name: "missing schedule team", tool: "ScheduleCron", input: `{"cron":"@daily","message":"hello","team_id":"missing"}`, want: "team not found: missing"},
+		{name: "missing schedule delete id", tool: "ScheduleCron", input: `{"action":"delete"}`, want: "schedule_id is required"},
+		{name: "missing schedule delete schedule", tool: "ScheduleCron", input: `{"action":"delete","schedule_id":"missing"}`, want: "schedule not found: missing"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
