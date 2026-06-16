@@ -3,6 +3,8 @@ package tasktools
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -175,6 +177,77 @@ func TestTaskOutputListsAndReadsSidechainOutput(t *testing.T) {
 	}
 	if tail.StructuredContent["tail_lines"] != 1 || strings.TrimSpace(tail.StructuredContent["output"].(string)) != "Found issue" {
 		t.Fatalf("tail structured content = %#v", tail.StructuredContent)
+	}
+}
+
+func TestTaskToolCreatesAndKillCleansOwnedWorktree(t *testing.T) {
+	repo := initTaskGitRepo(t)
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	ctx := tool.Context{
+		Context:          context.Background(),
+		WorkingDirectory: repo,
+		SessionID:        "sess_task",
+		Metadata: map[string]any{
+			tool.MetadataSessionPathKey: transcriptPath,
+		},
+	}
+	executor := taskExecutor(t)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_worktree",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/worktree","description":"Isolated task","prompt":"Work separately","subagent_type":"general-purpose","worktree":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreePath, ok := result.StructuredContent["worktree_path"].(string)
+	if !ok || worktreePath == "" || worktreePath == repo {
+		t.Fatalf("worktree result = %#v", result.StructuredContent)
+	}
+	if result.StructuredContent["worktree_owned"] != true {
+		t.Fatalf("worktree ownership result = %#v", result.StructuredContent)
+	}
+	if _, err := os.Stat(filepath.Join(worktreePath, "README.md")); err != nil {
+		t.Fatalf("created worktree missing checkout: %v", err)
+	}
+
+	state, err := session.FindSidechainState(transcriptPath, ctx.SessionID, "agent/worktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Metadata.WorktreePath != worktreePath || !state.Metadata.WorktreeOwned {
+		t.Fatalf("worktree metadata = %#v", state.Metadata)
+	}
+
+	killed, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_worktree_kill",
+		Name:  "KillTask",
+		Input: json.RawMessage(`{"task_id":"agent/worktree","reason":"done testing cleanup"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if killed.StructuredContent["worktree_cleanup_attempted"] != true ||
+		killed.StructuredContent["worktree_cleanup_status"] != "removed" ||
+		killed.StructuredContent["worktree_cleanup_reason"] != "done testing cleanup" {
+		t.Fatalf("kill cleanup structured content = %#v", killed.StructuredContent)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists after cleanup: %v", err)
+	}
+
+	output, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_worktree_output",
+		Name:  "TaskOutput",
+		Input: json.RawMessage(`{"task_id":"agent/worktree"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.StructuredContent["worktree_cleanup_status"] != "removed" ||
+		output.StructuredContent["worktree_cleanup_reason"] != "done testing cleanup" {
+		t.Fatalf("output cleanup structured content = %#v", output.StructuredContent)
 	}
 }
 
@@ -436,6 +509,9 @@ func TestTaskToolDefinitionIsPermissionSafeButOrdered(t *testing.T) {
 	if !task.IsReadOnly(nil) {
 		t.Fatalf("Task should be read-only for permission decisions")
 	}
+	if task.IsReadOnly(json.RawMessage(`{"description":"Review API","prompt":"Inspect API changes","subagent_type":"general-purpose","worktree":true}`)) {
+		t.Fatalf("Task with worktree isolation should not be read-only")
+	}
 	if task.IsConcurrencySafe(nil) {
 		t.Fatalf("Task should preserve ordered sidechain lifecycle updates")
 	}
@@ -451,4 +527,32 @@ func containsEnum(values []any, want string) bool {
 		}
 	}
 	return false
+}
+
+func initTaskGitRepo(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is required for worktree tests")
+	}
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runTaskGitTest(t, repo, "init")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runTaskGitTest(t, repo, "add", "README.md")
+	runTaskGitTest(t, repo, "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "init")
+	return repo
+}
+
+func runTaskGitTest(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
 }

@@ -21,6 +21,7 @@ type taskInput struct {
 	Description  string `json:"description"`
 	Prompt       string `json:"prompt"`
 	SubagentType string `json:"subagent_type"`
+	Worktree     bool   `json:"worktree,omitempty"`
 }
 
 type taskOutputInput struct {
@@ -68,6 +69,10 @@ func NewTaskTool() tool.Tool {
 						"type":        "string",
 						"description": "Optional stable task id.",
 					},
+					"worktree": map[string]any{
+						"type":        "boolean",
+						"description": "Create an isolated git worktree for this task.",
+					},
 				},
 			},
 		},
@@ -75,9 +80,8 @@ func NewTaskTool() tool.Tool {
 		PromptFunc:      taskPrompt,
 		InputSchemaFunc: taskInputSchema,
 		ValidateFunc:    validateTask,
-		PermissionFunc:  allowTask,
 		CallFunc:        callTask,
-		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
+		ReadOnlyFunc:    func(raw json.RawMessage) bool { return !taskInputRequestsWorktree(raw) },
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
@@ -134,9 +138,10 @@ func NewKillTaskTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Cancels a running subagent task by task_id. Use TaskOutput afterwards to read the final status and cancellation summary.", nil
 		},
-		NormalizeFunc: normalizeKillTaskInput,
-		ValidateFunc:  validateKillTask,
-		CallFunc:      callKillTask,
+		NormalizeFunc:   normalizeKillTaskInput,
+		ValidateFunc:    validateKillTask,
+		CallFunc:        callKillTask,
+		DestructiveFunc: func(json.RawMessage) bool { return true },
 	}
 }
 
@@ -210,6 +215,10 @@ func taskInputSchema(ctx tool.PromptContext) contracts.JSONSchema {
 				"type":        "string",
 				"description": "Optional stable task id.",
 			},
+			"worktree": map[string]any{
+				"type":        "boolean",
+				"description": "Create an isolated git worktree for this task.",
+			},
 		},
 	}
 	metadataAgents := taskAgentsFromMetadata(ctx.Metadata)
@@ -249,6 +258,9 @@ func normalizeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	if value, ok := firstString(obj, "subagent_type", "subagentType", "agent_type", "agentType", "agent", "type"); ok {
 		input.SubagentType = value
 	}
+	if value, ok := firstBool(obj, "worktree", "isolated_worktree", "isolatedWorktree", "worktree_isolation", "worktreeIsolation", "create_worktree", "createWorktree"); ok {
+		input.Worktree = value
+	}
 	data, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
@@ -272,6 +284,9 @@ func validateTask(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if ctx.SessionID == "" {
 		return fmt.Errorf("session id is required")
+	}
+	if input.Worktree && strings.TrimSpace(ctx.WorkingDirectory) == "" {
+		return fmt.Errorf("working directory is required for worktree isolation")
 	}
 	if sessionPathFromMetadata(ctx.Metadata) == "" {
 		return fmt.Errorf("session path is required")
@@ -336,13 +351,6 @@ func validateResumeTask(ctx tool.Context, raw json.RawMessage) error {
 	return nil
 }
 
-func allowTask(tool.Context, json.RawMessage) (contracts.PermissionDecision, error) {
-	return contracts.PermissionDecision{
-		Behavior:       contracts.PermissionAllow,
-		DecisionReason: "starting a subagent task records runtime metadata; subagent tool calls are permissioned separately",
-	}, nil
-}
-
 func allowTaskOutput(tool.Context, json.RawMessage) (contracts.PermissionDecision, error) {
 	return contracts.PermissionDecision{
 		Behavior:       contracts.PermissionAllow,
@@ -358,10 +366,20 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	sessionPath := sessionPathFromMetadata(ctx.Metadata)
 	runtime := session.SidechainRuntime{SessionPath: sessionPath, SessionID: ctx.SessionID}
 	agent, hasAgent := taskAgentForType(input.SubagentType, availableTaskAgents(ctx.Metadata))
+	taskID := taskSidechainID(input.ID)
+	input.ID = taskID
+	if err := ensureTaskCanStart(sessionPath, ctx.SessionID, taskID); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	worktree, err := prepareTaskWorktree(ctx, taskID, input.Worktree)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
 	run, err := runtime.Start(session.SidechainOptions{
-		ID:                  input.ID,
+		ID:                  taskID,
 		AgentType:           input.SubagentType,
-		WorktreePath:        ctx.WorkingDirectory,
+		WorktreePath:        worktree.Path,
+		WorktreeOwned:       worktree.Owned,
 		Description:         input.Description,
 		AgentPath:           agent.Path,
 		AgentPrompt:         agent.Prompt,
@@ -370,6 +388,9 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		AgentAllowedTools:   append([]string(nil), agent.AllowedTools...),
 	})
 	if err != nil {
+		if worktree.Owned {
+			_ = removePreparedTaskWorktree(ctx, worktree.Path)
+		}
 		return contracts.ToolResult{}, err
 	}
 	if hasAgent && agent.Prompt != "" {
@@ -416,6 +437,10 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		"subagent_type": input.SubagentType,
 		"description":   input.Description,
 		"path":          run.Path,
+		"worktree_path": worktree.Path,
+	}
+	if worktree.Owned {
+		structured["worktree_owned"] = true
 	}
 	if hasAgent && agent.Path != "" {
 		structured["agent_path"] = agent.Path
@@ -433,12 +458,14 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		structured["agent_allowed_tools"] = append([]string(nil), agent.AllowedTools...)
 	}
 	_ = tool.SendProgress(sink, "", "task_started", map[string]any{
-		"task_id":       run.ID,
-		"sidechain_id":  run.ID,
-		"status":        session.SidechainStatusRunning,
-		"subagent_type": input.SubagentType,
-		"description":   input.Description,
-		"path":          run.Path,
+		"task_id":        run.ID,
+		"sidechain_id":   run.ID,
+		"status":         session.SidechainStatusRunning,
+		"subagent_type":  input.SubagentType,
+		"description":    input.Description,
+		"path":           run.Path,
+		"worktree_path":  worktree.Path,
+		"worktree_owned": worktree.Owned,
 	})
 	return contracts.ToolResult{
 		Content:           fmt.Sprintf("Task started: %s\nSubagent type: %s\nSidechain ID: %s", input.Description, input.SubagentType, run.ID),
@@ -526,14 +553,37 @@ func callKillTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink)
 			return contracts.ToolResult{}, err
 		}
 	}
+	cleanup, err := cleanupOwnedTaskWorktree(ctx, manager, state, input.Reason)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if cleanup.Attempted {
+		state, err = findTaskState(manager, state.ID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+	}
 	content := fmt.Sprintf("Task %s is not running.", state.ID)
 	if killed {
 		content = fmt.Sprintf("Cancel requested for task %s.", state.ID)
+	}
+	if cleanup.Attempted {
+		content += fmt.Sprintf("\nWorktree cleanup: %s.", cleanup.Status)
+		if cleanup.Reason != "" {
+			content += " " + cleanup.Reason
+		}
 	}
 	structured := structuredTaskState(state)
 	structured["type"] = "kill_task"
 	structured["killed"] = killed
 	structured["cancelled"] = state.Status == session.SidechainStatusCancelled
+	if cleanup.Attempted {
+		structured["worktree_cleanup_attempted"] = true
+		structured["worktree_cleanup_status"] = cleanup.Status
+		if cleanup.Reason != "" {
+			structured["worktree_cleanup_reason"] = cleanup.Reason
+		}
+	}
 	progressType := "task_not_running"
 	if killed {
 		progressType = "task_cancelled"
@@ -545,6 +595,15 @@ func callKillTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink)
 		"killed":       killed,
 		"cancelled":    state.Status == session.SidechainStatusCancelled,
 	})
+	if cleanup.Attempted {
+		_ = tool.SendProgress(sink, "", "task_worktree_cleanup", map[string]any{
+			"task_id":        state.ID,
+			"sidechain_id":   state.ID,
+			"worktree_path":  state.Metadata.WorktreePath,
+			"cleanup_status": cleanup.Status,
+			"cleanup_reason": cleanup.Reason,
+		})
+	}
 	return contracts.ToolResult{
 		Content:           content,
 		StructuredContent: structured,
@@ -1002,6 +1061,27 @@ func firstString(obj map[string]any, keys ...string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func firstBool(obj map[string]any, keys ...string) (bool, bool) {
+	for _, key := range keys {
+		value, ok := obj[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case bool:
+			return typed, true
+		case string:
+			switch strings.ToLower(strings.TrimSpace(typed)) {
+			case "true", "1", "yes", "on":
+				return true, true
+			case "false", "0", "no", "off":
+				return false, true
+			}
+		}
+	}
+	return false, false
 }
 
 func availableTaskAgents(metadata map[string]any) []tool.AgentInfo {
