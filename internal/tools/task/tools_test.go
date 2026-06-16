@@ -838,6 +838,9 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 	if triggered.StructuredContent["action"] != "trigger" || triggered.StructuredContent["sent_count"] != 1 {
 		t.Fatalf("schedule trigger structured content = %#v", triggered.StructuredContent)
 	}
+	if triggered.StructuredContent["last_run_status"] != "success" || triggered.StructuredContent["run_count"] != 1 {
+		t.Fatalf("schedule trigger run state = %#v", triggered.StructuredContent)
+	}
 	resume, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_schedule_resume",
 		Name:  "ResumeTask",
@@ -853,6 +856,28 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 	text, _ := messages[2]["text"].(string)
 	if !strings.Contains(text, "Scheduled cron trigger received.") || !strings.Contains(text, "Schedule: daily_check") || !strings.Contains(text, "Cron: 0 9 * * MON-FRI") || !strings.Contains(text, "Check the deployment status.") {
 		t.Fatalf("schedule trigger message = %q", text)
+	}
+	due, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_due",
+		Name:  "ScheduleCron",
+		Input: json.RawMessage(`{"action":"run_due","now":"2026-06-22T09:00:00Z"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if due.StructuredContent["action"] != "run_due" || due.StructuredContent["due_count"] != 1 || due.StructuredContent["triggered_count"] != 1 || due.StructuredContent["error_count"] != 0 {
+		t.Fatalf("schedule run due structured content = %#v", due.StructuredContent)
+	}
+	duplicateDue, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_schedule_due_duplicate",
+		Name:  "ScheduleCron",
+		Input: json.RawMessage(`{"action":"run_due","now":"2026-06-22T09:00:30Z"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicateDue.StructuredContent["due_count"] != 0 || duplicateDue.StructuredContent["triggered_count"] != 0 {
+		t.Fatalf("schedule duplicate run due structured content = %#v", duplicateDue.StructuredContent)
 	}
 	deleted, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_schedule_delete",
@@ -1149,7 +1174,8 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing brief summary", tool: "Brief", input: `{}`, want: "summary is required"},
 		{name: "unknown brief field", tool: "Brief", input: `{"summary":"hello","extra":true}`, want: "input.extra is not allowed"},
 		{name: "bad brief list", tool: "Brief", input: `{"summary":"hello","details":12}`, want: "details must be a string or string array"},
-		{name: "bad schedule action", tool: "ScheduleCron", input: `{"action":"invalid"}`, want: "action must be one of create, list, delete, trigger"},
+		{name: "bad schedule action", tool: "ScheduleCron", input: `{"action":"invalid"}`, want: "action must be one of create, list, delete, trigger, run_due"},
+		{name: "bad schedule now", tool: "ScheduleCron", input: `{"action":"run_due","now":"soon"}`, want: "now must be RFC3339"},
 		{name: "missing schedule cron", tool: "ScheduleCron", input: `{"message":"hello"}`, want: "cron is required"},
 		{name: "bad schedule cron", tool: "ScheduleCron", input: `{"cron":"bad","message":"hello"}`, want: "cron must be a supported 5-field expression"},
 		{name: "missing schedule message", tool: "ScheduleCron", input: `{"cron":"@daily"}`, want: "message is required"},

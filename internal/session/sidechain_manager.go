@@ -51,6 +51,10 @@ func (m SidechainManager) DeleteSchedule(scheduleID string) (ScheduleState, Sche
 	return DeleteSchedule(m.Runtime.SessionPath, m.Runtime.SessionID, scheduleID)
 }
 
+func (m SidechainManager) RecordScheduleRun(scheduleID string, options ScheduleRunOptions) (ScheduleState, ScheduleManifest, error) {
+	return RecordScheduleRun(m.Runtime.SessionPath, m.Runtime.SessionID, scheduleID, options)
+}
+
 func (m SidechainManager) Resume(sidechainID string) (SidechainRun, bool, error) {
 	return ResumeSidechainRun(m.Runtime.SessionPath, m.Runtime.SessionID, sidechainID)
 }

@@ -26,6 +26,7 @@ const (
 	scheduleCronActionList    = "list"
 	scheduleCronActionDelete  = "delete"
 	scheduleCronActionTrigger = "trigger"
+	scheduleCronActionRunDue  = "run_due"
 
 	maxSleepDuration = 60 * time.Second
 )
@@ -110,6 +111,7 @@ type scheduleCronInput struct {
 	TeamID      string `json:"team_id,omitempty"`
 	Target      string `json:"target,omitempty"`
 	Enabled     *bool  `json:"enabled,omitempty"`
+	Now         string `json:"now,omitempty"`
 }
 
 type remoteTriggerInput struct {
@@ -502,7 +504,7 @@ func NewScheduleCronTool() tool.Tool {
 			InputSchema: contracts.JSONSchema{
 				"type": "object",
 				"properties": map[string]any{
-					"action":      map[string]any{"type": "string", "enum": []any{scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger}},
+					"action":      map[string]any{"type": "string", "enum": []any{scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger, scheduleCronActionRunDue}},
 					"schedule_id": map[string]any{"type": "string"},
 					"description": map[string]any{"type": "string"},
 					"cron":        map[string]any{"type": "string"},
@@ -510,11 +512,12 @@ func NewScheduleCronTool() tool.Tool {
 					"team_id":     map[string]any{"type": "string"},
 					"target":      map[string]any{"type": "string", "enum": []any{teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll}},
 					"enabled":     map[string]any{"type": "boolean"},
+					"now":         map[string]any{"type": "string"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Creates, lists, deletes, or manually triggers session-scoped cron schedules. action defaults to create. create requires cron and message, and can optionally bind the schedule to a team_id and target. trigger sends the saved schedule message to the bound team's running recipients.", nil
+			return "Creates, lists, deletes, manually triggers, or runs due session-scoped cron schedules. action defaults to create. create requires cron and message, and can optionally bind the schedule to a team_id and target. trigger sends one saved schedule message to the bound team's running recipients. run_due executes enabled schedules whose cron matches the current minute.", nil
 		},
 		NormalizeFunc:   normalizeScheduleCronInput,
 		ValidateFunc:    validateScheduleCron,
@@ -937,6 +940,11 @@ func validateScheduleCron(ctx tool.Context, raw json.RawMessage) error {
 	if sessionPathFromMetadata(ctx.Metadata) == "" {
 		return fmt.Errorf("session path is required")
 	}
+	if input.Now != "" {
+		if _, err := parseScheduleCronNow(input.Now); err != nil {
+			return err
+		}
+	}
 	switch resolvedScheduleCronAction(input.Action) {
 	case scheduleCronActionCreate:
 		if input.Cron == "" {
@@ -999,6 +1007,15 @@ func validateScheduleCron(ctx tool.Context, raw json.RawMessage) error {
 		}
 		if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
 			return err
+		}
+	case scheduleCronActionRunDue:
+		if input.ScheduleID != "" {
+			manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+			if _, ok, err := findScheduleState(manager, input.ScheduleID); err != nil {
+				return err
+			} else if !ok {
+				return fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
+			}
 		}
 	}
 	return nil
@@ -1746,45 +1763,27 @@ func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 		if !ok {
 			return contracts.ToolResult{}, fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
 		}
-		team, err := loadTeamForMessage(manager, schedule.TeamID)
+		now, err := parseScheduleCronNow(input.Now)
 		if err != nil {
 			return contracts.ToolResult{}, err
 		}
-		taskIDs, err := teamSendMessageTaskIDs(team, schedule.Target)
+		sent, triggerMessageChars, err := triggerScheduleToTeam(ctx, manager, schedule, now)
 		if err != nil {
 			return contracts.ToolResult{}, err
 		}
-		if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		schedule, _, err = manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
+			Timestamp: now,
+			SentCount: len(sent),
+		})
+		if err != nil {
 			return contracts.ToolResult{}, err
-		}
-		triggerMessage := formatScheduleTriggerMessage(schedule)
-		sent := make([]map[string]any, 0, len(taskIDs))
-		for _, taskID := range taskIDs {
-			message := msgs.UserText(triggerMessage)
-			message.SessionID = ctx.SessionID
-			if err := manager.Append(taskID, session.TranscriptMessage{
-				Type:        string(contracts.MessageUser),
-				UUID:        message.UUID,
-				SessionID:   ctx.SessionID,
-				Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
-				IsSidechain: true,
-				AgentID:     taskID,
-				Message:     &message,
-			}); err != nil {
-				return contracts.ToolResult{}, err
-			}
-			sent = append(sent, map[string]any{
-				"task_id":      taskID,
-				"sidechain_id": taskID,
-				"message_uuid": string(message.UUID),
-			})
 		}
 		structured := structuredScheduleState(schedule)
 		structured["type"] = "schedule_cron"
 		structured["action"] = action
 		structured["sent_count"] = len(sent)
 		structured["sent"] = sent
-		structured["trigger_message_chars"] = len(triggerMessage)
+		structured["trigger_message_chars"] = triggerMessageChars
 		_ = tool.SendProgress(sink, "", "schedule_triggered", map[string]any{
 			"schedule_id": schedule.ID,
 			"team_id":     schedule.TeamID,
@@ -1794,6 +1793,81 @@ func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 		return contracts.ToolResult{
 			Content:           fmt.Sprintf("Schedule %s triggered for %d task(s).", schedule.ID, len(sent)),
 			StructuredContent: structured,
+		}, nil
+	case scheduleCronActionRunDue:
+		now, err := parseScheduleCronNow(input.Now)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		manifest, err := manager.ScheduleManifest()
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		dueSchedules := session.DueSchedulesAt(manifest, now)
+		filterID := sanitizeTaskLikeID(input.ScheduleID)
+		selectedDue := make([]session.ScheduleState, 0, len(dueSchedules))
+		for _, schedule := range dueSchedules {
+			if filterID == "" || schedule.ID == filterID {
+				selectedDue = append(selectedDue, schedule)
+			}
+		}
+		triggered := make([]map[string]any, 0, len(selectedDue))
+		runErrors := make([]map[string]any, 0)
+		for _, schedule := range selectedDue {
+			sent, triggerMessageChars, err := triggerScheduleToTeam(ctx, manager, schedule, now)
+			if err != nil {
+				updated, _, recordErr := manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
+					Timestamp: now,
+					Error:     err.Error(),
+				})
+				if recordErr == nil {
+					schedule = updated
+				}
+				runError := map[string]any{
+					"schedule_id": schedule.ID,
+					"error":       err.Error(),
+				}
+				if recordErr != nil {
+					runError["record_error"] = recordErr.Error()
+				}
+				runErrors = append(runErrors, runError)
+				continue
+			}
+			updated, _, err := manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
+				Timestamp: now,
+				SentCount: len(sent),
+			})
+			if err != nil {
+				runErrors = append(runErrors, map[string]any{
+					"schedule_id": schedule.ID,
+					"error":       err.Error(),
+				})
+				continue
+			}
+			triggeredSchedule := structuredScheduleState(updated)
+			triggeredSchedule["sent_count"] = len(sent)
+			triggeredSchedule["sent"] = sent
+			triggeredSchedule["trigger_message_chars"] = triggerMessageChars
+			triggered = append(triggered, triggeredSchedule)
+		}
+		_ = tool.SendProgress(sink, "", "schedule_due_run", map[string]any{
+			"checked_at":      now.UTC().Format(time.RFC3339Nano),
+			"due_count":       len(selectedDue),
+			"triggered_count": len(triggered),
+			"error_count":     len(runErrors),
+		})
+		return contracts.ToolResult{
+			Content: fmt.Sprintf("Triggered %d due schedule(s); %d error(s).", len(triggered), len(runErrors)),
+			StructuredContent: map[string]any{
+				"type":            "schedule_cron",
+				"action":          action,
+				"checked_at":      now.UTC().Format(time.RFC3339Nano),
+				"due_count":       len(selectedDue),
+				"triggered_count": len(triggered),
+				"error_count":     len(runErrors),
+				"triggered":       triggered,
+				"errors":          runErrors,
+			},
 		}, nil
 	default:
 		enabled := true
@@ -1828,6 +1902,52 @@ func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 			StructuredContent: structured,
 		}, nil
 	}
+}
+
+func triggerScheduleToTeam(ctx tool.Context, manager session.SidechainManager, schedule session.ScheduleState, now time.Time) ([]map[string]any, int, error) {
+	if !schedule.Enabled {
+		return nil, 0, fmt.Errorf("schedule %s is disabled", schedule.ID)
+	}
+	if schedule.TeamID == "" {
+		return nil, 0, fmt.Errorf("schedule %s has no team", schedule.ID)
+	}
+	team, err := loadTeamForMessage(manager, schedule.TeamID)
+	if err != nil {
+		return nil, 0, err
+	}
+	taskIDs, err := teamSendMessageTaskIDs(team, schedule.Target)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return nil, 0, err
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	triggerMessage := formatScheduleTriggerMessage(schedule)
+	sent := make([]map[string]any, 0, len(taskIDs))
+	for _, taskID := range taskIDs {
+		message := msgs.UserText(triggerMessage)
+		message.SessionID = ctx.SessionID
+		if err := manager.Append(taskID, session.TranscriptMessage{
+			Type:        string(contracts.MessageUser),
+			UUID:        message.UUID,
+			SessionID:   ctx.SessionID,
+			Timestamp:   now.UTC().Format(time.RFC3339Nano),
+			IsSidechain: true,
+			AgentID:     taskID,
+			Message:     &message,
+		}); err != nil {
+			return nil, 0, err
+		}
+		sent = append(sent, map[string]any{
+			"task_id":      taskID,
+			"sidechain_id": taskID,
+			"message_uuid": string(message.UUID),
+		})
+	}
+	return sent, len(triggerMessage), nil
 }
 
 func callRemoteTrigger(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
@@ -2334,7 +2454,7 @@ func normalizeScheduleCronInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "action", "op", "operation", "schedule_id", "scheduleId", "id", "name", "description", "desc", "summary", "cron", "expression", "schedule", "message", "text", "content", "prompt", "input", "team_id", "teamId", "team", "target", "recipient", "recipients", "audience", "scope", "enabled", "enable":
+		case "action", "op", "operation", "schedule_id", "scheduleId", "id", "name", "description", "desc", "summary", "cron", "expression", "schedule", "message", "text", "content", "prompt", "input", "team_id", "teamId", "team", "target", "recipient", "recipients", "audience", "scope", "enabled", "enable", "now", "at", "time":
 		default:
 			return nil, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -2363,6 +2483,9 @@ func normalizeScheduleCronInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	if value, ok := firstRawTaskField(obj, "enabled", "enable"); ok {
 		normalized["enabled"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "now", "at", "time"); ok {
+		normalized["now"] = value
 	}
 	return json.Marshal(normalized)
 }
@@ -2676,17 +2799,30 @@ func resolvedScheduleCronAction(action string) string {
 	switch action {
 	case "run", "fire", "execute":
 		return scheduleCronActionTrigger
+	case "due", "tick", "run-due", "rundue":
+		return scheduleCronActionRunDue
 	}
 	return action
 }
 
 func validateScheduleCronAction(action string) error {
 	switch resolvedScheduleCronAction(action) {
-	case scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger:
+	case scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger, scheduleCronActionRunDue:
 		return nil
 	default:
-		return fmt.Errorf("action must be one of %s, %s, %s, %s", scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger)
+		return fmt.Errorf("action must be one of %s, %s, %s, %s, %s", scheduleCronActionCreate, scheduleCronActionList, scheduleCronActionDelete, scheduleCronActionTrigger, scheduleCronActionRunDue)
 	}
+}
+
+func parseScheduleCronNow(raw string) (time.Time, error) {
+	if strings.TrimSpace(raw) == "" {
+		return time.Now().UTC(), nil
+	}
+	now, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("now must be RFC3339")
+	}
+	return now.UTC(), nil
 }
 
 func validScheduleCronSpec(spec string) bool {
@@ -2791,16 +2927,21 @@ func formatTeamList(teams []session.TeamState) string {
 
 func structuredScheduleState(schedule session.ScheduleState) map[string]any {
 	return map[string]any{
-		"schedule_id": schedule.ID,
-		"session_id":  string(schedule.SessionID),
-		"description": schedule.Description,
-		"cron":        schedule.Cron,
-		"message":     schedule.Message,
-		"team_id":     schedule.TeamID,
-		"target":      schedule.Target,
-		"enabled":     schedule.Enabled,
-		"created_at":  schedule.CreatedAt,
-		"updated_at":  schedule.UpdatedAt,
+		"schedule_id":         schedule.ID,
+		"session_id":          string(schedule.SessionID),
+		"description":         schedule.Description,
+		"cron":                schedule.Cron,
+		"message":             schedule.Message,
+		"team_id":             schedule.TeamID,
+		"target":              schedule.Target,
+		"enabled":             schedule.Enabled,
+		"created_at":          schedule.CreatedAt,
+		"updated_at":          schedule.UpdatedAt,
+		"last_run_at":         schedule.LastRunAt,
+		"last_run_status":     schedule.LastRunStatus,
+		"last_run_error":      schedule.LastRunError,
+		"last_run_sent_count": schedule.LastRunSentCount,
+		"run_count":           schedule.RunCount,
 	}
 }
 
