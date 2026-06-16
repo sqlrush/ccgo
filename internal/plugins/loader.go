@@ -1242,13 +1242,84 @@ func parseFrontmatterWords(raw string) []string {
 	if raw == "" {
 		return nil
 	}
-	var parts []string
-	if strings.Contains(raw, ",") {
-		parts = strings.Split(raw, ",")
-	} else {
-		parts = strings.Fields(raw)
+	if strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]") {
+		raw = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(raw, "["), "]"))
 	}
-	return compactStrings(parts)
+	parts := splitFrontmatterWords(raw)
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = trimFrontmatterScalar(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func splitFrontmatterWords(raw string) []string {
+	var parts []string
+	var current strings.Builder
+	var quote rune
+	depth := 0
+	escaped := false
+	for _, r := range raw {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			current.WriteRune(r)
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			current.WriteRune(r)
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch r {
+		case '\'', '"':
+			quote = r
+			current.WriteRune(r)
+		case '(', '[', '{':
+			depth++
+			current.WriteRune(r)
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+			current.WriteRune(r)
+		case ',', ' ', '\t', '\n', '\r':
+			if depth == 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+				continue
+			}
+			current.WriteRune(r)
+		default:
+			current.WriteRune(r)
+		}
+	}
+	parts = append(parts, current.String())
+	return parts
+}
+
+func trimFrontmatterScalar(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if len(raw) >= 1 {
+		first := raw[0]
+		if first == '"' || first == '\'' {
+			raw = strings.TrimSpace(raw[1:])
+			if len(raw) >= 1 && raw[len(raw)-1] == first {
+				raw = strings.TrimSpace(raw[:len(raw)-1])
+			}
+		}
+	}
+	return raw
 }
 
 func parseFrontmatterFalse(raw string) bool {

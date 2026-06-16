@@ -33,6 +33,8 @@
 | M10 Agents/tasks/worktree/remote | 已有 sidechain runtime 和基础 `Task` tool 启动入口：可记录 description/prompt/subagent_type、写入 sidechain transcript、返回 running structured content，并通过 runner metadata 落到当前 session；Task prompt/schema 现在会列出 `general-purpose` 与本地 plugin agents，存在明确 agent 清单时会拒绝未知 `subagent_type`；plugin agent path/prompt/model/permissionMode/tools 会写入 sidechain metadata/lifecycle payload，agent prompt 也会作为 sidechain system message 保留；完整 AgentTool、agent 选择/执行循环、progress/output、kill/resume、worktree isolation/cleanup、remote/team/swarm 仍未完成 |
 | 全量测试 | 当前 `go test ./...` 通过 |
 
+M10 补充：plugin command/agent 的 allowed tool frontmatter 解析现在只在顶层逗号或空白处分隔，保留括号、方括号和引号内的逗号/空白，避免 `Bash(git commit -m "x,y")` 这类 tool pattern 被误拆。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。

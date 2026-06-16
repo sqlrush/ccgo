@@ -3,6 +3,7 @@ package plugins
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "skills", "audit", "SKILL.md"), []byte("---\ndescription: Audit code\nallowed-tools: Read\n---\nAudit ${CLAUDE_SKILL_DIR}."), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "agents", "review.md"), []byte("---\nname: reviewer\ndescription: Review changes\nmodel: opus\npermissionMode: bypassPermissions\ntools: Read, Edit\n---\nReview."), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "agents", "review.md"), []byte("---\nname: reviewer\ndescription: Review changes\nmodel: opus\npermissionMode: bypassPermissions\ntools: Read, Bash(git commit -m \"x,y\"), Edit\n---\nReview."), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "extra-agent.md"), []byte("# Extra agent\nHelp with extra tasks."), 0o644); err != nil {
@@ -140,11 +141,37 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if plugin.Agents[0].Prompt != "# Extra agent\nHelp with extra tasks." || plugin.Agents[1].Prompt != "Review." {
 		t.Fatalf("agent prompts = %#v", plugin.Agents)
 	}
-	if plugin.Agents[1].Model != "opus" || plugin.Agents[1].PermissionMode != contracts.PermissionBypassPermissions || len(plugin.Agents[1].AllowedTools) != 2 || plugin.Agents[1].AllowedTools[0] != "Read" || plugin.Agents[1].AllowedTools[1] != "Edit" {
+	if plugin.Agents[1].Model != "opus" || plugin.Agents[1].PermissionMode != contracts.PermissionBypassPermissions || !reflect.DeepEqual(plugin.Agents[1].AllowedTools, []string{"Read", "Bash(git commit -m \"x,y\")", "Edit"}) {
 		t.Fatalf("agent frontmatter = %#v", plugin.Agents[1])
 	}
 	if len(plugin.HookEvents) != 2 || plugin.HookEvents[0].Event != "PostToolUse" || plugin.HookEvents[0].Count != 1 || plugin.HookEvents[1].Event != "PreToolUse" || plugin.HookEvents[1].Count != 1 {
 		t.Fatalf("hook events = %#v", plugin.HookEvents)
+	}
+}
+
+func TestParseFrontmatterWordsKeepsNestedToolPatterns(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{
+			name: "bracketed comma list",
+			raw:  `[Read, Bash(git commit -m "x,y"), "Bash(grep -E \"a,b\" file)", Edit]`,
+			want: []string{"Read", `Bash(git commit -m "x,y")`, `Bash(grep -E \"a,b\" file)`, "Edit"},
+		},
+		{
+			name: "space separated list",
+			raw:  `Read Bash(git status:*) "Bash(git commit -m \"x,y\")"`,
+			want: []string{"Read", "Bash(git status:*)", `Bash(git commit -m \"x,y\")`},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseFrontmatterWords(tt.raw); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("parseFrontmatterWords(%q) = %#v, want %#v", tt.raw, got, tt.want)
+			}
+		})
 	}
 }
 
