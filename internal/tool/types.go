@@ -17,6 +17,7 @@ type AgentInfo struct {
 	Name        string
 	Description string
 	Path        string
+	Prompt      string
 }
 
 type Context struct {

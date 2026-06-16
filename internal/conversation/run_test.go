@@ -359,7 +359,7 @@ func TestRunnerTaskToolUsesPluginAgentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(states) != 1 || states[0].Metadata.AgentType != "demo:reviewer" {
+	if len(states) != 1 || states[0].MessageCount != 3 || states[0].Metadata.AgentType != "demo:reviewer" || states[0].Metadata.AgentPath == "" || states[0].Metadata.AgentPrompt != "Review." {
 		t.Fatalf("states = %#v", states)
 	}
 }

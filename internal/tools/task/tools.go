@@ -190,14 +190,38 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}
 	sessionPath := sessionPathFromMetadata(ctx.Metadata)
 	runtime := session.SidechainRuntime{SessionPath: sessionPath, SessionID: ctx.SessionID}
+	agent, hasAgent := taskAgentForType(input.SubagentType, availableTaskAgents(ctx.Metadata))
 	run, err := runtime.Start(session.SidechainOptions{
 		ID:           input.ID,
 		AgentType:    input.SubagentType,
 		WorktreePath: ctx.WorkingDirectory,
 		Description:  input.Description,
+		AgentPath:    agent.Path,
+		AgentPrompt:  agent.Prompt,
 	})
 	if err != nil {
 		return contracts.ToolResult{}, err
+	}
+	if hasAgent && agent.Prompt != "" {
+		agentMessage := msgs.SystemText("agent_prompt", agent.Prompt)
+		agentMessage.SessionID = ctx.SessionID
+		if err := runtime.Append(run, session.TranscriptMessage{
+			Type:        string(contracts.MessageSystem),
+			UUID:        agentMessage.UUID,
+			SessionID:   ctx.SessionID,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+			Subtype:     "agent_prompt",
+			IsSidechain: true,
+			AgentID:     run.ID,
+			Message:     &agentMessage,
+			Content: map[string]any{
+				"agentType":   input.SubagentType,
+				"agentPath":   agent.Path,
+				"agentPrompt": agent.Prompt,
+			},
+		}); err != nil {
+			return contracts.ToolResult{}, err
+		}
 	}
 	taskMessage := msgs.UserText(input.Prompt)
 	taskMessage.SessionID = ctx.SessionID
@@ -219,6 +243,12 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		"subagent_type": input.SubagentType,
 		"description":   input.Description,
 		"path":          run.Path,
+	}
+	if hasAgent && agent.Path != "" {
+		structured["agent_path"] = agent.Path
+	}
+	if hasAgent && agent.Prompt != "" {
+		structured["agent_prompt_chars"] = len(agent.Prompt)
 	}
 	return contracts.ToolResult{
 		Content:           fmt.Sprintf("Task started: %s\nSubagent type: %s\nSidechain ID: %s", input.Description, input.SubagentType, run.ID),
@@ -280,6 +310,7 @@ func taskAgentsFromMetadata(metadata map[string]any) []tool.AgentInfo {
 				Name:        item["name"],
 				Description: item["description"],
 				Path:        item["path"],
+				Prompt:      item["prompt"],
 			})
 		}
 		return cleanTaskAgents(agents)
@@ -290,6 +321,7 @@ func taskAgentsFromMetadata(metadata map[string]any) []tool.AgentInfo {
 				Name:        firstTaskAgentField(item, "name", "id", "agent"),
 				Description: firstTaskAgentField(item, "description", "desc", "summary", "whenToUse", "when_to_use", "when-to-use"),
 				Path:        firstTaskAgentField(item, "path", "file", "source"),
+				Prompt:      firstTaskAgentField(item, "prompt", "agentPrompt", "agent_prompt", "instructions", "body"),
 			})
 		}
 		return cleanTaskAgents(agents)
@@ -313,6 +345,7 @@ func cleanTaskAgents(agents []tool.AgentInfo) []tool.AgentInfo {
 		agent.Name = strings.TrimSpace(agent.Name)
 		agent.Description = strings.TrimSpace(agent.Description)
 		agent.Path = strings.TrimSpace(agent.Path)
+		agent.Prompt = strings.TrimSpace(agent.Prompt)
 		if agent.Name == "" {
 			continue
 		}
@@ -363,4 +396,14 @@ func taskAgentAllowed(subagentType string, agents []tool.AgentInfo) bool {
 		}
 	}
 	return false
+}
+
+func taskAgentForType(subagentType string, agents []tool.AgentInfo) (tool.AgentInfo, bool) {
+	subagentType = strings.TrimSpace(subagentType)
+	for _, agent := range agents {
+		if subagentType == agent.Name {
+			return agent, true
+		}
+	}
+	return tool.AgentInfo{}, false
 }

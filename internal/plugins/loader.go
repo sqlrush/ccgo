@@ -24,6 +24,7 @@ type PluginAgent struct {
 	Name        string
 	Path        string
 	Description string
+	Prompt      string
 }
 
 type PluginHookEvent struct {
@@ -1001,6 +1002,7 @@ func loadPluginAgentFile(path string, pluginName string, namespace []string, see
 		Name:        strings.Join(compactStrings(parts), ":"),
 		Path:        path,
 		Description: description,
+		Prompt:      strings.TrimSpace(body),
 	}, true
 }
 

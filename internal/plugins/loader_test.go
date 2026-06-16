@@ -137,6 +137,9 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if len(plugin.Agents) != 2 || plugin.Agents[0].Name != "demo:extra-agent" || plugin.Agents[1].Name != "demo:reviewer" {
 		t.Fatalf("agents = %#v", plugin.Agents)
 	}
+	if plugin.Agents[0].Prompt != "# Extra agent\nHelp with extra tasks." || plugin.Agents[1].Prompt != "Review." {
+		t.Fatalf("agent prompts = %#v", plugin.Agents)
+	}
 	if len(plugin.HookEvents) != 2 || plugin.HookEvents[0].Event != "PostToolUse" || plugin.HookEvents[0].Count != 1 || plugin.HookEvents[1].Event != "PreToolUse" || plugin.HookEvents[1].Count != 1 {
 		t.Fatalf("hook events = %#v", plugin.HookEvents)
 	}

@@ -100,10 +100,11 @@ func TestTaskToolStartsSidechainAndStoresPrompt(t *testing.T) {
 }
 
 func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
-	ctx, _ := taskContextWithAgents(t, []tool.AgentInfo{{
+	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
 		Description: "Review changes",
 		Path:        "/tmp/reviewer.md",
+		Prompt:      "Review with plugin instructions.",
 	}})
 	task := NewTaskTool()
 
@@ -133,6 +134,37 @@ func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
 	}
 	if result.StructuredContent["subagent_type"] != "demo:reviewer" {
 		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+	if result.StructuredContent["agent_path"] != "/tmp/reviewer.md" || result.StructuredContent["agent_prompt_chars"] != len("Review with plugin instructions.") {
+		t.Fatalf("structured agent metadata = %#v", result.StructuredContent)
+	}
+	states, err := session.ListSidechainStates(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].MessageCount != 3 {
+		t.Fatalf("states = %#v", states)
+	}
+	if states[0].Metadata.AgentPath != "/tmp/reviewer.md" || states[0].Metadata.AgentPrompt != "Review with plugin instructions." {
+		t.Fatalf("metadata = %#v", states[0].Metadata)
+	}
+	transcript, err := session.LoadTranscript(states[0].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundAgentPrompt bool
+	for _, id := range transcript.Order {
+		entry := transcript.Messages[id]
+		if entry == nil || entry.Subtype != "agent_prompt" || entry.Message == nil {
+			continue
+		}
+		if msgs.TextContent(*entry.Message) == "Review with plugin instructions." {
+			foundAgentPrompt = true
+			break
+		}
+	}
+	if !foundAgentPrompt {
+		t.Fatalf("sidechain transcript missing agent prompt: %#v", transcript.Order)
 	}
 
 	_, err = executor.Execute(ctx, contracts.ToolUse{

@@ -42,6 +42,8 @@ type SidechainOptions struct {
 	AgentType    string
 	WorktreePath string
 	Description  string
+	AgentPath    string
+	AgentPrompt  string
 }
 
 func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) {
@@ -74,6 +76,8 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 			AgentType:    options.AgentType,
 			WorktreePath: options.WorktreePath,
 			Description:  options.Description,
+			AgentPath:    options.AgentPath,
+			AgentPrompt:  options.AgentPrompt,
 		},
 	}
 	if !run.Metadata.Empty() {
@@ -96,6 +100,8 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 			"agentType":    options.AgentType,
 			"worktreePath": options.WorktreePath,
 			"description":  options.Description,
+			"agentPath":    options.AgentPath,
+			"agentPrompt":  options.AgentPrompt,
 		},
 	}); err != nil {
 		return SidechainRun{}, err

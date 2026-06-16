@@ -87,6 +87,24 @@ var sidechainLifecycleDescriptionFields = []string{
 	"prompt", "input", "command", "title",
 }
 
+var sidechainLifecycleAgentPathFields = []string{
+	"agentPath", "agent_path",
+	"agentFile", "agent_file",
+	"agentSource", "agent_source",
+	"subagentPath", "subagent_path",
+	"subagentFile", "subagent_file",
+	"definitionPath", "definition_path",
+}
+
+var sidechainLifecycleAgentPromptFields = []string{
+	"agentPrompt", "agent_prompt",
+	"agentInstructions", "agent_instructions",
+	"agentSystemPrompt", "agent_system_prompt",
+	"systemPrompt", "system_prompt",
+	"subagentPrompt", "subagent_prompt",
+	"subagentInstructions", "subagent_instructions",
+}
+
 var sidechainLifecycleStartTimeFields = []string{
 	"startedAt", "started_at",
 	"startTime", "start_time",
@@ -224,6 +242,12 @@ func LoadSidechainState(info SidechainInfo) (SidechainState, error) {
 			}
 			if description := firstTextField(msg.Content, sidechainLifecycleDescriptionFields...); description != "" && state.Metadata.Description == "" {
 				state.Metadata.Description = description
+			}
+			if agentPath := firstStringField(msg.Content, sidechainLifecycleAgentPathFields...); agentPath != "" && state.Metadata.AgentPath == "" {
+				state.Metadata.AgentPath = agentPath
+			}
+			if agentPrompt := firstTextField(msg.Content, sidechainLifecycleAgentPromptFields...); agentPrompt != "" && state.Metadata.AgentPrompt == "" {
+				state.Metadata.AgentPrompt = agentPrompt
 			}
 			if status := sidechainStatusField(msg.Content, sidechainLifecycleStartStatusFields...); status != "" {
 				state.Status = status

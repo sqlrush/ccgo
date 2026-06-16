@@ -125,6 +125,8 @@ func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
 		AgentType:    "researcher",
 		WorktreePath: "/tmp/research-worktree",
 		Description:  "research the migration",
+		AgentPath:    "/tmp/agents/researcher.md",
+		AgentPrompt:  "Research carefully.",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -140,11 +142,11 @@ func TestSidechainRuntimeStartPersistsMetadataInLifecyclePayload(t *testing.T) {
 	if state.Status != SidechainStatusRunning {
 		t.Fatalf("state = %#v", state)
 	}
-	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research the migration" {
+	if state.Metadata.AgentType != "researcher" || state.Metadata.WorktreePath != "/tmp/research-worktree" || state.Metadata.Description != "research the migration" || state.Metadata.AgentPath != "/tmp/agents/researcher.md" || state.Metadata.AgentPrompt != "Research carefully." {
 		t.Fatalf("metadata recovered from lifecycle payload = %#v", state.Metadata)
 	}
 	resumed, ok := ResumeSidechainRunFromState(state)
-	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || resumed.Metadata.Description != "research the migration" {
+	if !ok || resumed.Metadata.AgentType != "researcher" || resumed.Metadata.WorktreePath != "/tmp/research-worktree" || resumed.Metadata.Description != "research the migration" || resumed.Metadata.AgentPath != "/tmp/agents/researcher.md" || resumed.Metadata.AgentPrompt != "Research carefully." {
 		t.Fatalf("resumed = %#v ok=%v", resumed, ok)
 	}
 }

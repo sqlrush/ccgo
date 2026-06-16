@@ -309,6 +309,7 @@ func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInf
 				Name:        name,
 				Description: strings.TrimSpace(agent.Description),
 				Path:        agent.Path,
+				Prompt:      strings.TrimSpace(agent.Prompt),
 			})
 		}
 	}

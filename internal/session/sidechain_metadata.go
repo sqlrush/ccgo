@@ -11,6 +11,8 @@ type SidechainMetadata struct {
 	AgentType    string `json:"agentType,omitempty"`
 	WorktreePath string `json:"worktreePath,omitempty"`
 	Description  string `json:"description,omitempty"`
+	AgentPath    string `json:"agentPath,omitempty"`
+	AgentPrompt  string `json:"agentPrompt,omitempty"`
 }
 
 func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
@@ -27,6 +29,8 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 	}
 	metadata.WorktreePath = firstStringField(fields, sidechainLifecycleWorktreeFields...)
 	metadata.Description = firstTextField(fields, sidechainLifecycleDescriptionFields...)
+	metadata.AgentPath = firstStringField(fields, sidechainLifecycleAgentPathFields...)
+	metadata.AgentPrompt = firstTextField(fields, sidechainLifecycleAgentPromptFields...)
 	*m = metadata
 	return nil
 }
@@ -40,7 +44,7 @@ func topLevelStringField(value any, key string) string {
 }
 
 func (m SidechainMetadata) Empty() bool {
-	return m.AgentType == "" && m.WorktreePath == "" && m.Description == ""
+	return m.AgentType == "" && m.WorktreePath == "" && m.Description == "" && m.AgentPath == "" && m.AgentPrompt == ""
 }
 
 func WriteSidechainMetadata(path string, metadata SidechainMetadata) error {
