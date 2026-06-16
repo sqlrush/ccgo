@@ -328,6 +328,12 @@ func formatCommandListLine(cmd contracts.Command) string {
 }
 
 func formatSkillsText(registry Registry, raw string) string {
+	if query, ok := searchQuery(raw); ok {
+		if query == "" {
+			return "Usage: /skills search <query>"
+		}
+		return formatSkillSearch(registry, query)
+	}
 	if target, ok := detailTarget(raw); ok {
 		cmd, found := registry.Find(target)
 		if !found || !isSkillCommand(cmd) {
@@ -352,6 +358,27 @@ func formatSkillsText(registry Registry, raw string) string {
 		return "No skills available."
 	}
 	return "Available skills:\n" + strings.Join(lines, "\n")
+}
+
+func formatSkillSearch(registry Registry, query string) string {
+	query = strings.TrimSpace(query)
+	var matches []contracts.Command
+	for _, cmd := range registry.Visible() {
+		if isSkillCommand(cmd) && commandMatchesQuery(cmd, query) {
+			matches = append(matches, cmd)
+		}
+	}
+	if len(matches) == 0 {
+		return "No skills matched " + query + "."
+	}
+	lines := []string{
+		"Skills search: " + query,
+		fmt.Sprintf("Matches: %d", len(matches)),
+	}
+	for _, cmd := range matches {
+		lines = append(lines, formatCommandListLine(cmd))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func detailTarget(raw string) (string, bool) {

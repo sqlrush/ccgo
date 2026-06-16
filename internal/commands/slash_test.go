@@ -414,6 +414,69 @@ func TestExecuteSlashSkillsShowReturnsDetail(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashSkillsSearchesSkills(t *testing.T) {
+	registry := FromSources(Sources{
+		ProjectSkillPrompts: []PromptTemplate{
+			{
+				Command: contracts.Command{
+					Name:        "deploy",
+					Type:        contracts.CommandPrompt,
+					Source:      contracts.CommandSourceSkills,
+					Description: "Deploy service",
+					WhenToUse:   "Use for release rollout",
+				},
+				Content: "Deploy $ARGUMENTS.",
+			},
+			{
+				Command: contracts.Command{
+					Name:        "review",
+					Type:        contracts.CommandPrompt,
+					Source:      contracts.CommandSourceSkills,
+					Description: "Review code",
+				},
+				Content: "Review $ARGUMENTS.",
+			},
+		},
+		Builtins: BuiltinCommands(),
+	})
+	result, handled, err := ExecuteSlashCommand(registry, "/skills search release", SlashOptions{UUID: "user_skill_search"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Skills search: release",
+		"Matches: 1",
+		"/deploy - Deploy service",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("skill search missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "/review") || strings.Contains(text, "/status") {
+		t.Fatalf("skill search included unrelated command: %q", text)
+	}
+
+	result, handled, err = ExecuteSlashCommand(registry, "/skills search", SlashOptions{UUID: "user_skill_search_empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.LocalResult == nil || result.Messages[1].Content[0].Text != "Usage: /skills search <query>" {
+		t.Fatalf("empty skill search = %#v", result)
+	}
+
+	result, handled, err = ExecuteSlashCommand(registry, "/skills search nowhere", SlashOptions{UUID: "user_skill_search_none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.LocalResult == nil || result.Messages[1].Content[0].Text != "No skills matched nowhere." {
+		t.Fatalf("missing skill search = %#v", result)
+	}
+}
+
 func TestExecuteSlashOutputStyleReturnsDeprecatedTextResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/output-style", SlashOptions{UUID: "user_output_style"})
