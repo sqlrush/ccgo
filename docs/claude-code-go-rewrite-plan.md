@@ -702,6 +702,7 @@ test/parity/                 # golden tests against TS/official behavior
 当前进度：
 
 - 已有 sidechain transcript/runtime 地基，新增基础 `Task` tool 入口，可按 description/prompt/subagent_type 启动 sidechain、写入 task prompt，并返回 running 状态的 structured content；conversation runner 会把 session transcript path 透传给工具，确保 Task tool 能落到当前 session。完整 AgentTool 执行循环、内置/自定义 agent 选择、task progress/output、kill/resume、worktree isolation/cleanup、remote/team/swarm 仍未完成。
+- 本轮补充：conversation runner 会把本地 plugin manifest 发现到的 agent 名称/描述透传给工具 metadata；`Task` tool 的 prompt/schema 会列出 `general-purpose` 和可用 plugin agents，并在存在明确 agent 清单时拒绝未知 `subagent_type`，减少 subagent 类型拼写错误落成孤立 sidechain。
 
 ### M11: Bridge 和高级集成
 

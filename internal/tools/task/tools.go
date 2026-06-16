@@ -3,6 +3,7 @@ package tasktools
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
+
+const builtInGeneralPurposeAgent = "general-purpose"
 
 type taskInput struct {
 	ID           string `json:"id,omitempty"`
@@ -54,6 +57,7 @@ func NewTaskTool() tool.Tool {
 		},
 		NormalizeFunc:   normalizeTaskInput,
 		PromptFunc:      taskPrompt,
+		InputSchemaFunc: taskInputSchema,
 		ValidateFunc:    validateTask,
 		PermissionFunc:  allowTask,
 		CallFunc:        callTask,
@@ -62,8 +66,63 @@ func NewTaskTool() tool.Tool {
 	}
 }
 
-func taskPrompt(tool.PromptContext) (string, error) {
-	return "Starts a subagent task with a short description, full prompt, and subagent_type. The task is recorded as a sidechain so it can be listed or resumed by the runtime.", nil
+func taskPrompt(ctx tool.PromptContext) (string, error) {
+	prompt := "Starts a subagent task with a short description, full prompt, and subagent_type. The task is recorded as a sidechain so it can be listed or resumed by the runtime."
+	agents := availableTaskAgents(ctx.Metadata)
+	if len(agents) == 0 {
+		return prompt, nil
+	}
+	var lines []string
+	for _, agent := range agents {
+		if agent.Description != "" {
+			lines = append(lines, fmt.Sprintf("- %s: %s", agent.Name, agent.Description))
+		} else {
+			lines = append(lines, "- "+agent.Name)
+		}
+	}
+	return prompt + "\n\nAvailable subagent types:\n" + strings.Join(lines, "\n"), nil
+}
+
+func taskInputSchema(ctx tool.PromptContext) contracts.JSONSchema {
+	schema := contracts.JSONSchema{
+		"type":     "object",
+		"required": []any{"description", "prompt", "subagent_type"},
+		"properties": map[string]any{
+			"description": map[string]any{
+				"type":        "string",
+				"description": "A short description of the task.",
+			},
+			"prompt": map[string]any{
+				"type":        "string",
+				"description": "The full instructions for the subagent.",
+			},
+			"subagent_type": map[string]any{
+				"type":        "string",
+				"description": "The subagent type to run.",
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "Optional stable task id.",
+			},
+		},
+	}
+	metadataAgents := taskAgentsFromMetadata(ctx.Metadata)
+	if len(metadataAgents) == 0 {
+		return schema
+	}
+	names := taskAgentNames(availableTaskAgents(ctx.Metadata))
+	if len(names) > 0 {
+		if properties, ok := schema["properties"].(map[string]any); ok {
+			if subagent, ok := properties["subagent_type"].(map[string]any); ok {
+				enumValues := make([]any, 0, len(names))
+				for _, name := range names {
+					enumValues = append(enumValues, name)
+				}
+				subagent["enum"] = enumValues
+			}
+		}
+	}
+	return schema
 }
 
 func normalizeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
@@ -110,6 +169,9 @@ func validateTask(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if sessionPathFromMetadata(ctx.Metadata) == "" {
 		return fmt.Errorf("session path is required")
+	}
+	if len(taskAgentsFromMetadata(ctx.Metadata)) > 0 && !taskAgentAllowed(input.SubagentType, availableTaskAgents(ctx.Metadata)) {
+		return fmt.Errorf("subagent_type %q is not available (available: %s)", input.SubagentType, strings.Join(taskAgentNames(availableTaskAgents(ctx.Metadata)), ", "))
 	}
 	return nil
 }
@@ -193,4 +255,112 @@ func firstString(obj map[string]any, keys ...string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func availableTaskAgents(metadata map[string]any) []tool.AgentInfo {
+	agents := []tool.AgentInfo{{
+		Name:        builtInGeneralPurposeAgent,
+		Description: "General-purpose subagent for researching, searching, and multi-step tasks.",
+	}}
+	agents = append(agents, taskAgentsFromMetadata(metadata)...)
+	return uniqueSortedAgents(agents)
+}
+
+func taskAgentsFromMetadata(metadata map[string]any) []tool.AgentInfo {
+	if metadata == nil {
+		return nil
+	}
+	switch raw := metadata[tool.MetadataAvailableAgentsKey].(type) {
+	case []tool.AgentInfo:
+		return cleanTaskAgents(raw)
+	case []map[string]string:
+		agents := make([]tool.AgentInfo, 0, len(raw))
+		for _, item := range raw {
+			agents = append(agents, tool.AgentInfo{
+				Name:        item["name"],
+				Description: item["description"],
+				Path:        item["path"],
+			})
+		}
+		return cleanTaskAgents(agents)
+	case []map[string]any:
+		agents := make([]tool.AgentInfo, 0, len(raw))
+		for _, item := range raw {
+			agents = append(agents, tool.AgentInfo{
+				Name:        firstTaskAgentField(item, "name", "id", "agent"),
+				Description: firstTaskAgentField(item, "description", "desc", "summary", "whenToUse", "when_to_use", "when-to-use"),
+				Path:        firstTaskAgentField(item, "path", "file", "source"),
+			})
+		}
+		return cleanTaskAgents(agents)
+	default:
+		return nil
+	}
+}
+
+func firstTaskAgentField(fields map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := fields[key].(string); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func cleanTaskAgents(agents []tool.AgentInfo) []tool.AgentInfo {
+	out := make([]tool.AgentInfo, 0, len(agents))
+	for _, agent := range agents {
+		agent.Name = strings.TrimSpace(agent.Name)
+		agent.Description = strings.TrimSpace(agent.Description)
+		agent.Path = strings.TrimSpace(agent.Path)
+		if agent.Name == "" {
+			continue
+		}
+		out = append(out, agent)
+	}
+	return out
+}
+
+func uniqueSortedAgents(agents []tool.AgentInfo) []tool.AgentInfo {
+	agents = cleanTaskAgents(agents)
+	seen := map[string]struct{}{}
+	out := make([]tool.AgentInfo, 0, len(agents))
+	for _, agent := range agents {
+		key := agent.Name
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, agent)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Name == builtInGeneralPurposeAgent {
+			return true
+		}
+		if out[j].Name == builtInGeneralPurposeAgent {
+			return false
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func taskAgentNames(agents []tool.AgentInfo) []string {
+	names := make([]string, 0, len(agents))
+	for _, agent := range agents {
+		if agent.Name != "" {
+			names = append(names, agent.Name)
+		}
+	}
+	return names
+}
+
+func taskAgentAllowed(subagentType string, agents []tool.AgentInfo) bool {
+	subagentType = strings.TrimSpace(subagentType)
+	for _, agent := range agents {
+		if subagentType == agent.Name {
+			return true
+		}
+	}
+	return false
 }

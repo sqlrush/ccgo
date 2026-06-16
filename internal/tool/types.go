@@ -13,6 +13,12 @@ type PromptContext struct {
 	Metadata         map[string]any
 }
 
+type AgentInfo struct {
+	Name        string
+	Description string
+	Path        string
+}
+
 type Context struct {
 	Context          context.Context
 	WorkingDirectory string
@@ -68,6 +74,7 @@ const (
 	MetadataInternalPathContextKey = "ccgo.permissions.internal_paths"
 	MetadataSettingsKey            = "ccgo.settings"
 	MetadataSessionPathKey         = "ccgo.session.path"
+	MetadataAvailableAgentsKey     = "ccgo.available_agents"
 
 	HookPreToolUse       = "PreToolUse"
 	HookPostToolUse      = "PostToolUse"

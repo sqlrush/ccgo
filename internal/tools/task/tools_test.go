@@ -36,6 +36,13 @@ func taskContext(t *testing.T) (tool.Context, string) {
 	}, transcriptPath
 }
 
+func taskContextWithAgents(t *testing.T, agents []tool.AgentInfo) (tool.Context, string) {
+	t.Helper()
+	ctx, transcriptPath := taskContext(t)
+	ctx.Metadata[tool.MetadataAvailableAgentsKey] = agents
+	return ctx, transcriptPath
+}
+
 func TestTaskToolStartsSidechainAndStoresPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContext(t)
 	executor := taskExecutor(t)
@@ -92,6 +99,52 @@ func TestTaskToolStartsSidechainAndStoresPrompt(t *testing.T) {
 	}
 }
 
+func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
+	ctx, _ := taskContextWithAgents(t, []tool.AgentInfo{{
+		Name:        "demo:reviewer",
+		Description: "Review changes",
+		Path:        "/tmp/reviewer.md",
+	}})
+	task := NewTaskTool()
+
+	prompt, err := task.Prompt(tool.PromptContext{Metadata: ctx.Metadata})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(prompt, "general-purpose") || !strings.Contains(prompt, "demo:reviewer: Review changes") {
+		t.Fatalf("prompt = %q", prompt)
+	}
+	schema := task.InputSchema(tool.PromptContext{Metadata: ctx.Metadata})
+	properties := schema["properties"].(map[string]any)
+	subagent := properties["subagent_type"].(map[string]any)
+	enumValues, ok := subagent["enum"].([]any)
+	if !ok || !containsEnum(enumValues, "general-purpose") || !containsEnum(enumValues, "demo:reviewer") {
+		t.Fatalf("schema enum = %#v", subagent["enum"])
+	}
+
+	executor := taskExecutor(t)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_plugin_agent",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"Review API","prompt":"Inspect API changes","subagent_type":"demo:reviewer"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["subagent_type"] != "demo:reviewer" {
+		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_unknown_agent",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"Review API","prompt":"Inspect API changes","subagent_type":"missing:agent"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), `subagent_type "missing:agent" is not available`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestTaskToolValidatesRuntimeContext(t *testing.T) {
 	executor := taskExecutor(t)
 	ctx := tool.Context{Context: context.Background(), SessionID: "sess_task"}
@@ -126,4 +179,13 @@ func TestTaskToolDefinitionIsPermissionSafeButOrdered(t *testing.T) {
 	if task.IsDestructive(nil) {
 		t.Fatalf("Task should not be destructive")
 	}
+}
+
+func containsEnum(values []any, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

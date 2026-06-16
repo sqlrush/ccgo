@@ -267,11 +267,15 @@ func (t *relevantMemoryPrefetchTask) requestContext(ctx context.Context) (releva
 }
 
 func (r Runner) toolMetadata() map[string]any {
+	settings := r.mergedSettings()
 	metadata := map[string]any{
-		tool.MetadataSettingsKey: r.mergedSettings(),
+		tool.MetadataSettingsKey: settings,
 	}
 	if r.SessionPath != "" {
 		metadata[tool.MetadataSessionPathKey] = r.SessionPath
+	}
+	if agents := r.toolAvailableAgents(settings); len(agents) > 0 {
+		metadata[tool.MetadataAvailableAgentsKey] = agents
 	}
 	skillDirs := append([]string(nil), r.SkillDirs...)
 	skillDirs = appendUniqueStrings(skillDirs, skills.UserSkillDirs()...)
@@ -287,6 +291,34 @@ func (r Runner) toolMetadata() map[string]any {
 		}
 	}
 	return metadata
+}
+
+func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInfo {
+	if r.WorkingDirectory == "" {
+		return nil
+	}
+	plugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), settings)
+	var agents []tool.AgentInfo
+	for _, plugin := range plugins {
+		for _, agent := range plugin.Agents {
+			name := strings.TrimSpace(agent.Name)
+			if name == "" {
+				continue
+			}
+			agents = append(agents, tool.AgentInfo{
+				Name:        name,
+				Description: strings.TrimSpace(agent.Description),
+				Path:        agent.Path,
+			})
+		}
+	}
+	sort.SliceStable(agents, func(i, j int) bool {
+		if agents[i].Name == agents[j].Name {
+			return agents[i].Path < agents[j].Path
+		}
+		return agents[i].Name < agents[j].Name
+	})
+	return agents
 }
 
 func appendUniqueStrings(base []string, items ...string) []string {

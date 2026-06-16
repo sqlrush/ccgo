@@ -159,8 +159,6 @@ func toolPromptContext(r Runner) tool.PromptContext {
 	return tool.PromptContext{
 		Model:            r.model(),
 		WorkingDirectory: r.WorkingDirectory,
-		Metadata: map[string]any{
-			tool.MetadataSettingsKey: r.mergedSettings(),
-		},
+		Metadata:         r.toolMetadata(),
 	}
 }

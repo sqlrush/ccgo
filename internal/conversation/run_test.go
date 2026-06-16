@@ -277,6 +277,93 @@ func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
 	}
 }
 
+func TestRunnerTaskToolUsesPluginAgentMetadata(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "agents", "reviewer.md"), []byte("---\nname: reviewer\ndescription: Review changes\n---\nReview."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"description":"Review API","prompt":"Inspect the API changes","subagent_type":"demo:reviewer"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task recorded")},
+		}},
+	}}
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_plugin",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: cwd,
+	}
+
+	request, err := runner.BuildRequest([]contracts.Message{messages.UserText("start task")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Tools) != 1 || request.Tools[0].Name != "Task" {
+		t.Fatalf("tools = %#v", request.Tools)
+	}
+	properties := request.Tools[0].InputSchema["properties"].(map[string]any)
+	subagent := properties["subagent_type"].(map[string]any)
+	enumValues, ok := subagent["enum"].([]any)
+	if !ok || !containsAnyString(enumValues, "general-purpose") || !containsAnyString(enumValues, "demo:reviewer") {
+		t.Fatalf("task schema enum = %#v", subagent["enum"])
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].StructuredContent["subagent_type"] != "demo:reviewer" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	states, err := session.ListSidechainStates(transcriptPath, "sess_task_plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].Metadata.AgentType != "demo:reviewer" {
+		t.Fatalf("states = %#v", states)
+	}
+}
+
 func TestRunnerAddsConfiguredMCPToolsAndExecutesUse(t *testing.T) {
 	mcpClient := &fakeRunnerMCPClient{
 		tools: []mcp.RemoteTool{{
@@ -3903,6 +3990,15 @@ func containsEvent(events []EventType, target EventType) bool {
 func requestHasTool(request anthropic.Request, name string) bool {
 	for _, definition := range request.Tools {
 		if definition.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyString(values []any, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}
