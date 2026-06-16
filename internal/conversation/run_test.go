@@ -286,6 +286,97 @@ func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
 	}
 }
 
+func TestRunnerTaskToolRunExecutesOneShotSubagent(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/run","description":"Run task","prompt":"Investigate and answer","subagent_type":"general-purpose","run":true}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("Subagent done")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task completed")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	cwd := t.TempDir()
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_agent",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: cwd,
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	taskResult := result.ToolResults[0]
+	if taskResult.IsError || taskResult.StructuredContent["status"] != session.SidechainStatusCompleted || taskResult.StructuredContent["summary"] != "Subagent done" {
+		t.Fatalf("task result = %#v", taskResult)
+	}
+	if !strings.Contains(taskResult.Content.(string), "Task completed: agent_run") {
+		t.Fatalf("task content = %#v", taskResult.Content)
+	}
+	if len(client.requests) != 3 {
+		t.Fatalf("requests = %d, want 3", len(client.requests))
+	}
+	subagentRequest := client.requests[1]
+	if len(subagentRequest.Tools) != 0 {
+		t.Fatalf("subagent tools = %#v", subagentRequest.Tools)
+	}
+	if len(subagentRequest.Messages) != 1 || subagentRequest.Messages[0].Role != "user" || subagentRequest.Messages[0].Content[0].Text != "Investigate and answer" {
+		t.Fatalf("subagent request messages = %#v", subagentRequest.Messages)
+	}
+
+	state, err := session.FindSidechainState(transcriptPath, "sess_task_agent", "agent/run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != session.SidechainStatusCompleted || state.Summary != "Subagent done" || state.MessageCount != 4 {
+		t.Fatalf("state = %#v", state)
+	}
+	if !hasToolProgress(progress, "toolu_task", "task_agent_completed", "agent_run", session.SidechainStatusCompleted) {
+		t.Fatalf("progress = %#v", progress)
+	}
+}
+
 func TestRunnerTaskToolUsesPluginAgentMetadata(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

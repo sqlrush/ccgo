@@ -1,0 +1,167 @@
+package conversation
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"ccgo/internal/contracts"
+	msgs "ccgo/internal/messages"
+	"ccgo/internal/session"
+	"ccgo/internal/tool"
+)
+
+func (r Runner) maybeRunTaskSubagent(ctx context.Context, use contracts.ToolUse, result *contracts.ToolResult) {
+	if result == nil || result.IsError || !taskToolRunRequested(result.StructuredContent) {
+		return
+	}
+	sidechainID := taskToolResultString(result.StructuredContent, "sidechain_id", "task_id")
+	if sidechainID == "" {
+		result.IsError = true
+		result.Content = "task result requested subagent run but did not include sidechain_id"
+		return
+	}
+	r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
+		ToolUseID: use.ID,
+		Type:      "task_agent_started",
+		Data: map[string]any{
+			"task_id":      sidechainID,
+			"sidechain_id": sidechainID,
+		},
+	}})
+	outcome, err := r.runTaskSubagentOnce(ctx, sidechainID)
+	if err != nil {
+		result.IsError = true
+		result.Content = fmt.Sprintf("Task subagent failed: %v", err)
+		result.StructuredContent["status"] = session.SidechainStatusFailed
+		result.StructuredContent["running"] = false
+		result.StructuredContent["error"] = err.Error()
+		r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
+			ToolUseID: use.ID,
+			Type:      "task_agent_failed",
+			Data: map[string]any{
+				"task_id":      sidechainID,
+				"sidechain_id": sidechainID,
+				"error":        err.Error(),
+			},
+		}})
+		return
+	}
+	result.Content = fmt.Sprintf("Task completed: %s\nSummary: %s", sidechainID, outcome.Summary)
+	result.StructuredContent["status"] = session.SidechainStatusCompleted
+	result.StructuredContent["running"] = false
+	result.StructuredContent["summary"] = outcome.Summary
+	result.StructuredContent["agent_model"] = outcome.Model
+	result.StructuredContent["agent_stop_reason"] = outcome.StopReason
+	r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
+		ToolUseID: use.ID,
+		Type:      "task_agent_completed",
+		Data: map[string]any{
+			"task_id":      sidechainID,
+			"sidechain_id": sidechainID,
+			"status":       session.SidechainStatusCompleted,
+			"summary":      outcome.Summary,
+		},
+	}})
+}
+
+type taskSubagentOutcome struct {
+	Summary    string
+	Model      string
+	StopReason string
+}
+
+func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (taskSubagentOutcome, error) {
+	if r.SessionPath == "" || r.SessionID == "" {
+		return taskSubagentOutcome{}, fmt.Errorf("session path and id are required")
+	}
+	manager := session.NewSidechainManager(r.SessionPath, r.SessionID)
+	state, err := session.FindSidechainState(r.SessionPath, r.SessionID, sidechainID)
+	if err != nil {
+		return taskSubagentOutcome{}, err
+	}
+	if state.Status != session.SidechainStatusRunning {
+		return taskSubagentOutcome{}, fmt.Errorf("task %s is not running", state.ID)
+	}
+	conversation, err := manager.Conversation(sidechainID)
+	if err != nil {
+		return taskSubagentOutcome{}, err
+	}
+	if len(conversation.Messages) == 0 {
+		return taskSubagentOutcome{}, fmt.Errorf("task %s has no prompt messages", state.ID)
+	}
+	subRunner := r
+	subRunner.Tools = tool.Executor{}
+	subRunner.MCP = nil
+	subRunner.SystemPrompt = taskSubagentSystemPrompt(r.SystemPrompt, state.Metadata.AgentPrompt)
+	if state.Metadata.AgentModel != "" {
+		subRunner.Model = state.Metadata.AgentModel
+	}
+	_, _, response, _, err := subRunner.send(ctx, conversation.Messages, nil)
+	if err != nil {
+		_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
+		return taskSubagentOutcome{}, err
+	}
+	assistant := messageFromResponse(r.SessionID, response)
+	if len(ToolUses(assistant)) > 0 {
+		err := fmt.Errorf("task %s subagent requested tools; nested tool execution is not enabled yet", state.ID)
+		_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
+		return taskSubagentOutcome{}, err
+	}
+	if err := manager.Append(state.ID, session.TranscriptMessage{
+		Type:        string(contracts.MessageAssistant),
+		UUID:        assistant.UUID,
+		SessionID:   r.SessionID,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+		IsSidechain: true,
+		AgentID:     state.ID,
+		Message:     &assistant,
+	}); err != nil {
+		return taskSubagentOutcome{}, err
+	}
+	summary := strings.TrimSpace(msgs.TextContent(assistant))
+	if summary == "" {
+		summary = strings.TrimSpace(response.StopReason)
+	}
+	if summary == "" {
+		summary = "subagent completed"
+	}
+	if _, err := manager.Finish(state.ID, session.SidechainStatusCompleted, summary, time.Now().UTC()); err != nil {
+		return taskSubagentOutcome{}, err
+	}
+	return taskSubagentOutcome{Summary: summary, Model: response.Model, StopReason: response.StopReason}, nil
+}
+
+func taskSubagentSystemPrompt(base string, agentPrompt string) string {
+	base = strings.TrimSpace(base)
+	agentPrompt = strings.TrimSpace(agentPrompt)
+	switch {
+	case base == "":
+		return agentPrompt
+	case agentPrompt == "":
+		return base
+	default:
+		return base + "\n\n" + agentPrompt
+	}
+}
+
+func taskToolRunRequested(structured map[string]any) bool {
+	if structured == nil {
+		return false
+	}
+	if kind, _ := structured["type"].(string); kind != "task" {
+		return false
+	}
+	value, _ := structured["run"].(bool)
+	return value
+}
+
+func taskToolResultString(structured map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := structured[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}

@@ -3896,6 +3896,7 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		if err != nil && result.Content == nil {
 			result = tool.ErrorResult(use, err)
 		}
+		r.maybeRunTaskSubagent(ctx, use, &result)
 		message := msgs.ToolResult(use.ID, result.Content, result.IsError)
 		if r.SessionID != "" {
 			message.SessionID = r.SessionID

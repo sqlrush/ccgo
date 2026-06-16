@@ -22,6 +22,7 @@ type taskInput struct {
 	Prompt       string `json:"prompt"`
 	SubagentType string `json:"subagent_type"`
 	Worktree     bool   `json:"worktree,omitempty"`
+	Run          bool   `json:"run,omitempty"`
 }
 
 type taskOutputInput struct {
@@ -72,6 +73,10 @@ func NewTaskTool() tool.Tool {
 					"worktree": map[string]any{
 						"type":        "boolean",
 						"description": "Create an isolated git worktree for this task.",
+					},
+					"run": map[string]any{
+						"type":        "boolean",
+						"description": "Run the subagent synchronously after recording the task.",
 					},
 				},
 			},
@@ -178,7 +183,7 @@ func NewResumeTaskTool() tool.Tool {
 }
 
 func taskPrompt(ctx tool.PromptContext) (string, error) {
-	prompt := "Starts a subagent task with a short description, full prompt, and subagent_type. The task is recorded as a sidechain so it can be listed or resumed by the runtime."
+	prompt := "Starts a subagent task with a short description, full prompt, and subagent_type. The task is recorded as a sidechain so it can be listed or resumed by the runtime. Set run=true only when the runtime should immediately execute a synchronous subagent pass."
 	agents := availableTaskAgents(ctx.Metadata)
 	if len(agents) == 0 {
 		return prompt, nil
@@ -218,6 +223,10 @@ func taskInputSchema(ctx tool.PromptContext) contracts.JSONSchema {
 			"worktree": map[string]any{
 				"type":        "boolean",
 				"description": "Create an isolated git worktree for this task.",
+			},
+			"run": map[string]any{
+				"type":        "boolean",
+				"description": "Run the subagent synchronously after recording the task.",
 			},
 		},
 	}
@@ -260,6 +269,9 @@ func normalizeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	if value, ok := firstBool(obj, "worktree", "isolated_worktree", "isolatedWorktree", "worktree_isolation", "worktreeIsolation", "create_worktree", "createWorktree"); ok {
 		input.Worktree = value
+	}
+	if value, ok := firstBool(obj, "run", "execute", "sync", "synchronous", "await", "wait"); ok {
+		input.Run = value
 	}
 	data, err := json.Marshal(input)
 	if err != nil {
@@ -434,7 +446,9 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	}
 	structured := map[string]any{
 		"success":       true,
+		"type":          "task",
 		"status":        session.SidechainStatusRunning,
+		"run":           input.Run,
 		"sidechain_id":  run.ID,
 		"subagent_type": input.SubagentType,
 		"description":   input.Description,
@@ -471,6 +485,7 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		"status":         session.SidechainStatusRunning,
 		"subagent_type":  input.SubagentType,
 		"description":    input.Description,
+		"run":            input.Run,
 		"path":           run.Path,
 		"worktree_path":  worktree.Path,
 		"worktree_owned": worktree.Owned,
