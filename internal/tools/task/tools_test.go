@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -713,6 +713,25 @@ func TestTeamCoordinateSendsBriefingToCoordinator(t *testing.T) {
 	}
 }
 
+func TestSleepToolWaitsForBoundedDuration(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_sleep",
+		Name:  "Sleep",
+		Input: json.RawMessage(`{"ms":"1"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "sleep" || result.StructuredContent["duration_ms"] != int64(1) || result.StructuredContent["cancelled"] != false {
+		t.Fatalf("sleep structured content = %#v", result.StructuredContent)
+	}
+	if !strings.Contains(result.Content.(string), "Slept for 1ms.") {
+		t.Fatalf("sleep content = %#v", result.Content)
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -915,6 +934,11 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing team coordinate team", tool: "TeamCoordinate", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
+		{name: "missing sleep duration", tool: "Sleep", input: `{}`, want: "duration is required"},
+		{name: "unknown sleep field", tool: "Sleep", input: `{"until":"later"}`, want: "input.until is not allowed"},
+		{name: "bad sleep duration", tool: "Sleep", input: `{"duration":"soon"}`, want: "duration must be a valid Go duration"},
+		{name: "conflicting sleep duration", tool: "Sleep", input: `{"duration_ms":1,"seconds":1}`, want: "provide exactly one of duration_ms, seconds, or duration"},
+		{name: "long sleep duration", tool: "Sleep", input: `{"duration_ms":60001}`, want: "duration must be <= 60000ms"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

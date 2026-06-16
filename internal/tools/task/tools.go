@@ -1,6 +1,7 @@
 package tasktools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -20,6 +21,8 @@ const (
 	teamSendTargetMembers     = "members"
 	teamSendTargetCoordinator = "coordinator"
 	teamSendTargetAll         = "all"
+
+	maxSleepDuration = 60 * time.Second
 )
 
 type taskInput struct {
@@ -76,6 +79,12 @@ type teamCoordinateInput struct {
 type taskResumeInput struct {
 	TaskID string `json:"task_id,omitempty"`
 	Limit  *int   `json:"limit,omitempty"`
+}
+
+type sleepInput struct {
+	DurationMS *int     `json:"duration_ms,omitempty"`
+	Seconds    *float64 `json:"seconds,omitempty"`
+	Duration   string   `json:"duration,omitempty"`
 }
 
 func NewTaskTool() tool.Tool {
@@ -382,6 +391,35 @@ func NewResumeTaskTool() tool.Tool {
 		ValidateFunc:    validateResumeTask,
 		PermissionFunc:  allowTaskOutput,
 		CallFunc:        callResumeTask,
+		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
+func NewSleepTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "Sleep",
+			Description:     "Wait for a bounded duration.",
+			SearchHint:      "sleep wait delay timer",
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"duration_ms": map[string]any{"type": "integer", "description": "Duration to wait in milliseconds."},
+					"seconds":     map[string]any{"type": "number", "description": "Duration to wait in seconds."},
+					"duration":    map[string]any{"type": "string", "description": "Go duration string such as 500ms, 2s, or 1m."},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Waits for a bounded duration. Provide exactly one of duration_ms, seconds, or duration; the maximum duration is 60 seconds and the wait is cancelled if the tool context is cancelled.", nil
+		},
+		NormalizeFunc:   normalizeSleepInput,
+		ValidateFunc:    validateSleep,
+		CallFunc:        callSleep,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
 		ConcurrencyFunc: func(json.RawMessage) bool { return true },
 	}
@@ -718,6 +756,22 @@ func validateResumeTask(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if sessionPathFromMetadata(ctx.Metadata) == "" {
 		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
+func validateSleep(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeSleepInput(raw)
+	if err != nil {
+		return err
+	}
+	if _, err := sleepDuration(input); err != nil {
+		return err
+	}
+	if ctx.Context != nil {
+		if err := ctx.Context.Err(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1290,6 +1344,58 @@ func callResumeTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSin
 	}, nil
 }
 
+func callSleep(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeSleepInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	duration, err := sleepDuration(input)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	waitCtx := ctx.Context
+	if waitCtx == nil {
+		waitCtx = context.Background()
+	}
+	started := time.Now().UTC()
+	_ = tool.SendProgress(sink, "", "sleep_started", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	})
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-waitCtx.Done():
+		ended := time.Now().UTC()
+		structured := map[string]any{
+			"type":        "sleep",
+			"duration_ms": duration.Milliseconds(),
+			"started_at":  started.Format(time.RFC3339Nano),
+			"ended_at":    ended.Format(time.RFC3339Nano),
+			"cancelled":   true,
+		}
+		return contracts.ToolResult{
+			Content:           "Sleep cancelled.",
+			StructuredContent: structured,
+		}, waitCtx.Err()
+	}
+	ended := time.Now().UTC()
+	structured := map[string]any{
+		"type":        "sleep",
+		"duration_ms": duration.Milliseconds(),
+		"started_at":  started.Format(time.RFC3339Nano),
+		"ended_at":    ended.Format(time.RFC3339Nano),
+		"cancelled":   false,
+	}
+	_ = tool.SendProgress(sink, "", "sleep_completed", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Slept for %dms.", duration.Milliseconds()),
+		StructuredContent: structured,
+	}, nil
+}
+
 func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	var input taskInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -1402,6 +1508,15 @@ func decodeResumeTaskInput(raw json.RawMessage) (taskResumeInput, error) {
 		return taskResumeInput{}, err
 	}
 	input.TaskID = strings.TrimSpace(input.TaskID)
+	return input, nil
+}
+
+func decodeSleepInput(raw json.RawMessage) (sleepInput, error) {
+	var input sleepInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return sleepInput{}, err
+	}
+	input.Duration = strings.TrimSpace(input.Duration)
 	return input, nil
 }
 
@@ -1605,6 +1720,32 @@ func normalizeResumeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 		normalized["limit"] = value
 	}
 	coerceTaskSemanticNumberStrings(normalized, "limit")
+	return json.Marshal(normalized)
+}
+
+func normalizeSleepInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "duration_ms", "durationMs", "milliseconds", "millis", "ms", "seconds", "secs", "sec", "duration", "wait", "for":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "duration_ms", "durationMs", "milliseconds", "millis", "ms"); ok {
+		normalized["duration_ms"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "seconds", "secs", "sec"); ok {
+		normalized["seconds"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "duration", "wait", "for"); ok {
+		normalized["duration"] = value
+	}
+	coerceTaskSemanticNumberStrings(normalized, "duration_ms")
 	return json.Marshal(normalized)
 }
 
@@ -1967,6 +2108,49 @@ func resumeTaskLimit(input taskResumeInput) int {
 		return 0
 	}
 	return *input.Limit
+}
+
+func sleepDuration(input sleepInput) (time.Duration, error) {
+	set := 0
+	var duration time.Duration
+	if input.DurationMS != nil {
+		set++
+		if *input.DurationMS <= 0 {
+			return 0, fmt.Errorf("duration must be positive")
+		}
+		duration = time.Duration(*input.DurationMS) * time.Millisecond
+	}
+	if input.Seconds != nil {
+		set++
+		if *input.Seconds <= 0 {
+			return 0, fmt.Errorf("duration must be positive")
+		}
+		if *input.Seconds > maxSleepDuration.Seconds() {
+			return 0, fmt.Errorf("duration must be <= %dms", maxSleepDuration.Milliseconds())
+		}
+		duration = time.Duration(*input.Seconds * float64(time.Second))
+	}
+	if input.Duration != "" {
+		set++
+		parsed, err := time.ParseDuration(input.Duration)
+		if err != nil {
+			return 0, fmt.Errorf("duration must be a valid Go duration")
+		}
+		duration = parsed
+	}
+	if set == 0 {
+		return 0, fmt.Errorf("duration is required")
+	}
+	if set > 1 {
+		return 0, fmt.Errorf("provide exactly one of duration_ms, seconds, or duration")
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("duration must be positive")
+	}
+	if duration > maxSleepDuration {
+		return 0, fmt.Errorf("duration must be <= %dms", maxSleepDuration.Milliseconds())
+	}
+	return duration, nil
 }
 
 func taskTranscriptOutput(state session.SidechainState, tailLines int) (string, error) {
