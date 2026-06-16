@@ -713,7 +713,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：sidechain metadata/lifecycle 现在记录 `worktreeOwned` 与 worktree cleanup status/reason/timestamp，`SidechainManager.MarkWorktreeCleanup` 可写入 `worktree_cleanup` lifecycle marker，`TaskOutput` structured content 也会透出 cleanup 状态。真实 worktree 创建、隔离、删除和 ownership enforcement 仍未完成。
 - 本轮补充：`Task` 支持显式 `worktree: true`，会从当前 git HEAD 创建 ccgo 受管 detached worktree 并把 owned path 写入 sidechain metadata/structured output；`KillTask` 会对 owned worktree 做受管路径校验后执行 `git worktree remove --force` 并记录 cleanup marker。默认 Task 仍保持原工作目录，完整自动 agent 执行循环、worktree settings/sparse/symlink 语义和完成后自动 cleanup 仍未完成。
 - 本轮补充：显式 owned worktree 创建后会应用 settings `worktree.sparsePaths` 和 `worktree.symlinkDirectories`：前者通过 git sparse-checkout 限定 checkout，后者把主 repo 中存在的目录 symlink 到 isolated worktree；应用后的 sparse/symlink 列表会写入 sidechain metadata/lifecycle 并由 `TaskOutput` 返回。完整默认策略、settings 更多别名、完成态自动清理和 agent 执行闭环仍未完成。
-- 本轮补充：`Task` 支持显式 `run: true`，conversation runner 会读取 sidechain conversation，用同一 model client 做一次 one-shot subagent 请求，写回 sidechain assistant message，并通过 `SidechainManager.Finish` 标记 completed；主对话收到的 tool result 会更新为 completed summary 并发 `task_agent_started`/`task_agent_completed` progress。完整 nested tool loop、agent 多轮执行、取消传播和完成态 worktree 自动 cleanup 仍未完成。
+- 本轮补充：`Task` 支持显式 `run: true`，conversation runner 会读取 sidechain conversation，用同一 model client 驱动 subagent 多轮工具循环；subagent assistant/tool_result 都写回 sidechain transcript，最终通过 `SidechainManager.Finish` 标记 completed，主对话收到的 tool result 会更新为 completed summary 并发 `task_agent_started`/`task_agent_completed` progress。完整多 agent 编排、取消传播、agent allowlist enforcement 和完成态 worktree 自动 cleanup 仍未完成。
 
 ### M11: Bridge 和高级集成
 

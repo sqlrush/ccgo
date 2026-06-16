@@ -98,39 +98,62 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 	if state.Metadata.AgentModel != "" {
 		subRunner.Model = state.Metadata.AgentModel
 	}
-	_, _, response, _, err := subRunner.send(ctx, conversation.Messages, nil)
-	if err != nil {
-		_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
-		return taskSubagentOutcome{}, err
+	history := append([]contracts.Message(nil), conversation.Messages...)
+	for round := 0; ; round++ {
+		if round >= subRunner.maxToolRounds() {
+			err := fmt.Errorf("task %s exceeded maximum subagent tool rounds: %d", state.ID, subRunner.maxToolRounds())
+			_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
+			return taskSubagentOutcome{}, err
+		}
+		_, _, response, _, err := subRunner.send(ctx, history, nil)
+		if err != nil {
+			_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
+			return taskSubagentOutcome{}, err
+		}
+		assistant := messageFromResponse(r.SessionID, response)
+		if err := manager.Append(state.ID, session.TranscriptMessage{
+			Type:        string(contracts.MessageAssistant),
+			UUID:        assistant.UUID,
+			SessionID:   r.SessionID,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+			IsSidechain: true,
+			AgentID:     state.ID,
+			Message:     &assistant,
+		}); err != nil {
+			return taskSubagentOutcome{}, err
+		}
+		history, assistant = appendMessage(history, assistant)
+		uses := ToolUses(assistant)
+		if len(uses) == 0 {
+			summary := strings.TrimSpace(msgs.TextContent(assistant))
+			if summary == "" {
+				summary = strings.TrimSpace(response.StopReason)
+			}
+			if summary == "" {
+				summary = "subagent completed"
+			}
+			if _, err := manager.Finish(state.ID, session.SidechainStatusCompleted, summary, time.Now().UTC()); err != nil {
+				return taskSubagentOutcome{}, err
+			}
+			return taskSubagentOutcome{Summary: summary, Model: response.Model, StopReason: response.StopReason}, nil
+		}
+		toolMessages, _ := subRunner.executeToolUses(ctx, uses, subRunner.toolMetadata(), history)
+		for i := range toolMessages {
+			history, toolMessages[i] = appendMessage(history, toolMessages[i])
+			if err := manager.Append(state.ID, session.TranscriptMessage{
+				Type:        string(toolMessages[i].Type),
+				UUID:        toolMessages[i].UUID,
+				ParentUUID:  toolMessages[i].ParentUUID,
+				SessionID:   r.SessionID,
+				Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+				IsSidechain: true,
+				AgentID:     state.ID,
+				Message:     &toolMessages[i],
+			}); err != nil {
+				return taskSubagentOutcome{}, err
+			}
+		}
 	}
-	assistant := messageFromResponse(r.SessionID, response)
-	if len(ToolUses(assistant)) > 0 {
-		err := fmt.Errorf("task %s subagent requested tools; nested tool execution is not enabled yet", state.ID)
-		_, _ = manager.Fail(state.ID, err.Error(), time.Now().UTC())
-		return taskSubagentOutcome{}, err
-	}
-	if err := manager.Append(state.ID, session.TranscriptMessage{
-		Type:        string(contracts.MessageAssistant),
-		UUID:        assistant.UUID,
-		SessionID:   r.SessionID,
-		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
-		IsSidechain: true,
-		AgentID:     state.ID,
-		Message:     &assistant,
-	}); err != nil {
-		return taskSubagentOutcome{}, err
-	}
-	summary := strings.TrimSpace(msgs.TextContent(assistant))
-	if summary == "" {
-		summary = strings.TrimSpace(response.StopReason)
-	}
-	if summary == "" {
-		summary = "subagent completed"
-	}
-	if _, err := manager.Finish(state.ID, session.SidechainStatusCompleted, summary, time.Now().UTC()); err != nil {
-		return taskSubagentOutcome{}, err
-	}
-	return taskSubagentOutcome{Summary: summary, Model: response.Model, StopReason: response.StopReason}, nil
 }
 
 func taskSubagentSystemPrompt(base string, agentPrompt string) string {

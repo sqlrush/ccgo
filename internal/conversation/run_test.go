@@ -377,6 +377,125 @@ func TestRunnerTaskToolRunExecutesOneShotSubagent(t *testing.T) {
 	}
 }
 
+func TestRunnerTaskSubagentExecutesNestedToolLoop(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "Echo",
+			Description:     "Echo text",
+			ReadOnly:        true,
+			ConcurrencySafe: true,
+			InputSchema: contracts.JSONSchema{
+				"type":       "object",
+				"properties": map[string]any{"text": map[string]any{"type": "string"}},
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			var input struct {
+				Text string `json:"text"`
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return contracts.ToolResult{Content: "echo:" + input.Text}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/tools","description":"Run tools","prompt":"Use echo","subagent_type":"general-purpose","run":true}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_echo",
+				Name:  "Echo",
+				Input: json.RawMessage(`{"text":"hello"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("Echo returned echo:hello")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task completed")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_task_nested",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: t.TempDir(),
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].StructuredContent["summary"] != "Echo returned echo:hello" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if len(client.requests) != 4 {
+		t.Fatalf("requests = %d, want 4", len(client.requests))
+	}
+	subagentToolResultRequest := client.requests[2]
+	last := subagentToolResultRequest.Messages[len(subagentToolResultRequest.Messages)-1]
+	if last.Role != "user" || last.Content[0].Type != contracts.ContentToolResult || last.Content[0].ToolUseID != "toolu_echo" {
+		t.Fatalf("subagent tool result request = %#v", subagentToolResultRequest.Messages)
+	}
+	state, err := session.FindSidechainState(transcriptPath, "sess_task_nested", "agent/tools")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != session.SidechainStatusCompleted || state.Summary != "Echo returned echo:hello" || state.MessageCount != 6 {
+		t.Fatalf("state = %#v", state)
+	}
+	output, err := session.LoadTranscript(state.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundEchoResult bool
+	for _, id := range output.Order {
+		entry := output.Messages[id]
+		if entry != nil && entry.Message != nil && len(entry.Message.Content) > 0 && entry.Message.Content[0].ToolUseID == "toolu_echo" {
+			foundEchoResult = true
+			break
+		}
+	}
+	if !foundEchoResult {
+		t.Fatalf("sidechain transcript missing nested tool result: %#v", output.Order)
+	}
+}
+
 func TestRunnerTaskToolUsesPluginAgentMetadata(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
