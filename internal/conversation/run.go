@@ -1652,6 +1652,12 @@ func (r Runner) formatMemorySummary(raw string) string {
 				return r.formatMemoryFileShow(query)
 			}
 			return r.formatMemoryShow()
+		case "search", "find", "grep":
+			query := subcommandRemainder(raw, args[0])
+			if strings.TrimSpace(query) == "" {
+				return "Usage: /memory " + args[0] + " <query>"
+			}
+			return r.formatMemorySearch(query)
 		default:
 			return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
@@ -1704,6 +1710,25 @@ func (r Runner) formatMemoryShow() string {
 	}
 	appendMemoryFileSection("Session memory root", sessionRoot)
 	appendMemoryFileSection("Relevant memory directory", relevantRoot)
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMemorySearch(query string) string {
+	results, total := searchMemoryMarkdownFiles(r.memoryRoots(), query, 20)
+	query = strings.TrimSpace(query)
+	if total == 0 {
+		return "No memory files matched " + query + "."
+	}
+	lines := []string{
+		"Memory search: " + query,
+		fmt.Sprintf("Matches: %d", total),
+	}
+	for _, result := range results {
+		lines = append(lines, fmt.Sprintf("- %s/%s: %s", result.RootLabel, result.RelPath, result.Preview))
+	}
+	if total > len(results) {
+		lines = append(lines, fmt.Sprintf("Showing %d of %d memory matches.", len(results), total))
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -2308,6 +2333,12 @@ type memoryMarkdownFile struct {
 	ModTime   time.Time
 }
 
+type memorySearchResult struct {
+	RootLabel string
+	RelPath   string
+	Preview   string
+}
+
 func collectMarkdownFilePreviews(root string, limit int) []markdownFilePreview {
 	if strings.TrimSpace(root) == "" || limit <= 0 {
 		return nil
@@ -2353,6 +2384,70 @@ func collectMarkdownFilePreviews(root string, limit int) []markdownFilePreview {
 		files = files[:limit]
 	}
 	return files
+}
+
+func searchMemoryMarkdownFiles(roots []memoryRoot, query string, limit int) ([]memorySearchResult, int) {
+	query = strings.TrimSpace(query)
+	if query == "" || limit <= 0 {
+		return nil, 0
+	}
+	queryLower := strings.ToLower(query)
+	var results []memorySearchResult
+	var total int
+	for _, root := range roots {
+		rootPath := strings.TrimSpace(root.Path)
+		if rootPath == "" {
+			continue
+		}
+		rootAbs, err := filepath.Abs(rootPath)
+		if err != nil {
+			continue
+		}
+		_ = filepath.WalkDir(rootAbs, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if entry.IsDir() {
+				name := entry.Name()
+				if name == ".git" || name == "node_modules" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.EqualFold(filepath.Ext(path), ".md") {
+				return nil
+			}
+			file, ok := memoryMarkdownFileFromPath(root, rootAbs, path)
+			if !ok {
+				return nil
+			}
+			data, err := os.ReadFile(file.Path)
+			if err != nil {
+				return nil
+			}
+			_, body := memory.ParseFrontmatter(string(data))
+			searchText := strings.ToLower(file.RelPath + "\n" + body)
+			if !strings.Contains(searchText, queryLower) {
+				return nil
+			}
+			total++
+			if len(results) < limit {
+				results = append(results, memorySearchResult{
+					RootLabel: root.Label,
+					RelPath:   file.RelPath,
+					Preview:   markdownSearchPreview(body, queryLower),
+				})
+			}
+			return nil
+		})
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].RootLabel != results[j].RootLabel {
+			return results[i].RootLabel < results[j].RootLabel
+		}
+		return results[i].RelPath < results[j].RelPath
+	})
+	return results, total
 }
 
 func findMemoryMarkdownFile(roots []memoryRoot, query string) (memoryMarkdownFile, bool) {
@@ -2489,6 +2584,29 @@ func markdownPreview(path string) string {
 			continue
 		}
 		return truncatePreviewLine(strings.TrimLeft(text, "# "))
+	}
+	return "(empty)"
+}
+
+func markdownSearchPreview(body string, queryLower string) string {
+	for _, line := range strings.Split(body, "\n") {
+		text := strings.TrimSpace(line)
+		if text == "" || strings.TrimSpace(queryLower) == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(text), queryLower) {
+			return truncatePreviewLine(strings.TrimLeft(text, "# "))
+		}
+	}
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "(empty)"
+	}
+	for _, line := range strings.Split(body, "\n") {
+		text := strings.TrimSpace(line)
+		if text != "" {
+			return truncatePreviewLine(strings.TrimLeft(text, "# "))
+		}
 	}
 	return "(empty)"
 }

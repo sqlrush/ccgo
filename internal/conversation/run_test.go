@@ -1774,6 +1774,75 @@ func TestRunnerMemoryShowListsMemoryFiles(t *testing.T) {
 	}
 }
 
+func TestRunnerMemorySearchFindsMemoryFiles(t *testing.T) {
+	client := &fakeClient{}
+	sessionRoot := t.TempDir()
+	relevantRoot := t.TempDir()
+	if _, err := memory.WriteSessionSummary(memory.SessionSummaryOptions{
+		Root:      sessionRoot,
+		SessionID: "sess_search",
+		Summary:   "remember deployment search flow",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(relevantRoot, "team"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(relevantRoot, "team", "db.md"), []byte("---\ntitle: DB\n---\n# Database rules\nKeep migrations small.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:            client,
+		SessionID:         "sess_memory_search",
+		SessionMemoryRoot: sessionRoot,
+		RelevantMemoryDir: relevantRoot,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/memory search migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory search: migrations",
+		"Matches: 1",
+		"Relevant memory directory/team/db.md: Keep migrations small.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory search missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "title: DB") {
+		t.Fatalf("frontmatter leaked into memory search: %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory find deployment"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "Session memory root/sess_search/"+memory.SessionSummaryFilename+": remember deployment search flow") {
+		t.Fatalf("memory find session summary = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory search"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /memory search <query>" {
+		t.Fatalf("memory search usage = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory search nowhere"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No memory files matched nowhere." {
+		t.Fatalf("memory search missing = %q", got)
+	}
+}
+
 func TestRunnerMemoryShowDisplaysSingleMemoryFile(t *testing.T) {
 	relevantRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(relevantRoot, "team"), 0o755); err != nil {
