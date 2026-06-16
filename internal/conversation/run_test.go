@@ -2009,6 +2009,96 @@ func TestRunnerResumeSlashCommandSearchesSessions(t *testing.T) {
 	}
 }
 
+func TestRunnerResumeSlashCommandShowsSessionDetails(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	sessionID := contracts.ID("sess_resume_detail")
+	path := session.TranscriptPath(cwd, sessionID)
+	user := messages.UserText("first deploy request")
+	user.UUID = "user_detail"
+	assistant := messages.AssistantText("deployment response", "sonnet", nil)
+	assistant.UUID = "assistant_detail"
+	if err := session.AppendTranscriptMessage(path, session.TranscriptMessage{
+		Type:      "user",
+		UUID:      user.UUID,
+		SessionID: sessionID,
+		Message:   &user,
+		CWD:       cwd,
+		GitBranch: "main",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.AppendTranscriptMessage(path, session.TranscriptMessage{
+		Type:      "assistant",
+		UUID:      assistant.UUID,
+		SessionID: sessionID,
+		Message:   &assistant,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	appendRawTranscriptLines(t, path, []string{
+		`{"type":"custom-title","sessionId":"sess_resume_detail","customTitle":"Deploy Detail"}`,
+		`{"type":"ai-title","sessionId":"sess_resume_detail","aiTitle":"AI Deploy"}`,
+		`{"type":"last-prompt","sessionId":"sess_resume_detail","lastPrompt":"resume last prompt"}`,
+		`{"type":"task-summary","sessionId":"sess_resume_detail","summary":"running deployment checks"}`,
+		`{"type":"tag","sessionId":"sess_resume_detail","tag":"ops"}`,
+		`{"type":"mode","sessionId":"sess_resume_detail","mode":"plan"}`,
+		`{"type":"pr-link","sessionId":"sess_resume_detail","prNumber":42,"prUrl":"https://example/pr/42","prRepository":"org/repo"}`,
+	})
+
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_resume_detail_current",
+		WorkingDirectory: cwd,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/resume show sess_resume_detail"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Session sess_resume_detail",
+		"Title: Deploy Detail",
+		"Path: " + path,
+		"Messages: 2",
+		"User messages: 1",
+		"Assistant messages: 1",
+		"First message UUID: user_detail",
+		"Last message UUID: assistant_detail",
+		"First user: first deploy request",
+		"Last assistant: deployment response",
+		"Project path: " + cwd,
+		"Git branch: main",
+		"AI title: AI Deploy",
+		"Last prompt: resume last prompt",
+		"Task summary: running deployment checks",
+		"Tag: ops",
+		"Mode: plan",
+		"Pull request: #42 org/repo https://example/pr/42",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("resume show missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerResumeSlashCommandReportsMissingSessionDetails(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_resume_missing_current",
+		WorkingDirectory: cwd,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/resume show missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Session missing was not found." {
+		t.Fatalf("resume show missing = %q", got)
+	}
+}
+
 func TestRunnerResumeSlashCommandReportsNoSessions(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
@@ -2026,6 +2116,20 @@ func TestRunnerResumeSlashCommandReportsNoSessions(t *testing.T) {
 	}
 	if got := result.Messages[1].Content[0].Text; !strings.Contains(got, "No sessions found for ") {
 		t.Fatalf("resume text = %q", got)
+	}
+}
+
+func appendRawTranscriptLines(t *testing.T, path string, lines []string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, line := range lines {
+		if _, err := f.WriteString(line + "\n"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

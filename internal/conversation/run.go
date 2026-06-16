@@ -2296,6 +2296,19 @@ func (r Runner) formatResumeSummary(raw string) (string, error) {
 	if cwd == "" {
 		cwd = "."
 	}
+	args := strings.Fields(query)
+	if len(args) > 0 {
+		switch args[0] {
+		case "list", "status":
+			query = ""
+		case "show", "info":
+			target := subcommandRemainder(query, args[0])
+			if strings.TrimSpace(target) == "" {
+				return "Usage: /resume " + args[0] + " <session-id>", nil
+			}
+			return formatResumeSessionDetail(cwd, target)
+		}
+	}
 	if query != "" {
 		results, err := session.SearchProjectSessions(cwd, query, 10)
 		if err != nil {
@@ -2327,6 +2340,140 @@ func (r Runner) formatResumeSummary(raw string) (string, error) {
 		lines = append(lines, fmt.Sprintf("Showing %d of %d sessions.", len(page.Sessions), page.Total))
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+func formatResumeSessionDetail(cwd string, target string) (string, error) {
+	info, ok, err := findProjectSession(cwd, target)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "Session " + strings.TrimSpace(target) + " was not found.", nil
+	}
+	index, err := session.LoadTranscriptIndex(info.Path, info.ID)
+	if err != nil {
+		return "", err
+	}
+	title := strings.TrimSpace(index.Title)
+	if title == "" {
+		title = strings.TrimSpace(info.Title)
+	}
+	if title == "" {
+		title = "(untitled)"
+	}
+	modified := "unknown time"
+	if !info.Modified.IsZero() {
+		modified = info.Modified.Format(time.RFC3339)
+	}
+	lines := []string{
+		"Session " + string(info.ID),
+		"Title: " + title,
+		"Path: " + info.Path,
+		"Modified: " + modified,
+		fmt.Sprintf("Size: %d bytes", info.Size),
+		fmt.Sprintf("Messages: %d", index.MessageCount),
+		fmt.Sprintf("User messages: %d", index.UserMessageCount),
+		fmt.Sprintf("Assistant messages: %d", index.AssistantMessageCount),
+		fmt.Sprintf("System messages: %d", index.SystemMessageCount),
+	}
+	if index.FirstUUID != "" {
+		lines = append(lines, "First message UUID: "+string(index.FirstUUID))
+	}
+	if index.LastUUID != "" {
+		lines = append(lines, "Last message UUID: "+string(index.LastUUID))
+	}
+	if index.FirstTimestamp != "" {
+		lines = append(lines, "First timestamp: "+index.FirstTimestamp)
+	}
+	if index.LastTimestamp != "" {
+		lines = append(lines, "Last timestamp: "+index.LastTimestamp)
+	}
+	if text := strings.TrimSpace(index.FirstUserText); text != "" {
+		lines = append(lines, "First user: "+truncatePreviewLine(text))
+	}
+	if text := strings.TrimSpace(index.LastUserText); text != "" {
+		lines = append(lines, "Last user: "+truncatePreviewLine(text))
+	}
+	if text := strings.TrimSpace(index.LastAssistantText); text != "" {
+		lines = append(lines, "Last assistant: "+truncatePreviewLine(text))
+	}
+	if projectPath := strings.TrimSpace(index.ProjectPath); projectPath != "" {
+		lines = append(lines, "Project path: "+projectPath)
+	} else if projectPath := strings.TrimSpace(info.ProjectPath); projectPath != "" {
+		lines = append(lines, "Project path: "+projectPath)
+	}
+	if branch := strings.TrimSpace(index.GitBranch); branch != "" {
+		lines = append(lines, "Git branch: "+branch)
+	} else if branch := strings.TrimSpace(info.GitBranch); branch != "" {
+		lines = append(lines, "Git branch: "+branch)
+	}
+	if index.AITitle != "" {
+		lines = append(lines, "AI title: "+index.AITitle)
+	}
+	if index.LastPrompt != "" {
+		lines = append(lines, "Last prompt: "+truncatePreviewLine(index.LastPrompt))
+	}
+	if index.TaskSummary != "" {
+		lines = append(lines, "Task summary: "+truncatePreviewLine(index.TaskSummary))
+	}
+	if index.Tag != "" {
+		lines = append(lines, "Tag: "+index.Tag)
+	}
+	if index.AgentName != "" {
+		lines = append(lines, "Agent: "+index.AgentName)
+	}
+	if index.AgentSetting != "" {
+		lines = append(lines, "Agent setting: "+index.AgentSetting)
+	}
+	if index.Mode != "" {
+		lines = append(lines, "Mode: "+index.Mode)
+	}
+	if index.PRNumber != 0 || index.PRURL != "" || index.PRRepository != "" {
+		lines = append(lines, "Pull request: "+formatSessionPR(index))
+	}
+	lines = append(lines, fmt.Sprintf("Summaries: %d", index.SummaryCount))
+	lines = append(lines, fmt.Sprintf("Content replacements: %d", index.ContentReplacementCount))
+	lines = append(lines, fmt.Sprintf("Worktree state: %t", index.HasWorktreeState))
+	return strings.Join(lines, "\n"), nil
+}
+
+func findProjectSession(cwd string, target string) (session.SessionInfo, bool, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return session.SessionInfo{}, false, nil
+	}
+	sessions, err := session.ListProjectSessions(cwd)
+	if err != nil {
+		return session.SessionInfo{}, false, err
+	}
+	for _, info := range sessions {
+		if string(info.ID) == target || info.Path == target {
+			return info, true, nil
+		}
+	}
+	for _, info := range sessions {
+		if strings.EqualFold(string(info.ID), target) {
+			return info, true, nil
+		}
+	}
+	return session.SessionInfo{}, false, nil
+}
+
+func formatSessionPR(index session.TranscriptIndex) string {
+	var parts []string
+	if index.PRNumber != 0 {
+		parts = append(parts, fmt.Sprintf("#%d", index.PRNumber))
+	}
+	if index.PRRepository != "" {
+		parts = append(parts, index.PRRepository)
+	}
+	if index.PRURL != "" {
+		parts = append(parts, index.PRURL)
+	}
+	if len(parts) == 0 {
+		return "(unknown)"
+	}
+	return strings.Join(parts, " ")
 }
 
 func formatSessionInfoLine(info session.SessionInfo) string {
