@@ -1526,6 +1526,55 @@ func TestRunnerMemoryShowListsMemoryFiles(t *testing.T) {
 	}
 }
 
+func TestRunnerMemoryShowDisplaysSingleMemoryFile(t *testing.T) {
+	relevantRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(relevantRoot, "team"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	memoryPath := filepath.Join(relevantRoot, "team", "db.md")
+	if err := os.WriteFile(memoryPath, []byte("---\ntitle: DB\n---\n# Database rules\nKeep migrations small.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(filepath.Dir(relevantRoot), "outside.md")
+	if err := os.WriteFile(outside, []byte("outside memory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:            &fakeClient{},
+		SessionID:         "sess_memory_file_show",
+		RelevantMemoryDir: relevantRoot,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/memory show team/db.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory file team/db.md",
+		"Root: Relevant memory directory",
+		"Path: team/db.md",
+		"Absolute path: " + memoryPath,
+		"Truncated: false",
+		"Content:",
+		"# Database rules\nKeep migrations small.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory file show missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "title: DB") {
+		t.Fatalf("frontmatter leaked into memory file body: %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory show ../outside.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Memory file ../outside.md was not found." {
+		t.Fatalf("outside memory result = %q", got)
+	}
+}
+
 func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},

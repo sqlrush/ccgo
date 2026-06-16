@@ -1172,7 +1172,11 @@ func (r Runner) formatMemorySummary(raw string) string {
 	if len(args) > 0 {
 		switch args[0] {
 		case "list", "status":
-		case "show":
+		case "show", "view", "cat":
+			query := subcommandRemainder(raw, args[0])
+			if strings.TrimSpace(query) != "" {
+				return r.formatMemoryFileShow(query)
+			}
 			return r.formatMemoryShow()
 		default:
 			return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
@@ -1227,6 +1231,53 @@ func (r Runner) formatMemoryShow() string {
 	appendMemoryFileSection("Session memory root", sessionRoot)
 	appendMemoryFileSection("Relevant memory directory", relevantRoot)
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMemoryFileShow(query string) string {
+	roots := r.memoryRoots()
+	file, ok := findMemoryMarkdownFile(roots, query)
+	if !ok {
+		return "Memory file " + strings.TrimSpace(query) + " was not found."
+	}
+	preview, truncated := readMarkdownBodyPreview(file.Path, 2000)
+	lines := []string{
+		"Memory file " + file.RelPath,
+		"Root: " + file.RootLabel,
+		"Path: " + file.RelPath,
+		"Absolute path: " + file.Path,
+		fmt.Sprintf("Size: %d bytes", file.Size),
+		"Modified: " + file.ModTime.Format(time.RFC3339),
+		fmt.Sprintf("Truncated: %t", truncated),
+		"Content:",
+		preview,
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) memoryRoots() []memoryRoot {
+	sessionRoot := r.SessionMemoryRoot
+	if sessionRoot == "" {
+		sessionRoot = memory.DefaultSessionMemoryRoot(r.SessionPath)
+	}
+	return []memoryRoot{
+		{Label: "Session memory root", Path: sessionRoot},
+		{Label: "Relevant memory directory", Path: strings.TrimSpace(r.RelevantMemoryDir)},
+	}
+}
+
+func subcommandRemainder(raw string, subcommand string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	subcommand = strings.TrimSpace(subcommand)
+	if subcommand == "" {
+		return raw
+	}
+	if len(raw) < len(subcommand) || !strings.EqualFold(raw[:len(subcommand)], subcommand) {
+		return raw
+	}
+	return strings.TrimSpace(raw[len(subcommand):])
 }
 
 func (r Runner) mergedSettings() contracts.Settings {
@@ -1763,6 +1814,19 @@ type markdownFilePreview struct {
 	ModTime time.Time
 }
 
+type memoryRoot struct {
+	Label string
+	Path  string
+}
+
+type memoryMarkdownFile struct {
+	RootLabel string
+	Path      string
+	RelPath   string
+	Size      int64
+	ModTime   time.Time
+}
+
 func collectMarkdownFilePreviews(root string, limit int) []markdownFilePreview {
 	if strings.TrimSpace(root) == "" || limit <= 0 {
 		return nil
@@ -1810,6 +1874,117 @@ func collectMarkdownFilePreviews(root string, limit int) []markdownFilePreview {
 	return files
 }
 
+func findMemoryMarkdownFile(roots []memoryRoot, query string) (memoryMarkdownFile, bool) {
+	query = strings.TrimSpace(strings.TrimPrefix(query, "/"))
+	if query == "" {
+		return memoryMarkdownFile{}, false
+	}
+	for _, root := range roots {
+		if file, ok := findMemoryMarkdownFileInRoot(root, query); ok {
+			return file, true
+		}
+	}
+	return memoryMarkdownFile{}, false
+}
+
+func findMemoryMarkdownFileInRoot(root memoryRoot, query string) (memoryMarkdownFile, bool) {
+	rootPath := strings.TrimSpace(root.Path)
+	if rootPath == "" {
+		return memoryMarkdownFile{}, false
+	}
+	rootAbs, err := filepath.Abs(rootPath)
+	if err != nil {
+		return memoryMarkdownFile{}, false
+	}
+	var candidates []string
+	if filepath.IsAbs(query) {
+		candidates = append(candidates, query)
+	} else {
+		candidates = append(candidates, filepath.Join(rootAbs, filepath.FromSlash(query)))
+		if !strings.EqualFold(filepath.Ext(query), ".md") {
+			candidates = append(candidates, filepath.Join(rootAbs, filepath.FromSlash(query+".md")))
+		}
+	}
+	for _, candidate := range candidates {
+		if file, ok := memoryMarkdownFileFromPath(root, rootAbs, candidate); ok {
+			return file, true
+		}
+	}
+	var found memoryMarkdownFile
+	matched := false
+	querySlash := filepath.ToSlash(strings.TrimSuffix(query, ".md"))
+	_ = filepath.WalkDir(rootAbs, func(path string, entry os.DirEntry, err error) error {
+		if matched || err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			name := entry.Name()
+			if name == ".git" || name == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.EqualFold(filepath.Ext(path), ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(rootAbs, path)
+		if err != nil {
+			return nil
+		}
+		relSlash := filepath.ToSlash(rel)
+		relNoExt := strings.TrimSuffix(relSlash, filepath.Ext(relSlash))
+		if strings.EqualFold(relSlash, filepath.ToSlash(query)) || strings.EqualFold(relNoExt, querySlash) || strings.EqualFold(filepath.Base(relNoExt), querySlash) {
+			if file, ok := memoryMarkdownFileFromPath(root, rootAbs, path); ok {
+				found = file
+				matched = true
+			}
+		}
+		return nil
+	})
+	return found, matched
+}
+
+func memoryMarkdownFileFromPath(root memoryRoot, rootAbs string, path string) (memoryMarkdownFile, bool) {
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return memoryMarkdownFile{}, false
+	}
+	rootCheck := rootAbs
+	if resolvedRoot, err := filepath.EvalSymlinks(rootAbs); err == nil {
+		rootCheck = resolvedRoot
+	}
+	pathCheck := pathAbs
+	if resolvedPath, err := filepath.EvalSymlinks(pathAbs); err == nil {
+		pathCheck = resolvedPath
+	}
+	if !pathWithinRoot(pathCheck, rootCheck) || !strings.EqualFold(filepath.Ext(pathAbs), ".md") {
+		return memoryMarkdownFile{}, false
+	}
+	info, err := os.Stat(pathAbs)
+	if err != nil || info.IsDir() {
+		return memoryMarkdownFile{}, false
+	}
+	rel, err := filepath.Rel(rootAbs, pathAbs)
+	if err != nil {
+		rel = filepath.Base(pathAbs)
+	}
+	return memoryMarkdownFile{
+		RootLabel: root.Label,
+		Path:      pathAbs,
+		RelPath:   filepath.ToSlash(rel),
+		Size:      info.Size(),
+		ModTime:   info.ModTime(),
+	}, true
+}
+
+func pathWithinRoot(path string, root string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != "" && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
+}
+
 func markdownPreview(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1835,6 +2010,25 @@ func markdownPreview(path string) string {
 		return truncatePreviewLine(strings.TrimLeft(text, "# "))
 	}
 	return "(empty)"
+}
+
+func readMarkdownBodyPreview(path string, limit int) (string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "(unreadable)", false
+	}
+	_, body := memory.ParseFrontmatter(string(data))
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "(empty)", false
+	}
+	if limit <= 0 || len(body) <= limit {
+		return body, false
+	}
+	if limit <= 3 {
+		return body[:limit], true
+	}
+	return body[:limit-3] + "...", true
 }
 
 func truncatePreviewLine(text string) string {
