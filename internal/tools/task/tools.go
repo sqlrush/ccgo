@@ -111,6 +111,14 @@ type scheduleCronInput struct {
 	Enabled     *bool  `json:"enabled,omitempty"`
 }
 
+type remoteTriggerInput struct {
+	TeamID  string `json:"team_id,omitempty"`
+	Target  string `json:"target,omitempty"`
+	Source  string `json:"source,omitempty"`
+	Event   string `json:"event,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 func NewTaskTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
@@ -510,6 +518,36 @@ func NewScheduleCronTool() tool.Tool {
 		NormalizeFunc:   normalizeScheduleCronInput,
 		ValidateFunc:    validateScheduleCron,
 		CallFunc:        callScheduleCron,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
+func NewRemoteTriggerTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "RemoteTrigger",
+			Description:     "Inject a remote trigger event into a running subagent team.",
+			SearchHint:      "remote trigger event team coordinator",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"team_id", "message"},
+				"properties": map[string]any{
+					"team_id": map[string]any{"type": "string"},
+					"target":  map[string]any{"type": "string", "enum": []any{teamSendTargetMembers, teamSendTargetCoordinator, teamSendTargetAll}},
+					"source":  map[string]any{"type": "string"},
+					"event":   map[string]any{"type": "string"},
+					"message": map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Injects a remote trigger event into a running subagent team. The message sent to recipients includes source/event metadata plus the trigger message. target defaults to coordinator when the team has one, otherwise members.", nil
+		},
+		NormalizeFunc:   normalizeRemoteTriggerInput,
+		ValidateFunc:    validateRemoteTrigger,
+		CallFunc:        callRemoteTrigger,
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
@@ -932,6 +970,42 @@ func validateScheduleCron(ctx tool.Context, raw json.RawMessage) error {
 		} else if !ok {
 			return fmt.Errorf("schedule not found: %s", sanitizeTaskLikeID(input.ScheduleID))
 		}
+	}
+	return nil
+}
+
+func validateRemoteTrigger(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeRemoteTriggerInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TeamID == "" {
+		return fmt.Errorf("team_id is required")
+	}
+	if input.Message == "" {
+		return fmt.Errorf("message is required")
+	}
+	if err := validateTeamSendTarget(input.Target); err != nil {
+		return err
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return err
+	}
+	target := resolvedRemoteTriggerTarget(team, input.Target)
+	taskIDs, err := teamSendMessageTaskIDs(team, target)
+	if err != nil {
+		return err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1669,6 +1743,69 @@ func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 	}
 }
 
+func callRemoteTrigger(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeRemoteTriggerInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	target := resolvedRemoteTriggerTarget(team, input.Target)
+	taskIDs, err := teamSendMessageTaskIDs(team, target)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	triggerMessage := formatRemoteTriggerMessage(input)
+	sent := make([]map[string]any, 0, len(taskIDs))
+	for _, taskID := range taskIDs {
+		message := msgs.UserText(triggerMessage)
+		message.SessionID = ctx.SessionID
+		if err := manager.Append(taskID, session.TranscriptMessage{
+			Type:        string(contracts.MessageUser),
+			UUID:        message.UUID,
+			SessionID:   ctx.SessionID,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+			IsSidechain: true,
+			AgentID:     taskID,
+			Message:     &message,
+		}); err != nil {
+			return contracts.ToolResult{}, err
+		}
+		sent = append(sent, map[string]any{
+			"task_id":      taskID,
+			"sidechain_id": taskID,
+			"message_uuid": string(message.UUID),
+		})
+	}
+	structured := structuredTeamState(team)
+	structured["type"] = "remote_trigger"
+	structured["target"] = target
+	structured["source"] = input.Source
+	structured["event"] = input.Event
+	structured["message_chars"] = len(input.Message)
+	structured["trigger_message_chars"] = len(triggerMessage)
+	structured["sent_count"] = len(sent)
+	structured["sent"] = sent
+	_ = tool.SendProgress(sink, "", "remote_trigger_sent", map[string]any{
+		"team_id":       team.ID,
+		"target":        target,
+		"source":        input.Source,
+		"event":         input.Event,
+		"sent_count":    len(sent),
+		"message_chars": len(input.Message),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Remote trigger sent to %d task(s) in team %s.", len(sent), team.ID),
+		StructuredContent: structured,
+	}, nil
+}
+
 func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	var input taskInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -1819,6 +1956,19 @@ func decodeScheduleCronInput(raw json.RawMessage) (scheduleCronInput, error) {
 	input.Message = strings.TrimSpace(input.Message)
 	input.TeamID = strings.TrimSpace(input.TeamID)
 	input.Target = normalizeTeamSendTarget(input.Target)
+	return input, nil
+}
+
+func decodeRemoteTriggerInput(raw json.RawMessage) (remoteTriggerInput, error) {
+	var input remoteTriggerInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return remoteTriggerInput{}, err
+	}
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	input.Target = normalizeTeamSendTarget(input.Target)
+	input.Source = strings.TrimSpace(input.Source)
+	input.Event = strings.TrimSpace(input.Event)
+	input.Message = strings.TrimSpace(input.Message)
 	return input, nil
 }
 
@@ -2130,6 +2280,37 @@ func normalizeScheduleCronInput(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(normalized)
 }
 
+func normalizeRemoteTriggerInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "team_id", "teamId", "team", "target", "recipient", "recipients", "audience", "scope", "source", "remote", "origin", "event", "event_type", "eventType", "type", "message", "text", "content", "prompt", "input", "payload":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "team"); ok {
+		normalized["team_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "target", "recipient", "recipients", "audience", "scope"); ok {
+		normalized["target"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "source", "remote", "origin"); ok {
+		normalized["source"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "event", "event_type", "eventType", "type"); ok {
+		normalized["event"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input", "payload"); ok {
+		normalized["message"] = value
+	}
+	return json.Marshal(normalized)
+}
+
 func decodeRawTaskObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
@@ -2389,6 +2570,17 @@ func teamSendMessageTaskIDs(team session.TeamState, target string) ([]string, er
 	}
 }
 
+func resolvedRemoteTriggerTarget(team session.TeamState, target string) string {
+	target = normalizeTeamSendTarget(target)
+	if target != "" {
+		return target
+	}
+	if team.CoordinatorTaskID != "" {
+		return teamSendTargetCoordinator
+	}
+	return teamSendTargetMembers
+}
+
 func resolvedScheduleCronAction(action string) string {
 	action = strings.ToLower(strings.TrimSpace(action))
 	if action == "" {
@@ -2620,6 +2812,20 @@ func formatBrief(input briefInput) string {
 	writeBriefSection(&builder, "Details", input.Details)
 	writeBriefSection(&builder, "Next steps", input.NextSteps)
 	writeBriefSection(&builder, "Risks", input.Risks)
+	return builder.String()
+}
+
+func formatRemoteTriggerMessage(input remoteTriggerInput) string {
+	var builder strings.Builder
+	builder.WriteString("Remote trigger received.")
+	if input.Source != "" {
+		fmt.Fprintf(&builder, "\nSource: %s", input.Source)
+	}
+	if input.Event != "" {
+		fmt.Fprintf(&builder, "\nEvent: %s", input.Event)
+	}
+	builder.WriteString("\nMessage:\n")
+	builder.WriteString(input.Message)
 	return builder.String()
 }
 

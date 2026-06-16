@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -841,6 +841,71 @@ func TestScheduleCronPersistsManifest(t *testing.T) {
 	}
 }
 
+func TestRemoteTriggerSendsEventToCoordinatorByDefault(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/remote-lead", "agent/remote-member"} {
+		if _, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_remote_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Remote team","prompt":"Handle remote triggers","subagent_type":"general-purpose"}`),
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_remote_team",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"remote/team","coordinator":"agent/remote-lead","members":["agent/remote-member"]}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	triggered, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_remote_trigger",
+		Name: "RemoteTrigger",
+		Input: json.RawMessage(`{
+			"team":"remote/team",
+			"source":"github",
+			"event_type":"workflow_failed",
+			"payload":"Investigate the failed CI run."
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if triggered.StructuredContent["type"] != "remote_trigger" || triggered.StructuredContent["target"] != "coordinator" || triggered.StructuredContent["sent_count"] != 1 || triggered.StructuredContent["source"] != "github" || triggered.StructuredContent["event"] != "workflow_failed" {
+		t.Fatalf("remote trigger structured content = %#v", triggered.StructuredContent)
+	}
+	resume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_remote_resume_lead",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/remote-lead","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(messages) != 3 {
+		t.Fatalf("remote trigger resume messages = %#v", resume.StructuredContent["resume_messages"])
+	}
+	text, _ := messages[2]["text"].(string)
+	if !strings.Contains(text, "Remote trigger received.") || !strings.Contains(text, "Source: github") || !strings.Contains(text, "Event: workflow_failed") || !strings.Contains(text, "Investigate the failed CI run.") {
+		t.Fatalf("remote trigger message = %q", text)
+	}
+	memberResume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_remote_resume_member",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/remote-member","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberMessages, ok := memberResume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(memberMessages) != 2 {
+		t.Fatalf("remote trigger member messages = %#v", memberResume.StructuredContent["resume_messages"])
+	}
+}
+
 func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:        "demo:reviewer",
@@ -1059,6 +1124,11 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing schedule team", tool: "ScheduleCron", input: `{"cron":"@daily","message":"hello","team_id":"missing"}`, want: "team not found: missing"},
 		{name: "missing schedule delete id", tool: "ScheduleCron", input: `{"action":"delete"}`, want: "schedule_id is required"},
 		{name: "missing schedule delete schedule", tool: "ScheduleCron", input: `{"action":"delete","schedule_id":"missing"}`, want: "schedule not found: missing"},
+		{name: "missing remote trigger team", tool: "RemoteTrigger", input: `{"message":"hello"}`, want: "team_id is required"},
+		{name: "missing remote trigger message", tool: "RemoteTrigger", input: `{"team_id":"missing"}`, want: "message is required"},
+		{name: "unknown remote trigger field", tool: "RemoteTrigger", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
+		{name: "bad remote trigger target", tool: "RemoteTrigger", input: `{"team_id":"missing","message":"hello","target":"leaders"}`, want: "target must be one of members, coordinator, all"},
+		{name: "missing remote trigger team state", tool: "RemoteTrigger", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
