@@ -288,6 +288,68 @@ func TestTaskToolCreatesAndKillCleansOwnedWorktree(t *testing.T) {
 	}
 }
 
+func TestTaskToolUsesSettingsDefaultWorktree(t *testing.T) {
+	repo := initTaskGitRepo(t)
+	defaultWorktree := true
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	ctx := tool.Context{
+		Context:          context.Background(),
+		WorkingDirectory: repo,
+		SessionID:        "sess_task_default_worktree",
+		Metadata: map[string]any{
+			tool.MetadataSessionPathKey: transcriptPath,
+			tool.MetadataSettingsKey: contracts.Settings{
+				Worktree: &contracts.WorktreeSetting{Enabled: &defaultWorktree},
+			},
+		},
+	}
+	executor := taskExecutor(t)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_default_worktree",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/default-worktree","description":"Default isolated task","prompt":"Work separately","subagent_type":"general-purpose"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreePath, ok := result.StructuredContent["worktree_path"].(string)
+	if !ok || worktreePath == "" || worktreePath == repo {
+		t.Fatalf("default worktree result = %#v", result.StructuredContent)
+	}
+	if result.StructuredContent["worktree_owned"] != true || result.StructuredContent["worktree_defaulted"] != true {
+		t.Fatalf("default worktree ownership result = %#v", result.StructuredContent)
+	}
+	if _, err := os.Stat(filepath.Join(worktreePath, "README.md")); err != nil {
+		t.Fatalf("created default worktree missing checkout: %v", err)
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_default_worktree_kill",
+		Name:  "KillTask",
+		Input: json.RawMessage(`{"task_id":"agent/default-worktree","reason":"default worktree cleanup"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Fatalf("default worktree still exists after cleanup: %v", err)
+	}
+
+	disabled, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_default_worktree_disabled",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/no-default-worktree","description":"Stay in repo","prompt":"Use original cwd","subagent_type":"general-purpose","worktree":false}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disabled.StructuredContent["worktree_path"] != repo || disabled.StructuredContent["worktree_owned"] == true {
+		t.Fatalf("explicit worktree false result = %#v", disabled.StructuredContent)
+	}
+	if _, ok := disabled.StructuredContent["worktree_defaulted"]; ok {
+		t.Fatalf("explicit worktree false defaulted = %#v", disabled.StructuredContent)
+	}
+}
+
 func TestKillTaskCancelsRunningSidechain(t *testing.T) {
 	ctx, transcriptPath := taskContext(t)
 	executor := taskExecutor(t)
@@ -543,8 +605,11 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 
 func TestTaskToolDefinitionIsPermissionSafeButOrdered(t *testing.T) {
 	task := NewTaskTool()
-	if !task.IsReadOnly(nil) {
-		t.Fatalf("Task should be read-only for permission decisions")
+	if task.IsReadOnly(nil) {
+		t.Fatalf("Task should not be read-only without an explicit worktree opt-out")
+	}
+	if !task.IsReadOnly(json.RawMessage(`{"description":"Review API","prompt":"Inspect API changes","subagent_type":"general-purpose","worktree":false}`)) {
+		t.Fatalf("Task with explicit worktree false should be read-only for permission decisions")
 	}
 	if task.IsReadOnly(json.RawMessage(`{"description":"Review API","prompt":"Inspect API changes","subagent_type":"general-purpose","worktree":true}`)) {
 		t.Fatalf("Task with worktree isolation should not be read-only")

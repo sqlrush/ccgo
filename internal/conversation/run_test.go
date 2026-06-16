@@ -649,7 +649,7 @@ func TestRunnerTaskSubagentEnforcesAllowedBashPattern(t *testing.T) {
 				Type:  contracts.ContentToolUse,
 				ID:    "toolu_task",
 				Name:  "Task",
-				Input: json.RawMessage(`{"id":"agent/bash-pattern","description":"Scoped bash","prompt":"Use bash","subagent_type":"demo:runner","run":true}`),
+				Input: json.RawMessage(`{"id":"agent/bash-pattern","description":"Scoped bash","prompt":"Use bash","subagent_type":"demo:runner","worktree":false,"run":true}`),
 			}},
 		}},
 		{response: &anthropic.Response{
@@ -767,7 +767,7 @@ func TestRunnerTaskSubagentHonorsAgentPermissionMode(t *testing.T) {
 				Type:  contracts.ContentToolUse,
 				ID:    "toolu_task",
 				Name:  "Task",
-				Input: json.RawMessage(`{"id":"agent/permission-mode","description":"Bypass edit","prompt":"Use edit","subagent_type":"demo:runner","run":true}`),
+				Input: json.RawMessage(`{"id":"agent/permission-mode","description":"Bypass edit","prompt":"Use edit","subagent_type":"demo:runner","worktree":false,"run":true}`),
 			}},
 		}},
 		{response: &anthropic.Response{

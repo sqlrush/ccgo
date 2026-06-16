@@ -27,9 +27,29 @@ type WorktreeCleanup struct {
 	Reason    string
 }
 
-func taskInputRequestsWorktree(raw []byte) bool {
+func taskInputExplicitlyDisablesWorktree(raw []byte) bool {
 	input, err := decodeTaskInput(raw)
-	return err == nil && input.Worktree
+	return err == nil && input.WorktreeSet && !input.Worktree
+}
+
+func taskInputRequestsWorktree(ctx tool.Context, input taskInput) bool {
+	if input.WorktreeSet {
+		return input.Worktree
+	}
+	return taskDefaultWorktreeEnabled(ctx)
+}
+
+func taskDefaultWorktreeEnabled(ctx tool.Context) bool {
+	settings := taskSettingsFromMetadata(ctx.Metadata)
+	if settings.Worktree == nil {
+		return false
+	}
+	for _, value := range []*bool{settings.Worktree.Enabled, settings.Worktree.Default, settings.Worktree.Auto} {
+		if value != nil {
+			return *value
+		}
+	}
+	return false
 }
 
 func taskSidechainID(raw string) string {

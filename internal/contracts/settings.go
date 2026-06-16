@@ -79,6 +79,9 @@ type AttributionSetting struct {
 }
 
 type WorktreeSetting struct {
+	Enabled            *bool    `json:"enabled,omitempty"`
+	Default            *bool    `json:"default,omitempty"`
+	Auto               *bool    `json:"auto,omitempty"`
 	SymlinkDirectories []string `json:"symlinkDirectories,omitempty"`
 	SparsePaths        []string `json:"sparsePaths,omitempty"`
 }

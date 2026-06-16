@@ -102,6 +102,15 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 			if out.Worktree == nil {
 				out.Worktree = &contracts.WorktreeSetting{}
 			}
+			if s.Worktree.Enabled != nil {
+				out.Worktree.Enabled = clonePtr(s.Worktree.Enabled)
+			}
+			if s.Worktree.Default != nil {
+				out.Worktree.Default = clonePtr(s.Worktree.Default)
+			}
+			if s.Worktree.Auto != nil {
+				out.Worktree.Auto = clonePtr(s.Worktree.Auto)
+			}
 			out.Worktree.SymlinkDirectories = mergeStrings(out.Worktree.SymlinkDirectories, s.Worktree.SymlinkDirectories)
 			out.Worktree.SparsePaths = mergeStrings(out.Worktree.SparsePaths, s.Worktree.SparsePaths)
 		}

@@ -22,6 +22,7 @@ type taskInput struct {
 	Prompt       string `json:"prompt"`
 	SubagentType string `json:"subagent_type"`
 	Worktree     bool   `json:"worktree,omitempty"`
+	WorktreeSet  bool   `json:"-"`
 	Run          bool   `json:"run,omitempty"`
 }
 
@@ -86,7 +87,7 @@ func NewTaskTool() tool.Tool {
 		InputSchemaFunc: taskInputSchema,
 		ValidateFunc:    validateTask,
 		CallFunc:        callTask,
-		ReadOnlyFunc:    func(raw json.RawMessage) bool { return !taskInputRequestsWorktree(raw) },
+		ReadOnlyFunc:    func(raw json.RawMessage) bool { return taskInputExplicitlyDisablesWorktree(raw) },
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
@@ -267,8 +268,10 @@ func normalizeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	if value, ok := firstString(obj, "subagent_type", "subagentType", "agent_type", "agentType", "agent", "type"); ok {
 		input.SubagentType = value
 	}
+	worktreeSet := false
 	if value, ok := firstBool(obj, "worktree", "isolated_worktree", "isolatedWorktree", "worktree_isolation", "worktreeIsolation", "create_worktree", "createWorktree"); ok {
 		input.Worktree = value
+		worktreeSet = true
 	}
 	if value, ok := firstBool(obj, "run", "execute", "sync", "synchronous", "await", "wait"); ok {
 		input.Run = value
@@ -276,6 +279,17 @@ func normalizeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	data, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
+	}
+	if worktreeSet {
+		var normalized map[string]any
+		if err := json.Unmarshal(data, &normalized); err != nil {
+			return nil, err
+		}
+		normalized["worktree"] = input.Worktree
+		data, err = json.Marshal(normalized)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return data, nil
 }
@@ -297,7 +311,7 @@ func validateTask(ctx tool.Context, raw json.RawMessage) error {
 	if ctx.SessionID == "" {
 		return fmt.Errorf("session id is required")
 	}
-	if input.Worktree && strings.TrimSpace(ctx.WorkingDirectory) == "" {
+	if taskInputRequestsWorktree(ctx, input) && strings.TrimSpace(ctx.WorkingDirectory) == "" {
 		return fmt.Errorf("working directory is required for worktree isolation")
 	}
 	if sessionPathFromMetadata(ctx.Metadata) == "" {
@@ -383,7 +397,8 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	if err := ensureTaskCanStart(sessionPath, ctx.SessionID, taskID); err != nil {
 		return contracts.ToolResult{}, err
 	}
-	worktree, err := prepareTaskWorktree(ctx, taskID, input.Worktree)
+	requestedWorktree := taskInputRequestsWorktree(ctx, input)
+	worktree, err := prepareTaskWorktree(ctx, taskID, requestedWorktree)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -463,6 +478,9 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	}
 	if len(worktree.SymlinkDirectories) > 0 {
 		structured["worktree_symlink_directories"] = append([]string(nil), worktree.SymlinkDirectories...)
+	}
+	if !input.WorktreeSet && requestedWorktree {
+		structured["worktree_defaulted"] = true
 	}
 	if hasAgent && agent.Path != "" {
 		structured["agent_path"] = agent.Path
@@ -671,11 +689,25 @@ func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	if err := json.Unmarshal(raw, &input); err != nil {
 		return taskInput{}, err
 	}
+	input.WorktreeSet = rawHasAnyField(raw, "worktree", "isolated_worktree", "isolatedWorktree", "worktree_isolation", "worktreeIsolation", "create_worktree", "createWorktree")
 	input.ID = strings.TrimSpace(input.ID)
 	input.Description = strings.TrimSpace(input.Description)
 	input.Prompt = strings.TrimSpace(input.Prompt)
 	input.SubagentType = strings.TrimSpace(input.SubagentType)
 	return input, nil
+}
+
+func rawHasAnyField(raw json.RawMessage, keys ...string) bool {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return false
+	}
+	for _, key := range keys {
+		if _, ok := obj[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeTaskOutputInput(raw json.RawMessage) (taskOutputInput, error) {

@@ -90,11 +90,18 @@ func TestValidateSettingsWarnsForInvalidSandboxFilesystem(t *testing.T) {
 }
 
 func TestMergeSettings(t *testing.T) {
+	defaultWorktree := true
+	overrideWorktree := false
 	a := contracts.Settings{
 		Env: map[string]string{"A": "1"},
 		Permissions: &contracts.PermissionsSetting{
 			Allow:       []string{"Read"},
 			DefaultMode: contracts.PermissionDefault,
+		},
+		Worktree: &contracts.WorktreeSetting{
+			Enabled:            &defaultWorktree,
+			SparsePaths:        []string{"README.md"},
+			SymlinkDirectories: []string{"cache"},
 		},
 	}
 	b := contracts.Settings{
@@ -103,6 +110,11 @@ func TestMergeSettings(t *testing.T) {
 		Permissions: &contracts.PermissionsSetting{
 			Deny:        []string{"Bash(rm *)"},
 			DefaultMode: contracts.PermissionPlan,
+		},
+		Worktree: &contracts.WorktreeSetting{
+			Enabled:            &overrideWorktree,
+			SparsePaths:        []string{"docs"},
+			SymlinkDirectories: []string{"node_modules"},
 		},
 	}
 	merged := MergeSettings(a, b)
@@ -114,6 +126,15 @@ func TestMergeSettings(t *testing.T) {
 	}
 	if len(merged.Permissions.Allow) != 1 || len(merged.Permissions.Deny) != 1 {
 		t.Fatalf("permissions = %#v", merged.Permissions)
+	}
+	if merged.Worktree == nil || merged.Worktree.Enabled == nil || *merged.Worktree.Enabled {
+		t.Fatalf("worktree enabled = %#v", merged.Worktree)
+	}
+	if len(merged.Worktree.SparsePaths) != 2 || merged.Worktree.SparsePaths[0] != "README.md" || merged.Worktree.SparsePaths[1] != "docs" {
+		t.Fatalf("worktree sparse paths = %#v", merged.Worktree.SparsePaths)
+	}
+	if len(merged.Worktree.SymlinkDirectories) != 2 || merged.Worktree.SymlinkDirectories[0] != "cache" || merged.Worktree.SymlinkDirectories[1] != "node_modules" {
+		t.Fatalf("worktree symlink dirs = %#v", merged.Worktree.SymlinkDirectories)
 	}
 }
 

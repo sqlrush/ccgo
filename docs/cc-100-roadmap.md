@@ -45,7 +45,9 @@ M10 补充：sidechain metadata/lifecycle 现在会保存 `worktreeOwned` 和 wo
 
 M10 补充：`Task` 支持显式 `worktree: true`，会基于当前 git HEAD 创建 ccgo 受管 detached worktree，写入 sidechain metadata 和 structured output；`KillTask` 会校验 owned worktree 处于受管目录后执行 `git worktree remove --force` 并记录 cleanup marker。默认 Task 仍保持原工作目录，完整自动 agent 执行循环、worktree settings/sparse/symlink 语义和完成后自动 cleanup 仍未完成。
 
-M10 补充：显式 owned worktree 创建后会应用 settings `worktree.sparsePaths` 和 `worktree.symlinkDirectories`：前者通过 git sparse-checkout 限定 checkout，后者把主 repo 中存在的目录 symlink 到 isolated worktree；应用后的 sparse/symlink 列表会写入 sidechain metadata/lifecycle 并由 `TaskOutput` 返回。完整默认策略、settings 更多别名和 agent 执行闭环仍未完成。
+M10 补充：显式 owned worktree 创建后会应用 settings `worktree.sparsePaths` 和 `worktree.symlinkDirectories`：前者通过 git sparse-checkout 限定 checkout，后者把主 repo 中存在的目录 symlink 到 isolated worktree；应用后的 sparse/symlink 列表会写入 sidechain metadata/lifecycle 并由 `TaskOutput` 返回。完整 agent 执行闭环仍未完成。
+
+M10 补充：settings `worktree.enabled`/`worktree.default`/`worktree.auto` 现在可作为 Task 默认 worktree 策略；Task 未显式传 `worktree` 时会按 settings 默认创建 owned worktree，显式 `worktree:false` 会覆盖默认并留在原工作目录。由于默认策略可能创建 worktree，未显式 opt-out 的 Task 权限判定不再按只读处理。
 
 M10 补充：`Task` 支持显式 `run: true`，conversation runner 会读取 sidechain conversation，用同一 model client 驱动 subagent 多轮工具循环；subagent assistant/tool_result 都写回 sidechain transcript，最终通过 `SidechainManager.Finish` 标记 completed，主对话收到的 tool result 会更新为 completed summary 并发 `task_agent_started`/`task_agent_completed` progress。完整多 agent 编排和取消传播仍未完成。
 
@@ -55,7 +57,7 @@ M10 补充：agent `allowedTools` 现在也会注入 subagent permission decider
 
 M10 补充：agent metadata 的 `permissionMode` 现在会在 `run:true` subagent 执行时覆盖子 runner permission engine mode；例如 `bypassPermissions` agent 可以执行基础 default mode 下会 ask 的 mutating tool，同时保留原 engine context/rules 以及随后叠加的 agent allowed-tools 限制。
 
-M10 补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。默认 worktree 策略和团队编排仍未完成。
+M10 补充：`run:true` subagent 执行时会切换到 sidechain metadata 的 `worktreePath`，因此 nested tool loop 的本地工具在 isolated worktree 内运行；完成后会复用 `KillTask` 的受管路径校验和 `git worktree remove --force` 清理 owned worktree，并把 cleanup 状态写回 structured result、progress 和 sidechain lifecycle。团队编排仍未完成。
 
 M10 补充：`run:true` subagent 的错误路径现在会收敛 sidechain 终态：context cancel 标记 `cancelled`，其它执行错误标记 `failed`；两类终态都会尝试清理 owned worktree，并把 cleanup marker 透出到主 Task structured result。更细的外部中断 UI/进度呈现仍未完成。
 
@@ -1416,7 +1418,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - remote CCR agent、team/swarm/coordinator。
 - SendMessage、TeamCreate、TeamDelete、Task*。
 
-当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 编排、默认 worktree 策略、远端协作和团队编排仍未完成。
+当前状态：已有 Task/TaskOutput/KillTask/ResumeTask 入口、sidechain metadata/lifecycle、task progress event、显式与 settings 默认 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整多 agent 编排、远端协作和团队编排仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 
