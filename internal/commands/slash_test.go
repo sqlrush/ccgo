@@ -196,6 +196,43 @@ func TestExecuteSlashHelpWithCommandReturnsDetail(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashHelpSearchesCommands(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/help search MCP", SlashOptions{UUID: "user_help_search"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Help search: MCP",
+		"Matches: 1",
+		"/mcp - Manage MCP servers",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help search missing %q: %q", want, text)
+		}
+	}
+
+	result, handled, err = ExecuteSlashCommand(registry, "/help search", SlashOptions{UUID: "user_help_search_empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.LocalResult == nil || result.Messages[1].Content[0].Text != "Usage: /help search <query>" {
+		t.Fatalf("empty help search = %#v", result)
+	}
+
+	result, handled, err = ExecuteSlashCommand(registry, "/help search nowhere", SlashOptions{UUID: "user_help_search_none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.LocalResult == nil || result.Messages[1].Content[0].Text != "No commands matched nowhere." {
+		t.Fatalf("missing help search = %#v", result)
+	}
+}
+
 func TestExecuteSlashMCPReturnsLocalMCPResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/mcp list", SlashOptions{UUID: "user_mcp"})

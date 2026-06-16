@@ -225,6 +225,12 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 }
 
 func formatHelpText(registry Registry, raw string) string {
+	if query, ok := searchQuery(raw); ok {
+		if query == "" {
+			return "Usage: /help search <query>"
+		}
+		return formatHelpSearch(registry, query)
+	}
 	if target, ok := detailTarget(raw); ok {
 		cmd, found := registry.Find(target)
 		if !found {
@@ -239,15 +245,86 @@ func formatHelpText(registry Registry, raw string) string {
 	var lines []string
 	lines = append(lines, "Available commands:")
 	for _, cmd := range commands {
-		name := "/" + UserFacingName(cmd)
-		description := strings.TrimSpace(cmd.Description)
-		if description == "" {
-			lines = append(lines, name)
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("%s - %s", name, description))
+		lines = append(lines, formatCommandListLine(cmd))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatHelpSearch(registry Registry, query string) string {
+	query = strings.TrimSpace(query)
+	var matches []contracts.Command
+	for _, cmd := range registry.Visible() {
+		if commandMatchesQuery(cmd, query) {
+			matches = append(matches, cmd)
+		}
+	}
+	if len(matches) == 0 {
+		return "No commands matched " + query + "."
+	}
+	lines := []string{
+		"Help search: " + query,
+		fmt.Sprintf("Matches: %d", len(matches)),
+	}
+	for _, cmd := range matches {
+		lines = append(lines, formatCommandListLine(cmd))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func searchQuery(raw string) (string, bool) {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return "", false
+	}
+	switch strings.ToLower(args[0]) {
+	case "search", "find", "query":
+		return strings.TrimSpace(subcommandArgs(raw, args[0])), true
+	default:
+		return "", false
+	}
+}
+
+func subcommandArgs(raw string, subcommand string) string {
+	raw = strings.TrimSpace(raw)
+	subcommand = strings.TrimSpace(subcommand)
+	if raw == "" || subcommand == "" || len(raw) < len(subcommand) || !strings.EqualFold(raw[:len(subcommand)], subcommand) {
+		return raw
+	}
+	return strings.TrimSpace(raw[len(subcommand):])
+}
+
+func commandMatchesQuery(cmd contracts.Command, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return false
+	}
+	values := []string{
+		cmd.Name,
+		cmd.DisplayName,
+		UserFacingName(cmd),
+		cmd.Description,
+		cmd.WhenToUse,
+		string(cmd.Type),
+		string(cmd.Source),
+		cmd.LoadedFrom,
+		cmd.ArgumentHint,
+	}
+	values = append(values, cmd.Aliases...)
+	for _, value := range values {
+		if strings.Contains(strings.ToLower(value), query) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatCommandListLine(cmd contracts.Command) string {
+	name := "/" + UserFacingName(cmd)
+	description := strings.TrimSpace(cmd.Description)
+	if description == "" {
+		return name
+	}
+	return fmt.Sprintf("%s - %s", name, description)
 }
 
 func formatSkillsText(registry Registry, raw string) string {
