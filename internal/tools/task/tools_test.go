@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewResumeTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewResumeTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,6 +511,45 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	if !ok || len(tasks) != 2 || tasks[0]["status"] != session.SidechainStatusRunning || tasks[1]["task_id"] != "agent_team-two" {
 		t.Fatalf("team read = %#v", read.StructuredContent)
 	}
+	sent, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_send",
+		Name:  "TeamSendMessage",
+		Input: json.RawMessage(`{"team_id":"review/team","message":"Please coordinate the review."}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent.StructuredContent["sent_count"] != 2 || sent.StructuredContent["message_chars"] != len("Please coordinate the review.") {
+		t.Fatalf("team send structured content = %#v", sent.StructuredContent)
+	}
+	for _, taskID := range []string{"agent/team-one", "agent/team-two"} {
+		resume, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_resume_" + strings.ReplaceAll(taskID, "/", "_")),
+			Name:  "ResumeTask",
+			Input: json.RawMessage(`{"task_id":"` + taskID + `","limit":3}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+		if !ok || len(messages) != 3 || messages[2]["text"] != "Please coordinate the review." {
+			t.Fatalf("team broadcast resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_cancel_member",
+		Name:  "KillTask",
+		Input: json.RawMessage(`{"task_id":"agent/team-one","reason":"member done"}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_send_cancelled",
+		Name:  "TeamSendMessage",
+		Input: json.RawMessage(`{"team_id":"review/team","message":"Should not partially send."}`),
+	}, nil); err == nil || !strings.Contains(err.Error(), "task agent_team-one is not running") {
+		t.Fatalf("team send after cancellation err = %v", err)
+	}
 
 	deleted, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_team_delete",
@@ -723,6 +762,10 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing delete team", tool: "TeamDelete", input: `{"team_id":"missing"}`, want: "team not found: missing"},
 		{name: "unknown team output field", tool: "TeamOutput", input: `{"extra":true}`, want: "input.extra is not allowed"},
 		{name: "missing team output team", tool: "TeamOutput", input: `{"team_id":"missing"}`, want: "team not found: missing"},
+		{name: "missing team send id", tool: "TeamSendMessage", input: `{"message":"hello"}`, want: "team_id is required"},
+		{name: "missing team send message", tool: "TeamSendMessage", input: `{"team_id":"missing"}`, want: "message is required"},
+		{name: "unknown team send field", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team send team", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
 		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
 		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
 	}

@@ -55,6 +55,11 @@ type teamOutputInput struct {
 	TeamID string `json:"team_id,omitempty"`
 }
 
+type teamSendMessageInput struct {
+	TeamID  string `json:"team_id,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 type taskResumeInput struct {
 	TaskID string `json:"task_id,omitempty"`
 	Limit  *int   `json:"limit,omitempty"`
@@ -278,6 +283,33 @@ func NewTeamOutputTool() tool.Tool {
 		CallFunc:        callTeamOutput,
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
 		ConcurrencyFunc: func(json.RawMessage) bool { return true },
+	}
+}
+
+func NewTeamSendMessageTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "TeamSendMessage",
+			Description:     "Append the same user message to every running task in a subagent team.",
+			SearchHint:      "broadcast message team subagent tasks",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"team_id", "message"},
+				"properties": map[string]any{
+					"team_id": map[string]any{"type": "string"},
+					"message": map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Sends the same user message to every running task in a subagent team. The operation validates all member tasks are running before appending any message.", nil
+		},
+		NormalizeFunc:   normalizeTeamSendMessageInput,
+		ValidateFunc:    validateTeamSendMessage,
+		CallFunc:        callTeamSendMessage,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
 
@@ -556,6 +588,34 @@ func validateTeamOutput(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if sessionPathFromMetadata(ctx.Metadata) == "" {
 		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
+func validateTeamSendMessage(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeTeamSendMessageInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TeamID == "" {
+		return fmt.Errorf("team_id is required")
+	}
+	if input.Message == "" {
+		return fmt.Errorf("message is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return err
+	}
+	if err := validateTeamTasksRunning(manager, team); err != nil {
+		return err
 	}
 	return nil
 }
@@ -999,6 +1059,57 @@ func callTeamOutput(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSin
 	}, nil
 }
 
+func callTeamSendMessage(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeTeamSendMessageInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if err := validateTeamTasksRunning(manager, team); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	sent := make([]map[string]any, 0, len(team.TaskIDs))
+	for _, taskID := range team.TaskIDs {
+		message := msgs.UserText(input.Message)
+		message.SessionID = ctx.SessionID
+		if err := manager.Append(taskID, session.TranscriptMessage{
+			Type:        string(contracts.MessageUser),
+			UUID:        message.UUID,
+			SessionID:   ctx.SessionID,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+			IsSidechain: true,
+			AgentID:     taskID,
+			Message:     &message,
+		}); err != nil {
+			return contracts.ToolResult{}, err
+		}
+		sent = append(sent, map[string]any{
+			"task_id":      taskID,
+			"sidechain_id": taskID,
+			"message_uuid": string(message.UUID),
+		})
+	}
+	structured := structuredTeamState(team)
+	structured["type"] = "team_send_message"
+	structured["message_chars"] = len(input.Message)
+	structured["sent_count"] = len(sent)
+	structured["sent"] = sent
+	_ = tool.SendProgress(sink, "", "team_message_sent", map[string]any{
+		"team_id":       team.ID,
+		"task_count":    len(team.TaskIDs),
+		"sent_count":    len(sent),
+		"message_chars": len(input.Message),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Message sent to %d task(s) in team %s.", len(sent), team.ID),
+		StructuredContent: structured,
+	}, nil
+}
+
 func callResumeTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeResumeTaskInput(raw)
 	if err != nil {
@@ -1113,6 +1224,16 @@ func decodeTeamOutputInput(raw json.RawMessage) (teamOutputInput, error) {
 		return teamOutputInput{}, err
 	}
 	input.TeamID = strings.TrimSpace(input.TeamID)
+	return input, nil
+}
+
+func decodeTeamSendMessageInput(raw json.RawMessage) (teamSendMessageInput, error) {
+	var input teamSendMessageInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return teamSendMessageInput{}, err
+	}
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	input.Message = strings.TrimSpace(input.Message)
 	return input, nil
 }
 
@@ -1251,6 +1372,28 @@ func normalizeTeamOutputInput(raw json.RawMessage) (json.RawMessage, error) {
 	normalized := map[string]json.RawMessage{}
 	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
 		normalized["team_id"] = value
+	}
+	return json.Marshal(normalized)
+}
+
+func normalizeTeamSendMessageInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "team_id", "teamId", "id", "name", "message", "text", "content", "prompt", "input":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
+		normalized["team_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input"); ok {
+		normalized["message"] = value
 	}
 	return json.Marshal(normalized)
 }
@@ -1412,6 +1555,34 @@ func findTeamState(manifest session.TeamManifest, teamID string) (session.TeamSt
 		}
 	}
 	return session.TeamState{}, false
+}
+
+func loadTeamForMessage(manager session.SidechainManager, teamID string) (session.TeamState, error) {
+	manifest, err := manager.TeamManifest()
+	if err != nil {
+		return session.TeamState{}, err
+	}
+	team, ok := findTeamState(manifest, teamID)
+	if !ok {
+		return session.TeamState{}, fmt.Errorf("team not found: %s", teamID)
+	}
+	if len(team.TaskIDs) == 0 {
+		return session.TeamState{}, fmt.Errorf("team %s has no tasks", team.ID)
+	}
+	return team, nil
+}
+
+func validateTeamTasksRunning(manager session.SidechainManager, team session.TeamState) error {
+	for _, taskID := range team.TaskIDs {
+		state, err := findTaskState(manager, taskID)
+		if err != nil {
+			return err
+		}
+		if state.Status != session.SidechainStatusRunning {
+			return fmt.Errorf("task %s is not running", state.ID)
+		}
+	}
+	return nil
 }
 
 func structuredTeamTaskStates(manager session.SidechainManager, team session.TeamState) []map[string]any {
