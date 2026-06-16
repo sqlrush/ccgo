@@ -3884,7 +3884,12 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		Permissions:      r.permissionsForTurn(turnMessages),
 		Metadata:         metadata,
 	}
-	for update := range tool.RunTools(toolCtx, r.Tools, uses, nil, tool.RunOptions{}) {
+	progressSink := tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCopy := progress
+		r.emit(Event{Type: EventToolProgress, ToolProgress: &progressCopy})
+		return nil
+	})
+	for update := range tool.RunTools(toolCtx, r.Tools, uses, progressSink, tool.RunOptions{}) {
 		use := update.ToolUse
 		result := update.Result
 		err := update.Err

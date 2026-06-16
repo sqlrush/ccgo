@@ -28,6 +28,7 @@ const (
 	EventAssistantMessage EventType = "assistant_message"
 	EventToolUse          EventType = "tool_use"
 	EventToolResult       EventType = "tool_result"
+	EventToolProgress     EventType = "tool_progress"
 	EventRetry            EventType = "retry"
 	EventTokenWarning     EventType = "token_warning"
 	EventCompact          EventType = "compact"
@@ -45,6 +46,7 @@ type Event struct {
 	Message      *contracts.Message
 	ToolUse      *contracts.ToolUse
 	ToolResult   *contracts.ToolResult
+	ToolProgress *contracts.ToolProgress
 	TokenWarning *TokenWarning
 	Compact      *compactpkg.Result
 	StreamEvent  *anthropic.StreamEvent

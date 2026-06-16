@@ -232,6 +232,7 @@ func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
 	}}
 	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
 	cwd := t.TempDir()
+	var progress []contracts.ToolProgress
 	runner := Runner{
 		Client:           client,
 		Tools:            tool.NewExecutor(registry),
@@ -240,6 +241,11 @@ func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
 		SessionID:        "sess_task_runner",
 		SessionPath:      transcriptPath,
 		WorkingDirectory: cwd,
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
 	}
 
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
@@ -274,6 +280,9 @@ func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
 	}
 	if state.Metadata.AgentType != "general-purpose" || state.Metadata.Description != "Review API" || state.Metadata.WorktreePath != cwd {
 		t.Fatalf("metadata = %#v", state.Metadata)
+	}
+	if !hasToolProgress(progress, "toolu_task", "task_started", "agent_api", session.SidechainStatusRunning) {
+		t.Fatalf("progress = %#v", progress)
 	}
 }
 
@@ -3981,6 +3990,18 @@ func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 func containsEvent(events []EventType, target EventType) bool {
 	for _, event := range events {
 		if event == target {
+			return true
+		}
+	}
+	return false
+}
+
+func hasToolProgress(progress []contracts.ToolProgress, toolUseID contracts.ID, progressType string, taskID string, status string) bool {
+	for _, item := range progress {
+		if item.ToolUseID != toolUseID || item.Type != progressType {
+			continue
+		}
+		if item.Data["task_id"] == taskID && item.Data["status"] == status {
 			return true
 		}
 	}

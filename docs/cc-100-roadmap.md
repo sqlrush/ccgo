@@ -39,6 +39,8 @@ M10 补充：新增 `TaskOutput`/`AgentOutputTool` 和 `KillTask`/`TaskStop` 内
 
 M10 补充：新增 `ResumeTask`/`TaskResume` 只读工具，复用 sidechain resume context builder 返回 `can_resume`、截断状态、message limit、agent metadata 和恢复用 tail message 摘要；plugin agent prompt 被 tail 截断时会自动以前置 system meta message 恢复。完整恢复后的 agent 执行循环和 UI picker 仍未完成。
 
+M10 补充：tool executor 现在会为工具内部空-ID progress 自动补当前 `tool_use_id`，conversation runner 新增 `tool_progress` 事件透出 `contracts.ToolProgress`；`Task`/`TaskOutput`/`KillTask`/`ResumeTask` 会发 task-specific progress，包括 task ID、status、输出/取消/resume context 关键字段。完整 agent step-level streaming 和 TUI task 面板接线仍未完成。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。

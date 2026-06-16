@@ -350,7 +350,7 @@ func allowTaskOutput(tool.Context, json.RawMessage) (contracts.PermissionDecisio
 	}, nil
 }
 
-func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeTaskInput(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -432,13 +432,21 @@ func callTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if hasAgent && len(agent.AllowedTools) > 0 {
 		structured["agent_allowed_tools"] = append([]string(nil), agent.AllowedTools...)
 	}
+	_ = tool.SendProgress(sink, "", "task_started", map[string]any{
+		"task_id":       run.ID,
+		"sidechain_id":  run.ID,
+		"status":        session.SidechainStatusRunning,
+		"subagent_type": input.SubagentType,
+		"description":   input.Description,
+		"path":          run.Path,
+	})
 	return contracts.ToolResult{
 		Content:           fmt.Sprintf("Task started: %s\nSubagent type: %s\nSidechain ID: %s", input.Description, input.SubagentType, run.ID),
 		StructuredContent: structured,
 	}, nil
 }
 
-func callTaskOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+func callTaskOutput(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeTaskOutputInput(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -453,6 +461,9 @@ func callTaskOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 		for _, state := range states {
 			tasks = append(tasks, structuredTaskState(state))
 		}
+		_ = tool.SendProgress(sink, "", "task_listed", map[string]any{
+			"count": len(tasks),
+		})
 		return contracts.ToolResult{
 			Content: formatTaskList(states),
 			StructuredContent: map[string]any{
@@ -476,13 +487,21 @@ func callTaskOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 	if input.TailLines != nil {
 		structured["tail_lines"] = *input.TailLines
 	}
+	_ = tool.SendProgress(sink, "", "task_output", map[string]any{
+		"task_id":       state.ID,
+		"sidechain_id":  state.ID,
+		"status":        state.Status,
+		"running":       state.Status == session.SidechainStatusRunning,
+		"message_count": state.MessageCount,
+		"tail_lines":    taskOutputTailLines(input),
+	})
 	return contracts.ToolResult{
 		Content:           formatTaskOutput(state, output),
 		StructuredContent: structured,
 	}, nil
 }
 
-func callKillTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+func callKillTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeKillTaskInput(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -515,13 +534,24 @@ func callKillTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 	structured["type"] = "kill_task"
 	structured["killed"] = killed
 	structured["cancelled"] = state.Status == session.SidechainStatusCancelled
+	progressType := "task_not_running"
+	if killed {
+		progressType = "task_cancelled"
+	}
+	_ = tool.SendProgress(sink, "", progressType, map[string]any{
+		"task_id":      state.ID,
+		"sidechain_id": state.ID,
+		"status":       state.Status,
+		"killed":       killed,
+		"cancelled":    state.Status == session.SidechainStatusCancelled,
+	})
 	return contracts.ToolResult{
 		Content:           content,
 		StructuredContent: structured,
 	}, nil
 }
 
-func callResumeTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+func callResumeTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeResumeTaskInput(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -540,6 +570,14 @@ func callResumeTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 	structured["truncated"] = resumeContext.Truncated
 	structured["message_limit"] = resumeContext.MessageLimit
 	structured["resume_messages"] = structuredResumeMessages(resumeContext.Messages)
+	_ = tool.SendProgress(sink, "", "task_resume_context", map[string]any{
+		"task_id":       resumeContext.State.ID,
+		"sidechain_id":  resumeContext.State.ID,
+		"status":        resumeContext.State.Status,
+		"can_resume":    resumeContext.CanResume,
+		"truncated":     resumeContext.Truncated,
+		"message_limit": resumeContext.MessageLimit,
+	})
 	return contracts.ToolResult{
 		Content:           formatTaskResume(resumeContext),
 		StructuredContent: structured,

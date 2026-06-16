@@ -105,7 +105,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 		_ = SendProgress(sink, use.ID, "cancelled", map[string]any{"tool": t.Name(), "error": err.Error()})
 		return ErrorResult(use, err), err
 	}
-	result, err := t.Call(ctx, raw, sink)
+	result, err := t.Call(ctx, raw, defaultToolUseProgressSink{sink: sink, toolUseID: use.ID})
 	if result.ToolUseID == "" {
 		result.ToolUseID = use.ID
 	}
@@ -126,6 +126,21 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	}
 	_ = SendProgress(sink, use.ID, "completed", map[string]any{"tool": t.Name()})
 	return result, nil
+}
+
+type defaultToolUseProgressSink struct {
+	sink      ProgressSink
+	toolUseID contracts.ID
+}
+
+func (s defaultToolUseProgressSink) Send(progress contracts.ToolProgress) error {
+	if s.sink == nil {
+		return nil
+	}
+	if progress.ToolUseID == "" {
+		progress.ToolUseID = s.toolUseID
+	}
+	return s.sink.Send(progress)
 }
 
 func (e Executor) runPreHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage) (json.RawMessage, error) {

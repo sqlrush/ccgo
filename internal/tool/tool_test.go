@@ -90,7 +90,7 @@ func TestExecutorHooksCanUpdateInputAndEmitProgress(t *testing.T) {
 				t.Fatal(err)
 			}
 			seenInput = input.Text
-			_ = SendProgress(sink, "toolu_hook", "custom", map[string]any{"step": "call"})
+			_ = SendProgress(sink, "", "custom", map[string]any{"step": "call"})
 			return contracts.ToolResult{Content: input.Text}, nil
 		},
 	})
@@ -133,6 +133,11 @@ func TestExecutorHooksCanUpdateInputAndEmitProgress(t *testing.T) {
 	}
 	if got := progressTypes(progress); strings.Join(got, ",") != "started,custom,completed" {
 		t.Fatalf("progress = %#v", got)
+	}
+	for _, item := range progress {
+		if item.ToolUseID != "toolu_hook" {
+			t.Fatalf("progress tool use id = %#v", progress)
+		}
 	}
 }
 
