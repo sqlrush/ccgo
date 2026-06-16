@@ -863,6 +863,48 @@ func TestRunPrintJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONOutputIncludesRuntimeMetadata(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "beta-one beta-two,beta-one")
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"outputStyle":"Explanatory","fastMode":true,"permissions":{"defaultMode":"plan"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	expectedCWD, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "--print", "--output-format", "json", "/status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["cwd"] != expectedCWD || payload["permission_mode"] != "plan" || payload["api_key_source"] != "api_key" || payload["fast_mode"] != true {
+		t.Fatalf("runtime metadata = %#v", payload)
+	}
+	if payload["output_style"] != "Explanatory" {
+		t.Fatalf("output_style = %#v", payload["output_style"])
+	}
+	betas, ok := payload["betas"].([]any)
+	if !ok || len(betas) != 3 || betas[0] != "beta-one" || betas[1] != "beta-two" || betas[2] != "fast-mode-2025-01-24" {
+		t.Fatalf("betas = %#v", payload["betas"])
+	}
+	outputStyles, ok := payload["available_output_styles"].([]any)
+	if !ok || len(outputStyles) < 3 || outputStyles[0] != "default" {
+		t.Fatalf("available output styles = %#v", payload["available_output_styles"])
+	}
+}
+
 func TestRunPrintJSONClearIncludesCleared(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")
@@ -1176,7 +1218,7 @@ func TestWritePrintJSONResultIncludesCompactMetadata(t *testing.T) {
 		Compact:   &compactpkg.Result{Plan: plan},
 	}
 	var stdout bytes.Buffer
-	if err := writePrintJSONResult(&stdout, result, messages.TextContent(plan.Summary), 10, "sonnet"); err != nil {
+	if err := writePrintJSONResult(&stdout, conversation.Runner{Model: "sonnet"}, result, messages.TextContent(plan.Summary), 10); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any

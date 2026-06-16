@@ -785,24 +785,31 @@ func firstNonEmpty(values ...string) string {
 }
 
 type printJSONResult struct {
-	Type        string                   `json:"type"`
-	Subtype     string                   `json:"subtype"`
-	IsError     bool                     `json:"is_error"`
-	DurationMS  int64                    `json:"duration_ms"`
-	DurationAPI int64                    `json:"duration_api_ms"`
-	NumTurns    int                      `json:"num_turns,omitempty"`
-	TotalCost   float64                  `json:"total_cost_usd,omitempty"`
-	SessionID   contracts.ID             `json:"session_id,omitempty"`
-	Result      string                   `json:"result"`
-	Error       string                   `json:"error,omitempty"`
-	Message     *contracts.Message       `json:"message,omitempty"`
-	StopReason  string                   `json:"stop_reason,omitempty"`
-	Model       string                   `json:"model,omitempty"`
-	Usage       *contracts.Usage         `json:"usage,omitempty"`
-	ToolResults []contracts.ToolResult   `json:"tool_results,omitempty"`
-	Cleared     bool                     `json:"cleared,omitempty"`
-	Compacted   bool                     `json:"compacted,omitempty"`
-	Compact     *session.CompactMetadata `json:"compact,omitempty"`
+	Type           string                   `json:"type"`
+	Subtype        string                   `json:"subtype"`
+	IsError        bool                     `json:"is_error"`
+	DurationMS     int64                    `json:"duration_ms"`
+	DurationAPI    int64                    `json:"duration_api_ms"`
+	NumTurns       int                      `json:"num_turns,omitempty"`
+	TotalCost      float64                  `json:"total_cost_usd,omitempty"`
+	SessionID      contracts.ID             `json:"session_id,omitempty"`
+	CWD            string                   `json:"cwd,omitempty"`
+	PermissionMode string                   `json:"permission_mode,omitempty"`
+	APIKeySource   string                   `json:"api_key_source,omitempty"`
+	Betas          []string                 `json:"betas,omitempty"`
+	FastMode       bool                     `json:"fast_mode,omitempty"`
+	OutputStyle    string                   `json:"output_style,omitempty"`
+	OutputStyles   []string                 `json:"available_output_styles,omitempty"`
+	Result         string                   `json:"result"`
+	Error          string                   `json:"error,omitempty"`
+	Message        *contracts.Message       `json:"message,omitempty"`
+	StopReason     string                   `json:"stop_reason,omitempty"`
+	Model          string                   `json:"model,omitempty"`
+	Usage          *contracts.Usage         `json:"usage,omitempty"`
+	ToolResults    []contracts.ToolResult   `json:"tool_results,omitempty"`
+	Cleared        bool                     `json:"cleared,omitempty"`
+	Compacted      bool                     `json:"compacted,omitempty"`
+	Compact        *session.CompactMetadata `json:"compact,omitempty"`
 }
 
 type printStreamEvent struct {
@@ -1074,7 +1081,7 @@ func writePrintResult(stdout io.Writer, runner conversation.Runner, result conve
 		}
 	}
 	if outputFormat == "json" || outputFormat == "stream-json" {
-		return writePrintJSONResult(stdout, result, text, duration, runner.Model)
+		return writePrintJSONResult(stdout, runner, result, text, duration)
 	}
 	if _, err := fmt.Fprint(stdout, text); err != nil {
 		return err
@@ -1123,7 +1130,7 @@ func writePrintError(stdout io.Writer, runner conversation.Runner, err error, ou
 
 func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration) error {
 	encoder := json.NewEncoder(stdout)
-	return encoder.Encode(printJSONResult{
+	envelope := printJSONResult{
 		Type:        "result",
 		Subtype:     "error",
 		IsError:     true,
@@ -1131,24 +1138,28 @@ func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error
 		DurationAPI: durationMillis(apiDuration),
 		SessionID:   runner.SessionID,
 		Error:       err.Error(),
-	})
+	}
+	applyPrintJSONRuntime(&envelope, runner)
+	return encoder.Encode(envelope)
 }
 
 func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration) error {
 	encoder := json.NewEncoder(stdout)
 	durationMS := durationMillis(duration)
 	durationAPI := durationMillis(apiDuration)
-	return encoder.Encode(printStreamEvent{
+	envelope := printStreamEvent{
 		Type:        "error",
 		SessionID:   runner.SessionID,
 		Error:       err.Error(),
 		IsError:     true,
 		DurationMS:  &durationMS,
 		DurationAPI: &durationAPI,
-	})
+	}
+	applyPrintStreamRuntime(&envelope, runner)
+	return encoder.Encode(envelope)
 }
 
-func writePrintJSONResult(stdout io.Writer, result conversation.Result, text string, duration time.Duration, modelFallback string) error {
+func writePrintJSONResult(stdout io.Writer, runner conversation.Runner, result conversation.Result, text string, duration time.Duration) error {
 	message := result.Assistant
 	var messagePtr *contracts.Message
 	if message.Type != "" {
@@ -1169,7 +1180,7 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 	}
 	model := message.Model
 	if model == "" {
-		model = strings.TrimSpace(modelFallback)
+		model = strings.TrimSpace(runner.Model)
 	}
 	envelope := printJSONResult{
 		Type:        "result",
@@ -1189,12 +1200,39 @@ func writePrintJSONResult(stdout io.Writer, result conversation.Result, text str
 		Cleared:     result.Cleared,
 		Compacted:   result.Compacted,
 	}
+	applyPrintJSONRuntime(&envelope, runner)
 	if result.Compact != nil {
 		metadata := result.Compact.Plan.Metadata
 		envelope.Compact = &metadata
 	}
 	encoder := json.NewEncoder(stdout)
 	return encoder.Encode(envelope)
+}
+
+func applyPrintJSONRuntime(envelope *printJSONResult, runner conversation.Runner) {
+	if envelope == nil || runner.WorkingDirectory == "" {
+		return
+	}
+	envelope.CWD = runner.WorkingDirectory
+	envelope.PermissionMode = string(runner.PermissionMode)
+	envelope.APIKeySource = runner.APIKeySource
+	envelope.Betas = append([]string(nil), runner.BetaHeaders...)
+	envelope.FastMode = runner.FastMode
+	envelope.OutputStyle = runner.EffectiveOutputStyleName()
+	envelope.OutputStyles = runner.AvailableOutputStyleNames()
+}
+
+func applyPrintStreamRuntime(envelope *printStreamEvent, runner conversation.Runner) {
+	if envelope == nil || runner.WorkingDirectory == "" {
+		return
+	}
+	envelope.CWD = runner.WorkingDirectory
+	envelope.PermissionMode = string(runner.PermissionMode)
+	envelope.APIKeySource = runner.APIKeySource
+	envelope.Betas = append([]string(nil), runner.BetaHeaders...)
+	envelope.FastMode = runner.FastMode
+	envelope.OutputStyle = runner.EffectiveOutputStyleName()
+	envelope.OutputStyles = runner.AvailableOutputStyleNames()
 }
 
 func durationMillis(duration time.Duration) int64 {
