@@ -454,7 +454,7 @@ func TestSendMessageAppendsToRunningSidechain(t *testing.T) {
 func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	ctx, transcriptPath := taskContext(t)
 	executor := taskExecutor(t)
-	for _, id := range []string{"agent/team-one", "agent/team-two"} {
+	for _, id := range []string{"agent/team-one", "agent/team-two", "agent/coordinator"} {
 		_, err := executor.Execute(ctx, contracts.ToolUse{
 			ID:    contracts.ID("toolu_" + strings.ReplaceAll(id, "/", "_")),
 			Name:  "Task",
@@ -464,11 +464,18 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_create_missing_coordinator",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"missing/coordinator","coordinator":"missing"}`),
+	}, nil); err == nil || !strings.Contains(err.Error(), "task not found: missing") {
+		t.Fatalf("team create missing coordinator err = %v", err)
+	}
 
 	created, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_team_create",
 		Name:  "TeamCreate",
-		Input: json.RawMessage(`{"name":"review/team","description":"Review team","members":["agent/team-one","agent/team-two","agent/team-one"]}`),
+		Input: json.RawMessage(`{"name":"review/team","description":"Review team","coordinator":"agent/coordinator","members":["agent/team-one","agent/team-two","agent/team-one"]}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -480,11 +487,14 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	if created.StructuredContent["team_id"] != "review_team" || created.StructuredContent["task_count"] != 2 || created.StructuredContent["team_count"] != 1 {
 		t.Fatalf("team create structured content = %#v", created.StructuredContent)
 	}
+	if created.StructuredContent["coordinator_task_id"] != "agent_coordinator" {
+		t.Fatalf("team create coordinator = %#v", created.StructuredContent)
+	}
 	manifest, err := session.LoadTeamManifest(transcriptPath, ctx.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Teams) != 1 || manifest.Teams[0].ID != "review_team" || len(manifest.Teams[0].TaskIDs) != 2 {
+	if len(manifest.Teams) != 1 || manifest.Teams[0].ID != "review_team" || len(manifest.Teams[0].TaskIDs) != 2 || manifest.Teams[0].CoordinatorTaskID != "agent_coordinator" {
 		t.Fatalf("team manifest = %#v", manifest)
 	}
 	listed, err := executor.Execute(ctx, contracts.ToolUse{
@@ -496,7 +506,7 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	teams, ok := listed.StructuredContent["teams"].([]map[string]any)
-	if !ok || len(teams) != 1 || teams[0]["team_id"] != "review_team" {
+	if !ok || len(teams) != 1 || teams[0]["team_id"] != "review_team" || teams[0]["coordinator_task_id"] != "agent_coordinator" {
 		t.Fatalf("team list = %#v", listed.StructuredContent)
 	}
 	read, err := executor.Execute(ctx, contracts.ToolUse{
@@ -507,9 +517,16 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	coordinator, ok := read.StructuredContent["coordinator"].(map[string]any)
+	if !ok || coordinator["task_id"] != "agent_coordinator" || coordinator["status"] != session.SidechainStatusRunning {
+		t.Fatalf("team coordinator = %#v", read.StructuredContent)
+	}
 	tasks, ok := read.StructuredContent["tasks"].([]map[string]any)
 	if !ok || len(tasks) != 2 || tasks[0]["status"] != session.SidechainStatusRunning || tasks[1]["task_id"] != "agent_team-two" {
 		t.Fatalf("team read = %#v", read.StructuredContent)
+	}
+	if !strings.Contains(read.Content.(string), "Coordinator: agent_coordinator: running") {
+		t.Fatalf("team read content = %#v", read.Content)
 	}
 	sent, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_team_send",

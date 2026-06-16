@@ -42,9 +42,10 @@ type taskSendMessageInput struct {
 }
 
 type teamCreateInput struct {
-	TeamID      string   `json:"team_id,omitempty"`
-	Description string   `json:"description,omitempty"`
-	TaskIDs     []string `json:"task_ids,omitempty"`
+	TeamID            string   `json:"team_id,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	CoordinatorTaskID string   `json:"coordinator_task_id,omitempty"`
+	TaskIDs           []string `json:"task_ids,omitempty"`
 }
 
 type teamDeleteInput struct {
@@ -215,14 +216,15 @@ func NewTeamCreateTool() tool.Tool {
 				"type":     "object",
 				"required": []any{"team_id"},
 				"properties": map[string]any{
-					"team_id":     map[string]any{"type": "string"},
-					"description": map[string]any{"type": "string"},
-					"task_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"team_id":             map[string]any{"type": "string"},
+					"description":         map[string]any{"type": "string"},
+					"coordinator_task_id": map[string]any{"type": "string"},
+					"task_ids":            map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Creates or updates a named team of existing subagent tasks by team_id. task_ids should reference sidechain task IDs that already exist.", nil
+			return "Creates or updates a named team of existing subagent tasks by team_id. task_ids and optional coordinator_task_id should reference sidechain task IDs that already exist.", nil
 		},
 		NormalizeFunc:   normalizeTeamCreateInput,
 		ValidateFunc:    validateTeamCreate,
@@ -554,6 +556,11 @@ func validateTeamCreate(ctx tool.Context, raw json.RawMessage) error {
 		return fmt.Errorf("session path is required")
 	}
 	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	if input.CoordinatorTaskID != "" {
+		if _, err := findTaskState(manager, input.CoordinatorTaskID); err != nil {
+			return err
+		}
+	}
 	for _, taskID := range input.TaskIDs {
 		if _, err := findTaskState(manager, taskID); err != nil {
 			return err
@@ -968,9 +975,10 @@ func callTeamCreate(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSin
 	}
 	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
 	team, manifest, err := manager.CreateTeam(session.TeamOptions{
-		ID:          input.TeamID,
-		Description: input.Description,
-		TaskIDs:     input.TaskIDs,
+		ID:                input.TeamID,
+		Description:       input.Description,
+		CoordinatorTaskID: input.CoordinatorTaskID,
+		TaskIDs:           input.TaskIDs,
 	})
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -1045,16 +1053,20 @@ func callTeamOutput(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSin
 	if !ok {
 		return contracts.ToolResult{}, fmt.Errorf("team not found: %s", input.TeamID)
 	}
+	coordinator := structuredTeamCoordinatorState(manager, team)
 	tasks := structuredTeamTaskStates(manager, team)
 	structured := structuredTeamState(team)
 	structured["type"] = "team_output"
+	if coordinator != nil {
+		structured["coordinator"] = coordinator
+	}
 	structured["tasks"] = tasks
 	_ = tool.SendProgress(sink, "", "team_output", map[string]any{
 		"team_id":    team.ID,
 		"task_count": len(team.TaskIDs),
 	})
 	return contracts.ToolResult{
-		Content:           formatTeamOutput(team, tasks),
+		Content:           formatTeamOutput(team, coordinator, tasks),
 		StructuredContent: structured,
 	}, nil
 }
@@ -1205,6 +1217,7 @@ func decodeTeamCreateInput(raw json.RawMessage) (teamCreateInput, error) {
 	}
 	input.TeamID = strings.TrimSpace(input.TeamID)
 	input.Description = strings.TrimSpace(input.Description)
+	input.CoordinatorTaskID = strings.TrimSpace(input.CoordinatorTaskID)
 	input.TaskIDs = cleanTaskAgentStrings(input.TaskIDs)
 	return input, nil
 }
@@ -1320,7 +1333,7 @@ func normalizeTeamCreateInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	for key := range obj {
 		switch key {
-		case "team_id", "teamId", "id", "name", "description", "desc", "summary", "task_ids", "taskIds", "tasks", "members", "agents":
+		case "team_id", "teamId", "id", "name", "description", "desc", "summary", "coordinator_task_id", "coordinatorTaskId", "coordinator", "coordinator_id", "coordinatorId", "task_ids", "taskIds", "tasks", "members", "agents":
 		default:
 			return nil, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -1331,6 +1344,9 @@ func normalizeTeamCreateInput(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	if value, ok := firstRawTaskField(obj, "description", "desc", "summary"); ok {
 		normalized["description"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "coordinator_task_id", "coordinatorTaskId", "coordinator", "coordinator_id", "coordinatorId"); ok {
+		normalized["coordinator_task_id"] = value
 	}
 	if value, ok := firstRawTaskField(obj, "task_ids", "taskIds", "tasks", "members", "agents"); ok {
 		normalized["task_ids"] = value
@@ -1536,7 +1552,7 @@ func structuredTaskState(state session.SidechainState) map[string]any {
 }
 
 func structuredTeamState(team session.TeamState) map[string]any {
-	return map[string]any{
+	structured := map[string]any{
 		"team_id":     team.ID,
 		"session_id":  string(team.SessionID),
 		"description": team.Description,
@@ -1545,6 +1561,10 @@ func structuredTeamState(team session.TeamState) map[string]any {
 		"created_at":  team.CreatedAt,
 		"updated_at":  team.UpdatedAt,
 	}
+	if team.CoordinatorTaskID != "" {
+		structured["coordinator_task_id"] = team.CoordinatorTaskID
+	}
+	return structured
 }
 
 func findTeamState(manifest session.TeamManifest, teamID string) (session.TeamState, bool) {
@@ -1603,6 +1623,22 @@ func structuredTeamTaskStates(manager session.SidechainManager, team session.Tea
 	return out
 }
 
+func structuredTeamCoordinatorState(manager session.SidechainManager, team session.TeamState) map[string]any {
+	if team.CoordinatorTaskID == "" {
+		return nil
+	}
+	state, err := findTaskState(manager, team.CoordinatorTaskID)
+	if err != nil {
+		return map[string]any{
+			"task_id":      team.CoordinatorTaskID,
+			"sidechain_id": team.CoordinatorTaskID,
+			"status":       "missing",
+			"error":        err.Error(),
+		}
+	}
+	return structuredTaskState(state)
+}
+
 func formatTeamList(teams []session.TeamState) string {
 	if len(teams) == 0 {
 		return "No teams found."
@@ -1611,6 +1647,9 @@ func formatTeamList(teams []session.TeamState) string {
 	builder.WriteString("Teams:\n")
 	for _, team := range teams {
 		fmt.Fprintf(&builder, "- %s (%d tasks)", team.ID, len(team.TaskIDs))
+		if team.CoordinatorTaskID != "" {
+			fmt.Fprintf(&builder, " coordinator %s", team.CoordinatorTaskID)
+		}
 		if team.Description != "" {
 			fmt.Fprintf(&builder, ": %s", team.Description)
 		}
@@ -1619,11 +1658,22 @@ func formatTeamList(teams []session.TeamState) string {
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func formatTeamOutput(team session.TeamState, tasks []map[string]any) string {
+func formatTeamOutput(team session.TeamState, coordinator map[string]any, tasks []map[string]any) string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "Team %s has %d task(s).", team.ID, len(team.TaskIDs))
 	if team.Description != "" {
 		fmt.Fprintf(&builder, "\nDescription: %s", team.Description)
+	}
+	if coordinator != nil {
+		taskID, _ := coordinator["task_id"].(string)
+		status, _ := coordinator["status"].(string)
+		if status == "" {
+			status = "unknown"
+		}
+		fmt.Fprintf(&builder, "\nCoordinator: %s: %s", taskID, status)
+		if summary, _ := coordinator["summary"].(string); summary != "" {
+			fmt.Fprintf(&builder, " - %s", summary)
+		}
 	}
 	if len(tasks) > 0 {
 		builder.WriteString("\nTasks:")

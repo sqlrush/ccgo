@@ -14,12 +14,13 @@ import (
 )
 
 type TeamState struct {
-	ID          string       `json:"id"`
-	SessionID   contracts.ID `json:"sessionId,omitempty"`
-	Description string       `json:"description,omitempty"`
-	TaskIDs     []string     `json:"taskIds,omitempty"`
-	CreatedAt   string       `json:"createdAt,omitempty"`
-	UpdatedAt   string       `json:"updatedAt,omitempty"`
+	ID                string       `json:"id"`
+	SessionID         contracts.ID `json:"sessionId,omitempty"`
+	Description       string       `json:"description,omitempty"`
+	CoordinatorTaskID string       `json:"coordinatorTaskId,omitempty"`
+	TaskIDs           []string     `json:"taskIds,omitempty"`
+	CreatedAt         string       `json:"createdAt,omitempty"`
+	UpdatedAt         string       `json:"updatedAt,omitempty"`
 }
 
 type TeamManifest struct {
@@ -28,10 +29,11 @@ type TeamManifest struct {
 }
 
 type TeamOptions struct {
-	ID          string
-	Description string
-	TaskIDs     []string
-	Timestamp   time.Time
+	ID                string
+	Description       string
+	CoordinatorTaskID string
+	TaskIDs           []string
+	Timestamp         time.Time
 }
 
 func TeamManifestPath(sessionPath string, sessionID contracts.ID) string {
@@ -62,6 +64,7 @@ func LoadTeamManifest(sessionPath string, sessionID contracts.ID) (TeamManifest,
 		manifest.Teams[i].SessionID = sessionID
 		manifest.Teams[i].ID = sanitizeSidechainID(manifest.Teams[i].ID)
 		manifest.Teams[i].Description = strings.TrimSpace(manifest.Teams[i].Description)
+		manifest.Teams[i].CoordinatorTaskID = sanitizeSidechainID(manifest.Teams[i].CoordinatorTaskID)
 		manifest.Teams[i].TaskIDs = cleanTeamTaskIDs(manifest.Teams[i].TaskIDs)
 	}
 	sort.SliceStable(manifest.Teams, func(i, j int) bool {
@@ -100,12 +103,13 @@ func CreateTeam(sessionPath string, sessionID contracts.ID, options TeamOptions)
 		now = time.Now().UTC()
 	}
 	team := TeamState{
-		ID:          id,
-		SessionID:   sessionID,
-		Description: strings.TrimSpace(options.Description),
-		TaskIDs:     cleanTeamTaskIDs(options.TaskIDs),
-		CreatedAt:   now.UTC().Format(time.RFC3339Nano),
-		UpdatedAt:   now.UTC().Format(time.RFC3339Nano),
+		ID:                id,
+		SessionID:         sessionID,
+		Description:       strings.TrimSpace(options.Description),
+		CoordinatorTaskID: sanitizeSidechainID(options.CoordinatorTaskID),
+		TaskIDs:           cleanTeamTaskIDs(options.TaskIDs),
+		CreatedAt:         now.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:         now.UTC().Format(time.RFC3339Nano),
 	}
 	replaced := false
 	for i := range manifest.Teams {
