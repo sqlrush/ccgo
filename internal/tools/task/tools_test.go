@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamDispatchTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -575,6 +575,44 @@ func TestTeamCreateAndDeletePersistManifest(t *testing.T) {
 		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
 		if !ok || len(messages) != 3 || messages[2]["text"] != "Please coordinate the review." {
 			t.Fatalf("team broadcast resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+	}
+	dispatched, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_team_dispatch",
+		Name: "TeamDispatch",
+		Input: json.RawMessage(`{
+			"team_id":"review/team",
+			"assignments":[
+				{"task_id":"agent/team-one","message":"Review the API changes."},
+				{"task_id":"agent/team-two","message":"Update the release notes."}
+			]
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dispatched.StructuredContent["type"] != "team_dispatch" || dispatched.StructuredContent["assignment_count"] != 2 {
+		t.Fatalf("team dispatch structured content = %#v", dispatched.StructuredContent)
+	}
+	for taskID, want := range map[string]string{
+		"agent/team-one": "Review the API changes.",
+		"agent/team-two": "Update the release notes.",
+	} {
+		resume, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_dispatch_resume_" + strings.ReplaceAll(taskID, "/", "_")),
+			Name:  "ResumeTask",
+			Input: json.RawMessage(`{"task_id":"` + taskID + `","limit":4}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+		if !ok || len(messages) != 4 {
+			t.Fatalf("team dispatch resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+		text, _ := messages[3]["text"].(string)
+		if !strings.Contains(text, "Team dispatch assignment for review_team.") || !strings.Contains(text, want) {
+			t.Fatalf("team dispatch message for %s = %q", taskID, text)
 		}
 	}
 	coordinatorResume, err = executor.Execute(ctx, contracts.ToolUse{
@@ -1160,6 +1198,10 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "unknown team send field", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},
 		{name: "bad team send target", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello","target":"leaders"}`, want: "target must be one of members, coordinator, all"},
 		{name: "missing team send team", tool: "TeamSendMessage", input: `{"team_id":"missing","message":"hello"}`, want: "team not found: missing"},
+		{name: "missing team dispatch id", tool: "TeamDispatch", input: `{"assignments":[{"task_id":"agent/member","message":"hello"}]}`, want: "team_id is required"},
+		{name: "missing team dispatch assignments", tool: "TeamDispatch", input: `{"team_id":"missing"}`, want: "input.assignments is required"},
+		{name: "unknown team dispatch field", tool: "TeamDispatch", input: `{"team_id":"missing","assignments":[],"extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team dispatch team", tool: "TeamDispatch", input: `{"team_id":"missing","assignments":[{"task_id":"agent/member","message":"hello"}]}`, want: "team not found: missing"},
 		{name: "missing team coordinate id", tool: "TeamCoordinate", input: `{"message":"hello"}`, want: "team_id is required"},
 		{name: "missing team coordinate message", tool: "TeamCoordinate", input: `{"team_id":"missing"}`, want: "message is required"},
 		{name: "unknown team coordinate field", tool: "TeamCoordinate", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},

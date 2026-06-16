@@ -77,6 +77,16 @@ type teamSendMessageInput struct {
 	Target  string `json:"target,omitempty"`
 }
 
+type teamDispatchAssignmentInput struct {
+	TaskID  string `json:"task_id,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type teamDispatchInput struct {
+	TeamID      string                        `json:"team_id,omitempty"`
+	Assignments []teamDispatchAssignmentInput `json:"assignments,omitempty"`
+}
+
 type teamCoordinateInput struct {
 	TeamID  string `json:"team_id,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -368,6 +378,43 @@ func NewTeamSendMessageTool() tool.Tool {
 		NormalizeFunc:   normalizeTeamSendMessageInput,
 		ValidateFunc:    validateTeamSendMessage,
 		CallFunc:        callTeamSendMessage,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
+func NewTeamDispatchTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "TeamDispatch",
+			Description:     "Append individualized assignment messages to running task members in a subagent team.",
+			SearchHint:      "dispatch assignments team subagent members",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"team_id", "assignments"},
+				"properties": map[string]any{
+					"team_id": map[string]any{"type": "string"},
+					"assignments": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type":     "object",
+							"required": []any{"task_id", "message"},
+							"properties": map[string]any{
+								"task_id": map[string]any{"type": "string"},
+								"message": map[string]any{"type": "string"},
+							},
+						},
+					},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Dispatches distinct assignment messages to running members of a subagent team. Each assignment must name a team member task_id and message; all selected tasks are validated before any message is appended.", nil
+		},
+		NormalizeFunc:   normalizeTeamDispatchInput,
+		ValidateFunc:    validateTeamDispatch,
+		CallFunc:        callTeamDispatch,
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
@@ -834,6 +881,41 @@ func validateTeamSendMessage(ctx tool.Context, raw json.RawMessage) error {
 		return err
 	}
 	taskIDs, err := teamSendMessageTaskIDs(team, resolvedTeamSendTarget(input.Target))
+	if err != nil {
+		return err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateTeamDispatch(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeTeamDispatchInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TeamID == "" {
+		return fmt.Errorf("team_id is required")
+	}
+	if len(input.Assignments) == 0 {
+		return fmt.Errorf("assignments are required")
+	}
+	if len(input.Assignments) > 32 {
+		return fmt.Errorf("assignments must include <= 32 items")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return err
+	}
+	taskIDs, err := teamDispatchTaskIDs(team, input.Assignments)
 	if err != nil {
 		return err
 	}
@@ -1539,6 +1621,62 @@ func callTeamSendMessage(ctx tool.Context, raw json.RawMessage, sink tool.Progre
 	}, nil
 }
 
+func callTeamDispatch(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeTeamDispatchInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	taskIDs, err := teamDispatchTaskIDs(team, input.Assignments)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	now := time.Now().UTC()
+	assignments := make([]map[string]any, 0, len(input.Assignments))
+	for _, assignment := range input.Assignments {
+		dispatchMessage := formatTeamDispatchMessage(team, assignment)
+		message := msgs.UserText(dispatchMessage)
+		message.SessionID = ctx.SessionID
+		if err := manager.Append(assignment.TaskID, session.TranscriptMessage{
+			Type:        string(contracts.MessageUser),
+			UUID:        message.UUID,
+			SessionID:   ctx.SessionID,
+			Timestamp:   now.Format(time.RFC3339Nano),
+			IsSidechain: true,
+			AgentID:     assignment.TaskID,
+			Message:     &message,
+		}); err != nil {
+			return contracts.ToolResult{}, err
+		}
+		assignments = append(assignments, map[string]any{
+			"task_id":       assignment.TaskID,
+			"sidechain_id":  assignment.TaskID,
+			"message_uuid":  string(message.UUID),
+			"message_chars": len(assignment.Message),
+		})
+	}
+	structured := structuredTeamState(team)
+	structured["type"] = "team_dispatch"
+	structured["assignment_count"] = len(assignments)
+	structured["assignments"] = assignments
+	_ = tool.SendProgress(sink, "", "team_dispatched", map[string]any{
+		"team_id":          team.ID,
+		"task_count":       len(team.TaskIDs),
+		"assignment_count": len(assignments),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Dispatched %d assignment(s) in team %s.", len(assignments), team.ID),
+		StructuredContent: structured,
+	}, nil
+}
+
 func callTeamCoordinate(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeTeamCoordinateInput(raw)
 	if err != nil {
@@ -2109,6 +2247,19 @@ func decodeTeamSendMessageInput(raw json.RawMessage) (teamSendMessageInput, erro
 	return input, nil
 }
 
+func decodeTeamDispatchInput(raw json.RawMessage) (teamDispatchInput, error) {
+	var input teamDispatchInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return teamDispatchInput{}, err
+	}
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	for i := range input.Assignments {
+		input.Assignments[i].TaskID = sanitizeTaskLikeID(input.Assignments[i].TaskID)
+		input.Assignments[i].Message = strings.TrimSpace(input.Assignments[i].Message)
+	}
+	return input, nil
+}
+
 func decodeTeamCoordinateInput(raw json.RawMessage) (teamCoordinateInput, error) {
 	var input teamCoordinateInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -2333,6 +2484,28 @@ func normalizeTeamSendMessageInput(raw json.RawMessage) (json.RawMessage, error)
 	}
 	if value, ok := firstRawTaskField(obj, "target", "recipient", "recipients", "audience", "scope"); ok {
 		normalized["target"] = value
+	}
+	return json.Marshal(normalized)
+}
+
+func normalizeTeamDispatchInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "team_id", "teamId", "id", "name", "assignments", "tasks", "dispatches", "messages":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
+		normalized["team_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "assignments", "tasks", "dispatches", "messages"); ok {
+		normalized["assignments"] = value
 	}
 	return json.Marshal(normalized)
 }
@@ -2780,6 +2953,32 @@ func teamSendMessageTaskIDs(team session.TeamState, target string) ([]string, er
 	}
 }
 
+func teamDispatchTaskIDs(team session.TeamState, assignments []teamDispatchAssignmentInput) ([]string, error) {
+	members := map[string]struct{}{}
+	for _, taskID := range team.TaskIDs {
+		members[taskID] = struct{}{}
+	}
+	seen := map[string]struct{}{}
+	taskIDs := make([]string, 0, len(assignments))
+	for i, assignment := range assignments {
+		if assignment.TaskID == "" {
+			return nil, fmt.Errorf("assignments[%d].task_id is required", i)
+		}
+		if assignment.Message == "" {
+			return nil, fmt.Errorf("assignments[%d].message is required", i)
+		}
+		if _, ok := members[assignment.TaskID]; !ok {
+			return nil, fmt.Errorf("task %s is not a member of team %s", assignment.TaskID, team.ID)
+		}
+		if _, ok := seen[assignment.TaskID]; ok {
+			return nil, fmt.Errorf("duplicate assignment for task %s", assignment.TaskID)
+		}
+		seen[assignment.TaskID] = struct{}{}
+		taskIDs = append(taskIDs, assignment.TaskID)
+	}
+	return taskIDs, nil
+}
+
 func resolvedRemoteTriggerTarget(team session.TeamState, target string) string {
 	target = normalizeTeamSendTarget(target)
 	if target != "" {
@@ -3027,6 +3226,17 @@ func formatTeamCoordinateMessage(team session.TeamState, tasks []map[string]any,
 	}
 	builder.WriteString("\nObjective:\n")
 	builder.WriteString(objective)
+	return builder.String()
+}
+
+func formatTeamDispatchMessage(team session.TeamState, assignment teamDispatchAssignmentInput) string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "Team dispatch assignment for %s.", team.ID)
+	if team.Description != "" {
+		fmt.Fprintf(&builder, "\nDescription: %s", team.Description)
+	}
+	builder.WriteString("\nAssignment:\n")
+	builder.WriteString(assignment.Message)
 	return builder.String()
 }
 
