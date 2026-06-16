@@ -2147,6 +2147,63 @@ func TestRunnerModelSlashCommandListsModelsWithoutSelecting(t *testing.T) {
 	}
 }
 
+func TestRunnerModelSlashCommandSearchesModelsWithoutSelecting(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{
+		Client:    client,
+		Model:     "claude-opus-4-6",
+		SessionID: "sess_model_search",
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/model search opus4.6"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Model search: opus4.6",
+		"Matches: 1",
+		"Current model: claude-opus-4-6",
+		"- Opus 4.6: claude-opus-4-6",
+		"aliases: best, opus, opus4.6",
+		"current",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("model search missing %q: %q", want, text)
+		}
+	}
+	if runner.Model != "claude-opus-4-6" {
+		t.Fatalf("runner model changed to %q", runner.Model)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/model find haiku"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Model search: haiku") || !strings.Contains(text, "Haiku 4.5") || !strings.Contains(text, "Haiku 3.5") {
+		t.Fatalf("model find haiku text = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/model search"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /model search <query>" {
+		t.Fatalf("model search usage = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/model search nowhere"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "No models matched nowhere." {
+		t.Fatalf("model search missing = %q", got)
+	}
+}
+
 func TestRunnerExecutesMCPSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},

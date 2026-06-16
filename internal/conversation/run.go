@@ -2588,6 +2588,13 @@ func firstConfigSearchResults(values []configSearchResult, limit int) []configSe
 	return values[:limit]
 }
 
+func firstModelSearchResults(values []modelSearchResult, limit int) []modelSearchResult {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
 func firstLoadedPlugins(values []pluginpkg.LoadedPlugin, limit int) []pluginpkg.LoadedPlugin {
 	if limit <= 0 || len(values) <= limit {
 		return values
@@ -2999,9 +3006,16 @@ func (r *Runner) formatModelSummary(raw string) string {
 	if raw == "" {
 		return "Current model: " + r.model()
 	}
-	switch strings.ToLower(raw) {
+	args := strings.Fields(raw)
+	switch strings.ToLower(args[0]) {
 	case "list", "status", "available", "models":
 		return formatModelList(r.model())
+	case "search", "find":
+		query := subcommandRemainder(raw, args[0])
+		if strings.TrimSpace(query) == "" {
+			return "Usage: /model " + args[0] + " <query>"
+		}
+		return formatModelSearch(r.model(), query)
 	}
 	name, display := resolveModelSelection(raw)
 	r.Model = name
@@ -3052,6 +3066,88 @@ func formatModelList(current string) string {
 		lines = append(lines, "Alias names: "+strings.Join(aliases, ", "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+type modelSearchResult struct {
+	Capability modelpkg.Capability
+	Aliases    []string
+}
+
+func formatModelSearch(current string, query string) string {
+	query = strings.TrimSpace(query)
+	results := modelSearchResults(query)
+	if len(results) == 0 {
+		return "No models matched " + query + "."
+	}
+	lines := []string{
+		"Model search: " + query,
+		fmt.Sprintf("Matches: %d", len(results)),
+		"Current model: " + current,
+	}
+	for _, result := range firstModelSearchResults(results, 20) {
+		capability := result.Capability
+		display := strings.TrimSpace(capability.DisplayName)
+		if display == "" {
+			display = capability.Name
+		}
+		parts := []string{
+			fmt.Sprintf("context %d", capability.ContextWindowTokens),
+			fmt.Sprintf("max output %d", capability.MaxOutputTokens),
+		}
+		if len(result.Aliases) > 0 {
+			parts = append(parts, "aliases: "+strings.Join(result.Aliases, ", "))
+		}
+		if flags := modelCapabilityFlags(capability); flags != "" {
+			parts = append(parts, flags)
+		}
+		if capability.Name == current {
+			parts = append(parts, "current")
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s (%s)", display, capability.Name, strings.Join(parts, "; ")))
+	}
+	if len(results) > 20 {
+		lines = append(lines, fmt.Sprintf("Showing 20 of %d model matches.", len(results)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func modelSearchResults(query string) []modelSearchResult {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+	registry := modelpkg.DefaultRegistry()
+	aliasesByModel := map[string][]string{}
+	for alias, target := range registry.Aliases {
+		aliasesByModel[target] = append(aliasesByModel[target], alias)
+	}
+	for target := range aliasesByModel {
+		sort.Strings(aliasesByModel[target])
+	}
+	names := make([]string, 0, len(registry.Models))
+	for name := range registry.Models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var results []modelSearchResult
+	for _, name := range names {
+		capability := registry.Models[name]
+		aliases := aliasesByModel[name]
+		values := []string{
+			capability.Name,
+			capability.CanonicalName,
+			capability.DisplayName,
+			modelCapabilityFlags(capability),
+			strings.Join(aliases, " "),
+		}
+		for _, value := range values {
+			if strings.Contains(strings.ToLower(value), query) {
+				results = append(results, modelSearchResult{Capability: capability, Aliases: aliases})
+				break
+			}
+		}
+	}
+	return results
 }
 
 func modelCapabilityFlags(capability modelpkg.Capability) string {
