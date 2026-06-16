@@ -33,6 +33,11 @@ type taskKillInput struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type taskResumeInput struct {
+	TaskID string `json:"task_id,omitempty"`
+	Limit  *int   `json:"limit,omitempty"`
+}
+
 func NewTaskTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
@@ -132,6 +137,38 @@ func NewKillTaskTool() tool.Tool {
 		NormalizeFunc: normalizeKillTaskInput,
 		ValidateFunc:  validateKillTask,
 		CallFunc:      callKillTask,
+	}
+}
+
+func NewResumeTaskTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:               "ResumeTask",
+			Aliases:            []string{"TaskResume"},
+			Description:        "Build resume context for a subagent task.",
+			SearchHint:         "resume subagent task context",
+			ReadOnly:           true,
+			ConcurrencySafe:    true,
+			Strict:             true,
+			MaxResultSizeChars: 100_000,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"task_id"},
+				"properties": map[string]any{
+					"task_id": map[string]any{"type": "string"},
+					"limit":   map[string]any{"type": "integer"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Builds a resume context for a subagent task by task_id, including status, can_resume, metadata, and the tail messages that should seed the resumed agent.", nil
+		},
+		NormalizeFunc:   normalizeResumeTaskInput,
+		ValidateFunc:    validateResumeTask,
+		PermissionFunc:  allowTaskOutput,
+		CallFunc:        callResumeTask,
+		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
+		ConcurrencyFunc: func(json.RawMessage) bool { return true },
 	}
 }
 
@@ -269,6 +306,26 @@ func validateKillTask(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if input.TaskID == "" {
 		return fmt.Errorf("task_id is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	return nil
+}
+
+func validateResumeTask(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeResumeTaskInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TaskID == "" {
+		return fmt.Errorf("task_id is required")
+	}
+	if input.Limit != nil && *input.Limit <= 0 {
+		return fmt.Errorf("limit must be positive")
 	}
 	if ctx.SessionID == "" {
 		return fmt.Errorf("session id is required")
@@ -464,6 +521,31 @@ func callKillTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 	}, nil
 }
 
+func callResumeTask(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeResumeTaskInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	if _, err := findTaskState(manager, input.TaskID); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	resumeContext, err := manager.ResumeContext(input.TaskID, resumeTaskLimit(input))
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	structured := structuredTaskState(resumeContext.State)
+	structured["type"] = "task_resume"
+	structured["can_resume"] = resumeContext.CanResume
+	structured["truncated"] = resumeContext.Truncated
+	structured["message_limit"] = resumeContext.MessageLimit
+	structured["resume_messages"] = structuredResumeMessages(resumeContext.Messages)
+	return contracts.ToolResult{
+		Content:           formatTaskResume(resumeContext),
+		StructuredContent: structured,
+	}, nil
+}
+
 func decodeTaskInput(raw json.RawMessage) (taskInput, error) {
 	var input taskInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -492,6 +574,15 @@ func decodeKillTaskInput(raw json.RawMessage) (taskKillInput, error) {
 	}
 	input.TaskID = strings.TrimSpace(input.TaskID)
 	input.Reason = strings.TrimSpace(input.Reason)
+	return input, nil
+}
+
+func decodeResumeTaskInput(raw json.RawMessage) (taskResumeInput, error) {
+	var input taskResumeInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return taskResumeInput{}, err
+	}
+	input.TaskID = strings.TrimSpace(input.TaskID)
 	return input, nil
 }
 
@@ -537,6 +628,29 @@ func normalizeKillTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	if value, ok := firstRawTaskField(obj, "reason", "summary", "message"); ok {
 		normalized["reason"] = value
 	}
+	return json.Marshal(normalized)
+}
+
+func normalizeResumeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "task_id", "taskId", "sidechain_id", "sidechainId", "id", "limit", "message_limit", "messageLimit":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "task_id", "taskId", "sidechain_id", "sidechainId", "id"); ok {
+		normalized["task_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "limit", "message_limit", "messageLimit"); ok {
+		normalized["limit"] = value
+	}
+	coerceTaskSemanticNumberStrings(normalized, "limit")
 	return json.Marshal(normalized)
 }
 
@@ -641,6 +755,13 @@ func taskOutputTailLines(input taskOutputInput) int {
 		return 0
 	}
 	return *input.TailLines
+}
+
+func resumeTaskLimit(input taskResumeInput) int {
+	if input.Limit == nil {
+		return 0
+	}
+	return *input.Limit
 }
 
 func taskTranscriptOutput(state session.SidechainState, tailLines int) (string, error) {
@@ -769,6 +890,57 @@ func formatTaskOutput(state session.SidechainState, output string) string {
 		lines = append(lines, "No task output recorded yet.")
 	} else {
 		lines = append(lines, "Output:\n"+output)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func structuredResumeMessages(messages []contracts.Message) []map[string]any {
+	out := make([]map[string]any, 0, len(messages))
+	for _, message := range messages {
+		item := map[string]any{
+			"uuid":    message.UUID,
+			"type":    message.Type,
+			"subtype": message.Subtype,
+			"is_meta": message.IsMeta,
+			"text":    strings.TrimSpace(msgs.TextContent(message)),
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func formatTaskResume(resumeContext session.SidechainResumeContext) string {
+	state := resumeContext.State
+	status := "cannot be resumed"
+	if resumeContext.CanResume {
+		status = "can be resumed"
+	}
+	lines := []string{fmt.Sprintf("Task %s %s.", state.ID, status)}
+	lines = append(lines, "Status: "+state.Status)
+	if state.Metadata.AgentType != "" {
+		lines = append(lines, "Subagent type: "+state.Metadata.AgentType)
+	}
+	if resumeContext.Summary != "" {
+		lines = append(lines, "Summary: "+resumeContext.Summary)
+	}
+	if resumeContext.Truncated {
+		lines = append(lines, fmt.Sprintf("Resume context truncated to %d messages.", resumeContext.MessageLimit))
+	}
+	if len(resumeContext.Messages) == 0 {
+		lines = append(lines, "No resume messages available.")
+		return strings.Join(lines, "\n")
+	}
+	lines = append(lines, "Resume messages:")
+	for _, message := range resumeContext.Messages {
+		label := string(message.Type)
+		if message.Subtype != "" {
+			label += ":" + message.Subtype
+		}
+		text := strings.TrimSpace(msgs.TextContent(message))
+		if text == "" {
+			text = "(no text content)"
+		}
+		lines = append(lines, fmt.Sprintf("[%s] %s", label, text))
 	}
 	return strings.Join(lines, "\n")
 }

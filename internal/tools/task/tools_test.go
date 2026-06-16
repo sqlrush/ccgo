@@ -16,7 +16,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewResumeTaskTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,6 +225,60 @@ func TestKillTaskCancelsRunningSidechain(t *testing.T) {
 	}
 }
 
+func TestResumeTaskBuildsTruncatedContextWithAgentPrompt(t *testing.T) {
+	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
+		Name:        "demo:reviewer",
+		Description: "Review changes",
+		Prompt:      "Review carefully.",
+	}})
+	executor := taskExecutor(t)
+	_, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_resume_start",
+		Name:  "Task",
+		Input: json.RawMessage(`{"id":"agent/resume","description":"Review API","prompt":"Inspect API changes","subagent_type":"demo:reviewer"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := session.NewSidechainManager(transcriptPath, ctx.SessionID)
+	assistant := msgs.AssistantText("Partial answer", "sonnet", nil)
+	assistant.SessionID = ctx.SessionID
+	if err := manager.Append("agent_resume", session.TranscriptMessage{
+		Type:      string(contracts.MessageAssistant),
+		UUID:      assistant.UUID,
+		SessionID: ctx.SessionID,
+		Timestamp: time.Unix(200, 0).UTC().Format(time.RFC3339Nano),
+		Message:   &assistant,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_task_resume",
+		Name:  "TaskResume",
+		Input: json.RawMessage(`{"sidechainId":"agent/resume","messageLimit":"1"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resume.StructuredContent["can_resume"] != true || resume.StructuredContent["truncated"] != true || resume.StructuredContent["message_limit"] != 1 {
+		t.Fatalf("resume structured content = %#v", resume.StructuredContent)
+	}
+	messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("resume messages = %#v", resume.StructuredContent["resume_messages"])
+	}
+	if messages[0]["type"] != contracts.MessageSystem || messages[0]["subtype"] != "agent_prompt" || messages[0]["is_meta"] != true || messages[0]["text"] != "Review carefully." {
+		t.Fatalf("agent prompt resume message = %#v", messages[0])
+	}
+	if messages[1]["type"] != contracts.MessageAssistant || messages[1]["text"] != "Partial answer" {
+		t.Fatalf("tail resume message = %#v", messages[1])
+	}
+	if !strings.Contains(resume.Content.(string), "Task agent_resume can be resumed") || !strings.Contains(resume.Content.(string), "Resume context truncated to 1 messages") {
+		t.Fatalf("resume content = %#v", resume.Content)
+	}
+}
+
 func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
 	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
 		Name:           "demo:reviewer",
@@ -351,6 +405,8 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing kill id", tool: "KillTask", input: `{}`, want: "task_id is required"},
 		{name: "unknown kill field", tool: "KillTask", input: `{"task_id":"missing","extra":true}`, want: "input.extra is not allowed"},
 		{name: "missing kill task", tool: "KillTask", input: `{"id":"missing"}`, want: "task not found: missing"},
+		{name: "bad resume limit", tool: "ResumeTask", input: `{"task_id":"missing","limit":0}`, want: "limit must be positive"},
+		{name: "missing resume task", tool: "ResumeTask", input: `{"id":"missing"}`, want: "task not found: missing"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

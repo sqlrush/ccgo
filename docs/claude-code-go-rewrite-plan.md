@@ -708,6 +708,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：plugin agent frontmatter 的 `model`、`permissionMode` 和 `tools`/`allowed-tools` 会进入 runner tool metadata，并由 `Task` 写入 sidechain metadata/lifecycle payload 与 structured content，为后续 subagent 执行器接入模型选择、权限模式和工具 allowlist 打地基。
 - 本轮补充：plugin command/agent 的 `allowed-tools`/`tools` frontmatter 解析现在只在顶层逗号或空白处分隔，保留括号、方括号和引号内的逗号/空白，避免 `Bash(git commit -m "x,y")` 这类 tool pattern 被误拆。
 - 本轮补充：新增 `TaskOutput`/`AgentOutputTool` 和 `KillTask`/`TaskStop` 工具入口；`TaskOutput` 可列出当前 session 的 sidechain task，或按 task/sidechain ID 读取状态、summary、tail 输出和 agent metadata；`KillTask` 会通过 `SidechainManager.Cancel` 写入 cancelled lifecycle summary，已接入默认内置工具集。真实 AgentTool 执行循环、progress event streaming、resume command UI 和 worktree isolation 仍未完成。
+- 本轮补充：新增 `ResumeTask`/`TaskResume` 只读工具入口，复用 `BuildSidechainResumeContext` 返回 `can_resume`、截断状态、message limit、agent metadata 和恢复用 tail message 摘要；当 tail 截断原始 plugin agent prompt 时，会沿用已有 deterministic `agent_prompt` system meta message 注入。完整恢复后的 agent 执行循环和 UI picker 仍未完成。
 
 ### M11: Bridge 和高级集成
 

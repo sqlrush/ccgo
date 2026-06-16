@@ -40,6 +40,9 @@ func TestParseRuleEscapesAndLegacyNames(t *testing.T) {
 	if got := PermissionRuleValueFromString("AgentOutputTool"); got.ToolName != "TaskOutput" {
 		t.Fatalf("agent output tool = %q", got.ToolName)
 	}
+	if got := PermissionRuleValueFromString("TaskResume"); got.ToolName != "ResumeTask" {
+		t.Fatalf("task resume tool = %q", got.ToolName)
+	}
 }
 
 func TestShellRuleMatching(t *testing.T) {
