@@ -262,8 +262,31 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 		fmt.Fprintf(stderr, "ccgo daemon: session state path is unavailable\n")
 		return 1
 	}
+	endpoint := ""
+	var daemonServer *daemonpkg.Server
+	if !options.Once {
+		daemonServer, err = daemonpkg.StartServer(daemonpkg.ServerOptions{
+			StateFunc: func() daemonpkg.State {
+				state, err := daemonpkg.LoadState(statePath)
+				if err != nil || state.GeneratedAt == "" {
+					return daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, time.Now().UTC(), err)
+				}
+				return state
+			},
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+			return 1
+		}
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_ = daemonServer.Close(shutdownCtx)
+		}()
+		endpoint = daemonServer.Endpoint()
+	}
 	writeHeartbeat := func(now time.Time) error {
-		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), "", now, nil))
+		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, now, nil))
 	}
 	runTick := func(now time.Time) error {
 		if err := writeHeartbeat(now); err != nil {
@@ -284,7 +307,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	for {
 		select {
 		case <-ctx.Done():
-			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), "", time.Now().UTC(), ctx.Err()))
+			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), ctx.Err()))
 			return 0
 		case now := <-ticker.C:
 			if err := runTick(now.UTC()); err != nil {

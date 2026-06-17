@@ -197,6 +197,52 @@ func TestRunDaemonDueSchedulesNoopsWithoutSchedules(t *testing.T) {
 	}
 }
 
+func TestRunDaemonServesHealthEndpoint(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SetCWD(cwd)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var stdout, stderr bytes.Buffer
+	done := make(chan int, 1)
+	go func() {
+		done <- runDaemon(ctx, state, daemonOptions{HeartbeatInterval: 10 * time.Millisecond}, &stdout, &stderr)
+	}()
+	statePath := waitForDaemonStatePath(t, &stdout)
+	daemonState, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if daemonState.Endpoint == "" {
+		t.Fatalf("daemon state missing endpoint: %#v", daemonState)
+	}
+	resp, err := http.Get(daemonState.Endpoint + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var health daemonpkg.HealthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatal(err)
+	}
+	if !health.OK || health.SessionID != state.SessionID() || health.RuntimeState != daemonpkg.RuntimeRunning {
+		t.Fatalf("health = %#v", health)
+	}
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("daemon exit = %d stderr=%s", code, stderr.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("daemon did not stop after cancel")
+	}
+}
+
 func daemonStatePathFromOutput(t *testing.T, output string) string {
 	t.Helper()
 	for _, line := range strings.Split(output, "\n") {
@@ -205,6 +251,28 @@ func daemonStatePathFromOutput(t *testing.T, output string) string {
 		}
 	}
 	t.Fatalf("daemon output missing state_path: %q", output)
+	return ""
+}
+
+func waitForDaemonStatePath(t *testing.T, stdout *bytes.Buffer) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if statePath := daemonStatePathFromOutputIfPresent(stdout.String()); statePath != "" {
+			return statePath
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("daemon output missing state_path: %q", stdout.String())
+	return ""
+}
+
+func daemonStatePathFromOutputIfPresent(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if value, ok := strings.CutPrefix(line, "state_path="); ok {
+			return value
+		}
+	}
 	return ""
 }
 
