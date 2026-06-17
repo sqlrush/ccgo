@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	daemonpkg "ccgo/internal/daemon"
+	hookpkg "ccgo/internal/hooks"
 	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
@@ -5287,7 +5288,9 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		r.emit(Event{Type: EventToolProgress, ToolProgress: &progressCopy})
 		return nil
 	})
-	for update := range tool.RunTools(toolCtx, r.Tools, uses, progressSink, tool.RunOptions{}) {
+	executor := r.Tools
+	executor.Hooks = append(executor.Hooks, hookpkg.FromSettings(r.mergedSettings())...)
+	for update := range tool.RunTools(toolCtx, executor, uses, progressSink, tool.RunOptions{}) {
 		use := update.ToolUse
 		result := update.Result
 		err := update.Err

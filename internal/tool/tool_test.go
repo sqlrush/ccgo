@@ -634,6 +634,97 @@ func TestExecutorRunsPermissionRequestHook(t *testing.T) {
 	}
 }
 
+func TestExecutorPermissionRequestHookCanAllowTool(t *testing.T) {
+	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
+	var seenInput string
+	var progress []contracts.ToolProgress
+	registry, err := NewRegistry(FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        "Bash",
+			Destructive: true,
+			InputSchema: contracts.JSONSchema{"type": "object", "properties": map[string]any{
+				"command": map[string]any{"type": "string"},
+			}},
+		},
+		CallFunc: func(ctx Context, raw json.RawMessage, sink ProgressSink) (contracts.ToolResult, error) {
+			var input struct {
+				Command string `json:"command"`
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			seenInput = input.Command
+			return contracts.ToolResult{Content: input.Command}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := (Executor{
+		Registry: registry,
+		Hooks: []Hook{HookFunc(func(ctx Context, event HookEvent) (HookResult, error) {
+			if event.Phase != HookPermissionRequest {
+				return HookResult{}, nil
+			}
+			return HookResult{
+				UpdatedInput:       json.RawMessage(`{"command":"git status --short"}`),
+				PermissionDecision: &contracts.PermissionDecision{Behavior: contracts.PermissionAllow, Message: "approved by hook"},
+			}, nil
+		})},
+	}).Execute(Context{
+		Context:     context.Background(),
+		Permissions: NewEnginePermissionDecider(engine),
+	}, contracts.ToolUse{ID: "toolu_request_allow", Name: "Bash", Input: json.RawMessage(`{"command":"rm -rf build"}`)}, ProgressFunc(func(p contracts.ToolProgress) error {
+		progress = append(progress, p)
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "git status --short" || seenInput != "git status --short" {
+		t.Fatalf("seenInput=%q result=%#v", seenInput, result)
+	}
+	if got := progressTypes(progress); strings.Join(got, ",") != "hook_started,hook_completed,started,hook_started,hook_completed,permission_allowed,hook_started,hook_completed,completed" {
+		t.Fatalf("progress = %#v", got)
+	}
+	if progress[4].Data["permission_behavior"] != string(contracts.PermissionAllow) || progress[4].Data["updated_input"] != true {
+		t.Fatalf("progress data = %#v", progress)
+	}
+}
+
+func TestExecutorPermissionRequestHookCanDenyTool(t *testing.T) {
+	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
+	registry, err := NewRegistry(FuncTool{
+		DefinitionValue: contracts.ToolDefinition{Name: "Bash", Destructive: true},
+		CallFunc: func(ctx Context, raw json.RawMessage, sink ProgressSink) (contracts.ToolResult, error) {
+			t.Fatalf("call should not run")
+			return contracts.ToolResult{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := (Executor{
+		Registry: registry,
+		Hooks: []Hook{HookFunc(func(ctx Context, event HookEvent) (HookResult, error) {
+			if event.Phase != HookPermissionRequest {
+				return HookResult{}, nil
+			}
+			return HookResult{Block: true, Message: "blocked by request hook"}, nil
+		})},
+	}).Execute(Context{
+		Context:     context.Background(),
+		Permissions: NewEnginePermissionDecider(engine),
+	}, contracts.ToolUse{ID: "toolu_request_deny", Name: "Bash"}, nil)
+	var permissionErr PermissionError
+	if !errors.As(err, &permissionErr) {
+		t.Fatalf("error = %v, want PermissionError", err)
+	}
+	if permissionErr.Decision.Behavior != contracts.PermissionDeny || result.Content != "blocked by request hook" {
+		t.Fatalf("decision=%#v result=%#v", permissionErr.Decision, result)
+	}
+}
+
 func TestExecutorHonorsCancelledContextBeforeCall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

@@ -97,14 +97,19 @@ type HookEvent struct {
 }
 
 type HookResult struct {
-	Block        bool
-	Message      string
-	UpdatedInput json.RawMessage
-	Metadata     map[string]any
+	Block              bool
+	Message            string
+	UpdatedInput       json.RawMessage
+	PermissionDecision *contracts.PermissionDecision
+	Metadata           map[string]any
 }
 
 type Hook interface {
 	RunToolHook(Context, HookEvent) (HookResult, error)
+}
+
+type PhaseHook interface {
+	HookPhases() []string
 }
 
 type HookFunc func(Context, HookEvent) (HookResult, error)

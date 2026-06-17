@@ -213,6 +213,95 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesSettingsCommandHookForToolUse(t *testing.T) {
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:     "Echo",
+			ReadOnly: true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"text"},
+				"properties": map[string]any{
+					"text": map[string]any{"type": "string"},
+				},
+			},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			var input struct {
+				Text string `json:"text"`
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return contracts.ToolResult{}, err
+			}
+			return contracts.ToolResult{Content: "echo:" + input.Text}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_hook",
+				Name:  "Echo",
+				Input: json.RawMessage(`{"text":"original"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_settings_hook",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: t.TempDir(),
+		MCP: &MCPConfig{ProjectSettings: contracts.Settings{Hooks: map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Echo",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": `printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"text":"from-command"}},"systemMessage":"updated"}'`,
+						},
+					},
+				},
+			},
+		}}},
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("run echo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].Content != "echo:from-command" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if !hasHookProgress(progress, tool.HookPreToolUse, "hook_completed") {
+		t.Fatalf("hook progress = %#v", progress)
+	}
+}
+
 func TestRunnerRunsDueSchedulesBeforeMainRequest(t *testing.T) {
 	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_schedule_tick")
@@ -6069,6 +6158,15 @@ func hasScheduleDueTickProgress(progress []contracts.ToolProgress) bool {
 			continue
 		}
 		if item.Data["due_count"] == 1 && item.Data["triggered_count"] == 1 && item.Data["error_count"] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasHookProgress(progress []contracts.ToolProgress, phase string, progressType string) bool {
+	for _, item := range progress {
+		if item.Type == progressType && item.Data["phase"] == phase {
 			return true
 		}
 	}
