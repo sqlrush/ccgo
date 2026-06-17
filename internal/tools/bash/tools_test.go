@@ -518,8 +518,8 @@ func TestBashRunInBackgroundAndReadOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tail.StructuredContent["stdout"] != "two\nthree" {
-		t.Fatalf("tail stdout = %#v", tail.StructuredContent["stdout"])
+	if tail.StructuredContent["stdout"] != "two\nthree" || tail.StructuredContent["tail_lines"] != 2 {
+		t.Fatalf("tail structured content = %#v", tail.StructuredContent)
 	}
 }
 

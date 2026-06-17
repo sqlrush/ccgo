@@ -970,6 +970,7 @@ func callBashOutput(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 			"description": snapshot.Description,
 			"stdout":      snapshot.Stdout,
 			"stderr":      snapshot.Stderr,
+			"tail_lines":  tailLines,
 			"running":     snapshot.Running,
 			"exit_code":   snapshot.ExitCode,
 			"timed_out":   snapshot.TimedOut,

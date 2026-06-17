@@ -201,6 +201,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash destructive 分类把未引用单个 `&` 后台分隔符纳入命令分段，后台后续命令会独立参与 destructive 判断。
 - 本轮补充：Bash/BashOutput 输入解码现在兼容 `timeout`、`run_in_background`/`runInBackground`、`tail_lines`/`tailLines` 的 quoted semantic string 形式，官方 SDK 风格的 `"1000"`/`"true"` 不再被严格 JSON 类型拒绝。
 - 本轮补充：PowerShell/PowerShellOutput 输入解码现在同样兼容 `timeout`、`run_in_background`/`runInBackground`、`tail_lines`/`tailLines` 的 quoted semantic string 形式，和官方 PowerShell tool 的 semantic number/boolean schema 对齐。
+- 本轮补充：BashOutput/PowerShellOutput structured content 现在会回传实际应用的 `tail_lines`，未请求时为 `0`，让后台输出截断状态可被 UI/golden 明确审计。
 - 本轮补充：Read/Edit 输入解码现在兼容 `offset`/`limit` 和 `replace_all` 的 quoted semantic string 形式；whole-decimal 数字字符串会按官方 `semanticNumber(...int())` 语义归一为整数，fractional 数字继续拒绝。
 - 本轮补充：Bash/PowerShell 输入校验现在会阻断前台首语句长 `sleep`/`Start-Sleep`（2 秒及以上）并提示改用 `run_in_background`；短 sleep、浮点 sleep、PowerShell `-Milliseconds` 和显式后台执行保持允许。
 - 本轮补充：Bash/PowerShell 输入解码现在接受官方 `dangerouslyDisableSandbox` semantic boolean 字段并在 structured content 中记录请求；真实 sandbox adapter/override 执行语义仍未宣称完成。

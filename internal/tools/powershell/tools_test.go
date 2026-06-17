@@ -455,6 +455,9 @@ func TestPowerShellRunInBackgroundAndReadOutput(t *testing.T) {
 	if normalizeNewlines(tail.StructuredContent["stdout"].(string)) != "two\nthree" {
 		t.Fatalf("tail stdout = %#v", tail.StructuredContent["stdout"])
 	}
+	if tail.StructuredContent["tail_lines"] != 2 {
+		t.Fatalf("tail structured content = %#v", tail.StructuredContent)
+	}
 }
 
 func TestPowerShellBackgroundTimeout(t *testing.T) {

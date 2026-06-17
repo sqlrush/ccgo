@@ -153,6 +153,8 @@ M5 补充：Bash/BashOutput 现在接受 `timeout`、`run_in_background`/`runInB
 
 M5 补充：PowerShell/PowerShellOutput 现在接受 `timeout`、`run_in_background`/`runInBackground`、`tail_lines`/`tailLines` 的 quoted semantic string 输入，和官方 PowerShell tool schema 的 semantic number/boolean 行为对齐。
 
+M5 补充：BashOutput/PowerShellOutput structured content 现在会回传实际应用的 `tail_lines`，未请求时为 `0`，让后台输出截断状态可被 UI/golden 明确审计。
+
 M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted semantic string 输入；whole-decimal 数字字符串如 `"2.0"` 会按官方 `semanticNumber(...int())` 语义归一为整数，fractional 数字仍会被拒绝。
 
 M5 补充：`Grep` content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
