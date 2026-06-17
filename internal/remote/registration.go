@@ -37,8 +37,11 @@ type RegistrationState struct {
 	StatusCode       int          `json:"status_code,omitempty"`
 	RemoteSessionID  string       `json:"remote_session_id,omitempty"`
 	RegistrationID   string       `json:"registration_id,omitempty"`
+	ProtocolVersion  string       `json:"protocol_version,omitempty"`
+	Capabilities     []string     `json:"capabilities,omitempty"`
 	WebSocketURL     string       `json:"websocket_url,omitempty"`
 	PollURL          string       `json:"poll_url,omitempty"`
+	LeaseRenewURL    string       `json:"lease_renew_url,omitempty"`
 	Message          string       `json:"message,omitempty"`
 	Error            string       `json:"error,omitempty"`
 	ManifestServices int          `json:"manifest_services,omitempty"`
@@ -198,11 +201,23 @@ func applyRegistrationResponseFields(state *RegistrationState, raw map[string]an
 	if state.RegistrationID == "" {
 		state.RegistrationID = firstString(raw, "registration_id", "registrationId", "id")
 	}
+	if state.ProtocolVersion == "" {
+		state.ProtocolVersion = firstString(raw, "protocol_version", "protocolVersion", "remote_protocol_version", "remoteProtocolVersion", "version")
+	}
+	if len(state.Capabilities) == 0 {
+		state.Capabilities = firstStringList(raw, "capabilities", "features", "supported_capabilities", "supportedCapabilities")
+	}
 	if state.WebSocketURL == "" {
 		state.WebSocketURL = firstString(raw, "websocket_url", "websocketUrl", "web_socket_url", "ws_url", "wsUrl")
 	}
 	if state.PollURL == "" {
 		state.PollURL = firstString(raw, "poll_url", "pollUrl", "events_url", "eventsUrl")
+	}
+	if state.LeaseRenewURL == "" {
+		state.LeaseRenewURL = firstString(raw, "lease_renew_url", "leaseRenewUrl", "lease_refresh_url", "leaseRefreshUrl", "renew_url", "renewUrl")
+	}
+	if state.LeaseRenewURL == "" {
+		state.LeaseRenewURL = stringFromNestedMap(raw["lease"], "renew_url", "renewUrl", "refresh_url", "refreshUrl", "url")
 	}
 	if state.Message == "" {
 		state.Message = firstString(raw, "message", "status", "detail")
@@ -229,6 +244,59 @@ func firstString(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstStringList(values map[string]any, keys ...string) []string {
+	for _, key := range keys {
+		if value, ok := values[key]; ok {
+			if list := normalizeStringList(value); len(list) > 0 {
+				return list
+			}
+		}
+	}
+	return nil
+}
+
+func normalizeStringList(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return cleanStringList(typed)
+	case []any:
+		items := make([]string, 0, len(typed))
+		for _, item := range typed {
+			items = append(items, fmt.Sprint(item))
+		}
+		return cleanStringList(items)
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return nil
+		}
+		if strings.Contains(text, ",") {
+			return cleanStringList(strings.Split(text, ","))
+		}
+		return cleanStringList(strings.Fields(text))
+	default:
+		text := strings.TrimSpace(fmt.Sprint(typed))
+		if text == "" || text == "<nil>" {
+			return nil
+		}
+		return []string{text}
+	}
+}
+
+func cleanStringList(values []string) []string {
+	cleaned := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		text := strings.TrimSpace(value)
+		if text == "" || text == "<nil>" || seen[text] {
+			continue
+		}
+		seen[text] = true
+		cleaned = append(cleaned, text)
+	}
+	return cleaned
 }
 
 func remoteRegistrationError(status string, body []byte) string {

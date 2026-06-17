@@ -2812,8 +2812,11 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		RegistrationURL: "https://remote.example/register",
 		StatusCode:      http.StatusAccepted,
 		RemoteSessionID: "remote-status",
+		ProtocolVersion: "ccr.remote.v1",
+		Capabilities:    []string{"websocket_protocol", "lease_renew"},
 		WebSocketURL:    "wss://remote.example/ws?token=secret",
 		PollURL:         "https://remote.example/poll?token=secret",
+		LeaseRenewURL:   "https://remote.example/leases/renew?token=secret",
 		RegisteredAt:    "2026-06-17T10:02:00Z",
 	}); err != nil {
 		t.Fatal(err)
@@ -2982,7 +2985,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status remote",
 		"Enabled: disabled",
 		"Remote environment: env-status",
-		"Remote registration: registered: url https://remote.example/register: status 202: remote session remote-status: websocket wss://remote.example/ws: poll https://remote.example/poll",
+		"Remote registration: registered: url https://remote.example/register: status 202: remote session remote-status: protocol ccr.remote.v1: capabilities websocket_protocol, lease_renew: websocket wss://remote.example/ws: poll https://remote.example/poll: lease renew https://remote.example/leases/renew",
 		"Remote pump: running: transport websocket: websocket wss://remote.example/ws: poll https://remote.example/poll: cursor cursor-2: status 200: frames 2: connects 1: reconnects 1: ack events 2: ack sent 1: ack errors 1: lease events 1: lease expired 1: events 3: delivered 2: duplicates 1: errors 0",
 		"close 1000",
 		"stream started 2026-06-17T10:03:00Z: stream ended 2026-06-17T10:08:00Z: stream stop context_cancelled",

@@ -1836,11 +1836,20 @@ func formatRemoteRegistration(state remotepkg.RegistrationState) []string {
 	if state.RegistrationID != "" {
 		parts = append(parts, "registration "+state.RegistrationID)
 	}
+	if state.ProtocolVersion != "" {
+		parts = append(parts, "protocol "+state.ProtocolVersion)
+	}
+	if len(state.Capabilities) > 0 {
+		parts = append(parts, "capabilities "+strings.Join(state.Capabilities, ", "))
+	}
 	if state.WebSocketURL != "" {
 		parts = append(parts, "websocket "+remotepkg.DisplayEndpoint(state.WebSocketURL))
 	}
 	if state.PollURL != "" {
 		parts = append(parts, "poll "+remotepkg.DisplayEndpoint(state.PollURL))
+	}
+	if state.LeaseRenewURL != "" {
+		parts = append(parts, "lease renew "+remotepkg.DisplayEndpoint(state.LeaseRenewURL))
 	}
 	lines := []string{"Remote registration: " + strings.Join(parts, ": ")}
 	if state.Error != "" {

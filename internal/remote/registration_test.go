@@ -26,7 +26,7 @@ func TestRegisterManifestPostsServiceManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 		w.Header().Set("content-type", "application/json")
-		_, _ = w.Write([]byte(`{"remoteSessionId":"remote-sess","registration_id":"reg-1","websocketUrl":"wss://remote/ws","pollUrl":"https://remote/events","message":"registered"}`))
+		_, _ = w.Write([]byte(`{"remoteSessionId":"remote-sess","registration_id":"reg-1","protocolVersion":"ccr.remote.v1","capabilities":["websocket_protocol","lease_renew","lease_renew"],"websocketUrl":"wss://remote/ws","pollUrl":"https://remote/events","lease":{"renewUrl":"https://remote/leases/renew?token=secret"},"message":"registered"}`))
 	}))
 	defer server.Close()
 
@@ -42,7 +42,10 @@ func TestRegisterManifestPostsServiceManifest(t *testing.T) {
 		},
 		Now: now,
 	})
-	if state.RuntimeState != RegistrationRegistered || state.StatusCode != http.StatusOK || state.RemoteSessionID != "remote-sess" || state.RegistrationID != "reg-1" || state.WebSocketURL != "wss://remote/ws" || state.PollURL != "https://remote/events" {
+	if state.RuntimeState != RegistrationRegistered || state.StatusCode != http.StatusOK || state.RemoteSessionID != "remote-sess" || state.RegistrationID != "reg-1" || state.ProtocolVersion != "ccr.remote.v1" || state.WebSocketURL != "wss://remote/ws" || state.PollURL != "https://remote/events" || state.LeaseRenewURL != "https://remote/leases/renew?token=secret" {
+		t.Fatalf("registration state = %#v", state)
+	}
+	if len(state.Capabilities) != 2 || state.Capabilities[0] != "websocket_protocol" || state.Capabilities[1] != "lease_renew" {
 		t.Fatalf("registration state = %#v", state)
 	}
 	if got.SessionID != "sess_remote" || len(got.Services) != 1 || got.Services[0].Name != "bridge" {
@@ -66,8 +69,11 @@ func TestRegisterManifestAcceptsWrappedResponse(t *testing.T) {
 				"sessionId":"remote-wrapped",
 				"registration":{
 					"id":"reg-wrapped",
+					"protocol_version":"ccr.remote.v2",
+					"features":"remote_trigger lease_refresh",
 					"web_socket_url":"wss://remote/wrapped/ws",
 					"eventsUrl":"https://remote/wrapped/events",
+					"lease_refresh_url":"https://remote/wrapped/leases/refresh",
 					"detail":"nested detail"
 				}
 			}
@@ -84,7 +90,10 @@ func TestRegisterManifestAcceptsWrappedResponse(t *testing.T) {
 		},
 		Now: now,
 	})
-	if state.RuntimeState != RegistrationRegistered || state.RemoteSessionID != "remote-wrapped" || state.RegistrationID != "reg-wrapped" || state.WebSocketURL != "wss://remote/wrapped/ws" || state.PollURL != "https://remote/wrapped/events" || state.Message != "registered" {
+	if state.RuntimeState != RegistrationRegistered || state.RemoteSessionID != "remote-wrapped" || state.RegistrationID != "reg-wrapped" || state.ProtocolVersion != "ccr.remote.v2" || state.WebSocketURL != "wss://remote/wrapped/ws" || state.PollURL != "https://remote/wrapped/events" || state.LeaseRenewURL != "https://remote/wrapped/leases/refresh" || state.Message != "registered" {
+		t.Fatalf("registration state = %#v", state)
+	}
+	if len(state.Capabilities) != 2 || state.Capabilities[0] != "remote_trigger" || state.Capabilities[1] != "lease_refresh" {
 		t.Fatalf("registration state = %#v", state)
 	}
 }
@@ -109,6 +118,9 @@ func TestRegisterManifestHandlesDisabledAndFailedState(t *testing.T) {
 func TestWriteAndLoadRegistrationState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sess_remote", registrationFileName)
 	state := DisabledRegistrationState(Manifest{SessionID: "sess_remote"}, "/state/remote-service.json", time.Date(2026, 6, 17, 11, 10, 0, 0, time.UTC))
+	state.ProtocolVersion = "ccr.remote.v1"
+	state.Capabilities = []string{"websocket_protocol", "lease_renew"}
+	state.LeaseRenewURL = "https://remote/leases/renew"
 	if err := WriteRegistrationState(path, state); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +128,7 @@ func TestWriteAndLoadRegistrationState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != RegistrationDisabled || loaded.ManifestPath != "/state/remote-service.json" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != RegistrationDisabled || loaded.ManifestPath != "/state/remote-service.json" || loaded.ProtocolVersion != "ccr.remote.v1" || loaded.LeaseRenewURL != "https://remote/leases/renew" || len(loaded.Capabilities) != 2 {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	missing, err := LoadRegistrationState(filepath.Join(t.TempDir(), registrationFileName))
