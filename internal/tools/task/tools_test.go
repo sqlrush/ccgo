@@ -983,6 +983,95 @@ func TestTeamAutoScheduleAppliesCoordinatorPlanAssignments(t *testing.T) {
 	}
 }
 
+func TestTeamAutoScheduleAcceptsWrappedCoordinatorPlan(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/auto-wrap-lead", "agent/auto-wrap-one", "agent/auto-wrap-two"} {
+		if _, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_auto_wrap_task_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Wrapped auto plan task","prompt":"Work with the wrapped planned team","subagent_type":"general-purpose"}`),
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_team_auto_wrap_create",
+		Name: "TeamCreate",
+		Input: json.RawMessage(`{
+			"team_id":"auto/wrapped",
+			"description":"Wrapped auto planned team",
+			"coordinator_task_id":"agent/auto-wrap-lead",
+			"task_ids":["agent/auto-wrap-one","agent/auto-wrap-two"]
+		}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	const objective = "Coordinate a wrapped model plan."
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_team_auto_wrap_schedule_request",
+		Name: "TeamAutoSchedule",
+		Input: json.RawMessage(`{
+			"team_id":"auto/wrapped",
+			"coordinator_plan":{
+				"objective":"` + objective + `",
+				"assignments":[
+					{"taskId":"agent/auto-wrap-one","assignment":"Own wrapped input parser."},
+					{"member":"agent/auto-wrap-two","content":"Verify wrapped input aliases."}
+				]
+			}
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "team_auto_schedule" || result.StructuredContent["objective"] != objective || result.StructuredContent["schedule_source"] != teamAutoScheduleSourceCoordinatorPlan {
+		t.Fatalf("team auto wrapped plan structured content = %#v", result.StructuredContent)
+	}
+	assignments, ok := result.StructuredContent["assignments"].([]map[string]any)
+	if !ok || len(assignments) != 2 || assignments[0]["task_id"] != "agent_auto-wrap-one" || assignments[1]["task_id"] != "agent_auto-wrap-two" {
+		t.Fatalf("team auto wrapped plan assignments = %#v", result.StructuredContent["assignments"])
+	}
+	coordinatorResume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_auto_wrap_coordinator_resume",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/auto-wrap-lead","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinatorMessages, ok := coordinatorResume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(coordinatorMessages) != 3 {
+		t.Fatalf("team auto wrapped coordinator resume messages = %#v", coordinatorResume.StructuredContent["resume_messages"])
+	}
+	coordinatorText, _ := coordinatorMessages[2]["text"].(string)
+	if !strings.Contains(coordinatorText, "Objective:\n"+objective) || !strings.Contains(coordinatorText, "agent_auto-wrap-two: Verify wrapped input aliases.") {
+		t.Fatalf("team auto wrapped coordinator briefing = %q", coordinatorText)
+	}
+	memberChecks := map[string]string{
+		"agent/auto-wrap-one": "Own wrapped input parser.",
+		"agent/auto-wrap-two": "Verify wrapped input aliases.",
+	}
+	for taskID, wantAssignment := range memberChecks {
+		resume, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_auto_wrap_resume_" + strings.ReplaceAll(taskID, "/", "_")),
+			Name:  "ResumeTask",
+			Input: json.RawMessage(`{"task_id":"` + taskID + `","limit":3}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+		if !ok || len(messages) != 3 {
+			t.Fatalf("team auto wrapped member resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+		text, _ := messages[2]["text"].(string)
+		if !strings.Contains(text, "Team planned assignment for auto_wrapped.") || !strings.Contains(text, "Assignment:\n"+wantAssignment) {
+			t.Fatalf("team auto wrapped member message for %s = %q", taskID, text)
+		}
+	}
+}
+
 func TestSleepToolWaitsForBoundedDuration(t *testing.T) {
 	ctx, _ := taskContext(t)
 	executor := taskExecutor(t)

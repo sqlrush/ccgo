@@ -2951,7 +2951,7 @@ func normalizeTeamAutoScheduleInput(raw json.RawMessage) (json.RawMessage, error
 	}
 	for key := range obj {
 		switch key {
-		case "team_id", "teamId", "id", "name", "objective", "message", "text", "content", "prompt", "input", "instruction", "request", "goal", "assignments", "tasks", "dispatches", "plan", "member_assignments", "memberAssignments", "messages":
+		case "team_id", "teamId", "id", "name", "objective", "message", "text", "content", "prompt", "input", "instruction", "request", "goal", "assignments", "tasks", "dispatches", "plan", "coordinator_plan", "coordinatorPlan", "member_plan", "memberPlan", "member_assignments", "memberAssignments", "messages":
 		default:
 			return nil, fmt.Errorf("input.%s is not allowed", key)
 		}
@@ -2960,13 +2960,95 @@ func normalizeTeamAutoScheduleInput(raw json.RawMessage) (json.RawMessage, error
 	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
 		normalized["team_id"] = value
 	}
+	objectiveSet := false
 	if value, ok := firstRawTaskField(obj, "objective", "message", "text", "content", "prompt", "input", "instruction", "request", "goal"); ok {
 		normalized["objective"] = value
+		objectiveSet = true
 	}
-	if value, ok := firstRawTaskField(obj, "assignments", "tasks", "dispatches", "plan", "member_assignments", "memberAssignments", "messages"); ok {
-		normalized["assignments"] = value
+	if value, ok := firstRawTaskField(obj, "assignments", "tasks", "dispatches", "plan", "coordinator_plan", "coordinatorPlan", "member_plan", "memberPlan", "member_assignments", "memberAssignments", "messages"); ok {
+		assignments, objective, err := normalizeTeamAutoPlanRaw(value)
+		if err != nil {
+			return nil, err
+		}
+		normalized["assignments"] = assignments
+		if !objectiveSet && len(objective) > 0 {
+			normalized["objective"] = objective
+		}
 	}
 	return json.Marshal(normalized)
+}
+
+func normalizeTeamAutoPlanRaw(raw json.RawMessage) (json.RawMessage, json.RawMessage, error) {
+	raw = trimRawTaskMessage(raw)
+	if len(raw) == 0 {
+		return raw, nil, nil
+	}
+	switch raw[0] {
+	case '[':
+		assignments, err := normalizeTeamAssignmentArrayRaw(raw)
+		return assignments, nil, err
+	case '{':
+		obj, err := decodeRawTaskObject(raw)
+		if err != nil {
+			return nil, nil, err
+		}
+		objective, _ := firstRawTaskField(obj, "objective", "message", "text", "content", "prompt", "input", "instruction", "request", "goal")
+		if nested, ok := firstRawTaskField(obj, "assignments", "tasks", "dispatches", "plan", "member_assignments", "memberAssignments", "messages"); ok {
+			assignments, nestedObjective, err := normalizeTeamAutoPlanRaw(nested)
+			if err != nil {
+				return nil, nil, err
+			}
+			if len(objective) == 0 {
+				objective = nestedObjective
+			}
+			return assignments, objective, nil
+		}
+		if _, ok := firstRawTaskField(obj, "task_id", "taskId", "taskID", "id", "task", "sidechain_id", "sidechainId", "member", "member_id", "memberId", "agent"); ok {
+			assignment, err := normalizeTeamAssignmentObjectRaw(obj)
+			if err != nil {
+				return nil, nil, err
+			}
+			assignments, err := json.Marshal([]map[string]json.RawMessage{assignment})
+			return assignments, objective, err
+		}
+		return raw, objective, nil
+	default:
+		return raw, nil, nil
+	}
+}
+
+func normalizeTeamAssignmentArrayRaw(raw json.RawMessage) (json.RawMessage, error) {
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return raw, nil
+	}
+	normalized := make([]map[string]json.RawMessage, 0, len(items))
+	for i, item := range items {
+		assignment, err := normalizeTeamAssignmentObjectRaw(item)
+		if err != nil {
+			return nil, fmt.Errorf("assignments[%d]: %w", i, err)
+		}
+		normalized = append(normalized, assignment)
+	}
+	return json.Marshal(normalized)
+}
+
+func normalizeTeamAssignmentObjectRaw(obj map[string]json.RawMessage) (map[string]json.RawMessage, error) {
+	for key := range obj {
+		switch key {
+		case "task_id", "taskId", "taskID", "id", "task", "sidechain_id", "sidechainId", "member", "member_id", "memberId", "agent", "message", "text", "content", "prompt", "input", "assignment", "instruction", "instructions", "request", "goal", "objective":
+		default:
+			return nil, fmt.Errorf("field %s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "task_id", "taskId", "taskID", "id", "task", "sidechain_id", "sidechainId", "member", "member_id", "memberId", "agent"); ok {
+		normalized["task_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "message", "text", "content", "prompt", "input", "assignment", "instruction", "instructions", "request", "goal", "objective"); ok {
+		normalized["message"] = value
+	}
+	return normalized, nil
 }
 
 func normalizeTeamCoordinateInput(raw json.RawMessage) (json.RawMessage, error) {
@@ -3174,6 +3256,10 @@ func firstRawTaskField(obj map[string]json.RawMessage, keys ...string) (json.Raw
 		}
 	}
 	return nil, false
+}
+
+func trimRawTaskMessage(raw json.RawMessage) json.RawMessage {
+	return json.RawMessage(strings.TrimSpace(string(raw)))
 }
 
 func coerceTaskSemanticNumberStrings(obj map[string]json.RawMessage, keys ...string) {
