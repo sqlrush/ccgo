@@ -204,7 +204,11 @@ func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.SetCWD(cwd)
+	resolvedCWD, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SetCWD(resolvedCWD)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var stdout, stderr bytes.Buffer
@@ -245,21 +249,21 @@ func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 		t.Fatalf("tick = %#v", tick)
 	}
 	var statusOut, statusErr bytes.Buffer
-	if code := run([]string{"--daemon-status", "--daemon-state", statePath}, strings.NewReader(""), &statusOut, &statusErr); code != 0 {
+	if code := run([]string{"--cwd", cwd, "--daemon-status"}, strings.NewReader(""), &statusOut, &statusErr); code != 0 {
 		t.Fatalf("daemon status exit = %d stderr=%s", code, statusErr.String())
 	}
 	if !strings.Contains(statusOut.String(), "runtime_state=running") || !strings.Contains(statusOut.String(), "endpoint="+daemonState.Endpoint) {
 		t.Fatalf("daemon status stdout = %q", statusOut.String())
 	}
 	var tickOut, tickErr bytes.Buffer
-	if code := run([]string{"--daemon-tick", "--daemon-state", statePath}, strings.NewReader(""), &tickOut, &tickErr); code != 0 {
+	if code := run([]string{"--cwd", cwd, "--daemon-tick"}, strings.NewReader(""), &tickOut, &tickErr); code != 0 {
 		t.Fatalf("daemon tick exit = %d stderr=%s", code, tickErr.String())
 	}
 	if !strings.Contains(tickOut.String(), "ccgo daemon tick") || !strings.Contains(tickOut.String(), "error_count=0") {
 		t.Fatalf("daemon tick stdout = %q", tickOut.String())
 	}
 	var stopOut, stopErr bytes.Buffer
-	if code := run([]string{"--daemon-stop", "--daemon-state", statePath}, strings.NewReader(""), &stopOut, &stopErr); code != 0 {
+	if code := run([]string{"--cwd", cwd, "--daemon-stop"}, strings.NewReader(""), &stopOut, &stopErr); code != 0 {
 		t.Fatalf("daemon stop exit = %d stderr=%s", code, stopErr.String())
 	}
 	if !strings.Contains(stopOut.String(), "ccgo daemon stopped") || !strings.Contains(stopOut.String(), "runtime_state=disabled") {

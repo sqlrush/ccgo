@@ -317,6 +317,13 @@ func resolveDaemonStatePath(state *bootstrap.State, explicit string) (string, er
 	if runner.SessionPath == "" && runner.SessionID != "" {
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
+	discoveredPath, err := daemonpkg.LatestStatePath(session.ProjectDir(runner.WorkingDirectory), time.Now().UTC(), 2*time.Minute)
+	if err != nil {
+		return "", err
+	}
+	if discoveredPath != "" {
+		return discoveredPath, nil
+	}
 	statePath := daemonpkg.SessionStatePath(runner.SessionPath, runner.SessionID)
 	if statePath == "" {
 		return "", errors.New("session state path is unavailable")

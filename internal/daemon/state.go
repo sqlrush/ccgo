@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,11 +34,80 @@ type State struct {
 	Error            string       `json:"error,omitempty"`
 }
 
+type DiscoveredState struct {
+	Path         string
+	State        State
+	RuntimeState string
+	GeneratedAt  time.Time
+}
+
 func SessionStatePath(sessionPath string, sessionID contracts.ID) string {
 	if sessionPath == "" || sessionID == "" {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(sessionPath), string(sessionID), stateFileName)
+}
+
+func DiscoverStates(projectDir string, now time.Time, staleAfter time.Duration) ([]DiscoveredState, error) {
+	if projectDir == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(projectDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	discovered := make([]DiscoveredState, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(projectDir, entry.Name(), stateFileName)
+		state, err := LoadState(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if state.GeneratedAt == "" {
+			continue
+		}
+		generatedAt, _ := time.Parse(time.RFC3339Nano, state.GeneratedAt)
+		if generatedAt.IsZero() {
+			if info, err := os.Stat(path); err == nil {
+				generatedAt = info.ModTime()
+			}
+		}
+		discovered = append(discovered, DiscoveredState{
+			Path:         path,
+			State:        state,
+			RuntimeState: RuntimeStateAt(state, now, staleAfter),
+			GeneratedAt:  generatedAt,
+		})
+	}
+	sort.Slice(discovered, func(i, j int) bool {
+		leftRank := runtimeStateRank(discovered[i].RuntimeState)
+		rightRank := runtimeStateRank(discovered[j].RuntimeState)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		if !discovered[i].GeneratedAt.Equal(discovered[j].GeneratedAt) {
+			return discovered[i].GeneratedAt.After(discovered[j].GeneratedAt)
+		}
+		return discovered[i].Path < discovered[j].Path
+	})
+	return discovered, nil
+}
+
+func LatestStatePath(projectDir string, now time.Time, staleAfter time.Duration) (string, error) {
+	discovered, err := DiscoverStates(projectDir, now, staleAfter)
+	if err != nil || len(discovered) == 0 {
+		return "", err
+	}
+	return discovered[0].Path, nil
 }
 
 func BuildState(sessionID contracts.ID, cwd string, runtimeState string, pid int, endpoint string, now time.Time, err error) State {
@@ -130,4 +200,19 @@ func RuntimeStateAt(state State, now time.Time, staleAfter time.Duration) string
 		return RuntimeStale
 	}
 	return RuntimeRunning
+}
+
+func runtimeStateRank(runtimeState string) int {
+	switch strings.TrimSpace(runtimeState) {
+	case RuntimeRunning:
+		return 0
+	case RuntimeStale:
+		return 1
+	case RuntimeFailed:
+		return 2
+	case RuntimeDisabled:
+		return 3
+	default:
+		return 4
+	}
 }

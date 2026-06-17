@@ -34,6 +34,37 @@ func TestRuntimeStateAtMarksStaleRunningDaemon(t *testing.T) {
 	}
 }
 
+func TestLatestStatePathDiscoversBestDaemonState(t *testing.T) {
+	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.UTC)
+	projectDir := t.TempDir()
+	disabledPath := filepath.Join(projectDir, "sess_disabled", stateFileName)
+	stalePath := filepath.Join(projectDir, "sess_stale", stateFileName)
+	runningPath := filepath.Join(projectDir, "sess_running", stateFileName)
+	if err := WriteState(disabledPath, BuildState("sess_disabled", "/work", RuntimeDisabled, 0, "", now.Add(2*time.Minute), nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteState(stalePath, BuildState("sess_stale", "/work", RuntimeRunning, 1111, "http://127.0.0.1:1", now.Add(-5*time.Minute), nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteState(runningPath, BuildState("sess_running", "/work", RuntimeRunning, 2222, "http://127.0.0.1:2", now.Add(-10*time.Second), nil)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LatestStatePath(projectDir, now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != runningPath {
+		t.Fatalf("latest state path = %q, want %q", got, runningPath)
+	}
+	discovered, err := DiscoverStates(projectDir, now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(discovered) != 3 || discovered[0].RuntimeState != RuntimeRunning || discovered[1].RuntimeState != RuntimeStale {
+		t.Fatalf("discovered = %#v", discovered)
+	}
+}
+
 func TestBuildStateRecordsError(t *testing.T) {
 	state := BuildState("sess_daemon", "/work", RuntimeDisabled, 0, "", time.Time{}, errors.New("bind failed"))
 	if state.RuntimeState != RuntimeFailed || state.Error != "bind failed" || state.GeneratedAt == "" {
