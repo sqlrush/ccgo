@@ -1093,7 +1093,7 @@ func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) stri
 	case "clipboard":
 		return r.formatNativeClipboardCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "chrome":
-		return r.formatNativeChromeCommand(strings.TrimSpace(dropLeadingFields(raw, 1)))
+		return r.formatNativeChromeCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "voice":
 		return r.formatNativeVoiceCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "computer", "computer-use", "computer_use":
@@ -1103,7 +1103,7 @@ func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) stri
 	}
 }
 
-func (r Runner) formatNativeChromeCommand(raw string) string {
+func (r Runner) formatNativeChromeCommand(ctx context.Context, raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) == 0 {
 		return "Usage: /native chrome <status|install [chrome|chromium|edge]>"
@@ -1138,7 +1138,7 @@ func (r Runner) formatNativeChromeCommand(raw string) string {
 		if len(args) > 1 {
 			browser = args[1]
 		}
-		install, err := integrationspkg.InstallChromeNativeHostManifest(manifestPath, integrationspkg.ChromeNativeHostInstallOptions{
+		install, err := integrationspkg.InstallChromeNativeHostManifest(ctx, manifestPath, integrationspkg.ChromeNativeHostInstallOptions{
 			Browser:           browser,
 			InstallDir:        strings.TrimSpace(os.Getenv("CLAUDE_CHROME_NATIVE_HOST_INSTALL_DIR")),
 			WrapperSourcePath: wrapperPath,

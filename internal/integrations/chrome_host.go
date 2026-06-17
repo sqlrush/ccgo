@@ -1,12 +1,14 @@
 package integrations
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -22,12 +24,15 @@ const (
 	chromeHostWrapperCMDName = "chrome-native-host.cmd"
 )
 
+type ChromeNativeHostRegistryRunner func(ctx context.Context, command []string) error
+
 type ChromeNativeHostInstallOptions struct {
 	Browser           string
 	GOOS              string
 	HomeDir           string
 	InstallDir        string
 	WrapperSourcePath string
+	RegistryRunner    ChromeNativeHostRegistryRunner
 }
 
 type ChromeNativeHostInstallResult struct {
@@ -35,6 +40,7 @@ type ChromeNativeHostInstallResult struct {
 	SourcePath  string `json:"source_path,omitempty"`
 	TargetPath  string `json:"target_path,omitempty"`
 	WrapperPath string `json:"wrapper_path,omitempty"`
+	RegistryKey string `json:"registry_key,omitempty"`
 	Skipped     bool   `json:"skipped,omitempty"`
 	Detail      string `json:"detail,omitempty"`
 }
@@ -129,7 +135,7 @@ func LoadChromeNativeHostManifest(path string) (ChromeNativeHostManifest, error)
 	return manifest, nil
 }
 
-func InstallChromeNativeHostManifest(sourcePath string, options ChromeNativeHostInstallOptions) (ChromeNativeHostInstallResult, error) {
+func InstallChromeNativeHostManifest(ctx context.Context, sourcePath string, options ChromeNativeHostInstallOptions) (ChromeNativeHostInstallResult, error) {
 	result := ChromeNativeHostInstallResult{
 		Browser:    normalizeChromeBrowser(options.Browser),
 		SourcePath: strings.TrimSpace(sourcePath),
@@ -167,6 +173,19 @@ func InstallChromeNativeHostManifest(sourcePath string, options ChromeNativeHost
 		result.Detail = err.Error()
 		return result, err
 	}
+	if chromeInstallGOOS(options) == "windows" {
+		registryKey := ChromeNativeHostRegistryKey(manifest.Name, options.Browser)
+		result.RegistryKey = registryKey
+		runner := options.RegistryRunner
+		if runner == nil {
+			runner = DefaultChromeNativeHostRegistryRunner
+		}
+		command := BuildChromeNativeHostRegistryInstallCommand(registryKey, targetPath)
+		if err := runner(ctx, command); err != nil {
+			result.Detail = err.Error()
+			return result, err
+		}
+	}
 	return result, nil
 }
 
@@ -179,13 +198,7 @@ func ChromeNativeHostInstallPath(hostName string, options ChromeNativeHostInstal
 	if strings.TrimSpace(options.InstallDir) != "" {
 		return filepath.Join(options.InstallDir, hostName+".json"), nil
 	}
-	goos := strings.TrimSpace(options.GOOS)
-	if goos == "" {
-		goos = runtime.GOOS
-	}
-	if goos == "windows" {
-		return "", fmt.Errorf("Windows Chrome native messaging host install requires HKCU/HKLM registry registration")
-	}
+	goos := chromeInstallGOOS(options)
 	home := strings.TrimSpace(options.HomeDir)
 	if home == "" {
 		var err error
@@ -196,6 +209,9 @@ func ChromeNativeHostInstallPath(hostName string, options ChromeNativeHostInstal
 	}
 	if strings.TrimSpace(home) == "" {
 		return "", fmt.Errorf("home directory is not available")
+	}
+	if goos == "windows" {
+		return filepath.Join(home, "AppData", "Local", "ClaudeCodeGo", "NativeMessagingHosts", hostName+".json"), nil
 	}
 	switch goos {
 	case "darwin":
@@ -217,6 +233,53 @@ func ChromeNativeHostInstallPath(hostName string, options ChromeNativeHostInstal
 			return filepath.Join(home, ".config", "google-chrome", "NativeMessagingHosts", hostName+".json"), nil
 		}
 	}
+}
+
+func ChromeNativeHostRegistryKey(hostName string, browser string) string {
+	hostName = strings.TrimSpace(hostName)
+	if hostName == "" {
+		hostName = ChromeNativeHostName
+	}
+	switch normalizeChromeBrowser(browser) {
+	case "edge":
+		return `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\` + hostName
+	case "chromium":
+		return `HKCU\Software\Chromium\NativeMessagingHosts\` + hostName
+	default:
+		return `HKCU\Software\Google\Chrome\NativeMessagingHosts\` + hostName
+	}
+}
+
+func BuildChromeNativeHostRegistryInstallCommand(registryKey string, manifestPath string) []string {
+	return []string{"reg.exe", "add", strings.TrimSpace(registryKey), "/ve", "/t", "REG_SZ", "/d", strings.TrimSpace(manifestPath), "/f"}
+}
+
+func DefaultChromeNativeHostRegistryRunner(ctx context.Context, command []string) error {
+	if len(command) == 0 || strings.TrimSpace(command[0]) == "" {
+		return os.ErrInvalid
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stderr := &limitedBuffer{max: 64 * 1024}
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return fmt.Errorf("%w: %s", err, detail)
+		}
+		return err
+	}
+	return nil
+}
+
+func chromeInstallGOOS(options ChromeNativeHostInstallOptions) string {
+	goos := strings.TrimSpace(options.GOOS)
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	return goos
 }
 
 func installChromeNativeHostWrapper(sourcePath string, targetDir string) (string, error) {

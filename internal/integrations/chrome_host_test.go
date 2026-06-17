@@ -2,6 +2,7 @@ package integrations
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"os"
@@ -76,7 +77,7 @@ func TestInstallChromeNativeHostManifestWritesTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	installDir := filepath.Join(dir, "NativeMessagingHosts")
-	result, err := InstallChromeNativeHostManifest(sourcePath, ChromeNativeHostInstallOptions{InstallDir: installDir, WrapperSourcePath: wrapperPath})
+	result, err := InstallChromeNativeHostManifest(context.Background(), sourcePath, ChromeNativeHostInstallOptions{InstallDir: installDir, WrapperSourcePath: wrapperPath})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,9 +123,57 @@ func TestChromeNativeHostInstallPathDefaults(t *testing.T) {
 	}
 }
 
-func TestChromeNativeHostInstallPathRejectsWindowsFileInstall(t *testing.T) {
-	if _, err := ChromeNativeHostInstallPath(ChromeNativeHostName, ChromeNativeHostInstallOptions{GOOS: "windows", HomeDir: `C:\Users\alice`}); err == nil {
-		t.Fatal("expected Windows registry install error")
+func TestChromeNativeHostInstallPathDefaultsForWindows(t *testing.T) {
+	path, err := ChromeNativeHostInstallPath(ChromeNativeHostName, ChromeNativeHostInstallOptions{GOOS: "windows", HomeDir: `C:\Users\alice`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(`C:\Users\alice`, "AppData", "Local", "ClaudeCodeGo", "NativeMessagingHosts", ChromeNativeHostName+".json")
+	if path != want {
+		t.Fatalf("windows path = %q, want %q", path, want)
+	}
+}
+
+func TestInstallChromeNativeHostManifestRegistersWindowsHKCU(t *testing.T) {
+	dir := t.TempDir()
+	sourcePath := filepath.Join(dir, "session", chromeHostFileName)
+	wrapperPath := filepath.Join(dir, "session", chromeHostWrapperCMDName)
+	if err := WriteChromeNativeHostWrapper(wrapperPath, `C:\Program Files\ccgo\ccgo.exe`); err != nil {
+		t.Fatal(err)
+	}
+	manifest := BuildChromeNativeHostManifest(wrapperPath, []string{"chrome-extension://abc"})
+	if err := WriteChromeNativeHostManifest(sourcePath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	var gotCommand []string
+	result, err := InstallChromeNativeHostManifest(context.Background(), sourcePath, ChromeNativeHostInstallOptions{
+		GOOS:              "windows",
+		HomeDir:           `C:\Users\alice`,
+		Browser:           "edge",
+		InstallDir:        filepath.Join(dir, "NativeMessagingHosts"),
+		WrapperSourcePath: wrapperPath,
+		RegistryRunner: func(ctx context.Context, command []string) error {
+			gotCommand = append([]string(nil), command...)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKey := `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\` + ChromeNativeHostName
+	if result.RegistryKey != wantKey {
+		t.Fatalf("registry key = %q, want %q", result.RegistryKey, wantKey)
+	}
+	wantCommand := BuildChromeNativeHostRegistryInstallCommand(wantKey, result.TargetPath)
+	if !sameChromeHostStrings(gotCommand, wantCommand) {
+		t.Fatalf("command = %#v, want %#v", gotCommand, wantCommand)
+	}
+	installed, err := LoadChromeNativeHostManifest(result.TargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installed.Path != result.WrapperPath || result.WrapperPath == "" {
+		t.Fatalf("installed manifest = %#v result=%#v", installed, result)
 	}
 }
 
@@ -173,6 +222,18 @@ func TestChromeNativeMessageRoundTrip(t *testing.T) {
 	if decoded["type"] != "ping" || decoded["ok"] != true {
 		t.Fatalf("decoded = %#v", decoded)
 	}
+}
+
+func sameChromeHostStrings(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestChromeNativeMessageRejectsOversizeAndInvalidJSON(t *testing.T) {
