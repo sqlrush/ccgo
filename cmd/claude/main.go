@@ -1240,11 +1240,7 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		if ws.Error == "" || pollURL == "" {
 			return fetch
 		}
-		poll := remotepkg.FetchPollEvents(ctx, remotepkg.PollOptions{
-			PollURL:   pollURL,
-			Cursor:    cursor,
-			AuthToken: authToken,
-		})
+		poll := remotepkg.FetchPollEvents(ctx, daemonRemotePollOptions(pollURL, cursor, authToken))
 		return daemonRemoteFetch{
 			Transport:     "poll",
 			StatusCode:    poll.StatusCode,
@@ -1255,11 +1251,7 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 			FallbackError: ws.Error,
 		}
 	}
-	poll := remotepkg.FetchPollEvents(ctx, remotepkg.PollOptions{
-		PollURL:   pollURL,
-		Cursor:    cursor,
-		AuthToken: authToken,
-	})
+	poll := remotepkg.FetchPollEvents(ctx, daemonRemotePollOptions(pollURL, cursor, authToken))
 	return daemonRemoteFetch{
 		Transport:    "poll",
 		StatusCode:   poll.StatusCode,
@@ -1267,6 +1259,17 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		NextCursor:   poll.NextCursor,
 		Events:       poll.Events,
 		Error:        poll.Error,
+	}
+}
+
+func daemonRemotePollOptions(pollURL string, cursor string, authToken string) remotepkg.PollOptions {
+	return remotepkg.PollOptions{
+		PollURL:           pollURL,
+		Cursor:            cursor,
+		AuthToken:         authToken,
+		RetryAttempts:     1,
+		RetryInitialDelay: 100 * time.Millisecond,
+		RetryMaxDelay:     500 * time.Millisecond,
 	}
 }
 

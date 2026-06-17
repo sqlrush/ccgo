@@ -404,6 +404,57 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 	}
 }
 
+func TestRunDaemonRemotePollRetriesTransientPoll(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_remote_poll_retry")
+	calls := 0
+	var auths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		auths = append(auths, r.Header.Get("Authorization"))
+		if calls == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "try again", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"next_cursor":"cursor-retry","events":[]}`))
+	}))
+	defer server.Close()
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:       sessionID,
+		RuntimeState:    remotepkg.RegistrationRegistered,
+		PollURL:         server.URL + "/poll",
+		RemoteSessionID: "remote-session",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &conversation.MCPConfig{UserSettings: contracts.Settings{
+			Remote: &contracts.RemoteSetting{AuthToken: "poll-token"},
+		}},
+	}
+
+	result := runDaemonRemotePoll(context.Background(), runner, time.Unix(200, 0).UTC())
+	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["status_code"] != http.StatusOK || result.StructuredContent["attempt_count"] != 2 || result.StructuredContent["last_cursor"] != "cursor-retry" || result.StructuredContent["event_count"] != 0 || result.StructuredContent["error_count"] != 0 {
+		t.Fatalf("retry poll = %#v", result.StructuredContent)
+	}
+	if calls != 2 || len(auths) != 2 || auths[0] != "Bearer poll-token" || auths[1] != "Bearer poll-token" {
+		t.Fatalf("calls/auths = %d %#v", calls, auths)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.StatusCode != http.StatusOK || pump.AttemptCount != 2 || pump.LastCursor != "cursor-retry" || pump.ErrorCount != 0 {
+		t.Fatalf("pump = %#v", pump)
+	}
+}
+
 func TestRunDaemonRemotePollSkipsExpiredLease(t *testing.T) {
 	dir := t.TempDir()
 	transcriptPath := filepath.Join(dir, "session.jsonl")
