@@ -22,6 +22,9 @@ const (
 	teamSendTargetCoordinator = "coordinator"
 	teamSendTargetAll         = "all"
 
+	teamAutoScheduleSourceDeterministic   = "deterministic"
+	teamAutoScheduleSourceCoordinatorPlan = "coordinator_plan"
+
 	scheduleCronActionCreate  = "create"
 	scheduleCronActionList    = "list"
 	scheduleCronActionDelete  = "delete"
@@ -93,8 +96,9 @@ type teamScheduleInput struct {
 }
 
 type teamAutoScheduleInput struct {
-	TeamID    string `json:"team_id,omitempty"`
-	Objective string `json:"objective,omitempty"`
+	TeamID      string                        `json:"team_id,omitempty"`
+	Objective   string                        `json:"objective,omitempty"`
+	Assignments []teamDispatchAssignmentInput `json:"assignments,omitempty"`
 }
 
 type teamCoordinateInput struct {
@@ -461,8 +465,8 @@ func NewTeamAutoScheduleTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
 			Name:            "TeamAutoSchedule",
-			Description:     "Send a team objective to the coordinator and deterministically schedule it across running task members.",
-			SearchHint:      "auto schedule objective team coordinator members assignments",
+			Description:     "Send a team objective to the coordinator and schedule it across running task members.",
+			SearchHint:      "auto schedule objective team coordinator model plan members assignments",
 			ConcurrencySafe: false,
 			Strict:          true,
 			InputSchema: contracts.JSONSchema{
@@ -471,11 +475,23 @@ func NewTeamAutoScheduleTool() tool.Tool {
 				"properties": map[string]any{
 					"team_id":   map[string]any{"type": "string"},
 					"objective": map[string]any{"type": "string"},
+					"assignments": map[string]any{
+						"type":        "array",
+						"description": "Optional coordinator/model-produced member plan. When omitted, deterministic assignments are generated for every member.",
+						"items": map[string]any{
+							"type":     "object",
+							"required": []any{"task_id", "message"},
+							"properties": map[string]any{
+								"task_id": map[string]any{"type": "string"},
+								"message": map[string]any{"type": "string"},
+							},
+						},
+					},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Combines coordinator briefing and deterministic member scheduling for a subagent team. If the team has a coordinator, the objective is first appended to the running coordinator with team status context; then every running member receives an assignment message.", nil
+			return "Combines coordinator briefing and member scheduling for a subagent team. If the team has a coordinator, the objective is first appended to the running coordinator with team status context. Provide assignments when a coordinator/model has produced a concrete member plan; otherwise every running member receives a deterministic assignment message.", nil
 		},
 		NormalizeFunc:   normalizeTeamAutoScheduleInput,
 		ValidateFunc:    validateTeamAutoSchedule,
@@ -1045,7 +1061,7 @@ func validateTeamAutoSchedule(ctx tool.Context, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	taskIDs, err := teamScheduleTaskIDs(team)
+	taskIDs, err := teamAutoScheduleTaskIDs(team, input)
 	if err != nil {
 		return err
 	}
@@ -1892,12 +1908,16 @@ func callTeamAutoSchedule(ctx tool.Context, raw json.RawMessage, sink tool.Progr
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	taskIDs, err := teamScheduleTaskIDs(team)
+	taskIDs, err := teamAutoScheduleTaskIDs(team, input)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
 	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
 		return contracts.ToolResult{}, err
+	}
+	scheduleSource := teamAutoScheduleSourceDeterministic
+	if len(input.Assignments) > 0 {
+		scheduleSource = teamAutoScheduleSourceCoordinatorPlan
 	}
 	var coordinator session.SidechainState
 	if team.CoordinatorTaskID != "" {
@@ -1912,9 +1932,10 @@ func callTeamAutoSchedule(ctx tool.Context, raw json.RawMessage, sink tool.Progr
 	structured["type"] = "team_auto_schedule"
 	structured["objective"] = input.Objective
 	structured["objective_chars"] = len(input.Objective)
+	structured["schedule_source"] = scheduleSource
 	structured["tasks"] = tasks
 	if coordinator.ID != "" {
-		briefing := formatTeamCoordinateMessage(team, tasks, input.Objective)
+		briefing := formatTeamAutoCoordinateMessage(team, tasks, input.Objective, input.Assignments)
 		message, err := appendTaskUserMessage(manager, ctx.SessionID, coordinator.ID, briefing, now)
 		if err != nil {
 			return contracts.ToolResult{}, err
@@ -1933,20 +1954,39 @@ func callTeamAutoSchedule(ctx tool.Context, raw json.RawMessage, sink tool.Progr
 		}
 	}
 	assignments := make([]map[string]any, 0, len(taskIDs))
-	for i, taskID := range taskIDs {
-		scheduleMessage := formatTeamScheduleMessage(team, tasks, input.Objective, taskID, i+1, len(taskIDs))
-		message, err := appendTaskUserMessage(manager, ctx.SessionID, taskID, scheduleMessage, now)
-		if err != nil {
-			return contracts.ToolResult{}, err
+	if len(input.Assignments) > 0 {
+		for _, assignment := range input.Assignments {
+			plannedMessage := formatTeamPlannedAssignmentMessage(team, input.Objective, assignment)
+			message, err := appendTaskUserMessage(manager, ctx.SessionID, assignment.TaskID, plannedMessage, now)
+			if err != nil {
+				return contracts.ToolResult{}, err
+			}
+			assignments = append(assignments, map[string]any{
+				"task_id":               assignment.TaskID,
+				"sidechain_id":          assignment.TaskID,
+				"message_uuid":          string(message.UUID),
+				"message_chars":         len(assignment.Message),
+				"planned_message_chars": len(plannedMessage),
+				"schedule_source":       scheduleSource,
+			})
 		}
-		assignments = append(assignments, map[string]any{
-			"task_id":       taskID,
-			"sidechain_id":  taskID,
-			"member_index":  i + 1,
-			"member_count":  len(taskIDs),
-			"message_uuid":  string(message.UUID),
-			"message_chars": len(scheduleMessage),
-		})
+	} else {
+		for i, taskID := range taskIDs {
+			scheduleMessage := formatTeamScheduleMessage(team, tasks, input.Objective, taskID, i+1, len(taskIDs))
+			message, err := appendTaskUserMessage(manager, ctx.SessionID, taskID, scheduleMessage, now)
+			if err != nil {
+				return contracts.ToolResult{}, err
+			}
+			assignments = append(assignments, map[string]any{
+				"task_id":         taskID,
+				"sidechain_id":    taskID,
+				"member_index":    i + 1,
+				"member_count":    len(taskIDs),
+				"message_uuid":    string(message.UUID),
+				"message_chars":   len(scheduleMessage),
+				"schedule_source": scheduleSource,
+			})
+		}
 	}
 	structured["assignment_count"] = len(assignments)
 	structured["assignments"] = assignments
@@ -1957,9 +1997,10 @@ func callTeamAutoSchedule(ctx tool.Context, raw json.RawMessage, sink tool.Progr
 		"has_coordinator":     coordinator.ID != "",
 		"coordinator_task_id": coordinator.ID,
 		"objective_chars":     len(input.Objective),
+		"schedule_source":     scheduleSource,
 	})
 	return contracts.ToolResult{
-		Content:           fmt.Sprintf("Auto-scheduled %d assignment(s) in team %s.", len(assignments), team.ID),
+		Content:           fmt.Sprintf("Auto-scheduled %d assignment(s) in team %s using %s.", len(assignments), team.ID, scheduleSource),
 		StructuredContent: structured,
 	}, nil
 }
@@ -2623,6 +2664,10 @@ func decodeTeamAutoScheduleInput(raw json.RawMessage) (teamAutoScheduleInput, er
 	}
 	input.TeamID = strings.TrimSpace(input.TeamID)
 	input.Objective = strings.TrimSpace(input.Objective)
+	for i := range input.Assignments {
+		input.Assignments[i].TaskID = sanitizeTaskLikeID(input.Assignments[i].TaskID)
+		input.Assignments[i].Message = strings.TrimSpace(input.Assignments[i].Message)
+	}
 	return input, nil
 }
 
@@ -2900,7 +2945,28 @@ func normalizeTeamScheduleInput(raw json.RawMessage) (json.RawMessage, error) {
 }
 
 func normalizeTeamAutoScheduleInput(raw json.RawMessage) (json.RawMessage, error) {
-	return normalizeTeamScheduleInput(raw)
+	obj, err := decodeRawTaskObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	for key := range obj {
+		switch key {
+		case "team_id", "teamId", "id", "name", "objective", "message", "text", "content", "prompt", "input", "instruction", "request", "goal", "assignments", "tasks", "dispatches", "plan", "member_assignments", "memberAssignments", "messages":
+		default:
+			return nil, fmt.Errorf("input.%s is not allowed", key)
+		}
+	}
+	normalized := map[string]json.RawMessage{}
+	if value, ok := firstRawTaskField(obj, "team_id", "teamId", "id", "name"); ok {
+		normalized["team_id"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "objective", "message", "text", "content", "prompt", "input", "instruction", "request", "goal"); ok {
+		normalized["objective"] = value
+	}
+	if value, ok := firstRawTaskField(obj, "assignments", "tasks", "dispatches", "plan", "member_assignments", "memberAssignments", "messages"); ok {
+		normalized["assignments"] = value
+	}
+	return json.Marshal(normalized)
 }
 
 func normalizeTeamCoordinateInput(raw json.RawMessage) (json.RawMessage, error) {
@@ -3393,6 +3459,16 @@ func teamDispatchTaskIDs(team session.TeamState, assignments []teamDispatchAssig
 	return taskIDs, nil
 }
 
+func teamAutoScheduleTaskIDs(team session.TeamState, input teamAutoScheduleInput) ([]string, error) {
+	if len(input.Assignments) == 0 {
+		return teamScheduleTaskIDs(team)
+	}
+	if len(input.Assignments) > 32 {
+		return nil, fmt.Errorf("assignments must include <= 32 items")
+	}
+	return teamDispatchTaskIDs(team, input.Assignments)
+}
+
 func teamScheduleTaskIDs(team session.TeamState) ([]string, error) {
 	if len(team.TaskIDs) == 0 {
 		return nil, fmt.Errorf("team %s has no tasks", team.ID)
@@ -3681,6 +3757,20 @@ func formatTeamCoordinateMessage(team session.TeamState, tasks []map[string]any,
 	return builder.String()
 }
 
+func formatTeamAutoCoordinateMessage(team session.TeamState, tasks []map[string]any, objective string, assignments []teamDispatchAssignmentInput) string {
+	briefing := formatTeamCoordinateMessage(team, tasks, objective)
+	if len(assignments) == 0 {
+		return briefing
+	}
+	var builder strings.Builder
+	builder.WriteString(briefing)
+	builder.WriteString("\nPlanned assignments:")
+	for _, assignment := range assignments {
+		fmt.Fprintf(&builder, "\n- %s: %s", assignment.TaskID, assignment.Message)
+	}
+	return builder.String()
+}
+
 func formatTeamScheduleMessage(team session.TeamState, tasks []map[string]any, objective string, taskID string, index int, total int) string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "Team scheduled assignment for %s.", team.ID)
@@ -3705,6 +3795,20 @@ func formatTeamScheduleMessage(team session.TeamState, tasks []map[string]any, o
 	builder.WriteString("\nObjective:\n")
 	builder.WriteString(objective)
 	builder.WriteString("\nInstruction:\nWork on the part of the objective that best matches your role and current context. Use team communication tools when coordination is needed.")
+	return builder.String()
+}
+
+func formatTeamPlannedAssignmentMessage(team session.TeamState, objective string, assignment teamDispatchAssignmentInput) string {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "Team planned assignment for %s.", team.ID)
+	if team.Description != "" {
+		fmt.Fprintf(&builder, "\nDescription: %s", team.Description)
+	}
+	builder.WriteString("\nObjective:\n")
+	builder.WriteString(objective)
+	builder.WriteString("\nAssignment:\n")
+	builder.WriteString(assignment.Message)
+	builder.WriteString("\nInstruction:\nExecute this coordinator/model plan for your assigned scope. Use team communication tools when coordination is needed.")
 	return builder.String()
 }
 

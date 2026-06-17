@@ -890,6 +890,99 @@ func TestTeamAutoScheduleBriefsCoordinatorAndAssignsMembers(t *testing.T) {
 	}
 }
 
+func TestTeamAutoScheduleAppliesCoordinatorPlanAssignments(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/auto-plan-lead", "agent/auto-plan-one", "agent/auto-plan-two"} {
+		if _, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_auto_plan_task_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Auto plan team task","prompt":"Work with the planned team","subagent_type":"general-purpose"}`),
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_team_auto_plan_create",
+		Name: "TeamCreate",
+		Input: json.RawMessage(`{
+			"team_id":"auto/plan",
+			"description":"Auto planned team",
+			"coordinator_task_id":"agent/auto-plan-lead",
+			"task_ids":["agent/auto-plan-one","agent/auto-plan-two"]
+		}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	const objective = "Split implementation and verification by ownership."
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_team_auto_plan_schedule_request",
+		Name: "TeamAutoSchedule",
+		Input: json.RawMessage(`{
+			"team_id":"auto/plan",
+			"goal":"` + objective + `",
+			"plan":[
+				{"task_id":"agent/auto-plan-one","message":"Implement the scheduler plan path."},
+				{"task_id":"agent/auto-plan-two","message":"Verify transcript and structured output coverage."}
+			]
+		}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "team_auto_schedule" || result.StructuredContent["assignment_count"] != 2 || result.StructuredContent["schedule_source"] != teamAutoScheduleSourceCoordinatorPlan {
+		t.Fatalf("team auto plan structured content = %#v", result.StructuredContent)
+	}
+	assignments, ok := result.StructuredContent["assignments"].([]map[string]any)
+	if !ok || len(assignments) != 2 || assignments[0]["task_id"] != "agent_auto-plan-one" || assignments[1]["task_id"] != "agent_auto-plan-two" {
+		t.Fatalf("team auto plan assignments = %#v", result.StructuredContent["assignments"])
+	}
+	if assignments[0]["schedule_source"] != teamAutoScheduleSourceCoordinatorPlan || assignments[1]["schedule_source"] != teamAutoScheduleSourceCoordinatorPlan {
+		t.Fatalf("team auto plan assignment source = %#v", assignments)
+	}
+	coordinatorResume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_auto_plan_coordinator_resume",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/auto-plan-lead","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinatorMessages, ok := coordinatorResume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(coordinatorMessages) != 3 {
+		t.Fatalf("team auto plan coordinator resume messages = %#v", coordinatorResume.StructuredContent["resume_messages"])
+	}
+	coordinatorText, _ := coordinatorMessages[2]["text"].(string)
+	if !strings.Contains(coordinatorText, "Team coordination request for auto_plan.") || !strings.Contains(coordinatorText, "Planned assignments:") || !strings.Contains(coordinatorText, "agent_auto-plan-one: Implement the scheduler plan path.") {
+		t.Fatalf("team auto plan coordinator briefing = %q", coordinatorText)
+	}
+	memberChecks := map[string]string{
+		"agent/auto-plan-one": "Implement the scheduler plan path.",
+		"agent/auto-plan-two": "Verify transcript and structured output coverage.",
+	}
+	for taskID, wantAssignment := range memberChecks {
+		resume, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_auto_plan_resume_" + strings.ReplaceAll(taskID, "/", "_")),
+			Name:  "ResumeTask",
+			Input: json.RawMessage(`{"task_id":"` + taskID + `","limit":3}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+		if !ok || len(messages) != 3 {
+			t.Fatalf("team auto plan member resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+		text, _ := messages[2]["text"].(string)
+		if !strings.Contains(text, "Team planned assignment for auto_plan.") || !strings.Contains(text, "Objective:\n"+objective) || !strings.Contains(text, "Assignment:\n"+wantAssignment) {
+			t.Fatalf("team auto plan member message for %s = %q", taskID, text)
+		}
+		if strings.Contains(text, "Team scheduled assignment") {
+			t.Fatalf("team auto plan member message used deterministic schedule for %s = %q", taskID, text)
+		}
+	}
+}
+
 func TestSleepToolWaitsForBoundedDuration(t *testing.T) {
 	ctx, _ := taskContext(t)
 	executor := taskExecutor(t)
