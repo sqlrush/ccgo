@@ -778,6 +778,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Grep` 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。
 
+本轮补充：`Grep` 长行省略阈值现在支持 `max_columns`/`maxColumns`/`max-columns`/`--max-columns`，默认保持 500，传 `0` 可关闭省略，quoted semantic number 同样兼容。
+
 本轮补充：`Grep` 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore` 规则，同时继续排除 VCS metadata 目录并保留 `Read(...)` deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。
 
 本轮补充：`Grep` 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。

@@ -1571,8 +1571,8 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 
 func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	dir := t.TempDir()
-	longMatch := strings.Repeat("x", grepMaxColumns-len("Needle")) + "Needle"
-	longContext := strings.Repeat("c", grepMaxColumns)
+	longMatch := strings.Repeat("x", defaultGrepMaxColumns-len("Needle")) + "Needle"
+	longContext := strings.Repeat("c", defaultGrepMaxColumns)
 	if err := os.WriteFile(filepath.Join(dir, "long.txt"), []byte(longMatch+"\n"+longContext+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1614,6 +1614,31 @@ func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	}
 	if countResult.Content != "long.txt:1\n\nFound 1 total occurrence across 1 file." {
 		t.Fatalf("max-columns count = %#v", countResult.Content)
+	}
+
+	customResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_custom_max_columns",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","after_context":1,"--max-columns":"0"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCustom := "long.txt:1:" + longMatch + "\nlong.txt-2-" + longContext
+	if customResult.Content != wantCustom || customResult.StructuredContent["max_columns"] != 0 {
+		t.Fatalf("custom max-columns result = %#v", customResult)
+	}
+
+	shortResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_max_columns",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_columns":6}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortResult.Content != "long.txt:1:[Omitted long matching line]" || shortResult.StructuredContent["max_columns"] != 6 {
+		t.Fatalf("short max-columns result = %#v", shortResult)
 	}
 }
 
@@ -1692,6 +1717,15 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "max_count must be non-negative") {
 		t.Fatalf("max_count validation err = %v", err)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_max_columns",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","--max-columns":"-1"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "max_columns must be non-negative") {
+		t.Fatalf("max_columns validation err = %v", err)
 	}
 }
 
