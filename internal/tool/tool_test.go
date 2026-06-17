@@ -580,6 +580,60 @@ func TestExecutorRunsPermissionDeniedHook(t *testing.T) {
 	}
 }
 
+func TestExecutorRunsPermissionRequestHook(t *testing.T) {
+	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
+	hookCalled := false
+	var progress []contracts.ToolProgress
+	registry, err := NewRegistry(FuncTool{
+		DefinitionValue: contracts.ToolDefinition{Name: "Bash", Destructive: true},
+		CallFunc: func(ctx Context, raw json.RawMessage, sink ProgressSink) (contracts.ToolResult, error) {
+			t.Fatalf("call should not run")
+			return contracts.ToolResult{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := (Executor{
+		Registry: registry,
+		Hooks: []Hook{HookFunc(func(ctx Context, event HookEvent) (HookResult, error) {
+			if event.Phase == HookPermissionDenied {
+				t.Fatalf("ask decision should not run PermissionDenied hook")
+			}
+			if event.Phase == HookPermissionRequest && event.Decision != nil {
+				hookCalled = true
+				return HookResult{Message: "request logged", Metadata: map[string]any{"behavior": string(event.Decision.Behavior)}}, nil
+			}
+			return HookResult{}, nil
+		})},
+	}).Execute(Context{
+		Context:     context.Background(),
+		Permissions: NewEnginePermissionDecider(engine),
+	}, contracts.ToolUse{ID: "toolu_request", Name: "Bash"}, ProgressFunc(func(p contracts.ToolProgress) error {
+		progress = append(progress, p)
+		return nil
+	}))
+	var permissionErr PermissionError
+	if !errors.As(err, &permissionErr) {
+		t.Fatalf("error = %v, want PermissionError", err)
+	}
+	if permissionErr.Decision.Behavior != contracts.PermissionAsk {
+		t.Fatalf("decision = %#v", permissionErr.Decision)
+	}
+	if !hookCalled || result.Meta["permission_request_hook_message"] != "request logged" {
+		t.Fatalf("hookCalled=%v result=%#v", hookCalled, result)
+	}
+	if _, ok := result.Meta["permission_denied_hook_message"]; ok {
+		t.Fatalf("ask path should not use denied hook meta: %#v", result.Meta)
+	}
+	if got := progressTypes(progress); strings.Join(got, ",") != "hook_started,hook_completed,started,hook_started,hook_completed,permission_requested" {
+		t.Fatalf("progress = %#v", got)
+	}
+	if progress[3].Data["phase"] != HookPermissionRequest || progress[4].Data["message"] != "request logged" || progress[4].Data["behavior"] != string(contracts.PermissionAsk) {
+		t.Fatalf("progress data = %#v", progress)
+	}
+}
+
 func TestExecutorHonorsCancelledContextBeforeCall(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

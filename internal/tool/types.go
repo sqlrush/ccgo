@@ -80,9 +80,10 @@ const (
 	MetadataSessionPathKey         = "ccgo.session.path"
 	MetadataAvailableAgentsKey     = "ccgo.available_agents"
 
-	HookPreToolUse       = "PreToolUse"
-	HookPostToolUse      = "PostToolUse"
-	HookPermissionDenied = "PermissionDenied"
+	HookPreToolUse        = "PreToolUse"
+	HookPostToolUse       = "PostToolUse"
+	HookPermissionRequest = "PermissionRequest"
+	HookPermissionDenied  = "PermissionDenied"
 )
 
 type HookEvent struct {

@@ -97,8 +97,8 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 				"permission": decision,
 			},
 		}
-		result = e.runPermissionDeniedHooks(ctx, use, t, raw, decision, result, permissionErr, sink)
-		_ = SendProgress(sink, use.ID, "permission_denied", map[string]any{"tool": t.Name(), "behavior": string(decision.Behavior)})
+		result = e.runPermissionRequestHooks(ctx, use, t, raw, decision, result, permissionErr, sink)
+		_ = SendProgress(sink, use.ID, "permission_requested", map[string]any{"tool": t.Name(), "behavior": string(decision.Behavior)})
 		return result, permissionErr
 	}
 	if err := contextError(ctx); err != nil {
@@ -175,28 +175,36 @@ func (e Executor) runPreHooks(ctx Context, use contracts.ToolUse, t Tool, raw js
 }
 
 func (e Executor) runPermissionDeniedHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, decision contracts.PermissionDecision, result contracts.ToolResult, originalErr error, sink ProgressSink) contracts.ToolResult {
+	return e.runPermissionHooks(ctx, use, t, raw, decision, result, originalErr, sink, HookPermissionDenied, "permission_denied_hook")
+}
+
+func (e Executor) runPermissionRequestHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, decision contracts.PermissionDecision, result contracts.ToolResult, originalErr error, sink ProgressSink) contracts.ToolResult {
+	return e.runPermissionHooks(ctx, use, t, raw, decision, result, originalErr, sink, HookPermissionRequest, "permission_request_hook")
+}
+
+func (e Executor) runPermissionHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, decision contracts.PermissionDecision, result contracts.ToolResult, originalErr error, sink ProgressSink, phase string, metaKey string) contracts.ToolResult {
 	for idx, hook := range e.Hooks {
-		_ = e.sendHookProgress(sink, use.ID, t, HookPermissionDenied, idx, "hook_started", map[string]any{"behavior": string(decision.Behavior)})
-		hookResult, err := hook.RunToolHook(ctx, HookEvent{Phase: HookPermissionDenied, ToolUse: use, ToolName: t.Name(), Input: raw, Decision: &decision, Result: &result, Error: originalErr.Error()})
+		_ = e.sendHookProgress(sink, use.ID, t, phase, idx, "hook_started", map[string]any{"behavior": string(decision.Behavior)})
+		hookResult, err := hook.RunToolHook(ctx, HookEvent{Phase: phase, ToolUse: use, ToolName: t.Name(), Input: raw, Decision: &decision, Result: &result, Error: originalErr.Error()})
 		if result.Meta == nil {
 			result.Meta = map[string]any{}
 		}
 		if err != nil {
-			result.Meta["permission_denied_hook_error"] = err.Error()
-			_ = e.sendHookProgress(sink, use.ID, t, HookPermissionDenied, idx, "hook_failed", map[string]any{"behavior": string(decision.Behavior), "error": err.Error()})
+			result.Meta[metaKey+"_error"] = err.Error()
+			_ = e.sendHookProgress(sink, use.ID, t, phase, idx, "hook_failed", map[string]any{"behavior": string(decision.Behavior), "error": err.Error()})
 			continue
 		}
 		if hookResult.Message != "" {
-			result.Meta["permission_denied_hook_message"] = hookResult.Message
+			result.Meta[metaKey+"_message"] = hookResult.Message
 		}
 		if len(hookResult.Metadata) > 0 {
-			result.Meta["permission_denied_hook"] = hookResult.Metadata
+			result.Meta[metaKey] = hookResult.Metadata
 		}
 		data := map[string]any{"behavior": string(decision.Behavior)}
 		if hookResult.Message != "" {
 			data["message"] = hookResult.Message
 		}
-		_ = e.sendHookProgress(sink, use.ID, t, HookPermissionDenied, idx, "hook_completed", data)
+		_ = e.sendHookProgress(sink, use.ID, t, phase, idx, "hook_completed", data)
 	}
 	return result
 }

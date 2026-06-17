@@ -143,7 +143,7 @@ test/parity/                 # golden tests against TS/official behavior
 
 当前进度：
 
-- 本轮补充：tool executor 会围绕 `PreToolUse`、`PostToolUse` 和 `PermissionDenied` hook 发出 `hook_started`、`hook_completed`、`hook_failed`、`hook_blocked` 进度事件，携带 phase/tool/hook_index 以及阻断、错误、权限行为和 input 更新摘要；conversation runner 已通过现有 tool progress 通道透出这些事件。command-backed hook 执行、PermissionRequest hook 和 hook telemetry 仍未宣称完成。
+- 本轮补充：tool executor 会围绕 `PreToolUse`、`PostToolUse`、`PermissionDenied` 和 `PermissionRequest` hook 发出 `hook_started`、`hook_completed`、`hook_failed`、`hook_blocked` 进度事件，携带 phase/tool/hook_index 以及阻断、错误、权限行为和 input 更新摘要；`PermissionAsk` 现在走独立 `PermissionRequest` phase 并发出 `permission_requested` 进度，conversation runner 已通过现有 tool progress 通道透出这些事件。command-backed hook 执行和 hook telemetry 仍未宣称完成。
 
 验收：
 
