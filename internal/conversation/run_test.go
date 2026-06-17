@@ -1953,6 +1953,9 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	if bridgeManifestHasCommand(manifest, "status") || bridgeManifestHasCommand(manifest, "model") {
 		t.Fatalf("manifest leaked unsafe commands: %#v", manifest.Commands)
 	}
+	if !bridgeManifestHasCapability(manifest, "remote_trigger") {
+		t.Fatalf("manifest missing remote trigger capability: %#v", manifest.Capabilities)
+	}
 	state, err := bridgepkg.LoadDirectState(bridgepkg.SessionDirectStatePath(transcriptPath, "sess_bridge"))
 	if err != nil {
 		t.Fatal(err)
@@ -5959,6 +5962,15 @@ func requestHasTool(request anthropic.Request, name string) bool {
 func bridgeManifestHasCommand(manifest bridgepkg.Manifest, name string) bool {
 	for _, command := range manifest.Commands {
 		if command.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func bridgeManifestHasCapability(manifest bridgepkg.Manifest, name string) bool {
+	for _, capability := range manifest.Capabilities {
+		if capability.Name == name {
 			return true
 		}
 	}

@@ -99,9 +99,13 @@ func NewDirectHandler(opts DirectOptions) *DirectHandler {
 	if sessionID == "" {
 		sessionID = opts.Manifest.SessionID
 	}
+	manifest := opts.Manifest
+	if opts.RemoteTrigger != nil {
+		manifest = WithRemoteTriggerCapability(manifest)
+	}
 	return &DirectHandler{
 		sessionID:     sessionID,
-		manifest:      opts.Manifest,
+		manifest:      manifest,
 		registry:      opts.Registry,
 		remoteTrigger: opts.RemoteTrigger,
 	}

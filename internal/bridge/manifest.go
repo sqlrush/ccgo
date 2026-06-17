@@ -20,6 +20,7 @@ type Manifest struct {
 	WorkingDirectory string       `json:"working_directory,omitempty"`
 	GeneratedAt      string       `json:"generated_at"`
 	Commands         []Command    `json:"commands,omitempty"`
+	Capabilities     []Capability `json:"capabilities,omitempty"`
 }
 
 type Command struct {
@@ -32,6 +33,12 @@ type Command struct {
 	ArgumentHint           string                  `json:"argument_hint,omitempty"`
 	SupportsNonInteractive bool                    `json:"supports_non_interactive,omitempty"`
 	Immediate              bool                    `json:"immediate,omitempty"`
+}
+
+type Capability struct {
+	Name            string `json:"name"`
+	HTTPPath        string `json:"http_path,omitempty"`
+	WebSocketAction string `json:"websocket_action,omitempty"`
 }
 
 func SessionManifestPath(sessionPath string, sessionID contracts.ID) string {
@@ -68,6 +75,20 @@ func BuildManifest(sessionID contracts.ID, cwd string, registry commands.Registr
 
 func BuildManifestFromSettings(sessionID contracts.ID, cwd string, settings contracts.Settings) Manifest {
 	return BuildManifest(sessionID, cwd, commands.Load(commands.Options{CWD: cwd, Settings: settings}))
+}
+
+func WithRemoteTriggerCapability(manifest Manifest) Manifest {
+	for _, capability := range manifest.Capabilities {
+		if strings.EqualFold(capability.Name, "remote_trigger") {
+			return manifest
+		}
+	}
+	manifest.Capabilities = append(manifest.Capabilities, Capability{
+		Name:            "remote_trigger",
+		HTTPPath:        "/remote-trigger",
+		WebSocketAction: "remote_trigger",
+	})
+	return manifest
 }
 
 func WriteManifest(path string, manifest Manifest) error {

@@ -188,6 +188,19 @@ func TestDirectHandlerRemoteTriggerEndpoint(t *testing.T) {
 	if !response.Accepted || response.SentCount != 2 || response.TeamID != "ops/team" || response.EventID != "evt-1" {
 		t.Fatalf("remote trigger response = %#v", response)
 	}
+
+	manifest := httptest.NewRecorder()
+	handler.ServeHTTP(manifest, httptest.NewRequest(http.MethodGet, "/manifest", nil))
+	if manifest.Code != http.StatusOK {
+		t.Fatalf("manifest status = %d body=%s", manifest.Code, manifest.Body.String())
+	}
+	var manifestResponse Manifest
+	if err := json.Unmarshal(manifest.Body.Bytes(), &manifestResponse); err != nil {
+		t.Fatal(err)
+	}
+	if !manifestHasCapability(manifestResponse, "remote_trigger") {
+		t.Fatalf("manifest capabilities = %#v", manifestResponse.Capabilities)
+	}
 }
 
 func TestDirectHandlerRemoteTriggerRequiresCallback(t *testing.T) {
@@ -258,4 +271,13 @@ func testDirectRegistry() commands.Registry {
 			{Name: "status", Type: contracts.CommandLocalJSX, Source: contracts.CommandSourceBuiltin},
 		},
 	})
+}
+
+func manifestHasCapability(manifest Manifest, name string) bool {
+	for _, capability := range manifest.Capabilities {
+		if capability.Name == name {
+			return true
+		}
+	}
+	return false
 }
