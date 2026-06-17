@@ -8,6 +8,8 @@ import (
 	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
 	"ccgo/internal/contracts"
+	daemonpkg "ccgo/internal/daemon"
+	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/tool"
 	tasktools "ccgo/internal/tools/task"
 )
@@ -24,6 +26,7 @@ func (r *Runner) maybeWriteBridgeManifest() {
 	manifest := bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.BuildManifestFromSettings(r.SessionID, r.WorkingDirectory, settings)))
 	_ = bridgepkg.WriteManifest(path, manifest)
 	r.maybeStartBridgeDirect(manifest)
+	r.maybeWriteRemoteManifest(manifest)
 }
 
 func (r *Runner) maybeStartBridgeDirect(manifest bridgepkg.Manifest) {
@@ -54,6 +57,34 @@ func (r *Runner) maybeStartBridgeDirect(manifest bridgepkg.Manifest) {
 	}
 	r.BridgeDirectServer = server
 	_ = bridgepkg.WriteDirectState(statePath, bridgepkg.BuildDirectState(r.SessionID, r.WorkingDirectory, manifest, server, r.BridgeDirectToken, bridgepkg.DirectRuntimeRunning, nil))
+}
+
+func (r Runner) maybeWriteRemoteManifest(bridgeManifest bridgepkg.Manifest) {
+	path := remotepkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		return
+	}
+	settings := r.mergedSettings()
+	environmentID := ""
+	if settings.Remote != nil {
+		environmentID = settings.Remote.DefaultEnvironmentID
+	}
+	bridgeManifestPath := bridgepkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	bridgeStatePath := bridgepkg.SessionDirectStatePath(r.SessionPath, r.SessionID)
+	bridgeState, _ := bridgepkg.LoadDirectState(bridgeStatePath)
+	daemonStatePath := daemonpkg.SessionStatePath(r.SessionPath, r.SessionID)
+	daemonState, _ := daemonpkg.LoadState(daemonStatePath)
+	_ = remotepkg.WriteManifest(path, remotepkg.BuildManifest(remotepkg.BuildInput{
+		SessionID:             r.SessionID,
+		WorkingDirectory:      r.WorkingDirectory,
+		EnvironmentID:         environmentID,
+		BridgeManifestPath:    bridgeManifestPath,
+		BridgeDirectStatePath: bridgeStatePath,
+		BridgeManifest:        bridgeManifest,
+		BridgeDirectState:     bridgeState,
+		DaemonStatePath:       daemonStatePath,
+		DaemonState:           daemonState,
+	}))
 }
 
 func (r Runner) bridgeRemoteTriggerFunc() bridgepkg.DirectRemoteTriggerFunc {

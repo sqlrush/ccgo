@@ -30,6 +30,7 @@ import (
 	"ccgo/internal/outputstyles"
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
+	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/session"
 	"ccgo/internal/skills"
 	telemetrypkg "ccgo/internal/telemetry"
@@ -659,10 +660,10 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|lsp|native|integrations>"
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|remote|daemon|lsp|native|integrations>"
 			}
 			return r.formatStatusShow(args[1])
-		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "lsp", "native":
+		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native":
 			return r.formatStatusShow(args[0])
 		default:
 			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
@@ -805,6 +806,8 @@ func (r Runner) formatStatusShow(raw string) string {
 		return r.formatStatusTelemetry()
 	case "bridge":
 		return r.formatStatusBridge()
+	case "remote":
+		return r.formatStatusRemote()
 	case "daemon":
 		return r.formatStatusDaemon()
 	case "lsp":
@@ -814,7 +817,7 @@ func (r Runner) formatStatusShow(raw string) string {
 	case "integrations":
 		return r.formatStatusIntegrations()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, daemon, lsp, native, integrations"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, remote, daemon, lsp, native, integrations"
 	}
 }
 
@@ -839,6 +842,8 @@ func normalizeStatusSection(raw string) string {
 		return "telemetry"
 	case "bridge", "repl-bridge", "remote-control", "control":
 		return "bridge"
+	case "remote", "remote-service", "remote-services", "remote-session", "ccr", "cloud":
+		return "remote"
 	case "lsp", "language-server", "language-servers", "diagnostic", "diagnostics":
 		return "lsp"
 	case "native", "native-integration", "native-integrations", "platform":
@@ -1758,6 +1763,61 @@ func formatBridgeCapability(capability bridgepkg.Capability) string {
 	}
 	if capability.WebSocketAction != "" {
 		parts = append(parts, "websocket "+capability.WebSocketAction)
+	}
+	return "- " + strings.Join(parts, ": ")
+}
+
+func (r Runner) formatStatusRemote() string {
+	settings := r.mergedSettings()
+	enabled := settings.Advanced != nil && advancedBoolEnabled(settings.Advanced.Bridge)
+	path := remotepkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status remote",
+		"Enabled: " + boolEnabledText(enabled),
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Remote manifest path: (not configured)", "Remote services: 0"), "\n")
+	}
+	manifest, err := remotepkg.LoadManifest(path)
+	if err != nil {
+		return strings.Join(append(lines, "Remote manifest path: "+path, "Remote error: "+err.Error()), "\n")
+	}
+	lines = append(lines, "Remote manifest path: "+path)
+	if manifest.GeneratedAt == "" {
+		return strings.Join(append(lines, "Remote services: 0"), "\n")
+	}
+	if manifest.EnvironmentID != "" {
+		lines = append(lines, "Remote environment: "+manifest.EnvironmentID)
+	}
+	lines = append(lines, fmt.Sprintf("Remote services: %d", len(manifest.Services)))
+	for _, service := range manifest.Services {
+		lines = append(lines, formatRemoteService(service))
+	}
+	if manifest.GeneratedAt != "" {
+		lines = append(lines, "Generated at: "+manifest.GeneratedAt)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatRemoteService(service remotepkg.Service) string {
+	parts := []string{service.Name, service.RuntimeState}
+	if service.Endpoint != "" {
+		parts = append(parts, "endpoint "+service.Endpoint)
+	}
+	if service.WebSocketURL != "" {
+		parts = append(parts, "websocket "+service.WebSocketURL)
+	}
+	if service.TokenRequired {
+		parts = append(parts, "token required")
+	}
+	if service.Commands > 0 {
+		parts = append(parts, fmt.Sprintf("commands %d", service.Commands))
+	}
+	if service.PID > 0 {
+		parts = append(parts, fmt.Sprintf("pid %d", service.PID))
+	}
+	if capabilities := remotepkg.ServiceCapabilityNames(service); capabilities != "" {
+		parts = append(parts, "capabilities "+capabilities)
 	}
 	return "- " + strings.Join(parts, ": ")
 }

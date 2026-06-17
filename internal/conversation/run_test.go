@@ -28,6 +28,7 @@ import (
 	"ccgo/internal/messages"
 	nativepkg "ccgo/internal/native"
 	"ccgo/internal/permissions"
+	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/session"
 	telemetrypkg "ccgo/internal/telemetry"
 	"ccgo/internal/tool"
@@ -1926,6 +1927,7 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 		WorkingDirectory: dir,
 		MCP: &MCPConfig{UserSettings: contracts.Settings{
 			Advanced: &contracts.AdvancedSetting{Bridge: &bridgeEnabled},
+			Remote:   &contracts.RemoteSetting{DefaultEnvironmentID: "env-test"},
 		}},
 	}
 	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
@@ -1963,6 +1965,16 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	}
 	if state.SessionID != "sess_bridge" || state.RuntimeState != bridgepkg.DirectRuntimeRunning || state.URL == "" || state.WebSocketURL == "" || state.TokenRequired {
 		t.Fatalf("direct state = %#v", state)
+	}
+	remoteManifest, err := remotepkg.LoadManifest(remotepkg.SessionManifestPath(transcriptPath, "sess_bridge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remoteManifest.SessionID != "sess_bridge" || remoteManifest.EnvironmentID != "env-test" || len(remoteManifest.Services) == 0 {
+		t.Fatalf("remote manifest = %#v", remoteManifest)
+	}
+	if remoteManifest.Services[0].Name != "bridge" || remoteManifest.Services[0].RuntimeState != bridgepkg.DirectRuntimeRunning || remoteManifest.Services[0].Endpoint == "" || remotepkg.ServiceCapabilityNames(remoteManifest.Services[0]) == "" {
+		t.Fatalf("remote bridge service = %#v", remoteManifest.Services[0])
 	}
 	resp, err := http.Get(state.URL + "/health")
 	if err != nil {
@@ -2740,6 +2752,31 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := remotepkg.WriteManifest(remotepkg.SessionManifestPath(transcriptPath, "sess_status_show"), remotepkg.Manifest{
+		SessionID:     "sess_status_show",
+		EnvironmentID: "env-status",
+		GeneratedAt:   "2026-06-17T10:01:00Z",
+		Services: []remotepkg.Service{
+			{
+				Name:          "bridge",
+				RuntimeState:  bridgepkg.DirectRuntimeRunning,
+				Endpoint:      "http://127.0.0.1:8888",
+				WebSocketURL:  "ws://127.0.0.1:8888/ws",
+				TokenRequired: true,
+				Commands:      2,
+				Capabilities:  []string{"websocket_protocol", "remote_trigger"},
+			},
+			{
+				Name:         "daemon",
+				RuntimeState: daemonpkg.RuntimeRunning,
+				Endpoint:     "http://127.0.0.1:7777",
+				PID:          4242,
+				Capabilities: []string{"health", "status", "tick", "stop"},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := lsppkg.WriteSnapshot(lsppkg.SessionDiagnosticsPath(transcriptPath, "sess_status_show"), []lsppkg.Diagnostic{
 		{FilePath: "main.go", Severity: "error", Source: "gopls", Message: "broken"},
 		{FilePath: "main.go", Severity: "warning", Source: "gopls", Message: "unused"},
@@ -2871,6 +2908,14 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"- websocket_protocol: http /ws: websocket hello",
 		"- remote_trigger: http /remote-trigger: websocket remote_trigger",
 		"Command names: ask, compact",
+	}, nil)
+	assertStatusShow("/status show remote", []string{
+		"Status remote",
+		"Enabled: disabled",
+		"Remote environment: env-status",
+		"Remote services: 2",
+		"- bridge: running: endpoint http://127.0.0.1:8888: websocket ws://127.0.0.1:8888/ws: token required: commands 2: capabilities websocket_protocol, remote_trigger",
+		"- daemon: running: endpoint http://127.0.0.1:7777: pid 4242: capabilities health, status, tick, stop",
 	}, nil)
 	assertStatusShow("/status show daemon", []string{
 		"Status daemon",
