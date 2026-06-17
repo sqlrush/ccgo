@@ -817,6 +817,17 @@ func (r Runner) maybeWriteIntegrationsManifest() {
 				}
 			}
 		}
+		if integration.Enabled && strings.TrimSpace(integration.Name) == "voice" {
+			voicePlanPath := integrationspkg.VoiceCapturePlanPath(r.SessionPath, r.SessionID)
+			if voicePlanPath != "" {
+				voicePlan := integrationspkg.BuildVoiceCapturePlan(r.SessionID, r.WorkingDirectory, integration.Adapters)
+				_ = integrationspkg.WriteVoiceCapturePlan(voicePlanPath, voicePlan)
+				if runtimeState.Artifacts == nil {
+					runtimeState.Artifacts = map[string]string{}
+				}
+				runtimeState.Artifacts["voice_capture_plan"] = voicePlanPath
+			}
+		}
 		_ = integrationspkg.WriteRuntimeState(statePath, runtimeState)
 	}
 }
@@ -1094,6 +1105,9 @@ func (r Runner) formatStatusIntegrations() string {
 				}
 				if chromeWrapperPath := runtimeState.Artifacts["chrome_native_host_wrapper"]; chromeWrapperPath != "" {
 					line += " chrome_wrapper=" + chromeWrapperPath
+				}
+				if voicePlanPath := runtimeState.Artifacts["voice_capture_plan"]; voicePlanPath != "" {
+					line += " voice_plan=" + voicePlanPath
 				}
 			} else if len(integration.Adapters) > 0 {
 				line += fmt.Sprintf(" adapters=%d", integrationspkg.CountAvailableAdapters(integration.Adapters))

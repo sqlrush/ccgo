@@ -2154,7 +2154,7 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	transcriptPath := filepath.Join(dir, "session.jsonl")
 	chromeEnabled := true
 	computerUseEnabled := true
-	voiceEnabled := false
+	voiceEnabled := true
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
@@ -2179,12 +2179,12 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	if manifest.SessionID != "sess_integrations" || manifest.WorkingDirectory != dir || manifest.GeneratedAt == "" {
 		t.Fatalf("manifest metadata = %#v", manifest)
 	}
-	if integrationspkg.CountEnabled(manifest.Integrations) != 2 {
+	if integrationspkg.CountEnabled(manifest.Integrations) != 3 {
 		t.Fatalf("manifest integrations = %#v", manifest.Integrations)
 	}
 	if !integrationHasState(manifest.Integrations, "chrome", true, integrationspkg.RuntimeStateReady) ||
 		!integrationHasState(manifest.Integrations, "computer_use", true, integrationspkg.RuntimeStateReady) ||
-		!integrationHasState(manifest.Integrations, "voice", false, integrationspkg.RuntimeStateDisabled) {
+		!integrationHasState(manifest.Integrations, "voice", true, integrationspkg.RuntimeStateReady) {
 		t.Fatalf("manifest integration states = %#v", manifest.Integrations)
 	}
 	chromeState, err := integrationspkg.LoadRuntimeState(integrationspkg.SessionRuntimeStatePath(transcriptPath, "sess_integrations", "chrome"))
@@ -2218,6 +2218,21 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	}
 	if computerState.Name != "computer_use" || computerState.RuntimeState != integrationspkg.RuntimeStateReady {
 		t.Fatalf("computer runtime state = %#v", computerState)
+	}
+	voiceState, err := integrationspkg.LoadRuntimeState(integrationspkg.SessionRuntimeStatePath(transcriptPath, "sess_integrations", "voice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	voicePlanPath := voiceState.Artifacts["voice_capture_plan"]
+	if voicePlanPath == "" {
+		t.Fatalf("voice capture plan artifact missing: %#v", voiceState.Artifacts)
+	}
+	voicePlan, err := integrationspkg.LoadVoiceCapturePlan(voicePlanPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if voicePlan.SessionID != "sess_integrations" || voicePlan.SampleRateHz != 16000 || !voicePlan.Streaming {
+		t.Fatalf("voice capture plan = %#v", voicePlan)
 	}
 }
 
