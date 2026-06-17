@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -60,6 +61,15 @@ type remoteWebSocketConn struct {
 	reader *bufio.Reader
 }
 
+type remoteWebSocketUpgradeError struct {
+	StatusCode int
+	RetryAfter string
+}
+
+func (e remoteWebSocketUpgradeError) Error() string {
+	return fmt.Sprintf("remote websocket upgrade failed with status %d", e.StatusCode)
+}
+
 func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSocketResult {
 	result := WebSocketResult{CheckedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	rawURL := strings.TrimSpace(options.WebSocketURL)
@@ -91,7 +101,7 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 				result.Error = result.LastError
 				return result
 			}
-			if !backoffRemoteWebSocket(ctx, options, result.ReconnectCount) {
+			if !backoffRemoteWebSocketAfter(ctx, options, result.ReconnectCount, err) {
 				return result
 			}
 			result.ReconnectCount++
@@ -149,7 +159,7 @@ func StreamWebSocketEvents(ctx context.Context, options WebSocketOptions, handle
 				result.Error = result.LastError
 				return result
 			}
-			if !backoffRemoteWebSocket(ctx, options, result.ReconnectCount) {
+			if !backoffRemoteWebSocketAfter(ctx, options, result.ReconnectCount, err) {
 				return result
 			}
 			result.ReconnectCount++
@@ -277,7 +287,24 @@ func shouldReconnectRemoteWebSocket(ctx context.Context, options WebSocketOption
 }
 
 func backoffRemoteWebSocket(ctx context.Context, options WebSocketOptions, reconnects int) bool {
+	return backoffRemoteWebSocketAfter(ctx, options, reconnects, nil)
+}
+
+func backoffRemoteWebSocketAfter(ctx context.Context, options WebSocketOptions, reconnects int, err error) bool {
 	delay := remoteWebSocketBackoffDelay(options, reconnects)
+	if retryDelay, ok := remoteWebSocketRetryAfterDelay(err, time.Now()); ok {
+		delay = retryDelay
+		maxDelay := options.ReconnectMaxDelay
+		if maxDelay <= 0 {
+			maxDelay = 5 * time.Second
+		}
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+		if delay < 0 {
+			delay = 0
+		}
+	}
 	if delay <= 0 {
 		return ctx.Err() == nil
 	}
@@ -289,6 +316,17 @@ func backoffRemoteWebSocket(ctx context.Context, options WebSocketOptions, recon
 	case <-timer.C:
 		return true
 	}
+}
+
+func remoteWebSocketRetryAfterDelay(err error, now time.Time) (time.Duration, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var upgradeErr remoteWebSocketUpgradeError
+	if !errors.As(err, &upgradeErr) {
+		return 0, false
+	}
+	return remoteRetryAfterDelay(upgradeErr.RetryAfter, now)
 }
 
 func remoteWebSocketBackoffDelay(options WebSocketOptions, reconnects int) time.Duration {
@@ -353,7 +391,7 @@ func dialRemoteWebSocket(ctx context.Context, parsed *url.URL, options WebSocket
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusSwitchingProtocols {
 		_ = rawConn.Close()
-		return nil, fmt.Errorf("remote websocket upgrade failed with status %d", response.StatusCode)
+		return nil, remoteWebSocketUpgradeError{StatusCode: response.StatusCode, RetryAfter: response.Header.Get("Retry-After")}
 	}
 	if !remoteHeaderContainsToken(response.Header.Get("Upgrade"), "websocket") || !remoteHeaderContainsToken(response.Header.Get("Connection"), "upgrade") {
 		_ = rawConn.Close()

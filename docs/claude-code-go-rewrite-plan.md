@@ -759,6 +759,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：remote ack 和 lease renew 的 transient retry 现在会优先遵守服务端 `Retry-After` header（秒数或 HTTP-date），再回退到本地指数退避，并继续受最大退避上限约束，减少云端 429/503 限流时的协议偏差。
 - 本轮补充：remote poll fetch 现在也支持 transient retry，遇到 transport error、408、429 或 5xx 时可按 PollOptions 重试，并同样优先遵守服务端 `Retry-After` header；PollResult 暴露 `attempt_count` 便于 daemon/pump 审计。
 - 本轮补充：remote pump state 现在持久化 `attempt_count`，`/status show remote` 会显示 `attempts N`，让 poll/WebSocket pump 的重试行为能被 CLI 状态页审计。
+- 本轮补充：remote WebSocket upgrade 失败后的重连退避现在会读取服务端 `Retry-After` header（秒数或 HTTP-date），Fetch/Stream 两条 WebSocket 路径都会优先遵守云端限流退避，再回退到本地指数退避。
 - 本轮补充：daemon remote delivery 现在会对带 `lease_id` 且未过期的事件，在投递前向注册响应提供的同源 `lease_renew_url`/`lease_refresh_url` 做 best-effort POST，携带 Bearer auth、event_id 和 lease_id；renew 对 transport error、408/429/5xx 做一次短退避重试，成功/失败计数会写入 `remote-pump.json`、structured result 和 `/status show remote`。完整租约续期策略和云端协议演进策略仍未完成。
 
 ### M11: Bridge 和高级集成

@@ -112,6 +112,49 @@ func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
 	}
 }
 
+func TestFetchWebSocketEventsHonorsUpgradeRetryAfter(t *testing.T) {
+	connections := 0
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
+		connections++
+		if connections == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		conn, err := acceptRemoteTestWebSocket(w, r)
+		if err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+		defer conn.Close()
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-retry-after","team":"remote/team","message":"retry after"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+	}))
+	defer server.Close()
+
+	start := time.Now()
+	result := FetchWebSocketEvents(context.Background(), WebSocketOptions{
+		WebSocketURL:          "ws" + strings.TrimPrefix(server.URL, "http") + "/events",
+		MaxFrames:             1,
+		ReconnectAttempts:     1,
+		ReconnectInitialDelay: time.Second,
+		ReconnectMaxDelay:     time.Second,
+	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
+	if result.Error != "" || result.ConnectCount != 1 || result.ReconnectCount != 1 || result.FrameCount != 1 || len(result.Events) != 1 || result.Events[0].EventID != "evt-retry-after" {
+		t.Fatalf("websocket retry-after result = %#v connections=%d", result, connections)
+	}
+	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
+		t.Fatalf("websocket reconnect ignored Retry-After header; elapsed=%s", elapsed)
+	}
+}
+
 func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
 	connections := 0
 	var handlers sync.WaitGroup
@@ -160,6 +203,53 @@ func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
 	}
 	if delivered[0].EventID != "evt-stream-1" || delivered[1].EventID != "evt-stream-2" || result.LastError == "" {
 		t.Fatalf("delivered=%#v last=%q", delivered, result.LastError)
+	}
+}
+
+func TestStreamWebSocketEventsHonorsUpgradeRetryAfter(t *testing.T) {
+	connections := 0
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
+		connections++
+		if connections == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusServiceUnavailable)
+			return
+		}
+		conn, err := acceptRemoteTestWebSocket(w, r)
+		if err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+		defer conn.Close()
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-retry-after","team":"remote/team","message":"retry after"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+	}))
+	defer server.Close()
+
+	var delivered []PollEvent
+	start := time.Now()
+	result := StreamWebSocketEvents(context.Background(), WebSocketOptions{
+		WebSocketURL:          "ws" + strings.TrimPrefix(server.URL, "http") + "/stream",
+		MaxFrames:             1,
+		ReconnectAttempts:     1,
+		ReconnectInitialDelay: time.Second,
+		ReconnectMaxDelay:     time.Second,
+	}, func(events []PollEvent) error {
+		delivered = append(delivered, events...)
+		return nil
+	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
+	if result.Error != "" || result.ConnectCount != 1 || result.ReconnectCount != 1 || result.FrameCount != 1 || len(delivered) != 1 || delivered[0].EventID != "evt-stream-retry-after" {
+		t.Fatalf("stream retry-after result=%#v delivered=%#v connections=%d", result, delivered, connections)
+	}
+	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
+		t.Fatalf("stream reconnect ignored Retry-After header; elapsed=%s", elapsed)
 	}
 }
 
