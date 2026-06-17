@@ -111,6 +111,19 @@ func TestDiagnosticsFromPublishDiagnosticsWrapper(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsUpdateFromPublishDiagnosticsPreservesEmptyUpdates(t *testing.T) {
+	update, err := DiagnosticsUpdateFromPublishDiagnostics([]byte(`{
+		"uri": "file:///work/main.go",
+		"diagnostics": []
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if update.FilePath != "/work/main.go" || len(update.Diagnostics) != 0 {
+		t.Fatalf("update = %#v", update)
+	}
+}
+
 func TestDiagnosticsFromPublishDiagnosticsRequiresURI(t *testing.T) {
 	_, err := DiagnosticsFromPublishDiagnostics([]byte(`{"diagnostics":[]}`))
 	if err == nil || !strings.Contains(err.Error(), "uri is required") {
@@ -136,6 +149,47 @@ func TestApplyDiagnosticsUpdateReplacesUpdatedFiles(t *testing.T) {
 	}
 	if got[1].FilePath != "b.go" || got[1].Message != "old b" {
 		t.Fatalf("updated diagnostics = %#v", got)
+	}
+}
+
+func TestApplyDiagnosticsForFileClearsUpdatedFile(t *testing.T) {
+	existing := []Diagnostic{
+		{FilePath: "a.go", Severity: "error", Message: "old a"},
+		{FilePath: "b.go", Severity: "warning", Message: "old b"},
+	}
+	got := ApplyDiagnosticsForFile(existing, "./a.go", nil)
+	if len(got) != 1 || got[0].FilePath != "b.go" || got[0].Message != "old b" {
+		t.Fatalf("updated diagnostics = %#v", got)
+	}
+}
+
+func TestApplyPublishDiagnosticsSnapshotWritesReplacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), diagnosticsFileName)
+	if err := WriteSnapshot(path, []Diagnostic{
+		{FilePath: "/a.go", Severity: "error", Message: "old a"},
+		{FilePath: "b.go", Severity: "warning", Message: "old b"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := ApplyPublishDiagnosticsSnapshot(path, []byte(`{
+		"uri": "file:///a.go",
+		"diagnostics": [{"severity": 1, "message": "new a"}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 2 || updated[0].FilePath != "/a.go" || updated[0].Message != "new a" || updated[1].FilePath != "b.go" {
+		t.Fatalf("updated diagnostics = %#v", updated)
+	}
+	updated, err = ApplyPublishDiagnosticsSnapshot(path, []byte(`{
+		"uri": "file:///a.go",
+		"diagnostics": []
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 1 || updated[0].FilePath != "b.go" {
+		t.Fatalf("cleared diagnostics = %#v", updated)
 	}
 }
 

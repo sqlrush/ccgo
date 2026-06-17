@@ -49,6 +49,11 @@ type PublishDiagnosticRecord struct {
 	Message  string `json:"message"`
 }
 
+type DiagnosticsUpdate struct {
+	FilePath    string
+	Diagnostics []Diagnostic
+}
+
 type Filter struct {
 	FilePath string
 	Severity string
@@ -95,22 +100,49 @@ func LoadSnapshot(path string) ([]Diagnostic, error) {
 	return NormalizeDiagnostics(diagnostics), nil
 }
 
+func ApplyPublishDiagnosticsSnapshot(path string, data []byte) ([]Diagnostic, error) {
+	if path == "" {
+		return nil, os.ErrInvalid
+	}
+	update, err := DiagnosticsUpdateFromPublishDiagnostics(data)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := LoadSnapshot(path)
+	if err != nil {
+		return nil, err
+	}
+	updated := ApplyDiagnosticsForFile(existing, update.FilePath, update.Diagnostics)
+	if err := WriteSnapshot(path, updated); err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 func DiagnosticsFromPublishDiagnostics(data []byte) ([]Diagnostic, error) {
+	update, err := DiagnosticsUpdateFromPublishDiagnostics(data)
+	if err != nil {
+		return nil, err
+	}
+	return update.Diagnostics, nil
+}
+
+func DiagnosticsUpdateFromPublishDiagnostics(data []byte) (DiagnosticsUpdate, error) {
 	var params PublishDiagnosticsParams
 	if err := json.Unmarshal(data, &params); err != nil {
-		return nil, err
+		return DiagnosticsUpdate{}, err
 	}
 	if strings.TrimSpace(params.URI) == "" {
 		var wrapper struct {
 			Params PublishDiagnosticsParams `json:"params"`
 		}
 		if err := json.Unmarshal(data, &wrapper); err != nil {
-			return nil, err
+			return DiagnosticsUpdate{}, err
 		}
 		params = wrapper.Params
 	}
 	if strings.TrimSpace(params.URI) == "" {
-		return nil, fmt.Errorf("publishDiagnostics uri is required")
+		return DiagnosticsUpdate{}, fmt.Errorf("publishDiagnostics uri is required")
 	}
 	filePath := URIToPath(params.URI)
 	out := make([]Diagnostic, 0, len(params.Diagnostics))
@@ -124,7 +156,10 @@ func DiagnosticsFromPublishDiagnostics(data []byte) ([]Diagnostic, error) {
 			Message:  diagnostic.Message,
 		})
 	}
-	return NormalizeDiagnostics(out), nil
+	return DiagnosticsUpdate{
+		FilePath:    normalizePath(filePath),
+		Diagnostics: NormalizeDiagnostics(out),
+	}, nil
 }
 
 func ApplyDiagnosticsUpdate(existing []Diagnostic, update []Diagnostic) []Diagnostic {
@@ -144,6 +179,25 @@ func ApplyDiagnosticsUpdate(existing []Diagnostic, update []Diagnostic) []Diagno
 		out = append(out, diagnostic)
 	}
 	out = append(out, normalizedUpdate...)
+	return NormalizeDiagnostics(out)
+}
+
+func ApplyDiagnosticsForFile(existing []Diagnostic, filePath string, diagnostics []Diagnostic) []Diagnostic {
+	filePath = normalizePath(filePath)
+	if filePath == "" {
+		return NormalizeDiagnostics(existing)
+	}
+	out := make([]Diagnostic, 0, len(existing)+len(diagnostics))
+	for _, diagnostic := range NormalizeDiagnostics(existing) {
+		if diagnostic.FilePath == filePath {
+			continue
+		}
+		out = append(out, diagnostic)
+	}
+	for _, diagnostic := range diagnostics {
+		diagnostic.FilePath = filePath
+		out = append(out, diagnostic)
+	}
 	return NormalizeDiagnostics(out)
 }
 
