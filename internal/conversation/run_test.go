@@ -2407,6 +2407,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Platform: testos/testarch",
 		"Capabilities: 2",
 		"Available capabilities: 1",
+		"Clipboard adapters: 0",
 		"Terminal: xterm-256color",
 		"- native_clipboard: unavailable",
 		"- osc52_clipboard: available",
@@ -2426,6 +2427,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Unknown status section unknown.",
 		"Available sections:",
 		"telemetry",
+		"integrations",
 	}, nil)
 }
 

@@ -39,6 +39,9 @@ func TestBuildManifest(t *testing.T) {
 		!hasCapability(manifest.Capabilities, "native_color_diff", true) {
 		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
 	}
+	if !hasClipboardAdapter(manifest.ClipboardAdapters, "osc52", true) {
+		t.Fatalf("manifest clipboard adapters = %#v", manifest.ClipboardAdapters)
+	}
 }
 
 func TestWriteAndLoadManifest(t *testing.T) {
@@ -64,6 +67,15 @@ func TestWriteAndLoadManifest(t *testing.T) {
 func hasCapability(capabilities []Capability, name string, available bool) bool {
 	for _, capability := range capabilities {
 		if capability.Name == name && capability.Available == available {
+			return true
+		}
+	}
+	return false
+}
+
+func hasClipboardAdapter(adapters []ClipboardAdapter, name string, available bool) bool {
+	for _, adapter := range adapters {
+		if adapter.Name == name && adapter.Available == available {
 			return true
 		}
 	}

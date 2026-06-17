@@ -17,14 +17,15 @@ import (
 const manifestFileName = "native-manifest.json"
 
 type Manifest struct {
-	SessionID        contracts.ID `json:"session_id,omitempty"`
-	WorkingDirectory string       `json:"working_directory,omitempty"`
-	GeneratedAt      string       `json:"generated_at"`
-	GOOS             string       `json:"goos"`
-	GOARCH           string       `json:"goarch"`
-	Terminal         string       `json:"terminal,omitempty"`
-	ColorTerminal    string       `json:"color_terminal,omitempty"`
-	Capabilities     []Capability `json:"capabilities,omitempty"`
+	SessionID         contracts.ID       `json:"session_id,omitempty"`
+	WorkingDirectory  string             `json:"working_directory,omitempty"`
+	GeneratedAt       string             `json:"generated_at"`
+	GOOS              string             `json:"goos"`
+	GOARCH            string             `json:"goarch"`
+	Terminal          string             `json:"terminal,omitempty"`
+	ColorTerminal     string             `json:"color_terminal,omitempty"`
+	ClipboardAdapters []ClipboardAdapter `json:"clipboard_adapters,omitempty"`
+	Capabilities      []Capability       `json:"capabilities,omitempty"`
 }
 
 type Capability struct {
@@ -41,19 +42,23 @@ func SessionManifestPath(sessionPath string, sessionID contracts.ID) string {
 }
 
 func BuildManifest(sessionID contracts.ID, cwd string) Manifest {
+	clipboardAdapters := DetectClipboardAdapters(ClipboardAdapterOptions{})
 	manifest := Manifest{
-		SessionID:        sessionID,
-		WorkingDirectory: cwd,
-		GeneratedAt:      time.Now().UTC().Format(time.RFC3339Nano),
-		GOOS:             runtime.GOOS,
-		GOARCH:           runtime.GOARCH,
-		Terminal:         strings.TrimSpace(os.Getenv("TERM")),
-		ColorTerminal:    strings.TrimSpace(os.Getenv("COLORTERM")),
+		SessionID:         sessionID,
+		WorkingDirectory:  cwd,
+		GeneratedAt:       time.Now().UTC().Format(time.RFC3339Nano),
+		GOOS:              runtime.GOOS,
+		GOARCH:            runtime.GOARCH,
+		Terminal:          strings.TrimSpace(os.Getenv("TERM")),
+		ColorTerminal:     strings.TrimSpace(os.Getenv("COLORTERM")),
+		ClipboardAdapters: clipboardAdapters,
 		Capabilities: []Capability{
 			{Name: "terminal_title", Available: true, Detail: "OSC title sequence generation"},
 			{Name: "terminal_hyperlink", Available: true, Detail: "OSC 8 hyperlink sequence generation"},
 			{Name: "terminal_progress", Available: true, Detail: "OSC progress sequence generation"},
 			{Name: "osc52_clipboard", Available: true, Detail: "OSC 52 clipboard sequence generation"},
+			{Name: "system_clipboard", Available: HasClipboardAdapterKind(clipboardAdapters, ClipboardAdapterKindSystem), Detail: clipboardCapabilityDetail(clipboardAdapters, ClipboardAdapterKindSystem, "no supported system clipboard command found")},
+			{Name: "tmux_clipboard", Available: HasClipboardAdapterKind(clipboardAdapters, ClipboardAdapterKindMultiplexer), Detail: clipboardCapabilityDetail(clipboardAdapters, ClipboardAdapterKindMultiplexer, "tmux buffer adapter unavailable")},
 			{Name: "native_clipboard", Available: true, Detail: "session-scoped native clipboard runtime"},
 			{Name: "native_file_index", Available: true, Detail: "session-scoped native file index runtime"},
 			{Name: "native_color_diff", Available: true, Detail: "ANSI color diff rendering runtime"},

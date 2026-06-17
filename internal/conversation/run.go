@@ -588,7 +588,7 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|lsp|native>"
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|lsp|native|integrations>"
 			}
 			return r.formatStatusShow(args[1])
 		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "lsp", "native":
@@ -953,7 +953,28 @@ func (r Runner) formatStatusNative() string {
 		"Platform: "+manifest.GOOS+"/"+manifest.GOARCH,
 		fmt.Sprintf("Capabilities: %d", len(manifest.Capabilities)),
 		fmt.Sprintf("Available capabilities: %d", nativepkg.CountAvailable(manifest.Capabilities)),
+		fmt.Sprintf("Clipboard adapters: %d", nativepkg.CountAvailableClipboardAdapters(manifest.ClipboardAdapters)),
 	)
+	if len(manifest.ClipboardAdapters) > 0 {
+		lines = append(lines, "Clipboard adapter states:")
+		for _, adapter := range manifest.ClipboardAdapters {
+			state := "unavailable"
+			if adapter.Available {
+				state = "available"
+			}
+			line := "- " + adapter.Name + ": " + state
+			if adapter.Kind != "" {
+				line += " kind=" + adapter.Kind
+			}
+			if len(adapter.WriteCommand) > 0 {
+				line += " write=" + strings.Join(adapter.WriteCommand, " ")
+			}
+			if len(adapter.ReadCommand) > 0 {
+				line += " read=" + strings.Join(adapter.ReadCommand, " ")
+			}
+			lines = append(lines, line)
+		}
+	}
 	clipboardPath := nativepkg.SessionClipboardPath(r.SessionPath, r.SessionID)
 	if clipboardPath != "" {
 		clipboard, err := nativepkg.LoadClipboard(clipboardPath)
@@ -990,7 +1011,11 @@ func (r Runner) formatStatusNative() string {
 			if capability.Available {
 				state = "available"
 			}
-			lines = append(lines, "- "+capability.Name+": "+state)
+			line := "- " + capability.Name + ": " + state
+			if capability.Detail != "" {
+				line += " (" + capability.Detail + ")"
+			}
+			lines = append(lines, line)
 		}
 	}
 	return strings.Join(lines, "\n")
