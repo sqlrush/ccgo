@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -13,20 +14,36 @@ import (
 func TestFetchWebSocketEventsUsesAuthAndDecodesFrames(t *testing.T) {
 	var gotAuth string
 	var gotPath string
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
 		gotAuth = r.Header.Get("Authorization")
 		gotPath = r.URL.String()
-		conn := acceptRemoteTestWebSocket(t, w, r)
+		conn, err := acceptRemoteTestWebSocket(w, r)
+		if err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
 		defer conn.Close()
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-ws","team":"remote/team","event":"deploy","message":"Ship it."}`))
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xe8})
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-ws","team":"remote/team","event":"deploy","message":"Ship it."}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xe8}); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
 	}))
 	defer server.Close()
 
 	result := FetchWebSocketEvents(context.Background(), WebSocketOptions{
 		WebSocketURL: "ws" + strings.TrimPrefix(server.URL, "http") + "/events?token=secret",
 		AuthToken:    "ws-token",
+		MaxFrames:    2,
 	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
 	if result.Error != "" || result.FrameCount != 1 || len(result.Events) != 1 {
 		t.Fatalf("websocket result = %#v", result)
 	}
@@ -50,16 +67,32 @@ func TestFetchWebSocketEventsReportsInvalidURLRedacted(t *testing.T) {
 
 func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
 	connections := 0
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 8)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
 		connections++
-		conn := acceptRemoteTestWebSocket(t, w, r)
-		defer conn.Close()
-		if connections == 1 {
-			writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xf3})
+		conn, err := acceptRemoteTestWebSocket(w, r)
+		if err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
 			return
 		}
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-1","team":"remote/team","message":"one"}`))
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-2","team":"remote/team","message":"two"}`))
+		defer conn.Close()
+		if connections == 1 {
+			if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xf3}); err != nil {
+				recordRemoteTestHandlerError(handlerErrors, err)
+			}
+			return
+		}
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-1","team":"remote/team","message":"one"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-2","team":"remote/team","message":"two"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -70,6 +103,7 @@ func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
 		ReconnectInitialDelay: time.Millisecond,
 		ReconnectMaxDelay:     time.Millisecond,
 	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
 	if result.Error != "" || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 2 {
 		t.Fatalf("websocket result = %#v connections=%d", result, connections)
 	}
@@ -80,16 +114,32 @@ func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
 
 func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
 	connections := 0
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 8)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
 		connections++
-		conn := acceptRemoteTestWebSocket(t, w, r)
-		defer conn.Close()
-		if connections == 1 {
-			writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xf3})
+		conn, err := acceptRemoteTestWebSocket(w, r)
+		if err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
 			return
 		}
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-1","team":"remote/team","message":"one"}`))
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-2","team":"remote/team","message":"two"}`))
+		defer conn.Close()
+		if connections == 1 {
+			if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xf3}); err != nil {
+				recordRemoteTestHandlerError(handlerErrors, err)
+			}
+			return
+		}
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-1","team":"remote/team","message":"one"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-2","team":"remote/team","message":"two"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -104,6 +154,7 @@ func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
 		delivered = append(delivered, events...)
 		return nil
 	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
 	if result.Error != "" || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 0 || len(delivered) != 2 {
 		t.Fatalf("stream result=%#v delivered=%#v connections=%d", result, delivered, connections)
 	}
@@ -113,10 +164,21 @@ func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
 }
 
 func TestStreamWebSocketEventsReturnsHandlerError(t *testing.T) {
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn := acceptRemoteTestWebSocket(t, w, r)
+		handlers.Add(1)
+		defer handlers.Done()
+		conn, err := acceptRemoteTestWebSocket(w, r)
+		if err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
 		defer conn.Close()
-		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream","team":"remote/team","message":"fail"}`))
+		if err := writeRemoteTestFrame(conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream","team":"remote/team","message":"fail"}`)); err != nil {
+			recordRemoteTestHandlerError(handlerErrors, err)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -126,33 +188,35 @@ func TestStreamWebSocketEventsReturnsHandlerError(t *testing.T) {
 	}, func(events []PollEvent) error {
 		return fmt.Errorf("handler failed for %s", events[0].EventID)
 	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
 	if result.Error != "handler failed for evt-stream" || result.FrameCount != 1 {
 		t.Fatalf("stream result = %#v", result)
 	}
 }
 
-func acceptRemoteTestWebSocket(t *testing.T, w http.ResponseWriter, r *http.Request) netConn {
-	t.Helper()
+func acceptRemoteTestWebSocket(w http.ResponseWriter, r *http.Request) (netConn, error) {
 	key := r.Header.Get("Sec-WebSocket-Key")
 	if key == "" {
-		t.Fatalf("missing websocket key")
+		return nil, fmt.Errorf("missing websocket key")
 	}
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
-		t.Fatalf("response writer cannot hijack")
+		return nil, fmt.Errorf("response writer cannot hijack")
 	}
 	conn, bufrw, err := hijacker.Hijack()
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	response := fmt.Sprintf("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", remoteWebSocketAccept(key))
 	if _, err := bufrw.WriteString(response); err != nil {
-		t.Fatal(err)
+		_ = conn.Close()
+		return nil, err
 	}
 	if err := bufrw.Flush(); err != nil {
-		t.Fatal(err)
+		_ = conn.Close()
+		return nil, err
 	}
-	return conn
+	return conn, nil
 }
 
 type netConn interface {
@@ -160,16 +224,50 @@ type netConn interface {
 	Close() error
 }
 
-func writeRemoteTestFrame(t *testing.T, conn netConn, opcode byte, payload []byte) {
-	t.Helper()
+func writeRemoteTestFrame(conn netConn, opcode byte, payload []byte) error {
 	header, _, err := remoteWebSocketFrameHeader(opcode, payload, false)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	if _, err := conn.Write(header); err != nil {
-		t.Fatal(err)
+		return err
 	}
 	if _, err := conn.Write(payload); err != nil {
-		t.Fatal(err)
+		return err
+	}
+	return nil
+}
+
+func recordRemoteTestHandlerError(errors chan<- error, err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case errors <- err:
+	default:
+	}
+}
+
+func waitRemoteTestHandlers(t *testing.T, handlers *sync.WaitGroup, errors <-chan error) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		handlers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("websocket test handler did not finish")
+	}
+	for {
+		select {
+		case err := <-errors:
+			if err != nil {
+				t.Fatal(err)
+			}
+		default:
+			return
+		}
 	}
 }
