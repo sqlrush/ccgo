@@ -2254,6 +2254,41 @@ func TestRunnerExecutesNativeVoiceCaptureCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesNativeVoiceTranscribeCommandWithoutQuery(t *testing.T) {
+	setupFakeNativeIntegrationCommandPath(t)
+	t.Setenv("CLAUDE_VOICE_TRANSCRIBE_COMMAND", "mock-stt --format pcm_s16le")
+	client := &fakeClient{}
+	dir := t.TempDir()
+	var gotAudio []byte
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_voice_transcribe",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+		NativeVoiceRunner: func(ctx context.Context, command []string, maxBytes int64) ([]byte, bool, error) {
+			return []byte{1, 2, 3}, false, nil
+		},
+		NativeVoiceTranscribeRunner: func(ctx context.Context, command []string, audio []byte, maxBytes int64) (string, bool, error) {
+			gotAudio = append([]byte(nil), audio...)
+			return "hello from voice", false, nil
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native voice transcribe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	if len(gotAudio) != 3 {
+		t.Fatalf("transcribe audio = %#v", gotAudio)
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Transcript: hello from voice") {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+}
+
 func TestRunnerExecutesNativeComputerScreenshotCommandWithoutQuery(t *testing.T) {
 	setupFakeNativeIntegrationCommandPath(t)
 	client := &fakeClient{}

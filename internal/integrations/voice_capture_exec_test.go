@@ -70,6 +70,53 @@ func TestCaptureVoiceAudioReturnsRunnerErrors(t *testing.T) {
 	}
 }
 
+func TestTranscribeVoiceAudioRunsConfiguredCommand(t *testing.T) {
+	var gotCommand []string
+	var gotAudio []byte
+	var gotMaxBytes int64
+	result, err := TranscribeVoiceAudio(context.Background(), []byte{1, 2, 3}, VoiceTranscriptionOptions{
+		Command:  []string{"mock-stt", "--format", "pcm_s16le"},
+		MaxBytes: 128,
+		Runner: func(ctx context.Context, command []string, audio []byte, maxBytes int64) (string, bool, error) {
+			gotCommand = append([]string(nil), command...)
+			gotAudio = append([]byte(nil), audio...)
+			gotMaxBytes = maxBytes
+			return " hello world \n", false, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Transcript != "hello world" || result.AudioBytes != 3 || result.Truncated || result.Skipped {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(gotCommand) != 3 || gotCommand[0] != "mock-stt" || len(gotAudio) != 3 || gotMaxBytes != 128 {
+		t.Fatalf("command=%#v audio=%#v max=%d", gotCommand, gotAudio, gotMaxBytes)
+	}
+}
+
+func TestTranscribeVoiceAudioSkipsWithoutCommand(t *testing.T) {
+	result, err := TranscribeVoiceAudio(context.Background(), []byte{1, 2, 3}, VoiceTranscriptionOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Skipped || result.Detail == "" || result.AudioBytes != 3 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestVoiceTranscriptionCommandFromEnv(t *testing.T) {
+	command := VoiceTranscriptionCommandFromEnv(func(key string) string {
+		if key == "CLAUDE_VOICE_TRANSCRIBE_COMMAND" {
+			return "mock-stt --language en"
+		}
+		return ""
+	})
+	if len(command) != 3 || command[0] != "mock-stt" || command[2] != "en" {
+		t.Fatalf("command = %#v", command)
+	}
+}
+
 func TestLimitedBufferTruncatesWithoutShortWrite(t *testing.T) {
 	var buf limitedBuffer
 	buf.max = 3

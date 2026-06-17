@@ -99,10 +99,13 @@ type Runner struct {
 	EnableMemoryExtraction    bool
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int
-	NativeClipboardRunner     nativepkg.ClipboardCommandRunner
-	NativeVoiceRunner         integrationspkg.VoiceCommandRunner
-	NativeComputerUseRunner   integrationspkg.ComputerUseCommandRunner
-	OnEvent                   func(Event)
+
+	NativeClipboardRunner       nativepkg.ClipboardCommandRunner
+	NativeVoiceRunner           integrationspkg.VoiceCommandRunner
+	NativeVoiceTranscribeRunner integrationspkg.VoiceTranscriptionRunner
+	NativeComputerUseRunner     integrationspkg.ComputerUseCommandRunner
+
+	OnEvent func(Event)
 }
 
 type MCPConfig struct {

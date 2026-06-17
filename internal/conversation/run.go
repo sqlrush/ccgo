@@ -1221,13 +1221,60 @@ func (r Runner) formatNativeClipboardCommand(ctx context.Context, raw string) st
 
 func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
-	if len(args) == 0 || strings.ToLower(args[0]) != "capture" {
-		return "Usage: /native voice capture"
+	if len(args) == 0 {
+		return nativeVoiceUsage()
 	}
 	plan := integrationspkg.BuildVoiceCapturePlan(r.SessionID, r.WorkingDirectory, integrationspkg.DetectAdapters("voice", integrationspkg.AdapterOptions{}))
-	capture, err := integrationspkg.CaptureVoiceAudio(ctx, plan, integrationspkg.VoiceCaptureOptions{Runner: r.NativeVoiceRunner})
+	switch strings.ToLower(args[0]) {
+	case "capture":
+		capture, err := integrationspkg.CaptureVoiceAudio(ctx, plan, integrationspkg.VoiceCaptureOptions{Runner: r.NativeVoiceRunner})
+		lines := formatNativeVoiceCaptureLines("Native voice capture", capture)
+		if err != nil {
+			lines = append(lines, "Capture error: "+err.Error())
+		}
+		return strings.Join(lines, "\n")
+	case "transcribe", "transcription", "stt":
+		capture, captureErr := integrationspkg.CaptureVoiceAudio(ctx, plan, integrationspkg.VoiceCaptureOptions{Runner: r.NativeVoiceRunner})
+		lines := formatNativeVoiceCaptureLines("Native voice transcribe", capture)
+		if captureErr != nil {
+			lines = append(lines, "Capture error: "+captureErr.Error())
+			return strings.Join(lines, "\n")
+		}
+		if capture.Skipped {
+			return strings.Join(lines, "\n")
+		}
+		transcription, err := integrationspkg.TranscribeVoiceAudio(ctx, capture.Audio, integrationspkg.VoiceTranscriptionOptions{
+			Command: integrationspkg.VoiceTranscriptionCommandFromEnv(os.Getenv),
+			Runner:  r.NativeVoiceTranscribeRunner,
+		})
+		if transcription.Skipped {
+			lines = append(lines, "Transcription: skipped")
+		}
+		if transcription.Truncated {
+			lines = append(lines, "Transcript truncated: yes")
+		}
+		if transcription.Detail != "" {
+			lines = append(lines, "Transcription detail: "+transcription.Detail)
+		}
+		if transcription.Transcript != "" {
+			lines = append(lines, "Transcript: "+transcription.Transcript)
+		}
+		if err != nil {
+			lines = append(lines, "Transcription error: "+err.Error())
+		}
+		return strings.Join(lines, "\n")
+	default:
+		return nativeVoiceUsage()
+	}
+}
+
+func nativeVoiceUsage() string {
+	return "Usage: /native voice <capture|transcribe>"
+}
+
+func formatNativeVoiceCaptureLines(title string, capture integrationspkg.VoiceCaptureResult) []string {
 	lines := []string{
-		"Native voice capture",
+		title,
 		"Adapter: " + capture.AdapterName,
 		fmt.Sprintf("Audio bytes: %d", capture.Bytes),
 		fmt.Sprintf("Sample rate: %d", capture.SampleRateHz),
@@ -1243,10 +1290,7 @@ func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string
 	if capture.Detail != "" {
 		lines = append(lines, "Detail: "+capture.Detail)
 	}
-	if err != nil {
-		lines = append(lines, "Capture error: "+err.Error())
-	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) string {
