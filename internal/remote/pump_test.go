@@ -97,6 +97,9 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 		PollURL:        "https://remote/poll",
 		WebSocketURL:   "wss://remote/ws",
 		LastCursor:     "cursor-1",
+		FrameCount:     2,
+		ConnectCount:   1,
+		ReconnectCount: 1,
 		EventCount:     2,
 		DeliveredCount: 1,
 	}
@@ -107,7 +110,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.LastPollAt == "" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.LastPollAt == "" {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	data, err := json.Marshal(loaded)

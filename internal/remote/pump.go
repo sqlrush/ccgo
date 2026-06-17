@@ -34,6 +34,9 @@ type PumpState struct {
 	LastCursor     string       `json:"last_cursor,omitempty"`
 	LastPollAt     string       `json:"last_poll_at,omitempty"`
 	StatusCode     int          `json:"status_code,omitempty"`
+	FrameCount     int          `json:"frame_count,omitempty"`
+	ConnectCount   int          `json:"connect_count,omitempty"`
+	ReconnectCount int          `json:"reconnect_count,omitempty"`
 	EventCount     int          `json:"event_count,omitempty"`
 	DeliveredCount int          `json:"delivered_count,omitempty"`
 	DuplicateCount int          `json:"duplicate_count,omitempty"`

@@ -31,20 +31,26 @@ const (
 )
 
 type WebSocketOptions struct {
-	WebSocketURL  string
-	AuthToken     string
-	Headers       map[string]string
-	MaxFrames     int
-	MaxFrameBytes int64
-	DialContext   func(context.Context, string, string) (net.Conn, error)
+	WebSocketURL          string
+	AuthToken             string
+	Headers               map[string]string
+	MaxFrames             int
+	MaxFrameBytes         int64
+	ReconnectAttempts     int
+	ReconnectInitialDelay time.Duration
+	ReconnectMaxDelay     time.Duration
+	DialContext           func(context.Context, string, string) (net.Conn, error)
 }
 
 type WebSocketResult struct {
-	CheckedAt  string      `json:"checked_at,omitempty"`
-	Events     []PollEvent `json:"events,omitempty"`
-	FrameCount int         `json:"frame_count,omitempty"`
-	CloseCode  int         `json:"close_code,omitempty"`
-	Error      string      `json:"error,omitempty"`
+	CheckedAt      string      `json:"checked_at,omitempty"`
+	Events         []PollEvent `json:"events,omitempty"`
+	FrameCount     int         `json:"frame_count,omitempty"`
+	ConnectCount   int         `json:"connect_count,omitempty"`
+	ReconnectCount int         `json:"reconnect_count,omitempty"`
+	CloseCode      int         `json:"close_code,omitempty"`
+	LastError      string      `json:"last_error,omitempty"`
+	Error          string      `json:"error,omitempty"`
 }
 
 type remoteWebSocketConn struct {
@@ -64,12 +70,6 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 		result.Error = fmt.Sprintf("invalid remote websocket url: %s", DisplayEndpoint(rawURL))
 		return result
 	}
-	conn, err := dialRemoteWebSocket(ctx, parsed, options)
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	defer conn.Close()
 	maxFrames := options.MaxFrames
 	if maxFrames <= 0 {
 		maxFrames = 1
@@ -78,45 +78,125 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 	if frameLimit <= 0 {
 		frameLimit = defaultRemoteWebSocketFrameLimit
 	}
+	for {
+		conn, err := dialRemoteWebSocket(ctx, parsed, options)
+		if err != nil {
+			if ctx.Err() != nil {
+				return result
+			}
+			result.LastError = err.Error()
+			if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
+				result.Error = result.LastError
+				return result
+			}
+			if !backoffRemoteWebSocket(ctx, options, result.ReconnectCount) {
+				return result
+			}
+			result.ReconnectCount++
+			continue
+		}
+		result.ConnectCount++
+		transient, fatal := readRemoteWebSocketEvents(ctx, conn, frameLimit, maxFrames, &result)
+		_ = conn.Close()
+		if fatal != nil {
+			result.Error = fatal.Error()
+			return result
+		}
+		if result.FrameCount >= maxFrames || transient == nil {
+			return result
+		}
+		result.LastError = transient.Error()
+		if len(result.Events) > 0 {
+			return result
+		}
+		if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
+			result.Error = result.LastError
+			return result
+		}
+		if !backoffRemoteWebSocket(ctx, options, result.ReconnectCount) {
+			return result
+		}
+		result.ReconnectCount++
+	}
+}
+
+func readRemoteWebSocketEvents(ctx context.Context, conn *remoteWebSocketConn, frameLimit int64, maxFrames int, result *WebSocketResult) (error, error) {
 	stopReadWatch := watchRemoteWebSocketReadContext(ctx, conn.Conn)
 	defer stopReadWatch()
 	for {
 		opcode, payload, err := readRemoteWebSocketFrame(conn.reader, frameLimit)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return result
+				return nil, nil
 			}
 			if err == io.EOF {
-				return result
+				return nil, nil
 			}
-			result.Error = err.Error()
-			return result
+			return err, nil
 		}
 		switch opcode {
 		case remoteWebSocketOpcodeText, remoteWebSocketOpcodeBinary:
 			events, _, err := DecodePollEvents(payload)
 			if err != nil {
-				result.Error = fmt.Sprintf("decode remote websocket event: %v", err)
-				return result
+				return nil, fmt.Errorf("decode remote websocket event: %v", err)
 			}
 			result.FrameCount++
 			result.Events = append(result.Events, events...)
 			if result.FrameCount >= maxFrames {
-				return result
+				return nil, nil
 			}
 		case remoteWebSocketOpcodePing:
 			if err := writeRemoteWebSocketControlFrame(conn.Conn, remoteWebSocketOpcodePong, payload); err != nil {
-				result.Error = err.Error()
-				return result
+				return err, nil
 			}
 		case remoteWebSocketOpcodeClose:
 			result.CloseCode = remoteWebSocketCloseCode(payload)
 			if result.CloseCode != defaultRemoteWebSocketCloseCode {
-				result.Error = fmt.Sprintf("remote websocket closed with code %d", result.CloseCode)
+				return fmt.Errorf("remote websocket closed with code %d", result.CloseCode), nil
 			}
-			return result
+			return nil, nil
 		}
 	}
+}
+
+func shouldReconnectRemoteWebSocket(ctx context.Context, options WebSocketOptions, reconnects int) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	return reconnects < options.ReconnectAttempts
+}
+
+func backoffRemoteWebSocket(ctx context.Context, options WebSocketOptions, reconnects int) bool {
+	delay := remoteWebSocketBackoffDelay(options, reconnects)
+	if delay <= 0 {
+		return ctx.Err() == nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func remoteWebSocketBackoffDelay(options WebSocketOptions, reconnects int) time.Duration {
+	delay := options.ReconnectInitialDelay
+	if delay <= 0 {
+		delay = 250 * time.Millisecond
+	}
+	for i := 0; i < reconnects; i++ {
+		delay *= 2
+	}
+	maxDelay := options.ReconnectMaxDelay
+	if maxDelay <= 0 {
+		maxDelay = 5 * time.Second
+	}
+	if delay > maxDelay {
+		return maxDelay
+	}
+	return delay
 }
 
 func dialRemoteWebSocket(ctx context.Context, parsed *url.URL, options WebSocketOptions) (*remoteWebSocketConn, error) {

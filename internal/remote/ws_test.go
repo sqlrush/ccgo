@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFetchWebSocketEventsUsesAuthAndDecodesFrames(t *testing.T) {
@@ -44,6 +45,36 @@ func TestFetchWebSocketEventsReportsInvalidURLRedacted(t *testing.T) {
 	})
 	if result.Error == "" || strings.Contains(result.Error, "token=secret") || strings.Contains(result.Error, "user:pass") {
 		t.Fatalf("error = %q", result.Error)
+	}
+}
+
+func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
+	connections := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		connections++
+		conn := acceptRemoteTestWebSocket(t, w, r)
+		defer conn.Close()
+		if connections == 1 {
+			writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xf3})
+			return
+		}
+		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-1","team":"remote/team","message":"one"}`))
+		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-2","team":"remote/team","message":"two"}`))
+	}))
+	defer server.Close()
+
+	result := FetchWebSocketEvents(context.Background(), WebSocketOptions{
+		WebSocketURL:          "ws" + strings.TrimPrefix(server.URL, "http") + "/events",
+		MaxFrames:             2,
+		ReconnectAttempts:     1,
+		ReconnectInitialDelay: time.Millisecond,
+		ReconnectMaxDelay:     time.Millisecond,
+	})
+	if result.Error != "" || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 2 {
+		t.Fatalf("websocket result = %#v connections=%d", result, connections)
+	}
+	if result.Events[0].EventID != "evt-1" || result.Events[1].EventID != "evt-2" || result.LastError == "" {
+		t.Fatalf("events/last error = %#v last=%q", result.Events, result.LastError)
 	}
 }
 

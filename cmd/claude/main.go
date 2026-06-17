@@ -861,15 +861,18 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	}
 	remoteFetch := fetchDaemonRemoteEvents(ctx, registration, previous.LastCursor, authToken)
 	pumpState := remotepkg.PumpState{
-		SessionID:    runner.SessionID,
-		RuntimeState: remotepkg.PumpRunning,
-		Transport:    remoteFetch.Transport,
-		PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
-		WebSocketURL: remotepkg.DisplayEndpoint(registration.WebSocketURL),
-		LastCursor:   previous.LastCursor,
-		LastPollAt:   now.UTC().Format(time.RFC3339Nano),
-		StatusCode:   remoteFetch.StatusCode,
-		EventCount:   len(remoteFetch.Events),
+		SessionID:      runner.SessionID,
+		RuntimeState:   remotepkg.PumpRunning,
+		Transport:      remoteFetch.Transport,
+		PollURL:        remotepkg.DisplayEndpoint(registration.PollURL),
+		WebSocketURL:   remotepkg.DisplayEndpoint(registration.WebSocketURL),
+		LastCursor:     previous.LastCursor,
+		LastPollAt:     now.UTC().Format(time.RFC3339Nano),
+		StatusCode:     remoteFetch.StatusCode,
+		FrameCount:     remoteFetch.FrameCount,
+		ConnectCount:   remoteFetch.ConnectCount,
+		ReconnectCount: remoteFetch.ReconnectCount,
+		EventCount:     len(remoteFetch.Events),
 	}
 	if remoteFetch.Transport == "poll" {
 		if remoteFetch.NextCursor != "" {
@@ -887,6 +890,9 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		structured["poll_url"] = pumpState.PollURL
 		structured["websocket_url"] = pumpState.WebSocketURL
 		structured["status_code"] = remoteFetch.StatusCode
+		structured["frame_count"] = remoteFetch.FrameCount
+		structured["connect_count"] = remoteFetch.ConnectCount
+		structured["reconnect_count"] = remoteFetch.ReconnectCount
 		structured["event_count"] = len(remoteFetch.Events)
 		structured["error_count"] = 1
 		structured["error"] = remoteFetch.Error
@@ -943,6 +949,9 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	structured["websocket_url"] = pumpState.WebSocketURL
 	structured["last_cursor"] = pumpState.LastCursor
 	structured["status_code"] = pumpState.StatusCode
+	structured["frame_count"] = pumpState.FrameCount
+	structured["connect_count"] = pumpState.ConnectCount
+	structured["reconnect_count"] = pumpState.ReconnectCount
 	structured["event_count"] = pumpState.EventCount
 	structured["delivered_count"] = pumpState.DeliveredCount
 	structured["duplicate_count"] = pumpState.DuplicateCount
@@ -958,12 +967,15 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 }
 
 type daemonRemoteFetch struct {
-	Transport     string
-	StatusCode    int
-	NextCursor    string
-	Events        []remotepkg.PollEvent
-	Error         string
-	FallbackError string
+	Transport      string
+	StatusCode     int
+	NextCursor     string
+	FrameCount     int
+	ConnectCount   int
+	ReconnectCount int
+	Events         []remotepkg.PollEvent
+	Error          string
+	FallbackError  string
 }
 
 func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.RegistrationState, cursor string, authToken string) daemonRemoteFetch {
@@ -973,14 +985,20 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		wsCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
 		ws := remotepkg.FetchWebSocketEvents(wsCtx, remotepkg.WebSocketOptions{
-			WebSocketURL: webSocketURL,
-			AuthToken:    authToken,
-			MaxFrames:    1,
+			WebSocketURL:          webSocketURL,
+			AuthToken:             authToken,
+			MaxFrames:             8,
+			ReconnectAttempts:     2,
+			ReconnectInitialDelay: 100 * time.Millisecond,
+			ReconnectMaxDelay:     500 * time.Millisecond,
 		})
 		fetch := daemonRemoteFetch{
-			Transport: "websocket",
-			Events:    ws.Events,
-			Error:     ws.Error,
+			Transport:      "websocket",
+			FrameCount:     ws.FrameCount,
+			ConnectCount:   ws.ConnectCount,
+			ReconnectCount: ws.ReconnectCount,
+			Events:         ws.Events,
+			Error:          ws.Error,
 		}
 		if ws.Error == "" || pollURL == "" {
 			return fetch

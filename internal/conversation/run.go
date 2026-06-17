@@ -1872,6 +1872,15 @@ func formatRemotePump(state remotepkg.PumpState) []string {
 	if state.StatusCode > 0 {
 		parts = append(parts, fmt.Sprintf("status %d", state.StatusCode))
 	}
+	if state.FrameCount > 0 {
+		parts = append(parts, fmt.Sprintf("frames %d", state.FrameCount))
+	}
+	if state.ConnectCount > 0 {
+		parts = append(parts, fmt.Sprintf("connects %d", state.ConnectCount))
+	}
+	if state.ReconnectCount > 0 {
+		parts = append(parts, fmt.Sprintf("reconnects %d", state.ReconnectCount))
+	}
 	parts = append(parts, fmt.Sprintf("events %d", state.EventCount))
 	parts = append(parts, fmt.Sprintf("delivered %d", state.DeliveredCount))
 	parts = append(parts, fmt.Sprintf("duplicates %d", state.DuplicateCount))
