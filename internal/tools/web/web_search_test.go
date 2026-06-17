@@ -285,7 +285,11 @@ func TestWebSearchValidation(t *testing.T) {
 		{name: "bad max results", input: `{"query":"xx","max_results":0}`, want: "max_results must be positive"},
 		{name: "too many results", input: `{"query":"xx","maxResults":21}`, want: "max_results must be at most 20"},
 		{name: "bad timeout", input: `{"query":"xx","timeout":0}`, want: "timeout must be positive"},
+		{name: "bad domain type", input: `{"query":"xx","allowed_domains":[3]}`, want: "input.allowed_domains[0] must be string"},
+		{name: "empty domain", input: `{"query":"xx","allowed_domains":[""]}`, want: "allowed_domains[0] must be a domain name"},
 		{name: "bad domain", input: `{"query":"xx","allowed_domains":["https://example.com"]}`, want: "allowed_domains[0] must be a domain name"},
+		{name: "bad wildcard domain", input: `{"query":"xx","allowed_domains":["*example.com"]}`, want: "allowed_domains[0] must be a domain name"},
+		{name: "bad domain label", input: `{"query":"xx","allowed_domains":["bad_domain.com"]}`, want: "allowed_domains[0] must be a domain name"},
 		{name: "allowed and blocked domains", input: `{"query":"xx","allowedDomains":["example.com"],"blockedDomains":["blocked.example.net"]}`, want: "Cannot specify both allowed_domains and blocked_domains"},
 		{name: "unknown field", input: `{"query":"xx","extra":true}`, want: "input.extra is not allowed"},
 	}

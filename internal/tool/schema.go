@@ -34,6 +34,16 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must be at least %d characters", path, minLength)
 		}
 	}
+	if itemsSchema, ok := schema["items"].(map[string]any); ok {
+		items, ok := value.([]any)
+		if ok {
+			for idx, item := range items {
+				if err := validateValue(contracts.JSONSchema(itemsSchema), item, fmt.Sprintf("%s[%d]", path, idx)); err != nil {
+					return err
+				}
+			}
+		}
+	}
 
 	if required := stringSlice(schema["required"]); len(required) > 0 {
 		obj, ok := value.(map[string]any)

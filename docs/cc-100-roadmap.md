@@ -285,6 +285,8 @@ M5 补充：WebFetch input schema 现在与官方对齐，`url` 和 `prompt` 都
 
 M5 补充：WebSearch `query` schema 现在按官方 `min(2)` 约束拒绝单字符查询，通用 tool schema validator 同步支持 `minLength`，让工具定义可直接表达字符串最小长度契约。
 
+M5 补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。
+
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
 
 M6 补充：microcompact disk cache loader 和 prune 现在接受 digest 缺失但文件名已 keyed 的 cache entry，会用 `<digest>.json` 文件名作为 digest fallback，同时保留显式 digest mismatch 的 invalid-cache guard。

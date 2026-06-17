@@ -83,10 +83,10 @@ func NewWebSearchTool() tool.Tool {
 				"required": []any{"query"},
 				"properties": map[string]any{
 					"query":           map[string]any{"type": "string", "minLength": 2},
-					"allowed_domains": map[string]any{"type": "array"},
-					"allowedDomains":  map[string]any{"type": "array"},
-					"blocked_domains": map[string]any{"type": "array"},
-					"blockedDomains":  map[string]any{"type": "array"},
+					"allowed_domains": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"allowedDomains":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"blocked_domains": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"blockedDomains":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 					"max_results":     map[string]any{"type": "integer"},
 					"maxResults":      map[string]any{"type": "integer"},
 					"timeout":         map[string]any{"type": "integer"},
@@ -127,15 +127,17 @@ func validateWebSearch(_ tool.Context, raw json.RawMessage) error {
 			return fmt.Errorf("timeout must be at most %d milliseconds", maxWebSearchTimeoutMillis)
 		}
 	}
-	allowedDomains := webSearchAllowedDomains(input)
-	blockedDomains := webSearchBlockedDomains(input)
+	allowedDomainsRaw := webSearchAllowedDomainsRaw(input)
+	blockedDomainsRaw := webSearchBlockedDomainsRaw(input)
+	allowedDomains := normalizeDomains(allowedDomainsRaw)
+	blockedDomains := normalizeDomains(blockedDomainsRaw)
 	if len(allowedDomains) > 0 && len(blockedDomains) > 0 {
 		return fmt.Errorf("Cannot specify both allowed_domains and blocked_domains in the same request")
 	}
-	if err := validateDomains("allowed_domains", allowedDomains); err != nil {
+	if err := validateDomains("allowed_domains", allowedDomainsRaw); err != nil {
 		return err
 	}
-	return validateDomains("blocked_domains", blockedDomains)
+	return validateDomains("blocked_domains", blockedDomainsRaw)
 }
 
 func callWebSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
@@ -605,17 +607,25 @@ func webSearchTimeout(input webSearchInput) time.Duration {
 }
 
 func webSearchAllowedDomains(input webSearchInput) []string {
+	return normalizeDomains(webSearchAllowedDomainsRaw(input))
+}
+
+func webSearchAllowedDomainsRaw(input webSearchInput) []string {
 	if len(input.AllowedDomains) > 0 {
-		return normalizeDomains(input.AllowedDomains)
+		return input.AllowedDomains
 	}
-	return normalizeDomains(input.AllowedDomainsAlt)
+	return input.AllowedDomainsAlt
 }
 
 func webSearchBlockedDomains(input webSearchInput) []string {
+	return normalizeDomains(webSearchBlockedDomainsRaw(input))
+}
+
+func webSearchBlockedDomainsRaw(input webSearchInput) []string {
 	if len(input.BlockedDomains) > 0 {
-		return normalizeDomains(input.BlockedDomains)
+		return input.BlockedDomains
 	}
-	return normalizeDomains(input.BlockedDomainsAlt)
+	return input.BlockedDomainsAlt
 }
 
 func normalizeDomains(domains []string) []string {
@@ -634,8 +644,38 @@ func validateDomains(field string, domains []string) error {
 		if strings.Contains(domain, "://") || strings.ContainsAny(domain, "/?#") {
 			return fmt.Errorf("%s[%d] must be a domain name, not a URL", field, i)
 		}
+		if !isValidWebSearchDomain(domain) {
+			return fmt.Errorf("%s[%d] must be a domain name", field, i)
+		}
 	}
 	return nil
+}
+
+func isValidWebSearchDomain(domain string) bool {
+	domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	if domain == "" || strings.ContainsAny(domain, " \t\r\n:") {
+		return false
+	}
+	if strings.HasPrefix(domain, "*.") {
+		domain = strings.TrimPrefix(domain, "*.")
+	} else if strings.Contains(domain, "*") {
+		return false
+	}
+	if domain == "" {
+		return false
+	}
+	for _, label := range strings.Split(domain, ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return false
+		}
+		for _, r := range label {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
 }
 
 func structuredSearchResults(results []searchResult) []map[string]any {
