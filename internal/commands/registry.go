@@ -221,7 +221,7 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "plugin", Description: "Manage plugins", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "skills", Description: "List available skills", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "memory", Description: "Edit memory files", Source: contracts.CommandSourceBuiltin},
-		{Type: contracts.CommandLocal, Name: "native", Description: "Run explicit native integration commands", ArgumentHint: "clipboard|voice|computer", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocal, Name: "native", Description: "Run explicit native integration commands", ArgumentHint: "clipboard|chrome|voice|computer", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocalJSX, Name: "resume", Aliases: []string{"continue"}, Description: "Resume a previous conversation", ArgumentHint: "[conversation id or search term]", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocal, Name: "clear", Aliases: []string{"reset", "new"}, Description: "Clear conversation history and free up context", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "compact", Description: "Compact the current conversation", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},

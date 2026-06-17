@@ -64,6 +64,70 @@ func TestChromeNativeHostManifestWriteLoad(t *testing.T) {
 	}
 }
 
+func TestInstallChromeNativeHostManifestWritesTarget(t *testing.T) {
+	dir := t.TempDir()
+	sourcePath := filepath.Join(dir, "session", chromeHostFileName)
+	wrapperPath := filepath.Join(dir, "session", chromeHostWrapperName)
+	if err := WriteChromeNativeHostWrapper(wrapperPath, "/usr/local/bin/claude"); err != nil {
+		t.Fatal(err)
+	}
+	manifest := BuildChromeNativeHostManifest("/usr/local/bin/claude", []string{"chrome-extension://abc"})
+	if err := WriteChromeNativeHostManifest(sourcePath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	installDir := filepath.Join(dir, "NativeMessagingHosts")
+	result, err := InstallChromeNativeHostManifest(sourcePath, ChromeNativeHostInstallOptions{InstallDir: installDir, WrapperSourcePath: wrapperPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTarget := filepath.Join(installDir, ChromeNativeHostName+".json")
+	if result.TargetPath != wantTarget || result.Skipped {
+		t.Fatalf("install result = %#v, want target %q", result, wantTarget)
+	}
+	installed, err := LoadChromeNativeHostManifest(wantTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantWrapper := filepath.Join(installDir, chromeHostWrapperName)
+	if result.WrapperPath != wantWrapper {
+		t.Fatalf("wrapper path = %q, want %q", result.WrapperPath, wantWrapper)
+	}
+	if installed.Name != ChromeNativeHostName || installed.Path != wantWrapper {
+		t.Fatalf("installed manifest = %#v", installed)
+	}
+}
+
+func TestChromeNativeHostInstallPathDefaults(t *testing.T) {
+	linuxPath, err := ChromeNativeHostInstallPath(ChromeNativeHostName, ChromeNativeHostInstallOptions{
+		GOOS:    "linux",
+		HomeDir: "/home/alice",
+		Browser: "chromium",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linuxPath != filepath.Join("/home/alice", ".config", "chromium", "NativeMessagingHosts", ChromeNativeHostName+".json") {
+		t.Fatalf("linux path = %q", linuxPath)
+	}
+	darwinPath, err := ChromeNativeHostInstallPath(ChromeNativeHostName, ChromeNativeHostInstallOptions{
+		GOOS:    "darwin",
+		HomeDir: "/Users/alice",
+		Browser: "edge",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if darwinPath != filepath.Join("/Users/alice", "Library", "Application Support", "Microsoft Edge", "NativeMessagingHosts", ChromeNativeHostName+".json") {
+		t.Fatalf("darwin path = %q", darwinPath)
+	}
+}
+
+func TestChromeNativeHostInstallPathRejectsWindowsFileInstall(t *testing.T) {
+	if _, err := ChromeNativeHostInstallPath(ChromeNativeHostName, ChromeNativeHostInstallOptions{GOOS: "windows", HomeDir: `C:\Users\alice`}); err == nil {
+		t.Fatal("expected Windows registry install error")
+	}
+}
+
 func TestChromeAllowedOriginsFromEnv(t *testing.T) {
 	origins := ChromeAllowedOriginsFromEnv(func(key string) string {
 		switch key {

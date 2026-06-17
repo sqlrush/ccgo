@@ -799,24 +799,13 @@ func (r Runner) maybeWriteIntegrationsManifest() {
 		}
 		runtimeState := integrationspkg.BuildRuntimeState(r.SessionPath, r.SessionID, r.WorkingDirectory, integration)
 		if integration.Enabled && strings.TrimSpace(integration.Name) == "chrome" {
-			chromeManifestPath := integrationspkg.ChromeNativeHostManifestPath(r.SessionPath, r.SessionID)
-			if chromeManifestPath != "" {
-				hostPath, _ := os.Executable()
-				chromeWrapperPath := integrationspkg.ChromeNativeHostWrapperPath(r.SessionPath, r.SessionID)
-				if chromeWrapperPath != "" && strings.TrimSpace(hostPath) != "" {
-					_ = integrationspkg.WriteChromeNativeHostWrapper(chromeWrapperPath, hostPath)
-				}
-				chromeManifestHostPath := hostPath
-				if chromeWrapperPath != "" {
-					chromeManifestHostPath = chromeWrapperPath
-				}
-				chromeManifest := integrationspkg.BuildChromeNativeHostManifest(chromeManifestHostPath, integrationspkg.ChromeAllowedOriginsFromEnv(os.Getenv))
-				_ = integrationspkg.WriteChromeNativeHostManifest(chromeManifestPath, chromeManifest)
+			chromeManifestPath, chromeWrapperPath, err := r.writeChromeNativeHostArtifacts()
+			if err == nil && chromeManifestPath != "" {
 				if runtimeState.Artifacts == nil {
 					runtimeState.Artifacts = map[string]string{}
 				}
 				runtimeState.Artifacts["chrome_native_host_manifest"] = chromeManifestPath
-				if chromeWrapperPath != "" {
+				if strings.TrimSpace(chromeWrapperPath) != "" {
 					runtimeState.Artifacts["chrome_native_host_wrapper"] = chromeWrapperPath
 				}
 			}
@@ -845,6 +834,30 @@ func (r Runner) maybeWriteIntegrationsManifest() {
 		}
 		_ = integrationspkg.WriteRuntimeState(statePath, runtimeState)
 	}
+}
+
+func (r Runner) writeChromeNativeHostArtifacts() (string, string, error) {
+	chromeManifestPath := integrationspkg.ChromeNativeHostManifestPath(r.SessionPath, r.SessionID)
+	if chromeManifestPath == "" {
+		return "", "", os.ErrInvalid
+	}
+	hostPath, err := os.Executable()
+	if err != nil {
+		return "", "", err
+	}
+	chromeWrapperPath := integrationspkg.ChromeNativeHostWrapperPath(r.SessionPath, r.SessionID)
+	chromeManifestHostPath := hostPath
+	if chromeWrapperPath != "" {
+		if err := integrationspkg.WriteChromeNativeHostWrapper(chromeWrapperPath, hostPath); err != nil {
+			return "", "", err
+		}
+		chromeManifestHostPath = chromeWrapperPath
+	}
+	chromeManifest := integrationspkg.BuildChromeNativeHostManifest(chromeManifestHostPath, integrationspkg.ChromeAllowedOriginsFromEnv(os.Getenv))
+	if err := integrationspkg.WriteChromeNativeHostManifest(chromeManifestPath, chromeManifest); err != nil {
+		return "", "", err
+	}
+	return chromeManifestPath, chromeWrapperPath, nil
 }
 
 func (r Runner) maybeWriteNativeManifest() {
@@ -1079,12 +1092,81 @@ func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) stri
 	switch strings.ToLower(args[0]) {
 	case "clipboard":
 		return r.formatNativeClipboardCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
+	case "chrome":
+		return r.formatNativeChromeCommand(strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "voice":
 		return r.formatNativeVoiceCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "computer", "computer-use", "computer_use":
 		return r.formatNativeComputerCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	default:
 		return "Native command is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	}
+}
+
+func (r Runner) formatNativeChromeCommand(raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return "Usage: /native chrome <status|install [chrome|chromium|edge]>"
+	}
+	manifestPath, wrapperPath, err := r.writeChromeNativeHostArtifacts()
+	if err != nil {
+		return "Native Chrome native host\nArtifact error: " + err.Error()
+	}
+	switch strings.ToLower(args[0]) {
+	case "status", "show":
+		browser := "chrome"
+		if len(args) > 1 {
+			browser = args[1]
+		}
+		targetPath, targetErr := integrationspkg.ChromeNativeHostInstallPath(integrationspkg.ChromeNativeHostName, integrationspkg.ChromeNativeHostInstallOptions{
+			Browser:    browser,
+			InstallDir: strings.TrimSpace(os.Getenv("CLAUDE_CHROME_NATIVE_HOST_INSTALL_DIR")),
+		})
+		lines := []string{
+			"Native Chrome native host",
+			"Manifest path: " + manifestPath,
+			"Wrapper path: " + wrapperPath,
+		}
+		if targetErr != nil {
+			lines = append(lines, "Install target error: "+targetErr.Error())
+		} else {
+			lines = append(lines, "Install target: "+targetPath)
+		}
+		return strings.Join(lines, "\n")
+	case "install":
+		browser := "chrome"
+		if len(args) > 1 {
+			browser = args[1]
+		}
+		install, err := integrationspkg.InstallChromeNativeHostManifest(manifestPath, integrationspkg.ChromeNativeHostInstallOptions{
+			Browser:           browser,
+			InstallDir:        strings.TrimSpace(os.Getenv("CLAUDE_CHROME_NATIVE_HOST_INSTALL_DIR")),
+			WrapperSourcePath: wrapperPath,
+		})
+		lines := []string{
+			"Native Chrome native host install",
+			"Browser: " + install.Browser,
+			"Manifest path: " + manifestPath,
+			"Wrapper path: " + wrapperPath,
+		}
+		if install.TargetPath != "" {
+			lines = append(lines, "Installed manifest: "+install.TargetPath)
+		}
+		if install.WrapperPath != "" {
+			lines = append(lines, "Installed wrapper: "+install.WrapperPath)
+		}
+		if install.Skipped {
+			lines = append(lines, "Install: skipped")
+		}
+		if install.Detail != "" {
+			lines = append(lines, "Detail: "+install.Detail)
+		}
+		if err != nil {
+			lines = append(lines, "Install error: "+err.Error())
+		}
+		return strings.Join(lines, "\n")
+	default:
+		return "Usage: /native chrome <status|install [chrome|chromium|edge]>"
 	}
 }
 
@@ -1222,7 +1304,7 @@ func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) str
 }
 
 func nativeCommandUsage() string {
-	return "Usage: /native <clipboard|voice|computer>"
+	return "Usage: /native <clipboard|chrome|voice|computer>"
 }
 
 func nativeComputerUsage() string {

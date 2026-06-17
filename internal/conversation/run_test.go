@@ -2196,6 +2196,38 @@ func TestRunnerExecutesNativeClipboardReadCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesNativeChromeInstallCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	installDir := filepath.Join(dir, "NativeMessagingHosts")
+	t.Setenv("CLAUDE_CHROME_NATIVE_HOST_INSTALL_DIR", installDir)
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_chrome",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native chrome install"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	targetPath := filepath.Join(installDir, integrationspkg.ChromeNativeHostName+".json")
+	manifest, err := integrationspkg.LoadChromeNativeHostManifest(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Name != integrationspkg.ChromeNativeHostName || !strings.HasPrefix(manifest.Path, installDir) || !strings.Contains(manifest.Path, "chrome-native-host") {
+		t.Fatalf("installed manifest = %#v", manifest)
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Installed manifest: "+targetPath) {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+}
+
 func TestRunnerExecutesNativeVoiceCaptureCommandWithoutQuery(t *testing.T) {
 	setupFakeNativeIntegrationCommandPath(t)
 	client := &fakeClient{}

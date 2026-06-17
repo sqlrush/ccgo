@@ -22,6 +22,23 @@ const (
 	chromeHostWrapperCMDName = "chrome-native-host.cmd"
 )
 
+type ChromeNativeHostInstallOptions struct {
+	Browser           string
+	GOOS              string
+	HomeDir           string
+	InstallDir        string
+	WrapperSourcePath string
+}
+
+type ChromeNativeHostInstallResult struct {
+	Browser     string `json:"browser"`
+	SourcePath  string `json:"source_path,omitempty"`
+	TargetPath  string `json:"target_path,omitempty"`
+	WrapperPath string `json:"wrapper_path,omitempty"`
+	Skipped     bool   `json:"skipped,omitempty"`
+	Detail      string `json:"detail,omitempty"`
+}
+
 type ChromeNativeHostManifest struct {
 	Name           string   `json:"name"`
 	Description    string   `json:"description"`
@@ -112,6 +129,113 @@ func LoadChromeNativeHostManifest(path string) (ChromeNativeHostManifest, error)
 	return manifest, nil
 }
 
+func InstallChromeNativeHostManifest(sourcePath string, options ChromeNativeHostInstallOptions) (ChromeNativeHostInstallResult, error) {
+	result := ChromeNativeHostInstallResult{
+		Browser:    normalizeChromeBrowser(options.Browser),
+		SourcePath: strings.TrimSpace(sourcePath),
+	}
+	if result.SourcePath == "" {
+		result.Skipped = true
+		result.Detail = "source manifest path is not configured"
+		return result, os.ErrInvalid
+	}
+	manifest, err := LoadChromeNativeHostManifest(result.SourcePath)
+	if err != nil {
+		result.Detail = err.Error()
+		return result, err
+	}
+	if strings.TrimSpace(manifest.Name) == "" {
+		manifest.Name = ChromeNativeHostName
+	}
+	targetPath, err := ChromeNativeHostInstallPath(manifest.Name, options)
+	result.TargetPath = targetPath
+	if err != nil {
+		result.Skipped = true
+		result.Detail = err.Error()
+		return result, err
+	}
+	if strings.TrimSpace(options.WrapperSourcePath) != "" {
+		wrapperPath, err := installChromeNativeHostWrapper(options.WrapperSourcePath, filepath.Dir(targetPath))
+		result.WrapperPath = wrapperPath
+		if err != nil {
+			result.Detail = err.Error()
+			return result, err
+		}
+		manifest.Path = wrapperPath
+	}
+	if err := WriteChromeNativeHostManifest(targetPath, manifest); err != nil {
+		result.Detail = err.Error()
+		return result, err
+	}
+	return result, nil
+}
+
+func ChromeNativeHostInstallPath(hostName string, options ChromeNativeHostInstallOptions) (string, error) {
+	hostName = strings.TrimSpace(hostName)
+	if hostName == "" {
+		hostName = ChromeNativeHostName
+	}
+	browser := normalizeChromeBrowser(options.Browser)
+	if strings.TrimSpace(options.InstallDir) != "" {
+		return filepath.Join(options.InstallDir, hostName+".json"), nil
+	}
+	goos := strings.TrimSpace(options.GOOS)
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	if goos == "windows" {
+		return "", fmt.Errorf("Windows Chrome native messaging host install requires HKCU/HKLM registry registration")
+	}
+	home := strings.TrimSpace(options.HomeDir)
+	if home == "" {
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+	}
+	if strings.TrimSpace(home) == "" {
+		return "", fmt.Errorf("home directory is not available")
+	}
+	switch goos {
+	case "darwin":
+		switch browser {
+		case "chromium":
+			return filepath.Join(home, "Library", "Application Support", "Chromium", "NativeMessagingHosts", hostName+".json"), nil
+		case "edge":
+			return filepath.Join(home, "Library", "Application Support", "Microsoft Edge", "NativeMessagingHosts", hostName+".json"), nil
+		default:
+			return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts", hostName+".json"), nil
+		}
+	default:
+		switch browser {
+		case "chromium":
+			return filepath.Join(home, ".config", "chromium", "NativeMessagingHosts", hostName+".json"), nil
+		case "edge":
+			return filepath.Join(home, ".config", "microsoft-edge", "NativeMessagingHosts", hostName+".json"), nil
+		default:
+			return filepath.Join(home, ".config", "google-chrome", "NativeMessagingHosts", hostName+".json"), nil
+		}
+	}
+}
+
+func installChromeNativeHostWrapper(sourcePath string, targetDir string) (string, error) {
+	sourcePath = strings.TrimSpace(sourcePath)
+	targetDir = strings.TrimSpace(targetDir)
+	if sourcePath == "" || targetDir == "" {
+		return "", os.ErrInvalid
+	}
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	targetPath := filepath.Join(targetDir, filepath.Base(sourcePath))
+	if err := platform.AtomicWriteFile(targetPath, data, 0o755); err != nil {
+		return targetPath, err
+	}
+	return targetPath, nil
+}
+
 func ChromeAllowedOriginsFromEnv(env func(string) string) []string {
 	if env == nil {
 		env = os.Getenv
@@ -199,6 +323,17 @@ func normalizeChromeAllowedOrigins(origins []string) []string {
 		normalized = append(normalized, origin)
 	}
 	return normalized
+}
+
+func normalizeChromeBrowser(browser string) string {
+	switch strings.ToLower(strings.TrimSpace(browser)) {
+	case "chromium", "chromium-browser":
+		return "chromium"
+	case "edge", "microsoft-edge", "msedge":
+		return "edge"
+	default:
+		return "chrome"
+	}
 }
 
 func shellQuote(value string) string {
