@@ -133,6 +133,8 @@ M10 补充：remote poll/WebSocket 事件现在会解析 `ack_url`/`ackUrl`/`ack
 
 M10 补充：remote ack 和 lease renew 的 transient retry 现在会优先遵守服务端 `Retry-After` header（秒数或 HTTP-date），再回退到本地指数退避，并继续受最大退避上限约束，减少云端 429/503 限流时的协议偏差。
 
+M10 补充：remote poll fetch 现在也支持 transient retry，遇到 transport error、408、429 或 5xx 时可按 PollOptions 重试，并同样优先遵守服务端 `Retry-After` header；PollResult 暴露 `attempt_count` 便于 daemon/pump 审计。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。

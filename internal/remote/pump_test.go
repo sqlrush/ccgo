@@ -111,6 +111,59 @@ func TestFetchPollEventsReportsFailedHTTPAndRedactsInvalidURL(t *testing.T) {
 	}
 }
 
+func TestFetchPollEventsRetriesTransientFailure(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			http.Error(w, "try again", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"next_cursor":"cursor-2","events":[{"id":"evt-retry","team_id":"team","message":"retried"}]}`))
+	}))
+	defer server.Close()
+
+	result := FetchPollEvents(context.Background(), PollOptions{
+		PollURL:           server.URL + "/poll",
+		RetryAttempts:     1,
+		RetryInitialDelay: time.Millisecond,
+		RetryMaxDelay:     time.Millisecond,
+	})
+	if result.Error != "" || result.StatusCode != http.StatusOK || result.AttemptCount != 2 || calls != 2 || result.NextCursor != "cursor-2" || len(result.Events) != 1 || result.Events[0].EventID != "evt-retry" {
+		t.Fatalf("poll retry result = %#v calls=%d", result, calls)
+	}
+}
+
+func TestFetchPollEventsHonorsRetryAfterHeader(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"events":[{"id":"evt-after","team_id":"team","message":"after"}]}`))
+	}))
+	defer server.Close()
+
+	start := time.Now()
+	result := FetchPollEvents(context.Background(), PollOptions{
+		PollURL:           server.URL + "/poll",
+		RetryAttempts:     1,
+		RetryInitialDelay: time.Second,
+		RetryMaxDelay:     time.Second,
+	})
+	if result.Error != "" || result.StatusCode != http.StatusOK || result.AttemptCount != 2 || calls != 2 || len(result.Events) != 1 || result.Events[0].EventID != "evt-after" {
+		t.Fatalf("poll retry-after result = %#v calls=%d", result, calls)
+	}
+	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
+		t.Fatalf("poll retry ignored Retry-After header; elapsed=%s", elapsed)
+	}
+}
+
 func TestSendAckPostsSameOriginPayloadAndAuth(t *testing.T) {
 	var gotAuth string
 	var got map[string]any

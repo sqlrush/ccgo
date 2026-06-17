@@ -70,18 +70,22 @@ type PollEvent struct {
 }
 
 type PollOptions struct {
-	PollURL   string
-	Cursor    string
-	AuthToken string
-	Client    *http.Client
+	PollURL           string
+	Cursor            string
+	AuthToken         string
+	RetryAttempts     int
+	RetryInitialDelay time.Duration
+	RetryMaxDelay     time.Duration
+	Client            *http.Client
 }
 
 type PollResult struct {
-	CheckedAt  string      `json:"checked_at,omitempty"`
-	StatusCode int         `json:"status_code,omitempty"`
-	NextCursor string      `json:"next_cursor,omitempty"`
-	Events     []PollEvent `json:"events,omitempty"`
-	Error      string      `json:"error,omitempty"`
+	CheckedAt    string      `json:"checked_at,omitempty"`
+	StatusCode   int         `json:"status_code,omitempty"`
+	AttemptCount int         `json:"attempt_count,omitempty"`
+	NextCursor   string      `json:"next_cursor,omitempty"`
+	Events       []PollEvent `json:"events,omitempty"`
+	Error        string      `json:"error,omitempty"`
 }
 
 type AckOptions struct {
@@ -290,39 +294,54 @@ func FetchPollEvents(ctx context.Context, options PollOptions) PollResult {
 		query.Set("cursor", strings.TrimSpace(options.Cursor))
 		parsed.RawQuery = query.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	req.Header.Set("accept", "application/json")
-	if strings.TrimSpace(options.AuthToken) != "" {
-		req.Header.Set("authorization", "Bearer "+strings.TrimSpace(options.AuthToken))
-	}
 	client := options.Client
 	if client == nil {
 		client = http.DefaultClient
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		result.Error = err.Error()
+	retries := options.RetryAttempts
+	if retries < 0 {
+		retries = 0
+	}
+	for attempt := 0; ; attempt++ {
+		result.AttemptCount = attempt + 1
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+		if err != nil {
+			result.Error = err.Error()
+			return result
+		}
+		req.Header.Set("accept", "application/json")
+		if strings.TrimSpace(options.AuthToken) != "" {
+			req.Header.Set("authorization", "Bearer "+strings.TrimSpace(options.AuthToken))
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			result.StatusCode = 0
+			result.Error = err.Error()
+			if attempt < retries && sleepRemoteDeliveryRetry(ctx, options.RetryInitialDelay, options.RetryMaxDelay, attempt) {
+				continue
+			}
+			return result
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		_ = resp.Body.Close()
+		result.StatusCode = resp.StatusCode
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			result.Error = remoteRegistrationError(resp.Status, body)
+			if remoteDeliveryStatusRetryable(resp.StatusCode) && attempt < retries && sleepRemoteDeliveryRetryAfter(ctx, resp.Header.Get("Retry-After"), options.RetryInitialDelay, options.RetryMaxDelay, attempt, time.Now()) {
+				continue
+			}
+			return result
+		}
+		events, cursor, err := DecodePollEvents(body)
+		if err != nil {
+			result.Error = err.Error()
+			return result
+		}
+		result.Error = ""
+		result.Events = events
+		result.NextCursor = cursor
 		return result
 	}
-	defer resp.Body.Close()
-	result.StatusCode = resp.StatusCode
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		result.Error = remoteRegistrationError(resp.Status, body)
-		return result
-	}
-	events, cursor, err := DecodePollEvents(body)
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	result.Events = events
-	result.NextCursor = cursor
-	return result
 }
 
 func DecodePollEvents(data []byte) ([]PollEvent, string, error) {
