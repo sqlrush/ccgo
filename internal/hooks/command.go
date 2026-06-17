@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -20,6 +22,7 @@ import (
 )
 
 const defaultCommandHookTimeout = 10 * time.Minute
+const defaultHTTPHookTimeout = 10 * time.Minute
 
 type CommandHook struct {
 	Phase         string
@@ -31,6 +34,19 @@ type CommandHook struct {
 	Timeout       time.Duration
 }
 
+type HTTPHook struct {
+	Phase                string
+	Matcher              string
+	If                   string
+	URL                  string
+	Headers              map[string]string
+	AllowedEnvVars       []string
+	StatusMessage        string
+	Timeout              time.Duration
+	AllowedURLPatterns   []string
+	PolicyAllowedEnvVars []string
+}
+
 func FromSettings(settings contracts.Settings) []tool.Hook {
 	if settings.DisableAllHooks != nil && *settings.DisableAllHooks {
 		return nil
@@ -38,10 +54,18 @@ func FromSettings(settings contracts.Settings) []tool.Hook {
 	if settings.AllowManagedHooksOnly != nil && *settings.AllowManagedHooksOnly {
 		return nil
 	}
-	return hooksFromRawSettings(settings.Hooks)
+	return hooksFromRawSettings(settings.Hooks, settingsHookOptions{
+		AllowedHTTPHookURLs:    settings.AllowedHTTPHookURLs,
+		HTTPHookAllowedEnvVars: settings.HTTPHookAllowedEnvVars,
+	})
 }
 
-func hooksFromRawSettings(raw map[string]any) []tool.Hook {
+type settingsHookOptions struct {
+	AllowedHTTPHookURLs    []string
+	HTTPHookAllowedEnvVars []string
+}
+
+func hooksFromRawSettings(raw map[string]any, options settingsHookOptions) []tool.Hook {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -51,17 +75,17 @@ func hooksFromRawSettings(raw map[string]any) []tool.Hook {
 		if phase == "" {
 			continue
 		}
-		for _, hook := range commandHooksForPhase(phase, value) {
+		for _, hook := range hooksForPhase(phase, value, options) {
 			hooks = append(hooks, hook)
 		}
 	}
 	return hooks
 }
 
-func commandHooksForPhase(phase string, raw any) []CommandHook {
-	var out []CommandHook
+func hooksForPhase(phase string, raw any, options settingsHookOptions) []tool.Hook {
+	var out []tool.Hook
 	for _, matcher := range hookMatchers(raw) {
-		out = append(out, commandHooksFromMatcher(phase, matcher)...)
+		out = append(out, hooksFromMatcher(phase, matcher, options)...)
 	}
 	return out
 }
@@ -91,23 +115,26 @@ func hookMatchers(raw any) []hookMatcher {
 	}
 }
 
-func commandHooksFromMatcher(phase string, matcher hookMatcher) []CommandHook {
-	var out []CommandHook
-	for _, rawHook := range hookCommandSpecs(matcher.Hooks) {
-		hook, ok := commandHookFromRaw(phase, matcher.Matcher, rawHook)
-		if ok {
+func hooksFromMatcher(phase string, matcher hookMatcher, options settingsHookOptions) []tool.Hook {
+	var out []tool.Hook
+	for _, rawHook := range hookSpecs(matcher.Hooks) {
+		if hook, ok := commandHookFromRaw(phase, matcher.Matcher, rawHook); ok {
+			out = append(out, hook)
+			continue
+		}
+		if hook, ok := httpHookFromRaw(phase, matcher.Matcher, rawHook, options); ok {
 			out = append(out, hook)
 		}
 	}
 	return out
 }
 
-func hookCommandSpecs(raw any) []any {
+func hookSpecs(raw any) []any {
 	switch value := raw.(type) {
 	case []any:
 		var out []any
 		for _, item := range value {
-			out = append(out, hookCommandSpecs(item)...)
+			out = append(out, hookSpecs(item)...)
 		}
 		return out
 	case nil:
@@ -115,6 +142,34 @@ func hookCommandSpecs(raw any) []any {
 	default:
 		return []any{value}
 	}
+}
+
+func httpHookFromRaw(phase string, matcher string, raw any, options settingsHookOptions) (HTTPHook, bool) {
+	value, ok := raw.(map[string]any)
+	if !ok {
+		return HTTPHook{}, false
+	}
+	hookType := strings.TrimSpace(stringField(value, "type"))
+	url := strings.TrimSpace(stringField(value, "url"))
+	if url == "" || hookType != "http" {
+		return HTTPHook{}, false
+	}
+	timeout := durationSeconds(value["timeout"])
+	if timeout <= 0 {
+		timeout = defaultHTTPHookTimeout
+	}
+	return HTTPHook{
+		Phase:                phase,
+		Matcher:              matcher,
+		If:                   stringField(value, "if"),
+		URL:                  url,
+		Headers:              stringMapField(value, "headers"),
+		AllowedEnvVars:       stringListField(value, "allowedEnvVars", "allowed_env_vars"),
+		StatusMessage:        stringField(value, "statusMessage", "status_message"),
+		Timeout:              timeout,
+		AllowedURLPatterns:   append([]string(nil), options.AllowedHTTPHookURLs...),
+		PolicyAllowedEnvVars: append([]string(nil), options.HTTPHookAllowedEnvVars...),
+	}, true
 }
 
 func commandHookFromRaw(phase string, matcher string, raw any) (CommandHook, bool) {
@@ -158,6 +213,52 @@ func stringField(object map[string]any, names ...string) string {
 	return ""
 }
 
+func stringMapField(object map[string]any, name string) map[string]string {
+	raw, ok := object[name].(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := map[string]string{}
+	for key, value := range raw {
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key != "" {
+			out[key] = text
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func stringListField(object map[string]any, names ...string) []string {
+	for _, name := range names {
+		switch value := object[name].(type) {
+		case []any:
+			var out []string
+			for _, item := range value {
+				if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+					out = append(out, strings.TrimSpace(text))
+				}
+			}
+			return out
+		case []string:
+			out := make([]string, 0, len(value))
+			for _, item := range value {
+				if strings.TrimSpace(item) != "" {
+					out = append(out, strings.TrimSpace(item))
+				}
+			}
+			return out
+		}
+	}
+	return nil
+}
+
 func durationSeconds(raw any) time.Duration {
 	switch value := raw.(type) {
 	case float64:
@@ -188,6 +289,10 @@ func (h CommandHook) HookPhases() []string {
 	return []string{h.Phase}
 }
 
+func (h HTTPHook) HookPhases() []string {
+	return []string{h.Phase}
+}
+
 func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.HookResult, error) {
 	if event.Phase != h.Phase {
 		return tool.HookResult{}, nil
@@ -195,7 +300,7 @@ func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.H
 	if !matchesPattern(event.ToolName, h.Matcher) || !h.matchesIf(event, ctx.WorkingDirectory) {
 		return tool.HookResult{}, nil
 	}
-	input, err := h.input(ctx, event)
+	input, err := hookInput(ctx, event)
 	if err != nil {
 		return tool.HookResult{}, err
 	}
@@ -206,7 +311,25 @@ func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.H
 	return hookResultFromOutput(h, event, stdout, stderr, exitCode), nil
 }
 
-func (h CommandHook) input(ctx tool.Context, event tool.HookEvent) (string, error) {
+func (h HTTPHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.HookResult, error) {
+	if event.Phase != h.Phase {
+		return tool.HookResult{}, nil
+	}
+	if !matchesPattern(event.ToolName, h.Matcher) || !h.matchesIf(event, ctx.WorkingDirectory) {
+		return tool.HookResult{}, nil
+	}
+	input, err := hookInput(ctx, event)
+	if err != nil {
+		return tool.HookResult{}, err
+	}
+	body, statusCode, err := h.runHTTP(ctx, input)
+	if err != nil {
+		return tool.HookResult{Metadata: h.metadata("", statusCode, err.Error())}, nil
+	}
+	return h.resultFromHTTPBody(event, body, statusCode), nil
+}
+
+func hookInput(ctx tool.Context, event tool.HookEvent) (string, error) {
 	payload := map[string]any{
 		"session_id":      string(ctx.SessionID),
 		"transcript_path": metadataString(ctx.Metadata, tool.MetadataSessionPathKey),
@@ -281,6 +404,64 @@ func (h CommandHook) runCommand(ctx tool.Context, input string) (string, string,
 	return stdout.String(), stderr.String(), exitCode, nil
 }
 
+func (h HTTPHook) runHTTP(ctx tool.Context, input string) (string, int, error) {
+	if len(h.AllowedURLPatterns) > 0 && !urlMatchesAnyPattern(h.URL, h.AllowedURLPatterns) {
+		return "", 0, fmt.Errorf("HTTP hook blocked: %s does not match any pattern in allowedHttpHookUrls", h.URL)
+	}
+	timeout := h.Timeout
+	if timeout <= 0 {
+		timeout = defaultHTTPHookTimeout
+	}
+	base := ctx.Context
+	if base == nil {
+		base = context.Background()
+	}
+	reqCtx, cancel := context.WithTimeout(base, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, h.URL, strings.NewReader(input))
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for name, value := range h.Headers {
+		req.Header.Set(name, h.interpolateHeader(value))
+	}
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp.StatusCode, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return string(data), resp.StatusCode, fmt.Errorf("HTTP hook returned status %d", resp.StatusCode)
+	}
+	return string(data), resp.StatusCode, nil
+}
+
+func (h HTTPHook) resultFromHTTPBody(event tool.HookEvent, body string, statusCode int) tool.HookResult {
+	trimmed := strings.TrimSpace(body)
+	if strings.HasPrefix(trimmed, "{") {
+		if result, ok := hookResultFromJSON(event.Phase, trimmed); ok {
+			if result.Metadata == nil {
+				result.Metadata = map[string]any{}
+			}
+			for key, value := range h.metadata(body, statusCode, "") {
+				result.Metadata[key] = value
+			}
+			return result
+		}
+	}
+	result := tool.HookResult{Metadata: h.metadata(body, statusCode, "")}
+	if trimmed != "" {
+		result.Message = trimmed
+	}
+	return result
+}
+
 func shellCommand(ctx context.Context, shell string, command string) *exec.Cmd {
 	switch strings.ToLower(strings.TrimSpace(shell)) {
 	case "powershell", "pwsh":
@@ -329,6 +510,26 @@ func commandHookMetadata(h CommandHook, stdout string, stderr string, exitCode i
 	}
 	if strings.TrimSpace(stderr) != "" {
 		metadata["stderr"] = strings.TrimSpace(stderr)
+	}
+	return metadata
+}
+
+func (h HTTPHook) metadata(body string, statusCode int, errText string) map[string]any {
+	metadata := map[string]any{
+		"type": "http",
+		"url":  h.URL,
+	}
+	if statusCode != 0 {
+		metadata["status_code"] = statusCode
+	}
+	if h.StatusMessage != "" {
+		metadata["status_message"] = h.StatusMessage
+	}
+	if strings.TrimSpace(body) != "" {
+		metadata["body"] = strings.TrimSpace(body)
+	}
+	if errText != "" {
+		metadata["error"] = errText
 	}
 	return metadata
 }
@@ -406,10 +607,18 @@ func applyHookSpecificOutput(result *tool.HookResult, phase string, hookSpecific
 }
 
 func (h CommandHook) matchesIf(event tool.HookEvent, cwd string) bool {
-	if strings.TrimSpace(h.If) == "" {
+	return matchesIf(h.If, event, cwd)
+}
+
+func (h HTTPHook) matchesIf(event tool.HookEvent, cwd string) bool {
+	return matchesIf(h.If, event, cwd)
+}
+
+func matchesIf(condition string, event tool.HookEvent, cwd string) bool {
+	if strings.TrimSpace(condition) == "" {
 		return true
 	}
-	rule, err := permissions.ParseRule(contracts.PermissionSourceUserSettings, contracts.PermissionAllow, h.If)
+	rule, err := permissions.ParseRule(contracts.PermissionSourceUserSettings, contracts.PermissionAllow, condition)
 	if err == nil {
 		return rule.Matches(permissions.Request{
 			ToolName:         event.ToolName,
@@ -419,7 +628,7 @@ func (h CommandHook) matchesIf(event tool.HookEvent, cwd string) bool {
 			WorkingDirectory: cwd,
 		})
 	}
-	return matchesPattern(event.ToolName, h.If)
+	return matchesPattern(event.ToolName, condition)
 }
 
 func matchesPattern(matchQuery string, matcher string) bool {
@@ -451,6 +660,63 @@ func simpleHookMatcher(matcher string) bool {
 		return false
 	}
 	return true
+}
+
+func urlMatchesAnyPattern(rawURL string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if urlMatchesPattern(rawURL, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func urlMatchesPattern(rawURL string, pattern string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return false
+	}
+	regex := regexp.QuoteMeta(pattern)
+	regex = strings.ReplaceAll(regex, `\*`, ".*")
+	return regexp.MustCompile("^" + regex + "$").MatchString(rawURL)
+}
+
+func (h HTTPHook) interpolateHeader(value string) string {
+	allowed := map[string]struct{}{}
+	policy := map[string]struct{}{}
+	for _, name := range h.PolicyAllowedEnvVars {
+		if strings.TrimSpace(name) != "" {
+			policy[strings.TrimSpace(name)] = struct{}{}
+		}
+	}
+	for _, name := range h.AllowedEnvVars {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if len(policy) > 0 {
+			if _, ok := policy[name]; !ok {
+				continue
+			}
+		}
+		allowed[name] = struct{}{}
+	}
+	out := regexp.MustCompile(`\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)`).ReplaceAllStringFunc(value, func(match string) string {
+		name := strings.TrimPrefix(strings.TrimPrefix(match, "${"), "$")
+		name = strings.TrimSuffix(name, "}")
+		if _, ok := allowed[name]; !ok {
+			return ""
+		}
+		return os.Getenv(name)
+	})
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\r', '\n', 0:
+			return -1
+		default:
+			return r
+		}
+	}, out)
 }
 
 func firstInputString(raw json.RawMessage, keys ...string) string {
