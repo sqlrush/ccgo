@@ -466,6 +466,91 @@ func TestRunDaemonRemotePollSkipsExpiredLease(t *testing.T) {
 	}
 }
 
+func TestRunDaemonRemotePollRenewsLeaseBeforeDelivery(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_remote_lease_renew")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{ID: "agent/remote-lead", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:                "remote/team",
+		CoordinatorTaskID: "agent/remote-lead",
+		Timestamp:         time.Unix(102, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var renewAuth string
+	var renewPayload map[string]any
+	var ackStatuses []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/leases/renew":
+			renewAuth = r.Header.Get("Authorization")
+			if err := json.NewDecoder(r.Body).Decode(&renewPayload); err != nil {
+				t.Fatal(err)
+			}
+			w.Header().Set("content-type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"lease_expires_at":"2026-06-17T12:05:00Z"}`))
+		case "/ack":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			ackStatuses = append(ackStatuses, fmt.Sprint(payload["status"]))
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"events":[{"id":"delivery-renew","team":"remote/team","message":"Renewed deploy.","ack_url":%q,"lease_id":"lease-renew","lease_expires_at":"2026-06-17T12:00:00Z"}]}`, server.URL+"/ack")))
+		}
+	}))
+	defer server.Close()
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:       sessionID,
+		RuntimeState:    remotepkg.RegistrationRegistered,
+		PollURL:         server.URL + "/poll?token=secret",
+		LeaseRenewURL:   server.URL + "/leases/renew?token=secret",
+		RemoteSessionID: "remote-session",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &conversation.MCPConfig{UserSettings: contracts.Settings{
+			Remote: &contracts.RemoteSetting{AuthToken: "renew-token"},
+		}},
+	}
+	result := runDaemonRemotePoll(context.Background(), runner, time.Date(2026, 6, 17, 11, 55, 0, 0, time.UTC))
+	if result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["lease_event_count"] != 1 || result.StructuredContent["lease_expired_count"] != 0 || result.StructuredContent["lease_renew_sent_count"] != 1 || result.StructuredContent["lease_renew_error_count"] != 0 || result.StructuredContent["ack_sent_count"] != 1 || result.StructuredContent["error_count"] != 0 {
+		t.Fatalf("renew poll = %#v", result.StructuredContent)
+	}
+	if renewAuth != "Bearer renew-token" || renewPayload["event_id"] != "delivery-renew" || renewPayload["lease_id"] != "lease-renew" {
+		t.Fatalf("renew auth=%q payload=%#v", renewAuth, renewPayload)
+	}
+	if len(ackStatuses) != 1 || ackStatuses[0] != "delivered" {
+		t.Fatalf("ack statuses = %#v", ackStatuses)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.DeliveredCount != 1 || pump.LeaseRenewSent != 1 || pump.LeaseRenewErrors != 0 || pump.ErrorCount != 0 {
+		t.Fatalf("pump = %#v", pump)
+	}
+	resume, err := manager.ResumeContext("agent/remote-lead", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 || !strings.Contains(messages.TextContent(resume.Messages[1]), "Renewed deploy.") {
+		t.Fatalf("resume messages = %#v", resume.Messages)
+	}
+}
+
 func TestRunDaemonRemotePollPrefersWebSocket(t *testing.T) {
 	dir := t.TempDir()
 	transcriptPath := filepath.Join(dir, "session.jsonl")

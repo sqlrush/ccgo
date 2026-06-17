@@ -1905,6 +1905,12 @@ func formatRemotePump(state remotepkg.PumpState) []string {
 	if state.LeaseExpiredCount > 0 {
 		parts = append(parts, fmt.Sprintf("lease expired %d", state.LeaseExpiredCount))
 	}
+	if state.LeaseRenewSent > 0 {
+		parts = append(parts, fmt.Sprintf("lease renew sent %d", state.LeaseRenewSent))
+	}
+	if state.LeaseRenewErrors > 0 {
+		parts = append(parts, fmt.Sprintf("lease renew errors %d", state.LeaseRenewErrors))
+	}
 	parts = append(parts, fmt.Sprintf("events %d", state.EventCount))
 	parts = append(parts, fmt.Sprintf("delivered %d", state.DeliveredCount))
 	parts = append(parts, fmt.Sprintf("duplicates %d", state.DuplicateCount))

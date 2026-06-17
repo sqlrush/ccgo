@@ -153,6 +153,50 @@ func TestSendAckRejectsDisallowedOriginAndRedactsURL(t *testing.T) {
 	}
 }
 
+func TestSendLeaseRenewalPostsSameOriginPayloadAndAuth(t *testing.T) {
+	var gotAuth string
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s", r.Method)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"lease":{"expiresAt":"2026-06-17T12:05:00Z"}}`))
+	}))
+	defer server.Close()
+
+	result := SendLeaseRenewal(context.Background(), LeaseRenewOptions{
+		LeaseRenewURL:  server.URL + "/leases/renew?token=secret",
+		AuthToken:      "renew-token",
+		EventID:        "evt-renew",
+		LeaseID:        "lease-1",
+		AllowedOrigins: []string{server.URL + "/poll"},
+	})
+	if result.Error != "" || result.StatusCode != http.StatusAccepted || result.LeaseExpiresAt != "2026-06-17T12:05:00Z" {
+		t.Fatalf("renew result = %#v", result)
+	}
+	if gotAuth != "Bearer renew-token" || got["event_id"] != "evt-renew" || got["lease_id"] != "lease-1" {
+		t.Fatalf("auth=%q payload=%#v", gotAuth, got)
+	}
+}
+
+func TestSendLeaseRenewalRejectsDisallowedOriginAndRedactsURL(t *testing.T) {
+	result := SendLeaseRenewal(context.Background(), LeaseRenewOptions{
+		LeaseRenewURL:  "https://user:pass@example.invalid/leases/renew?token=secret",
+		EventID:        "evt",
+		LeaseID:        "lease",
+		AllowedOrigins: []string{"https://remote.example/poll"},
+	})
+	if result.Error == "" || !strings.Contains(result.Error, "not allowed") || strings.Contains(result.Error, "token=secret") || strings.Contains(result.Error, "user:pass") {
+		t.Fatalf("renew result = %#v", result)
+	}
+}
+
 func TestWriteAndLoadPumpState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sess_remote", pumpFileName)
 	state := PumpState{
@@ -174,6 +218,8 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 		AckErrorCount:     1,
 		LeaseEventCount:   1,
 		LeaseExpiredCount: 1,
+		LeaseRenewSent:    1,
+		LeaseRenewErrors:  1,
 		EventCount:        2,
 		DeliveredCount:    1,
 	}
@@ -184,7 +230,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.AckEventCount != 1 || loaded.AckSentCount != 1 || loaded.AckErrorCount != 1 || loaded.LeaseEventCount != 1 || loaded.LeaseExpiredCount != 1 || loaded.LastPollAt == "" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.AckEventCount != 1 || loaded.AckSentCount != 1 || loaded.AckErrorCount != 1 || loaded.LeaseEventCount != 1 || loaded.LeaseExpiredCount != 1 || loaded.LeaseRenewSent != 1 || loaded.LeaseRenewErrors != 1 || loaded.LastPollAt == "" {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	data, err := json.Marshal(loaded)

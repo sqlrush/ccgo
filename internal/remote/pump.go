@@ -47,6 +47,8 @@ type PumpState struct {
 	AckErrorCount     int          `json:"ack_error_count,omitempty"`
 	LeaseEventCount   int          `json:"lease_event_count,omitempty"`
 	LeaseExpiredCount int          `json:"lease_expired_count,omitempty"`
+	LeaseRenewSent    int          `json:"lease_renew_sent_count,omitempty"`
+	LeaseRenewErrors  int          `json:"lease_renew_error_count,omitempty"`
 	EventCount        int          `json:"event_count,omitempty"`
 	DeliveredCount    int          `json:"delivered_count,omitempty"`
 	DuplicateCount    int          `json:"duplicate_count,omitempty"`
@@ -97,6 +99,22 @@ type AckResult struct {
 	AckedAt    string `json:"acked_at,omitempty"`
 	StatusCode int    `json:"status_code,omitempty"`
 	Error      string `json:"error,omitempty"`
+}
+
+type LeaseRenewOptions struct {
+	LeaseRenewURL  string
+	AuthToken      string
+	EventID        string
+	LeaseID        string
+	AllowedOrigins []string
+	Client         *http.Client
+}
+
+type LeaseRenewResult struct {
+	RenewedAt      string `json:"renewed_at,omitempty"`
+	StatusCode     int    `json:"status_code,omitempty"`
+	LeaseExpiresAt string `json:"lease_expires_at,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 func SessionPumpPath(sessionPath string, sessionID contracts.ID) string {
@@ -158,6 +176,60 @@ func SendAck(ctx context.Context, options AckOptions) AckResult {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		result.Error = remoteRegistrationError(resp.Status, body)
 	}
+	return result
+}
+
+func SendLeaseRenewal(ctx context.Context, options LeaseRenewOptions) LeaseRenewResult {
+	result := LeaseRenewResult{RenewedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	rawURL := strings.TrimSpace(options.LeaseRenewURL)
+	if rawURL == "" {
+		result.Error = "remote lease renew url is unavailable"
+		return result
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		result.Error = fmt.Sprintf("invalid remote lease renew url: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	if !remoteAckOriginAllowed(parsed, options.AllowedOrigins) {
+		result.Error = fmt.Sprintf("remote lease renew url is not allowed: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	payload, err := json.Marshal(map[string]any{
+		"event_id": strings.TrimSpace(options.EventID),
+		"lease_id": strings.TrimSpace(options.LeaseID),
+	})
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed.String(), bytes.NewReader(payload))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("accept", "application/json")
+	if strings.TrimSpace(options.AuthToken) != "" {
+		req.Header.Set("authorization", "Bearer "+strings.TrimSpace(options.AuthToken))
+	}
+	client := options.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Error = fmt.Sprintf("remote lease renew request failed: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	defer resp.Body.Close()
+	result.StatusCode = resp.StatusCode
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		result.Error = remoteRegistrationError(resp.Status, body)
+		return result
+	}
+	result.LeaseExpiresAt = leaseExpiresAtFromRenewResponse(body)
 	return result
 }
 
@@ -252,6 +324,20 @@ func DecodePollEvents(data []byte) ([]PollEvent, string, error) {
 	default:
 		return nil, "", fmt.Errorf("remote poll response must be an object or array")
 	}
+}
+
+func leaseExpiresAtFromRenewResponse(body []byte) string {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return ""
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return ""
+	}
+	if text := firstString(raw, "lease_expires_at", "leaseExpiresAt", "expires_at", "expiresAt"); text != "" {
+		return text
+	}
+	return stringFromNestedMap(raw["lease"], "lease_expires_at", "leaseExpiresAt", "expires_at", "expiresAt")
 }
 
 func decodePollEventValue(value any) ([]PollEvent, string, bool) {
