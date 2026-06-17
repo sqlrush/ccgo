@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -42,6 +43,11 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must match exactly one allowed schema", path)
 		}
 	}
+	if notSchema, ok := schemaMap(schema["not"]); ok {
+		if err := validateValue(notSchema, value, path); err == nil {
+			return fmt.Errorf("%s must not match disallowed schema", path)
+		}
+	}
 	if types := stringOrStrings(schema["type"]); len(types) > 0 {
 		if !matchesAnyType(types, value) {
 			return fmt.Errorf("%s must be %s", path, strings.Join(types, " or "))
@@ -75,6 +81,14 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 	if exclusiveMaximum, ok := exclusiveNumberConstraint(schema["exclusiveMaximum"], schema["maximum"]); ok {
 		if number, ok := schemaNumber(value); ok && number >= exclusiveMaximum {
 			return fmt.Errorf("%s must be less than %s", path, describeSchemaNumber(exclusiveMaximum))
+		}
+	}
+	if multiple, ok := schemaNumberConstraint(schema["multipleOf"]); ok {
+		if multiple <= 0 {
+			return fmt.Errorf("%s has invalid multipleOf %s", path, describeSchemaNumber(multiple))
+		}
+		if number, ok := schemaNumber(value); ok && !isMultipleOf(number, multiple) {
+			return fmt.Errorf("%s must be a multiple of %s", path, describeSchemaNumber(multiple))
 		}
 	}
 	if minLength, ok := intSchemaConstraint(schema["minLength"]); ok {
@@ -113,13 +127,52 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must contain at most %d items", path, maxItems)
 		}
 	}
-	if itemsSchema, ok := schema["items"].(map[string]any); ok {
+	if unique, ok := schema["uniqueItems"].(bool); ok && unique {
 		items, ok := value.([]any)
-		if ok {
-			for idx, item := range items {
-				if err := validateValue(contracts.JSONSchema(itemsSchema), item, fmt.Sprintf("%s[%d]", path, idx)); err != nil {
+		if ok && !arrayItemsUnique(items) {
+			return fmt.Errorf("%s must contain unique items", path)
+		}
+	}
+	if items, ok := value.([]any); ok {
+		prefixItems := schemaList(schema["prefixItems"])
+		for idx, item := range items {
+			if idx >= len(prefixItems) {
+				break
+			}
+			if err := validateValue(prefixItems[idx], item, fmt.Sprintf("%s[%d]", path, idx)); err != nil {
+				return err
+			}
+		}
+		if itemsSchema, ok := schemaMap(schema["items"]); ok {
+			start := 0
+			if len(prefixItems) > 0 {
+				start = len(prefixItems)
+			}
+			for idx := start; idx < len(items); idx++ {
+				if err := validateValue(itemsSchema, items[idx], fmt.Sprintf("%s[%d]", path, idx)); err != nil {
 					return err
 				}
+			}
+		} else if additional, ok := schema["items"].(bool); ok && !additional {
+			start := 0
+			if len(prefixItems) > 0 {
+				start = len(prefixItems)
+			}
+			if len(items) > start {
+				return fmt.Errorf("%s[%d] is not allowed", path, start)
+			}
+		}
+		if containsSchema, ok := schemaMap(schema["contains"]); ok {
+			matches := countMatchingItems(containsSchema, items, path)
+			minContains := 1
+			if configured, ok := intSchemaConstraint(schema["minContains"]); ok {
+				minContains = configured
+			}
+			if matches < minContains {
+				return fmt.Errorf("%s must contain at least %d matching items", path, minContains)
+			}
+			if maxContains, ok := intSchemaConstraint(schema["maxContains"]); ok && matches > maxContains {
+				return fmt.Errorf("%s must contain at most %d matching items", path, maxContains)
 			}
 		}
 	}
@@ -136,7 +189,7 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 		}
 	}
 
-	properties, ok := schema["properties"].(map[string]any)
+	properties, ok := objectMap(schema["properties"])
 	obj, ok := value.(map[string]any)
 	if !ok {
 		return nil
@@ -153,27 +206,43 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			if !ok {
 				continue
 			}
-			propertyMap, ok := propertySchema.(map[string]any)
+			propertyMap, ok := schemaMap(propertySchema)
 			if !ok {
 				continue
 			}
-			if err := validateValue(contracts.JSONSchema(propertyMap), child, path+"."+key); err != nil {
+			if err := validateValue(propertyMap, child, path+"."+key); err != nil {
 				return err
 			}
 		}
 	}
-	if additionalSchema, ok := schema["additionalProperties"].(map[string]any); ok {
-		for key, child := range obj {
-			if _, defined := properties[key]; defined {
+	patternDefined, err := validatePatternProperties(schema["patternProperties"], obj, path)
+	if err != nil {
+		return err
+	}
+	if requiredDeps, ok := objectMap(schema["dependentRequired"]); ok {
+		for key, requiredValue := range requiredDeps {
+			if _, present := obj[key]; !present {
 				continue
 			}
-			if err := validateValue(contracts.JSONSchema(additionalSchema), child, path+"."+key); err != nil {
+			for _, requiredKey := range stringSlice(requiredValue) {
+				if _, ok := obj[requiredKey]; !ok {
+					return fmt.Errorf("%s.%s is required when %s.%s is present", path, requiredKey, path, key)
+				}
+			}
+		}
+	}
+	if additionalSchema, ok := schemaMap(schema["additionalProperties"]); ok {
+		for key, child := range obj {
+			if _, defined := properties[key]; defined || patternDefined[key] {
+				continue
+			}
+			if err := validateValue(additionalSchema, child, path+"."+key); err != nil {
 				return err
 			}
 		}
 	} else if additional, ok := schema["additionalProperties"].(bool); ok && !additional {
 		for key := range obj {
-			if _, defined := properties[key]; !defined {
+			if _, defined := properties[key]; !defined && !patternDefined[key] {
 				return fmt.Errorf("%s.%s is not allowed", path, key)
 			}
 		}
@@ -181,13 +250,35 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 	return nil
 }
 
+func schemaMap(value any) (contracts.JSONSchema, bool) {
+	switch typed := value.(type) {
+	case contracts.JSONSchema:
+		return typed, true
+	case map[string]any:
+		return contracts.JSONSchema(typed), true
+	default:
+		return nil, false
+	}
+}
+
+func objectMap(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	case contracts.JSONSchema:
+		return map[string]any(typed), true
+	default:
+		return nil, false
+	}
+}
+
 func schemaList(value any) []contracts.JSONSchema {
 	switch items := value.(type) {
 	case []any:
 		out := make([]contracts.JSONSchema, 0, len(items))
 		for _, item := range items {
-			if child, ok := item.(map[string]any); ok {
-				out = append(out, contracts.JSONSchema(child))
+			if child, ok := schemaMap(item); ok {
+				out = append(out, child)
 			}
 		}
 		return out
@@ -211,6 +302,44 @@ func matchesAtLeastOneSchema(schemas []contracts.JSONSchema, value any, path str
 		}
 	}
 	return false
+}
+
+func countMatchingItems(schema contracts.JSONSchema, items []any, path string) int {
+	matches := 0
+	for idx, item := range items {
+		if err := validateValue(schema, item, fmt.Sprintf("%s[%d]", path, idx)); err == nil {
+			matches++
+		}
+	}
+	return matches
+}
+
+func validatePatternProperties(value any, obj map[string]any, path string) (map[string]bool, error) {
+	patterns, ok := objectMap(value)
+	if !ok || len(patterns) == 0 {
+		return map[string]bool{}, nil
+	}
+	defined := map[string]bool{}
+	for pattern, rawSchema := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("%s has invalid patternProperties pattern %q: %w", path, pattern, err)
+		}
+		childSchema, ok := schemaMap(rawSchema)
+		if !ok {
+			continue
+		}
+		for key, child := range obj {
+			if !re.MatchString(key) {
+				continue
+			}
+			defined[key] = true
+			if err := validateValue(childSchema, child, path+"."+key); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return defined, nil
 }
 
 func countMatchingSchemas(schemas []contracts.JSONSchema, value any, path string) int {
@@ -299,6 +428,9 @@ func equalSchemaValue(a any, b any) bool {
 	case nil:
 		return b == nil
 	default:
+		if reflect.DeepEqual(a, b) {
+			return true
+		}
 		return fmt.Sprint(a) == fmt.Sprint(b)
 	}
 }
@@ -335,6 +467,11 @@ func schemaNumberConstraint(value any) (float64, bool) {
 	return schemaNumber(value)
 }
 
+func isMultipleOf(number float64, multiple float64) bool {
+	quotient := number / multiple
+	return math.Abs(quotient-math.Round(quotient)) < 1e-9
+}
+
 func exclusiveNumberConstraint(value any, pairedLimit any) (float64, bool) {
 	switch typed := value.(type) {
 	case bool:
@@ -345,6 +482,17 @@ func exclusiveNumberConstraint(value any, pairedLimit any) (float64, bool) {
 	default:
 		return schemaNumberConstraint(value)
 	}
+}
+
+func arrayItemsUnique(items []any) bool {
+	for i := range items {
+		for j := i + 1; j < len(items); j++ {
+			if equalSchemaValue(items[i], items[j]) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func describeSchemaNumber(value float64) string {

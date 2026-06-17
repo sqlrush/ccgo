@@ -121,7 +121,7 @@ func TestValidateSchemaAdvancedConstraints(t *testing.T) {
 			},
 			"combined": map[string]any{
 				"allOf": []any{
-					map[string]any{"type": "string"},
+					contracts.JSONSchema{"type": "string"},
 					map[string]any{"minLength": 3},
 				},
 			},
@@ -155,6 +155,66 @@ func TestValidateSchemaAdvancedConstraints(t *testing.T) {
 		})
 	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"kind":"task","name":"alpha","ratio":0.5,"legacy_ratio":0.5,"tags":["a","b"],"choice":2,"single":"x","combined":"abc"}`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateSchemaAdditionalAdvancedConstraints(t *testing.T) {
+	schema := contracts.JSONSchema{
+		"type": "object",
+		"properties": map[string]any{
+			"known":        map[string]any{"type": "string"},
+			"labels":       map[string]any{"type": "array", "uniqueItems": true},
+			"numbers":      map[string]any{"type": "array", "contains": map[string]any{"type": "integer", "minimum": 10}, "minContains": 1, "maxContains": 2},
+			"safe":         map[string]any{"type": "string", "not": map[string]any{"const": "forbidden"}},
+			"step":         map[string]any{"type": "number", "multipleOf": 0.5},
+			"strings":      map[string]any{"type": "array", "items": contracts.JSONSchema{"type": "string"}},
+			"token":        map[string]any{"type": "string"},
+			"token_secret": map[string]any{"type": "string"},
+			"tuple": map[string]any{
+				"type": "array",
+				"prefixItems": []contracts.JSONSchema{
+					{"type": "string"},
+					{"type": "integer"},
+				},
+				"items": false,
+			},
+		},
+		"patternProperties": map[string]any{
+			"^x-": contracts.JSONSchema{"type": "string"},
+		},
+		"dependentRequired": map[string]any{
+			"token": []string{"token_secret"},
+		},
+		"additionalProperties": false,
+	}
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"multiple-of", `{"step":1.3}`, "input.step must be a multiple of 0.5"},
+		{"unique-items", `{"labels":["a","a"]}`, "input.labels must contain unique items"},
+		{"typed-items", `{"strings":["ok",3]}`, "input.strings[1] must be string"},
+		{"prefix-item", `{"tuple":["id","bad"]}`, "input.tuple[1] must be integer"},
+		{"prefix-additional-item", `{"tuple":["id",2,true]}`, "input.tuple[2] is not allowed"},
+		{"contains-min", `{"numbers":[1,2]}`, "input.numbers must contain at least 1 matching items"},
+		{"contains-max", `{"numbers":[10,11,12]}`, "input.numbers must contain at most 2 matching items"},
+		{"not", `{"safe":"forbidden"}`, "input.safe must not match disallowed schema"},
+		{"pattern-properties", `{"x-env":3}`, "input.x-env must be string"},
+		{"dependent-required", `{"token":"t"}`, "input.token_secret is required when input.token is present"},
+		{"additional-properties", `{"other":"x"}`, "input.other is not allowed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateSchema(schema, json.RawMessage(tc.input))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	valid := `{"known":"ok","labels":["a","b"],"numbers":[10,3],"safe":"allowed","step":1.5,"strings":["ok"],"token":"t","token_secret":"s","tuple":["id",2],"x-env":"prod"}`
+	if err := ValidateSchema(schema, json.RawMessage(valid)); err != nil {
 		t.Fatal(err)
 	}
 }
