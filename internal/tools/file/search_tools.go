@@ -34,6 +34,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
+	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
 }
 
 var grepSemanticNumberKeys = map[string]struct{}{
@@ -47,6 +48,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
+	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
 }
 
 type globInput struct {
@@ -94,6 +96,10 @@ type grepInput struct {
 	InvertMatchAlt     bool   `json:"invertMatch,omitempty"`
 	InvertMatchDash    bool   `json:"invert-match,omitempty"`
 	ShortInvertMatch   bool   `json:"-v,omitempty"`
+	OnlyMatching       bool   `json:"only_matching,omitempty"`
+	OnlyMatchingAlt    bool   `json:"onlyMatching,omitempty"`
+	OnlyMatchingDash   bool   `json:"only-matching,omitempty"`
+	ShortOnlyMatching  bool   `json:"-o,omitempty"`
 	Multiline          bool   `json:"multiline,omitempty"`
 }
 
@@ -106,6 +112,7 @@ type fileSearchMatch struct {
 type grepMatch struct {
 	Path    string
 	Line    int
+	Column  int
 	Text    string
 	Count   int
 	Matched bool
@@ -122,6 +129,7 @@ type grepOptions struct {
 	LineNumbers   bool
 	Multiline     bool
 	InvertMatch   bool
+	OnlyMatching  bool
 }
 
 type searchWalkOptions struct {
@@ -215,12 +223,16 @@ func NewGrepTool() tool.Tool {
 					"invertMatch":      map[string]any{"type": "boolean"},
 					"invert-match":     map[string]any{"type": "boolean"},
 					"-v":               map[string]any{"type": "boolean"},
+					"only_matching":    map[string]any{"type": "boolean"},
+					"onlyMatching":     map[string]any{"type": "boolean"},
+					"only-matching":    map[string]any{"type": "boolean"},
+					"-o":               map[string]any{"type": "boolean"},
 					"multiline":        map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, and max_count/-m per-file match limiting. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, and only_matching/-o matched-text output. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -357,6 +369,11 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		before = 0
 		after = 0
 	}
+	onlyMatching := grepOnlyMatching(input) && mode == "content" && !grepInvertMatch(input)
+	if onlyMatching {
+		before = 0
+		after = 0
+	}
 	options := grepOptions{
 		Mode:          mode,
 		Limit:         grepLimit(input),
@@ -367,6 +384,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		LineNumbers:   grepLineNumbers(input, mode),
 		Multiline:     input.Multiline,
 		InvertMatch:   grepInvertMatch(input),
+		OnlyMatching:  onlyMatching,
 	}
 	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options, grepWalkOptions(ctx, root))
 	if err != nil {
@@ -397,6 +415,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"fixed_strings":    grepFixedStrings(input),
 			"word_regexp":      grepWordRegexp(input),
 			"invert_match":     grepInvertMatch(input),
+			"only_matching":    onlyMatching,
 			"multiline":        input.Multiline,
 			"truncated":        truncated,
 		},
@@ -594,7 +613,10 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 		if matches[i].Path != matches[j].Path {
 			return matches[i].Path < matches[j].Path
 		}
-		return matches[i].Line < matches[j].Line
+		if matches[i].Line != matches[j].Line {
+			return matches[i].Line < matches[j].Line
+		}
+		return matches[i].Column < matches[j].Column
 	})
 	totalMatches := len(matches)
 	start := options.Offset
@@ -647,6 +669,12 @@ func globBaseDirectory(pattern string) (string, string) {
 func grepFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) []grepMatch {
 	content = normalizeGrepContent(content)
 	lines := strings.Split(content, "\n")
+	if options.OnlyMatching {
+		if options.Multiline {
+			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount)
+		}
+		return grepLineOnlyMatches(path, lines, expr, options.MaxCount)
+	}
 	matched := map[int]bool{}
 	included := map[int]bool{}
 	if options.Multiline {
@@ -660,6 +688,73 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 			continue
 		}
 		matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: grepDisplayLine(lines[i], matched[i]), Matched: matched[i]})
+	}
+	return matches
+}
+
+func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCount int) []grepMatch {
+	var matches []grepMatch
+	matchedLines := 0
+	for i, line := range lines {
+		spans := expr.FindAllStringIndex(line, -1)
+		if len(spans) == 0 {
+			continue
+		}
+		if maxCount > 0 && matchedLines >= maxCount {
+			break
+		}
+		for _, span := range spans {
+			matches = append(matches, grepMatch{
+				Path:    path,
+				Line:    i + 1,
+				Column:  span[0] + 1,
+				Text:    grepDisplayLine(line[span[0]:span[1]], true),
+				Matched: true,
+			})
+		}
+		matchedLines++
+	}
+	return matches
+}
+
+func grepMultilineOnlyMatches(path string, lines []string, content string, expr *regexp.Regexp, maxCount int) []grepMatch {
+	if content == "" {
+		return nil
+	}
+	starts := grepLineStarts(lines)
+	var matches []grepMatch
+	for matchIndex, span := range expr.FindAllStringIndex(content, -1) {
+		if maxCount > 0 && matchIndex >= maxCount {
+			break
+		}
+		for i, lineStart := range starts {
+			lineEnd := lineStart + len(lines[i])
+			lineSpanEnd := lineEnd
+			if i < len(lines)-1 {
+				lineSpanEnd++
+			}
+			if !grepSpanTouchesLine(span[0], span[1], lineStart, lineEnd, lineSpanEnd) {
+				continue
+			}
+			fragmentStart := span[0]
+			if fragmentStart < lineStart {
+				fragmentStart = lineStart
+			}
+			fragmentEnd := span[1]
+			if fragmentEnd > lineEnd {
+				fragmentEnd = lineEnd
+			}
+			if fragmentStart > fragmentEnd {
+				fragmentStart = fragmentEnd
+			}
+			matches = append(matches, grepMatch{
+				Path:    path,
+				Line:    i + 1,
+				Column:  fragmentStart - lineStart + 1,
+				Text:    grepDisplayLine(lines[i][fragmentStart-lineStart:fragmentEnd-lineStart], true),
+				Matched: true,
+			})
+		}
 	}
 	return matches
 }
@@ -697,15 +792,7 @@ func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, m
 	if content == "" {
 		return
 	}
-	starts := make([]int, len(lines))
-	offset := 0
-	for i, line := range lines {
-		starts[i] = offset
-		offset += len(line)
-		if i < len(lines)-1 {
-			offset++
-		}
-	}
+	starts := grepLineStarts(lines)
 	matches := 0
 	spanMatched := map[int]bool{}
 	for _, span := range expr.FindAllStringIndex(content, -1) {
@@ -757,6 +844,19 @@ func grepSpanTouchesLine(matchStart int, matchEnd int, lineStart int, lineEnd in
 		return matchStart >= lineStart && matchStart <= lineEnd
 	}
 	return matchStart < lineSpanEnd && matchEnd > lineStart
+}
+
+func grepLineStarts(lines []string) []int {
+	starts := make([]int, len(lines))
+	offset := 0
+	for i, line := range lines {
+		starts[i] = offset
+		offset += len(line)
+		if i < len(lines)-1 {
+			offset++
+		}
+	}
+	return starts
 }
 
 func markGrepLineRange(first int, last int, lineCount int, beforeContext int, afterContext int, matched map[int]bool, included map[int]bool) {
@@ -894,6 +994,9 @@ func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
 			item["line"] = match.Line
 			item["text"] = match.Text
 			item["matched"] = match.Matched
+			if match.Column > 0 {
+				item["column"] = match.Column
+			}
 		case "count":
 			item["count"] = match.Count
 		}
@@ -946,6 +1049,10 @@ func grepWordRegexp(input grepInput) bool {
 
 func grepInvertMatch(input grepInput) bool {
 	return input.InvertMatch || input.InvertMatchAlt || input.InvertMatchDash || input.ShortInvertMatch
+}
+
+func grepOnlyMatching(input grepInput) bool {
+	return input.OnlyMatching || input.OnlyMatchingAlt || input.OnlyMatchingDash || input.ShortOnlyMatching
 }
 
 func grepLineNumbers(input grepInput, mode string) bool {

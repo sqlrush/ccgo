@@ -1703,6 +1703,50 @@ func TestGrepToolFixedStrings(t *testing.T) {
 	}
 }
 
+func TestGrepToolOnlyMatching(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"ID-123 ID-456",
+		"none",
+		"prefix ID-789 tail",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "tokens.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_only_matching",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-[0-9]+","output_mode":"content","only_matching":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "tokens.txt:1:ID-123\ntokens.txt:1:ID-456\ntokens.txt:3:ID-789"
+	if result.Content != want || result.StructuredContent["only_matching"] != true {
+		t.Fatalf("only_matching result = %#v", result)
+	}
+	matches := result.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 3 || matches[1]["text"] != "ID-456" || matches[1]["line"] != 1 || matches[1]["column"] != 8 {
+		t.Fatalf("only_matching structured matches = %#v", matches)
+	}
+
+	shortResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_only_matching_short",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-[0-9]+","outputMode":"content","-o":"true","lineNumbers":false}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantShort := "tokens.txt:ID-123\ntokens.txt:ID-456\ntokens.txt:ID-789"
+	if shortResult.Content != wantShort || shortResult.StructuredContent["only_matching"] != true || shortResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("short only-matching result = %#v", shortResult)
+	}
+}
+
 func TestGrepToolWordRegexp(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{
