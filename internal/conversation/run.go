@@ -799,6 +799,10 @@ func (r Runner) maybeWriteNativeManifest() {
 		return
 	}
 	_ = nativepkg.WriteManifest(path, nativepkg.BuildManifest(r.SessionID, r.WorkingDirectory))
+	clipboardPath := nativepkg.SessionClipboardPath(r.SessionPath, r.SessionID)
+	if clipboardPath != "" {
+		_ = nativepkg.EnsureClipboardState(clipboardPath, r.SessionID)
+	}
 	indexPath := nativepkg.SessionFileIndexPath(r.SessionPath, r.SessionID)
 	if indexPath == "" || strings.TrimSpace(r.WorkingDirectory) == "" {
 		return
@@ -942,6 +946,16 @@ func (r Runner) formatStatusNative() string {
 		fmt.Sprintf("Capabilities: %d", len(manifest.Capabilities)),
 		fmt.Sprintf("Available capabilities: %d", nativepkg.CountAvailable(manifest.Capabilities)),
 	)
+	clipboardPath := nativepkg.SessionClipboardPath(r.SessionPath, r.SessionID)
+	if clipboardPath != "" {
+		clipboard, err := nativepkg.LoadClipboard(clipboardPath)
+		if err == nil && clipboard.UpdatedAt != "" {
+			lines = append(lines,
+				"Clipboard path: "+clipboardPath,
+				fmt.Sprintf("Clipboard items: %d", len(clipboard.Items)),
+			)
+		}
+	}
 	indexPath := nativepkg.SessionFileIndexPath(r.SessionPath, r.SessionID)
 	if indexPath != "" {
 		index, err := nativepkg.LoadFileIndex(indexPath)

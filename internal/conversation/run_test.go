@@ -2079,8 +2079,17 @@ func TestRunnerWritesGatedNativeManifest(t *testing.T) {
 	if len(manifest.Capabilities) == 0 || nativepkg.CountAvailable(manifest.Capabilities) == 0 {
 		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
 	}
-	if !nativeCapabilityAvailable(manifest.Capabilities, "native_file_index", true) {
+	if !nativeCapabilityAvailable(manifest.Capabilities, "native_file_index", true) ||
+		!nativeCapabilityAvailable(manifest.Capabilities, "native_clipboard", true) ||
+		!nativeCapabilityAvailable(manifest.Capabilities, "native_color_diff", true) {
 		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
+	}
+	clipboard, err := nativepkg.LoadClipboard(nativepkg.SessionClipboardPath(transcriptPath, "sess_native"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clipboard.SessionID != "sess_native" || clipboard.UpdatedAt == "" || len(clipboard.Items) != 0 {
+		t.Fatalf("clipboard state = %#v", clipboard)
 	}
 	index, err := nativepkg.LoadFileIndex(nativepkg.SessionFileIndexPath(transcriptPath, "sess_native"))
 	if err != nil {

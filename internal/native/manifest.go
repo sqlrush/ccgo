@@ -54,9 +54,9 @@ func BuildManifest(sessionID contracts.ID, cwd string) Manifest {
 			{Name: "terminal_hyperlink", Available: true, Detail: "OSC 8 hyperlink sequence generation"},
 			{Name: "terminal_progress", Available: true, Detail: "OSC progress sequence generation"},
 			{Name: "osc52_clipboard", Available: true, Detail: "OSC 52 clipboard sequence generation"},
-			{Name: "native_clipboard", Available: false, Detail: "native clipboard runtime is not wired"},
+			{Name: "native_clipboard", Available: true, Detail: "session-scoped native clipboard runtime"},
 			{Name: "native_file_index", Available: true, Detail: "session-scoped native file index runtime"},
-			{Name: "native_color_diff", Available: false, Detail: "native color diff runtime is not wired"},
+			{Name: "native_color_diff", Available: true, Detail: "ANSI color diff rendering runtime"},
 		},
 	}
 	sort.SliceStable(manifest.Capabilities, func(i, j int) bool {
