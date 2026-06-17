@@ -2134,12 +2134,26 @@ func readOnlyWords(words []string) bool {
 
 func readOnlyPathCommand(words []string) bool {
 	command := filepathBase(words[0])
-	for _, word := range words[1:] {
+	for i := 1; i < len(words); i++ {
+		word := words[i]
 		if word == "--" {
 			continue
 		}
 		if unsafeReadOnlyPathWord(command, word) {
 			return false
+		}
+		if value, consumesNext, ok := pathCommandPathFlagValue(command, word); ok {
+			if consumesNext {
+				i++
+				if i >= len(words) {
+					return false
+				}
+				value = words[i]
+			}
+			if !safeRelativeShellPathArg(value) {
+				return false
+			}
+			continue
 		}
 		if strings.HasPrefix(word, "-") {
 			if unsafeReadOnlyPathFlag(command, word) {
@@ -2157,6 +2171,24 @@ func readOnlyPathCommand(words []string) bool {
 		}
 	}
 	return true
+}
+
+func pathCommandPathFlagValue(command string, word string) (string, bool, bool) {
+	switch command {
+	case "grep", "egrep", "fgrep", "rg":
+	default:
+		return "", false, false
+	}
+	switch {
+	case word == "-f" || word == "--file":
+		return "", true, true
+	case strings.HasPrefix(word, "-f") && len(word) > 2:
+		return word[2:], false, true
+	case strings.HasPrefix(word, "--file="):
+		return strings.TrimPrefix(word, "--file="), false, true
+	default:
+		return "", false, false
+	}
 }
 
 func unsafeReadOnlyPathWord(command string, word string) bool {

@@ -798,6 +798,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` 常见文件读取/搜索类只读命令（`ls`/`cat`/`head`/`tail`/`wc`/`grep`/`rg`/`find`/`stat`/`file`/`du`/`df`）现在增加基础相对路径 guard，绝对路径、home、`..`、变量/命令替换路径、Windows drive、UNC 和 URI/provider-like 路径不再自动进入 read-only fast path。
 
+本轮补充：`Bash` `grep`/`rg` read-only 分类现在会把 pattern-file 参数 `-f FILE`、`-fFILE` 和 `--file=FILE` 当作路径读取处理，缺值、绝对路径和 `..` 路径不再进入 read-only fast path。
+
 本轮补充：`Bash` `rg` read-only 分类现在拒绝 `--pre`/`--pre=...` 外部预处理命令，避免 ripgrep 执行任意预处理器时仍被自动归为只读。
 
 本轮补充：`Bash` `go list` read-only 分类现在从“子命令即只读”收敛到参数级 allowlist，允许 `-json`、`-deps`、`-f`、`-m`、`-versions`、`-tags` 和 `-mod=readonly/vendor` 等查询形态，拒绝 `-mod=mod`、`-modfile`、`-overlay`、未知 flag、缺值 flag 和非本地 package pattern。
