@@ -1237,6 +1237,49 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if filesResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.go" {
 		t.Fatalf("files result = %#v", filesResult.Content)
 	}
+	if filesResult.StructuredContent["files_with_matches"] != true {
+		t.Fatalf("files result structured content = %#v", filesResult.StructuredContent)
+	}
+
+	filesWithFlagResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_with_matches_flag",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","--files-with-matches":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesWithFlagResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.go" ||
+		filesWithFlagResult.StructuredContent["output_mode"] != "files_with_matches" ||
+		filesWithFlagResult.StructuredContent["files_with_matches"] != true {
+		t.Fatalf("files-with-matches flag result = %#v", filesWithFlagResult)
+	}
+
+	shortFilesWithResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_with_matches_short",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","-l":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortFilesWithResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.go" ||
+		shortFilesWithResult.StructuredContent["files_with_matches"] != true {
+		t.Fatalf("short files-with-matches result = %#v", shortFilesWithResult)
+	}
+
+	singularFilesWithResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_with_match_mode",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","output_mode":"files_with_match"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if singularFilesWithResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.go" ||
+		singularFilesWithResult.StructuredContent["output_mode"] != "files_with_matches" {
+		t.Fatalf("singular files-with-match result = %#v", singularFilesWithResult)
+	}
 
 	filesPagedResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_files_paged",
