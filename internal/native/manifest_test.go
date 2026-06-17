@@ -33,7 +33,9 @@ func TestBuildManifest(t *testing.T) {
 	if CountAvailable(manifest.Capabilities) == 0 {
 		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
 	}
-	if !hasCapability(manifest.Capabilities, "osc52_clipboard", true) || !hasCapability(manifest.Capabilities, "native_clipboard", false) {
+	if !hasCapability(manifest.Capabilities, "osc52_clipboard", true) ||
+		!hasCapability(manifest.Capabilities, "native_file_index", true) ||
+		!hasCapability(manifest.Capabilities, "native_clipboard", false) {
 		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
 	}
 }

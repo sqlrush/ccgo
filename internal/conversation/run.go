@@ -798,6 +798,13 @@ func (r Runner) maybeWriteNativeManifest() {
 		return
 	}
 	_ = nativepkg.WriteManifest(path, nativepkg.BuildManifest(r.SessionID, r.WorkingDirectory))
+	indexPath := nativepkg.SessionFileIndexPath(r.SessionPath, r.SessionID)
+	if indexPath == "" || strings.TrimSpace(r.WorkingDirectory) == "" {
+		return
+	}
+	if index, err := nativepkg.BuildFileIndex(r.SessionID, r.WorkingDirectory, nativepkg.FileIndexOptions{}); err == nil {
+		_ = nativepkg.WriteFileIndex(indexPath, index)
+	}
 }
 
 func (r Runner) maybeWriteLSPManagerStatus() {
@@ -921,6 +928,19 @@ func (r Runner) formatStatusNative() string {
 		fmt.Sprintf("Capabilities: %d", len(manifest.Capabilities)),
 		fmt.Sprintf("Available capabilities: %d", nativepkg.CountAvailable(manifest.Capabilities)),
 	)
+	indexPath := nativepkg.SessionFileIndexPath(r.SessionPath, r.SessionID)
+	if indexPath != "" {
+		index, err := nativepkg.LoadFileIndex(indexPath)
+		if err == nil && index.GeneratedAt != "" {
+			lines = append(lines,
+				"File index path: "+indexPath,
+				fmt.Sprintf("Indexed files: %d", len(index.Files)),
+			)
+			if index.Truncated {
+				lines = append(lines, "File index truncated: yes")
+			}
+		}
+	}
 	if manifest.Terminal != "" {
 		lines = append(lines, "Terminal: "+manifest.Terminal)
 	}

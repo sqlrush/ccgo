@@ -1918,6 +1918,9 @@ func TestRunnerStartsConfiguredLSPServer(t *testing.T) {
 func TestRunnerWritesGatedNativeManifest(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	transcriptPath := filepath.Join(dir, "session.jsonl")
 	nativeEnabled := true
 	runner := Runner{
@@ -1942,6 +1945,19 @@ func TestRunnerWritesGatedNativeManifest(t *testing.T) {
 	}
 	if len(manifest.Capabilities) == 0 || nativepkg.CountAvailable(manifest.Capabilities) == 0 {
 		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
+	}
+	if !nativeCapabilityAvailable(manifest.Capabilities, "native_file_index", true) {
+		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
+	}
+	index, err := nativepkg.LoadFileIndex(nativepkg.SessionFileIndexPath(transcriptPath, "sess_native"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.SessionID != "sess_native" || index.WorkingDirectory != dir || index.GeneratedAt == "" {
+		t.Fatalf("file index metadata = %#v", index)
+	}
+	if !nativeIndexHasPath(index.Files, "main.go") {
+		t.Fatalf("file index entries = %#v", index.Files)
 	}
 }
 
@@ -5286,6 +5302,24 @@ func bridgeManifestHasCommand(manifest bridgepkg.Manifest, name string) bool {
 func integrationHasState(integrations []integrationspkg.Integration, name string, enabled bool, state string) bool {
 	for _, integration := range integrations {
 		if integration.Name == name && integration.Enabled == enabled && integration.RuntimeState == state {
+			return true
+		}
+	}
+	return false
+}
+
+func nativeCapabilityAvailable(capabilities []nativepkg.Capability, name string, available bool) bool {
+	for _, capability := range capabilities {
+		if capability.Name == name && capability.Available == available {
+			return true
+		}
+	}
+	return false
+}
+
+func nativeIndexHasPath(files []nativepkg.FileEntry, path string) bool {
+	for _, file := range files {
+		if file.Path == path {
 			return true
 		}
 	}
