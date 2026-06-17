@@ -1486,11 +1486,11 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 当前状态：已有 Task/TaskOutput/KillTask/SendMessage/TeamCreate/TeamDelete/TeamOutput/TeamSendMessage/TeamDispatch/TeamSchedule/TeamAutoSchedule/TeamCoordinate/ResumeTask/Sleep/Brief/ScheduleCron/RemoteTrigger 入口、sidechain metadata/lifecycle、team manifest、schedule manifest、remote trigger receipt manifest、daemon heartbeat CLI/state/status 审计、ScheduleCron manual trigger/run_due/turn-start due tick、team coordinator_task_id 元数据、TeamOutput coordinator status、TeamSendMessage target routing、TeamDispatch individualized assignments、TeamSchedule deterministic member assignments、TeamAutoSchedule coordinator briefing + member assignments、TeamCoordinate coordinator briefing、structured handoff brief、remote trigger injection/event_id dedupe、remote service manifest、remote registrationUrl/authToken POST 注册状态、remote poll URL/cursor 与 websocket_url 多帧/tick 消息泵、WebSocket 基础重连/backoff 与连接计数审计、bridge direct `/remote-trigger`/`/remote-service` HTTP endpoint、WebSocket `remote_trigger`/`remote_status`/`hello`/`health`/`manifest` action、remote_trigger/remote_service/websocket_protocol manifest capability、task progress event、显式与 settings 默认 owned worktree 创建/清理、sparse/symlink settings 应用、`run:true` subagent nested tool loop、agent permission mode 应用、agent tool allowlist registry/permission pattern 过滤，以及 completed/failed/cancelled 终态 owned worktree 自动清理；完整远端 WebSocket 常驻持久 stream、daemon 托管调度循环、多 agent 后台调度循环和模型驱动团队自动调度仍未完成。
 
-本轮补充：remote registration 响应会持久化协议版本、能力列表和 lease renew/refresh endpoint，并在 `/status show remote` 中脱敏展示，为后续租约刷新调用和协议兼容判断提供可审计状态；实际 lease renew/refresh 调用和协议版本强制兼容仍未完成。
+本轮补充：remote registration 响应会持久化协议版本、能力列表和 lease renew/refresh endpoint，并在 `/status show remote` 中脱敏展示；注册协议版本现在强制校验，只接受空 legacy 版本、`ccr.remote.v1` 和 `ccr.remote.v2`，未知版本会把 registration 标为 failed 并清掉可用 endpoint。更完整的云端协议演进策略仍未完成。
 
-本轮补充：daemon remote delivery 会在投递未过期 leased event 前，对注册级同源 lease renew/refresh endpoint 做 best-effort POST，并对 transport error、408/429/5xx 做一次短退避重试，把 renew sent/error 计数写入 pump state、structured result 和 `/status show remote`；完整续期策略和协议版本强制兼容仍未完成。
+本轮补充：daemon remote delivery 会在投递未过期 leased event 前，对注册级同源 lease renew/refresh endpoint 做 best-effort POST，并对 transport error、408/429/5xx 做一次短退避重试，把 renew sent/error 计数写入 pump state、structured result 和 `/status show remote`；完整续期策略和云端协议演进策略仍未完成。
 
-本轮补充：remote delivery ack POST 同样会对 transport error、408/429/5xx 做一次短退避重试，保持 delivered/duplicate/failed/expired ack 在瞬时服务端错误下更稳；更完整的远端协议版本兼容策略仍未完成。
+本轮补充：remote delivery ack POST 同样会对 transport error、408/429/5xx 做一次短退避重试，保持 delivered/duplicate/failed/expired ack 在瞬时服务端错误下更稳；更完整的远端协议演进策略仍未完成。
 
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 

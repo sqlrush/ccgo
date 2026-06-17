@@ -42,7 +42,7 @@ func TestRegisterManifestPostsServiceManifest(t *testing.T) {
 		},
 		Now: now,
 	})
-	if state.RuntimeState != RegistrationRegistered || state.StatusCode != http.StatusOK || state.RemoteSessionID != "remote-sess" || state.RegistrationID != "reg-1" || state.ProtocolVersion != "ccr.remote.v1" || state.WebSocketURL != "wss://remote/ws" || state.PollURL != "https://remote/events" || state.LeaseRenewURL != "https://remote/leases/renew?token=secret" {
+	if state.RuntimeState != RegistrationRegistered || state.StatusCode != http.StatusOK || state.RemoteSessionID != "remote-sess" || state.RegistrationID != "reg-1" || state.ProtocolVersion != RemoteProtocolVersionV1 || state.WebSocketURL != "wss://remote/ws" || state.PollURL != "https://remote/events" || state.LeaseRenewURL != "https://remote/leases/renew?token=secret" {
 		t.Fatalf("registration state = %#v", state)
 	}
 	if len(state.Capabilities) != 2 || state.Capabilities[0] != "websocket_protocol" || state.Capabilities[1] != "lease_renew" {
@@ -90,11 +90,43 @@ func TestRegisterManifestAcceptsWrappedResponse(t *testing.T) {
 		},
 		Now: now,
 	})
-	if state.RuntimeState != RegistrationRegistered || state.RemoteSessionID != "remote-wrapped" || state.RegistrationID != "reg-wrapped" || state.ProtocolVersion != "ccr.remote.v2" || state.WebSocketURL != "wss://remote/wrapped/ws" || state.PollURL != "https://remote/wrapped/events" || state.LeaseRenewURL != "https://remote/wrapped/leases/refresh" || state.Message != "registered" {
+	if state.RuntimeState != RegistrationRegistered || state.RemoteSessionID != "remote-wrapped" || state.RegistrationID != "reg-wrapped" || state.ProtocolVersion != RemoteProtocolVersionV2 || state.WebSocketURL != "wss://remote/wrapped/ws" || state.PollURL != "https://remote/wrapped/events" || state.LeaseRenewURL != "https://remote/wrapped/leases/refresh" || state.Message != "registered" {
 		t.Fatalf("registration state = %#v", state)
 	}
 	if len(state.Capabilities) != 2 || state.Capabilities[0] != "remote_trigger" || state.Capabilities[1] != "lease_refresh" {
 		t.Fatalf("registration state = %#v", state)
+	}
+}
+
+func TestRegisterManifestRejectsUnsupportedProtocolVersion(t *testing.T) {
+	now := time.Date(2026, 6, 17, 11, 4, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"remoteSessionId":"remote-future",
+			"protocolVersion":"ccr.remote.v99",
+			"capabilities":["websocket_protocol"],
+			"websocketUrl":"wss://remote/future/ws?token=secret",
+			"pollUrl":"https://remote/future/events?token=secret",
+			"leaseRenewUrl":"https://remote/future/leases/renew?token=secret"
+		}`))
+	}))
+	defer server.Close()
+
+	state := RegisterManifest(context.Background(), RegistrationOptions{
+		RegistrationURL: server.URL + "/register",
+		Manifest: Manifest{
+			SessionID:     "sess_future",
+			EnvironmentID: "env-prod",
+			Services:      []Service{{Name: "daemon", RuntimeState: "running"}},
+		},
+		Now: now,
+	})
+	if state.RuntimeState != RegistrationFailed || state.StatusCode != http.StatusOK || state.ProtocolVersion != "ccr.remote.v99" || !strings.Contains(state.Error, "unsupported remote protocol version") || !strings.Contains(state.Error, RemoteProtocolVersionV1) || !strings.Contains(state.Error, RemoteProtocolVersionV2) {
+		t.Fatalf("registration state = %#v", state)
+	}
+	if state.RegisteredAt != "" || state.WebSocketURL != "" || state.PollURL != "" || state.LeaseRenewURL != "" || strings.Contains(state.Error, "token=secret") {
+		t.Fatalf("unsupported state leaked usable endpoint or secret = %#v", state)
 	}
 }
 
@@ -118,7 +150,7 @@ func TestRegisterManifestHandlesDisabledAndFailedState(t *testing.T) {
 func TestWriteAndLoadRegistrationState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sess_remote", registrationFileName)
 	state := DisabledRegistrationState(Manifest{SessionID: "sess_remote"}, "/state/remote-service.json", time.Date(2026, 6, 17, 11, 10, 0, 0, time.UTC))
-	state.ProtocolVersion = "ccr.remote.v1"
+	state.ProtocolVersion = RemoteProtocolVersionV1
 	state.Capabilities = []string{"websocket_protocol", "lease_renew"}
 	state.LeaseRenewURL = "https://remote/leases/renew"
 	if err := WriteRegistrationState(path, state); err != nil {
@@ -128,7 +160,7 @@ func TestWriteAndLoadRegistrationState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != RegistrationDisabled || loaded.ManifestPath != "/state/remote-service.json" || loaded.ProtocolVersion != "ccr.remote.v1" || loaded.LeaseRenewURL != "https://remote/leases/renew" || len(loaded.Capabilities) != 2 {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != RegistrationDisabled || loaded.ManifestPath != "/state/remote-service.json" || loaded.ProtocolVersion != RemoteProtocolVersionV1 || loaded.LeaseRenewURL != "https://remote/leases/renew" || len(loaded.Capabilities) != 2 {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	missing, err := LoadRegistrationState(filepath.Join(t.TempDir(), registrationFileName))

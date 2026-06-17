@@ -26,6 +26,13 @@ const (
 	RegistrationFailed     = "failed"
 )
 
+const (
+	RemoteProtocolVersionV1 = "ccr.remote.v1"
+	RemoteProtocolVersionV2 = "ccr.remote.v2"
+)
+
+var supportedRemoteProtocolVersions = []string{RemoteProtocolVersionV1, RemoteProtocolVersionV2}
+
 type RegistrationState struct {
 	SessionID        contracts.ID `json:"session_id,omitempty"`
 	EnvironmentID    string       `json:"environment_id,omitempty"`
@@ -142,6 +149,14 @@ func RegisterManifest(ctx context.Context, options RegistrationOptions) Registra
 	state.RuntimeState = RegistrationRegistered
 	state.RegisteredAt = now.UTC().Format(time.RFC3339Nano)
 	applyRegistrationResponse(&state, body)
+	if err := validateRemoteProtocolVersion(state.ProtocolVersion); err != nil {
+		state.RuntimeState = RegistrationFailed
+		state.RegisteredAt = ""
+		state.Error = err.Error()
+		state.WebSocketURL = ""
+		state.PollURL = ""
+		state.LeaseRenewURL = ""
+	}
 	return state
 }
 
@@ -297,6 +312,19 @@ func cleanStringList(values []string) []string {
 		cleaned = append(cleaned, text)
 	}
 	return cleaned
+}
+
+func validateRemoteProtocolVersion(version string) error {
+	text := strings.TrimSpace(version)
+	if text == "" {
+		return nil
+	}
+	for _, supported := range supportedRemoteProtocolVersions {
+		if text == supported {
+			return nil
+		}
+	}
+	return fmt.Errorf("unsupported remote protocol version %q; supported: %s", text, strings.Join(supportedRemoteProtocolVersions, ", "))
 }
 
 func remoteRegistrationError(status string, body []byte) string {

@@ -2718,6 +2718,20 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	}
 }
 
+func TestFormatRemoteRegistrationReportsUnsupportedProtocol(t *testing.T) {
+	lines := formatRemoteRegistration(remotepkg.RegistrationState{
+		RuntimeState:    remotepkg.RegistrationFailed,
+		StatusCode:      http.StatusOK,
+		RemoteSessionID: "remote-future",
+		ProtocolVersion: "ccr.remote.v99",
+		Error:           "unsupported remote protocol version \"ccr.remote.v99\"; supported: ccr.remote.v1, ccr.remote.v2",
+	})
+	text := strings.Join(lines, "\n")
+	if !strings.Contains(text, "Remote registration: failed: status 200: remote session remote-future: protocol ccr.remote.v99") || !strings.Contains(text, "unsupported remote protocol version") {
+		t.Fatalf("registration status = %q", text)
+	}
+}
+
 func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
