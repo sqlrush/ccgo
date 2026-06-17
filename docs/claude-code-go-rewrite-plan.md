@@ -749,6 +749,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：remote WebSocket pump 现在支持单次 tick 内读取多帧事件，并在握手/读帧失败或非正常 close 时按可配置 backoff 重连；daemon 默认读取最多 8 帧、最多重连 2 次，并把 frame/connect/reconnect 计数写入 `remote-pump.json` 和 `/status show remote`。完整 CCR 云端 WebSocket 常驻持久 stream 与更深协议 hardening 仍未完成。
 - 本轮补充：`internal/remote` 新增 callback 型 `StreamWebSocketEvents` primitive，可保持 WebSocket 连接逐帧解码并把事件批次交给调用方，支持 context 取消、可选帧上限、handler 错误传播、异常 close/读错后的 backoff 重连以及 `ReconnectAttempts < 0` 无限重连语义；该能力为 daemon 常驻 stream 托管接线打底。完整云端协议 hardening 仍未完成。
 - 本轮补充：`--daemon` 常驻模式现在会在初始 tick 后启动 remote WebSocket stream goroutine，按 heartbeat 间隔重试注册状态，复用 `StreamWebSocketEvents` 和 `RemoteTrigger` delivery/dedupe，把推送事件实时注入 running team，并在 `remote-pump.json` 中持续更新 `websocket_stream` transport、frame/connect/reconnect、delivered/duplicate/error 计数；daemon heartbeat/tick 在已注册 `websocket_url` 时会跳过短 WebSocket 读取，避免 stream 和 tick 双连接/重复写 pump state，poll-only 注册仍走原 tick 路径；daemon stop/context cancel 会取消 stream，并在 pump state 与 `/status show remote` 中记录 stream start/end/stop reason。完整云端协议 hardening 仍未完成。
+- 本轮补充：remote poll/WebSocket 共用解码器现在兼容 `data`、`event`、`remote_event`、`delivery`、`payload` 包裹的单条事件，以及这些 wrapper 下的 `events/items/messages/deliveries` 列表；云端可以用 envelope 协议携带 cursor 和事件内容，而无需强制把事件字段铺在顶层。更深的鉴权刷新、ack/lease 和服务端协议协商仍未完成。
 
 ### M11: Bridge 和高级集成
 

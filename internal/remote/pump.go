@@ -145,16 +145,21 @@ func DecodePollEvents(data []byte) ([]PollEvent, string, error) {
 	case map[string]any:
 		cursor := firstString(value, "next_cursor", "nextCursor", "cursor", "after", "after_id", "afterId")
 		if nested, ok := firstAny(value, "events", "items", "messages", "deliveries", "data"); ok {
-			if nestedMap, ok := nested.(map[string]any); ok {
-				if nestedEvents, ok := firstAny(nestedMap, "events", "items", "messages", "deliveries"); ok {
-					nested = nestedEvents
-				}
-				if cursor == "" {
-					cursor = firstString(nestedMap, "next_cursor", "nextCursor", "cursor", "after", "after_id", "afterId")
-				}
+			events, nestedCursor, decoded := decodePollEventValue(nested)
+			if cursor == "" {
+				cursor = nestedCursor
 			}
-			if list, ok := nested.([]any); ok {
-				return decodePollEventList(list), cursor, nil
+			if decoded && (len(events) > 0 || nestedCursor != "") {
+				return events, cursor, nil
+			}
+		}
+		if nested, ok := firstAny(value, "event", "remote_event", "remoteEvent", "delivery", "payload"); ok {
+			events, nestedCursor, decoded := decodePollEventValue(nested)
+			if cursor == "" {
+				cursor = nestedCursor
+			}
+			if decoded && (len(events) > 0 || nestedCursor != "") {
+				return events, cursor, nil
 			}
 		}
 		if event, ok := decodePollEventMap(value); ok {
@@ -163,6 +168,30 @@ func DecodePollEvents(data []byte) ([]PollEvent, string, error) {
 		return nil, cursor, nil
 	default:
 		return nil, "", fmt.Errorf("remote poll response must be an object or array")
+	}
+}
+
+func decodePollEventValue(value any) ([]PollEvent, string, bool) {
+	switch typed := value.(type) {
+	case []any:
+		return decodePollEventList(typed), "", true
+	case map[string]any:
+		cursor := firstString(typed, "next_cursor", "nextCursor", "cursor", "after", "after_id", "afterId")
+		if nested, ok := firstAny(typed, "events", "items", "messages", "deliveries"); ok {
+			events, nestedCursor, decoded := decodePollEventValue(nested)
+			if cursor == "" {
+				cursor = nestedCursor
+			}
+			if decoded {
+				return events, cursor, true
+			}
+		}
+		if event, ok := decodePollEventMap(typed); ok {
+			return []PollEvent{event}, cursor, true
+		}
+		return nil, cursor, cursor != ""
+	default:
+		return nil, "", false
 	}
 }
 

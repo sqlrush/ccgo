@@ -64,6 +64,27 @@ func TestDecodePollEventsAcceptsNestedDataAndArray(t *testing.T) {
 	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-single" || events[0].Message != "single payload" {
 		t.Fatalf("single events=%#v cursor=%q", events, cursor)
 	}
+	events, cursor, err = DecodePollEvents([]byte(`{"cursor":"c4","data":{"id":"evt-data","team":"team","payload":{"message":"data payload"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "c4" || len(events) != 1 || events[0].EventID != "evt-data" || events[0].Message != "data payload" {
+		t.Fatalf("data wrapper events=%#v cursor=%q", events, cursor)
+	}
+	events, cursor, err = DecodePollEvents([]byte(`{"type":"remote_trigger","event":{"delivery_id":"evt-event","team_id":"team","target":"coordinator","message":"event wrapper"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-event" || events[0].Target != "coordinator" || events[0].Message != "event wrapper" {
+		t.Fatalf("event wrapper events=%#v cursor=%q", events, cursor)
+	}
+	events, cursor, err = DecodePollEvents([]byte(`{"kind":"delivery","payload":{"id":"evt-payload","team_id":"team","event_type":"deploy","message":"payload wrapper"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-payload" || events[0].Event != "deploy" || events[0].Message != "payload wrapper" {
+		t.Fatalf("payload wrapper events=%#v cursor=%q", events, cursor)
+	}
 	events, cursor, err = DecodePollEvents([]byte(`{"cursor":"c3","message":"ok"}`))
 	if err != nil {
 		t.Fatal(err)
