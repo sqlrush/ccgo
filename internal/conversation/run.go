@@ -33,6 +33,7 @@ import (
 	"ccgo/internal/skills"
 	telemetrypkg "ccgo/internal/telemetry"
 	"ccgo/internal/tool"
+	tasktools "ccgo/internal/tools/task"
 )
 
 func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user contracts.Message) (Result, error) {
@@ -135,6 +136,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if err != nil {
 		return result, err
 	}
+	runner.maybeRunDueSchedules(ctx)
 	runner.maybeEmitTokenWarning(history)
 	relevantMemoryPrefetch := runner.startRelevantMemoryPrefetch(ctx, history)
 	if relevantMemoryPrefetch != nil {
@@ -360,6 +362,70 @@ func appendUniqueStrings(base []string, items ...string) []string {
 		base = append(base, item)
 	}
 	return base
+}
+
+func (r Runner) maybeRunDueSchedules(ctx context.Context) {
+	if r.SessionID == "" || strings.TrimSpace(r.SessionPath) == "" {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	const toolUseID contracts.ID = "schedule_due_tick"
+	progressSink := tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		if isNoopScheduleDueProgress(progress) {
+			return nil
+		}
+		progressCopy := progress
+		if progressCopy.ToolUseID == "" {
+			progressCopy.ToolUseID = toolUseID
+		}
+		r.emit(Event{Type: EventToolProgress, ToolProgress: &progressCopy})
+		return nil
+	})
+	_, err := tasktools.RunDueSchedules(tool.Context{
+		Context:          ctx,
+		WorkingDirectory: r.WorkingDirectory,
+		SessionID:        r.SessionID,
+		Metadata: map[string]any{
+			tool.MetadataSessionPathKey: r.SessionPath,
+		},
+	}, "", time.Now().UTC(), progressSink)
+	if err == nil {
+		return
+	}
+	r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
+		ToolUseID: toolUseID,
+		Type:      "schedule_due_error",
+		Data: map[string]any{
+			"error": err.Error(),
+		},
+	}})
+}
+
+func isNoopScheduleDueProgress(progress contracts.ToolProgress) bool {
+	if progress.Type != "schedule_due_run" {
+		return false
+	}
+	return progressDataInt(progress.Data, "due_count") == 0 &&
+		progressDataInt(progress.Data, "triggered_count") == 0 &&
+		progressDataInt(progress.Data, "error_count") == 0
+}
+
+func progressDataInt(data map[string]any, key string) int {
+	if data == nil {
+		return 0
+	}
+	switch value := data[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
 }
 
 func (r Runner) maybeEmitTokenWarning(history []contracts.Message) {

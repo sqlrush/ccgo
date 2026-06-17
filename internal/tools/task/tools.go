@@ -1985,6 +1985,80 @@ func callBrief(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (c
 	}, nil
 }
 
+func RunDueSchedules(ctx tool.Context, scheduleID string, now time.Time, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	manifest, err := manager.ScheduleManifest()
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	dueSchedules := session.DueSchedulesAt(manifest, now)
+	filterID := sanitizeTaskLikeID(scheduleID)
+	selectedDue := make([]session.ScheduleState, 0, len(dueSchedules))
+	for _, schedule := range dueSchedules {
+		if filterID == "" || schedule.ID == filterID {
+			selectedDue = append(selectedDue, schedule)
+		}
+	}
+	triggered := make([]map[string]any, 0, len(selectedDue))
+	runErrors := make([]map[string]any, 0)
+	for _, schedule := range selectedDue {
+		sent, triggerMessageChars, err := triggerScheduleToTeam(ctx, manager, schedule, now)
+		if err != nil {
+			updated, _, recordErr := manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
+				Timestamp: now,
+				Error:     err.Error(),
+			})
+			if recordErr == nil {
+				schedule = updated
+			}
+			runError := map[string]any{
+				"schedule_id": schedule.ID,
+				"error":       err.Error(),
+			}
+			if recordErr != nil {
+				runError["record_error"] = recordErr.Error()
+			}
+			runErrors = append(runErrors, runError)
+			continue
+		}
+		updated, _, err := manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
+			Timestamp: now,
+			SentCount: len(sent),
+		})
+		if err != nil {
+			runErrors = append(runErrors, map[string]any{
+				"schedule_id": schedule.ID,
+				"error":       err.Error(),
+			})
+			continue
+		}
+		triggeredSchedule := structuredScheduleState(updated)
+		triggeredSchedule["sent_count"] = len(sent)
+		triggeredSchedule["sent"] = sent
+		triggeredSchedule["trigger_message_chars"] = triggerMessageChars
+		triggered = append(triggered, triggeredSchedule)
+	}
+	_ = tool.SendProgress(sink, "", "schedule_due_run", map[string]any{
+		"checked_at":      now.UTC().Format(time.RFC3339Nano),
+		"due_count":       len(selectedDue),
+		"triggered_count": len(triggered),
+		"error_count":     len(runErrors),
+	})
+	return contracts.ToolResult{
+		Content: fmt.Sprintf("Triggered %d due schedule(s); %d error(s).", len(triggered), len(runErrors)),
+		StructuredContent: map[string]any{
+			"type":            "schedule_cron",
+			"action":          scheduleCronActionRunDue,
+			"checked_at":      now.UTC().Format(time.RFC3339Nano),
+			"due_count":       len(selectedDue),
+			"triggered_count": len(triggered),
+			"error_count":     len(runErrors),
+			"triggered":       triggered,
+			"errors":          runErrors,
+		},
+	}, nil
+}
+
 func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeScheduleCronInput(raw)
 	if err != nil {
@@ -2073,76 +2147,7 @@ func callScheduleCron(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 		if err != nil {
 			return contracts.ToolResult{}, err
 		}
-		manifest, err := manager.ScheduleManifest()
-		if err != nil {
-			return contracts.ToolResult{}, err
-		}
-		dueSchedules := session.DueSchedulesAt(manifest, now)
-		filterID := sanitizeTaskLikeID(input.ScheduleID)
-		selectedDue := make([]session.ScheduleState, 0, len(dueSchedules))
-		for _, schedule := range dueSchedules {
-			if filterID == "" || schedule.ID == filterID {
-				selectedDue = append(selectedDue, schedule)
-			}
-		}
-		triggered := make([]map[string]any, 0, len(selectedDue))
-		runErrors := make([]map[string]any, 0)
-		for _, schedule := range selectedDue {
-			sent, triggerMessageChars, err := triggerScheduleToTeam(ctx, manager, schedule, now)
-			if err != nil {
-				updated, _, recordErr := manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
-					Timestamp: now,
-					Error:     err.Error(),
-				})
-				if recordErr == nil {
-					schedule = updated
-				}
-				runError := map[string]any{
-					"schedule_id": schedule.ID,
-					"error":       err.Error(),
-				}
-				if recordErr != nil {
-					runError["record_error"] = recordErr.Error()
-				}
-				runErrors = append(runErrors, runError)
-				continue
-			}
-			updated, _, err := manager.RecordScheduleRun(schedule.ID, session.ScheduleRunOptions{
-				Timestamp: now,
-				SentCount: len(sent),
-			})
-			if err != nil {
-				runErrors = append(runErrors, map[string]any{
-					"schedule_id": schedule.ID,
-					"error":       err.Error(),
-				})
-				continue
-			}
-			triggeredSchedule := structuredScheduleState(updated)
-			triggeredSchedule["sent_count"] = len(sent)
-			triggeredSchedule["sent"] = sent
-			triggeredSchedule["trigger_message_chars"] = triggerMessageChars
-			triggered = append(triggered, triggeredSchedule)
-		}
-		_ = tool.SendProgress(sink, "", "schedule_due_run", map[string]any{
-			"checked_at":      now.UTC().Format(time.RFC3339Nano),
-			"due_count":       len(selectedDue),
-			"triggered_count": len(triggered),
-			"error_count":     len(runErrors),
-		})
-		return contracts.ToolResult{
-			Content: fmt.Sprintf("Triggered %d due schedule(s); %d error(s).", len(triggered), len(runErrors)),
-			StructuredContent: map[string]any{
-				"type":            "schedule_cron",
-				"action":          action,
-				"checked_at":      now.UTC().Format(time.RFC3339Nano),
-				"due_count":       len(selectedDue),
-				"triggered_count": len(triggered),
-				"error_count":     len(runErrors),
-				"triggered":       triggered,
-				"errors":          runErrors,
-			},
-		}, nil
+		return RunDueSchedules(ctx, input.ScheduleID, now, sink)
 	default:
 		enabled := true
 		if input.Enabled != nil {

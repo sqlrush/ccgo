@@ -211,6 +211,74 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 }
 
+func TestRunnerRunsDueSchedulesBeforeMainRequest(t *testing.T) {
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionID := contracts.ID("sess_schedule_tick")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{
+		ID:          "agent/scheduled",
+		AgentType:   "general-purpose",
+		Description: "Scheduled task",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:          "ops/team",
+		Description: "Ops team",
+		TaskIDs:     []string{"agent/scheduled"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.UpsertSchedule(session.ScheduleOptions{
+		ID:        "minute/check",
+		Cron:      "* * * * *",
+		Message:   "Check due work.",
+		TeamID:    "ops/team",
+		Enabled:   true,
+		Timestamp: time.Date(2026, 6, 17, 9, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+		ID:         "msg_done",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "sonnet",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+	}}}}
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   sessionID,
+		SessionPath: transcriptPath,
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("continue")); err != nil {
+		t.Fatal(err)
+	}
+	resume, err := manager.ResumeContext("agent/scheduled", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 {
+		t.Fatalf("scheduled sidechain messages = %#v", resume.Messages)
+	}
+	text := messages.TextContent(resume.Messages[1])
+	if !strings.Contains(text, "Scheduled cron trigger received.") || !strings.Contains(text, "Schedule: minute_check") || !strings.Contains(text, "Check due work.") {
+		t.Fatalf("scheduled tick message = %q", text)
+	}
+	if !hasScheduleDueTickProgress(progress) {
+		t.Fatalf("schedule due progress = %#v", progress)
+	}
+}
+
 func TestRunnerTaskToolStartsSidechainFromSessionMetadata(t *testing.T) {
 	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
 	if err != nil {
@@ -5736,6 +5804,18 @@ func hasToolProgress(progress []contracts.ToolProgress, toolUseID contracts.ID, 
 			continue
 		}
 		if item.Data["task_id"] == taskID && item.Data["status"] == status {
+			return true
+		}
+	}
+	return false
+}
+
+func hasScheduleDueTickProgress(progress []contracts.ToolProgress) bool {
+	for _, item := range progress {
+		if item.ToolUseID != "schedule_due_tick" || item.Type != "schedule_due_run" {
+			continue
+		}
+		if item.Data["due_count"] == 1 && item.Data["triggered_count"] == 1 && item.Data["error_count"] == 0 {
 			return true
 		}
 	}
