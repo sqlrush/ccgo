@@ -22,6 +22,7 @@ import (
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
 	modelpkg "ccgo/internal/model"
+	nativepkg "ccgo/internal/native"
 	"ccgo/internal/outputstyles"
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
@@ -39,6 +40,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		return Result{}, fmt.Errorf("conversation runner missing client")
 	}
 	r.maybeWriteBridgeManifest()
+	r.maybeWriteNativeManifest()
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
@@ -581,10 +583,10 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|lsp>"
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|lsp|native>"
 			}
 			return r.formatStatusShow(args[1])
-		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "lsp":
+		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "lsp", "native":
 			return r.formatStatusShow(args[0])
 		default:
 			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
@@ -729,8 +731,10 @@ func (r Runner) formatStatusShow(raw string) string {
 		return r.formatStatusBridge()
 	case "lsp":
 		return r.formatStatusLSP()
+	case "native":
+		return r.formatStatusNative()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, lsp"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, lsp, native"
 	}
 }
 
@@ -757,9 +761,63 @@ func normalizeStatusSection(raw string) string {
 		return "bridge"
 	case "lsp", "language-server", "language-servers", "diagnostic", "diagnostics":
 		return "lsp"
+	case "native", "native-integration", "native-integrations", "platform":
+		return "native"
 	default:
 		return compact
 	}
+}
+
+func (r Runner) maybeWriteNativeManifest() {
+	settings := r.mergedSettings()
+	if settings.Advanced == nil || !advancedBoolEnabled(settings.Advanced.NativeIntegrations) {
+		return
+	}
+	path := nativepkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		return
+	}
+	_ = nativepkg.WriteManifest(path, nativepkg.BuildManifest(r.SessionID, r.WorkingDirectory))
+}
+
+func (r Runner) formatStatusNative() string {
+	settings := r.mergedSettings()
+	enabled := settings.Advanced != nil && advancedBoolEnabled(settings.Advanced.NativeIntegrations)
+	path := nativepkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status native integrations",
+		"Enabled: " + boolEnabledText(enabled),
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Manifest path: (not configured)", "Capabilities: 0"), "\n")
+	}
+	manifest, err := nativepkg.LoadManifest(path)
+	if err != nil {
+		return strings.Join(append(lines, "Manifest path: "+path, "Native integrations error: "+err.Error()), "\n")
+	}
+	lines = append(lines,
+		"Manifest path: "+path,
+		"Platform: "+manifest.GOOS+"/"+manifest.GOARCH,
+		fmt.Sprintf("Capabilities: %d", len(manifest.Capabilities)),
+		fmt.Sprintf("Available capabilities: %d", nativepkg.CountAvailable(manifest.Capabilities)),
+	)
+	if manifest.Terminal != "" {
+		lines = append(lines, "Terminal: "+manifest.Terminal)
+	}
+	if manifest.ColorTerminal != "" {
+		lines = append(lines, "Color terminal: "+manifest.ColorTerminal)
+	}
+	if len(manifest.Capabilities) > 0 {
+		lines = append(lines, "Capability states:")
+		for _, capability := range manifest.Capabilities {
+			state := "unavailable"
+			if capability.Available {
+				state = "available"
+			}
+			lines = append(lines, "- "+capability.Name+": "+state)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) formatStatusLSP() string {

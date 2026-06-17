@@ -21,6 +21,7 @@ import (
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	"ccgo/internal/messages"
+	nativepkg "ccgo/internal/native"
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	telemetrypkg "ccgo/internal/telemetry"
@@ -1799,6 +1800,36 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	}
 }
 
+func TestRunnerWritesGatedNativeManifest(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	nativeEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{NativeIntegrations: &nativeEnabled},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := nativepkg.LoadManifest(nativepkg.SessionManifestPath(transcriptPath, "sess_native"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SessionID != "sess_native" || manifest.WorkingDirectory != dir || manifest.GeneratedAt == "" {
+		t.Fatalf("manifest metadata = %#v", manifest)
+	}
+	if len(manifest.Capabilities) == 0 || nativepkg.CountAvailable(manifest.Capabilities) == 0 {
+		t.Fatalf("manifest capabilities = %#v", manifest.Capabilities)
+	}
+}
+
 func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
@@ -1852,6 +1883,18 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		{FilePath: "main.go", Severity: "error", Source: "gopls", Message: "broken"},
 		{FilePath: "main.go", Severity: "warning", Source: "gopls", Message: "unused"},
 		{FilePath: "web.ts", Severity: "info", Source: "tsserver", Message: "info"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativepkg.WriteManifest(nativepkg.SessionManifestPath(transcriptPath, "sess_status_show"), nativepkg.Manifest{
+		SessionID: "sess_status_show",
+		GOOS:      "testos",
+		GOARCH:    "testarch",
+		Terminal:  "xterm-256color",
+		Capabilities: []nativepkg.Capability{
+			{Name: "native_clipboard", Available: false},
+			{Name: "osc52_clipboard", Available: true},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1960,6 +2003,16 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"- gopls: 2",
 		"- tsserver: 1",
 	}, []string{"broken", "unused"})
+	assertStatusShow("/status show native", []string{
+		"Status native integrations",
+		"Enabled: disabled",
+		"Platform: testos/testarch",
+		"Capabilities: 2",
+		"Available capabilities: 1",
+		"Terminal: xterm-256color",
+		"- native_clipboard: unavailable",
+		"- osc52_clipboard: available",
+	}, nil)
 	assertStatusShow("/status show unknown", []string{
 		"Unknown status section unknown.",
 		"Available sections:",
