@@ -2160,6 +2160,30 @@ func TestGrepToolMultiline(t *testing.T) {
 		t.Fatalf("multiline structured matches = %#v", matches)
 	}
 
+	shortMultilineResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_multiline_short",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha.*gamma","output_mode":"content","-U":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortMultilineResult.Content != want || shortMultilineResult.StructuredContent["multiline"] != true {
+		t.Fatalf("short multiline result = %#v", shortMultilineResult)
+	}
+
+	dotallResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_multiline_dotall",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha.*gamma","output_mode":"content","--multiline-dotall":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dotallResult.Content != want || dotallResult.StructuredContent["multiline"] != true {
+		t.Fatalf("multiline-dotall result = %#v", dotallResult)
+	}
+
 	invertResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_multiline_invert",
 		Name:  "Grep",
