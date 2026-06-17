@@ -798,6 +798,7 @@ func runDaemonTick(ctx context.Context, runner conversation.Runner, now time.Tim
 		"remote_delivered_count":      remoteDelivered,
 		"remote_poll_error_count":     remoteErrors,
 		"remote_poll_duplicate_count": intMapValue(remotePoll, "duplicate_count"),
+		"remote_transport":            stringMapValue(remotePoll, "transport"),
 		"schedule":                    schedule,
 		"remote_poll":                 remotePoll,
 	}
@@ -812,6 +813,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		"type":            "remote_poll",
 		"checked_at":      now.UTC().Format(time.RFC3339Nano),
 		"runtime_state":   remotepkg.PumpDisabled,
+		"transport":       "",
 		"event_count":     0,
 		"delivered_count": 0,
 		"duplicate_count": 0,
@@ -838,11 +840,12 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		})
 		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
 	}
-	if registration.RuntimeState != remotepkg.RegistrationRegistered || strings.TrimSpace(registration.PollURL) == "" {
+	if registration.RuntimeState != remotepkg.RegistrationRegistered || (strings.TrimSpace(registration.PollURL) == "" && strings.TrimSpace(registration.WebSocketURL) == "") {
 		_ = remotepkg.WritePumpState(pumpPath, remotepkg.PumpState{
 			SessionID:    runner.SessionID,
 			RuntimeState: remotepkg.PumpDisabled,
 			PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
+			WebSocketURL: remotepkg.DisplayEndpoint(registration.WebSocketURL),
 			LastPollAt:   now.UTC().Format(time.RFC3339Nano),
 		})
 		return contracts.ToolResult{Content: "Remote poll is disabled.", StructuredContent: structured}
@@ -856,39 +859,47 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	if settings.Remote != nil {
 		authToken = settings.Remote.AuthToken
 	}
-	poll := remotepkg.FetchPollEvents(ctx, remotepkg.PollOptions{
-		PollURL:   registration.PollURL,
-		Cursor:    previous.LastCursor,
-		AuthToken: authToken,
-	})
+	remoteFetch := fetchDaemonRemoteEvents(ctx, registration, previous.LastCursor, authToken)
 	pumpState := remotepkg.PumpState{
 		SessionID:    runner.SessionID,
 		RuntimeState: remotepkg.PumpRunning,
+		Transport:    remoteFetch.Transport,
 		PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
+		WebSocketURL: remotepkg.DisplayEndpoint(registration.WebSocketURL),
 		LastCursor:   previous.LastCursor,
 		LastPollAt:   now.UTC().Format(time.RFC3339Nano),
-		StatusCode:   poll.StatusCode,
-		EventCount:   len(poll.Events),
+		StatusCode:   remoteFetch.StatusCode,
+		EventCount:   len(remoteFetch.Events),
 	}
-	if poll.NextCursor != "" {
-		pumpState.LastCursor = poll.NextCursor
+	if remoteFetch.Transport == "poll" {
+		if remoteFetch.NextCursor != "" {
+			pumpState.LastCursor = remoteFetch.NextCursor
+		}
+	} else {
+		pumpState.LastCursor = ""
 	}
-	if poll.Error != "" {
+	if remoteFetch.Error != "" {
 		pumpState.RuntimeState = remotepkg.PumpFailed
 		pumpState.ErrorCount = 1
-		pumpState.LastError = poll.Error
+		pumpState.LastError = remoteFetch.Error
 		structured["runtime_state"] = pumpState.RuntimeState
-		structured["status_code"] = poll.StatusCode
-		structured["event_count"] = len(poll.Events)
+		structured["transport"] = pumpState.Transport
+		structured["poll_url"] = pumpState.PollURL
+		structured["websocket_url"] = pumpState.WebSocketURL
+		structured["status_code"] = remoteFetch.StatusCode
+		structured["event_count"] = len(remoteFetch.Events)
 		structured["error_count"] = 1
-		structured["error"] = poll.Error
+		structured["error"] = remoteFetch.Error
+		if remoteFetch.FallbackError != "" {
+			structured["fallback_error"] = remoteFetch.FallbackError
+		}
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
 		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
 	}
 	errorsOut := make([]map[string]any, 0)
 	delivered := 0
 	duplicates := 0
-	for _, event := range poll.Events {
+	for _, event := range remoteFetch.Events {
 		input, err := json.Marshal(map[string]any{
 			"team_id":  event.TeamID,
 			"target":   event.Target,
@@ -927,7 +938,9 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	}
 	_ = remotepkg.WritePumpState(pumpPath, pumpState)
 	structured["runtime_state"] = pumpState.RuntimeState
+	structured["transport"] = pumpState.Transport
 	structured["poll_url"] = pumpState.PollURL
+	structured["websocket_url"] = pumpState.WebSocketURL
 	structured["last_cursor"] = pumpState.LastCursor
 	structured["status_code"] = pumpState.StatusCode
 	structured["event_count"] = pumpState.EventCount
@@ -935,9 +948,68 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	structured["duplicate_count"] = pumpState.DuplicateCount
 	structured["error_count"] = pumpState.ErrorCount
 	structured["errors"] = errorsOut
+	if remoteFetch.FallbackError != "" {
+		structured["fallback_error"] = remoteFetch.FallbackError
+	}
 	return contracts.ToolResult{
-		Content:           fmt.Sprintf("Remote poll delivered %d event(s); %d duplicate(s); %d error(s).", delivered, duplicates, len(errorsOut)),
+		Content:           fmt.Sprintf("Remote %s delivered %d event(s); %d duplicate(s); %d error(s).", remoteFetch.Transport, delivered, duplicates, len(errorsOut)),
 		StructuredContent: structured,
+	}
+}
+
+type daemonRemoteFetch struct {
+	Transport     string
+	StatusCode    int
+	NextCursor    string
+	Events        []remotepkg.PollEvent
+	Error         string
+	FallbackError string
+}
+
+func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.RegistrationState, cursor string, authToken string) daemonRemoteFetch {
+	webSocketURL := strings.TrimSpace(registration.WebSocketURL)
+	pollURL := strings.TrimSpace(registration.PollURL)
+	if webSocketURL != "" {
+		wsCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		ws := remotepkg.FetchWebSocketEvents(wsCtx, remotepkg.WebSocketOptions{
+			WebSocketURL: webSocketURL,
+			AuthToken:    authToken,
+			MaxFrames:    1,
+		})
+		fetch := daemonRemoteFetch{
+			Transport: "websocket",
+			Events:    ws.Events,
+			Error:     ws.Error,
+		}
+		if ws.Error == "" || pollURL == "" {
+			return fetch
+		}
+		poll := remotepkg.FetchPollEvents(ctx, remotepkg.PollOptions{
+			PollURL:   pollURL,
+			Cursor:    cursor,
+			AuthToken: authToken,
+		})
+		return daemonRemoteFetch{
+			Transport:     "poll",
+			StatusCode:    poll.StatusCode,
+			NextCursor:    poll.NextCursor,
+			Events:        poll.Events,
+			Error:         poll.Error,
+			FallbackError: ws.Error,
+		}
+	}
+	poll := remotepkg.FetchPollEvents(ctx, remotepkg.PollOptions{
+		PollURL:   pollURL,
+		Cursor:    cursor,
+		AuthToken: authToken,
+	})
+	return daemonRemoteFetch{
+		Transport:  "poll",
+		StatusCode: poll.StatusCode,
+		NextCursor: poll.NextCursor,
+		Events:     poll.Events,
+		Error:      poll.Error,
 	}
 }
 

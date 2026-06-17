@@ -28,7 +28,9 @@ const (
 type PumpState struct {
 	SessionID      contracts.ID `json:"session_id,omitempty"`
 	RuntimeState   string       `json:"runtime_state"`
+	Transport      string       `json:"transport,omitempty"`
 	PollURL        string       `json:"poll_url,omitempty"`
+	WebSocketURL   string       `json:"websocket_url,omitempty"`
 	LastCursor     string       `json:"last_cursor,omitempty"`
 	LastPollAt     string       `json:"last_poll_at,omitempty"`
 	StatusCode     int          `json:"status_code,omitempty"`
@@ -149,6 +151,9 @@ func DecodePollEvents(data []byte) ([]PollEvent, string, error) {
 				return decodePollEventList(list), cursor, nil
 			}
 		}
+		if event, ok := decodePollEventMap(value); ok {
+			return []PollEvent{event}, cursor, nil
+		}
 		return nil, cursor, nil
 	default:
 		return nil, "", fmt.Errorf("remote poll response must be an object or array")
@@ -209,20 +214,31 @@ func decodePollEventList(list []any) []PollEvent {
 		if !ok {
 			continue
 		}
-		event := PollEvent{
-			EventID: firstString(obj, "event_id", "eventId", "remote_event_id", "remoteEventId", "delivery_id", "deliveryId", "id"),
-			TeamID:  firstString(obj, "team_id", "teamId", "team"),
-			Target:  firstString(obj, "target", "recipient", "recipients", "audience", "scope"),
-			Source:  firstString(obj, "source", "remote", "origin"),
-			Event:   firstString(obj, "event", "event_type", "eventType", "type"),
-			Message: firstString(obj, "message", "text", "content", "prompt", "input"),
-		}
-		if event.Message == "" {
-			event.Message = messageFromPayload(obj["payload"])
+		event, ok := decodePollEventMap(obj)
+		if !ok {
+			continue
 		}
 		events = append(events, event)
 	}
 	return events
+}
+
+func decodePollEventMap(obj map[string]any) (PollEvent, bool) {
+	event := PollEvent{
+		EventID: firstString(obj, "event_id", "eventId", "remote_event_id", "remoteEventId", "delivery_id", "deliveryId", "id"),
+		TeamID:  firstString(obj, "team_id", "teamId", "team"),
+		Target:  firstString(obj, "target", "recipient", "recipients", "audience", "scope"),
+		Source:  firstString(obj, "source", "remote", "origin"),
+		Event:   firstString(obj, "event", "event_type", "eventType", "type"),
+		Message: firstString(obj, "message", "text", "content", "prompt", "input"),
+	}
+	if event.Message == "" {
+		event.Message = messageFromPayload(obj["payload"])
+	}
+	if event.TeamID == "" || event.Message == "" {
+		return PollEvent{}, false
+	}
+	return event, true
 }
 
 func firstAny(values map[string]any, keys ...string) (any, bool) {

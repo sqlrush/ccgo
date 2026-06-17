@@ -57,6 +57,20 @@ func TestDecodePollEventsAcceptsNestedDataAndArray(t *testing.T) {
 	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-array" || events[0].Message != "array payload" {
 		t.Fatalf("array events=%#v cursor=%q", events, cursor)
 	}
+	events, cursor, err = DecodePollEvents([]byte(`{"id":"evt-single","team":"team","payload":{"message":"single payload"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-single" || events[0].Message != "single payload" {
+		t.Fatalf("single events=%#v cursor=%q", events, cursor)
+	}
+	events, cursor, err = DecodePollEvents([]byte(`{"cursor":"c3","message":"ok"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != "c3" || len(events) != 0 {
+		t.Fatalf("status object events=%#v cursor=%q", events, cursor)
+	}
 }
 
 func TestFetchPollEventsReportsFailedHTTPAndRedactsInvalidURL(t *testing.T) {
@@ -79,7 +93,9 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	state := PumpState{
 		SessionID:      "sess_remote",
 		RuntimeState:   PumpRunning,
+		Transport:      "websocket",
 		PollURL:        "https://remote/poll",
+		WebSocketURL:   "wss://remote/ws",
 		LastCursor:     "cursor-1",
 		EventCount:     2,
 		DeliveredCount: 1,
@@ -91,7 +107,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.LastCursor != "cursor-1" || loaded.LastPollAt == "" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.LastPollAt == "" {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	data, err := json.Marshal(loaded)

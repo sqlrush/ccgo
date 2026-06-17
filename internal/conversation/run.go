@@ -1857,6 +1857,12 @@ func formatRemotePump(state remotepkg.PumpState) []string {
 		return []string{"Remote pump: disabled"}
 	}
 	parts := []string{state.RuntimeState}
+	if state.Transport != "" {
+		parts = append(parts, "transport "+state.Transport)
+	}
+	if state.WebSocketURL != "" {
+		parts = append(parts, "websocket "+remotepkg.DisplayEndpoint(state.WebSocketURL))
+	}
 	if state.PollURL != "" {
 		parts = append(parts, "poll "+remotepkg.DisplayEndpoint(state.PollURL))
 	}

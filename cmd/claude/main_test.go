@@ -3,9 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -380,6 +384,70 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 	}
 	if len(resume.Messages) != 2 {
 		t.Fatalf("duplicate should not append, messages = %#v", resume.Messages)
+	}
+}
+
+func TestRunDaemonRemotePollPrefersWebSocket(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_remote_ws")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{ID: "agent/remote-lead", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:                "remote/team",
+		CoordinatorTaskID: "agent/remote-lead",
+		Timestamp:         time.Unix(102, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var auths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auths = append(auths, r.Header.Get("Authorization"))
+		conn := acceptDaemonTestWebSocket(t, w, r)
+		defer conn.Close()
+		writeDaemonTestWebSocketFrame(t, conn, 0x1, []byte(`{"id":"delivery-ws","team":"remote/team","source":"websocket","event":"deploy","message":"WS deploy."}`))
+		writeDaemonTestWebSocketFrame(t, conn, 0x8, []byte{0x03, 0xe8})
+	}))
+	defer server.Close()
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:       sessionID,
+		RuntimeState:    remotepkg.RegistrationRegistered,
+		WebSocketURL:    "ws" + strings.TrimPrefix(server.URL, "http") + "/events?token=secret",
+		PollURL:         "https://poll.example.invalid/events?token=secret",
+		RemoteSessionID: "remote-session",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &conversation.MCPConfig{UserSettings: contracts.Settings{
+			Remote: &contracts.RemoteSetting{AuthToken: "ws-token"},
+		}},
+	}
+	result := runDaemonRemotePoll(context.Background(), runner, time.Unix(200, 0).UTC())
+	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket" || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
+		t.Fatalf("websocket poll = %#v", result.StructuredContent)
+	}
+	if len(auths) != 1 || auths[0] != "Bearer ws-token" {
+		t.Fatalf("auths = %#v", auths)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.Transport != "websocket" || pump.DeliveredCount != 1 || strings.Contains(pump.WebSocketURL, "token=secret") {
+		t.Fatalf("pump = %#v", pump)
+	}
+	resume, err := manager.ResumeContext("agent/remote-lead", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 || !strings.Contains(messages.TextContent(resume.Messages[1]), "WS deploy.") {
+		t.Fatalf("resume messages = %#v", resume.Messages)
 	}
 }
 
@@ -2256,4 +2324,60 @@ func containsMCPServerSummary(values []any, name string, status string, typ stri
 		return true
 	}
 	return false
+}
+
+func acceptDaemonTestWebSocket(t *testing.T, w http.ResponseWriter, r *http.Request) net.Conn {
+	t.Helper()
+	key := r.Header.Get("Sec-WebSocket-Key")
+	if key == "" {
+		t.Fatalf("missing websocket key")
+	}
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		t.Fatalf("response writer cannot hijack")
+	}
+	conn, bufrw, err := hijacker.Hijack()
+	if err != nil {
+		t.Fatal(err)
+	}
+	accept := daemonTestWebSocketAccept(key)
+	response := fmt.Sprintf("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", accept)
+	if _, err := bufrw.WriteString(response); err != nil {
+		t.Fatal(err)
+	}
+	if err := bufrw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
+func writeDaemonTestWebSocketFrame(t *testing.T, conn net.Conn, opcode byte, payload []byte) {
+	t.Helper()
+	header := []byte{0x80 | opcode}
+	length := len(payload)
+	switch {
+	case length <= 125:
+		header = append(header, byte(length))
+	case length <= 65535:
+		header = append(header, 126)
+		var buf [2]byte
+		binary.BigEndian.PutUint16(buf[:], uint16(length))
+		header = append(header, buf[:]...)
+	default:
+		header = append(header, 127)
+		var buf [8]byte
+		binary.BigEndian.PutUint64(buf[:], uint64(length))
+		header = append(header, buf[:]...)
+	}
+	if _, err := conn.Write(header); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func daemonTestWebSocketAccept(key string) string {
+	sum := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+	return base64.StdEncoding.EncodeToString(sum[:])
 }
