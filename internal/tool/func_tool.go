@@ -73,13 +73,23 @@ func (t FuncTool) Validate(ctx Context, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	if err := ValidateSchema(t.DefinitionValue.InputSchema, normalized); err != nil {
+	if err := ValidateSchema(t.validationSchema(ctx), normalized); err != nil {
 		return err
 	}
 	if t.ValidateFunc != nil {
 		return t.ValidateFunc(ctx, normalized)
 	}
 	return nil
+}
+
+func (t FuncTool) validationSchema(ctx Context) contracts.JSONSchema {
+	if t.InputSchemaFunc == nil {
+		return t.DefinitionValue.InputSchema
+	}
+	return t.InputSchema(PromptContext{
+		WorkingDirectory: ctx.WorkingDirectory,
+		Metadata:         ctx.Metadata,
+	})
 }
 
 func (t FuncTool) CheckPermissions(ctx Context, raw json.RawMessage) (contracts.PermissionDecision, error) {

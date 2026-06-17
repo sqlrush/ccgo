@@ -159,6 +159,39 @@ func TestValidateSchemaAdvancedConstraints(t *testing.T) {
 	}
 }
 
+func TestFuncToolValidateUsesDynamicInputSchema(t *testing.T) {
+	dynamic := FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name: "Dynamic",
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"mode": map[string]any{"type": "string", "enum": []any{"static"}},
+				},
+			},
+		},
+		InputSchemaFunc: func(ctx PromptContext) contracts.JSONSchema {
+			allowed, _ := ctx.Metadata["allowed_mode"].(string)
+			if allowed == "" {
+				allowed = "dynamic"
+			}
+			return contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"mode": map[string]any{"type": "string", "enum": []any{allowed}},
+				},
+			}
+		},
+	}
+	ctx := Context{Metadata: map[string]any{"allowed_mode": "dynamic"}}
+	if err := dynamic.Validate(ctx, json.RawMessage(`{"mode":"dynamic"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := dynamic.Validate(ctx, json.RawMessage(`{"mode":"static"}`)); err == nil || !strings.Contains(err.Error(), "input.mode must be one of dynamic") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestExecutorRunsAllowedTool(t *testing.T) {
 	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
 	registry, err := NewRegistry(FuncTool{

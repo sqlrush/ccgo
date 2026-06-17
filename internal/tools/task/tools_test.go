@@ -1497,7 +1497,7 @@ func TestTaskToolUsesAvailableAgentsInPromptSchemaAndValidation(t *testing.T) {
 		Name:  "Task",
 		Input: json.RawMessage(`{"description":"Review API","prompt":"Inspect API changes","subagent_type":"missing:agent"}`),
 	}, nil)
-	if err == nil || !strings.Contains(err.Error(), `subagent_type "missing:agent" is not available`) {
+	if err == nil || !strings.Contains(err.Error(), "input.subagent_type must be one of general-purpose, demo:reviewer") {
 		t.Fatalf("err = %v", err)
 	}
 }
