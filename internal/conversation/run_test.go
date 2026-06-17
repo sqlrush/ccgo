@@ -2194,6 +2194,17 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	if chromeState.SessionID != "sess_integrations" || chromeState.Name != "chrome" || chromeState.RuntimeState != integrationspkg.RuntimeStateReady || chromeState.Artifacts["state"] == "" {
 		t.Fatalf("chrome runtime state = %#v", chromeState)
 	}
+	chromeManifestPath := chromeState.Artifacts["chrome_native_host_manifest"]
+	if chromeManifestPath == "" {
+		t.Fatalf("chrome native host manifest artifact missing: %#v", chromeState.Artifacts)
+	}
+	chromeManifest, err := integrationspkg.LoadChromeNativeHostManifest(chromeManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chromeManifest.Name != integrationspkg.ChromeNativeHostName || chromeManifest.Type != "stdio" || chromeManifest.Path == "" {
+		t.Fatalf("chrome native host manifest = %#v", chromeManifest)
+	}
 	computerState, err := integrationspkg.LoadRuntimeState(integrationspkg.SessionRuntimeStatePath(transcriptPath, "sess_integrations", "computer_use"))
 	if err != nil {
 		t.Fatal(err)
