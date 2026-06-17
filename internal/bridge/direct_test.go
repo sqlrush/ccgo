@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -150,6 +151,54 @@ func TestDirectHandlerExecuteRejectsUnsafeCommands(t *testing.T) {
 	}
 	if response.Allowed || response.Error == "" {
 		t.Fatalf("unsafe response = %#v", response)
+	}
+}
+
+func TestDirectHandlerRemoteTriggerEndpoint(t *testing.T) {
+	var got DirectRemoteTriggerRequest
+	handler := NewDirectHandler(DirectOptions{
+		SessionID: "sess_bridge",
+		Manifest:  testDirectManifest(t),
+		Registry:  testDirectRegistry(),
+		RemoteTrigger: func(_ context.Context, req DirectRemoteTriggerRequest) (DirectRemoteTriggerResponse, int) {
+			got = req
+			return DirectRemoteTriggerResponse{
+				Accepted:  true,
+				TeamID:    req.TeamID,
+				Target:    req.Target,
+				EventID:   req.EventID,
+				Source:    req.Source,
+				Event:     req.Event,
+				SentCount: 2,
+			}, http.StatusAccepted
+		},
+	})
+
+	recorder := bridgePOST(t, handler, "/v1/remote-trigger", `{"team_id":"ops/team","target":"all","event_id":"evt-1","source":"github","event":"workflow_failed","message":"Investigate CI."}`)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("remote trigger status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got.TeamID != "ops/team" || got.Target != "all" || got.EventID != "evt-1" || got.Source != "github" || got.Event != "workflow_failed" || got.Message != "Investigate CI." {
+		t.Fatalf("remote trigger request = %#v", got)
+	}
+	var response DirectRemoteTriggerResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Accepted || response.SentCount != 2 || response.TeamID != "ops/team" || response.EventID != "evt-1" {
+		t.Fatalf("remote trigger response = %#v", response)
+	}
+}
+
+func TestDirectHandlerRemoteTriggerRequiresCallback(t *testing.T) {
+	handler := NewDirectHandler(DirectOptions{
+		SessionID: "sess_bridge",
+		Manifest:  testDirectManifest(t),
+		Registry:  testDirectRegistry(),
+	})
+	recorder := bridgePOST(t, handler, "/remote-trigger", `{"team_id":"ops/team","message":"Investigate CI."}`)
+	if recorder.Code != http.StatusNotImplemented {
+		t.Fatalf("remote trigger status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

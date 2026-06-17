@@ -1970,6 +1970,79 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	}
 }
 
+func TestRunnerBridgeRemoteTriggerEndpointInjectsTeam(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_bridge_remote")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{
+		ID:          "agent/remote-lead",
+		AgentType:   "general-purpose",
+		Description: "Remote trigger lead",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:                "remote/team",
+		Description:       "Remote team",
+		CoordinatorTaskID: "agent/remote-lead",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bridgeEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{Bridge: &bridgeEnabled},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	if runner.BridgeDirectServer == nil {
+		t.Fatal("bridge direct server was not started")
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := runner.BridgeDirectServer.Close(ctx); err != nil {
+			t.Fatalf("close bridge direct server: %v", err)
+		}
+	})
+	resp, err := http.Post(runner.BridgeDirectServer.URL()+"/remote-trigger", "application/json", strings.NewReader(`{"team_id":"remote/team","event_id":"delivery-1","source":"webhook","event":"deploy","message":"Deploy now."}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("remote trigger status = %d", resp.StatusCode)
+	}
+	var response bridgepkg.DirectRemoteTriggerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Accepted || response.Duplicate || response.TeamID != "remote_team" || response.Target != "coordinator" || response.EventID != "delivery-1" || response.SentCount != 1 {
+		t.Fatalf("remote trigger response = %#v", response)
+	}
+	resume, err := manager.ResumeContext("agent/remote-lead", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 {
+		t.Fatalf("remote lead messages = %#v", resume.Messages)
+	}
+	text := messages.TextContent(resume.Messages[1])
+	if !strings.Contains(text, "Remote trigger received.") || !strings.Contains(text, "Source: webhook") || !strings.Contains(text, "Event: deploy") || !strings.Contains(text, "Deploy now.") {
+		t.Fatalf("remote trigger message = %q", text)
+	}
+}
+
 func TestRunnerLSPManagerStatusDisabledByDefault(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()

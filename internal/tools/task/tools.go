@@ -2229,6 +2229,13 @@ func triggerScheduleToTeam(ctx tool.Context, manager session.SidechainManager, s
 	return sent, len(triggerMessage), nil
 }
 
+func RunRemoteTrigger(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	if err := validateRemoteTrigger(ctx, raw); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	return callRemoteTrigger(ctx, raw, sink)
+}
+
 func callRemoteTrigger(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeRemoteTriggerInput(raw)
 	if err != nil {

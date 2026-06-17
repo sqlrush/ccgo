@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,16 +12,20 @@ import (
 )
 
 type DirectOptions struct {
-	SessionID contracts.ID
-	Manifest  Manifest
-	Registry  commands.Registry
+	SessionID     contracts.ID
+	Manifest      Manifest
+	Registry      commands.Registry
+	RemoteTrigger DirectRemoteTriggerFunc
 }
 
 type DirectHandler struct {
-	sessionID contracts.ID
-	manifest  Manifest
-	registry  commands.Registry
+	sessionID     contracts.ID
+	manifest      Manifest
+	registry      commands.Registry
+	remoteTrigger DirectRemoteTriggerFunc
 }
+
+type DirectRemoteTriggerFunc func(context.Context, DirectRemoteTriggerRequest) (DirectRemoteTriggerResponse, int)
 
 type DirectHealthResponse struct {
 	OK        bool         `json:"ok"`
@@ -31,6 +36,15 @@ type DirectHealthResponse struct {
 type DirectCommandRequest struct {
 	Command string       `json:"command"`
 	UUID    contracts.ID `json:"uuid,omitempty"`
+}
+
+type DirectRemoteTriggerRequest struct {
+	TeamID  string `json:"team_id"`
+	Target  string `json:"target,omitempty"`
+	EventID string `json:"event_id,omitempty"`
+	Source  string `json:"source,omitempty"`
+	Event   string `json:"event,omitempty"`
+	Message string `json:"message"`
 }
 
 type DirectResolveResponse struct {
@@ -58,6 +72,19 @@ type DirectExecuteResponse struct {
 	Error        string             `json:"error,omitempty"`
 }
 
+type DirectRemoteTriggerResponse struct {
+	Accepted   bool           `json:"accepted"`
+	Duplicate  bool           `json:"duplicate,omitempty"`
+	TeamID     string         `json:"team_id,omitempty"`
+	Target     string         `json:"target,omitempty"`
+	EventID    string         `json:"event_id,omitempty"`
+	Source     string         `json:"source,omitempty"`
+	Event      string         `json:"event,omitempty"`
+	SentCount  int            `json:"sent_count,omitempty"`
+	Structured map[string]any `json:"structured,omitempty"`
+	Error      string         `json:"error,omitempty"`
+}
+
 type DirectLocalResult struct {
 	Type     commands.LocalCommandResultType `json:"type"`
 	HasValue bool                            `json:"has_value"`
@@ -73,9 +100,10 @@ func NewDirectHandler(opts DirectOptions) *DirectHandler {
 		sessionID = opts.Manifest.SessionID
 	}
 	return &DirectHandler{
-		sessionID: sessionID,
-		manifest:  opts.Manifest,
-		registry:  opts.Registry,
+		sessionID:     sessionID,
+		manifest:      opts.Manifest,
+		registry:      opts.Registry,
+		remoteTrigger: opts.RemoteTrigger,
 	}
 }
 
@@ -98,6 +126,8 @@ func (h *DirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleResolve(w, r)
 	case "/execute":
 		h.handleExecute(w, r)
+	case "/remote-trigger":
+		h.handleRemoteTrigger(w, r)
 	case "/ws":
 		h.handleWebSocket(w, r)
 	default:
@@ -148,6 +178,26 @@ func (h *DirectHandler) handleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response, status := h.execute(req)
+	writeDirectJSON(w, status, response)
+}
+
+func (h *DirectHandler) handleRemoteTrigger(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeDirectError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if h.remoteTrigger == nil {
+		writeDirectError(w, http.StatusNotImplemented, "remote trigger endpoint is not configured")
+		return
+	}
+	req, ok := decodeDirectRemoteTriggerRequest(w, r)
+	if !ok {
+		return
+	}
+	response, status := h.remoteTrigger(r.Context(), req)
+	if status == 0 {
+		status = http.StatusOK
+	}
 	writeDirectJSON(w, status, response)
 }
 
@@ -221,6 +271,32 @@ func decodeDirectCommandRequest(w http.ResponseWriter, r *http.Request) (DirectC
 	if strings.TrimSpace(req.Command) == "" {
 		writeDirectError(w, http.StatusBadRequest, "command is required")
 		return DirectCommandRequest{}, false
+	}
+	return req, true
+}
+
+func decodeDirectRemoteTriggerRequest(w http.ResponseWriter, r *http.Request) (DirectRemoteTriggerRequest, bool) {
+	defer r.Body.Close()
+	var req DirectRemoteTriggerRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64*1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeDirectError(w, http.StatusBadRequest, "invalid JSON request: "+err.Error())
+		return DirectRemoteTriggerRequest{}, false
+	}
+	req.TeamID = strings.TrimSpace(req.TeamID)
+	req.Target = strings.TrimSpace(req.Target)
+	req.EventID = strings.TrimSpace(req.EventID)
+	req.Source = strings.TrimSpace(req.Source)
+	req.Event = strings.TrimSpace(req.Event)
+	req.Message = strings.TrimSpace(req.Message)
+	if req.TeamID == "" {
+		writeDirectError(w, http.StatusBadRequest, "team_id is required")
+		return DirectRemoteTriggerRequest{}, false
+	}
+	if req.Message == "" {
+		writeDirectError(w, http.StatusBadRequest, "message is required")
+		return DirectRemoteTriggerRequest{}, false
 	}
 	return req, true
 }
