@@ -1412,6 +1412,32 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("multi glob result = %#v", multiGlobResult.Content)
 	}
 
+	longGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_long_glob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","--glob":"**/*.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longGlobResult.Content != "Found 1 file\nsrc/b.txt" ||
+		longGlobResult.StructuredContent["glob"] != "**/*.txt" {
+		t.Fatalf("long glob result = %#v", longGlobResult)
+	}
+
+	shortGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_glob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","-g":"**/*.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortGlobResult.Content != "Found 1 file\nsrc/b.txt" ||
+		shortGlobResult.StructuredContent["glob"] != "**/*.txt" {
+		t.Fatalf("short glob result = %#v", shortGlobResult)
+	}
+
 	braceGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_brace_glob",
 		Name:  "Grep",
@@ -2115,6 +2141,30 @@ func TestGrepToolTypeFilter(t *testing.T) {
 	}
 	if jsResult.Content != "Found 1 file\nsrc/c.jsx" {
 		t.Fatalf("javascript type result = %#v", jsResult.Content)
+	}
+
+	longTypeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_long_type",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--type":"javascript"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longTypeResult.Content != "Found 1 file\nsrc/c.jsx" || longTypeResult.StructuredContent["type_filter"] != "javascript" {
+		t.Fatalf("long type result = %#v", longTypeResult)
+	}
+
+	shortTypeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_type",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","-t":"go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortTypeResult.Content != "Found 1 file\nsrc/a.go" || shortTypeResult.StructuredContent["type_filter"] != "go" {
+		t.Fatalf("short type result = %#v", shortTypeResult)
 	}
 
 	_, err = executor.Execute(ctx, contracts.ToolUse{
