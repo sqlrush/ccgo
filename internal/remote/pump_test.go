@@ -168,6 +168,37 @@ func TestSendAckRetriesTransientFailure(t *testing.T) {
 	}
 }
 
+func TestSendAckHonorsRetryAfterHeader(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	start := time.Now()
+	result := SendAck(context.Background(), AckOptions{
+		AckURL:            server.URL + "/ack",
+		EventID:           "evt-ack",
+		Status:            "delivered",
+		AllowedOrigins:    []string{server.URL + "/poll"},
+		RetryAttempts:     1,
+		RetryInitialDelay: time.Second,
+		RetryMaxDelay:     time.Second,
+	})
+	if result.Error != "" || result.StatusCode != http.StatusAccepted || result.AttemptCount != 2 || calls != 2 {
+		t.Fatalf("ack result = %#v calls=%d", result, calls)
+	}
+	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
+		t.Fatalf("ack retry ignored Retry-After header; elapsed=%s", elapsed)
+	}
+}
+
 func TestSendAckRejectsDisallowedOriginAndRedactsURL(t *testing.T) {
 	result := SendAck(context.Background(), AckOptions{
 		AckURL:         "https://user:pass@example.invalid/ack?token=secret",
@@ -237,6 +268,39 @@ func TestSendLeaseRenewalRetriesTransientFailure(t *testing.T) {
 	})
 	if result.Error != "" || result.StatusCode != http.StatusAccepted || result.LeaseExpiresAt != "2026-06-17T12:10:00Z" || result.AttemptCount != 2 || calls != 2 {
 		t.Fatalf("renew result = %#v calls=%d", result, calls)
+	}
+}
+
+func TestSendLeaseRenewalHonorsRetryAfterHeader(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"lease_expires_at":"2026-06-17T12:15:00Z"}`))
+	}))
+	defer server.Close()
+
+	start := time.Now()
+	result := SendLeaseRenewal(context.Background(), LeaseRenewOptions{
+		LeaseRenewURL:     server.URL + "/leases/renew",
+		EventID:           "evt-renew",
+		LeaseID:           "lease-1",
+		AllowedOrigins:    []string{server.URL + "/poll"},
+		RetryAttempts:     1,
+		RetryInitialDelay: time.Second,
+		RetryMaxDelay:     time.Second,
+	})
+	if result.Error != "" || result.StatusCode != http.StatusAccepted || result.LeaseExpiresAt != "2026-06-17T12:15:00Z" || result.AttemptCount != 2 || calls != 2 {
+		t.Fatalf("renew result = %#v calls=%d", result, calls)
+	}
+	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
+		t.Fatalf("lease renew retry ignored Retry-After header; elapsed=%s", elapsed)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -193,7 +194,7 @@ func SendAck(ctx context.Context, options AckOptions) AckResult {
 		result.StatusCode = resp.StatusCode
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			result.Error = remoteRegistrationError(resp.Status, body)
-			if remoteDeliveryStatusRetryable(resp.StatusCode) && attempt < retries && sleepRemoteDeliveryRetry(ctx, options.RetryInitialDelay, options.RetryMaxDelay, attempt) {
+			if remoteDeliveryStatusRetryable(resp.StatusCode) && attempt < retries && sleepRemoteDeliveryRetryAfter(ctx, resp.Header.Get("Retry-After"), options.RetryInitialDelay, options.RetryMaxDelay, attempt, time.Now()) {
 				continue
 			}
 			return result
@@ -261,7 +262,7 @@ func SendLeaseRenewal(ctx context.Context, options LeaseRenewOptions) LeaseRenew
 		result.StatusCode = resp.StatusCode
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			result.Error = remoteRegistrationError(resp.Status, body)
-			if remoteDeliveryStatusRetryable(resp.StatusCode) && attempt < retries && sleepRemoteDeliveryRetry(ctx, options.RetryInitialDelay, options.RetryMaxDelay, attempt) {
+			if remoteDeliveryStatusRetryable(resp.StatusCode) && attempt < retries && sleepRemoteDeliveryRetryAfter(ctx, resp.Header.Get("Retry-After"), options.RetryInitialDelay, options.RetryMaxDelay, attempt, time.Now()) {
 				continue
 			}
 			return result
@@ -384,6 +385,27 @@ func remoteDeliveryStatusRetryable(status int) bool {
 }
 
 func sleepRemoteDeliveryRetry(ctx context.Context, initialDelay, maxDelay time.Duration, attempt int) bool {
+	return sleepRemoteDeliveryRetryDelay(ctx, remoteDeliveryRetryDelay(initialDelay, maxDelay, attempt))
+}
+
+func sleepRemoteDeliveryRetryAfter(ctx context.Context, retryAfter string, initialDelay, maxDelay time.Duration, attempt int, now time.Time) bool {
+	delay := remoteDeliveryRetryDelay(initialDelay, maxDelay, attempt)
+	if retryDelay, ok := remoteRetryAfterDelay(retryAfter, now); ok {
+		delay = retryDelay
+		if maxDelay <= 0 {
+			maxDelay = time.Second
+		}
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+		if delay < 0 {
+			delay = 0
+		}
+	}
+	return sleepRemoteDeliveryRetryDelay(ctx, delay)
+}
+
+func remoteDeliveryRetryDelay(initialDelay, maxDelay time.Duration, attempt int) time.Duration {
 	delay := initialDelay
 	if delay <= 0 {
 		delay = 100 * time.Millisecond
@@ -401,6 +423,35 @@ func sleepRemoteDeliveryRetry(ctx context.Context, initialDelay, maxDelay time.D
 	if delay > maxDelay {
 		delay = maxDelay
 	}
+	return delay
+}
+
+func remoteRetryAfterDelay(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	after, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	delay := after.Sub(now)
+	if delay < 0 {
+		delay = 0
+	}
+	return delay, true
+}
+
+func sleepRemoteDeliveryRetryDelay(ctx context.Context, delay time.Duration) bool {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
