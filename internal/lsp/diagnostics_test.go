@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,53 @@ func TestLoadSnapshotMissingFile(t *testing.T) {
 func TestWriteSnapshotRejectsEmptyPath(t *testing.T) {
 	if err := WriteSnapshot("", nil); !errors.Is(err, os.ErrInvalid) {
 		t.Fatalf("WriteSnapshot empty path err = %v", err)
+	}
+}
+
+func TestDiagnosticsFromPublishDiagnosticsParams(t *testing.T) {
+	got, err := DiagnosticsFromPublishDiagnostics([]byte(`{
+		"uri": "file:///work/main.go",
+		"diagnostics": [{
+			"range": {"start": {"line": 4, "character": 2}, "end": {"line": 4, "character": 7}},
+			"severity": 1,
+			"code": "E100",
+			"source": "gopls",
+			"message": "broken"
+		}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 ||
+		got[0].FilePath != "/work/main.go" ||
+		got[0].Severity != "error" ||
+		got[0].Code != "E100" ||
+		got[0].Source != "gopls" ||
+		got[0].Message != "broken" {
+		t.Fatalf("diagnostics = %#v", got)
+	}
+}
+
+func TestDiagnosticsFromPublishDiagnosticsWrapper(t *testing.T) {
+	got, err := DiagnosticsFromPublishDiagnostics([]byte(`{
+		"jsonrpc": "2.0",
+		"method": "textDocument/publishDiagnostics",
+		"params": {
+			"uri": "file:///work/with%20space.go",
+			"diagnostics": [{"severity": "warning", "code": 7, "message": "warn"}]
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].FilePath != "/work/with space.go" || got[0].Severity != "warning" || got[0].Code != "7" {
+		t.Fatalf("diagnostics = %#v", got)
+	}
+}
+
+func TestDiagnosticsFromPublishDiagnosticsRequiresURI(t *testing.T) {
+	_, err := DiagnosticsFromPublishDiagnostics([]byte(`{"diagnostics":[]}`))
+	if err == nil || !strings.Contains(err.Error(), "uri is required") {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -3,9 +3,12 @@ package lsp
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -29,6 +32,19 @@ type Diagnostic struct {
 	Range    Range  `json:"range"`
 	Severity string `json:"severity,omitempty"`
 	Code     string `json:"code,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Message  string `json:"message"`
+}
+
+type PublishDiagnosticsParams struct {
+	URI         string                    `json:"uri"`
+	Diagnostics []PublishDiagnosticRecord `json:"diagnostics"`
+}
+
+type PublishDiagnosticRecord struct {
+	Range    Range  `json:"range"`
+	Severity any    `json:"severity,omitempty"`
+	Code     any    `json:"code,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Message  string `json:"message"`
 }
@@ -77,6 +93,51 @@ func LoadSnapshot(path string) ([]Diagnostic, error) {
 		return nil, err
 	}
 	return NormalizeDiagnostics(diagnostics), nil
+}
+
+func DiagnosticsFromPublishDiagnostics(data []byte) ([]Diagnostic, error) {
+	var params PublishDiagnosticsParams
+	if err := json.Unmarshal(data, &params); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(params.URI) == "" {
+		var wrapper struct {
+			Params PublishDiagnosticsParams `json:"params"`
+		}
+		if err := json.Unmarshal(data, &wrapper); err != nil {
+			return nil, err
+		}
+		params = wrapper.Params
+	}
+	if strings.TrimSpace(params.URI) == "" {
+		return nil, fmt.Errorf("publishDiagnostics uri is required")
+	}
+	filePath := URIToPath(params.URI)
+	out := make([]Diagnostic, 0, len(params.Diagnostics))
+	for _, diagnostic := range params.Diagnostics {
+		out = append(out, Diagnostic{
+			FilePath: filePath,
+			Range:    diagnostic.Range,
+			Severity: diagnosticSeverity(diagnostic.Severity),
+			Code:     diagnosticCode(diagnostic.Code),
+			Source:   diagnostic.Source,
+			Message:  diagnostic.Message,
+		})
+	}
+	return NormalizeDiagnostics(out), nil
+}
+
+func URIToPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "file" {
+		return raw
+	}
+	path := parsed.Path
+	if parsed.Host != "" && parsed.Host != "localhost" {
+		path = "//" + parsed.Host + path
+	}
+	return path
 }
 
 func NormalizeDiagnostics(diagnostics []Diagnostic) []Diagnostic {
@@ -128,6 +189,42 @@ func FilterDiagnostics(diagnostics []Diagnostic, filter Filter) ([]Diagnostic, b
 		return append([]Diagnostic(nil), out[:limit]...), true
 	}
 	return out, false
+}
+
+func diagnosticSeverity(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return NormalizeSeverity(v)
+	case float64:
+		if v == float64(int(v)) {
+			return NormalizeSeverity(strconv.Itoa(int(v)))
+		}
+		return NormalizeSeverity(strconv.FormatFloat(v, 'f', -1, 64))
+	case int:
+		return NormalizeSeverity(strconv.Itoa(v))
+	default:
+		return NormalizeSeverity(fmt.Sprint(v))
+	}
+}
+
+func diagnosticCode(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		if v == float64(int(v)) {
+			return strconv.Itoa(int(v))
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(v)
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
 }
 
 func NormalizeSeverity(raw string) string {
