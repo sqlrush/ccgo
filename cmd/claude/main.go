@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
@@ -70,6 +71,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 
 	showVersion := flags.Bool("version", false, "print version")
 	flags.BoolVar(showVersion, "v", false, "print version")
+	chromeNativeHost := flags.Bool("chrome-native-host", false, "run Chrome native messaging host")
 	cwd := flags.String("cwd", "", "working directory")
 	printMode := flags.Bool("print", false, "print response and exit")
 	flags.BoolVar(printMode, "p", false, "print response and exit")
@@ -114,6 +116,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if *showVersion {
 		fmt.Fprintf(stdout, "%s (ccgo)\n", version)
 		return 0
+	}
+	if *chromeNativeHost {
+		return runChromeNativeHost(stdin, stdout, stderr)
 	}
 
 	state, err := bootstrap.New()
@@ -202,6 +207,43 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 
 	fmt.Fprintf(stdout, "ccgo scaffold ready\nsession_id=%s\ncwd=%s\n", state.SessionID(), state.CWD())
 	return 0
+}
+
+func runChromeNativeHost(stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	for {
+		raw, err := integrationspkg.ReadChromeNativeMessage(stdin, 1<<20)
+		if errors.Is(err, io.EOF) {
+			return 0
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo chrome native host: %v\n", err)
+			return 1
+		}
+		response := handleChromeNativeHostMessage(raw)
+		if err := integrationspkg.WriteChromeNativeMessage(stdout, response); err != nil {
+			fmt.Fprintf(stderr, "ccgo chrome native host: %v\n", err)
+			return 1
+		}
+	}
+}
+
+func handleChromeNativeHostMessage(raw json.RawMessage) map[string]any {
+	var message map[string]any
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return map[string]any{"type": "error", "ok": false, "error": "invalid JSON message"}
+	}
+	messageType, _ := message["type"].(string)
+	switch strings.ToLower(strings.TrimSpace(messageType)) {
+	case "ping":
+		return map[string]any{"type": "pong", "ok": true}
+	case "status":
+		return map[string]any{"type": "status", "ok": true, "runtime": "ccgo", "version": version}
+	default:
+		if messageType == "" {
+			messageType = "(missing)"
+		}
+		return map[string]any{"type": "error", "ok": false, "error": "unsupported message type: " + messageType}
+	}
 }
 
 func applyCWDFlag(state *bootstrap.State, raw string) error {

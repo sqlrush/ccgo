@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +17,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -95,6 +97,59 @@ func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
 	if !ok || len(tools) == 0 {
 		t.Fatalf("missing builtin tools: %#v", requestBody["tools"])
 	}
+}
+
+func TestRunChromeNativeHostRespondsToMessages(t *testing.T) {
+	var stdin, stdout, stderr bytes.Buffer
+	if err := integrationspkg.WriteChromeNativeMessage(&stdin, map[string]any{"type": "ping"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := integrationspkg.WriteChromeNativeMessage(&stdin, map[string]any{"type": "status"}); err != nil {
+		t.Fatal(err)
+	}
+	code := run([]string{"--chrome-native-host"}, &stdin, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	pong := readNativeHostTestMessage(t, &stdout)
+	if pong["type"] != "pong" || pong["ok"] != true {
+		t.Fatalf("pong = %#v", pong)
+	}
+	status := readNativeHostTestMessage(t, &stdout)
+	if status["type"] != "status" || status["runtime"] != "ccgo" || status["version"] != version {
+		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestRunChromeNativeHostReportsUnsupportedMessage(t *testing.T) {
+	var stdin, stdout, stderr bytes.Buffer
+	if err := integrationspkg.WriteChromeNativeMessage(&stdin, map[string]any{"type": "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	code := run([]string{"--chrome-native-host"}, &stdin, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	response := readNativeHostTestMessage(t, &stdout)
+	if response["type"] != "error" || response["ok"] != false || !strings.Contains(fmt.Sprint(response["error"]), "unsupported message type") {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
+func readNativeHostTestMessage(t *testing.T, r io.Reader) map[string]any {
+	t.Helper()
+	raw, err := integrationspkg.ReadChromeNativeMessage(r, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var message map[string]any
+	if err := json.Unmarshal(raw, &message); err != nil {
+		t.Fatal(err)
+	}
+	return message
 }
 
 func TestRunHelpExitsSuccessfully(t *testing.T) {

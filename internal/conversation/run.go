@@ -798,12 +798,23 @@ func (r Runner) maybeWriteIntegrationsManifest() {
 			chromeManifestPath := integrationspkg.ChromeNativeHostManifestPath(r.SessionPath, r.SessionID)
 			if chromeManifestPath != "" {
 				hostPath, _ := os.Executable()
-				chromeManifest := integrationspkg.BuildChromeNativeHostManifest(hostPath, integrationspkg.ChromeAllowedOriginsFromEnv(os.Getenv))
+				chromeWrapperPath := integrationspkg.ChromeNativeHostWrapperPath(r.SessionPath, r.SessionID)
+				if chromeWrapperPath != "" && strings.TrimSpace(hostPath) != "" {
+					_ = integrationspkg.WriteChromeNativeHostWrapper(chromeWrapperPath, hostPath)
+				}
+				chromeManifestHostPath := hostPath
+				if chromeWrapperPath != "" {
+					chromeManifestHostPath = chromeWrapperPath
+				}
+				chromeManifest := integrationspkg.BuildChromeNativeHostManifest(chromeManifestHostPath, integrationspkg.ChromeAllowedOriginsFromEnv(os.Getenv))
 				_ = integrationspkg.WriteChromeNativeHostManifest(chromeManifestPath, chromeManifest)
 				if runtimeState.Artifacts == nil {
 					runtimeState.Artifacts = map[string]string{}
 				}
 				runtimeState.Artifacts["chrome_native_host_manifest"] = chromeManifestPath
+				if chromeWrapperPath != "" {
+					runtimeState.Artifacts["chrome_native_host_wrapper"] = chromeWrapperPath
+				}
 			}
 		}
 		_ = integrationspkg.WriteRuntimeState(statePath, runtimeState)
@@ -1080,6 +1091,9 @@ func (r Runner) formatStatusIntegrations() string {
 				}
 				if chromeManifestPath := runtimeState.Artifacts["chrome_native_host_manifest"]; chromeManifestPath != "" {
 					line += " chrome_manifest=" + chromeManifestPath
+				}
+				if chromeWrapperPath := runtimeState.Artifacts["chrome_native_host_wrapper"]; chromeWrapperPath != "" {
+					line += " chrome_wrapper=" + chromeWrapperPath
 				}
 			} else if len(integration.Adapters) > 0 {
 				line += fmt.Sprintf(" adapters=%d", integrationspkg.CountAvailableAdapters(integration.Adapters))

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -16,6 +18,27 @@ func TestChromeNativeHostManifestPath(t *testing.T) {
 	}
 	if got := ChromeNativeHostManifestPath("", "sess_chrome"); got != "" {
 		t.Fatalf("empty transcript path = %q, want empty", got)
+	}
+}
+
+func TestChromeNativeHostWrapperWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sess_chrome", chromeHostWrapperName)
+	if err := WriteChromeNativeHostWrapper(path, "/tmp/Claude Code/claude"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "exec '/tmp/Claude Code/claude' --chrome-native-host") {
+		t.Fatalf("wrapper = %q", string(data))
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("wrapper mode = %v", info.Mode().Perm())
 	}
 }
 

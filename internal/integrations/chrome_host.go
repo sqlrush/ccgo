@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -15,8 +16,10 @@ import (
 )
 
 const (
-	ChromeNativeHostName = "com.anthropic.claude_code_go"
-	chromeHostFileName   = "chrome-native-host.json"
+	ChromeNativeHostName     = "com.anthropic.claude_code_go"
+	chromeHostFileName       = "chrome-native-host.json"
+	chromeHostWrapperName    = "chrome-native-host.sh"
+	chromeHostWrapperCMDName = "chrome-native-host.cmd"
 )
 
 type ChromeNativeHostManifest struct {
@@ -32,6 +35,17 @@ func ChromeNativeHostManifestPath(sessionPath string, sessionID contracts.ID) st
 		return ""
 	}
 	return filepath.Join(filepath.Dir(sessionPath), string(sessionID), chromeHostFileName)
+}
+
+func ChromeNativeHostWrapperPath(sessionPath string, sessionID contracts.ID) string {
+	if sessionPath == "" || sessionID == "" {
+		return ""
+	}
+	name := chromeHostWrapperName
+	if runtime.GOOS == "windows" {
+		name = chromeHostWrapperCMDName
+	}
+	return filepath.Join(filepath.Dir(sessionPath), string(sessionID), name)
 }
 
 func BuildChromeNativeHostManifest(hostPath string, allowedOrigins []string) ChromeNativeHostManifest {
@@ -64,6 +78,19 @@ func WriteChromeNativeHostManifest(path string, manifest ChromeNativeHostManifes
 	}
 	data = append(data, '\n')
 	return platform.AtomicWriteFile(path, data, 0o644)
+}
+
+func WriteChromeNativeHostWrapper(path string, executablePath string) error {
+	if path == "" || strings.TrimSpace(executablePath) == "" {
+		return os.ErrInvalid
+	}
+	var data []byte
+	if strings.HasSuffix(strings.ToLower(path), ".cmd") {
+		data = []byte("@echo off\r\n" + cmdQuote(executablePath) + " --chrome-native-host %*\r\n")
+	} else {
+		data = []byte("#!/bin/sh\nexec " + shellQuote(executablePath) + " --chrome-native-host \"$@\"\n")
+	}
+	return platform.AtomicWriteFile(path, data, 0o755)
 }
 
 func LoadChromeNativeHostManifest(path string) (ChromeNativeHostManifest, error) {
@@ -172,4 +199,12 @@ func normalizeChromeAllowedOrigins(origins []string) []string {
 		normalized = append(normalized, origin)
 	}
 	return normalized
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func cmdQuote(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
