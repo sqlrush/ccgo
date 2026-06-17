@@ -44,6 +44,20 @@ func TestBuildManifestIncludesOnlyBridgeSafeCommands(t *testing.T) {
 	}
 }
 
+func TestManifestCapabilitiesAreIdempotent(t *testing.T) {
+	manifest := WithRemoteTriggerCapability(WithWebSocketProtocolCapability(Manifest{}))
+	manifest = WithRemoteTriggerCapability(WithWebSocketProtocolCapability(manifest))
+	if len(manifest.Capabilities) != 2 {
+		t.Fatalf("capabilities = %#v", manifest.Capabilities)
+	}
+	if manifest.Capabilities[0].Name != "websocket_protocol" || manifest.Capabilities[0].HTTPPath != "/ws" || manifest.Capabilities[0].WebSocketAction != "hello" {
+		t.Fatalf("websocket capability = %#v", manifest.Capabilities[0])
+	}
+	if manifest.Capabilities[1].Name != "remote_trigger" || manifest.Capabilities[1].HTTPPath != "/remote-trigger" || manifest.Capabilities[1].WebSocketAction != "remote_trigger" {
+		t.Fatalf("remote trigger capability = %#v", manifest.Capabilities[1])
+	}
+}
+
 func TestWriteAndLoadManifest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sess_bridge", manifestFileName)
 	input := Manifest{

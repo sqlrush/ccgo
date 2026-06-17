@@ -78,16 +78,28 @@ func BuildManifestFromSettings(sessionID contracts.ID, cwd string, settings cont
 }
 
 func WithRemoteTriggerCapability(manifest Manifest) Manifest {
-	for _, capability := range manifest.Capabilities {
-		if strings.EqualFold(capability.Name, "remote_trigger") {
-			return manifest
-		}
-	}
-	manifest.Capabilities = append(manifest.Capabilities, Capability{
+	return withCapability(manifest, Capability{
 		Name:            "remote_trigger",
 		HTTPPath:        "/remote-trigger",
 		WebSocketAction: "remote_trigger",
 	})
+}
+
+func WithWebSocketProtocolCapability(manifest Manifest) Manifest {
+	return withCapability(manifest, Capability{
+		Name:            "websocket_protocol",
+		HTTPPath:        "/ws",
+		WebSocketAction: "hello",
+	})
+}
+
+func withCapability(manifest Manifest, capability Capability) Manifest {
+	for _, existing := range manifest.Capabilities {
+		if strings.EqualFold(existing.Name, capability.Name) {
+			return manifest
+		}
+	}
+	manifest.Capabilities = append(manifest.Capabilities, capability)
 	return manifest
 }
 

@@ -2723,9 +2723,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 			{Name: "compact", Type: contracts.CommandLocal},
 			{Name: "ask", Type: contracts.CommandPrompt, Aliases: []string{"question"}},
 		},
-		Capabilities: []bridgepkg.Capability{
-			{Name: "remote_trigger", HTTPPath: "/remote-trigger", WebSocketAction: "remote_trigger"},
-		},
+		Capabilities: bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.Manifest{})).Capabilities,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2856,7 +2854,8 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status bridge",
 		"Enabled: disabled",
 		"Bridge-safe commands: 2",
-		"Bridge capabilities: 1",
+		"Bridge capabilities: 2",
+		"- websocket_protocol: http /ws: websocket hello",
 		"- remote_trigger: http /remote-trigger: websocket remote_trigger",
 		"Command names: ask, compact",
 	}, nil)

@@ -99,7 +99,7 @@ func NewDirectHandler(opts DirectOptions) *DirectHandler {
 	if sessionID == "" {
 		sessionID = opts.Manifest.SessionID
 	}
-	manifest := opts.Manifest
+	manifest := WithWebSocketProtocolCapability(opts.Manifest)
 	if opts.RemoteTrigger != nil {
 		manifest = WithRemoteTriggerCapability(manifest)
 	}
@@ -144,11 +144,7 @@ func (h *DirectHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		writeDirectError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	writeDirectJSON(w, http.StatusOK, DirectHealthResponse{
-		OK:        true,
-		SessionID: h.sessionID,
-		Commands:  len(h.manifest.Commands),
-	})
+	writeDirectJSON(w, http.StatusOK, h.health())
 }
 
 func (h *DirectHandler) handleManifest(w http.ResponseWriter, r *http.Request) {

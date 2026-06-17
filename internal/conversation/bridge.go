@@ -21,7 +21,7 @@ func (r *Runner) maybeWriteBridgeManifest() {
 	if path == "" {
 		return
 	}
-	manifest := bridgepkg.WithRemoteTriggerCapability(bridgepkg.BuildManifestFromSettings(r.SessionID, r.WorkingDirectory, settings))
+	manifest := bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.BuildManifestFromSettings(r.SessionID, r.WorkingDirectory, settings)))
 	_ = bridgepkg.WriteManifest(path, manifest)
 	r.maybeStartBridgeDirect(manifest)
 }

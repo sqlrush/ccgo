@@ -57,6 +57,55 @@ func TestDirectWebSocketResolveAndExecute(t *testing.T) {
 	}
 }
 
+func TestDirectWebSocketHelloHealthAndManifest(t *testing.T) {
+	server, err := StartDirectServer(DirectServerOptions{
+		Handler: NewDirectHandler(DirectOptions{
+			SessionID: "sess_bridge",
+			Manifest:  testDirectManifest(t),
+			Registry:  testDirectRegistry(),
+			RemoteTrigger: func(_ context.Context, req DirectRemoteTriggerRequest) (DirectRemoteTriggerResponse, int) {
+				return DirectRemoteTriggerResponse{Accepted: true, TeamID: req.TeamID, SentCount: 1}, http.StatusOK
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := server.Close(ctx); err != nil {
+			t.Fatalf("close direct server: %v", err)
+		}
+	})
+	conn, reader := dialDirectWebSocket(t, server.URL()+"/ws", nil)
+	defer conn.Close()
+
+	writeClientWebSocketText(t, conn, `{"action":"hello"}`)
+	var hello DirectWebSocketResponse
+	readServerWebSocketJSON(t, reader, &hello)
+	if hello.Type != "hello" || hello.Hello == nil || !hello.Hello.OK || hello.Hello.ProtocolVersion != 1 || hello.Hello.SessionID != "sess_bridge" || hello.Hello.Commands != 2 {
+		t.Fatalf("hello websocket response = %#v", hello)
+	}
+	if !webSocketActionPresent(hello.Hello.Actions, "execute") || !webSocketActionPresent(hello.Hello.Actions, "remote_trigger") || !manifestCapabilityPresent(hello.Hello.Capabilities, "websocket_protocol") {
+		t.Fatalf("hello capabilities/actions = %#v %#v", hello.Hello.Capabilities, hello.Hello.Actions)
+	}
+
+	writeClientWebSocketText(t, conn, `{"action":"health"}`)
+	var health DirectWebSocketResponse
+	readServerWebSocketJSON(t, reader, &health)
+	if health.Type != "health" || health.Health == nil || !health.Health.OK || health.Health.Commands != 2 {
+		t.Fatalf("health websocket response = %#v", health)
+	}
+
+	writeClientWebSocketText(t, conn, `{"action":"manifest"}`)
+	var manifest DirectWebSocketResponse
+	readServerWebSocketJSON(t, reader, &manifest)
+	if manifest.Type != "manifest" || manifest.Manifest == nil || len(manifest.Manifest.Commands) != 2 || !manifestHasCapability(*manifest.Manifest, "websocket_protocol") || !manifestHasCapability(*manifest.Manifest, "remote_trigger") {
+		t.Fatalf("manifest websocket response = %#v", manifest)
+	}
+}
+
 func TestDirectWebSocketRemoteTrigger(t *testing.T) {
 	var got DirectRemoteTriggerRequest
 	server, err := StartDirectServer(DirectServerOptions{
@@ -240,4 +289,22 @@ func readServerWebSocketText(t *testing.T, reader *bufio.Reader) (byte, []byte) 
 		t.Fatal(err)
 	}
 	return opcode, payload
+}
+
+func webSocketActionPresent(actions []string, want string) bool {
+	for _, action := range actions {
+		if action == want {
+			return true
+		}
+	}
+	return false
+}
+
+func manifestCapabilityPresent(capabilities []Capability, want string) bool {
+	for _, capability := range capabilities {
+		if capability.Name == want {
+			return true
+		}
+	}
+	return false
 }

@@ -20,8 +20,15 @@ import (
 )
 
 const (
-	webSocketMagicGUID  = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-	webSocketFrameLimit = 64 * 1024
+	webSocketMagicGUID        = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+	webSocketFrameLimit       = 64 * 1024
+	webSocketProtocolVersion  = 1
+	webSocketActionHello      = "hello"
+	webSocketActionHealth     = "health"
+	webSocketActionManifest   = "manifest"
+	webSocketActionResolve    = "resolve"
+	webSocketActionExecute    = "execute"
+	webSocketActionRemoteTrig = "remote_trigger"
 )
 
 type DirectWebSocketRequest struct {
@@ -33,10 +40,23 @@ type DirectWebSocketRequest struct {
 
 type DirectWebSocketResponse struct {
 	Type          string                       `json:"type"`
+	Hello         *DirectWebSocketHello        `json:"hello,omitempty"`
+	Health        *DirectHealthResponse        `json:"health,omitempty"`
+	Manifest      *Manifest                    `json:"manifest,omitempty"`
 	Resolve       *DirectResolveResponse       `json:"resolve,omitempty"`
 	Execute       *DirectExecuteResponse       `json:"execute,omitempty"`
 	RemoteTrigger *DirectRemoteTriggerResponse `json:"remote_trigger,omitempty"`
 	Error         string                       `json:"error,omitempty"`
+}
+
+type DirectWebSocketHello struct {
+	OK                  bool         `json:"ok"`
+	ProtocolVersion     int          `json:"protocol_version"`
+	SessionID           contracts.ID `json:"session_id,omitempty"`
+	Commands            int          `json:"commands"`
+	Capabilities        []Capability `json:"capabilities,omitempty"`
+	Actions             []string     `json:"actions"`
+	ManifestGeneratedAt string       `json:"manifest_generated_at,omitempty"`
 }
 
 func (h *DirectHandler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -110,16 +130,25 @@ func (h *DirectHandler) handleWebSocketMessage(payload []byte) DirectWebSocketRe
 	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action == "" {
-		action = "execute"
+		action = webSocketActionExecute
 	}
 	switch action {
-	case "resolve":
+	case webSocketActionHello, "status":
+		hello := h.webSocketHello()
+		return DirectWebSocketResponse{Type: webSocketActionHello, Hello: &hello}
+	case webSocketActionHealth:
+		health := h.health()
+		return DirectWebSocketResponse{Type: webSocketActionHealth, Health: &health}
+	case webSocketActionManifest:
+		manifest := h.manifest
+		return DirectWebSocketResponse{Type: webSocketActionManifest, Manifest: &manifest}
+	case webSocketActionResolve:
 		resolved := h.resolve(req.Command)
-		return DirectWebSocketResponse{Type: "resolve", Resolve: &resolved}
-	case "execute":
+		return DirectWebSocketResponse{Type: webSocketActionResolve, Resolve: &resolved}
+	case webSocketActionExecute:
 		executed, _ := h.execute(DirectCommandRequest{Command: req.Command, UUID: req.UUID})
-		return DirectWebSocketResponse{Type: "execute", Execute: &executed}
-	case "remote_trigger", "remote-trigger":
+		return DirectWebSocketResponse{Type: webSocketActionExecute, Execute: &executed}
+	case webSocketActionRemoteTrig, "remote-trigger":
 		if h.remoteTrigger == nil {
 			return DirectWebSocketResponse{Type: "error", Error: "remote trigger endpoint is not configured"}
 		}
@@ -131,9 +160,39 @@ func (h *DirectHandler) handleWebSocketMessage(payload []byte) DirectWebSocketRe
 			return DirectWebSocketResponse{Type: "error", Error: err.Error()}
 		}
 		response, _ := h.remoteTrigger(context.Background(), remoteTrigger)
-		return DirectWebSocketResponse{Type: "remote_trigger", RemoteTrigger: &response}
+		return DirectWebSocketResponse{Type: webSocketActionRemoteTrig, RemoteTrigger: &response}
 	default:
 		return DirectWebSocketResponse{Type: "error", Error: "unknown websocket action"}
+	}
+}
+
+func (h *DirectHandler) health() DirectHealthResponse {
+	return DirectHealthResponse{
+		OK:        true,
+		SessionID: h.sessionID,
+		Commands:  len(h.manifest.Commands),
+	}
+}
+
+func (h *DirectHandler) webSocketHello() DirectWebSocketHello {
+	actions := []string{
+		webSocketActionHello,
+		webSocketActionHealth,
+		webSocketActionManifest,
+		webSocketActionResolve,
+		webSocketActionExecute,
+	}
+	if h.remoteTrigger != nil {
+		actions = append(actions, webSocketActionRemoteTrig)
+	}
+	return DirectWebSocketHello{
+		OK:                  true,
+		ProtocolVersion:     webSocketProtocolVersion,
+		SessionID:           h.sessionID,
+		Commands:            len(h.manifest.Commands),
+		Capabilities:        append([]Capability(nil), h.manifest.Capabilities...),
+		Actions:             actions,
+		ManifestGeneratedAt: h.manifest.GeneratedAt,
 	}
 }
 
