@@ -52,6 +52,12 @@ func TestAppendWritesJSONLine(t *testing.T) {
 	if got.Timestamp == "" {
 		t.Fatalf("timestamp was not populated: %#v", got)
 	}
+	if got.TraceID == "" || got.SpanID == "" {
+		t.Fatalf("trace/span was not populated: %#v", got)
+	}
+	if got.TraceID != TraceID("sess_1") {
+		t.Fatalf("trace id = %q, want %q", got.TraceID, TraceID("sess_1"))
+	}
 	if got.SessionID != "sess_1" || got.Type != "tool_progress" || got.ToolUseID != "toolu_1" || got.ProgressType != "task_started" {
 		t.Fatalf("event = %#v", got)
 	}
@@ -88,12 +94,63 @@ func TestLoadFilterAndSummarize(t *testing.T) {
 	if summary.Total != 5 ||
 		summary.ByType["tool_result"] != 1 ||
 		summary.ByModel["sonnet"] != 1 ||
+		summary.Traces != 1 ||
+		summary.Spans != 5 ||
 		summary.ToolEvents != 1 ||
 		summary.ToolErrors != 1 ||
 		summary.ErrorEvents != 1 ||
 		summary.Compactions != 1 ||
 		summary.TokenWarnings != 1 {
 		t.Fatalf("summary = %#v", summary)
+	}
+}
+
+func TestPrepareEventPreservesProvidedTraceMetadata(t *testing.T) {
+	event := PrepareEvent(Event{
+		SessionID:    "sess_1",
+		TraceID:      "trace_custom",
+		SpanID:       "span_custom",
+		ParentSpanID: "span_parent",
+		Type:         "assistant_message",
+	})
+	if event.Timestamp == "" || event.TraceID != "trace_custom" || event.SpanID != "span_custom" || event.ParentSpanID != "span_parent" {
+		t.Fatalf("event = %#v", event)
+	}
+}
+
+func TestExportSummaryWritesFilteredJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sess_1", "telemetry.jsonl")
+	for _, event := range []Event{
+		{SessionID: "sess_1", Type: "user_message"},
+		{SessionID: "sess_1", Type: "assistant_message", Model: "sonnet"},
+		{SessionID: "sess_1", Type: "assistant_message", Model: "opus"},
+	} {
+		if err := Append(path, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outPath := filepath.Join(dir, "telemetry-export.json")
+	export, err := ExportSummary(path, outPath, Filter{Type: "assistant_message", Model: "sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if export.SourcePath != path || export.EventCount != 1 || export.Summary.Total != 1 || len(export.Events) != 1 {
+		t.Fatalf("export = %#v", export)
+	}
+	if export.Events[0].TraceID == "" || export.Events[0].SpanID == "" || export.Events[0].Model != "sonnet" {
+		t.Fatalf("export events = %#v", export.Events)
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded Export
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.EventCount != 1 || loaded.Summary.ByType["assistant_message"] != 1 {
+		t.Fatalf("loaded export = %#v", loaded)
 	}
 }
 

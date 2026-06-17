@@ -1738,6 +1738,8 @@ func TestRunnerRecordsGatedTelemetrySummaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first.Timestamp == "" ||
+		first.TraceID == "" ||
+		first.SpanID == "" ||
 		first.SessionID != "sess_telemetry" ||
 		first.Type != string(EventUserMessage) ||
 		first.MessageType != string(contracts.MessageUser) ||
@@ -2107,6 +2109,8 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status telemetry",
 		"Enabled: disabled",
 		"Events: 2",
+		"Traces: 1",
+		"Spans: 2",
 		"Tool events: 1",
 		"Tool errors: 1",
 		"Error events: 1",

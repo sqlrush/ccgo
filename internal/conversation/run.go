@@ -1007,6 +1007,8 @@ func (r Runner) formatStatusTelemetry() string {
 	lines = append(lines,
 		"Telemetry path: "+path,
 		fmt.Sprintf("Events: %d", summary.Total),
+		fmt.Sprintf("Traces: %d", summary.Traces),
+		fmt.Sprintf("Spans: %d", summary.Spans),
 		fmt.Sprintf("Tool events: %d", summary.ToolEvents),
 		fmt.Sprintf("Tool errors: %d", summary.ToolErrors),
 		fmt.Sprintf("Error events: %d", summary.ErrorEvents),

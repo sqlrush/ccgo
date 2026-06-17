@@ -2,6 +2,8 @@ package telemetry
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -17,6 +19,9 @@ import (
 type Event struct {
 	Timestamp      string       `json:"timestamp"`
 	SessionID      contracts.ID `json:"session_id,omitempty"`
+	TraceID        string       `json:"trace_id,omitempty"`
+	SpanID         string       `json:"span_id,omitempty"`
+	ParentSpanID   string       `json:"parent_span_id,omitempty"`
 	Type           string       `json:"type"`
 	Model          string       `json:"model,omitempty"`
 	MessageType    string       `json:"message_type,omitempty"`
@@ -42,11 +47,21 @@ type Summary struct {
 	Total         int            `json:"total"`
 	ByType        map[string]int `json:"by_type,omitempty"`
 	ByModel       map[string]int `json:"by_model,omitempty"`
+	Traces        int            `json:"traces,omitempty"`
+	Spans         int            `json:"spans,omitempty"`
 	ToolEvents    int            `json:"tool_events,omitempty"`
 	ToolErrors    int            `json:"tool_errors,omitempty"`
 	ErrorEvents   int            `json:"error_events,omitempty"`
 	Compactions   int            `json:"compactions,omitempty"`
 	TokenWarnings int            `json:"token_warnings,omitempty"`
+}
+
+type Export struct {
+	GeneratedAt string  `json:"generated_at"`
+	SourcePath  string  `json:"source_path,omitempty"`
+	EventCount  int     `json:"event_count"`
+	Summary     Summary `json:"summary"`
+	Events      []Event `json:"events,omitempty"`
 }
 
 func SessionPath(sessionPath string, sessionID contracts.ID) string {
@@ -60,9 +75,7 @@ func Append(path string, event Event) error {
 	if path == "" {
 		return os.ErrInvalid
 	}
-	if event.Timestamp == "" {
-		event.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
-	}
+	event = PrepareEvent(event)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
@@ -78,6 +91,73 @@ func Append(path string, event Event) error {
 	defer file.Close()
 	_, err = file.Write(data)
 	return err
+}
+
+func ExportSummary(path string, outPath string, filter Filter) (Export, error) {
+	if path == "" || outPath == "" {
+		return Export{}, os.ErrInvalid
+	}
+	events, err := Load(path)
+	if err != nil {
+		return Export{}, err
+	}
+	events = FilterEvents(events, filter)
+	export := Export{
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		SourcePath:  path,
+		EventCount:  len(events),
+		Summary:     Summarize(events),
+		Events:      events,
+	}
+	data, err := json.MarshalIndent(export, "", "  ")
+	if err != nil {
+		return Export{}, err
+	}
+	data = append(data, '\n')
+	if err := platform.AtomicWriteFile(outPath, data, 0o644); err != nil {
+		return Export{}, err
+	}
+	return export, nil
+}
+
+func PrepareEvent(event Event) Event {
+	if event.Timestamp == "" {
+		event.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if event.TraceID == "" {
+		event.TraceID = TraceID(event.SessionID)
+	}
+	if event.SpanID == "" {
+		event.SpanID = SpanID(event)
+	}
+	return event
+}
+
+func TraceID(sessionID contracts.ID) string {
+	session := strings.TrimSpace(string(sessionID))
+	if session == "" {
+		return ""
+	}
+	return traceHex("trace:"+session, 16)
+}
+
+func SpanID(event Event) string {
+	parts := []string{
+		"span",
+		event.Timestamp,
+		string(event.SessionID),
+		event.Type,
+		event.Model,
+		event.MessageType,
+		string(event.MessageUUID),
+		string(event.ToolUseID),
+		event.ToolName,
+		event.ProgressType,
+		event.TokenState,
+		event.CompactTrigger,
+		event.Error,
+	}
+	return traceHex(strings.Join(parts, "\x00"), 8)
 }
 
 func Load(path string) ([]Event, error) {
@@ -136,12 +216,20 @@ func Summarize(events []Event) Summary {
 		ByType:  map[string]int{},
 		ByModel: map[string]int{},
 	}
+	traces := map[string]struct{}{}
+	spans := map[string]struct{}{}
 	for _, event := range events {
 		if event.Type != "" {
 			summary.ByType[event.Type]++
 		}
 		if event.Model != "" {
 			summary.ByModel[event.Model]++
+		}
+		if event.TraceID != "" {
+			traces[event.TraceID] = struct{}{}
+		}
+		if event.SpanID != "" {
+			spans[event.SpanID] = struct{}{}
 		}
 		if event.ToolUseID != "" {
 			summary.ToolEvents++
@@ -165,6 +253,8 @@ func Summarize(events []Event) Summary {
 	if len(summary.ByModel) == 0 {
 		summary.ByModel = nil
 	}
+	summary.Traces = len(traces)
+	summary.Spans = len(spans)
 	return summary
 }
 
@@ -175,4 +265,15 @@ func SortedMapKeys(values map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func traceHex(value string, bytes int) string {
+	if bytes <= 0 {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	if bytes > len(sum) {
+		bytes = len(sum)
+	}
+	return hex.EncodeToString(sum[:bytes])
 }
