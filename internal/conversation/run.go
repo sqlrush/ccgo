@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ccgo/internal/api/anthropic"
+	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
@@ -579,10 +580,10 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry>"
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge>"
 			}
 			return r.formatStatusShow(args[1])
-		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry":
+		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge":
 			return r.formatStatusShow(args[0])
 		default:
 			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
@@ -723,8 +724,10 @@ func (r Runner) formatStatusShow(raw string) string {
 		return strings.Join(lines, "\n")
 	case "telemetry":
 		return r.formatStatusTelemetry()
+	case "bridge":
+		return r.formatStatusBridge()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge"
 	}
 }
 
@@ -747,9 +750,47 @@ func normalizeStatusSection(raw string) string {
 		return "plugins"
 	case "telemetry", "telemetry-events", "diagnostics", "trace", "tracing":
 		return "telemetry"
+	case "bridge", "repl-bridge", "remote-control", "control":
+		return "bridge"
 	default:
 		return compact
 	}
+}
+
+func (r Runner) formatStatusBridge() string {
+	settings := r.mergedSettings()
+	enabled := settings.Advanced != nil && advancedBoolEnabled(settings.Advanced.Bridge)
+	path := bridgepkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status bridge",
+		"Enabled: " + boolEnabledText(enabled),
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Manifest path: (not configured)", "Bridge-safe commands: 0"), "\n")
+	}
+	manifest, err := bridgepkg.LoadManifest(path)
+	if err != nil {
+		return strings.Join(append(lines, "Manifest path: "+path, "Bridge error: "+err.Error()), "\n")
+	}
+	lines = append(lines,
+		"Manifest path: "+path,
+		fmt.Sprintf("Bridge-safe commands: %d", len(manifest.Commands)),
+	)
+	if manifest.GeneratedAt != "" {
+		lines = append(lines, "Generated at: "+manifest.GeneratedAt)
+	}
+	if len(manifest.Commands) > 0 {
+		names := make([]string, 0, len(manifest.Commands))
+		for _, command := range manifest.Commands {
+			names = append(names, command.Name)
+		}
+		sort.Strings(names)
+		lines = append(lines, "Command names: "+strings.Join(firstStrings(names, 40), ", "))
+		if len(names) > 40 {
+			lines = append(lines, fmt.Sprintf("Showing 40 of %d bridge-safe commands.", len(names)))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) formatStatusTelemetry() string {

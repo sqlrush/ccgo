@@ -1837,6 +1837,16 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := bridgepkg.WriteManifest(bridgepkg.SessionManifestPath(transcriptPath, "sess_status_show"), bridgepkg.Manifest{
+		SessionID:        "sess_status_show",
+		WorkingDirectory: "/tmp/project",
+		Commands: []bridgepkg.Command{
+			{Name: "compact", Type: contracts.CommandLocal},
+			{Name: "ask", Type: contracts.CommandPrompt, Aliases: []string{"question"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	runner := Runner{
 		Client:           client,
 		Tools:            tool.NewExecutor(registry),
@@ -1921,6 +1931,12 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Models:",
 		"- sonnet: 1",
 	}, []string{"tool failed"})
+	assertStatusShow("/status show bridge", []string{
+		"Status bridge",
+		"Enabled: disabled",
+		"Bridge-safe commands: 2",
+		"Command names: ask, compact",
+	}, nil)
 	assertStatusShow("/status show unknown", []string{
 		"Unknown status section unknown.",
 		"Available sections:",
