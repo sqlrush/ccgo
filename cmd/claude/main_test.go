@@ -17,6 +17,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/messages"
 	"ccgo/internal/session"
@@ -157,6 +158,42 @@ func TestRunChromeNativeHostReportsUnsupportedMessage(t *testing.T) {
 	if response["type"] != "error" || response["ok"] != false || !strings.Contains(fmt.Sprint(response["error"]), "unsupported message type") {
 		t.Fatalf("response = %#v", response)
 	}
+}
+
+func TestRunDaemonOnceWritesState(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", cwd, "--daemon-once"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	statePath := daemonStatePathFromOutput(t, stdout.String())
+	state, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedCWD, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.RuntimeState != daemonpkg.RuntimeRunning || state.PID <= 0 || state.WorkingDirectory != resolvedCWD || state.HeartbeatAt == "" {
+		t.Fatalf("daemon state = %#v", state)
+	}
+}
+
+func daemonStatePathFromOutput(t *testing.T, output string) string {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if value, ok := strings.CutPrefix(line, "state_path="); ok {
+			return value
+		}
+	}
+	t.Fatalf("daemon output missing state_path: %q", output)
+	return ""
 }
 
 func readNativeHostTestMessage(t *testing.T, r io.Reader) map[string]any {

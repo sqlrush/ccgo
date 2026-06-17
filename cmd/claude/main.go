@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
@@ -55,6 +56,11 @@ type cliOptions struct {
 	AddDirs         []string
 }
 
+type daemonOptions struct {
+	Once              bool
+	HeartbeatInterval time.Duration
+}
+
 type repeatedStringFlag []string
 
 func (f *repeatedStringFlag) String() string {
@@ -73,6 +79,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	showVersion := flags.Bool("version", false, "print version")
 	flags.BoolVar(showVersion, "v", false, "print version")
 	chromeNativeHost := flags.Bool("chrome-native-host", false, "run Chrome native messaging host")
+	daemonMode := flags.Bool("daemon", false, "run daemon heartbeat loop")
+	daemonOnce := flags.Bool("daemon-once", false, "write one daemon heartbeat and exit")
+	daemonHeartbeat := flags.Duration("daemon-heartbeat", 5*time.Second, "daemon heartbeat interval")
 	cwd := flags.String("cwd", "", "working directory")
 	printMode := flags.Bool("print", false, "print response and exit")
 	flags.BoolVar(printMode, "p", false, "print response and exit")
@@ -130,6 +139,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if err := applyCWDFlag(state, *cwd); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
+	}
+	if *daemonMode || *daemonOnce {
+		return runDaemon(context.Background(), state, daemonOptions{
+			Once:              *daemonOnce,
+			HeartbeatInterval: *daemonHeartbeat,
+		}, stdout, stderr)
 	}
 	if *printMode {
 		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
@@ -224,6 +239,51 @@ func runChromeNativeHost(stdin io.Reader, stdout io.Writer, stderr io.Writer) in
 		if err := integrationspkg.WriteChromeNativeMessage(stdout, response); err != nil {
 			fmt.Fprintf(stderr, "ccgo chrome native host: %v\n", err)
 			return 1
+		}
+	}
+}
+
+func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOptions, stdout io.Writer, stderr io.Writer) int {
+	if options.HeartbeatInterval <= 0 {
+		fmt.Fprintf(stderr, "ccgo: daemon heartbeat interval must be positive\n")
+		return 1
+	}
+	runner, err := state.ConversationRunner()
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+		return 1
+	}
+	if runner.SessionPath == "" && runner.SessionID != "" {
+		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
+	}
+	statePath := daemonpkg.SessionStatePath(runner.SessionPath, runner.SessionID)
+	if statePath == "" {
+		fmt.Fprintf(stderr, "ccgo daemon: session state path is unavailable\n")
+		return 1
+	}
+	writeHeartbeat := func(now time.Time) error {
+		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), "", now, nil))
+	}
+	if err := writeHeartbeat(time.Now().UTC()); err != nil {
+		fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "ccgo daemon running\nsession_id=%s\nstate_path=%s\n", runner.SessionID, statePath)
+	if options.Once {
+		return 0
+	}
+	ticker := time.NewTicker(options.HeartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), "", time.Now().UTC(), ctx.Err()))
+			return 0
+		case now := <-ticker.C:
+			if err := writeHeartbeat(now.UTC()); err != nil {
+				fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+				return 1
+			}
 		}
 	}
 }
