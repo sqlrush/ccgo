@@ -47,6 +47,11 @@ type HTTPHook struct {
 	PolicyAllowedEnvVars []string
 }
 
+type Options struct {
+	AllowedHTTPHookURLs    []string
+	HTTPHookAllowedEnvVars []string
+}
+
 func FromSettings(settings contracts.Settings) []tool.Hook {
 	if settings.DisableAllHooks != nil && *settings.DisableAllHooks {
 		return nil
@@ -54,18 +59,13 @@ func FromSettings(settings contracts.Settings) []tool.Hook {
 	if settings.AllowManagedHooksOnly != nil && *settings.AllowManagedHooksOnly {
 		return nil
 	}
-	return hooksFromRawSettings(settings.Hooks, settingsHookOptions{
+	return FromRaw(settings.Hooks, Options{
 		AllowedHTTPHookURLs:    settings.AllowedHTTPHookURLs,
 		HTTPHookAllowedEnvVars: settings.HTTPHookAllowedEnvVars,
 	})
 }
 
-type settingsHookOptions struct {
-	AllowedHTTPHookURLs    []string
-	HTTPHookAllowedEnvVars []string
-}
-
-func hooksFromRawSettings(raw map[string]any, options settingsHookOptions) []tool.Hook {
+func FromRaw(raw map[string]any, options Options) []tool.Hook {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -82,7 +82,7 @@ func hooksFromRawSettings(raw map[string]any, options settingsHookOptions) []too
 	return hooks
 }
 
-func hooksForPhase(phase string, raw any, options settingsHookOptions) []tool.Hook {
+func hooksForPhase(phase string, raw any, options Options) []tool.Hook {
 	var out []tool.Hook
 	for _, matcher := range hookMatchers(raw) {
 		out = append(out, hooksFromMatcher(phase, matcher, options)...)
@@ -115,7 +115,7 @@ func hookMatchers(raw any) []hookMatcher {
 	}
 }
 
-func hooksFromMatcher(phase string, matcher hookMatcher, options settingsHookOptions) []tool.Hook {
+func hooksFromMatcher(phase string, matcher hookMatcher, options Options) []tool.Hook {
 	var out []tool.Hook
 	for _, rawHook := range hookSpecs(matcher.Hooks) {
 		if hook, ok := commandHookFromRaw(phase, matcher.Matcher, rawHook); ok {
@@ -144,7 +144,7 @@ func hookSpecs(raw any) []any {
 	}
 }
 
-func httpHookFromRaw(phase string, matcher string, raw any, options settingsHookOptions) (HTTPHook, bool) {
+func httpHookFromRaw(phase string, matcher string, raw any, options Options) (HTTPHook, bool) {
 	value, ok := raw.(map[string]any)
 	if !ok {
 		return HTTPHook{}, false

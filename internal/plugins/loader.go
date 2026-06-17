@@ -53,6 +53,7 @@ type LoadedPlugin struct {
 	SkillCommands   []contracts.Command
 	MCPServers      map[string]contracts.MCPServer
 	Agents          []PluginAgent
+	Hooks           map[string]any
 	HookEvents      []PluginHookEvent
 	OutputStyles    []PluginOutputStyle
 }
@@ -229,7 +230,8 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 	}
 	loaded.MCPServers = pluginMCPServers(root, name, parsed.MCPServers, parsed.MCPServersSnake)
 	loaded.Agents = pluginAgents(root, name, parsed.Agents)
-	loaded.HookEvents = pluginHookEvents(root, parsed.Hooks)
+	loaded.Hooks = pluginHooks(root, parsed.Hooks)
+	loaded.HookEvents = pluginHookEventsFromRaw(loaded.Hooks)
 	loaded.OutputStyles = pluginOutputStyles(root, name, parsed.OutputStyles)
 	return loaded, nil
 }
@@ -1012,18 +1014,26 @@ func loadPluginAgentFile(path string, pluginName string, namespace []string, see
 	}, true
 }
 
-func pluginHookEvents(root string, manifestHooks any) []PluginHookEvent {
-	counts := map[string]int{}
+func pluginHooks(root string, manifestHooks any) map[string]any {
+	hooks := map[string]any{}
 	seenFiles := map[string]struct{}{}
-	mergeHookCounts(counts, loadPluginHookFileOnce(filepath.Join(root, "hooks", "hooks.json"), seenFiles))
+	mergeRawHooks(hooks, loadPluginHookFileOnce(filepath.Join(root, "hooks", "hooks.json"), seenFiles))
 	for _, spec := range manifestHookSpecs(manifestHooks) {
 		switch value := spec.(type) {
 		case string:
-			mergeHookCounts(counts, loadPluginHookFileOnce(safeJoin(root, value), seenFiles))
+			mergeRawHooks(hooks, loadPluginHookFileOnce(safeJoin(root, value), seenFiles))
 		default:
-			mergeHookCounts(counts, hookCountsFromRaw(value))
+			mergeRawHooks(hooks, rawHooksFromAny(value))
 		}
 	}
+	if len(hooks) == 0 {
+		return nil
+	}
+	return hooks
+}
+
+func pluginHookEventsFromRaw(raw map[string]any) []PluginHookEvent {
+	counts := hookCountsFromRaw(raw)
 	if len(counts) == 0 {
 		return nil
 	}
@@ -1049,7 +1059,7 @@ func manifestHookSpecs(raw any) []any {
 	return []any{raw}
 }
 
-func loadPluginHookFileOnce(path string, seen map[string]struct{}) map[string]int {
+func loadPluginHookFileOnce(path string, seen map[string]struct{}) map[string]any {
 	key := normalizePath(path)
 	if _, ok := seen[key]; ok {
 		return nil
@@ -1058,7 +1068,7 @@ func loadPluginHookFileOnce(path string, seen map[string]struct{}) map[string]in
 	return loadPluginHookFile(path)
 }
 
-func loadPluginHookFile(path string) map[string]int {
+func loadPluginHookFile(path string) map[string]any {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -1067,7 +1077,50 @@ func loadPluginHookFile(path string) map[string]int {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil
 	}
-	return hookCountsFromRaw(raw)
+	return rawHooksFromAny(raw)
+}
+
+func rawHooksFromAny(raw any) map[string]any {
+	object, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if hooks, ok := object["hooks"]; ok {
+		object, ok = hooks.(map[string]any)
+		if !ok {
+			return nil
+		}
+	}
+	out := map[string]any{}
+	for event, value := range object {
+		event = strings.TrimSpace(event)
+		if event == "" || event == "description" {
+			continue
+		}
+		specs := rawHookMatcherSpecs(value)
+		if len(specs) > 0 {
+			out[event] = specs
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func rawHookMatcherSpecs(raw any) []any {
+	switch value := raw.(type) {
+	case []any:
+		out := make([]any, 0, len(value))
+		for _, item := range value {
+			out = append(out, rawHookMatcherSpecs(item)...)
+		}
+		return out
+	case nil:
+		return nil
+	default:
+		return []any{value}
+	}
 }
 
 func hookCountsFromRaw(raw any) map[string]int {
@@ -1095,6 +1148,20 @@ func hookCountsFromRaw(raw any) map[string]int {
 		return nil
 	}
 	return counts
+}
+
+func mergeRawHooks(dst map[string]any, src map[string]any) {
+	for event, value := range src {
+		event = strings.TrimSpace(event)
+		if event == "" {
+			continue
+		}
+		existing := rawHookMatcherSpecs(dst[event])
+		existing = append(existing, rawHookMatcherSpecs(value)...)
+		if len(existing) > 0 {
+			dst[event] = existing
+		}
+	}
 }
 
 func countHookMatchers(raw any) int {

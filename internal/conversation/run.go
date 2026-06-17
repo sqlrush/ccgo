@@ -3471,6 +3471,27 @@ func (r Runner) outputStylePlugins() []pluginpkg.LoadedPlugin {
 	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), r.mergedSettings())
 }
 
+func (r Runner) pluginToolHooks(settings contracts.Settings) []tool.Hook {
+	if strings.TrimSpace(r.WorkingDirectory) == "" {
+		return nil
+	}
+	if settings.DisableAllHooks != nil && *settings.DisableAllHooks {
+		return nil
+	}
+	if settings.AllowManagedHooksOnly != nil && *settings.AllowManagedHooksOnly {
+		return nil
+	}
+	options := hookpkg.Options{
+		AllowedHTTPHookURLs:    settings.AllowedHTTPHookURLs,
+		HTTPHookAllowedEnvVars: settings.HTTPHookAllowedEnvVars,
+	}
+	var out []tool.Hook
+	for _, plugin := range pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), settings) {
+		out = append(out, hookpkg.FromRaw(plugin.Hooks, options)...)
+	}
+	return out
+}
+
 func settingsPermissionsSummary(setting *contracts.PermissionsSetting) string {
 	if setting == nil {
 		return "none"
@@ -5289,7 +5310,9 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		return nil
 	})
 	executor := r.Tools
-	executor.Hooks = append(executor.Hooks, hookpkg.FromSettings(r.mergedSettings())...)
+	settings := r.mergedSettings()
+	executor.Hooks = append(executor.Hooks, hookpkg.FromSettings(settings)...)
+	executor.Hooks = append(executor.Hooks, r.pluginToolHooks(settings)...)
 	for update := range tool.RunTools(toolCtx, executor, uses, progressSink, tool.RunOptions{}) {
 		use := update.ToolUse
 		result := update.Result

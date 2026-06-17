@@ -302,6 +302,90 @@ func TestRunnerExecutesSettingsCommandHookForToolUse(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesPluginCommandHookForToolUse(t *testing.T) {
+	registry, err := tool.NewRegistry(namedTextTool("Echo", "echo:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "hooks", "hooks.json"), []byte(`{
+		"hooks": {
+			"PreToolUse": [{
+				"matcher": "Echo",
+				"hooks": [{
+					"type": "command",
+					"command": "printf '%s\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"text\":\"from-plugin\"}},\"systemMessage\":\"plugin updated\"}'"
+				}]
+			}]
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_plugin_hook",
+				Name:  "Echo",
+				Input: json.RawMessage(`{"text":"original"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_plugin_hook",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: cwd,
+		MCP:              &MCPConfig{},
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("run echo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].Content != "echo:from-plugin" {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if !hasHookProgress(progress, tool.HookPreToolUse, "hook_completed") {
+		t.Fatalf("hook progress = %#v", progress)
+	}
+}
+
 func TestRunnerRunsDueSchedulesBeforeMainRequest(t *testing.T) {
 	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_schedule_tick")

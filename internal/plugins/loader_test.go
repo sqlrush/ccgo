@@ -147,6 +147,10 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if len(plugin.HookEvents) != 2 || plugin.HookEvents[0].Event != "PostToolUse" || plugin.HookEvents[0].Count != 1 || plugin.HookEvents[1].Event != "PreToolUse" || plugin.HookEvents[1].Count != 1 {
 		t.Fatalf("hook events = %#v", plugin.HookEvents)
 	}
+	hookCounts := hookCountsFromRaw(plugin.Hooks)
+	if hookCounts["PreToolUse"] != 1 || hookCounts["PostToolUse"] != 1 {
+		t.Fatalf("raw hooks = %#v counts=%#v", plugin.Hooks, hookCounts)
+	}
 }
 
 func TestParseFrontmatterWordsKeepsNestedToolPatterns(t *testing.T) {
