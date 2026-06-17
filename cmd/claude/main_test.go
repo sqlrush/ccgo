@@ -451,6 +451,68 @@ func TestRunDaemonRemotePollPrefersWebSocket(t *testing.T) {
 	}
 }
 
+func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_remote_stream")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{ID: "agent/remote-lead", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:                "remote/team",
+		CoordinatorTaskID: "agent/remote-lead",
+		Timestamp:         time.Unix(102, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var auths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auths = append(auths, r.Header.Get("Authorization"))
+		conn := acceptDaemonTestWebSocket(t, w, r)
+		defer conn.Close()
+		writeDaemonTestWebSocketFrame(t, conn, 0x1, []byte(`{"id":"delivery-stream","team":"remote/team","source":"stream","event":"deploy","message":"Stream deploy."}`))
+	}))
+	defer server.Close()
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:       sessionID,
+		RuntimeState:    remotepkg.RegistrationRegistered,
+		WebSocketURL:    "ws" + strings.TrimPrefix(server.URL, "http") + "/stream?token=secret",
+		RemoteSessionID: "remote-session",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &conversation.MCPConfig{UserSettings: contracts.Settings{
+			Remote: &contracts.RemoteSetting{AuthToken: "stream-token"},
+		}},
+	}
+	result := runDaemonRemoteStream(context.Background(), runner, time.Unix(200, 0).UTC(), remotepkg.WebSocketOptions{MaxFrames: 1})
+	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket_stream" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
+		t.Fatalf("stream result = %#v", result.StructuredContent)
+	}
+	if len(auths) != 1 || auths[0] != "Bearer stream-token" {
+		t.Fatalf("auths = %#v", auths)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.Transport != "websocket_stream" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.DeliveredCount != 1 || strings.Contains(pump.WebSocketURL, "token=secret") {
+		t.Fatalf("pump = %#v", pump)
+	}
+	resume, err := manager.ResumeContext("agent/remote-lead", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 || !strings.Contains(messages.TextContent(resume.Messages[1]), "Stream deploy.") {
+		t.Fatalf("resume messages = %#v", resume.Messages)
+	}
+}
+
 func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	cwd := t.TempDir()

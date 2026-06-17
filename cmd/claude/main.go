@@ -741,16 +741,50 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	if options.Once {
 		return 0
 	}
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	streamDone := make(chan struct{})
+	go func() {
+		defer close(streamDone)
+		retryDelay := options.HeartbeatInterval
+		if retryDelay < time.Second {
+			retryDelay = time.Second
+		}
+		for streamCtx.Err() == nil {
+			result := runDaemonRemoteStream(streamCtx, runner, time.Now().UTC(), remotepkg.WebSocketOptions{})
+			if errText := stringMapValue(result.StructuredContent, "error"); errText != "" && streamCtx.Err() == nil {
+				fmt.Fprintf(stderr, "ccgo daemon remote stream: %s\n", errText)
+			}
+			if streamCtx.Err() != nil {
+				return
+			}
+			timer := time.NewTimer(retryDelay)
+			select {
+			case <-streamCtx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+		}
+	}()
+	defer func() {
+		cancelStream()
+		select {
+		case <-streamDone:
+		case <-time.After(time.Second):
+		}
+	}()
 	ticker := time.NewTicker(options.HeartbeatInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			cancelStream()
 			tickMu.Lock()
 			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), nil))
 			tickMu.Unlock()
 			return 0
 		case <-stopRequested:
+			cancelStream()
 			tickMu.Lock()
 			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), nil))
 			tickMu.Unlock()
@@ -761,6 +795,117 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 				return 1
 			}
 		}
+	}
+}
+
+func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now time.Time, streamOptions remotepkg.WebSocketOptions) contracts.ToolResult {
+	structured := map[string]any{
+		"type":            "remote_stream",
+		"checked_at":      now.UTC().Format(time.RFC3339Nano),
+		"runtime_state":   remotepkg.PumpDisabled,
+		"transport":       "websocket",
+		"event_count":     0,
+		"delivered_count": 0,
+		"duplicate_count": 0,
+		"error_count":     0,
+	}
+	registrationPath := remotepkg.SessionRegistrationPath(runner.SessionPath, runner.SessionID)
+	pumpPath := remotepkg.SessionPumpPath(runner.SessionPath, runner.SessionID)
+	if registrationPath == "" || pumpPath == "" {
+		structured["error_count"] = 1
+		structured["error"] = "remote registration path is unavailable"
+		return contracts.ToolResult{Content: "Remote stream is not configured.", StructuredContent: structured}
+	}
+	registration, err := remotepkg.LoadRegistrationState(registrationPath)
+	if err != nil {
+		structured["runtime_state"] = remotepkg.PumpFailed
+		structured["error_count"] = 1
+		structured["error"] = err.Error()
+		_ = remotepkg.WritePumpState(pumpPath, remotepkg.PumpState{
+			SessionID:    runner.SessionID,
+			RuntimeState: remotepkg.PumpFailed,
+			Transport:    "websocket",
+			LastPollAt:   now.UTC().Format(time.RFC3339Nano),
+			ErrorCount:   1,
+			LastError:    err.Error(),
+		})
+		return contracts.ToolResult{Content: "Remote stream failed.", StructuredContent: structured}
+	}
+	if registration.RuntimeState != remotepkg.RegistrationRegistered || strings.TrimSpace(registration.WebSocketURL) == "" {
+		return contracts.ToolResult{Content: "Remote stream is disabled.", StructuredContent: structured}
+	}
+	settings := runner.MergedSettings()
+	authToken := ""
+	if settings.Remote != nil {
+		authToken = settings.Remote.AuthToken
+	}
+	options := streamOptions
+	options.WebSocketURL = strings.TrimSpace(registration.WebSocketURL)
+	options.AuthToken = authToken
+	if options.ReconnectAttempts == 0 && options.MaxFrames == 0 {
+		options.ReconnectAttempts = -1
+	}
+	if options.ReconnectInitialDelay <= 0 {
+		options.ReconnectInitialDelay = time.Second
+	}
+	if options.ReconnectMaxDelay <= 0 {
+		options.ReconnectMaxDelay = 30 * time.Second
+	}
+	pumpState := remotepkg.PumpState{
+		SessionID:    runner.SessionID,
+		RuntimeState: remotepkg.PumpRunning,
+		Transport:    "websocket_stream",
+		PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
+		WebSocketURL: remotepkg.DisplayEndpoint(registration.WebSocketURL),
+		LastPollAt:   now.UTC().Format(time.RFC3339Nano),
+	}
+	writeStreamState := func() {
+		_ = remotepkg.WritePumpState(pumpPath, pumpState)
+	}
+	writeStreamState()
+	result := remotepkg.StreamWebSocketEvents(ctx, options, func(events []remotepkg.PollEvent) error {
+		delivered, duplicates, errorsOut := deliverDaemonRemoteEvents(ctx, runner, events)
+		pumpState.RuntimeState = remotepkg.PumpRunning
+		pumpState.EventCount += len(events)
+		pumpState.DeliveredCount += delivered
+		pumpState.DuplicateCount += duplicates
+		pumpState.ErrorCount += len(errorsOut)
+		pumpState.LastPollAt = time.Now().UTC().Format(time.RFC3339Nano)
+		if len(errorsOut) > 0 {
+			pumpState.LastError = fmt.Sprint(errorsOut[0]["error"])
+		}
+		writeStreamState()
+		return nil
+	})
+	pumpState.FrameCount = result.FrameCount
+	pumpState.ConnectCount = result.ConnectCount
+	pumpState.ReconnectCount = result.ReconnectCount
+	pumpState.LastPollAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if result.Error != "" {
+		pumpState.RuntimeState = remotepkg.PumpFailed
+		pumpState.ErrorCount++
+		pumpState.LastError = result.Error
+	} else if ctx.Err() != nil {
+		pumpState.RuntimeState = remotepkg.PumpDisabled
+	}
+	writeStreamState()
+	structured["runtime_state"] = pumpState.RuntimeState
+	structured["transport"] = pumpState.Transport
+	structured["websocket_url"] = pumpState.WebSocketURL
+	structured["poll_url"] = pumpState.PollURL
+	structured["frame_count"] = pumpState.FrameCount
+	structured["connect_count"] = pumpState.ConnectCount
+	structured["reconnect_count"] = pumpState.ReconnectCount
+	structured["event_count"] = pumpState.EventCount
+	structured["delivered_count"] = pumpState.DeliveredCount
+	structured["duplicate_count"] = pumpState.DuplicateCount
+	structured["error_count"] = pumpState.ErrorCount
+	if result.Error != "" {
+		structured["error"] = result.Error
+	}
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Remote stream delivered %d event(s); %d duplicate(s); %d error(s).", pumpState.DeliveredCount, pumpState.DuplicateCount, pumpState.ErrorCount),
+		StructuredContent: structured,
 	}
 }
 
@@ -902,40 +1047,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
 		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
 	}
-	errorsOut := make([]map[string]any, 0)
-	delivered := 0
-	duplicates := 0
-	for _, event := range remoteFetch.Events {
-		input, err := json.Marshal(map[string]any{
-			"team_id":  event.TeamID,
-			"target":   event.Target,
-			"event_id": event.EventID,
-			"source":   event.Source,
-			"event":    event.Event,
-			"message":  event.Message,
-		})
-		if err != nil {
-			errorsOut = append(errorsOut, map[string]any{"event_id": event.EventID, "error": err.Error()})
-			continue
-		}
-		result, err := tasktools.RunRemoteTrigger(tool.Context{
-			Context:          ctx,
-			WorkingDirectory: runner.WorkingDirectory,
-			SessionID:        runner.SessionID,
-			Metadata: map[string]any{
-				tool.MetadataSessionPathKey: runner.SessionPath,
-			},
-		}, input, tool.NopProgressSink())
-		if err != nil {
-			errorsOut = append(errorsOut, map[string]any{"event_id": event.EventID, "team_id": event.TeamID, "error": err.Error()})
-			continue
-		}
-		if duplicate, _ := result.StructuredContent["duplicate"].(bool); duplicate {
-			duplicates++
-			continue
-		}
-		delivered += intMapValue(result.StructuredContent, "sent_count")
-	}
+	delivered, duplicates, errorsOut := deliverDaemonRemoteEvents(ctx, runner, remoteFetch.Events)
 	pumpState.DeliveredCount = delivered
 	pumpState.DuplicateCount = duplicates
 	pumpState.ErrorCount = len(errorsOut)
@@ -1029,6 +1141,44 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		Events:     poll.Events,
 		Error:      poll.Error,
 	}
+}
+
+func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, events []remotepkg.PollEvent) (int, int, []map[string]any) {
+	errorsOut := make([]map[string]any, 0)
+	delivered := 0
+	duplicates := 0
+	for _, event := range events {
+		input, err := json.Marshal(map[string]any{
+			"team_id":  event.TeamID,
+			"target":   event.Target,
+			"event_id": event.EventID,
+			"source":   event.Source,
+			"event":    event.Event,
+			"message":  event.Message,
+		})
+		if err != nil {
+			errorsOut = append(errorsOut, map[string]any{"event_id": event.EventID, "error": err.Error()})
+			continue
+		}
+		result, err := tasktools.RunRemoteTrigger(tool.Context{
+			Context:          ctx,
+			WorkingDirectory: runner.WorkingDirectory,
+			SessionID:        runner.SessionID,
+			Metadata: map[string]any{
+				tool.MetadataSessionPathKey: runner.SessionPath,
+			},
+		}, input, tool.NopProgressSink())
+		if err != nil {
+			errorsOut = append(errorsOut, map[string]any{"event_id": event.EventID, "team_id": event.TeamID, "error": err.Error()})
+			continue
+		}
+		if duplicate, _ := result.StructuredContent["duplicate"].(bool); duplicate {
+			duplicates++
+			continue
+		}
+		delivered += intMapValue(result.StructuredContent, "sent_count")
+	}
+	return delivered, duplicates, errorsOut
 }
 
 func daemonTickResponse(result contracts.ToolResult) daemonpkg.TickResponse {
