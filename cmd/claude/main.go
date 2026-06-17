@@ -1408,14 +1408,17 @@ func acknowledgeDaemonRemoteEvent(ctx context.Context, event remotepkg.PollEvent
 		return 0, nil
 	}
 	result := remotepkg.SendAck(ctx, remotepkg.AckOptions{
-		AckURL:         event.AckURL,
-		AuthToken:      options.AuthToken,
-		EventID:        event.EventID,
-		Status:         status,
-		SentCount:      sentCount,
-		Duplicate:      duplicate,
-		Error:          errorText,
-		AllowedOrigins: options.AllowedOrigins,
+		AckURL:            event.AckURL,
+		AuthToken:         options.AuthToken,
+		EventID:           event.EventID,
+		Status:            status,
+		SentCount:         sentCount,
+		Duplicate:         duplicate,
+		Error:             errorText,
+		AllowedOrigins:    options.AllowedOrigins,
+		RetryAttempts:     1,
+		RetryInitialDelay: 100 * time.Millisecond,
+		RetryMaxDelay:     500 * time.Millisecond,
 	})
 	if result.Error != "" {
 		return 0, map[string]any{

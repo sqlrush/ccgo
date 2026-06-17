@@ -1490,6 +1490,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：daemon remote delivery 会在投递未过期 leased event 前，对注册级同源 lease renew/refresh endpoint 做 best-effort POST，并对 transport error、408/429/5xx 做一次短退避重试，把 renew sent/error 计数写入 pump state、structured result 和 `/status show remote`；完整续期策略和协议版本强制兼容仍未完成。
 
+本轮补充：remote delivery ack POST 同样会对 transport error、408/429/5xx 做一次短退避重试，保持 delivered/duplicate/failed/expired ack 在瞬时服务端错误下更稳；更完整的远端协议版本兼容策略仍未完成。
+
 ### M11: Bridge, LSP, Telemetry, Advanced Integrations
 
 目标：补齐高级集成能力。

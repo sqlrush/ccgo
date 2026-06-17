@@ -142,6 +142,32 @@ func TestSendAckPostsSameOriginPayloadAndAuth(t *testing.T) {
 	}
 }
 
+func TestSendAckRetriesTransientFailure(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			http.Error(w, "try again", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	result := SendAck(context.Background(), AckOptions{
+		AckURL:            server.URL + "/ack",
+		EventID:           "evt-ack",
+		Status:            "delivered",
+		AllowedOrigins:    []string{server.URL + "/poll"},
+		RetryAttempts:     1,
+		RetryInitialDelay: time.Millisecond,
+		RetryMaxDelay:     time.Millisecond,
+	})
+	if result.Error != "" || result.StatusCode != http.StatusAccepted || result.AttemptCount != 2 || calls != 2 {
+		t.Fatalf("ack result = %#v calls=%d", result, calls)
+	}
+}
+
 func TestSendAckRejectsDisallowedOriginAndRedactsURL(t *testing.T) {
 	result := SendAck(context.Background(), AckOptions{
 		AckURL:         "https://user:pass@example.invalid/ack?token=secret",
