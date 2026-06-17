@@ -119,7 +119,7 @@ M10 补充：remote WebSocket pump 现在支持单次 tick 内读取多帧事件
 
 M10 补充：`internal/remote` 新增 callback 型 `StreamWebSocketEvents` primitive，可保持 WebSocket 连接逐帧解码并把事件批次交给调用方，支持 context 取消、可选帧上限、handler 错误传播、异常 close/读错后的 backoff 重连以及 `ReconnectAttempts < 0` 无限重连语义；该能力为 daemon 常驻 stream 托管接线打底。完整云端协议 hardening 仍未完成。
 
-M10 补充：`--daemon` 常驻模式现在会在初始 tick 后启动 remote WebSocket stream goroutine，按 heartbeat 间隔重试注册状态，复用 `StreamWebSocketEvents` 和 `RemoteTrigger` delivery/dedupe，把推送事件实时注入 running team，并在 `remote-pump.json` 中持续更新 `websocket_stream` transport、frame/connect/reconnect、delivered/duplicate/error 计数；daemon stop/context cancel 会取消 stream。完整云端协议 hardening 和更细的 stream lifecycle 审计仍未完成。
+M10 补充：`--daemon` 常驻模式现在会在初始 tick 后启动 remote WebSocket stream goroutine，按 heartbeat 间隔重试注册状态，复用 `StreamWebSocketEvents` 和 `RemoteTrigger` delivery/dedupe，把推送事件实时注入 running team，并在 `remote-pump.json` 中持续更新 `websocket_stream` transport、frame/connect/reconnect、delivered/duplicate/error 计数；daemon heartbeat/tick 在已注册 `websocket_url` 时会跳过短 WebSocket 读取，避免 stream 和 tick 双连接/重复写 pump state，poll-only 注册仍走原 tick 路径；daemon stop/context cancel 会取消 stream。完整云端协议 hardening 和更细的 stream lifecycle 审计仍未完成。
 
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 

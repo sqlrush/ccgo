@@ -66,6 +66,10 @@ type daemonOptions struct {
 	HeartbeatInterval time.Duration
 }
 
+type daemonTickOptions struct {
+	SkipRemoteWhenWebSocket bool
+}
+
 type daemonControlOptions struct {
 	StatePath         string
 	Status            bool
@@ -690,6 +694,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	var tickMu sync.Mutex
 	stopRequested := make(chan struct{})
 	var stopOnce sync.Once
+	remoteStreamMode := false
 	writeHeartbeat := func(now time.Time) error {
 		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, now, nil))
 	}
@@ -699,7 +704,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 		if err := writeHeartbeat(now); err != nil {
 			return contracts.ToolResult{}, err
 		}
-		return runDaemonTick(ctx, runner, now)
+		return runDaemonTickWithOptions(ctx, runner, now, daemonTickOptions{SkipRemoteWhenWebSocket: remoteStreamMode})
 	}
 	if !options.Once {
 		daemonServer, err = daemonpkg.StartServer(daemonpkg.ServerOptions{
@@ -737,6 +742,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 		fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
 		return 1
 	}
+	remoteStreamMode = true
 	fmt.Fprintf(stdout, "ccgo daemon running\nsession_id=%s\nstate_path=%s\n", runner.SessionID, statePath)
 	if options.Once {
 		return 0
@@ -921,11 +927,20 @@ func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now 
 }
 
 func runDaemonTick(ctx context.Context, runner conversation.Runner, now time.Time) (contracts.ToolResult, error) {
+	return runDaemonTickWithOptions(ctx, runner, now, daemonTickOptions{})
+}
+
+func runDaemonTickWithOptions(ctx context.Context, runner conversation.Runner, now time.Time, options daemonTickOptions) (contracts.ToolResult, error) {
 	scheduleResult, err := runDaemonDueSchedules(ctx, runner, now)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	remoteResult := runDaemonRemotePoll(ctx, runner, now)
+	var remoteResult contracts.ToolResult
+	if options.SkipRemoteWhenWebSocket {
+		remoteResult = runDaemonRemotePollUnlessStream(ctx, runner, now)
+	} else {
+		remoteResult = runDaemonRemotePoll(ctx, runner, now)
+	}
 	schedule := scheduleResult.StructuredContent
 	remotePoll := remoteResult.StructuredContent
 	scheduleTriggered := intMapValue(schedule, "triggered_count")
@@ -951,6 +966,32 @@ func runDaemonTick(ctx context.Context, runner conversation.Runner, now time.Tim
 		Content:           fmt.Sprintf("Triggered %d due schedule(s), delivered %d remote event(s); %d error(s).", scheduleTriggered, remoteDelivered, scheduleErrors+remoteErrors),
 		StructuredContent: structured,
 	}, nil
+}
+
+func runDaemonRemotePollUnlessStream(ctx context.Context, runner conversation.Runner, now time.Time) contracts.ToolResult {
+	registrationPath := remotepkg.SessionRegistrationPath(runner.SessionPath, runner.SessionID)
+	if registrationPath == "" {
+		return runDaemonRemotePoll(ctx, runner, now)
+	}
+	registration, err := remotepkg.LoadRegistrationState(registrationPath)
+	if err != nil || registration.RuntimeState != remotepkg.RegistrationRegistered || strings.TrimSpace(registration.WebSocketURL) == "" {
+		return runDaemonRemotePoll(ctx, runner, now)
+	}
+	structured := map[string]any{
+		"type":            "remote_poll",
+		"checked_at":      now.UTC().Format(time.RFC3339Nano),
+		"runtime_state":   remotepkg.PumpRunning,
+		"transport":       "websocket_stream",
+		"skipped":         true,
+		"event_count":     0,
+		"delivered_count": 0,
+		"duplicate_count": 0,
+		"error_count":     0,
+	}
+	return contracts.ToolResult{
+		Content:           "Remote stream is handling websocket events.",
+		StructuredContent: structured,
+	}
 }
 
 func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now time.Time) contracts.ToolResult {

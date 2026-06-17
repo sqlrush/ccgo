@@ -513,6 +513,43 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 	}
 }
 
+func TestRunDaemonTickSkipsRemotePollWhenWebSocketStreamRegistered(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_stream_skip")
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:    sessionID,
+		RuntimeState: remotepkg.RegistrationRegistered,
+		WebSocketURL: "ws://127.0.0.1:1/stream?token=secret",
+		PollURL:      "https://poll.example.invalid/events?token=secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+	}
+	result, err := runDaemonTickWithOptions(context.Background(), runner, time.Unix(200, 0).UTC(), daemonTickOptions{SkipRemoteWhenWebSocket: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remotePoll, ok := result.StructuredContent["remote_poll"].(map[string]any)
+	if !ok {
+		t.Fatalf("remote poll = %#v", result.StructuredContent["remote_poll"])
+	}
+	if remotePoll["transport"] != "websocket_stream" || remotePoll["skipped"] != true || remotePoll["error_count"] != 0 {
+		t.Fatalf("remote poll = %#v", remotePoll)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.RuntimeState != "" {
+		t.Fatalf("pump should not be overwritten by skipped tick: %#v", pump)
+	}
+}
+
 func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	cwd := t.TempDir()
