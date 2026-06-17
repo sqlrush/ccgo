@@ -7,6 +7,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	"ccgo/internal/session"
@@ -86,6 +87,9 @@ type Runner struct {
 	RelevantMemoryDir         string
 	RelevantMemoryLimit       int
 	SkillDirs                 []string
+	LSPServerDefinitions      []lsppkg.ServerDefinition
+	LSPStartupDocuments       []lsppkg.OpenDocument
+	LSPProcesses              map[string]*lsppkg.ServerProcess
 	EnableMemoryExtraction    bool
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int

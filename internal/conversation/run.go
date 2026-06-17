@@ -44,6 +44,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	r.maybeWriteNativeManifest()
 	r.maybeWriteIntegrationsManifest()
 	r.maybeWriteLSPManagerStatus()
+	r.maybeStartLSPServers(ctx)
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
@@ -808,7 +809,95 @@ func (r Runner) maybeWriteLSPManagerStatus() {
 	if path == "" {
 		return
 	}
-	_ = lsppkg.WriteManagerStatus(path, lsppkg.BuildManagerStatus(r.SessionID, r.WorkingDirectory, nil, nil))
+	_ = lsppkg.WriteManagerStatus(path, lsppkg.BuildManagerStatus(r.SessionID, r.WorkingDirectory, r.lspServerDefinitions(), nil))
+}
+
+func (r *Runner) maybeStartLSPServers(ctx context.Context) {
+	settings := r.mergedSettings()
+	if settings.Advanced == nil || !advancedBoolEnabled(settings.Advanced.LSP) || len(r.LSPServerDefinitions) == 0 {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	diagnosticsPath := lsppkg.SessionDiagnosticsPath(r.SessionPath, r.SessionID)
+	managerPath := lsppkg.SessionManagerStatusPath(r.SessionPath, r.SessionID)
+	if diagnosticsPath == "" || managerPath == "" {
+		return
+	}
+	status := lsppkg.BuildManagerStatus(r.SessionID, r.WorkingDirectory, r.LSPServerDefinitions, nil)
+	for _, server := range status.Servers {
+		if server.RuntimeState != lsppkg.ServerRuntimeNotStarted || r.lspProcessRunning(server.Name) {
+			continue
+		}
+		definition, ok := r.lspDefinitionByName(server.Name)
+		if !ok {
+			continue
+		}
+		process, err := lsppkg.StartServerProcess(ctx, lsppkg.ServerProcessOptions{
+			SessionID:         r.SessionID,
+			Definition:        definition,
+			WorkingDirectory:  r.WorkingDirectory,
+			SnapshotPath:      diagnosticsPath,
+			ManagerStatusPath: managerPath,
+		})
+		if err != nil {
+			server.RuntimeState = lsppkg.ServerRuntimeFailed
+			server.Reason = err.Error()
+			_ = lsppkg.WriteManagerStatus(managerPath, lsppkg.UpsertServerStatus(status, server))
+			continue
+		}
+		if r.LSPProcesses == nil {
+			r.LSPProcesses = map[string]*lsppkg.ServerProcess{}
+		}
+		r.LSPProcesses[server.Name] = process
+		if err := process.InitializeAndOpen(ctx, lsppkg.ServerHandshakeOptions{
+			RootURI:       lsppkg.FileURIFromPath(r.WorkingDirectory),
+			RootPath:      r.WorkingDirectory,
+			ClientName:    "ccgo",
+			ClientVersion: "go-rewrite",
+			Documents:     r.LSPStartupDocuments,
+		}); err != nil {
+			server.RuntimeState = lsppkg.ServerRuntimeFailed
+			server.Reason = err.Error()
+			_ = lsppkg.WriteManagerStatus(managerPath, lsppkg.UpsertServerStatus(status, server))
+		}
+	}
+}
+
+func (r Runner) lspServerDefinitions() []lsppkg.ServerDefinition {
+	if len(r.LSPServerDefinitions) > 0 {
+		return r.LSPServerDefinitions
+	}
+	return nil
+}
+
+func (r Runner) lspDefinitionByName(name string) (lsppkg.ServerDefinition, bool) {
+	name = strings.TrimSpace(name)
+	for _, definition := range r.LSPServerDefinitions {
+		if strings.TrimSpace(definition.Name) == name {
+			return definition, true
+		}
+	}
+	return lsppkg.ServerDefinition{}, false
+}
+
+func (r *Runner) lspProcessRunning(name string) bool {
+	if r == nil || r.LSPProcesses == nil {
+		return false
+	}
+	process := r.LSPProcesses[name]
+	if process == nil {
+		delete(r.LSPProcesses, name)
+		return false
+	}
+	select {
+	case <-process.Done():
+		delete(r.LSPProcesses, name)
+		return false
+	default:
+		return true
+	}
 }
 
 func (r Runner) formatStatusNative() string {

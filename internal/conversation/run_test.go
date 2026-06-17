@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -1854,6 +1855,63 @@ func TestRunnerWritesGatedLSPManagerStatus(t *testing.T) {
 	gopls := lspServerStatus(status.Servers, "gopls")
 	if gopls.RuntimeState != lsppkg.ServerRuntimeNotStarted || len(gopls.MatchReasons) == 0 {
 		t.Fatalf("gopls status = %#v", gopls)
+	}
+}
+
+func TestRunnerStartsConfiguredLSPServer(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	lspEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_lsp_start",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{LSP: &lspEnabled},
+		}},
+		LSPServerDefinitions: []lsppkg.ServerDefinition{conversationLSPHelperDefinition()},
+		LSPStartupDocuments: []lsppkg.OpenDocument{{
+			URI:        "file:///work/main.go",
+			LanguageID: "go",
+			Version:    1,
+			Text:       "package main\n",
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	process := runner.LSPProcesses["conversation-lsp-helper"]
+	if process == nil {
+		t.Fatalf("lsp process was not recorded: %#v", runner.LSPProcesses)
+	}
+	select {
+	case result := <-process.Done():
+		if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
+			t.Fatalf("lsp process result = %#v", result)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for lsp process")
+	}
+	status, err := lsppkg.LoadManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_start"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := lspServerStatus(status.Servers, "conversation-lsp-helper")
+	if server.RuntimeState != lsppkg.ServerRuntimeExited || server.ProcessID == 0 || server.StartedAt == "" || server.EndedAt == "" {
+		t.Fatalf("server status = %#v", server)
+	}
+	diagnostics, err := lsppkg.LoadSnapshot(lsppkg.SessionDiagnosticsPath(transcriptPath, "sess_lsp_start"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics) != 1 || diagnostics[0].Message != "runner lsp diagnostic" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 }
 
@@ -5440,4 +5498,53 @@ func TestRunnerCanUseStreamingClient(t *testing.T) {
 	if len(streamEvents) != 4 || streamEvents[2].StreamEvent == nil || streamEvents[2].StreamEvent.TextDelta() != "streamed" {
 		t.Fatalf("stream events = %#v", streamEvents)
 	}
+}
+
+func conversationLSPHelperDefinition() lsppkg.ServerDefinition {
+	return lsppkg.ServerDefinition{
+		Name:           "conversation-lsp-helper",
+		Command:        os.Args[0],
+		Args:           []string{"-test.run=TestConversationLSPServerHelper", "--", "conversation-lsp-helper"},
+		FileExtensions: []string{".go"},
+		RootMarkers:    []string{"go.mod"},
+	}
+}
+
+func TestConversationLSPServerHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_CONVERSATION_LSP_HELPER") != "1" {
+		return
+	}
+	reader := bufio.NewReader(os.Stdin)
+	if _, err := lsppkg.ReadFramedMessage(reader, 8<<20); err != nil {
+		os.Exit(2)
+	}
+	if err := lsppkg.WriteFramedMessage(os.Stdout, []byte(`{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1}}}`)); err != nil {
+		os.Exit(3)
+	}
+	if _, err := lsppkg.ReadFramedMessage(reader, 8<<20); err != nil {
+		os.Exit(4)
+	}
+	if _, err := lsppkg.ReadFramedMessage(reader, 8<<20); err != nil {
+		os.Exit(5)
+	}
+	if err := lsppkg.WriteFramedMessage(os.Stdout, []byte(`{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///work/main.go","diagnostics":[{"severity":1,"message":"runner lsp diagnostic"}]}}`)); err != nil {
+		os.Exit(6)
+	}
+	os.Exit(0)
+}
+
+func TestMain(m *testing.M) {
+	if shouldRunConversationLSPHelper() {
+		os.Setenv("GO_WANT_CONVERSATION_LSP_HELPER", "1")
+	}
+	os.Exit(m.Run())
+}
+
+func shouldRunConversationLSPHelper() bool {
+	for i, arg := range os.Args {
+		if arg == "--" && i+1 < len(os.Args) && os.Args[i+1] == "conversation-lsp-helper" {
+			return true
+		}
+	}
+	return false
 }
