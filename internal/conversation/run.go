@@ -1078,6 +1078,10 @@ func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) stri
 	switch strings.ToLower(args[0]) {
 	case "clipboard":
 		return r.formatNativeClipboardCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
+	case "voice":
+		return r.formatNativeVoiceCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
+	case "computer", "computer-use", "computer_use":
+		return r.formatNativeComputerCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	default:
 		return "Native command is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 	}
@@ -1129,6 +1133,69 @@ func (r Runner) formatNativeClipboardCommand(ctx context.Context, raw string) st
 		return strings.Join(lines, "\n")
 	default:
 		return "Usage: /native clipboard <read|write <text>>"
+	}
+}
+
+func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 || strings.ToLower(args[0]) != "capture" {
+		return "Usage: /native voice capture"
+	}
+	plan := integrationspkg.BuildVoiceCapturePlan(r.SessionID, r.WorkingDirectory, integrationspkg.DetectAdapters("voice", integrationspkg.AdapterOptions{}))
+	capture, err := integrationspkg.CaptureVoiceAudio(ctx, plan, integrationspkg.VoiceCaptureOptions{Runner: r.NativeVoiceRunner})
+	lines := []string{
+		"Native voice capture",
+		"Adapter: " + capture.AdapterName,
+		fmt.Sprintf("Audio bytes: %d", capture.Bytes),
+		fmt.Sprintf("Sample rate: %d", capture.SampleRateHz),
+		fmt.Sprintf("Channels: %d", capture.Channels),
+		"Encoding: " + capture.Encoding,
+	}
+	if capture.Truncated {
+		lines = append(lines, "Truncated: yes")
+	}
+	if capture.Skipped {
+		lines = append(lines, "Capture: skipped")
+	}
+	if capture.Detail != "" {
+		lines = append(lines, "Detail: "+capture.Detail)
+	}
+	if err != nil {
+		lines = append(lines, "Capture error: "+err.Error())
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return "Usage: /native computer screenshot"
+	}
+	plan := integrationspkg.BuildComputerUseDriverPlan(r.SessionID, r.WorkingDirectory, integrationspkg.DetectAdapters("computer_use", integrationspkg.AdapterOptions{}))
+	switch strings.ToLower(args[0]) {
+	case "screenshot", "screen", "capture":
+		screenshot, err := integrationspkg.CaptureComputerUseScreenshot(ctx, plan, integrationspkg.ComputerUseExecutionOptions{Runner: r.NativeComputerUseRunner})
+		lines := []string{
+			"Native computer screenshot",
+			"Adapter: " + screenshot.AdapterName,
+			"Format: " + screenshot.Format,
+			fmt.Sprintf("Image bytes: %d", screenshot.Bytes),
+		}
+		if screenshot.Truncated {
+			lines = append(lines, "Truncated: yes")
+		}
+		if screenshot.Skipped {
+			lines = append(lines, "Capture: skipped")
+		}
+		if screenshot.Detail != "" {
+			lines = append(lines, "Detail: "+screenshot.Detail)
+		}
+		if err != nil {
+			lines = append(lines, "Capture error: "+err.Error())
+		}
+		return strings.Join(lines, "\n")
+	default:
+		return "Usage: /native computer screenshot"
 	}
 }
 

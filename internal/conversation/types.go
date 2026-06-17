@@ -8,6 +8,7 @@ import (
 	bridgepkg "ccgo/internal/bridge"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
@@ -99,6 +100,8 @@ type Runner struct {
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int
 	NativeClipboardRunner     nativepkg.ClipboardCommandRunner
+	NativeVoiceRunner         integrationspkg.VoiceCommandRunner
+	NativeComputerUseRunner   integrationspkg.ComputerUseCommandRunner
 	OnEvent                   func(Event)
 }
 

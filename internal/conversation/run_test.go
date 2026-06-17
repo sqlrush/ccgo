@@ -2196,6 +2196,80 @@ func TestRunnerExecutesNativeClipboardReadCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesNativeVoiceCaptureCommandWithoutQuery(t *testing.T) {
+	setupFakeNativeIntegrationCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_voice",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+		NativeVoiceRunner: func(ctx context.Context, command []string, maxBytes int64) ([]byte, bool, error) {
+			return []byte{1, 2, 3}, false, nil
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native voice capture"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Audio bytes: 3") {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+}
+
+func TestRunnerExecutesNativeComputerScreenshotCommandWithoutQuery(t *testing.T) {
+	setupFakeNativeIntegrationCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_computer",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+		NativeComputerUseRunner: func(ctx context.Context, command []string, stdin string, maxBytes int64) ([]byte, bool, error) {
+			return []byte{0x89, 'P', 'N', 'G'}, false, nil
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native computer screenshot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Image bytes: 4") {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+}
+
+func setupFakeNativeIntegrationCommandPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	names := []string{
+		"pw-record", "parecord", "arecord", "rec", "sox", "ffmpeg", "ffmpeg.exe",
+		"grim", "gnome-screenshot", "import", "screencapture", "powershell.exe",
+	}
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		body := "#!/bin/sh\nexit 0\n"
+		if runtime.GOOS == "windows" {
+			body = "@echo off\r\nexit /b 0\r\n"
+		}
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", ":0")
+}
+
 func setupFakeClipboardCommandPath(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
