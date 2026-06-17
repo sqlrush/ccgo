@@ -21,7 +21,7 @@ func TestSessionManifestPath(t *testing.T) {
 	}
 }
 
-func TestBuildManifestMarksEnabledRuntimesAsNotWired(t *testing.T) {
+func TestBuildManifestMarksEnabledRuntimesAsReady(t *testing.T) {
 	enabledValue := true
 	disabledValue := false
 	manifest := BuildManifest("sess_integrations", "/work", &contracts.AdvancedSetting{
@@ -38,17 +38,17 @@ func TestBuildManifestMarksEnabledRuntimesAsNotWired(t *testing.T) {
 	if CountEnabled(manifest.Integrations) != 2 {
 		t.Fatalf("enabled count = %d, integrations = %#v", CountEnabled(manifest.Integrations), manifest.Integrations)
 	}
-	if !hasIntegration(manifest.Integrations, "chrome", true, RuntimeStateNotWired) {
-		t.Fatalf("chrome integration missing/not wired: %#v", manifest.Integrations)
+	if !hasIntegration(manifest.Integrations, "chrome", true, RuntimeStateReady) {
+		t.Fatalf("chrome integration missing/ready: %#v", manifest.Integrations)
 	}
-	if !hasIntegration(manifest.Integrations, "computer_use", true, RuntimeStateNotWired) {
-		t.Fatalf("computer_use integration missing/not wired: %#v", manifest.Integrations)
+	if !hasIntegration(manifest.Integrations, "computer_use", true, RuntimeStateReady) {
+		t.Fatalf("computer_use integration missing/ready: %#v", manifest.Integrations)
 	}
 	if !hasIntegration(manifest.Integrations, "voice", false, RuntimeStateDisabled) {
 		t.Fatalf("voice integration missing/disabled: %#v", manifest.Integrations)
 	}
 	counts := CountByRuntimeState(manifest.Integrations)
-	if counts[RuntimeStateNotWired] != 2 || counts[RuntimeStateDisabled] != 1 {
+	if counts[RuntimeStateReady] != 2 || counts[RuntimeStateDisabled] != 1 {
 		t.Fatalf("state counts = %#v", counts)
 	}
 }

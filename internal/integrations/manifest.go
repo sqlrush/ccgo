@@ -17,6 +17,7 @@ const manifestFileName = "integrations-manifest.json"
 const (
 	RuntimeStateDisabled = "disabled"
 	RuntimeStateNotWired = "not_wired"
+	RuntimeStateReady    = "ready"
 )
 
 type Manifest struct {
@@ -46,9 +47,9 @@ func BuildManifest(sessionID contracts.ID, cwd string, advanced *contracts.Advan
 		WorkingDirectory: cwd,
 		GeneratedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 		Integrations: []Integration{
-			buildIntegration("chrome", enabled(advancedChrome(advanced)), "Chrome native host runtime is not wired"),
-			buildIntegration("computer_use", enabled(advancedComputerUse(advanced)), "computer-use runtime is not wired"),
-			buildIntegration("voice", enabled(advancedVoice(advanced)), "voice runtime is not wired"),
+			buildIntegration("chrome", enabled(advancedChrome(advanced)), "session-scoped Chrome runtime state is ready"),
+			buildIntegration("computer_use", enabled(advancedComputerUse(advanced)), "session-scoped computer-use runtime state is ready"),
+			buildIntegration("voice", enabled(advancedVoice(advanced)), "session-scoped voice runtime state is ready"),
 		},
 	}
 	sort.SliceStable(manifest.Integrations, func(i, j int) bool {
@@ -116,13 +117,13 @@ func CountByRuntimeState(integrations []Integration) map[string]int {
 	return counts
 }
 
-func buildIntegration(name string, isEnabled bool, notWiredDetail string) Integration {
+func buildIntegration(name string, isEnabled bool, readyDetail string) Integration {
 	if isEnabled {
 		return Integration{
 			Name:         name,
 			Enabled:      true,
-			RuntimeState: RuntimeStateNotWired,
-			Detail:       notWiredDetail,
+			RuntimeState: RuntimeStateReady,
+			Detail:       readyDetail,
 		}
 	}
 	return Integration{

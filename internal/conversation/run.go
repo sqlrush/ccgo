@@ -786,7 +786,15 @@ func (r Runner) maybeWriteIntegrationsManifest() {
 	if path == "" {
 		return
 	}
-	_ = integrationspkg.WriteManifest(path, integrationspkg.BuildManifest(r.SessionID, r.WorkingDirectory, settings.Advanced))
+	manifest := integrationspkg.BuildManifest(r.SessionID, r.WorkingDirectory, settings.Advanced)
+	_ = integrationspkg.WriteManifest(path, manifest)
+	for _, integration := range manifest.Integrations {
+		statePath := integrationspkg.SessionRuntimeStatePath(r.SessionPath, r.SessionID, integration.Name)
+		if statePath == "" {
+			continue
+		}
+		_ = integrationspkg.WriteRuntimeState(statePath, integrationspkg.BuildRuntimeState(r.SessionPath, r.SessionID, r.WorkingDirectory, integration))
+	}
 }
 
 func (r Runner) maybeWriteNativeManifest() {
@@ -1025,7 +1033,12 @@ func (r Runner) formatStatusIntegrations() string {
 			if state == "" {
 				state = integrationspkg.RuntimeStateDisabled
 			}
-			lines = append(lines, fmt.Sprintf("- %s: enabled=%s runtime=%s", integration.Name, boolEnabledText(integration.Enabled), state))
+			line := fmt.Sprintf("- %s: enabled=%s runtime=%s", integration.Name, boolEnabledText(integration.Enabled), state)
+			statePath := integrationspkg.SessionRuntimeStatePath(r.SessionPath, r.SessionID, integration.Name)
+			if runtimeState, err := integrationspkg.LoadRuntimeState(statePath); err == nil && runtimeState.GeneratedAt != "" {
+				line += " state=" + statePath
+			}
+			lines = append(lines, line)
 		}
 	}
 	return strings.Join(lines, "\n")

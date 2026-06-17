@@ -2182,10 +2182,24 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	if integrationspkg.CountEnabled(manifest.Integrations) != 2 {
 		t.Fatalf("manifest integrations = %#v", manifest.Integrations)
 	}
-	if !integrationHasState(manifest.Integrations, "chrome", true, integrationspkg.RuntimeStateNotWired) ||
-		!integrationHasState(manifest.Integrations, "computer_use", true, integrationspkg.RuntimeStateNotWired) ||
+	if !integrationHasState(manifest.Integrations, "chrome", true, integrationspkg.RuntimeStateReady) ||
+		!integrationHasState(manifest.Integrations, "computer_use", true, integrationspkg.RuntimeStateReady) ||
 		!integrationHasState(manifest.Integrations, "voice", false, integrationspkg.RuntimeStateDisabled) {
 		t.Fatalf("manifest integration states = %#v", manifest.Integrations)
+	}
+	chromeState, err := integrationspkg.LoadRuntimeState(integrationspkg.SessionRuntimeStatePath(transcriptPath, "sess_integrations", "chrome"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chromeState.SessionID != "sess_integrations" || chromeState.Name != "chrome" || chromeState.RuntimeState != integrationspkg.RuntimeStateReady || chromeState.Artifacts["state"] == "" {
+		t.Fatalf("chrome runtime state = %#v", chromeState)
+	}
+	computerState, err := integrationspkg.LoadRuntimeState(integrationspkg.SessionRuntimeStatePath(transcriptPath, "sess_integrations", "computer_use"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if computerState.Name != "computer_use" || computerState.RuntimeState != integrationspkg.RuntimeStateReady {
+		t.Fatalf("computer runtime state = %#v", computerState)
 	}
 }
 
