@@ -114,6 +114,8 @@ type PluginConfig struct {
 
 type RemoteSetting struct {
 	DefaultEnvironmentID string `json:"defaultEnvironmentId,omitempty"`
+	RegistrationURL      string `json:"registrationUrl,omitempty"`
+	AuthToken            string `json:"authToken,omitempty"`
 }
 
 type TelemetryExportSetting struct {

@@ -1919,6 +1919,20 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	dir := t.TempDir()
 	transcriptPath := filepath.Join(dir, "session.jsonl")
 	bridgeEnabled := true
+	var registeredManifest remotepkg.Manifest
+	var registrationAuth string
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/register" {
+			t.Fatalf("registration path = %s", r.URL.Path)
+		}
+		registrationAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&registeredManifest); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"remoteSessionId":"remote-sess","websocketUrl":"wss://remote/ws"}`))
+	}))
+	defer registrationServer.Close()
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
@@ -1927,7 +1941,11 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 		WorkingDirectory: dir,
 		MCP: &MCPConfig{UserSettings: contracts.Settings{
 			Advanced: &contracts.AdvancedSetting{Bridge: &bridgeEnabled},
-			Remote:   &contracts.RemoteSetting{DefaultEnvironmentID: "env-test"},
+			Remote: &contracts.RemoteSetting{
+				DefaultEnvironmentID: "env-test",
+				RegistrationURL:      registrationServer.URL + "/register?token=secret",
+				AuthToken:            "registration-token",
+			},
 		}},
 	}
 	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
@@ -1975,6 +1993,16 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	}
 	if remoteManifest.Services[0].Name != "bridge" || remoteManifest.Services[0].RuntimeState != bridgepkg.DirectRuntimeRunning || remoteManifest.Services[0].Endpoint == "" || remotepkg.ServiceCapabilityNames(remoteManifest.Services[0]) == "" {
 		t.Fatalf("remote bridge service = %#v", remoteManifest.Services[0])
+	}
+	if registeredManifest.SessionID != "sess_bridge" || len(registeredManifest.Services) == 0 || registrationAuth != "Bearer registration-token" {
+		t.Fatalf("registered manifest = %#v auth=%q", registeredManifest, registrationAuth)
+	}
+	registrationState, err := remotepkg.LoadRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, "sess_bridge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registrationState.RuntimeState != remotepkg.RegistrationRegistered || registrationState.RemoteSessionID != "remote-sess" || registrationState.WebSocketURL != "wss://remote/ws" || strings.Contains(registrationState.RegistrationURL, "secret") {
+		t.Fatalf("registration state = %#v", registrationState)
 	}
 	resp, err := http.Get(state.URL + "/health")
 	if err != nil {
@@ -2777,6 +2805,18 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, "sess_status_show"), remotepkg.RegistrationState{
+		SessionID:       "sess_status_show",
+		EnvironmentID:   "env-status",
+		RuntimeState:    remotepkg.RegistrationRegistered,
+		RegistrationURL: "https://remote.example/register",
+		StatusCode:      http.StatusAccepted,
+		RemoteSessionID: "remote-status",
+		WebSocketURL:    "wss://remote.example/ws",
+		RegisteredAt:    "2026-06-17T10:02:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := lsppkg.WriteSnapshot(lsppkg.SessionDiagnosticsPath(transcriptPath, "sess_status_show"), []lsppkg.Diagnostic{
 		{FilePath: "main.go", Severity: "error", Source: "gopls", Message: "broken"},
 		{FilePath: "main.go", Severity: "warning", Source: "gopls", Message: "unused"},
@@ -2914,6 +2954,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status remote",
 		"Enabled: disabled",
 		"Remote environment: env-status",
+		"Remote registration: registered: url https://remote.example/register: status 202: remote session remote-status: websocket wss://remote.example/ws",
 		"Remote services: 2",
 		"- bridge: running: endpoint http://127.0.0.1:8888: websocket ws://127.0.0.1:8888/ws: token required: commands 2: capabilities websocket_protocol, remote_trigger, remote_service",
 		"- daemon: running: endpoint http://127.0.0.1:7777: pid 4242: capabilities health, status, tick, stop",

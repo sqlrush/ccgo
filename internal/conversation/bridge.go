@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
+	"time"
 
 	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
@@ -65,7 +67,9 @@ func (r Runner) maybeWriteRemoteManifest(bridgeManifest bridgepkg.Manifest) {
 	if path == "" {
 		return
 	}
-	_ = remotepkg.WriteManifest(path, r.remoteManifest(bridgeManifest))
+	manifest := r.remoteManifest(bridgeManifest)
+	_ = remotepkg.WriteManifest(path, manifest)
+	r.maybeWriteRemoteRegistration(manifest, path)
 }
 
 func (r Runner) bridgeRemoteStatusFunc(bridgeManifest bridgepkg.Manifest) bridgepkg.DirectRemoteStatusFunc {
@@ -96,6 +100,27 @@ func (r Runner) remoteManifest(bridgeManifest bridgepkg.Manifest) remotepkg.Mani
 		DaemonStatePath:       daemonStatePath,
 		DaemonState:           daemonState,
 	})
+}
+
+func (r Runner) maybeWriteRemoteRegistration(manifest remotepkg.Manifest, manifestPath string) {
+	path := remotepkg.SessionRegistrationPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		return
+	}
+	settings := r.mergedSettings()
+	if settings.Remote == nil || strings.TrimSpace(settings.Remote.RegistrationURL) == "" {
+		_ = remotepkg.WriteRegistrationState(path, remotepkg.DisabledRegistrationState(manifest, manifestPath, time.Now().UTC()))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	state := remotepkg.RegisterManifest(ctx, remotepkg.RegistrationOptions{
+		RegistrationURL: settings.Remote.RegistrationURL,
+		AuthToken:       settings.Remote.AuthToken,
+		ManifestPath:    manifestPath,
+		Manifest:        manifest,
+	})
+	_ = remotepkg.WriteRegistrationState(path, state)
 }
 
 func (r Runner) bridgeRemoteTriggerFunc() bridgepkg.DirectRemoteTriggerFunc {

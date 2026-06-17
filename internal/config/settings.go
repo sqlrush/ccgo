@@ -220,8 +220,7 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 			}
 		}
 		if s.Remote != nil {
-			cp := *s.Remote
-			out.Remote = &cp
+			out.Remote = mergeRemoteSetting(out.Remote, s.Remote)
 		}
 		if s.Advanced != nil {
 			out.Advanced = mergeAdvancedSetting(out.Advanced, s.Advanced)
@@ -254,6 +253,30 @@ func cloneTelemetryExportSetting(setting *contracts.TelemetryExportSetting) *con
 		}
 	}
 	return &cp
+}
+
+func mergeRemoteSetting(base *contracts.RemoteSetting, override *contracts.RemoteSetting) *contracts.RemoteSetting {
+	if override == nil {
+		if base == nil {
+			return nil
+		}
+		cp := *base
+		return &cp
+	}
+	var out contracts.RemoteSetting
+	if base != nil {
+		out = *base
+	}
+	if override.DefaultEnvironmentID != "" {
+		out.DefaultEnvironmentID = override.DefaultEnvironmentID
+	}
+	if override.RegistrationURL != "" {
+		out.RegistrationURL = override.RegistrationURL
+	}
+	if override.AuthToken != "" {
+		out.AuthToken = override.AuthToken
+	}
+	return &out
 }
 
 func MergeSettingsSources(sources ...SourceSettings) contracts.Settings {

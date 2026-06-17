@@ -32,7 +32,7 @@ func TestSettingsPreservesUnknownFields(t *testing.T) {
 }
 
 func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
-	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true},"telemetryExport":{"path":"/tmp/events.jsonl","url":"https://example.com/telemetry","headers":{"Authorization":"Bearer token"}}}`)
+	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true},"telemetryExport":{"path":"/tmp/events.jsonl","url":"https://example.com/telemetry","headers":{"Authorization":"Bearer token"}},"remote":{"defaultEnvironmentId":"env-prod","registrationUrl":"https://example.com/register","authToken":"remote-token"}}`)
 	var settings Settings
 	if err := json.Unmarshal(input, &settings); err != nil {
 		t.Fatal(err)
@@ -57,6 +57,15 @@ func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
 	}
 	if settings.Extra["telemetryExport"] != nil {
 		t.Fatalf("telemetryExport should be a known setting, extra = %#v", settings.Extra)
+	}
+	if settings.Remote == nil ||
+		settings.Remote.DefaultEnvironmentID != "env-prod" ||
+		settings.Remote.RegistrationURL != "https://example.com/register" ||
+		settings.Remote.AuthToken != "remote-token" {
+		t.Fatalf("remote = %#v", settings.Remote)
+	}
+	if settings.Extra["remote"] != nil {
+		t.Fatalf("remote should be a known setting, extra = %#v", settings.Extra)
 	}
 }
 

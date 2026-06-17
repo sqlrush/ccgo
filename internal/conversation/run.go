@@ -1783,6 +1783,16 @@ func (r Runner) formatStatusRemote() string {
 		return strings.Join(append(lines, "Remote manifest path: "+path, "Remote error: "+err.Error()), "\n")
 	}
 	lines = append(lines, "Remote manifest path: "+path)
+	registrationPath := remotepkg.SessionRegistrationPath(r.SessionPath, r.SessionID)
+	if registrationPath != "" {
+		lines = append(lines, "Remote registration path: "+registrationPath)
+		registration, err := remotepkg.LoadRegistrationState(registrationPath)
+		if err != nil {
+			lines = append(lines, "Remote registration error: "+err.Error())
+		} else {
+			lines = append(lines, formatRemoteRegistration(registration)...)
+		}
+	}
 	if manifest.GeneratedAt == "" {
 		return strings.Join(append(lines, "Remote services: 0"), "\n")
 	}
@@ -1797,6 +1807,39 @@ func (r Runner) formatStatusRemote() string {
 		lines = append(lines, "Generated at: "+manifest.GeneratedAt)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatRemoteRegistration(state remotepkg.RegistrationState) []string {
+	if state.RuntimeState == "" {
+		return []string{"Remote registration: disabled"}
+	}
+	parts := []string{state.RuntimeState}
+	if state.RegistrationURL != "" {
+		parts = append(parts, "url "+state.RegistrationURL)
+	}
+	if state.StatusCode > 0 {
+		parts = append(parts, fmt.Sprintf("status %d", state.StatusCode))
+	}
+	if state.RemoteSessionID != "" {
+		parts = append(parts, "remote session "+state.RemoteSessionID)
+	}
+	if state.RegistrationID != "" {
+		parts = append(parts, "registration "+state.RegistrationID)
+	}
+	if state.WebSocketURL != "" {
+		parts = append(parts, "websocket "+state.WebSocketURL)
+	}
+	if state.PollURL != "" {
+		parts = append(parts, "poll "+state.PollURL)
+	}
+	lines := []string{"Remote registration: " + strings.Join(parts, ": ")}
+	if state.Error != "" {
+		lines = append(lines, "Remote registration error: "+state.Error)
+	}
+	if state.RegisteredAt != "" {
+		lines = append(lines, "Remote registered at: "+state.RegisteredAt)
+	}
+	return lines
 }
 
 func formatRemoteService(service remotepkg.Service) string {

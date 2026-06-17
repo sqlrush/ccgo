@@ -116,6 +116,10 @@ func TestMergeSettings(t *testing.T) {
 				"X-Old": "old",
 			},
 		},
+		Remote: &contracts.RemoteSetting{
+			DefaultEnvironmentID: "env-base",
+			AuthToken:            "base-token",
+		},
 	}
 	b := contracts.Settings{
 		Env:   map[string]string{"A": "2", "B": "3"},
@@ -138,6 +142,9 @@ func TestMergeSettings(t *testing.T) {
 			Headers: map[string]string{
 				"X-New": "new",
 			},
+		},
+		Remote: &contracts.RemoteSetting{
+			RegistrationURL: "https://example.com/register",
 		},
 	}
 	merged := MergeSettings(a, b)
@@ -168,6 +175,12 @@ func TestMergeSettings(t *testing.T) {
 		merged.TelemetryExport.Headers["X-New"] != "new" ||
 		merged.TelemetryExport.Headers["X-Old"] != "" {
 		t.Fatalf("telemetry export = %#v", merged.TelemetryExport)
+	}
+	if merged.Remote == nil ||
+		merged.Remote.DefaultEnvironmentID != "env-base" ||
+		merged.Remote.RegistrationURL != "https://example.com/register" ||
+		merged.Remote.AuthToken != "base-token" {
+		t.Fatalf("remote = %#v", merged.Remote)
 	}
 }
 
