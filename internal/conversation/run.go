@@ -17,6 +17,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
+	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
@@ -41,6 +42,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	}
 	r.maybeWriteBridgeManifest()
 	r.maybeWriteNativeManifest()
+	r.maybeWriteIntegrationsManifest()
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
@@ -733,8 +735,10 @@ func (r Runner) formatStatusShow(raw string) string {
 		return r.formatStatusLSP()
 	case "native":
 		return r.formatStatusNative()
+	case "integrations":
+		return r.formatStatusIntegrations()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, lsp, native"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, lsp, native, integrations"
 	}
 }
 
@@ -763,9 +767,23 @@ func normalizeStatusSection(raw string) string {
 		return "lsp"
 	case "native", "native-integration", "native-integrations", "platform":
 		return "native"
+	case "integration", "integrations", "advanced-integration", "advanced-integrations", "chrome", "voice", "computer-use", "computeruse":
+		return "integrations"
 	default:
 		return compact
 	}
+}
+
+func (r Runner) maybeWriteIntegrationsManifest() {
+	settings := r.mergedSettings()
+	if settings.Advanced == nil || !integrationspkg.AnyEnabled(settings.Advanced) {
+		return
+	}
+	path := integrationspkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		return
+	}
+	_ = integrationspkg.WriteManifest(path, integrationspkg.BuildManifest(r.SessionID, r.WorkingDirectory, settings.Advanced))
 }
 
 func (r Runner) maybeWriteNativeManifest() {
@@ -815,6 +833,49 @@ func (r Runner) formatStatusNative() string {
 				state = "available"
 			}
 			lines = append(lines, "- "+capability.Name+": "+state)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatStatusIntegrations() string {
+	settings := r.mergedSettings()
+	enabled := settings.Advanced != nil && integrationspkg.AnyEnabled(settings.Advanced)
+	path := integrationspkg.SessionManifestPath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status advanced integrations",
+		"Enabled: " + boolEnabledText(enabled),
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Manifest path: (not configured)", "Integrations: 0"), "\n")
+	}
+	manifest, err := integrationspkg.LoadManifest(path)
+	if err != nil {
+		return strings.Join(append(lines, "Manifest path: "+path, "Integrations error: "+err.Error()), "\n")
+	}
+	lines = append(lines,
+		"Manifest path: "+path,
+		fmt.Sprintf("Integrations: %d", len(manifest.Integrations)),
+		fmt.Sprintf("Enabled integrations: %d", integrationspkg.CountEnabled(manifest.Integrations)),
+	)
+	if manifest.GeneratedAt != "" {
+		lines = append(lines, "Generated at: "+manifest.GeneratedAt)
+	}
+	stateCounts := integrationspkg.CountByRuntimeState(manifest.Integrations)
+	if len(stateCounts) > 0 {
+		lines = append(lines, "Runtime states:")
+		for _, key := range sortedIntMapKeys(stateCounts) {
+			lines = append(lines, fmt.Sprintf("- %s: %d", key, stateCounts[key]))
+		}
+	}
+	if len(manifest.Integrations) > 0 {
+		lines = append(lines, "Integration states:")
+		for _, integration := range manifest.Integrations {
+			state := integration.RuntimeState
+			if state == "" {
+				state = integrationspkg.RuntimeStateDisabled
+			}
+			lines = append(lines, fmt.Sprintf("- %s: enabled=%s runtime=%s", integration.Name, boolEnabledText(integration.Enabled), state))
 		}
 	}
 	return strings.Join(lines, "\n")

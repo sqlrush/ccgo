@@ -17,6 +17,7 @@ import (
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
@@ -1830,6 +1831,67 @@ func TestRunnerWritesGatedNativeManifest(t *testing.T) {
 	}
 }
 
+func TestRunnerIntegrationsManifestDisabledByDefault(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_integrations_disabled",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	path := integrationspkg.SessionManifestPath(transcriptPath, "sess_integrations_disabled")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("integrations manifest exists with disabled integrations: %v", err)
+	}
+}
+
+func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	chromeEnabled := true
+	computerUseEnabled := true
+	voiceEnabled := false
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_integrations",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{
+				Chrome:      &chromeEnabled,
+				ComputerUse: &computerUseEnabled,
+				Voice:       &voiceEnabled,
+			},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := integrationspkg.LoadManifest(integrationspkg.SessionManifestPath(transcriptPath, "sess_integrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SessionID != "sess_integrations" || manifest.WorkingDirectory != dir || manifest.GeneratedAt == "" {
+		t.Fatalf("manifest metadata = %#v", manifest)
+	}
+	if integrationspkg.CountEnabled(manifest.Integrations) != 2 {
+		t.Fatalf("manifest integrations = %#v", manifest.Integrations)
+	}
+	if !integrationHasState(manifest.Integrations, "chrome", true, integrationspkg.RuntimeStateNotWired) ||
+		!integrationHasState(manifest.Integrations, "computer_use", true, integrationspkg.RuntimeStateNotWired) ||
+		!integrationHasState(manifest.Integrations, "voice", false, integrationspkg.RuntimeStateDisabled) {
+		t.Fatalf("manifest integration states = %#v", manifest.Integrations)
+	}
+}
+
 func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
@@ -1894,6 +1956,15 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		Capabilities: []nativepkg.Capability{
 			{Name: "native_clipboard", Available: false},
 			{Name: "osc52_clipboard", Available: true},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := integrationspkg.WriteManifest(integrationspkg.SessionManifestPath(transcriptPath, "sess_status_show"), integrationspkg.Manifest{
+		SessionID: "sess_status_show",
+		Integrations: []integrationspkg.Integration{
+			{Name: "chrome", Enabled: true, RuntimeState: integrationspkg.RuntimeStateNotWired},
+			{Name: "voice", RuntimeState: integrationspkg.RuntimeStateDisabled},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -2012,6 +2083,17 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Terminal: xterm-256color",
 		"- native_clipboard: unavailable",
 		"- osc52_clipboard: available",
+	}, nil)
+	assertStatusShow("/status show integrations", []string{
+		"Status advanced integrations",
+		"Enabled: disabled",
+		"Integrations: 2",
+		"Enabled integrations: 1",
+		"Runtime states:",
+		"- disabled: 1",
+		"- not_wired: 1",
+		"- chrome: enabled=enabled runtime=not_wired",
+		"- voice: enabled=disabled runtime=disabled",
 	}, nil)
 	assertStatusShow("/status show unknown", []string{
 		"Unknown status section unknown.",
@@ -5065,6 +5147,15 @@ func requestHasTool(request anthropic.Request, name string) bool {
 func bridgeManifestHasCommand(manifest bridgepkg.Manifest, name string) bool {
 	for _, command := range manifest.Commands {
 		if command.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func integrationHasState(integrations []integrationspkg.Integration, name string, enabled bool, state string) bool {
+	for _, integration := range integrations {
+		if integration.Name == name && integration.Enabled == enabled && integration.RuntimeState == state {
 			return true
 		}
 	}
