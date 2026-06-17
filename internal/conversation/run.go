@@ -19,6 +19,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
+	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
@@ -804,6 +805,8 @@ func (r Runner) formatStatusShow(raw string) string {
 		return r.formatStatusTelemetry()
 	case "bridge":
 		return r.formatStatusBridge()
+	case "daemon":
+		return r.formatStatusDaemon()
 	case "lsp":
 		return r.formatStatusLSP()
 	case "native":
@@ -811,7 +814,7 @@ func (r Runner) formatStatusShow(raw string) string {
 	case "integrations":
 		return r.formatStatusIntegrations()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, lsp, native, integrations"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, daemon, lsp, native, integrations"
 	}
 }
 
@@ -1757,6 +1760,45 @@ func formatBridgeCapability(capability bridgepkg.Capability) string {
 		parts = append(parts, "websocket "+capability.WebSocketAction)
 	}
 	return "- " + strings.Join(parts, ": ")
+}
+
+func (r Runner) formatStatusDaemon() string {
+	path := daemonpkg.SessionStatePath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status daemon",
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Daemon state path: (not configured)", "Daemon state: disabled"), "\n")
+	}
+	state, err := daemonpkg.LoadState(path)
+	if err != nil {
+		return strings.Join(append(lines, "Daemon state path: "+path, "Daemon error: "+err.Error()), "\n")
+	}
+	lines = append(lines, "Daemon state path: "+path)
+	if state.GeneratedAt == "" {
+		return strings.Join(append(lines, "Daemon state: disabled"), "\n")
+	}
+	runtimeState := daemonpkg.RuntimeStateAt(state, time.Now().UTC(), 2*time.Minute)
+	lines = append(lines, "Daemon state: "+runtimeState)
+	if state.PID > 0 {
+		lines = append(lines, fmt.Sprintf("Daemon pid: %d", state.PID))
+	}
+	if state.Endpoint != "" {
+		lines = append(lines, "Daemon endpoint: "+state.Endpoint)
+	}
+	if state.HeartbeatAt != "" {
+		lines = append(lines, "Daemon heartbeat: "+state.HeartbeatAt)
+	}
+	if state.StartedAt != "" {
+		lines = append(lines, "Daemon started: "+state.StartedAt)
+	}
+	if state.GeneratedAt != "" {
+		lines = append(lines, "Generated at: "+state.GeneratedAt)
+	}
+	if state.Error != "" {
+		lines = append(lines, "Daemon error: "+state.Error)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) formatStatusTelemetry() string {

@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
@@ -2727,6 +2728,18 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := daemonpkg.WriteState(daemonpkg.SessionStatePath(transcriptPath, "sess_status_show"), daemonpkg.State{
+		SessionID:        "sess_status_show",
+		WorkingDirectory: "/tmp/project",
+		RuntimeState:     daemonpkg.RuntimeRunning,
+		PID:              4242,
+		Endpoint:         "http://127.0.0.1:7777",
+		GeneratedAt:      "2026-06-17T10:00:00Z",
+		StartedAt:        "2026-06-17T09:59:00Z",
+		HeartbeatAt:      time.Now().UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := lsppkg.WriteSnapshot(lsppkg.SessionDiagnosticsPath(transcriptPath, "sess_status_show"), []lsppkg.Diagnostic{
 		{FilePath: "main.go", Severity: "error", Source: "gopls", Message: "broken"},
 		{FilePath: "main.go", Severity: "warning", Source: "gopls", Message: "unused"},
@@ -2859,6 +2872,12 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"- remote_trigger: http /remote-trigger: websocket remote_trigger",
 		"Command names: ask, compact",
 	}, nil)
+	assertStatusShow("/status show daemon", []string{
+		"Status daemon",
+		"Daemon state: running",
+		"Daemon pid: 4242",
+		"Daemon endpoint: http://127.0.0.1:7777",
+	}, nil)
 	assertStatusShow("/status show lsp", []string{
 		"Status LSP",
 		"Enabled: disabled",
@@ -2905,6 +2924,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Unknown status section unknown.",
 		"Available sections:",
 		"telemetry",
+		"daemon",
 		"integrations",
 	}, nil)
 }
