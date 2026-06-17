@@ -36,11 +36,14 @@ func TestValidateSchema(t *testing.T) {
 		"type":     "object",
 		"required": []any{"path"},
 		"properties": map[string]any{
-			"path": map[string]any{"type": "string"},
+			"path": map[string]any{"type": "string", "minLength": 2},
 		},
 	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":3}`)); err == nil {
 		t.Fatalf("expected schema validation error")
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"x"}`)); err == nil || !strings.Contains(err.Error(), "input.path must be at least 2 characters") {
+		t.Fatalf("err = %v", err)
 	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md"}`)); err != nil {
 		t.Fatal(err)

@@ -244,12 +244,12 @@ func TestWebSearchBlockedDomainsAndNoResults(t *testing.T) {
 	}, contracts.ToolUse{
 		ID:    "toolu_search_empty",
 		Name:  "WebSearch",
-		Input: json.RawMessage(`{"query":"x","blocked_domains":["example.com"]}`),
+		Input: json.RawMessage(`{"query":"xx","blocked_domains":["example.com"]}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Content != "No search results found for: x" {
+	if result.Content != "No search results found for: xx" {
 		t.Fatalf("content = %#v", result.Content)
 	}
 	results := result.StructuredContent["results"].([]map[string]any)
@@ -281,12 +281,13 @@ func TestWebSearchValidation(t *testing.T) {
 	}{
 		{name: "missing query", input: `{}`, want: "input.query is required"},
 		{name: "empty query", input: `{"query":"  "}`, want: "query is required"},
-		{name: "bad max results", input: `{"query":"x","max_results":0}`, want: "max_results must be positive"},
-		{name: "too many results", input: `{"query":"x","maxResults":21}`, want: "max_results must be at most 20"},
-		{name: "bad timeout", input: `{"query":"x","timeout":0}`, want: "timeout must be positive"},
-		{name: "bad domain", input: `{"query":"x","allowed_domains":["https://example.com"]}`, want: "allowed_domains[0] must be a domain name"},
-		{name: "allowed and blocked domains", input: `{"query":"x","allowedDomains":["example.com"],"blockedDomains":["blocked.example.net"]}`, want: "Cannot specify both allowed_domains and blocked_domains"},
-		{name: "unknown field", input: `{"query":"x","extra":true}`, want: "input.extra is not allowed"},
+		{name: "short query", input: `{"query":"x"}`, want: "input.query must be at least 2 characters"},
+		{name: "bad max results", input: `{"query":"xx","max_results":0}`, want: "max_results must be positive"},
+		{name: "too many results", input: `{"query":"xx","maxResults":21}`, want: "max_results must be at most 20"},
+		{name: "bad timeout", input: `{"query":"xx","timeout":0}`, want: "timeout must be positive"},
+		{name: "bad domain", input: `{"query":"xx","allowed_domains":["https://example.com"]}`, want: "allowed_domains[0] must be a domain name"},
+		{name: "allowed and blocked domains", input: `{"query":"xx","allowedDomains":["example.com"],"blockedDomains":["blocked.example.net"]}`, want: "Cannot specify both allowed_domains and blocked_domains"},
+		{name: "unknown field", input: `{"query":"xx","extra":true}`, want: "input.extra is not allowed"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

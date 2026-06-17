@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"ccgo/internal/contracts"
 )
@@ -25,6 +26,12 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 	if types := stringOrStrings(schema["type"]); len(types) > 0 {
 		if !matchesAnyType(types, value) {
 			return fmt.Errorf("%s must be %s", path, strings.Join(types, " or "))
+		}
+	}
+	if minLength, ok := intSchemaConstraint(schema["minLength"]); ok {
+		text, ok := value.(string)
+		if ok && utf8.RuneCountInString(text) < minLength {
+			return fmt.Errorf("%s must be at least %d characters", path, minLength)
 		}
 	}
 
@@ -98,6 +105,24 @@ func matchesAnyType(types []string, value any) bool {
 		}
 	}
 	return false
+}
+
+func intSchemaConstraint(value any) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case float64:
+		if math.Trunc(v) == v {
+			return int(v), true
+		}
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return int(i), true
+		}
+	}
+	return 0, false
 }
 
 func stringOrStrings(value any) []string {

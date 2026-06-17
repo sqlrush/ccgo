@@ -82,7 +82,7 @@ func NewWebSearchTool() tool.Tool {
 				"type":     "object",
 				"required": []any{"query"},
 				"properties": map[string]any{
-					"query":           map[string]any{"type": "string"},
+					"query":           map[string]any{"type": "string", "minLength": 2},
 					"allowed_domains": map[string]any{"type": "array"},
 					"allowedDomains":  map[string]any{"type": "array"},
 					"blocked_domains": map[string]any{"type": "array"},
