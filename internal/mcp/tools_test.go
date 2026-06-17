@@ -371,6 +371,14 @@ func TestBuildPromptToolsListAndGetPrompt(t *testing.T) {
 		t.Fatalf("get input = %s", client.calls[0].Input)
 	}
 	_, err = executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_bad_prompt_argument",
+		Name:  "mcp__workflow__get_prompt",
+		Input: json.RawMessage(`{"name":"deploy","arguments":{"env":3}}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "input.arguments.env must be string") {
+		t.Fatalf("expected prompt argument schema error, got %v", err)
+	}
+	_, err = executor.Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
 		ID:    "toolu_bad_prompt",
 		Name:  "mcp__workflow__get_prompt",
 		Input: json.RawMessage(`{"name":" "}`),

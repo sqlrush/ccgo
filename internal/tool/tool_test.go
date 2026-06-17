@@ -34,14 +34,18 @@ func TestRegistryAliasLookup(t *testing.T) {
 func TestValidateSchema(t *testing.T) {
 	schema := contracts.JSONSchema{
 		"type":     "object",
-		"required": []any{"path"},
+		"required": []string{"path"},
 		"properties": map[string]any{
-			"path":  map[string]any{"type": "string", "minLength": 2},
-			"mode":  map[string]any{"type": "string", "enum": []any{"read", "write"}},
-			"count": map[string]any{"type": "integer", "enum": []any{1, 2}},
-			"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 5},
-			"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"path":     map[string]any{"type": "string", "minLength": 2},
+			"mode":     map[string]any{"type": "string", "enum": []any{"read", "write"}},
+			"count":    map[string]any{"type": "integer", "enum": []any{1, 2}},
+			"limit":    map[string]any{"type": "integer", "minimum": 1, "maximum": 5},
+			"metadata": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+			"tags":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		},
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{}`)); err == nil || !strings.Contains(err.Error(), "input.path is required") {
+		t.Fatalf("err = %v", err)
 	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":3}`)); err == nil {
 		t.Fatalf("expected schema validation error")
@@ -64,10 +68,13 @@ func TestValidateSchema(t *testing.T) {
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","limit":6}`)); err == nil || !strings.Contains(err.Error(), "input.limit must be at most 5") {
 		t.Fatalf("err = %v", err)
 	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","metadata":{"env":3}}`)); err == nil || !strings.Contains(err.Error(), "input.metadata.env must be string") {
+		t.Fatalf("err = %v", err)
+	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","mode":"read","count":2,"limit":5}`)); err != nil {
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","mode":"read","count":2,"limit":5,"metadata":{"env":"prod"}}`)); err != nil {
 		t.Fatal(err)
 	}
 }

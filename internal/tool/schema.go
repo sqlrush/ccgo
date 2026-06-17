@@ -73,24 +73,39 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 	}
 
 	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		return nil
-	}
 	obj, ok := value.(map[string]any)
 	if !ok {
 		return nil
 	}
-	for key, propertySchema := range properties {
-		child, ok := obj[key]
-		if !ok {
-			continue
+	if ok {
+		for key, propertySchema := range properties {
+			child, ok := obj[key]
+			if !ok {
+				continue
+			}
+			propertyMap, ok := propertySchema.(map[string]any)
+			if !ok {
+				continue
+			}
+			if err := validateValue(contracts.JSONSchema(propertyMap), child, path+"."+key); err != nil {
+				return err
+			}
 		}
-		propertyMap, ok := propertySchema.(map[string]any)
-		if !ok {
-			continue
+	}
+	if additionalSchema, ok := schema["additionalProperties"].(map[string]any); ok {
+		for key, child := range obj {
+			if _, defined := properties[key]; defined {
+				continue
+			}
+			if err := validateValue(contracts.JSONSchema(additionalSchema), child, path+"."+key); err != nil {
+				return err
+			}
 		}
-		if err := validateValue(contracts.JSONSchema(propertyMap), child, path+"."+key); err != nil {
-			return err
+	} else if additional, ok := schema["additionalProperties"].(bool); ok && !additional {
+		for key := range obj {
+			if _, defined := properties[key]; !defined {
+				return fmt.Errorf("%s.%s is not allowed", path, key)
+			}
 		}
 	}
 	return nil
@@ -253,17 +268,20 @@ func stringOrStrings(value any) []string {
 }
 
 func stringSlice(value any) []string {
-	items, ok := value.([]any)
-	if !ok {
+	switch items := value.(type) {
+	case []any:
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []string:
+		return append([]string(nil), items...)
+	default:
 		return nil
 	}
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if s, ok := item.(string); ok {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func normalizeRawInput(raw json.RawMessage) json.RawMessage {
