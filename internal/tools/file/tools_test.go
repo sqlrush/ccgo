@@ -2093,6 +2093,30 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if grepResult.Content != "Found 3 files\nimportant.log\nkeep.txt\nsub/visible.txt" {
 		t.Fatalf("grep content = %#v", grepResult.Content)
 	}
+
+	noIgnoreResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_ignore",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--no-ignore":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedNoIgnore := "Found 8 files\n" +
+		"debug.log\n" +
+		"ignored/hit.txt\n" +
+		"important.log\n" +
+		"keep.txt\n" +
+		"scratch.txt\n" +
+		"sub/local.txt\n" +
+		"sub/logs/hit.md\n" +
+		"sub/visible.txt"
+	if noIgnoreResult.Content != expectedNoIgnore {
+		t.Fatalf("grep no-ignore content = %#v", noIgnoreResult.Content)
+	}
+	if noIgnoreResult.StructuredContent["no_ignore"] != true {
+		t.Fatalf("grep no-ignore structured content = %#v", noIgnoreResult.StructuredContent)
+	}
 }
 
 func TestGlobAndGrepRespectReadDenyPermissionRules(t *testing.T) {

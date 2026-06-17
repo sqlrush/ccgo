@@ -36,6 +36,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
+	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
 }
 
 var grepSemanticNumberKeys = map[string]struct{}{
@@ -51,6 +52,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
+	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
 }
 
 type globInput struct {
@@ -106,6 +108,10 @@ type grepInput struct {
 	CountMatchesAlt    bool   `json:"countMatches,omitempty"`
 	CountMatchesDash   bool   `json:"count-matches,omitempty"`
 	LongCountMatches   bool   `json:"--count-matches,omitempty"`
+	NoIgnore           bool   `json:"no_ignore,omitempty"`
+	NoIgnoreAlt        bool   `json:"noIgnore,omitempty"`
+	NoIgnoreDash       bool   `json:"no-ignore,omitempty"`
+	LongNoIgnore       bool   `json:"--no-ignore,omitempty"`
 	Multiline          bool   `json:"multiline,omitempty"`
 }
 
@@ -238,12 +244,16 @@ func NewGrepTool() tool.Tool {
 					"countMatches":     map[string]any{"type": "boolean"},
 					"count-matches":    map[string]any{"type": "boolean"},
 					"--count-matches":  map[string]any{"type": "boolean"},
+					"no_ignore":        map[string]any{"type": "boolean"},
+					"noIgnore":         map[string]any{"type": "boolean"},
+					"no-ignore":        map[string]any{"type": "boolean"},
+					"--no-ignore":      map[string]any{"type": "boolean"},
 					"multiline":        map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, and only_matching/-o matched-text output. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, and only_matching/-o matched-text output. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -399,7 +409,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		OnlyMatching:  onlyMatching,
 		CountMatches:  countMatches,
 	}
-	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options, grepWalkOptions(ctx, root))
+	noIgnore := grepNoIgnore(input)
+	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options, grepWalkOptions(ctx, root, noIgnore))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -430,6 +441,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"invert_match":     grepInvertMatch(input),
 			"only_matching":    onlyMatching,
 			"count_matches":    countMatches,
+			"no_ignore":        noIgnore,
 			"multiline":        input.Multiline,
 			"truncated":        truncated,
 		},
@@ -1083,6 +1095,10 @@ func grepCountMatches(input grepInput) bool {
 	return input.CountMatches || input.CountMatchesAlt || input.CountMatchesDash || input.LongCountMatches
 }
 
+func grepNoIgnore(input grepInput) bool {
+	return input.NoIgnore || input.NoIgnoreAlt || input.NoIgnoreDash || input.LongNoIgnore
+}
+
 func grepLineNumbers(input grepInput, mode string) bool {
 	if mode != "content" {
 		return false
@@ -1258,9 +1274,9 @@ func globWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 	}
 }
 
-func grepWalkOptions(ctx tool.Context, root string) searchWalkOptions {
+func grepWalkOptions(ctx tool.Context, root string, noIgnore bool) searchWalkOptions {
 	return searchWalkOptions{
-		UseIgnoreFiles: true,
+		UseIgnoreFiles: !noIgnore,
 		IncludeHidden:  true,
 		ExcludeVCSDirs: true,
 		ExtraIgnores:   readDenySearchIgnoreRules(ctx, root),
