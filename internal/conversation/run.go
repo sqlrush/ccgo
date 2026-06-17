@@ -1110,6 +1110,26 @@ func (r Runner) formatStatusBridge() string {
 		"Manifest path: "+path,
 		fmt.Sprintf("Bridge-safe commands: %d", len(manifest.Commands)),
 	)
+	directPath := bridgepkg.SessionDirectStatePath(r.SessionPath, r.SessionID)
+	if directPath != "" {
+		state, err := bridgepkg.LoadDirectState(directPath)
+		if err == nil && state.GeneratedAt != "" {
+			lines = append(lines,
+				"Direct connect state: "+state.RuntimeState,
+				"Direct connect path: "+directPath,
+			)
+			if state.URL != "" {
+				lines = append(lines, "Direct connect url: "+state.URL)
+			}
+			if state.WebSocketURL != "" {
+				lines = append(lines, "Direct websocket url: "+state.WebSocketURL)
+			}
+			lines = append(lines, "Direct token required: "+boolEnabledText(state.TokenRequired))
+			if state.Error != "" {
+				lines = append(lines, "Direct connect error: "+state.Error)
+			}
+		}
+	}
 	if manifest.GeneratedAt != "" {
 		lines = append(lines, "Generated at: "+manifest.GeneratedAt)
 	}

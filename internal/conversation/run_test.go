@@ -1861,6 +1861,16 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
 		t.Fatal(err)
 	}
+	if runner.BridgeDirectServer == nil {
+		t.Fatal("bridge direct server was not started")
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := runner.BridgeDirectServer.Close(ctx); err != nil {
+			t.Fatalf("close bridge direct server: %v", err)
+		}
+	})
 	manifest, err := bridgepkg.LoadManifest(bridgepkg.SessionManifestPath(transcriptPath, "sess_bridge"))
 	if err != nil {
 		t.Fatal(err)
@@ -1873,6 +1883,21 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	}
 	if bridgeManifestHasCommand(manifest, "status") || bridgeManifestHasCommand(manifest, "model") {
 		t.Fatalf("manifest leaked unsafe commands: %#v", manifest.Commands)
+	}
+	state, err := bridgepkg.LoadDirectState(bridgepkg.SessionDirectStatePath(transcriptPath, "sess_bridge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.SessionID != "sess_bridge" || state.RuntimeState != bridgepkg.DirectRuntimeRunning || state.URL == "" || state.WebSocketURL == "" || state.TokenRequired {
+		t.Fatalf("direct state = %#v", state)
+	}
+	resp, err := http.Get(state.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("direct health status = %d", resp.StatusCode)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"ccgo/internal/api/anthropic"
+	bridgepkg "ccgo/internal/bridge"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	lsppkg "ccgo/internal/lsp"
@@ -90,6 +91,9 @@ type Runner struct {
 	LSPServerDefinitions      []lsppkg.ServerDefinition
 	LSPStartupDocuments       []lsppkg.OpenDocument
 	LSPProcesses              map[string]*lsppkg.ServerProcess
+	BridgeDirectServer        *bridgepkg.DirectServer
+	BridgeDirectAddr          string
+	BridgeDirectToken         string
 	EnableMemoryExtraction    bool
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int
