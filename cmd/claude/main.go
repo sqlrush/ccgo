@@ -2184,6 +2184,9 @@ type printStreamEvent struct {
 	Message        *contracts.Message         `json:"message,omitempty"`
 	ToolUse        *contracts.ToolUse         `json:"tool_use,omitempty"`
 	ToolResult     *contracts.ToolResult      `json:"tool_result,omitempty"`
+	ToolUseID      contracts.ID               `json:"tool_use_id,omitempty"`
+	ProgressType   string                     `json:"progress_type,omitempty"`
+	Data           map[string]any             `json:"data,omitempty"`
 	TokenWarning   *conversation.TokenWarning `json:"token_warning,omitempty"`
 	Compact        any                        `json:"compact,omitempty"`
 	StreamEvent    *anthropic.StreamEvent     `json:"stream_event,omitempty"`
@@ -2418,6 +2421,11 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 	}
 	if event.Compact != nil {
 		out.Compact = event.Compact
+	}
+	if event.ToolProgress != nil {
+		out.ToolUseID = event.ToolProgress.ToolUseID
+		out.ProgressType = event.ToolProgress.Type
+		out.Data = event.ToolProgress.Data
 	}
 	if event.Error != nil {
 		out.Error = event.Error.Error()

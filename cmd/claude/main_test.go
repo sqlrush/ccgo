@@ -1994,6 +1994,113 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_stream_hook",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"hook stream ok"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"printf '%s\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"stream hook context\"}}'"}]}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "--print", "--output-format", "stream-json", "stream prompt"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	messages, ok := requestBody["messages"].([]any)
+	if !ok || len(messages) != 1 {
+		t.Fatalf("messages = %#v", requestBody["messages"])
+	}
+	message, ok := messages[0].(map[string]any)
+	if !ok {
+		t.Fatalf("message = %#v", messages[0])
+	}
+	content, ok := message["content"].([]any)
+	if !ok || len(content) != 1 {
+		t.Fatalf("content = %#v", message["content"])
+	}
+	block, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("block = %#v", content[0])
+	}
+	prompt, _ := block["text"].(string)
+	if !strings.Contains(prompt, "stream prompt") || !strings.Contains(prompt, "stream hook context") {
+		t.Fatalf("prompt = %q", prompt)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var sawHookStarted bool
+	var sawHookCompleted bool
+	var sawResult bool
+	var hookCompletedIndex = -1
+	var userMessageIndex = -1
+	for idx, line := range lines {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("invalid json line %q: %v", line, err)
+		}
+		switch event["type"] {
+		case "tool_progress":
+			if event["tool_use_id"] != "hook_UserPromptSubmit" {
+				continue
+			}
+			data, ok := event["data"].(map[string]any)
+			if !ok {
+				t.Fatalf("progress data = %#v", event["data"])
+			}
+			if data["phase"] != "UserPromptSubmit" || data["scope"] != "conversation" || data["hook_index"] != float64(0) {
+				t.Fatalf("progress event = %#v", event)
+			}
+			switch event["progress_type"] {
+			case "hook_started":
+				sawHookStarted = true
+			case "hook_completed":
+				sawHookCompleted = true
+				hookCompletedIndex = idx
+			}
+		case "user_message":
+			if userMessageIndex < 0 {
+				userMessageIndex = idx
+			}
+		case "result":
+			if event["result"] == "hook stream ok" && event["is_error"] == false {
+				sawResult = true
+			}
+		}
+	}
+	if !sawHookStarted || !sawHookCompleted {
+		t.Fatalf("missing hook progress in %q", stdout.String())
+	}
+	if hookCompletedIndex < 0 || userMessageIndex < 0 || hookCompletedIndex > userMessageIndex {
+		t.Fatalf("event order hook_completed=%d user_message=%d stdout=%q", hookCompletedIndex, userMessageIndex, stdout.String())
+	}
+	if !sawResult {
+		t.Fatalf("missing result event in %q", stdout.String())
+	}
+}
+
 func TestRunPrintStreamJSONClearIncludesCleared(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")
