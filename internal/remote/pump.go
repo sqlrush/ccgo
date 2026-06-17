@@ -27,30 +27,31 @@ const (
 )
 
 type PumpState struct {
-	SessionID        contracts.ID `json:"session_id,omitempty"`
-	RuntimeState     string       `json:"runtime_state"`
-	Transport        string       `json:"transport,omitempty"`
-	PollURL          string       `json:"poll_url,omitempty"`
-	WebSocketURL     string       `json:"websocket_url,omitempty"`
-	LastCursor       string       `json:"last_cursor,omitempty"`
-	LastPollAt       string       `json:"last_poll_at,omitempty"`
-	StreamStartedAt  string       `json:"stream_started_at,omitempty"`
-	StreamEndedAt    string       `json:"stream_ended_at,omitempty"`
-	StreamStopReason string       `json:"stream_stop_reason,omitempty"`
-	StatusCode       int          `json:"status_code,omitempty"`
-	CloseCode        int          `json:"close_code,omitempty"`
-	FrameCount       int          `json:"frame_count,omitempty"`
-	ConnectCount     int          `json:"connect_count,omitempty"`
-	ReconnectCount   int          `json:"reconnect_count,omitempty"`
-	AckEventCount    int          `json:"ack_event_count,omitempty"`
-	AckSentCount     int          `json:"ack_sent_count,omitempty"`
-	AckErrorCount    int          `json:"ack_error_count,omitempty"`
-	LeaseEventCount  int          `json:"lease_event_count,omitempty"`
-	EventCount       int          `json:"event_count,omitempty"`
-	DeliveredCount   int          `json:"delivered_count,omitempty"`
-	DuplicateCount   int          `json:"duplicate_count,omitempty"`
-	ErrorCount       int          `json:"error_count,omitempty"`
-	LastError        string       `json:"last_error,omitempty"`
+	SessionID         contracts.ID `json:"session_id,omitempty"`
+	RuntimeState      string       `json:"runtime_state"`
+	Transport         string       `json:"transport,omitempty"`
+	PollURL           string       `json:"poll_url,omitempty"`
+	WebSocketURL      string       `json:"websocket_url,omitempty"`
+	LastCursor        string       `json:"last_cursor,omitempty"`
+	LastPollAt        string       `json:"last_poll_at,omitempty"`
+	StreamStartedAt   string       `json:"stream_started_at,omitempty"`
+	StreamEndedAt     string       `json:"stream_ended_at,omitempty"`
+	StreamStopReason  string       `json:"stream_stop_reason,omitempty"`
+	StatusCode        int          `json:"status_code,omitempty"`
+	CloseCode         int          `json:"close_code,omitempty"`
+	FrameCount        int          `json:"frame_count,omitempty"`
+	ConnectCount      int          `json:"connect_count,omitempty"`
+	ReconnectCount    int          `json:"reconnect_count,omitempty"`
+	AckEventCount     int          `json:"ack_event_count,omitempty"`
+	AckSentCount      int          `json:"ack_sent_count,omitempty"`
+	AckErrorCount     int          `json:"ack_error_count,omitempty"`
+	LeaseEventCount   int          `json:"lease_event_count,omitempty"`
+	LeaseExpiredCount int          `json:"lease_expired_count,omitempty"`
+	EventCount        int          `json:"event_count,omitempty"`
+	DeliveredCount    int          `json:"delivered_count,omitempty"`
+	DuplicateCount    int          `json:"duplicate_count,omitempty"`
+	ErrorCount        int          `json:"error_count,omitempty"`
+	LastError         string       `json:"last_error,omitempty"`
 }
 
 type PollEvent struct {

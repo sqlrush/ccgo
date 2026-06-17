@@ -156,25 +156,26 @@ func TestSendAckRejectsDisallowedOriginAndRedactsURL(t *testing.T) {
 func TestWriteAndLoadPumpState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sess_remote", pumpFileName)
 	state := PumpState{
-		SessionID:        "sess_remote",
-		RuntimeState:     PumpRunning,
-		Transport:        "websocket",
-		PollURL:          "https://remote/poll",
-		WebSocketURL:     "wss://remote/ws",
-		LastCursor:       "cursor-1",
-		StreamStartedAt:  "2026-06-17T10:00:00Z",
-		StreamEndedAt:    "2026-06-17T10:05:00Z",
-		StreamStopReason: "max_frames",
-		CloseCode:        1000,
-		FrameCount:       2,
-		ConnectCount:     1,
-		ReconnectCount:   1,
-		AckEventCount:    1,
-		AckSentCount:     1,
-		AckErrorCount:    1,
-		LeaseEventCount:  1,
-		EventCount:       2,
-		DeliveredCount:   1,
+		SessionID:         "sess_remote",
+		RuntimeState:      PumpRunning,
+		Transport:         "websocket",
+		PollURL:           "https://remote/poll",
+		WebSocketURL:      "wss://remote/ws",
+		LastCursor:        "cursor-1",
+		StreamStartedAt:   "2026-06-17T10:00:00Z",
+		StreamEndedAt:     "2026-06-17T10:05:00Z",
+		StreamStopReason:  "max_frames",
+		CloseCode:         1000,
+		FrameCount:        2,
+		ConnectCount:      1,
+		ReconnectCount:    1,
+		AckEventCount:     1,
+		AckSentCount:      1,
+		AckErrorCount:     1,
+		LeaseEventCount:   1,
+		LeaseExpiredCount: 1,
+		EventCount:        2,
+		DeliveredCount:    1,
 	}
 	if err := WritePumpState(path, state); err != nil {
 		t.Fatal(err)
@@ -183,7 +184,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.AckEventCount != 1 || loaded.AckSentCount != 1 || loaded.AckErrorCount != 1 || loaded.LeaseEventCount != 1 || loaded.LastPollAt == "" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.AckEventCount != 1 || loaded.AckSentCount != 1 || loaded.AckErrorCount != 1 || loaded.LeaseEventCount != 1 || loaded.LeaseExpiredCount != 1 || loaded.LastPollAt == "" {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	data, err := json.Marshal(loaded)

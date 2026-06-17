@@ -125,7 +125,7 @@ M10 补充：`--daemon` 常驻模式现在会在初始 tick 后启动 remote Web
 
 M10 补充：remote poll/WebSocket 共用解码器现在兼容 `data`、`event`、`remote_event`、`delivery`、`payload` 包裹的单条事件，以及这些 wrapper 下的 `events/items/messages/deliveries` 列表；云端可以用 envelope 协议携带 cursor 和事件内容，而无需强制把事件字段铺在顶层。更深的鉴权刷新、ack/lease 和服务端协议协商仍未完成。
 
-M10 补充：remote poll/WebSocket 事件现在会解析 `ack_url`/`ackUrl`/`acknowledge_url`/`receipt_url` 和 `lease_id`/`lease_expires_at` 及 `ack`/`lease` nested object 元数据；daemon 会在 delivered/duplicate/failed 后对注册 poll/websocket 同源的 ack URL 做 best-effort POST，带 Bearer auth 和 event/status/sent_count/duplicate/error payload，并在 pump state、structured result 和 `/status show remote` 记录 ack event/sent/error 与 lease event 计数；非同源 ack URL 会被拒绝且脱敏。更深的 lease refresh 和服务端协议协商仍未完成。
+M10 补充：remote poll/WebSocket 事件现在会解析 `ack_url`/`ackUrl`/`acknowledge_url`/`receipt_url` 和 `lease_id`/`lease_expires_at` 及 `ack`/`lease` nested object 元数据；daemon 会在 delivered/duplicate/failed 后对注册 poll/websocket 同源的 ack URL 做 best-effort POST，带 Bearer auth 和 event/status/sent_count/duplicate/error payload，并在 pump state、structured result 和 `/status show remote` 记录 ack event/sent/error 与 lease event 计数；非同源 ack URL 会被拒绝且脱敏；已过期 lease 会被跳过投递并 ack `expired`，同时记录 `lease_expired_count`。更深的 lease renew/refresh 和服务端协议协商仍未完成。
 
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 

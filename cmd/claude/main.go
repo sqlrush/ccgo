@@ -871,15 +871,16 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
 	}
 	writeStreamState()
-	deliveryOptions := newDaemonRemoteDeliveryOptions(registration, authToken)
+	deliveryOptions := newDaemonRemoteDeliveryOptions(registration, authToken, time.Time{})
 	result := remotepkg.StreamWebSocketEvents(ctx, options, func(events []remotepkg.PollEvent) error {
-		delivered, duplicates, ackEvents, ackSent, ackErrors, leaseEvents, errorsOut := deliverDaemonRemoteEvents(ctx, runner, events, deliveryOptions)
+		delivered, duplicates, ackEvents, ackSent, ackErrors, leaseEvents, leaseExpired, errorsOut := deliverDaemonRemoteEvents(ctx, runner, events, deliveryOptions)
 		pumpState.RuntimeState = remotepkg.PumpRunning
 		pumpState.EventCount += len(events)
 		pumpState.AckEventCount += ackEvents
 		pumpState.AckSentCount += ackSent
 		pumpState.AckErrorCount += ackErrors
 		pumpState.LeaseEventCount += leaseEvents
+		pumpState.LeaseExpiredCount += leaseExpired
 		pumpState.DeliveredCount += delivered
 		pumpState.DuplicateCount += duplicates
 		pumpState.ErrorCount += len(errorsOut)
@@ -917,6 +918,7 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	structured["ack_sent_count"] = pumpState.AckSentCount
 	structured["ack_error_count"] = pumpState.AckErrorCount
 	structured["lease_event_count"] = pumpState.LeaseEventCount
+	structured["lease_expired_count"] = pumpState.LeaseExpiredCount
 	structured["stream_started_at"] = pumpState.StreamStartedAt
 	structured["stream_ended_at"] = pumpState.StreamEndedAt
 	structured["stream_stop_reason"] = pumpState.StreamStopReason
@@ -1121,11 +1123,12 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
 		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
 	}
-	delivered, duplicates, ackEvents, ackSent, ackErrors, leaseEvents, errorsOut := deliverDaemonRemoteEvents(ctx, runner, remoteFetch.Events, newDaemonRemoteDeliveryOptions(registration, authToken))
+	delivered, duplicates, ackEvents, ackSent, ackErrors, leaseEvents, leaseExpired, errorsOut := deliverDaemonRemoteEvents(ctx, runner, remoteFetch.Events, newDaemonRemoteDeliveryOptions(registration, authToken, now))
 	pumpState.AckEventCount = ackEvents
 	pumpState.AckSentCount = ackSent
 	pumpState.AckErrorCount = ackErrors
 	pumpState.LeaseEventCount = leaseEvents
+	pumpState.LeaseExpiredCount = leaseExpired
 	pumpState.DeliveredCount = delivered
 	pumpState.DuplicateCount = duplicates
 	pumpState.ErrorCount = len(errorsOut)
@@ -1147,6 +1150,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	structured["ack_sent_count"] = pumpState.AckSentCount
 	structured["ack_error_count"] = pumpState.AckErrorCount
 	structured["lease_event_count"] = pumpState.LeaseEventCount
+	structured["lease_expired_count"] = pumpState.LeaseExpiredCount
 	structured["event_count"] = pumpState.EventCount
 	structured["delivered_count"] = pumpState.DeliveredCount
 	structured["duplicate_count"] = pumpState.DuplicateCount
@@ -1177,15 +1181,17 @@ type daemonRemoteFetch struct {
 type daemonRemoteDeliveryOptions struct {
 	AuthToken      string
 	AllowedOrigins []string
+	Now            time.Time
 }
 
-func newDaemonRemoteDeliveryOptions(registration remotepkg.RegistrationState, authToken string) daemonRemoteDeliveryOptions {
+func newDaemonRemoteDeliveryOptions(registration remotepkg.RegistrationState, authToken string, now time.Time) daemonRemoteDeliveryOptions {
 	return daemonRemoteDeliveryOptions{
 		AuthToken: authToken,
 		AllowedOrigins: []string{
 			registration.PollURL,
 			registration.WebSocketURL,
 		},
+		Now: now,
 	}
 }
 
@@ -1243,7 +1249,7 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 	}
 }
 
-func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, events []remotepkg.PollEvent, options daemonRemoteDeliveryOptions) (int, int, int, int, int, int, []map[string]any) {
+func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, events []remotepkg.PollEvent, options daemonRemoteDeliveryOptions) (int, int, int, int, int, int, int, []map[string]any) {
 	errorsOut := make([]map[string]any, 0)
 	delivered := 0
 	duplicates := 0
@@ -1251,12 +1257,31 @@ func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, 
 	ackSent := 0
 	ackErrors := 0
 	leaseEvents := 0
+	leaseExpired := 0
 	for _, event := range events {
 		if event.AckURL != "" {
 			ackEvents++
 		}
 		if event.LeaseID != "" || event.LeaseExpiresAt != "" {
 			leaseEvents++
+		}
+		if daemonRemoteLeaseExpired(event, options.Now) {
+			leaseExpired++
+			errorText := "remote event lease expired"
+			errorsOut = append(errorsOut, map[string]any{
+				"type":             "remote_lease",
+				"event_id":         event.EventID,
+				"lease_id":         event.LeaseID,
+				"lease_expires_at": event.LeaseExpiresAt,
+				"error":            errorText,
+			})
+			sent, ackErr := acknowledgeDaemonRemoteEvent(ctx, event, options, "expired", 0, false, errorText)
+			ackSent += sent
+			if ackErr != nil {
+				ackErrors++
+				errorsOut = append(errorsOut, ackErr)
+			}
+			continue
 		}
 		input, err := json.Marshal(map[string]any{
 			"team_id":  event.TeamID,
@@ -1313,7 +1338,21 @@ func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, 
 			errorsOut = append(errorsOut, ackErr)
 		}
 	}
-	return delivered, duplicates, ackEvents, ackSent, ackErrors, leaseEvents, errorsOut
+	return delivered, duplicates, ackEvents, ackSent, ackErrors, leaseEvents, leaseExpired, errorsOut
+}
+
+func daemonRemoteLeaseExpired(event remotepkg.PollEvent, now time.Time) bool {
+	if strings.TrimSpace(event.LeaseExpiresAt) == "" {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(event.LeaseExpiresAt))
+	if err != nil {
+		return false
+	}
+	return !expiresAt.After(now.UTC())
 }
 
 func acknowledgeDaemonRemoteEvent(ctx context.Context, event remotepkg.PollEvent, options daemonRemoteDeliveryOptions, status string, sentCount int, duplicate bool, errorText string) (int, map[string]any) {

@@ -404,6 +404,68 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 	}
 }
 
+func TestRunDaemonRemotePollSkipsExpiredLease(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_remote_expired_lease")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{ID: "agent/remote-lead", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:                "remote/team",
+		CoordinatorTaskID: "agent/remote-lead",
+		Timestamp:         time.Unix(102, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var ackStatuses []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ack" {
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			ackStatuses = append(ackStatuses, fmt.Sprint(payload["status"]))
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"events":[{"id":"delivery-expired","team":"remote/team","message":"Expired deploy.","ack_url":%q,"lease_id":"lease-expired","lease_expires_at":"2026-06-17T11:59:00Z"}]}`, server.URL+"/ack")))
+	}))
+	defer server.Close()
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:    sessionID,
+		RuntimeState: remotepkg.RegistrationRegistered,
+		PollURL:      server.URL + "/poll",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{SessionID: sessionID, SessionPath: transcriptPath, WorkingDirectory: dir}
+	result := runDaemonRemotePoll(context.Background(), runner, time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC))
+	if result.StructuredContent["delivered_count"] != 0 || result.StructuredContent["duplicate_count"] != 0 || result.StructuredContent["ack_event_count"] != 1 || result.StructuredContent["ack_sent_count"] != 1 || result.StructuredContent["lease_event_count"] != 1 || result.StructuredContent["lease_expired_count"] != 1 || result.StructuredContent["error_count"] != 1 {
+		t.Fatalf("expired poll = %#v", result.StructuredContent)
+	}
+	if len(ackStatuses) != 1 || ackStatuses[0] != "expired" {
+		t.Fatalf("ack statuses = %#v", ackStatuses)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.DeliveredCount != 0 || pump.AckSentCount != 1 || pump.LeaseExpiredCount != 1 || pump.ErrorCount != 1 {
+		t.Fatalf("pump = %#v", pump)
+	}
+	resume, err := manager.ResumeContext("agent/remote-lead", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 1 || strings.Contains(messages.TextContent(resume.Messages[0]), "Expired deploy.") {
+		t.Fatalf("resume messages = %#v", resume.Messages)
+	}
+}
+
 func TestRunDaemonRemotePollPrefersWebSocket(t *testing.T) {
 	dir := t.TempDir()
 	transcriptPath := filepath.Join(dir, "session.jsonl")
