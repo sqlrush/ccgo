@@ -327,11 +327,25 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 	}
 	var cursors []string
 	var auths []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var ackStatuses []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ack" {
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			ackStatuses = append(ackStatuses, fmt.Sprint(payload["status"]))
+			if got := r.Header.Get("Authorization"); got != "Bearer poll-token" {
+				t.Fatalf("ack auth = %q", got)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		cursors = append(cursors, r.URL.Query().Get("cursor"))
 		auths = append(auths, r.Header.Get("Authorization"))
 		w.Header().Set("content-type", "application/json")
-		_, _ = w.Write([]byte(`{"next_cursor":"cursor-2","events":[{"id":"delivery-1","team":"remote/team","source":"webhook","event":"deploy","message":"Deploy now.","ack_url":"https://remote.example/ack/delivery-1","lease":{"id":"lease-1","expires_at":"2026-06-17T12:00:00Z"}}]}`))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"next_cursor":"cursor-2","events":[{"id":"delivery-1","team":"remote/team","source":"webhook","event":"deploy","message":"Deploy now.","ack_url":%q,"lease":{"id":"lease-1","expires_at":"2026-06-17T12:00:00Z"}}]}`, server.URL+"/ack?token=secret")))
 	}))
 	defer server.Close()
 	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
@@ -351,7 +365,7 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 		}},
 	}
 	first := runDaemonRemotePoll(context.Background(), runner, time.Unix(200, 0).UTC())
-	if first.StructuredContent["runtime_state"] != remotepkg.PumpRunning || first.StructuredContent["delivered_count"] != 1 || first.StructuredContent["duplicate_count"] != 0 || first.StructuredContent["ack_event_count"] != 1 || first.StructuredContent["lease_event_count"] != 1 || first.StructuredContent["error_count"] != 0 {
+	if first.StructuredContent["runtime_state"] != remotepkg.PumpRunning || first.StructuredContent["delivered_count"] != 1 || first.StructuredContent["duplicate_count"] != 0 || first.StructuredContent["ack_event_count"] != 1 || first.StructuredContent["ack_sent_count"] != 1 || first.StructuredContent["ack_error_count"] != 0 || first.StructuredContent["lease_event_count"] != 1 || first.StructuredContent["error_count"] != 0 {
 		t.Fatalf("first poll = %#v", first.StructuredContent)
 	}
 	if len(cursors) != 1 || cursors[0] != "" || auths[0] != "Bearer poll-token" {
@@ -361,7 +375,7 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pump.LastCursor != "cursor-2" || pump.PollURL != server.URL+"/poll" || pump.AckEventCount != 1 || pump.LeaseEventCount != 1 || pump.DeliveredCount != 1 {
+	if pump.LastCursor != "cursor-2" || pump.PollURL != server.URL+"/poll" || pump.AckEventCount != 1 || pump.AckSentCount != 1 || pump.AckErrorCount != 0 || pump.LeaseEventCount != 1 || pump.DeliveredCount != 1 {
 		t.Fatalf("pump = %#v", pump)
 	}
 	resume, err := manager.ResumeContext("agent/remote-lead", 3)
@@ -374,6 +388,9 @@ func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
 	second := runDaemonRemotePoll(context.Background(), runner, time.Unix(201, 0).UTC())
 	if second.StructuredContent["delivered_count"] != 0 || second.StructuredContent["duplicate_count"] != 1 || second.StructuredContent["error_count"] != 0 {
 		t.Fatalf("second poll = %#v", second.StructuredContent)
+	}
+	if len(ackStatuses) != 2 || ackStatuses[0] != "delivered" || ackStatuses[1] != "duplicate" {
+		t.Fatalf("ack statuses = %#v", ackStatuses)
 	}
 	if len(cursors) != 2 || cursors[1] != "cursor-2" {
 		t.Fatalf("cursors = %#v", cursors)
@@ -467,11 +484,25 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 		t.Fatal(err)
 	}
 	var auths []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var ackStatuses []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ack" {
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			ackStatuses = append(ackStatuses, fmt.Sprint(payload["status"]))
+			if got := r.Header.Get("Authorization"); got != "Bearer stream-token" {
+				t.Fatalf("ack auth = %q", got)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		auths = append(auths, r.Header.Get("Authorization"))
 		conn := acceptDaemonTestWebSocket(t, w, r)
 		defer conn.Close()
-		writeDaemonTestWebSocketFrame(t, conn, 0x1, []byte(`{"id":"delivery-stream","team":"remote/team","source":"stream","event":"deploy","message":"Stream deploy.","ackUrl":"https://remote.example/ack/delivery-stream","lease_id":"lease-stream"}`))
+		writeDaemonTestWebSocketFrame(t, conn, 0x1, []byte(fmt.Sprintf(`{"id":"delivery-stream","team":"remote/team","source":"stream","event":"deploy","message":"Stream deploy.","ackUrl":%q,"lease_id":"lease-stream"}`, server.URL+"/ack")))
 	}))
 	defer server.Close()
 	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
@@ -491,7 +522,7 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 		}},
 	}
 	result := runDaemonRemoteStream(context.Background(), runner, time.Unix(200, 0).UTC(), remotepkg.WebSocketOptions{MaxFrames: 1})
-	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket_stream" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["ack_event_count"] != 1 || result.StructuredContent["lease_event_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
+	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket_stream" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["ack_event_count"] != 1 || result.StructuredContent["ack_sent_count"] != 1 || result.StructuredContent["ack_error_count"] != 0 || result.StructuredContent["lease_event_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
 		t.Fatalf("stream result = %#v", result.StructuredContent)
 	}
 	if result.StructuredContent["stream_started_at"] != "1970-01-01T00:03:20Z" || result.StructuredContent["stream_ended_at"] == "" || result.StructuredContent["stream_stop_reason"] != "max_frames" {
@@ -500,11 +531,14 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 	if len(auths) != 1 || auths[0] != "Bearer stream-token" {
 		t.Fatalf("auths = %#v", auths)
 	}
+	if len(ackStatuses) != 1 || ackStatuses[0] != "delivered" {
+		t.Fatalf("ack statuses = %#v", ackStatuses)
+	}
 	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pump.Transport != "websocket_stream" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.AckEventCount != 1 || pump.LeaseEventCount != 1 || pump.DeliveredCount != 1 || pump.StreamStartedAt != "1970-01-01T00:03:20Z" || pump.StreamEndedAt == "" || pump.StreamStopReason != "max_frames" || strings.Contains(pump.WebSocketURL, "token=secret") {
+	if pump.Transport != "websocket_stream" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.AckEventCount != 1 || pump.AckSentCount != 1 || pump.AckErrorCount != 0 || pump.LeaseEventCount != 1 || pump.DeliveredCount != 1 || pump.StreamStartedAt != "1970-01-01T00:03:20Z" || pump.StreamEndedAt == "" || pump.StreamStopReason != "max_frames" || strings.Contains(pump.WebSocketURL, "token=secret") {
 		t.Fatalf("pump = %#v", pump)
 	}
 	resume, err := manager.ResumeContext("agent/remote-lead", 3)

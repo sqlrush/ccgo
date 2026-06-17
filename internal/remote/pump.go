@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -42,6 +43,8 @@ type PumpState struct {
 	ConnectCount     int          `json:"connect_count,omitempty"`
 	ReconnectCount   int          `json:"reconnect_count,omitempty"`
 	AckEventCount    int          `json:"ack_event_count,omitempty"`
+	AckSentCount     int          `json:"ack_sent_count,omitempty"`
+	AckErrorCount    int          `json:"ack_error_count,omitempty"`
 	LeaseEventCount  int          `json:"lease_event_count,omitempty"`
 	EventCount       int          `json:"event_count,omitempty"`
 	DeliveredCount   int          `json:"delivered_count,omitempty"`
@@ -77,11 +80,84 @@ type PollResult struct {
 	Error      string      `json:"error,omitempty"`
 }
 
+type AckOptions struct {
+	AckURL         string
+	AuthToken      string
+	EventID        string
+	Status         string
+	SentCount      int
+	Duplicate      bool
+	Error          string
+	AllowedOrigins []string
+	Client         *http.Client
+}
+
+type AckResult struct {
+	AckedAt    string `json:"acked_at,omitempty"`
+	StatusCode int    `json:"status_code,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
 func SessionPumpPath(sessionPath string, sessionID contracts.ID) string {
 	if sessionPath == "" || sessionID == "" {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(sessionPath), string(sessionID), pumpFileName)
+}
+
+func SendAck(ctx context.Context, options AckOptions) AckResult {
+	result := AckResult{AckedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	rawURL := strings.TrimSpace(options.AckURL)
+	if rawURL == "" {
+		result.Error = "remote ack url is unavailable"
+		return result
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		result.Error = fmt.Sprintf("invalid remote ack url: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	if !remoteAckOriginAllowed(parsed, options.AllowedOrigins) {
+		result.Error = fmt.Sprintf("remote ack url is not allowed: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	payload, err := json.Marshal(map[string]any{
+		"event_id":   strings.TrimSpace(options.EventID),
+		"status":     strings.TrimSpace(options.Status),
+		"sent_count": options.SentCount,
+		"duplicate":  options.Duplicate,
+		"error":      strings.TrimSpace(options.Error),
+	})
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed.String(), bytes.NewReader(payload))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("accept", "application/json")
+	if strings.TrimSpace(options.AuthToken) != "" {
+		req.Header.Set("authorization", "Bearer "+strings.TrimSpace(options.AuthToken))
+	}
+	client := options.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Error = fmt.Sprintf("remote ack request failed: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	defer resp.Body.Close()
+	result.StatusCode = resp.StatusCode
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		result.Error = remoteRegistrationError(resp.Status, body)
+	}
+	return result
 }
 
 func FetchPollEvents(ctx context.Context, options PollOptions) PollResult {
@@ -246,6 +322,46 @@ func DisplayEndpoint(raw string) string {
 	parsed.Fragment = ""
 	parsed.User = nil
 	return parsed.String()
+}
+
+func remoteAckOriginAllowed(ack *url.URL, allowed []string) bool {
+	if ack == nil {
+		return false
+	}
+	if len(allowed) == 0 {
+		return false
+	}
+	ackOrigin := remoteHTTPOrigin(ack)
+	if ackOrigin == "" {
+		return false
+	}
+	for _, raw := range allowed {
+		parsed, err := url.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		if remoteHTTPOrigin(parsed) == ackOrigin {
+			return true
+		}
+	}
+	return false
+}
+
+func remoteHTTPOrigin(parsed *url.URL) string {
+	if parsed == nil || parsed.Host == "" {
+		return ""
+	}
+	scheme := parsed.Scheme
+	switch scheme {
+	case "ws":
+		scheme = "http"
+	case "wss":
+		scheme = "https"
+	case "http", "https":
+	default:
+		return ""
+	}
+	return scheme + "://" + strings.ToLower(parsed.Host)
 }
 
 func decodePollEventList(list []any) []PollEvent {

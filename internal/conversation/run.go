@@ -1884,6 +1884,12 @@ func formatRemotePump(state remotepkg.PumpState) []string {
 	if state.AckEventCount > 0 {
 		parts = append(parts, fmt.Sprintf("ack events %d", state.AckEventCount))
 	}
+	if state.AckSentCount > 0 {
+		parts = append(parts, fmt.Sprintf("ack sent %d", state.AckSentCount))
+	}
+	if state.AckErrorCount > 0 {
+		parts = append(parts, fmt.Sprintf("ack errors %d", state.AckErrorCount))
+	}
 	if state.LeaseEventCount > 0 {
 		parts = append(parts, fmt.Sprintf("lease events %d", state.LeaseEventCount))
 	}
