@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1073,7 +1074,7 @@ func (r Runner) formatStatusNative() string {
 func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) == 0 {
-		return "Usage: /native clipboard <read|write <text>>"
+		return nativeCommandUsage()
 	}
 	switch strings.ToLower(args[0]) {
 	case "clipboard":
@@ -1169,7 +1170,7 @@ func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string
 func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) == 0 {
-		return "Usage: /native computer screenshot"
+		return nativeComputerUsage()
 	}
 	plan := integrationspkg.BuildComputerUseDriverPlan(r.SessionID, r.WorkingDirectory, integrationspkg.DetectAdapters("computer_use", integrationspkg.AdapterOptions{}))
 	switch strings.ToLower(args[0]) {
@@ -1194,9 +1195,128 @@ func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) str
 			lines = append(lines, "Capture error: "+err.Error())
 		}
 		return strings.Join(lines, "\n")
+	case "move", "mousemove", "mouse-move", "pointer-move", "click", "mouse-click", "left-click", "right-click", "leftclick", "rightclick", "type", "text", "type-text", "key", "keypress", "key-press":
+		action, err := parseNativeComputerInputAction(raw)
+		if err != nil {
+			return err.Error() + "\n" + nativeComputerUsage()
+		}
+		input, err := integrationspkg.ExecuteComputerUseInput(ctx, plan, action, integrationspkg.ComputerUseExecutionOptions{Runner: r.NativeComputerUseRunner})
+		lines := []string{
+			"Native computer input",
+			"Action: " + input.ActionType,
+			"Adapter: " + input.AdapterName,
+		}
+		if input.Skipped {
+			lines = append(lines, "Input: skipped")
+		}
+		if input.Detail != "" {
+			lines = append(lines, "Detail: "+input.Detail)
+		}
+		if err != nil {
+			lines = append(lines, "Input error: "+err.Error())
+		}
+		return strings.Join(lines, "\n")
 	default:
-		return "Usage: /native computer screenshot"
+		return nativeComputerUsage()
 	}
+}
+
+func nativeCommandUsage() string {
+	return "Usage: /native <clipboard|voice|computer>"
+}
+
+func nativeComputerUsage() string {
+	return "Usage: /native computer <screenshot|move <x> <y>|click [x y] [button]|type <text>|key <key>>"
+}
+
+func parseNativeComputerInputAction(raw string) (integrationspkg.ComputerUseInputAction, error) {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return integrationspkg.ComputerUseInputAction{}, fmt.Errorf("computer input action is required")
+	}
+	verb := strings.ToLower(args[0])
+	switch verb {
+	case "move", "mousemove", "mouse-move", "pointer-move":
+		if len(args) != 3 {
+			return integrationspkg.ComputerUseInputAction{}, fmt.Errorf("move action requires x and y coordinates")
+		}
+		x, y, err := parseNativeComputerPosition(args[1], args[2])
+		if err != nil {
+			return integrationspkg.ComputerUseInputAction{}, err
+		}
+		return integrationspkg.ComputerUseInputAction{Type: "move", X: x, Y: y, HasPosition: true}, nil
+	case "click", "mouse-click", "left-click", "right-click", "leftclick", "rightclick":
+		action := integrationspkg.ComputerUseInputAction{Type: "click"}
+		if verb == "right-click" || verb == "rightclick" {
+			action.Button = 3
+		}
+		if verb == "left-click" || verb == "leftclick" {
+			action.Button = 1
+		}
+		switch len(args) {
+		case 1:
+			return action, nil
+		case 2:
+			button, err := parseNativeComputerButton(args[1])
+			if err != nil {
+				return integrationspkg.ComputerUseInputAction{}, err
+			}
+			action.Button = button
+			return action, nil
+		case 3, 4:
+			x, y, err := parseNativeComputerPosition(args[1], args[2])
+			if err != nil {
+				return integrationspkg.ComputerUseInputAction{}, err
+			}
+			action.X = x
+			action.Y = y
+			action.HasPosition = true
+			if len(args) == 4 {
+				button, err := parseNativeComputerButton(args[3])
+				if err != nil {
+					return integrationspkg.ComputerUseInputAction{}, err
+				}
+				action.Button = button
+			}
+			return action, nil
+		default:
+			return integrationspkg.ComputerUseInputAction{}, fmt.Errorf("click action accepts optional x y coordinates and button")
+		}
+	case "type", "text", "type-text":
+		text := strings.TrimSpace(dropLeadingFields(raw, 1))
+		if text == "" {
+			return integrationspkg.ComputerUseInputAction{}, fmt.Errorf("type action requires text")
+		}
+		return integrationspkg.ComputerUseInputAction{Type: "type", Text: text}, nil
+	case "key", "keypress", "key-press":
+		key := strings.TrimSpace(dropLeadingFields(raw, 1))
+		if key == "" {
+			return integrationspkg.ComputerUseInputAction{}, fmt.Errorf("key action requires a key")
+		}
+		return integrationspkg.ComputerUseInputAction{Type: "key", Key: key}, nil
+	default:
+		return integrationspkg.ComputerUseInputAction{}, fmt.Errorf("unsupported computer input action %q", args[0])
+	}
+}
+
+func parseNativeComputerPosition(rawX string, rawY string) (int, int, error) {
+	x, err := strconv.Atoi(rawX)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid x coordinate %q", rawX)
+	}
+	y, err := strconv.Atoi(rawY)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid y coordinate %q", rawY)
+	}
+	return x, y, nil
+}
+
+func parseNativeComputerButton(raw string) (int, error) {
+	button, err := strconv.Atoi(raw)
+	if err != nil || button <= 0 {
+		return 0, fmt.Errorf("invalid mouse button %q", raw)
+	}
+	return button, nil
 }
 
 func formatNativeClipboardExternalResult(result nativepkg.ClipboardCommandResult) string {

@@ -2248,12 +2248,56 @@ func TestRunnerExecutesNativeComputerScreenshotCommandWithoutQuery(t *testing.T)
 	}
 }
 
+func TestParseNativeComputerInputActionClick(t *testing.T) {
+	action, err := parseNativeComputerInputAction("click 12 34 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action.Type != "click" || !action.HasPosition || action.X != 12 || action.Y != 34 || action.Button != 3 {
+		t.Fatalf("action = %#v", action)
+	}
+}
+
+func TestRunnerHandlesNativeComputerInputCommandWithoutQuery(t *testing.T) {
+	setupFakeNativeIntegrationCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	var gotCommand []string
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_computer_input",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+		NativeComputerUseRunner: func(ctx context.Context, command []string, stdin string, maxBytes int64) ([]byte, bool, error) {
+			gotCommand = append([]string(nil), command...)
+			return nil, false, nil
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native computer click 12 34 3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Native computer input") {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if runtime.GOOS == "linux" {
+		wantSuffix := []string{"mousemove", "12", "34", "click", "3"}
+		if !hasStringSuffix(gotCommand, wantSuffix) {
+			t.Fatalf("command = %#v, want suffix %#v", gotCommand, wantSuffix)
+		}
+	}
+}
+
 func setupFakeNativeIntegrationCommandPath(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
 	names := []string{
 		"pw-record", "parecord", "arecord", "rec", "sox", "ffmpeg", "ffmpeg.exe",
-		"grim", "gnome-screenshot", "import", "screencapture", "powershell.exe",
+		"grim", "gnome-screenshot", "import", "screencapture", "powershell.exe", "xdotool",
 	}
 	for _, name := range names {
 		path := filepath.Join(dir, name)
@@ -2268,6 +2312,19 @@ func setupFakeNativeIntegrationCommandPath(t *testing.T) {
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", ":0")
+}
+
+func hasStringSuffix(values []string, suffix []string) bool {
+	if len(values) < len(suffix) {
+		return false
+	}
+	offset := len(values) - len(suffix)
+	for i := range suffix {
+		if values[offset+i] != suffix[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func setupFakeClipboardCommandPath(t *testing.T) {
