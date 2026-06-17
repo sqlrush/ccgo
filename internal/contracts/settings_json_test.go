@@ -32,7 +32,7 @@ func TestSettingsPreservesUnknownFields(t *testing.T) {
 }
 
 func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
-	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true}}`)
+	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true},"telemetryExport":{"path":"/tmp/events.jsonl","url":"https://example.com/telemetry","headers":{"Authorization":"Bearer token"}}}`)
 	var settings Settings
 	if err := json.Unmarshal(input, &settings); err != nil {
 		t.Fatal(err)
@@ -48,6 +48,15 @@ func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
 	}
 	if settings.Extra["advanced"] != nil {
 		t.Fatalf("advanced should be a known setting, extra = %#v", settings.Extra)
+	}
+	if settings.TelemetryExport == nil ||
+		settings.TelemetryExport.Path != "/tmp/events.jsonl" ||
+		settings.TelemetryExport.URL != "https://example.com/telemetry" ||
+		settings.TelemetryExport.Headers["Authorization"] != "Bearer token" {
+		t.Fatalf("telemetry export = %#v", settings.TelemetryExport)
+	}
+	if settings.Extra["telemetryExport"] != nil {
+		t.Fatalf("telemetryExport should be a known setting, extra = %#v", settings.Extra)
 	}
 }
 

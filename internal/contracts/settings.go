@@ -63,6 +63,7 @@ type Settings struct {
 	PluginConfigs                   map[string]PluginConfig     `json:"pluginConfigs,omitempty"`
 	Remote                          *RemoteSetting              `json:"remote,omitempty"`
 	Advanced                        *AdvancedSetting            `json:"advanced,omitempty"`
+	TelemetryExport                 *TelemetryExportSetting     `json:"telemetryExport,omitempty"`
 	AutoUpdatesChannel              string                      `json:"autoUpdatesChannel,omitempty"`
 	Plugins                         map[string]any              `json:"plugins,omitempty"`
 	Extra                           map[string]any              `json:"-"`
@@ -113,6 +114,12 @@ type PluginConfig struct {
 
 type RemoteSetting struct {
 	DefaultEnvironmentID string `json:"defaultEnvironmentId,omitempty"`
+}
+
+type TelemetryExportSetting struct {
+	Path    string            `json:"path,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type AdvancedSetting struct {

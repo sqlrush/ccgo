@@ -1,8 +1,11 @@
 package conversation
 
 import (
+	"context"
+
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
+	"ccgo/internal/contracts"
 	telemetrypkg "ccgo/internal/telemetry"
 )
 
@@ -14,7 +17,9 @@ func (r Runner) recordTelemetry(event Event) {
 	if path == "" {
 		return
 	}
-	_ = telemetrypkg.Append(path, r.telemetryEvent(event))
+	summary := telemetrypkg.PrepareEvent(r.telemetryEvent(event))
+	_ = telemetrypkg.Append(path, summary)
+	_, _ = telemetrypkg.ExportEvent(context.Background(), r.telemetryExportTarget(), summary)
 }
 
 func (r Runner) telemetryEnabled() bool {
@@ -67,6 +72,22 @@ func (r Runner) telemetryEvent(event Event) telemetrypkg.Event {
 		out.Error = event.Error.Error()
 	}
 	return out
+}
+
+func (r Runner) telemetryExportTarget() telemetrypkg.ExportTarget {
+	settings := r.mergedSettings()
+	return telemetryExportTargetFromSettings(settings)
+}
+
+func telemetryExportTargetFromSettings(settings contracts.Settings) telemetrypkg.ExportTarget {
+	if settings.TelemetryExport == nil {
+		return telemetrypkg.ExportTarget{}
+	}
+	return telemetrypkg.ExportTarget{
+		Path:    settings.TelemetryExport.Path,
+		URL:     settings.TelemetryExport.URL,
+		Headers: settings.TelemetryExport.Headers,
+	}
 }
 
 func telemetryWarningState(state compactpkg.WarningState) string {

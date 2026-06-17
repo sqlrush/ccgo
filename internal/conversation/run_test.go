@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1746,6 +1747,77 @@ func TestRunnerRecordsGatedTelemetrySummaries(t *testing.T) {
 		first.MessageType != string(contracts.MessageUser) ||
 		first.MessageUUID == "" {
 		t.Fatalf("telemetry summary = %#v", first)
+	}
+}
+
+func TestRunnerExportsGatedTelemetryToConfiguredBackend(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	var posted []telemetrypkg.Event
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Test") != "ok" {
+			t.Fatalf("headers = %#v", r.Header)
+		}
+		var event telemetrypkg.Event
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Fatal(err)
+		}
+		posted = append(posted, event)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	exportPath := filepath.Join(dir, "export", "events.jsonl")
+	telemetryEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_telemetry_export",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{Telemetry: &telemetryEnabled},
+			TelemetryExport: &contracts.TelemetryExportSetting{
+				Path:    exportPath,
+				URL:     server.URL + "/collect?token=secret",
+				Headers: map[string]string{"X-Test": "ok"},
+			},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(data)
+	for _, reject := range []string{"/status", "Status", "Session ID", "token=secret"} {
+		if strings.Contains(raw, reject) {
+			t.Fatalf("telemetry export leaked %q: %q", reject, raw)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(raw), "\n")
+	if len(lines) < 2 || len(posted) < 2 {
+		t.Fatalf("export lines=%d posted=%d raw=%q posted=%#v", len(lines), len(posted), raw, posted)
+	}
+	var first telemetrypkg.Event
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.SessionID != "sess_telemetry_export" || first.TraceID == "" || first.SpanID == "" || posted[0].SessionID != "sess_telemetry_export" {
+		t.Fatalf("exported events first=%#v posted=%#v", first, posted)
+	}
+	status, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status show telemetry"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := status.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Exporter path: "+exportPath) || !strings.Contains(text, "Exporter url: "+server.URL+"/collect") {
+		t.Fatalf("telemetry status missing exporter details: %q", text)
+	}
+	if strings.Contains(text, "token=secret") || strings.Contains(text, "X-Test") {
+		t.Fatalf("telemetry status leaked secret exporter config: %q", text)
 	}
 }
 

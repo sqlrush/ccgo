@@ -110,6 +110,12 @@ func TestMergeSettings(t *testing.T) {
 			Bridge:    &bridgeEnabled,
 			Telemetry: &telemetryDisabled,
 		},
+		TelemetryExport: &contracts.TelemetryExportSetting{
+			Path: "/tmp/old.jsonl",
+			Headers: map[string]string{
+				"X-Old": "old",
+			},
+		},
 	}
 	b := contracts.Settings{
 		Env:   map[string]string{"A": "2", "B": "3"},
@@ -125,6 +131,13 @@ func TestMergeSettings(t *testing.T) {
 		},
 		Advanced: &contracts.AdvancedSetting{
 			Telemetry: &telemetryEnabled,
+		},
+		TelemetryExport: &contracts.TelemetryExportSetting{
+			Path: "/tmp/new.jsonl",
+			URL:  "https://example.com/telemetry",
+			Headers: map[string]string{
+				"X-New": "new",
+			},
 		},
 	}
 	merged := MergeSettings(a, b)
@@ -148,6 +161,13 @@ func TestMergeSettings(t *testing.T) {
 	}
 	if merged.Advanced == nil || merged.Advanced.Bridge == nil || !*merged.Advanced.Bridge || merged.Advanced.Telemetry == nil || !*merged.Advanced.Telemetry {
 		t.Fatalf("advanced = %#v", merged.Advanced)
+	}
+	if merged.TelemetryExport == nil ||
+		merged.TelemetryExport.Path != "/tmp/new.jsonl" ||
+		merged.TelemetryExport.URL != "https://example.com/telemetry" ||
+		merged.TelemetryExport.Headers["X-New"] != "new" ||
+		merged.TelemetryExport.Headers["X-Old"] != "" {
+		t.Fatalf("telemetry export = %#v", merged.TelemetryExport)
 	}
 }
 

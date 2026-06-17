@@ -1119,16 +1119,24 @@ func (r Runner) formatStatusTelemetry() string {
 		"Status telemetry",
 		"Enabled: " + boolEnabledText(r.telemetryEnabled()),
 	}
+	target := r.telemetryExportTarget()
 	if path == "" {
-		return strings.Join(append(lines, "Telemetry path: (not configured)", "Events: 0"), "\n")
+		lines = append(lines, "Telemetry path: (not configured)")
+		lines = append(lines, telemetryExporterStatusLines(target)...)
+		return strings.Join(append(lines, "Events: 0"), "\n")
 	}
 	events, err := telemetrypkg.Load(path)
 	if err != nil {
-		return strings.Join(append(lines, "Telemetry path: "+path, "Telemetry error: "+err.Error()), "\n")
+		lines = append(lines, "Telemetry path: "+path)
+		lines = append(lines, telemetryExporterStatusLines(target)...)
+		return strings.Join(append(lines, "Telemetry error: "+err.Error()), "\n")
 	}
 	summary := telemetrypkg.Summarize(events)
 	lines = append(lines,
 		"Telemetry path: "+path,
+	)
+	lines = append(lines, telemetryExporterStatusLines(target)...)
+	lines = append(lines,
 		fmt.Sprintf("Events: %d", summary.Total),
 		fmt.Sprintf("Traces: %d", summary.Traces),
 		fmt.Sprintf("Spans: %d", summary.Spans),
@@ -1151,6 +1159,20 @@ func (r Runner) formatStatusTelemetry() string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func telemetryExporterStatusLines(target telemetrypkg.ExportTarget) []string {
+	var lines []string
+	if strings.TrimSpace(target.Path) != "" {
+		lines = append(lines, "Exporter path: "+strings.TrimSpace(target.Path))
+	}
+	if strings.TrimSpace(target.URL) != "" {
+		lines = append(lines, "Exporter url: "+telemetrypkg.RedactEndpoint(target.URL))
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "Exporter: disabled")
+	}
+	return lines
 }
 
 func (r *Runner) formatConfigSummary(raw string) string {

@@ -1,7 +1,10 @@
 package telemetry
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -151,6 +154,67 @@ func TestExportSummaryWritesFilteredJSON(t *testing.T) {
 	}
 	if loaded.EventCount != 1 || loaded.Summary.ByType["assistant_message"] != 1 {
 		t.Fatalf("loaded export = %#v", loaded)
+	}
+}
+
+func TestExportEventWritesFileAndPostsHTTP(t *testing.T) {
+	var posted Event
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/json" || r.Header.Get("X-Test") != "ok" {
+			t.Fatalf("headers = %#v", r.Header)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	path := filepath.Join(t.TempDir(), "backend", "events.jsonl")
+	delivery, err := ExportEvent(context.Background(), ExportTarget{
+		Path:    path,
+		URL:     server.URL + "/collect?token=secret",
+		Headers: map[string]string{"X-Test": "ok"},
+	}, Event{SessionID: "sess_export", Type: "assistant_message", Model: "sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if delivery.FilePath != path || delivery.HTTPStatus != http.StatusAccepted || strings.Contains(delivery.URL, "token=secret") {
+		t.Fatalf("delivery = %#v", delivery)
+	}
+	if posted.SessionID != "sess_export" || posted.TraceID == "" || posted.SpanID == "" || posted.Model != "sonnet" {
+		t.Fatalf("posted = %#v", posted)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("export lines = %q", string(data))
+	}
+	var stored Event
+	if err := json.Unmarshal([]byte(lines[0]), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.SessionID != "sess_export" || stored.TraceID == "" || stored.SpanID == "" {
+		t.Fatalf("stored = %#v", stored)
+	}
+}
+
+func TestExportEventRejectsUnsupportedURLScheme(t *testing.T) {
+	_, err := ExportEvent(context.Background(), ExportTarget{URL: "file:///tmp/telemetry.json"}, Event{SessionID: "sess_1", Type: "user_message"})
+	if err == nil || !strings.Contains(err.Error(), "http or https") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRedactEndpoint(t *testing.T) {
+	got := RedactEndpoint("https://user:pass@example.com/collect?token=secret#frag")
+	if got != "https://example.com/collect" {
+		t.Fatalf("RedactEndpoint() = %q", got)
 	}
 }
 

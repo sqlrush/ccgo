@@ -99,6 +99,7 @@ var knownSettingsJSONKeys = []string{
 	"pluginConfigs",
 	"remote",
 	"advanced",
+	"telemetryExport",
 	"autoUpdatesChannel",
 	"plugins",
 }

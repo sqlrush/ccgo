@@ -226,6 +226,9 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 		if s.Advanced != nil {
 			out.Advanced = mergeAdvancedSetting(out.Advanced, s.Advanced)
 		}
+		if s.TelemetryExport != nil {
+			out.TelemetryExport = cloneTelemetryExportSetting(s.TelemetryExport)
+		}
 		if s.AutoUpdatesChannel != "" {
 			out.AutoUpdatesChannel = s.AutoUpdatesChannel
 		}
@@ -237,6 +240,20 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 		}
 	}
 	return out
+}
+
+func cloneTelemetryExportSetting(setting *contracts.TelemetryExportSetting) *contracts.TelemetryExportSetting {
+	if setting == nil {
+		return nil
+	}
+	cp := *setting
+	if setting.Headers != nil {
+		cp.Headers = map[string]string{}
+		for key, value := range setting.Headers {
+			cp.Headers[key] = value
+		}
+	}
+	return &cp
 }
 
 func MergeSettingsSources(sources ...SourceSettings) contracts.Settings {
