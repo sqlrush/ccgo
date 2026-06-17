@@ -3,10 +3,14 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -62,6 +66,51 @@ func TestCommandHookBlocksOnExitCodeTwo(t *testing.T) {
 	}
 }
 
+func TestCommandHookRunsInBackground(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "hook.out")
+	settings := contracts.Settings{
+		Hooks: map[string]any{
+			"Stop": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":            "command",
+					"command":         fmt.Sprintf("sleep 0.2; printf done > %s", shellQuote(outputPath)),
+					"runInBackground": "true",
+				}},
+			}},
+		},
+	}
+	parsed := FromSettings(settings)
+	if len(parsed) != 1 {
+		t.Fatalf("hooks = %#v", parsed)
+	}
+	result, err := parsed[0].RunToolHook(tool.Context{
+		Context:          context.Background(),
+		WorkingDirectory: dir,
+		SessionID:        "sess_background_hook",
+	}, tool.HookEvent{Phase: tool.HookStop, Payload: map[string]any{"reason": "done"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Metadata["background"] != true || result.Metadata["pid"] == nil {
+		t.Fatalf("metadata = %#v", result.Metadata)
+	}
+	if _, err := os.Stat(outputPath); err == nil {
+		t.Fatalf("background hook should return before command writes output")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		data, err := os.ReadFile(outputPath)
+		if err == nil && string(data) == "done" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background hook did not finish, data=%q err=%v", data, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestFromSettingsParsesCommandHooksAndMatchesIfRule(t *testing.T) {
 	settings := contracts.Settings{
 		Hooks: map[string]any{
@@ -89,6 +138,10 @@ func TestFromSettingsParsesCommandHooksAndMatchesIfRule(t *testing.T) {
 	if hook.matchesIf(tool.HookEvent{ToolName: "Bash", Input: json.RawMessage(`{"command":"rm -rf build"}`)}, t.TempDir()) {
 		t.Fatalf("expected if rule to reject")
 	}
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func TestHTTPHookPostsInputAndParsesJSONResponse(t *testing.T) {

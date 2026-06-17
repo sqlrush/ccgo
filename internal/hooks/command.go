@@ -25,13 +25,14 @@ const defaultCommandHookTimeout = 10 * time.Minute
 const defaultHTTPHookTimeout = 10 * time.Minute
 
 type CommandHook struct {
-	Phase         string
-	Matcher       string
-	If            string
-	Command       string
-	Shell         string
-	StatusMessage string
-	Timeout       time.Duration
+	Phase           string
+	Matcher         string
+	If              string
+	Command         string
+	Shell           string
+	StatusMessage   string
+	Timeout         time.Duration
+	RunInBackground bool
 }
 
 type HTTPHook struct {
@@ -191,13 +192,14 @@ func commandHookFromRaw(phase string, matcher string, raw any) (CommandHook, boo
 			timeout = defaultCommandHookTimeout
 		}
 		return CommandHook{
-			Phase:         phase,
-			Matcher:       matcher,
-			If:            stringField(value, "if"),
-			Command:       command,
-			Shell:         stringField(value, "shell"),
-			StatusMessage: stringField(value, "statusMessage", "status_message"),
-			Timeout:       timeout,
+			Phase:           phase,
+			Matcher:         matcher,
+			If:              stringField(value, "if"),
+			Command:         command,
+			Shell:           stringField(value, "shell"),
+			StatusMessage:   stringField(value, "statusMessage", "status_message"),
+			Timeout:         timeout,
+			RunInBackground: boolField(value, "runInBackground", "run_in_background"),
 		}, true
 	default:
 		return CommandHook{}, false
@@ -259,6 +261,31 @@ func stringListField(object map[string]any, names ...string) []string {
 	return nil
 }
 
+func boolField(object map[string]any, names ...string) bool {
+	for _, name := range names {
+		switch value := object[name].(type) {
+		case bool:
+			return value
+		case string:
+			switch strings.ToLower(strings.TrimSpace(value)) {
+			case "true", "1", "yes", "on":
+				return true
+			case "false", "0", "no", "off":
+				return false
+			}
+		case float64:
+			return value != 0
+		case int:
+			return value != 0
+		case json.Number:
+			if parsed, err := strconv.ParseFloat(string(value), 64); err == nil {
+				return parsed != 0
+			}
+		}
+	}
+	return false
+}
+
 func durationSeconds(raw any) time.Duration {
 	switch value := raw.(type) {
 	case float64:
@@ -303,6 +330,9 @@ func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.H
 	input, err := hookInput(ctx, event)
 	if err != nil {
 		return tool.HookResult{}, err
+	}
+	if h.RunInBackground {
+		return h.runCommandBackground(ctx, input)
 	}
 	stdout, stderr, exitCode, err := h.runCommand(ctx, input)
 	if err != nil {
@@ -408,6 +438,44 @@ func (h CommandHook) runCommand(ctx tool.Context, input string) (string, string,
 		}
 	}
 	return stdout.String(), stderr.String(), exitCode, nil
+}
+
+func (h CommandHook) runCommandBackground(ctx tool.Context, input string) (tool.HookResult, error) {
+	timeout := h.Timeout
+	if timeout <= 0 {
+		timeout = defaultCommandHookTimeout
+	}
+	base := ctx.Context
+	if base == nil {
+		base = context.Background()
+	}
+	cmdCtx, cancel := context.WithTimeout(base, timeout)
+	cmd := shellCommand(cmdCtx, h.Shell, h.Command)
+	if ctx.WorkingDirectory != "" {
+		cmd.Dir = ctx.WorkingDirectory
+	}
+	cmd.Env = append(os.Environ(),
+		"CLAUDE_PROJECT_DIR="+ctx.WorkingDirectory,
+		"CLAUDE_SESSION_ID="+string(ctx.SessionID),
+		"CLAUDE_TRANSCRIPT_PATH="+metadataString(ctx.Metadata, tool.MetadataSessionPathKey),
+	)
+	cmd.Stdin = strings.NewReader(input + "\n")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return tool.HookResult{}, err
+	}
+	pid := 0
+	if cmd.Process != nil {
+		pid = cmd.Process.Pid
+	}
+	go func() {
+		defer cancel()
+		_ = cmd.Wait()
+	}()
+	metadata := commandHookMetadataBackground(h, pid)
+	return tool.HookResult{Message: h.StatusMessage, Metadata: metadata}, nil
 }
 
 func (h HTTPHook) runHTTP(ctx tool.Context, input string) (string, int, error) {
@@ -516,6 +584,21 @@ func commandHookMetadata(h CommandHook, stdout string, stderr string, exitCode i
 	}
 	if strings.TrimSpace(stderr) != "" {
 		metadata["stderr"] = strings.TrimSpace(stderr)
+	}
+	return metadata
+}
+
+func commandHookMetadataBackground(h CommandHook, pid int) map[string]any {
+	metadata := map[string]any{
+		"type":       "command",
+		"command":    h.Command,
+		"background": true,
+	}
+	if pid != 0 {
+		metadata["pid"] = pid
+	}
+	if h.StatusMessage != "" {
+		metadata["status_message"] = h.StatusMessage
 	}
 	return metadata
 }
