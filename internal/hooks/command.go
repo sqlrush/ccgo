@@ -348,6 +348,12 @@ func hookInput(ctx tool.Context, event tool.HookEvent) (string, error) {
 	if event.Error != "" {
 		payload["error"] = event.Error
 	}
+	for key, value := range event.Payload {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			payload[key] = value
+		}
+	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -600,6 +606,10 @@ func applyHookSpecificOutput(result *tool.HookResult, phase string, hookSpecific
 			}
 		}
 	case tool.HookPostToolUse:
+		if value := stringField(hookSpecific, "additionalContext"); value != "" {
+			result.Message = value
+		}
+	case tool.HookUserPromptSubmit, tool.HookStop, tool.HookSubagentStop:
 		if value := stringField(hookSpecific, "additionalContext"); value != "" {
 			result.Message = value
 		}

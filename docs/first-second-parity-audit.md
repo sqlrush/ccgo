@@ -92,7 +92,7 @@ Anthropic API 和 conversation：
 
 The following items remain incomplete and must not be treated as done:
 
-- Full permission hook flow gaps that remain: prompt/agent hook execution, async/background hook runtime policy, richer hook telemetry, and full UI/SDK surfacing beyond the current executor hook phase progress events.
+- Full permission hook flow gaps that remain: async/background hook runtime policy, richer hook telemetry, and full UI/SDK surfacing beyond the current executor/conversation hook phase progress events.
 - Auto mode / YOLO classifier: transcript construction, two-stage classifier, XML/tool-use parsing, prompt dump, denial circuit breaker, model gating, and fallback behavior.
 - Interactive permission prompt flow: REPL dialogs, bridge/channel/swarm permission relays, user feedback images, prompt race handling, cancellation.
 - Full filesystem permission parity gaps that remain: skill-scope allow suggestions, complete local/local-jsx slash-command execution wiring, command permission UI/SDK surfacing, forked/remote/MCP/plugin/bundled SkillTool behavior, skill prompt shell injection, complete auto-memory override policy, and deeper platform-specific Windows/WSL bypass handling.

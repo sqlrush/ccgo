@@ -84,6 +84,9 @@ const (
 	HookPostToolUse       = "PostToolUse"
 	HookPermissionRequest = "PermissionRequest"
 	HookPermissionDenied  = "PermissionDenied"
+	HookUserPromptSubmit  = "UserPromptSubmit"
+	HookStop              = "Stop"
+	HookSubagentStop      = "SubagentStop"
 )
 
 type HookEvent struct {
@@ -94,6 +97,7 @@ type HookEvent struct {
 	Decision *contracts.PermissionDecision
 	Result   *contracts.ToolResult
 	Error    string
+	Payload  map[string]any
 }
 
 type HookResult struct {

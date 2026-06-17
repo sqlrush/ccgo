@@ -65,6 +65,24 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if err != nil {
 		return Result{}, err
 	}
+	if shouldQuery {
+		var blocked bool
+		var blockMessage string
+		initialMessages, blocked, blockMessage, err = r.applyUserPromptSubmitHooks(ctx, initialMessages)
+		if err != nil {
+			return Result{}, err
+		}
+		if blocked {
+			for i := range initialMessages {
+				history, initialMessages[i] = appendMessage(history, initialMessages[i])
+				if err := r.appendTranscript(initialMessages[i]); err != nil {
+					return Result{}, err
+				}
+				r.emit(Event{Type: EventUserMessage, Message: &initialMessages[i]})
+			}
+			return r.appendLocalTextResult(Result{Messages: append([]contracts.Message(nil), initialMessages...)}, history, blockMessage)
+		}
+	}
 	originalHistory := append([]contracts.Message(nil), history...)
 	for i := range initialMessages {
 		history, initialMessages[i] = appendMessage(history, initialMessages[i])
@@ -191,6 +209,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		uses := ToolUses(assistant)
 		if len(uses) == 0 {
 			if err := runner.maybeExtractSessionMemory(ctx, result.Messages); err != nil {
+				return result, err
+			}
+			if err := runner.runStopHooks(ctx, response.Model, response.StopReason, response.StopSequence, assistant); err != nil {
 				return result, err
 			}
 			return result, nil
@@ -5311,8 +5332,7 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 	})
 	executor := r.Tools
 	settings := r.mergedSettings()
-	executor.Hooks = append(executor.Hooks, hookpkg.FromSettings(settings)...)
-	executor.Hooks = append(executor.Hooks, r.pluginToolHooks(settings)...)
+	executor.Hooks = append(executor.Hooks, r.configuredHooks(settings)...)
 	for update := range tool.RunTools(toolCtx, executor, uses, progressSink, tool.RunOptions{}) {
 		use := update.ToolUse
 		result := update.Result

@@ -386,6 +386,91 @@ func TestRunnerExecutesPluginCommandHookForToolUse(t *testing.T) {
 	}
 }
 
+func TestRunnerUserPromptSubmitHookAddsContext(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+		ID:         "msg_done",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "sonnet",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+	}}}}
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_prompt_hook",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: t.TempDir(),
+		MCP: &MCPConfig{ProjectSettings: contracts.Settings{Hooks: map[string]any{
+			"UserPromptSubmit": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": `printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"context from prompt hook"}}'`,
+				}},
+			}},
+		}}},
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	got := client.requests[0].Messages[0].Content[0].Text
+	if !strings.Contains(got, "hello") || !strings.Contains(got, "context from prompt hook") {
+		t.Fatalf("prompt = %q", got)
+	}
+	if !hasHookProgress(progress, tool.HookUserPromptSubmit, "hook_completed") {
+		t.Fatalf("hook progress = %#v", progress)
+	}
+}
+
+func TestRunnerStopHookRunsAfterAssistantCompletes(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+		ID:         "msg_done",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "sonnet",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+	}}}}
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_stop_hook",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: t.TempDir(),
+		MCP: &MCPConfig{ProjectSettings: contracts.Settings{Hooks: map[string]any{
+			"Stop": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": `printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"stop observed"}}'`,
+				}},
+			}},
+		}}},
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if !hasHookProgress(progress, tool.HookStop, "hook_completed") {
+		t.Fatalf("hook progress = %#v", progress)
+	}
+}
+
 func TestRunnerRunsDueSchedulesBeforeMainRequest(t *testing.T) {
 	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionID := contracts.ID("sess_schedule_tick")
@@ -626,6 +711,78 @@ func TestRunnerTaskToolRunExecutesOneShotSubagent(t *testing.T) {
 	}
 	if !hasToolProgress(progress, "toolu_task", "task_agent_completed", "agent_run", session.SidechainStatusCompleted) {
 		t.Fatalf("progress = %#v", progress)
+	}
+}
+
+func TestRunnerSubagentStopHookRunsAfterOneShotSubagent(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_task",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_task",
+				Name:  "Task",
+				Input: json.RawMessage(`{"id":"agent/run","description":"Run task","prompt":"Investigate and answer","subagent_type":"general-purpose","run":true}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_subagent",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("Subagent done")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("task completed")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_subagent_stop_hook",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: t.TempDir(),
+		MCP: &MCPConfig{ProjectSettings: contracts.Settings{Hooks: map[string]any{
+			"SubagentStop": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": `printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"SubagentStop","additionalContext":"subagent stop observed"}}'`,
+				}},
+			}},
+		}}},
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("start task"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || result.ToolResults[0].StructuredContent["status"] != session.SidechainStatusCompleted {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	if !hasHookProgress(progress, tool.HookSubagentStop, "hook_completed") {
+		t.Fatalf("hook progress = %#v", progress)
 	}
 }
 

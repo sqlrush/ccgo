@@ -176,6 +176,20 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 			if summary == "" {
 				summary = "subagent completed"
 			}
+			hookRunner := subRunner
+			hookRunner.MCP = r.MCP
+			if err := hookRunner.runSubagentStopHooks(ctx, map[string]any{
+				"agent_id":       state.ID,
+				"sidechain_id":   state.ID,
+				"task_id":        state.ID,
+				"summary":        summary,
+				"model":          response.Model,
+				"stop_reason":    response.StopReason,
+				"stop_sequence":  response.StopSequence,
+				"assistant_text": msgs.TextContent(assistant),
+			}); err != nil {
+				return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
+			}
 			if _, err := manager.Finish(state.ID, session.SidechainStatusCompleted, summary, time.Now().UTC()); err != nil {
 				return taskSubagentOutcome{}, err
 			}
