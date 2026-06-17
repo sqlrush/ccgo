@@ -68,6 +68,7 @@ type daemonControlOptions struct {
 	StatePath string
 	Status    bool
 	Stop      bool
+	Tick      bool
 }
 
 type repeatedStringFlag []string
@@ -93,6 +94,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	daemonHeartbeat := flags.Duration("daemon-heartbeat", 5*time.Second, "daemon heartbeat interval")
 	daemonStatus := flags.Bool("daemon-status", false, "print daemon status and exit")
 	daemonStop := flags.Bool("daemon-stop", false, "stop the daemon recorded in daemon state")
+	daemonTick := flags.Bool("daemon-tick", false, "trigger one daemon schedule tick")
 	daemonStatePath := flags.String("daemon-state", "", "daemon state path")
 	cwd := flags.String("cwd", "", "working directory")
 	printMode := flags.Bool("print", false, "print response and exit")
@@ -152,11 +154,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
-	if *daemonStatus || *daemonStop {
+	if *daemonStatus || *daemonStop || *daemonTick {
 		return runDaemonControl(context.Background(), state, daemonControlOptions{
 			StatePath: strings.TrimSpace(*daemonStatePath),
 			Status:    *daemonStatus,
 			Stop:      *daemonStop,
+			Tick:      *daemonTick,
 		}, stdout, stderr)
 	}
 	if *daemonMode || *daemonOnce {
@@ -263,8 +266,14 @@ func runChromeNativeHost(stdin io.Reader, stdout io.Writer, stderr io.Writer) in
 }
 
 func runDaemonControl(ctx context.Context, state *bootstrap.State, options daemonControlOptions, stdout io.Writer, stderr io.Writer) int {
-	if options.Status && options.Stop {
-		fmt.Fprintf(stderr, "ccgo daemon: --daemon-status and --daemon-stop are mutually exclusive\n")
+	actionCount := 0
+	for _, enabled := range []bool{options.Status, options.Stop, options.Tick} {
+		if enabled {
+			actionCount++
+		}
+	}
+	if actionCount > 1 {
+		fmt.Fprintf(stderr, "ccgo daemon: daemon control actions are mutually exclusive\n")
 		return 2
 	}
 	statePath, err := resolveDaemonStatePath(state, options.StatePath)
@@ -274,6 +283,13 @@ func runDaemonControl(ctx context.Context, state *bootstrap.State, options daemo
 	}
 	if options.Status {
 		if err := writeDaemonStatus(stdout, statePath); err != nil {
+			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if options.Tick {
+		if err := tickDaemon(ctx, stdout, statePath); err != nil {
 			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
 			return 1
 		}
@@ -383,6 +399,39 @@ func stopDaemon(ctx context.Context, stdout io.Writer, statePath string) error {
 	return err
 }
 
+func tickDaemon(ctx context.Context, stdout io.Writer, statePath string) error {
+	state, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		return err
+	}
+	if state.GeneratedAt == "" {
+		return fmt.Errorf("daemon state not found: %s", statePath)
+	}
+	if strings.TrimSpace(state.Endpoint) == "" {
+		return fmt.Errorf("daemon endpoint is unavailable in %s", statePath)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	response, err := postDaemonTick(ctx, state.Endpoint)
+	if err != nil {
+		return err
+	}
+	lines := []string{
+		"ccgo daemon tick",
+		"state_path=" + statePath,
+		"ok=true",
+	}
+	if response.CheckedAt != "" {
+		lines = append(lines, "checked_at="+response.CheckedAt)
+	}
+	lines = append(lines,
+		fmt.Sprintf("triggered_count=%d", response.TriggeredCount),
+		fmt.Sprintf("error_count=%d", response.ErrorCount),
+	)
+	_, err = fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+	return err
+}
+
 func postDaemonStop(ctx context.Context, endpoint string) (daemonpkg.StopResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/stop", nil)
 	if err != nil {
@@ -402,6 +451,29 @@ func postDaemonStop(ctx context.Context, endpoint string) (daemonpkg.StopRespons
 			response.Error = resp.Status
 		}
 		return daemonpkg.StopResponse{}, errors.New(response.Error)
+	}
+	return response, nil
+}
+
+func postDaemonTick(ctx context.Context, endpoint string) (daemonpkg.TickResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/tick", nil)
+	if err != nil {
+		return daemonpkg.TickResponse{}, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return daemonpkg.TickResponse{}, err
+	}
+	defer resp.Body.Close()
+	var response daemonpkg.TickResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return daemonpkg.TickResponse{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 || !response.OK {
+		if response.Error == "" {
+			response.Error = resp.Status
+		}
+		return daemonpkg.TickResponse{}, errors.New(response.Error)
 	}
 	return response, nil
 }
