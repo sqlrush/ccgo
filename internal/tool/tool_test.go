@@ -79,6 +79,86 @@ func TestValidateSchema(t *testing.T) {
 	}
 }
 
+func TestValidateSchemaAdvancedConstraints(t *testing.T) {
+	schema := contracts.JSONSchema{
+		"type":          "object",
+		"minProperties": 2,
+		"maxProperties": 8,
+		"properties": map[string]any{
+			"kind": map[string]any{"const": "task"},
+			"name": map[string]any{
+				"type":      "string",
+				"maxLength": 8,
+				"pattern":   "^[a-z][a-z0-9-]*$",
+			},
+			"ratio": map[string]any{
+				"type":             "number",
+				"exclusiveMinimum": 0,
+				"exclusiveMaximum": 1,
+			},
+			"legacy_ratio": map[string]any{
+				"type":             "number",
+				"minimum":          0,
+				"exclusiveMinimum": true,
+			},
+			"tags": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"maxItems": 2,
+				"items":    map[string]any{"type": "string"},
+			},
+			"choice": map[string]any{
+				"anyOf": []contracts.JSONSchema{
+					{"type": "string", "enum": []any{"fast", "safe"}},
+					{"type": "integer", "minimum": 1, "maximum": 3},
+				},
+			},
+			"single": map[string]any{
+				"oneOf": []map[string]any{
+					map[string]any{"type": "string"},
+					map[string]any{"enum": []any{"same"}},
+				},
+			},
+			"combined": map[string]any{
+				"allOf": []any{
+					map[string]any{"type": "string"},
+					map[string]any{"minLength": 3},
+				},
+			},
+		},
+	}
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"min-properties", `{"kind":"task"}`, "input must contain at least 2 properties"},
+		{"max-properties", `{"kind":"task","name":"alpha","ratio":0.5,"tags":["x"],"choice":"fast","single":"x","combined":"abc","extra":1,"extra2":2}`, "input must contain at most 8 properties"},
+		{"const", `{"kind":"job","name":"alpha"}`, "input.kind must be task"},
+		{"pattern", `{"kind":"task","name":"Alpha"}`, "input.name must match pattern ^[a-z][a-z0-9-]*$"},
+		{"max-length", `{"kind":"task","name":"alpha-beta"}`, "input.name must be at most 8 characters"},
+		{"exclusive-minimum", `{"kind":"task","ratio":0}`, "input.ratio must be greater than 0"},
+		{"exclusive-maximum", `{"kind":"task","ratio":1}`, "input.ratio must be less than 1"},
+		{"legacy-exclusive-minimum", `{"kind":"task","legacy_ratio":0}`, "input.legacy_ratio must be greater than 0"},
+		{"min-items", `{"kind":"task","tags":[]}`, "input.tags must contain at least 1 items"},
+		{"max-items", `{"kind":"task","tags":["a","b","c"]}`, "input.tags must contain at most 2 items"},
+		{"any-of", `{"kind":"task","choice":9}`, "input.choice must match at least one allowed schema"},
+		{"one-of", `{"kind":"task","single":"same"}`, "input.single must match exactly one allowed schema"},
+		{"all-of", `{"kind":"task","combined":"ab"}`, "input.combined must be at least 3 characters"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateSchema(schema, json.RawMessage(tc.input))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"kind":"task","name":"alpha","ratio":0.5,"legacy_ratio":0.5,"tags":["a","b"],"choice":2,"single":"x","combined":"abc"}`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExecutorRunsAllowedTool(t *testing.T) {
 	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDefault})
 	registry, err := NewRegistry(FuncTool{

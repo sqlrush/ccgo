@@ -187,6 +187,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：通用 tool schema validator 现在支持 `enum`，可直接执行 Grep output mode、NotebookEdit edit mode/cell type、Todo status/priority、Task target/action、LSP severity 等工具 schema 的枚举契约。
 - 本轮补充：通用 tool schema validator 现在支持数字 `minimum`/`maximum`，可直接执行 LSPDiagnostics `limit` 等工具 schema 的数值范围契约。
 - 本轮补充：通用 tool schema validator 现在支持 `required` 的 Go `[]string` 形态和 object `additionalProperties` schema 校验，MCP `get_prompt.arguments` 会在 schema 层拒绝非字符串参数值。
+- 本轮补充：通用 tool schema validator 现在支持 `const`、`pattern`、`maxLength`、`minItems`/`maxItems`、`minProperties`/`maxProperties`、`exclusiveMinimum`/`exclusiveMaximum` 以及 `allOf`/`anyOf`/`oneOf`，并兼容 Go 代码直接构造的 typed schema list，外部 MCP 工具 schema 的基础 JSON Schema 约束会在本地调用前执行。
 - 本轮补充：WebFetch/WebSearch 输入解码现在兼容 `timeout`、`max_bytes`/`maxBytes`、`max_results`/`maxResults` 的 quoted semantic string 数值；WebSearch 也会按官方校验拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 - 本轮补充：Grep 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下按词边界过滤匹配，并兼容 quoted boolean 输入。
 - 本轮补充：Grep 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。

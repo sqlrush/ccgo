@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -23,9 +24,32 @@ func ValidateSchema(schema contracts.JSONSchema, raw json.RawMessage) error {
 }
 
 func validateValue(schema contracts.JSONSchema, value any, path string) error {
+	if allOf := schemaList(schema["allOf"]); len(allOf) > 0 {
+		for _, childSchema := range allOf {
+			if err := validateValue(childSchema, value, path); err != nil {
+				return err
+			}
+		}
+	}
+	if anyOf := schemaList(schema["anyOf"]); len(anyOf) > 0 {
+		if !matchesAtLeastOneSchema(anyOf, value, path) {
+			return fmt.Errorf("%s must match at least one allowed schema", path)
+		}
+	}
+	if oneOf := schemaList(schema["oneOf"]); len(oneOf) > 0 {
+		matches := countMatchingSchemas(oneOf, value, path)
+		if matches != 1 {
+			return fmt.Errorf("%s must match exactly one allowed schema", path)
+		}
+	}
 	if types := stringOrStrings(schema["type"]); len(types) > 0 {
 		if !matchesAnyType(types, value) {
 			return fmt.Errorf("%s must be %s", path, strings.Join(types, " or "))
+		}
+	}
+	if constValue, ok := schema["const"]; ok {
+		if !equalSchemaValue(value, constValue) {
+			return fmt.Errorf("%s must be %s", path, fmt.Sprint(constValue))
 		}
 	}
 	if enumValues, ok := schemaEnumValues(schema["enum"]); ok {
@@ -38,15 +62,55 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must be at least %s", path, describeSchemaNumber(minimum))
 		}
 	}
+	if exclusiveMinimum, ok := exclusiveNumberConstraint(schema["exclusiveMinimum"], schema["minimum"]); ok {
+		if number, ok := schemaNumber(value); ok && number <= exclusiveMinimum {
+			return fmt.Errorf("%s must be greater than %s", path, describeSchemaNumber(exclusiveMinimum))
+		}
+	}
 	if maximum, ok := schemaNumberConstraint(schema["maximum"]); ok {
 		if number, ok := schemaNumber(value); ok && number > maximum {
 			return fmt.Errorf("%s must be at most %s", path, describeSchemaNumber(maximum))
+		}
+	}
+	if exclusiveMaximum, ok := exclusiveNumberConstraint(schema["exclusiveMaximum"], schema["maximum"]); ok {
+		if number, ok := schemaNumber(value); ok && number >= exclusiveMaximum {
+			return fmt.Errorf("%s must be less than %s", path, describeSchemaNumber(exclusiveMaximum))
 		}
 	}
 	if minLength, ok := intSchemaConstraint(schema["minLength"]); ok {
 		text, ok := value.(string)
 		if ok && utf8.RuneCountInString(text) < minLength {
 			return fmt.Errorf("%s must be at least %d characters", path, minLength)
+		}
+	}
+	if maxLength, ok := intSchemaConstraint(schema["maxLength"]); ok {
+		text, ok := value.(string)
+		if ok && utf8.RuneCountInString(text) > maxLength {
+			return fmt.Errorf("%s must be at most %d characters", path, maxLength)
+		}
+	}
+	if pattern, ok := schema["pattern"].(string); ok && pattern != "" {
+		text, ok := value.(string)
+		if ok {
+			matched, err := regexp.MatchString(pattern, text)
+			if err != nil {
+				return fmt.Errorf("%s has invalid pattern %q: %w", path, pattern, err)
+			}
+			if !matched {
+				return fmt.Errorf("%s must match pattern %s", path, pattern)
+			}
+		}
+	}
+	if minItems, ok := intSchemaConstraint(schema["minItems"]); ok {
+		items, ok := value.([]any)
+		if ok && len(items) < minItems {
+			return fmt.Errorf("%s must contain at least %d items", path, minItems)
+		}
+	}
+	if maxItems, ok := intSchemaConstraint(schema["maxItems"]); ok {
+		items, ok := value.([]any)
+		if ok && len(items) > maxItems {
+			return fmt.Errorf("%s must contain at most %d items", path, maxItems)
 		}
 	}
 	if itemsSchema, ok := schema["items"].(map[string]any); ok {
@@ -76,6 +140,12 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 	obj, ok := value.(map[string]any)
 	if !ok {
 		return nil
+	}
+	if minProperties, ok := intSchemaConstraint(schema["minProperties"]); ok && len(obj) < minProperties {
+		return fmt.Errorf("%s must contain at least %d properties", path, minProperties)
+	}
+	if maxProperties, ok := intSchemaConstraint(schema["maxProperties"]); ok && len(obj) > maxProperties {
+		return fmt.Errorf("%s must contain at most %d properties", path, maxProperties)
 	}
 	if ok {
 		for key, propertySchema := range properties {
@@ -109,6 +179,48 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 		}
 	}
 	return nil
+}
+
+func schemaList(value any) []contracts.JSONSchema {
+	switch items := value.(type) {
+	case []any:
+		out := make([]contracts.JSONSchema, 0, len(items))
+		for _, item := range items {
+			if child, ok := item.(map[string]any); ok {
+				out = append(out, contracts.JSONSchema(child))
+			}
+		}
+		return out
+	case []map[string]any:
+		out := make([]contracts.JSONSchema, 0, len(items))
+		for _, item := range items {
+			out = append(out, contracts.JSONSchema(item))
+		}
+		return out
+	case []contracts.JSONSchema:
+		return append([]contracts.JSONSchema(nil), items...)
+	default:
+		return nil
+	}
+}
+
+func matchesAtLeastOneSchema(schemas []contracts.JSONSchema, value any, path string) bool {
+	for _, schema := range schemas {
+		if err := validateValue(schema, value, path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func countMatchingSchemas(schemas []contracts.JSONSchema, value any, path string) int {
+	matches := 0
+	for _, schema := range schemas {
+		if err := validateValue(schema, value, path); err == nil {
+			matches++
+		}
+	}
+	return matches
 }
 
 func matchesAnyType(types []string, value any) bool {
@@ -221,6 +333,18 @@ func schemaNumber(value any) (float64, bool) {
 
 func schemaNumberConstraint(value any) (float64, bool) {
 	return schemaNumber(value)
+}
+
+func exclusiveNumberConstraint(value any, pairedLimit any) (float64, bool) {
+	switch typed := value.(type) {
+	case bool:
+		if !typed {
+			return 0, false
+		}
+		return schemaNumberConstraint(pairedLimit)
+	default:
+		return schemaNumberConstraint(value)
+	}
 }
 
 func describeSchemaNumber(value float64) string {
