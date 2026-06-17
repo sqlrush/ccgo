@@ -28,10 +28,11 @@ type Manifest struct {
 }
 
 type Integration struct {
-	Name         string `json:"name"`
-	Enabled      bool   `json:"enabled"`
-	RuntimeState string `json:"runtime_state"`
-	Detail       string `json:"detail,omitempty"`
+	Name         string    `json:"name"`
+	Enabled      bool      `json:"enabled"`
+	RuntimeState string    `json:"runtime_state"`
+	Detail       string    `json:"detail,omitempty"`
+	Adapters     []Adapter `json:"adapters,omitempty"`
 }
 
 func SessionManifestPath(sessionPath string, sessionID contracts.ID) string {
@@ -118,18 +119,21 @@ func CountByRuntimeState(integrations []Integration) map[string]int {
 }
 
 func buildIntegration(name string, isEnabled bool, readyDetail string) Integration {
+	adapters := DetectAdapters(name, AdapterOptions{})
 	if isEnabled {
 		return Integration{
 			Name:         name,
 			Enabled:      true,
 			RuntimeState: RuntimeStateReady,
 			Detail:       readyDetail,
+			Adapters:     adapters,
 		}
 	}
 	return Integration{
 		Name:         name,
 		RuntimeState: RuntimeStateDisabled,
 		Detail:       "advanced integration is disabled or unset",
+		Adapters:     adapters,
 	}
 }
 

@@ -41,8 +41,14 @@ func TestBuildManifestMarksEnabledRuntimesAsReady(t *testing.T) {
 	if !hasIntegration(manifest.Integrations, "chrome", true, RuntimeStateReady) {
 		t.Fatalf("chrome integration missing/ready: %#v", manifest.Integrations)
 	}
+	if integrationAdapterCount(manifest.Integrations, "chrome") == 0 {
+		t.Fatalf("chrome adapters missing: %#v", manifest.Integrations)
+	}
 	if !hasIntegration(manifest.Integrations, "computer_use", true, RuntimeStateReady) {
 		t.Fatalf("computer_use integration missing/ready: %#v", manifest.Integrations)
+	}
+	if integrationAdapterCount(manifest.Integrations, "computer_use") == 0 {
+		t.Fatalf("computer_use adapters missing: %#v", manifest.Integrations)
 	}
 	if !hasIntegration(manifest.Integrations, "voice", false, RuntimeStateDisabled) {
 		t.Fatalf("voice integration missing/disabled: %#v", manifest.Integrations)
@@ -92,4 +98,13 @@ func hasIntegration(integrations []Integration, name string, enabled bool, state
 		}
 	}
 	return false
+}
+
+func integrationAdapterCount(integrations []Integration, name string) int {
+	for _, integration := range integrations {
+		if integration.Name == name {
+			return len(integration.Adapters)
+		}
+	}
+	return 0
 }

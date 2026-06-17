@@ -46,8 +46,9 @@ func TestBuildRuntimeState(t *testing.T) {
 		Enabled:      true,
 		RuntimeState: RuntimeStateReady,
 		Detail:       "ready",
+		Adapters:     []Adapter{{Name: "pw-record", Kind: AdapterKindAudioCapture, Available: true}},
 	})
-	if state.SessionID != "sess_int" || state.WorkingDirectory != "/work" || state.GeneratedAt == "" || state.Name != "voice" || !state.Enabled || state.RuntimeState != RuntimeStateReady || state.Artifacts["state"] == "" {
+	if state.SessionID != "sess_int" || state.WorkingDirectory != "/work" || state.GeneratedAt == "" || state.Name != "voice" || !state.Enabled || state.RuntimeState != RuntimeStateReady || state.Artifacts["state"] == "" || len(state.Adapters) != 1 {
 		t.Fatalf("state = %#v", state)
 	}
 }

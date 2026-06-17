@@ -20,6 +20,7 @@ type RuntimeState struct {
 	Enabled          bool              `json:"enabled"`
 	RuntimeState     string            `json:"runtime_state"`
 	Detail           string            `json:"detail,omitempty"`
+	Adapters         []Adapter         `json:"adapters,omitempty"`
 	Artifacts        map[string]string `json:"artifacts,omitempty"`
 }
 
@@ -48,6 +49,7 @@ func BuildRuntimeState(sessionPath string, sessionID contracts.ID, cwd string, i
 		Enabled:          integration.Enabled,
 		RuntimeState:     state,
 		Detail:           integration.Detail,
+		Adapters:         append([]Adapter(nil), integration.Adapters...),
 	}
 	artifactPath := SessionRuntimeStatePath(sessionPath, sessionID, name)
 	if artifactPath != "" {

@@ -1062,8 +1062,31 @@ func (r Runner) formatStatusIntegrations() string {
 			statePath := integrationspkg.SessionRuntimeStatePath(r.SessionPath, r.SessionID, integration.Name)
 			if runtimeState, err := integrationspkg.LoadRuntimeState(statePath); err == nil && runtimeState.GeneratedAt != "" {
 				line += " state=" + statePath
+				if len(runtimeState.Adapters) > 0 {
+					line += fmt.Sprintf(" adapters=%d", integrationspkg.CountAvailableAdapters(runtimeState.Adapters))
+				}
+			} else if len(integration.Adapters) > 0 {
+				line += fmt.Sprintf(" adapters=%d", integrationspkg.CountAvailableAdapters(integration.Adapters))
 			}
 			lines = append(lines, line)
+			adapters := integration.Adapters
+			if runtimeState, err := integrationspkg.LoadRuntimeState(statePath); err == nil && len(runtimeState.Adapters) > 0 {
+				adapters = runtimeState.Adapters
+			}
+			for _, adapter := range adapters {
+				adapterState := "unavailable"
+				if adapter.Available {
+					adapterState = "available"
+				}
+				adapterLine := fmt.Sprintf("  - %s/%s: %s", integration.Name, adapter.Name, adapterState)
+				if adapter.Kind != "" {
+					adapterLine += " kind=" + adapter.Kind
+				}
+				if len(adapter.Command) > 0 {
+					adapterLine += " command=" + strings.Join(adapter.Command, " ")
+				}
+				lines = append(lines, adapterLine)
+			}
 		}
 	}
 	return strings.Join(lines, "\n")
