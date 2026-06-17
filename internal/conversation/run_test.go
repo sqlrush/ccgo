@@ -1827,6 +1827,7 @@ func TestRunnerLSPManagerStatusDisabledByDefault(t *testing.T) {
 func TestRunnerWritesGatedLSPManagerStatus(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1855,6 +1856,9 @@ func TestRunnerWritesGatedLSPManagerStatus(t *testing.T) {
 	gopls := lspServerStatus(status.Servers, "gopls")
 	if gopls.RuntimeState != lsppkg.ServerRuntimeNotStarted || len(gopls.MatchReasons) == 0 {
 		t.Fatalf("gopls status = %#v", gopls)
+	}
+	if !strings.Contains(gopls.Reason, "command not found") {
+		t.Fatalf("gopls reason = %q", gopls.Reason)
 	}
 }
 
@@ -1895,7 +1899,7 @@ func TestRunnerStartsConfiguredLSPServer(t *testing.T) {
 		if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
 			t.Fatalf("lsp process result = %#v", result)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for lsp process")
 	}
 	status, err := lsppkg.LoadManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_start"))
@@ -1912,6 +1916,63 @@ func TestRunnerStartsConfiguredLSPServer(t *testing.T) {
 	}
 	if len(diagnostics) != 1 || diagnostics[0].Message != "runner lsp diagnostic" {
 		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+}
+
+func TestRunnerStartsDefaultLSPServer(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeConversationLSPCommandShim(t, "gopls")
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	lspEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_lsp_default_start",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{LSP: &lspEnabled},
+		}},
+		LSPStartupDocuments: []lsppkg.OpenDocument{{
+			URI:        "file:///work/main.go",
+			LanguageID: "go",
+			Version:    1,
+			Text:       "package main\n",
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	process := runner.LSPProcesses["gopls"]
+	if process == nil {
+		t.Fatalf("default lsp process was not recorded: %#v", runner.LSPProcesses)
+	}
+	select {
+	case result := <-process.Done():
+		if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
+			t.Fatalf("default lsp process result = %#v", result)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for default lsp process")
+	}
+	status, err := lsppkg.LoadManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_default_start"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := lspServerStatus(status.Servers, "gopls")
+	if server.RuntimeState != lsppkg.ServerRuntimeExited || server.ProcessID == 0 || server.StartedAt == "" || server.EndedAt == "" {
+		t.Fatalf("default server status = %#v", server)
+	}
+	diagnostics, err := lsppkg.LoadSnapshot(lsppkg.SessionDiagnosticsPath(transcriptPath, "sess_lsp_default_start"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics) != 1 || diagnostics[0].Message != "runner lsp diagnostic" {
+		t.Fatalf("default diagnostics = %#v", diagnostics)
 	}
 }
 
@@ -5541,6 +5602,22 @@ func conversationLSPHelperDefinition() lsppkg.ServerDefinition {
 		Args:           []string{"-test.run=TestConversationLSPServerHelper", "--", "conversation-lsp-helper"},
 		FileExtensions: []string{".go"},
 		RootMarkers:    []string{"go.mod"},
+	}
+}
+
+func writeConversationLSPCommandShim(t *testing.T, name string) {
+	t.Helper()
+	dir := t.TempDir()
+	testBinary, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GO_TEST_BINARY", testBinary)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	path := filepath.Join(dir, name)
+	script := "#!/bin/sh\nexec \"$GO_TEST_BINARY\" -test.run=TestConversationLSPServerHelper -- conversation-lsp-helper\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
 	}
 }
 

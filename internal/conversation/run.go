@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -821,24 +822,35 @@ func (r Runner) maybeWriteLSPManagerStatus() {
 
 func (r *Runner) maybeStartLSPServers(ctx context.Context) {
 	settings := r.mergedSettings()
-	if settings.Advanced == nil || !advancedBoolEnabled(settings.Advanced.LSP) || len(r.LSPServerDefinitions) == 0 {
+	if settings.Advanced == nil || !advancedBoolEnabled(settings.Advanced.LSP) {
 		return
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	definitions := r.lspServerDefinitions()
+	if len(definitions) == 0 {
+		return
 	}
 	diagnosticsPath := lsppkg.SessionDiagnosticsPath(r.SessionPath, r.SessionID)
 	managerPath := lsppkg.SessionManagerStatusPath(r.SessionPath, r.SessionID)
 	if diagnosticsPath == "" || managerPath == "" {
 		return
 	}
-	status := lsppkg.BuildManagerStatus(r.SessionID, r.WorkingDirectory, r.LSPServerDefinitions, nil)
+	status := lsppkg.BuildManagerStatus(r.SessionID, r.WorkingDirectory, definitions, nil)
 	for _, server := range status.Servers {
 		if server.RuntimeState != lsppkg.ServerRuntimeNotStarted || r.lspProcessRunning(server.Name) {
 			continue
 		}
 		definition, ok := r.lspDefinitionByName(server.Name)
 		if !ok {
+			continue
+		}
+		if _, err := exec.LookPath(definition.Command); err != nil {
+			server.RuntimeState = lsppkg.ServerRuntimeNotStarted
+			server.Reason = "language server command not found in PATH: " + definition.Command
+			status = lsppkg.UpsertServerStatus(status, server)
+			_ = lsppkg.WriteManagerStatus(managerPath, status)
 			continue
 		}
 		process, err := lsppkg.StartServerProcess(ctx, lsppkg.ServerProcessOptions{
@@ -851,7 +863,8 @@ func (r *Runner) maybeStartLSPServers(ctx context.Context) {
 		if err != nil {
 			server.RuntimeState = lsppkg.ServerRuntimeFailed
 			server.Reason = err.Error()
-			_ = lsppkg.WriteManagerStatus(managerPath, lsppkg.UpsertServerStatus(status, server))
+			status = lsppkg.UpsertServerStatus(status, server)
+			_ = lsppkg.WriteManagerStatus(managerPath, status)
 			continue
 		}
 		if r.LSPProcesses == nil {
@@ -867,7 +880,8 @@ func (r *Runner) maybeStartLSPServers(ctx context.Context) {
 		}); err != nil {
 			server.RuntimeState = lsppkg.ServerRuntimeFailed
 			server.Reason = err.Error()
-			_ = lsppkg.WriteManagerStatus(managerPath, lsppkg.UpsertServerStatus(status, server))
+			status = lsppkg.UpsertServerStatus(status, server)
+			_ = lsppkg.WriteManagerStatus(managerPath, status)
 		}
 	}
 }
@@ -876,12 +890,12 @@ func (r Runner) lspServerDefinitions() []lsppkg.ServerDefinition {
 	if len(r.LSPServerDefinitions) > 0 {
 		return r.LSPServerDefinitions
 	}
-	return nil
+	return lsppkg.DefaultServerDefinitions()
 }
 
 func (r Runner) lspDefinitionByName(name string) (lsppkg.ServerDefinition, bool) {
 	name = strings.TrimSpace(name)
-	for _, definition := range r.LSPServerDefinitions {
+	for _, definition := range r.lspServerDefinitions() {
 		if strings.TrimSpace(definition.Name) == name {
 			return definition, true
 		}
