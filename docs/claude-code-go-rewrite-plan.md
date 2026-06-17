@@ -186,6 +186,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
 - 本轮补充：Grep count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
 - 本轮补充：Grep 长行省略阈值现在支持 `max_columns`/`maxColumns`/`max-columns`/`--max-columns`，默认保持 500，传 `0` 可关闭省略，quoted semantic number 同样兼容。
+- 本轮补充：Grep 文件列表输出现在支持 `files_without_match`/`filesWithoutMatch`/`files-without-match`/`--files-without-match`/`-L`，也接受 `output_mode` 的 `files_without_match(es)`，用于列出不含匹配的文件并兼容 quoted boolean。
 - 本轮补充：Grep 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore` 规则，同时继续排除 VCS metadata 目录并保留 Read deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。
 - 本轮补充：Grep 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
 - 本轮补充：Glob/Grep 搜索遍历现在会读取 permission context 中的 `Read(...)` deny 规则，并把对应 basename/path/directory pattern 作为额外 ignore rule，避免被禁止读取的文件出现在搜索结果中。

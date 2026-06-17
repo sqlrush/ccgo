@@ -1327,6 +1327,36 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("camel outputMode result = %#v", camelModeResult)
 	}
 
+	if err := os.WriteFile(filepath.Join(dir, "src", "noalpha.go"), []byte("package main\nfunc Gamma() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	filesWithoutResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_without_match",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","output_mode":"files_without_match"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesWithoutResult.Content != "Found 1 file\nsrc/noalpha.go" ||
+		filesWithoutResult.StructuredContent["output_mode"] != "files_without_matches" ||
+		filesWithoutResult.StructuredContent["files_without_match"] != true {
+		t.Fatalf("files-without-match result = %#v", filesWithoutResult)
+	}
+
+	shortFilesWithoutResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_without_match_short",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","-L":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortFilesWithoutResult.Content != "Found 1 file\nsrc/noalpha.go" ||
+		shortFilesWithoutResult.StructuredContent["files_without_match"] != true {
+		t.Fatalf("short files-without-match result = %#v", shortFilesWithoutResult)
+	}
+
 	multiGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_multi_glob",
 		Name:  "Grep",

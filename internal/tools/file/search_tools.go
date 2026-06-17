@@ -36,6 +36,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
+	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
 }
@@ -53,6 +54,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
+	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
 }
@@ -63,62 +65,71 @@ type globInput struct {
 }
 
 type grepInput struct {
-	Pattern            string `json:"pattern"`
-	Path               string `json:"path,omitempty"`
-	Glob               string `json:"glob,omitempty"`
-	Type               string `json:"type,omitempty"`
-	OutputMode         string `json:"output_mode,omitempty"`
-	OutputModeAlt      string `json:"outputMode,omitempty"`
-	Limit              *int   `json:"limit,omitempty"`
-	HeadLimit          *int   `json:"head_limit,omitempty"`
-	HeadLimitAlt       *int   `json:"headLimit,omitempty"`
-	Offset             *int   `json:"offset,omitempty"`
-	MaxCount           *int   `json:"max_count,omitempty"`
-	MaxCountAlt        *int   `json:"maxCount,omitempty"`
-	ShortMaxCount      *int   `json:"-m,omitempty"`
-	MaxColumns         *int   `json:"max_columns,omitempty"`
-	MaxColumnsAlt      *int   `json:"maxColumns,omitempty"`
-	MaxColumnsDash     *int   `json:"max-columns,omitempty"`
-	LongMaxColumns     *int   `json:"--max-columns,omitempty"`
-	Context            *int   `json:"context,omitempty"`
-	ShortContext       *int   `json:"-C,omitempty"`
-	BeforeContext      *int   `json:"before_context,omitempty"`
-	BeforeContextAlt   *int   `json:"beforeContext,omitempty"`
-	ShortBeforeContext *int   `json:"-B,omitempty"`
-	AfterContext       *int   `json:"after_context,omitempty"`
-	AfterContextAlt    *int   `json:"afterContext,omitempty"`
-	ShortAfterContext  *int   `json:"-A,omitempty"`
-	LineNumbers        *bool  `json:"line_numbers,omitempty"`
-	LineNumbersAlt     *bool  `json:"lineNumbers,omitempty"`
-	ShortLineNumbers   *bool  `json:"-n,omitempty"`
-	IgnoreCase         bool   `json:"ignore_case,omitempty"`
-	CaseInsensitive    bool   `json:"case_insensitive,omitempty"`
-	CaseInsensitiveAlt bool   `json:"caseInsensitive,omitempty"`
-	ShortIgnoreCase    bool   `json:"-i,omitempty"`
-	FixedStrings       bool   `json:"fixed_strings,omitempty"`
-	FixedStringsAlt    bool   `json:"fixedStrings,omitempty"`
-	ShortFixedStrings  bool   `json:"-F,omitempty"`
-	WordRegexp         bool   `json:"word_regexp,omitempty"`
-	WordRegexpAlt      bool   `json:"wordRegexp,omitempty"`
-	WordRegexpDash     bool   `json:"word-regexp,omitempty"`
-	ShortWordRegexp    bool   `json:"-w,omitempty"`
-	InvertMatch        bool   `json:"invert_match,omitempty"`
-	InvertMatchAlt     bool   `json:"invertMatch,omitempty"`
-	InvertMatchDash    bool   `json:"invert-match,omitempty"`
-	ShortInvertMatch   bool   `json:"-v,omitempty"`
-	OnlyMatching       bool   `json:"only_matching,omitempty"`
-	OnlyMatchingAlt    bool   `json:"onlyMatching,omitempty"`
-	OnlyMatchingDash   bool   `json:"only-matching,omitempty"`
-	ShortOnlyMatching  bool   `json:"-o,omitempty"`
-	CountMatches       bool   `json:"count_matches,omitempty"`
-	CountMatchesAlt    bool   `json:"countMatches,omitempty"`
-	CountMatchesDash   bool   `json:"count-matches,omitempty"`
-	LongCountMatches   bool   `json:"--count-matches,omitempty"`
-	NoIgnore           bool   `json:"no_ignore,omitempty"`
-	NoIgnoreAlt        bool   `json:"noIgnore,omitempty"`
-	NoIgnoreDash       bool   `json:"no-ignore,omitempty"`
-	LongNoIgnore       bool   `json:"--no-ignore,omitempty"`
-	Multiline          bool   `json:"multiline,omitempty"`
+	Pattern                 string `json:"pattern"`
+	Path                    string `json:"path,omitempty"`
+	Glob                    string `json:"glob,omitempty"`
+	Type                    string `json:"type,omitempty"`
+	OutputMode              string `json:"output_mode,omitempty"`
+	OutputModeAlt           string `json:"outputMode,omitempty"`
+	Limit                   *int   `json:"limit,omitempty"`
+	HeadLimit               *int   `json:"head_limit,omitempty"`
+	HeadLimitAlt            *int   `json:"headLimit,omitempty"`
+	Offset                  *int   `json:"offset,omitempty"`
+	MaxCount                *int   `json:"max_count,omitempty"`
+	MaxCountAlt             *int   `json:"maxCount,omitempty"`
+	ShortMaxCount           *int   `json:"-m,omitempty"`
+	MaxColumns              *int   `json:"max_columns,omitempty"`
+	MaxColumnsAlt           *int   `json:"maxColumns,omitempty"`
+	MaxColumnsDash          *int   `json:"max-columns,omitempty"`
+	LongMaxColumns          *int   `json:"--max-columns,omitempty"`
+	Context                 *int   `json:"context,omitempty"`
+	ShortContext            *int   `json:"-C,omitempty"`
+	BeforeContext           *int   `json:"before_context,omitempty"`
+	BeforeContextAlt        *int   `json:"beforeContext,omitempty"`
+	ShortBeforeContext      *int   `json:"-B,omitempty"`
+	AfterContext            *int   `json:"after_context,omitempty"`
+	AfterContextAlt         *int   `json:"afterContext,omitempty"`
+	ShortAfterContext       *int   `json:"-A,omitempty"`
+	LineNumbers             *bool  `json:"line_numbers,omitempty"`
+	LineNumbersAlt          *bool  `json:"lineNumbers,omitempty"`
+	ShortLineNumbers        *bool  `json:"-n,omitempty"`
+	IgnoreCase              bool   `json:"ignore_case,omitempty"`
+	CaseInsensitive         bool   `json:"case_insensitive,omitempty"`
+	CaseInsensitiveAlt      bool   `json:"caseInsensitive,omitempty"`
+	ShortIgnoreCase         bool   `json:"-i,omitempty"`
+	FixedStrings            bool   `json:"fixed_strings,omitempty"`
+	FixedStringsAlt         bool   `json:"fixedStrings,omitempty"`
+	ShortFixedStrings       bool   `json:"-F,omitempty"`
+	WordRegexp              bool   `json:"word_regexp,omitempty"`
+	WordRegexpAlt           bool   `json:"wordRegexp,omitempty"`
+	WordRegexpDash          bool   `json:"word-regexp,omitempty"`
+	ShortWordRegexp         bool   `json:"-w,omitempty"`
+	InvertMatch             bool   `json:"invert_match,omitempty"`
+	InvertMatchAlt          bool   `json:"invertMatch,omitempty"`
+	InvertMatchDash         bool   `json:"invert-match,omitempty"`
+	ShortInvertMatch        bool   `json:"-v,omitempty"`
+	OnlyMatching            bool   `json:"only_matching,omitempty"`
+	OnlyMatchingAlt         bool   `json:"onlyMatching,omitempty"`
+	OnlyMatchingDash        bool   `json:"only-matching,omitempty"`
+	ShortOnlyMatching       bool   `json:"-o,omitempty"`
+	FilesWithoutMatch       bool   `json:"files_without_match,omitempty"`
+	FilesWithoutMatchAlt    bool   `json:"filesWithoutMatch,omitempty"`
+	FilesWithoutMatchDash   bool   `json:"files-without-match,omitempty"`
+	LongFilesWithoutMatch   bool   `json:"--files-without-match,omitempty"`
+	FilesWithoutMatches     bool   `json:"files_without_matches,omitempty"`
+	FilesWithoutMatchesAlt  bool   `json:"filesWithoutMatches,omitempty"`
+	FilesWithoutMatchesDash bool   `json:"files-without-matches,omitempty"`
+	LongFilesWithoutMatches bool   `json:"--files-without-matches,omitempty"`
+	ShortFilesWithoutMatch  bool   `json:"-L,omitempty"`
+	CountMatches            bool   `json:"count_matches,omitempty"`
+	CountMatchesAlt         bool   `json:"countMatches,omitempty"`
+	CountMatchesDash        bool   `json:"count-matches,omitempty"`
+	LongCountMatches        bool   `json:"--count-matches,omitempty"`
+	NoIgnore                bool   `json:"no_ignore,omitempty"`
+	NoIgnoreAlt             bool   `json:"noIgnore,omitempty"`
+	NoIgnoreDash            bool   `json:"no-ignore,omitempty"`
+	LongNoIgnore            bool   `json:"--no-ignore,omitempty"`
+	Multiline               bool   `json:"multiline,omitempty"`
 }
 
 type fileSearchMatch struct {
@@ -204,8 +215,8 @@ func NewGrepTool() tool.Tool {
 					"path":        map[string]any{"type": "string"},
 					"glob":        map[string]any{"type": "string"},
 					"type":        map[string]any{"type": "string"},
-					"output_mode": map[string]any{"type": "string", "enum": []any{"files_with_matches", "content", "count"}},
-					"outputMode":  map[string]any{"type": "string", "enum": []any{"files_with_matches", "content", "count"}},
+					"output_mode": map[string]any{"type": "string", "enum": []any{"files_with_matches", "files_without_match", "files_without_matches", "content", "count"}},
+					"outputMode":  map[string]any{"type": "string", "enum": []any{"files_with_matches", "files_without_match", "files_without_matches", "content", "count"}},
 					"limit":       map[string]any{"type": "integer"},
 					"head_limit":  map[string]any{"type": "integer"},
 					"headLimit":   map[string]any{"type": "integer"},
@@ -253,20 +264,41 @@ func NewGrepTool() tool.Tool {
 					"onlyMatching":     map[string]any{"type": "boolean"},
 					"only-matching":    map[string]any{"type": "boolean"},
 					"-o":               map[string]any{"type": "boolean"},
-					"count_matches":    map[string]any{"type": "boolean"},
-					"countMatches":     map[string]any{"type": "boolean"},
-					"count-matches":    map[string]any{"type": "boolean"},
-					"--count-matches":  map[string]any{"type": "boolean"},
-					"no_ignore":        map[string]any{"type": "boolean"},
-					"noIgnore":         map[string]any{"type": "boolean"},
-					"no-ignore":        map[string]any{"type": "boolean"},
-					"--no-ignore":      map[string]any{"type": "boolean"},
-					"multiline":        map[string]any{"type": "boolean"},
+					"files_without_match": map[string]any{
+						"type": "boolean",
+					},
+					"filesWithoutMatch": map[string]any{"type": "boolean"},
+					"files-without-match": map[string]any{
+						"type": "boolean",
+					},
+					"--files-without-match": map[string]any{
+						"type": "boolean",
+					},
+					"files_without_matches": map[string]any{
+						"type": "boolean",
+					},
+					"filesWithoutMatches": map[string]any{"type": "boolean"},
+					"files-without-matches": map[string]any{
+						"type": "boolean",
+					},
+					"--files-without-matches": map[string]any{
+						"type": "boolean",
+					},
+					"-L":              map[string]any{"type": "boolean"},
+					"count_matches":   map[string]any{"type": "boolean"},
+					"countMatches":    map[string]any{"type": "boolean"},
+					"count-matches":   map[string]any{"type": "boolean"},
+					"--count-matches": map[string]any{"type": "boolean"},
+					"no_ignore":       map[string]any{"type": "boolean"},
+					"noIgnore":        map[string]any{"type": "boolean"},
+					"no-ignore":       map[string]any{"type": "boolean"},
+					"--no-ignore":     map[string]any{"type": "boolean"},
+					"multiline":       map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o matched-text output. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, files_without_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o matched-text output. Use files_without_match or -L to list files without matches. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -344,9 +376,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	}
 	mode := normalizedGrepOutputMode(input)
 	switch mode {
-	case "files_with_matches", "content", "count":
+	case "files_with_matches", "files_without_matches", "content", "count":
 	default:
-		return fmt.Errorf("output_mode must be one of files_with_matches, content, or count")
+		return fmt.Errorf("output_mode must be one of files_with_matches, files_without_matches, content, or count")
 	}
 	if input.Limit != nil && *input.Limit <= 0 {
 		return fmt.Errorf("limit must be positive")
@@ -447,30 +479,31 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	return contracts.ToolResult{
 		Content: content,
 		StructuredContent: map[string]any{
-			"type":             "grep",
-			"pattern":          input.Pattern,
-			"path":             input.Path,
-			"glob":             input.Glob,
-			"type_filter":      input.Type,
-			"output_mode":      mode,
-			"matches":          grepStructuredMatches(matches, mode),
-			"total_matches":    totalMatches,
-			"offset":           options.Offset,
-			"limit":            options.Limit,
-			"max_count":        options.MaxCount,
-			"max_columns":      options.MaxColumns,
-			"before_context":   options.BeforeContext,
-			"after_context":    options.AfterContext,
-			"line_numbers":     options.LineNumbers,
-			"case_insensitive": grepCaseInsensitive(input),
-			"fixed_strings":    grepFixedStrings(input),
-			"word_regexp":      grepWordRegexp(input),
-			"invert_match":     grepInvertMatch(input),
-			"only_matching":    onlyMatching,
-			"count_matches":    countMatches,
-			"no_ignore":        noIgnore,
-			"multiline":        input.Multiline,
-			"truncated":        truncated,
+			"type":                "grep",
+			"pattern":             input.Pattern,
+			"path":                input.Path,
+			"glob":                input.Glob,
+			"type_filter":         input.Type,
+			"output_mode":         mode,
+			"matches":             grepStructuredMatches(matches, mode),
+			"total_matches":       totalMatches,
+			"offset":              options.Offset,
+			"limit":               options.Limit,
+			"max_count":           options.MaxCount,
+			"max_columns":         options.MaxColumns,
+			"before_context":      options.BeforeContext,
+			"after_context":       options.AfterContext,
+			"line_numbers":        options.LineNumbers,
+			"case_insensitive":    grepCaseInsensitive(input),
+			"fixed_strings":       grepFixedStrings(input),
+			"word_regexp":         grepWordRegexp(input),
+			"invert_match":        grepInvertMatch(input),
+			"only_matching":       onlyMatching,
+			"files_without_match": mode == "files_without_matches",
+			"count_matches":       countMatches,
+			"no_ignore":           noIgnore,
+			"multiline":           input.Multiline,
+			"truncated":           truncated,
 		},
 	}, nil
 }
@@ -649,6 +682,12 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 			matchOptions.AfterContext = 0
 		}
 		lineMatches := grepFileMatches(displayRel, content, expr, matchOptions)
+		if options.Mode == "files_without_matches" {
+			if len(lineMatches) == 0 {
+				matches = append(matches, grepMatch{Path: displayRel, ModUnix: info.ModTime().UnixNano()})
+			}
+			return nil
+		}
 		if len(lineMatches) == 0 {
 			return nil
 		}
@@ -670,7 +709,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 		return nil, 0, false, err
 	}
 	sort.Slice(matches, func(i, j int) bool {
-		if options.Mode == "files_with_matches" && matches[i].ModUnix != matches[j].ModUnix {
+		if grepModeIsFileList(options.Mode) && matches[i].ModUnix != matches[j].ModUnix {
 			return matches[i].ModUnix > matches[j].ModUnix
 		}
 		if matches[i].Path != matches[j].Path {
@@ -953,7 +992,7 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 	lines := make([]string, 0, len(matches))
 	for _, match := range matches {
 		switch options.Mode {
-		case "files_with_matches":
+		case "files_with_matches", "files_without_matches":
 			lines = append(lines, match.Path)
 		case "count":
 			lines = append(lines, fmt.Sprintf("%s:%d", match.Path, match.Count))
@@ -979,7 +1018,7 @@ func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated
 		return formatGrepContentResult(content, options, truncated)
 	case "count":
 		return formatGrepCountResult(content, matches, options, truncated)
-	case "files_with_matches":
+	case "files_with_matches", "files_without_matches":
 		return formatGrepFilesResult(content, matches, options, truncated)
 	default:
 		return content
@@ -1041,6 +1080,10 @@ func grepPaginationInfo(options grepOptions, truncated bool) string {
 	return strings.Join(parts, ", ")
 }
 
+func grepModeIsFileList(mode string) bool {
+	return mode == "files_with_matches" || mode == "files_without_matches"
+}
+
 func pluralWord(count int, singular string, plural string) string {
 	if count == 1 {
 		return singular
@@ -1069,12 +1112,18 @@ func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
 }
 
 func normalizedGrepOutputMode(input grepInput) string {
+	if grepFilesWithoutMatch(input) {
+		return "files_without_matches"
+	}
 	mode := strings.TrimSpace(input.OutputMode)
 	if mode == "" {
 		mode = strings.TrimSpace(input.OutputModeAlt)
 	}
 	if mode == "" {
 		return "files_with_matches"
+	}
+	if mode == "files_without_match" {
+		return "files_without_matches"
 	}
 	return mode
 }
@@ -1116,6 +1165,18 @@ func grepInvertMatch(input grepInput) bool {
 
 func grepOnlyMatching(input grepInput) bool {
 	return input.OnlyMatching || input.OnlyMatchingAlt || input.OnlyMatchingDash || input.ShortOnlyMatching
+}
+
+func grepFilesWithoutMatch(input grepInput) bool {
+	return input.FilesWithoutMatch ||
+		input.FilesWithoutMatchAlt ||
+		input.FilesWithoutMatchDash ||
+		input.LongFilesWithoutMatch ||
+		input.FilesWithoutMatches ||
+		input.FilesWithoutMatchesAlt ||
+		input.FilesWithoutMatchesDash ||
+		input.LongFilesWithoutMatches ||
+		input.ShortFilesWithoutMatch
 }
 
 func grepCountMatches(input grepInput) bool {
