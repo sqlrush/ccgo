@@ -828,6 +828,17 @@ func (r Runner) maybeWriteIntegrationsManifest() {
 				runtimeState.Artifacts["voice_capture_plan"] = voicePlanPath
 			}
 		}
+		if integration.Enabled && strings.TrimSpace(integration.Name) == "computer_use" {
+			computerUsePlanPath := integrationspkg.ComputerUseDriverPlanPath(r.SessionPath, r.SessionID)
+			if computerUsePlanPath != "" {
+				computerUsePlan := integrationspkg.BuildComputerUseDriverPlan(r.SessionID, r.WorkingDirectory, integration.Adapters)
+				_ = integrationspkg.WriteComputerUseDriverPlan(computerUsePlanPath, computerUsePlan)
+				if runtimeState.Artifacts == nil {
+					runtimeState.Artifacts = map[string]string{}
+				}
+				runtimeState.Artifacts["computer_use_driver_plan"] = computerUsePlanPath
+			}
+		}
 		_ = integrationspkg.WriteRuntimeState(statePath, runtimeState)
 	}
 }
@@ -1108,6 +1119,9 @@ func (r Runner) formatStatusIntegrations() string {
 				}
 				if voicePlanPath := runtimeState.Artifacts["voice_capture_plan"]; voicePlanPath != "" {
 					line += " voice_plan=" + voicePlanPath
+				}
+				if computerUsePlanPath := runtimeState.Artifacts["computer_use_driver_plan"]; computerUsePlanPath != "" {
+					line += " computer_use_plan=" + computerUsePlanPath
 				}
 			} else if len(integration.Adapters) > 0 {
 				line += fmt.Sprintf(" adapters=%d", integrationspkg.CountAvailableAdapters(integration.Adapters))

@@ -2219,6 +2219,17 @@ func TestRunnerWritesGatedIntegrationsManifest(t *testing.T) {
 	if computerState.Name != "computer_use" || computerState.RuntimeState != integrationspkg.RuntimeStateReady {
 		t.Fatalf("computer runtime state = %#v", computerState)
 	}
+	computerUsePlanPath := computerState.Artifacts["computer_use_driver_plan"]
+	if computerUsePlanPath == "" {
+		t.Fatalf("computer-use driver plan artifact missing: %#v", computerState.Artifacts)
+	}
+	computerUsePlan, err := integrationspkg.LoadComputerUseDriverPlan(computerUsePlanPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if computerUsePlan.SessionID != "sess_integrations" || computerUsePlan.ScreenshotFormat != "png" || computerUsePlan.ExecutionMode != "planned" {
+		t.Fatalf("computer-use driver plan = %#v", computerUsePlan)
+	}
 	voiceState, err := integrationspkg.LoadRuntimeState(integrationspkg.SessionRuntimeStatePath(transcriptPath, "sess_integrations", "voice"))
 	if err != nil {
 		t.Fatal(err)
