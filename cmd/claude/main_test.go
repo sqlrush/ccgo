@@ -192,7 +192,7 @@ func TestRunDaemonDueSchedulesNoopsWithoutSchedules(t *testing.T) {
 		WorkingDirectory: t.TempDir(),
 		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
 	}
-	if err := runDaemonDueSchedules(context.Background(), runner, time.Now().UTC()); err != nil {
+	if _, err := runDaemonDueSchedules(context.Background(), runner, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -231,6 +231,18 @@ func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 	}
 	if !health.OK || health.SessionID != state.SessionID() || health.RuntimeState != daemonpkg.RuntimeRunning {
 		t.Fatalf("health = %#v", health)
+	}
+	tickResp, err := http.Post(daemonState.Endpoint+"/tick", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tickResp.Body.Close()
+	var tick daemonpkg.TickResponse
+	if err := json.NewDecoder(tickResp.Body).Decode(&tick); err != nil {
+		t.Fatal(err)
+	}
+	if !tick.OK || tick.ErrorCount != 0 {
+		t.Fatalf("tick = %#v", tick)
 	}
 	cancel()
 	select {

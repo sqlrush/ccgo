@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"ccgo/internal/api/anthropic"
@@ -264,6 +265,18 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	}
 	endpoint := ""
 	var daemonServer *daemonpkg.Server
+	var tickMu sync.Mutex
+	writeHeartbeat := func(now time.Time) error {
+		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, now, nil))
+	}
+	runTick := func(now time.Time) (contracts.ToolResult, error) {
+		tickMu.Lock()
+		defer tickMu.Unlock()
+		if err := writeHeartbeat(now); err != nil {
+			return contracts.ToolResult{}, err
+		}
+		return runDaemonDueSchedules(ctx, runner, now)
+	}
 	if !options.Once {
 		daemonServer, err = daemonpkg.StartServer(daemonpkg.ServerOptions{
 			StateFunc: func() daemonpkg.State {
@@ -272,6 +285,13 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 					return daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, time.Now().UTC(), err)
 				}
 				return state
+			},
+			TickFunc: func(context.Context) daemonpkg.TickResponse {
+				result, err := runTick(time.Now().UTC())
+				if err != nil {
+					return daemonpkg.TickResponse{OK: false, Error: err.Error()}
+				}
+				return daemonTickResponse(result)
 			},
 		})
 		if err != nil {
@@ -285,16 +305,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 		}()
 		endpoint = daemonServer.Endpoint()
 	}
-	writeHeartbeat := func(now time.Time) error {
-		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, now, nil))
-	}
-	runTick := func(now time.Time) error {
-		if err := writeHeartbeat(now); err != nil {
-			return err
-		}
-		return runDaemonDueSchedules(ctx, runner, now)
-	}
-	if err := runTick(time.Now().UTC()); err != nil {
+	if _, err := runTick(time.Now().UTC()); err != nil {
 		fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
 		return 1
 	}
@@ -307,10 +318,12 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	for {
 		select {
 		case <-ctx.Done():
+			tickMu.Lock()
 			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), ctx.Err()))
+			tickMu.Unlock()
 			return 0
 		case now := <-ticker.C:
-			if err := runTick(now.UTC()); err != nil {
+			if _, err := runTick(now.UTC()); err != nil {
 				fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
 				return 1
 			}
@@ -318,8 +331,8 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	}
 }
 
-func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now time.Time) error {
-	_, err := tasktools.RunDueSchedules(tool.Context{
+func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now time.Time) (contracts.ToolResult, error) {
+	return tasktools.RunDueSchedules(tool.Context{
 		Context:          ctx,
 		WorkingDirectory: runner.WorkingDirectory,
 		SessionID:        runner.SessionID,
@@ -327,7 +340,41 @@ func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now 
 			tool.MetadataSessionPathKey: runner.SessionPath,
 		},
 	}, "", now, tool.NopProgressSink())
-	return err
+}
+
+func daemonTickResponse(result contracts.ToolResult) daemonpkg.TickResponse {
+	structured := result.StructuredContent
+	return daemonpkg.TickResponse{
+		OK:             true,
+		CheckedAt:      stringMapValue(structured, "checked_at"),
+		TriggeredCount: intMapValue(structured, "triggered_count"),
+		ErrorCount:     intMapValue(structured, "error_count"),
+		Structured:     structured,
+	}
+}
+
+func stringMapValue(values map[string]any, key string) string {
+	if values == nil {
+		return ""
+	}
+	value, _ := values[key].(string)
+	return value
+}
+
+func intMapValue(values map[string]any, key string) int {
+	if values == nil {
+		return 0
+	}
+	switch value := values[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
 }
 
 func handleChromeNativeHostMessage(raw json.RawMessage) map[string]any {

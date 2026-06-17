@@ -14,6 +14,7 @@ import (
 type ServerOptions struct {
 	Addr      string
 	StateFunc func() State
+	TickFunc  func(context.Context) TickResponse
 }
 
 type Server struct {
@@ -26,6 +27,15 @@ type HealthResponse struct {
 	SessionID    contracts.ID `json:"session_id,omitempty"`
 	RuntimeState string       `json:"runtime_state,omitempty"`
 	PID          int          `json:"pid,omitempty"`
+}
+
+type TickResponse struct {
+	OK             bool           `json:"ok"`
+	CheckedAt      string         `json:"checked_at,omitempty"`
+	TriggeredCount int            `json:"triggered_count,omitempty"`
+	ErrorCount     int            `json:"error_count,omitempty"`
+	Structured     map[string]any `json:"structured,omitempty"`
+	Error          string         `json:"error,omitempty"`
 }
 
 func StartServer(options ServerOptions) (*Server, error) {
@@ -64,6 +74,22 @@ func StartServer(options ServerOptions) (*Server, error) {
 			return
 		}
 		writeJSON(w, http.StatusOK, stateFunc())
+	})
+	mux.HandleFunc("/tick", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if options.TickFunc == nil {
+			writeJSON(w, http.StatusNotImplemented, TickResponse{OK: false, Error: "daemon tick is not configured"})
+			return
+		}
+		response := options.TickFunc(r.Context())
+		status := http.StatusOK
+		if !response.OK {
+			status = http.StatusInternalServerError
+		}
+		writeJSON(w, status, response)
 	})
 	server := &http.Server{Handler: mux}
 	wrapped := &Server{listener: listener, server: server}
