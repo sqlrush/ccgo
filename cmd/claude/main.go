@@ -32,6 +32,7 @@ import (
 )
 
 const version = "0.0.0-dev"
+const chromeNativeHostProtocolVersion = "1"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -236,13 +237,55 @@ func handleChromeNativeHostMessage(raw json.RawMessage) map[string]any {
 	switch strings.ToLower(strings.TrimSpace(messageType)) {
 	case "ping":
 		return map[string]any{"type": "pong", "ok": true}
+	case "hello", "capabilities":
+		return chromeNativeHostCapabilitiesResponse()
+	case "runtime", "session":
+		return chromeNativeHostRuntimeResponse(strings.ToLower(strings.TrimSpace(messageType)))
 	case "status":
-		return map[string]any{"type": "status", "ok": true, "runtime": "ccgo", "version": version}
+		response := chromeNativeHostRuntimeResponse("status")
+		response["capabilities"] = chromeNativeHostCapabilities()
+		return response
 	default:
 		if messageType == "" {
 			messageType = "(missing)"
 		}
 		return map[string]any{"type": "error", "ok": false, "error": "unsupported message type: " + messageType}
+	}
+}
+
+func chromeNativeHostCapabilitiesResponse() map[string]any {
+	return map[string]any{
+		"type":             "capabilities",
+		"ok":               true,
+		"runtime":          "ccgo",
+		"version":          version,
+		"protocol_version": chromeNativeHostProtocolVersion,
+		"capabilities":     chromeNativeHostCapabilities(),
+	}
+}
+
+func chromeNativeHostRuntimeResponse(responseType string) map[string]any {
+	if responseType == "" {
+		responseType = "runtime"
+	}
+	return map[string]any{
+		"type":             responseType,
+		"ok":               true,
+		"runtime":          "ccgo",
+		"version":          version,
+		"protocol_version": chromeNativeHostProtocolVersion,
+		"pid":              os.Getpid(),
+	}
+}
+
+func chromeNativeHostCapabilities() map[string]any {
+	return map[string]any{
+		"ping":         true,
+		"status":       true,
+		"hello":        true,
+		"capabilities": true,
+		"runtime":      true,
+		"session":      true,
 	}
 }
 

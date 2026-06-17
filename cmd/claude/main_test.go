@@ -107,6 +107,12 @@ func TestRunChromeNativeHostRespondsToMessages(t *testing.T) {
 	if err := integrationspkg.WriteChromeNativeMessage(&stdin, map[string]any{"type": "status"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := integrationspkg.WriteChromeNativeMessage(&stdin, map[string]any{"type": "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := integrationspkg.WriteChromeNativeMessage(&stdin, map[string]any{"type": "session"}); err != nil {
+		t.Fatal(err)
+	}
 	code := run([]string{"--chrome-native-host"}, &stdin, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
@@ -121,6 +127,20 @@ func TestRunChromeNativeHostRespondsToMessages(t *testing.T) {
 	status := readNativeHostTestMessage(t, &stdout)
 	if status["type"] != "status" || status["runtime"] != "ccgo" || status["version"] != version {
 		t.Fatalf("status = %#v", status)
+	}
+	if capabilities, ok := status["capabilities"].(map[string]any); !ok || capabilities["ping"] != true || capabilities["session"] != true {
+		t.Fatalf("status capabilities = %#v", status["capabilities"])
+	}
+	hello := readNativeHostTestMessage(t, &stdout)
+	if hello["type"] != "capabilities" || hello["protocol_version"] != chromeNativeHostProtocolVersion {
+		t.Fatalf("hello = %#v", hello)
+	}
+	if capabilities, ok := hello["capabilities"].(map[string]any); !ok || capabilities["capabilities"] != true {
+		t.Fatalf("hello capabilities = %#v", hello["capabilities"])
+	}
+	session := readNativeHostTestMessage(t, &stdout)
+	if session["type"] != "session" || session["runtime"] != "ccgo" || session["protocol_version"] != chromeNativeHostProtocolVersion {
+		t.Fatalf("session = %#v", session)
 	}
 }
 
