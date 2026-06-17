@@ -41,6 +41,7 @@ type WebSocketOptions struct {
 	ReconnectInitialDelay time.Duration
 	ReconnectMaxDelay     time.Duration
 	DialContext           func(context.Context, string, string) (net.Conn, error)
+	StatusHandler         func(WebSocketResult)
 }
 
 type WebSocketResult struct {
@@ -101,6 +102,7 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 			}
 			recordRemoteWebSocketDialError(&result, err)
 			result.LastError = err.Error()
+			notifyRemoteWebSocketStatus(options, result)
 			if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
 				result.Error = result.LastError
 				return result
@@ -113,6 +115,7 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 		}
 		result.StatusCode = http.StatusSwitchingProtocols
 		result.ConnectCount++
+		notifyRemoteWebSocketStatus(options, result)
 		transient, fatal := readRemoteWebSocketEvents(ctx, conn, frameLimit, maxFrames, &result)
 		_ = conn.Close()
 		if fatal != nil {
@@ -162,6 +165,7 @@ func StreamWebSocketEvents(ctx context.Context, options WebSocketOptions, handle
 			}
 			recordRemoteWebSocketDialError(&result, err)
 			result.LastError = err.Error()
+			notifyRemoteWebSocketStatus(options, result)
 			if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
 				result.Error = result.LastError
 				return result
@@ -174,7 +178,8 @@ func StreamWebSocketEvents(ctx context.Context, options WebSocketOptions, handle
 		}
 		result.StatusCode = http.StatusSwitchingProtocols
 		result.ConnectCount++
-		transient, fatal := streamRemoteWebSocketConnection(ctx, conn, frameLimit, options.MaxFrames, handler, &result)
+		notifyRemoteWebSocketStatus(options, result)
+		transient, fatal := streamRemoteWebSocketConnection(ctx, conn, frameLimit, options.MaxFrames, handler, &result, options.StatusHandler)
 		_ = conn.Close()
 		if fatal != nil {
 			result.Error = fatal.Error()
@@ -237,7 +242,7 @@ func readRemoteWebSocketEvents(ctx context.Context, conn *remoteWebSocketConn, f
 	}
 }
 
-func streamRemoteWebSocketConnection(ctx context.Context, conn *remoteWebSocketConn, frameLimit int64, maxFrames int, handler WebSocketEventHandler, result *WebSocketResult) (error, error) {
+func streamRemoteWebSocketConnection(ctx context.Context, conn *remoteWebSocketConn, frameLimit int64, maxFrames int, handler WebSocketEventHandler, result *WebSocketResult, statusHandler func(WebSocketResult)) (error, error) {
 	stopReadWatch := watchRemoteWebSocketReadContext(ctx, conn.Conn)
 	defer stopReadWatch()
 	for {
@@ -258,6 +263,7 @@ func streamRemoteWebSocketConnection(ctx context.Context, conn *remoteWebSocketC
 				return nil, fmt.Errorf("decode remote websocket event: %v", err)
 			}
 			result.FrameCount++
+			notifyRemoteWebSocketStatusHandler(statusHandler, *result)
 			if len(events) > 0 {
 				if handler != nil {
 					if err := handler(events); err != nil {
@@ -276,6 +282,7 @@ func streamRemoteWebSocketConnection(ctx context.Context, conn *remoteWebSocketC
 			}
 		case remoteWebSocketOpcodeClose:
 			result.CloseCode = remoteWebSocketCloseCode(payload)
+			notifyRemoteWebSocketStatusHandler(statusHandler, *result)
 			if result.CloseCode != defaultRemoteWebSocketCloseCode {
 				return fmt.Errorf("remote websocket closed with code %d", result.CloseCode), nil
 			}
@@ -346,6 +353,18 @@ func recordRemoteWebSocketDialError(result *WebSocketResult, err error) {
 	if errors.As(err, &upgradeErr) {
 		result.StatusCode = upgradeErr.StatusCode
 	}
+}
+
+func notifyRemoteWebSocketStatus(options WebSocketOptions, result WebSocketResult) {
+	notifyRemoteWebSocketStatusHandler(options.StatusHandler, result)
+}
+
+func notifyRemoteWebSocketStatusHandler(handler func(WebSocketResult), result WebSocketResult) {
+	if handler == nil {
+		return
+	}
+	result.Events = nil
+	handler(result)
 }
 
 func remoteWebSocketBackoffDelay(options WebSocketOptions, reconnects int) time.Duration {

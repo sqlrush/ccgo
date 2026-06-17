@@ -870,6 +870,20 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	writeStreamState := func() {
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
 	}
+	streamStatusHandler := options.StatusHandler
+	options.StatusHandler = func(status remotepkg.WebSocketResult) {
+		pumpState.FrameCount = status.FrameCount
+		pumpState.ConnectCount = status.ConnectCount
+		pumpState.ReconnectCount = status.ReconnectCount
+		pumpState.StatusCode = status.StatusCode
+		pumpState.AttemptCount = status.AttemptCount
+		pumpState.CloseCode = status.CloseCode
+		pumpState.LastPollAt = time.Now().UTC().Format(time.RFC3339Nano)
+		writeStreamState()
+		if streamStatusHandler != nil {
+			streamStatusHandler(status)
+		}
+	}
 	writeStreamState()
 	deliveryOptions := newDaemonRemoteDeliveryOptions(registration, authToken, time.Time{})
 	result := remotepkg.StreamWebSocketEvents(ctx, options, func(events []remotepkg.PollEvent) error {
@@ -914,6 +928,8 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	structured["transport"] = pumpState.Transport
 	structured["websocket_url"] = pumpState.WebSocketURL
 	structured["poll_url"] = pumpState.PollURL
+	structured["status_code"] = pumpState.StatusCode
+	structured["attempt_count"] = pumpState.AttemptCount
 	structured["frame_count"] = pumpState.FrameCount
 	structured["connect_count"] = pumpState.ConnectCount
 	structured["reconnect_count"] = pumpState.ReconnectCount

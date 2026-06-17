@@ -683,6 +683,7 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 	}
 	var auths []string
 	var ackStatuses []string
+	var pumpDuringAck remotepkg.PumpState
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ack" {
@@ -694,6 +695,11 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 			if got := r.Header.Get("Authorization"); got != "Bearer stream-token" {
 				t.Fatalf("ack auth = %q", got)
 			}
+			loadedPump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pumpDuringAck = loadedPump
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
@@ -720,7 +726,7 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 		}},
 	}
 	result := runDaemonRemoteStream(context.Background(), runner, time.Unix(200, 0).UTC(), remotepkg.WebSocketOptions{MaxFrames: 1})
-	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket_stream" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["ack_event_count"] != 1 || result.StructuredContent["ack_sent_count"] != 1 || result.StructuredContent["ack_error_count"] != 0 || result.StructuredContent["lease_event_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
+	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket_stream" || result.StructuredContent["status_code"] != http.StatusSwitchingProtocols || result.StructuredContent["attempt_count"] != 1 || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["ack_event_count"] != 1 || result.StructuredContent["ack_sent_count"] != 1 || result.StructuredContent["ack_error_count"] != 0 || result.StructuredContent["lease_event_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
 		t.Fatalf("stream result = %#v", result.StructuredContent)
 	}
 	if result.StructuredContent["stream_started_at"] != "1970-01-01T00:03:20Z" || result.StructuredContent["stream_ended_at"] == "" || result.StructuredContent["stream_stop_reason"] != "max_frames" {
@@ -732,11 +738,14 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 	if len(ackStatuses) != 1 || ackStatuses[0] != "delivered" {
 		t.Fatalf("ack statuses = %#v", ackStatuses)
 	}
+	if pumpDuringAck.Transport != "websocket_stream" || pumpDuringAck.StatusCode != http.StatusSwitchingProtocols || pumpDuringAck.AttemptCount != 1 || pumpDuringAck.FrameCount != 1 || pumpDuringAck.ConnectCount != 1 || pumpDuringAck.StreamEndedAt != "" {
+		t.Fatalf("pump during ack = %#v", pumpDuringAck)
+	}
 	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pump.Transport != "websocket_stream" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.AckEventCount != 1 || pump.AckSentCount != 1 || pump.AckErrorCount != 0 || pump.LeaseEventCount != 1 || pump.DeliveredCount != 1 || pump.StreamStartedAt != "1970-01-01T00:03:20Z" || pump.StreamEndedAt == "" || pump.StreamStopReason != "max_frames" || strings.Contains(pump.WebSocketURL, "token=secret") {
+	if pump.Transport != "websocket_stream" || pump.StatusCode != http.StatusSwitchingProtocols || pump.AttemptCount != 1 || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.AckEventCount != 1 || pump.AckSentCount != 1 || pump.AckErrorCount != 0 || pump.LeaseEventCount != 1 || pump.DeliveredCount != 1 || pump.StreamStartedAt != "1970-01-01T00:03:20Z" || pump.StreamEndedAt == "" || pump.StreamStopReason != "max_frames" || strings.Contains(pump.WebSocketURL, "token=secret") {
 		t.Fatalf("pump = %#v", pump)
 	}
 	resume, err := manager.ResumeContext("agent/remote-lead", 3)
