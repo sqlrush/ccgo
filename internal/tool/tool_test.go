@@ -36,8 +36,10 @@ func TestValidateSchema(t *testing.T) {
 		"type":     "object",
 		"required": []any{"path"},
 		"properties": map[string]any{
-			"path": map[string]any{"type": "string", "minLength": 2},
-			"tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"path":  map[string]any{"type": "string", "minLength": 2},
+			"mode":  map[string]any{"type": "string", "enum": []any{"read", "write"}},
+			"count": map[string]any{"type": "integer", "enum": []any{1, 2}},
+			"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		},
 	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":3}`)); err == nil {
@@ -49,7 +51,16 @@ func TestValidateSchema(t *testing.T) {
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","tags":[3]}`)); err == nil || !strings.Contains(err.Error(), "input.tags[0] must be string") {
 		t.Fatalf("err = %v", err)
 	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","mode":"delete"}`)); err == nil || !strings.Contains(err.Error(), "input.mode must be one of read, write") {
+		t.Fatalf("err = %v", err)
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","count":3}`)); err == nil || !strings.Contains(err.Error(), "input.count must be one of 1, 2") {
+		t.Fatalf("err = %v", err)
+	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","mode":"read","count":2}`)); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -28,6 +28,11 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must be %s", path, strings.Join(types, " or "))
 		}
 	}
+	if enumValues, ok := schemaEnumValues(schema["enum"]); ok {
+		if !matchesEnumValue(value, enumValues) {
+			return fmt.Errorf("%s must be one of %s", path, describeEnumValues(enumValues))
+		}
+	}
 	if minLength, ok := intSchemaConstraint(schema["minLength"]); ok {
 		text, ok := value.(string)
 		if ok && utf8.RuneCountInString(text) < minLength {
@@ -115,6 +120,78 @@ func matchesAnyType(types []string, value any) bool {
 		}
 	}
 	return false
+}
+
+func schemaEnumValues(value any) ([]any, bool) {
+	switch v := value.(type) {
+	case []any:
+		return v, len(v) > 0
+	case []string:
+		out := make([]any, 0, len(v))
+		for _, item := range v {
+			out = append(out, item)
+		}
+		return out, len(out) > 0
+	default:
+		return nil, false
+	}
+}
+
+func matchesEnumValue(value any, enumValues []any) bool {
+	for _, candidate := range enumValues {
+		if equalSchemaValue(value, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func equalSchemaValue(a any, b any) bool {
+	if af, ok := schemaNumber(a); ok {
+		if bf, ok := schemaNumber(b); ok {
+			return af == bf
+		}
+	}
+	switch av := a.(type) {
+	case string:
+		bv, ok := b.(string)
+		return ok && av == bv
+	case bool:
+		bv, ok := b.(bool)
+		return ok && av == bv
+	case nil:
+		return b == nil
+	default:
+		return fmt.Sprint(a) == fmt.Sprint(b)
+	}
+}
+
+func describeEnumValues(enumValues []any) string {
+	parts := make([]string, 0, len(enumValues))
+	for _, value := range enumValues {
+		parts = append(parts, fmt.Sprint(value))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func schemaNumber(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func intSchemaConstraint(value any) (int, bool) {

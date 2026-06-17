@@ -148,12 +148,12 @@ func TestTodoWriteValidatesInput(t *testing.T) {
 		{
 			name:  "invalid status",
 			input: `{"todos":[{"id":"1","content":"x","status":"blocked","priority":"low"}]}`,
-			want:  "status must be one of pending, in_progress, or completed",
+			want:  "input.todos[0].status must be one of pending, in_progress, completed",
 		},
 		{
 			name:  "invalid priority",
 			input: `{"todos":[{"id":"1","content":"x","status":"pending","priority":"urgent"}]}`,
-			want:  "priority must be one of high, medium, or low",
+			want:  "input.todos[0].priority must be one of high, medium, low",
 		},
 		{
 			name:  "duplicate id",

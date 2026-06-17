@@ -52,7 +52,7 @@ func TestDiagnosticsToolNoSessionPath(t *testing.T) {
 
 func TestDiagnosticsToolValidatesSeverity(t *testing.T) {
 	err := NewDiagnosticsTool().Validate(tool.Context{}, json.RawMessage(`{"severity":"fatal"}`))
-	if err == nil || !strings.Contains(err.Error(), "unsupported severity") {
+	if err == nil || !strings.Contains(err.Error(), "input.severity must be one of error, warning, info, hint") {
 		t.Fatalf("severity validation err = %v", err)
 	}
 }
