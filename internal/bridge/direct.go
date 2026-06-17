@@ -98,6 +98,8 @@ func (h *DirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleResolve(w, r)
 	case "/execute":
 		h.handleExecute(w, r)
+	case "/ws":
+		h.handleWebSocket(w, r)
 	default:
 		writeDirectError(w, http.StatusNotFound, "bridge endpoint not found")
 	}
@@ -145,45 +147,8 @@ func (h *DirectHandler) handleExecute(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	resolved := h.resolve(req.Command)
-	if !resolved.Allowed || resolved.Command == nil {
-		writeDirectJSON(w, http.StatusForbidden, DirectExecuteResponse{
-			Allowed: false,
-			Error:   resolved.Reason,
-		})
-		return
-	}
-	canonical := canonicalSlashCommand(*resolved.Command, resolved.Args)
-	result, handled, err := commands.ExecuteSlashCommand(h.registry, canonical, commands.SlashOptions{
-		SessionID: h.sessionID,
-		UUID:      req.UUID,
-	})
-	response := DirectExecuteResponse{
-		Allowed: true,
-		Handled: handled,
-		Command: resolved.Command,
-		Name:    resolved.Name,
-		Args:    resolved.Args,
-	}
-	if err != nil {
-		response.Error = err.Error()
-		writeDirectJSON(w, http.StatusInternalServerError, response)
-		return
-	}
-	response.ShouldQuery = result.ShouldQuery
-	response.Model = result.Model
-	response.AllowedTools = append([]string(nil), result.AllowedTools...)
-	response.Messages = len(result.Messages)
-	response.Unknown = result.Unknown
-	response.Unsupported = result.Unsupported
-	response.ResultText = result.ResultText
-	if result.LocalResult != nil {
-		response.LocalResult = &DirectLocalResult{
-			Type:     result.LocalResult.Type,
-			HasValue: strings.TrimSpace(result.LocalResult.Value) != "",
-		}
-	}
-	writeDirectJSON(w, http.StatusOK, response)
+	response, status := h.execute(req)
+	writeDirectJSON(w, status, response)
 }
 
 func (h *DirectHandler) resolve(raw string) DirectResolveResponse {
@@ -202,6 +167,46 @@ func (h *DirectHandler) resolve(raw string) DirectResolveResponse {
 		Name:    command.Name,
 		Args:    args,
 	}
+}
+
+func (h *DirectHandler) execute(req DirectCommandRequest) (DirectExecuteResponse, int) {
+	resolved := h.resolve(req.Command)
+	if !resolved.Allowed || resolved.Command == nil {
+		return DirectExecuteResponse{
+			Allowed: false,
+			Error:   resolved.Reason,
+		}, http.StatusForbidden
+	}
+	canonical := canonicalSlashCommand(*resolved.Command, resolved.Args)
+	result, handled, err := commands.ExecuteSlashCommand(h.registry, canonical, commands.SlashOptions{
+		SessionID: h.sessionID,
+		UUID:      req.UUID,
+	})
+	response := DirectExecuteResponse{
+		Allowed: true,
+		Handled: handled,
+		Command: resolved.Command,
+		Name:    resolved.Name,
+		Args:    resolved.Args,
+	}
+	if err != nil {
+		response.Error = err.Error()
+		return response, http.StatusInternalServerError
+	}
+	response.ShouldQuery = result.ShouldQuery
+	response.Model = result.Model
+	response.AllowedTools = append([]string(nil), result.AllowedTools...)
+	response.Messages = len(result.Messages)
+	response.Unknown = result.Unknown
+	response.Unsupported = result.Unsupported
+	response.ResultText = result.ResultText
+	if result.LocalResult != nil {
+		response.LocalResult = &DirectLocalResult{
+			Type:     result.LocalResult.Type,
+			HasValue: strings.TrimSpace(result.LocalResult.Value) != "",
+		}
+	}
+	return response, http.StatusOK
 }
 
 func decodeDirectCommandRequest(w http.ResponseWriter, r *http.Request) (DirectCommandRequest, bool) {

@@ -1,0 +1,223 @@
+package bridge
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+
+	"ccgo/internal/contracts"
+)
+
+const (
+	webSocketMagicGUID  = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+	webSocketFrameLimit = 64 * 1024
+)
+
+type DirectWebSocketRequest struct {
+	Action  string       `json:"action,omitempty"`
+	Command string       `json:"command"`
+	UUID    contracts.ID `json:"uuid,omitempty"`
+}
+
+type DirectWebSocketResponse struct {
+	Type    string                 `json:"type"`
+	Resolve *DirectResolveResponse `json:"resolve,omitempty"`
+	Execute *DirectExecuteResponse `json:"execute,omitempty"`
+	Error   string                 `json:"error,omitempty"`
+}
+
+func (h *DirectHandler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeDirectError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !headerContainsToken(r.Header.Get("Connection"), "upgrade") || !strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket") {
+		writeDirectError(w, http.StatusBadRequest, "websocket upgrade is required")
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Sec-WebSocket-Key"))
+	if key == "" || strings.TrimSpace(r.Header.Get("Sec-WebSocket-Version")) != "13" {
+		writeDirectError(w, http.StatusBadRequest, "invalid websocket handshake")
+		return
+	}
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		writeDirectError(w, http.StatusInternalServerError, "websocket hijack is unavailable")
+		return
+	}
+	conn, rw, err := hijacker.Hijack()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	if _, err := fmt.Fprintf(rw, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", webSocketAccept(key)); err != nil {
+		return
+	}
+	if err := rw.Flush(); err != nil {
+		return
+	}
+	h.serveWebSocket(conn, rw.Reader)
+}
+
+func (h *DirectHandler) serveWebSocket(conn net.Conn, reader *bufio.Reader) {
+	for {
+		opcode, payload, err := readWebSocketFrame(reader)
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err != nil {
+			_ = writeWebSocketJSON(conn, DirectWebSocketResponse{Type: "error", Error: err.Error()})
+			return
+		}
+		switch opcode {
+		case 0x1:
+			if err := writeWebSocketJSON(conn, h.handleWebSocketMessage(payload)); err != nil {
+				return
+			}
+		case 0x8:
+			_ = writeWebSocketFrame(conn, 0x8, nil)
+			return
+		case 0x9:
+			if err := writeWebSocketFrame(conn, 0xA, payload); err != nil {
+				return
+			}
+		default:
+			_ = writeWebSocketJSON(conn, DirectWebSocketResponse{Type: "error", Error: "unsupported websocket frame opcode"})
+			return
+		}
+	}
+}
+
+func (h *DirectHandler) handleWebSocketMessage(payload []byte) DirectWebSocketResponse {
+	var req DirectWebSocketRequest
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		return DirectWebSocketResponse{Type: "error", Error: "invalid JSON request: " + err.Error()}
+	}
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	if action == "" {
+		action = "execute"
+	}
+	switch action {
+	case "resolve":
+		resolved := h.resolve(req.Command)
+		return DirectWebSocketResponse{Type: "resolve", Resolve: &resolved}
+	case "execute":
+		executed, _ := h.execute(DirectCommandRequest{Command: req.Command, UUID: req.UUID})
+		return DirectWebSocketResponse{Type: "execute", Execute: &executed}
+	default:
+		return DirectWebSocketResponse{Type: "error", Error: "unknown websocket action"}
+	}
+}
+
+func webSocketAccept(key string) string {
+	sum := sha1.Sum([]byte(strings.TrimSpace(key) + webSocketMagicGUID))
+	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+func headerContainsToken(header string, token string) bool {
+	token = strings.ToLower(strings.TrimSpace(token))
+	for _, part := range strings.Split(header, ",") {
+		if strings.ToLower(strings.TrimSpace(part)) == token {
+			return true
+		}
+	}
+	return false
+}
+
+func readWebSocketFrame(reader *bufio.Reader) (byte, []byte, error) {
+	if reader == nil {
+		return 0, nil, os.ErrInvalid
+	}
+	first, err := reader.ReadByte()
+	if err != nil {
+		return 0, nil, err
+	}
+	second, err := reader.ReadByte()
+	if err != nil {
+		return 0, nil, err
+	}
+	if first&0x80 == 0 {
+		return 0, nil, errors.New("fragmented websocket frames are not supported")
+	}
+	opcode := first & 0x0F
+	masked := second&0x80 != 0
+	length := uint64(second & 0x7F)
+	switch length {
+	case 126:
+		var buf [2]byte
+		if _, err := io.ReadFull(reader, buf[:]); err != nil {
+			return 0, nil, err
+		}
+		length = uint64(binary.BigEndian.Uint16(buf[:]))
+	case 127:
+		var buf [8]byte
+		if _, err := io.ReadFull(reader, buf[:]); err != nil {
+			return 0, nil, err
+		}
+		length = binary.BigEndian.Uint64(buf[:])
+	}
+	if length > webSocketFrameLimit {
+		return 0, nil, errors.New("websocket frame exceeds limit")
+	}
+	var mask [4]byte
+	if masked {
+		if _, err := io.ReadFull(reader, mask[:]); err != nil {
+			return 0, nil, err
+		}
+	} else {
+		return 0, nil, errors.New("client websocket frames must be masked")
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(reader, payload); err != nil {
+		return 0, nil, err
+	}
+	if masked {
+		for i := range payload {
+			payload[i] ^= mask[i%4]
+		}
+	}
+	return opcode, payload, nil
+}
+
+func writeWebSocketJSON(w io.Writer, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return writeWebSocketFrame(w, 0x1, data)
+}
+
+func writeWebSocketFrame(w io.Writer, opcode byte, payload []byte) error {
+	if w == nil {
+		return os.ErrInvalid
+	}
+	var header []byte
+	length := len(payload)
+	switch {
+	case length < 126:
+		header = []byte{0x80 | opcode, byte(length)}
+	case length <= 0xFFFF:
+		header = []byte{0x80 | opcode, 126, 0, 0}
+		binary.BigEndian.PutUint16(header[2:], uint16(length))
+	default:
+		header = []byte{0x80 | opcode, 127, 0, 0, 0, 0, 0, 0, 0, 0}
+		binary.BigEndian.PutUint64(header[2:], uint64(length))
+	}
+	if _, err := w.Write(header); err != nil {
+		return err
+	}
+	_, err := w.Write(payload)
+	return err
+}
