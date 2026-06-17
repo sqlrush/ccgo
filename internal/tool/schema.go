@@ -33,6 +33,16 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must be one of %s", path, describeEnumValues(enumValues))
 		}
 	}
+	if minimum, ok := schemaNumberConstraint(schema["minimum"]); ok {
+		if number, ok := schemaNumber(value); ok && number < minimum {
+			return fmt.Errorf("%s must be at least %s", path, describeSchemaNumber(minimum))
+		}
+	}
+	if maximum, ok := schemaNumberConstraint(schema["maximum"]); ok {
+		if number, ok := schemaNumber(value); ok && number > maximum {
+			return fmt.Errorf("%s must be at most %s", path, describeSchemaNumber(maximum))
+		}
+	}
 	if minLength, ok := intSchemaConstraint(schema["minLength"]); ok {
 		text, ok := value.(string)
 		if ok && utf8.RuneCountInString(text) < minLength {
@@ -192,6 +202,17 @@ func schemaNumber(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func schemaNumberConstraint(value any) (float64, bool) {
+	return schemaNumber(value)
+}
+
+func describeSchemaNumber(value float64) string {
+	if math.Trunc(value) == value {
+		return fmt.Sprintf("%.0f", value)
+	}
+	return fmt.Sprintf("%g", value)
 }
 
 func intSchemaConstraint(value any) (int, bool) {

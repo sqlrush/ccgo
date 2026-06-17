@@ -185,6 +185,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebSearch `query` schema 现在按官方 `min(2)` 约束拒绝单字符查询，通用 tool schema validator 同步支持 `minLength`，让工具定义可直接表达字符串最小长度契约。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。
 - 本轮补充：通用 tool schema validator 现在支持 `enum`，可直接执行 Grep output mode、NotebookEdit edit mode/cell type、Todo status/priority、Task target/action、LSP severity 等工具 schema 的枚举契约。
+- 本轮补充：通用 tool schema validator 现在支持数字 `minimum`/`maximum`，可直接执行 LSPDiagnostics `limit` 等工具 schema 的数值范围契约。
 - 本轮补充：WebFetch/WebSearch 输入解码现在兼容 `timeout`、`max_bytes`/`maxBytes`、`max_results`/`maxResults` 的 quoted semantic string 数值；WebSearch 也会按官方校验拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 - 本轮补充：Grep 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下按词边界过滤匹配，并兼容 quoted boolean 输入。
 - 本轮补充：Grep 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。

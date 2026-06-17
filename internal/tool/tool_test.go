@@ -39,6 +39,7 @@ func TestValidateSchema(t *testing.T) {
 			"path":  map[string]any{"type": "string", "minLength": 2},
 			"mode":  map[string]any{"type": "string", "enum": []any{"read", "write"}},
 			"count": map[string]any{"type": "integer", "enum": []any{1, 2}},
+			"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 5},
 			"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		},
 	}
@@ -57,10 +58,16 @@ func TestValidateSchema(t *testing.T) {
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","count":3}`)); err == nil || !strings.Contains(err.Error(), "input.count must be one of 1, 2") {
 		t.Fatalf("err = %v", err)
 	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","limit":0}`)); err == nil || !strings.Contains(err.Error(), "input.limit must be at least 1") {
+		t.Fatalf("err = %v", err)
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","limit":6}`)); err == nil || !strings.Contains(err.Error(), "input.limit must be at most 5") {
+		t.Fatalf("err = %v", err)
+	}
 	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","mode":"read","count":2}`)); err != nil {
+	if err := ValidateSchema(schema, json.RawMessage(`{"path":"README.md","mode":"read","count":2,"limit":5}`)); err != nil {
 		t.Fatal(err)
 	}
 }
