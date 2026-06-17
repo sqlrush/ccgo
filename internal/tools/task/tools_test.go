@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamDispatchTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamDispatchTool(), NewTeamScheduleTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,6 +751,61 @@ func TestTeamCoordinateSendsBriefingToCoordinator(t *testing.T) {
 	}
 }
 
+func TestTeamScheduleAssignsObjectiveToMembers(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/schedule-one", "agent/schedule-two"} {
+		if _, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_schedule_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Team task","prompt":"Work with the scheduled team","subagent_type":"general-purpose"}`),
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_schedule_create",
+		Name:  "TeamCreate",
+		Input: json.RawMessage(`{"name":"schedule/team","description":"Scheduled team","members":["agent/schedule-one","agent/schedule-two"]}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	const objective = "Prepare the release checklist and verify docs."
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_schedule_request",
+		Name:  "TeamSchedule",
+		Input: json.RawMessage(`{"team_id":"schedule/team","goal":"` + objective + `"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "team_schedule" || result.StructuredContent["assignment_count"] != 2 || result.StructuredContent["objective"] != objective {
+		t.Fatalf("team schedule structured content = %#v", result.StructuredContent)
+	}
+	assignments, ok := result.StructuredContent["assignments"].([]map[string]any)
+	if !ok || len(assignments) != 2 || assignments[0]["task_id"] != "agent_schedule-one" || assignments[1]["task_id"] != "agent_schedule-two" {
+		t.Fatalf("team schedule assignments = %#v", result.StructuredContent["assignments"])
+	}
+	for _, taskID := range []string{"agent/schedule-one", "agent/schedule-two"} {
+		resume, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_schedule_resume_" + strings.ReplaceAll(taskID, "/", "_")),
+			Name:  "ResumeTask",
+			Input: json.RawMessage(`{"task_id":"` + taskID + `","limit":3}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+		if !ok || len(messages) != 3 {
+			t.Fatalf("team schedule resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+		text, _ := messages[2]["text"].(string)
+		if !strings.Contains(text, "Team scheduled assignment for schedule_team.") || !strings.Contains(text, "Objective:\n"+objective) || !strings.Contains(text, "Assigned member: "+strings.ReplaceAll(taskID, "/", "_")) {
+			t.Fatalf("team schedule message for %s = %q", taskID, text)
+		}
+	}
+}
+
 func TestSleepToolWaitsForBoundedDuration(t *testing.T) {
 	ctx, _ := taskContext(t)
 	executor := taskExecutor(t)
@@ -1239,6 +1294,10 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing team dispatch assignments", tool: "TeamDispatch", input: `{"team_id":"missing"}`, want: "input.assignments is required"},
 		{name: "unknown team dispatch field", tool: "TeamDispatch", input: `{"team_id":"missing","assignments":[],"extra":true}`, want: "input.extra is not allowed"},
 		{name: "missing team dispatch team", tool: "TeamDispatch", input: `{"team_id":"missing","assignments":[{"task_id":"agent/member","message":"hello"}]}`, want: "team not found: missing"},
+		{name: "missing team schedule id", tool: "TeamSchedule", input: `{"objective":"ship"}`, want: "team_id is required"},
+		{name: "missing team schedule objective", tool: "TeamSchedule", input: `{"team_id":"missing"}`, want: "input.objective is required"},
+		{name: "unknown team schedule field", tool: "TeamSchedule", input: `{"team_id":"missing","objective":"ship","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team schedule team", tool: "TeamSchedule", input: `{"team_id":"missing","objective":"ship"}`, want: "team not found: missing"},
 		{name: "missing team coordinate id", tool: "TeamCoordinate", input: `{"message":"hello"}`, want: "team_id is required"},
 		{name: "missing team coordinate message", tool: "TeamCoordinate", input: `{"team_id":"missing"}`, want: "message is required"},
 		{name: "unknown team coordinate field", tool: "TeamCoordinate", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},

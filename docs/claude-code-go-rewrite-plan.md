@@ -728,6 +728,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`TeamSendMessage` 现在支持 `target` 路由，默认 `members` 仍只广播成员任务，也可显式选择 `coordinator` 或 `all`；发送前会对选中 recipient 做全量 running 校验，避免 coordinator/成员半成功。完整自动任务分派和 coordinator 决策循环仍未完成。
 - 本轮补充：新增 `TeamCoordinate` 工具入口，可把 team description、成员 task status/summary 和用户 objective 组装为 deterministic briefing，发送给 running coordinator task；这提供了 coordinator 驱动团队协作的最小上下文注入能力。完整自动调度循环和远端协作仍未完成。
 - 本轮补充：新增 `TeamDispatch` 工具入口，可把不同 assignment message 分别发送给 team 内 running members，并在整批发送前校验所有目标成员归属和 running 状态；这补齐了 broadcast 之外的结构化分派原语。完整自动调度循环仍未完成。
+- 本轮补充：新增 `TeamSchedule` 工具入口，可根据 team objective 为每个 running member 生成 deterministic scheduled assignment，消息包含成员序号、当前 team status 和 objective，并在写入前全量校验目标成员 running 状态；完整后台调度循环和模型驱动团队自动调度仍未完成。
 - 本轮补充：新增 `Sleep` 工具入口，支持 `duration_ms`/`seconds`/Go duration 字符串，最大 60 秒，并使用 tool context cancellation 中断等待；这补齐了 proactive/gated 工具中的安全 wait 原语。完整 ScheduleCron/RemoteTrigger 仍未完成。
 - 本轮补充：新增 `Brief` 工具入口，可把 summary/title/status/details/next_steps/risks 规范为 structured handoff brief，并支持常见字段别名与单字符串列表项归一化；这为后续远端协作/UI brief surface 提供稳定 payload。完整 remote brief UI/调度接线仍未完成。
 - 本轮补充：新增 `ScheduleCron` 工具入口和 session-scoped `schedules.json` manifest，可 create/list/delete/trigger/run_due cron schedule metadata，校验 5-field cron 或常见 `@daily` 类表达式，并可绑定 team_id/target/message；`trigger` 会把保存的 schedule message 发送给绑定 team 的 running recipients，`run_due` 会按当前分钟执行到期且启用的 schedule，并记录 last run 状态避免同一分钟重复触发。当前已有手动与一次性到期执行路径，完整后台 daemon 仍未完成。
