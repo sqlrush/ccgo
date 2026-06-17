@@ -46,6 +46,8 @@ type WebSocketOptions struct {
 type WebSocketResult struct {
 	CheckedAt      string      `json:"checked_at,omitempty"`
 	Events         []PollEvent `json:"events,omitempty"`
+	StatusCode     int         `json:"status_code,omitempty"`
+	AttemptCount   int         `json:"attempt_count,omitempty"`
 	FrameCount     int         `json:"frame_count,omitempty"`
 	ConnectCount   int         `json:"connect_count,omitempty"`
 	ReconnectCount int         `json:"reconnect_count,omitempty"`
@@ -91,11 +93,13 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 		frameLimit = defaultRemoteWebSocketFrameLimit
 	}
 	for {
+		result.AttemptCount++
 		conn, err := dialRemoteWebSocket(ctx, parsed, options)
 		if err != nil {
 			if ctx.Err() != nil {
 				return result
 			}
+			recordRemoteWebSocketDialError(&result, err)
 			result.LastError = err.Error()
 			if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
 				result.Error = result.LastError
@@ -107,6 +111,7 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 			result.ReconnectCount++
 			continue
 		}
+		result.StatusCode = http.StatusSwitchingProtocols
 		result.ConnectCount++
 		transient, fatal := readRemoteWebSocketEvents(ctx, conn, frameLimit, maxFrames, &result)
 		_ = conn.Close()
@@ -149,11 +154,13 @@ func StreamWebSocketEvents(ctx context.Context, options WebSocketOptions, handle
 		frameLimit = defaultRemoteWebSocketFrameLimit
 	}
 	for {
+		result.AttemptCount++
 		conn, err := dialRemoteWebSocket(ctx, parsed, options)
 		if err != nil {
 			if ctx.Err() != nil {
 				return result
 			}
+			recordRemoteWebSocketDialError(&result, err)
 			result.LastError = err.Error()
 			if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
 				result.Error = result.LastError
@@ -165,6 +172,7 @@ func StreamWebSocketEvents(ctx context.Context, options WebSocketOptions, handle
 			result.ReconnectCount++
 			continue
 		}
+		result.StatusCode = http.StatusSwitchingProtocols
 		result.ConnectCount++
 		transient, fatal := streamRemoteWebSocketConnection(ctx, conn, frameLimit, options.MaxFrames, handler, &result)
 		_ = conn.Close()
@@ -327,6 +335,17 @@ func remoteWebSocketRetryAfterDelay(err error, now time.Time) (time.Duration, bo
 		return 0, false
 	}
 	return remoteRetryAfterDelay(upgradeErr.RetryAfter, now)
+}
+
+func recordRemoteWebSocketDialError(result *WebSocketResult, err error) {
+	if result == nil {
+		return
+	}
+	result.StatusCode = 0
+	var upgradeErr remoteWebSocketUpgradeError
+	if errors.As(err, &upgradeErr) {
+		result.StatusCode = upgradeErr.StatusCode
+	}
 }
 
 func remoteWebSocketBackoffDelay(options WebSocketOptions, reconnects int) time.Duration {

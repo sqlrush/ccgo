@@ -139,6 +139,8 @@ M10 补充：remote pump state 现在持久化 `attempt_count`，`/status show r
 
 M10 补充：remote WebSocket upgrade 失败后的重连退避现在会读取服务端 `Retry-After` header（秒数或 HTTP-date），Fetch/Stream 两条 WebSocket 路径都会优先遵守云端限流退避，再回退到本地指数退避。
 
+M10 补充：remote WebSocket `FetchWebSocketEvents`/`StreamWebSocketEvents` result 现在暴露 `status_code` 和 `attempt_count`；成功握手记录 101，upgrade 失败记录服务端 HTTP status，daemon tick/常驻 stream 会把这些字段写入 `remote-pump.json`、structured result 和 `/status show remote` 审计面。
+
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 
 M7 补充：scripted task runtime payload 和 task expectation 现在接受 `taskID`、`jobId`、`runId`、`label`、`displayName`、`phase`、`taskState`、`message`、`currentStep`、`percent`/`percentage`/`pct` 等相邻字段，并支持数字 task ID 与数字字符串 progress。

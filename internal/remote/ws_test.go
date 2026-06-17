@@ -44,7 +44,7 @@ func TestFetchWebSocketEventsUsesAuthAndDecodesFrames(t *testing.T) {
 		MaxFrames:    2,
 	})
 	waitRemoteTestHandlers(t, &handlers, handlerErrors)
-	if result.Error != "" || result.FrameCount != 1 || len(result.Events) != 1 {
+	if result.Error != "" || result.StatusCode != http.StatusSwitchingProtocols || result.AttemptCount != 1 || result.FrameCount != 1 || len(result.Events) != 1 {
 		t.Fatalf("websocket result = %#v", result)
 	}
 	if gotAuth != "Bearer ws-token" || gotPath != "/events?token=secret" {
@@ -104,7 +104,7 @@ func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
 		ReconnectMaxDelay:     time.Millisecond,
 	})
 	waitRemoteTestHandlers(t, &handlers, handlerErrors)
-	if result.Error != "" || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 2 {
+	if result.Error != "" || result.StatusCode != http.StatusSwitchingProtocols || result.AttemptCount != 2 || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 2 {
 		t.Fatalf("websocket result = %#v connections=%d", result, connections)
 	}
 	if result.Events[0].EventID != "evt-1" || result.Events[1].EventID != "evt-2" || result.LastError == "" {
@@ -147,11 +147,36 @@ func TestFetchWebSocketEventsHonorsUpgradeRetryAfter(t *testing.T) {
 		ReconnectMaxDelay:     time.Second,
 	})
 	waitRemoteTestHandlers(t, &handlers, handlerErrors)
-	if result.Error != "" || result.ConnectCount != 1 || result.ReconnectCount != 1 || result.FrameCount != 1 || len(result.Events) != 1 || result.Events[0].EventID != "evt-retry-after" {
+	if result.Error != "" || result.StatusCode != http.StatusSwitchingProtocols || result.AttemptCount != 2 || result.ConnectCount != 1 || result.ReconnectCount != 1 || result.FrameCount != 1 || len(result.Events) != 1 || result.Events[0].EventID != "evt-retry-after" {
 		t.Fatalf("websocket retry-after result = %#v connections=%d", result, connections)
 	}
 	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
 		t.Fatalf("websocket reconnect ignored Retry-After header; elapsed=%s", elapsed)
+	}
+}
+
+func TestFetchWebSocketEventsReportsUpgradeStatusAndAttempts(t *testing.T) {
+	connections := 0
+	var handlers sync.WaitGroup
+	handlerErrors := make(chan error, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
+		connections++
+		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	result := FetchWebSocketEvents(context.Background(), WebSocketOptions{
+		WebSocketURL:          "ws" + strings.TrimPrefix(server.URL, "http") + "/events",
+		MaxFrames:             1,
+		ReconnectAttempts:     1,
+		ReconnectInitialDelay: time.Millisecond,
+		ReconnectMaxDelay:     time.Millisecond,
+	})
+	waitRemoteTestHandlers(t, &handlers, handlerErrors)
+	if result.StatusCode != http.StatusServiceUnavailable || result.AttemptCount != 2 || result.ConnectCount != 0 || result.ReconnectCount != 1 || result.Error == "" || result.LastError == "" {
+		t.Fatalf("websocket failed upgrade result=%#v connections=%d", result, connections)
 	}
 }
 
@@ -198,7 +223,7 @@ func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
 		return nil
 	})
 	waitRemoteTestHandlers(t, &handlers, handlerErrors)
-	if result.Error != "" || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 0 || len(delivered) != 2 {
+	if result.Error != "" || result.StatusCode != http.StatusSwitchingProtocols || result.AttemptCount != 2 || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 0 || len(delivered) != 2 {
 		t.Fatalf("stream result=%#v delivered=%#v connections=%d", result, delivered, connections)
 	}
 	if delivered[0].EventID != "evt-stream-1" || delivered[1].EventID != "evt-stream-2" || result.LastError == "" {
@@ -245,7 +270,7 @@ func TestStreamWebSocketEventsHonorsUpgradeRetryAfter(t *testing.T) {
 		return nil
 	})
 	waitRemoteTestHandlers(t, &handlers, handlerErrors)
-	if result.Error != "" || result.ConnectCount != 1 || result.ReconnectCount != 1 || result.FrameCount != 1 || len(delivered) != 1 || delivered[0].EventID != "evt-stream-retry-after" {
+	if result.Error != "" || result.StatusCode != http.StatusSwitchingProtocols || result.AttemptCount != 2 || result.ConnectCount != 1 || result.ReconnectCount != 1 || result.FrameCount != 1 || len(delivered) != 1 || delivered[0].EventID != "evt-stream-retry-after" {
 		t.Fatalf("stream retry-after result=%#v delivered=%#v connections=%d", result, delivered, connections)
 	}
 	if elapsed := time.Since(start); elapsed >= 500*time.Millisecond {
@@ -279,7 +304,7 @@ func TestStreamWebSocketEventsReturnsHandlerError(t *testing.T) {
 		return fmt.Errorf("handler failed for %s", events[0].EventID)
 	})
 	waitRemoteTestHandlers(t, &handlers, handlerErrors)
-	if result.Error != "handler failed for evt-stream" || result.FrameCount != 1 {
+	if result.Error != "handler failed for evt-stream" || result.StatusCode != http.StatusSwitchingProtocols || result.AttemptCount != 1 || result.FrameCount != 1 {
 		t.Fatalf("stream result = %#v", result)
 	}
 }

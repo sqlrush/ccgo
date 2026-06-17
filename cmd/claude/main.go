@@ -896,6 +896,8 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	pumpState.FrameCount = result.FrameCount
 	pumpState.ConnectCount = result.ConnectCount
 	pumpState.ReconnectCount = result.ReconnectCount
+	pumpState.StatusCode = result.StatusCode
+	pumpState.AttemptCount = result.AttemptCount
 	pumpState.CloseCode = result.CloseCode
 	pumpState.LastPollAt = time.Now().UTC().Format(time.RFC3339Nano)
 	pumpState.StreamEndedAt = pumpState.LastPollAt
@@ -1092,6 +1094,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		LastCursor:     previous.LastCursor,
 		LastPollAt:     now.UTC().Format(time.RFC3339Nano),
 		StatusCode:     remoteFetch.StatusCode,
+		AttemptCount:   remoteFetch.AttemptCount,
 		CloseCode:      remoteFetch.CloseCode,
 		FrameCount:     remoteFetch.FrameCount,
 		ConnectCount:   remoteFetch.ConnectCount,
@@ -1114,6 +1117,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		structured["poll_url"] = pumpState.PollURL
 		structured["websocket_url"] = pumpState.WebSocketURL
 		structured["status_code"] = remoteFetch.StatusCode
+		structured["attempt_count"] = remoteFetch.AttemptCount
 		structured["close_code"] = remoteFetch.CloseCode
 		structured["frame_count"] = remoteFetch.FrameCount
 		structured["connect_count"] = remoteFetch.ConnectCount
@@ -1148,6 +1152,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	structured["websocket_url"] = pumpState.WebSocketURL
 	structured["last_cursor"] = pumpState.LastCursor
 	structured["status_code"] = pumpState.StatusCode
+	structured["attempt_count"] = pumpState.AttemptCount
 	structured["close_code"] = pumpState.CloseCode
 	structured["frame_count"] = pumpState.FrameCount
 	structured["connect_count"] = pumpState.ConnectCount
@@ -1176,6 +1181,7 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 type daemonRemoteFetch struct {
 	Transport      string
 	StatusCode     int
+	AttemptCount   int
 	NextCursor     string
 	CloseCode      int
 	FrameCount     int
@@ -1222,6 +1228,8 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		})
 		fetch := daemonRemoteFetch{
 			Transport:      "websocket",
+			StatusCode:     ws.StatusCode,
+			AttemptCount:   ws.AttemptCount,
 			FrameCount:     ws.FrameCount,
 			ConnectCount:   ws.ConnectCount,
 			ReconnectCount: ws.ReconnectCount,
@@ -1240,6 +1248,7 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		return daemonRemoteFetch{
 			Transport:     "poll",
 			StatusCode:    poll.StatusCode,
+			AttemptCount:  poll.AttemptCount,
 			NextCursor:    poll.NextCursor,
 			Events:        poll.Events,
 			Error:         poll.Error,
@@ -1252,11 +1261,12 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 		AuthToken: authToken,
 	})
 	return daemonRemoteFetch{
-		Transport:  "poll",
-		StatusCode: poll.StatusCode,
-		NextCursor: poll.NextCursor,
-		Events:     poll.Events,
-		Error:      poll.Error,
+		Transport:    "poll",
+		StatusCode:   poll.StatusCode,
+		AttemptCount: poll.AttemptCount,
+		NextCursor:   poll.NextCursor,
+		Events:       poll.Events,
+		Error:        poll.Error,
 	}
 }
 
