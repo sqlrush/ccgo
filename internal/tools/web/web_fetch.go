@@ -165,27 +165,29 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 	content := formatWebFetchContent(input, result)
 	return contracts.ToolResult{
 		Content: content,
-		IsError: result.StatusCode < 200 || result.StatusCode >= 300 || result.Binary,
+		IsError: !result.RedirectDetected && (result.StatusCode < 200 || result.StatusCode >= 300 || result.Binary),
 		StructuredContent: map[string]any{
-			"type":           "web_fetch",
-			"url":            parsed.String(),
-			"final_url":      result.FinalURL,
-			"domain":         strings.ToLower(parsed.Hostname()),
-			"prompt":         input.Prompt,
-			"status_code":    result.StatusCode,
-			"content_type":   result.ContentType,
-			"charset":        result.Charset,
-			"body":           result.Body,
-			"rendered":       result.Rendered,
-			"rendered_body":  result.RenderedBody,
-			"prompt_terms":   result.PromptTerms,
-			"prompt_phrases": result.PromptPhrases,
-			"prompt_excerpt": result.PromptExcerpt,
-			"bytes":          result.Bytes,
-			"truncated":      result.Truncated,
-			"binary":         result.Binary,
-			"duration_ms":    result.DurationMS,
-			"preflight":      structuredWebFetchPreflight(result.Preflight),
+			"type":              "web_fetch",
+			"url":               parsed.String(),
+			"final_url":         result.FinalURL,
+			"domain":            strings.ToLower(parsed.Hostname()),
+			"prompt":            input.Prompt,
+			"status_code":       result.StatusCode,
+			"content_type":      result.ContentType,
+			"charset":           result.Charset,
+			"body":              result.Body,
+			"rendered":          result.Rendered,
+			"rendered_body":     result.RenderedBody,
+			"prompt_terms":      result.PromptTerms,
+			"prompt_phrases":    result.PromptPhrases,
+			"prompt_excerpt":    result.PromptExcerpt,
+			"bytes":             result.Bytes,
+			"truncated":         result.Truncated,
+			"binary":            result.Binary,
+			"duration_ms":       result.DurationMS,
+			"redirect_detected": result.RedirectDetected,
+			"redirect_url":      result.RedirectURL,
+			"preflight":         structuredWebFetchPreflight(result.Preflight),
 		},
 	}, nil
 }
@@ -206,6 +208,9 @@ type fetchResult struct {
 	Binary        bool
 	DurationMS    int64
 	Preflight     webFetchPreflight
+
+	RedirectDetected bool
+	RedirectURL      string
 }
 
 type webFetchPreflight struct {
@@ -245,11 +250,27 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 		return fetchResult{}, err
 	}
 	req.Header.Set("User-Agent", "ccgo-webfetch/0.1")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := webFetchHTTPClient().Do(req)
 	if err != nil {
 		return fetchResult{}, err
 	}
 	defer resp.Body.Close()
+	if redirectURL, ok := webFetchCrossHostRedirectURL(rawURL, resp); ok {
+		body := webFetchRedirectMessage(rawURL, redirectURL, resp.Status)
+		return fetchResult{
+			StatusCode:       resp.StatusCode,
+			FinalURL:         rawURL,
+			ContentType:      "text/plain; charset=utf-8",
+			Charset:          "utf-8",
+			Body:             body,
+			Bytes:            len([]byte(body)),
+			Binary:           false,
+			DurationMS:       time.Since(start).Milliseconds(),
+			Preflight:        preflight,
+			RedirectDetected: true,
+			RedirectURL:      redirectURL,
+		}, nil
+	}
 	limited := io.LimitReader(resp.Body, int64(maxBytes)+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
@@ -283,6 +304,53 @@ func fetchURL(ctx context.Context, rawURL string, timeout time.Duration, maxByte
 	}, nil
 }
 
+func webFetchHTTPClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			if len(via) == 0 {
+				return nil
+			}
+			if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+}
+
+func webFetchCrossHostRedirectURL(rawURL string, resp *http.Response) (string, bool) {
+	if resp == nil || resp.StatusCode < 300 || resp.StatusCode >= 400 {
+		return "", false
+	}
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" || resp.Request == nil || resp.Request.URL == nil {
+		return "", false
+	}
+	redirectRef, err := url.Parse(location)
+	if err != nil {
+		return "", false
+	}
+	redirectURL := resp.Request.URL.ResolveReference(redirectRef)
+	originalURL, err := url.Parse(rawURL)
+	if err != nil || originalURL.Host == "" || redirectURL.Host == "" {
+		return "", false
+	}
+	if strings.EqualFold(redirectURL.Host, originalURL.Host) {
+		return "", false
+	}
+	return redirectURL.String(), true
+}
+
+func webFetchRedirectMessage(originalURL string, redirectURL string, status string) string {
+	if strings.TrimSpace(status) == "" {
+		status = "redirect"
+	}
+	return fmt.Sprintf("REDIRECT DETECTED: The URL redirects to a different host. You should make a new WebFetch request to the redirect URL to fetch the content.\n\nOriginal URL: %s\nRedirect URL: %s\nStatus: %s", originalURL, redirectURL, status)
+}
+
 func runWebFetchPreflight(ctx context.Context, rawURL string) webFetchPreflight {
 	preflight := webFetchPreflight{Attempted: true, ContentLength: -1}
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
@@ -291,7 +359,7 @@ func runWebFetchPreflight(ctx context.Context, rawURL string) webFetchPreflight 
 		return preflight
 	}
 	req.Header.Set("User-Agent", "ccgo-webfetch/0.1")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := webFetchHTTPClient().Do(req)
 	if err != nil {
 		preflight.Error = err.Error()
 		return preflight
@@ -309,7 +377,7 @@ func runWebFetchPreflight(ctx context.Context, rawURL string) webFetchPreflight 
 }
 
 func prepareWebFetchResult(result fetchResult, prompt string) fetchResult {
-	if result.Binary || result.Body == "" {
+	if result.RedirectDetected || result.Binary || result.Body == "" {
 		return result
 	}
 	rendered, ok := renderWebFetchBody(result.ContentType, result.Body, result.FinalURL)
@@ -327,6 +395,9 @@ func prepareWebFetchResult(result fetchResult, prompt string) fetchResult {
 }
 
 func formatWebFetchContent(input webFetchInput, result fetchResult) string {
+	if result.RedirectDetected {
+		return result.Body
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Fetched %s with status %d", input.URL, result.StatusCode)
 	if result.ContentType != "" {

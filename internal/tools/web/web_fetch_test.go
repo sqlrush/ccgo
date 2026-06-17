@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -299,6 +300,54 @@ func TestWebFetchResolvesHTMLLinksAgainstFinalURL(t *testing.T) {
 	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
 	if !ok || !strings.Contains(excerpt, "Image: Nested diagram ("+server.URL+"/assets/diagram.png)") {
 		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
+func TestWebFetchReportsCrossHostRedirect(t *testing.T) {
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("target body should not be fetched"))
+	}))
+	defer target.Close()
+	redirectURL := target.URL + "/landing"
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+	}))
+	defer source.Close()
+
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_cross_host_redirect",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(source.URL) + `,"prompt":"summarize redirected page"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("redirect notice should not be marked as error: %#v", result)
+	}
+	if hits := targetHits.Load(); hits != 0 {
+		t.Fatalf("cross-host redirect target should not be fetched; hits=%d", hits)
+	}
+	content := result.Content.(string)
+	if !strings.Contains(content, "REDIRECT DETECTED") || !strings.Contains(content, redirectURL) || !strings.Contains(content, source.URL) {
+		t.Fatalf("content = %#v", content)
+	}
+	if strings.Contains(content, "target body should not be fetched") {
+		t.Fatalf("content included redirected target body: %#v", content)
+	}
+	if result.StructuredContent["redirect_detected"] != true ||
+		result.StructuredContent["redirect_url"] != redirectURL ||
+		result.StructuredContent["final_url"] != source.URL ||
+		result.StructuredContent["status_code"] != http.StatusFound {
+		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+	body, ok := result.StructuredContent["body"].(string)
+	if !ok || !strings.Contains(body, "REDIRECT DETECTED") {
+		t.Fatalf("body = %#v", result.StructuredContent["body"])
 	}
 }
 
