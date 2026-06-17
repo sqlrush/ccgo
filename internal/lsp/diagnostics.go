@@ -54,6 +54,17 @@ type DiagnosticsUpdate struct {
 	Diagnostics []Diagnostic
 }
 
+type Summary struct {
+	Total        int            `json:"total"`
+	Files        int            `json:"files"`
+	BySeverity   map[string]int `json:"by_severity,omitempty"`
+	BySource     map[string]int `json:"by_source,omitempty"`
+	ErrorCount   int            `json:"error_count,omitempty"`
+	WarningCount int            `json:"warning_count,omitempty"`
+	InfoCount    int            `json:"info_count,omitempty"`
+	HintCount    int            `json:"hint_count,omitempty"`
+}
+
 type Filter struct {
 	FilePath string
 	Severity string
@@ -263,6 +274,45 @@ func FilterDiagnostics(diagnostics []Diagnostic, filter Filter) ([]Diagnostic, b
 		return append([]Diagnostic(nil), out[:limit]...), true
 	}
 	return out, false
+}
+
+func Summarize(diagnostics []Diagnostic) Summary {
+	normalized := NormalizeDiagnostics(diagnostics)
+	files := map[string]struct{}{}
+	summary := Summary{
+		Total:      len(normalized),
+		BySeverity: map[string]int{},
+		BySource:   map[string]int{},
+	}
+	for _, diagnostic := range normalized {
+		files[diagnostic.FilePath] = struct{}{}
+		severity := diagnostic.Severity
+		if severity == "" {
+			severity = "diagnostic"
+		}
+		summary.BySeverity[severity]++
+		switch severity {
+		case "error":
+			summary.ErrorCount++
+		case "warning":
+			summary.WarningCount++
+		case "info":
+			summary.InfoCount++
+		case "hint":
+			summary.HintCount++
+		}
+		if diagnostic.Source != "" {
+			summary.BySource[diagnostic.Source]++
+		}
+	}
+	summary.Files = len(files)
+	if len(summary.BySeverity) == 0 {
+		summary.BySeverity = nil
+	}
+	if len(summary.BySource) == 0 {
+		summary.BySource = nil
+	}
+	return summary
 }
 
 func diagnosticSeverity(value any) string {

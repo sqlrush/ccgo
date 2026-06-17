@@ -17,6 +17,7 @@ import (
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
+	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	"ccgo/internal/messages"
@@ -1847,6 +1848,13 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := lsppkg.WriteSnapshot(lsppkg.SessionDiagnosticsPath(transcriptPath, "sess_status_show"), []lsppkg.Diagnostic{
+		{FilePath: "main.go", Severity: "error", Source: "gopls", Message: "broken"},
+		{FilePath: "main.go", Severity: "warning", Source: "gopls", Message: "unused"},
+		{FilePath: "web.ts", Severity: "info", Source: "tsserver", Message: "info"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	runner := Runner{
 		Client:           client,
 		Tools:            tool.NewExecutor(registry),
@@ -1937,6 +1945,21 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Bridge-safe commands: 2",
 		"Command names: ask, compact",
 	}, nil)
+	assertStatusShow("/status show lsp", []string{
+		"Status LSP",
+		"Enabled: disabled",
+		"Diagnostics: 3",
+		"Files: 2",
+		"Errors: 1",
+		"Warnings: 1",
+		"Info: 1",
+		"Severities:",
+		"- error: 1",
+		"- warning: 1",
+		"Sources:",
+		"- gopls: 2",
+		"- tsserver: 1",
+	}, []string{"broken", "unused"})
 	assertStatusShow("/status show unknown", []string{
 		"Unknown status section unknown.",
 		"Available sections:",

@@ -17,6 +17,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
+	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
@@ -580,10 +581,10 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge>"
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|lsp>"
 			}
 			return r.formatStatusShow(args[1])
-		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge":
+		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "lsp":
 			return r.formatStatusShow(args[0])
 		default:
 			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
@@ -726,8 +727,10 @@ func (r Runner) formatStatusShow(raw string) string {
 		return r.formatStatusTelemetry()
 	case "bridge":
 		return r.formatStatusBridge()
+	case "lsp":
+		return r.formatStatusLSP()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, lsp"
 	}
 }
 
@@ -748,13 +751,55 @@ func normalizeStatusSection(raw string) string {
 		return "mcp"
 	case "plugin", "plugins":
 		return "plugins"
-	case "telemetry", "telemetry-events", "diagnostics", "trace", "tracing":
+	case "telemetry", "telemetry-events", "trace", "tracing":
 		return "telemetry"
 	case "bridge", "repl-bridge", "remote-control", "control":
 		return "bridge"
+	case "lsp", "language-server", "language-servers", "diagnostic", "diagnostics":
+		return "lsp"
 	default:
 		return compact
 	}
+}
+
+func (r Runner) formatStatusLSP() string {
+	settings := r.mergedSettings()
+	enabled := settings.Advanced != nil && advancedBoolEnabled(settings.Advanced.LSP)
+	path := lsppkg.SessionDiagnosticsPath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status LSP",
+		"Enabled: " + boolEnabledText(enabled),
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Diagnostics path: (not configured)", "Diagnostics: 0"), "\n")
+	}
+	diagnostics, err := lsppkg.LoadSnapshot(path)
+	if err != nil {
+		return strings.Join(append(lines, "Diagnostics path: "+path, "Diagnostics error: "+err.Error()), "\n")
+	}
+	summary := lsppkg.Summarize(diagnostics)
+	lines = append(lines,
+		"Diagnostics path: "+path,
+		fmt.Sprintf("Diagnostics: %d", summary.Total),
+		fmt.Sprintf("Files: %d", summary.Files),
+		fmt.Sprintf("Errors: %d", summary.ErrorCount),
+		fmt.Sprintf("Warnings: %d", summary.WarningCount),
+		fmt.Sprintf("Info: %d", summary.InfoCount),
+		fmt.Sprintf("Hints: %d", summary.HintCount),
+	)
+	if len(summary.BySeverity) > 0 {
+		lines = append(lines, "Severities:")
+		for _, key := range sortedIntMapKeys(summary.BySeverity) {
+			lines = append(lines, fmt.Sprintf("- %s: %d", key, summary.BySeverity[key]))
+		}
+	}
+	if len(summary.BySource) > 0 {
+		lines = append(lines, "Sources:")
+		for _, key := range sortedIntMapKeys(summary.BySource) {
+			lines = append(lines, fmt.Sprintf("- %s: %d", key, summary.BySource[key]))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) formatStatusBridge() string {

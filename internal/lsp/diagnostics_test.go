@@ -54,6 +54,27 @@ func TestWriteLoadAndFilterDiagnostics(t *testing.T) {
 	}
 }
 
+func TestSummarizeDiagnostics(t *testing.T) {
+	summary := Summarize([]Diagnostic{
+		{FilePath: "a.go", Severity: "error", Source: "gopls", Message: "err"},
+		{FilePath: "a.go", Severity: "warning", Source: "gopls", Message: "warn"},
+		{FilePath: "b.go", Severity: "info", Source: "tsserver", Message: "info"},
+		{FilePath: "c.go", Severity: "hint", Message: "hint"},
+		{FilePath: "", Severity: "error", Message: "ignored"},
+	})
+	if summary.Total != 4 ||
+		summary.Files != 3 ||
+		summary.ErrorCount != 1 ||
+		summary.WarningCount != 1 ||
+		summary.InfoCount != 1 ||
+		summary.HintCount != 1 ||
+		summary.BySeverity["error"] != 1 ||
+		summary.BySource["gopls"] != 2 ||
+		summary.BySource["tsserver"] != 1 {
+		t.Fatalf("summary = %#v", summary)
+	}
+}
+
 func TestLoadSnapshotMissingFile(t *testing.T) {
 	got, err := LoadSnapshot(filepath.Join(t.TempDir(), diagnosticsFileName))
 	if err != nil {
