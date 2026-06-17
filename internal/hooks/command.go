@@ -609,7 +609,7 @@ func applyHookSpecificOutput(result *tool.HookResult, phase string, hookSpecific
 		if value := stringField(hookSpecific, "additionalContext"); value != "" {
 			result.Message = value
 		}
-	case tool.HookUserPromptSubmit, tool.HookStop, tool.HookSubagentStop:
+	case tool.HookUserPromptSubmit, tool.HookStop, tool.HookSubagentStop, tool.HookPreCompact:
 		if value := stringField(hookSpecific, "additionalContext"); value != "" {
 			result.Message = value
 		}

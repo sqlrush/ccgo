@@ -87,6 +87,7 @@ const (
 	HookUserPromptSubmit  = "UserPromptSubmit"
 	HookStop              = "Stop"
 	HookSubagentStop      = "SubagentStop"
+	HookPreCompact        = "PreCompact"
 )
 
 type HookEvent struct {

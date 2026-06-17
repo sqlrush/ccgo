@@ -486,6 +486,12 @@ func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Messag
 	if !compactpkg.ShouldRun(history, config) {
 		return history, compactpkg.Result{}, false, nil
 	}
+	extraInstructions := config.ExtraInstructions
+	if additional, blocked, err := r.runPreCompactHooks(ctx, compactpkg.TriggerAuto, config.TokenUsage, len(history), "", extraInstructions); err != nil || blocked {
+		return history, compactpkg.Result{}, false, nil
+	} else {
+		extraInstructions = appendHookInstructions(extraInstructions, additional)
+	}
 	client := r.CompactClient
 	if client == nil {
 		client = r.Client
@@ -495,7 +501,7 @@ func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Messag
 		Model:             r.model(),
 		MaxTokens:         r.CompactMaxTokens,
 		KeepLast:          config.KeepLast,
-		ExtraInstructions: config.ExtraInstructions,
+		ExtraInstructions: extraInstructions,
 	}.Compact(ctx, history, compactpkg.TriggerAuto, config.TokenUsage, "")
 	if err != nil {
 		compactpkg.RecordFailure(r.AutoCompact)
@@ -518,6 +524,13 @@ func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, 
 		extraInstructions = r.AutoCompact.ExtraInstructions
 	}
 	tokenUsage := compactpkg.EstimateTokens(history)
+	if additional, blocked, err := r.runPreCompactHooks(ctx, compactpkg.TriggerManual, tokenUsage, len(history), userContext, extraInstructions); err != nil {
+		return compactpkg.Result{}, err
+	} else if blocked {
+		return compactpkg.Result{}, fmt.Errorf("blocked by PreCompact hook")
+	} else {
+		extraInstructions = appendHookInstructions(extraInstructions, additional)
+	}
 	result, err := compactpkg.Runner{
 		Client:            client,
 		Model:             r.model(),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	hookpkg "ccgo/internal/hooks"
 	msgs "ccgo/internal/messages"
@@ -76,6 +77,22 @@ func (r Runner) runSubagentStopHooks(ctx context.Context, payload map[string]any
 		return fmt.Errorf("%s", message)
 	}
 	return nil
+}
+
+func (r Runner) runPreCompactHooks(ctx context.Context, trigger compactpkg.Trigger, tokenUsage int, messageCount int, userContext string, extraInstructions string) (string, bool, error) {
+	payload := map[string]any{
+		"trigger":             string(trigger),
+		"token_usage":         tokenUsage,
+		"message_count":       messageCount,
+		"user_context":        userContext,
+		"extra_instructions":  extraInstructions,
+		"custom_instructions": userContext,
+	}
+	result, err := r.runConversationHooks(ctx, tool.HookPreCompact, payload)
+	if err != nil {
+		return "", false, err
+	}
+	return result.Message, result.Block, nil
 }
 
 func (r Runner) runConversationHooks(ctx context.Context, phase string, payload map[string]any) (tool.HookResult, error) {
@@ -196,4 +213,16 @@ func appendUserPromptContext(messages []contracts.Message, contextText string) [
 		return out
 	}
 	return out
+}
+
+func appendHookInstructions(base string, extra string) string {
+	base = strings.TrimSpace(base)
+	extra = strings.TrimSpace(extra)
+	if base == "" {
+		return extra
+	}
+	if extra == "" {
+		return base
+	}
+	return base + "\n\n" + extra
 }

@@ -1885,6 +1885,60 @@ func TestRunnerExecutesCompactSlashCommandWithoutMainQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerPreCompactHookAddsSummaryInstructions(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{{response: &anthropic.Response{
+		ID:         "msg_summary",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "sonnet",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("manual summary")},
+	}}}}
+	var progress []contracts.ToolProgress
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_precompact_hook",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: t.TempDir(),
+		MCP: &MCPConfig{ProjectSettings: contracts.Settings{Hooks: map[string]any{
+			"PreCompact": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": `printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreCompact","additionalContext":"include hook compact instructions"}}'`,
+				}},
+			}},
+		}}},
+		OnEvent: func(event Event) {
+			if event.Type == EventToolProgress && event.ToolProgress != nil {
+				progress = append(progress, *event.ToolProgress)
+			}
+		},
+	}
+	history := []contracts.Message{
+		messages.UserText("old one"),
+		messages.AssistantText("old two", "sonnet", nil),
+	}
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("/compact focus on API"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Compacted || result.Compact == nil {
+		t.Fatalf("manual compact result = %#v", result)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	compactPrompt := client.requests[0].Messages[len(client.requests[0].Messages)-1].Content[0].Text
+	if !strings.Contains(compactPrompt, "include hook compact instructions") {
+		t.Fatalf("compact prompt = %q", compactPrompt)
+	}
+	if !hasHookProgress(progress, tool.HookPreCompact, "hook_completed") {
+		t.Fatalf("hook progress = %#v", progress)
+	}
+}
+
 func TestRunnerExecutesCostSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
