@@ -113,6 +113,8 @@ M10 补充：bridge direct server 新增 `GET /remote-service` discovery endpoin
 
 M10 补充：remote settings 新增 `registrationUrl`/`authToken`，`advanced.bridge=true` 写出 remote service manifest 后会把 manifest POST 到注册 URL，并将 registered/failed/disabled、HTTP status、远端 session/websocket/poll 信息写入 session-scoped `remote-registration.json`；`/status show remote` 可审计注册状态且不泄露 token/query。完整 CCR 云端长连接仍未完成。
 
+M10 补充：remote registration 响应解析现在会先读取顶层字段，再递归解包 `data`、`session`、`remote_session`、`registration`、`result`、`payload` wrapper，兼容云端把 remote session、registration id、websocket/poll endpoint 放在 envelope 内返回。更深的注册协议协商和租约刷新仍未完成。
+
 M10 补充：新增 session-scoped `remote-pump.json` 和 daemon remote 消息泵；daemon tick 会在 ScheduleCron due tick 后优先读取 registered `websocket_url`，通过 Bearer auth 建立 WebSocket、读取单帧事件并复用 poll 解码/`RemoteTrigger` 注入路径；无 WebSocket 或 WebSocket 失败且存在 poll URL 时回退到带 cursor 的 poll 拉取。pump 状态会记录 transport、websocket/poll URL 脱敏值、cursor、HTTP status、event/delivered/duplicate/error 计数，`/status show remote` 可审计当前传输。完整 CCR WebSocket 常驻持久 stream 和云端协议 hardening 仍未完成。
 
 M10 补充：remote WebSocket pump 现在支持单次 tick 内读取多帧事件，并在握手/读帧失败或非正常 close 时按可配置 backoff 重连；daemon 默认读取最多 8 帧、最多重连 2 次，并把 frame/connect/reconnect 计数和 WebSocket close code 写入 `remote-pump.json` 和 `/status show remote`。完整 CCR 云端 WebSocket 常驻持久 stream 与更深协议 hardening 仍未完成。

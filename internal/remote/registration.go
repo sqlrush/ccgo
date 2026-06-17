@@ -187,11 +187,37 @@ func applyRegistrationResponse(state *RegistrationState, body []byte) {
 		state.Message = strings.TrimSpace(string(body))
 		return
 	}
-	state.RemoteSessionID = firstString(raw, "remote_session_id", "remoteSessionId", "session_id", "sessionId")
-	state.RegistrationID = firstString(raw, "registration_id", "registrationId", "id")
-	state.WebSocketURL = firstString(raw, "websocket_url", "websocketUrl", "web_socket_url", "ws_url", "wsUrl")
-	state.PollURL = firstString(raw, "poll_url", "pollUrl", "events_url", "eventsUrl")
-	state.Message = firstString(raw, "message", "status", "detail")
+	applyRegistrationResponseFields(state, raw)
+	applyNestedRegistrationResponseFields(state, raw)
+}
+
+func applyRegistrationResponseFields(state *RegistrationState, raw map[string]any) {
+	if state.RemoteSessionID == "" {
+		state.RemoteSessionID = firstString(raw, "remote_session_id", "remoteSessionId", "session_id", "sessionId")
+	}
+	if state.RegistrationID == "" {
+		state.RegistrationID = firstString(raw, "registration_id", "registrationId", "id")
+	}
+	if state.WebSocketURL == "" {
+		state.WebSocketURL = firstString(raw, "websocket_url", "websocketUrl", "web_socket_url", "ws_url", "wsUrl")
+	}
+	if state.PollURL == "" {
+		state.PollURL = firstString(raw, "poll_url", "pollUrl", "events_url", "eventsUrl")
+	}
+	if state.Message == "" {
+		state.Message = firstString(raw, "message", "status", "detail")
+	}
+}
+
+func applyNestedRegistrationResponseFields(state *RegistrationState, raw map[string]any) {
+	for _, key := range []string{"data", "session", "remote_session", "remoteSession", "registration", "result", "payload"} {
+		nested, ok := raw[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		applyRegistrationResponseFields(state, nested)
+		applyNestedRegistrationResponseFields(state, nested)
+	}
 }
 
 func firstString(values map[string]any, keys ...string) string {

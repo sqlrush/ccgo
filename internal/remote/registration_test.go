@@ -56,6 +56,39 @@ func TestRegisterManifestPostsServiceManifest(t *testing.T) {
 	}
 }
 
+func TestRegisterManifestAcceptsWrappedResponse(t *testing.T) {
+	now := time.Date(2026, 6, 17, 11, 3, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"message":"registered",
+			"data":{
+				"sessionId":"remote-wrapped",
+				"registration":{
+					"id":"reg-wrapped",
+					"web_socket_url":"wss://remote/wrapped/ws",
+					"eventsUrl":"https://remote/wrapped/events",
+					"detail":"nested detail"
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	state := RegisterManifest(context.Background(), RegistrationOptions{
+		RegistrationURL: server.URL + "/register",
+		Manifest: Manifest{
+			SessionID:     "sess_wrapped",
+			EnvironmentID: "env-prod",
+			Services:      []Service{{Name: "daemon", RuntimeState: "running"}},
+		},
+		Now: now,
+	})
+	if state.RuntimeState != RegistrationRegistered || state.RemoteSessionID != "remote-wrapped" || state.RegistrationID != "reg-wrapped" || state.WebSocketURL != "wss://remote/wrapped/ws" || state.PollURL != "https://remote/wrapped/events" || state.Message != "registered" {
+		t.Fatalf("registration state = %#v", state)
+	}
+}
+
 func TestRegisterManifestHandlesDisabledAndFailedState(t *testing.T) {
 	now := time.Date(2026, 6, 17, 11, 5, 0, 0, time.UTC)
 	manifest := Manifest{SessionID: "sess_remote", EnvironmentID: "env-prod"}
