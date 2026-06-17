@@ -127,6 +127,26 @@ func DiagnosticsFromPublishDiagnostics(data []byte) ([]Diagnostic, error) {
 	return NormalizeDiagnostics(out), nil
 }
 
+func ApplyDiagnosticsUpdate(existing []Diagnostic, update []Diagnostic) []Diagnostic {
+	normalizedUpdate := NormalizeDiagnostics(update)
+	if len(normalizedUpdate) == 0 {
+		return NormalizeDiagnostics(existing)
+	}
+	updatedFiles := map[string]struct{}{}
+	for _, diagnostic := range normalizedUpdate {
+		updatedFiles[diagnostic.FilePath] = struct{}{}
+	}
+	out := make([]Diagnostic, 0, len(existing)+len(normalizedUpdate))
+	for _, diagnostic := range NormalizeDiagnostics(existing) {
+		if _, ok := updatedFiles[diagnostic.FilePath]; ok {
+			continue
+		}
+		out = append(out, diagnostic)
+	}
+	out = append(out, normalizedUpdate...)
+	return NormalizeDiagnostics(out)
+}
+
 func URIToPath(raw string) string {
 	raw = strings.TrimSpace(raw)
 	parsed, err := url.Parse(raw)

@@ -117,3 +117,32 @@ func TestDiagnosticsFromPublishDiagnosticsRequiresURI(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestApplyDiagnosticsUpdateReplacesUpdatedFiles(t *testing.T) {
+	existing := []Diagnostic{
+		{FilePath: "a.go", Severity: "error", Message: "old a"},
+		{FilePath: "b.go", Severity: "warning", Message: "old b"},
+	}
+	update := []Diagnostic{
+		{FilePath: "./a.go", Severity: "2", Message: "new a"},
+		{FilePath: "", Severity: "error", Message: "ignored"},
+	}
+	got := ApplyDiagnosticsUpdate(existing, update)
+	if len(got) != 2 {
+		t.Fatalf("updated diagnostics = %#v", got)
+	}
+	if got[0].FilePath != "a.go" || got[0].Severity != "warning" || got[0].Message != "new a" {
+		t.Fatalf("updated diagnostics = %#v", got)
+	}
+	if got[1].FilePath != "b.go" || got[1].Message != "old b" {
+		t.Fatalf("updated diagnostics = %#v", got)
+	}
+}
+
+func TestApplyDiagnosticsUpdateIgnoresEmptyUpdate(t *testing.T) {
+	existing := []Diagnostic{{FilePath: "a.go", Severity: "error", Message: "old a"}}
+	got := ApplyDiagnosticsUpdate(existing, nil)
+	if len(got) != 1 || got[0].Message != "old a" {
+		t.Fatalf("updated diagnostics = %#v", got)
+	}
+}
