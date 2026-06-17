@@ -735,6 +735,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：conversation runner 在每轮主请求前会执行一次 `ScheduleCron` due tick，复用 `run_due` 的触发与 last-run 去重逻辑，把到期 schedule 自动注入 running team recipients；无到期任务时不发噪声进度，触发失败会 fail-open 并发 `schedule_due_error` progress。完整常驻后台 daemon 和远端服务接入仍未完成。
 - 本轮补充：新增 `RemoteTrigger` 工具入口，可把 source/event/message 作为远端触发事件注入到 running team recipients；默认优先发给 coordinator，消息正文保留远端来源和事件类型。`event_id` 可选，提供后会写入 session-scoped `remote_triggers.json` receipt，重复投递会 no-op 并记录 duplicate_count，避免远端重试重复注入。完整 remote websocket/CCR 服务接入仍未完成。
 - 本轮补充：bridge direct server 新增 loopback-only `POST /remote-trigger` HTTP endpoint，并沿用 direct server token guard；conversation runner 会把该 endpoint 接到 `RemoteTrigger` 的校验、注入和 event_id dedupe 逻辑，远端系统可通过受控 HTTP 请求向 running team 注入事件。完整 remote websocket/CCR 长连接服务仍未完成。
+- 本轮补充：bridge direct WebSocket JSON 通道新增 `remote_trigger` action，复用 direct remote trigger request/response 结构和同一回调，可在已鉴权的 loopback WebSocket 连接上注入远端事件。完整 CCR 云端长连接协议仍未完成。
 
 ### M11: Bridge 和高级集成
 

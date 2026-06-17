@@ -57,6 +57,49 @@ func TestDirectWebSocketResolveAndExecute(t *testing.T) {
 	}
 }
 
+func TestDirectWebSocketRemoteTrigger(t *testing.T) {
+	var got DirectRemoteTriggerRequest
+	server, err := StartDirectServer(DirectServerOptions{
+		Handler: NewDirectHandler(DirectOptions{
+			SessionID: "sess_bridge",
+			Manifest:  testDirectManifest(t),
+			Registry:  testDirectRegistry(),
+			RemoteTrigger: func(_ context.Context, req DirectRemoteTriggerRequest) (DirectRemoteTriggerResponse, int) {
+				got = req
+				return DirectRemoteTriggerResponse{
+					Accepted:  true,
+					TeamID:    req.TeamID,
+					Target:    req.Target,
+					EventID:   req.EventID,
+					SentCount: 1,
+				}, http.StatusOK
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := server.Close(ctx); err != nil {
+			t.Fatalf("close direct server: %v", err)
+		}
+	})
+	conn, reader := dialDirectWebSocket(t, server.URL()+"/ws", nil)
+	defer conn.Close()
+
+	writeClientWebSocketText(t, conn, `{"action":"remote_trigger","remote_trigger":{"team_id":"ops/team","target":"coordinator","event_id":"evt-2","message":"Investigate deploy."}}`)
+	var response DirectWebSocketResponse
+	readServerWebSocketJSON(t, reader, &response)
+	if response.Type != "remote_trigger" || response.RemoteTrigger == nil || !response.RemoteTrigger.Accepted || response.RemoteTrigger.SentCount != 1 || response.RemoteTrigger.EventID != "evt-2" {
+		t.Fatalf("remote trigger websocket response = %#v", response)
+	}
+	if got.TeamID != "ops/team" || got.Target != "coordinator" || got.EventID != "evt-2" || got.Message != "Investigate deploy." {
+		t.Fatalf("remote trigger websocket request = %#v", got)
+	}
+}
+
 func TestDirectWebSocketUsesDirectTokenGuard(t *testing.T) {
 	server, err := StartDirectServer(DirectServerOptions{
 		Token: "secret",

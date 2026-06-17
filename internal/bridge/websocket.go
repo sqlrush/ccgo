@@ -3,6 +3,7 @@ package bridge
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
@@ -24,16 +25,18 @@ const (
 )
 
 type DirectWebSocketRequest struct {
-	Action  string       `json:"action,omitempty"`
-	Command string       `json:"command"`
-	UUID    contracts.ID `json:"uuid,omitempty"`
+	Action        string                      `json:"action,omitempty"`
+	Command       string                      `json:"command,omitempty"`
+	UUID          contracts.ID                `json:"uuid,omitempty"`
+	RemoteTrigger *DirectRemoteTriggerRequest `json:"remote_trigger,omitempty"`
 }
 
 type DirectWebSocketResponse struct {
-	Type    string                 `json:"type"`
-	Resolve *DirectResolveResponse `json:"resolve,omitempty"`
-	Execute *DirectExecuteResponse `json:"execute,omitempty"`
-	Error   string                 `json:"error,omitempty"`
+	Type          string                       `json:"type"`
+	Resolve       *DirectResolveResponse       `json:"resolve,omitempty"`
+	Execute       *DirectExecuteResponse       `json:"execute,omitempty"`
+	RemoteTrigger *DirectRemoteTriggerResponse `json:"remote_trigger,omitempty"`
+	Error         string                       `json:"error,omitempty"`
 }
 
 func (h *DirectHandler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +119,19 @@ func (h *DirectHandler) handleWebSocketMessage(payload []byte) DirectWebSocketRe
 	case "execute":
 		executed, _ := h.execute(DirectCommandRequest{Command: req.Command, UUID: req.UUID})
 		return DirectWebSocketResponse{Type: "execute", Execute: &executed}
+	case "remote_trigger", "remote-trigger":
+		if h.remoteTrigger == nil {
+			return DirectWebSocketResponse{Type: "error", Error: "remote trigger endpoint is not configured"}
+		}
+		if req.RemoteTrigger == nil {
+			return DirectWebSocketResponse{Type: "error", Error: "remote_trigger is required"}
+		}
+		remoteTrigger, err := normalizeDirectRemoteTriggerRequest(*req.RemoteTrigger)
+		if err != nil {
+			return DirectWebSocketResponse{Type: "error", Error: err.Error()}
+		}
+		response, _ := h.remoteTrigger(context.Background(), remoteTrigger)
+		return DirectWebSocketResponse{Type: "remote_trigger", RemoteTrigger: &response}
 	default:
 		return DirectWebSocketResponse{Type: "error", Error: "unknown websocket action"}
 	}

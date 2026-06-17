@@ -290,15 +290,28 @@ func decodeDirectRemoteTriggerRequest(w http.ResponseWriter, r *http.Request) (D
 	req.Source = strings.TrimSpace(req.Source)
 	req.Event = strings.TrimSpace(req.Event)
 	req.Message = strings.TrimSpace(req.Message)
-	if req.TeamID == "" {
-		writeDirectError(w, http.StatusBadRequest, "team_id is required")
+	normalized, err := normalizeDirectRemoteTriggerRequest(req)
+	if err != nil {
+		writeDirectError(w, http.StatusBadRequest, err.Error())
 		return DirectRemoteTriggerRequest{}, false
+	}
+	return normalized, true
+}
+
+func normalizeDirectRemoteTriggerRequest(req DirectRemoteTriggerRequest) (DirectRemoteTriggerRequest, error) {
+	req.TeamID = strings.TrimSpace(req.TeamID)
+	req.Target = strings.TrimSpace(req.Target)
+	req.EventID = strings.TrimSpace(req.EventID)
+	req.Source = strings.TrimSpace(req.Source)
+	req.Event = strings.TrimSpace(req.Event)
+	req.Message = strings.TrimSpace(req.Message)
+	if req.TeamID == "" {
+		return DirectRemoteTriggerRequest{}, fmt.Errorf("team_id is required")
 	}
 	if req.Message == "" {
-		writeDirectError(w, http.StatusBadRequest, "message is required")
-		return DirectRemoteTriggerRequest{}, false
+		return DirectRemoteTriggerRequest{}, fmt.Errorf("message is required")
 	}
-	return req, true
+	return req, nil
 }
 
 func canonicalSlashCommand(command Command, args string) string {
