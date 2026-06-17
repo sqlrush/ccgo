@@ -78,6 +78,59 @@ func TestFetchWebSocketEventsReconnectsAndReadsMultipleFrames(t *testing.T) {
 	}
 }
 
+func TestStreamWebSocketEventsReconnectsAndCallsHandler(t *testing.T) {
+	connections := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		connections++
+		conn := acceptRemoteTestWebSocket(t, w, r)
+		defer conn.Close()
+		if connections == 1 {
+			writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeClose, []byte{0x03, 0xf3})
+			return
+		}
+		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-1","team":"remote/team","message":"one"}`))
+		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream-2","team":"remote/team","message":"two"}`))
+	}))
+	defer server.Close()
+
+	var delivered []PollEvent
+	result := StreamWebSocketEvents(context.Background(), WebSocketOptions{
+		WebSocketURL:          "ws" + strings.TrimPrefix(server.URL, "http") + "/stream",
+		MaxFrames:             2,
+		ReconnectAttempts:     1,
+		ReconnectInitialDelay: time.Millisecond,
+		ReconnectMaxDelay:     time.Millisecond,
+	}, func(events []PollEvent) error {
+		delivered = append(delivered, events...)
+		return nil
+	})
+	if result.Error != "" || result.ConnectCount != 2 || result.ReconnectCount != 1 || result.FrameCount != 2 || len(result.Events) != 0 || len(delivered) != 2 {
+		t.Fatalf("stream result=%#v delivered=%#v connections=%d", result, delivered, connections)
+	}
+	if delivered[0].EventID != "evt-stream-1" || delivered[1].EventID != "evt-stream-2" || result.LastError == "" {
+		t.Fatalf("delivered=%#v last=%q", delivered, result.LastError)
+	}
+}
+
+func TestStreamWebSocketEventsReturnsHandlerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn := acceptRemoteTestWebSocket(t, w, r)
+		defer conn.Close()
+		writeRemoteTestFrame(t, conn, remoteWebSocketOpcodeText, []byte(`{"id":"evt-stream","team":"remote/team","message":"fail"}`))
+	}))
+	defer server.Close()
+
+	result := StreamWebSocketEvents(context.Background(), WebSocketOptions{
+		WebSocketURL: "ws" + strings.TrimPrefix(server.URL, "http") + "/stream",
+		MaxFrames:    1,
+	}, func(events []PollEvent) error {
+		return fmt.Errorf("handler failed for %s", events[0].EventID)
+	})
+	if result.Error != "handler failed for evt-stream" || result.FrameCount != 1 {
+		t.Fatalf("stream result = %#v", result)
+	}
+}
+
 func acceptRemoteTestWebSocket(t *testing.T, w http.ResponseWriter, r *http.Request) netConn {
 	t.Helper()
 	key := r.Header.Get("Sec-WebSocket-Key")

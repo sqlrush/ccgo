@@ -53,6 +53,8 @@ type WebSocketResult struct {
 	Error          string      `json:"error,omitempty"`
 }
 
+type WebSocketEventHandler func([]PollEvent) error
+
 type remoteWebSocketConn struct {
 	net.Conn
 	reader *bufio.Reader
@@ -120,6 +122,64 @@ func FetchWebSocketEvents(ctx context.Context, options WebSocketOptions) WebSock
 	}
 }
 
+func StreamWebSocketEvents(ctx context.Context, options WebSocketOptions, handler WebSocketEventHandler) WebSocketResult {
+	result := WebSocketResult{CheckedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	rawURL := strings.TrimSpace(options.WebSocketURL)
+	if rawURL == "" {
+		result.Error = "remote websocket url is unavailable"
+		return result
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "ws" && parsed.Scheme != "wss") {
+		result.Error = fmt.Sprintf("invalid remote websocket url: %s", DisplayEndpoint(rawURL))
+		return result
+	}
+	frameLimit := options.MaxFrameBytes
+	if frameLimit <= 0 {
+		frameLimit = defaultRemoteWebSocketFrameLimit
+	}
+	for {
+		conn, err := dialRemoteWebSocket(ctx, parsed, options)
+		if err != nil {
+			if ctx.Err() != nil {
+				return result
+			}
+			result.LastError = err.Error()
+			if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
+				result.Error = result.LastError
+				return result
+			}
+			if !backoffRemoteWebSocket(ctx, options, result.ReconnectCount) {
+				return result
+			}
+			result.ReconnectCount++
+			continue
+		}
+		result.ConnectCount++
+		transient, fatal := streamRemoteWebSocketConnection(ctx, conn, frameLimit, options.MaxFrames, handler, &result)
+		_ = conn.Close()
+		if fatal != nil {
+			result.Error = fatal.Error()
+			return result
+		}
+		if ctx.Err() != nil || (options.MaxFrames > 0 && result.FrameCount >= options.MaxFrames) {
+			return result
+		}
+		if transient == nil {
+			return result
+		}
+		result.LastError = transient.Error()
+		if !shouldReconnectRemoteWebSocket(ctx, options, result.ReconnectCount) {
+			result.Error = result.LastError
+			return result
+		}
+		if !backoffRemoteWebSocket(ctx, options, result.ReconnectCount) {
+			return result
+		}
+		result.ReconnectCount++
+	}
+}
+
 func readRemoteWebSocketEvents(ctx context.Context, conn *remoteWebSocketConn, frameLimit int64, maxFrames int, result *WebSocketResult) (error, error) {
 	stopReadWatch := watchRemoteWebSocketReadContext(ctx, conn.Conn)
 	defer stopReadWatch()
@@ -159,9 +219,59 @@ func readRemoteWebSocketEvents(ctx context.Context, conn *remoteWebSocketConn, f
 	}
 }
 
+func streamRemoteWebSocketConnection(ctx context.Context, conn *remoteWebSocketConn, frameLimit int64, maxFrames int, handler WebSocketEventHandler, result *WebSocketResult) (error, error) {
+	stopReadWatch := watchRemoteWebSocketReadContext(ctx, conn.Conn)
+	defer stopReadWatch()
+	for {
+		opcode, payload, err := readRemoteWebSocketFrame(conn.reader, frameLimit)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, nil
+			}
+			if err == io.EOF {
+				return io.EOF, nil
+			}
+			return err, nil
+		}
+		switch opcode {
+		case remoteWebSocketOpcodeText, remoteWebSocketOpcodeBinary:
+			events, _, err := DecodePollEvents(payload)
+			if err != nil {
+				return nil, fmt.Errorf("decode remote websocket event: %v", err)
+			}
+			result.FrameCount++
+			if len(events) > 0 {
+				if handler != nil {
+					if err := handler(events); err != nil {
+						return nil, err
+					}
+				} else {
+					result.Events = append(result.Events, events...)
+				}
+			}
+			if maxFrames > 0 && result.FrameCount >= maxFrames {
+				return nil, nil
+			}
+		case remoteWebSocketOpcodePing:
+			if err := writeRemoteWebSocketControlFrame(conn.Conn, remoteWebSocketOpcodePong, payload); err != nil {
+				return err, nil
+			}
+		case remoteWebSocketOpcodeClose:
+			result.CloseCode = remoteWebSocketCloseCode(payload)
+			if result.CloseCode != defaultRemoteWebSocketCloseCode {
+				return fmt.Errorf("remote websocket closed with code %d", result.CloseCode), nil
+			}
+			return io.EOF, nil
+		}
+	}
+}
+
 func shouldReconnectRemoteWebSocket(ctx context.Context, options WebSocketOptions, reconnects int) bool {
 	if ctx.Err() != nil {
 		return false
+	}
+	if options.ReconnectAttempts < 0 {
+		return true
 	}
 	return reconnects < options.ReconnectAttempts
 }
