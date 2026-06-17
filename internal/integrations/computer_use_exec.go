@@ -129,6 +129,10 @@ func BuildComputerUseInputCommand(adapter Adapter, action ComputerUseInputAction
 	switch strings.ToLower(strings.TrimSpace(adapter.Name)) {
 	case "xdotool":
 		return buildXdotoolCommand(base, action)
+	case "osascript":
+		return buildOsaScriptCommand(base, action)
+	case "powershell.exe", "powershell", "pwsh":
+		return buildPowerShellInputCommand(base, action)
 	default:
 		return base, fmt.Errorf("computer-use input adapter %q does not support semantic actions yet", adapter.Name)
 	}
@@ -195,6 +199,79 @@ func buildXdotoolCommand(base []string, action ComputerUseInputAction) ([]string
 	}
 }
 
+func buildOsaScriptCommand(base []string, action ComputerUseInputAction) ([]string, error) {
+	switch normalizeComputerUseActionType(action.Type) {
+	case "move":
+		return base, fmt.Errorf("macOS osascript adapter does not support move without a click")
+	case "click":
+		button := action.Button
+		if button <= 0 {
+			button = 1
+		}
+		if button != 1 {
+			return base, fmt.Errorf("macOS osascript adapter only supports primary-button click")
+		}
+		if !action.HasPosition {
+			return base, fmt.Errorf("click action requires a position for macOS osascript")
+		}
+		return append(base, "-e", fmt.Sprintf(`tell application "System Events" to click at {%d, %d}`, action.X, action.Y)), nil
+	case "type":
+		if action.Text == "" {
+			return base, fmt.Errorf("type action requires text")
+		}
+		return append(base, "-e", `tell application "System Events" to keystroke `+appleScriptString(action.Text)), nil
+	case "key":
+		key := strings.TrimSpace(action.Key)
+		if key == "" {
+			return base, fmt.Errorf("key action requires a key")
+		}
+		if code, ok := macOSKeyCode(key); ok {
+			return append(base, "-e", fmt.Sprintf(`tell application "System Events" to key code %d`, code)), nil
+		}
+		return append(base, "-e", `tell application "System Events" to keystroke `+appleScriptString(key)), nil
+	default:
+		return base, fmt.Errorf("unsupported computer-use input action %q", action.Type)
+	}
+}
+
+func buildPowerShellInputCommand(base []string, action ComputerUseInputAction) ([]string, error) {
+	switch normalizeComputerUseActionType(action.Type) {
+	case "move":
+		if !action.HasPosition {
+			return base, fmt.Errorf("move action requires a position")
+		}
+		return append(base, powerShellInputPrelude()+fmt.Sprintf("[NativeInput]::SetCursorPos(%d,%d) | Out-Null", action.X, action.Y)), nil
+	case "click":
+		button := action.Button
+		if button <= 0 {
+			button = 1
+		}
+		down, up, err := windowsMouseButtonFlags(button)
+		if err != nil {
+			return base, err
+		}
+		script := powerShellInputPrelude()
+		if action.HasPosition {
+			script += fmt.Sprintf("[NativeInput]::SetCursorPos(%d,%d) | Out-Null;", action.X, action.Y)
+		}
+		script += fmt.Sprintf("[NativeInput]::mouse_event(%d,0,0,0,[UIntPtr]::Zero);[NativeInput]::mouse_event(%d,0,0,0,[UIntPtr]::Zero)", down, up)
+		return append(base, script), nil
+	case "type":
+		if action.Text == "" {
+			return base, fmt.Errorf("type action requires text")
+		}
+		return append(base, "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait("+powerShellSingleQuoted(sendKeysEscape(action.Text))+")"), nil
+	case "key":
+		key := strings.TrimSpace(action.Key)
+		if key == "" {
+			return base, fmt.Errorf("key action requires a key")
+		}
+		return append(base, "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait("+powerShellSingleQuoted(windowsSendKey(key))+")"), nil
+	default:
+		return base, fmt.Errorf("unsupported computer-use input action %q", action.Type)
+	}
+}
+
 func normalizeComputerUseActionType(actionType string) string {
 	actionType = strings.TrimSpace(strings.ToLower(actionType))
 	actionType = strings.ReplaceAll(actionType, "_", "-")
@@ -209,6 +286,101 @@ func normalizeComputerUseActionType(actionType string) string {
 		return "key"
 	default:
 		return actionType
+	}
+}
+
+func appleScriptString(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+}
+
+func macOSKeyCode(key string) (int, bool) {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "escape", "esc":
+		return 53, true
+	case "enter", "return":
+		return 36, true
+	case "tab":
+		return 48, true
+	case "space":
+		return 49, true
+	case "backspace", "delete":
+		return 51, true
+	case "forward-delete", "delete-forward":
+		return 117, true
+	case "left", "arrow-left":
+		return 123, true
+	case "right", "arrow-right":
+		return 124, true
+	case "down", "arrow-down":
+		return 125, true
+	case "up", "arrow-up":
+		return 126, true
+	default:
+		return 0, false
+	}
+}
+
+func powerShellInputPrelude() string {
+	return `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class NativeInput { [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y); [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo); }';`
+}
+
+func windowsMouseButtonFlags(button int) (int, int, error) {
+	switch button {
+	case 1:
+		return 0x0002, 0x0004, nil
+	case 2:
+		return 0x0020, 0x0040, nil
+	case 3:
+		return 0x0008, 0x0010, nil
+	default:
+		return 0, 0, fmt.Errorf("unsupported Windows mouse button %d", button)
+	}
+}
+
+func powerShellSingleQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+func sendKeysEscape(value string) string {
+	replacer := strings.NewReplacer(
+		"+", "{+}",
+		"^", "{^}",
+		"%", "{%}",
+		"~", "{~}",
+		"(", "{(}",
+		")", "{)}",
+		"{", "{{}",
+		"}", "{}}",
+		"[", "{[}",
+		"]", "{]}",
+	)
+	return replacer.Replace(value)
+}
+
+func windowsSendKey(key string) string {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "escape", "esc":
+		return "{ESC}"
+	case "enter", "return":
+		return "{ENTER}"
+	case "tab":
+		return "{TAB}"
+	case "space":
+		return " "
+	case "backspace":
+		return "{BACKSPACE}"
+	case "delete":
+		return "{DELETE}"
+	case "left", "arrow-left":
+		return "{LEFT}"
+	case "right", "arrow-right":
+		return "{RIGHT}"
+	case "down", "arrow-down":
+		return "{DOWN}"
+	case "up", "arrow-up":
+		return "{UP}"
+	default:
+		return sendKeysEscape(key)
 	}
 }
 

@@ -3,6 +3,7 @@ package integrations
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -92,8 +93,59 @@ func TestExecuteComputerUseInputReturnsRunnerErrors(t *testing.T) {
 	}
 }
 
+func TestBuildComputerUseInputCommandBuildsOsaScriptClick(t *testing.T) {
+	command, err := BuildComputerUseInputCommand(Adapter{Name: "osascript", Command: []string{"/usr/bin/osascript"}}, ComputerUseInputAction{
+		Type:        "click",
+		X:           12,
+		Y:           34,
+		HasPosition: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(command) != 3 || command[1] != "-e" || !strings.Contains(command[2], "click at {12, 34}") {
+		t.Fatalf("command = %#v", command)
+	}
+}
+
+func TestBuildComputerUseInputCommandBuildsOsaScriptKey(t *testing.T) {
+	command, err := BuildComputerUseInputCommand(Adapter{Name: "osascript", Command: []string{"/usr/bin/osascript"}}, ComputerUseInputAction{Type: "key", Key: "Escape"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(command) != 3 || command[1] != "-e" || !strings.Contains(command[2], "key code 53") {
+		t.Fatalf("command = %#v", command)
+	}
+}
+
+func TestBuildComputerUseInputCommandBuildsPowerShellClick(t *testing.T) {
+	command, err := BuildComputerUseInputCommand(Adapter{Name: "powershell.exe", Command: []string{"powershell.exe", "-NoProfile", "-Command"}}, ComputerUseInputAction{
+		Type:        "click",
+		X:           10,
+		Y:           20,
+		HasPosition: true,
+		Button:      3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(command) != 4 || !strings.Contains(command[3], "SetCursorPos(10,20)") || !strings.Contains(command[3], "mouse_event(8") || !strings.Contains(command[3], "mouse_event(16") {
+		t.Fatalf("command = %#v", command)
+	}
+}
+
+func TestBuildComputerUseInputCommandBuildsPowerShellType(t *testing.T) {
+	command, err := BuildComputerUseInputCommand(Adapter{Name: "powershell.exe", Command: []string{"powershell.exe", "-NoProfile", "-Command"}}, ComputerUseInputAction{Type: "type", Text: "a+b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(command) != 4 || !strings.Contains(command[3], "SendKeys") || !strings.Contains(command[3], "a{+}b") {
+		t.Fatalf("command = %#v", command)
+	}
+}
+
 func TestBuildComputerUseInputCommandRejectsUnsupportedAdapter(t *testing.T) {
-	_, err := BuildComputerUseInputCommand(Adapter{Name: "osascript", Command: []string{"/usr/bin/osascript"}}, ComputerUseInputAction{Type: "click"})
+	_, err := BuildComputerUseInputCommand(Adapter{Name: "unknown", Command: []string{"/usr/bin/unknown"}}, ComputerUseInputAction{Type: "click"})
 	if err == nil {
 		t.Fatal("expected unsupported adapter error")
 	}
