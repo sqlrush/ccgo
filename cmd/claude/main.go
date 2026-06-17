@@ -319,7 +319,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 		select {
 		case <-ctx.Done():
 			tickMu.Lock()
-			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), ctx.Err()))
+			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), nil))
 			tickMu.Unlock()
 			return 0
 		case now := <-ticker.C:

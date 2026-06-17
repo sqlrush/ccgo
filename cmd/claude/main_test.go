@@ -253,6 +253,13 @@ func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("daemon did not stop after cancel")
 	}
+	stoppedState, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stoppedState.RuntimeState != daemonpkg.RuntimeDisabled || stoppedState.Error != "" {
+		t.Fatalf("stopped daemon state = %#v", stoppedState)
+	}
 }
 
 func daemonStatePathFromOutput(t *testing.T, output string) string {
