@@ -93,7 +93,7 @@ M10 补充：bridge direct server 新增 loopback-only `POST /remote-trigger` HT
 
 M10 补充：bridge direct WebSocket JSON 通道新增 `remote_trigger` action，复用 direct remote trigger request/response 结构和同一回调，可在已鉴权的 loopback WebSocket 连接上注入远端事件。完整 CCR 云端长连接协议仍未完成。
 
-M10 补充：bridge manifest 新增 `remote_trigger` capability，声明 `/remote-trigger` HTTP path 和 `remote_trigger` WebSocket action；runner 写出的 session-scoped bridge manifest 与 direct `/manifest` 响应都会暴露该能力，方便远端控制端发现可用入口。完整 CCR 能力协商仍未完成。
+M10 补充：bridge manifest 新增 `remote_trigger` capability，声明 `/remote-trigger` HTTP path 和 `remote_trigger` WebSocket action；runner 写出的 session-scoped bridge manifest、direct `/manifest` 响应和 `/status show bridge` 都会暴露该能力，方便远端控制端发现可用入口。完整 CCR 能力协商仍未完成。
 
 M7 补充：interaction script paste payload 现在接受 ClipboardItem 风格的 `items[].getAsString`/`get_as_string` 以及 `stringData`/`textData` 文本字段，DOM clipboard 录制脚本可直接恢复 pasted text。
 

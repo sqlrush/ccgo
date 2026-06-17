@@ -2723,6 +2723,9 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 			{Name: "compact", Type: contracts.CommandLocal},
 			{Name: "ask", Type: contracts.CommandPrompt, Aliases: []string{"question"}},
 		},
+		Capabilities: []bridgepkg.Capability{
+			{Name: "remote_trigger", HTTPPath: "/remote-trigger", WebSocketAction: "remote_trigger"},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2853,6 +2856,8 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status bridge",
 		"Enabled: disabled",
 		"Bridge-safe commands: 2",
+		"Bridge capabilities: 1",
+		"- remote_trigger: http /remote-trigger: websocket remote_trigger",
 		"Command names: ask, compact",
 	}, nil)
 	assertStatusShow("/status show lsp", []string{

@@ -1704,7 +1704,13 @@ func (r Runner) formatStatusBridge() string {
 	lines = append(lines,
 		"Manifest path: "+path,
 		fmt.Sprintf("Bridge-safe commands: %d", len(manifest.Commands)),
+		fmt.Sprintf("Bridge capabilities: %d", len(manifest.Capabilities)),
 	)
+	if len(manifest.Capabilities) > 0 {
+		for _, capability := range manifest.Capabilities {
+			lines = append(lines, formatBridgeCapability(capability))
+		}
+	}
 	directPath := bridgepkg.SessionDirectStatePath(r.SessionPath, r.SessionID)
 	if directPath != "" {
 		state, err := bridgepkg.LoadDirectState(directPath)
@@ -1740,6 +1746,17 @@ func (r Runner) formatStatusBridge() string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatBridgeCapability(capability bridgepkg.Capability) string {
+	parts := []string{capability.Name}
+	if capability.HTTPPath != "" {
+		parts = append(parts, "http "+capability.HTTPPath)
+	}
+	if capability.WebSocketAction != "" {
+		parts = append(parts, "websocket "+capability.WebSocketAction)
+	}
+	return "- " + strings.Join(parts, ": ")
 }
 
 func (r Runner) formatStatusTelemetry() string {
