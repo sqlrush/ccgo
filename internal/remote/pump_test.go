@@ -19,7 +19,7 @@ func TestFetchPollEventsUsesCursorAndAuth(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"nextCursor":"cursor-2",
 			"events":[
-				{"deliveryId":"evt-1","team":"remote/team","recipient":"coordinator","remote":"github","eventType":"workflow_failed","payload":{"message":"Fix CI."}},
+				{"deliveryId":"evt-1","team":"remote/team","recipient":"coordinator","remote":"github","eventType":"workflow_failed","ack":{"url":"https://remote/ack/evt-1"},"lease":{"id":"lease-1","expiresAt":"2026-06-17T11:30:00Z"},"payload":{"message":"Fix CI."}},
 				{"id":"evt-2","team_id":"remote/team","message":"Ship docs."}
 			]
 		}`))
@@ -37,7 +37,7 @@ func TestFetchPollEventsUsesCursorAndAuth(t *testing.T) {
 	if gotCursor != "cursor-1" || gotAuth != "Bearer poll-token" {
 		t.Fatalf("cursor/auth = %q/%q", gotCursor, gotAuth)
 	}
-	if result.Events[0].EventID != "evt-1" || result.Events[0].TeamID != "remote/team" || result.Events[0].Target != "coordinator" || result.Events[0].Source != "github" || result.Events[0].Event != "workflow_failed" || result.Events[0].Message != "Fix CI." {
+	if result.Events[0].EventID != "evt-1" || result.Events[0].TeamID != "remote/team" || result.Events[0].Target != "coordinator" || result.Events[0].Source != "github" || result.Events[0].Event != "workflow_failed" || result.Events[0].Message != "Fix CI." || result.Events[0].AckURL != "https://remote/ack/evt-1" || result.Events[0].LeaseID != "lease-1" || result.Events[0].LeaseExpiresAt != "2026-06-17T11:30:00Z" {
 		t.Fatalf("event aliases = %#v", result.Events[0])
 	}
 }
@@ -71,11 +71,11 @@ func TestDecodePollEventsAcceptsNestedDataAndArray(t *testing.T) {
 	if cursor != "c4" || len(events) != 1 || events[0].EventID != "evt-data" || events[0].Message != "data payload" {
 		t.Fatalf("data wrapper events=%#v cursor=%q", events, cursor)
 	}
-	events, cursor, err = DecodePollEvents([]byte(`{"type":"remote_trigger","event":{"delivery_id":"evt-event","team_id":"team","target":"coordinator","message":"event wrapper"}}`))
+	events, cursor, err = DecodePollEvents([]byte(`{"type":"remote_trigger","event":{"delivery_id":"evt-event","team_id":"team","target":"coordinator","message":"event wrapper","ack_url":"https://remote/ack/evt-event","lease_id":"lease-event","lease_expires_at":"2026-06-17T11:45:00Z"}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-event" || events[0].Target != "coordinator" || events[0].Message != "event wrapper" {
+	if cursor != "" || len(events) != 1 || events[0].EventID != "evt-event" || events[0].Target != "coordinator" || events[0].Message != "event wrapper" || events[0].AckURL != "https://remote/ack/evt-event" || events[0].LeaseID != "lease-event" || events[0].LeaseExpiresAt != "2026-06-17T11:45:00Z" {
 		t.Fatalf("event wrapper events=%#v cursor=%q", events, cursor)
 	}
 	events, cursor, err = DecodePollEvents([]byte(`{"kind":"delivery","payload":{"id":"evt-payload","team_id":"team","event_type":"deploy","message":"payload wrapper"}}`))
@@ -125,6 +125,8 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 		FrameCount:       2,
 		ConnectCount:     1,
 		ReconnectCount:   1,
+		AckEventCount:    1,
+		LeaseEventCount:  1,
 		EventCount:       2,
 		DeliveredCount:   1,
 	}
@@ -135,7 +137,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.LastPollAt == "" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.AckEventCount != 1 || loaded.LeaseEventCount != 1 || loaded.LastPollAt == "" {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	data, err := json.Marshal(loaded)

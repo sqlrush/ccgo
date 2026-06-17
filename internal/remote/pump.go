@@ -41,6 +41,8 @@ type PumpState struct {
 	FrameCount       int          `json:"frame_count,omitempty"`
 	ConnectCount     int          `json:"connect_count,omitempty"`
 	ReconnectCount   int          `json:"reconnect_count,omitempty"`
+	AckEventCount    int          `json:"ack_event_count,omitempty"`
+	LeaseEventCount  int          `json:"lease_event_count,omitempty"`
 	EventCount       int          `json:"event_count,omitempty"`
 	DeliveredCount   int          `json:"delivered_count,omitempty"`
 	DuplicateCount   int          `json:"duplicate_count,omitempty"`
@@ -49,12 +51,15 @@ type PumpState struct {
 }
 
 type PollEvent struct {
-	EventID string `json:"event_id,omitempty"`
-	TeamID  string `json:"team_id,omitempty"`
-	Target  string `json:"target,omitempty"`
-	Source  string `json:"source,omitempty"`
-	Event   string `json:"event,omitempty"`
-	Message string `json:"message,omitempty"`
+	EventID        string `json:"event_id,omitempty"`
+	TeamID         string `json:"team_id,omitempty"`
+	Target         string `json:"target,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Event          string `json:"event,omitempty"`
+	Message        string `json:"message,omitempty"`
+	AckURL         string `json:"ack_url,omitempty"`
+	LeaseID        string `json:"lease_id,omitempty"`
+	LeaseExpiresAt string `json:"lease_expires_at,omitempty"`
 }
 
 type PollOptions struct {
@@ -261,20 +266,40 @@ func decodePollEventList(list []any) []PollEvent {
 
 func decodePollEventMap(obj map[string]any) (PollEvent, bool) {
 	event := PollEvent{
-		EventID: firstString(obj, "event_id", "eventId", "remote_event_id", "remoteEventId", "delivery_id", "deliveryId", "id"),
-		TeamID:  firstString(obj, "team_id", "teamId", "team"),
-		Target:  firstString(obj, "target", "recipient", "recipients", "audience", "scope"),
-		Source:  firstString(obj, "source", "remote", "origin"),
-		Event:   firstString(obj, "event", "event_type", "eventType", "type"),
-		Message: firstString(obj, "message", "text", "content", "prompt", "input"),
+		EventID:        firstString(obj, "event_id", "eventId", "remote_event_id", "remoteEventId", "delivery_id", "deliveryId", "id"),
+		TeamID:         firstString(obj, "team_id", "teamId", "team"),
+		Target:         firstString(obj, "target", "recipient", "recipients", "audience", "scope"),
+		Source:         firstString(obj, "source", "remote", "origin"),
+		Event:          firstString(obj, "event", "event_type", "eventType", "type"),
+		Message:        firstString(obj, "message", "text", "content", "prompt", "input"),
+		AckURL:         firstString(obj, "ack_url", "ackUrl", "acknowledge_url", "acknowledgeUrl", "receipt_url", "receiptUrl"),
+		LeaseID:        firstString(obj, "lease_id", "leaseId"),
+		LeaseExpiresAt: firstString(obj, "lease_expires_at", "leaseExpiresAt", "lease_expiry", "leaseExpiry", "expires_at", "expiresAt"),
 	}
 	if event.Message == "" {
 		event.Message = messageFromPayload(obj["payload"])
+	}
+	if event.AckURL == "" {
+		event.AckURL = stringFromNestedMap(obj["ack"], "url", "href", "endpoint")
+	}
+	if event.LeaseID == "" {
+		event.LeaseID = stringFromNestedMap(obj["lease"], "id", "lease_id", "leaseId")
+	}
+	if event.LeaseExpiresAt == "" {
+		event.LeaseExpiresAt = stringFromNestedMap(obj["lease"], "expires_at", "expiresAt", "lease_expires_at", "leaseExpiresAt")
 	}
 	if event.TeamID == "" || event.Message == "" {
 		return PollEvent{}, false
 	}
 	return event, true
+}
+
+func stringFromNestedMap(value any, keys ...string) string {
+	nested, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	return firstString(nested, keys...)
 }
 
 func firstAny(values map[string]any, keys ...string) (any, bool) {

@@ -872,9 +872,11 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	}
 	writeStreamState()
 	result := remotepkg.StreamWebSocketEvents(ctx, options, func(events []remotepkg.PollEvent) error {
-		delivered, duplicates, errorsOut := deliverDaemonRemoteEvents(ctx, runner, events)
+		delivered, duplicates, ackEvents, leaseEvents, errorsOut := deliverDaemonRemoteEvents(ctx, runner, events)
 		pumpState.RuntimeState = remotepkg.PumpRunning
 		pumpState.EventCount += len(events)
+		pumpState.AckEventCount += ackEvents
+		pumpState.LeaseEventCount += leaseEvents
 		pumpState.DeliveredCount += delivered
 		pumpState.DuplicateCount += duplicates
 		pumpState.ErrorCount += len(errorsOut)
@@ -908,6 +910,8 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	structured["connect_count"] = pumpState.ConnectCount
 	structured["reconnect_count"] = pumpState.ReconnectCount
 	structured["close_code"] = pumpState.CloseCode
+	structured["ack_event_count"] = pumpState.AckEventCount
+	structured["lease_event_count"] = pumpState.LeaseEventCount
 	structured["stream_started_at"] = pumpState.StreamStartedAt
 	structured["stream_ended_at"] = pumpState.StreamEndedAt
 	structured["stream_stop_reason"] = pumpState.StreamStopReason
@@ -1112,7 +1116,9 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
 		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
 	}
-	delivered, duplicates, errorsOut := deliverDaemonRemoteEvents(ctx, runner, remoteFetch.Events)
+	delivered, duplicates, ackEvents, leaseEvents, errorsOut := deliverDaemonRemoteEvents(ctx, runner, remoteFetch.Events)
+	pumpState.AckEventCount = ackEvents
+	pumpState.LeaseEventCount = leaseEvents
 	pumpState.DeliveredCount = delivered
 	pumpState.DuplicateCount = duplicates
 	pumpState.ErrorCount = len(errorsOut)
@@ -1130,6 +1136,8 @@ func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now ti
 	structured["frame_count"] = pumpState.FrameCount
 	structured["connect_count"] = pumpState.ConnectCount
 	structured["reconnect_count"] = pumpState.ReconnectCount
+	structured["ack_event_count"] = pumpState.AckEventCount
+	structured["lease_event_count"] = pumpState.LeaseEventCount
 	structured["event_count"] = pumpState.EventCount
 	structured["delivered_count"] = pumpState.DeliveredCount
 	structured["duplicate_count"] = pumpState.DuplicateCount
@@ -1211,11 +1219,19 @@ func fetchDaemonRemoteEvents(ctx context.Context, registration remotepkg.Registr
 	}
 }
 
-func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, events []remotepkg.PollEvent) (int, int, []map[string]any) {
+func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, events []remotepkg.PollEvent) (int, int, int, int, []map[string]any) {
 	errorsOut := make([]map[string]any, 0)
 	delivered := 0
 	duplicates := 0
+	ackEvents := 0
+	leaseEvents := 0
 	for _, event := range events {
+		if event.AckURL != "" {
+			ackEvents++
+		}
+		if event.LeaseID != "" || event.LeaseExpiresAt != "" {
+			leaseEvents++
+		}
 		input, err := json.Marshal(map[string]any{
 			"team_id":  event.TeamID,
 			"target":   event.Target,
@@ -1246,7 +1262,7 @@ func deliverDaemonRemoteEvents(ctx context.Context, runner conversation.Runner, 
 		}
 		delivered += intMapValue(result.StructuredContent, "sent_count")
 	}
-	return delivered, duplicates, errorsOut
+	return delivered, duplicates, ackEvents, leaseEvents, errorsOut
 }
 
 func daemonTickResponse(result contracts.ToolResult) daemonpkg.TickResponse {
