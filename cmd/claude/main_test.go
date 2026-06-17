@@ -186,6 +186,110 @@ func TestRunDaemonOnceWritesState(t *testing.T) {
 	}
 }
 
+func TestRunDaemonOnceUsesInjectedSessionID(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", cwd, "--daemon-session", "sess_fixed_daemon", "--daemon-once"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	statePath := daemonStatePathFromOutput(t, stdout.String())
+	if !strings.Contains(statePath, "sess_fixed_daemon") {
+		t.Fatalf("state path = %q", statePath)
+	}
+	state, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.SessionID != "sess_fixed_daemon" {
+		t.Fatalf("daemon state session = %q", state.SessionID)
+	}
+}
+
+func TestRunDaemonStartLaunchesDetachedDaemon(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	oldStartDaemonProcess := startDaemonProcess
+	defer func() { startDaemonProcess = oldStartDaemonProcess }()
+	launches := 0
+	startDaemonProcess = func(_ context.Context, options daemonProcessStartOptions) (int, error) {
+		launches++
+		if options.SessionID == "" || options.StatePath == "" || options.WorkingDirectory == "" {
+			t.Fatalf("start options = %#v", options)
+		}
+		state := daemonpkg.BuildState(options.SessionID, options.WorkingDirectory, daemonpkg.RuntimeRunning, 4242, "http://127.0.0.1:4242", time.Now().UTC(), nil)
+		if err := daemonpkg.WriteState(options.StatePath, state); err != nil {
+			t.Fatal(err)
+		}
+		return 4242, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", cwd, "--daemon-start", "--daemon-heartbeat", "20ms"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("daemon start exit = %d stderr=%s", code, stderr.String())
+	}
+	if launches != 1 || !strings.Contains(stdout.String(), "ccgo daemon started") || !strings.Contains(stdout.String(), "endpoint=http://127.0.0.1:4242") {
+		t.Fatalf("launches=%d stdout=%q", launches, stdout.String())
+	}
+	var secondOut, secondErr bytes.Buffer
+	code = run([]string{"--cwd", cwd, "--daemon-start"}, strings.NewReader(""), &secondOut, &secondErr)
+	if code != 0 {
+		t.Fatalf("second daemon start exit = %d stderr=%s", code, secondErr.String())
+	}
+	if launches != 1 || !strings.Contains(secondOut.String(), "ccgo daemon already running") {
+		t.Fatalf("launches=%d second stdout=%q", launches, secondOut.String())
+	}
+}
+
+func TestRunDaemonRestartStopsRunningDaemonBeforeStart(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	cwd := t.TempDir()
+	resolvedCWD, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSessionID := contracts.ID("sess_restart_old")
+	oldStatePath := daemonpkg.SessionStatePath(session.TranscriptPath(resolvedCWD, oldSessionID), oldSessionID)
+	var stopped bool
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/stop" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		stopped = true
+		disabled := daemonpkg.BuildState(oldSessionID, resolvedCWD, daemonpkg.RuntimeDisabled, 1111, server.URL, time.Now().UTC(), nil)
+		if err := daemonpkg.WriteState(oldStatePath, disabled); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(daemonpkg.StopResponse{OK: true, RuntimeState: daemonpkg.RuntimeDisabled})
+	}))
+	defer server.Close()
+	running := daemonpkg.BuildState(oldSessionID, resolvedCWD, daemonpkg.RuntimeRunning, 1111, server.URL, time.Now().UTC(), nil)
+	if err := daemonpkg.WriteState(oldStatePath, running); err != nil {
+		t.Fatal(err)
+	}
+	oldStartDaemonProcess := startDaemonProcess
+	defer func() { startDaemonProcess = oldStartDaemonProcess }()
+	launches := 0
+	startDaemonProcess = func(_ context.Context, options daemonProcessStartOptions) (int, error) {
+		launches++
+		state := daemonpkg.BuildState(options.SessionID, options.WorkingDirectory, daemonpkg.RuntimeRunning, 5151, "http://127.0.0.1:5151", time.Now().UTC(), nil)
+		if err := daemonpkg.WriteState(options.StatePath, state); err != nil {
+			t.Fatal(err)
+		}
+		return 5151, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", cwd, "--daemon-restart"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("daemon restart exit = %d stderr=%s", code, stderr.String())
+	}
+	if !stopped || launches != 1 || !strings.Contains(stdout.String(), "ccgo daemon started") {
+		t.Fatalf("stopped=%v launches=%d stdout=%q", stopped, launches, stdout.String())
+	}
+}
+
 func TestRunDaemonDueSchedulesNoopsWithoutSchedules(t *testing.T) {
 	runner := conversation.Runner{
 		SessionID:        "sess_daemon_due",

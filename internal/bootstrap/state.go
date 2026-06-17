@@ -42,6 +42,14 @@ func (s *State) SessionID() contracts.ID {
 	return s.sessionID
 }
 
+func (s *State) SetSessionID(sessionID contracts.ID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sessionID != "" {
+		s.sessionID = sessionID
+	}
+}
+
 func (s *State) CWD() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

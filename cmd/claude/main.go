@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -65,10 +66,20 @@ type daemonOptions struct {
 }
 
 type daemonControlOptions struct {
-	StatePath string
-	Status    bool
-	Stop      bool
-	Tick      bool
+	StatePath         string
+	Status            bool
+	Stop              bool
+	Tick              bool
+	Start             bool
+	Restart           bool
+	HeartbeatInterval time.Duration
+}
+
+type daemonProcessStartOptions struct {
+	WorkingDirectory string
+	SessionID        contracts.ID
+	StatePath        string
+	Heartbeat        time.Duration
 }
 
 type repeatedStringFlag []string
@@ -95,6 +106,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	daemonStatus := flags.Bool("daemon-status", false, "print daemon status and exit")
 	daemonStop := flags.Bool("daemon-stop", false, "stop the daemon recorded in daemon state")
 	daemonTick := flags.Bool("daemon-tick", false, "trigger one daemon schedule tick")
+	daemonStart := flags.Bool("daemon-start", false, "start daemon in the background")
+	daemonRestart := flags.Bool("daemon-restart", false, "restart daemon in the background")
+	daemonSession := flags.String("daemon-session", "", "daemon session id")
 	daemonStatePath := flags.String("daemon-state", "", "daemon state path")
 	cwd := flags.String("cwd", "", "working directory")
 	printMode := flags.Bool("print", false, "print response and exit")
@@ -154,12 +168,18 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
-	if *daemonStatus || *daemonStop || *daemonTick {
+	if strings.TrimSpace(*daemonSession) != "" {
+		state.SetSessionID(contracts.ID(strings.TrimSpace(*daemonSession)))
+	}
+	if *daemonStatus || *daemonStop || *daemonTick || *daemonStart || *daemonRestart {
 		return runDaemonControl(context.Background(), state, daemonControlOptions{
-			StatePath: strings.TrimSpace(*daemonStatePath),
-			Status:    *daemonStatus,
-			Stop:      *daemonStop,
-			Tick:      *daemonTick,
+			StatePath:         strings.TrimSpace(*daemonStatePath),
+			Status:            *daemonStatus,
+			Stop:              *daemonStop,
+			Tick:              *daemonTick,
+			Start:             *daemonStart,
+			Restart:           *daemonRestart,
+			HeartbeatInterval: *daemonHeartbeat,
 		}, stdout, stderr)
 	}
 	if *daemonMode || *daemonOnce {
@@ -265,9 +285,11 @@ func runChromeNativeHost(stdin io.Reader, stdout io.Writer, stderr io.Writer) in
 	}
 }
 
+var startDaemonProcess = startDaemonProcessDefault
+
 func runDaemonControl(ctx context.Context, state *bootstrap.State, options daemonControlOptions, stdout io.Writer, stderr io.Writer) int {
 	actionCount := 0
-	for _, enabled := range []bool{options.Status, options.Stop, options.Tick} {
+	for _, enabled := range []bool{options.Status, options.Stop, options.Tick, options.Start, options.Restart} {
 		if enabled {
 			actionCount++
 		}
@@ -275,6 +297,13 @@ func runDaemonControl(ctx context.Context, state *bootstrap.State, options daemo
 	if actionCount > 1 {
 		fmt.Fprintf(stderr, "ccgo daemon: daemon control actions are mutually exclusive\n")
 		return 2
+	}
+	if options.Start || options.Restart {
+		if err := startOrRestartDaemon(ctx, state, options, stdout); err != nil {
+			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 	statePath, err := resolveDaemonStatePath(state, options.StatePath)
 	if err != nil {
@@ -304,6 +333,138 @@ func runDaemonControl(ctx context.Context, state *bootstrap.State, options daemo
 	}
 	fmt.Fprintf(stderr, "ccgo daemon: no daemon control action requested\n")
 	return 2
+}
+
+func startOrRestartDaemon(ctx context.Context, state *bootstrap.State, options daemonControlOptions, stdout io.Writer) error {
+	if options.HeartbeatInterval <= 0 {
+		return errors.New("daemon heartbeat interval must be positive")
+	}
+	runner, err := state.ConversationRunner()
+	if err != nil {
+		return err
+	}
+	if runner.SessionPath == "" && runner.SessionID != "" {
+		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
+	}
+	existingPath, err := resolveDaemonStatePath(state, options.StatePath)
+	if err != nil {
+		return err
+	}
+	existingState, err := daemonpkg.LoadState(existingPath)
+	if err != nil {
+		return err
+	}
+	existingRuntime := daemonpkg.RuntimeStateAt(existingState, time.Now().UTC(), 2*time.Minute)
+	if options.Restart && existingState.GeneratedAt != "" && existingRuntime == daemonpkg.RuntimeRunning && strings.TrimSpace(existingState.Endpoint) != "" {
+		if err := stopDaemon(ctx, io.Discard, existingPath); err != nil {
+			return err
+		}
+	} else if options.Start && existingRuntime == daemonpkg.RuntimeRunning && existingState.GeneratedAt != "" {
+		return writeAlreadyRunningDaemon(stdout, existingPath, existingState)
+	}
+
+	sessionID := contracts.NewID()
+	sessionPath := session.TranscriptPath(runner.WorkingDirectory, sessionID)
+	statePath := daemonpkg.SessionStatePath(sessionPath, sessionID)
+	pid, err := startDaemonProcess(ctx, daemonProcessStartOptions{
+		WorkingDirectory: runner.WorkingDirectory,
+		SessionID:        sessionID,
+		StatePath:        statePath,
+		Heartbeat:        options.HeartbeatInterval,
+	})
+	if err != nil {
+		return err
+	}
+	startCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	started := waitForDaemonRuntimeState(startCtx, statePath, daemonpkg.RuntimeRunning)
+	if started.RuntimeState != daemonpkg.RuntimeRunning {
+		return fmt.Errorf("daemon start did not report running state: %s", statePath)
+	}
+	lines := []string{
+		"ccgo daemon started",
+		"session_id=" + string(sessionID),
+		"state_path=" + statePath,
+		"runtime_state=" + daemonpkg.RuntimeRunning,
+	}
+	if started.PID > 0 {
+		lines = append(lines, fmt.Sprintf("pid=%d", started.PID))
+	} else if pid > 0 {
+		lines = append(lines, fmt.Sprintf("pid=%d", pid))
+	}
+	if started.Endpoint != "" {
+		lines = append(lines, "endpoint="+started.Endpoint)
+	}
+	if started.GeneratedAt != "" {
+		lines = append(lines, "generated_at="+started.GeneratedAt)
+	}
+	_, err = fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+	return err
+}
+
+func writeAlreadyRunningDaemon(stdout io.Writer, statePath string, state daemonpkg.State) error {
+	lines := []string{
+		"ccgo daemon already running",
+		"state_path=" + statePath,
+		"runtime_state=" + daemonpkg.RuntimeRunning,
+	}
+	if state.PID > 0 {
+		lines = append(lines, fmt.Sprintf("pid=%d", state.PID))
+	}
+	if state.Endpoint != "" {
+		lines = append(lines, "endpoint="+state.Endpoint)
+	}
+	_, err := fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+	return err
+}
+
+func startDaemonProcessDefault(ctx context.Context, options daemonProcessStartOptions) (int, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(options.WorkingDirectory) == "" {
+		return 0, errors.New("daemon working directory is unavailable")
+	}
+	if options.SessionID == "" {
+		return 0, errors.New("daemon session id is unavailable")
+	}
+	logPath := options.StatePath + ".log"
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		return 0, err
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	defer logFile.Close()
+	args := []string{
+		"--cwd", options.WorkingDirectory,
+		"--daemon",
+		"--daemon-session", string(options.SessionID),
+		"--daemon-heartbeat", options.Heartbeat.String(),
+	}
+	cmd := exec.Command(executable, args...)
+	cmd.Dir = options.WorkingDirectory
+	cmd.Env = os.Environ()
+	cmd.Stdin = nil
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		default:
+		}
+	}
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := cmd.Process.Pid
+	if err := cmd.Process.Release(); err != nil {
+		return 0, err
+	}
+	return pid, nil
 }
 
 func resolveDaemonStatePath(state *bootstrap.State, explicit string) (string, error) {
