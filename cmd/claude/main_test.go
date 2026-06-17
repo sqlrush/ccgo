@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/bootstrap"
 	compactpkg "ccgo/internal/compact"
@@ -182,6 +183,17 @@ func TestRunDaemonOnceWritesState(t *testing.T) {
 	}
 	if state.RuntimeState != daemonpkg.RuntimeRunning || state.PID <= 0 || state.WorkingDirectory != resolvedCWD || state.HeartbeatAt == "" {
 		t.Fatalf("daemon state = %#v", state)
+	}
+}
+
+func TestRunDaemonDueSchedulesNoopsWithoutSchedules(t *testing.T) {
+	runner := conversation.Runner{
+		SessionID:        "sess_daemon_due",
+		WorkingDirectory: t.TempDir(),
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+	}
+	if err := runDaemonDueSchedules(context.Background(), runner, time.Now().UTC()); err != nil {
+		t.Fatal(err)
 	}
 }
 

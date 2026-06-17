@@ -89,7 +89,7 @@ M10 补充：新增 `ScheduleCron` 工具入口和 session-scoped `schedules.jso
 
 M10 补充：conversation runner 在每轮主请求前会执行一次 `ScheduleCron` due tick，复用 `run_due` 的触发与 last-run 去重逻辑，把到期 schedule 自动注入 running team recipients；无到期任务时不发噪声进度，触发失败会 fail-open 并发 `schedule_due_error` progress。完整常驻后台 daemon 和远端服务接入仍未完成。
 
-M10 补充：新增 session-scoped `daemon-state.json` 状态契约和 `/status show daemon` 审计 section，可记录 runtime_state、PID、endpoint、started_at、heartbeat_at 和错误，并按 heartbeat 超时把 running 状态判定为 stale；CLI 新增 `--daemon` heartbeat loop 和 `--daemon-once` 单次写入模式。完整 daemon 托管调度循环仍未完成。
+M10 补充：新增 session-scoped `daemon-state.json` 状态契约和 `/status show daemon` 审计 section，可记录 runtime_state、PID、endpoint、started_at、heartbeat_at 和错误，并按 heartbeat 超时把 running 状态判定为 stale；CLI 新增 `--daemon` heartbeat loop 和 `--daemon-once` 单次写入模式，daemon tick 会复用 `ScheduleCron run_due` 执行到期 schedule。完整 daemon 进程管理/远端托管仍未完成。
 
 M10 补充：新增 `RemoteTrigger` 工具入口，可把 source/event/message 作为远端触发事件注入到 running team recipients；默认优先发给 coordinator，消息正文保留远端来源和事件类型。`event_id` 可选，提供后会写入 session-scoped `remote_triggers.json` receipt，重复投递会 no-op 并记录 duplicate_count，避免远端重试重复注入。完整 remote websocket/CCR 服务接入仍未完成。
 

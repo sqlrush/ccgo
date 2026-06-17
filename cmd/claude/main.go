@@ -30,6 +30,7 @@ import (
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
+	tasktools "ccgo/internal/tools/task"
 )
 
 const version = "0.0.0-dev"
@@ -264,7 +265,13 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	writeHeartbeat := func(now time.Time) error {
 		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), "", now, nil))
 	}
-	if err := writeHeartbeat(time.Now().UTC()); err != nil {
+	runTick := func(now time.Time) error {
+		if err := writeHeartbeat(now); err != nil {
+			return err
+		}
+		return runDaemonDueSchedules(ctx, runner, now)
+	}
+	if err := runTick(time.Now().UTC()); err != nil {
 		fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
 		return 1
 	}
@@ -280,12 +287,24 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), "", time.Now().UTC(), ctx.Err()))
 			return 0
 		case now := <-ticker.C:
-			if err := writeHeartbeat(now.UTC()); err != nil {
+			if err := runTick(now.UTC()); err != nil {
 				fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
 				return 1
 			}
 		}
 	}
+}
+
+func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now time.Time) error {
+	_, err := tasktools.RunDueSchedules(tool.Context{
+		Context:          ctx,
+		WorkingDirectory: runner.WorkingDirectory,
+		SessionID:        runner.SessionID,
+		Metadata: map[string]any{
+			tool.MetadataSessionPathKey: runner.SessionPath,
+		},
+	}, "", now, tool.NopProgressSink())
+	return err
 }
 
 func handleChromeNativeHostMessage(raw json.RawMessage) map[string]any {
