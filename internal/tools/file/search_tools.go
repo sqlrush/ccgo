@@ -35,6 +35,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
+	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 }
 
 var grepSemanticNumberKeys = map[string]struct{}{
@@ -49,6 +50,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
+	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 }
 
 type globInput struct {
@@ -100,6 +102,10 @@ type grepInput struct {
 	OnlyMatchingAlt    bool   `json:"onlyMatching,omitempty"`
 	OnlyMatchingDash   bool   `json:"only-matching,omitempty"`
 	ShortOnlyMatching  bool   `json:"-o,omitempty"`
+	CountMatches       bool   `json:"count_matches,omitempty"`
+	CountMatchesAlt    bool   `json:"countMatches,omitempty"`
+	CountMatchesDash   bool   `json:"count-matches,omitempty"`
+	LongCountMatches   bool   `json:"--count-matches,omitempty"`
 	Multiline          bool   `json:"multiline,omitempty"`
 }
 
@@ -130,6 +136,7 @@ type grepOptions struct {
 	Multiline     bool
 	InvertMatch   bool
 	OnlyMatching  bool
+	CountMatches  bool
 }
 
 type searchWalkOptions struct {
@@ -227,12 +234,16 @@ func NewGrepTool() tool.Tool {
 					"onlyMatching":     map[string]any{"type": "boolean"},
 					"only-matching":    map[string]any{"type": "boolean"},
 					"-o":               map[string]any{"type": "boolean"},
+					"count_matches":    map[string]any{"type": "boolean"},
+					"countMatches":     map[string]any{"type": "boolean"},
+					"count-matches":    map[string]any{"type": "boolean"},
+					"--count-matches":  map[string]any{"type": "boolean"},
 					"multiline":        map[string]any{"type": "boolean"},
 				},
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, and only_matching/-o matched-text output. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, content, or count; glob and type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, and only_matching/-o matched-text output. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -374,6 +385,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		before = 0
 		after = 0
 	}
+	countMatches := grepCountMatches(input) && mode == "count" && !grepInvertMatch(input)
 	options := grepOptions{
 		Mode:          mode,
 		Limit:         grepLimit(input),
@@ -385,6 +397,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Multiline:     input.Multiline,
 		InvertMatch:   grepInvertMatch(input),
 		OnlyMatching:  onlyMatching,
+		CountMatches:  countMatches,
 	}
 	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, input.Glob, input.Type, expr, options, grepWalkOptions(ctx, root))
 	if err != nil {
@@ -416,6 +429,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"word_regexp":      grepWordRegexp(input),
 			"invert_match":     grepInvertMatch(input),
 			"only_matching":    onlyMatching,
+			"count_matches":    countMatches,
 			"multiline":        input.Multiline,
 			"truncated":        truncated,
 		},
@@ -589,7 +603,13 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 			return nil
 		}
 		displayRel := searchDisplayPath(displayRoot, path, rel)
-		lineMatches := grepFileMatches(displayRel, content, expr, options)
+		matchOptions := options
+		if options.CountMatches {
+			matchOptions.OnlyMatching = true
+			matchOptions.BeforeContext = 0
+			matchOptions.AfterContext = 0
+		}
+		lineMatches := grepFileMatches(displayRel, content, expr, matchOptions)
 		if len(lineMatches) == 0 {
 			return nil
 		}
@@ -597,7 +617,11 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 		case "files_with_matches":
 			matches = append(matches, grepMatch{Path: displayRel, ModUnix: info.ModTime().UnixNano()})
 		case "count":
-			matches = append(matches, grepMatch{Path: displayRel, Count: countMatchedLines(lineMatches)})
+			count := countMatchedLines(lineMatches)
+			if options.CountMatches {
+				count = len(lineMatches)
+			}
+			matches = append(matches, grepMatch{Path: displayRel, Count: count})
 		default:
 			matches = append(matches, lineMatches...)
 		}
@@ -1053,6 +1077,10 @@ func grepInvertMatch(input grepInput) bool {
 
 func grepOnlyMatching(input grepInput) bool {
 	return input.OnlyMatching || input.OnlyMatchingAlt || input.OnlyMatchingDash || input.ShortOnlyMatching
+}
+
+func grepCountMatches(input grepInput) bool {
+	return input.CountMatches || input.CountMatchesAlt || input.CountMatchesDash || input.LongCountMatches
 }
 
 func grepLineNumbers(input grepInput, mode string) bool {

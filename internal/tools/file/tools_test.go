@@ -1287,6 +1287,34 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("count result = %#v", countResult.Content)
 	}
 
+	if err := os.WriteFile(filepath.Join(dir, "src", "multi.txt"), []byte("func func\nfunc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	countMatchesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_count_matches",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/multi.txt","output_mode":"count","--count-matches":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCountMatches := "src/multi.txt:3\n\nFound 3 total occurrences across 1 file."
+	if countMatchesResult.Content != wantCountMatches || countMatchesResult.StructuredContent["count_matches"] != true {
+		t.Fatalf("count-matches result = %#v", countMatchesResult)
+	}
+
+	quotedCountMatchesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_count_matches_quoted",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/multi.txt","outputMode":"count","countMatches":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quotedCountMatchesResult.Content != wantCountMatches || quotedCountMatchesResult.StructuredContent["count_matches"] != true {
+		t.Fatalf("quoted countMatches result = %#v", quotedCountMatchesResult)
+	}
+
 	camelModeResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_camel_output_mode",
 		Name:  "Grep",
