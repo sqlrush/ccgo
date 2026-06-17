@@ -21,6 +21,7 @@ import (
 	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/messages"
+	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	bashtools "ccgo/internal/tools/bash"
@@ -298,6 +299,87 @@ func TestRunDaemonDueSchedulesNoopsWithoutSchedules(t *testing.T) {
 	}
 	if _, err := runDaemonDueSchedules(context.Background(), runner, time.Now().UTC()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunDaemonRemotePollInjectsRemoteTriggers(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_daemon_remote")
+	manager := session.NewSidechainManager(transcriptPath, sessionID)
+	if _, err := manager.Start(session.SidechainOptions{ID: "agent/remote-lead", StartedAt: time.Unix(100, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(session.SidechainOptions{ID: "agent/remote-member", StartedAt: time.Unix(101, 0).UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.CreateTeam(session.TeamOptions{
+		ID:                "remote/team",
+		CoordinatorTaskID: "agent/remote-lead",
+		TaskIDs:           []string{"agent/remote-member"},
+		Timestamp:         time.Unix(102, 0).UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var cursors []string
+	var auths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cursors = append(cursors, r.URL.Query().Get("cursor"))
+		auths = append(auths, r.Header.Get("Authorization"))
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"next_cursor":"cursor-2","events":[{"id":"delivery-1","team":"remote/team","source":"webhook","event":"deploy","message":"Deploy now."}]}`))
+	}))
+	defer server.Close()
+	if err := remotepkg.WriteRegistrationState(remotepkg.SessionRegistrationPath(transcriptPath, sessionID), remotepkg.RegistrationState{
+		SessionID:       sessionID,
+		RuntimeState:    remotepkg.RegistrationRegistered,
+		PollURL:         server.URL + "/poll?token=secret",
+		RemoteSessionID: "remote-session",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := conversation.Runner{
+		SessionID:        sessionID,
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &conversation.MCPConfig{UserSettings: contracts.Settings{
+			Remote: &contracts.RemoteSetting{AuthToken: "poll-token"},
+		}},
+	}
+	first := runDaemonRemotePoll(context.Background(), runner, time.Unix(200, 0).UTC())
+	if first.StructuredContent["runtime_state"] != remotepkg.PumpRunning || first.StructuredContent["delivered_count"] != 1 || first.StructuredContent["duplicate_count"] != 0 || first.StructuredContent["error_count"] != 0 {
+		t.Fatalf("first poll = %#v", first.StructuredContent)
+	}
+	if len(cursors) != 1 || cursors[0] != "" || auths[0] != "Bearer poll-token" {
+		t.Fatalf("first cursor/auth = %#v %#v", cursors, auths)
+	}
+	pump, err := remotepkg.LoadPumpState(remotepkg.SessionPumpPath(transcriptPath, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pump.LastCursor != "cursor-2" || pump.PollURL != server.URL+"/poll" || pump.DeliveredCount != 1 {
+		t.Fatalf("pump = %#v", pump)
+	}
+	resume, err := manager.ResumeContext("agent/remote-lead", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 || !strings.Contains(messages.TextContent(resume.Messages[1]), "Remote trigger received.") || !strings.Contains(messages.TextContent(resume.Messages[1]), "Deploy now.") {
+		t.Fatalf("resume messages = %#v", resume.Messages)
+	}
+	second := runDaemonRemotePoll(context.Background(), runner, time.Unix(201, 0).UTC())
+	if second.StructuredContent["delivered_count"] != 0 || second.StructuredContent["duplicate_count"] != 1 || second.StructuredContent["error_count"] != 0 {
+		t.Fatalf("second poll = %#v", second.StructuredContent)
+	}
+	if len(cursors) != 2 || cursors[1] != "cursor-2" {
+		t.Fatalf("cursors = %#v", cursors)
+	}
+	resume, err = manager.ResumeContext("agent/remote-lead", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resume.Messages) != 2 {
+		t.Fatalf("duplicate should not append, messages = %#v", resume.Messages)
 	}
 }
 

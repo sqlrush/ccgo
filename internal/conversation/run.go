@@ -1793,6 +1793,16 @@ func (r Runner) formatStatusRemote() string {
 			lines = append(lines, formatRemoteRegistration(registration)...)
 		}
 	}
+	pumpPath := remotepkg.SessionPumpPath(r.SessionPath, r.SessionID)
+	if pumpPath != "" {
+		lines = append(lines, "Remote pump path: "+pumpPath)
+		pump, err := remotepkg.LoadPumpState(pumpPath)
+		if err != nil {
+			lines = append(lines, "Remote pump error: "+err.Error())
+		} else {
+			lines = append(lines, formatRemotePump(pump)...)
+		}
+	}
 	if manifest.GeneratedAt == "" {
 		return strings.Join(append(lines, "Remote services: 0"), "\n")
 	}
@@ -1815,7 +1825,7 @@ func formatRemoteRegistration(state remotepkg.RegistrationState) []string {
 	}
 	parts := []string{state.RuntimeState}
 	if state.RegistrationURL != "" {
-		parts = append(parts, "url "+state.RegistrationURL)
+		parts = append(parts, "url "+remotepkg.DisplayEndpoint(state.RegistrationURL))
 	}
 	if state.StatusCode > 0 {
 		parts = append(parts, fmt.Sprintf("status %d", state.StatusCode))
@@ -1827,10 +1837,10 @@ func formatRemoteRegistration(state remotepkg.RegistrationState) []string {
 		parts = append(parts, "registration "+state.RegistrationID)
 	}
 	if state.WebSocketURL != "" {
-		parts = append(parts, "websocket "+state.WebSocketURL)
+		parts = append(parts, "websocket "+remotepkg.DisplayEndpoint(state.WebSocketURL))
 	}
 	if state.PollURL != "" {
-		parts = append(parts, "poll "+state.PollURL)
+		parts = append(parts, "poll "+remotepkg.DisplayEndpoint(state.PollURL))
 	}
 	lines := []string{"Remote registration: " + strings.Join(parts, ": ")}
 	if state.Error != "" {
@@ -1838,6 +1848,31 @@ func formatRemoteRegistration(state remotepkg.RegistrationState) []string {
 	}
 	if state.RegisteredAt != "" {
 		lines = append(lines, "Remote registered at: "+state.RegisteredAt)
+	}
+	return lines
+}
+
+func formatRemotePump(state remotepkg.PumpState) []string {
+	if state.RuntimeState == "" {
+		return []string{"Remote pump: disabled"}
+	}
+	parts := []string{state.RuntimeState}
+	if state.PollURL != "" {
+		parts = append(parts, "poll "+remotepkg.DisplayEndpoint(state.PollURL))
+	}
+	if state.LastCursor != "" {
+		parts = append(parts, "cursor "+state.LastCursor)
+	}
+	if state.StatusCode > 0 {
+		parts = append(parts, fmt.Sprintf("status %d", state.StatusCode))
+	}
+	parts = append(parts, fmt.Sprintf("events %d", state.EventCount))
+	parts = append(parts, fmt.Sprintf("delivered %d", state.DeliveredCount))
+	parts = append(parts, fmt.Sprintf("duplicates %d", state.DuplicateCount))
+	parts = append(parts, fmt.Sprintf("errors %d", state.ErrorCount))
+	lines := []string{"Remote pump: " + strings.Join(parts, ": ")}
+	if state.LastError != "" {
+		lines = append(lines, "Remote pump error: "+state.LastError)
 	}
 	return lines
 }
@@ -3330,6 +3365,10 @@ func (r Runner) mergedSettings() contracts.Settings {
 		return contracts.Settings{}
 	}
 	return config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+}
+
+func (r Runner) MergedSettings() contracts.Settings {
+	return r.mergedSettings()
 }
 
 func (r Runner) systemPromptWithOutputStyle() string {

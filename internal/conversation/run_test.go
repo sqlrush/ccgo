@@ -2812,8 +2812,22 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		RegistrationURL: "https://remote.example/register",
 		StatusCode:      http.StatusAccepted,
 		RemoteSessionID: "remote-status",
-		WebSocketURL:    "wss://remote.example/ws",
+		WebSocketURL:    "wss://remote.example/ws?token=secret",
+		PollURL:         "https://remote.example/poll?token=secret",
 		RegisteredAt:    "2026-06-17T10:02:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := remotepkg.WritePumpState(remotepkg.SessionPumpPath(transcriptPath, "sess_status_show"), remotepkg.PumpState{
+		SessionID:      "sess_status_show",
+		RuntimeState:   remotepkg.PumpRunning,
+		PollURL:        "https://remote.example/poll?token=secret",
+		LastCursor:     "cursor-2",
+		StatusCode:     http.StatusOK,
+		EventCount:     3,
+		DeliveredCount: 2,
+		DuplicateCount: 1,
+		ErrorCount:     0,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2954,11 +2968,12 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status remote",
 		"Enabled: disabled",
 		"Remote environment: env-status",
-		"Remote registration: registered: url https://remote.example/register: status 202: remote session remote-status: websocket wss://remote.example/ws",
+		"Remote registration: registered: url https://remote.example/register: status 202: remote session remote-status: websocket wss://remote.example/ws: poll https://remote.example/poll",
+		"Remote pump: running: poll https://remote.example/poll: cursor cursor-2: status 200: events 3: delivered 2: duplicates 1: errors 0",
 		"Remote services: 2",
 		"- bridge: running: endpoint http://127.0.0.1:8888: websocket ws://127.0.0.1:8888/ws: token required: commands 2: capabilities websocket_protocol, remote_trigger, remote_service",
 		"- daemon: running: endpoint http://127.0.0.1:7777: pid 4242: capabilities health, status, tick, stop",
-	}, nil)
+	}, []string{"token=secret"})
 	assertStatusShow("/status show daemon", []string{
 		"Status daemon",
 		"Daemon state: running",

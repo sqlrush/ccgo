@@ -30,6 +30,7 @@ import (
 	"ccgo/internal/model"
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
+	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
@@ -698,7 +699,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 		if err := writeHeartbeat(now); err != nil {
 			return contracts.ToolResult{}, err
 		}
-		return runDaemonDueSchedules(ctx, runner, now)
+		return runDaemonTick(ctx, runner, now)
 	}
 	if !options.Once {
 		daemonServer, err = daemonpkg.StartServer(daemonpkg.ServerOptions{
@@ -772,6 +773,172 @@ func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now 
 			tool.MetadataSessionPathKey: runner.SessionPath,
 		},
 	}, "", now, tool.NopProgressSink())
+}
+
+func runDaemonTick(ctx context.Context, runner conversation.Runner, now time.Time) (contracts.ToolResult, error) {
+	scheduleResult, err := runDaemonDueSchedules(ctx, runner, now)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	remoteResult := runDaemonRemotePoll(ctx, runner, now)
+	schedule := scheduleResult.StructuredContent
+	remotePoll := remoteResult.StructuredContent
+	scheduleTriggered := intMapValue(schedule, "triggered_count")
+	scheduleErrors := intMapValue(schedule, "error_count")
+	remoteDelivered := intMapValue(remotePoll, "delivered_count")
+	remoteErrors := intMapValue(remotePoll, "error_count")
+	structured := map[string]any{
+		"type":                        "daemon_tick",
+		"checked_at":                  now.UTC().Format(time.RFC3339Nano),
+		"due_count":                   intMapValue(schedule, "due_count"),
+		"triggered_count":             scheduleTriggered + remoteDelivered,
+		"error_count":                 scheduleErrors + remoteErrors,
+		"schedule_triggered_count":    scheduleTriggered,
+		"schedule_error_count":        scheduleErrors,
+		"remote_delivered_count":      remoteDelivered,
+		"remote_poll_error_count":     remoteErrors,
+		"remote_poll_duplicate_count": intMapValue(remotePoll, "duplicate_count"),
+		"schedule":                    schedule,
+		"remote_poll":                 remotePoll,
+	}
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Triggered %d due schedule(s), delivered %d remote event(s); %d error(s).", scheduleTriggered, remoteDelivered, scheduleErrors+remoteErrors),
+		StructuredContent: structured,
+	}, nil
+}
+
+func runDaemonRemotePoll(ctx context.Context, runner conversation.Runner, now time.Time) contracts.ToolResult {
+	structured := map[string]any{
+		"type":            "remote_poll",
+		"checked_at":      now.UTC().Format(time.RFC3339Nano),
+		"runtime_state":   remotepkg.PumpDisabled,
+		"event_count":     0,
+		"delivered_count": 0,
+		"duplicate_count": 0,
+		"error_count":     0,
+	}
+	registrationPath := remotepkg.SessionRegistrationPath(runner.SessionPath, runner.SessionID)
+	pumpPath := remotepkg.SessionPumpPath(runner.SessionPath, runner.SessionID)
+	if registrationPath == "" || pumpPath == "" {
+		structured["error_count"] = 1
+		structured["error"] = "remote registration path is unavailable"
+		return contracts.ToolResult{Content: "Remote poll is not configured.", StructuredContent: structured}
+	}
+	registration, err := remotepkg.LoadRegistrationState(registrationPath)
+	if err != nil {
+		structured["runtime_state"] = remotepkg.PumpFailed
+		structured["error_count"] = 1
+		structured["error"] = err.Error()
+		_ = remotepkg.WritePumpState(pumpPath, remotepkg.PumpState{
+			SessionID:    runner.SessionID,
+			RuntimeState: remotepkg.PumpFailed,
+			LastPollAt:   now.UTC().Format(time.RFC3339Nano),
+			ErrorCount:   1,
+			LastError:    err.Error(),
+		})
+		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
+	}
+	if registration.RuntimeState != remotepkg.RegistrationRegistered || strings.TrimSpace(registration.PollURL) == "" {
+		_ = remotepkg.WritePumpState(pumpPath, remotepkg.PumpState{
+			SessionID:    runner.SessionID,
+			RuntimeState: remotepkg.PumpDisabled,
+			PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
+			LastPollAt:   now.UTC().Format(time.RFC3339Nano),
+		})
+		return contracts.ToolResult{Content: "Remote poll is disabled.", StructuredContent: structured}
+	}
+	previous, err := remotepkg.LoadPumpState(pumpPath)
+	if err != nil {
+		previous.LastError = err.Error()
+	}
+	settings := runner.MergedSettings()
+	authToken := ""
+	if settings.Remote != nil {
+		authToken = settings.Remote.AuthToken
+	}
+	poll := remotepkg.FetchPollEvents(ctx, remotepkg.PollOptions{
+		PollURL:   registration.PollURL,
+		Cursor:    previous.LastCursor,
+		AuthToken: authToken,
+	})
+	pumpState := remotepkg.PumpState{
+		SessionID:    runner.SessionID,
+		RuntimeState: remotepkg.PumpRunning,
+		PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
+		LastCursor:   previous.LastCursor,
+		LastPollAt:   now.UTC().Format(time.RFC3339Nano),
+		StatusCode:   poll.StatusCode,
+		EventCount:   len(poll.Events),
+	}
+	if poll.NextCursor != "" {
+		pumpState.LastCursor = poll.NextCursor
+	}
+	if poll.Error != "" {
+		pumpState.RuntimeState = remotepkg.PumpFailed
+		pumpState.ErrorCount = 1
+		pumpState.LastError = poll.Error
+		structured["runtime_state"] = pumpState.RuntimeState
+		structured["status_code"] = poll.StatusCode
+		structured["event_count"] = len(poll.Events)
+		structured["error_count"] = 1
+		structured["error"] = poll.Error
+		_ = remotepkg.WritePumpState(pumpPath, pumpState)
+		return contracts.ToolResult{Content: "Remote poll failed.", StructuredContent: structured}
+	}
+	errorsOut := make([]map[string]any, 0)
+	delivered := 0
+	duplicates := 0
+	for _, event := range poll.Events {
+		input, err := json.Marshal(map[string]any{
+			"team_id":  event.TeamID,
+			"target":   event.Target,
+			"event_id": event.EventID,
+			"source":   event.Source,
+			"event":    event.Event,
+			"message":  event.Message,
+		})
+		if err != nil {
+			errorsOut = append(errorsOut, map[string]any{"event_id": event.EventID, "error": err.Error()})
+			continue
+		}
+		result, err := tasktools.RunRemoteTrigger(tool.Context{
+			Context:          ctx,
+			WorkingDirectory: runner.WorkingDirectory,
+			SessionID:        runner.SessionID,
+			Metadata: map[string]any{
+				tool.MetadataSessionPathKey: runner.SessionPath,
+			},
+		}, input, tool.NopProgressSink())
+		if err != nil {
+			errorsOut = append(errorsOut, map[string]any{"event_id": event.EventID, "team_id": event.TeamID, "error": err.Error()})
+			continue
+		}
+		if duplicate, _ := result.StructuredContent["duplicate"].(bool); duplicate {
+			duplicates++
+			continue
+		}
+		delivered += intMapValue(result.StructuredContent, "sent_count")
+	}
+	pumpState.DeliveredCount = delivered
+	pumpState.DuplicateCount = duplicates
+	pumpState.ErrorCount = len(errorsOut)
+	if len(errorsOut) > 0 {
+		pumpState.LastError = fmt.Sprint(errorsOut[0]["error"])
+	}
+	_ = remotepkg.WritePumpState(pumpPath, pumpState)
+	structured["runtime_state"] = pumpState.RuntimeState
+	structured["poll_url"] = pumpState.PollURL
+	structured["last_cursor"] = pumpState.LastCursor
+	structured["status_code"] = pumpState.StatusCode
+	structured["event_count"] = pumpState.EventCount
+	structured["delivered_count"] = pumpState.DeliveredCount
+	structured["duplicate_count"] = pumpState.DuplicateCount
+	structured["error_count"] = pumpState.ErrorCount
+	structured["errors"] = errorsOut
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Remote poll delivered %d event(s); %d duplicate(s); %d error(s).", delivered, duplicates, len(errorsOut)),
+		StructuredContent: structured,
+	}
 }
 
 func daemonTickResponse(result contracts.ToolResult) daemonpkg.TickResponse {
