@@ -1,7 +1,9 @@
 package lsp
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,6 +93,56 @@ func TestServerProcessStopCancelsRunningProcess(t *testing.T) {
 	}
 }
 
+func TestServerProcessInitializeAndOpenWritesHandshakeToStdin(t *testing.T) {
+	dir := t.TempDir()
+	snapshotPath := filepath.Join(dir, diagnosticsFileName)
+	capturePath := filepath.Join(dir, "handshake.json")
+	process, err := StartServerProcess(context.Background(), ServerProcessOptions{
+		Definition:   helperServerDefinition("helper-capture-handshake", capturePath),
+		SnapshotPath: snapshotPath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := process.InitializeAndOpen(context.Background(), ServerHandshakeOptions{
+		InitializeID:  3,
+		ProcessID:     99,
+		RootURI:       "file:///work",
+		ClientName:    "ccgo-test",
+		ClientVersion: "test",
+		Documents: []OpenDocument{{
+			URI:        "file:///work/main.go",
+			LanguageID: "go",
+			Version:    5,
+			Text:       "package main\n",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := <-process.Done()
+	if result.RuntimeState != ServerRuntimeExited || result.Error != "" {
+		t.Fatalf("process result = %#v", result)
+	}
+	messages := loadCapturedMessages(t, capturePath)
+	if len(messages) != 3 {
+		t.Fatalf("captured messages = %#v", messages)
+	}
+	if messages[0]["method"] != "initialize" || numberValue(messages[0]["id"]) != 3 {
+		t.Fatalf("initialize message = %#v", messages[0])
+	}
+	params := objectValue(messages[0]["params"])
+	if numberValue(params["processId"]) != 99 || params["rootUri"] != "file:///work" {
+		t.Fatalf("initialize params = %#v", params)
+	}
+	if messages[1]["method"] != "initialized" {
+		t.Fatalf("initialized message = %#v", messages[1])
+	}
+	textDocument := objectValue(objectValue(messages[2]["params"])["textDocument"])
+	if messages[2]["method"] != "textDocument/didOpen" || textDocument["uri"] != "file:///work/main.go" || textDocument["languageId"] != "go" || numberValue(textDocument["version"]) != 5 {
+		t.Fatalf("didOpen message = %#v", messages[2])
+	}
+}
+
 func TestStartServerProcessRejectsInvalidOptions(t *testing.T) {
 	if _, err := StartServerProcess(context.Background(), ServerProcessOptions{}); err == nil {
 		t.Fatal("StartServerProcess accepted empty options")
@@ -115,11 +167,13 @@ func TestNormalizeServerDefinitionPreservesProcessArgOrder(t *testing.T) {
 	}
 }
 
-func helperServerDefinition(mode string) ServerDefinition {
+func helperServerDefinition(mode string, extraArgs ...string) ServerDefinition {
+	args := []string{"-test.run=TestLSPServerProcessHelper", "--", mode}
+	args = append(args, extraArgs...)
 	return ServerDefinition{
 		Name:    mode,
 		Command: os.Args[0],
-		Args:    []string{"-test.run=TestLSPServerProcessHelper", "--", mode},
+		Args:    args,
 	}
 }
 
@@ -137,6 +191,11 @@ func TestLSPServerProcessHelper(t *testing.T) {
 	switch mode {
 	case "helper-diagnostics":
 		_ = WriteFramedMessage(os.Stdout, []byte(`{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///work/main.go","diagnostics":[{"severity":1,"message":"broken"}]}}`))
+		os.Exit(0)
+	case "helper-capture-handshake":
+		if runCaptureHandshake() != nil {
+			os.Exit(8)
+		}
 		os.Exit(0)
 	case "helper-fail":
 		_, _ = os.Stderr.WriteString("failed\n")
@@ -163,4 +222,44 @@ func shouldRunLSPHelper() bool {
 		}
 	}
 	return false
+}
+
+func runCaptureHandshake() error {
+	capturePath := ""
+	for i, arg := range os.Args {
+		if arg == "--" && i+2 < len(os.Args) {
+			capturePath = os.Args[i+2]
+			break
+		}
+	}
+	if strings.TrimSpace(capturePath) == "" {
+		return os.ErrInvalid
+	}
+	reader := bufio.NewReader(os.Stdin)
+	messages := make([]json.RawMessage, 0, 3)
+	for len(messages) < 3 {
+		payload, err := ReadFramedMessage(reader, defaultFrameLimit)
+		if err != nil {
+			return err
+		}
+		messages = append(messages, append(json.RawMessage(nil), payload...))
+	}
+	data, err := json.Marshal(messages)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(capturePath, data, 0o644)
+}
+
+func loadCapturedMessages(t *testing.T, path string) []map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var messages []map[string]any
+	if err := json.Unmarshal(data, &messages); err != nil {
+		t.Fatal(err)
+	}
+	return messages
 }
