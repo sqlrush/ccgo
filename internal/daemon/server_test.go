@@ -97,6 +97,41 @@ func TestServerTick(t *testing.T) {
 	}
 }
 
+func TestServerStop(t *testing.T) {
+	var called bool
+	server, err := StartServer(ServerOptions{
+		StopFunc: func(context.Context) StopResponse {
+			called = true
+			return StopResponse{OK: true, RuntimeState: RuntimeDisabled}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := server.Close(ctx); err != nil {
+			t.Fatalf("close daemon server: %v", err)
+		}
+	})
+	resp, err := http.Post(server.Endpoint()+"/stop", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("stop status = %d", resp.StatusCode)
+	}
+	var stop StopResponse
+	if err := json.NewDecoder(resp.Body).Decode(&stop); err != nil {
+		t.Fatal(err)
+	}
+	if !called || !stop.OK || stop.RuntimeState != RuntimeDisabled {
+		t.Fatalf("called=%v stop=%#v", called, stop)
+	}
+}
+
 func TestServerTickRequiresCallback(t *testing.T) {
 	server, err := StartServer(ServerOptions{})
 	if err != nil {
@@ -114,5 +149,25 @@ func TestServerTickRequiresCallback(t *testing.T) {
 	server.server.Handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusNotImplemented {
 		t.Fatalf("tick status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestServerStopRequiresCallback(t *testing.T) {
+	server, err := StartServer(ServerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := server.Close(ctx); err != nil {
+			t.Fatalf("close daemon server: %v", err)
+		}
+	})
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/stop", nil)
+	server.server.Handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusNotImplemented {
+		t.Fatalf("stop status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

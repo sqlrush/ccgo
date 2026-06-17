@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,6 +64,12 @@ type daemonOptions struct {
 	HeartbeatInterval time.Duration
 }
 
+type daemonControlOptions struct {
+	StatePath string
+	Status    bool
+	Stop      bool
+}
+
 type repeatedStringFlag []string
 
 func (f *repeatedStringFlag) String() string {
@@ -84,6 +91,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	daemonMode := flags.Bool("daemon", false, "run daemon heartbeat loop")
 	daemonOnce := flags.Bool("daemon-once", false, "write one daemon heartbeat and exit")
 	daemonHeartbeat := flags.Duration("daemon-heartbeat", 5*time.Second, "daemon heartbeat interval")
+	daemonStatus := flags.Bool("daemon-status", false, "print daemon status and exit")
+	daemonStop := flags.Bool("daemon-stop", false, "stop the daemon recorded in daemon state")
+	daemonStatePath := flags.String("daemon-state", "", "daemon state path")
 	cwd := flags.String("cwd", "", "working directory")
 	printMode := flags.Bool("print", false, "print response and exit")
 	flags.BoolVar(printMode, "p", false, "print response and exit")
@@ -141,6 +151,13 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if err := applyCWDFlag(state, *cwd); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
+	}
+	if *daemonStatus || *daemonStop {
+		return runDaemonControl(context.Background(), state, daemonControlOptions{
+			StatePath: strings.TrimSpace(*daemonStatePath),
+			Status:    *daemonStatus,
+			Stop:      *daemonStop,
+		}, stdout, stderr)
 	}
 	if *daemonMode || *daemonOnce {
 		return runDaemon(context.Background(), state, daemonOptions{
@@ -245,6 +262,170 @@ func runChromeNativeHost(stdin io.Reader, stdout io.Writer, stderr io.Writer) in
 	}
 }
 
+func runDaemonControl(ctx context.Context, state *bootstrap.State, options daemonControlOptions, stdout io.Writer, stderr io.Writer) int {
+	if options.Status && options.Stop {
+		fmt.Fprintf(stderr, "ccgo daemon: --daemon-status and --daemon-stop are mutually exclusive\n")
+		return 2
+	}
+	statePath, err := resolveDaemonStatePath(state, options.StatePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+		return 1
+	}
+	if options.Status {
+		if err := writeDaemonStatus(stdout, statePath); err != nil {
+			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if options.Stop {
+		if err := stopDaemon(ctx, stdout, statePath); err != nil {
+			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprintf(stderr, "ccgo daemon: no daemon control action requested\n")
+	return 2
+}
+
+func resolveDaemonStatePath(state *bootstrap.State, explicit string) (string, error) {
+	if strings.TrimSpace(explicit) != "" {
+		return filepath.Clean(strings.TrimSpace(explicit)), nil
+	}
+	runner, err := state.ConversationRunner()
+	if err != nil {
+		return "", err
+	}
+	if runner.SessionPath == "" && runner.SessionID != "" {
+		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
+	}
+	statePath := daemonpkg.SessionStatePath(runner.SessionPath, runner.SessionID)
+	if statePath == "" {
+		return "", errors.New("session state path is unavailable")
+	}
+	return statePath, nil
+}
+
+func writeDaemonStatus(stdout io.Writer, statePath string) error {
+	state, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		return err
+	}
+	lines := []string{
+		"ccgo daemon status",
+		"state_path=" + statePath,
+	}
+	if state.GeneratedAt == "" {
+		lines = append(lines, "runtime_state="+daemonpkg.RuntimeDisabled)
+		_, err := fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+		return err
+	}
+	runtimeState := daemonpkg.RuntimeStateAt(state, time.Now().UTC(), 2*time.Minute)
+	lines = append(lines, "runtime_state="+runtimeState)
+	if state.PID > 0 {
+		lines = append(lines, fmt.Sprintf("pid=%d", state.PID))
+	}
+	if state.Endpoint != "" {
+		lines = append(lines, "endpoint="+state.Endpoint)
+	}
+	if state.StartedAt != "" {
+		lines = append(lines, "started_at="+state.StartedAt)
+	}
+	if state.HeartbeatAt != "" {
+		lines = append(lines, "heartbeat_at="+state.HeartbeatAt)
+	}
+	if state.GeneratedAt != "" {
+		lines = append(lines, "generated_at="+state.GeneratedAt)
+	}
+	if state.Error != "" {
+		lines = append(lines, "error="+state.Error)
+	}
+	_, err = fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+	return err
+}
+
+func stopDaemon(ctx context.Context, stdout io.Writer, statePath string) error {
+	state, err := daemonpkg.LoadState(statePath)
+	if err != nil {
+		return err
+	}
+	if state.GeneratedAt == "" {
+		return fmt.Errorf("daemon state not found: %s", statePath)
+	}
+	if strings.TrimSpace(state.Endpoint) == "" {
+		return fmt.Errorf("daemon endpoint is unavailable in %s", statePath)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	response, err := postDaemonStop(ctx, state.Endpoint)
+	if err != nil {
+		return err
+	}
+	stopped := waitForDaemonRuntimeState(ctx, statePath, daemonpkg.RuntimeDisabled)
+	runtimeState := response.RuntimeState
+	if stopped.RuntimeState != "" {
+		runtimeState = stopped.RuntimeState
+	}
+	if runtimeState == "" {
+		runtimeState = daemonpkg.RuntimeDisabled
+	}
+	lines := []string{
+		"ccgo daemon stopped",
+		"state_path=" + statePath,
+		"runtime_state=" + runtimeState,
+	}
+	if stopped.GeneratedAt != "" {
+		lines = append(lines, "generated_at="+stopped.GeneratedAt)
+	}
+	_, err = fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+	return err
+}
+
+func postDaemonStop(ctx context.Context, endpoint string) (daemonpkg.StopResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/stop", nil)
+	if err != nil {
+		return daemonpkg.StopResponse{}, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return daemonpkg.StopResponse{}, err
+	}
+	defer resp.Body.Close()
+	var response daemonpkg.StopResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return daemonpkg.StopResponse{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 || !response.OK {
+		if response.Error == "" {
+			response.Error = resp.Status
+		}
+		return daemonpkg.StopResponse{}, errors.New(response.Error)
+	}
+	return response, nil
+}
+
+func waitForDaemonRuntimeState(ctx context.Context, statePath string, runtimeState string) daemonpkg.State {
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		state, err := daemonpkg.LoadState(statePath)
+		if err == nil && state.RuntimeState == runtimeState {
+			return state
+		}
+		select {
+		case <-ctx.Done():
+			return state
+		case <-deadline.C:
+			return state
+		case <-ticker.C:
+		}
+	}
+}
+
 func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOptions, stdout io.Writer, stderr io.Writer) int {
 	if options.HeartbeatInterval <= 0 {
 		fmt.Fprintf(stderr, "ccgo: daemon heartbeat interval must be positive\n")
@@ -266,6 +447,8 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	endpoint := ""
 	var daemonServer *daemonpkg.Server
 	var tickMu sync.Mutex
+	stopRequested := make(chan struct{})
+	var stopOnce sync.Once
 	writeHeartbeat := func(now time.Time) error {
 		return daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeRunning, os.Getpid(), endpoint, now, nil))
 	}
@@ -293,6 +476,10 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 				}
 				return daemonTickResponse(result)
 			},
+			StopFunc: func(context.Context) daemonpkg.StopResponse {
+				stopOnce.Do(func() { close(stopRequested) })
+				return daemonpkg.StopResponse{OK: true, RuntimeState: daemonpkg.RuntimeDisabled}
+			},
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "ccgo daemon: %v\n", err)
@@ -318,6 +505,11 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	for {
 		select {
 		case <-ctx.Done():
+			tickMu.Lock()
+			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), nil))
+			tickMu.Unlock()
+			return 0
+		case <-stopRequested:
 			tickMu.Lock()
 			_ = daemonpkg.WriteState(statePath, daemonpkg.BuildState(runner.SessionID, runner.WorkingDirectory, daemonpkg.RuntimeDisabled, os.Getpid(), endpoint, time.Now().UTC(), nil))
 			tickMu.Unlock()

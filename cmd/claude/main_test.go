@@ -244,7 +244,20 @@ func TestRunDaemonServesHealthEndpoint(t *testing.T) {
 	if !tick.OK || tick.ErrorCount != 0 {
 		t.Fatalf("tick = %#v", tick)
 	}
-	cancel()
+	var statusOut, statusErr bytes.Buffer
+	if code := run([]string{"--daemon-status", "--daemon-state", statePath}, strings.NewReader(""), &statusOut, &statusErr); code != 0 {
+		t.Fatalf("daemon status exit = %d stderr=%s", code, statusErr.String())
+	}
+	if !strings.Contains(statusOut.String(), "runtime_state=running") || !strings.Contains(statusOut.String(), "endpoint="+daemonState.Endpoint) {
+		t.Fatalf("daemon status stdout = %q", statusOut.String())
+	}
+	var stopOut, stopErr bytes.Buffer
+	if code := run([]string{"--daemon-stop", "--daemon-state", statePath}, strings.NewReader(""), &stopOut, &stopErr); code != 0 {
+		t.Fatalf("daemon stop exit = %d stderr=%s", code, stopErr.String())
+	}
+	if !strings.Contains(stopOut.String(), "ccgo daemon stopped") || !strings.Contains(stopOut.String(), "runtime_state=disabled") {
+		t.Fatalf("daemon stop stdout = %q", stopOut.String())
+	}
 	select {
 	case code := <-done:
 		if code != 0 {

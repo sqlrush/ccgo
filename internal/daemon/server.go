@@ -15,6 +15,7 @@ type ServerOptions struct {
 	Addr      string
 	StateFunc func() State
 	TickFunc  func(context.Context) TickResponse
+	StopFunc  func(context.Context) StopResponse
 }
 
 type Server struct {
@@ -36,6 +37,12 @@ type TickResponse struct {
 	ErrorCount     int            `json:"error_count,omitempty"`
 	Structured     map[string]any `json:"structured,omitempty"`
 	Error          string         `json:"error,omitempty"`
+}
+
+type StopResponse struct {
+	OK           bool   `json:"ok"`
+	RuntimeState string `json:"runtime_state,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 func StartServer(options ServerOptions) (*Server, error) {
@@ -85,6 +92,22 @@ func StartServer(options ServerOptions) (*Server, error) {
 			return
 		}
 		response := options.TickFunc(r.Context())
+		status := http.StatusOK
+		if !response.OK {
+			status = http.StatusInternalServerError
+		}
+		writeJSON(w, status, response)
+	})
+	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if options.StopFunc == nil {
+			writeJSON(w, http.StatusNotImplemented, StopResponse{OK: false, Error: "daemon stop is not configured"})
+			return
+		}
+		response := options.StopFunc(r.Context())
 		status := http.StatusOK
 		if !response.OK {
 			status = http.StatusInternalServerError
