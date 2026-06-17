@@ -1801,6 +1801,60 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	}
 }
 
+func TestRunnerLSPManagerStatusDisabledByDefault(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_lsp_disabled",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	path := lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_disabled")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("lsp manager status exists with disabled lsp: %v", err)
+	}
+}
+
+func TestRunnerWritesGatedLSPManagerStatus(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	lspEnabled := true
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_lsp_manager",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{LSP: &lspEnabled},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status")); err != nil {
+		t.Fatal(err)
+	}
+	status, err := lsppkg.LoadManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_manager"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.SessionID != "sess_lsp_manager" || status.WorkingDirectory != dir || status.GeneratedAt == "" {
+		t.Fatalf("lsp manager status metadata = %#v", status)
+	}
+	gopls := lspServerStatus(status.Servers, "gopls")
+	if gopls.RuntimeState != lsppkg.ServerRuntimeNotStarted || len(gopls.MatchReasons) == 0 {
+		t.Fatalf("gopls status = %#v", gopls)
+	}
+}
+
 func TestRunnerWritesGatedNativeManifest(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()
@@ -1948,6 +2002,15 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := lsppkg.WriteManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_status_show"), lsppkg.ManagerStatus{
+		SessionID: "sess_status_show",
+		Servers: []lsppkg.ServerStatus{
+			{Name: "gopls", Command: "gopls", RuntimeState: lsppkg.ServerRuntimeNotStarted, MatchReasons: []string{"root:go.mod"}},
+			{Name: "rust-analyzer", Command: "rust-analyzer", RuntimeState: lsppkg.ServerRuntimeNoWorkspaceMatch},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := nativepkg.WriteManifest(nativepkg.SessionManifestPath(transcriptPath, "sess_status_show"), nativepkg.Manifest{
 		SessionID: "sess_status_show",
 		GOOS:      "testos",
@@ -2073,6 +2136,11 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Sources:",
 		"- gopls: 2",
 		"- tsserver: 1",
+		"Configured LSP servers: 2",
+		"Matched LSP servers: 1",
+		"Server runtime states:",
+		"- no_workspace_match: 1",
+		"- not_started: 1",
 	}, []string{"broken", "unused"})
 	assertStatusShow("/status show native", []string{
 		"Status native integrations",
@@ -5160,6 +5228,15 @@ func integrationHasState(integrations []integrationspkg.Integration, name string
 		}
 	}
 	return false
+}
+
+func lspServerStatus(servers []lsppkg.ServerStatus, name string) lsppkg.ServerStatus {
+	for _, server := range servers {
+		if server.Name == name {
+			return server
+		}
+	}
+	return lsppkg.ServerStatus{}
 }
 
 func containsAnyString(values []any, want string) bool {

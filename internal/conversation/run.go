@@ -43,6 +43,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	r.maybeWriteBridgeManifest()
 	r.maybeWriteNativeManifest()
 	r.maybeWriteIntegrationsManifest()
+	r.maybeWriteLSPManagerStatus()
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
@@ -798,6 +799,18 @@ func (r Runner) maybeWriteNativeManifest() {
 	_ = nativepkg.WriteManifest(path, nativepkg.BuildManifest(r.SessionID, r.WorkingDirectory))
 }
 
+func (r Runner) maybeWriteLSPManagerStatus() {
+	settings := r.mergedSettings()
+	if settings.Advanced == nil || !advancedBoolEnabled(settings.Advanced.LSP) {
+		return
+	}
+	path := lsppkg.SessionManagerStatusPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		return
+	}
+	_ = lsppkg.WriteManagerStatus(path, lsppkg.BuildManagerStatus(r.SessionID, r.WorkingDirectory, nil, nil))
+}
+
 func (r Runner) formatStatusNative() string {
 	settings := r.mergedSettings()
 	enabled := settings.Advanced != nil && advancedBoolEnabled(settings.Advanced.NativeIntegrations)
@@ -885,6 +898,7 @@ func (r Runner) formatStatusLSP() string {
 	settings := r.mergedSettings()
 	enabled := settings.Advanced != nil && advancedBoolEnabled(settings.Advanced.LSP)
 	path := lsppkg.SessionDiagnosticsPath(r.SessionPath, r.SessionID)
+	managerPath := lsppkg.SessionManagerStatusPath(r.SessionPath, r.SessionID)
 	lines := []string{
 		"Status LSP",
 		"Enabled: " + boolEnabledText(enabled),
@@ -916,6 +930,25 @@ func (r Runner) formatStatusLSP() string {
 		lines = append(lines, "Sources:")
 		for _, key := range sortedIntMapKeys(summary.BySource) {
 			lines = append(lines, fmt.Sprintf("- %s: %d", key, summary.BySource[key]))
+		}
+	}
+	if managerPath != "" {
+		manager, err := lsppkg.LoadManagerStatus(managerPath)
+		if err != nil {
+			lines = append(lines, "Manager path: "+managerPath, "Manager error: "+err.Error())
+		} else {
+			lines = append(lines,
+				"Manager path: "+managerPath,
+				fmt.Sprintf("Configured LSP servers: %d", len(manager.Servers)),
+				fmt.Sprintf("Matched LSP servers: %d", lsppkg.CountMatchedServers(manager.Servers)),
+			)
+			stateCounts := lsppkg.CountServerRuntimeStates(manager.Servers)
+			if len(stateCounts) > 0 {
+				lines = append(lines, "Server runtime states:")
+				for _, key := range sortedIntMapKeys(stateCounts) {
+					lines = append(lines, fmt.Sprintf("- %s: %d", key, stateCounts[key]))
+				}
+			}
 		}
 	}
 	return strings.Join(lines, "\n")
