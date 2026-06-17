@@ -58,7 +58,7 @@ func TestReadFramedMessageErrors(t *testing.T) {
 func TestProcessDiagnosticsStreamAppliesPublishDiagnostics(t *testing.T) {
 	path := filepath.Join(t.TempDir(), diagnosticsFileName)
 	stream := framedMessages(t,
-		`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`,
+		`{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1,"diagnosticProvider":{"interFileDependencies":false}}}}`,
 		`{"jsonrpc":"2.0","method":"window/logMessage","params":{"message":"ignored"}}`,
 		`{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///work/main.go","diagnostics":[{"severity":1,"source":"gopls","message":"broken"}]}}`,
 		`{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///work/main.go","diagnostics":[]}}`,
@@ -69,6 +69,9 @@ func TestProcessDiagnosticsStreamAppliesPublishDiagnostics(t *testing.T) {
 	}
 	if result.Messages != 4 || result.DiagnosticsUpdates != 2 || len(result.LastSnapshot) != 0 {
 		t.Fatalf("result = %#v", result)
+	}
+	if result.InitializeResponses != 1 || numberValue(result.ServerCapabilities["textDocumentSync"]) != 1 {
+		t.Fatalf("initialize result = %#v", result)
 	}
 	loaded, err := LoadSnapshot(path)
 	if err != nil {

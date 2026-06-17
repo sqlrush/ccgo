@@ -18,9 +18,11 @@ const defaultFrameLimit int64 = 8 << 20
 var ErrFrameTooLarge = errors.New("lsp frame exceeds limit")
 
 type StreamProcessResult struct {
-	Messages           int          `json:"messages"`
-	DiagnosticsUpdates int          `json:"diagnostics_updates"`
-	LastSnapshot       []Diagnostic `json:"last_snapshot,omitempty"`
+	Messages            int            `json:"messages"`
+	InitializeResponses int            `json:"initialize_responses,omitempty"`
+	ServerCapabilities  map[string]any `json:"server_capabilities,omitempty"`
+	DiagnosticsUpdates  int            `json:"diagnostics_updates"`
+	LastSnapshot        []Diagnostic   `json:"last_snapshot,omitempty"`
 }
 
 func WriteFramedMessage(w io.Writer, payload []byte) error {
@@ -113,6 +115,15 @@ func ProcessDiagnosticsStreamLimit(ctx context.Context, reader io.Reader, snapsh
 			return result, err
 		}
 		result.Messages++
+		capabilities, ok, err := initializeCapabilitiesPayload(payload)
+		if err != nil {
+			return result, err
+		}
+		if ok {
+			result.InitializeResponses++
+			result.ServerCapabilities = capabilities
+			continue
+		}
 		updated, ok, err := applyPublishDiagnosticsPayload(snapshotPath, payload)
 		if err != nil {
 			return result, err
@@ -140,6 +151,30 @@ func applyPublishDiagnosticsPayload(snapshotPath string, payload []byte) ([]Diag
 		return nil, true, err
 	}
 	return updated, true, nil
+}
+
+func initializeCapabilitiesPayload(payload []byte) (map[string]any, bool, error) {
+	var envelope struct {
+		ID     any             `json:"id"`
+		Result json.RawMessage `json:"result"`
+		Error  any             `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return nil, false, err
+	}
+	if envelope.ID == nil || len(envelope.Result) == 0 || envelope.Error != nil {
+		return nil, false, nil
+	}
+	var result struct {
+		Capabilities map[string]any `json:"capabilities"`
+	}
+	if err := json.Unmarshal(envelope.Result, &result); err != nil {
+		return nil, false, err
+	}
+	if len(result.Capabilities) == 0 {
+		return nil, false, nil
+	}
+	return result.Capabilities, true, nil
 }
 
 func EncodeFramedJSON(value any) ([]byte, error) {

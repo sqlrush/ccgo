@@ -143,6 +143,47 @@ func TestServerProcessInitializeAndOpenWritesHandshakeToStdin(t *testing.T) {
 	}
 }
 
+func TestServerProcessCapturesInitializeResponseAndDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	snapshotPath := filepath.Join(dir, diagnosticsFileName)
+	process, err := StartServerProcess(context.Background(), ServerProcessOptions{
+		Definition:   helperServerDefinition("helper-lsp-session"),
+		SnapshotPath: snapshotPath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := process.InitializeAndOpen(context.Background(), ServerHandshakeOptions{
+		InitializeID: 11,
+		RootURI:      "file:///work",
+		Documents: []OpenDocument{{
+			URI:        "file:///work/main.go",
+			LanguageID: "go",
+			Version:    1,
+			Text:       "package main\n",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := <-process.Done()
+	if result.RuntimeState != ServerRuntimeExited || result.Error != "" {
+		t.Fatalf("process result = %#v", result)
+	}
+	if result.Diagnostics.InitializeResponses != 1 || numberValue(result.Diagnostics.ServerCapabilities["textDocumentSync"]) != 1 {
+		t.Fatalf("initialize response = %#v", result.Diagnostics)
+	}
+	if result.Diagnostics.DiagnosticsUpdates != 1 {
+		t.Fatalf("diagnostics result = %#v", result.Diagnostics)
+	}
+	diagnostics, err := LoadSnapshot(snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics) != 1 || diagnostics[0].Message != "session broken" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+}
+
 func TestStartServerProcessRejectsInvalidOptions(t *testing.T) {
 	if _, err := StartServerProcess(context.Background(), ServerProcessOptions{}); err == nil {
 		t.Fatal("StartServerProcess accepted empty options")
@@ -197,6 +238,11 @@ func TestLSPServerProcessHelper(t *testing.T) {
 			os.Exit(8)
 		}
 		os.Exit(0)
+	case "helper-lsp-session":
+		if runLSPSession() != nil {
+			os.Exit(9)
+		}
+		os.Exit(0)
 	case "helper-fail":
 		_, _ = os.Stderr.WriteString("failed\n")
 		os.Exit(7)
@@ -249,6 +295,23 @@ func runCaptureHandshake() error {
 		return err
 	}
 	return os.WriteFile(capturePath, data, 0o644)
+}
+
+func runLSPSession() error {
+	reader := bufio.NewReader(os.Stdin)
+	if _, err := ReadFramedMessage(reader, defaultFrameLimit); err != nil {
+		return err
+	}
+	if err := WriteFramedMessage(os.Stdout, []byte(`{"jsonrpc":"2.0","id":11,"result":{"capabilities":{"textDocumentSync":1,"diagnosticProvider":{"interFileDependencies":false}}}}`)); err != nil {
+		return err
+	}
+	if _, err := ReadFramedMessage(reader, defaultFrameLimit); err != nil {
+		return err
+	}
+	if _, err := ReadFramedMessage(reader, defaultFrameLimit); err != nil {
+		return err
+	}
+	return WriteFramedMessage(os.Stdout, []byte(`{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///work/main.go","diagnostics":[{"severity":1,"message":"session broken"}]}}`))
 }
 
 func loadCapturedMessages(t *testing.T, path string) []map[string]any {
