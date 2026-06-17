@@ -121,6 +121,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 		StreamStartedAt:  "2026-06-17T10:00:00Z",
 		StreamEndedAt:    "2026-06-17T10:05:00Z",
 		StreamStopReason: "max_frames",
+		CloseCode:        1000,
 		FrameCount:       2,
 		ConnectCount:     1,
 		ReconnectCount:   1,
@@ -134,7 +135,7 @@ func TestWriteAndLoadPumpState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.LastPollAt == "" {
+	if loaded.SessionID != "sess_remote" || loaded.RuntimeState != PumpRunning || loaded.Transport != "websocket" || loaded.WebSocketURL != "wss://remote/ws" || loaded.LastCursor != "cursor-1" || loaded.StreamStartedAt != "2026-06-17T10:00:00Z" || loaded.StreamEndedAt != "2026-06-17T10:05:00Z" || loaded.StreamStopReason != "max_frames" || loaded.CloseCode != 1000 || loaded.FrameCount != 2 || loaded.ConnectCount != 1 || loaded.ReconnectCount != 1 || loaded.LastPollAt == "" {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 	data, err := json.Marshal(loaded)

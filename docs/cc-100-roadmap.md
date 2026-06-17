@@ -115,7 +115,7 @@ M10 补充：remote settings 新增 `registrationUrl`/`authToken`，`advanced.br
 
 M10 补充：新增 session-scoped `remote-pump.json` 和 daemon remote 消息泵；daemon tick 会在 ScheduleCron due tick 后优先读取 registered `websocket_url`，通过 Bearer auth 建立 WebSocket、读取单帧事件并复用 poll 解码/`RemoteTrigger` 注入路径；无 WebSocket 或 WebSocket 失败且存在 poll URL 时回退到带 cursor 的 poll 拉取。pump 状态会记录 transport、websocket/poll URL 脱敏值、cursor、HTTP status、event/delivered/duplicate/error 计数，`/status show remote` 可审计当前传输。完整 CCR WebSocket 常驻持久 stream 和云端协议 hardening 仍未完成。
 
-M10 补充：remote WebSocket pump 现在支持单次 tick 内读取多帧事件，并在握手/读帧失败或非正常 close 时按可配置 backoff 重连；daemon 默认读取最多 8 帧、最多重连 2 次，并把 frame/connect/reconnect 计数写入 `remote-pump.json` 和 `/status show remote`。完整 CCR 云端 WebSocket 常驻持久 stream 与更深协议 hardening 仍未完成。
+M10 补充：remote WebSocket pump 现在支持单次 tick 内读取多帧事件，并在握手/读帧失败或非正常 close 时按可配置 backoff 重连；daemon 默认读取最多 8 帧、最多重连 2 次，并把 frame/connect/reconnect 计数和 WebSocket close code 写入 `remote-pump.json` 和 `/status show remote`。完整 CCR 云端 WebSocket 常驻持久 stream 与更深协议 hardening 仍未完成。
 
 M10 补充：`internal/remote` 新增 callback 型 `StreamWebSocketEvents` primitive，可保持 WebSocket 连接逐帧解码并把事件批次交给调用方，支持 context 取消、可选帧上限、handler 错误传播、异常 close/读错后的 backoff 重连以及 `ReconnectAttempts < 0` 无限重连语义；该能力为 daemon 常驻 stream 托管接线打底。完整云端协议 hardening 仍未完成。
 

@@ -37,6 +37,7 @@ type PumpState struct {
 	StreamEndedAt    string       `json:"stream_ended_at,omitempty"`
 	StreamStopReason string       `json:"stream_stop_reason,omitempty"`
 	StatusCode       int          `json:"status_code,omitempty"`
+	CloseCode        int          `json:"close_code,omitempty"`
 	FrameCount       int          `json:"frame_count,omitempty"`
 	ConnectCount     int          `json:"connect_count,omitempty"`
 	ReconnectCount   int          `json:"reconnect_count,omitempty"`

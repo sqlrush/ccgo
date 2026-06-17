@@ -1885,6 +1885,9 @@ func formatRemotePump(state remotepkg.PumpState) []string {
 	parts = append(parts, fmt.Sprintf("delivered %d", state.DeliveredCount))
 	parts = append(parts, fmt.Sprintf("duplicates %d", state.DuplicateCount))
 	parts = append(parts, fmt.Sprintf("errors %d", state.ErrorCount))
+	if state.CloseCode > 0 {
+		parts = append(parts, fmt.Sprintf("close %d", state.CloseCode))
+	}
 	if state.StreamStartedAt != "" {
 		parts = append(parts, "stream started "+state.StreamStartedAt)
 	}

@@ -429,7 +429,7 @@ func TestRunDaemonRemotePollPrefersWebSocket(t *testing.T) {
 		}},
 	}
 	result := runDaemonRemotePoll(context.Background(), runner, time.Unix(200, 0).UTC())
-	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
+	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["close_code"] != 1000 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
 		t.Fatalf("websocket poll = %#v", result.StructuredContent)
 	}
 	if len(auths) != 1 || auths[0] != "Bearer ws-token" {
@@ -439,7 +439,7 @@ func TestRunDaemonRemotePollPrefersWebSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pump.Transport != "websocket" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.DeliveredCount != 1 || strings.Contains(pump.WebSocketURL, "token=secret") {
+	if pump.Transport != "websocket" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.CloseCode != 1000 || pump.DeliveredCount != 1 || strings.Contains(pump.WebSocketURL, "token=secret") {
 		t.Fatalf("pump = %#v", pump)
 	}
 	resume, err := manager.ResumeContext("agent/remote-lead", 3)
