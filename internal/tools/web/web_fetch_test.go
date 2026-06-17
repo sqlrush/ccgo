@@ -60,7 +60,7 @@ func TestWebFetchTruncatesBody(t *testing.T) {
 	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_truncate",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"max_bytes":"5.0","timeout":"1000"}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"summarize","max_bytes":"5.0","timeout":"1000"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestWebFetchDecodesTextCharsets(t *testing.T) {
 	utf16Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_utf16",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/utf16le") + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/utf16le") + `,"prompt":"extract text"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestWebFetchDecodesTextCharsets(t *testing.T) {
 	cp1252Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_cp1252",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/windows1252") + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/windows1252") + `,"prompt":"extract price"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ func TestWebFetchDecodesTextCharsets(t *testing.T) {
 	metaCP1252Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_meta_cp1252",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/meta-windows1252") + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/meta-windows1252") + `,"prompt":"extract price"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestWebFetchDecodesTextCharsets(t *testing.T) {
 	metaLatin1Result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_meta_latin1",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/meta-http-equiv-latin1") + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/meta-http-equiv-latin1") + `,"prompt":"extract text"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +387,7 @@ func TestWebFetchPreflightSkipsBinaryGet(t *testing.T) {
 	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_preflight",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"summarize"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -429,7 +429,7 @@ func TestWebFetchPreflightSkipsBinaryAttachmentFilename(t *testing.T) {
 	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_preflight_attachment",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"summarize"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -473,7 +473,7 @@ func TestWebFetchSkipPreflightMetadata(t *testing.T) {
 	}, contracts.ToolUse{
 		ID:    "toolu_web_skip_preflight",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"summarize"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -506,7 +506,7 @@ func TestWebFetchMarksNonSuccessAndBinaryResponses(t *testing.T) {
 	missing, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_missing",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/missing") + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/missing") + `,"prompt":"summarize"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -518,7 +518,7 @@ func TestWebFetchMarksNonSuccessAndBinaryResponses(t *testing.T) {
 	binary, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
 		ID:    "toolu_web_binary",
 		Name:  "WebFetch",
-		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/binary") + `}`),
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/binary") + `,"prompt":"summarize"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -536,11 +536,12 @@ func TestWebFetchValidation(t *testing.T) {
 		want  string
 	}{
 		{name: "missing url", input: `{}`, want: "input.url is required"},
-		{name: "ftp", input: `{"url":"ftp://example.com/file"}`, want: "url must use http or https"},
-		{name: "missing host", input: `{"url":"https:///path"}`, want: "url must include a hostname"},
-		{name: "bad timeout", input: `{"url":"https://example.com","timeout":0}`, want: "timeout must be positive"},
-		{name: "bad max bytes", input: `{"url":"https://example.com","max_bytes":0}`, want: "max_bytes must be positive"},
-		{name: "unknown field", input: `{"url":"https://example.com","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing prompt", input: `{"url":"https://example.com"}`, want: "input.prompt is required"},
+		{name: "ftp", input: `{"url":"ftp://example.com/file","prompt":"summarize"}`, want: "url must use http or https"},
+		{name: "missing host", input: `{"url":"https:///path","prompt":"summarize"}`, want: "url must include a hostname"},
+		{name: "bad timeout", input: `{"url":"https://example.com","prompt":"summarize","timeout":0}`, want: "timeout must be positive"},
+		{name: "bad max bytes", input: `{"url":"https://example.com","prompt":"summarize","max_bytes":0}`, want: "max_bytes must be positive"},
+		{name: "unknown field", input: `{"url":"https://example.com","prompt":"summarize","extra":true}`, want: "input.extra is not allowed"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -565,7 +566,7 @@ func TestWebFetchPermissionsUseDomainTarget(t *testing.T) {
 			permissions.MustParseRule(contracts.PermissionSourceSession, contracts.PermissionDeny, "WebFetch(domain:example.com)"),
 		)),
 	}
-	decision, err := webFetch.CheckPermissions(ctx, json.RawMessage(`{"url":"https://example.com/path"}`))
+	decision, err := webFetch.CheckPermissions(ctx, json.RawMessage(`{"url":"https://example.com/path","prompt":"summarize"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

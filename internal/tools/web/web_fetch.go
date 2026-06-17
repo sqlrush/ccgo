@@ -66,7 +66,7 @@ func NewWebFetchTool() tool.Tool {
 			MaxResultSizeChars: 100_000,
 			InputSchema: contracts.JSONSchema{
 				"type":     "object",
-				"required": []any{"url"},
+				"required": []any{"url", "prompt"},
 				"properties": map[string]any{
 					"url":       map[string]any{"type": "string"},
 					"prompt":    map[string]any{"type": "string"},
@@ -77,7 +77,7 @@ func NewWebFetchTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Fetches a web URL and returns text content. Provide url and optionally prompt, timeout in milliseconds, and max_bytes. HTML responses are rendered to readable text, and prompts produce a focused excerpt when matching text is found. Browser rendering and model summarization are not implemented yet.", nil
+			return "Fetches a web URL and returns text content. Provide url, prompt, and optionally timeout in milliseconds and max_bytes. HTML responses are rendered to readable text, and prompts produce a focused excerpt when matching text is found. Browser rendering and model summarization are not implemented yet.", nil
 		},
 		NormalizeFunc: normalizeWebFetchRawInput,
 		ValidateFunc:  validateWebFetch,
