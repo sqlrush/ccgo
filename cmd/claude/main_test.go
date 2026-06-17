@@ -494,6 +494,9 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 	if result.StructuredContent["runtime_state"] != remotepkg.PumpRunning || result.StructuredContent["transport"] != "websocket_stream" || result.StructuredContent["frame_count"] != 1 || result.StructuredContent["connect_count"] != 1 || result.StructuredContent["delivered_count"] != 1 || result.StructuredContent["error_count"] != 0 {
 		t.Fatalf("stream result = %#v", result.StructuredContent)
 	}
+	if result.StructuredContent["stream_started_at"] != "1970-01-01T00:03:20Z" || result.StructuredContent["stream_ended_at"] == "" || result.StructuredContent["stream_stop_reason"] != "max_frames" {
+		t.Fatalf("stream lifecycle result = %#v", result.StructuredContent)
+	}
 	if len(auths) != 1 || auths[0] != "Bearer stream-token" {
 		t.Fatalf("auths = %#v", auths)
 	}
@@ -501,7 +504,7 @@ func TestRunDaemonRemoteStreamInjectsRemoteTriggers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pump.Transport != "websocket_stream" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.DeliveredCount != 1 || strings.Contains(pump.WebSocketURL, "token=secret") {
+	if pump.Transport != "websocket_stream" || pump.FrameCount != 1 || pump.ConnectCount != 1 || pump.DeliveredCount != 1 || pump.StreamStartedAt != "1970-01-01T00:03:20Z" || pump.StreamEndedAt == "" || pump.StreamStopReason != "max_frames" || strings.Contains(pump.WebSocketURL, "token=secret") {
 		t.Fatalf("pump = %#v", pump)
 	}
 	resume, err := manager.ResumeContext("agent/remote-lead", 3)

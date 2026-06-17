@@ -857,13 +857,15 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	if options.ReconnectMaxDelay <= 0 {
 		options.ReconnectMaxDelay = 30 * time.Second
 	}
+	streamStartedAt := now.UTC().Format(time.RFC3339Nano)
 	pumpState := remotepkg.PumpState{
-		SessionID:    runner.SessionID,
-		RuntimeState: remotepkg.PumpRunning,
-		Transport:    "websocket_stream",
-		PollURL:      remotepkg.DisplayEndpoint(registration.PollURL),
-		WebSocketURL: remotepkg.DisplayEndpoint(registration.WebSocketURL),
-		LastPollAt:   now.UTC().Format(time.RFC3339Nano),
+		SessionID:       runner.SessionID,
+		RuntimeState:    remotepkg.PumpRunning,
+		Transport:       "websocket_stream",
+		PollURL:         remotepkg.DisplayEndpoint(registration.PollURL),
+		WebSocketURL:    remotepkg.DisplayEndpoint(registration.WebSocketURL),
+		LastPollAt:      streamStartedAt,
+		StreamStartedAt: streamStartedAt,
 	}
 	writeStreamState := func() {
 		_ = remotepkg.WritePumpState(pumpPath, pumpState)
@@ -887,6 +889,8 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	pumpState.ConnectCount = result.ConnectCount
 	pumpState.ReconnectCount = result.ReconnectCount
 	pumpState.LastPollAt = time.Now().UTC().Format(time.RFC3339Nano)
+	pumpState.StreamEndedAt = pumpState.LastPollAt
+	pumpState.StreamStopReason = daemonRemoteStreamStopReason(ctx, streamOptions, result)
 	if result.Error != "" {
 		pumpState.RuntimeState = remotepkg.PumpFailed
 		pumpState.ErrorCount++
@@ -902,6 +906,9 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 	structured["frame_count"] = pumpState.FrameCount
 	structured["connect_count"] = pumpState.ConnectCount
 	structured["reconnect_count"] = pumpState.ReconnectCount
+	structured["stream_started_at"] = pumpState.StreamStartedAt
+	structured["stream_ended_at"] = pumpState.StreamEndedAt
+	structured["stream_stop_reason"] = pumpState.StreamStopReason
 	structured["event_count"] = pumpState.EventCount
 	structured["delivered_count"] = pumpState.DeliveredCount
 	structured["duplicate_count"] = pumpState.DuplicateCount
@@ -913,6 +920,19 @@ func runDaemonRemoteStream(ctx context.Context, runner conversation.Runner, now 
 		Content:           fmt.Sprintf("Remote stream delivered %d event(s); %d duplicate(s); %d error(s).", pumpState.DeliveredCount, pumpState.DuplicateCount, pumpState.ErrorCount),
 		StructuredContent: structured,
 	}
+}
+
+func daemonRemoteStreamStopReason(ctx context.Context, options remotepkg.WebSocketOptions, result remotepkg.WebSocketResult) string {
+	if strings.TrimSpace(result.Error) != "" {
+		return "error"
+	}
+	if ctx.Err() != nil {
+		return "context_cancelled"
+	}
+	if options.MaxFrames > 0 && result.FrameCount >= options.MaxFrames {
+		return "max_frames"
+	}
+	return "closed"
 }
 
 func runDaemonDueSchedules(ctx context.Context, runner conversation.Runner, now time.Time) (contracts.ToolResult, error) {
