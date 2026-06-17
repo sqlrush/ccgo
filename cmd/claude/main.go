@@ -1383,11 +1383,14 @@ func renewDaemonRemoteLease(ctx context.Context, event remotepkg.PollEvent, opti
 		return 0, nil
 	}
 	result := remotepkg.SendLeaseRenewal(ctx, remotepkg.LeaseRenewOptions{
-		LeaseRenewURL:  options.LeaseRenewURL,
-		AuthToken:      options.AuthToken,
-		EventID:        event.EventID,
-		LeaseID:        event.LeaseID,
-		AllowedOrigins: options.AllowedOrigins,
+		LeaseRenewURL:     options.LeaseRenewURL,
+		AuthToken:         options.AuthToken,
+		EventID:           event.EventID,
+		LeaseID:           event.LeaseID,
+		AllowedOrigins:    options.AllowedOrigins,
+		RetryAttempts:     1,
+		RetryInitialDelay: 100 * time.Millisecond,
+		RetryMaxDelay:     500 * time.Millisecond,
 	})
 	if result.Error != "" {
 		return 0, map[string]any{

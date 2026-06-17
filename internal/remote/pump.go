@@ -102,18 +102,22 @@ type AckResult struct {
 }
 
 type LeaseRenewOptions struct {
-	LeaseRenewURL  string
-	AuthToken      string
-	EventID        string
-	LeaseID        string
-	AllowedOrigins []string
-	Client         *http.Client
+	LeaseRenewURL     string
+	AuthToken         string
+	EventID           string
+	LeaseID           string
+	AllowedOrigins    []string
+	RetryAttempts     int
+	RetryInitialDelay time.Duration
+	RetryMaxDelay     time.Duration
+	Client            *http.Client
 }
 
 type LeaseRenewResult struct {
 	RenewedAt      string `json:"renewed_at,omitempty"`
 	StatusCode     int    `json:"status_code,omitempty"`
 	LeaseExpiresAt string `json:"lease_expires_at,omitempty"`
+	AttemptCount   int    `json:"attempt_count,omitempty"`
 	Error          string `json:"error,omitempty"`
 }
 
@@ -180,7 +184,7 @@ func SendAck(ctx context.Context, options AckOptions) AckResult {
 }
 
 func SendLeaseRenewal(ctx context.Context, options LeaseRenewOptions) LeaseRenewResult {
-	result := LeaseRenewResult{RenewedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	result := LeaseRenewResult{RenewedAt: time.Now().UTC().Format(time.RFC3339Nano), AttemptCount: 0}
 	rawURL := strings.TrimSpace(options.LeaseRenewURL)
 	if rawURL == "" {
 		result.Error = "remote lease renew url is unavailable"
@@ -203,34 +207,49 @@ func SendLeaseRenewal(ctx context.Context, options LeaseRenewOptions) LeaseRenew
 		result.Error = err.Error()
 		return result
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed.String(), bytes.NewReader(payload))
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("accept", "application/json")
-	if strings.TrimSpace(options.AuthToken) != "" {
-		req.Header.Set("authorization", "Bearer "+strings.TrimSpace(options.AuthToken))
-	}
 	client := options.Client
 	if client == nil {
 		client = http.DefaultClient
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		result.Error = fmt.Sprintf("remote lease renew request failed: %s", DisplayEndpoint(rawURL))
+	retries := options.RetryAttempts
+	if retries < 0 {
+		retries = 0
+	}
+	for attempt := 0; ; attempt++ {
+		result.AttemptCount = attempt + 1
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed.String(), bytes.NewReader(payload))
+		if err != nil {
+			result.Error = err.Error()
+			return result
+		}
+		req.Header.Set("content-type", "application/json")
+		req.Header.Set("accept", "application/json")
+		if strings.TrimSpace(options.AuthToken) != "" {
+			req.Header.Set("authorization", "Bearer "+strings.TrimSpace(options.AuthToken))
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			result.StatusCode = 0
+			result.Error = fmt.Sprintf("remote lease renew request failed: %s", DisplayEndpoint(rawURL))
+			if attempt < retries && sleepRemoteLeaseRenewRetry(ctx, options, attempt) {
+				continue
+			}
+			return result
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		_ = resp.Body.Close()
+		result.StatusCode = resp.StatusCode
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			result.Error = remoteRegistrationError(resp.Status, body)
+			if remoteLeaseRenewStatusRetryable(resp.StatusCode) && attempt < retries && sleepRemoteLeaseRenewRetry(ctx, options, attempt) {
+				continue
+			}
+			return result
+		}
+		result.Error = ""
+		result.LeaseExpiresAt = leaseExpiresAtFromRenewResponse(body)
 		return result
 	}
-	defer resp.Body.Close()
-	result.StatusCode = resp.StatusCode
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		result.Error = remoteRegistrationError(resp.Status, body)
-		return result
-	}
-	result.LeaseExpiresAt = leaseExpiresAtFromRenewResponse(body)
-	return result
 }
 
 func FetchPollEvents(ctx context.Context, options PollOptions) PollResult {
@@ -338,6 +357,39 @@ func leaseExpiresAtFromRenewResponse(body []byte) string {
 		return text
 	}
 	return stringFromNestedMap(raw["lease"], "lease_expires_at", "leaseExpiresAt", "expires_at", "expiresAt")
+}
+
+func remoteLeaseRenewStatusRetryable(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500
+}
+
+func sleepRemoteLeaseRenewRetry(ctx context.Context, options LeaseRenewOptions, attempt int) bool {
+	delay := options.RetryInitialDelay
+	if delay <= 0 {
+		delay = 100 * time.Millisecond
+	}
+	maxDelay := options.RetryMaxDelay
+	if maxDelay <= 0 {
+		maxDelay = time.Second
+	}
+	for i := 0; i < attempt; i++ {
+		delay *= 2
+		if delay >= maxDelay {
+			delay = maxDelay
+			break
+		}
+	}
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func decodePollEventValue(value any) ([]PollEvent, string, bool) {

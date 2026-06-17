@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFetchPollEventsUsesCursorAndAuth(t *testing.T) {
@@ -182,6 +183,34 @@ func TestSendLeaseRenewalPostsSameOriginPayloadAndAuth(t *testing.T) {
 	}
 	if gotAuth != "Bearer renew-token" || got["event_id"] != "evt-renew" || got["lease_id"] != "lease-1" {
 		t.Fatalf("auth=%q payload=%#v", gotAuth, got)
+	}
+}
+
+func TestSendLeaseRenewalRetriesTransientFailure(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			http.Error(w, "try again", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"lease_expires_at":"2026-06-17T12:10:00Z"}`))
+	}))
+	defer server.Close()
+
+	result := SendLeaseRenewal(context.Background(), LeaseRenewOptions{
+		LeaseRenewURL:     server.URL + "/leases/renew",
+		EventID:           "evt-renew",
+		LeaseID:           "lease-1",
+		AllowedOrigins:    []string{server.URL + "/poll"},
+		RetryAttempts:     1,
+		RetryInitialDelay: time.Millisecond,
+		RetryMaxDelay:     time.Millisecond,
+	})
+	if result.Error != "" || result.StatusCode != http.StatusAccepted || result.LeaseExpiresAt != "2026-06-17T12:10:00Z" || result.AttemptCount != 2 || calls != 2 {
+		t.Fatalf("renew result = %#v calls=%d", result, calls)
 	}
 }
 
