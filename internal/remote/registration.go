@@ -34,24 +34,25 @@ const (
 var supportedRemoteProtocolVersions = []string{RemoteProtocolVersionV1, RemoteProtocolVersionV2}
 
 type RegistrationState struct {
-	SessionID        contracts.ID `json:"session_id,omitempty"`
-	EnvironmentID    string       `json:"environment_id,omitempty"`
-	RuntimeState     string       `json:"runtime_state"`
-	RegistrationURL  string       `json:"registration_url,omitempty"`
-	ManifestPath     string       `json:"manifest_path,omitempty"`
-	LastAttemptAt    string       `json:"last_attempt_at,omitempty"`
-	RegisteredAt     string       `json:"registered_at,omitempty"`
-	StatusCode       int          `json:"status_code,omitempty"`
-	RemoteSessionID  string       `json:"remote_session_id,omitempty"`
-	RegistrationID   string       `json:"registration_id,omitempty"`
-	ProtocolVersion  string       `json:"protocol_version,omitempty"`
-	Capabilities     []string     `json:"capabilities,omitempty"`
-	WebSocketURL     string       `json:"websocket_url,omitempty"`
-	PollURL          string       `json:"poll_url,omitempty"`
-	LeaseRenewURL    string       `json:"lease_renew_url,omitempty"`
-	Message          string       `json:"message,omitempty"`
-	Error            string       `json:"error,omitempty"`
-	ManifestServices int          `json:"manifest_services,omitempty"`
+	SessionID          contracts.ID `json:"session_id,omitempty"`
+	EnvironmentID      string       `json:"environment_id,omitempty"`
+	RuntimeState       string       `json:"runtime_state"`
+	RegistrationURL    string       `json:"registration_url,omitempty"`
+	ManifestPath       string       `json:"manifest_path,omitempty"`
+	LastAttemptAt      string       `json:"last_attempt_at,omitempty"`
+	RegisteredAt       string       `json:"registered_at,omitempty"`
+	StatusCode         int          `json:"status_code,omitempty"`
+	RemoteSessionID    string       `json:"remote_session_id,omitempty"`
+	RegistrationID     string       `json:"registration_id,omitempty"`
+	ProtocolVersion    string       `json:"protocol_version,omitempty"`
+	Capabilities       []string     `json:"capabilities,omitempty"`
+	CapabilityWarnings []string     `json:"capability_warnings,omitempty"`
+	WebSocketURL       string       `json:"websocket_url,omitempty"`
+	PollURL            string       `json:"poll_url,omitempty"`
+	LeaseRenewURL      string       `json:"lease_renew_url,omitempty"`
+	Message            string       `json:"message,omitempty"`
+	Error              string       `json:"error,omitempty"`
+	ManifestServices   int          `json:"manifest_services,omitempty"`
 }
 
 type RegistrationOptions struct {
@@ -157,6 +158,7 @@ func RegisterManifest(ctx context.Context, options RegistrationOptions) Registra
 		state.PollURL = ""
 		state.LeaseRenewURL = ""
 	}
+	applyRemoteCapabilityGates(&state)
 	return state
 }
 
@@ -325,6 +327,40 @@ func validateRemoteProtocolVersion(version string) error {
 		}
 	}
 	return fmt.Errorf("unsupported remote protocol version %q; supported: %s", text, strings.Join(supportedRemoteProtocolVersions, ", "))
+}
+
+func applyRemoteCapabilityGates(state *RegistrationState) {
+	if state == nil || len(state.Capabilities) == 0 {
+		return
+	}
+	if strings.TrimSpace(state.WebSocketURL) != "" && !hasRemoteCapability(state.Capabilities, "websocket_protocol", "websocket", "websocket_stream") {
+		state.WebSocketURL = ""
+		state.CapabilityWarnings = append(state.CapabilityWarnings, "websocket url ignored: missing websocket_protocol capability")
+	}
+	if strings.TrimSpace(state.LeaseRenewURL) != "" && !hasRemoteCapability(state.Capabilities, "lease_renew", "lease_refresh") {
+		state.LeaseRenewURL = ""
+		state.CapabilityWarnings = append(state.CapabilityWarnings, "lease renew url ignored: missing lease_renew capability")
+	}
+}
+
+func hasRemoteCapability(capabilities []string, names ...string) bool {
+	if len(capabilities) == 0 {
+		return false
+	}
+	wanted := make(map[string]bool, len(names))
+	for _, name := range names {
+		text := strings.TrimSpace(strings.ToLower(name))
+		if text != "" {
+			wanted[text] = true
+		}
+	}
+	for _, capability := range capabilities {
+		text := strings.TrimSpace(strings.ToLower(capability))
+		if wanted[text] {
+			return true
+		}
+	}
+	return false
 }
 
 func remoteRegistrationError(status string, body []byte) string {

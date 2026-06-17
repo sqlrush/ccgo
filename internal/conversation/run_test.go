@@ -2732,6 +2732,21 @@ func TestFormatRemoteRegistrationReportsUnsupportedProtocol(t *testing.T) {
 	}
 }
 
+func TestFormatRemoteRegistrationReportsCapabilityWarnings(t *testing.T) {
+	lines := formatRemoteRegistration(remotepkg.RegistrationState{
+		RuntimeState:       remotepkg.RegistrationRegistered,
+		RemoteSessionID:    "remote-limited",
+		ProtocolVersion:    remotepkg.RemoteProtocolVersionV1,
+		Capabilities:       []string{"remote_trigger"},
+		PollURL:            "https://remote.example/poll?token=secret",
+		CapabilityWarnings: []string{"websocket url ignored: missing websocket_protocol capability", "lease renew url ignored: missing lease_renew capability"},
+	})
+	text := strings.Join(lines, "\n")
+	if !strings.Contains(text, "Remote registration warnings: websocket url ignored: missing websocket_protocol capability; lease renew url ignored: missing lease_renew capability") || strings.Contains(text, "token=secret") {
+		t.Fatalf("registration status = %q", text)
+	}
+}
+
 func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())

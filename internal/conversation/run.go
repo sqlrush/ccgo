@@ -1855,6 +1855,9 @@ func formatRemoteRegistration(state remotepkg.RegistrationState) []string {
 	if state.Error != "" {
 		lines = append(lines, "Remote registration error: "+state.Error)
 	}
+	if len(state.CapabilityWarnings) > 0 {
+		lines = append(lines, "Remote registration warnings: "+strings.Join(state.CapabilityWarnings, "; "))
+	}
 	if state.RegisteredAt != "" {
 		lines = append(lines, "Remote registered at: "+state.RegisteredAt)
 	}

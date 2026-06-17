@@ -1488,6 +1488,8 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：remote registration 响应会持久化协议版本、能力列表和 lease renew/refresh endpoint，并在 `/status show remote` 中脱敏展示；注册协议版本现在强制校验，只接受空 legacy 版本、`ccr.remote.v1` 和 `ccr.remote.v2`，未知版本会把 registration 标为 failed 并清掉可用 endpoint。更完整的云端协议演进策略仍未完成。
 
+本轮补充：remote registration 的显式 capabilities/features 会参与 endpoint 启用：非空能力列表缺少 `websocket_protocol` 时忽略 websocket URL，缺少 `lease_renew`/`lease_refresh` 时忽略 renew endpoint，并把 capability warning 写入 registration state 和 `/status show remote`；空能力列表仍按 legacy 兼容处理。更完整的云端能力矩阵仍未完成。
+
 本轮补充：daemon remote delivery 会在投递未过期 leased event 前，对注册级同源 lease renew/refresh endpoint 做 best-effort POST，并对 transport error、408/429/5xx 做一次短退避重试，把 renew sent/error 计数写入 pump state、structured result 和 `/status show remote`；完整续期策略和云端协议演进策略仍未完成。
 
 本轮补充：remote delivery ack POST 同样会对 transport error、408/429/5xx 做一次短退避重试，保持 delivered/duplicate/failed/expired ack 在瞬时服务端错误下更稳；更完整的远端协议演进策略仍未完成。

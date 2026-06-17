@@ -70,7 +70,7 @@ func TestRegisterManifestAcceptsWrappedResponse(t *testing.T) {
 				"registration":{
 					"id":"reg-wrapped",
 					"protocol_version":"ccr.remote.v2",
-					"features":"remote_trigger lease_refresh",
+					"features":"websocket_protocol remote_trigger lease_refresh",
 					"web_socket_url":"wss://remote/wrapped/ws",
 					"eventsUrl":"https://remote/wrapped/events",
 					"lease_refresh_url":"https://remote/wrapped/leases/refresh",
@@ -93,13 +93,45 @@ func TestRegisterManifestAcceptsWrappedResponse(t *testing.T) {
 	if state.RuntimeState != RegistrationRegistered || state.RemoteSessionID != "remote-wrapped" || state.RegistrationID != "reg-wrapped" || state.ProtocolVersion != RemoteProtocolVersionV2 || state.WebSocketURL != "wss://remote/wrapped/ws" || state.PollURL != "https://remote/wrapped/events" || state.LeaseRenewURL != "https://remote/wrapped/leases/refresh" || state.Message != "registered" {
 		t.Fatalf("registration state = %#v", state)
 	}
-	if len(state.Capabilities) != 2 || state.Capabilities[0] != "remote_trigger" || state.Capabilities[1] != "lease_refresh" {
+	if len(state.Capabilities) != 3 || state.Capabilities[0] != "websocket_protocol" || state.Capabilities[1] != "remote_trigger" || state.Capabilities[2] != "lease_refresh" {
 		t.Fatalf("registration state = %#v", state)
 	}
 }
 
-func TestRegisterManifestRejectsUnsupportedProtocolVersion(t *testing.T) {
+func TestRegisterManifestGatesEndpointsByCapabilities(t *testing.T) {
 	now := time.Date(2026, 6, 17, 11, 4, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"remoteSessionId":"remote-limited",
+			"protocolVersion":"ccr.remote.v1",
+			"capabilities":["remote_trigger"],
+			"websocketUrl":"wss://remote/limited/ws",
+			"pollUrl":"https://remote/limited/events",
+			"leaseRenewUrl":"https://remote/limited/leases/renew"
+		}`))
+	}))
+	defer server.Close()
+
+	state := RegisterManifest(context.Background(), RegistrationOptions{
+		RegistrationURL: server.URL + "/register",
+		Manifest: Manifest{
+			SessionID:     "sess_limited",
+			EnvironmentID: "env-prod",
+			Services:      []Service{{Name: "daemon", RuntimeState: "running"}},
+		},
+		Now: now,
+	})
+	if state.RuntimeState != RegistrationRegistered || state.PollURL != "https://remote/limited/events" || state.WebSocketURL != "" || state.LeaseRenewURL != "" {
+		t.Fatalf("registration state = %#v", state)
+	}
+	if len(state.CapabilityWarnings) != 2 || !strings.Contains(state.CapabilityWarnings[0], "websocket url ignored") || !strings.Contains(state.CapabilityWarnings[1], "lease renew url ignored") {
+		t.Fatalf("capability warnings = %#v", state.CapabilityWarnings)
+	}
+}
+
+func TestRegisterManifestRejectsUnsupportedProtocolVersion(t *testing.T) {
+	now := time.Date(2026, 6, 17, 11, 5, 0, 0, time.UTC)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{
@@ -131,7 +163,7 @@ func TestRegisterManifestRejectsUnsupportedProtocolVersion(t *testing.T) {
 }
 
 func TestRegisterManifestHandlesDisabledAndFailedState(t *testing.T) {
-	now := time.Date(2026, 6, 17, 11, 5, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 17, 11, 6, 0, 0, time.UTC)
 	manifest := Manifest{SessionID: "sess_remote", EnvironmentID: "env-prod"}
 	disabled := RegisterManifest(context.Background(), RegistrationOptions{Manifest: manifest, Now: now})
 	if disabled.RuntimeState != RegistrationDisabled || disabled.Error != "" || disabled.SessionID != "sess_remote" {
