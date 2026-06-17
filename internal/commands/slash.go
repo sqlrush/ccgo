@@ -56,6 +56,7 @@ const (
 	LocalCommandResultConfig  LocalCommandResultType = "config"
 	LocalCommandResultPlugin  LocalCommandResultType = "plugin"
 	LocalCommandResultMemory  LocalCommandResultType = "memory"
+	LocalCommandResultNative  LocalCommandResultType = "native"
 )
 
 type LocalCommandResult struct {
@@ -219,6 +220,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultText, Value: formatSkillsText(registry, args)}, true
 	case "memory":
 		return LocalCommandResult{Type: LocalCommandResultMemory, Value: strings.TrimSpace(args)}, true
+	case "native":
+		return LocalCommandResult{Type: LocalCommandResultNative, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}

@@ -107,6 +107,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		if localResult != nil && localResult.Type == commands.LocalCommandResultMemory {
 			return r.appendLocalTextResult(result, history, r.formatMemorySummary(localResult.Value))
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultNative {
+			return r.appendLocalTextResult(result, history, r.formatNativeCommandSummary(ctx, localResult.Value))
+		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultResume {
 			text, err := r.formatResumeSummary(localResult.Value)
 			if err != nil {
@@ -1065,6 +1068,100 @@ func (r Runner) formatStatusNative() string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return "Usage: /native clipboard <read|write <text>>"
+	}
+	switch strings.ToLower(args[0]) {
+	case "clipboard":
+		return r.formatNativeClipboardCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
+	default:
+		return "Native command is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+	}
+}
+
+func (r Runner) formatNativeClipboardCommand(ctx context.Context, raw string) string {
+	args := strings.Fields(strings.TrimSpace(raw))
+	if len(args) == 0 {
+		return "Usage: /native clipboard <read|write <text>>"
+	}
+	clipboardPath := nativepkg.SessionClipboardPath(r.SessionPath, r.SessionID)
+	if clipboardPath == "" {
+		return "Native clipboard\nClipboard path: (not configured)"
+	}
+	adapters := nativepkg.DetectClipboardAdapters(nativepkg.ClipboardAdapterOptions{})
+	switch strings.ToLower(args[0]) {
+	case "write", "set", "copy":
+		text := strings.TrimSpace(dropLeadingFields(raw, 1))
+		if text == "" {
+			return "Usage: /native clipboard write <text>"
+		}
+		state, external, err := nativepkg.WriteClipboardTextWithAdapters(ctx, clipboardPath, r.SessionID, "clipboard", text, adapters, r.NativeClipboardRunner)
+		lines := []string{
+			"Native clipboard write",
+			"Clipboard path: " + clipboardPath,
+			fmt.Sprintf("Session clipboard items: %d", len(state.Items)),
+			formatNativeClipboardExternalResult(external),
+		}
+		if err != nil {
+			lines = append(lines, "External clipboard error: "+err.Error())
+		}
+		return strings.Join(lines, "\n")
+	case "read", "get", "paste":
+		text, found, external, err := nativepkg.ReadClipboardTextWithAdapters(ctx, clipboardPath, "clipboard", adapters, r.NativeClipboardRunner)
+		lines := []string{
+			"Native clipboard read",
+			"Clipboard path: " + clipboardPath,
+			formatNativeClipboardExternalResult(external),
+		}
+		if err != nil {
+			lines = append(lines, "External clipboard error: "+err.Error())
+			return strings.Join(lines, "\n")
+		}
+		if !found {
+			lines = append(lines, "Text: (empty)")
+			return strings.Join(lines, "\n")
+		}
+		lines = append(lines, "Text: "+text)
+		return strings.Join(lines, "\n")
+	default:
+		return "Usage: /native clipboard <read|write <text>>"
+	}
+}
+
+func formatNativeClipboardExternalResult(result nativepkg.ClipboardCommandResult) string {
+	if result.Skipped {
+		if result.Detail != "" {
+			return "External clipboard: skipped (" + result.Detail + ")"
+		}
+		return "External clipboard: skipped"
+	}
+	if !result.External {
+		return "External clipboard: none"
+	}
+	line := "External clipboard: " + result.AdapterName
+	if result.AdapterKind != "" {
+		line += " kind=" + result.AdapterKind
+	}
+	if len(result.Command) > 0 {
+		line += " command=" + strings.Join(result.Command, " ")
+	}
+	return line
+}
+
+func dropLeadingFields(raw string, count int) string {
+	remaining := strings.TrimSpace(raw)
+	for i := 0; i < count; i++ {
+		fields := strings.Fields(remaining)
+		if len(fields) == 0 {
+			return ""
+		}
+		remaining = strings.TrimSpace(strings.TrimPrefix(remaining, fields[0]))
+	}
+	return remaining
 }
 
 func (r Runner) formatStatusIntegrations() string {

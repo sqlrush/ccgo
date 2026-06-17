@@ -543,6 +543,26 @@ func TestExecuteSlashStatusReturnsLocalStatusResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashNativeReturnsLocalNativeResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/native clipboard write hello", SlashOptions{UUID: "user_native"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultNative || result.LocalResult.Value != "clipboard write hello" {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_native" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/native</command-name>") || !strings.Contains(text, "<command-args>clipboard write hello</command-args>") {
+		t.Fatalf("native command message = %q", text)
+	}
+}
+
 func TestExecuteSlashModelReturnsLocalModelResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/model opus", SlashOptions{UUID: "user_model"})

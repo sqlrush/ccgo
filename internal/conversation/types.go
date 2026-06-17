@@ -11,6 +11,7 @@ import (
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
+	nativepkg "ccgo/internal/native"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -97,6 +98,7 @@ type Runner struct {
 	EnableMemoryExtraction    bool
 	MemoryAgentClient         memory.MessageClient
 	MemoryExtractLimit        int
+	NativeClipboardRunner     nativepkg.ClipboardCommandRunner
 	OnEvent                   func(Event)
 }
 

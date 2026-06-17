@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -2126,6 +2127,93 @@ func TestRunnerWritesGatedNativeManifest(t *testing.T) {
 	if !nativeIndexHasPath(index.Files, "main.go") {
 		t.Fatalf("file index entries = %#v", index.Files)
 	}
+}
+
+func TestRunnerExecutesNativeClipboardCommandWithoutQuery(t *testing.T) {
+	setupFakeClipboardCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	var gotCommand []string
+	var gotStdin string
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_command",
+		SessionPath:      transcriptPath,
+		WorkingDirectory: dir,
+		NativeClipboardRunner: func(ctx context.Context, command []string, stdin string) (string, error) {
+			gotCommand = append([]string(nil), command...)
+			gotStdin = stdin
+			return "", nil
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native clipboard write hello world"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Native clipboard write") {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if len(gotCommand) == 0 || gotStdin != "hello world" {
+		t.Fatalf("command = %#v stdin=%q", gotCommand, gotStdin)
+	}
+	text, ok, err := nativepkg.ReadClipboardText(nativepkg.SessionClipboardPath(transcriptPath, "sess_native_command"), "clipboard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || text != "hello world" {
+		t.Fatalf("clipboard text = %q ok=%v", text, ok)
+	}
+}
+
+func TestRunnerExecutesNativeClipboardReadCommandWithoutQuery(t *testing.T) {
+	setupFakeClipboardCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_read",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+		NativeClipboardRunner: func(ctx context.Context, command []string, stdin string) (string, error) {
+			return "from external", nil
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native clipboard read"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("client requests = %d, want 0", len(client.requests))
+	}
+	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Text: from external") {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+}
+
+func setupFakeClipboardCommandPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	names := []string{"pbcopy", "pbpaste", "xclip", "xsel", "tmux", "powershell.exe", "pwsh", "clip.exe"}
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		body := "#!/bin/sh\nexit 0\n"
+		if runtime.GOOS == "windows" {
+			body = "@echo off\r\nexit /b 0\r\n"
+		}
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", ":0")
+	t.Setenv("TMUX", "")
 }
 
 func TestRunnerIntegrationsManifestDisabledByDefault(t *testing.T) {
