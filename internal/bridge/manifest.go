@@ -85,6 +85,14 @@ func WithRemoteTriggerCapability(manifest Manifest) Manifest {
 	})
 }
 
+func WithRemoteServiceCapability(manifest Manifest) Manifest {
+	return withCapability(manifest, Capability{
+		Name:            "remote_service",
+		HTTPPath:        "/remote-service",
+		WebSocketAction: "remote_status",
+	})
+}
+
 func WithWebSocketProtocolCapability(manifest Manifest) Manifest {
 	return withCapability(manifest, Capability{
 		Name:            "websocket_protocol",

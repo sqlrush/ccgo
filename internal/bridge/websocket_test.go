@@ -66,6 +66,14 @@ func TestDirectWebSocketHelloHealthAndManifest(t *testing.T) {
 			RemoteTrigger: func(_ context.Context, req DirectRemoteTriggerRequest) (DirectRemoteTriggerResponse, int) {
 				return DirectRemoteTriggerResponse{Accepted: true, TeamID: req.TeamID, SentCount: 1}, http.StatusOK
 			},
+			RemoteStatus: func(context.Context) (any, int) {
+				return map[string]any{
+					"session_id": "sess_bridge",
+					"services": []map[string]any{
+						{"name": "bridge", "runtime_state": "running"},
+					},
+				}, http.StatusOK
+			},
 		}),
 	})
 	if err != nil {
@@ -87,7 +95,7 @@ func TestDirectWebSocketHelloHealthAndManifest(t *testing.T) {
 	if hello.Type != "hello" || hello.Hello == nil || !hello.Hello.OK || hello.Hello.ProtocolVersion != 1 || hello.Hello.SessionID != "sess_bridge" || hello.Hello.Commands != 2 {
 		t.Fatalf("hello websocket response = %#v", hello)
 	}
-	if !webSocketActionPresent(hello.Hello.Actions, "execute") || !webSocketActionPresent(hello.Hello.Actions, "remote_trigger") || !manifestCapabilityPresent(hello.Hello.Capabilities, "websocket_protocol") {
+	if !webSocketActionPresent(hello.Hello.Actions, "execute") || !webSocketActionPresent(hello.Hello.Actions, "remote_trigger") || !webSocketActionPresent(hello.Hello.Actions, "remote_status") || !manifestCapabilityPresent(hello.Hello.Capabilities, "websocket_protocol") || !manifestCapabilityPresent(hello.Hello.Capabilities, "remote_service") {
 		t.Fatalf("hello capabilities/actions = %#v %#v", hello.Hello.Capabilities, hello.Hello.Actions)
 	}
 
@@ -101,8 +109,16 @@ func TestDirectWebSocketHelloHealthAndManifest(t *testing.T) {
 	writeClientWebSocketText(t, conn, `{"action":"manifest"}`)
 	var manifest DirectWebSocketResponse
 	readServerWebSocketJSON(t, reader, &manifest)
-	if manifest.Type != "manifest" || manifest.Manifest == nil || len(manifest.Manifest.Commands) != 2 || !manifestHasCapability(*manifest.Manifest, "websocket_protocol") || !manifestHasCapability(*manifest.Manifest, "remote_trigger") {
+	if manifest.Type != "manifest" || manifest.Manifest == nil || len(manifest.Manifest.Commands) != 2 || !manifestHasCapability(*manifest.Manifest, "websocket_protocol") || !manifestHasCapability(*manifest.Manifest, "remote_trigger") || !manifestHasCapability(*manifest.Manifest, "remote_service") {
 		t.Fatalf("manifest websocket response = %#v", manifest)
+	}
+
+	writeClientWebSocketText(t, conn, `{"action":"remote_status"}`)
+	var remoteStatus DirectWebSocketResponse
+	readServerWebSocketJSON(t, reader, &remoteStatus)
+	statusMap, ok := remoteStatus.RemoteStatus.(map[string]any)
+	if remoteStatus.Type != "remote_status" || !ok || statusMap["session_id"] != "sess_bridge" {
+		t.Fatalf("remote status websocket response = %#v", remoteStatus)
 	}
 }
 

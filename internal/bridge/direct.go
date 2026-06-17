@@ -16,6 +16,7 @@ type DirectOptions struct {
 	Manifest      Manifest
 	Registry      commands.Registry
 	RemoteTrigger DirectRemoteTriggerFunc
+	RemoteStatus  DirectRemoteStatusFunc
 }
 
 type DirectHandler struct {
@@ -23,9 +24,11 @@ type DirectHandler struct {
 	manifest      Manifest
 	registry      commands.Registry
 	remoteTrigger DirectRemoteTriggerFunc
+	remoteStatus  DirectRemoteStatusFunc
 }
 
 type DirectRemoteTriggerFunc func(context.Context, DirectRemoteTriggerRequest) (DirectRemoteTriggerResponse, int)
+type DirectRemoteStatusFunc func(context.Context) (any, int)
 
 type DirectHealthResponse struct {
 	OK        bool         `json:"ok"`
@@ -103,11 +106,15 @@ func NewDirectHandler(opts DirectOptions) *DirectHandler {
 	if opts.RemoteTrigger != nil {
 		manifest = WithRemoteTriggerCapability(manifest)
 	}
+	if opts.RemoteStatus != nil {
+		manifest = WithRemoteServiceCapability(manifest)
+	}
 	return &DirectHandler{
 		sessionID:     sessionID,
 		manifest:      manifest,
 		registry:      opts.Registry,
 		remoteTrigger: opts.RemoteTrigger,
+		remoteStatus:  opts.RemoteStatus,
 	}
 }
 
@@ -132,6 +139,8 @@ func (h *DirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleExecute(w, r)
 	case "/remote-trigger":
 		h.handleRemoteTrigger(w, r)
+	case "/remote-service":
+		h.handleRemoteService(w, r)
 	case "/ws":
 		h.handleWebSocket(w, r)
 	default:
@@ -195,6 +204,22 @@ func (h *DirectHandler) handleRemoteTrigger(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	response, status := h.remoteTrigger(r.Context(), req)
+	if status == 0 {
+		status = http.StatusOK
+	}
+	writeDirectJSON(w, status, response)
+}
+
+func (h *DirectHandler) handleRemoteService(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeDirectError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if h.remoteStatus == nil {
+		writeDirectError(w, http.StatusNotImplemented, "remote service endpoint is not configured")
+		return
+	}
+	response, status := h.remoteStatus(r.Context())
 	if status == 0 {
 		status = http.StatusOK
 	}

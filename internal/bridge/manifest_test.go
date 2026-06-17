@@ -45,9 +45,9 @@ func TestBuildManifestIncludesOnlyBridgeSafeCommands(t *testing.T) {
 }
 
 func TestManifestCapabilitiesAreIdempotent(t *testing.T) {
-	manifest := WithRemoteTriggerCapability(WithWebSocketProtocolCapability(Manifest{}))
-	manifest = WithRemoteTriggerCapability(WithWebSocketProtocolCapability(manifest))
-	if len(manifest.Capabilities) != 2 {
+	manifest := WithRemoteServiceCapability(WithRemoteTriggerCapability(WithWebSocketProtocolCapability(Manifest{})))
+	manifest = WithRemoteServiceCapability(WithRemoteTriggerCapability(WithWebSocketProtocolCapability(manifest)))
+	if len(manifest.Capabilities) != 3 {
 		t.Fatalf("capabilities = %#v", manifest.Capabilities)
 	}
 	if manifest.Capabilities[0].Name != "websocket_protocol" || manifest.Capabilities[0].HTTPPath != "/ws" || manifest.Capabilities[0].WebSocketAction != "hello" {
@@ -55,6 +55,9 @@ func TestManifestCapabilitiesAreIdempotent(t *testing.T) {
 	}
 	if manifest.Capabilities[1].Name != "remote_trigger" || manifest.Capabilities[1].HTTPPath != "/remote-trigger" || manifest.Capabilities[1].WebSocketAction != "remote_trigger" {
 		t.Fatalf("remote trigger capability = %#v", manifest.Capabilities[1])
+	}
+	if manifest.Capabilities[2].Name != "remote_service" || manifest.Capabilities[2].HTTPPath != "/remote-service" || manifest.Capabilities[2].WebSocketAction != "remote_status" {
+		t.Fatalf("remote service capability = %#v", manifest.Capabilities[2])
 	}
 }
 

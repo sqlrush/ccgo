@@ -29,6 +29,7 @@ const (
 	webSocketActionResolve    = "resolve"
 	webSocketActionExecute    = "execute"
 	webSocketActionRemoteTrig = "remote_trigger"
+	webSocketActionRemoteStat = "remote_status"
 )
 
 type DirectWebSocketRequest struct {
@@ -46,6 +47,7 @@ type DirectWebSocketResponse struct {
 	Resolve       *DirectResolveResponse       `json:"resolve,omitempty"`
 	Execute       *DirectExecuteResponse       `json:"execute,omitempty"`
 	RemoteTrigger *DirectRemoteTriggerResponse `json:"remote_trigger,omitempty"`
+	RemoteStatus  any                          `json:"remote_status,omitempty"`
 	Error         string                       `json:"error,omitempty"`
 }
 
@@ -161,6 +163,12 @@ func (h *DirectHandler) handleWebSocketMessage(payload []byte) DirectWebSocketRe
 		}
 		response, _ := h.remoteTrigger(context.Background(), remoteTrigger)
 		return DirectWebSocketResponse{Type: webSocketActionRemoteTrig, RemoteTrigger: &response}
+	case webSocketActionRemoteStat, "remote-service":
+		if h.remoteStatus == nil {
+			return DirectWebSocketResponse{Type: "error", Error: "remote service endpoint is not configured"}
+		}
+		response, _ := h.remoteStatus(context.Background())
+		return DirectWebSocketResponse{Type: webSocketActionRemoteStat, RemoteStatus: response}
 	default:
 		return DirectWebSocketResponse{Type: "error", Error: "unknown websocket action"}
 	}
@@ -184,6 +192,9 @@ func (h *DirectHandler) webSocketHello() DirectWebSocketHello {
 	}
 	if h.remoteTrigger != nil {
 		actions = append(actions, webSocketActionRemoteTrig)
+	}
+	if h.remoteStatus != nil {
+		actions = append(actions, webSocketActionRemoteStat)
 	}
 	return DirectWebSocketHello{
 		OK:                  true,

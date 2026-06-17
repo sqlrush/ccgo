@@ -743,6 +743,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：bridge direct WebSocket JSON 通道新增 `remote_trigger` action，复用 direct remote trigger request/response 结构和同一回调，可在已鉴权的 loopback WebSocket 连接上注入远端事件。完整 CCR 云端长连接协议仍未完成。
 - 本轮补充：bridge manifest 新增 `remote_trigger` capability，声明 `/remote-trigger` HTTP path 和 `remote_trigger` WebSocket action；runner 写出的 session-scoped bridge manifest、direct `/manifest` 响应和 `/status show bridge` 都会暴露该能力，方便远端控制端发现可用入口。完整 CCR 能力协商仍未完成。
 - 本轮补充：bridge direct WebSocket JSON 通道新增 `hello`/`health`/`manifest` action，`hello` 会返回 protocol version、session、command count、capabilities 和可用 action 列表；bridge manifest 同时暴露 `websocket_protocol` capability，远端长连接客户端可在同一连接内完成能力握手。完整 CCR 云端长连接服务仍未完成。
+- 本轮补充：bridge direct server 新增 `GET /remote-service` discovery endpoint 和 WebSocket `remote_status` action，返回同一份 session-scoped remote service manifest；bridge manifest、direct `/manifest` 响应和 `/status show bridge` 同步暴露 `remote_service` capability，远端控制端可通过 HTTP 或已鉴权 WebSocket 查询 bridge/daemon 服务状态。完整 CCR 云端注册和消息泵仍未完成。
 
 ### M11: Bridge 和高级集成
 

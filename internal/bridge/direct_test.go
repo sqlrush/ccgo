@@ -215,6 +215,56 @@ func TestDirectHandlerRemoteTriggerRequiresCallback(t *testing.T) {
 	}
 }
 
+func TestDirectHandlerRemoteServiceEndpoint(t *testing.T) {
+	handler := NewDirectHandler(DirectOptions{
+		SessionID: "sess_bridge",
+		Manifest:  testDirectManifest(t),
+		Registry:  testDirectRegistry(),
+		RemoteStatus: func(context.Context) (any, int) {
+			return map[string]any{
+				"session_id": "sess_bridge",
+				"services": []map[string]any{
+					{"name": "bridge", "runtime_state": "running"},
+				},
+			}, http.StatusOK
+		},
+	})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/remote-service", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("remote service status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response["session_id"] != "sess_bridge" {
+		t.Fatalf("remote service response = %#v", response)
+	}
+	manifest := httptest.NewRecorder()
+	handler.ServeHTTP(manifest, httptest.NewRequest(http.MethodGet, "/manifest", nil))
+	var manifestResponse Manifest
+	if err := json.Unmarshal(manifest.Body.Bytes(), &manifestResponse); err != nil {
+		t.Fatal(err)
+	}
+	if !manifestHasCapability(manifestResponse, "remote_service") {
+		t.Fatalf("manifest capabilities = %#v", manifestResponse.Capabilities)
+	}
+}
+
+func TestDirectHandlerRemoteServiceRequiresCallback(t *testing.T) {
+	handler := NewDirectHandler(DirectOptions{
+		SessionID: "sess_bridge",
+		Manifest:  testDirectManifest(t),
+		Registry:  testDirectRegistry(),
+	})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/remote-service", nil))
+	if recorder.Code != http.StatusNotImplemented {
+		t.Fatalf("remote service status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestNewDirectHandlerFromSettingsBuildsRegistryAndManifest(t *testing.T) {
 	handler := NewDirectHandlerFromSettings("sess_bridge", t.TempDir(), contracts.Settings{})
 	recorder := httptest.NewRecorder()

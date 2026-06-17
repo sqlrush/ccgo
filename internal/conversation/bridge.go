@@ -23,7 +23,7 @@ func (r *Runner) maybeWriteBridgeManifest() {
 	if path == "" {
 		return
 	}
-	manifest := bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.BuildManifestFromSettings(r.SessionID, r.WorkingDirectory, settings)))
+	manifest := bridgepkg.WithRemoteServiceCapability(bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.BuildManifestFromSettings(r.SessionID, r.WorkingDirectory, settings))))
 	_ = bridgepkg.WriteManifest(path, manifest)
 	r.maybeStartBridgeDirect(manifest)
 	r.maybeWriteRemoteManifest(manifest)
@@ -45,6 +45,7 @@ func (r *Runner) maybeStartBridgeDirect(manifest bridgepkg.Manifest) {
 		Manifest:      manifest,
 		Registry:      registry,
 		RemoteTrigger: r.bridgeRemoteTriggerFunc(),
+		RemoteStatus:  r.bridgeRemoteStatusFunc(manifest),
 	})
 	server, err := bridgepkg.StartDirectServer(bridgepkg.DirectServerOptions{
 		Addr:    r.BridgeDirectAddr,
@@ -64,6 +65,16 @@ func (r Runner) maybeWriteRemoteManifest(bridgeManifest bridgepkg.Manifest) {
 	if path == "" {
 		return
 	}
+	_ = remotepkg.WriteManifest(path, r.remoteManifest(bridgeManifest))
+}
+
+func (r Runner) bridgeRemoteStatusFunc(bridgeManifest bridgepkg.Manifest) bridgepkg.DirectRemoteStatusFunc {
+	return func(context.Context) (any, int) {
+		return r.remoteManifest(bridgeManifest), http.StatusOK
+	}
+}
+
+func (r Runner) remoteManifest(bridgeManifest bridgepkg.Manifest) remotepkg.Manifest {
 	settings := r.mergedSettings()
 	environmentID := ""
 	if settings.Remote != nil {
@@ -74,7 +85,7 @@ func (r Runner) maybeWriteRemoteManifest(bridgeManifest bridgepkg.Manifest) {
 	bridgeState, _ := bridgepkg.LoadDirectState(bridgeStatePath)
 	daemonStatePath := daemonpkg.SessionStatePath(r.SessionPath, r.SessionID)
 	daemonState, _ := daemonpkg.LoadState(daemonStatePath)
-	_ = remotepkg.WriteManifest(path, remotepkg.BuildManifest(remotepkg.BuildInput{
+	return remotepkg.BuildManifest(remotepkg.BuildInput{
 		SessionID:             r.SessionID,
 		WorkingDirectory:      r.WorkingDirectory,
 		EnvironmentID:         environmentID,
@@ -84,7 +95,7 @@ func (r Runner) maybeWriteRemoteManifest(bridgeManifest bridgepkg.Manifest) {
 		BridgeDirectState:     bridgeState,
 		DaemonStatePath:       daemonStatePath,
 		DaemonState:           daemonState,
-	}))
+	})
 }
 
 func (r Runner) bridgeRemoteTriggerFunc() bridgepkg.DirectRemoteTriggerFunc {

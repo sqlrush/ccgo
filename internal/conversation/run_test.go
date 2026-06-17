@@ -1956,8 +1956,8 @@ func TestRunnerWritesGatedBridgeManifest(t *testing.T) {
 	if bridgeManifestHasCommand(manifest, "status") || bridgeManifestHasCommand(manifest, "model") {
 		t.Fatalf("manifest leaked unsafe commands: %#v", manifest.Commands)
 	}
-	if !bridgeManifestHasCapability(manifest, "remote_trigger") {
-		t.Fatalf("manifest missing remote trigger capability: %#v", manifest.Capabilities)
+	if !bridgeManifestHasCapability(manifest, "remote_trigger") || !bridgeManifestHasCapability(manifest, "remote_service") {
+		t.Fatalf("manifest missing remote capabilities: %#v", manifest.Capabilities)
 	}
 	state, err := bridgepkg.LoadDirectState(bridgepkg.SessionDirectStatePath(transcriptPath, "sess_bridge"))
 	if err != nil {
@@ -2736,7 +2736,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 			{Name: "compact", Type: contracts.CommandLocal},
 			{Name: "ask", Type: contracts.CommandPrompt, Aliases: []string{"question"}},
 		},
-		Capabilities: bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.Manifest{})).Capabilities,
+		Capabilities: bridgepkg.WithRemoteServiceCapability(bridgepkg.WithRemoteTriggerCapability(bridgepkg.WithWebSocketProtocolCapability(bridgepkg.Manifest{}))).Capabilities,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2764,7 +2764,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 				WebSocketURL:  "ws://127.0.0.1:8888/ws",
 				TokenRequired: true,
 				Commands:      2,
-				Capabilities:  []string{"websocket_protocol", "remote_trigger"},
+				Capabilities:  []string{"websocket_protocol", "remote_trigger", "remote_service"},
 			},
 			{
 				Name:         "daemon",
@@ -2904,9 +2904,10 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Status bridge",
 		"Enabled: disabled",
 		"Bridge-safe commands: 2",
-		"Bridge capabilities: 2",
+		"Bridge capabilities: 3",
 		"- websocket_protocol: http /ws: websocket hello",
 		"- remote_trigger: http /remote-trigger: websocket remote_trigger",
+		"- remote_service: http /remote-service: websocket remote_status",
 		"Command names: ask, compact",
 	}, nil)
 	assertStatusShow("/status show remote", []string{
@@ -2914,7 +2915,7 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"Enabled: disabled",
 		"Remote environment: env-status",
 		"Remote services: 2",
-		"- bridge: running: endpoint http://127.0.0.1:8888: websocket ws://127.0.0.1:8888/ws: token required: commands 2: capabilities websocket_protocol, remote_trigger",
+		"- bridge: running: endpoint http://127.0.0.1:8888: websocket ws://127.0.0.1:8888/ws: token required: commands 2: capabilities websocket_protocol, remote_trigger, remote_service",
 		"- daemon: running: endpoint http://127.0.0.1:7777: pid 4242: capabilities health, status, tick, stop",
 	}, nil)
 	assertStatusShow("/status show daemon", []string{
