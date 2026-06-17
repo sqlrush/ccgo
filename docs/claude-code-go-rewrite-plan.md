@@ -141,6 +141,10 @@ test/parity/                 # golden tests against TS/official behavior
 - hook/classifier/permission prompt 接入点。
 - sandbox adapter 接口。
 
+当前进度：
+
+- 本轮补充：tool executor 会围绕 `PreToolUse`、`PostToolUse` 和 `PermissionDenied` hook 发出 `hook_started`、`hook_completed`、`hook_failed`、`hook_blocked` 进度事件，携带 phase/tool/hook_index 以及阻断、错误、权限行为和 input 更新摘要；conversation runner 已通过现有 tool progress 通道透出这些事件。command-backed hook 执行、PermissionRequest hook 和 hook telemetry 仍未宣称完成。
+
 验收：
 
 - allow/deny/ask、path rule、MCP rule、agent rule、mode rule 有覆盖。

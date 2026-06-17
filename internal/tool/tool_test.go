@@ -391,7 +391,8 @@ func TestExecutorHooksCanUpdateInputAndEmitProgress(t *testing.T) {
 	if result.Meta["post_tool_use_hook"].(map[string]any)["ok"] != true {
 		t.Fatalf("meta = %#v", result.Meta)
 	}
-	if got := progressTypes(progress); strings.Join(got, ",") != "started,custom,completed" {
+	wantProgress := "hook_started,hook_completed,hook_started,hook_completed,started,custom,hook_started,hook_completed,hook_started,hook_completed,completed"
+	if got := progressTypes(progress); strings.Join(got, ",") != wantProgress {
 		t.Fatalf("progress = %#v", got)
 	}
 	for _, item := range progress {
@@ -399,9 +400,13 @@ func TestExecutorHooksCanUpdateInputAndEmitProgress(t *testing.T) {
 			t.Fatalf("progress tool use id = %#v", progress)
 		}
 	}
+	if progress[0].Data["phase"] != HookPreToolUse || progress[1].Data["updated_input"] != true || progress[6].Data["phase"] != HookPostToolUse {
+		t.Fatalf("hook progress data = %#v", progress)
+	}
 }
 
 func TestExecutorPreHookCanBlock(t *testing.T) {
+	var progress []contracts.ToolProgress
 	registry, err := NewRegistry(FuncTool{
 		DefinitionValue: contracts.ToolDefinition{Name: "Read", ReadOnly: true},
 		CallFunc: func(ctx Context, raw json.RawMessage, sink ProgressSink) (contracts.ToolResult, error) {
@@ -417,10 +422,19 @@ func TestExecutorPreHookCanBlock(t *testing.T) {
 		Hooks: []Hook{HookFunc(func(ctx Context, event HookEvent) (HookResult, error) {
 			return HookResult{Block: true, Message: "blocked"}, nil
 		})},
-	}).Execute(Context{Context: context.Background()}, contracts.ToolUse{ID: "toolu_block", Name: "Read"}, nil)
+	}).Execute(Context{Context: context.Background()}, contracts.ToolUse{ID: "toolu_block", Name: "Read"}, ProgressFunc(func(p contracts.ToolProgress) error {
+		progress = append(progress, p)
+		return nil
+	}))
 	var blocked HookBlockedError
 	if !errors.As(err, &blocked) || blocked.Phase != HookPreToolUse {
 		t.Fatalf("error = %#v", err)
+	}
+	if got := progressTypes(progress); strings.Join(got, ",") != "hook_started,hook_blocked" {
+		t.Fatalf("progress = %#v", got)
+	}
+	if progress[1].Data["phase"] != HookPreToolUse || progress[1].Data["message"] != "blocked" {
+		t.Fatalf("progress data = %#v", progress)
 	}
 }
 
@@ -524,6 +538,7 @@ func TestEnginePermissionDeciderSurfacesSandboxOverride(t *testing.T) {
 func TestExecutorRunsPermissionDeniedHook(t *testing.T) {
 	engine := permissions.NewEngine(contracts.PermissionContext{Mode: contracts.PermissionDontAsk})
 	hookCalled := false
+	var progress []contracts.ToolProgress
 	registry, err := NewRegistry(FuncTool{
 		DefinitionValue: contracts.ToolDefinition{Name: "Bash", Destructive: true},
 		CallFunc: func(ctx Context, raw json.RawMessage, sink ProgressSink) (contracts.ToolResult, error) {
@@ -546,13 +561,22 @@ func TestExecutorRunsPermissionDeniedHook(t *testing.T) {
 	}).Execute(Context{
 		Context:     context.Background(),
 		Permissions: NewEnginePermissionDecider(engine),
-	}, contracts.ToolUse{ID: "toolu_denied", Name: "Bash"}, nil)
+	}, contracts.ToolUse{ID: "toolu_denied", Name: "Bash"}, ProgressFunc(func(p contracts.ToolProgress) error {
+		progress = append(progress, p)
+		return nil
+	}))
 	var permissionErr PermissionError
 	if !errors.As(err, &permissionErr) {
 		t.Fatalf("error = %v, want PermissionError", err)
 	}
 	if !hookCalled || result.Meta["permission_denied_hook_message"] != "logged" {
 		t.Fatalf("hookCalled=%v result=%#v", hookCalled, result)
+	}
+	if got := progressTypes(progress); strings.Join(got, ",") != "hook_started,hook_completed,started,hook_started,hook_completed,permission_denied" {
+		t.Fatalf("progress = %#v", got)
+	}
+	if progress[3].Data["phase"] != HookPermissionDenied || progress[4].Data["message"] != "logged" || progress[4].Data["behavior"] != string(contracts.PermissionDeny) {
+		t.Fatalf("progress data = %#v", progress)
 	}
 }
 

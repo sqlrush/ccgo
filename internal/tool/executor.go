@@ -57,7 +57,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	if err := t.Validate(ctx, raw); err != nil {
 		return ErrorResult(use, err), err
 	}
-	raw, err := e.runPreHooks(ctx, use, t, raw)
+	raw, err := e.runPreHooks(ctx, use, t, raw, sink)
 	if err != nil {
 		return ErrorResult(use, err), err
 	}
@@ -83,7 +83,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 				"permission": decision,
 			},
 		}
-		result = e.runPermissionDeniedHooks(ctx, use, t, raw, decision, result, permissionErr)
+		result = e.runPermissionDeniedHooks(ctx, use, t, raw, decision, result, permissionErr, sink)
 		_ = SendProgress(sink, use.ID, "permission_denied", map[string]any{"tool": t.Name(), "behavior": string(decision.Behavior)})
 		return result, permissionErr
 	}
@@ -97,7 +97,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 				"permission": decision,
 			},
 		}
-		result = e.runPermissionDeniedHooks(ctx, use, t, raw, decision, result, permissionErr)
+		result = e.runPermissionDeniedHooks(ctx, use, t, raw, decision, result, permissionErr, sink)
 		_ = SendProgress(sink, use.ID, "permission_denied", map[string]any{"tool": t.Name(), "behavior": string(decision.Behavior)})
 		return result, permissionErr
 	}
@@ -112,7 +112,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	if err == nil {
 		result = e.limitResult(t, use, result)
 	}
-	result, hookErr := e.runPostHooks(ctx, use, t, raw, result, err)
+	result, hookErr := e.runPostHooks(ctx, use, t, raw, result, err, sink)
 	if hookErr != nil && err == nil {
 		err = hookErr
 	}
@@ -143,11 +143,13 @@ func (s defaultToolUseProgressSink) Send(progress contracts.ToolProgress) error 
 	return s.sink.Send(progress)
 }
 
-func (e Executor) runPreHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage) (json.RawMessage, error) {
+func (e Executor) runPreHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, sink ProgressSink) (json.RawMessage, error) {
 	current := normalizeRawInput(raw)
-	for _, hook := range e.Hooks {
+	for idx, hook := range e.Hooks {
+		_ = e.sendHookProgress(sink, use.ID, t, HookPreToolUse, idx, "hook_started", nil)
 		result, err := hook.RunToolHook(ctx, HookEvent{Phase: HookPreToolUse, ToolUse: use, ToolName: t.Name(), Input: current})
 		if err != nil {
+			_ = e.sendHookProgress(sink, use.ID, t, HookPreToolUse, idx, "hook_failed", map[string]any{"error": err.Error()})
 			return current, err
 		}
 		if len(result.UpdatedInput) > 0 {
@@ -157,20 +159,31 @@ func (e Executor) runPreHooks(ctx Context, use contracts.ToolUse, t Tool, raw js
 			if result.Message == "" {
 				result.Message = "blocked by PreToolUse hook"
 			}
+			_ = e.sendHookProgress(sink, use.ID, t, HookPreToolUse, idx, "hook_blocked", map[string]any{"message": result.Message})
 			return current, HookBlockedError{Phase: HookPreToolUse, Message: result.Message, Metadata: result.Metadata}
 		}
+		data := map[string]any{}
+		if len(result.UpdatedInput) > 0 {
+			data["updated_input"] = true
+		}
+		if result.Message != "" {
+			data["message"] = result.Message
+		}
+		_ = e.sendHookProgress(sink, use.ID, t, HookPreToolUse, idx, "hook_completed", data)
 	}
 	return current, nil
 }
 
-func (e Executor) runPermissionDeniedHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, decision contracts.PermissionDecision, result contracts.ToolResult, originalErr error) contracts.ToolResult {
-	for _, hook := range e.Hooks {
+func (e Executor) runPermissionDeniedHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, decision contracts.PermissionDecision, result contracts.ToolResult, originalErr error, sink ProgressSink) contracts.ToolResult {
+	for idx, hook := range e.Hooks {
+		_ = e.sendHookProgress(sink, use.ID, t, HookPermissionDenied, idx, "hook_started", map[string]any{"behavior": string(decision.Behavior)})
 		hookResult, err := hook.RunToolHook(ctx, HookEvent{Phase: HookPermissionDenied, ToolUse: use, ToolName: t.Name(), Input: raw, Decision: &decision, Result: &result, Error: originalErr.Error()})
 		if result.Meta == nil {
 			result.Meta = map[string]any{}
 		}
 		if err != nil {
 			result.Meta["permission_denied_hook_error"] = err.Error()
+			_ = e.sendHookProgress(sink, use.ID, t, HookPermissionDenied, idx, "hook_failed", map[string]any{"behavior": string(decision.Behavior), "error": err.Error()})
 			continue
 		}
 		if hookResult.Message != "" {
@@ -179,24 +192,32 @@ func (e Executor) runPermissionDeniedHooks(ctx Context, use contracts.ToolUse, t
 		if len(hookResult.Metadata) > 0 {
 			result.Meta["permission_denied_hook"] = hookResult.Metadata
 		}
+		data := map[string]any{"behavior": string(decision.Behavior)}
+		if hookResult.Message != "" {
+			data["message"] = hookResult.Message
+		}
+		_ = e.sendHookProgress(sink, use.ID, t, HookPermissionDenied, idx, "hook_completed", data)
 	}
 	return result
 }
 
-func (e Executor) runPostHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, result contracts.ToolResult, callErr error) (contracts.ToolResult, error) {
+func (e Executor) runPostHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, result contracts.ToolResult, callErr error, sink ProgressSink) (contracts.ToolResult, error) {
 	var errText string
 	if callErr != nil {
 		errText = callErr.Error()
 	}
-	for _, hook := range e.Hooks {
+	for idx, hook := range e.Hooks {
+		_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUse, idx, "hook_started", nil)
 		hookResult, err := hook.RunToolHook(ctx, HookEvent{Phase: HookPostToolUse, ToolUse: use, ToolName: t.Name(), Input: raw, Result: &result, Error: errText})
 		if err != nil {
+			_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUse, idx, "hook_failed", map[string]any{"error": err.Error()})
 			return result, err
 		}
 		if hookResult.Block {
 			if hookResult.Message == "" {
 				hookResult.Message = "blocked by PostToolUse hook"
 			}
+			_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUse, idx, "hook_blocked", map[string]any{"message": hookResult.Message})
 			return result, HookBlockedError{Phase: HookPostToolUse, Message: hookResult.Message, Metadata: hookResult.Metadata}
 		}
 		if len(hookResult.Metadata) > 0 {
@@ -205,8 +226,23 @@ func (e Executor) runPostHooks(ctx Context, use contracts.ToolUse, t Tool, raw j
 			}
 			result.Meta["post_tool_use_hook"] = hookResult.Metadata
 		}
+		data := map[string]any{}
+		if hookResult.Message != "" {
+			data["message"] = hookResult.Message
+		}
+		_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUse, idx, "hook_completed", data)
 	}
 	return result, nil
+}
+
+func (e Executor) sendHookProgress(sink ProgressSink, toolUseID contracts.ID, t Tool, phase string, index int, progressType string, data map[string]any) error {
+	if data == nil {
+		data = map[string]any{}
+	}
+	data["tool"] = t.Name()
+	data["phase"] = phase
+	data["hook_index"] = index
+	return SendProgress(sink, toolUseID, progressType, data)
 }
 
 type HookBlockedError struct {
