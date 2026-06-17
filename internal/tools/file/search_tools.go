@@ -30,12 +30,12 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"pattern": {}, "path": {}, "glob": {}, "--glob": {}, "-g": {}, "type": {}, "--type": {}, "-t": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
-	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "-n": {},
-	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
-	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
-	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
-	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
-	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
+	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
+	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
+	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {},
+	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
+	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
+	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
@@ -49,12 +49,12 @@ var grepSemanticNumberKeys = map[string]struct{}{
 }
 
 var grepSemanticBooleanKeys = map[string]struct{}{
-	"line_numbers": {}, "lineNumbers": {}, "-n": {},
-	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "-i": {},
-	"fixed_strings": {}, "fixedStrings": {}, "-F": {}, "multiline": {},
-	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "-w": {},
-	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "-v": {},
-	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "-o": {},
+	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
+	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
+	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {},
+	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
+	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
+	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
@@ -98,25 +98,34 @@ type grepInput struct {
 	ShortAfterContext       *int   `json:"-A,omitempty"`
 	LineNumbers             *bool  `json:"line_numbers,omitempty"`
 	LineNumbersAlt          *bool  `json:"lineNumbers,omitempty"`
+	LineNumbersDash         *bool  `json:"line-number,omitempty"`
+	LongLineNumbers         *bool  `json:"--line-number,omitempty"`
 	ShortLineNumbers        *bool  `json:"-n,omitempty"`
 	IgnoreCase              bool   `json:"ignore_case,omitempty"`
 	CaseInsensitive         bool   `json:"case_insensitive,omitempty"`
 	CaseInsensitiveAlt      bool   `json:"caseInsensitive,omitempty"`
+	IgnoreCaseDash          bool   `json:"ignore-case,omitempty"`
+	LongIgnoreCase          bool   `json:"--ignore-case,omitempty"`
 	ShortIgnoreCase         bool   `json:"-i,omitempty"`
 	FixedStrings            bool   `json:"fixed_strings,omitempty"`
 	FixedStringsAlt         bool   `json:"fixedStrings,omitempty"`
+	FixedStringsDash        bool   `json:"fixed-strings,omitempty"`
+	LongFixedStrings        bool   `json:"--fixed-strings,omitempty"`
 	ShortFixedStrings       bool   `json:"-F,omitempty"`
 	WordRegexp              bool   `json:"word_regexp,omitempty"`
 	WordRegexpAlt           bool   `json:"wordRegexp,omitempty"`
 	WordRegexpDash          bool   `json:"word-regexp,omitempty"`
+	LongWordRegexp          bool   `json:"--word-regexp,omitempty"`
 	ShortWordRegexp         bool   `json:"-w,omitempty"`
 	InvertMatch             bool   `json:"invert_match,omitempty"`
 	InvertMatchAlt          bool   `json:"invertMatch,omitempty"`
 	InvertMatchDash         bool   `json:"invert-match,omitempty"`
+	LongInvertMatch         bool   `json:"--invert-match,omitempty"`
 	ShortInvertMatch        bool   `json:"-v,omitempty"`
 	OnlyMatching            bool   `json:"only_matching,omitempty"`
 	OnlyMatchingAlt         bool   `json:"onlyMatching,omitempty"`
 	OnlyMatchingDash        bool   `json:"only-matching,omitempty"`
+	LongOnlyMatching        bool   `json:"--only-matching,omitempty"`
 	ShortOnlyMatching       bool   `json:"-o,omitempty"`
 	FilesWithMatch          bool   `json:"files_with_match,omitempty"`
 	FilesWithMatchAlt       bool   `json:"filesWithMatch,omitempty"`
@@ -263,25 +272,34 @@ func NewGrepTool() tool.Tool {
 					"-A":               map[string]any{"type": "integer"},
 					"line_numbers":     map[string]any{"type": "boolean"},
 					"lineNumbers":      map[string]any{"type": "boolean"},
+					"line-number":      map[string]any{"type": "boolean"},
+					"--line-number":    map[string]any{"type": "boolean"},
 					"-n":               map[string]any{"type": "boolean"},
 					"ignore_case":      map[string]any{"type": "boolean"},
 					"case_insensitive": map[string]any{"type": "boolean"},
 					"caseInsensitive":  map[string]any{"type": "boolean"},
+					"ignore-case":      map[string]any{"type": "boolean"},
+					"--ignore-case":    map[string]any{"type": "boolean"},
 					"-i":               map[string]any{"type": "boolean"},
 					"fixed_strings":    map[string]any{"type": "boolean"},
 					"fixedStrings":     map[string]any{"type": "boolean"},
+					"fixed-strings":    map[string]any{"type": "boolean"},
+					"--fixed-strings":  map[string]any{"type": "boolean"},
 					"-F":               map[string]any{"type": "boolean"},
 					"word_regexp":      map[string]any{"type": "boolean"},
 					"wordRegexp":       map[string]any{"type": "boolean"},
 					"word-regexp":      map[string]any{"type": "boolean"},
+					"--word-regexp":    map[string]any{"type": "boolean"},
 					"-w":               map[string]any{"type": "boolean"},
 					"invert_match":     map[string]any{"type": "boolean"},
 					"invertMatch":      map[string]any{"type": "boolean"},
 					"invert-match":     map[string]any{"type": "boolean"},
+					"--invert-match":   map[string]any{"type": "boolean"},
 					"-v":               map[string]any{"type": "boolean"},
 					"only_matching":    map[string]any{"type": "boolean"},
 					"onlyMatching":     map[string]any{"type": "boolean"},
 					"only-matching":    map[string]any{"type": "boolean"},
+					"--only-matching":  map[string]any{"type": "boolean"},
 					"-o":               map[string]any{"type": "boolean"},
 					"files_with_match": map[string]any{
 						"type": "boolean",
@@ -338,7 +356,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o matched-text output. Use files_with_matches or -l to list files with matches, and files_without_match or -L to list files without matches. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings or -F for literal matching, word_regexp or -w for whole-word matches, and invert_match or -v to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, and files_without_match or -L to list files without matches. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -1217,23 +1235,44 @@ func grepTypeFilter(input grepInput) string {
 }
 
 func grepCaseInsensitive(input grepInput) bool {
-	return input.IgnoreCase || input.CaseInsensitive || input.CaseInsensitiveAlt || input.ShortIgnoreCase
+	return input.IgnoreCase ||
+		input.CaseInsensitive ||
+		input.CaseInsensitiveAlt ||
+		input.IgnoreCaseDash ||
+		input.LongIgnoreCase ||
+		input.ShortIgnoreCase
 }
 
 func grepFixedStrings(input grepInput) bool {
-	return input.FixedStrings || input.FixedStringsAlt || input.ShortFixedStrings
+	return input.FixedStrings ||
+		input.FixedStringsAlt ||
+		input.FixedStringsDash ||
+		input.LongFixedStrings ||
+		input.ShortFixedStrings
 }
 
 func grepWordRegexp(input grepInput) bool {
-	return input.WordRegexp || input.WordRegexpAlt || input.WordRegexpDash || input.ShortWordRegexp
+	return input.WordRegexp ||
+		input.WordRegexpAlt ||
+		input.WordRegexpDash ||
+		input.LongWordRegexp ||
+		input.ShortWordRegexp
 }
 
 func grepInvertMatch(input grepInput) bool {
-	return input.InvertMatch || input.InvertMatchAlt || input.InvertMatchDash || input.ShortInvertMatch
+	return input.InvertMatch ||
+		input.InvertMatchAlt ||
+		input.InvertMatchDash ||
+		input.LongInvertMatch ||
+		input.ShortInvertMatch
 }
 
 func grepOnlyMatching(input grepInput) bool {
-	return input.OnlyMatching || input.OnlyMatchingAlt || input.OnlyMatchingDash || input.ShortOnlyMatching
+	return input.OnlyMatching ||
+		input.OnlyMatchingAlt ||
+		input.OnlyMatchingDash ||
+		input.LongOnlyMatching ||
+		input.ShortOnlyMatching
 }
 
 func grepFilesWithMatches(input grepInput) bool {
@@ -1277,6 +1316,12 @@ func grepLineNumbers(input grepInput, mode string) bool {
 	}
 	if input.LineNumbersAlt != nil {
 		return *input.LineNumbersAlt
+	}
+	if input.LineNumbersDash != nil {
+		return *input.LineNumbersDash
+	}
+	if input.LongLineNumbers != nil {
+		return *input.LongLineNumbers
 	}
 	if input.ShortLineNumbers == nil {
 		return true

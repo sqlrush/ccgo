@@ -1580,6 +1580,18 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("lineNumbers alias result = %#v", camelLineNumberResult)
 	}
 
+	longLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_number_long_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--line-number":"false","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longLineNumberResult.Content != wantNoLineNumber || longLineNumberResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("long line-number alias result = %#v", longLineNumberResult)
+	}
+
 	shortContextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_short_context",
 		Name:  "Grep",
@@ -1797,6 +1809,18 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 		t.Fatalf("semantic bool case-insensitive result = %#v", semanticBoolResult)
 	}
 
+	longIgnoreCaseResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_long_ignore_case",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","--ignore-case":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longIgnoreCaseResult.Content != "Found 1 file\nmixed.txt" || longIgnoreCaseResult.StructuredContent["case_insensitive"] != true {
+		t.Fatalf("long ignore-case result = %#v", longIgnoreCaseResult)
+	}
+
 	ignoredContextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_ignored_context",
 		Name:  "Grep",
@@ -1862,6 +1886,18 @@ func TestGrepToolFixedStrings(t *testing.T) {
 	if fixedResult.Content != "literal.txt:1:a+b" || fixedResult.StructuredContent["fixed_strings"] != true {
 		t.Fatalf("fixed result = %#v", fixedResult)
 	}
+
+	longFixedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_long_fixed",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"a+b","output_mode":"content","--fixed-strings":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longFixedResult.Content != "literal.txt:1:a+b" || longFixedResult.StructuredContent["fixed_strings"] != true {
+		t.Fatalf("long fixed result = %#v", longFixedResult)
+	}
 }
 
 func TestGrepToolOnlyMatching(t *testing.T) {
@@ -1905,6 +1941,18 @@ func TestGrepToolOnlyMatching(t *testing.T) {
 	wantShort := "tokens.txt:ID-123\ntokens.txt:ID-456\ntokens.txt:ID-789"
 	if shortResult.Content != wantShort || shortResult.StructuredContent["only_matching"] != true || shortResult.StructuredContent["line_numbers"] != false {
 		t.Fatalf("short only-matching result = %#v", shortResult)
+	}
+
+	longResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_only_matching_long",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-[0-9]+","outputMode":"content","--only-matching":"true","--line-number":false}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longResult.Content != wantShort || longResult.StructuredContent["only_matching"] != true || longResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("long only-matching result = %#v", longResult)
 	}
 }
 
@@ -1972,6 +2020,18 @@ func TestGrepToolWordRegexp(t *testing.T) {
 	}
 	if shortSemanticResult.Content != wantCount || shortSemanticResult.StructuredContent["word_regexp"] != true {
 		t.Fatalf("short semantic word regexp result = %#v", shortSemanticResult)
+	}
+
+	longResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_word_regexp_long",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"count","--word-regexp":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longResult.Content != wantCount || longResult.StructuredContent["word_regexp"] != true {
+		t.Fatalf("long word-regexp result = %#v", longResult)
 	}
 }
 
@@ -2042,6 +2102,18 @@ func TestGrepToolInvertMatch(t *testing.T) {
 	}
 	if shortResult.Content != "Found 1 file\none.txt" || shortResult.StructuredContent["invert_match"] != true {
 		t.Fatalf("short invert-match result = %#v", shortResult)
+	}
+
+	longResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_invert_match_long_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--invert-match":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longResult.Content != "Found 1 file\none.txt" || longResult.StructuredContent["invert_match"] != true {
+		t.Fatalf("long invert-match result = %#v", longResult)
 	}
 }
 
