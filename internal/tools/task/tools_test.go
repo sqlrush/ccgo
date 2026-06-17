@@ -18,7 +18,7 @@ import (
 
 func taskExecutor(t *testing.T) tool.Executor {
 	t.Helper()
-	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamDispatchTool(), NewTeamScheduleTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
+	registry, err := tool.NewRegistry(NewTaskTool(), NewTaskOutputTool(), NewKillTaskTool(), NewSendMessageTool(), NewTeamCreateTool(), NewTeamDeleteTool(), NewTeamOutputTool(), NewTeamSendMessageTool(), NewTeamDispatchTool(), NewTeamScheduleTool(), NewTeamAutoScheduleTool(), NewTeamCoordinateTool(), NewResumeTaskTool(), NewSleepTool(), NewBriefTool(), NewScheduleCronTool(), NewRemoteTriggerTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -806,6 +806,90 @@ func TestTeamScheduleAssignsObjectiveToMembers(t *testing.T) {
 	}
 }
 
+func TestTeamAutoScheduleBriefsCoordinatorAndAssignsMembers(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+	for _, id := range []string{"agent/auto-lead", "agent/auto-one", "agent/auto-two"} {
+		if _, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_auto_task_" + strings.ReplaceAll(id, "/", "_")),
+			Name:  "Task",
+			Input: json.RawMessage(`{"id":"` + id + `","description":"Auto team task","prompt":"Work with the auto team","subagent_type":"general-purpose"}`),
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_team_auto_create",
+		Name: "TeamCreate",
+		Input: json.RawMessage(`{
+			"team_id":"auto/team",
+			"description":"Auto scheduled team",
+			"coordinator_task_id":"agent/auto-lead",
+			"task_ids":["agent/auto-one","agent/auto-two"]
+		}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	const objective = "Plan implementation ownership and start verification."
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_auto_schedule_request",
+		Name:  "TeamAutoSchedule",
+		Input: json.RawMessage(`{"team_id":"auto/team","instruction":"` + objective + `"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["type"] != "team_auto_schedule" || result.StructuredContent["assignment_count"] != 2 || result.StructuredContent["objective"] != objective {
+		t.Fatalf("team auto schedule structured content = %#v", result.StructuredContent)
+	}
+	coordinator, ok := result.StructuredContent["coordinator"].(map[string]any)
+	if !ok || coordinator["task_id"] != "agent_auto-lead" || coordinator["status"] != session.SidechainStatusRunning {
+		t.Fatalf("team auto schedule coordinator = %#v", result.StructuredContent)
+	}
+	coordinatorMessage, ok := result.StructuredContent["coordinator_message"].(map[string]any)
+	if !ok || coordinatorMessage["task_id"] != "agent_auto-lead" {
+		t.Fatalf("team auto schedule coordinator message = %#v", result.StructuredContent["coordinator_message"])
+	}
+	assignments, ok := result.StructuredContent["assignments"].([]map[string]any)
+	if !ok || len(assignments) != 2 || assignments[0]["task_id"] != "agent_auto-one" || assignments[1]["task_id"] != "agent_auto-two" {
+		t.Fatalf("team auto schedule assignments = %#v", result.StructuredContent["assignments"])
+	}
+	coordinatorResume, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_team_auto_coordinator_resume",
+		Name:  "ResumeTask",
+		Input: json.RawMessage(`{"task_id":"agent/auto-lead","limit":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinatorMessages, ok := coordinatorResume.StructuredContent["resume_messages"].([]map[string]any)
+	if !ok || len(coordinatorMessages) != 3 {
+		t.Fatalf("team auto coordinator resume messages = %#v", coordinatorResume.StructuredContent["resume_messages"])
+	}
+	coordinatorText, _ := coordinatorMessages[2]["text"].(string)
+	if !strings.Contains(coordinatorText, "Team coordination request for auto_team.") || !strings.Contains(coordinatorText, "- agent_auto-one: running") || !strings.Contains(coordinatorText, "Objective:\n"+objective) {
+		t.Fatalf("team auto coordinator briefing = %q", coordinatorText)
+	}
+	for _, taskID := range []string{"agent/auto-one", "agent/auto-two"} {
+		resume, err := executor.Execute(ctx, contracts.ToolUse{
+			ID:    contracts.ID("toolu_team_auto_resume_" + strings.ReplaceAll(taskID, "/", "_")),
+			Name:  "ResumeTask",
+			Input: json.RawMessage(`{"task_id":"` + taskID + `","limit":3}`),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := resume.StructuredContent["resume_messages"].([]map[string]any)
+		if !ok || len(messages) != 3 {
+			t.Fatalf("team auto member resume messages for %s = %#v", taskID, resume.StructuredContent["resume_messages"])
+		}
+		text, _ := messages[2]["text"].(string)
+		if !strings.Contains(text, "Team scheduled assignment for auto_team.") || !strings.Contains(text, "Objective:\n"+objective) || !strings.Contains(text, "Assigned member: "+strings.ReplaceAll(taskID, "/", "_")) {
+			t.Fatalf("team auto member message for %s = %q", taskID, text)
+		}
+	}
+}
+
 func TestSleepToolWaitsForBoundedDuration(t *testing.T) {
 	ctx, _ := taskContext(t)
 	executor := taskExecutor(t)
@@ -1298,6 +1382,10 @@ func TestTaskOutputAndKillValidation(t *testing.T) {
 		{name: "missing team schedule objective", tool: "TeamSchedule", input: `{"team_id":"missing"}`, want: "input.objective is required"},
 		{name: "unknown team schedule field", tool: "TeamSchedule", input: `{"team_id":"missing","objective":"ship","extra":true}`, want: "input.extra is not allowed"},
 		{name: "missing team schedule team", tool: "TeamSchedule", input: `{"team_id":"missing","objective":"ship"}`, want: "team not found: missing"},
+		{name: "missing team auto schedule id", tool: "TeamAutoSchedule", input: `{"objective":"ship"}`, want: "team_id is required"},
+		{name: "missing team auto schedule objective", tool: "TeamAutoSchedule", input: `{"team_id":"missing"}`, want: "input.objective is required"},
+		{name: "unknown team auto schedule field", tool: "TeamAutoSchedule", input: `{"team_id":"missing","objective":"ship","extra":true}`, want: "input.extra is not allowed"},
+		{name: "missing team auto schedule team", tool: "TeamAutoSchedule", input: `{"team_id":"missing","objective":"ship"}`, want: "team not found: missing"},
 		{name: "missing team coordinate id", tool: "TeamCoordinate", input: `{"message":"hello"}`, want: "team_id is required"},
 		{name: "missing team coordinate message", tool: "TeamCoordinate", input: `{"team_id":"missing"}`, want: "message is required"},
 		{name: "unknown team coordinate field", tool: "TeamCoordinate", input: `{"team_id":"missing","message":"hello","extra":true}`, want: "input.extra is not allowed"},

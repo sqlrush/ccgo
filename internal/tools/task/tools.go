@@ -92,6 +92,11 @@ type teamScheduleInput struct {
 	Objective string `json:"objective,omitempty"`
 }
 
+type teamAutoScheduleInput struct {
+	TeamID    string `json:"team_id,omitempty"`
+	Objective string `json:"objective,omitempty"`
+}
+
 type teamCoordinateInput struct {
 	TeamID  string `json:"team_id,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -448,6 +453,33 @@ func NewTeamScheduleTool() tool.Tool {
 		NormalizeFunc:   normalizeTeamScheduleInput,
 		ValidateFunc:    validateTeamSchedule,
 		CallFunc:        callTeamSchedule,
+		ConcurrencyFunc: func(json.RawMessage) bool { return false },
+	}
+}
+
+func NewTeamAutoScheduleTool() tool.Tool {
+	return tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:            "TeamAutoSchedule",
+			Description:     "Send a team objective to the coordinator and deterministically schedule it across running task members.",
+			SearchHint:      "auto schedule objective team coordinator members assignments",
+			ConcurrencySafe: false,
+			Strict:          true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"team_id", "objective"},
+				"properties": map[string]any{
+					"team_id":   map[string]any{"type": "string"},
+					"objective": map[string]any{"type": "string"},
+				},
+			},
+		},
+		PromptFunc: func(tool.PromptContext) (string, error) {
+			return "Combines coordinator briefing and deterministic member scheduling for a subagent team. If the team has a coordinator, the objective is first appended to the running coordinator with team status context; then every running member receives an assignment message.", nil
+		},
+		NormalizeFunc:   normalizeTeamAutoScheduleInput,
+		ValidateFunc:    validateTeamAutoSchedule,
+		CallFunc:        callTeamAutoSchedule,
 		ConcurrencyFunc: func(json.RawMessage) bool { return false },
 	}
 }
@@ -987,6 +1019,43 @@ func validateTeamSchedule(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateTeamAutoSchedule(ctx tool.Context, raw json.RawMessage) error {
+	input, err := decodeTeamAutoScheduleInput(raw)
+	if err != nil {
+		return err
+	}
+	if input.TeamID == "" {
+		return fmt.Errorf("team_id is required")
+	}
+	if input.Objective == "" {
+		return fmt.Errorf("objective is required")
+	}
+	if ctx.SessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+	if sessionPathFromMetadata(ctx.Metadata) == "" {
+		return fmt.Errorf("session path is required")
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return err
+	}
+	taskIDs, err := teamScheduleTaskIDs(team)
+	if err != nil {
+		return err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return err
+	}
+	if team.CoordinatorTaskID != "" {
+		if _, err := runningTeamCoordinatorState(manager, team); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1813,6 +1882,88 @@ func callTeamSchedule(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 	}, nil
 }
 
+func callTeamAutoSchedule(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+	input, err := decodeTeamAutoScheduleInput(raw)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	manager := session.NewSidechainManager(sessionPathFromMetadata(ctx.Metadata), ctx.SessionID)
+	team, err := loadTeamForMessage(manager, input.TeamID)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	taskIDs, err := teamScheduleTaskIDs(team)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	if err := validateTaskIDsRunning(manager, taskIDs); err != nil {
+		return contracts.ToolResult{}, err
+	}
+	var coordinator session.SidechainState
+	if team.CoordinatorTaskID != "" {
+		coordinator, err = runningTeamCoordinatorState(manager, team)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+	}
+	tasks := structuredTeamTaskStates(manager, team)
+	now := time.Now().UTC()
+	structured := structuredTeamState(team)
+	structured["type"] = "team_auto_schedule"
+	structured["objective"] = input.Objective
+	structured["objective_chars"] = len(input.Objective)
+	structured["tasks"] = tasks
+	if coordinator.ID != "" {
+		briefing := formatTeamCoordinateMessage(team, tasks, input.Objective)
+		message, err := appendTaskUserMessage(manager, ctx.SessionID, coordinator.ID, briefing, now)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		coordinator, err = findTaskState(manager, coordinator.ID)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		structured["coordinator"] = structuredTaskState(coordinator)
+		structured["coordinator_message"] = map[string]any{
+			"task_id":        coordinator.ID,
+			"sidechain_id":   coordinator.ID,
+			"message_uuid":   string(message.UUID),
+			"message_chars":  len(input.Objective),
+			"briefing_chars": len(briefing),
+		}
+	}
+	assignments := make([]map[string]any, 0, len(taskIDs))
+	for i, taskID := range taskIDs {
+		scheduleMessage := formatTeamScheduleMessage(team, tasks, input.Objective, taskID, i+1, len(taskIDs))
+		message, err := appendTaskUserMessage(manager, ctx.SessionID, taskID, scheduleMessage, now)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		assignments = append(assignments, map[string]any{
+			"task_id":       taskID,
+			"sidechain_id":  taskID,
+			"member_index":  i + 1,
+			"member_count":  len(taskIDs),
+			"message_uuid":  string(message.UUID),
+			"message_chars": len(scheduleMessage),
+		})
+	}
+	structured["assignment_count"] = len(assignments)
+	structured["assignments"] = assignments
+	_ = tool.SendProgress(sink, "", "team_auto_scheduled", map[string]any{
+		"team_id":             team.ID,
+		"task_count":          len(team.TaskIDs),
+		"assignment_count":    len(assignments),
+		"has_coordinator":     coordinator.ID != "",
+		"coordinator_task_id": coordinator.ID,
+		"objective_chars":     len(input.Objective),
+	})
+	return contracts.ToolResult{
+		Content:           fmt.Sprintf("Auto-scheduled %d assignment(s) in team %s.", len(assignments), team.ID),
+		StructuredContent: structured,
+	}, nil
+}
+
 func callTeamCoordinate(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeTeamCoordinateInput(raw)
 	if err != nil {
@@ -2465,6 +2616,16 @@ func decodeTeamScheduleInput(raw json.RawMessage) (teamScheduleInput, error) {
 	return input, nil
 }
 
+func decodeTeamAutoScheduleInput(raw json.RawMessage) (teamAutoScheduleInput, error) {
+	var input teamAutoScheduleInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return teamAutoScheduleInput{}, err
+	}
+	input.TeamID = strings.TrimSpace(input.TeamID)
+	input.Objective = strings.TrimSpace(input.Objective)
+	return input, nil
+}
+
 func decodeTeamCoordinateInput(raw json.RawMessage) (teamCoordinateInput, error) {
 	var input teamCoordinateInput
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -2738,6 +2899,10 @@ func normalizeTeamScheduleInput(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(normalized)
 }
 
+func normalizeTeamAutoScheduleInput(raw json.RawMessage) (json.RawMessage, error) {
+	return normalizeTeamScheduleInput(raw)
+}
+
 func normalizeTeamCoordinateInput(raw json.RawMessage) (json.RawMessage, error) {
 	obj, err := decodeRawTaskObject(raw)
 	if err != nil {
@@ -2993,6 +3158,24 @@ func sessionPathFromMetadata(metadata map[string]any) string {
 		return strings.TrimSpace(value)
 	}
 	return ""
+}
+
+func appendTaskUserMessage(manager session.SidechainManager, sessionID contracts.ID, taskID string, text string, now time.Time) (contracts.Message, error) {
+	message := msgs.UserText(text)
+	message.SessionID = sessionID
+	err := manager.Append(taskID, session.TranscriptMessage{
+		Type:        string(contracts.MessageUser),
+		UUID:        message.UUID,
+		SessionID:   sessionID,
+		Timestamp:   now.Format(time.RFC3339Nano),
+		IsSidechain: true,
+		AgentID:     taskID,
+		Message:     &message,
+	})
+	if err != nil {
+		return contracts.Message{}, err
+	}
+	return message, nil
 }
 
 func findTaskState(manager session.SidechainManager, taskID string) (session.SidechainState, error) {

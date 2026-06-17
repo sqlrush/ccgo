@@ -205,6 +205,7 @@ func BuiltinTools() []tool.Tool {
 		tasktools.NewTeamSendMessageTool(),
 		tasktools.NewTeamDispatchTool(),
 		tasktools.NewTeamScheduleTool(),
+		tasktools.NewTeamAutoScheduleTool(),
 		tasktools.NewTeamCoordinateTool(),
 		tasktools.NewResumeTaskTool(),
 		tasktools.NewSleepTool(),
