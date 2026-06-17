@@ -17,6 +17,9 @@ const managerStatusFileName = "lsp-manager.json"
 
 const (
 	ServerRuntimeNotStarted       = "not_started"
+	ServerRuntimeRunning          = "running"
+	ServerRuntimeExited           = "exited"
+	ServerRuntimeFailed           = "failed"
 	ServerRuntimeNoWorkspaceMatch = "no_workspace_match"
 	ServerRuntimeInvalid          = "invalid"
 )
@@ -47,6 +50,9 @@ type ServerStatus struct {
 	RuntimeState   string   `json:"runtime_state"`
 	Reason         string   `json:"reason,omitempty"`
 	MatchReasons   []string `json:"match_reasons,omitempty"`
+	ProcessID      int      `json:"process_id,omitempty"`
+	StartedAt      string   `json:"started_at,omitempty"`
+	EndedAt        string   `json:"ended_at,omitempty"`
 }
 
 func SessionManagerStatusPath(sessionPath string, sessionID contracts.ID) string {
@@ -178,6 +184,30 @@ func CountMatchedServers(servers []ServerStatus) int {
 	return count
 }
 
+func UpsertServerStatus(status ManagerStatus, server ServerStatus) ManagerStatus {
+	servers := normalizeServerStatuses([]ServerStatus{server})
+	if len(servers) == 0 {
+		return status
+	}
+	server = servers[0]
+	replaced := false
+	for i, existing := range status.Servers {
+		if existing.Name == server.Name {
+			status.Servers[i] = server
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		status.Servers = append(status.Servers, server)
+	}
+	status.Servers = normalizeServerStatuses(status.Servers)
+	if status.GeneratedAt == "" {
+		status.GeneratedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	return status
+}
+
 func resolveServerStatus(cwd string, definition ServerDefinition, files []string) ServerStatus {
 	status := ServerStatus{
 		Name:           definition.Name,
@@ -199,7 +229,7 @@ func resolveServerStatus(cwd string, definition ServerDefinition, files []string
 		return status
 	}
 	status.RuntimeState = ServerRuntimeNotStarted
-	status.Reason = "language server process runtime is not wired"
+	status.Reason = "language server process has not been started"
 	return status
 }
 
@@ -269,6 +299,8 @@ func normalizeServerStatuses(servers []ServerStatus) []ServerStatus {
 		server.RuntimeState = strings.TrimSpace(server.RuntimeState)
 		server.Reason = strings.TrimSpace(server.Reason)
 		server.MatchReasons = sortedTrimmedStrings(server.MatchReasons)
+		server.StartedAt = strings.TrimSpace(server.StartedAt)
+		server.EndedAt = strings.TrimSpace(server.EndedAt)
 		if server.Name == "" {
 			continue
 		}

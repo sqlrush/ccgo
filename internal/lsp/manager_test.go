@@ -97,6 +97,19 @@ func TestWriteAndLoadManagerStatus(t *testing.T) {
 	}
 }
 
+func TestUpsertServerStatusIgnoresEmptyServer(t *testing.T) {
+	status := ManagerStatus{
+		Servers: []ServerStatus{{
+			Name:         "gopls",
+			RuntimeState: ServerRuntimeNotStarted,
+		}},
+	}
+	got := UpsertServerStatus(status, ServerStatus{})
+	if len(got.Servers) != 1 || got.Servers[0].Name != "gopls" {
+		t.Fatalf("status = %#v", got)
+	}
+}
+
 func TestManagerStatusIORejectsEmptyPath(t *testing.T) {
 	if err := WriteManagerStatus("", ManagerStatus{}); !errors.Is(err, os.ErrInvalid) {
 		t.Fatalf("WriteManagerStatus empty path err = %v", err)
