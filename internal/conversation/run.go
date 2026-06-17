@@ -25,6 +25,7 @@ import (
 	pluginpkg "ccgo/internal/plugins"
 	"ccgo/internal/session"
 	"ccgo/internal/skills"
+	telemetrypkg "ccgo/internal/telemetry"
 	"ccgo/internal/tool"
 )
 
@@ -578,10 +579,10 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins>"
+				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry>"
 			}
 			return r.formatStatusShow(args[1])
-		case "session", "model", "auth", "tools", "mcp", "plugins":
+		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry":
 			return r.formatStatusShow(args[0])
 		default:
 			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
@@ -720,8 +721,10 @@ func (r Runner) formatStatusShow(raw string) string {
 			}
 		}
 		return strings.Join(lines, "\n")
+	case "telemetry":
+		return r.formatStatusTelemetry()
 	default:
-		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins"
+		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry"
 	}
 }
 
@@ -742,9 +745,49 @@ func normalizeStatusSection(raw string) string {
 		return "mcp"
 	case "plugin", "plugins":
 		return "plugins"
+	case "telemetry", "telemetry-events", "diagnostics", "trace", "tracing":
+		return "telemetry"
 	default:
 		return compact
 	}
+}
+
+func (r Runner) formatStatusTelemetry() string {
+	path := telemetrypkg.SessionPath(r.SessionPath, r.SessionID)
+	lines := []string{
+		"Status telemetry",
+		"Enabled: " + boolEnabledText(r.telemetryEnabled()),
+	}
+	if path == "" {
+		return strings.Join(append(lines, "Telemetry path: (not configured)", "Events: 0"), "\n")
+	}
+	events, err := telemetrypkg.Load(path)
+	if err != nil {
+		return strings.Join(append(lines, "Telemetry path: "+path, "Telemetry error: "+err.Error()), "\n")
+	}
+	summary := telemetrypkg.Summarize(events)
+	lines = append(lines,
+		"Telemetry path: "+path,
+		fmt.Sprintf("Events: %d", summary.Total),
+		fmt.Sprintf("Tool events: %d", summary.ToolEvents),
+		fmt.Sprintf("Tool errors: %d", summary.ToolErrors),
+		fmt.Sprintf("Error events: %d", summary.ErrorEvents),
+		fmt.Sprintf("Compactions: %d", summary.Compactions),
+		fmt.Sprintf("Token warnings: %d", summary.TokenWarnings),
+	)
+	if len(summary.ByType) > 0 {
+		lines = append(lines, "Event types:")
+		for _, key := range sortedIntMapKeys(summary.ByType) {
+			lines = append(lines, fmt.Sprintf("- %s: %d", key, summary.ByType[key]))
+		}
+	}
+	if len(summary.ByModel) > 0 {
+		lines = append(lines, "Models:")
+		for _, key := range sortedIntMapKeys(summary.ByModel) {
+			lines = append(lines, fmt.Sprintf("- %s: %d", key, summary.ByModel[key]))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r *Runner) formatConfigSummary(raw string) string {
@@ -2525,6 +2568,18 @@ func legacyPluginSettingKeys(value any) []string {
 }
 
 func sortedAnyMapKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedIntMapKeys(values map[string]int) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		key = strings.TrimSpace(key)

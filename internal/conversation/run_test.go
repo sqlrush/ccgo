@@ -1821,6 +1821,22 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := telemetrypkg.Append(telemetrypkg.SessionPath(transcriptPath, "sess_status_show"), telemetrypkg.Event{
+		SessionID: "sess_status_show",
+		Type:      string(EventAssistantMessage),
+		Model:     "sonnet",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := telemetrypkg.Append(telemetrypkg.SessionPath(transcriptPath, "sess_status_show"), telemetrypkg.Event{
+		SessionID:     "sess_status_show",
+		Type:          string(EventToolResult),
+		ToolUseID:     "toolu_status",
+		ToolResultErr: true,
+		Error:         "tool failed",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	runner := Runner{
 		Client:           client,
 		Tools:            tool.NewExecutor(registry),
@@ -1892,9 +1908,23 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"- market/a: enabled",
 		"- market/b: disabled",
 	}, []string{"plugin-secret"})
+	assertStatusShow("/status show telemetry", []string{
+		"Status telemetry",
+		"Enabled: disabled",
+		"Events: 2",
+		"Tool events: 1",
+		"Tool errors: 1",
+		"Error events: 1",
+		"Event types:",
+		"- assistant_message: 1",
+		"- tool_result: 1",
+		"Models:",
+		"- sonnet: 1",
+	}, []string{"tool failed"})
 	assertStatusShow("/status show unknown", []string{
 		"Unknown status section unknown.",
 		"Available sections:",
+		"telemetry",
 	}, nil)
 }
 
