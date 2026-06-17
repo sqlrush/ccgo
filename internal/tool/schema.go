@@ -48,6 +48,19 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 			return fmt.Errorf("%s must not match disallowed schema", path)
 		}
 	}
+	if ifSchema, ok := schemaMap(schema["if"]); ok {
+		if err := validateValue(ifSchema, value, path); err == nil {
+			if thenSchema, ok := schemaMap(schema["then"]); ok {
+				if err := validateValue(thenSchema, value, path); err != nil {
+					return err
+				}
+			}
+		} else if elseSchema, ok := schemaMap(schema["else"]); ok {
+			if err := validateValue(elseSchema, value, path); err != nil {
+				return err
+			}
+		}
+	}
 	if types := stringOrStrings(schema["type"]); len(types) > 0 {
 		if !matchesAnyType(types, value) {
 			return fmt.Errorf("%s must be %s", path, strings.Join(types, " or "))
@@ -200,6 +213,13 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 	if maxProperties, ok := intSchemaConstraint(schema["maxProperties"]); ok && len(obj) > maxProperties {
 		return fmt.Errorf("%s must contain at most %d properties", path, maxProperties)
 	}
+	if propertyNameSchema, ok := schemaMap(schema["propertyNames"]); ok {
+		for key := range obj {
+			if err := validateValue(propertyNameSchema, key, fmt.Sprintf("%s property name %q", path, key)); err != nil {
+				return err
+			}
+		}
+	}
 	if ok {
 		for key, propertySchema := range properties {
 			child, ok := obj[key]
@@ -211,6 +231,20 @@ func validateValue(schema contracts.JSONSchema, value any, path string) error {
 				continue
 			}
 			if err := validateValue(propertyMap, child, path+"."+key); err != nil {
+				return err
+			}
+		}
+	}
+	if dependentSchemas, ok := objectMap(schema["dependentSchemas"]); ok {
+		for key, rawSchema := range dependentSchemas {
+			if _, present := obj[key]; !present {
+				continue
+			}
+			dependencySchema, ok := schemaMap(rawSchema)
+			if !ok {
+				continue
+			}
+			if err := validateValue(dependencySchema, value, path); err != nil {
 				return err
 			}
 		}

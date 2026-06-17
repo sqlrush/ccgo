@@ -299,6 +299,8 @@ M4/M5/M10 补充：`FuncTool.Validate` 现在使用与模型 tool definition 同
 
 M5/M9 补充：通用 tool schema validator 继续补齐 `not`、`multipleOf`、`uniqueItems`、`prefixItems`/`items:false`、`contains`/`minContains`/`maxContains`、`patternProperties` 和 `dependentRequired`；`additionalProperties:false` 会正确把 pattern-matched 字段视为已定义，Go typed nested schema map 也会被执行。
 
+M5/M9 补充：通用 tool schema validator 现在支持条件类 JSON Schema 约束 `propertyNames`、`dependentSchemas` 和 `if`/`then`/`else`，外部 MCP/动态工具可用 schema 表达字段名规则、属性依赖和条件必填逻辑。
+
 M7 补充：scripted permission payload、dialog expectation、event、cancel-permission 和 dialog-result expectation 现在接受 `ID`/`ToolName`/`Actions`、`permissionID`、`requestID`、`toolUseID`、`operationID`、`operation`、`commandName`、`resourcePath`、`body`、`reasonText`、`allowedActions`、`buttons` 等相邻字段，并支持数字 request ID。
 
 M6 补充：microcompact disk cache loader 和 prune 现在接受 digest 缺失但文件名已 keyed 的 cache entry，会用 `<digest>.json` 文件名作为 digest fallback，同时保留显式 digest mismatch 的 invalid-cache guard。

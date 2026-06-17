@@ -219,6 +219,61 @@ func TestValidateSchemaAdditionalAdvancedConstraints(t *testing.T) {
 	}
 }
 
+func TestValidateSchemaConditionalConstraints(t *testing.T) {
+	schema := contracts.JSONSchema{
+		"type": "object",
+		"propertyNames": map[string]any{
+			"pattern": "^[a-z_]+$",
+		},
+		"properties": map[string]any{
+			"mode":         map[string]any{"type": "string"},
+			"note":         map[string]any{"type": "string"},
+			"secret":       map[string]any{"type": "string"},
+			"token":        map[string]any{"type": "string"},
+			"token_secret": map[string]any{"type": "string"},
+		},
+		"if": map[string]any{
+			"required": []string{"mode"},
+			"properties": map[string]any{
+				"mode": map[string]any{"const": "secure"},
+			},
+		},
+		"then": map[string]any{
+			"required": []string{"secret"},
+		},
+		"else": map[string]any{
+			"required": []string{"note"},
+		},
+		"dependentSchemas": map[string]any{
+			"token": contracts.JSONSchema{"required": []string{"token_secret"}},
+		},
+	}
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"property-names", `{"Bad":1,"note":"ok"}`, `input property name "Bad" must match pattern ^[a-z_]+$`},
+		{"then", `{"mode":"secure"}`, "input.secret is required"},
+		{"else", `{"mode":"plain"}`, "input.note is required"},
+		{"dependent-schemas", `{"note":"ok","token":"abc"}`, "input.token_secret is required"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateSchema(schema, json.RawMessage(tc.input))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"mode":"secure","secret":"s"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateSchema(schema, json.RawMessage(`{"mode":"plain","note":"ok","token":"abc","token_secret":"def"}`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFuncToolValidateUsesDynamicInputSchema(t *testing.T) {
 	dynamic := FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
