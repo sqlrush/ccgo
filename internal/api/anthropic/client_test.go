@@ -369,6 +369,40 @@ func TestCreateMessageAddsDynamicCacheBetaHeaders(t *testing.T) {
 	}
 }
 
+func TestCreateMessageAddsDynamicStrictAndContextBetaHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("anthropic-beta"); got != "structured-outputs-2025-11-13,context-1m-2025-08-07" {
+			t.Fatalf("anthropic-beta = %q", got)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"sonnet","content":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithBaseURL(server.URL), WithBeta(StructuredOutputsBetaHeader))
+	_, err := client.CreateMessage(context.Background(), Request{
+		Model:     "claude-sonnet-4-6[1m]",
+		MaxTokens: 32,
+		Messages:  []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("hello")}}},
+		Tools: []ToolDefinition{{
+			Name:        "Answer",
+			Description: "Return a structured answer",
+			InputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"answer": map[string]any{"type": "string"},
+				},
+				"required":             []any{"answer"},
+				"additionalProperties": false,
+			},
+			Strict: true,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAddCacheBreakpoints(t *testing.T) {
 	messages := []contracts.APIMessage{
 		{Role: "user", Content: []contracts.ContentBlock{{Type: contracts.ContentToolResult, ToolUseID: "toolu_1"}}},

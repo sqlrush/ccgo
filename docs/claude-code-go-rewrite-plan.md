@@ -133,6 +133,7 @@ test/parity/                 # golden tests against TS/official behavior
 - API request golden 能比对 headers/body 中关键字段。
 
 - 本轮补充：Anthropic client 构造请求时会把显式 beta headers 与请求内容推导出的 beta headers 合并去重；当 messages/system content 或 tool definitions 中出现 `cache_control`/`cache_reference`，以及 messages 中出现 `cache_edits` payload 时，会自动带上 prompt-caching scope 与 cache-editing beta，避免 prompt-cache/cache-editing 请求依赖外部环境变量手动配置。
+- 本轮补充：动态 beta header 推导继续覆盖 strict tool structured-output 请求和 `[1m]` context model 请求；当 request tools 中存在 `strict:true` 时自动追加 structured-outputs beta，当 request model 以 `[1m]` 结尾时自动追加 context-1m beta，并继续和显式 beta 去重合并。
 
 ### M4: Tool framework、permissions、sandbox
 

@@ -49,6 +49,12 @@ func DynamicBetaHeaders(payload any) []string {
 	if requestUsesCacheEditing(request) {
 		betas = append(betas, CacheEditingBetaHeader)
 	}
+	if requestUsesStructuredOutputs(request) {
+		betas = append(betas, StructuredOutputsBetaHeader)
+	}
+	if requestUsesContext1M(request) {
+		betas = append(betas, Context1MBetaHeader)
+	}
 	return betas
 }
 
@@ -78,6 +84,19 @@ func requestUsesCacheEditing(request Request) bool {
 		}
 	}
 	return false
+}
+
+func requestUsesStructuredOutputs(request Request) bool {
+	for _, tool := range request.Tools {
+		if tool.Strict {
+			return true
+		}
+	}
+	return false
+}
+
+func requestUsesContext1M(request Request) bool {
+	return strings.HasSuffix(strings.TrimSpace(strings.ToLower(request.Model)), "[1m]")
 }
 
 func contentBlocksUsePromptCaching(blocks []contracts.ContentBlock) bool {
