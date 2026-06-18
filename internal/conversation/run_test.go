@@ -2205,6 +2205,23 @@ func TestRunnerRecordsGatedTelemetrySummaries(t *testing.T) {
 	}
 }
 
+func TestRunnerTelemetryEventIncludesRetryBreadcrumb(t *testing.T) {
+	event := Runner{SessionID: "sess_retry"}.telemetryEvent(Event{
+		Type:  EventRetry,
+		Model: "sonnet",
+		Retry: &RetryInfo{
+			Attempt:     1,
+			MaxAttempts: 2,
+			FailedModel: "sonnet",
+			NextModel:   "haiku",
+			Fallback:    true,
+		},
+	})
+	if event.Type != string(EventRetry) || event.Model != "sonnet" || event.RetryAttempt != 1 || event.RetryMax != 2 || event.RetryFailed != "sonnet" || event.RetryNext != "haiku" || !event.RetryFallback {
+		t.Fatalf("telemetry event = %#v", event)
+	}
+}
+
 func TestRunnerExportsGatedTelemetryToConfiguredBackend(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()
@@ -6408,11 +6425,17 @@ func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 			Content:    []contracts.ContentBlock{contracts.NewTextBlock("fallback ok")},
 		}},
 	}}
+	var retryEvents []RetryInfo
 	runner := Runner{
 		Client:         client,
 		Model:          "sonnet",
 		FallbackModels: []string{"haiku"},
 		MaxTokens:      64,
+		OnEvent: func(event Event) {
+			if event.Type == EventRetry && event.Retry != nil {
+				retryEvents = append(retryEvents, *event.Retry)
+			}
+		},
 	}
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("hello"))
 	if err != nil {
@@ -6423,6 +6446,13 @@ func TestRunnerFallsBackOnRetryableAPIError(t *testing.T) {
 	}
 	if len(client.requests) != 2 || client.requests[0].Model != "sonnet" || client.requests[1].Model != "haiku" {
 		t.Fatalf("requests = %#v", client.requests)
+	}
+	if len(retryEvents) != 1 {
+		t.Fatalf("retry events = %#v", retryEvents)
+	}
+	retry := retryEvents[0]
+	if retry.Attempt != 1 || retry.MaxAttempts != 2 || retry.FailedModel != "sonnet" || retry.NextModel != "haiku" || !retry.Fallback {
+		t.Fatalf("retry event = %#v", retry)
 	}
 }
 

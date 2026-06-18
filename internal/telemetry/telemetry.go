@@ -31,6 +31,11 @@ type Event struct {
 	ToolResultErr  bool         `json:"tool_result_error,omitempty"`
 	ProgressType   string       `json:"progress_type,omitempty"`
 	ProgressKeys   []string     `json:"progress_keys,omitempty"`
+	RetryAttempt   int          `json:"retry_attempt,omitempty"`
+	RetryMax       int          `json:"retry_max_attempts,omitempty"`
+	RetryFailed    string       `json:"retry_failed_model,omitempty"`
+	RetryNext      string       `json:"retry_next_model,omitempty"`
+	RetryFallback  bool         `json:"retry_fallback,omitempty"`
 	TokenState     string       `json:"token_state,omitempty"`
 	TokenUsage     int          `json:"token_usage,omitempty"`
 	CompactTrigger string       `json:"compact_trigger,omitempty"`

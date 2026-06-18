@@ -2199,6 +2199,40 @@ func TestWritePrintStreamEventCompactUsesLightweightMetadata(t *testing.T) {
 	}
 }
 
+func TestWritePrintStreamEventRetryIncludesModelBreadcrumb(t *testing.T) {
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type:  conversation.EventRetry,
+		Model: "sonnet",
+		Error: fmt.Errorf("try later"),
+		Retry: &conversation.RetryInfo{
+			Attempt:     1,
+			MaxAttempts: 2,
+			FailedModel: "sonnet",
+			NextModel:   "haiku",
+			Fallback:    true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "retry" || event["model"] != "sonnet" || event["error"] != "try later" {
+		t.Fatalf("event = %#v", event)
+	}
+	retry, ok := event["retry"].(map[string]any)
+	if !ok {
+		t.Fatalf("retry = %#v", event["retry"])
+	}
+	if retry["attempt"] != float64(1) || retry["max_attempts"] != float64(2) || retry["failed_model"] != "sonnet" || retry["next_model"] != "haiku" || retry["fallback"] != true {
+		t.Fatalf("retry = %#v", retry)
+	}
+}
+
 func TestRunPrintStreamJSONClearIncludesCleared(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")

@@ -58,6 +58,16 @@ func (r Runner) telemetryEvent(event Event) telemetrypkg.Event {
 		out.ProgressType = event.ToolProgress.Type
 		out.ProgressKeys = telemetrypkg.SortedMapKeys(event.ToolProgress.Data)
 	}
+	if event.Retry != nil {
+		out.RetryAttempt = event.Retry.Attempt
+		out.RetryMax = event.Retry.MaxAttempts
+		out.RetryFailed = event.Retry.FailedModel
+		out.RetryNext = event.Retry.NextModel
+		out.RetryFallback = event.Retry.Fallback
+		if out.Model == "" {
+			out.Model = event.Retry.FailedModel
+		}
+	}
 	if event.TokenWarning != nil {
 		out.TokenUsage = event.TokenWarning.TokenUsage
 		out.TokenState = telemetryWarningState(event.TokenWarning.State)

@@ -45,6 +45,14 @@ type TokenWarning struct {
 	State      compactpkg.WarningState
 }
 
+type RetryInfo struct {
+	Attempt     int
+	MaxAttempts int
+	FailedModel string
+	NextModel   string
+	Fallback    bool
+}
+
 type Event struct {
 	Type         EventType
 	Message      *contracts.Message
@@ -52,6 +60,7 @@ type Event struct {
 	ToolResult   *contracts.ToolResult
 	ToolProgress *contracts.ToolProgress
 	TokenWarning *TokenWarning
+	Retry        *RetryInfo
 	Compact      *compactpkg.Result
 	StreamEvent  *anthropic.StreamEvent
 	Model        string

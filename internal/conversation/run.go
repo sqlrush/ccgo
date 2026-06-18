@@ -5277,7 +5277,13 @@ func (r Runner) send(ctx context.Context, history []contracts.Message, relevantM
 		if i == len(models)-1 || !isFallbackEligible(err) {
 			return request, attempts, nil, apiDuration, err
 		}
-		r.emit(Event{Type: EventRetry, Model: model, Error: err})
+		r.emit(Event{Type: EventRetry, Model: model, Error: err, Retry: &RetryInfo{
+			Attempt:     i + 1,
+			MaxAttempts: len(models),
+			FailedModel: model,
+			NextModel:   models[i+1],
+			Fallback:    true,
+		}})
 	}
 	return lastRequest, attempts, nil, apiDuration, lastErr
 }

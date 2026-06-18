@@ -2187,6 +2187,7 @@ type printStreamEvent struct {
 	ToolUseID      contracts.ID             `json:"tool_use_id,omitempty"`
 	ProgressType   string                   `json:"progress_type,omitempty"`
 	Data           map[string]any           `json:"data,omitempty"`
+	Retry          *printStreamRetry        `json:"retry,omitempty"`
 	TokenWarning   *printStreamTokenWarning `json:"token_warning,omitempty"`
 	Compact        any                      `json:"compact,omitempty"`
 	StreamEvent    *anthropic.StreamEvent   `json:"stream_event,omitempty"`
@@ -2195,6 +2196,14 @@ type printStreamEvent struct {
 	IsError        bool                     `json:"is_error,omitempty"`
 	DurationMS     *int64                   `json:"duration_ms,omitempty"`
 	DurationAPI    *int64                   `json:"duration_api_ms,omitempty"`
+}
+
+type printStreamRetry struct {
+	Attempt     int    `json:"attempt,omitempty"`
+	MaxAttempts int    `json:"max_attempts,omitempty"`
+	FailedModel string `json:"failed_model,omitempty"`
+	NextModel   string `json:"next_model,omitempty"`
+	Fallback    bool   `json:"fallback,omitempty"`
 }
 
 type printStreamTokenWarning struct {
@@ -2437,6 +2446,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		Message:      event.Message,
 		ToolUse:      event.ToolUse,
 		ToolResult:   event.ToolResult,
+		Retry:        printStreamRetryFrom(event.Retry),
 		TokenWarning: printStreamTokenWarningFrom(event.TokenWarning),
 		StreamEvent:  event.StreamEvent,
 		Model:        event.Model,
@@ -2453,6 +2463,19 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		out.Error = event.Error.Error()
 	}
 	return encoder.Encode(out)
+}
+
+func printStreamRetryFrom(retry *conversation.RetryInfo) *printStreamRetry {
+	if retry == nil {
+		return nil
+	}
+	return &printStreamRetry{
+		Attempt:     retry.Attempt,
+		MaxAttempts: retry.MaxAttempts,
+		FailedModel: retry.FailedModel,
+		NextModel:   retry.NextModel,
+		Fallback:    retry.Fallback,
+	}
 }
 
 func printStreamCompactMetadataFrom(event conversation.Event) *session.CompactMetadata {
