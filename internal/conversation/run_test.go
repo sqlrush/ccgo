@@ -3466,6 +3466,16 @@ func TestRunnerExecutesStatusShowSectionsWithoutQuery(t *testing.T) {
 		"- chrome: enabled=enabled runtime=not_wired",
 		"- voice: enabled=disabled runtime=disabled",
 	}, nil)
+	assertStatusShow("/status integrations", []string{
+		"Status advanced integrations",
+		"Integrations: 2",
+		"- chrome: enabled=enabled runtime=not_wired",
+	}, nil)
+	assertStatusShow("/status diagnostics", []string{
+		"Status LSP",
+		"Diagnostics: 3",
+		"Configured LSP servers: 2",
+	}, []string{"broken", "unused"})
 	assertStatusShow("/status show unknown", []string{
 		"Unknown status section unknown.",
 		"Available sections:",

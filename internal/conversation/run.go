@@ -698,9 +698,12 @@ func (r Runner) formatStatusSummary(raw string) string {
 				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|remote|daemon|lsp|native|integrations>"
 			}
 			return r.formatStatusShow(args[1])
-		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native":
+		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native", "integrations":
 			return r.formatStatusShow(args[0])
 		default:
+			if section := normalizeStatusSection(args[0]); isKnownStatusSection(section) {
+				return r.formatStatusShow(args[0])
+			}
 			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
 	}
@@ -853,6 +856,15 @@ func (r Runner) formatStatusShow(raw string) string {
 		return r.formatStatusIntegrations()
 	default:
 		return "Unknown status section " + strings.TrimSpace(raw) + ". Available sections: session, model, auth, tools, mcp, plugins, telemetry, bridge, remote, daemon, lsp, native, integrations"
+	}
+}
+
+func isKnownStatusSection(section string) bool {
+	switch section {
+	case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native", "integrations":
+		return true
+	default:
+		return false
 	}
 }
 
