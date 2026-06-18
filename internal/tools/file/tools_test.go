@@ -2897,6 +2897,20 @@ func TestGrepToolTextSearchesBinaryExtensionFiles(t *testing.T) {
 		t.Fatalf("text binary result = %#v", textResult)
 	}
 
+	noTextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_binary_no_text",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--text":true,"--no-text":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noTextResult.Content != "No files found" ||
+		noTextResult.StructuredContent["text"] != false ||
+		noTextResult.StructuredContent["no_text"] != true {
+		t.Fatalf("no-text binary result = %#v", noTextResult)
+	}
+
 	shortTextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_binary_short_text",
 		Name:  "Grep",
