@@ -2643,10 +2643,12 @@ func (r *Runner) formatConfigShow(raw string) string {
 			lines = append(lines, "Keys: "+strings.Join(sortedAnyMapKeys(merged.Sandbox), ", "))
 		}
 		return strings.Join(lines, "\n")
+	case "schema":
+		return formatSettingsSchemaSummary()
 	case "advanced":
 		return formatAdvancedSettings(merged.Advanced)
 	default:
-		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: settings, model, output-style, auth, fast-mode, betas, env, permissions, mcp, hooks, plugins, marketplaces, sandbox, advanced"
+		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: settings, model, output-style, auth, fast-mode, betas, env, permissions, mcp, hooks, plugins, marketplaces, sandbox, schema, advanced"
 	}
 }
 
@@ -2700,6 +2702,8 @@ func normalizeConfigSection(raw string) string {
 		return "auth"
 	case "sandbox":
 		return "sandbox"
+	case "schema", "json-schema", "settings-schema", "settingsschema", "settings-json-schema":
+		return "schema"
 	case "advanced", "advance", "adv", "gated", "gates", "feature", "features", "integration", "integrations":
 		return "advanced"
 	default:
@@ -2709,11 +2713,29 @@ func normalizeConfigSection(raw string) string {
 
 func isKnownConfigSection(section string) bool {
 	switch normalizeConfigSection(section) {
-	case "settings", "model", "output-style", "auth", "fast-mode", "betas", "env", "permissions", "mcp", "hooks", "plugins", "marketplaces", "sandbox", "advanced":
+	case "settings", "model", "output-style", "auth", "fast-mode", "betas", "env", "permissions", "mcp", "hooks", "plugins", "marketplaces", "sandbox", "schema", "advanced":
 		return true
 	default:
 		return false
 	}
+}
+
+func formatSettingsSchemaSummary() string {
+	schema := config.SettingsJSONSchema()
+	properties, _ := schema["properties"].(map[string]any)
+	data, err := config.SettingsJSONSchemaBytes()
+	sizeText := "unavailable"
+	if err == nil {
+		sizeText = fmt.Sprintf("%d bytes", len(data))
+	}
+	return strings.Join([]string{
+		"Config settings schema",
+		"Schema ID: " + config.SettingsJSONSchemaID,
+		"Draft: " + config.SettingsJSONSchemaDraft,
+		fmt.Sprintf("Settings properties: %d", len(properties)),
+		"Additional properties: allowed",
+		"Generated schema size: " + sizeText,
+	}, "\n")
 }
 
 type configSearchResult struct {

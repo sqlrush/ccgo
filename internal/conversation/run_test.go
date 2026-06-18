@@ -19,6 +19,7 @@ import (
 	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
@@ -4074,9 +4075,21 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"Computer use: (unset)",
 		"Native integrations: (unset)",
 	}, nil)
+	assertConfigShow("/config show schema", []string{
+		"Config settings schema",
+		"Schema ID: " + config.SettingsJSONSchemaID,
+		"Draft: " + config.SettingsJSONSchemaDraft,
+		"Settings properties:",
+		"Additional properties: allowed",
+		"Generated schema size:",
+	}, nil)
+	assertConfigShow("/config settings-schema", []string{
+		"Config settings schema",
+	}, nil)
 	assertConfigShow("/config show unknown", []string{
 		"Unknown config section unknown.",
 		"Available sections:",
+		"schema",
 		"advanced",
 	}, nil)
 }
