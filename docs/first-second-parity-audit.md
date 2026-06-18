@@ -138,6 +138,7 @@ Covered behavior:
 - `Grep` now accepts ripgrep-style traversal depth limiting through `max_depth`/`maxDepth`/`max-depth`/`--max-depth`/`-d`, including quoted numeric input and `--max-depth 0` directory no-op behavior.
 - `Grep` now accepts ripgrep-style negative type filtering through `type_not`/`typeNot`/`type-not`/`--type-not`/`-T`, applying it after any positive `type` filter and preserving structured filter metadata.
 - `Grep` now accepts ripgrep-style case-insensitive glob filtering through `iglob`/`--iglob`, sharing positive and `!` negative glob rule semantics with `glob` while preserving structured filter metadata.
+- `Grep` now accepts ripgrep-style `glob_case_insensitive`/`--glob-case-insensitive` plus no-override aliases, making ordinary `glob`/`--glob`/`-g` filters match paths case-insensitively while preserving `iglob` behavior.
 - `Grep` glob filtering now accepts ripgrep-style negated `!pattern` rules, including combinations with positive patterns, comma/whitespace splitting, and brace-expanded globs.
 - `Grep` now accepts `text`/`--text`/`-a` to search binary-extension files as text while preserving the default binary-extension skip behavior.
 - `Grep` now accepts `line_regexp`/`line-regexp`/`--line-regexp`/`-x` to require whole-line matches, with fixed-string and word-regexp precedence covered.

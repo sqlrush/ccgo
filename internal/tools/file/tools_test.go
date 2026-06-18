@@ -3871,6 +3871,32 @@ func TestGrepToolCaseInsensitiveGlobFilter(t *testing.T) {
 		t.Fatalf("iglob result = %#v", iglobResult)
 	}
 
+	globCaseInsensitiveResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_glob_case_insensitive_enabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"*.go","--glob-case-insensitive":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if globCaseInsensitiveResult.Content != "Found 1 file\nsrc/Alpha.GO" ||
+		globCaseInsensitiveResult.StructuredContent["glob_case_insensitive"] != true {
+		t.Fatalf("glob-case-insensitive result = %#v", globCaseInsensitiveResult)
+	}
+
+	noGlobCaseInsensitiveResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_glob_case_insensitive",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"*.go","glob_case_insensitive":true,"--no-glob-case-insensitive":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noGlobCaseInsensitiveResult.Content != "No files found" ||
+		noGlobCaseInsensitiveResult.StructuredContent["glob_case_insensitive"] != false {
+		t.Fatalf("no glob-case-insensitive result = %#v", noGlobCaseInsensitiveResult)
+	}
+
 	unionResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_glob_iglob_union",
 		Name:  "Grep",

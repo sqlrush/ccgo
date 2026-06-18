@@ -210,6 +210,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 路径过滤现在支持 ripgrep 风格 `--glob`/`-g` 和 `--type`/`-t` aliases，执行和 structured content 都统一使用归一化后的 glob/type 过滤值。
 - 本轮补充：Grep 路径过滤现在支持 ripgrep 风格 `type_not`/`typeNot`/`type-not`/`--type-not`/`-T`，可在 `type` 限定后排除指定文件类型，structured content 会回传归一化后的排除类型。
 - 本轮补充：Grep 路径过滤现在支持 ripgrep 风格 `iglob`/`--iglob` 大小写不敏感 glob，和 `glob` 共享正向/`!` 排除规则集合并语义，structured content 会回传归一化后的 `iglob` 过滤值。
+- 本轮补充：Grep 路径过滤现在支持 ripgrep 风格 `glob_case_insensitive`/`globCaseInsensitive`/`glob-case-insensitive`/`--glob-case-insensitive` 及 no-override aliases，让普通 `glob`/`--glob`/`-g` 按大小写不敏感方式匹配。
 - 本轮补充：Grep `glob`/`--glob`/`-g` 路径过滤现在支持 ripgrep 风格 `!pattern` 排除规则，可与正向 glob、逗号/空白多 pattern 和 brace alternation 组合；只有排除规则时默认包含未被排除的路径。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `text`/`--text`/`-a`，可显式把二进制扩展名文件按文本读取参与匹配，structured content 会回传 `text` 状态；`-a` 同样兼容 quoted semantic boolean。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `passthru`/`passthrough`/`--passthru`/`--passthrough`，可输出被搜索文件的全部行并保留匹配行标记；启用后按官方语义覆盖 context 行数，quoted semantic boolean 同样兼容。
