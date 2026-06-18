@@ -2439,6 +2439,7 @@ func (r *Runner) formatConfigSummary(raw string) string {
 		"Model: " + r.model(),
 		"Settings files:",
 		fmt.Sprintf("- managed: %s (%s)", config.ManagedSettingsPath(), fileStatusText(config.ManagedSettingsPath())),
+		fmt.Sprintf("- managed drop-ins: %s (%s)", config.ManagedSettingsDropInDir(), fileStatusText(config.ManagedSettingsDropInDir())),
 		fmt.Sprintf("- user: %s (%s)", config.UserSettingsPath(), fileStatusText(config.UserSettingsPath())),
 		fmt.Sprintf("- project: %s (%s)", config.ProjectSettingsPath(cwd), fileStatusText(config.ProjectSettingsPath(cwd))),
 		fmt.Sprintf("- local: %s (%s)", config.LocalSettingsPath(cwd), fileStatusText(config.LocalSettingsPath(cwd))),
@@ -2469,6 +2470,7 @@ func (r *Runner) formatConfigShow(raw string) string {
 		return strings.Join([]string{
 			"Config settings files",
 			fmt.Sprintf("Managed: %s (%s)", config.ManagedSettingsPath(), fileStatusText(config.ManagedSettingsPath())),
+			fmt.Sprintf("Managed drop-ins: %s (%s)", config.ManagedSettingsDropInDir(), fileStatusText(config.ManagedSettingsDropInDir())),
 			fmt.Sprintf("User: %s (%s)", config.UserSettingsPath(), fileStatusText(config.UserSettingsPath())),
 			fmt.Sprintf("Project: %s (%s)", config.ProjectSettingsPath(cwd), fileStatusText(config.ProjectSettingsPath(cwd))),
 			fmt.Sprintf("Local: %s (%s)", config.LocalSettingsPath(cwd), fileStatusText(config.LocalSettingsPath(cwd))),
@@ -2741,6 +2743,7 @@ func configSearchResults(r Runner, query string) []configSearchResult {
 	}
 
 	add("settings", "managed settings file", config.ManagedSettingsPath())
+	add("settings", "managed settings drop-ins", config.ManagedSettingsDropInDir())
 	add("settings", "user settings file", config.UserSettingsPath())
 	cwd := strings.TrimSpace(r.WorkingDirectory)
 	if cwd == "" {

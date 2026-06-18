@@ -26,13 +26,19 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	t.Setenv("USER_TYPE", "ant")
+	managedDir := filepath.Join(root, "managed")
+	if err := os.MkdirAll(managedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", managedDir)
 	writeSettingsFile(t, filepath.Join(claudeHome, "settings.json"), `{
 		"model": "sonnet",
 		"mcpServers": {
 			"user": {"command": "user-server"}
 		}
 	}`)
-	writeSettingsFile(t, filepath.Join(claudeHome, "managed-settings.json"), `{
+	writeSettingsFile(t, filepath.Join(managedDir, "managed-settings.json"), `{
 		"model": "opus",
 		"allowManagedPermissionRulesOnly": true,
 		"permissions": {
@@ -110,6 +116,8 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 func TestLoadMCPConfigFromSettingsFilesIgnoresMissingFiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "missing-home"))
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "missing-managed"))
 	project := filepath.Join(root, "project")
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
@@ -140,6 +148,8 @@ func TestLoadMCPConfigFromSettingsFilesSkipsDisabledPluginServers(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "managed"))
 	writeSettingsFile(t, filepath.Join(project, ".claude", "settings.json"), `{
 		"enabledPlugins": {"demo": false}
 	}`)

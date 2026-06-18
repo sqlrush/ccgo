@@ -25,7 +25,7 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	policySettings, err := loadOptionalSettings(config.ManagedSettingsPath())
+	policySettings, err := config.LoadPolicySettings()
 	if err != nil {
 		return nil, err
 	}
