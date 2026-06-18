@@ -222,6 +222,8 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
     <img aria-label="Responsive diagram" srcset="/assets/responsive-1x.png 1x, /assets/responsive-2x.png 2x">
     <img alt="Lazy responsive diagram" data-srcset="/assets/lazy-1x.png 1x, /assets/lazy-2x.png 2x">
     <img alt="Lazy source diagram" data-src="/assets/lazy-source.png">
+    <img alt="Lazy data placeholder" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP" data-original-src="/assets/real-lazy.png">
+    <img alt="Srcset data placeholder" srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP 1x, /assets/srcset-real.png 2x">
     <picture>
       <source media="(min-width: 800px)" srcset="/assets/hero-large.png 1x, /assets/hero-large@2x.png 2x">
       <img alt="Hero diagram" src="/assets/hero-fallback.png">
@@ -234,6 +236,10 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
     <picture>
       <source srcset="javascript:alert(3)">
       <img alt="Fallback diagram" src="/assets/fallback.png">
+    </picture>
+    <picture>
+      <source srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP 1x, /assets/picture-real.png 2x">
+      <img alt="Picture data placeholder" src="/assets/picture-fallback.png">
     </picture>
     <a href="javascript:alert(1)">ignored script link</a>
   </main>
@@ -269,6 +275,9 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	if !strings.Contains(rendered, "Image: Lazy responsive diagram ("+server.URL+"/assets/lazy-1x.png)") || !strings.Contains(rendered, "Image: Lazy source diagram ("+server.URL+"/assets/lazy-source.png)") {
 		t.Fatalf("rendered body missing lazy image text: %#v", rendered)
 	}
+	if !strings.Contains(rendered, "Image: Lazy data placeholder ("+server.URL+"/assets/real-lazy.png)") || !strings.Contains(rendered, "Image: Srcset data placeholder ("+server.URL+"/assets/srcset-real.png)") {
+		t.Fatalf("rendered body missing data-placeholder image text: %#v", rendered)
+	}
 	if !strings.Contains(rendered, "Image: Hero diagram ("+server.URL+"/assets/hero-large.png)") {
 		t.Fatalf("rendered body missing picture source image text: %#v", rendered)
 	}
@@ -278,7 +287,10 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	if !strings.Contains(rendered, "Image: Fallback diagram ("+server.URL+"/assets/fallback.png)") {
 		t.Fatalf("rendered body missing unsafe picture fallback image text: %#v", rendered)
 	}
-	if strings.Contains(rendered, "javascript:alert") {
+	if !strings.Contains(rendered, "Image: Picture data placeholder ("+server.URL+"/assets/picture-real.png)") {
+		t.Fatalf("rendered body missing data-placeholder picture source text: %#v", rendered)
+	}
+	if strings.Contains(rendered, "javascript:alert") || strings.Contains(rendered, "data:image") || strings.Contains(rendered, "R0lGOD") {
 		t.Fatalf("rendered body kept unsafe href: %#v", rendered)
 	}
 	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)

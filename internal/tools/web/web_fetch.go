@@ -563,7 +563,7 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			}
 		}
 		if tag == "source" && !closing && pictureDepth > 0 && pictureSource == "" {
-			if candidate := firstWebFetchSrcsetURL(htmlWebFetchAttr(rawTag, "srcset")); resolveWebFetchHTMLURL(candidate, baseURL) != "" {
+			if candidate := resolveFirstWebFetchMediaURL(baseURL, webFetchSrcsetURLs(htmlWebFetchAttr(rawTag, "srcset"))...); candidate != "" {
 				pictureSource = candidate
 			}
 		}
@@ -664,7 +664,9 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 
 func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string, sourceOverride string) {
 	label := firstNonEmptyWebFetchAttr(rawTag, "alt", "title", "aria-label")
-	src := resolveFirstWebFetchHTMLURL(baseURL, sourceOverride, webFetchImageSource(rawTag))
+	srcValues := []string{sourceOverride}
+	srcValues = append(srcValues, webFetchImageSources(rawTag)...)
+	src := resolveFirstWebFetchMediaURL(baseURL, srcValues...)
 	if label == "" {
 		return
 	}
@@ -678,45 +680,75 @@ func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL stri
 	b.WriteByte('\n')
 }
 
-func webFetchImageSource(rawTag string) string {
+func webFetchImageSources(rawTag string) []string {
+	var sources []string
 	for _, name := range []string{"srcset", "data-srcset", "data-lazy-srcset"} {
-		if srcset := firstWebFetchSrcsetURL(htmlWebFetchAttr(rawTag, name)); srcset != "" {
-			return srcset
-		}
+		sources = append(sources, webFetchSrcsetURLs(htmlWebFetchAttr(rawTag, name))...)
 	}
-	for _, name := range []string{"src", "data-src", "data-original", "data-lazy-src", "data-url"} {
+	for _, name := range []string{"src", "data-src", "data-original", "data-original-src", "data-lazy-src", "data-url", "data-image", "data-image-src"} {
 		if src := strings.TrimSpace(htmlWebFetchAttr(rawTag, name)); src != "" {
-			return src
+			sources = append(sources, src)
 		}
 	}
-	return ""
+	return sources
 }
 
-func firstWebFetchSrcsetURL(raw string) string {
+func webFetchSrcsetURLs(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return ""
+		return nil
 	}
+	var urls []string
+	skipDataContinuation := false
 	for _, candidate := range strings.Split(raw, ",") {
 		fields := strings.Fields(strings.TrimSpace(candidate))
-		if len(fields) > 0 {
-			return fields[0]
+		if len(fields) == 0 {
+			continue
+		}
+		src := strings.TrimSpace(fields[0])
+		lower := strings.ToLower(src)
+		if strings.HasPrefix(lower, "data:") {
+			skipDataContinuation = true
+			continue
+		}
+		if skipDataContinuation {
+			if !looksLikeWebFetchURLCandidate(src) {
+				continue
+			}
+			skipDataContinuation = false
+		}
+		urls = append(urls, src)
+	}
+	return urls
+}
+
+func resolveFirstWebFetchMediaURL(baseURL string, rawValues ...string) string {
+	for _, raw := range rawValues {
+		resolved := resolveWebFetchHTMLURL(raw, baseURL)
+		if resolved == "" {
+			continue
+		}
+		parsed, err := url.Parse(resolved)
+		if err != nil || !parsed.IsAbs() {
+			continue
+		}
+		if parsed.Scheme == "http" || parsed.Scheme == "https" {
+			return parsed.String()
 		}
 	}
 	return ""
 }
 
-func resolveFirstWebFetchHTMLURL(baseURL string, rawValues ...string) string {
-	for _, raw := range rawValues {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		if resolved := resolveWebFetchHTMLURL(raw, baseURL); resolved != "" {
-			return resolved
-		}
-	}
-	return ""
+func looksLikeWebFetchURLCandidate(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	lower := strings.ToLower(raw)
+	return strings.HasPrefix(lower, "http://") ||
+		strings.HasPrefix(lower, "https://") ||
+		strings.HasPrefix(raw, "//") ||
+		strings.HasPrefix(raw, "/") ||
+		strings.HasPrefix(raw, "./") ||
+		strings.HasPrefix(raw, "../") ||
+		strings.Contains(raw, ".")
 }
 
 func firstNonEmptyWebFetchAttr(rawTag string, names ...string) string {
