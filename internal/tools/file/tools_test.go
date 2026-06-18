@@ -1544,6 +1544,73 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	}
 }
 
+func TestGrepToolFilesMode(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".ignore"), []byte("ignored.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string][]byte{
+		"src/a.go":      []byte("Alpha go\n"),
+		"src/b.TXT":     []byte("Alpha text\n"),
+		"src/image.png": []byte{0, 1, 2, 3},
+		".hidden.txt":   []byte("Alpha hidden\n"),
+		"ignored.txt":   []byte("Alpha ignored\n"),
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_mode",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--files":true,"--no-hidden":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesResult.Content != "Found 2 files\nsrc/a.go\nsrc/b.TXT" ||
+		filesResult.StructuredContent["output_mode"] != "files" ||
+		filesResult.StructuredContent["files"] != true ||
+		filesResult.StructuredContent["pattern"] != "" {
+		t.Fatalf("files mode result = %#v", filesResult)
+	}
+
+	outputModeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_output_mode_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"output_mode":"files","type":"txt","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outputModeResult.Content != "Found 2 files\n.hidden.txt\nsrc/b.TXT" ||
+		outputModeResult.StructuredContent["files"] != true ||
+		outputModeResult.StructuredContent["type_filter"] != "txt" {
+		t.Fatalf("output_mode files result = %#v", outputModeResult)
+	}
+
+	textBinaryResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_text_binary",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"files":true,"--text":true,"iglob":"*.png","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if textBinaryResult.Content != "Found 1 file\nsrc/image.png" ||
+		textBinaryResult.StructuredContent["text"] != true ||
+		textBinaryResult.StructuredContent["iglob"] != "*.png" {
+		t.Fatalf("files text binary result = %#v", textBinaryResult)
+	}
+}
+
 func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-4 * time.Hour)

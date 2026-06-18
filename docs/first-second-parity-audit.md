@@ -133,6 +133,7 @@ Covered behavior:
 - `Grep` content output now accepts ripgrep-style no-line-number controls such as `--no-line-number` and `-N`, plus snake/camel adjacent aliases, to disable default line-number output with structured state preserved.
 - `Grep` content output now accepts `column`/`column_numbers`/`columnNumbers`/`column-number`/`--column`, emitting `path:line:column:text` for matching lines while preserving context-line formatting and structured column metadata.
 - `Grep` files-with-matches output now mirrors the official modified-time sort: newest files first, path tie-breaker, and pagination applied after sorting.
+- `Grep` now accepts ripgrep-style file listing through `files`/`--files` and `output_mode:"files"`, not requiring a pattern and listing paths after traversal, ignore, glob/iglob, type/type-not, hidden, and binary/text filters without reading file contents.
 - `Grep` now accepts ripgrep-style result ordering through `sort`/`--sort` and `sortr`/`--sortr`, covering path, modified-time, and none ordering for files/content/count modes with structured sort metadata.
 - `Grep` now accepts ripgrep-style negative type filtering through `type_not`/`typeNot`/`type-not`/`--type-not`/`-T`, applying it after any positive `type` filter and preserving structured filter metadata.
 - `Grep` now accepts ripgrep-style case-insensitive glob filtering through `iglob`/`--iglob`, sharing positive and `!` negative glob rule semantics with `glob` while preserving structured filter metadata.
