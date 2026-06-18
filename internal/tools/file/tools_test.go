@@ -2236,6 +2236,98 @@ func TestGrepToolPathSeparator(t *testing.T) {
 	}
 }
 
+func TestGrepToolNullPathSeparator(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src", "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "pkg", "a.txt"), []byte("Needle alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "b.txt"), []byte("before\nNeedle beta\nafter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--null":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "src/b.txt\x002:Needle beta\nsrc/pkg/a.txt\x001:Needle alpha"
+	if contentResult.Content != wantContent || contentResult.StructuredContent["null"] != true {
+		t.Fatalf("null content result = %#v", contentResult)
+	}
+
+	contextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","null":true,"context":1,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContext := "src/b.txt\x001-before\nsrc/b.txt\x002:Needle beta\nsrc/b.txt\x003-after\nsrc/pkg/a.txt\x001:Needle alpha"
+	if contextResult.Content != wantContext {
+		t.Fatalf("null context result = %#v", contextResult)
+	}
+
+	headingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_heading",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","heading":true,"-0":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHeading := "src/b.txt\x002:Needle beta\n\nsrc/pkg/a.txt\x001:Needle alpha"
+	if headingResult.Content != wantHeading || headingResult.StructuredContent["null"] != true {
+		t.Fatalf("null heading result = %#v", headingResult)
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","--null":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCount := "src/b.txt\x001\nsrc/pkg/a.txt\x001\n\nFound 2 total occurrences across 2 files."
+	if countResult.Content != wantCount {
+		t.Fatalf("null count result = %#v", countResult)
+	}
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"--null":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFiles := "Found 2 files\nsrc/b.txt\x00src/pkg/a.txt\x00"
+	if filesResult.Content != wantFiles {
+		t.Fatalf("null files result = %#v", filesResult)
+	}
+
+	noFilenameResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_no_filename",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--null":true,"--no-filename":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noFilenameResult.Content != "2:Needle beta\n1:Needle alpha" {
+		t.Fatalf("null no-filename result = %#v", noFilenameResult)
+	}
+}
+
 func TestGrepToolIncludeZero(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\n"), 0o644); err != nil {
