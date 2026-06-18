@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"os"
 
 	"ccgo/internal/contracts"
 )
@@ -15,10 +14,6 @@ type SourceSettings struct {
 func LoadSettingsFile(path string) (contracts.Settings, error) {
 	settings, _, err := LoadSettingsFileWithWarnings(path)
 	return settings, err
-}
-
-func readSettingsFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
 }
 
 func loadSettingsFileStrict(path string) (contracts.Settings, error) {

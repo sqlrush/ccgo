@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 )
@@ -62,6 +63,122 @@ func TestLoadSettingsFileWithWarningsFiltersInvalidPermissionRules(t *testing.T)
 	}
 	if paths["permissions.allow"] != 2 || paths["permissions.deny"] != 1 || paths["permissions.defaultMode"] != 1 || paths["permissions.disableBypassPermissionsMode"] != 1 || paths["sandbox.allowUnsandboxedCommands"] != 1 {
 		t.Fatalf("warning paths = %#v warnings=%#v", paths, warnings)
+	}
+}
+
+func TestSettingsFileCacheInvalidatesWhenFileChanges(t *testing.T) {
+	ResetSettingsFileCache()
+	t.Cleanup(ResetSettingsFileCache)
+
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"model":"opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, err := LoadSettingsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Model != "opus" {
+		t.Fatalf("model = %q", settings.Model)
+	}
+	if got := settingsFileCacheLen(); got != 1 {
+		t.Fatalf("cache entries = %d", got)
+	}
+
+	later := time.Now().Add(2 * time.Second)
+	if err := os.WriteFile(path, []byte(`{"model":"sonnet"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, err = LoadSettingsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Model != "sonnet" {
+		t.Fatalf("model after change = %q", settings.Model)
+	}
+	if got := settingsFileCacheLen(); got != 1 {
+		t.Fatalf("cache entries after change = %d", got)
+	}
+}
+
+func TestSettingsChangeDetectorReportsChangesAndResetsCache(t *testing.T) {
+	ResetSettingsFileCache()
+	t.Cleanup(ResetSettingsFileCache)
+
+	path := filepath.Join(t.TempDir(), "settings.json")
+	detector, err := NewSettingsChangeDetector([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(path, []byte(`{"model":"opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changes, err := detector.DetectChanges([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Kind != SettingsChangeCreated {
+		t.Fatalf("create changes = %#v", changes)
+	}
+
+	if _, err := LoadSettingsFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := settingsFileCacheLen(); got != 1 {
+		t.Fatalf("cache entries = %d", got)
+	}
+
+	later := time.Now().Add(2 * time.Second)
+	if err := os.WriteFile(path, []byte(`{"model":"sonnet"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	changes, err = detector.DetectChanges([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Kind != SettingsChangeModified {
+		t.Fatalf("modify changes = %#v", changes)
+	}
+	if got := settingsFileCacheLen(); got != 0 {
+		t.Fatalf("cache entries after detected change = %d", got)
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	changes, err = detector.DetectChanges([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Kind != SettingsChangeDeleted {
+		t.Fatalf("delete changes = %#v", changes)
+	}
+}
+
+func TestSettingsChangeDetectorIgnoresUnchangedFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"model":"opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	detector, err := NewSettingsChangeDetector([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes, err := detector.DetectChanges([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 0 {
+		t.Fatalf("changes = %#v", changes)
 	}
 }
 
