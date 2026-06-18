@@ -443,7 +443,8 @@ func renderWebFetchBody(contentType string, body string, baseURL string) (string
 		return body, false
 	}
 	stripped := removeHTMLWebFetchBlocks(body, "script", "style", "noscript", "template", "svg", "canvas")
-	rendered := stripHTMLWebFetchTags(stripped, baseURL)
+	resolvedBaseURL := webFetchHTMLBaseURL(stripped, baseURL)
+	rendered := stripHTMLWebFetchTags(stripped, resolvedBaseURL)
 	rendered = html.UnescapeString(rendered)
 	return normalizeWebFetchText(rendered), true
 }
@@ -553,6 +554,58 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 		i += end + 1
 	}
 	return b.String()
+}
+
+func webFetchHTMLBaseURL(body string, fallback string) string {
+	for i := 0; i < len(body); {
+		if strings.HasPrefix(body[i:], "<!--") {
+			if end := strings.Index(body[i+4:], "-->"); end >= 0 {
+				i += 4 + end + 3
+				continue
+			}
+			break
+		}
+		if body[i] != '<' {
+			i++
+			continue
+		}
+		end := strings.IndexByte(body[i:], '>')
+		if end < 0 {
+			break
+		}
+		rawTag := body[i+1 : i+end]
+		tag, closing := htmlWebFetchTagInfo(rawTag)
+		if tag == "base" && !closing {
+			href := strings.TrimSpace(htmlWebFetchAttr(rawTag, "href"))
+			if resolved := resolveWebFetchBaseURL(href, fallback); resolved != "" {
+				return resolved
+			}
+		}
+		i += end + 1
+	}
+	return fallback
+}
+
+func resolveWebFetchBaseURL(raw string, fallback string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if !parsed.IsAbs() {
+		fallbackURL, err := url.Parse(strings.TrimSpace(fallback))
+		if err != nil || fallbackURL.Scheme == "" || fallbackURL.Host == "" {
+			return ""
+		}
+		parsed = fallbackURL.ResolveReference(parsed)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.String()
 }
 
 type htmlWebFetchAnchor struct {

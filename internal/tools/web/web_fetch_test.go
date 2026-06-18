@@ -303,6 +303,54 @@ func TestWebFetchResolvesHTMLLinksAgainstFinalURL(t *testing.T) {
 	}
 }
 
+func TestWebFetchResolvesHTMLLinksAgainstBaseHref(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/nested/page.html", http.StatusFound)
+		case "/nested/page.html":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<head><base href="/static/root/"></head>
+<body>
+  <a href="guide">Base guide</a>
+  <img alt="Base diagram" src="images/diagram.png">
+</body>
+</html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_base_href",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL+"/start") + `,"prompt":"base diagram"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	if !strings.Contains(rendered, "Base guide ("+server.URL+"/static/root/guide)") {
+		t.Fatalf("rendered body missing base-href-resolved link: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Base diagram ("+server.URL+"/static/root/images/diagram.png)") {
+		t.Fatalf("rendered body missing base-href-resolved image: %#v", rendered)
+	}
+	if strings.Contains(rendered, server.URL+"/nested/guide") || strings.Contains(rendered, server.URL+"/nested/images/diagram.png") {
+		t.Fatalf("rendered body resolved against final URL instead of base href: %#v", rendered)
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "Image: Base diagram ("+server.URL+"/static/root/images/diagram.png)") {
+		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
 func TestWebFetchReportsCrossHostRedirect(t *testing.T) {
 	var targetHits atomic.Int32
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
