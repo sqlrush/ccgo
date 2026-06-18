@@ -2143,6 +2143,61 @@ func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	}
 }
 
+func TestGrepToolMaxColumnsPreview(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"1234567890NeedleXYZ",
+		"  1234567890NeedleXYZ",
+		"short Needle",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "preview.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_columns_preview",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--max-columns":10,"--max-columns-preview":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "preview.txt:1:1234567890 [... omitted end of long line]\n\n[Showing results with pagination = limit: 1]"
+	if result.Content != want || result.StructuredContent["max_columns_preview"] != true {
+		t.Fatalf("max-columns-preview result = %#v", result)
+	}
+
+	trimResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_columns_preview_trim",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_columns":10,"max_columns_preview":"true","--trim":true,"offset":1,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTrim := "preview.txt:2:1234567890 [... omitted end of long line]\n\n[Showing results with pagination = limit: 1, offset: 1]"
+	if trimResult.Content != wantTrim ||
+		trimResult.StructuredContent["max_columns_preview"] != true ||
+		trimResult.StructuredContent["trim"] != true {
+		t.Fatalf("trim max-columns-preview result = %#v", trimResult)
+	}
+
+	noPreviewResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_max_columns_preview",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","max_columns":10,"maxColumnsPreview":true,"--no-max-columns-preview":"true","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoPreview := "preview.txt:1:[Omitted long matching line]\n\n[Showing results with pagination = limit: 1]"
+	if noPreviewResult.Content != wantNoPreview || noPreviewResult.StructuredContent["max_columns_preview"] != false {
+		t.Fatalf("no max-columns-preview result = %#v", noPreviewResult)
+	}
+}
+
 func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "mixed.txt"), []byte("Alpha\n"), 0o644); err != nil {

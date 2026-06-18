@@ -24,6 +24,7 @@ const fileNotFoundCWDNote = "Note: your current working directory is"
 const globTruncatedMessage = "(Results are truncated. Consider using a more specific path or pattern.)"
 const grepOmittedLongMatchingLine = "[Omitted long matching line]"
 const grepOmittedLongContextLine = "[Omitted long context line]"
+const grepOmittedLongLinePreviewSuffix = " [... omitted end of long line]"
 
 var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
@@ -31,6 +32,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"pattern": {}, "regex": {}, "regexp": {}, "--regexp": {}, "-e": {}, "path": {}, "glob": {}, "--glob": {}, "-g": {}, "type": {}, "--type": {}, "-t": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
+	"max_columns_preview": {}, "maxColumnsPreview": {}, "max-columns-preview": {}, "--max-columns-preview": {}, "no_max_columns_preview": {}, "noMaxColumnsPreview": {}, "no-max-columns-preview": {}, "--no-max-columns-preview": {},
 	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
@@ -59,6 +61,7 @@ var grepSemanticNumberKeys = map[string]struct{}{
 }
 
 var grepSemanticBooleanKeys = map[string]struct{}{
+	"max_columns_preview": {}, "maxColumnsPreview": {}, "max-columns-preview": {}, "--max-columns-preview": {}, "no_max_columns_preview": {}, "noMaxColumnsPreview": {}, "no-max-columns-preview": {}, "--no-max-columns-preview": {},
 	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
 	"column": {}, "column_numbers": {}, "columnNumbers": {}, "column-number": {}, "--column": {},
@@ -110,6 +113,14 @@ type grepInput struct {
 	MaxColumnsAlt           *int   `json:"maxColumns,omitempty"`
 	MaxColumnsDash          *int   `json:"max-columns,omitempty"`
 	LongMaxColumns          *int   `json:"--max-columns,omitempty"`
+	MaxColumnsPreview       bool   `json:"max_columns_preview,omitempty"`
+	MaxColumnsPreviewAlt    bool   `json:"maxColumnsPreview,omitempty"`
+	MaxColumnsPreviewDash   bool   `json:"max-columns-preview,omitempty"`
+	LongMaxColumnsPreview   bool   `json:"--max-columns-preview,omitempty"`
+	NoMaxColumnsPreview     bool   `json:"no_max_columns_preview,omitempty"`
+	NoMaxColumnsPreviewAlt  bool   `json:"noMaxColumnsPreview,omitempty"`
+	NoMaxColumnsPreviewDash bool   `json:"no-max-columns-preview,omitempty"`
+	LongNoMaxColumnsPreview bool   `json:"--no-max-columns-preview,omitempty"`
 	Sort                    string `json:"sort,omitempty"`
 	LongSort                string `json:"--sort,omitempty"`
 	SortReverse             string `json:"sortr,omitempty"`
@@ -247,6 +258,7 @@ type grepOptions struct {
 	Offset        int
 	MaxCount      int
 	MaxColumns    int
+	MaxPreview    bool
 	BeforeContext int
 	AfterContext  int
 	LineNumbers   bool
@@ -336,6 +348,16 @@ func NewGrepTool() tool.Tool {
 					"max-columns": map[string]any{"type": "integer"},
 					"--max-columns": map[string]any{
 						"type": "integer",
+					},
+					"max_columns_preview":    map[string]any{"type": "boolean"},
+					"maxColumnsPreview":      map[string]any{"type": "boolean"},
+					"max-columns-preview":    map[string]any{"type": "boolean"},
+					"--max-columns-preview":  map[string]any{"type": "boolean"},
+					"no_max_columns_preview": map[string]any{"type": "boolean"},
+					"noMaxColumnsPreview":    map[string]any{"type": "boolean"},
+					"no-max-columns-preview": map[string]any{"type": "boolean"},
+					"--no-max-columns-preview": map[string]any{
+						"type": "boolean",
 					},
 					"sort":   map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"--sort": map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
@@ -488,7 +510,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, only_matching/-o/--only-matching matched-text output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, only_matching/-o/--only-matching matched-text output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -663,6 +685,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Offset:        grepOffset(input),
 		MaxCount:      grepMaxCount(input),
 		MaxColumns:    grepMaxColumns(input),
+		MaxPreview:    grepMaxColumnsPreview(input),
 		BeforeContext: before,
 		AfterContext:  after,
 		LineNumbers:   grepLineNumbers(input, mode),
@@ -704,6 +727,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"limit":               options.Limit,
 			"max_count":           options.MaxCount,
 			"max_columns":         options.MaxColumns,
+			"max_columns_preview": options.MaxPreview,
 			"before_context":      options.BeforeContext,
 			"after_context":       options.AfterContext,
 			"line_numbers":        options.LineNumbers,
@@ -996,9 +1020,9 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 	lines := strings.Split(content, "\n")
 	if options.OnlyMatching {
 		if options.Multiline {
-			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount, options.MaxColumns, options.Trim)
+			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim)
 		}
-		return grepLineOnlyMatches(path, lines, expr, options.MaxCount, options.MaxColumns, options.Trim)
+		return grepLineOnlyMatches(path, lines, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim)
 	}
 	matched := map[int]bool{}
 	included := map[int]bool{}
@@ -1023,12 +1047,12 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 				column = span[0] + 1
 			}
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayLine(lines[i], matched[i], options.MaxColumns, options.Trim), Matched: matched[i]})
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayLine(lines[i], matched[i], options.MaxColumns, options.MaxPreview, options.Trim), Matched: matched[i]})
 	}
 	return matches
 }
 
-func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCount int, maxColumns int, trim bool) []grepMatch {
+func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool) []grepMatch {
 	var matches []grepMatch
 	matchedLines := 0
 	for i, line := range lines {
@@ -1044,7 +1068,7 @@ func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCo
 				Path:    path,
 				Line:    i + 1,
 				Column:  span[0] + 1,
-				Text:    grepDisplayLine(line[span[0]:span[1]], true, maxColumns, trim),
+				Text:    grepDisplayLine(line[span[0]:span[1]], true, maxColumns, maxPreview, trim),
 				Matched: true,
 			})
 		}
@@ -1053,7 +1077,7 @@ func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCo
 	return matches
 }
 
-func grepMultilineOnlyMatches(path string, lines []string, content string, expr *regexp.Regexp, maxCount int, maxColumns int, trim bool) []grepMatch {
+func grepMultilineOnlyMatches(path string, lines []string, content string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool) []grepMatch {
 	if content == "" {
 		return nil
 	}
@@ -1087,7 +1111,7 @@ func grepMultilineOnlyMatches(path string, lines []string, content string, expr 
 				Path:    path,
 				Line:    i + 1,
 				Column:  fragmentStart - lineStart + 1,
-				Text:    grepDisplayLine(lines[i][fragmentStart-lineStart:fragmentEnd-lineStart], true, maxColumns, trim),
+				Text:    grepDisplayLine(lines[i][fragmentStart-lineStart:fragmentEnd-lineStart], true, maxColumns, maxPreview, trim),
 				Matched: true,
 			})
 		}
@@ -1100,9 +1124,16 @@ func normalizeGrepContent(content string) string {
 	return strings.TrimSuffix(content, "\n")
 }
 
-func grepDisplayLine(line string, matched bool, maxColumns int, trim bool) string {
+func grepDisplayLine(line string, matched bool, maxColumns int, maxPreview bool, trim bool) string {
 	if maxColumns <= 0 || len(line) < maxColumns {
 		return grepTrimDisplayLine(line, trim)
+	}
+	if maxPreview {
+		display := grepTrimDisplayLine(line, trim)
+		if len(display) > maxColumns {
+			display = display[:maxColumns]
+		}
+		return display + grepOmittedLongLinePreviewSuffix
 	}
 	if matched {
 		return grepOmittedLongMatchingLine
@@ -1883,6 +1914,19 @@ func grepMaxColumns(input grepInput) int {
 		return *input.LongMaxColumns
 	}
 	return defaultGrepMaxColumns
+}
+
+func grepMaxColumnsPreview(input grepInput) bool {
+	if input.NoMaxColumnsPreview ||
+		input.NoMaxColumnsPreviewAlt ||
+		input.NoMaxColumnsPreviewDash ||
+		input.LongNoMaxColumnsPreview {
+		return false
+	}
+	return input.MaxColumnsPreview ||
+		input.MaxColumnsPreviewAlt ||
+		input.MaxColumnsPreviewDash ||
+		input.LongMaxColumnsPreview
 }
 
 func grepContextLines(input grepInput) (int, int) {
