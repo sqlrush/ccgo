@@ -4120,8 +4120,27 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	}
 	if noIgnoreFilesResult.StructuredContent["no_ignore"] != false ||
 		noIgnoreFilesResult.StructuredContent["ignore_files"] != false ||
+		noIgnoreFilesResult.StructuredContent["no_ignore_dot"] != true ||
 		noIgnoreFilesResult.StructuredContent["no_ignore_files"] != true {
 		t.Fatalf("grep no-ignore-files structured content = %#v", noIgnoreFilesResult.StructuredContent)
+	}
+
+	noIgnoreDotResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_ignore_dot",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--no-ignore-dot":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noIgnoreDotResult.Content != expectedNoIgnoreFiles {
+		t.Fatalf("grep no-ignore-dot content = %#v", noIgnoreDotResult.Content)
+	}
+	if noIgnoreDotResult.StructuredContent["no_ignore"] != false ||
+		noIgnoreDotResult.StructuredContent["ignore_dot"] != false ||
+		noIgnoreDotResult.StructuredContent["no_ignore_dot"] != true ||
+		noIgnoreDotResult.StructuredContent["no_ignore_files"] != false {
+		t.Fatalf("grep no-ignore-dot structured content = %#v", noIgnoreDotResult.StructuredContent)
 	}
 
 	noIgnoreVCSResult, err := executor.Execute(ctx, contracts.ToolUse{

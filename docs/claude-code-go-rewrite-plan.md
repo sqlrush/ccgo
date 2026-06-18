@@ -231,7 +231,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 常用布尔参数继续补齐 ripgrep 长参数 aliases，覆盖 `--line-number`、`--ignore-case`、`--fixed-strings`、`--word-regexp`、`--invert-match` 和 `--only-matching`，并兼容 quoted semantic boolean。
 - 本轮补充：Grep multiline 搜索现在支持 ripgrep 风格 `-U`、`--multiline`、`multiline-dotall` 和 `--multiline-dotall` aliases，统一映射到既有跨行 dotall 匹配逻辑并兼容 quoted semantic boolean。
 - 本轮补充：Grep 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore`/`.rgignore` 规则，同时继续排除 VCS metadata 目录并保留 Read deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。
-- 本轮补充：Grep 搜索现在支持 ripgrep 风格 `ignore_files`/`--ignore-files` 与 `no_ignore_files`/`--no-ignore-files` aliases；`--no-ignore-files` 只跳过 `.ignore`/`.rgignore`，保留 `.gitignore` 规则继续生效，并兼容 quoted boolean。
+- 本轮补充：Grep 搜索现在支持 ripgrep 风格 `ignore_dot`/`--ignore-dot` 与 `no_ignore_dot`/`--no-ignore-dot` aliases；`--no-ignore-dot` 只跳过 `.ignore`/`.rgignore`，保留 `.gitignore` 规则继续生效，并兼容 quoted boolean；既有 `no_ignore_files`/`--no-ignore-files` 保留为同路径兼容输入。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `ignore_vcs`/`--ignore-vcs` 与 `no_ignore_vcs`/`--no-ignore-vcs` aliases；`--no-ignore-vcs` 只跳过 `.gitignore`，保留 `.ignore`/`.rgignore` 规则继续生效，并兼容 quoted boolean。
 - 本轮补充：Glob/Grep 层级 ignore 文件现在支持 ripgrep 专用 `.rgignore`，并和 `.gitignore`/`.ignore` 共享解析、否定规则和目录规则语义。
 - 本轮补充：Grep 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
