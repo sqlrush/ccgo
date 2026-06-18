@@ -1614,6 +1614,35 @@ func TestGrepToolStats(t *testing.T) {
 		noStatsResult.StructuredContent["stats"] != nil {
 		t.Fatalf("no-stats override result = %#v", noStatsResult)
 	}
+
+	quietResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_quiet",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","-q":"true","--stats":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quietResult.Content != "" ||
+		quietResult.StructuredContent["quiet"] != true ||
+		quietResult.StructuredContent["stats_enabled"] != false ||
+		quietResult.StructuredContent["total_matches"] != 1 {
+		t.Fatalf("quiet result = %#v", quietResult)
+	}
+
+	noQuietResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_quiet_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","quiet":true,"--no-quiet":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noQuietResult.Content != "a.txt:1:Needle Needle" ||
+		noQuietResult.StructuredContent["quiet"] != false ||
+		noQuietResult.StructuredContent["no_quiet"] != true {
+		t.Fatalf("no-quiet override result = %#v", noQuietResult)
+	}
 }
 
 func TestGrepToolFilesMode(t *testing.T) {
