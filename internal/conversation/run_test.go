@@ -4811,8 +4811,9 @@ func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
 }
 
 func TestRunnerModelSlashCommandReportsCurrentModel(t *testing.T) {
+	client := &fakeClient{}
 	runner := Runner{
-		Client:    &fakeClient{},
+		Client:    client,
 		Model:     "claude-sonnet-4-6",
 		SessionID: "sess_model_current",
 	}
@@ -4825,6 +4826,25 @@ func TestRunnerModelSlashCommandReportsCurrentModel(t *testing.T) {
 	}
 	if got := result.Messages[1].Content[0].Text; got != "Current model: claude-sonnet-4-6" {
 		t.Fatalf("model text = %q", got)
+	}
+	if runner.Model != "claude-sonnet-4-6" {
+		t.Fatalf("runner model changed to %q", runner.Model)
+	}
+
+	for _, prompt := range []string{"/model show", "/model info", "/model current"} {
+		result, err = runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("model should not be queried, requests = %#v", client.requests)
+		}
+		if got := result.Messages[1].Content[0].Text; got != "Current model: claude-sonnet-4-6" {
+			t.Fatalf("%s text = %q", prompt, got)
+		}
+		if runner.Model != "claude-sonnet-4-6" {
+			t.Fatalf("%s changed runner model to %q", prompt, runner.Model)
+		}
 	}
 }
 

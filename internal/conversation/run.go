@@ -4532,6 +4532,8 @@ func (r *Runner) formatModelSummary(raw string) string {
 	}
 	args := strings.Fields(raw)
 	switch strings.ToLower(args[0]) {
+	case "show", "info", "current":
+		return "Current model: " + r.model()
 	case "list", "status", "available", "models":
 		return formatModelList(r.model())
 	case "search", "find":
