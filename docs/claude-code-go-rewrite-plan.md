@@ -215,6 +215,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `vimgrep`/`--vimgrep`，匹配行按每个匹配重复输出 `path:line:column:text`，context 行保持单行输出，并兼容 `-N`、`only_matching` 和 quoted semantic boolean。
 - 本轮补充：Grep content/count 输出现在支持 ripgrep 风格 `with_filename`/`--with-filename`/`-H` 和 `no_filename`/`--no-filename`/`-I`，可控制匹配行和计数输出的文件名前缀；文件列表模式仍保留路径输出。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `replace`/`--replace`/`-r` 显示替换，匹配行按 replacement 展示、context 行保持原文，`only_matching` 和 `vimgrep` 输出也保留替换语义。
+- 本轮补充：Grep count 输出现在支持 ripgrep 风格 `include_zero`/`--include-zero`，普通 line count 和 `count_matches` occurrence count 都会输出零命中文件，并兼容 `--no-filename`。
 - 本轮补充：Grep 常用布尔参数继续补齐 ripgrep 长参数 aliases，覆盖 `--line-number`、`--ignore-case`、`--fixed-strings`、`--word-regexp`、`--invert-match` 和 `--only-matching`，并兼容 quoted semantic boolean。
 - 本轮补充：Grep multiline 搜索现在支持 ripgrep 风格 `-U`、`--multiline`、`multiline-dotall` 和 `--multiline-dotall` aliases，统一映射到既有跨行 dotall 匹配逻辑并兼容 quoted semantic boolean。
 - 本轮补充：Grep 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore` 规则，同时继续排除 VCS metadata 目录并保留 Read deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。

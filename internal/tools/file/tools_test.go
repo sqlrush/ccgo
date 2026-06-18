@@ -2089,6 +2089,73 @@ func TestGrepToolFilenameControls(t *testing.T) {
 	}
 }
 
+func TestGrepToolIncludeZero(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("none\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_include_zero_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","include_zero":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCount := "a.txt:1\nb.txt:0\n\nFound 1 total occurrence across 2 files."
+	if countResult.Content != wantCount || countResult.StructuredContent["include_zero"] != true {
+		t.Fatalf("include-zero count result = %#v", countResult)
+	}
+
+	countMatchesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_include_zero_count_matches",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","count_matches":true,"--include-zero":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCountMatches := "a.txt:2\nb.txt:0\n\nFound 2 total occurrences across 2 files."
+	if countMatchesResult.Content != wantCountMatches ||
+		countMatchesResult.StructuredContent["count_matches"] != true ||
+		countMatchesResult.StructuredContent["include_zero"] != true {
+		t.Fatalf("include-zero count-matches result = %#v", countMatchesResult)
+	}
+
+	noFilenameResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_include_zero_no_filename",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","include-zero":true,"--no-filename":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoFilename := "1\n0\n\nFound 1 total occurrence across 2 files."
+	if noFilenameResult.Content != wantNoFilename ||
+		noFilenameResult.StructuredContent["with_filename"] != false ||
+		noFilenameResult.StructuredContent["include_zero"] != true {
+		t.Fatalf("include-zero no-filename result = %#v", noFilenameResult)
+	}
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_include_zero_content_ignored",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--include-zero":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contentResult.Content != "a.txt:1:Needle Needle" || contentResult.StructuredContent["include_zero"] != false {
+		t.Fatalf("include-zero content result = %#v", contentResult)
+	}
+}
+
 func TestGrepToolTrim(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{
