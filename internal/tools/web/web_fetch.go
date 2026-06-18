@@ -642,7 +642,7 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 
 func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string) {
 	label := firstNonEmptyWebFetchAttr(rawTag, "alt", "title", "aria-label")
-	src := resolveWebFetchHTMLURL(strings.TrimSpace(htmlWebFetchAttr(rawTag, "src")), baseURL)
+	src := resolveWebFetchHTMLURL(webFetchImageSource(rawTag), baseURL)
 	if label == "" {
 		return
 	}
@@ -654,6 +654,27 @@ func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL stri
 		b.WriteByte(')')
 	}
 	b.WriteByte('\n')
+}
+
+func webFetchImageSource(rawTag string) string {
+	if srcset := firstWebFetchSrcsetURL(htmlWebFetchAttr(rawTag, "srcset")); srcset != "" {
+		return srcset
+	}
+	return strings.TrimSpace(htmlWebFetchAttr(rawTag, "src"))
+}
+
+func firstWebFetchSrcsetURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	for _, candidate := range strings.Split(raw, ",") {
+		fields := strings.Fields(strings.TrimSpace(candidate))
+		if len(fields) > 0 {
+			return fields[0]
+		}
+	}
+	return ""
 }
 
 func firstNonEmptyWebFetchAttr(rawTag string, names ...string) string {

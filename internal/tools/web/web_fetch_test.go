@@ -219,6 +219,7 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
     <p>External reference: <a href="https://example.com/reference">https://example.com/reference</a>.</p>
     <img alt="Architecture diagram" src="/assets/diagram.png">
     <img title="Release checklist" src="/assets/checklist.png">
+    <img aria-label="Responsive diagram" srcset="/assets/responsive-1x.png 1x, /assets/responsive-2x.png 2x">
     <a href="javascript:alert(1)">ignored script link</a>
   </main>
 </body>
@@ -246,6 +247,9 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Image: Architecture diagram ("+server.URL+"/assets/diagram.png)") || !strings.Contains(rendered, "Image: Release checklist ("+server.URL+"/assets/checklist.png)") {
 		t.Fatalf("rendered body missing image text: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Responsive diagram ("+server.URL+"/assets/responsive-1x.png)") {
+		t.Fatalf("rendered body missing srcset image text: %#v", rendered)
 	}
 	if strings.Contains(rendered, "javascript:alert") {
 		t.Fatalf("rendered body kept unsafe href: %#v", rendered)
