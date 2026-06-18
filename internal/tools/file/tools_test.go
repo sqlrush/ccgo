@@ -1726,6 +1726,42 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("long line-number alias result = %#v", longLineNumberResult)
 	}
 
+	longNoLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_line_number_long_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--no-line-number":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longNoLineNumberResult.Content != wantNoLineNumber || longNoLineNumberResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("long no-line-number alias result = %#v", longNoLineNumberResult)
+	}
+
+	shortNoLineNumberResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_line_number_short_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","-N":"true","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortNoLineNumberResult.Content != wantNoLineNumber || shortNoLineNumberResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("short no-line-number alias result = %#v", shortNoLineNumberResult)
+	}
+
+	noLineNumberOverrideResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_line_number_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","line_numbers":true,"no_line_numbers":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noLineNumberOverrideResult.Content != wantNoLineNumber || noLineNumberOverrideResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("no-line-number override result = %#v", noLineNumberOverrideResult)
+	}
+
 	shortContextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_short_context",
 		Name:  "Grep",
