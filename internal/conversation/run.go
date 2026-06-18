@@ -1347,6 +1347,8 @@ func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string
 	}
 	plan := integrationspkg.BuildVoiceCapturePlan(r.SessionID, r.WorkingDirectory, integrationspkg.DetectAdapters("voice", integrationspkg.AdapterOptions{}))
 	switch strings.ToLower(args[0]) {
+	case "status", "show", "plan":
+		return strings.Join(r.formatNativeVoiceStatusLines(plan), "\n")
 	case "capture":
 		capture, err := integrationspkg.CaptureVoiceAudio(ctx, plan, integrationspkg.VoiceCaptureOptions{Runner: r.NativeVoiceRunner})
 		lines := formatNativeVoiceCaptureLines("Native voice capture", capture)
@@ -1389,8 +1391,35 @@ func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string
 	}
 }
 
+func (r Runner) formatNativeVoiceStatusLines(plan integrationspkg.VoiceCapturePlan) []string {
+	path := integrationspkg.VoiceCapturePlanPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		path = "(not configured)"
+	}
+	lines := []string{
+		"Native voice status",
+		"Plan path: " + path,
+		"Adapter: " + nativeAdapterName(plan.Adapter),
+		"Adapter available: " + boolEnabledText(plan.Adapter.Available),
+		fmt.Sprintf("Sample rate: %d", plan.SampleRateHz),
+		fmt.Sprintf("Channels: %d", plan.Channels),
+		"Encoding: " + plan.Encoding,
+		"Streaming: " + boolEnabledText(plan.Streaming),
+	}
+	if plan.Adapter.Kind != "" {
+		lines = append(lines, "Adapter kind: "+plan.Adapter.Kind)
+	}
+	if len(plan.Adapter.Command) > 0 {
+		lines = append(lines, "Adapter command: "+strings.Join(plan.Adapter.Command, " "))
+	}
+	if plan.Adapter.Detail != "" {
+		lines = append(lines, "Adapter detail: "+plan.Adapter.Detail)
+	}
+	return lines
+}
+
 func nativeVoiceUsage() string {
-	return "Usage: /native voice <capture|transcribe>"
+	return "Usage: /native voice <status|capture|transcribe>"
 }
 
 func formatNativeVoiceCaptureLines(title string, capture integrationspkg.VoiceCaptureResult) []string {
@@ -1421,6 +1450,8 @@ func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) str
 	}
 	plan := integrationspkg.BuildComputerUseDriverPlan(r.SessionID, r.WorkingDirectory, integrationspkg.DetectAdapters("computer_use", integrationspkg.AdapterOptions{}))
 	switch strings.ToLower(args[0]) {
+	case "status", "show", "plan":
+		return strings.Join(r.formatNativeComputerStatusLines(plan), "\n")
 	case "screenshot", "screen", "capture":
 		screenshot, err := integrationspkg.CaptureComputerUseScreenshot(ctx, plan, integrationspkg.ComputerUseExecutionOptions{Runner: r.NativeComputerUseRunner})
 		lines := []string{
@@ -1468,12 +1499,56 @@ func (r Runner) formatNativeComputerCommand(ctx context.Context, raw string) str
 	}
 }
 
+func (r Runner) formatNativeComputerStatusLines(plan integrationspkg.ComputerUseDriverPlan) []string {
+	path := integrationspkg.ComputerUseDriverPlanPath(r.SessionPath, r.SessionID)
+	if path == "" {
+		path = "(not configured)"
+	}
+	lines := []string{
+		"Native computer status",
+		"Plan path: " + path,
+		"Screen capture adapter: " + nativeAdapterName(plan.ScreenCaptureAdapter),
+		"Screen capture available: " + boolEnabledText(plan.ScreenCaptureAdapter.Available),
+		"Input control adapter: " + nativeAdapterName(plan.InputControlAdapter),
+		"Input control available: " + boolEnabledText(plan.InputControlAdapter.Available),
+		"Screenshot format: " + plan.ScreenshotFormat,
+		"Coordinate system: " + plan.CoordinateSystem,
+		"Execution mode: " + plan.ExecutionMode,
+	}
+	if plan.ScreenCaptureAdapter.Kind != "" {
+		lines = append(lines, "Screen capture kind: "+plan.ScreenCaptureAdapter.Kind)
+	}
+	if len(plan.ScreenCaptureAdapter.Command) > 0 {
+		lines = append(lines, "Screen capture command: "+strings.Join(plan.ScreenCaptureAdapter.Command, " "))
+	}
+	if plan.ScreenCaptureAdapter.Detail != "" {
+		lines = append(lines, "Screen capture detail: "+plan.ScreenCaptureAdapter.Detail)
+	}
+	if plan.InputControlAdapter.Kind != "" {
+		lines = append(lines, "Input control kind: "+plan.InputControlAdapter.Kind)
+	}
+	if len(plan.InputControlAdapter.Command) > 0 {
+		lines = append(lines, "Input control command: "+strings.Join(plan.InputControlAdapter.Command, " "))
+	}
+	if plan.InputControlAdapter.Detail != "" {
+		lines = append(lines, "Input control detail: "+plan.InputControlAdapter.Detail)
+	}
+	return lines
+}
+
 func nativeCommandUsage() string {
 	return "Usage: /native <clipboard|chrome|voice|computer>"
 }
 
 func nativeComputerUsage() string {
-	return "Usage: /native computer <screenshot|move <x> <y>|click [x y] [button]|type <text>|key <key>>"
+	return "Usage: /native computer <status|screenshot|move <x> <y>|click [x y] [button]|type <text>|key <key>>"
+}
+
+func nativeAdapterName(adapter integrationspkg.Adapter) string {
+	if strings.TrimSpace(adapter.Name) == "" {
+		return "(none)"
+	}
+	return adapter.Name
 }
 
 func parseNativeComputerInputAction(raw string) (integrationspkg.ComputerUseInputAction, error) {

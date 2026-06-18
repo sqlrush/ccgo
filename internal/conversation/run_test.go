@@ -2819,6 +2819,40 @@ func TestRunnerExecutesNativeChromeInstallCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerNativeVoiceStatusCommandWithoutQuery(t *testing.T) {
+	setupFakeNativeIntegrationCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_voice_status",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+	}
+	for _, prompt := range []string{"/native voice status", "/native voice show"} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %d", prompt, len(client.requests))
+		}
+		text := result.Messages[len(result.Messages)-1].Content[0].Text
+		for _, want := range []string{
+			"Native voice status",
+			"Plan path: " + integrationspkg.VoiceCapturePlanPath(runner.SessionPath, runner.SessionID),
+			"Adapter available: enabled",
+			"Sample rate: 16000",
+			"Encoding: pcm_s16le",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s status missing %q: %q", prompt, want, text)
+			}
+		}
+	}
+}
+
 func TestRunnerExecutesNativeVoiceCaptureCommandWithoutQuery(t *testing.T) {
 	setupFakeNativeIntegrationCommandPath(t)
 	client := &fakeClient{}
@@ -2877,6 +2911,41 @@ func TestRunnerExecutesNativeVoiceTranscribeCommandWithoutQuery(t *testing.T) {
 	}
 	if len(result.Messages) == 0 || !strings.Contains(result.Messages[len(result.Messages)-1].Content[0].Text, "Transcript: hello from voice") {
 		t.Fatalf("messages = %#v", result.Messages)
+	}
+}
+
+func TestRunnerNativeComputerStatusCommandWithoutQuery(t *testing.T) {
+	setupFakeNativeIntegrationCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        "sess_native_computer_status",
+		SessionPath:      filepath.Join(dir, "session.jsonl"),
+		WorkingDirectory: dir,
+	}
+	for _, prompt := range []string{"/native computer status", "/native computer show"} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %d", prompt, len(client.requests))
+		}
+		text := result.Messages[len(result.Messages)-1].Content[0].Text
+		for _, want := range []string{
+			"Native computer status",
+			"Plan path: " + integrationspkg.ComputerUseDriverPlanPath(runner.SessionPath, runner.SessionID),
+			"Screen capture available: enabled",
+			"Input control available: enabled",
+			"Screenshot format: png",
+			"Coordinate system: screen_pixels",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s status missing %q: %q", prompt, want, text)
+			}
+		}
 	}
 }
 
@@ -2955,7 +3024,7 @@ func setupFakeNativeIntegrationCommandPath(t *testing.T) {
 	dir := t.TempDir()
 	names := []string{
 		"pw-record", "parecord", "arecord", "rec", "sox", "ffmpeg", "ffmpeg.exe",
-		"grim", "gnome-screenshot", "import", "screencapture", "powershell.exe", "xdotool",
+		"grim", "gnome-screenshot", "import", "screencapture", "powershell.exe", "xdotool", "ydotool", "osascript",
 	}
 	for _, name := range names {
 		path := filepath.Join(dir, name)
