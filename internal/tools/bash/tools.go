@@ -2036,6 +2036,18 @@ func isShellIdentifier(value string) bool {
 	return true
 }
 
+func isShellUnsignedInteger(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func isSafeEnvValue(value string) bool {
 	if value == "" {
 		return false
@@ -2123,6 +2135,8 @@ func readOnlyWords(words []string) bool {
 		return readOnlyPathCommand(words)
 	case "sed":
 		return readOnlySed(words[1:])
+	case "awk", "gawk", "mawk", "nawk":
+		return readOnlyAwk(words[1:])
 	case "pwd", "printf", "echo", "date", "whoami", "id", "uname", "printenv", "which", "type":
 		return true
 	case "env":
@@ -2175,6 +2189,118 @@ func readOnlyPathCommand(words []string) bool {
 		}
 	}
 	return true
+}
+
+func readOnlyAwk(args []string) bool {
+	seenScript := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			i++
+			if !seenScript {
+				if i >= len(args) || !safeAwkScript(args[i]) {
+					return false
+				}
+				seenScript = true
+				i++
+			}
+			for ; i < len(args); i++ {
+				if !safeRelativeShellPathArg(args[i]) {
+					return false
+				}
+			}
+			return seenScript
+		}
+		switch {
+		case arg == "-F" || arg == "--field-separator":
+			i++
+			if i >= len(args) || !safeAwkValue(args[i]) {
+				return false
+			}
+		case strings.HasPrefix(arg, "-F") && len(arg) > 2:
+			if !safeAwkValue(arg[2:]) {
+				return false
+			}
+		case strings.HasPrefix(arg, "--field-separator="):
+			if !safeAwkValue(strings.TrimPrefix(arg, "--field-separator=")) {
+				return false
+			}
+		case arg == "-v":
+			i++
+			if i >= len(args) || !safeAwkAssignment(args[i]) {
+				return false
+			}
+		case strings.HasPrefix(arg, "-v") && len(arg) > 2:
+			if !safeAwkAssignment(arg[2:]) {
+				return false
+			}
+		case arg == "-f" || arg == "--file" || strings.HasPrefix(arg, "-f") || strings.HasPrefix(arg, "--file="):
+			return false
+		case strings.HasPrefix(arg, "-"):
+			return false
+		case !seenScript:
+			if !safeAwkScript(arg) {
+				return false
+			}
+			seenScript = true
+		default:
+			if !safeRelativeShellPathArg(arg) {
+				return false
+			}
+		}
+	}
+	return seenScript
+}
+
+func safeAwkScript(script string) bool {
+	script = strings.Trim(strings.TrimSpace(script), `"'`)
+	if script == "" || strings.ContainsAny(script, "`\x00\\><|;&\n\r") {
+		return false
+	}
+	if !strings.HasPrefix(script, "{") || !strings.HasSuffix(script, "}") {
+		return false
+	}
+	body := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(script, "{"), "}"))
+	if body != "print" && (len(body) <= len("print") || !strings.HasPrefix(body, "print") || !unicode.IsSpace(rune(body[len("print")]))) {
+		return false
+	}
+	body = strings.TrimSpace(strings.TrimPrefix(body, "print"))
+	if body == "" {
+		return true
+	}
+	for _, term := range strings.Split(body, ",") {
+		if !safeAwkPrintTerm(term) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeAwkPrintTerm(term string) bool {
+	term = strings.TrimSpace(term)
+	if term == "" {
+		return false
+	}
+	if strings.HasPrefix(term, "$") {
+		return isShellUnsignedInteger(term[1:])
+	}
+	if isShellUnsignedInteger(term) || isShellIdentifier(term) {
+		return true
+	}
+	if strings.HasPrefix(term, `"`) && strings.HasSuffix(term, `"`) {
+		return safeAwkValue(strings.Trim(term, `"`))
+	}
+	return false
+}
+
+func safeAwkAssignment(value string) bool {
+	name, raw, ok := strings.Cut(value, "=")
+	return ok && isShellIdentifier(name) && safeAwkValue(raw)
+}
+
+func safeAwkValue(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return value != "" && !strings.ContainsAny(value, "$`\\\x00><|;&\n\r")
 }
 
 func readOnlySed(args []string) bool {
