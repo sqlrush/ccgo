@@ -2506,6 +2506,14 @@ func unsafeReadOnlyPathWord(command string, word string) bool {
 }
 
 func unsafeReadOnlyPathFlag(command string, word string) bool {
+	if command == "file" {
+		if word == "-C" || word == "--compile" || strings.HasPrefix(word, "--compile=") {
+			return true
+		}
+		if word == "-f" || strings.HasPrefix(word, "-f") || word == "--files-from" || strings.HasPrefix(word, "--files-from=") {
+			return true
+		}
+	}
 	if command == "rg" && (word == "--pre" || strings.HasPrefix(word, "--pre=")) {
 		return true
 	}

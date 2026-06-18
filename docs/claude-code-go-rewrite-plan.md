@@ -255,6 +255,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Glob/Grep 搜索遍历现在会读取 permission context 中的 `Read(...)` deny 规则，并把对应 basename/path/directory pattern 作为额外 ignore rule，避免被禁止读取的文件出现在搜索结果中。
 - 本轮补充：Bash `grep`/`rg` read-only 分类现在会把 pattern-file 参数 `-f FILE`、`-fFILE` 和 `--file=FILE` 当作路径读取处理，缺值、绝对路径和 `..` 路径不再进入 read-only fast path。
 - 本轮补充：Bash `wc`/`du` 的 `--files0-from` 与 `find -files0-from` 不再进入 read-only fast path，避免通过受检列表文件间接读取未校验的绝对路径、父目录路径或敏感路径。
+- 本轮补充：Bash `file -f`/`--files-from` 这类间接路径列表读取，以及 `file -C`/`--compile` magic 编译形态不再进入 read-only fast path；普通 `file README.md` 和 `file --mime-type README.md` 保持只读。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。
 - 本轮补充：Bash/PowerShell tokenizer 现在按 single-quoted literal 处理单引号内的 escape 字符，Bash 的 `\` 和 PowerShell 的 backtick 在单引号内不再导致错误的 quote/segment/token 状态。
 - 本轮补充：Bash/PowerShell 分类现在把未引用 newline 作为命令分隔符，并支持未引用 `#` 行注释剥离；注释文本不再污染分类，下一行命令仍保留 read-only/destructive 判断。
@@ -297,6 +298,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash safety 分类将 `find -exec*` 形态排除出 read-only fast path，并补 `find`/`xargs` 经 `sh`/`bash`/`zsh`/`dash`/`ksh -c` 包装的嵌套破坏性脚本检测；`find -exec*` 和 `xargs` 现在还会复用 safe wrapper/env/assignment 归一化，覆盖 `env rm`、`timeout rm`、`xargs -I{} env sh -c ...` 等形态。
 - 本轮补充：PowerShell native/external 文件读取/搜索命令（`where.exe`/`file`/`tree`/`findstr`）现在也对路径型 positional 和 path flag 使用相对路径 guard，拒绝 Windows drive、UNC、URI/provider-like、父目录和缺值 path flag；`where.exe` 从 allow-all flag 收敛到 `/R`/`/Q`/`/F`/`/T`。
 - 本轮补充：PowerShell `findstr /D:` 目录列表现在按分号拆分后逐项做相对路径 guard，`file -p` 也恢复为普通开关处理，避免通过 quoted path list 或误判 value flag 绕过敏感路径检查。
+- 本轮补充：PowerShell native `file -f`/attached `-ffile` 和 `--files-from` 不再进入 read-only fast path，避免通过相对列表文件间接读取未校验路径；`file -p` 仍作为普通开关接受相对路径读取。
 
 ### M6: Session、memory、compact
 

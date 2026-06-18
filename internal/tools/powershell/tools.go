@@ -1482,9 +1482,8 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		valueFlags:   stringSet("/fo"),
 	},
 	"file": {
-		allowedFlags:               stringSet("-b", "--brief", "-i", "--mime", "-l", "--dereference", "--mime-type", "--mime-encoding", "-z", "--uncompress", "-p", "--preserve-date", "-k", "--keep-going", "-r", "--raw", "-v", "--version", "-0", "--print0", "-s", "--special-files", "-l", "-f", "--separator", "-e", "-p", "-n", "--no-pad", "-e", "--extension"),
-		pathFlags:                  stringSet("-f"),
-		valueFlags:                 stringSet("-f", "--separator", "-e"),
+		allowedFlags:               stringSet("-b", "--brief", "-i", "--mime", "-l", "--dereference", "--mime-type", "--mime-encoding", "-z", "--uncompress", "-p", "--preserve-date", "-k", "--keep-going", "-r", "--raw", "-v", "--version", "-0", "--print0", "-s", "--special-files", "-l", "--separator", "-e", "-p", "-n", "--no-pad", "-e", "--extension"),
+		valueFlags:                 stringSet("--separator", "-e"),
 		allowPositionals:           true,
 		validatePositionalsAsPaths: true,
 	},
