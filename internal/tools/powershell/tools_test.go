@@ -314,6 +314,8 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"docker run alpine",
 		"docker rm app",
 		"docker exec app id",
+		"docker logs --follow app",
+		"docker logs -f app",
 		"docker logs --since $env:SECRET app",
 		"docker inspect --format $env:SECRET app",
 		"docker inspect --privileged app",

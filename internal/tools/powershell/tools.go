@@ -1703,7 +1703,7 @@ func readOnlyDocker(words []string) bool {
 		return true
 	case "logs":
 		config := powerShellNativeReadOnlyConfig{
-			allowedFlags:     stringSet("--follow", "-f", "--tail", "-n", "--timestamps", "-t", "--since", "--until", "--details"),
+			allowedFlags:     stringSet("--tail", "-n", "--timestamps", "-t", "--since", "--until", "--details"),
 			valueFlags:       stringSet("--tail", "-n", "--since", "--until"),
 			allowPositionals: true,
 		}
