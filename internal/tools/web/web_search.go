@@ -278,6 +278,9 @@ func collectJSONSearchResults(value any, base *url.URL, results *[]searchResult,
 			"results", "organic_results", "organicResults", "items", "value", "data",
 			"webPages", "web_pages", "web", "response", "search",
 			"hits", "documents", "records", "entries", "organic",
+			"answer_box", "answerBox", "knowledge_graph", "knowledgeGraph",
+			"news", "news_results", "newsResults", "top_stories", "topStories",
+			"people_also_ask", "peopleAlsoAsk", "related_questions", "relatedQuestions",
 			"deepLinks", "deep_links", "siteLinks", "sitelinks", "pages", "matches",
 		} {
 			if child, ok := typed[key]; ok {
@@ -295,7 +298,7 @@ func searchResultFromJSONObject(obj map[string]any, base *url.URL) (searchResult
 	}
 	title := cleanJSONSearchText(jsonStringField(obj,
 		"title", "name", "headline", "heading",
-		"htmlTitle", "html_title",
+		"question", "label", "htmlTitle", "html_title",
 	))
 	if strings.TrimSpace(title) == "" {
 		title = resolved
@@ -304,6 +307,7 @@ func searchResultFromJSONObject(obj map[string]any, base *url.URL) (searchResult
 		"snippet", "description", "content", "text",
 		"htmlSnippet", "html_snippet",
 		"summary", "extract", "abstract", "body", "caption",
+		"answer", "excerpt",
 	))
 	return searchResult{
 		Title:   title,
@@ -319,6 +323,8 @@ func jsonSearchURLField(obj map[string]any) string {
 		"targetUrl", "targetURL", "target_url",
 		"webUrl", "webURL", "web_url",
 		"sourceUrl", "sourceURL", "source_url",
+		"sourceLink", "source_link",
+		"website", "site",
 	); raw != "" {
 		return raw
 	}

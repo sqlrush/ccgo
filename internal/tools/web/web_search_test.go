@@ -229,6 +229,65 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesSearchBackendWrapperObjects(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"answerBox": {
+				"title": "Answer Box",
+				"link": "https://example.com/answer",
+				"answer": "direct answer"
+			},
+			"knowledgeGraph": {
+				"title": "Knowledge Graph",
+				"website": "https://example.com/kg",
+				"description": "knowledge description"
+			},
+			"news": {
+				"results": [
+					{"title": "News Result", "url": "https://news.example.com/story", "excerpt": "news excerpt"}
+				]
+			},
+			"peopleAlsoAsk": [
+				{"question": "Question Result", "sourceLink": "https://example.com/question", "snippet": "question snippet"}
+			],
+			"related_questions": [
+				{"question": "Duplicate Question", "link": "https://example.com/question", "snippet": "duplicate"}
+			]
+		}`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL,
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_backend_wrappers",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"backend wrappers","allowed_domains":["example.com"],"max_results":10}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 4 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	wantTitles := []string{"Answer Box", "Knowledge Graph", "News Result", "Question Result"}
+	wantSnippets := []string{"direct answer", "knowledge description", "news excerpt", "question snippet"}
+	for i := range wantTitles {
+		if results[i]["title"] != wantTitles[i] || results[i]["snippet"] != wantSnippets[i] {
+			t.Fatalf("result %d = %#v", i, results[i])
+		}
+	}
+	content := result.Content.(string)
+	if !strings.Contains(content, "Knowledge Graph") || !strings.Contains(content, "news excerpt") || strings.Contains(content, "Duplicate Question") {
+		t.Fatalf("content = %#v", content)
+	}
+}
+
 func TestWebSearchBlockedDomainsAndNoResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
