@@ -4124,6 +4124,32 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 		t.Fatalf("grep no-ignore-files structured content = %#v", noIgnoreFilesResult.StructuredContent)
 	}
 
+	noIgnoreVCSResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_ignore_vcs",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--no-ignore-vcs":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedNoIgnoreVCS := "Found 7 files\n" +
+		"debug.log\n" +
+		"ignored/hit.txt\n" +
+		"important.log\n" +
+		"keep.txt\n" +
+		"sub/local.txt\n" +
+		"sub/logs/hit.md\n" +
+		"sub/visible.txt"
+	if noIgnoreVCSResult.Content != expectedNoIgnoreVCS {
+		t.Fatalf("grep no-ignore-vcs content = %#v", noIgnoreVCSResult.Content)
+	}
+	if noIgnoreVCSResult.StructuredContent["no_ignore"] != false ||
+		noIgnoreVCSResult.StructuredContent["ignore_vcs"] != false ||
+		noIgnoreVCSResult.StructuredContent["no_ignore_vcs"] != true ||
+		noIgnoreVCSResult.StructuredContent["ignore_files"] != true {
+		t.Fatalf("grep no-ignore-vcs structured content = %#v", noIgnoreVCSResult.StructuredContent)
+	}
+
 	noIgnoreResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_ignore",
 		Name:  "Grep",
