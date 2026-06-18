@@ -41,6 +41,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
 	"max_filesize": {}, "maxFilesize": {}, "max-filesize": {}, "--max-filesize": {},
 	"max_depth": {}, "maxDepth": {}, "max-depth": {}, "--max-depth": {}, "-d": {},
+	"threads": {}, "--threads": {},
 	"max_columns_preview": {}, "maxColumnsPreview": {}, "max-columns-preview": {}, "--max-columns-preview": {}, "no_max_columns_preview": {}, "noMaxColumnsPreview": {}, "no-max-columns-preview": {}, "--no-max-columns-preview": {},
 	"replace": {}, "--replace": {}, "-r": {},
 	"with_filename": {}, "withFilename": {}, "with-filename": {}, "--with-filename": {}, "-H": {}, "no_filename": {}, "noFilename": {}, "no-filename": {}, "--no-filename": {}, "-I": {},
@@ -95,6 +96,7 @@ var grepSemanticNumberKeys = map[string]struct{}{
 	"limit": {}, "head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
 	"max_depth": {}, "maxDepth": {}, "max-depth": {}, "--max-depth": {}, "-d": {},
+	"threads": {}, "--threads": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {},
 }
 
@@ -204,6 +206,8 @@ type grepInput struct {
 	MaxDepthDash              *int    `json:"max-depth,omitempty"`
 	LongMaxDepth              *int    `json:"--max-depth,omitempty"`
 	ShortMaxDepth             *int    `json:"-d,omitempty"`
+	Threads                   *int    `json:"threads,omitempty"`
+	LongThreads               *int    `json:"--threads,omitempty"`
 	MaxColumnsPreview         bool    `json:"max_columns_preview,omitempty"`
 	MaxColumnsPreviewAlt      bool    `json:"maxColumnsPreview,omitempty"`
 	MaxColumnsPreviewDash     bool    `json:"max-columns-preview,omitempty"`
@@ -692,6 +696,8 @@ func NewGrepTool() tool.Tool {
 						"type": "integer",
 					},
 					"-d":                     map[string]any{"type": "integer"},
+					"threads":                map[string]any{"type": "integer"},
+					"--threads":              map[string]any{"type": "integer"},
 					"max_columns_preview":    map[string]any{"type": "boolean"},
 					"maxColumnsPreview":      map[string]any{"type": "boolean"},
 					"max-columns-preview":    map[string]any{"type": "boolean"},
@@ -1023,7 +1029,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases, and pattern_file/--file/-f can read one pattern per line from a file. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, stats/--stats aggregate statistics, json/--json NDJSON events, quiet/--quiet/-q output suppression, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, sort/--sort or sortr/--sortr with path or modified to control result ordering, and mmap/--mmap or no_mmap/--no-mmap as accepted backend selection hints; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, encoding/--encoding/-E to choose auto/none/utf-8/utf-16/utf-16le/utf-16be text decoding, null_data/--null-data to use NUL as the input line terminator, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to disable binary detection and search NUL-containing files as text, binary/--binary to report NUL-containing files that match, no_binary/--no-binary to restore binary filtering, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases, and pattern_file/--file/-f can read one pattern per line from a file. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, stats/--stats aggregate statistics, json/--json NDJSON events, quiet/--quiet/-q output suppression, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, sort/--sort or sortr/--sortr with path or modified to control result ordering, and threads/--threads plus mmap/--mmap or no_mmap/--no-mmap as accepted backend selection hints; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, encoding/--encoding/-E to choose auto/none/utf-8/utf-16/utf-16le/utf-16be text decoding, null_data/--null-data to use NUL as the input line terminator, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to disable binary detection and search NUL-containing files as text, binary/--binary to report NUL-containing files that match, no_binary/--no-binary to restore binary filtering, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -1153,6 +1159,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 		return err
 	}
 	if err := validateGrepMaxDepth(input); err != nil {
+		return err
+	}
+	if err := validateGrepThreads(input); err != nil {
 		return err
 	}
 	if _, _, _, err := grepSort(input); err != nil {
@@ -1354,6 +1363,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"offset":                  options.Offset,
 			"limit":                   options.Limit,
 			"max_depth":               structuredOptionalInt(maxDepth),
+			"threads":                 structuredOptionalInt(grepThreads(input)),
 			"max_count":               options.MaxCount,
 			"max_columns":             options.MaxColumns,
 			"max_filesize":            structuredOptionalInt64(options.MaxFilesize, options.HasMaxFilesize),
@@ -3914,6 +3924,15 @@ func validateGrepMaxDepth(input grepInput) error {
 	return nil
 }
 
+func validateGrepThreads(input grepInput) error {
+	for _, value := range []*int{input.Threads, input.LongThreads} {
+		if value != nil && *value < 0 {
+			return fmt.Errorf("threads must be non-negative")
+		}
+	}
+	return nil
+}
+
 func grepMaxDepth(input grepInput) int {
 	if input.MaxDepth != nil {
 		return *input.MaxDepth
@@ -3929,6 +3948,16 @@ func grepMaxDepth(input grepInput) int {
 	}
 	if input.ShortMaxDepth != nil {
 		return *input.ShortMaxDepth
+	}
+	return -1
+}
+
+func grepThreads(input grepInput) int {
+	if input.Threads != nil {
+		return *input.Threads
+	}
+	if input.LongThreads != nil {
+		return *input.LongThreads
 	}
 	return -1
 }

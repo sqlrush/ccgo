@@ -3331,6 +3331,37 @@ func TestGrepToolMMapControls(t *testing.T) {
 	}
 }
 
+func TestGrepToolThreadsControl(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hit.txt"), []byte("Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	threadsResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_threads",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--threads":"4"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if threadsResult.Content != "Found 1 file\nhit.txt" ||
+		threadsResult.StructuredContent["threads"] != 4 {
+		t.Fatalf("threads result = %#v", threadsResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_threads_negative",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","threads":-1}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "threads must be non-negative") {
+		t.Fatalf("negative threads err = %v", err)
+	}
+}
+
 func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	dir := t.TempDir()
 	longMatch := strings.Repeat("x", defaultGrepMaxColumns-len("Needle")) + "Needle"
