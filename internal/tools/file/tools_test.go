@@ -2328,6 +2328,72 @@ func TestGrepToolNullPathSeparator(t *testing.T) {
 	}
 }
 
+func TestGrepToolFieldSeparators(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("before\nNeedle here\nafter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("Needle other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_field_separators_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","field-match-separator":"::","field_context_separator":"~~","context":1,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContext := "a.txt~~1~~before\na.txt::2::Needle here\na.txt~~3~~after\nb.txt::1::Needle other"
+	if contextResult.Content != wantContext ||
+		contextResult.StructuredContent["field_match_separator"] != "::" ||
+		contextResult.StructuredContent["field_context_separator"] != "~~" {
+		t.Fatalf("field separator context result = %#v", contextResult)
+	}
+
+	columnResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_field_separators_column",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--field-match-separator":"::","--field-context-separator":"~~","column":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantColumn := "a.txt::2::1::Needle here\nb.txt::1::1::Needle other"
+	if columnResult.Content != wantColumn {
+		t.Fatalf("field separator column result = %#v", columnResult)
+	}
+
+	nullResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_field_separators_null",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--null":true,"fieldMatchSeparator":"::","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNull := "a.txt\x002::Needle here\nb.txt\x001::Needle other"
+	if nullResult.Content != wantNull {
+		t.Fatalf("field separator null result = %#v", nullResult)
+	}
+
+	emptyResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_empty_field_separator",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","field_match_separator":"","sort":"path","glob":"a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if emptyResult.Content != "a.txt2Needle here" ||
+		emptyResult.StructuredContent["field_match_separator"] != "" {
+		t.Fatalf("empty field separator result = %#v", emptyResult)
+	}
+}
+
 func TestGrepToolIncludeZero(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\n"), 0o644); err != nil {
