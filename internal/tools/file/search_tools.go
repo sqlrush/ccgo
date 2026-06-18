@@ -503,6 +503,7 @@ type grepStats struct {
 type grepFileStats struct {
 	Matches       int
 	MatchedLines  int
+	BytesPrinted  int
 	BytesSearched int64
 	HasMatches    bool
 }
@@ -2394,10 +2395,27 @@ func formatGrepJSONResult(matches []grepMatch, options grepOptions, stats *grepS
 		return strings.Join([]string{mustMarshalGrepJSON(grepJSONSummaryEvent(*stats))}, "\n")
 	}
 	content := ""
-	for range 3 {
-		content = buildGrepJSONResult(matches, options, *stats)
-		printed := len([]byte(content))
-		if printed == stats.BytesPrinted {
+	for range 8 {
+		var printedByPath map[string]int
+		content, printedByPath = buildGrepJSONResult(matches, options, *stats)
+		printed := 0
+		stable := printed == stats.BytesPrinted
+		if stats.Files == nil {
+			stats.Files = map[string]grepFileStats{}
+		}
+		for path, bytesPrinted := range printedByPath {
+			printed += bytesPrinted
+			fileStats := stats.Files[path]
+			if fileStats.BytesPrinted != bytesPrinted {
+				stable = false
+			}
+			fileStats.BytesPrinted = bytesPrinted
+			stats.Files[path] = fileStats
+		}
+		if printed != stats.BytesPrinted {
+			stable = false
+		}
+		if stable {
 			break
 		}
 		stats.BytesPrinted = printed
@@ -2405,27 +2423,51 @@ func formatGrepJSONResult(matches []grepMatch, options grepOptions, stats *grepS
 	return content
 }
 
-func buildGrepJSONResult(matches []grepMatch, options grepOptions, stats grepStats) string {
-	lines := make([]string, 0, len(matches)+2)
+type grepJSONOutputLine struct {
+	Path string
+	Text string
+}
+
+func buildGrepJSONResult(matches []grepMatch, options grepOptions, stats grepStats) (string, map[string]int) {
+	searchLines := make([]grepJSONOutputLine, 0, len(matches)+2)
+	allLines := make([]string, 0, len(matches)+2)
+	appendSearchLine := func(path string, event map[string]any) {
+		line := mustMarshalGrepJSON(event)
+		searchLines = append(searchLines, grepJSONOutputLine{Path: path, Text: line})
+		allLines = append(allLines, line)
+	}
 	currentPath := ""
 	for i, match := range matches {
 		if match.Path != currentPath {
 			if currentPath != "" {
-				lines = append(lines, mustMarshalGrepJSON(grepJSONEndEvent(currentPath, statsForGrepJSONPath(stats, currentPath), stats.SearchDuration)))
+				appendSearchLine(currentPath, grepJSONEndEvent(currentPath, statsForGrepJSONPath(stats, currentPath), stats.SearchDuration))
 			}
 			currentPath = match.Path
-			lines = append(lines, mustMarshalGrepJSON(map[string]any{
+			appendSearchLine(match.Path, map[string]any{
 				"type": "begin",
 				"data": map[string]any{"path": grepJSONText(match.Path)},
-			}))
+			})
 		}
-		lines = append(lines, mustMarshalGrepJSON(grepJSONLineEvent(match, options)))
+		appendSearchLine(match.Path, grepJSONLineEvent(match, options))
 		if i == len(matches)-1 {
-			lines = append(lines, mustMarshalGrepJSON(grepJSONEndEvent(currentPath, statsForGrepJSONPath(stats, currentPath), stats.SearchDuration)))
+			appendSearchLine(currentPath, grepJSONEndEvent(currentPath, statsForGrepJSONPath(stats, currentPath), stats.SearchDuration))
 		}
 	}
-	lines = append(lines, mustMarshalGrepJSON(grepJSONSummaryEvent(stats)))
-	return strings.Join(lines, "\n")
+	printedByPath := grepJSONPrintedBytes(searchLines)
+	allLines = append(allLines, mustMarshalGrepJSON(grepJSONSummaryEvent(stats)))
+	return strings.Join(allLines, "\n"), printedByPath
+}
+
+func grepJSONPrintedBytes(lines []grepJSONOutputLine) map[string]int {
+	printed := map[string]int{}
+	for i, line := range lines {
+		size := len([]byte(line.Text))
+		if i < len(lines)-1 {
+			size++
+		}
+		printed[line.Path] += size
+	}
+	return printed
 }
 
 func grepJSONLineEvent(match grepMatch, options grepOptions) map[string]any {
@@ -2476,7 +2518,7 @@ func grepJSONEndEvent(path string, stats grepFileStats, elapsed time.Duration) m
 				"searches":            1,
 				"searches_with_match": searchesWithMatch,
 				"bytes_searched":      stats.BytesSearched,
-				"bytes_printed":       0,
+				"bytes_printed":       stats.BytesPrinted,
 				"matched_lines":       stats.MatchedLines,
 				"matches":             stats.Matches,
 			},

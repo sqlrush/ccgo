@@ -1702,6 +1702,11 @@ func TestGrepToolJSONOutput(t *testing.T) {
 		summaryStats["bytes_searched"] != float64(32) {
 		t.Fatalf("summary stats = %#v", summaryStats)
 	}
+	endStats := events[4]["data"].(map[string]any)["stats"].(map[string]any)
+	if endStats["bytes_printed"] == float64(0) ||
+		summaryStats["bytes_printed"] != endStats["bytes_printed"] {
+		t.Fatalf("json bytes_printed summary=%#v end=%#v", summaryStats["bytes_printed"], endStats["bytes_printed"])
+	}
 
 	quietResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_json_quiet",
