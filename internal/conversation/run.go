@@ -3353,7 +3353,7 @@ func (r Runner) formatMemorySummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) > 0 {
 		switch args[0] {
-		case "list":
+		case "list", "ls", "files":
 			return r.formatMemoryShow()
 		case "status":
 		case "show", "view", "cat":
