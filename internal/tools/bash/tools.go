@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -2120,6 +2121,8 @@ func readOnlyWords(words []string) bool {
 	switch cmd {
 	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df":
 		return readOnlyPathCommand(words)
+	case "sed":
+		return readOnlySed(words[1:])
 	case "pwd", "printf", "echo", "date", "whoami", "id", "uname", "printenv", "which", "type":
 		return true
 	case "env":
@@ -2168,6 +2171,116 @@ func readOnlyPathCommand(words []string) bool {
 			continue
 		}
 		if !safeRelativeShellPathArg(word) {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlySed(args []string) bool {
+	seenScript := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			i++
+			if !seenScript {
+				if i >= len(args) || !safeSedScript(args[i]) {
+					return false
+				}
+				seenScript = true
+				i++
+			}
+			for ; i < len(args); i++ {
+				if !safeRelativeShellPathArg(args[i]) {
+					return false
+				}
+			}
+			return seenScript
+		}
+		switch {
+		case arg == "-n" || arg == "--quiet" || arg == "--silent" || arg == "-E" || arg == "-r" || arg == "-u" || arg == "--unbuffered" || arg == "-s" || arg == "--separate":
+			continue
+		case arg == "-i" || strings.HasPrefix(arg, "-i") || arg == "--in-place" || strings.HasPrefix(arg, "--in-place="):
+			return false
+		case arg == "-f" || arg == "--file" || strings.HasPrefix(arg, "-f") || strings.HasPrefix(arg, "--file="):
+			return false
+		case arg == "-e" || arg == "--expression":
+			i++
+			if i >= len(args) || !safeSedScript(args[i]) {
+				return false
+			}
+			seenScript = true
+		case strings.HasPrefix(arg, "-e") && len(arg) > 2:
+			if !safeSedScript(arg[2:]) {
+				return false
+			}
+			seenScript = true
+		case strings.HasPrefix(arg, "--expression="):
+			if !safeSedScript(strings.TrimPrefix(arg, "--expression=")) {
+				return false
+			}
+			seenScript = true
+		case strings.HasPrefix(arg, "-"):
+			return false
+		case !seenScript:
+			if !safeSedScript(arg) {
+				return false
+			}
+			seenScript = true
+		default:
+			if !safeRelativeShellPathArg(arg) {
+				return false
+			}
+		}
+	}
+	return seenScript
+}
+
+func safeSedScript(script string) bool {
+	script = strings.Trim(strings.TrimSpace(script), `"'`)
+	if script == "" || strings.ContainsAny(script, "`\x00\\") {
+		return false
+	}
+	commands := strings.FieldsFunc(script, func(r rune) bool {
+		return r == ';' || r == '\n' || r == '\r'
+	})
+	if len(commands) == 0 {
+		return false
+	}
+	for _, command := range commands {
+		if !safeSedSimpleCommand(command) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeSedSimpleCommand(command string) bool {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return false
+	}
+	last := rune(0)
+	lastIndex := -1
+	for i, r := range command {
+		if !unicode.IsSpace(r) {
+			last = r
+			lastIndex = i
+		}
+	}
+	switch last {
+	case 'p', 'd', 'q', '=':
+	default:
+		return false
+	}
+	for _, r := range strings.TrimSpace(command[:lastIndex]) {
+		if unicode.IsDigit(r) || unicode.IsSpace(r) {
+			continue
+		}
+		switch r {
+		case ',', '$', '+', '-', '~':
+			continue
+		default:
 			return false
 		}
 	}
