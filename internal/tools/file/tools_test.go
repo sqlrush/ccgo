@@ -1611,6 +1611,75 @@ func TestGrepToolFilesMode(t *testing.T) {
 	}
 }
 
+func TestGrepToolMaxDepth(t *testing.T) {
+	dir := t.TempDir()
+	for _, subdir := range []string{
+		filepath.Join(dir, "one", "two"),
+		filepath.Join(dir, "skip"),
+	} {
+		if err := os.MkdirAll(subdir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := map[string]string{
+		"root.txt":          "Needle root\n",
+		"one/one.txt":       "Needle one\n",
+		"one/two/two.txt":   "Needle two\n",
+		"skip/ignored.txt":  "no match\n",
+		"skip/matched.txt":  "Needle skip\n",
+		"skip/nested.txt":   "Needle nested\n",
+		"skip/another.json": "Needle json\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_depth_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--files":true,"--max-depth":"2","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFiles := "Found 6 files\none/one.txt\nroot.txt\nskip/another.json\nskip/ignored.txt\nskip/matched.txt\nskip/nested.txt"
+	if filesResult.Content != wantFiles ||
+		filesResult.StructuredContent["max_depth"] != 2 {
+		t.Fatalf("max-depth files result = %#v", filesResult)
+	}
+
+	matchResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_max_depth",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","-d":1,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if matchResult.Content != "Found 1 file\nroot.txt" ||
+		matchResult.StructuredContent["max_depth"] != 1 {
+		t.Fatalf("short max-depth result = %#v", matchResult)
+	}
+
+	zeroResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_zero_max_depth",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--files":true,"max_depth":0}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zeroResult.Content != "No files found" ||
+		zeroResult.StructuredContent["max_depth"] != 0 ||
+		zeroResult.StructuredContent["total_matches"] != 0 {
+		t.Fatalf("zero max-depth result = %#v", zeroResult)
+	}
+}
+
 func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-4 * time.Hour)
@@ -3135,6 +3204,15 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "max_columns must be non-negative") {
 		t.Fatalf("max_columns validation err = %v", err)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_max_depth",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","--max-depth":"-1"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "max_depth must be non-negative") {
+		t.Fatalf("max_depth validation err = %v", err)
 	}
 }
 

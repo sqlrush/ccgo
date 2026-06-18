@@ -233,6 +233,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
 - 本轮补充：Grep 结果排序现在支持 ripgrep 风格 `sort`/`--sort` 和 `sortr`/`--sortr` 参数，覆盖 `path`/`modified`/`none` 及常见别名；显式排序会作用于 files/content/count 输出，structured content 会回传实际 sort、reverse 和 explicit 状态。
 - 本轮补充：Grep 结果排序现在支持 ripgrep deprecated `sort_files`/`sortFiles`/`sort-files`/`--sort-files` aliases，统一映射到显式 `sort=path`，并兼容 quoted semantic boolean。
+- 本轮补充：Grep 遍历现在支持 ripgrep 风格 `max_depth`/`maxDepth`/`max-depth`/`--max-depth`/`-d`，按 `--max-depth 0` 目录 no-op、`1` 仅直属文件、`2` 下一层文件的语义限制递归，并兼容 quoted number。
 - 本轮补充：Glob/Grep 搜索遍历现在会读取 permission context 中的 `Read(...)` deny 规则，并把对应 basename/path/directory pattern 作为额外 ignore rule，避免被禁止读取的文件出现在搜索结果中。
 - 本轮补充：Bash `grep`/`rg` read-only 分类现在会把 pattern-file 参数 `-f FILE`、`-fFILE` 和 `--file=FILE` 当作路径读取处理，缺值、绝对路径和 `..` 路径不再进入 read-only fast path。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。
