@@ -2438,6 +2438,7 @@ func (r *Runner) formatConfigSummary(raw string) string {
 		"Working directory: " + cwd,
 		"Model: " + r.model(),
 		"Settings files:",
+		fmt.Sprintf("- managed: %s (%s)", config.ManagedSettingsPath(), fileStatusText(config.ManagedSettingsPath())),
 		fmt.Sprintf("- user: %s (%s)", config.UserSettingsPath(), fileStatusText(config.UserSettingsPath())),
 		fmt.Sprintf("- project: %s (%s)", config.ProjectSettingsPath(cwd), fileStatusText(config.ProjectSettingsPath(cwd))),
 		fmt.Sprintf("- local: %s (%s)", config.LocalSettingsPath(cwd), fileStatusText(config.LocalSettingsPath(cwd))),
@@ -2467,6 +2468,7 @@ func (r *Runner) formatConfigShow(raw string) string {
 		}
 		return strings.Join([]string{
 			"Config settings files",
+			fmt.Sprintf("Managed: %s (%s)", config.ManagedSettingsPath(), fileStatusText(config.ManagedSettingsPath())),
 			fmt.Sprintf("User: %s (%s)", config.UserSettingsPath(), fileStatusText(config.UserSettingsPath())),
 			fmt.Sprintf("Project: %s (%s)", config.ProjectSettingsPath(cwd), fileStatusText(config.ProjectSettingsPath(cwd))),
 			fmt.Sprintf("Local: %s (%s)", config.LocalSettingsPath(cwd), fileStatusText(config.LocalSettingsPath(cwd))),
@@ -2738,6 +2740,7 @@ func configSearchResults(r Runner, query string) []configSearchResult {
 		}
 	}
 
+	add("settings", "managed settings file", config.ManagedSettingsPath())
 	add("settings", "user settings file", config.UserSettingsPath())
 	cwd := strings.TrimSpace(r.WorkingDirectory)
 	if cwd == "" {
@@ -3780,7 +3783,7 @@ func (r Runner) mergedSettings() contracts.Settings {
 	if r.MCP == nil {
 		return contracts.Settings{}
 	}
-	return config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+	return r.MCP.MergedSettings()
 }
 
 func (r Runner) MergedSettings() contracts.Settings {
@@ -5252,7 +5255,7 @@ func (r Runner) mcpServers() []mcpServerSummary {
 	if r.MCP == nil {
 		return nil
 	}
-	merged := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+	merged := r.MCP.MergedSettings()
 	mcpServers := mcp.MergeServers(merged.MCPServers, r.MCP.PluginServers)
 	policy := mcp.PolicyFromSettings(merged)
 	servers := make([]mcpServerSummary, 0, len(mcpServers))

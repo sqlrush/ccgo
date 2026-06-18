@@ -16,6 +16,7 @@ func (r Runner) withConfiguredMCPTools(ctx context.Context) (Runner, func() erro
 		UserSettings:    r.MCP.UserSettings,
 		ProjectSettings: r.MCP.ProjectSettings,
 		LocalSettings:   r.MCP.LocalSettings,
+		PolicySettings:  r.MCP.PolicySettings,
 		PluginServers:   r.MCP.PluginServers,
 		CWD:             r.MCP.CWD,
 		ParseOptions:    r.MCP.ParseOptions,

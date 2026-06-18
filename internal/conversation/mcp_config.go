@@ -25,15 +25,20 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	policySettings, err := loadOptionalSettings(config.ManagedSettingsPath())
+	if err != nil {
+		return nil, err
+	}
 	localSettings, err := loadOptionalSettings(config.LocalSettingsPath(resolvedCWD))
 	if err != nil {
 		return nil, err
 	}
-	mergedSettings := config.MergeSettings(userSettings, projectSettings, localSettings)
+	mergedSettings := config.MergeSettings(userSettings, projectSettings, localSettings, policySettings)
 	return &MCPConfig{
 		UserSettings:    userSettings,
 		ProjectSettings: projectSettings,
 		LocalSettings:   localSettings,
+		PolicySettings:  policySettings,
 		PluginServers:   pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(resolvedCWD), mergedSettings),
 		CWD:             resolvedCWD,
 		ToolOptions: mcp.ServerToolOptions{

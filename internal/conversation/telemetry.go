@@ -4,7 +4,6 @@ import (
 	"context"
 
 	compactpkg "ccgo/internal/compact"
-	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	telemetrypkg "ccgo/internal/telemetry"
 )
@@ -26,7 +25,7 @@ func (r Runner) telemetryEnabled() bool {
 	if r.MCP == nil {
 		return false
 	}
-	settings := config.MergeSettings(r.MCP.UserSettings, r.MCP.ProjectSettings, r.MCP.LocalSettings)
+	settings := r.MCP.MergedSettings()
 	return settings.Advanced != nil && settings.Advanced.Telemetry != nil && *settings.Advanced.Telemetry
 }
 

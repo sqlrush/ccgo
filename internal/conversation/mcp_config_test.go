@@ -27,8 +27,16 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 	}
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
 	writeSettingsFile(t, filepath.Join(claudeHome, "settings.json"), `{
+		"model": "sonnet",
 		"mcpServers": {
 			"user": {"command": "user-server"}
+		}
+	}`)
+	writeSettingsFile(t, filepath.Join(claudeHome, "managed-settings.json"), `{
+		"model": "opus",
+		"allowManagedPermissionRulesOnly": true,
+		"permissions": {
+			"allow": ["Bash(git status *)"]
 		}
 	}`)
 	writeSettingsFile(t, filepath.Join(project, ".claude", "settings.json"), `{
@@ -65,6 +73,12 @@ func TestLoadMCPConfigFromSettingsFiles(t *testing.T) {
 	}
 	if config.UserSettings.MCPServers["user"].Command != "user-server" {
 		t.Fatalf("user settings = %#v", config.UserSettings.MCPServers)
+	}
+	if config.PolicySettings.Model != "opus" || config.MergedSettings().Model != "opus" {
+		t.Fatalf("policy settings = %#v merged=%#v", config.PolicySettings, config.MergedSettings())
+	}
+	if config.PolicySettings.Permissions == nil || len(config.PolicySettings.Permissions.Allow) != 1 || config.PolicySettings.Permissions.Allow[0] != "Bash(git status *)" {
+		t.Fatalf("policy permissions = %#v", config.PolicySettings.Permissions)
 	}
 	if config.ProjectSettings.MCPServers["project"].Command != "project-server" {
 		t.Fatalf("project settings = %#v", config.ProjectSettings.MCPServers)

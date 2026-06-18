@@ -325,6 +325,39 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 	}
 }
 
+func TestBuildConfiguredToolSetsUsesPolicySettings(t *testing.T) {
+	result, err := BuildConfiguredToolSets(context.Background(), ConfiguredToolSetOptions{
+		UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"allowed": {Command: "allowed-server"},
+				"blocked": {Command: "blocked-server"},
+			},
+		},
+		PolicySettings: contracts.Settings{
+			AllowedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "allowed"}},
+		},
+		ToolOptions: ServerToolOptions{
+			DisableResources: true,
+			DisablePrompts:   true,
+			OpenClient: func(_ context.Context, _ string, _ contracts.MCPServer) (ClientHandle, error) {
+				return ClientHandle{Client: &fakeMCPClient{}}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result.Servers["allowed"]; !ok {
+		t.Fatalf("allowed server missing: %#v", result.Servers)
+	}
+	if _, ok := result.Servers["blocked"]; ok {
+		t.Fatalf("blocked server kept: %#v", result.Servers)
+	}
+	if len(result.Blocked) != 1 || result.Blocked[0] != "blocked" {
+		t.Fatalf("blocked = %#v", result.Blocked)
+	}
+}
+
 func TestBuildConfiguredToolSetsAdvertisesCWDRoots(t *testing.T) {
 	root := t.TempDir()
 	var initializeParams string

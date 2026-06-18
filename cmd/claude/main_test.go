@@ -1544,6 +1544,40 @@ func TestPermissionDeciderFromCLIAllowDenyRules(t *testing.T) {
 	}
 }
 
+func TestPermissionDeciderHonorsManagedPermissionRulesOnly(t *testing.T) {
+	managedOnly := true
+	mcpConfig := &conversation.MCPConfig{
+		UserSettings: contracts.Settings{Permissions: &contracts.PermissionsSetting{
+			Allow: []string{"Write"},
+		}},
+		PolicySettings: contracts.Settings{
+			AllowManagedPermissionRulesOnly: &managedOnly,
+			Permissions: &contracts.PermissionsSetting{
+				Allow: []string{"Bash(git status *)"},
+			},
+		},
+	}
+	decider, err := permissionDeciderFromSettings(mcpConfig, "", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := tool.Context{Permissions: decider, WorkingDirectory: t.TempDir()}
+	allowed, err := bashtools.NewBashTool().CheckPermissions(ctx, json.RawMessage(`{"command":"git status --short"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allowed.Behavior != contracts.PermissionAllow {
+		t.Fatalf("managed decision = %#v", allowed)
+	}
+	userRule, err := filetools.NewWriteTool().CheckPermissions(ctx, json.RawMessage(`{"file_path":"managed-only.txt","content":"hi"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userRule.Behavior == contracts.PermissionAllow {
+		t.Fatalf("user rule should be stripped by managed-only policy: %#v", userRule)
+	}
+}
+
 func TestParseToolRulesAcceptsRepeatedFlagValues(t *testing.T) {
 	got := parseToolRules("Write", "Bash(git status *)", "Read, Edit")
 	want := []string{"Write", "Bash(git status *)", "Read", "Edit"}

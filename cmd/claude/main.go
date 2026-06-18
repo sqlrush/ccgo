@@ -1839,7 +1839,7 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	runner.PermissionMode = runnerPermissionModeFromDecider(runner.Permissions)
 	runner.Model = resolveCLIModel(options.Model, runner.MCP)
 	if runner.MCP != nil {
-		merged := config.MergeSettings(runner.MCP.UserSettings, runner.MCP.ProjectSettings, runner.MCP.LocalSettings)
+		merged := runner.MCP.MergedSettings()
 		runner.FastMode = merged.FastMode != nil && *merged.FastMode
 	}
 	if options.MaxTokens < 0 {
@@ -1994,12 +1994,13 @@ func permissionDeciderFromSettings(mcpConfig *conversation.MCPConfig, permission
 	var sources []permissions.SettingsSource
 	var managedRulesOnly bool
 	if mcpConfig != nil {
-		merged := config.MergeSettings(mcpConfig.UserSettings, mcpConfig.ProjectSettings, mcpConfig.LocalSettings)
+		merged := mcpConfig.MergedSettings()
 		managedRulesOnly = merged.AllowManagedPermissionRulesOnly != nil && *merged.AllowManagedPermissionRulesOnly
 		sources = append(sources,
 			permissions.SettingsSource{Source: contracts.PermissionSourceUserSettings, Permissions: mcpConfig.UserSettings.Permissions, Sandbox: mcpConfig.UserSettings.Sandbox},
 			permissions.SettingsSource{Source: contracts.PermissionSourceProjectSettings, Permissions: mcpConfig.ProjectSettings.Permissions, Sandbox: mcpConfig.ProjectSettings.Sandbox},
 			permissions.SettingsSource{Source: contracts.PermissionSourceLocalSettings, Permissions: mcpConfig.LocalSettings.Permissions, Sandbox: mcpConfig.LocalSettings.Sandbox},
+			permissions.SettingsSource{Source: contracts.PermissionSourcePolicySettings, Permissions: mcpConfig.PolicySettings.Permissions, Sandbox: mcpConfig.PolicySettings.Sandbox},
 		)
 	}
 	if permissionMode != "" {
@@ -2051,7 +2052,7 @@ func validPermissionMode(mode contracts.PermissionMode) bool {
 func resolveCLIModel(flagValue string, mcpConfig *conversation.MCPConfig) string {
 	raw := firstNonEmpty(flagValue, os.Getenv("ANTHROPIC_MODEL"), os.Getenv("CLAUDE_MODEL"))
 	if raw == "" && mcpConfig != nil {
-		raw = config.MergeSettings(mcpConfig.UserSettings, mcpConfig.ProjectSettings, mcpConfig.LocalSettings).Model
+		raw = mcpConfig.MergedSettings().Model
 	}
 	if capability, ok := model.DefaultRegistry().Resolve(raw); ok {
 		return capability.Name
@@ -2468,7 +2469,7 @@ func runnerMCPServerStates(config *conversation.MCPConfig) map[string]mcpServerI
 			project = mcp.MergeServers(project, chain.Servers)
 		}
 	}
-	policySettings := mergeMCPPolicySettingsForInit(config.UserSettings, config.ProjectSettings, config.LocalSettings)
+	policySettings := mergeMCPPolicySettingsForInit(config.UserSettings, config.ProjectSettings, config.LocalSettings, config.PolicySettings)
 	manual := mcp.MergeServers(user, project, local)
 	plugin := mcp.DedupPluginServers(config.PluginServers, manual).Servers
 	for name := range plugin {
@@ -2574,7 +2575,7 @@ func runnerMergedSettings(runner conversation.Runner) contracts.Settings {
 	if runner.MCP == nil {
 		return contracts.Settings{}
 	}
-	return config.MergeSettings(runner.MCP.UserSettings, runner.MCP.ProjectSettings, runner.MCP.LocalSettings)
+	return runner.MCP.MergedSettings()
 }
 
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {

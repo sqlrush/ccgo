@@ -126,6 +126,7 @@ type MCPConfig struct {
 	UserSettings    contracts.Settings
 	ProjectSettings contracts.Settings
 	LocalSettings   contracts.Settings
+	PolicySettings  contracts.Settings
 	PluginServers   map[string]contracts.MCPServer
 	CWD             string
 	ParseOptions    mcp.ParseOptions

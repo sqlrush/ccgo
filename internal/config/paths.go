@@ -10,6 +10,10 @@ func UserSettingsPath() string {
 	return filepath.Join(platform.ClaudeHomeDir(), "settings.json")
 }
 
+func ManagedSettingsPath() string {
+	return filepath.Join(platform.ClaudeHomeDir(), "managed-settings.json")
+}
+
 func ProjectSettingsPath(root string) string {
 	return filepath.Join(root, ".claude", "settings.json")
 }
