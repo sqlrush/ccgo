@@ -221,9 +221,12 @@ func parseSearchResults(body string, base *url.URL) []searchResult {
 
 func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 	anchors := anchorRe.FindAllStringSubmatchIndex(body, -1)
-	results := make([]searchResult, 0, len(anchors))
-	seen := map[string]struct{}{}
 	resultBase := searchHTMLBaseURL(body, base)
+	results := parseHTMLJSONLDSearchResults(body, resultBase)
+	seen := map[string]struct{}{}
+	for _, result := range results {
+		seen[result.URL] = struct{}{}
+	}
 	for idx, anchor := range anchors {
 		attrs := body[anchor[2]:anchor[3]]
 		if isSearchSnippetAnchor(attrs) {
@@ -243,6 +246,28 @@ func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 		}
 		seen[resolved] = struct{}{}
 		results = append(results, searchResult{Title: label, URL: resolved, Snippet: searchSnippetAfterAnchor(body, anchors, idx)})
+	}
+	return results
+}
+
+func parseHTMLJSONLDSearchResults(body string, base *url.URL) []searchResult {
+	var results []searchResult
+	seen := map[string]struct{}{}
+	for _, match := range scriptTagRe.FindAllStringSubmatch(body, -1) {
+		if len(match) < 3 || !strings.Contains(strings.ToLower(match[1]), "ld+json") {
+			continue
+		}
+		parsed, ok := parseJSONSearchResults(htmlstd.UnescapeString(match[2]), base)
+		if !ok {
+			continue
+		}
+		for _, result := range parsed {
+			if _, exists := seen[result.URL]; exists {
+				continue
+			}
+			seen[result.URL] = struct{}{}
+			results = append(results, result)
+		}
 	}
 	return results
 }
@@ -307,6 +332,7 @@ func collectJSONSearchResults(value any, base *url.URL, results *[]searchResult,
 			"news", "news_results", "newsResults", "top_stories", "topStories",
 			"people_also_ask", "peopleAlsoAsk", "related_questions", "relatedQuestions",
 			"deepLinks", "deep_links", "siteLinks", "sitelinks", "pages", "matches",
+			"@graph", "itemListElement", "item_list_element", "item", "mainEntity", "main_entity",
 		} {
 			if child, ok := typed[key]; ok {
 				collectJSONSearchResults(child, base, results, seen)
@@ -343,7 +369,7 @@ func searchResultFromJSONObject(obj map[string]any, base *url.URL) (searchResult
 
 func jsonSearchURLField(obj map[string]any) string {
 	if raw := jsonStringField(obj,
-		"url", "link", "href",
+		"url", "link", "href", "@id",
 		"pageUrl", "pageURL", "page_url",
 		"targetUrl", "targetURL", "target_url",
 		"webUrl", "webURL", "web_url",
@@ -382,7 +408,7 @@ func jsonSearchString(value any) string {
 		return strings.TrimSpace(fmt.Sprintf("%.0f", typed))
 	case map[string]any:
 		return jsonStringField(typed,
-			"url", "link", "href",
+			"url", "link", "href", "@id",
 			"raw", "value", "text", "content",
 			"title", "name", "headline", "heading",
 		)
@@ -412,6 +438,7 @@ func isAbsoluteSearchURL(raw string) bool {
 var (
 	anchorRe      = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
 	baseTagRe     = regexp.MustCompile(`(?is)<base\b([^>]*)>`)
+	scriptTagRe   = regexp.MustCompile(`(?is)<script\b([^>]*)>(.*?)</script>`)
 	htmlCommentRe = regexp.MustCompile(`(?is)<!--.*?-->`)
 	hrefRe        = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
 	snippetRe     = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet)[^>]*>(.*?)</(?:a|div|span|td|p)>`)

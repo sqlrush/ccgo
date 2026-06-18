@@ -105,6 +105,104 @@ func TestWebSearchResolvesHTMLResultsAgainstBaseHref(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesHTMLJSONLDResults(t *testing.T) {
+	page := `
+		<html><head><base href="/catalog/"></head><body>
+			<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@graph": [
+					{
+						"@type": "ItemList",
+						"itemListElement": [
+							{
+								"@type": "ListItem",
+								"position": 1,
+								"item": {
+									"@type": "WebPage",
+									"name": "JSON-LD Result",
+									"url": "guide",
+									"description": "JSON-LD snippet"
+								}
+							},
+							{
+								"@type": "ListItem",
+								"position": 2,
+								"item": {
+									"@type": "WebPage",
+									"name": "Nested ID JSON-LD",
+									"url": {"@id": "https://docs.example.com/jsonld"},
+									"description": "Nested ID snippet"
+								}
+							},
+							{
+								"@type": "ListItem",
+								"position": 3,
+								"item": {
+									"@type": "WebPage",
+									"name": "Direct ID JSON-LD",
+									"@id": "https://id.example.com/jsonld",
+									"description": "Direct ID snippet"
+								}
+							}
+						]
+					}
+				]
+			}
+			</script>
+			<a class="result__a" href="guide">Duplicate anchor</a>
+			<div class="result__snippet">Anchor duplicate snippet</div>
+			<a class="result__a" href="/anchor-only">Anchor Only</a>
+			<div class="result__snippet">Anchor snippet</div>
+		</body></html>`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(page))
+	}))
+	defer server.Close()
+	searchBase, err := url.Parse(server.URL + "/catalog/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed := parseHTMLJSONLDSearchResults(page, searchBase); len(parsed) != 3 {
+		t.Fatalf("direct JSON-LD results = %#v", parsed)
+	}
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL + "/search",
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_html_jsonld",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"json ld","max_results":5}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 4 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["title"] != "JSON-LD Result" || results[0]["url"] != server.URL+"/catalog/guide" || results[0]["snippet"] != "JSON-LD snippet" {
+		t.Fatalf("first JSON-LD result = %#v", results[0])
+	}
+	if results[1]["title"] != "Nested ID JSON-LD" || results[1]["url"] != "https://docs.example.com/jsonld" || results[1]["snippet"] != "Nested ID snippet" {
+		t.Fatalf("second JSON-LD result = %#v", results[1])
+	}
+	if results[2]["title"] != "Direct ID JSON-LD" || results[2]["url"] != "https://id.example.com/jsonld" || results[2]["snippet"] != "Direct ID snippet" {
+		t.Fatalf("third JSON-LD result = %#v", results[2])
+	}
+	if results[3]["title"] != "Anchor Only" || results[3]["url"] != server.URL+"/anchor-only" || results[3]["snippet"] != "Anchor snippet" {
+		t.Fatalf("anchor result = %#v", results[3])
+	}
+	content := result.Content.(string)
+	if strings.Contains(content, "Duplicate anchor") || strings.Contains(content, "Anchor duplicate snippet") {
+		t.Fatalf("content did not deduplicate JSON-LD and anchor result: %#v", content)
+	}
+}
+
 func TestWebSearchParsesJSONResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
