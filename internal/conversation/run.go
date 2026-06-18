@@ -2134,6 +2134,9 @@ func (r *Runner) formatConfigSummary(raw string) string {
 		case "permission-mode", "permissionMode":
 			return r.setPermissionModeSummary(args)
 		default:
+			if section := normalizeConfigSection(args[0]); isKnownConfigSection(section) {
+				return r.formatConfigShow(args[0])
+			}
 			return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
 	}
@@ -2402,6 +2405,15 @@ func normalizeConfigSection(raw string) string {
 		return "advanced"
 	default:
 		return compact
+	}
+}
+
+func isKnownConfigSection(section string) bool {
+	switch normalizeConfigSection(section) {
+	case "settings", "model", "output-style", "auth", "fast-mode", "betas", "env", "permissions", "mcp", "hooks", "plugins", "marketplaces", "sandbox", "advanced":
+		return true
+	default:
+		return false
 	}
 }
 

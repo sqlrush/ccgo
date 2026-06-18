@@ -3640,7 +3640,24 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"Env vars: 2",
 		"Env names: PUBLIC_FLAG, SECRET_TOKEN",
 	}, []string{"secret-value"})
+	assertConfigShow("/config env", []string{
+		"Config env",
+		"Env vars: 2",
+		"Env names: PUBLIC_FLAG, SECRET_TOKEN",
+	}, []string{"secret-value"})
 	assertConfigShow("/config show permissions", []string{
+		"Config permissions",
+		"Default mode: plan",
+		"Allow rules: 1",
+		"- Read",
+		"Deny rules: 1",
+		"- Bash(rm *)",
+		"Ask rules: 1",
+		"- Edit",
+		"Additional directories: 1",
+		"Disable bypass mode: enabled",
+	}, nil)
+	assertConfigShow("/config permissions", []string{
 		"Config permissions",
 		"Default mode: plan",
 		"Allow rules: 1",
@@ -3667,6 +3684,15 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"Plugin config names: market/a",
 	}, []string{"plugin-secret"})
 	assertConfigShow("/config show advanced", []string{
+		"Config advanced integrations",
+		"Bridge: enabled",
+		"LSP: disabled",
+		"Telemetry: enabled",
+		"Chrome: (unset)",
+		"Computer use: (unset)",
+		"Native integrations: (unset)",
+	}, nil)
+	assertConfigShow("/config integrations", []string{
 		"Config advanced integrations",
 		"Bridge: enabled",
 		"LSP: disabled",
