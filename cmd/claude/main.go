@@ -2165,36 +2165,58 @@ type printJSONResult struct {
 }
 
 type printStreamEvent struct {
-	Type           conversation.EventType     `json:"type"`
-	Subtype        string                     `json:"subtype,omitempty"`
-	SessionID      contracts.ID               `json:"session_id,omitempty"`
-	CWD            string                     `json:"cwd,omitempty"`
-	Tools          []string                   `json:"tools,omitempty"`
-	MCPServers     []printStreamMCPServer     `json:"mcp_servers,omitempty"`
-	SlashCommands  []string                   `json:"slash_commands,omitempty"`
-	Agents         []string                   `json:"agents,omitempty"`
-	Skills         []string                   `json:"skills,omitempty"`
-	Plugins        []printStreamPlugin        `json:"plugins,omitempty"`
-	PermissionMode string                     `json:"permission_mode,omitempty"`
-	APIKeySource   string                     `json:"api_key_source,omitempty"`
-	Betas          []string                   `json:"betas,omitempty"`
-	FastMode       bool                       `json:"fast_mode,omitempty"`
-	OutputStyle    string                     `json:"output_style,omitempty"`
-	OutputStyles   []string                   `json:"available_output_styles,omitempty"`
-	Message        *contracts.Message         `json:"message,omitempty"`
-	ToolUse        *contracts.ToolUse         `json:"tool_use,omitempty"`
-	ToolResult     *contracts.ToolResult      `json:"tool_result,omitempty"`
-	ToolUseID      contracts.ID               `json:"tool_use_id,omitempty"`
-	ProgressType   string                     `json:"progress_type,omitempty"`
-	Data           map[string]any             `json:"data,omitempty"`
-	TokenWarning   *conversation.TokenWarning `json:"token_warning,omitempty"`
-	Compact        any                        `json:"compact,omitempty"`
-	StreamEvent    *anthropic.StreamEvent     `json:"stream_event,omitempty"`
-	Model          string                     `json:"model,omitempty"`
-	Error          string                     `json:"error,omitempty"`
-	IsError        bool                       `json:"is_error,omitempty"`
-	DurationMS     *int64                     `json:"duration_ms,omitempty"`
-	DurationAPI    *int64                     `json:"duration_api_ms,omitempty"`
+	Type           conversation.EventType   `json:"type"`
+	Subtype        string                   `json:"subtype,omitempty"`
+	SessionID      contracts.ID             `json:"session_id,omitempty"`
+	CWD            string                   `json:"cwd,omitempty"`
+	Tools          []string                 `json:"tools,omitempty"`
+	MCPServers     []printStreamMCPServer   `json:"mcp_servers,omitempty"`
+	SlashCommands  []string                 `json:"slash_commands,omitempty"`
+	Agents         []string                 `json:"agents,omitempty"`
+	Skills         []string                 `json:"skills,omitempty"`
+	Plugins        []printStreamPlugin      `json:"plugins,omitempty"`
+	PermissionMode string                   `json:"permission_mode,omitempty"`
+	APIKeySource   string                   `json:"api_key_source,omitempty"`
+	Betas          []string                 `json:"betas,omitempty"`
+	FastMode       bool                     `json:"fast_mode,omitempty"`
+	OutputStyle    string                   `json:"output_style,omitempty"`
+	OutputStyles   []string                 `json:"available_output_styles,omitempty"`
+	Message        *contracts.Message       `json:"message,omitempty"`
+	ToolUse        *contracts.ToolUse       `json:"tool_use,omitempty"`
+	ToolResult     *contracts.ToolResult    `json:"tool_result,omitempty"`
+	ToolUseID      contracts.ID             `json:"tool_use_id,omitempty"`
+	ProgressType   string                   `json:"progress_type,omitempty"`
+	Data           map[string]any           `json:"data,omitempty"`
+	TokenWarning   *printStreamTokenWarning `json:"token_warning,omitempty"`
+	Compact        any                      `json:"compact,omitempty"`
+	StreamEvent    *anthropic.StreamEvent   `json:"stream_event,omitempty"`
+	Model          string                   `json:"model,omitempty"`
+	Error          string                   `json:"error,omitempty"`
+	IsError        bool                     `json:"is_error,omitempty"`
+	DurationMS     *int64                   `json:"duration_ms,omitempty"`
+	DurationAPI    *int64                   `json:"duration_api_ms,omitempty"`
+}
+
+type printStreamTokenWarning struct {
+	TokenUsage int                          `json:"token_usage"`
+	Window     printStreamTokenWindow       `json:"window"`
+	State      printStreamTokenWarningState `json:"state"`
+}
+
+type printStreamTokenWindow struct {
+	ContextWindow       int      `json:"context_window,omitempty"`
+	MaxOutputTokens     int      `json:"max_output_tokens,omitempty"`
+	AutoCompactEnabled  bool     `json:"auto_compact_enabled,omitempty"`
+	AutoCompactOverride *float64 `json:"auto_compact_override,omitempty"`
+	BlockingLimit       int      `json:"blocking_limit,omitempty"`
+}
+
+type printStreamTokenWarningState struct {
+	PercentLeft                 int  `json:"percent_left"`
+	IsAboveWarningThreshold     bool `json:"is_above_warning_threshold"`
+	IsAboveErrorThreshold       bool `json:"is_above_error_threshold"`
+	IsAboveAutoCompactThreshold bool `json:"is_above_auto_compact_threshold"`
+	IsAtBlockingLimit           bool `json:"is_at_blocking_limit"`
 }
 
 type printStreamPlugin struct {
@@ -2415,7 +2437,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		Message:      event.Message,
 		ToolUse:      event.ToolUse,
 		ToolResult:   event.ToolResult,
-		TokenWarning: event.TokenWarning,
+		TokenWarning: printStreamTokenWarningFrom(event.TokenWarning),
 		StreamEvent:  event.StreamEvent,
 		Model:        event.Model,
 	}
@@ -2431,6 +2453,29 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		out.Error = event.Error.Error()
 	}
 	return encoder.Encode(out)
+}
+
+func printStreamTokenWarningFrom(warning *conversation.TokenWarning) *printStreamTokenWarning {
+	if warning == nil {
+		return nil
+	}
+	return &printStreamTokenWarning{
+		TokenUsage: warning.TokenUsage,
+		Window: printStreamTokenWindow{
+			ContextWindow:       warning.Window.ContextWindow,
+			MaxOutputTokens:     warning.Window.MaxOutputTokens,
+			AutoCompactEnabled:  warning.Window.AutoCompactEnabled,
+			AutoCompactOverride: warning.Window.AutoCompactOverride,
+			BlockingLimit:       warning.Window.BlockingLimit,
+		},
+		State: printStreamTokenWarningState{
+			PercentLeft:                 warning.State.PercentLeft,
+			IsAboveWarningThreshold:     warning.State.IsAboveWarningThreshold,
+			IsAboveErrorThreshold:       warning.State.IsAboveErrorThreshold,
+			IsAboveAutoCompactThreshold: warning.State.IsAboveAutoCompactThreshold,
+			IsAtBlockingLimit:           warning.State.IsAtBlockingLimit,
+		},
+	}
 }
 
 func writePrintResult(stdout io.Writer, runner conversation.Runner, result conversation.Result, outputFormat string, duration time.Duration) error {

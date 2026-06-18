@@ -2101,6 +2101,64 @@ func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 	}
 }
 
+func TestWritePrintStreamEventTokenWarningUsesSnakeCasePayload(t *testing.T) {
+	autoOverride := 50.0
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type: conversation.EventTokenWarning,
+		TokenWarning: &conversation.TokenWarning{
+			TokenUsage: 160_000,
+			Window: compactpkg.WindowConfig{
+				ContextWindow:       200_000,
+				MaxOutputTokens:     20_000,
+				AutoCompactEnabled:  true,
+				AutoCompactOverride: &autoOverride,
+				BlockingLimit:       177_000,
+			},
+			State: compactpkg.WarningState{
+				PercentLeft:                 4,
+				IsAboveWarningThreshold:     true,
+				IsAboveAutoCompactThreshold: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "token_warning" {
+		t.Fatalf("event = %#v", event)
+	}
+	warning, ok := event["token_warning"].(map[string]any)
+	if !ok {
+		t.Fatalf("token warning = %#v", event["token_warning"])
+	}
+	if _, exists := warning["TokenUsage"]; exists {
+		t.Fatalf("token warning uses Go field names: %#v", warning)
+	}
+	if warning["token_usage"] != float64(160_000) {
+		t.Fatalf("token usage = %#v", warning["token_usage"])
+	}
+	window, ok := warning["window"].(map[string]any)
+	if !ok {
+		t.Fatalf("window = %#v", warning["window"])
+	}
+	if window["context_window"] != float64(200_000) || window["max_output_tokens"] != float64(20_000) || window["auto_compact_enabled"] != true || window["auto_compact_override"] != float64(50) || window["blocking_limit"] != float64(177_000) {
+		t.Fatalf("window = %#v", window)
+	}
+	state, ok := warning["state"].(map[string]any)
+	if !ok {
+		t.Fatalf("state = %#v", warning["state"])
+	}
+	if state["percent_left"] != float64(4) || state["is_above_warning_threshold"] != true || state["is_above_error_threshold"] != false || state["is_above_auto_compact_threshold"] != true || state["is_at_blocking_limit"] != false {
+		t.Fatalf("state = %#v", state)
+	}
+}
+
 func TestRunPrintStreamJSONClearIncludesCleared(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")
