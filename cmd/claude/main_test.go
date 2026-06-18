@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"ccgo/internal/api/anthropic"
 	"ccgo/internal/bootstrap"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
@@ -2233,6 +2234,37 @@ func TestWritePrintStreamEventRetryIncludesModelBreadcrumb(t *testing.T) {
 	}
 }
 
+func TestWritePrintStreamEventRetryIncludesAPIErrorMetadata(t *testing.T) {
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type:  conversation.EventRetry,
+		Model: "sonnet",
+		Error: fmt.Errorf("request failed: %w", anthropic.APIError{
+			StatusCode: http.StatusTooManyRequests,
+			Type:       "rate_limit_error",
+			Message:    "try later",
+		}),
+		Retry: &conversation.RetryInfo{
+			Attempt:     1,
+			MaxAttempts: 2,
+			FailedModel: "sonnet",
+			NextModel:   "haiku",
+			Fallback:    true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "retry" || event["error_type"] != "rate_limit_error" || event["status_code"] != float64(http.StatusTooManyRequests) {
+		t.Fatalf("event = %#v", event)
+	}
+}
+
 func TestRunPrintStreamJSONClearIncludesCleared(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")
@@ -2311,6 +2343,25 @@ func TestWritePrintJSONErrorIncludesModelsAttempted(t *testing.T) {
 	}
 }
 
+func TestWritePrintJSONErrorIncludesAPIErrorMetadata(t *testing.T) {
+	var stdout bytes.Buffer
+	err := writePrintJSONError(&stdout, conversation.Runner{SessionID: "sess_error"}, anthropic.APIError{
+		StatusCode: http.StatusServiceUnavailable,
+		Type:       "overloaded_error",
+		Message:    "temporarily overloaded",
+	}, time.Millisecond, 2*time.Millisecond, []string{"sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "error" || payload["error_type"] != "overloaded_error" || payload["status_code"] != float64(http.StatusServiceUnavailable) {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
 func TestWritePrintStreamErrorIncludesModelsAttempted(t *testing.T) {
 	var stdout bytes.Buffer
 	err := writePrintStreamError(&stdout, conversation.Runner{SessionID: "sess_error"}, fmt.Errorf("fallback failed"), time.Millisecond, 2*time.Millisecond, []string{"sonnet", "haiku"})
@@ -2327,6 +2378,25 @@ func TestWritePrintStreamErrorIncludesModelsAttempted(t *testing.T) {
 	attempts, ok := event["models_attempted"].([]any)
 	if !ok || len(attempts) != 2 || attempts[0] != "sonnet" || attempts[1] != "haiku" {
 		t.Fatalf("models_attempted = %#v", event["models_attempted"])
+	}
+}
+
+func TestWritePrintStreamErrorIncludesAPIErrorMetadata(t *testing.T) {
+	var stdout bytes.Buffer
+	err := writePrintStreamError(&stdout, conversation.Runner{SessionID: "sess_error"}, anthropic.APIError{
+		StatusCode: http.StatusUnauthorized,
+		Type:       "authentication_error",
+		Message:    "invalid api key",
+	}, time.Millisecond, 2*time.Millisecond, []string{"sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "error" || event["is_error"] != true || event["error_type"] != "authentication_error" || event["status_code"] != float64(http.StatusUnauthorized) {
+		t.Fatalf("event = %#v", event)
 	}
 }
 
