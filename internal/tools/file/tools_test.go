@@ -4100,6 +4100,30 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 		t.Fatalf("grep content = %#v", grepResult.Content)
 	}
 
+	noIgnoreFilesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_ignore_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--no-ignore-files":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedNoIgnoreFiles := "Found 6 files\n" +
+		"important.log\n" +
+		"keep.txt\n" +
+		"rgonly.txt\n" +
+		"scratch.txt\n" +
+		"sub/rgonly.md\n" +
+		"sub/visible.txt"
+	if noIgnoreFilesResult.Content != expectedNoIgnoreFiles {
+		t.Fatalf("grep no-ignore-files content = %#v", noIgnoreFilesResult.Content)
+	}
+	if noIgnoreFilesResult.StructuredContent["no_ignore"] != false ||
+		noIgnoreFilesResult.StructuredContent["ignore_files"] != false ||
+		noIgnoreFilesResult.StructuredContent["no_ignore_files"] != true {
+		t.Fatalf("grep no-ignore-files structured content = %#v", noIgnoreFilesResult.StructuredContent)
+	}
+
 	noIgnoreResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_ignore",
 		Name:  "Grep",

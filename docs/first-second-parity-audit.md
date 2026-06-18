@@ -158,6 +158,7 @@ Covered behavior:
 - `Grep` long-line output now accepts `max_columns_preview`/`--max-columns-preview` plus `no_max_columns_preview`/`--no-max-columns-preview`, showing a ripgrep-style truncated preview when `max_columns` is exceeded.
 - `Glob`/`Grep` traversal now applies `Read(...)` deny rules from the permission context as extra search ignore rules, hiding denied basename, path, and directory patterns from search results.
 - `Glob`/`Grep` hierarchical ignore loading now includes ripgrep-specific `.rgignore` files in addition to `.gitignore` and `.ignore`.
+- `Grep` now accepts ripgrep-style `ignore_files`/`--ignore-files` and `no_ignore_files`/`--no-ignore-files`, letting `.ignore`/`.rgignore` rules be disabled while `.gitignore` remains active.
 - `Read`/`Edit` now coerce quoted semantic strings for `offset`/`limit` and `replace_all`, including whole-decimal numeric strings such as `"2.0"` for integer fields while keeping fractional values rejected.
 - `Bash`/`BashOutput` now coerce quoted semantic strings for `timeout`, `run_in_background`/`runInBackground`, and `tail_lines`/`tailLines`, matching official SDK-style number/boolean inputs without relaxing unknown-field validation.
 - `PowerShell`/`PowerShellOutput` now coerce quoted semantic strings for `timeout`, `run_in_background`/`runInBackground`, and `tail_lines`/`tailLines`, matching the official PowerShell tool's semantic number/boolean schema without relaxing unknown-field validation.
