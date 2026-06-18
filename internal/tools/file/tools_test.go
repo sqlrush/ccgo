@@ -3761,6 +3761,99 @@ func TestGrepToolMultiline(t *testing.T) {
 	}
 }
 
+func TestGrepToolPatternFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"src/a.txt":       "Needle alpha\n",
+		"src/b.txt":       "Other beta\n",
+		"src/c.txt":       "plain text\n",
+		"src/literal.txt": "axb\na.b\n",
+		"patterns.txt":    "Needle\n",
+		"literal.pats":    "a.b\n",
+		"empty.pats":      "",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	fileOnlyResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_pattern_file_only",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--file":"patterns.txt","path":"src","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fileOnlyResult.Content != "Found 1 file\nsrc/a.txt" ||
+		fileOnlyResult.StructuredContent["pattern_file"] != "patterns.txt" ||
+		fileOnlyResult.StructuredContent["pattern_count"] != 1 {
+		t.Fatalf("pattern-file-only result = %#v", fileOnlyResult)
+	}
+
+	combinedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_pattern_file_combined",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Other","--file":"patterns.txt","path":"src","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if combinedResult.Content != "Found 2 files\nsrc/a.txt\nsrc/b.txt" ||
+		combinedResult.StructuredContent["pattern_count"] != 2 {
+		t.Fatalf("combined pattern-file result = %#v", combinedResult)
+	}
+
+	fixedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_pattern_file_fixed",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"-f":"literal.pats","path":"src","output_mode":"content","fixed_strings":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixedResult.Content != "src/literal.txt:2:a.b" {
+		t.Fatalf("fixed pattern-file result = %#v", fixedResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_pattern_file_missing",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--file":"missing.pats","path":"src"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "pattern_file does not exist: missing.pats") {
+		t.Fatalf("missing pattern-file error = %v", err)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_pattern_file_empty",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--file":"empty.pats","path":"src"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "pattern is required") {
+		t.Fatalf("empty pattern-file error = %v", err)
+	}
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_pattern_file_ignored_for_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--files":true,"--file":"missing.pats","path":"src","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filesContent, _ := filesResult.Content.(string)
+	if !strings.Contains(filesContent, "src/a.txt") {
+		t.Fatalf("files mode should ignore pattern file, got %#v", filesResult)
+	}
+}
+
 func TestGrepToolCRLFAnchors(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "crlf.txt"), []byte("foo\r\nbar\r\n"), 0o644); err != nil {

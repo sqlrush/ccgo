@@ -198,6 +198,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：通用 tool schema validator 现在支持条件类 JSON Schema 约束 `propertyNames`、`dependentSchemas` 和 `if`/`then`/`else`，外部 MCP/动态工具可用 schema 表达字段名规则、属性依赖和条件必填逻辑。
 - 本轮补充：WebFetch/WebSearch 输入解码现在兼容 `timeout`、`max_bytes`/`maxBytes`、`max_results`/`maxResults` 的 quoted semantic string 数值；WebSearch 也会按官方校验拒绝同一请求同时设置 `allowed_domains` 和 `blocked_domains`。
 - 本轮补充：Grep 现在支持 whole-word 搜索参数 `word_regexp`/`wordRegexp`/`word-regexp`/`-w`，在 regex 和 fixed-string 模式下按词边界过滤匹配，并兼容 quoted boolean 输入。
+- 本轮补充：Grep 现在支持 ripgrep 风格 pattern file 输入 `pattern_file`/`patternFile`/`pattern-file`/`--file`/`-f`，按一行一个 pattern 与显式 pattern 取 OR，空文件不提供 pattern、空行保留匹配空串语义，并兼容 fixed-string、smart-case、word/line-regexp 组合。
 - 本轮补充：Grep 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。
 - 本轮补充：Grep content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
 - 本轮补充：Grep count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
