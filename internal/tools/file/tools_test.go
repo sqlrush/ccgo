@@ -1794,7 +1794,7 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantShortContext := "a.txt-1-one\na.txt:2:Needle first\na.txt-4-four\na.txt:5:Needle second"
+	wantShortContext := "a.txt-1-one\na.txt:2:Needle first\n--\na.txt-4-four\na.txt:5:Needle second"
 	if shortContextResult.Content != wantShortContext {
 		t.Fatalf("short context content = %#v", shortContextResult.Content)
 	}
@@ -2271,7 +2271,7 @@ func TestGrepToolNullPathSeparator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantContext := "src/b.txt\x001-before\nsrc/b.txt\x002:Needle beta\nsrc/b.txt\x003-after\nsrc/pkg/a.txt\x001:Needle alpha"
+	wantContext := "src/b.txt\x001-before\nsrc/b.txt\x002:Needle beta\nsrc/b.txt\x003-after\n--\nsrc/pkg/a.txt\x001:Needle alpha"
 	if contextResult.Content != wantContext {
 		t.Fatalf("null context result = %#v", contextResult)
 	}
@@ -2347,7 +2347,7 @@ func TestGrepToolFieldSeparators(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantContext := "a.txt~~1~~before\na.txt::2::Needle here\na.txt~~3~~after\nb.txt::1::Needle other"
+	wantContext := "a.txt~~1~~before\na.txt::2::Needle here\na.txt~~3~~after\n--\nb.txt::1::Needle other"
 	if contextResult.Content != wantContext ||
 		contextResult.StructuredContent["field_match_separator"] != "::" ||
 		contextResult.StructuredContent["field_context_separator"] != "~~" {
@@ -2391,6 +2391,97 @@ func TestGrepToolFieldSeparators(t *testing.T) {
 	if emptyResult.Content != "a.txt2Needle here" ||
 		emptyResult.StructuredContent["field_match_separator"] != "" {
 		t.Fatalf("empty field separator result = %#v", emptyResult)
+	}
+}
+
+func TestGrepToolContextSeparators(t *testing.T) {
+	dir := t.TempDir()
+	aContent := strings.Join([]string{
+		"before1",
+		"Needle one",
+		"after1",
+		"gap",
+		"before2",
+		"Needle two",
+		"after2",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(aContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("pre\nNeedle b\npost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_default_context_separator",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","context":1,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDefault := "a.txt-1-before1\na.txt:2:Needle one\na.txt-3-after1\n--\na.txt-5-before2\na.txt:6:Needle two\na.txt-7-after2\n--\nb.txt-1-pre\nb.txt:2:Needle b\nb.txt-3-post"
+	if defaultResult.Content != wantDefault ||
+		defaultResult.StructuredContent["context_separator"] != "--" ||
+		defaultResult.StructuredContent["no_context_separator"] != false {
+		t.Fatalf("default context separator result = %#v", defaultResult)
+	}
+
+	customResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_custom_context_separator",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","context":1,"context-separator":"==","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCustom := strings.ReplaceAll(wantDefault, "\n--\n", "\n==\n")
+	if customResult.Content != wantCustom ||
+		customResult.StructuredContent["context_separator"] != "==" {
+		t.Fatalf("custom context separator result = %#v", customResult)
+	}
+
+	noSeparatorResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_context_separator",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","context":1,"--no-context-separator":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoSeparator := strings.ReplaceAll(wantDefault, "\n--\n", "\n")
+	if noSeparatorResult.Content != wantNoSeparator ||
+		noSeparatorResult.StructuredContent["no_context_separator"] != true {
+		t.Fatalf("no context separator result = %#v", noSeparatorResult)
+	}
+
+	headingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_heading_context_separator",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","heading":true,"context":1,"context_separator":"==","glob":"a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHeading := "a.txt\n1-before1\n2:Needle one\n3-after1\n==\n5-before2\n6:Needle two\n7-after2"
+	if headingResult.Content != wantHeading {
+		t.Fatalf("heading context separator result = %#v", headingResult)
+	}
+
+	noContextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_context_separator_without_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--context-separator":"==","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoContext := "a.txt:2:Needle one\na.txt:6:Needle two\nb.txt:2:Needle b"
+	if noContextResult.Content != wantNoContext ||
+		noContextResult.StructuredContent["context_separator"] != "==" {
+		t.Fatalf("context separator without context result = %#v", noContextResult)
 	}
 }
 

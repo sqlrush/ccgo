@@ -40,6 +40,8 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"null": {}, "--null": {}, "-0": {},
 	"field_match_separator": {}, "fieldMatchSeparator": {}, "field-match-separator": {}, "--field-match-separator": {},
 	"field_context_separator": {}, "fieldContextSeparator": {}, "field-context-separator": {}, "--field-context-separator": {},
+	"context_separator": {}, "contextSeparator": {}, "context-separator": {}, "--context-separator": {},
+	"no_context_separator": {}, "noContextSeparator": {}, "no-context-separator": {}, "--no-context-separator": {},
 	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
@@ -75,6 +77,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"with_filename": {}, "withFilename": {}, "with-filename": {}, "--with-filename": {}, "-H": {}, "no_filename": {}, "noFilename": {}, "no-filename": {}, "--no-filename": {}, "-I": {},
 	"heading": {}, "--heading": {}, "no_heading": {}, "noHeading": {}, "no-heading": {}, "--no-heading": {},
 	"null": {}, "--null": {}, "-0": {},
+	"no_context_separator": {}, "noContextSeparator": {}, "no-context-separator": {}, "--no-context-separator": {},
 	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
 	"column": {}, "column_numbers": {}, "columnNumbers": {}, "column-number": {}, "--column": {},
@@ -171,6 +174,14 @@ type grepInput struct {
 	FieldContextSeparatorAlt  *string `json:"fieldContextSeparator,omitempty"`
 	FieldContextSeparatorDash *string `json:"field-context-separator,omitempty"`
 	LongFieldContextSeparator *string `json:"--field-context-separator,omitempty"`
+	ContextSeparator          *string `json:"context_separator,omitempty"`
+	ContextSeparatorAlt       *string `json:"contextSeparator,omitempty"`
+	ContextSeparatorDash      *string `json:"context-separator,omitempty"`
+	LongContextSeparator      *string `json:"--context-separator,omitempty"`
+	NoContextSeparator        bool    `json:"no_context_separator,omitempty"`
+	NoContextSeparatorAlt     bool    `json:"noContextSeparator,omitempty"`
+	NoContextSeparatorDash    bool    `json:"no-context-separator,omitempty"`
+	LongNoContextSeparator    bool    `json:"--no-context-separator,omitempty"`
 	Sort                      string  `json:"sort,omitempty"`
 	LongSort                  string  `json:"--sort,omitempty"`
 	SortReverse               string  `json:"sortr,omitempty"`
@@ -326,6 +337,8 @@ type grepOptions struct {
 	Null                  bool
 	FieldMatchSeparator   string
 	FieldContextSeparator string
+	ContextSeparator      string
+	NoContextSeparator    bool
 	HasReplace            bool
 	Replace               string
 	BeforeContext         int
@@ -466,6 +479,14 @@ func NewGrepTool() tool.Tool {
 					"fieldContextSeparator":     map[string]any{"type": "string"},
 					"field-context-separator":   map[string]any{"type": "string"},
 					"--field-context-separator": map[string]any{"type": "string"},
+					"context_separator":         map[string]any{"type": "string"},
+					"contextSeparator":          map[string]any{"type": "string"},
+					"context-separator":         map[string]any{"type": "string"},
+					"--context-separator":       map[string]any{"type": "string"},
+					"no_context_separator":      map[string]any{"type": "boolean"},
+					"noContextSeparator":        map[string]any{"type": "boolean"},
+					"no-context-separator":      map[string]any{"type": "boolean"},
+					"--no-context-separator":    map[string]any{"type": "boolean"},
 					"sort":                      map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"--sort":                    map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"sortr":                     map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
@@ -628,7 +649,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -801,6 +822,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	null := grepNull(input)
 	fieldMatchSeparator := grepFieldMatchSeparator(input)
 	fieldContextSeparator := grepFieldContextSeparator(input)
+	contextSeparator := grepContextSeparator(input)
+	noContextSeparator := grepNoContextSeparator(input)
 	countMatches := grepCountMatches(input) && mode == "count" && !invertMatch
 	includeZero := grepIncludeZero(input) && mode == "count"
 	replace, hasReplace := grepReplacement(input)
@@ -825,6 +848,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Null:                  null,
 		FieldMatchSeparator:   fieldMatchSeparator,
 		FieldContextSeparator: fieldContextSeparator,
+		ContextSeparator:      contextSeparator,
+		NoContextSeparator:    noContextSeparator,
 		HasReplace:            hasReplace,
 		Replace:               replace,
 		BeforeContext:         before,
@@ -878,6 +903,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"null":                    null,
 			"field_match_separator":   fieldMatchSeparator,
 			"field_context_separator": fieldContextSeparator,
+			"context_separator":       contextSeparator,
+			"no_context_separator":    noContextSeparator,
 			"replace":                 replace,
 			"has_replace":             hasReplace,
 			"before_context":          options.BeforeContext,
@@ -1484,6 +1511,8 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 		return strings.Join(paths, "\x00") + "\x00"
 	}
 	lines := make([]string, 0, len(matches))
+	var previous grepMatch
+	hasPrevious := false
 	for _, match := range matches {
 		switch options.Mode {
 		case "files_with_matches", "files_without_matches":
@@ -1495,8 +1524,13 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 				lines = append(lines, fmt.Sprintf("%d", match.Count))
 			}
 		default:
+			if grepNeedsContextSeparator(previous, hasPrevious, match, options, true) {
+				lines = append(lines, options.ContextSeparator)
+			}
 			lines = append(lines, formatGrepContentMatch(match, options))
 		}
+		previous = match
+		hasPrevious = true
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1506,24 +1540,44 @@ func formatGrepHeadingMatches(matches []grepMatch, options grepOptions) string {
 	lineOptions := options
 	lineOptions.WithFilename = false
 	currentPath := ""
+	var previous grepMatch
+	hasPrevious := false
 	for _, match := range matches {
 		if match.Path != currentPath {
 			if currentPath != "" {
 				lines = append(lines, "")
 			}
 			currentPath = match.Path
+			hasPrevious = false
 			if options.WithFilename {
 				header := grepDisplayPath(match.Path, options)
 				if options.Null {
 					lines = append(lines, header+"\x00"+formatGrepContentMatch(match, lineOptions))
+					previous = match
+					hasPrevious = true
 					continue
 				}
 				lines = append(lines, header)
 			}
 		}
+		if grepNeedsContextSeparator(previous, hasPrevious, match, lineOptions, false) {
+			lines = append(lines, lineOptions.ContextSeparator)
+		}
 		lines = append(lines, formatGrepContentMatch(match, lineOptions))
+		previous = match
+		hasPrevious = true
 	}
 	return strings.Join(lines, "\n")
+}
+
+func grepNeedsContextSeparator(previous grepMatch, hasPrevious bool, current grepMatch, options grepOptions, separateFiles bool) bool {
+	if !hasPrevious || options.NoContextSeparator || options.Mode != "content" || options.BeforeContext+options.AfterContext <= 0 {
+		return false
+	}
+	if previous.Path != current.Path {
+		return separateFiles
+	}
+	return previous.Line > 0 && current.Line > previous.Line+1
 }
 
 func formatGrepContentMatch(match grepMatch, options grepOptions) string {
@@ -1986,6 +2040,20 @@ func grepFieldContextSeparator(input grepInput) string {
 		return value
 	}
 	return "-"
+}
+
+func grepContextSeparator(input grepInput) string {
+	if value, ok := firstStringPointer(input.ContextSeparator, input.ContextSeparatorAlt, input.ContextSeparatorDash, input.LongContextSeparator); ok {
+		return value
+	}
+	return "--"
+}
+
+func grepNoContextSeparator(input grepInput) bool {
+	return input.NoContextSeparator ||
+		input.NoContextSeparatorAlt ||
+		input.NoContextSeparatorDash ||
+		input.LongNoContextSeparator
 }
 
 func firstStringPointer(values ...*string) (string, bool) {
