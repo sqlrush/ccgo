@@ -55,6 +55,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
+	"crlf": {}, "--crlf": {}, "no_crlf": {}, "noCrlf": {}, "noCRLF": {}, "no-crlf": {}, "--no-crlf": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
 	"text": {}, "--text": {}, "-a": {}, "no_text": {}, "noText": {}, "no-text": {}, "--no-text": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
@@ -100,6 +101,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
+	"crlf": {}, "--crlf": {}, "no_crlf": {}, "noCrlf": {}, "noCRLF": {}, "no-crlf": {}, "--no-crlf": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
 	"glob_case_insensitive": {}, "globCaseInsensitive": {}, "glob-case-insensitive": {}, "--glob-case-insensitive": {}, "no_glob_case_insensitive": {}, "noGlobCaseInsensitive": {}, "no-glob-case-insensitive": {}, "--no-glob-case-insensitive": {},
 	"text": {}, "--text": {}, "-a": {}, "no_text": {}, "noText": {}, "no-text": {}, "--no-text": {},
@@ -289,6 +291,13 @@ type grepInput struct {
 	SmartCaseDash             bool    `json:"smart-case,omitempty"`
 	LongSmartCase             bool    `json:"--smart-case,omitempty"`
 	ShortSmartCase            bool    `json:"-S,omitempty"`
+	CRLF                      bool    `json:"crlf,omitempty"`
+	LongCRLF                  bool    `json:"--crlf,omitempty"`
+	NoCRLF                    bool    `json:"no_crlf,omitempty"`
+	NoCRLFAlt                 bool    `json:"noCrlf,omitempty"`
+	NoCRLFUpperAlt            bool    `json:"noCRLF,omitempty"`
+	NoCRLFDash                bool    `json:"no-crlf,omitempty"`
+	LongNoCRLF                bool    `json:"--no-crlf,omitempty"`
 	FixedStrings              bool    `json:"fixed_strings,omitempty"`
 	FixedStringsAlt           bool    `json:"fixedStrings,omitempty"`
 	FixedStringsDash          bool    `json:"fixed-strings,omitempty"`
@@ -449,6 +458,7 @@ type grepOptions struct {
 	BeforeContext         int
 	AfterContext          int
 	LineNumbers           bool
+	CRLF                  bool
 	Multiline             bool
 	InvertMatch           bool
 	OnlyMatching          bool
@@ -503,6 +513,13 @@ func NewGlobTool() tool.Tool {
 		ReadOnlyFunc:    func(json.RawMessage) bool { return true },
 		ConcurrencyFunc: func(json.RawMessage) bool { return true },
 	}
+}
+
+type grepContentView struct {
+	Lines        []string
+	MatchContent string
+	MatchStarts  []int
+	ByteStarts   []int
 }
 
 func NewGrepTool() tool.Tool {
@@ -691,6 +708,13 @@ func NewGrepTool() tool.Tool {
 					"smart-case":       map[string]any{"type": "boolean"},
 					"--smart-case":     map[string]any{"type": "boolean"},
 					"-S":               map[string]any{"type": "boolean"},
+					"crlf":             map[string]any{"type": "boolean"},
+					"--crlf":           map[string]any{"type": "boolean"},
+					"no_crlf":          map[string]any{"type": "boolean"},
+					"noCrlf":           map[string]any{"type": "boolean"},
+					"noCRLF":           map[string]any{"type": "boolean"},
+					"no-crlf":          map[string]any{"type": "boolean"},
+					"--no-crlf":        map[string]any{"type": "boolean"},
 					"fixed_strings":    map[string]any{"type": "boolean"},
 					"fixedStrings":     map[string]any{"type": "boolean"},
 					"fixed-strings":    map[string]any{"type": "boolean"},
@@ -847,7 +871,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -1079,6 +1103,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		BeforeContext:         before,
 		AfterContext:          after,
 		LineNumbers:           grepLineNumbers(input, mode),
+		CRLF:                  grepCRLF(input),
 		Multiline:             grepMultiline(input),
 		InvertMatch:           invertMatch,
 		OnlyMatching:          onlyMatching,
@@ -1152,6 +1177,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"after_context":           options.AfterContext,
 			"line_numbers":            options.LineNumbers,
 			"column_numbers":          options.ColumnNumbers,
+			"crlf":                    options.CRLF,
+			"no_crlf":                 grepNoCRLF(input),
 			"case_insensitive":        grepEffectiveCaseInsensitive(input),
 			"case_sensitive":          grepCaseSensitive(input),
 			"smart_case":              grepSmartCase(input),
@@ -1512,42 +1539,40 @@ func readGrepText(path string, allowBinary bool) (string, error) {
 }
 
 func grepFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) []grepMatch {
-	content = normalizeGrepContent(content)
-	lines := strings.Split(content, "\n")
-	starts := grepLineStarts(lines)
+	view := newGrepContentView(content, options.CRLF)
 	if options.OnlyMatching {
 		if options.Multiline {
-			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
+			return grepMultilineOnlyMatches(path, view, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
 		}
-		return grepLineOnlyMatches(path, lines, starts, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
+		return grepLineOnlyMatches(path, view.Lines, view.ByteStarts, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
 	}
 	matched := map[int]bool{}
 	included := map[int]bool{}
 	if options.Multiline {
-		markMultilineMatches(lines, content, expr, options.MaxCount, options.BeforeContext, options.AfterContext, options.InvertMatch, matched, included)
+		markMultilineMatches(view, expr, options.MaxCount, options.BeforeContext, options.AfterContext, options.InvertMatch, matched, included)
 	} else {
-		markLineMatches(lines, expr, options.MaxCount, options.BeforeContext, options.AfterContext, options.InvertMatch, matched, included)
+		markLineMatches(view.Lines, expr, options.MaxCount, options.BeforeContext, options.AfterContext, options.InvertMatch, matched, included)
 	}
 	if options.Passthru {
-		for i := range lines {
+		for i := range view.Lines {
 			included[i] = true
 		}
 	}
 	if options.Vimgrep && !options.InvertMatch {
-		return grepVimgrepMatches(path, lines, starts, expr, matched, included, options)
+		return grepVimgrepMatches(path, view.Lines, view.ByteStarts, expr, matched, included, options)
 	}
 	matches := make([]grepMatch, 0, len(included))
-	for i := range lines {
+	for i := range view.Lines {
 		if !included[i] {
 			continue
 		}
 		column := 0
 		if matched[i] && options.ColumnNumbers && !options.InvertMatch {
-			if span := expr.FindStringIndex(lines[i]); len(span) == 2 {
+			if span := expr.FindStringIndex(view.Lines[i]); len(span) == 2 {
 				column = span[0] + 1
 			}
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, ByteOffset: starts[i], Text: grepDisplayMatchedLine(expr, lines[i], matched[i], options), Matched: matched[i]})
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, ByteOffset: view.ByteStarts[i], Text: grepDisplayMatchedLine(expr, view.Lines[i], matched[i], options), Matched: matched[i]})
 	}
 	return matches
 }
@@ -1601,20 +1626,19 @@ func grepLineOnlyMatches(path string, lines []string, starts []int, expr *regexp
 	return matches
 }
 
-func grepMultilineOnlyMatches(path string, lines []string, content string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool, options grepOptions) []grepMatch {
-	if content == "" {
+func grepMultilineOnlyMatches(path string, view grepContentView, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool, options grepOptions) []grepMatch {
+	if view.MatchContent == "" {
 		return nil
 	}
-	starts := grepLineStarts(lines)
 	var matches []grepMatch
-	for matchIndex, span := range expr.FindAllStringSubmatchIndex(content, -1) {
+	for matchIndex, span := range expr.FindAllStringSubmatchIndex(view.MatchContent, -1) {
 		if maxCount > 0 && matchIndex >= maxCount {
 			break
 		}
-		for i, lineStart := range starts {
-			lineEnd := lineStart + len(lines[i])
+		for i, lineStart := range view.MatchStarts {
+			lineEnd := lineStart + len(view.Lines[i])
 			lineSpanEnd := lineEnd
-			if i < len(lines)-1 {
+			if i < len(view.Lines)-1 {
 				lineSpanEnd++
 			}
 			if !grepSpanTouchesLine(span[0], span[1], lineStart, lineEnd, lineSpanEnd) {
@@ -1631,15 +1655,15 @@ func grepMultilineOnlyMatches(path string, lines []string, content string, expr 
 			if fragmentStart > fragmentEnd {
 				fragmentStart = fragmentEnd
 			}
-			text := lines[i][fragmentStart-lineStart : fragmentEnd-lineStart]
+			text := view.Lines[i][fragmentStart-lineStart : fragmentEnd-lineStart]
 			if options.HasReplace {
-				text = grepExpandReplacement(expr, content, span, options.Replace)
+				text = grepExpandReplacement(expr, view.MatchContent, span, options.Replace)
 			}
 			matches = append(matches, grepMatch{
 				Path:       path,
 				Line:       i + 1,
 				Column:     fragmentStart - lineStart + 1,
-				ByteOffset: fragmentStart,
+				ByteOffset: view.ByteStarts[i] + fragmentStart - lineStart,
 				Text:       grepDisplayLine(text, true, maxColumns, maxPreview, trim),
 				Matched:    true,
 			})
@@ -1648,9 +1672,51 @@ func grepMultilineOnlyMatches(path string, lines []string, content string, expr 
 	return matches
 }
 
-func normalizeGrepContent(content string) string {
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	return strings.TrimSuffix(content, "\n")
+func newGrepContentView(content string, crlf bool) grepContentView {
+	if crlf {
+		return newGrepCRLFContentView(content)
+	}
+	matchContent := strings.TrimSuffix(content, "\n")
+	lines := strings.Split(matchContent, "\n")
+	starts := grepLineStarts(lines)
+	return grepContentView{Lines: lines, MatchContent: matchContent, MatchStarts: starts, ByteStarts: starts}
+}
+
+func newGrepCRLFContentView(content string) grepContentView {
+	if content == "" {
+		return grepContentView{Lines: []string{""}, MatchContent: "", MatchStarts: []int{0}, ByteStarts: []int{0}}
+	}
+	var lines []string
+	var matchStarts []int
+	var byteStarts []int
+	var match strings.Builder
+	appendLine := func(line string, byteStart int) {
+		if len(lines) > 0 {
+			match.WriteByte('\n')
+		}
+		matchStarts = append(matchStarts, match.Len())
+		byteStarts = append(byteStarts, byteStart)
+		lines = append(lines, line)
+		match.WriteString(line)
+	}
+	lineStart := 0
+	for i := 0; i < len(content); {
+		if content[i] != '\r' && content[i] != '\n' {
+			i++
+			continue
+		}
+		appendLine(content[lineStart:i], lineStart)
+		if content[i] == '\r' && i+1 < len(content) && content[i+1] == '\n' {
+			i += 2
+		} else {
+			i++
+		}
+		lineStart = i
+	}
+	if lineStart < len(content) {
+		appendLine(content[lineStart:], lineStart)
+	}
+	return grepContentView{Lines: lines, MatchContent: match.String(), MatchStarts: matchStarts, ByteStarts: byteStarts}
 }
 
 func grepDisplayMatchedLine(expr *regexp.Regexp, line string, matched bool, options grepOptions) string {
@@ -1712,20 +1778,19 @@ func markLineMatches(lines []string, expr *regexp.Regexp, maxCount int, beforeCo
 	}
 }
 
-func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, maxCount int, beforeContext int, afterContext int, invert bool, matched map[int]bool, included map[int]bool) {
-	if content == "" {
+func markMultilineMatches(view grepContentView, expr *regexp.Regexp, maxCount int, beforeContext int, afterContext int, invert bool, matched map[int]bool, included map[int]bool) {
+	if view.MatchContent == "" {
 		return
 	}
-	starts := grepLineStarts(lines)
 	matches := 0
 	spanMatched := map[int]bool{}
-	for _, span := range expr.FindAllStringIndex(content, -1) {
+	for _, span := range expr.FindAllStringIndex(view.MatchContent, -1) {
 		first := -1
 		last := -1
-		for i, lineStart := range starts {
-			lineEnd := lineStart + len(lines[i])
+		for i, lineStart := range view.MatchStarts {
+			lineEnd := lineStart + len(view.Lines[i])
 			lineSpanEnd := lineEnd
-			if i < len(lines)-1 {
+			if i < len(view.Lines)-1 {
 				lineSpanEnd++
 			}
 			if grepSpanTouchesLine(span[0], span[1], lineStart, lineEnd, lineSpanEnd) {
@@ -1743,7 +1808,7 @@ func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, m
 				if maxCount > 0 && matches >= maxCount {
 					break
 				}
-				markGrepLineRange(first, last, len(lines), beforeContext, afterContext, matched, included)
+				markGrepLineRange(first, last, len(view.Lines), beforeContext, afterContext, matched, included)
 				matches++
 			}
 		}
@@ -1751,14 +1816,14 @@ func markMultilineMatches(lines []string, content string, expr *regexp.Regexp, m
 	if !invert {
 		return
 	}
-	for i := range lines {
+	for i := range view.Lines {
 		if spanMatched[i] {
 			continue
 		}
 		if maxCount > 0 && matches >= maxCount {
 			break
 		}
-		markGrepLineRange(i, i, len(lines), beforeContext, afterContext, matched, included)
+		markGrepLineRange(i, i, len(view.Lines), beforeContext, afterContext, matched, included)
 		matches++
 	}
 }
@@ -2294,6 +2359,21 @@ func grepSmartCase(input grepInput) bool {
 		input.SmartCaseDash ||
 		input.LongSmartCase ||
 		input.ShortSmartCase
+}
+
+func grepCRLF(input grepInput) bool {
+	if grepNoCRLF(input) {
+		return false
+	}
+	return input.CRLF || input.LongCRLF
+}
+
+func grepNoCRLF(input grepInput) bool {
+	return input.NoCRLF ||
+		input.NoCRLFAlt ||
+		input.NoCRLFUpperAlt ||
+		input.NoCRLFDash ||
+		input.LongNoCRLF
 }
 
 func grepEffectiveCaseInsensitive(input grepInput) bool {

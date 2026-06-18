@@ -3761,6 +3761,67 @@ func TestGrepToolMultiline(t *testing.T) {
 	}
 }
 
+func TestGrepToolCRLFAnchors(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "crlf.txt"), []byte("foo\r\nbar\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_crlf_default",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"foo$","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Content != "No matches found" || defaultResult.StructuredContent["crlf"] != false {
+		t.Fatalf("default CRLF anchor result = %#v", defaultResult)
+	}
+
+	crlfResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_crlf_enabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"foo$","output_mode":"content","--crlf":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if crlfResult.Content != "crlf.txt:1:foo" || crlfResult.StructuredContent["crlf"] != true {
+		t.Fatalf("enabled CRLF anchor result = %#v", crlfResult)
+	}
+
+	noCRLFResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_crlf_disabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"foo$","output_mode":"content","crlf":true,"--no-crlf":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noCRLFResult.Content != "No matches found" || noCRLFResult.StructuredContent["crlf"] != false || noCRLFResult.StructuredContent["no_crlf"] != true {
+		t.Fatalf("disabled CRLF anchor result = %#v", noCRLFResult)
+	}
+
+	offsetResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_crlf_byte_offset",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"bar$","output_mode":"content","--crlf":true,"--byte-offset":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if offsetResult.Content != "crlf.txt:2:5:bar" {
+		t.Fatalf("CRLF byte offset result = %#v", offsetResult)
+	}
+	matches := offsetResult.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 1 || matches[0]["byte_offset"] != 5 {
+		t.Fatalf("CRLF byte offset structured matches = %#v", matches)
+	}
+}
+
 func TestGrepToolTypeFilter(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
