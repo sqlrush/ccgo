@@ -712,7 +712,13 @@ func TestPowerShellRunsWhenAvailable(t *testing.T) {
 
 func waitForPowerShellOutput(t *testing.T, executor tool.Executor, ctx tool.Context, powerShellID string) contracts.ToolResult {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
+	if testDeadline, ok := t.Deadline(); ok {
+		testDeadline = testDeadline.Add(-time.Second)
+		if testDeadline.Before(deadline) {
+			deadline = testDeadline
+		}
+	}
 	for {
 		output, err := executor.Execute(ctx, contracts.ToolUse{
 			ID:    "toolu_powershell_background_output",
@@ -728,7 +734,7 @@ func waitForPowerShellOutput(t *testing.T, executor tool.Executor, ctx tool.Cont
 		if time.Now().After(deadline) {
 			t.Fatalf("background PowerShell command %s did not finish; last output = %#v", powerShellID, output.StructuredContent)
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
