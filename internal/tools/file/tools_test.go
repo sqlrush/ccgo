@@ -1814,6 +1814,51 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 	}
 }
 
+func TestGrepToolColumnNumbers(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"before",
+		"xx Needle here",
+		"after",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_column",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--column":true,"before_context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "a.txt-1-before\na.txt:2:4:xx Needle here"
+	if result.Content != want ||
+		result.StructuredContent["column_numbers"] != true {
+		t.Fatalf("column result = %#v", result)
+	}
+	matches := result.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 2 || matches[0]["column"] != nil || matches[1]["column"] != 4 {
+		t.Fatalf("column structured matches = %#v", matches)
+	}
+
+	semanticResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_column_semantic",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","column":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if semanticResult.Content != "a.txt:2:4:xx Needle here" ||
+		semanticResult.StructuredContent["column_numbers"] != true {
+		t.Fatalf("semantic column result = %#v", semanticResult)
+	}
+}
+
 func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	dir := t.TempDir()
 	longMatch := strings.Repeat("x", defaultGrepMaxColumns-len("Needle")) + "Needle"

@@ -201,6 +201,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
 - 本轮补充：Grep count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
 - 本轮补充：Grep 长行省略阈值现在支持 `max_columns`/`maxColumns`/`max-columns`/`--max-columns`，默认保持 500，传 `0` 可关闭省略，quoted semantic number 同样兼容。
+- 本轮补充：Grep content 输出现在支持 `column`/`column_numbers`/`columnNumbers`/`column-number`/`--column`，显式开启时匹配行会输出 `path:line:column:text` 并在 structured matches 中暴露首个匹配列号，context 行保持原格式；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 文件列表输出现在支持 `files_without_match`/`filesWithoutMatch`/`files-without-match`/`--files-without-match`/`-L`，也接受 `output_mode` 的 `files_without_match(es)`，用于列出不含匹配的文件并兼容 quoted boolean。
 - 本轮补充：Grep 文件列表输出现在显式支持 `files_with_match(es)`/`filesWithMatch(es)`/`files-with-match(es)`/`--files-with-match(es)`/`-l`，并接受 `output_mode` 的 `files_with_match` alias，统一归一为 `files_with_matches`。
 - 本轮补充：Grep 路径过滤现在支持 ripgrep 风格 `--glob`/`-g` 和 `--type`/`-t` aliases，执行和 structured content 都统一使用归一化后的 glob/type 过滤值。

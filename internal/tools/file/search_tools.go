@@ -33,6 +33,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
 	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
+	"column": {}, "column_numbers": {}, "columnNumbers": {}, "column-number": {}, "--column": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
@@ -55,6 +56,7 @@ var grepSemanticNumberKeys = map[string]struct{}{
 
 var grepSemanticBooleanKeys = map[string]struct{}{
 	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
+	"column": {}, "column_numbers": {}, "columnNumbers": {}, "column-number": {}, "--column": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
@@ -117,6 +119,11 @@ type grepInput struct {
 	LineNumbersDash         *bool  `json:"line-number,omitempty"`
 	LongLineNumbers         *bool  `json:"--line-number,omitempty"`
 	ShortLineNumbers        *bool  `json:"-n,omitempty"`
+	Column                  bool   `json:"column,omitempty"`
+	ColumnNumbers           bool   `json:"column_numbers,omitempty"`
+	ColumnNumbersAlt        bool   `json:"columnNumbers,omitempty"`
+	ColumnNumbersDash       bool   `json:"column-number,omitempty"`
+	LongColumn              bool   `json:"--column,omitempty"`
 	IgnoreCase              bool   `json:"ignore_case,omitempty"`
 	CaseInsensitive         bool   `json:"case_insensitive,omitempty"`
 	CaseInsensitiveAlt      bool   `json:"caseInsensitive,omitempty"`
@@ -218,6 +225,7 @@ type grepOptions struct {
 	InvertMatch   bool
 	OnlyMatching  bool
 	CountMatches  bool
+	ColumnNumbers bool
 	SortMode      string
 	SortReverse   bool
 	SortExplicit  bool
@@ -320,6 +328,11 @@ func NewGrepTool() tool.Tool {
 					"line-number":      map[string]any{"type": "boolean"},
 					"--line-number":    map[string]any{"type": "boolean"},
 					"-n":               map[string]any{"type": "boolean"},
+					"column":           map[string]any{"type": "boolean"},
+					"column_numbers":   map[string]any{"type": "boolean"},
+					"columnNumbers":    map[string]any{"type": "boolean"},
+					"column-number":    map[string]any{"type": "boolean"},
+					"--column":         map[string]any{"type": "boolean"},
 					"ignore_case":      map[string]any{"type": "boolean"},
 					"case_insensitive": map[string]any{"type": "boolean"},
 					"caseInsensitive":  map[string]any{"type": "boolean"},
@@ -422,7 +435,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -597,6 +610,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		InvertMatch:   grepInvertMatch(input),
 		OnlyMatching:  onlyMatching,
 		CountMatches:  countMatches,
+		ColumnNumbers: grepColumnNumbers(input),
 		SortMode:      sortMode,
 		SortReverse:   sortReverse,
 		SortExplicit:  sortExplicit,
@@ -630,6 +644,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"before_context":      options.BeforeContext,
 			"after_context":       options.AfterContext,
 			"line_numbers":        options.LineNumbers,
+			"column_numbers":      options.ColumnNumbers,
 			"case_insensitive":    grepEffectiveCaseInsensitive(input),
 			"case_sensitive":      grepCaseSensitive(input),
 			"smart_case":          grepSmartCase(input),
@@ -924,7 +939,13 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 		if !included[i] {
 			continue
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: grepDisplayLine(lines[i], matched[i], options.MaxColumns), Matched: matched[i]})
+		column := 0
+		if matched[i] && options.ColumnNumbers && !options.InvertMatch {
+			if span := expr.FindStringIndex(lines[i]); len(span) == 2 {
+				column = span[0] + 1
+			}
+		}
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayLine(lines[i], matched[i], options.MaxColumns), Matched: matched[i]})
 	}
 	return matches
 }
@@ -1137,6 +1158,10 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 				separator = "-"
 			}
 			if options.LineNumbers {
+				if options.ColumnNumbers && match.Matched && match.Column > 0 {
+					lines = append(lines, fmt.Sprintf("%s%s%d%s%d%s%s", match.Path, separator, match.Line, separator, match.Column, separator, match.Text))
+					continue
+				}
 				lines = append(lines, fmt.Sprintf("%s%s%d%s%s", match.Path, separator, match.Line, separator, match.Text))
 			} else {
 				lines = append(lines, fmt.Sprintf("%s%s%s", match.Path, separator, match.Text))
@@ -1533,6 +1558,14 @@ func grepCountMatches(input grepInput) bool {
 
 func grepNoIgnore(input grepInput) bool {
 	return input.NoIgnore || input.NoIgnoreAlt || input.NoIgnoreDash || input.LongNoIgnore
+}
+
+func grepColumnNumbers(input grepInput) bool {
+	return input.Column ||
+		input.ColumnNumbers ||
+		input.ColumnNumbersAlt ||
+		input.ColumnNumbersDash ||
+		input.LongColumn
 }
 
 func grepLineNumbers(input grepInput, mode string) bool {
