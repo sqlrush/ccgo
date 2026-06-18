@@ -516,20 +516,96 @@ func resolveSearchURL(raw string, base *url.URL) string {
 	if base != nil {
 		parsed = base.ResolveReference(parsed)
 	}
-	if isDuckDuckGoHost(parsed.Hostname()) && strings.HasPrefix(parsed.Path, "/l/") {
-		if target := parsed.Query().Get("uddg"); target != "" {
-			if unescaped, err := url.QueryUnescape(target); err == nil {
-				parsed, err = url.Parse(unescaped)
-				if err != nil {
-					return ""
-				}
-			}
-		}
+	if unwrapped := unwrapSearchRedirectURL(parsed); unwrapped != nil {
+		parsed = unwrapped
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return ""
 	}
 	return parsed.String()
+}
+
+func unwrapSearchRedirectURL(parsed *url.URL) *url.URL {
+	if parsed == nil {
+		return nil
+	}
+	current := *parsed
+	for i := 0; i < 3; i++ {
+		target := searchRedirectTarget(&current)
+		if target == "" {
+			return &current
+		}
+		next, err := url.Parse(target)
+		if err != nil {
+			return &current
+		}
+		if next.Scheme == "" && next.Host != "" && (current.Scheme == "http" || current.Scheme == "https") {
+			next.Scheme = current.Scheme
+		}
+		if !next.IsAbs() || (next.Scheme != "http" && next.Scheme != "https") {
+			return &current
+		}
+		current = *next
+	}
+	return &current
+}
+
+func searchRedirectTarget(parsed *url.URL) string {
+	if parsed == nil {
+		return ""
+	}
+	values := parsed.Query()
+	if isDuckDuckGoHost(parsed.Hostname()) && strings.HasPrefix(parsed.Path, "/l/") {
+		return firstAbsoluteSearchRedirectValue(values, "uddg")
+	}
+	if !looksLikeSearchRedirectPath(parsed.Path) {
+		return ""
+	}
+	return firstAbsoluteSearchRedirectValue(values, "url", "u", "target", "to", "redirect", "dest", "destination", "q")
+}
+
+func firstAbsoluteSearchRedirectValue(values url.Values, keys ...string) string {
+	for _, key := range keys {
+		for _, candidate := range values[key] {
+			if target := cleanSearchRedirectCandidate(candidate); target != "" {
+				return target
+			}
+		}
+	}
+	return ""
+}
+
+func cleanSearchRedirectCandidate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	for i := 0; i < 2; i++ {
+		if isAbsoluteSearchURL(raw) {
+			return raw
+		}
+		unescaped, err := url.QueryUnescape(raw)
+		if err != nil || unescaped == raw {
+			break
+		}
+		raw = strings.TrimSpace(unescaped)
+	}
+	if isAbsoluteSearchURL(raw) {
+		return raw
+	}
+	return ""
+}
+
+func looksLikeSearchRedirectPath(path string) bool {
+	path = strings.ToLower(strings.TrimSpace(path))
+	switch strings.TrimSuffix(path, "/") {
+	case "/url", "/redirect", "/redirects", "/link", "/links", "/out", "/outbound", "/away":
+		return true
+	default:
+		return strings.HasPrefix(path, "/url/") ||
+			strings.HasPrefix(path, "/redirect/") ||
+			strings.HasPrefix(path, "/link/") ||
+			strings.HasPrefix(path, "/out/") ||
+			strings.HasPrefix(path, "/outbound/") ||
+			strings.HasPrefix(path, "/away/")
+	}
 }
 
 func isSearchChromeURL(raw string) bool {

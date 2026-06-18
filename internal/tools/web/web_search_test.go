@@ -105,6 +105,62 @@ func TestWebSearchResolvesHTMLResultsAgainstBaseHref(t *testing.T) {
 	}
 }
 
+func TestWebSearchUnwrapsCommonRedirectResultURLs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+			<html><body>
+				<a class="result__a" href="/url?q=https%3A%2F%2Fdocs.example.com%2Fguide&amp;sa=U">Docs Guide</a>
+				<div class="result__snippet">Docs redirect snippet</div>
+				<a class="result__a" href="/redirect?url=%2F%2Fexample.com%2Fprotocol-relative">Protocol Relative</a>
+				<div class="result__snippet">Protocol-relative redirect snippet</div>
+				<a class="result__a" href="/out?target=https%253A%252F%252Fexample.com%252Fdouble-encoded">Double Encoded</a>
+				<div class="result__snippet">Double encoded redirect snippet</div>
+			</body></html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL + "/search",
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_redirect_urls",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"redirect urls","max_results":5}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 3 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	wants := []string{
+		"https://docs.example.com/guide",
+		"http://example.com/protocol-relative",
+		"https://example.com/double-encoded",
+	}
+	for i, want := range wants {
+		if results[i]["url"] != want {
+			t.Fatalf("result %d URL = %#v, want %q; results=%#v", i, results[i]["url"], want, results)
+		}
+	}
+	content := result.Content.(string)
+	if strings.Contains(content, server.URL+"/url") || strings.Contains(content, server.URL+"/redirect") || strings.Contains(content, server.URL+"/out") {
+		t.Fatalf("content kept redirect intermediary URLs: %#v", content)
+	}
+	base, err := url.Parse(server.URL + "/search")
+	if err != nil {
+		t.Fatal(err)
+	}
+	searchURL := resolveSearchURL("/search?q=https%3A%2F%2Fdocs.example.com%2Fquery", base)
+	if strings.HasPrefix(searchURL, "https://docs.example.com/") {
+		t.Fatalf("non-redirect search path was unwrapped: %q", searchURL)
+	}
+}
+
 func TestWebSearchParsesHTMLJSONLDResults(t *testing.T) {
 	page := `
 		<html><head><base href="/catalog/"></head><body>
