@@ -220,6 +220,8 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
     <img alt="Architecture diagram" src="/assets/diagram.png">
     <img title="Release checklist" src="/assets/checklist.png">
     <img aria-label="Responsive diagram" srcset="/assets/responsive-1x.png 1x, /assets/responsive-2x.png 2x">
+    <img alt="Lazy responsive diagram" data-srcset="/assets/lazy-1x.png 1x, /assets/lazy-2x.png 2x">
+    <img alt="Lazy source diagram" data-src="/assets/lazy-source.png">
     <picture>
       <source media="(min-width: 800px)" srcset="/assets/hero-large.png 1x, /assets/hero-large@2x.png 2x">
       <img alt="Hero diagram" src="/assets/hero-fallback.png">
@@ -263,6 +265,9 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Image: Responsive diagram ("+server.URL+"/assets/responsive-1x.png)") {
 		t.Fatalf("rendered body missing srcset image text: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Lazy responsive diagram ("+server.URL+"/assets/lazy-1x.png)") || !strings.Contains(rendered, "Image: Lazy source diagram ("+server.URL+"/assets/lazy-source.png)") {
+		t.Fatalf("rendered body missing lazy image text: %#v", rendered)
 	}
 	if !strings.Contains(rendered, "Image: Hero diagram ("+server.URL+"/assets/hero-large.png)") {
 		t.Fatalf("rendered body missing picture source image text: %#v", rendered)

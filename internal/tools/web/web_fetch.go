@@ -679,10 +679,17 @@ func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL stri
 }
 
 func webFetchImageSource(rawTag string) string {
-	if srcset := firstWebFetchSrcsetURL(htmlWebFetchAttr(rawTag, "srcset")); srcset != "" {
-		return srcset
+	for _, name := range []string{"srcset", "data-srcset", "data-lazy-srcset"} {
+		if srcset := firstWebFetchSrcsetURL(htmlWebFetchAttr(rawTag, name)); srcset != "" {
+			return srcset
+		}
 	}
-	return strings.TrimSpace(htmlWebFetchAttr(rawTag, "src"))
+	for _, name := range []string{"src", "data-src", "data-original", "data-lazy-src", "data-url"} {
+		if src := strings.TrimSpace(htmlWebFetchAttr(rawTag, name)); src != "" {
+			return src
+		}
+	}
+	return ""
 }
 
 func firstWebFetchSrcsetURL(raw string) string {
