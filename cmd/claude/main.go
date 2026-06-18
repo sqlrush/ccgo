@@ -2137,31 +2137,32 @@ func firstNonEmpty(values ...string) string {
 }
 
 type printJSONResult struct {
-	Type           string                   `json:"type"`
-	Subtype        string                   `json:"subtype"`
-	IsError        bool                     `json:"is_error"`
-	DurationMS     int64                    `json:"duration_ms"`
-	DurationAPI    int64                    `json:"duration_api_ms"`
-	NumTurns       int                      `json:"num_turns,omitempty"`
-	TotalCost      float64                  `json:"total_cost_usd,omitempty"`
-	SessionID      contracts.ID             `json:"session_id,omitempty"`
-	CWD            string                   `json:"cwd,omitempty"`
-	PermissionMode string                   `json:"permission_mode,omitempty"`
-	APIKeySource   string                   `json:"api_key_source,omitempty"`
-	Betas          []string                 `json:"betas,omitempty"`
-	FastMode       bool                     `json:"fast_mode,omitempty"`
-	OutputStyle    string                   `json:"output_style,omitempty"`
-	OutputStyles   []string                 `json:"available_output_styles,omitempty"`
-	Result         string                   `json:"result"`
-	Error          string                   `json:"error,omitempty"`
-	Message        *contracts.Message       `json:"message,omitempty"`
-	StopReason     string                   `json:"stop_reason,omitempty"`
-	Model          string                   `json:"model,omitempty"`
-	Usage          *contracts.Usage         `json:"usage,omitempty"`
-	ToolResults    []contracts.ToolResult   `json:"tool_results,omitempty"`
-	Cleared        bool                     `json:"cleared,omitempty"`
-	Compacted      bool                     `json:"compacted,omitempty"`
-	Compact        *session.CompactMetadata `json:"compact,omitempty"`
+	Type            string                   `json:"type"`
+	Subtype         string                   `json:"subtype"`
+	IsError         bool                     `json:"is_error"`
+	DurationMS      int64                    `json:"duration_ms"`
+	DurationAPI     int64                    `json:"duration_api_ms"`
+	NumTurns        int                      `json:"num_turns,omitempty"`
+	TotalCost       float64                  `json:"total_cost_usd,omitempty"`
+	SessionID       contracts.ID             `json:"session_id,omitempty"`
+	CWD             string                   `json:"cwd,omitempty"`
+	PermissionMode  string                   `json:"permission_mode,omitempty"`
+	APIKeySource    string                   `json:"api_key_source,omitempty"`
+	Betas           []string                 `json:"betas,omitempty"`
+	FastMode        bool                     `json:"fast_mode,omitempty"`
+	OutputStyle     string                   `json:"output_style,omitempty"`
+	OutputStyles    []string                 `json:"available_output_styles,omitempty"`
+	Result          string                   `json:"result"`
+	Error           string                   `json:"error,omitempty"`
+	Message         *contracts.Message       `json:"message,omitempty"`
+	StopReason      string                   `json:"stop_reason,omitempty"`
+	Model           string                   `json:"model,omitempty"`
+	ModelsAttempted []string                 `json:"models_attempted,omitempty"`
+	Usage           *contracts.Usage         `json:"usage,omitempty"`
+	ToolResults     []contracts.ToolResult   `json:"tool_results,omitempty"`
+	Cleared         bool                     `json:"cleared,omitempty"`
+	Compacted       bool                     `json:"compacted,omitempty"`
+	Compact         *session.CompactMetadata `json:"compact,omitempty"`
 }
 
 type printStreamEvent struct {
@@ -2622,22 +2623,23 @@ func writePrintJSONResult(stdout io.Writer, runner conversation.Runner, result c
 		model = strings.TrimSpace(runner.Model)
 	}
 	envelope := printJSONResult{
-		Type:        "result",
-		Subtype:     "success",
-		IsError:     false,
-		DurationMS:  durationMillis(duration),
-		DurationAPI: durationMillis(result.APIDuration),
-		NumTurns:    resultNumTurns(result),
-		TotalCost:   usageCostUSD(usage),
-		SessionID:   sessionID,
-		Result:      text,
-		Message:     messagePtr,
-		StopReason:  result.StopReason,
-		Model:       model,
-		Usage:       usage,
-		ToolResults: result.ToolResults,
-		Cleared:     result.Cleared,
-		Compacted:   result.Compacted,
+		Type:            "result",
+		Subtype:         "success",
+		IsError:         false,
+		DurationMS:      durationMillis(duration),
+		DurationAPI:     durationMillis(result.APIDuration),
+		NumTurns:        resultNumTurns(result),
+		TotalCost:       usageCostUSD(usage),
+		SessionID:       sessionID,
+		Result:          text,
+		Message:         messagePtr,
+		StopReason:      result.StopReason,
+		Model:           model,
+		ModelsAttempted: append([]string(nil), result.ModelsAttempt...),
+		Usage:           usage,
+		ToolResults:     result.ToolResults,
+		Cleared:         result.Cleared,
+		Compacted:       result.Compacted,
 	}
 	applyPrintJSONRuntime(&envelope, runner)
 	if result.Compact != nil {

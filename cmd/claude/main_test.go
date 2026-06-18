@@ -2273,6 +2273,25 @@ func TestResultNumTurnsCountsAssistantMessages(t *testing.T) {
 	}
 }
 
+func TestWritePrintJSONResultIncludesModelsAttempted(t *testing.T) {
+	result := conversation.Result{
+		Assistant:     messages.AssistantText("fallback ok", "haiku", nil),
+		ModelsAttempt: []string{"sonnet", "haiku"},
+	}
+	var stdout bytes.Buffer
+	if err := writePrintJSONResult(&stdout, conversation.Runner{Model: "sonnet"}, result, "fallback ok", 10); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	attempts, ok := payload["models_attempted"].([]any)
+	if !ok || len(attempts) != 2 || attempts[0] != "sonnet" || attempts[1] != "haiku" {
+		t.Fatalf("models_attempted = %#v", payload["models_attempted"])
+	}
+}
+
 func TestWritePrintJSONResultIncludesCompactMetadata(t *testing.T) {
 	plan := compactpkg.BuildPlan(
 		[]contracts.Message{messages.UserText("old")},
