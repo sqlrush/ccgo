@@ -2509,6 +2509,14 @@ func unsafeReadOnlyPathFlag(command string, word string) bool {
 	if command == "rg" && (word == "--pre" || strings.HasPrefix(word, "--pre=")) {
 		return true
 	}
+	if command == "tail" {
+		if word == "--follow" || strings.HasPrefix(word, "--follow=") {
+			return true
+		}
+		if strings.HasPrefix(word, "-") && !strings.HasPrefix(word, "--") && strings.ContainsAny(strings.TrimLeft(word, "-"), "fF") {
+			return true
+		}
+	}
 	return false
 }
 
