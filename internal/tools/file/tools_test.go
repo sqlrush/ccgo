@@ -1645,6 +1645,96 @@ func TestGrepToolStats(t *testing.T) {
 	}
 }
 
+func TestGrepToolJSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("before\nNeedle Needle\nafter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("none\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--json":true,"context":1,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["json"] != true || result.StructuredContent["stats_enabled"] != true {
+		t.Fatalf("json structured content = %#v", result.StructuredContent)
+	}
+	lines := strings.Split(result.Content.(string), "\n")
+	if len(lines) != 6 {
+		t.Fatalf("json line count = %d content = %s", len(lines), result.Content)
+	}
+	events := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("json event %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	wantTypes := []string{"begin", "context", "match", "context", "end", "summary"}
+	for i, wantType := range wantTypes {
+		if events[i]["type"] != wantType {
+			t.Fatalf("event %d type = %#v, want %s", i, events[i]["type"], wantType)
+		}
+	}
+	matchData := events[2]["data"].(map[string]any)
+	if matchData["line_number"] != float64(2) || matchData["absolute_offset"] != float64(7) {
+		t.Fatalf("match event data = %#v", matchData)
+	}
+	submatches := matchData["submatches"].([]any)
+	if len(submatches) != 2 {
+		t.Fatalf("submatches = %#v", submatches)
+	}
+	summaryData := events[5]["data"].(map[string]any)
+	summaryStats := summaryData["stats"].(map[string]any)
+	if summaryStats["matches"] != float64(2) ||
+		summaryStats["matched_lines"] != float64(1) ||
+		summaryStats["searches"] != float64(2) ||
+		summaryStats["searches_with_match"] != float64(1) ||
+		summaryStats["bytes_searched"] != float64(32) {
+		t.Fatalf("summary stats = %#v", summaryStats)
+	}
+
+	quietResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_quiet",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"--quiet":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var quietEvent map[string]any
+	if err := json.Unmarshal([]byte(quietResult.Content.(string)), &quietEvent); err != nil {
+		t.Fatalf("quiet json content = %q: %v", quietResult.Content, err)
+	}
+	quietStats := quietEvent["data"].(map[string]any)["stats"].(map[string]any)
+	if quietEvent["type"] != "summary" || quietStats["bytes_printed"] != float64(0) {
+		t.Fatalf("quiet json event = %#v", quietEvent)
+	}
+
+	noJSONResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_json_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","json":true,"--no-json":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noJSONResult.Content != "a.txt:2:Needle Needle" ||
+		noJSONResult.StructuredContent["json"] != false ||
+		noJSONResult.StructuredContent["no_json"] != true {
+		t.Fatalf("no-json override result = %#v", noJSONResult)
+	}
+}
+
 func TestGrepToolFilesMode(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
