@@ -282,6 +282,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：slash command 现在有基础 local command result 抽象，`/clear` 不再落入 unsupported 分支，会生成 local text result、保留 command metadata message，并且不会请求模型；完整 REPL conversation reset、local command text/compact/skip 全语义、`/cost`/`/status`/`/compact` 和 local-jsx UI 执行仍未宣称完成。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
+- 本轮补充：PowerShell read-only 分类补齐常见 pipeline alias canonicalization，包括 `select`/`sort`/`group`/`where`/`?`、`ft`/`fl`/`fw`/`fc` 和 `measure`，复用现有参数表达式 guard。
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。
 - 本轮补充：Bash read-only 分类新增 `sed` 保守只读子集，允许 `-n`/`--quiet`、`-e`/`--expression` 的纯打印/删除/退出/行号脚本读取安全相对路径，同时拒绝 `-i`、`-f`、写文件/执行命令脚本和越界路径。
 - 本轮补充：Bash read-only 分类新增 `awk`/`gawk`/`mawk`/`nawk` 极小安全子集，允许 `{print}` 和 `{print $1, $2}` 这类纯输出脚本读取安全相对路径，并拒绝脚本文件、重定向、`system`/复杂表达式和越界路径。

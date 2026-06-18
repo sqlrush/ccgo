@@ -1944,6 +1944,24 @@ func canonicalCommand(command string) string {
 		return "write-output"
 	case "sleep":
 		return "start-sleep"
+	case "select":
+		return "select-object"
+	case "sort":
+		return "sort-object"
+	case "group":
+		return "group-object"
+	case "where", "?":
+		return "where-object"
+	case "ft":
+		return "format-table"
+	case "fl":
+		return "format-list"
+	case "fw":
+		return "format-wide"
+	case "fc":
+		return "format-custom"
+	case "measure":
+		return "measure-object"
 	default:
 		return name
 	}
