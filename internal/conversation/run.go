@@ -4714,6 +4714,11 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		case "enable", "disable":
 			return r.setMCPServerEnabledSummary(args)
 		default:
+			if len(args) == 1 {
+				if server, ok := findMCPServerSummary(r.mcpServers(), args[0]); ok {
+					return r.formatMCPServerShow([]string{"show", server.Name})
+				}
+			}
 			return "MCP subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
 	}

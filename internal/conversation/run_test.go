@@ -4957,6 +4957,27 @@ func TestRunnerMCPSlashCommandShowsServerDetails(t *testing.T) {
 	if strings.Contains(text, "secret-token") {
 		t.Fatalf("mcp show leaked env value: %q", text)
 	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/mcp alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP server alpha",
+		"Status: configured",
+		"Transport: stdio",
+		"Target: python server.py",
+		"Source: settings",
+		"Env names: API_TOKEN, HOST",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("direct mcp show missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "secret-token") {
+		t.Fatalf("direct mcp show leaked env value: %q", text)
+	}
 }
 
 func TestRunnerMCPSlashCommandSearchesServers(t *testing.T) {
