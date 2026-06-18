@@ -2089,6 +2089,74 @@ func TestGrepToolFilenameControls(t *testing.T) {
 	}
 }
 
+func TestGrepToolHeading(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle one\nskip\nNeedle two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("before\nNeedle beta\nafter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	headingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_heading",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--heading":"true","context":1,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHeading := "a.txt\n1:Needle one\n2-skip\n3:Needle two\n\nb.txt\n1-before\n2:Needle beta\n3-after"
+	if headingResult.Content != wantHeading || headingResult.StructuredContent["heading"] != true {
+		t.Fatalf("heading result = %#v", headingResult)
+	}
+
+	noFilenameResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_heading_no_filename",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","heading":true,"--no-filename":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoFilename := "1:Needle one\n3:Needle two\n\n2:Needle beta"
+	if noFilenameResult.Content != wantNoFilename ||
+		noFilenameResult.StructuredContent["heading"] != true ||
+		noFilenameResult.StructuredContent["with_filename"] != false {
+		t.Fatalf("heading no-filename result = %#v", noFilenameResult)
+	}
+
+	noHeadingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_heading",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","heading":true,"no-heading":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoHeading := "a.txt:1:Needle one\na.txt:3:Needle two\nb.txt:2:Needle beta"
+	if noHeadingResult.Content != wantNoHeading || noHeadingResult.StructuredContent["heading"] != false {
+		t.Fatalf("no-heading result = %#v", noHeadingResult)
+	}
+
+	vimgrepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_heading_vimgrep_ignored",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","heading":true,"--vimgrep":true,"sort":"path","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVimgrep := "a.txt:1:1:Needle one\n\n[Showing results with pagination = limit: 1]"
+	if vimgrepResult.Content != wantVimgrep ||
+		vimgrepResult.StructuredContent["heading"] != false ||
+		vimgrepResult.StructuredContent["vimgrep"] != true {
+		t.Fatalf("heading vimgrep result = %#v", vimgrepResult)
+	}
+}
+
 func TestGrepToolIncludeZero(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\n"), 0o644); err != nil {
