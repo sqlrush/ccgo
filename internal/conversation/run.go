@@ -112,7 +112,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			return result, nil
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultCost {
-			return r.appendLocalTextResult(result, history, formatCostSummary(localResult.Value, originalHistory))
+			return r.appendLocalTextResult(result, history, formatCostSummary(localResult.Value, r.costHistory(originalHistory)))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultIssue {
 			return r.appendLocalTextResult(result, history, r.formatIssueSummary(localResult.Value))
@@ -580,6 +580,77 @@ func formatCostSummary(raw string, history []contracts.Message) string {
 		}
 	}
 	return formatCostTotals(history)
+}
+
+func (r Runner) costHistory(history []contracts.Message) []contracts.Message {
+	sessionPath := strings.TrimSpace(r.SessionPath)
+	if sessionPath == "" {
+		return history
+	}
+	entries, err := session.Load(sessionPath)
+	if err != nil {
+		return history
+	}
+	var transcriptHistory []contracts.Message
+	for _, entry := range entries {
+		if entry.Message == nil {
+			continue
+		}
+		message := *entry.Message
+		if !messageBelongsToSession(entry, message, r.SessionID) {
+			continue
+		}
+		transcriptHistory = append(transcriptHistory, message)
+	}
+	if len(transcriptHistory) == 0 {
+		return history
+	}
+	return mergeCostHistories(transcriptHistory, history)
+}
+
+func messageBelongsToSession(entry contracts.SessionEntry, message contracts.Message, sessionID contracts.ID) bool {
+	if sessionID == "" {
+		return true
+	}
+	if entry.SessionID != "" {
+		return entry.SessionID == sessionID || message.SessionID == sessionID
+	}
+	if message.SessionID != "" {
+		return message.SessionID == sessionID
+	}
+	return true
+}
+
+func mergeCostHistories(primary []contracts.Message, secondary []contracts.Message) []contracts.Message {
+	merged := make([]contracts.Message, 0, len(primary)+len(secondary))
+	seen := map[string]struct{}{}
+	appendMessage := func(message contracts.Message) {
+		key := costHistoryMessageKey(message)
+		if key != "" {
+			if _, ok := seen[key]; ok {
+				return
+			}
+			seen[key] = struct{}{}
+		}
+		merged = append(merged, message)
+	}
+	for _, message := range primary {
+		appendMessage(message)
+	}
+	for _, message := range secondary {
+		appendMessage(message)
+	}
+	return merged
+}
+
+func costHistoryMessageKey(message contracts.Message) string {
+	if message.UUID != "" {
+		return "uuid:" + string(message.UUID)
+	}
+	if strings.TrimSpace(message.ID) != "" {
+		return "id:" + strings.TrimSpace(message.ID)
+	}
+	return ""
 }
 
 func formatCostTotals(history []contracts.Message) string {

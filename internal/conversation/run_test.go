@@ -2104,6 +2104,86 @@ func TestRunnerCostSlashCommandReportsMissingUsage(t *testing.T) {
 	}
 }
 
+func TestRunnerCostSlashCommandRestoresUsageFromSessionTranscript(t *testing.T) {
+	client := &fakeClient{}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	usage := contracts.Usage{
+		InputTokens:  11,
+		OutputTokens: 13,
+		CostUSD:      0.25,
+	}
+	prior := messages.AssistantText("old charged turn", "sonnet", &usage)
+	prior.UUID = "cost_restored"
+	prior.SessionID = "sess_cost_restore"
+	if err := session.Append(transcriptPath, session.EntryFromMessage("sess_cost_restore", prior)); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_cost_restore",
+		SessionPath: transcriptPath,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/cost"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Total cost: $0.250000",
+		"Input tokens: 11",
+		"Output tokens: 13",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("restored cost missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerCostSlashCommandDedupesResumeHistoryAndTranscriptUsage(t *testing.T) {
+	client := &fakeClient{}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	usage := contracts.Usage{
+		InputTokens:  11,
+		OutputTokens: 13,
+		CostUSD:      0.25,
+	}
+	prior := messages.AssistantText("old charged turn", "sonnet", &usage)
+	prior.UUID = "cost_dedupe"
+	prior.SessionID = "sess_cost_dedupe"
+	if err := session.Append(transcriptPath, session.EntryFromMessage("sess_cost_dedupe", prior)); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_cost_dedupe",
+		SessionPath: transcriptPath,
+	}
+	result, err := runner.RunTurn(context.Background(), []contracts.Message{prior}, messages.UserText("/cost"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Total cost: $0.250000",
+		"Input tokens: 11",
+		"Output tokens: 13",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("deduped cost missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "$0.500000") || strings.Contains(text, "Input tokens: 22") || strings.Contains(text, "Output tokens: 26") {
+		t.Fatalf("cost was double-counted: %q", text)
+	}
+}
+
 func TestRunnerCostSlashCommandReportsBreakdown(t *testing.T) {
 	client := &fakeClient{}
 	runner := Runner{Client: client, SessionID: "sess_cost_breakdown"}
