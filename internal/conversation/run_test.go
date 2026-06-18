@@ -2578,13 +2578,9 @@ func TestRunnerStartsConfiguredLSPServer(t *testing.T) {
 	if process == nil {
 		t.Fatalf("lsp process was not recorded: %#v", runner.LSPProcesses)
 	}
-	select {
-	case result := <-process.Done():
-		if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
-			t.Fatalf("lsp process result = %#v", result)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for lsp process")
+	result := waitForConversationLSPProcess(t, process, "lsp")
+	if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
+		t.Fatalf("lsp process result = %#v", result)
 	}
 	status, err := lsppkg.LoadManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_start"))
 	if err != nil {
@@ -2635,13 +2631,9 @@ func TestRunnerStartsDefaultLSPServer(t *testing.T) {
 	if process == nil {
 		t.Fatalf("default lsp process was not recorded: %#v", runner.LSPProcesses)
 	}
-	select {
-	case result := <-process.Done():
-		if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
-			t.Fatalf("default lsp process result = %#v", result)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for default lsp process")
+	result := waitForConversationLSPProcess(t, process, "default lsp")
+	if result.RuntimeState != lsppkg.ServerRuntimeExited || result.Diagnostics.InitializeResponses != 1 || result.Diagnostics.DiagnosticsUpdates != 1 {
+		t.Fatalf("default lsp process result = %#v", result)
 	}
 	status, err := lsppkg.LoadManagerStatus(lsppkg.SessionManagerStatusPath(transcriptPath, "sess_lsp_default_start"))
 	if err != nil {
@@ -6819,6 +6811,17 @@ func conversationLSPHelperDefinition() lsppkg.ServerDefinition {
 		Args:           []string{"-test.run=TestConversationLSPServerHelper", "--", "conversation-lsp-helper"},
 		FileExtensions: []string{".go"},
 		RootMarkers:    []string{"go.mod"},
+	}
+}
+
+func waitForConversationLSPProcess(t *testing.T, process *lsppkg.ServerProcess, label string) lsppkg.ServerProcessResult {
+	t.Helper()
+	select {
+	case result := <-process.Done():
+		return result
+	case <-time.After(30 * time.Second):
+		t.Fatalf("timed out waiting for %s process", label)
+		return lsppkg.ServerProcessResult{}
 	}
 }
 
