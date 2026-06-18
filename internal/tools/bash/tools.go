@@ -2131,7 +2131,7 @@ func readOnlyWords(words []string) bool {
 	}
 	cmd := filepathBase(words[0])
 	switch cmd {
-	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df":
+	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "cut", "uniq":
 		return readOnlyPathCommand(words)
 	case "sed":
 		return readOnlySed(words[1:])

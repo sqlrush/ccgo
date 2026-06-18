@@ -285,6 +285,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash 文件读取/搜索类 read-only 命令增加基础相对路径 guard，绝对路径、home、父目录、变量路径、Windows drive、UNC 和 URI/provider-like 路径不再自动允许。
 - 本轮补充：Bash read-only 分类新增 `sed` 保守只读子集，允许 `-n`/`--quiet`、`-e`/`--expression` 的纯打印/删除/退出/行号脚本读取安全相对路径，同时拒绝 `-i`、`-f`、写文件/执行命令脚本和越界路径。
 - 本轮补充：Bash read-only 分类新增 `awk`/`gawk`/`mawk`/`nawk` 极小安全子集，允许 `{print}` 和 `{print $1, $2}` 这类纯输出脚本读取安全相对路径，并拒绝脚本文件、重定向、`system`/复杂表达式和越界路径。
+- 本轮补充：Bash 文件读取类 read-only 命令新增 `cut`/`uniq`，复用安全相对路径 guard，允许常见字段/字符裁剪和去重读取，同时拒绝绝对路径、父目录和变量/URI/provider-like 路径。
 - 本轮补充：Bash `rg` read-only 分类现在拒绝 `--pre`/`--pre=...` 外部预处理命令，避免 ripgrep 调用任意预处理器时仍进入只读快路径。
 - 本轮补充：Bash `go list` read-only 分类从只看子命令收敛到参数级 allowlist，允许常见查询参数和 `-mod=readonly/vendor`，拒绝 `-mod=mod`、`-modfile`、`-overlay`、未知 flag、缺值 flag 以及非本地 package pattern。
 - 本轮补充：Bash `find` read-only 分类现在拒绝 `-delete`、`-fprint`、`-fprint0`、`-fprintf` 和 `-fls` 等删除/写文件 action，避免同一命令既被标成 destructive 又进入只读快路径。
