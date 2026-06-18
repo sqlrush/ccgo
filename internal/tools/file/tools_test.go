@@ -1456,17 +1456,17 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("files-without-match result = %#v", filesWithoutResult)
 	}
 
-	shortFilesWithoutResult, err := executor.Execute(ctx, contracts.ToolUse{
-		ID:    "toolu_grep_files_without_match_short",
+	longFilesWithoutResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_files_without_match_long",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","-L":"true"}`),
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.go","--files-without-match":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shortFilesWithoutResult.Content != "Found 1 file\nsrc/noalpha.go" ||
-		shortFilesWithoutResult.StructuredContent["files_without_match"] != true {
-		t.Fatalf("short files-without-match result = %#v", shortFilesWithoutResult)
+	if longFilesWithoutResult.Content != "Found 1 file\nsrc/noalpha.go" ||
+		longFilesWithoutResult.StructuredContent["files_without_match"] != true {
+		t.Fatalf("long files-without-match result = %#v", longFilesWithoutResult)
 	}
 
 	multiGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
@@ -4015,6 +4015,78 @@ func TestGrepToolHiddenControls(t *testing.T) {
 	wantNoIgnoreNoHidden := "Found 2 files\nignored.log\nvisible.txt"
 	if noIgnoreNoHiddenResult.Content != wantNoIgnoreNoHidden {
 		t.Fatalf("no-ignore no-hidden result = %#v", noIgnoreNoHiddenResult)
+	}
+}
+
+func TestGrepToolFollowSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFileDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "plain.txt"), []byte("Needle regular file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideDir, "linked.txt"), []byte("Needle through linked directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideFileDir, "outside.txt"), []byte("Needle through linked file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	symlink := func(oldname string, newname string) {
+		t.Helper()
+		if err := os.Symlink(oldname, newname); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+	}
+	symlink(outsideDir, filepath.Join(dir, "linkdir"))
+	symlink(filepath.Join(outsideFileDir, "outside.txt"), filepath.Join(dir, "linkfile.txt"))
+	symlink(dir, filepath.Join(outsideDir, "loop"))
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_symlink_default",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Content != "Found 1 file\nplain.txt" ||
+		defaultResult.StructuredContent["follow"] != false ||
+		defaultResult.StructuredContent["no_follow"] != false {
+		t.Fatalf("default symlink result = %#v", defaultResult)
+	}
+
+	followResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_symlink_follow",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","-L":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedFollow := "Found 3 files\n" +
+		"linkdir/linked.txt\n" +
+		"linkfile.txt\n" +
+		"plain.txt"
+	if followResult.Content != expectedFollow ||
+		followResult.StructuredContent["follow"] != true ||
+		followResult.StructuredContent["no_follow"] != false {
+		t.Fatalf("follow symlink result = %#v", followResult)
+	}
+
+	noFollowResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_symlink_no_follow",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--follow":true,"--no-follow":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noFollowResult.Content != "Found 1 file\nplain.txt" ||
+		noFollowResult.StructuredContent["follow"] != false ||
+		noFollowResult.StructuredContent["no_follow"] != true {
+		t.Fatalf("no-follow symlink result = %#v", noFollowResult)
 	}
 }
 
