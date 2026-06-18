@@ -46,6 +46,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"line_regexp": {}, "lineRegexp": {}, "line-regexp": {}, "--line-regexp": {}, "-x": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
+	"vimgrep": {}, "--vimgrep": {},
 	"passthru": {}, "passthrough": {}, "--passthru": {}, "--passthrough": {},
 	"trim": {}, "--trim": {}, "no_trim": {}, "noTrim": {}, "no-trim": {}, "--no-trim": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
@@ -75,6 +76,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"line_regexp": {}, "lineRegexp": {}, "line-regexp": {}, "--line-regexp": {}, "-x": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
+	"vimgrep": {}, "--vimgrep": {},
 	"passthru": {}, "passthrough": {}, "--passthru": {}, "--passthrough": {},
 	"trim": {}, "--trim": {}, "no_trim": {}, "noTrim": {}, "no-trim": {}, "--no-trim": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
@@ -197,6 +199,8 @@ type grepInput struct {
 	OnlyMatchingDash        bool   `json:"only-matching,omitempty"`
 	LongOnlyMatching        bool   `json:"--only-matching,omitempty"`
 	ShortOnlyMatching       bool   `json:"-o,omitempty"`
+	Vimgrep                 bool   `json:"vimgrep,omitempty"`
+	LongVimgrep             bool   `json:"--vimgrep,omitempty"`
 	Passthru                bool   `json:"passthru,omitempty"`
 	Passthrough             bool   `json:"passthrough,omitempty"`
 	LongPassthru            bool   `json:"--passthru,omitempty"`
@@ -272,6 +276,7 @@ type grepOptions struct {
 	Multiline     bool
 	InvertMatch   bool
 	OnlyMatching  bool
+	Vimgrep       bool
 	Passthru      bool
 	Trim          bool
 	CountMatches  bool
@@ -446,6 +451,8 @@ func NewGrepTool() tool.Tool {
 					"only-matching":    map[string]any{"type": "boolean"},
 					"--only-matching":  map[string]any{"type": "boolean"},
 					"-o":               map[string]any{"type": "boolean"},
+					"vimgrep":          map[string]any{"type": "boolean"},
+					"--vimgrep":        map[string]any{"type": "boolean"},
 					"passthru":         map[string]any{"type": "boolean"},
 					"passthrough":      map[string]any{"type": "boolean"},
 					"--passthru":       map[string]any{"type": "boolean"},
@@ -522,7 +529,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, only_matching/-o/--only-matching matched-text output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -680,6 +687,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		before = 0
 		after = 0
 	}
+	vimgrep := grepVimgrep(input) && mode == "content"
 	passthru := grepPassthru(input) && mode == "content" && !onlyMatching
 	if passthru {
 		before = 0
@@ -704,6 +712,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Multiline:     grepMultiline(input),
 		InvertMatch:   invertMatch,
 		OnlyMatching:  onlyMatching,
+		Vimgrep:       vimgrep,
 		Passthru:      passthru,
 		Trim:          trim,
 		CountMatches:  countMatches,
@@ -753,6 +762,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"line_regexp":         grepLineRegexp(input),
 			"invert_match":        invertMatch,
 			"only_matching":       onlyMatching,
+			"vimgrep":             vimgrep,
 			"passthru":            passthru,
 			"trim":                trim,
 			"files_with_matches":  mode == "files_with_matches",
@@ -1049,6 +1059,9 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 			included[i] = true
 		}
 	}
+	if options.Vimgrep && !options.InvertMatch {
+		return grepVimgrepMatches(path, lines, expr, matched, included, options)
+	}
 	matches := make([]grepMatch, 0, len(included))
 	for i := range lines {
 		if !included[i] {
@@ -1061,6 +1074,29 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 			}
 		}
 		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayLine(lines[i], matched[i], options.MaxColumns, options.MaxPreview, options.Trim), Matched: matched[i]})
+	}
+	return matches
+}
+
+func grepVimgrepMatches(path string, lines []string, expr *regexp.Regexp, matched map[int]bool, included map[int]bool, options grepOptions) []grepMatch {
+	matches := make([]grepMatch, 0, len(included))
+	for i := range lines {
+		if !included[i] {
+			continue
+		}
+		text := grepDisplayLine(lines[i], matched[i], options.MaxColumns, options.MaxPreview, options.Trim)
+		if !matched[i] {
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: text, Matched: false})
+			continue
+		}
+		spans := expr.FindAllStringIndex(lines[i], -1)
+		if len(spans) == 0 {
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: 1, Text: text, Matched: true})
+			continue
+		}
+		for _, span := range spans {
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: span[0] + 1, Text: text, Matched: true})
+		}
 	}
 	return matches
 }
@@ -1287,12 +1323,16 @@ func formatGrepMatches(matches []grepMatch, options grepOptions) string {
 				separator = "-"
 			}
 			if options.LineNumbers {
-				if options.ColumnNumbers && match.Matched && match.Column > 0 {
+				if (options.ColumnNumbers || options.Vimgrep) && match.Matched && match.Column > 0 {
 					lines = append(lines, fmt.Sprintf("%s%s%d%s%d%s%s", match.Path, separator, match.Line, separator, match.Column, separator, match.Text))
 					continue
 				}
 				lines = append(lines, fmt.Sprintf("%s%s%d%s%s", match.Path, separator, match.Line, separator, match.Text))
 			} else {
+				if options.Vimgrep && match.Matched && match.Column > 0 {
+					lines = append(lines, fmt.Sprintf("%s%s%d%s%s", match.Path, separator, match.Column, separator, match.Text))
+					continue
+				}
 				lines = append(lines, fmt.Sprintf("%s%s%s", match.Path, separator, match.Text))
 			}
 		}
@@ -1663,6 +1703,10 @@ func grepOnlyMatching(input grepInput) bool {
 		input.OnlyMatchingDash ||
 		input.LongOnlyMatching ||
 		input.ShortOnlyMatching
+}
+
+func grepVimgrep(input grepInput) bool {
+	return input.Vimgrep || input.LongVimgrep
 }
 
 func grepPassthru(input grepInput) bool {

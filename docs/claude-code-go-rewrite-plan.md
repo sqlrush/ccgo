@@ -212,6 +212,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `trim`/`--trim` 和 `no_trim`/`--no-trim`，会删除每条已打印文本行开头的 ASCII 空白，同时保留原始匹配列号；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 长行输出现在支持 ripgrep 风格 `max_columns_preview`/`--max-columns-preview` 和 `no_max_columns_preview`/`--no-max-columns-preview`，会在 `max_columns` 触发时输出截断预览加官方 omitted-end 后缀；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `line_regexp`/`line-regexp`/`--line-regexp`/`-x`，将 pattern 限定为整行匹配，并按官方语义优先于 `word_regexp`；fixed-string、multiline 和 quoted semantic boolean 组合均兼容。
+- 本轮补充：Grep content 输出现在支持 ripgrep 风格 `vimgrep`/`--vimgrep`，匹配行按每个匹配重复输出 `path:line:column:text`，context 行保持单行输出，并兼容 `-N`、`only_matching` 和 quoted semantic boolean。
 - 本轮补充：Grep 常用布尔参数继续补齐 ripgrep 长参数 aliases，覆盖 `--line-number`、`--ignore-case`、`--fixed-strings`、`--word-regexp`、`--invert-match` 和 `--only-matching`，并兼容 quoted semantic boolean。
 - 本轮补充：Grep multiline 搜索现在支持 ripgrep 风格 `-U`、`--multiline`、`multiline-dotall` 和 `--multiline-dotall` aliases，统一映射到既有跨行 dotall 匹配逻辑并兼容 quoted semantic boolean。
 - 本轮补充：Grep 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore` 规则，同时继续排除 VCS metadata 目录并保留 Read deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。

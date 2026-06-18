@@ -1951,6 +1951,64 @@ func TestGrepToolColumnNumbers(t *testing.T) {
 	}
 }
 
+func TestGrepToolVimgrep(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"before",
+		"Needle Needle",
+		"after",
+		"Needle",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "hits.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_vimgrep",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--vimgrep":"true","context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hits.txt-1-before\nhits.txt:2:1:Needle Needle\nhits.txt:2:8:Needle Needle\nhits.txt-3-after\nhits.txt:4:1:Needle"
+	if result.Content != want || result.StructuredContent["vimgrep"] != true {
+		t.Fatalf("vimgrep result = %#v", result)
+	}
+	matches := result.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 5 || matches[1]["column"] != 1 || matches[2]["column"] != 8 || matches[3]["matched"] != false {
+		t.Fatalf("vimgrep structured matches = %#v", matches)
+	}
+
+	noLineResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_vimgrep_no_line",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","vimgrep":true,"-N":true,"head_limit":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoLine := "hits.txt:1:Needle Needle\nhits.txt:8:Needle Needle\n\n[Showing results with pagination = limit: 2]"
+	if noLineResult.Content != wantNoLine || noLineResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("vimgrep no-line result = %#v", noLineResult)
+	}
+
+	onlyResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_vimgrep_only_matching",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--vimgrep":true,"only_matching":true,"head_limit":2}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOnly := "hits.txt:2:1:Needle\nhits.txt:2:8:Needle\n\n[Showing results with pagination = limit: 2]"
+	if onlyResult.Content != wantOnly || onlyResult.StructuredContent["vimgrep"] != true || onlyResult.StructuredContent["only_matching"] != true {
+		t.Fatalf("vimgrep only-matching result = %#v", onlyResult)
+	}
+}
+
 func TestGrepToolTrim(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{
