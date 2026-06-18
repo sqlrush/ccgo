@@ -2498,7 +2498,7 @@ func unsafeReadOnlyPathWord(command string, word string) bool {
 		return false
 	}
 	switch word {
-	case "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls":
+	case "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls", "-files0-from":
 		return true
 	default:
 		return false
@@ -2507,6 +2507,9 @@ func unsafeReadOnlyPathWord(command string, word string) bool {
 
 func unsafeReadOnlyPathFlag(command string, word string) bool {
 	if command == "rg" && (word == "--pre" || strings.HasPrefix(word, "--pre=")) {
+		return true
+	}
+	if (command == "du" || command == "wc") && (word == "--files0-from" || strings.HasPrefix(word, "--files0-from=")) {
 		return true
 	}
 	if command == "tail" {

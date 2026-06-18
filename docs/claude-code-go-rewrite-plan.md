@@ -254,6 +254,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 遍历现在支持 ripgrep 风格 `max_depth`/`maxDepth`/`max-depth`/`--max-depth`/`-d`，按 `--max-depth 0` 目录 no-op、`1` 仅直属文件、`2` 下一层文件的语义限制递归，并兼容 quoted number。
 - 本轮补充：Glob/Grep 搜索遍历现在会读取 permission context 中的 `Read(...)` deny 规则，并把对应 basename/path/directory pattern 作为额外 ignore rule，避免被禁止读取的文件出现在搜索结果中。
 - 本轮补充：Bash `grep`/`rg` read-only 分类现在会把 pattern-file 参数 `-f FILE`、`-fFILE` 和 `--file=FILE` 当作路径读取处理，缺值、绝对路径和 `..` 路径不再进入 read-only fast path。
+- 本轮补充：Bash `wc`/`du` 的 `--files0-from` 与 `find -files0-from` 不再进入 read-only fast path，避免通过受检列表文件间接读取未校验的绝对路径、父目录路径或敏感路径。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。
 - 本轮补充：Bash/PowerShell tokenizer 现在按 single-quoted literal 处理单引号内的 escape 字符，Bash 的 `\` 和 PowerShell 的 backtick 在单引号内不再导致错误的 quote/segment/token 状态。
 - 本轮补充：Bash/PowerShell 分类现在把未引用 newline 作为命令分隔符，并支持未引用 `#` 行注释剥离；注释文本不再污染分类，下一行命令仍保留 read-only/destructive 判断。
