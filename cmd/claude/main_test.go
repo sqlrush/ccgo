@@ -2292,6 +2292,44 @@ func TestWritePrintJSONResultIncludesModelsAttempted(t *testing.T) {
 	}
 }
 
+func TestWritePrintJSONErrorIncludesModelsAttempted(t *testing.T) {
+	var stdout bytes.Buffer
+	err := writePrintJSONError(&stdout, conversation.Runner{SessionID: "sess_error"}, fmt.Errorf("fallback failed"), time.Millisecond, 2*time.Millisecond, []string{"sonnet", "haiku"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if payload["type"] != "result" || payload["subtype"] != "error" || payload["is_error"] != true {
+		t.Fatalf("payload = %#v", payload)
+	}
+	attempts, ok := payload["models_attempted"].([]any)
+	if !ok || len(attempts) != 2 || attempts[0] != "sonnet" || attempts[1] != "haiku" {
+		t.Fatalf("models_attempted = %#v", payload["models_attempted"])
+	}
+}
+
+func TestWritePrintStreamErrorIncludesModelsAttempted(t *testing.T) {
+	var stdout bytes.Buffer
+	err := writePrintStreamError(&stdout, conversation.Runner{SessionID: "sess_error"}, fmt.Errorf("fallback failed"), time.Millisecond, 2*time.Millisecond, []string{"sonnet", "haiku"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "error" || event["is_error"] != true || event["error"] != "fallback failed" {
+		t.Fatalf("event = %#v", event)
+	}
+	attempts, ok := event["models_attempted"].([]any)
+	if !ok || len(attempts) != 2 || attempts[0] != "sonnet" || attempts[1] != "haiku" {
+		t.Fatalf("models_attempted = %#v", event["models_attempted"])
+	}
+}
+
 func TestWritePrintJSONResultIncludesCompactMetadata(t *testing.T) {
 	plan := compactpkg.BuildPlan(
 		[]contracts.Message{messages.UserText("old")},

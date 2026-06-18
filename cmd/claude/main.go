@@ -202,19 +202,19 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		startedAt := time.Now()
 		format, err := normalizeInputFormat(*inputFormat)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		userMessage, err := promptMessageFromArgsOrStdin(flags.Args(), stdin, format)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		effectiveMode, err := effectivePermissionMode(*permissionMode, *skipPermissions)
 		if err != nil {
-			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0)
+			_ = writePrintError(stdout, conversation.Runner{}, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -233,13 +233,13 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			AddDirs:         append([]string(nil), addDirs...),
 		})
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
 		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -249,7 +249,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
-			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), result.APIDuration)
+			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), result.APIDuration, result.ModelsAttempt)
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
@@ -2166,37 +2166,38 @@ type printJSONResult struct {
 }
 
 type printStreamEvent struct {
-	Type           conversation.EventType   `json:"type"`
-	Subtype        string                   `json:"subtype,omitempty"`
-	SessionID      contracts.ID             `json:"session_id,omitempty"`
-	CWD            string                   `json:"cwd,omitempty"`
-	Tools          []string                 `json:"tools,omitempty"`
-	MCPServers     []printStreamMCPServer   `json:"mcp_servers,omitempty"`
-	SlashCommands  []string                 `json:"slash_commands,omitempty"`
-	Agents         []string                 `json:"agents,omitempty"`
-	Skills         []string                 `json:"skills,omitempty"`
-	Plugins        []printStreamPlugin      `json:"plugins,omitempty"`
-	PermissionMode string                   `json:"permission_mode,omitempty"`
-	APIKeySource   string                   `json:"api_key_source,omitempty"`
-	Betas          []string                 `json:"betas,omitempty"`
-	FastMode       bool                     `json:"fast_mode,omitempty"`
-	OutputStyle    string                   `json:"output_style,omitempty"`
-	OutputStyles   []string                 `json:"available_output_styles,omitempty"`
-	Message        *contracts.Message       `json:"message,omitempty"`
-	ToolUse        *contracts.ToolUse       `json:"tool_use,omitempty"`
-	ToolResult     *contracts.ToolResult    `json:"tool_result,omitempty"`
-	ToolUseID      contracts.ID             `json:"tool_use_id,omitempty"`
-	ProgressType   string                   `json:"progress_type,omitempty"`
-	Data           map[string]any           `json:"data,omitempty"`
-	Retry          *printStreamRetry        `json:"retry,omitempty"`
-	TokenWarning   *printStreamTokenWarning `json:"token_warning,omitempty"`
-	Compact        any                      `json:"compact,omitempty"`
-	StreamEvent    *anthropic.StreamEvent   `json:"stream_event,omitempty"`
-	Model          string                   `json:"model,omitempty"`
-	Error          string                   `json:"error,omitempty"`
-	IsError        bool                     `json:"is_error,omitempty"`
-	DurationMS     *int64                   `json:"duration_ms,omitempty"`
-	DurationAPI    *int64                   `json:"duration_api_ms,omitempty"`
+	Type            conversation.EventType   `json:"type"`
+	Subtype         string                   `json:"subtype,omitempty"`
+	SessionID       contracts.ID             `json:"session_id,omitempty"`
+	CWD             string                   `json:"cwd,omitempty"`
+	Tools           []string                 `json:"tools,omitempty"`
+	MCPServers      []printStreamMCPServer   `json:"mcp_servers,omitempty"`
+	SlashCommands   []string                 `json:"slash_commands,omitempty"`
+	Agents          []string                 `json:"agents,omitempty"`
+	Skills          []string                 `json:"skills,omitempty"`
+	Plugins         []printStreamPlugin      `json:"plugins,omitempty"`
+	PermissionMode  string                   `json:"permission_mode,omitempty"`
+	APIKeySource    string                   `json:"api_key_source,omitempty"`
+	Betas           []string                 `json:"betas,omitempty"`
+	FastMode        bool                     `json:"fast_mode,omitempty"`
+	OutputStyle     string                   `json:"output_style,omitempty"`
+	OutputStyles    []string                 `json:"available_output_styles,omitempty"`
+	Message         *contracts.Message       `json:"message,omitempty"`
+	ToolUse         *contracts.ToolUse       `json:"tool_use,omitempty"`
+	ToolResult      *contracts.ToolResult    `json:"tool_result,omitempty"`
+	ToolUseID       contracts.ID             `json:"tool_use_id,omitempty"`
+	ProgressType    string                   `json:"progress_type,omitempty"`
+	Data            map[string]any           `json:"data,omitempty"`
+	Retry           *printStreamRetry        `json:"retry,omitempty"`
+	TokenWarning    *printStreamTokenWarning `json:"token_warning,omitempty"`
+	Compact         any                      `json:"compact,omitempty"`
+	StreamEvent     *anthropic.StreamEvent   `json:"stream_event,omitempty"`
+	Model           string                   `json:"model,omitempty"`
+	ModelsAttempted []string                 `json:"models_attempted,omitempty"`
+	Error           string                   `json:"error,omitempty"`
+	IsError         bool                     `json:"is_error,omitempty"`
+	DurationMS      *int64                   `json:"duration_ms,omitempty"`
+	DurationAPI     *int64                   `json:"duration_api_ms,omitempty"`
 }
 
 type printStreamRetry struct {
@@ -2554,46 +2555,48 @@ func isCommandMetadataText(text string) bool {
 	return strings.Contains(text, "<command-name>") && strings.Contains(text, "</command-name>")
 }
 
-func writePrintError(stdout io.Writer, runner conversation.Runner, err error, outputFormat string, duration time.Duration, apiDuration time.Duration) error {
+func writePrintError(stdout io.Writer, runner conversation.Runner, err error, outputFormat string, duration time.Duration, apiDuration time.Duration, modelsAttempted []string) error {
 	if err == nil {
 		return nil
 	}
 	switch outputFormat {
 	case "json":
-		return writePrintJSONError(stdout, runner, err, duration, apiDuration)
+		return writePrintJSONError(stdout, runner, err, duration, apiDuration, modelsAttempted)
 	case "stream-json":
-		return writePrintStreamError(stdout, runner, err, duration, apiDuration)
+		return writePrintStreamError(stdout, runner, err, duration, apiDuration, modelsAttempted)
 	default:
 		return nil
 	}
 }
 
-func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration) error {
+func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration, modelsAttempted []string) error {
 	encoder := json.NewEncoder(stdout)
 	envelope := printJSONResult{
-		Type:        "result",
-		Subtype:     "error",
-		IsError:     true,
-		DurationMS:  durationMillis(duration),
-		DurationAPI: durationMillis(apiDuration),
-		SessionID:   runner.SessionID,
-		Error:       err.Error(),
+		Type:            "result",
+		Subtype:         "error",
+		IsError:         true,
+		DurationMS:      durationMillis(duration),
+		DurationAPI:     durationMillis(apiDuration),
+		SessionID:       runner.SessionID,
+		ModelsAttempted: append([]string(nil), modelsAttempted...),
+		Error:           err.Error(),
 	}
 	applyPrintJSONRuntime(&envelope, runner)
 	return encoder.Encode(envelope)
 }
 
-func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration) error {
+func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration, modelsAttempted []string) error {
 	encoder := json.NewEncoder(stdout)
 	durationMS := durationMillis(duration)
 	durationAPI := durationMillis(apiDuration)
 	envelope := printStreamEvent{
-		Type:        "error",
-		SessionID:   runner.SessionID,
-		Error:       err.Error(),
-		IsError:     true,
-		DurationMS:  &durationMS,
-		DurationAPI: &durationAPI,
+		Type:            "error",
+		SessionID:       runner.SessionID,
+		ModelsAttempted: append([]string(nil), modelsAttempted...),
+		Error:           err.Error(),
+		IsError:         true,
+		DurationMS:      &durationMS,
+		DurationAPI:     &durationAPI,
 	}
 	applyPrintStreamRuntime(&envelope, runner)
 	return encoder.Encode(envelope)

@@ -1538,7 +1538,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 
 本轮补充：模型 fallback retry 事件现在携带可消费 breadcrumb：conversation event、telemetry 和 `--output-format stream-json` 都会暴露 attempt/max_attempts、failed_model、next_model 和 fallback 标记，便于 SDK/headless 调用方展示模型切换原因和下一跳。
 
-本轮补充：CLI JSON/NDJSON final result envelope 现在暴露 `models_attempted`，保留本轮请求实际尝试过的模型顺序；配合 retry breadcrumb，headless/SDK 调用方可以在最终结果里审计 fallback 路径。
+本轮补充：CLI JSON/NDJSON final result 和 structured error envelope 现在暴露 `models_attempted`，保留本轮请求实际尝试过的模型顺序；配合 retry breadcrumb，headless/SDK 调用方可以在成功或失败结果里审计 fallback 路径。
 
 本轮补充：CLI headless runner 在 Anthropic client 初始化阶段失败时会保留已构造的 runner 元数据，因此缺凭证等 late setup error 的 JSON/NDJSON structured error result 也能输出 `cwd`、`session_id` 和 settings-derived runtime context。
 
