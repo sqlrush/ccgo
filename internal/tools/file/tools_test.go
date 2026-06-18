@@ -3981,6 +3981,79 @@ func TestGrepToolNullData(t *testing.T) {
 	}
 }
 
+func TestGrepToolEncoding(t *testing.T) {
+	dir := t.TempDir()
+	utf16LE := []byte{0xff, 0xfe, 'N', 0x00, 'e', 0x00, 'e', 0x00, 'd', 0x00, 'l', 0x00, 'e', 0x00, '\n', 0x00}
+	utf16BE := []byte{0x00, 'B', 0x00, 'e', 0x00, 'a', 0x00, 'c', 0x00, 'o', 0x00, 'n', 0x00, '\n'}
+	if err := os.WriteFile(filepath.Join(dir, "utf16le.txt"), utf16LE, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "utf16be.txt"), utf16BE, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	autoResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_encoding_auto",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"utf16le.txt","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if autoResult.Content != "utf16le.txt:1:Needle" || autoResult.StructuredContent["encoding"] != "auto" {
+		t.Fatalf("auto encoding result = %#v", autoResult)
+	}
+
+	noneResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_encoding_none",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"utf16le.txt","output_mode":"content","--encoding":"none"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noneResult.Content != "No matches found" || noneResult.StructuredContent["encoding"] != "none" {
+		t.Fatalf("none encoding result = %#v", noneResult)
+	}
+
+	noEncodingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_encoding",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"utf16le.txt","output_mode":"content","--encoding":"none","--no-encoding":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noEncodingResult.Content != "utf16le.txt:1:Needle" ||
+		noEncodingResult.StructuredContent["encoding"] != "auto" ||
+		noEncodingResult.StructuredContent["no_encoding"] != true {
+		t.Fatalf("no-encoding result = %#v", noEncodingResult)
+	}
+
+	beResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_encoding_utf16be",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Beacon","path":"utf16be.txt","output_mode":"content","-E":"utf16be"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beResult.Content != "utf16be.txt:1:Beacon" || beResult.StructuredContent["encoding"] != "utf-16be" {
+		t.Fatalf("utf16be encoding result = %#v", beResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_encoding_invalid",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"utf16le.txt","--encoding":"shift-jis"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "encoding must be one of") {
+		t.Fatalf("invalid encoding error = %v", err)
+	}
+}
+
 func TestGrepToolTypeFilter(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {

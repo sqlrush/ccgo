@@ -1,6 +1,7 @@
 package filetools
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/permissions"
@@ -55,6 +58,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
+	"encoding": {}, "--encoding": {}, "-E": {}, "no_encoding": {}, "noEncoding": {}, "no-encoding": {}, "--no-encoding": {},
 	"crlf": {}, "--crlf": {}, "no_crlf": {}, "noCrlf": {}, "noCRLF": {}, "no-crlf": {}, "--no-crlf": {},
 	"null_data": {}, "nullData": {}, "null-data": {}, "--null-data": {}, "no_null_data": {}, "noNullData": {}, "no-null-data": {}, "--no-null-data": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
@@ -102,6 +106,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
+	"no_encoding": {}, "noEncoding": {}, "no-encoding": {}, "--no-encoding": {},
 	"crlf": {}, "--crlf": {}, "no_crlf": {}, "noCrlf": {}, "noCRLF": {}, "no-crlf": {}, "--no-crlf": {},
 	"null_data": {}, "nullData": {}, "null-data": {}, "--null-data": {}, "no_null_data": {}, "noNullData": {}, "no-null-data": {}, "--no-null-data": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
@@ -298,6 +303,13 @@ type grepInput struct {
 	SmartCaseDash             bool    `json:"smart-case,omitempty"`
 	LongSmartCase             bool    `json:"--smart-case,omitempty"`
 	ShortSmartCase            bool    `json:"-S,omitempty"`
+	Encoding                  string  `json:"encoding,omitempty"`
+	LongEncoding              string  `json:"--encoding,omitempty"`
+	ShortEncoding             string  `json:"-E,omitempty"`
+	NoEncoding                bool    `json:"no_encoding,omitempty"`
+	NoEncodingAlt             bool    `json:"noEncoding,omitempty"`
+	NoEncodingDash            bool    `json:"no-encoding,omitempty"`
+	LongNoEncoding            bool    `json:"--no-encoding,omitempty"`
 	CRLF                      bool    `json:"crlf,omitempty"`
 	LongCRLF                  bool    `json:"--crlf,omitempty"`
 	NoCRLF                    bool    `json:"no_crlf,omitempty"`
@@ -485,6 +497,7 @@ type grepOptions struct {
 	IncludeZero           bool
 	ColumnNumbers         bool
 	Text                  bool
+	Encoding              string
 	SortMode              string
 	SortReverse           bool
 	SortExplicit          bool
@@ -729,6 +742,13 @@ func NewGrepTool() tool.Tool {
 					"smart-case":       map[string]any{"type": "boolean"},
 					"--smart-case":     map[string]any{"type": "boolean"},
 					"-S":               map[string]any{"type": "boolean"},
+					"encoding":         map[string]any{"type": "string"},
+					"--encoding":       map[string]any{"type": "string"},
+					"-E":               map[string]any{"type": "string"},
+					"no_encoding":      map[string]any{"type": "boolean"},
+					"noEncoding":       map[string]any{"type": "boolean"},
+					"no-encoding":      map[string]any{"type": "boolean"},
+					"--no-encoding":    map[string]any{"type": "boolean"},
 					"crlf":             map[string]any{"type": "boolean"},
 					"--crlf":           map[string]any{"type": "boolean"},
 					"no_crlf":          map[string]any{"type": "boolean"},
@@ -900,7 +920,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases, and pattern_file/--file/-f can read one pattern per line from a file. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, null_data/--null-data to use NUL as the input line terminator, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases, and pattern_file/--file/-f can read one pattern per line from a file. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, encoding/--encoding/-E to choose auto/none/utf-8/utf-16/utf-16le/utf-16be text decoding, null_data/--null-data to use NUL as the input line terminator, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -1026,6 +1046,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if _, _, err := grepMaxFilesize(input); err != nil {
 		return err
 	}
+	if _, err := grepEncoding(input); err != nil {
+		return err
+	}
 	if err := validateGrepMaxDepth(input); err != nil {
 		return err
 	}
@@ -1105,6 +1128,10 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	noContextSeparator := grepNoContextSeparator(input)
 	byteOffset := grepByteOffset(input)
 	nullData := grepNullData(input)
+	encoding, err := grepEncoding(input)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
 	countMatches := grepCountMatches(input) && mode == "count" && !invertMatch
 	includeZero := grepIncludeZero(input) && mode == "count"
 	includeHidden := grepIncludeHidden(input)
@@ -1156,6 +1183,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		IncludeZero:           includeZero,
 		ColumnNumbers:         grepColumnNumbers(input),
 		Text:                  grepText(input) || nullData,
+		Encoding:              encoding,
 		SortMode:              sortMode,
 		SortReverse:           sortReverse,
 		SortExplicit:          sortExplicit,
@@ -1228,6 +1256,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"case_insensitive":        grepEffectiveCaseInsensitive(input),
 			"case_sensitive":          grepCaseSensitive(input),
 			"smart_case":              grepSmartCase(input),
+			"encoding":                encoding,
+			"no_encoding":             grepNoEncoding(input),
 			"fixed_strings":           grepFixedStrings(input),
 			"text":                    options.Text,
 			"no_text":                 grepNoText(input),
@@ -1485,7 +1515,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 			matches = append(matches, grepMatch{Path: displayRel, ModUnix: info.ModTime().UnixNano()})
 			return nil
 		}
-		content, err := readGrepText(path, options.Text)
+		content, err := readGrepText(path, options.Text, options.Encoding)
 		if err != nil {
 			return nil
 		}
@@ -1577,11 +1607,72 @@ func globBaseDirectory(pattern string) (string, string) {
 	return filepath.Clean(base), pattern[lastSep+1:]
 }
 
-func readGrepText(path string, allowBinary bool) (string, error) {
-	if allowBinary {
-		return readTextAllowBinary(path)
+func readGrepText(path string, allowBinary bool, encoding string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
 	}
-	return readText(path)
+	return decodeGrepText(data, allowBinary, encoding, path)
+}
+
+func decodeGrepText(data []byte, allowBinary bool, encoding string, path string) (string, error) {
+	switch encoding {
+	case "", "auto":
+		if len(data) >= 3 && bytes.Equal(data[:3], []byte{0xef, 0xbb, 0xbf}) {
+			data = data[3:]
+			return decodeGrepUTF8(data, allowBinary, path)
+		}
+		if len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe {
+			return decodeGrepUTF16(data[2:], true), nil
+		}
+		if len(data) >= 2 && data[0] == 0xfe && data[1] == 0xff {
+			return decodeGrepUTF16(data[2:], false), nil
+		}
+		return decodeGrepUTF8(data, allowBinary, path)
+	case "none":
+		return decodeGrepRaw(data, allowBinary, path)
+	case "utf-8":
+		data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
+		return decodeGrepUTF8(data, allowBinary, path)
+	case "utf-16", "utf-16le", "utf-16be":
+		littleEndian := encoding == "utf-16le"
+		if len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe {
+			littleEndian = true
+			data = data[2:]
+		} else if len(data) >= 2 && data[0] == 0xfe && data[1] == 0xff {
+			littleEndian = false
+			data = data[2:]
+		}
+		return decodeGrepUTF16(data, littleEndian), nil
+	default:
+		return "", fmt.Errorf("encoding must be one of auto, none, utf-8, utf-16, utf-16le, or utf-16be")
+	}
+}
+
+func decodeGrepUTF8(data []byte, allowBinary bool, path string) (string, error) {
+	if !allowBinary && (bytes.ContainsRune(data, 0) || !utf8.Valid(data)) {
+		return "", fmt.Errorf("this tool cannot read binary files: %s", path)
+	}
+	return string(data), nil
+}
+
+func decodeGrepRaw(data []byte, allowBinary bool, path string) (string, error) {
+	if !allowBinary && (bytes.ContainsRune(data, 0) || !utf8.Valid(data)) {
+		return "", fmt.Errorf("this tool cannot read binary files: %s", path)
+	}
+	return string(data), nil
+}
+
+func decodeGrepUTF16(data []byte, littleEndian bool) string {
+	units := make([]uint16, 0, len(data)/2)
+	for i := 0; i+1 < len(data); i += 2 {
+		if littleEndian {
+			units = append(units, uint16(data[i])|uint16(data[i+1])<<8)
+		} else {
+			units = append(units, uint16(data[i])<<8|uint16(data[i+1]))
+		}
+	}
+	return string(utf16.Decode(units))
 }
 
 func grepFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) []grepMatch {
@@ -2521,6 +2612,42 @@ func grepSmartCase(input grepInput) bool {
 		input.SmartCaseDash ||
 		input.LongSmartCase ||
 		input.ShortSmartCase
+}
+
+func grepEncoding(input grepInput) (string, error) {
+	if grepNoEncoding(input) {
+		return "auto", nil
+	}
+	raw := firstNonEmpty(input.Encoding, input.LongEncoding, input.ShortEncoding)
+	if strings.TrimSpace(raw) == "" {
+		return "auto", nil
+	}
+	encoding := strings.ToLower(strings.TrimSpace(raw))
+	encoding = strings.ReplaceAll(encoding, "_", "-")
+	switch encoding {
+	case "auto", "none", "utf-8", "utf8", "utf-16", "utf16", "utf-16le", "utf16le", "utf-16be", "utf16be":
+	default:
+		return "", fmt.Errorf("encoding must be one of auto, none, utf-8, utf-16, utf-16le, or utf-16be")
+	}
+	switch encoding {
+	case "utf8":
+		return "utf-8", nil
+	case "utf16":
+		return "utf-16", nil
+	case "utf16le":
+		return "utf-16le", nil
+	case "utf16be":
+		return "utf-16be", nil
+	default:
+		return encoding, nil
+	}
+}
+
+func grepNoEncoding(input grepInput) bool {
+	return input.NoEncoding ||
+		input.NoEncodingAlt ||
+		input.NoEncodingDash ||
+		input.LongNoEncoding
 }
 
 func grepCRLF(input grepInput) bool {

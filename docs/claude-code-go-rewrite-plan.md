@@ -206,6 +206,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 文件过滤现在支持 ripgrep 风格 `max_filesize`/`maxFilesize`/`max-filesize`/`--max-filesize`，接受 byte 数字或带 `K`/`M`/`G` 后缀的字符串，递归搜索时跳过超过阈值的文件并在 structured content 回传解析后的 byte 数。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `crlf`/`--crlf` 与 `no_crlf`/`--no-crlf`，默认不再把 CRLF 隐式归一成 LF 参与 `$` 锚点匹配，开启 CRLF 模式时会按原文件字节保留 byte offset。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `null_data`/`nullData`/`null-data`/`--null-data` 与 `no_null_data`/`--no-null-data`，可把 NUL 作为输入行终止符、隐式开启 text 搜索、覆盖 CRLF 模式，并在 content/count/匹配文件列表输出中使用 NUL 记录分隔。
+- 本轮补充：Grep 文本读取现在按 ripgrep `auto` 默认识别 UTF-8/UTF-16 BOM，并支持 `encoding`/`--encoding`/`-E` 的 `auto`、`none`、`utf-8`、`utf-16`、`utf-16le`、`utf-16be` 基础编码选择以及 `no_encoding`/`--no-encoding` 回到 auto 模式。
 - 本轮补充：Grep content 输出现在支持 `no_line_number`/`noLineNumber`/`no_line_numbers`/`noLineNumbers`/`no-line-number`/`--no-line-number`/`-N`，可用 ripgrep 风格显式关闭默认行号输出；quoted semantic boolean 同样兼容，且 no-line-number 优先于 line-number 开关。
 - 本轮补充：Grep content 输出现在支持 `column`/`column_numbers`/`columnNumbers`/`column-number`/`--column`，显式开启时匹配行会输出 `path:line:column:text` 并在 structured matches 中暴露首个匹配列号，context 行保持原格式；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 文件列表输出现在支持 `files_without_match`/`filesWithoutMatch`/`files-without-match`/`--files-without-match`，也接受 `output_mode` 的 `files_without_match(es)`，用于列出不含匹配的文件并兼容 quoted boolean。
