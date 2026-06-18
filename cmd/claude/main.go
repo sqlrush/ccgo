@@ -2442,7 +2442,7 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		Model:        event.Model,
 	}
 	if event.Compact != nil {
-		out.Compact = event.Compact
+		out.Compact = printStreamCompactMetadataFrom(event)
 	}
 	if event.ToolProgress != nil {
 		out.ToolUseID = event.ToolProgress.ToolUseID
@@ -2453,6 +2453,17 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		out.Error = event.Error.Error()
 	}
 	return encoder.Encode(out)
+}
+
+func printStreamCompactMetadataFrom(event conversation.Event) *session.CompactMetadata {
+	if event.Compact == nil {
+		return nil
+	}
+	metadata := event.Compact.Plan.Metadata
+	if metadata.Trigger == "" && metadata.PreTokens == 0 && metadata.UserContext == "" && metadata.MessagesSummarized == 0 && metadata.PreservedSegment == nil {
+		return nil
+	}
+	return &metadata
 }
 
 func printStreamTokenWarningFrom(warning *conversation.TokenWarning) *printStreamTokenWarning {

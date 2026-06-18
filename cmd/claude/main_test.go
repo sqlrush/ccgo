@@ -2159,6 +2159,46 @@ func TestWritePrintStreamEventTokenWarningUsesSnakeCasePayload(t *testing.T) {
 	}
 }
 
+func TestWritePrintStreamEventCompactUsesLightweightMetadata(t *testing.T) {
+	plan := compactpkg.BuildPlan(
+		[]contracts.Message{messages.UserText("old"), messages.AssistantText("old answer", "sonnet", nil)},
+		compactpkg.PlanOptions{
+			Trigger:     compactpkg.TriggerAuto,
+			PreTokens:   177_000,
+			UserContext: "preserve deployment note",
+			Summary:     "summary",
+		},
+	)
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type:    conversation.EventCompact,
+		Compact: &compactpkg.Result{Plan: plan, Usage: contracts.Usage{InputTokens: 10, OutputTokens: 2}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "compact" {
+		t.Fatalf("event = %#v", event)
+	}
+	compactPayload, ok := event["compact"].(map[string]any)
+	if !ok {
+		t.Fatalf("compact payload = %#v", event["compact"])
+	}
+	if compactPayload["trigger"] != "auto" || compactPayload["preTokens"] != float64(177_000) || compactPayload["userContext"] != "preserve deployment note" || compactPayload["messagesSummarized"] != float64(2) {
+		t.Fatalf("compact payload = %#v", compactPayload)
+	}
+	for _, key := range []string{"Plan", "plan", "Request", "request", "Response", "response", "Usage", "usage"} {
+		if _, exists := compactPayload[key]; exists {
+			t.Fatalf("compact payload leaked internal field %q: %#v", key, compactPayload)
+		}
+	}
+}
+
 func TestRunPrintStreamJSONClearIncludesCleared(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")
