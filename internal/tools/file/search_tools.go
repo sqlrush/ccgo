@@ -1689,11 +1689,7 @@ func grepTypeMatches(path string, extensions []string) bool {
 func splitGrepGlobPatterns(glob string) []string {
 	var patterns []string
 	for _, raw := range strings.Fields(glob) {
-		if strings.Contains(raw, "{") && strings.Contains(raw, "}") {
-			patterns = append(patterns, raw)
-			continue
-		}
-		for _, part := range strings.Split(raw, ",") {
+		for _, part := range splitGrepGlobToken(raw) {
 			if part = strings.TrimSpace(part); part != "" {
 				patterns = append(patterns, part)
 			}
@@ -1702,14 +1698,57 @@ func splitGrepGlobPatterns(glob string) []string {
 	return patterns
 }
 
-func matchAnyGlobPath(patterns []string, path string) (bool, error) {
-	for _, pattern := range patterns {
-		ok, err := matchGlobPath(pattern, path)
-		if err != nil || ok {
-			return ok, err
+func splitGrepGlobToken(raw string) []string {
+	var parts []string
+	start := 0
+	depth := 0
+	for i := 0; i < len(raw); i++ {
+		switch raw[i] {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				parts = append(parts, raw[start:i])
+				start = i + 1
+			}
 		}
 	}
-	return false, nil
+	parts = append(parts, raw[start:])
+	return parts
+}
+
+func matchAnyGlobPath(patterns []string, path string) (bool, error) {
+	hasPositive := false
+	matchedPositive := false
+	for _, pattern := range patterns {
+		negated := strings.HasPrefix(pattern, "!")
+		if negated {
+			pattern = strings.TrimSpace(strings.TrimPrefix(pattern, "!"))
+			if pattern == "" {
+				continue
+			}
+		} else {
+			hasPositive = true
+		}
+		ok, err := matchGlobPath(pattern, path)
+		if err != nil {
+			return false, err
+		}
+		if negated && ok {
+			return false, nil
+		}
+		if ok {
+			matchedPositive = true
+		}
+	}
+	if hasPositive {
+		return matchedPositive, nil
+	}
+	return true, nil
 }
 
 func grepLimit(input grepInput) int {

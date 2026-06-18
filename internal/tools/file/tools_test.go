@@ -1518,6 +1518,30 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	if braceGlobResult.Content != "Found 3 files\nsrc/a.go\nsrc/b.txt\nsrc/c.go" {
 		t.Fatalf("brace glob result = %#v", braceGlobResult.Content)
 	}
+
+	negatedGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_negated_glob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"**/*.{go,txt},!**/c.go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if negatedGlobResult.Content != "Found 2 files\nsrc/a.go\nsrc/b.txt" {
+		t.Fatalf("negated glob result = %#v", negatedGlobResult.Content)
+	}
+
+	onlyNegatedGlobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_only_negated_glob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Alpha","glob":"!**/*.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if onlyNegatedGlobResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.go" {
+		t.Fatalf("only negated glob result = %#v", onlyNegatedGlobResult.Content)
+	}
 }
 
 func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
