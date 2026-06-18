@@ -43,9 +43,10 @@ type fakeCall struct {
 }
 
 type fakeClient struct {
-	calls    []fakeCall
-	requests []anthropic.Request
-	streams  [][]anthropic.StreamEvent
+	calls      []fakeCall
+	requests   []anthropic.Request
+	streams    [][]anthropic.StreamEvent
+	streamErrs []error
 }
 
 type fakeRunnerMCPClient struct {
@@ -72,15 +73,23 @@ func (f *fakeClient) CreateMessage(ctx context.Context, req anthropic.Request) (
 
 func (f *fakeClient) StreamMessages(ctx context.Context, req anthropic.Request, handle func(anthropic.StreamEvent) error) error {
 	f.requests = append(f.requests, req)
-	if len(f.streams) == 0 {
+	if len(f.streams) == 0 && len(f.streamErrs) == 0 {
 		return anthropic.APIError{StatusCode: http.StatusInternalServerError, Type: "test_error", Message: "no fake stream configured"}
 	}
-	events := f.streams[0]
-	f.streams = f.streams[1:]
+	var events []anthropic.StreamEvent
+	if len(f.streams) > 0 {
+		events = f.streams[0]
+		f.streams = f.streams[1:]
+	}
 	for _, event := range events {
 		if err := handle(event); err != nil {
 			return err
 		}
+	}
+	if len(f.streamErrs) > 0 {
+		err := f.streamErrs[0]
+		f.streamErrs = f.streamErrs[1:]
+		return err
 	}
 	return nil
 }
@@ -7072,6 +7081,62 @@ func TestRunnerCanUseStreamingClient(t *testing.T) {
 	}
 	if len(streamEvents) != 4 || streamEvents[2].StreamEvent == nil || streamEvents[2].StreamEvent.TextDelta() != "streamed" {
 		t.Fatalf("stream events = %#v", streamEvents)
+	}
+}
+
+func TestRunnerFallsBackToNonStreamingWhenStreamFailsBeforeEvents(t *testing.T) {
+	client := &fakeClient{
+		streamErrs: []error{anthropic.APIError{StatusCode: http.StatusServiceUnavailable, Type: "overloaded_error", Message: "stream unavailable"}},
+		calls: []fakeCall{{
+			response: &anthropic.Response{ID: "msg_fallback", Type: "message", Role: "assistant", Model: "sonnet", Content: []contracts.ContentBlock{contracts.NewTextBlock("fallback ok")}},
+		}},
+	}
+	runner := Runner{
+		Client:       client,
+		Model:        "sonnet",
+		MaxTokens:    64,
+		UseStreaming: true,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Assistant.Content[0].Text; got != "fallback ok" {
+		t.Fatalf("assistant text = %q", got)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	if !client.requests[0].Stream {
+		t.Fatalf("first request should be streaming: %#v", client.requests[0])
+	}
+	if client.requests[1].Stream {
+		t.Fatalf("fallback request should be non-streaming: %#v", client.requests[1])
+	}
+}
+
+func TestRunnerDoesNotFallbackAfterStreamEvents(t *testing.T) {
+	client := &fakeClient{
+		streams: [][]anthropic.StreamEvent{{
+			{Type: "message_start", Message: &anthropic.Response{ID: "msg_partial", Type: "message", Role: "assistant", Model: "sonnet"}},
+		}},
+		streamErrs: []error{anthropic.APIError{StatusCode: http.StatusServiceUnavailable, Type: "overloaded_error", Message: "stream interrupted"}},
+		calls: []fakeCall{{
+			response: &anthropic.Response{ID: "msg_fallback", Type: "message", Role: "assistant", Model: "sonnet", Content: []contracts.ContentBlock{contracts.NewTextBlock("should not run")}},
+		}},
+	}
+	runner := Runner{
+		Client:       client,
+		Model:        "sonnet",
+		MaxTokens:    64,
+		UseStreaming: true,
+	}
+	_, err := runner.RunTurn(context.Background(), nil, messages.UserText("hello"))
+	if err == nil {
+		t.Fatal("expected stream error")
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %#v", client.requests)
 	}
 }
 

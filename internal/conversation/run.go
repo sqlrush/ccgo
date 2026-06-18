@@ -5475,13 +5475,21 @@ func (r Runner) applyToolResultBudget(history []contracts.Message) ([]contracts.
 func (r Runner) createMessage(ctx context.Context, request anthropic.Request) (*anthropic.Response, error) {
 	if r.UseStreaming {
 		if streamer, ok := r.Client.(StreamingMessageClient); ok {
-			request.Stream = true
+			streamRequest := request
+			streamRequest.Stream = true
 			acc := anthropic.NewStreamAccumulator()
-			if err := streamer.StreamMessages(ctx, request, func(event anthropic.StreamEvent) error {
+			seenStreamEvent := false
+			if err := streamer.StreamMessages(ctx, streamRequest, func(event anthropic.StreamEvent) error {
+				seenStreamEvent = true
 				eventCopy := event
-				r.emit(Event{Type: EventStreamEvent, StreamEvent: &eventCopy, Model: request.Model})
+				r.emit(Event{Type: EventStreamEvent, StreamEvent: &eventCopy, Model: streamRequest.Model})
 				return acc.Add(event)
 			}); err != nil {
+				if !seenStreamEvent {
+					fallbackRequest := request
+					fallbackRequest.Stream = false
+					return r.Client.CreateMessage(ctx, fallbackRequest)
+				}
 				return nil, err
 			}
 			return acc.Finish(), nil
