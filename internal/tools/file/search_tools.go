@@ -514,6 +514,7 @@ type grepFileStats struct {
 	MatchedLines  int
 	BytesPrinted  int
 	BytesSearched int64
+	BinaryOffset  *int
 	HasMatches    bool
 }
 
@@ -1638,6 +1639,22 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 			if !options.Binary {
 				return nil
 			}
+			if options.JSON {
+				lineMatches, fileMatches, fileMatchedLines := grepBinaryJSONFileMatches(displayRel, content, expr, options)
+				stats.Matches += fileMatches
+				stats.MatchedLines += fileMatchedLines
+				if fileMatchedLines > 0 {
+					stats.FilesWithMatches++
+				}
+				stats.Files[displayRel] = grepFileStats{Matches: fileMatches, MatchedLines: fileMatchedLines, BytesSearched: info.Size(), BinaryOffset: intPointer(binaryOffset), HasMatches: fileMatchedLines > 0}
+				if len(lineMatches) > 0 {
+					for i := range lineMatches {
+						lineMatches[i].ModUnix = info.ModTime().UnixNano()
+					}
+					matches = append(matches, lineMatches...)
+				}
+				return nil
+			}
 			if !expr.MatchString(content) {
 				if options.Mode == "files_without_matches" {
 					matches = append(matches, grepMatch{Path: displayRel, ModUnix: info.ModTime().UnixNano()})
@@ -1745,6 +1762,50 @@ func grepStatsForFile(content string, expr *regexp.Regexp, options grepOptions, 
 		return grepMultilineStats(view, expr, options.MaxCount)
 	}
 	return grepLineStats(view.Lines, expr, options.MaxCount)
+}
+
+func grepBinaryJSONFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) ([]grepMatch, int, int) {
+	var matches []grepMatch
+	matchCount := 0
+	matchedLines := 0
+	lineNumber := 1
+	lineStart := 0
+	flushLine := func(lineEnd int) bool {
+		line := content[lineStart:lineEnd]
+		spans := expr.FindAllStringIndex(line, -1)
+		if len(spans) == 0 {
+			return true
+		}
+		if options.MaxCount > 0 && matchedLines >= options.MaxCount {
+			return false
+		}
+		matchCount += len(spans)
+		matchedLines++
+		matches = append(matches, grepMatch{
+			Path:       path,
+			Line:       lineNumber,
+			Column:     spans[0][0] + 1,
+			ByteOffset: lineStart,
+			LineText:   line,
+			Text:       grepDisplayLine(line, true, options.MaxColumns, options.MaxPreview, options.Trim),
+			Matched:    true,
+		})
+		return true
+	}
+	for i := 0; i < len(content); i++ {
+		if content[i] != '\x00' && content[i] != '\n' {
+			continue
+		}
+		if !flushLine(i) {
+			return matches, matchCount, matchedLines
+		}
+		lineStart = i + 1
+		lineNumber++
+	}
+	if lineStart < len(content) {
+		flushLine(len(content))
+	}
+	return matches, matchCount, matchedLines
 }
 
 func grepLineStats(lines []string, expr *regexp.Regexp, maxCount int) (int, int) {
@@ -2571,7 +2632,7 @@ func grepJSONEndEvent(path string, stats grepFileStats, elapsed time.Duration) m
 		"type": "end",
 		"data": map[string]any{
 			"path":          grepJSONText(path),
-			"binary_offset": nil,
+			"binary_offset": grepJSONBinaryOffset(stats),
 			"stats": map[string]any{
 				"elapsed":             grepJSONElapsed(elapsed),
 				"searches":            1,
@@ -2583,6 +2644,13 @@ func grepJSONEndEvent(path string, stats grepFileStats, elapsed time.Duration) m
 			},
 		},
 	}
+}
+
+func grepJSONBinaryOffset(stats grepFileStats) any {
+	if stats.BinaryOffset == nil {
+		return nil
+	}
+	return *stats.BinaryOffset
 }
 
 func grepJSONSummaryEvent(stats grepStats) map[string]any {
@@ -3833,6 +3901,10 @@ func structuredOptionalInt(value int) any {
 		return nil
 	}
 	return value
+}
+
+func intPointer(value int) *int {
+	return &value
 }
 
 func structuredOptionalInt64(value int64, ok bool) any {

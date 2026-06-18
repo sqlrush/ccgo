@@ -3185,6 +3185,36 @@ func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 		t.Fatalf("binary flag result = %#v", binaryResult)
 	}
 
+	jsonBinaryResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_binary",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"--binary":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonBinaryEvents := strings.Split(jsonBinaryResult.Content.(string), "\n")
+	if len(jsonBinaryEvents) != 4 {
+		t.Fatalf("json binary content = %#v", jsonBinaryResult.Content)
+	}
+	var jsonBinaryMatch map[string]any
+	if err := json.Unmarshal([]byte(jsonBinaryEvents[1]), &jsonBinaryMatch); err != nil {
+		t.Fatal(err)
+	}
+	matchData := jsonBinaryMatch["data"].(map[string]any)
+	if matchData["lines"].(map[string]any)["text"] != "Needle\n" ||
+		matchData["line_number"] != float64(1) ||
+		matchData["absolute_offset"] != float64(0) {
+		t.Fatalf("json binary match = %#v", matchData)
+	}
+	var jsonBinaryEnd map[string]any
+	if err := json.Unmarshal([]byte(jsonBinaryEvents[2]), &jsonBinaryEnd); err != nil {
+		t.Fatal(err)
+	}
+	if jsonBinaryEnd["data"].(map[string]any)["binary_offset"] != float64(6) {
+		t.Fatalf("json binary end = %#v", jsonBinaryEnd)
+	}
+
 	textResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_binary_text",
 		Name:  "Grep",
