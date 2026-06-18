@@ -202,6 +202,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
 - 本轮补充：Grep count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
 - 本轮补充：Grep 长行省略阈值现在支持 `max_columns`/`maxColumns`/`max-columns`/`--max-columns`，默认保持 500，传 `0` 可关闭省略，quoted semantic number 同样兼容。
+- 本轮补充：Grep 文件过滤现在支持 ripgrep 风格 `max_filesize`/`maxFilesize`/`max-filesize`/`--max-filesize`，接受 byte 数字或带 `K`/`M`/`G` 后缀的字符串，递归搜索时跳过超过阈值的文件并在 structured content 回传解析后的 byte 数。
 - 本轮补充：Grep content 输出现在支持 `no_line_number`/`noLineNumber`/`no_line_numbers`/`noLineNumbers`/`no-line-number`/`--no-line-number`/`-N`，可用 ripgrep 风格显式关闭默认行号输出；quoted semantic boolean 同样兼容，且 no-line-number 优先于 line-number 开关。
 - 本轮补充：Grep content 输出现在支持 `column`/`column_numbers`/`columnNumbers`/`column-number`/`--column`，显式开启时匹配行会输出 `path:line:column:text` 并在 structured matches 中暴露首个匹配列号，context 行保持原格式；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 文件列表输出现在支持 `files_without_match`/`filesWithoutMatch`/`files-without-match`/`--files-without-match`，也接受 `output_mode` 的 `files_without_match(es)`，用于列出不含匹配的文件并兼容 quoted boolean。

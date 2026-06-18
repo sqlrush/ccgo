@@ -1680,6 +1680,57 @@ func TestGrepToolMaxDepth(t *testing.T) {
 	}
 }
 
+func TestGrepToolMaxFilesize(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "empty.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "small.txt"), []byte("Needle small\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	largeContent := strings.Repeat("x", 1100) + "\nNeedle large\n"
+	if err := os.WriteFile(filepath.Join(dir, "large.txt"), []byte(largeContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_filesize",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--max-filesize":"1K","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "Found 1 file\nsmall.txt" ||
+		result.StructuredContent["max_filesize"] != int64(1024) {
+		t.Fatalf("max-filesize result = %#v", result)
+	}
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_max_filesize_number",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--files":true,"max_filesize":20,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesResult.Content != "Found 2 files\nempty.txt\nsmall.txt" ||
+		filesResult.StructuredContent["max_filesize"] != int64(20) {
+		t.Fatalf("max-filesize numeric result = %#v", filesResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_invalid_max_filesize",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","max-filesize":"1.5K"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "max_filesize must be a non-negative integer") {
+		t.Fatalf("invalid max-filesize error = %v", err)
+	}
+}
+
 func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-4 * time.Hour)

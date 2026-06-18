@@ -28,10 +28,13 @@ const grepOmittedLongLinePreviewSuffix = " [... omitted end of long line]"
 
 var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
+type rawJSON = json.RawMessage
+
 var allowedGrepInputKeys = map[string]struct{}{
 	"pattern": {}, "regex": {}, "regexp": {}, "--regexp": {}, "-e": {}, "path": {}, "glob": {}, "--glob": {}, "-g": {}, "iglob": {}, "--iglob": {}, "glob_case_insensitive": {}, "globCaseInsensitive": {}, "glob-case-insensitive": {}, "--glob-case-insensitive": {}, "no_glob_case_insensitive": {}, "noGlobCaseInsensitive": {}, "no-glob-case-insensitive": {}, "--no-glob-case-insensitive": {}, "type": {}, "--type": {}, "-t": {}, "type_not": {}, "typeNot": {}, "type-not": {}, "--type-not": {}, "-T": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
+	"max_filesize": {}, "maxFilesize": {}, "max-filesize": {}, "--max-filesize": {},
 	"max_depth": {}, "maxDepth": {}, "max-depth": {}, "--max-depth": {}, "-d": {},
 	"max_columns_preview": {}, "maxColumnsPreview": {}, "max-columns-preview": {}, "--max-columns-preview": {}, "no_max_columns_preview": {}, "noMaxColumnsPreview": {}, "no-max-columns-preview": {}, "--no-max-columns-preview": {},
 	"replace": {}, "--replace": {}, "-r": {},
@@ -166,6 +169,10 @@ type grepInput struct {
 	MaxColumnsAlt             *int    `json:"maxColumns,omitempty"`
 	MaxColumnsDash            *int    `json:"max-columns,omitempty"`
 	LongMaxColumns            *int    `json:"--max-columns,omitempty"`
+	MaxFilesize               rawJSON `json:"max_filesize,omitempty"`
+	MaxFilesizeAlt            rawJSON `json:"maxFilesize,omitempty"`
+	MaxFilesizeDash           rawJSON `json:"max-filesize,omitempty"`
+	LongMaxFilesize           rawJSON `json:"--max-filesize,omitempty"`
 	MaxDepth                  *int    `json:"max_depth,omitempty"`
 	MaxDepthAlt               *int    `json:"maxDepth,omitempty"`
 	MaxDepthDash              *int    `json:"max-depth,omitempty"`
@@ -425,6 +432,8 @@ type grepOptions struct {
 	Offset                int
 	MaxCount              int
 	MaxColumns            int
+	MaxFilesize           int64
+	HasMaxFilesize        bool
 	MaxPreview            bool
 	WithFilename          bool
 	Heading               bool
@@ -550,9 +559,13 @@ func NewGrepTool() tool.Tool {
 					"--max-columns": map[string]any{
 						"type": "integer",
 					},
-					"max_depth": map[string]any{"type": "integer"},
-					"maxDepth":  map[string]any{"type": "integer"},
-					"max-depth": map[string]any{"type": "integer"},
+					"max_filesize":   map[string]any{"type": []any{"string", "number"}},
+					"maxFilesize":    map[string]any{"type": []any{"string", "number"}},
+					"max-filesize":   map[string]any{"type": []any{"string", "number"}},
+					"--max-filesize": map[string]any{"type": []any{"string", "number"}},
+					"max_depth":      map[string]any{"type": "integer"},
+					"maxDepth":       map[string]any{"type": "integer"},
+					"max-depth":      map[string]any{"type": "integer"},
 					"--max-depth": map[string]any{
 						"type": "integer",
 					},
@@ -834,7 +847,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -951,6 +964,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if input.LongMaxColumns != nil && *input.LongMaxColumns < 0 {
 		return fmt.Errorf("max_columns must be non-negative")
 	}
+	if _, _, err := grepMaxFilesize(input); err != nil {
+		return err
+	}
 	if err := validateGrepMaxDepth(input); err != nil {
 		return err
 	}
@@ -1036,12 +1052,18 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
+	maxFilesize, hasMaxFilesize, err := grepMaxFilesize(input)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
 	options := grepOptions{
 		Mode:                  mode,
 		Limit:                 grepLimit(input),
 		Offset:                grepOffset(input),
 		MaxCount:              grepMaxCount(input),
 		MaxColumns:            grepMaxColumns(input),
+		MaxFilesize:           maxFilesize,
+		HasMaxFilesize:        hasMaxFilesize,
 		MaxPreview:            grepMaxColumnsPreview(input),
 		WithFilename:          grepWithFilename(input, mode),
 		Heading:               heading,
@@ -1112,6 +1134,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"max_depth":               structuredOptionalInt(maxDepth),
 			"max_count":               options.MaxCount,
 			"max_columns":             options.MaxColumns,
+			"max_filesize":            structuredOptionalInt64(options.MaxFilesize, options.HasMaxFilesize),
 			"max_columns_preview":     options.MaxPreview,
 			"with_filename":           options.WithFilename,
 			"no_filename":             !options.WithFilename && (mode == "content" || mode == "count"),
@@ -1379,6 +1402,9 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 			return nil
 		}
 		displayRel := searchDisplayPath(displayRoot, path, rel)
+		if options.HasMaxFilesize && info.Size() > options.MaxFilesize {
+			return nil
+		}
 		if hasBinaryExtension(path) && !options.Text {
 			return nil
 		}
@@ -2785,6 +2811,83 @@ func grepMaxColumns(input grepInput) int {
 	return defaultGrepMaxColumns
 }
 
+func grepMaxFilesize(input grepInput) (int64, bool, error) {
+	raw := firstNonEmptyRaw(input.MaxFilesize, input.MaxFilesizeAlt, input.MaxFilesizeDash, input.LongMaxFilesize)
+	if len(raw) == 0 {
+		return 0, false, nil
+	}
+	text, err := scalarJSONText(raw)
+	if err != nil {
+		return 0, false, fmt.Errorf("max_filesize must be a non-negative integer with optional K, M, or G suffix")
+	}
+	size, err := parseGrepMaxFilesize(text)
+	if err != nil {
+		return 0, false, err
+	}
+	return size, true, nil
+}
+
+func firstNonEmptyRaw(values ...json.RawMessage) json.RawMessage {
+	for _, value := range values {
+		text := strings.TrimSpace(string(value))
+		if text != "" && text != "null" {
+			return value
+		}
+	}
+	return nil
+}
+
+func scalarJSONText(raw json.RawMessage) (string, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return "", fmt.Errorf("empty value")
+	}
+	if strings.HasPrefix(text, `"`) {
+		var decoded string
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(decoded), nil
+	}
+	return text, nil
+}
+
+func parseGrepMaxFilesize(raw string) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, fmt.Errorf("max_filesize must be a non-empty size")
+	}
+	multiplier := int64(1)
+	last := raw[len(raw)-1]
+	switch last {
+	case 'K', 'k':
+		multiplier = 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	case 'M', 'm':
+		multiplier = 1024 * 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	case 'G', 'g':
+		multiplier = 1024 * 1024 * 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	}
+	if raw == "" {
+		return 0, fmt.Errorf("max_filesize must be a non-empty size")
+	}
+	for _, r := range raw {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("max_filesize must be a non-negative integer with optional K, M, or G suffix")
+		}
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("max_filesize is too large")
+	}
+	if value > math.MaxInt64/multiplier {
+		return 0, fmt.Errorf("max_filesize is too large")
+	}
+	return value * multiplier, nil
+}
+
 func validateGrepMaxDepth(input grepInput) error {
 	for _, value := range []*int{input.MaxDepth, input.MaxDepthAlt, input.MaxDepthDash, input.LongMaxDepth, input.ShortMaxDepth} {
 		if value != nil && *value < 0 {
@@ -2815,6 +2918,13 @@ func grepMaxDepth(input grepInput) int {
 
 func structuredOptionalInt(value int) any {
 	if value < 0 {
+		return nil
+	}
+	return value
+}
+
+func structuredOptionalInt64(value int64, ok bool) any {
+	if !ok {
 		return nil
 	}
 	return value

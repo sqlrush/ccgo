@@ -157,6 +157,7 @@ Covered behavior:
 - `Grep` traversal now accepts ripgrep-style `follow`/`--follow`/`-L` plus `no_follow`/`--no-follow`, skipping symlinks by default and following symlink files/directories with real-path loop protection when requested.
 - `Grep` content output now accepts `trim`/`--trim` plus `no_trim`/`--no-trim`, trimming leading ASCII whitespace from printed line text while preserving original match columns.
 - `Grep` long-line output now accepts `max_columns_preview`/`--max-columns-preview` plus `no_max_columns_preview`/`--no-max-columns-preview`, showing a ripgrep-style truncated preview when `max_columns` is exceeded.
+- `Grep` file filtering now accepts ripgrep-style `max_filesize`/`--max-filesize` with optional `K`/`M`/`G` suffixes, skipping files larger than the parsed byte limit before content reads or file-list output.
 - `Glob`/`Grep` traversal now applies `Read(...)` deny rules from the permission context as extra search ignore rules, hiding denied basename, path, and directory patterns from search results.
 - `Glob`/`Grep` hierarchical ignore loading now includes ripgrep-specific `.rgignore` files in addition to `.gitignore` and `.ignore`.
 - `Grep` now accepts ripgrep-style `ignore_dot`/`--ignore-dot` and `no_ignore_dot`/`--no-ignore-dot`, letting `.ignore`/`.rgignore` rules be disabled while `.gitignore` remains active.
