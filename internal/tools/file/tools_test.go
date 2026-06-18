@@ -3612,6 +3612,102 @@ func TestGrepToolTypeFilter(t *testing.T) {
 	}
 }
 
+func TestGrepToolHiddenControls(t *testing.T) {
+	dir := t.TempDir()
+	for _, rel := range []string{".hdir", ".git"} {
+		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".ignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"visible.txt":     "Needle visible\n",
+		".hidden.txt":     "Needle hidden file\n",
+		".hdir/hit.txt":   "Needle hidden dir\n",
+		"ignored.log":     "Needle ignored log\n",
+		".hidden.log":     "Needle hidden ignored log\n",
+		".git/hidden.txt": "Needle vcs metadata\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(dir, rel)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_hidden_default",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDefault := "Found 3 files\n.hdir/hit.txt\n.hidden.txt\nvisible.txt"
+	if defaultResult.Content != wantDefault ||
+		defaultResult.StructuredContent["hidden"] != true ||
+		defaultResult.StructuredContent["no_hidden"] != false {
+		t.Fatalf("default hidden result = %#v", defaultResult)
+	}
+
+	hiddenFalseResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_hidden_false",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"hidden":false,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoHidden := "Found 1 file\nvisible.txt"
+	if hiddenFalseResult.Content != wantNoHidden ||
+		hiddenFalseResult.StructuredContent["hidden"] != false ||
+		hiddenFalseResult.StructuredContent["no_hidden"] != true {
+		t.Fatalf("hidden false result = %#v", hiddenFalseResult)
+	}
+
+	noHiddenResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_hidden",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"--no-hidden":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noHiddenResult.Content != wantNoHidden {
+		t.Fatalf("no-hidden result = %#v", noHiddenResult)
+	}
+
+	noIgnoreHiddenResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_hidden_no_ignore",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"--hidden":true,"--no-ignore":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoIgnoreHidden := "Found 5 files\n.hdir/hit.txt\n.hidden.log\n.hidden.txt\nignored.log\nvisible.txt"
+	if noIgnoreHiddenResult.Content != wantNoIgnoreHidden {
+		t.Fatalf("hidden no-ignore result = %#v", noIgnoreHiddenResult)
+	}
+
+	noIgnoreNoHiddenResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_ignore_no_hidden",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"--no-ignore":true,"--no-hidden":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoIgnoreNoHidden := "Found 2 files\nignored.log\nvisible.txt"
+	if noIgnoreNoHiddenResult.Content != wantNoIgnoreNoHidden {
+		t.Fatalf("no-ignore no-hidden result = %#v", noIgnoreNoHiddenResult)
+	}
+}
+
 func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "ignored"), 0o755); err != nil {

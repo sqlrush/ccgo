@@ -43,6 +43,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"context_separator": {}, "contextSeparator": {}, "context-separator": {}, "--context-separator": {},
 	"no_context_separator": {}, "noContextSeparator": {}, "no-context-separator": {}, "--no-context-separator": {},
 	"byte_offset": {}, "byteOffset": {}, "byte-offset": {}, "--byte-offset": {}, "-b": {},
+	"hidden": {}, "--hidden": {}, "no_hidden": {}, "noHidden": {}, "no-hidden": {}, "--no-hidden": {},
 	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
@@ -80,6 +81,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"null": {}, "--null": {}, "-0": {},
 	"no_context_separator": {}, "noContextSeparator": {}, "no-context-separator": {}, "--no-context-separator": {},
 	"byte_offset": {}, "byteOffset": {}, "byte-offset": {}, "--byte-offset": {}, "-b": {},
+	"hidden": {}, "--hidden": {}, "no_hidden": {}, "noHidden": {}, "no-hidden": {}, "--no-hidden": {},
 	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
 	"column": {}, "column_numbers": {}, "columnNumbers": {}, "column-number": {}, "--column": {},
@@ -189,6 +191,12 @@ type grepInput struct {
 	ByteOffsetDash            bool    `json:"byte-offset,omitempty"`
 	LongByteOffset            bool    `json:"--byte-offset,omitempty"`
 	ShortByteOffset           bool    `json:"-b,omitempty"`
+	Hidden                    *bool   `json:"hidden,omitempty"`
+	LongHidden                *bool   `json:"--hidden,omitempty"`
+	NoHidden                  bool    `json:"no_hidden,omitempty"`
+	NoHiddenAlt               bool    `json:"noHidden,omitempty"`
+	NoHiddenDash              bool    `json:"no-hidden,omitempty"`
+	LongNoHidden              bool    `json:"--no-hidden,omitempty"`
 	Sort                      string  `json:"sort,omitempty"`
 	LongSort                  string  `json:"--sort,omitempty"`
 	SortReverse               string  `json:"sortr,omitempty"`
@@ -501,6 +509,12 @@ func NewGrepTool() tool.Tool {
 					"byte-offset":               map[string]any{"type": "boolean"},
 					"--byte-offset":             map[string]any{"type": "boolean"},
 					"-b":                        map[string]any{"type": "boolean"},
+					"hidden":                    map[string]any{"type": "boolean"},
+					"--hidden":                  map[string]any{"type": "boolean"},
+					"no_hidden":                 map[string]any{"type": "boolean"},
+					"noHidden":                  map[string]any{"type": "boolean"},
+					"no-hidden":                 map[string]any{"type": "boolean"},
+					"--no-hidden":               map[string]any{"type": "boolean"},
 					"sort":                      map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"--sort":                    map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"sortr":                     map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
@@ -663,7 +677,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -841,6 +855,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	byteOffset := grepByteOffset(input)
 	countMatches := grepCountMatches(input) && mode == "count" && !invertMatch
 	includeZero := grepIncludeZero(input) && mode == "count"
+	includeHidden := grepIncludeHidden(input)
 	replace, hasReplace := grepReplacement(input)
 	if mode != "content" {
 		replace = ""
@@ -888,7 +903,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	noIgnore := grepNoIgnore(input)
 	globFilter := grepGlobFilter(input)
 	typeFilter := grepTypeFilter(input)
-	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, globFilter, typeFilter, expr, options, grepWalkOptions(ctx, root, noIgnore))
+	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, globFilter, typeFilter, expr, options, grepWalkOptions(ctx, root, noIgnore, includeHidden))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -946,6 +961,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"count_matches":           countMatches,
 			"include_zero":            includeZero,
 			"no_ignore":               noIgnore,
+			"hidden":                  includeHidden,
+			"no_hidden":               !includeHidden,
 			"multiline":               grepMultiline(input),
 			"sort":                    grepStructuredSortMode(options),
 			"sort_reverse":            grepStructuredSortReverse(options),
@@ -2085,6 +2102,25 @@ func grepByteOffset(input grepInput) bool {
 		input.ShortByteOffset
 }
 
+func grepIncludeHidden(input grepInput) bool {
+	if input.NoHidden || input.NoHiddenAlt || input.NoHiddenDash || input.LongNoHidden {
+		return false
+	}
+	if value, ok := firstBoolPointer(input.Hidden, input.LongHidden); ok {
+		return value
+	}
+	return true
+}
+
+func firstBoolPointer(values ...*bool) (bool, bool) {
+	for _, value := range values {
+		if value != nil {
+			return *value, true
+		}
+	}
+	return false, false
+}
+
 func firstStringPointer(values ...*string) (string, bool) {
 	for _, value := range values {
 		if value != nil {
@@ -2440,10 +2476,10 @@ func globWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 	}
 }
 
-func grepWalkOptions(ctx tool.Context, root string, noIgnore bool) searchWalkOptions {
+func grepWalkOptions(ctx tool.Context, root string, noIgnore bool, includeHidden bool) searchWalkOptions {
 	return searchWalkOptions{
 		UseIgnoreFiles: !noIgnore,
-		IncludeHidden:  true,
+		IncludeHidden:  includeHidden,
 		ExcludeVCSDirs: true,
 		ExtraIgnores:   readDenySearchIgnoreRules(ctx, root),
 	}
