@@ -3294,6 +3294,43 @@ func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 	}
 }
 
+func TestGrepToolMMapControls(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hit.txt"), []byte("Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	mmapResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_mmap",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--mmap":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mmapResult.Content != "Found 1 file\nhit.txt" ||
+		mmapResult.StructuredContent["mmap"] != true ||
+		mmapResult.StructuredContent["no_mmap"] != false {
+		t.Fatalf("mmap result = %#v", mmapResult)
+	}
+
+	noMMapResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_mmap_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","mmap":true,"noMMAP":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noMMapResult.Content != "Found 1 file\nhit.txt" ||
+		noMMapResult.StructuredContent["mmap"] != false ||
+		noMMapResult.StructuredContent["no_mmap"] != true {
+		t.Fatalf("no-mmap override result = %#v", noMMapResult)
+	}
+}
+
 func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	dir := t.TempDir()
 	longMatch := strings.Repeat("x", defaultGrepMaxColumns-len("Needle")) + "Needle"
