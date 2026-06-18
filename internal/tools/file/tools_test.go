@@ -3669,6 +3669,73 @@ func TestGrepToolTypeFilter(t *testing.T) {
 	}
 }
 
+func TestGrepToolCaseInsensitiveGlobFilter(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"src/Alpha.GO": "Needle go\n",
+		"src/Beta.TXT": "Needle text\n",
+		"src/gamma.md": "Needle markdown\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	caseSensitiveResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_glob_case_sensitive",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"*.go","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caseSensitiveResult.Content != "No files found" {
+		t.Fatalf("case-sensitive glob result = %#v", caseSensitiveResult)
+	}
+
+	iglobResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_iglob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--iglob":"*.go","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if iglobResult.Content != "Found 1 file\nsrc/Alpha.GO" || iglobResult.StructuredContent["iglob"] != "*.go" {
+		t.Fatalf("iglob result = %#v", iglobResult)
+	}
+
+	unionResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_glob_iglob_union",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"*.md","iglob":"*.go","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unionResult.Content != "Found 2 files\nsrc/Alpha.GO\nsrc/gamma.md" {
+		t.Fatalf("glob/iglob union result = %#v", unionResult)
+	}
+
+	negativeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_negative_iglob",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","iglob":"!*.txt","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if negativeResult.Content != "Found 2 files\nsrc/Alpha.GO\nsrc/gamma.md" {
+		t.Fatalf("negative iglob result = %#v", negativeResult)
+	}
+}
+
 func TestGrepToolHiddenControls(t *testing.T) {
 	dir := t.TempDir()
 	for _, rel := range []string{".hdir", ".git"} {
