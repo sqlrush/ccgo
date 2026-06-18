@@ -3348,7 +3348,9 @@ func (r Runner) formatMemorySummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) > 0 {
 		switch args[0] {
-		case "list", "status":
+		case "list":
+			return r.formatMemoryShow()
+		case "status":
 		case "show", "view", "cat":
 			query := subcommandRemainder(raw, args[0])
 			if strings.TrimSpace(query) != "" {

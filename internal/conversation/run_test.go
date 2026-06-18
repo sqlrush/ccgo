@@ -4607,6 +4607,26 @@ func TestRunnerMemoryShowListsMemoryFiles(t *testing.T) {
 			t.Fatalf("memory show missing %q: %q", want, text)
 		}
 	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory files",
+		"Session memory root: " + sessionRoot,
+		"sess_show/" + memory.SessionSummaryFilename + ": remember deployment flow",
+		"Relevant memory directory: " + relevantRoot,
+		"team/db.md: Database rules",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory list missing %q: %q", want, text)
+		}
+	}
 }
 
 func TestRunnerMemorySearchFindsMemoryFiles(t *testing.T) {
