@@ -4037,7 +4037,13 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".ignore"), []byte("scratch.txt\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, ".rgignore"), []byte("rgonly.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "sub", ".gitignore"), []byte("local.txt\n!visible.txt\nlogs/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", ".rgignore"), []byte("rgonly.md\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
@@ -4045,8 +4051,10 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 		"important.log":   "Needle visible by negation\n",
 		"keep.txt":        "Needle visible\n",
 		"ignored/hit.txt": "Needle hidden by ignored directory\n",
+		"rgonly.txt":      "Needle hidden by rgignore\n",
 		"scratch.txt":     "Needle hidden by ignore file\n",
 		"sub/local.txt":   "Needle hidden by nested gitignore\n",
+		"sub/rgonly.md":   "Needle hidden by nested rgignore\n",
 		"sub/visible.txt": "Needle visible by nested negation\n",
 		"sub/logs/hit.md": "Needle hidden by nested ignored directory\n",
 		".bzr/hit.log":    "Needle hidden by bzr metadata\n",
@@ -4100,14 +4108,16 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedNoIgnore := "Found 8 files\n" +
+	expectedNoIgnore := "Found 10 files\n" +
 		"debug.log\n" +
 		"ignored/hit.txt\n" +
 		"important.log\n" +
 		"keep.txt\n" +
+		"rgonly.txt\n" +
 		"scratch.txt\n" +
 		"sub/local.txt\n" +
 		"sub/logs/hit.md\n" +
+		"sub/rgonly.md\n" +
 		"sub/visible.txt"
 	if noIgnoreResult.Content != expectedNoIgnore {
 		t.Fatalf("grep no-ignore content = %#v", noIgnoreResult.Content)
