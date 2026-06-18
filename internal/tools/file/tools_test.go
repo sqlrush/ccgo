@@ -3822,6 +3822,72 @@ func TestGrepToolCRLFAnchors(t *testing.T) {
 	}
 }
 
+func TestGrepToolNullData(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "data.bin"), []byte("foo\x00bar\x00tail"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_data_default",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"foo$","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Content != "No matches found" || defaultResult.StructuredContent["null_data"] != false {
+		t.Fatalf("default null-data result = %#v", defaultResult)
+	}
+
+	nullDataResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_data_enabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"foo$","output_mode":"content","--null-data":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nullDataResult.Content != "data.bin:1:foo\x00" ||
+		nullDataResult.StructuredContent["null_data"] != true ||
+		nullDataResult.StructuredContent["text"] != true ||
+		nullDataResult.StructuredContent["crlf"] != false {
+		t.Fatalf("enabled null-data result = %#v", nullDataResult)
+	}
+
+	offsetResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_data_byte_offset",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"bar$","output_mode":"content","null_data":true,"--byte-offset":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if offsetResult.Content != "data.bin:2:4:bar\x00" {
+		t.Fatalf("null-data byte offset result = %#v", offsetResult)
+	}
+	matches := offsetResult.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 1 || matches[0]["byte_offset"] != 4 {
+		t.Fatalf("null-data byte offset structured matches = %#v", matches)
+	}
+
+	noNullDataResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_null_data_disabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"foo$","output_mode":"content","--null-data":true,"--no-null-data":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noNullDataResult.Content != "No matches found" ||
+		noNullDataResult.StructuredContent["null_data"] != false ||
+		noNullDataResult.StructuredContent["no_null_data"] != true {
+		t.Fatalf("disabled null-data result = %#v", noNullDataResult)
+	}
+}
+
 func TestGrepToolTypeFilter(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {

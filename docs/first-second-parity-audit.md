@@ -159,6 +159,7 @@ Covered behavior:
 - `Grep` long-line output now accepts `max_columns_preview`/`--max-columns-preview` plus `no_max_columns_preview`/`--no-max-columns-preview`, showing a ripgrep-style truncated preview when `max_columns` is exceeded.
 - `Grep` file filtering now accepts ripgrep-style `max_filesize`/`--max-filesize` with optional `K`/`M`/`G` suffixes, skipping files larger than the parsed byte limit before content reads or file-list output.
 - `Grep` search now accepts ripgrep-style `crlf`/`--crlf` plus `no_crlf`/`--no-crlf`, preserving default CRLF anchor behavior while allowing CRLF-aware anchors with original byte offsets.
+- `Grep` search now accepts ripgrep-style `null_data`/`--null-data` plus `no_null_data`/`--no-null-data`, treating NUL as the input line terminator, implying text search, overriding CRLF mode, and preserving NUL record separators for content/count/matching-file output.
 - `Glob`/`Grep` traversal now applies `Read(...)` deny rules from the permission context as extra search ignore rules, hiding denied basename, path, and directory patterns from search results.
 - `Glob`/`Grep` hierarchical ignore loading now includes ripgrep-specific `.rgignore` files in addition to `.gitignore` and `.ignore`.
 - `Grep` now accepts ripgrep-style `ignore_dot`/`--ignore-dot` and `no_ignore_dot`/`--no-ignore-dot`, letting `.ignore`/`.rgignore` rules be disabled while `.gitignore` remains active.
