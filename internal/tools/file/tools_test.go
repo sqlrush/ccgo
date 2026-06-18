@@ -1809,7 +1809,7 @@ func TestGrepToolFilesMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filesResult.Content != "Found 2 files\nsrc/a.go\nsrc/b.TXT" ||
+	if filesResult.Content != "Found 3 files\nsrc/a.go\nsrc/b.TXT\nsrc/image.png" ||
 		filesResult.StructuredContent["output_mode"] != "files" ||
 		filesResult.StructuredContent["files"] != true ||
 		filesResult.StructuredContent["pattern"] != "" {
@@ -3150,7 +3150,7 @@ func TestGrepToolTrim(t *testing.T) {
 	}
 }
 
-func TestGrepToolTextSearchesBinaryExtensionFiles(t *testing.T) {
+func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "payload.bin"), []byte("Needle\x00inside\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -3168,6 +3168,21 @@ func TestGrepToolTextSearchesBinaryExtensionFiles(t *testing.T) {
 	}
 	if defaultResult.Content != "No files found" || defaultResult.StructuredContent["text"] != false {
 		t.Fatalf("default binary result = %#v", defaultResult)
+	}
+
+	binaryResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_binary_flag",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--binary":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantBinary := "payload.bin: binary file matches (found \"\\0\" byte around offset 6)"
+	if binaryResult.Content != wantBinary ||
+		binaryResult.StructuredContent["binary"] != true ||
+		binaryResult.StructuredContent["no_binary"] != false {
+		t.Fatalf("binary flag result = %#v", binaryResult)
 	}
 
 	textResult, err := executor.Execute(ctx, contracts.ToolUse{
@@ -3194,6 +3209,20 @@ func TestGrepToolTextSearchesBinaryExtensionFiles(t *testing.T) {
 		noTextResult.StructuredContent["text"] != false ||
 		noTextResult.StructuredContent["no_text"] != true {
 		t.Fatalf("no-text binary result = %#v", noTextResult)
+	}
+
+	noBinaryResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_binary_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--binary":true,"--no-binary":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noBinaryResult.Content != "No files found" ||
+		noBinaryResult.StructuredContent["binary"] != false ||
+		noBinaryResult.StructuredContent["no_binary"] != true {
+		t.Fatalf("no-binary result = %#v", noBinaryResult)
 	}
 
 	shortTextResult, err := executor.Execute(ctx, contracts.ToolUse{

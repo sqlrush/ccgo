@@ -141,7 +141,8 @@ Covered behavior:
 - `Grep` now accepts ripgrep-style case-insensitive glob filtering through `iglob`/`--iglob`, sharing positive and `!` negative glob rule semantics with `glob` while preserving structured filter metadata.
 - `Grep` now accepts ripgrep-style `glob_case_insensitive`/`--glob-case-insensitive` plus no-override aliases, making ordinary `glob`/`--glob`/`-g` filters match paths case-insensitively while preserving `iglob` behavior.
 - `Grep` glob filtering now accepts ripgrep-style negated `!pattern` rules, including combinations with positive patterns, comma/whitespace splitting, and brace-expanded globs.
-- `Grep` now accepts `text`/`--text`/`-a` to search binary-extension files as text while preserving the default binary-extension skip behavior; `no_text`/`--no-text` disables text mode when both are present.
+- `Grep` now accepts `text`/`--text`/`-a` to disable NUL-based binary filtering and search binary content as text; `no_text`/`--no-text` disables text mode when both are present.
+- `Grep` binary filtering now uses ripgrep-style NUL content detection instead of extension-based skipping; default search skips NUL-containing files, `binary`/`--binary` reports matching binary files, `text`/`--text`/`-a` searches them as text, and `no_binary`/`--no-binary` restores binary filtering.
 - `Grep` now accepts `line_regexp`/`line-regexp`/`--line-regexp`/`-x` to require whole-line matches, with fixed-string and word-regexp precedence covered.
 - `Grep` content output now accepts `passthru`/`passthrough`/`--passthru`/`--passthrough`, printing all searched lines while preserving matched-line markers and overriding context counts.
 - `Grep` content output now accepts `vimgrep`/`--vimgrep`, repeating matching lines once per match with column metadata while preserving context-line output and `-N` formatting.
