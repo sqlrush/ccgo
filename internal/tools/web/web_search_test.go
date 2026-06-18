@@ -68,6 +68,43 @@ func TestWebSearchReturnsParsedResults(t *testing.T) {
 	}
 }
 
+func TestWebSearchResolvesHTMLResultsAgainstBaseHref(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+			<html><head><base href="/search-base/"></head><body>
+				<a class="result__a" href="one">Base One</a>
+				<div class="result__snippet">Base snippet</div>
+			</body></html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL + "/search",
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_base_href",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"base href","max_results":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	wantURL := server.URL + "/search-base/one"
+	if results[0]["url"] != wantURL || results[0]["snippet"] != "Base snippet" {
+		t.Fatalf("result = %#v, want URL %q", results[0], wantURL)
+	}
+	if strings.Contains(result.Content.(string), server.URL+"/one") {
+		t.Fatalf("content resolved against search endpoint instead of base href: %#v", result.Content)
+	}
+}
+
 func TestWebSearchParsesJSONResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -184,6 +184,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch 现在按官方 cross-host redirect 语义处理跨 host 跳转，HEAD preflight 和 GET 都不会自动触达新 host，而是返回包含 original URL、redirect URL 和 status 的 redirect notice；同 host redirect 仍继续跟随并保留 `final_url`。
 - 本轮补充：WebFetch input schema 现在与官方对齐，`url` 和 `prompt` 都是必填字段；既有本地扩展 `timeout`、`max_bytes`/`maxBytes` 仍保持可选。
 - 本轮补充：WebFetch 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
+- 本轮补充：WebSearch HTML 结果解析现在会按搜索页首个有效 `<base href>` 解析相对结果 anchor，覆盖镜像/自定义搜索页中浏览器可见结果 URL 与请求路径不一致的情况。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。
 - 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
 - 本轮补充：WebSearch JSON parser 现在继续覆盖 `answerBox`/`answer_box`、`knowledgeGraph`/`knowledge_graph`、`news`/`news_results`、`topStories`、`peopleAlsoAsk` 和 `related_questions` 等常见搜索后端 wrapper，并识别 `website`/`sourceLink` URL alias、`question` title alias、`answer`/`excerpt` snippet alias。

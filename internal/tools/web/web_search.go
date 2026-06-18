@@ -223,6 +223,7 @@ func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 	anchors := anchorRe.FindAllStringSubmatchIndex(body, -1)
 	results := make([]searchResult, 0, len(anchors))
 	seen := map[string]struct{}{}
+	resultBase := searchHTMLBaseURL(body, base)
 	for idx, anchor := range anchors {
 		attrs := body[anchor[2]:anchor[3]]
 		if isSearchSnippetAnchor(attrs) {
@@ -233,7 +234,7 @@ func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 			continue
 		}
 		href := hrefFromAttrs(attrs)
-		resolved := resolveSearchURL(href, base)
+		resolved := resolveSearchURL(href, resultBase)
 		if resolved == "" || isSearchChromeURL(resolved) {
 			continue
 		}
@@ -244,6 +245,30 @@ func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 		results = append(results, searchResult{Title: label, URL: resolved, Snippet: searchSnippetAfterAnchor(body, anchors, idx)})
 	}
 	return results
+}
+
+func searchHTMLBaseURL(body string, fallback *url.URL) *url.URL {
+	searchBody := htmlCommentRe.ReplaceAllString(body, "")
+	for _, match := range baseTagRe.FindAllStringSubmatch(searchBody, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		href := strings.TrimSpace(hrefFromAttrs(match[1]))
+		if href == "" || strings.HasPrefix(strings.ToLower(href), "javascript:") {
+			continue
+		}
+		parsed, err := url.Parse(href)
+		if err != nil {
+			continue
+		}
+		if fallback != nil {
+			parsed = fallback.ResolveReference(parsed)
+		}
+		if parsed.Scheme == "http" || parsed.Scheme == "https" {
+			return parsed
+		}
+	}
+	return fallback
 }
 
 func parseJSONSearchResults(body string, base *url.URL) ([]searchResult, bool) {
@@ -386,6 +411,8 @@ func isAbsoluteSearchURL(raw string) bool {
 
 var (
 	anchorRe      = regexp.MustCompile(`(?is)<a\b([^>]*)>(.*?)</a>`)
+	baseTagRe     = regexp.MustCompile(`(?is)<base\b([^>]*)>`)
+	htmlCommentRe = regexp.MustCompile(`(?is)<!--.*?-->`)
 	hrefRe        = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
 	snippetRe     = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
 	tagRe         = regexp.MustCompile(`(?is)<[^>]+>`)
