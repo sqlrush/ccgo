@@ -133,6 +133,7 @@ Covered behavior:
 - `Grep` content output now accepts `column`/`column_numbers`/`columnNumbers`/`column-number`/`--column`, emitting `path:line:column:text` for matching lines while preserving context-line formatting and structured column metadata.
 - `Grep` files-with-matches output now mirrors the official modified-time sort: newest files first, path tie-breaker, and pagination applied after sorting.
 - `Grep` now accepts ripgrep-style result ordering through `sort`/`--sort` and `sortr`/`--sortr`, covering path, modified-time, and none ordering for files/content/count modes with structured sort metadata.
+- `Grep` now accepts ripgrep-style negative type filtering through `type_not`/`typeNot`/`type-not`/`--type-not`/`-T`, applying it after any positive `type` filter and preserving structured filter metadata.
 - `Grep` glob filtering now accepts ripgrep-style negated `!pattern` rules, including combinations with positive patterns, comma/whitespace splitting, and brace-expanded globs.
 - `Grep` now accepts `text`/`--text`/`-a` to search binary-extension files as text while preserving the default binary-extension skip behavior.
 - `Grep` now accepts `line_regexp`/`line-regexp`/`--line-regexp`/`-x` to require whole-line matches, with fixed-string and word-regexp precedence covered.

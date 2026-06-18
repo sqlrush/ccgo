@@ -3602,6 +3602,54 @@ func TestGrepToolTypeFilter(t *testing.T) {
 		t.Fatalf("short type result = %#v", shortTypeResult)
 	}
 
+	typeNotResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_type_not_go",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","type_not":"go","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if typeNotResult.Content != "Found 2 files\nsrc/b.txt\nsrc/c.jsx" || typeNotResult.StructuredContent["type_not_filter"] != "go" {
+		t.Fatalf("type_not result = %#v", typeNotResult)
+	}
+
+	longTypeNotResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_long_type_not",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--type-not":"javascript","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longTypeNotResult.Content != "Found 2 files\nsrc/a.go\nsrc/b.txt" || longTypeNotResult.StructuredContent["type_not_filter"] != "javascript" {
+		t.Fatalf("long type_not result = %#v", longTypeNotResult)
+	}
+
+	shortTypeNotResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_type_not",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","-T":"txt","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortTypeNotResult.Content != "Found 2 files\nsrc/a.go\nsrc/c.jsx" || shortTypeNotResult.StructuredContent["type_not_filter"] != "txt" {
+		t.Fatalf("short type_not result = %#v", shortTypeNotResult)
+	}
+
+	combinedTypeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_type_and_type_not",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","type":"javascript","--type-not":"js","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if combinedTypeResult.Content != "No files found" || combinedTypeResult.StructuredContent["type_filter"] != "javascript" || combinedTypeResult.StructuredContent["type_not_filter"] != "js" {
+		t.Fatalf("combined type/type_not result = %#v", combinedTypeResult)
+	}
+
 	_, err = executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_bad_type",
 		Name:  "Grep",
@@ -3609,6 +3657,15 @@ func TestGrepToolTypeFilter(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "type must be a file type or extension") {
 		t.Fatalf("type validation err = %v", err)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_type_not",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","type_not":"*.go"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "type must be a file type or extension") {
+		t.Fatalf("type_not validation err = %v", err)
 	}
 }
 
