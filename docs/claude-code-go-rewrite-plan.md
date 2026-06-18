@@ -143,6 +143,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`strictPluginOnlyCustomization` 已开始按 policy settings 生效，当前覆盖已实现的 `skills`、`mcp` 和 `hooks` surfaces：锁定后 user/project/local skills 与 legacy commands 不加载，manual MCP server sources 不加载但 plugin/admin policy 仍保留，settings hooks 只保留 policy hooks 且 plugin hooks 继续运行。agents 与更深 frontmatter/runtime edge cases 仍按缺口追踪。
 - 本轮补充：settings 文件读取现在有 path-keyed cache，按 size/mode/mtime 指纹复用内容并提供 `ResetSettingsCache`；新增 settings change detector，可对 settings 文件快照区分 created/modified/deleted，并在检测到变化时清空 settings 文件缓存。完整 watcher、remote managed refresh 和 app-state 同步仍按缺口追踪。
 - 本轮补充：新增 settings JSON Schema generation，`SettingsJSONSchema()` 会从 `contracts.Settings` 反射生成 draft 2020-12 schema，补强 `$schema` const、permission mode enum、`strictPluginOnlyCustomization` union 和 login method enum；`/config show schema` 现在可展示 schema ID、draft、字段数和生成大小，完整 Zod message parity 仍按缺口追踪。
+- 本轮补充：settings validation 现在覆盖官方 `extraKnownMarketplaces` settings-source key/name 一致性规则：当 inline marketplace `source.source=="settings"` 时，`source.name` 必须等于 `extraKnownMarketplaces` 的 map key；github/git/url 等 fetched sources 不做此约束。完整 marketplace source allow/block enforcement 仍按缺口追踪。
 
 ### M4: Tool framework、permissions、sandbox
 

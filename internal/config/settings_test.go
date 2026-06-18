@@ -206,6 +206,57 @@ func TestValidateSettingsWarnsForInvalidSandboxFilesystem(t *testing.T) {
 	}
 }
 
+func TestValidateSettingsWarnsForMismatchedSettingsMarketplaceName(t *testing.T) {
+	_, warnings, err := ParseSettingsJSON([]byte(`{
+		"extraKnownMarketplaces": {
+			"team": {
+				"source": {
+					"source": "settings",
+					"name": "other",
+					"plugins": []
+				}
+			}
+		}
+	}`), "settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if warnings[0].Path != "extraKnownMarketplaces.team.source.name" ||
+		warnings[0].Expected != "team" ||
+		warnings[0].InvalidValue != "other" {
+		t.Fatalf("warning = %#v", warnings[0])
+	}
+}
+
+func TestValidateSettingsAllowsMatchingSettingsMarketplaceAndFetchedSources(t *testing.T) {
+	_, warnings, err := ParseSettingsJSON([]byte(`{
+		"extraKnownMarketplaces": {
+			"team": {
+				"source": {
+					"source": "settings",
+					"name": "team",
+					"plugins": []
+				}
+			},
+			"github-key": {
+				"source": {
+					"source": "github",
+					"repo": "owner/repo"
+				}
+			}
+		}
+	}`), "settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+}
+
 func TestMergeSettings(t *testing.T) {
 	defaultWorktree := true
 	overrideWorktree := false

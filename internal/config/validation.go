@@ -116,6 +116,9 @@ func ValidateSettings(settings contracts.Settings, filePath string) []Validation
 	if settings.Sandbox != nil {
 		errors = append(errors, validateSandboxSetting(settings.Sandbox, filePath)...)
 	}
+	if settings.ExtraKnownMarketplaces != nil {
+		errors = append(errors, validateExtraKnownMarketplaces(settings.ExtraKnownMarketplaces, filePath)...)
+	}
 	if settings.CleanupPeriodDays != nil && *settings.CleanupPeriodDays < 0 {
 		errors = append(errors, ValidationError{
 			File:         filePath,
@@ -124,6 +127,46 @@ func ValidateSettings(settings contracts.Settings, filePath string) []Validation
 			Expected:     ">= 0",
 			InvalidValue: *settings.CleanupPeriodDays,
 		})
+	}
+	return errors
+}
+
+func validateExtraKnownMarketplaces(values map[string]any, filePath string) []ValidationError {
+	var errors []ValidationError
+	for key, rawEntry := range values {
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		source, ok := entry["source"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if sourceType, _ := source["source"].(string); sourceType != "settings" {
+			continue
+		}
+		name, ok := source["name"].(string)
+		if !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "extraKnownMarketplaces." + key + ".source.name",
+				Message:      "Settings-sourced marketplace source.name must be a string matching its extraKnownMarketplaces key",
+				Expected:     key,
+				InvalidValue: source["name"],
+				Suggestion:   "Set source.name to " + key + ".",
+			})
+			continue
+		}
+		if name != key {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "extraKnownMarketplaces." + key + ".source.name",
+				Message:      "Settings-sourced marketplace name must match its extraKnownMarketplaces key (got key \"" + key + "\" but source.name \"" + name + "\")",
+				Expected:     key,
+				InvalidValue: name,
+				Suggestion:   "Set source.name to " + key + " or change the extraKnownMarketplaces key to " + name + ".",
+			})
+		}
 	}
 	return errors
 }
