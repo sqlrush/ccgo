@@ -1294,7 +1294,7 @@ func (r Runner) formatNativeChromeCommand(ctx context.Context, raw string) strin
 func (r Runner) formatNativeClipboardCommand(ctx context.Context, raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) == 0 {
-		return "Usage: /native clipboard <read|write <text>>"
+		return nativeClipboardUsage()
 	}
 	clipboardPath := nativepkg.SessionClipboardPath(r.SessionPath, r.SessionID)
 	if clipboardPath == "" {
@@ -1302,6 +1302,8 @@ func (r Runner) formatNativeClipboardCommand(ctx context.Context, raw string) st
 	}
 	adapters := nativepkg.DetectClipboardAdapters(nativepkg.ClipboardAdapterOptions{})
 	switch strings.ToLower(args[0]) {
+	case "status", "show":
+		return strings.Join(formatNativeClipboardStatusLines(clipboardPath, adapters), "\n")
 	case "write", "set", "copy":
 		text := strings.TrimSpace(dropLeadingFields(raw, 1))
 		if text == "" {
@@ -1336,8 +1338,53 @@ func (r Runner) formatNativeClipboardCommand(ctx context.Context, raw string) st
 		lines = append(lines, "Text: "+text)
 		return strings.Join(lines, "\n")
 	default:
-		return "Usage: /native clipboard <read|write <text>>"
+		return nativeClipboardUsage()
 	}
+}
+
+func nativeClipboardUsage() string {
+	return "Usage: /native clipboard <status|read|write <text>>"
+}
+
+func formatNativeClipboardStatusLines(clipboardPath string, adapters []nativepkg.ClipboardAdapter) []string {
+	lines := []string{
+		"Native clipboard status",
+		"Clipboard path: " + clipboardPath,
+	}
+	clipboard, err := nativepkg.LoadClipboard(clipboardPath)
+	if err != nil {
+		lines = append(lines, "Clipboard state error: "+err.Error())
+	} else {
+		lines = append(lines, fmt.Sprintf("Session clipboard items: %d", len(clipboard.Items)))
+		if clipboard.UpdatedAt != "" {
+			lines = append(lines, "Clipboard updated: "+clipboard.UpdatedAt)
+		}
+	}
+	lines = append(lines, fmt.Sprintf("Clipboard adapters: %d", nativepkg.CountAvailableClipboardAdapters(adapters)))
+	if len(adapters) > 0 {
+		lines = append(lines, "Adapter states:")
+		for _, adapter := range adapters {
+			state := "unavailable"
+			if adapter.Available {
+				state = "available"
+			}
+			line := "- " + adapter.Name + ": " + state
+			if adapter.Kind != "" {
+				line += " (" + adapter.Kind + ")"
+			}
+			if len(adapter.WriteCommand) > 0 {
+				line += " write=" + strings.Join(adapter.WriteCommand, " ")
+			}
+			if len(adapter.ReadCommand) > 0 {
+				line += " read=" + strings.Join(adapter.ReadCommand, " ")
+			}
+			if adapter.Detail != "" {
+				line += " - " + adapter.Detail
+			}
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func (r Runner) formatNativeVoiceCommand(ctx context.Context, raw string) string {

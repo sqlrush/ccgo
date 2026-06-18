@@ -2787,6 +2787,58 @@ func TestRunnerExecutesNativeClipboardReadCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerNativeClipboardStatusCommandWithoutQuery(t *testing.T) {
+	setupFakeClipboardCommandPath(t)
+	client := &fakeClient{}
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	sessionID := contracts.ID("sess_native_clipboard_status")
+	clipboardPath := nativepkg.SessionClipboardPath(sessionPath, sessionID)
+	if _, err := nativepkg.WriteClipboardText(clipboardPath, sessionID, "clipboard", "secret status text"); err != nil {
+		t.Fatal(err)
+	}
+	runnerCalled := false
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        sessionID,
+		SessionPath:      sessionPath,
+		WorkingDirectory: dir,
+		NativeClipboardRunner: func(ctx context.Context, command []string, stdin string) (string, error) {
+			runnerCalled = true
+			return "", nil
+		},
+	}
+	for _, prompt := range []string{"/native clipboard status", "/native clipboard show"} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %d", prompt, len(client.requests))
+		}
+		if runnerCalled {
+			t.Fatalf("%s invoked external clipboard runner", prompt)
+		}
+		text := result.Messages[len(result.Messages)-1].Content[0].Text
+		for _, want := range []string{
+			"Native clipboard status",
+			"Clipboard path: " + clipboardPath,
+			"Session clipboard items: 1",
+			"Clipboard updated:",
+			"Clipboard adapters:",
+			"- osc52: available (terminal)",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s status missing %q: %q", prompt, want, text)
+			}
+		}
+		if strings.Contains(text, "secret status text") {
+			t.Fatalf("%s leaked clipboard text: %q", prompt, text)
+		}
+	}
+}
+
 func TestRunnerExecutesNativeChromeInstallCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()
