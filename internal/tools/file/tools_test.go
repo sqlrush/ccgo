@@ -1802,6 +1802,38 @@ func TestGrepToolContentContextAndPagination(t *testing.T) {
 		t.Fatalf("short context structured content = %#v", shortContextResult.StructuredContent)
 	}
 
+	passthruResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_passthru",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--passthru":true,"context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if passthruResult.Content != wantContext ||
+		passthruResult.StructuredContent["passthru"] != true ||
+		passthruResult.StructuredContent["before_context"] != 0 ||
+		passthruResult.StructuredContent["after_context"] != 0 {
+		t.Fatalf("passthru result = %#v", passthruResult)
+	}
+	passthruMatches := passthruResult.StructuredContent["matches"].([]map[string]any)
+	if len(passthruMatches) != 6 || passthruMatches[0]["matched"] != false || passthruMatches[1]["matched"] != true {
+		t.Fatalf("passthru structured matches = %#v", passthruMatches)
+	}
+
+	passthroughResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_passthrough_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","passthrough":"true","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPassthrough := "a.txt-1-one\n\n[Showing results with pagination = limit: 1]"
+	if passthroughResult.Content != wantPassthrough || passthroughResult.StructuredContent["passthru"] != true {
+		t.Fatalf("passthrough alias result = %#v", passthroughResult)
+	}
+
 	pagedResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_paged",
 		Name:  "Grep",

@@ -43,6 +43,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
+	"passthru": {}, "passthrough": {}, "--passthru": {}, "--passthrough": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
 	"count": {}, "--count": {}, "-c": {},
@@ -68,6 +69,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
+	"passthru": {}, "passthrough": {}, "--passthru": {}, "--passthrough": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
 	"count": {}, "--count": {}, "-c": {},
@@ -175,6 +177,10 @@ type grepInput struct {
 	OnlyMatchingDash        bool   `json:"only-matching,omitempty"`
 	LongOnlyMatching        bool   `json:"--only-matching,omitempty"`
 	ShortOnlyMatching       bool   `json:"-o,omitempty"`
+	Passthru                bool   `json:"passthru,omitempty"`
+	Passthrough             bool   `json:"passthrough,omitempty"`
+	LongPassthru            bool   `json:"--passthru,omitempty"`
+	LongPassthrough         bool   `json:"--passthrough,omitempty"`
 	FilesWithMatch          bool   `json:"files_with_match,omitempty"`
 	FilesWithMatchAlt       bool   `json:"filesWithMatch,omitempty"`
 	FilesWithMatchDash      bool   `json:"files-with-match,omitempty"`
@@ -239,6 +245,7 @@ type grepOptions struct {
 	Multiline     bool
 	InvertMatch   bool
 	OnlyMatching  bool
+	Passthru      bool
 	CountMatches  bool
 	ColumnNumbers bool
 	Text          bool
@@ -396,6 +403,10 @@ func NewGrepTool() tool.Tool {
 					"only-matching":    map[string]any{"type": "boolean"},
 					"--only-matching":  map[string]any{"type": "boolean"},
 					"-o":               map[string]any{"type": "boolean"},
+					"passthru":         map[string]any{"type": "boolean"},
+					"passthrough":      map[string]any{"type": "boolean"},
+					"--passthru":       map[string]any{"type": "boolean"},
+					"--passthrough":    map[string]any{"type": "boolean"},
 					"files_with_match": map[string]any{
 						"type": "boolean",
 					},
@@ -462,7 +473,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, only_matching/-o/--only-matching matched-text output, and passthru/--passthru/--passthrough all-line output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -614,12 +625,18 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		before = 0
 		after = 0
 	}
-	onlyMatching := grepOnlyMatching(input) && mode == "content" && !grepInvertMatch(input)
+	invertMatch := grepInvertMatch(input)
+	onlyMatching := grepOnlyMatching(input) && mode == "content" && !invertMatch
 	if onlyMatching {
 		before = 0
 		after = 0
 	}
-	countMatches := grepCountMatches(input) && mode == "count" && !grepInvertMatch(input)
+	passthru := grepPassthru(input) && mode == "content" && !onlyMatching
+	if passthru {
+		before = 0
+		after = 0
+	}
+	countMatches := grepCountMatches(input) && mode == "count" && !invertMatch
 	sortMode, sortReverse, sortExplicit, err := grepSort(input)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -634,8 +651,9 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		AfterContext:  after,
 		LineNumbers:   grepLineNumbers(input, mode),
 		Multiline:     grepMultiline(input),
-		InvertMatch:   grepInvertMatch(input),
+		InvertMatch:   invertMatch,
 		OnlyMatching:  onlyMatching,
+		Passthru:      passthru,
 		CountMatches:  countMatches,
 		ColumnNumbers: grepColumnNumbers(input),
 		Text:          grepText(input),
@@ -679,8 +697,9 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"fixed_strings":       grepFixedStrings(input),
 			"text":                options.Text,
 			"word_regexp":         grepWordRegexp(input),
-			"invert_match":        grepInvertMatch(input),
+			"invert_match":        invertMatch,
 			"only_matching":       onlyMatching,
+			"passthru":            passthru,
 			"files_with_matches":  mode == "files_with_matches",
 			"files_without_match": mode == "files_without_matches",
 			"count":               mode == "count",
@@ -969,6 +988,11 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 		markMultilineMatches(lines, content, expr, options.MaxCount, options.BeforeContext, options.AfterContext, options.InvertMatch, matched, included)
 	} else {
 		markLineMatches(lines, expr, options.MaxCount, options.BeforeContext, options.AfterContext, options.InvertMatch, matched, included)
+	}
+	if options.Passthru {
+		for i := range lines {
+			included[i] = true
+		}
 	}
 	matches := make([]grepMatch, 0, len(included))
 	for i := range lines {
@@ -1554,6 +1578,13 @@ func grepOnlyMatching(input grepInput) bool {
 		input.OnlyMatchingDash ||
 		input.LongOnlyMatching ||
 		input.ShortOnlyMatching
+}
+
+func grepPassthru(input grepInput) bool {
+	return input.Passthru ||
+		input.Passthrough ||
+		input.LongPassthru ||
+		input.LongPassthrough
 }
 
 func grepMultiline(input grepInput) bool {
