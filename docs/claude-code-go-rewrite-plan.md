@@ -283,6 +283,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：project legacy `.claude/commands/**/*.md` 现在会加载为 `commands_DEPRECATED` prompt command，覆盖普通 markdown 命名空间、目录式 `SKILL.md` 命名空间、frontmatter metadata、SkillTool 可见性过滤和 prompt expansion；目录式 legacy command 保留 base directory 前缀和 `${CLAUDE_SKILL_DIR}` 替换。完整 user/managed commands、plugin commands、local/local-jsx 执行仍未宣称完成。
 - 本轮补充：现有 Go 内置 slash command metadata 继续贴近官方源快照，补齐 `config`/`resume`/`clear` 的 aliases（`settings`、`continue`、`reset`、`new`），以及 `mcp`/`resume`/`model` 的 argument hint、`mcp`/`status`/`model` 的 immediate 标记和部分官方描述；大量内置 command 的真实 local/local-jsx UI 执行仍未宣称完成。
 - 本轮补充：slash command 现在有基础 local command result 抽象，`/clear` 不再落入 unsupported 分支，会生成 local text result、保留 command metadata message，并且不会请求模型；完整 REPL conversation reset、local command text/compact/skip 全语义、`/cost`/`/status`/`/compact` 和 local-jsx UI 执行仍未宣称完成。
+- 本轮补充：`/cost status`、`/cost current` 和 `/cost usage` 现在复用 `/cost` totals no-query 本地路径，未知 cost 子命令仍保持显式未实现提示，`/cost breakdown`/`show` 继续输出逐消息明细。
 - 本轮补充：`/status <section>` 现在复用 `/status show <section>` 的 section alias normalization，`/status integrations`、`/status diagnostics` 等直接调用不会再落入 unsupported subcommand 分支。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。

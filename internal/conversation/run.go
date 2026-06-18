@@ -567,7 +567,7 @@ func formatCostSummary(raw string, history []contracts.Message) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) > 0 {
 		switch args[0] {
-		case "summary", "total", "totals":
+		case "summary", "total", "totals", "status", "current", "usage":
 		case "show", "breakdown", "details", "detail":
 			return formatCostBreakdown(history)
 		default:

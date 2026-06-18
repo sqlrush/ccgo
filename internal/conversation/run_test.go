@@ -2002,6 +2002,19 @@ func TestRunnerExecutesCostSlashCommandWithoutQuery(t *testing.T) {
 	if len(entries) != 2 || !strings.Contains(entries[1].Message.Content[0].Text, "Total cost: $0.623456") {
 		t.Fatalf("transcript entries = %#v", entries)
 	}
+
+	for _, prompt := range []string{"/cost status", "/cost current", "/cost usage"} {
+		result, err = runner.RunTurn(context.Background(), history, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s should not query model, requests = %#v", prompt, client.requests)
+		}
+		if got := result.Messages[1].Content[0].Text; !strings.Contains(got, "Total cost: $0.623456") || strings.Contains(got, "Cost breakdown") {
+			t.Fatalf("%s cost text = %q", prompt, got)
+		}
+	}
 }
 
 func TestRunnerCostSlashCommandReportsMissingUsage(t *testing.T) {
