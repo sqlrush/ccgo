@@ -3215,10 +3215,35 @@ func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 		t.Fatalf("json binary end = %#v", jsonBinaryEnd)
 	}
 
+	if err := os.WriteFile(filepath.Join(dir, "invalid.bin"), []byte{'N', 'e', 'e', 'd', 'l', 'e', 0xff, '\n'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	jsonInvalidResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_invalid_utf8",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path":"invalid.bin","--json":true,"--text":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonInvalidEvents := strings.Split(jsonInvalidResult.Content.(string), "\n")
+	var jsonInvalidMatch map[string]any
+	if err := json.Unmarshal([]byte(jsonInvalidEvents[1]), &jsonInvalidMatch); err != nil {
+		t.Fatal(err)
+	}
+	invalidData := jsonInvalidMatch["data"].(map[string]any)
+	if invalidData["lines"].(map[string]any)["bytes"] != "TmVlZGxl/wo=" {
+		t.Fatalf("invalid utf8 json lines = %#v", invalidData["lines"])
+	}
+	invalidSubmatches := invalidData["submatches"].([]any)
+	if invalidSubmatches[0].(map[string]any)["match"].(map[string]any)["text"] != "Needle" {
+		t.Fatalf("invalid utf8 json submatches = %#v", invalidSubmatches)
+	}
+
 	textResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_binary_text",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"Needle","--text":true}`),
+		Input: json.RawMessage(`{"pattern":"Needle","path":"payload.bin","--text":true}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -3230,7 +3255,7 @@ func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 	noTextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_binary_no_text",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"Needle","--text":true,"--no-text":"true"}`),
+		Input: json.RawMessage(`{"pattern":"Needle","path":"payload.bin","--text":true,"--no-text":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -3244,7 +3269,7 @@ func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 	noBinaryResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_binary_override",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"Needle","--binary":true,"--no-binary":"true"}`),
+		Input: json.RawMessage(`{"pattern":"Needle","path":"payload.bin","--binary":true,"--no-binary":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -3258,7 +3283,7 @@ func TestGrepToolTextAndBinaryDetection(t *testing.T) {
 	shortTextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_binary_short_text",
 		Name:  "Grep",
-		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","-a":"true"}`),
+		Input: json.RawMessage(`{"pattern":"Needle","path":"payload.bin","output_mode":"count","-a":"true"}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)

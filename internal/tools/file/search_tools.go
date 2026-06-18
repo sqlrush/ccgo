@@ -2,6 +2,7 @@ package filetools
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -2694,6 +2695,9 @@ func grepJSONElapsed(duration time.Duration) map[string]any {
 }
 
 func grepJSONText(text string) map[string]any {
+	if !utf8.ValidString(text) {
+		return map[string]any{"bytes": base64.StdEncoding.EncodeToString([]byte(text))}
+	}
 	return map[string]any{"text": text}
 }
 
