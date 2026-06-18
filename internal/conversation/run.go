@@ -2849,6 +2849,11 @@ func (r Runner) formatPluginSummary(raw string) string {
 		case "enable", "disable":
 			return r.setPluginEnabledSummary(args)
 		default:
+			if len(args) == 1 {
+				if plugin, ok := findLoadedPlugin(pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory)), args[0]); ok {
+					return r.formatPluginShow([]string{"show", plugin.Name})
+				}
+			}
 			return "Plugin subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
 	}

@@ -4196,6 +4196,44 @@ func TestRunnerPluginShowReportsLocalPluginDetails(t *testing.T) {
 			t.Fatalf("plugin show missing %q: %q", want, text)
 		}
 	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin demo",
+		"State: enabled",
+		"Path: " + pluginDir,
+		"Version: 1.2.3",
+		"Description: Demo plugin",
+		"Commands: 1",
+		"Skills: 1",
+		"Agents: 1",
+		"MCP servers: 1",
+		"Output styles: 1",
+		"Hooks: 1",
+		"Commands:",
+		"- /plugin:deploy",
+		"Skills:",
+		"- /demo:audit",
+		"Agents:",
+		"- demo:reviewer",
+		"MCP servers:",
+		"- plugin:docs",
+		"Output styles:",
+		"- demo:brief",
+		"Hook events:",
+		"- PreToolUse (1)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("direct plugin show missing %q: %q", want, text)
+		}
+	}
 }
 
 func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
