@@ -1681,6 +1681,21 @@ func TestGrepToolSortAliases(t *testing.T) {
 		t.Fatalf("path sort result = %#v", pathResult)
 	}
 
+	sortFilesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_sort_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--sort-files":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sortFilesResult.Content != "Found 3 files\na.txt\nm.txt\nz.txt" ||
+		sortFilesResult.StructuredContent["sort"] != "path" ||
+		sortFilesResult.StructuredContent["sort_files"] != true ||
+		sortFilesResult.StructuredContent["sort_explicit"] != true {
+		t.Fatalf("sort-files result = %#v", sortFilesResult)
+	}
+
 	reversePathResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_sort_reverse_path",
 		Name:  "Grep",
