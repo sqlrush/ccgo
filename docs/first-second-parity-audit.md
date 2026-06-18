@@ -139,6 +139,7 @@ Covered behavior:
 - `Grep` content output now accepts `passthru`/`passthrough`/`--passthru`/`--passthrough`, printing all searched lines while preserving matched-line markers and overriding context counts.
 - `Grep` content output now accepts `vimgrep`/`--vimgrep`, repeating matching lines once per match with column metadata while preserving context-line output and `-N` formatting.
 - `Grep` content and count output now accept `with_filename`/`--with-filename`/`-H` plus `no_filename`/`--no-filename`/`-I`, while file-list modes continue to emit paths.
+- `Grep` content output now accepts `replace`/`--replace`/`-r`, applying display-only replacements to matching lines and only-matching/vimgrep output without changing context lines or count/list modes.
 - `Grep` content output now accepts `trim`/`--trim` plus `no_trim`/`--no-trim`, trimming leading ASCII whitespace from printed line text while preserving original match columns.
 - `Grep` long-line output now accepts `max_columns_preview`/`--max-columns-preview` plus `no_max_columns_preview`/`--no-max-columns-preview`, showing a ripgrep-style truncated preview when `max_columns` is exceeded.
 - `Glob`/`Grep` traversal now applies `Read(...)` deny rules from the permission context as extra search ignore rules, hiding denied basename, path, and directory patterns from search results.

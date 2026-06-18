@@ -33,6 +33,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
 	"max_columns_preview": {}, "maxColumnsPreview": {}, "max-columns-preview": {}, "--max-columns-preview": {}, "no_max_columns_preview": {}, "noMaxColumnsPreview": {}, "no-max-columns-preview": {}, "--no-max-columns-preview": {},
+	"replace": {}, "--replace": {}, "-r": {},
 	"with_filename": {}, "withFilename": {}, "with-filename": {}, "--with-filename": {}, "-H": {}, "no_filename": {}, "noFilename": {}, "no-filename": {}, "--no-filename": {}, "-I": {},
 	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
@@ -94,169 +95,172 @@ type globInput struct {
 }
 
 type grepInput struct {
-	Pattern                 string `json:"pattern"`
-	Regex                   string `json:"regex,omitempty"`
-	Regexp                  string `json:"regexp,omitempty"`
-	LongRegexp              string `json:"--regexp,omitempty"`
-	ShortRegexp             string `json:"-e,omitempty"`
-	Path                    string `json:"path,omitempty"`
-	Glob                    string `json:"glob,omitempty"`
-	LongGlob                string `json:"--glob,omitempty"`
-	ShortGlob               string `json:"-g,omitempty"`
-	Type                    string `json:"type,omitempty"`
-	LongType                string `json:"--type,omitempty"`
-	ShortType               string `json:"-t,omitempty"`
-	OutputMode              string `json:"output_mode,omitempty"`
-	OutputModeAlt           string `json:"outputMode,omitempty"`
-	Limit                   *int   `json:"limit,omitempty"`
-	HeadLimit               *int   `json:"head_limit,omitempty"`
-	HeadLimitAlt            *int   `json:"headLimit,omitempty"`
-	Offset                  *int   `json:"offset,omitempty"`
-	MaxCount                *int   `json:"max_count,omitempty"`
-	MaxCountAlt             *int   `json:"maxCount,omitempty"`
-	ShortMaxCount           *int   `json:"-m,omitempty"`
-	MaxColumns              *int   `json:"max_columns,omitempty"`
-	MaxColumnsAlt           *int   `json:"maxColumns,omitempty"`
-	MaxColumnsDash          *int   `json:"max-columns,omitempty"`
-	LongMaxColumns          *int   `json:"--max-columns,omitempty"`
-	MaxColumnsPreview       bool   `json:"max_columns_preview,omitempty"`
-	MaxColumnsPreviewAlt    bool   `json:"maxColumnsPreview,omitempty"`
-	MaxColumnsPreviewDash   bool   `json:"max-columns-preview,omitempty"`
-	LongMaxColumnsPreview   bool   `json:"--max-columns-preview,omitempty"`
-	NoMaxColumnsPreview     bool   `json:"no_max_columns_preview,omitempty"`
-	NoMaxColumnsPreviewAlt  bool   `json:"noMaxColumnsPreview,omitempty"`
-	NoMaxColumnsPreviewDash bool   `json:"no-max-columns-preview,omitempty"`
-	LongNoMaxColumnsPreview bool   `json:"--no-max-columns-preview,omitempty"`
-	WithFilename            bool   `json:"with_filename,omitempty"`
-	WithFilenameAlt         bool   `json:"withFilename,omitempty"`
-	WithFilenameDash        bool   `json:"with-filename,omitempty"`
-	LongWithFilename        bool   `json:"--with-filename,omitempty"`
-	ShortWithFilename       bool   `json:"-H,omitempty"`
-	NoFilename              bool   `json:"no_filename,omitempty"`
-	NoFilenameAlt           bool   `json:"noFilename,omitempty"`
-	NoFilenameDash          bool   `json:"no-filename,omitempty"`
-	LongNoFilename          bool   `json:"--no-filename,omitempty"`
-	ShortNoFilename         bool   `json:"-I,omitempty"`
-	Sort                    string `json:"sort,omitempty"`
-	LongSort                string `json:"--sort,omitempty"`
-	SortReverse             string `json:"sortr,omitempty"`
-	LongSortReverse         string `json:"--sortr,omitempty"`
-	Context                 *int   `json:"context,omitempty"`
-	ShortContext            *int   `json:"-C,omitempty"`
-	BeforeContext           *int   `json:"before_context,omitempty"`
-	BeforeContextAlt        *int   `json:"beforeContext,omitempty"`
-	ShortBeforeContext      *int   `json:"-B,omitempty"`
-	AfterContext            *int   `json:"after_context,omitempty"`
-	AfterContextAlt         *int   `json:"afterContext,omitempty"`
-	ShortAfterContext       *int   `json:"-A,omitempty"`
-	LineNumbers             *bool  `json:"line_numbers,omitempty"`
-	LineNumbersAlt          *bool  `json:"lineNumbers,omitempty"`
-	LineNumbersDash         *bool  `json:"line-number,omitempty"`
-	LongLineNumbers         *bool  `json:"--line-number,omitempty"`
-	ShortLineNumbers        *bool  `json:"-n,omitempty"`
-	NoLineNumber            bool   `json:"no_line_number,omitempty"`
-	NoLineNumberAlt         bool   `json:"noLineNumber,omitempty"`
-	NoLineNumbers           bool   `json:"no_line_numbers,omitempty"`
-	NoLineNumbersAlt        bool   `json:"noLineNumbers,omitempty"`
-	NoLineNumberDash        bool   `json:"no-line-number,omitempty"`
-	NoLineNumbersDash       bool   `json:"no-line-numbers,omitempty"`
-	LongNoLineNumber        bool   `json:"--no-line-number,omitempty"`
-	ShortNoLineNumber       bool   `json:"-N,omitempty"`
-	Column                  bool   `json:"column,omitempty"`
-	ColumnNumbers           bool   `json:"column_numbers,omitempty"`
-	ColumnNumbersAlt        bool   `json:"columnNumbers,omitempty"`
-	ColumnNumbersDash       bool   `json:"column-number,omitempty"`
-	LongColumn              bool   `json:"--column,omitempty"`
-	IgnoreCase              bool   `json:"ignore_case,omitempty"`
-	CaseInsensitive         bool   `json:"case_insensitive,omitempty"`
-	CaseInsensitiveAlt      bool   `json:"caseInsensitive,omitempty"`
-	IgnoreCaseDash          bool   `json:"ignore-case,omitempty"`
-	LongIgnoreCase          bool   `json:"--ignore-case,omitempty"`
-	ShortIgnoreCase         bool   `json:"-i,omitempty"`
-	CaseSensitive           bool   `json:"case_sensitive,omitempty"`
-	CaseSensitiveAlt        bool   `json:"caseSensitive,omitempty"`
-	CaseSensitiveDash       bool   `json:"case-sensitive,omitempty"`
-	LongCaseSensitive       bool   `json:"--case-sensitive,omitempty"`
-	ShortCaseSensitive      bool   `json:"-s,omitempty"`
-	SmartCase               bool   `json:"smart_case,omitempty"`
-	SmartCaseAlt            bool   `json:"smartCase,omitempty"`
-	SmartCaseDash           bool   `json:"smart-case,omitempty"`
-	LongSmartCase           bool   `json:"--smart-case,omitempty"`
-	ShortSmartCase          bool   `json:"-S,omitempty"`
-	FixedStrings            bool   `json:"fixed_strings,omitempty"`
-	FixedStringsAlt         bool   `json:"fixedStrings,omitempty"`
-	FixedStringsDash        bool   `json:"fixed-strings,omitempty"`
-	LongFixedStrings        bool   `json:"--fixed-strings,omitempty"`
-	ShortFixedStrings       bool   `json:"-F,omitempty"`
-	Text                    bool   `json:"text,omitempty"`
-	LongText                bool   `json:"--text,omitempty"`
-	ShortText               bool   `json:"-a,omitempty"`
-	WordRegexp              bool   `json:"word_regexp,omitempty"`
-	WordRegexpAlt           bool   `json:"wordRegexp,omitempty"`
-	WordRegexpDash          bool   `json:"word-regexp,omitempty"`
-	LongWordRegexp          bool   `json:"--word-regexp,omitempty"`
-	ShortWordRegexp         bool   `json:"-w,omitempty"`
-	LineRegexp              bool   `json:"line_regexp,omitempty"`
-	LineRegexpAlt           bool   `json:"lineRegexp,omitempty"`
-	LineRegexpDash          bool   `json:"line-regexp,omitempty"`
-	LongLineRegexp          bool   `json:"--line-regexp,omitempty"`
-	ShortLineRegexp         bool   `json:"-x,omitempty"`
-	InvertMatch             bool   `json:"invert_match,omitempty"`
-	InvertMatchAlt          bool   `json:"invertMatch,omitempty"`
-	InvertMatchDash         bool   `json:"invert-match,omitempty"`
-	LongInvertMatch         bool   `json:"--invert-match,omitempty"`
-	ShortInvertMatch        bool   `json:"-v,omitempty"`
-	OnlyMatching            bool   `json:"only_matching,omitempty"`
-	OnlyMatchingAlt         bool   `json:"onlyMatching,omitempty"`
-	OnlyMatchingDash        bool   `json:"only-matching,omitempty"`
-	LongOnlyMatching        bool   `json:"--only-matching,omitempty"`
-	ShortOnlyMatching       bool   `json:"-o,omitempty"`
-	Vimgrep                 bool   `json:"vimgrep,omitempty"`
-	LongVimgrep             bool   `json:"--vimgrep,omitempty"`
-	Passthru                bool   `json:"passthru,omitempty"`
-	Passthrough             bool   `json:"passthrough,omitempty"`
-	LongPassthru            bool   `json:"--passthru,omitempty"`
-	LongPassthrough         bool   `json:"--passthrough,omitempty"`
-	Trim                    bool   `json:"trim,omitempty"`
-	LongTrim                bool   `json:"--trim,omitempty"`
-	NoTrim                  bool   `json:"no_trim,omitempty"`
-	NoTrimAlt               bool   `json:"noTrim,omitempty"`
-	NoTrimDash              bool   `json:"no-trim,omitempty"`
-	LongNoTrim              bool   `json:"--no-trim,omitempty"`
-	FilesWithMatch          bool   `json:"files_with_match,omitempty"`
-	FilesWithMatchAlt       bool   `json:"filesWithMatch,omitempty"`
-	FilesWithMatchDash      bool   `json:"files-with-match,omitempty"`
-	LongFilesWithMatch      bool   `json:"--files-with-match,omitempty"`
-	FilesWithMatches        bool   `json:"files_with_matches,omitempty"`
-	FilesWithMatchesAlt     bool   `json:"filesWithMatches,omitempty"`
-	FilesWithMatchesDash    bool   `json:"files-with-matches,omitempty"`
-	LongFilesWithMatches    bool   `json:"--files-with-matches,omitempty"`
-	ShortFilesWithMatches   bool   `json:"-l,omitempty"`
-	FilesWithoutMatch       bool   `json:"files_without_match,omitempty"`
-	FilesWithoutMatchAlt    bool   `json:"filesWithoutMatch,omitempty"`
-	FilesWithoutMatchDash   bool   `json:"files-without-match,omitempty"`
-	LongFilesWithoutMatch   bool   `json:"--files-without-match,omitempty"`
-	FilesWithoutMatches     bool   `json:"files_without_matches,omitempty"`
-	FilesWithoutMatchesAlt  bool   `json:"filesWithoutMatches,omitempty"`
-	FilesWithoutMatchesDash bool   `json:"files-without-matches,omitempty"`
-	LongFilesWithoutMatches bool   `json:"--files-without-matches,omitempty"`
-	ShortFilesWithoutMatch  bool   `json:"-L,omitempty"`
-	Count                   bool   `json:"count,omitempty"`
-	LongCount               bool   `json:"--count,omitempty"`
-	ShortCount              bool   `json:"-c,omitempty"`
-	CountMatches            bool   `json:"count_matches,omitempty"`
-	CountMatchesAlt         bool   `json:"countMatches,omitempty"`
-	CountMatchesDash        bool   `json:"count-matches,omitempty"`
-	LongCountMatches        bool   `json:"--count-matches,omitempty"`
-	NoIgnore                bool   `json:"no_ignore,omitempty"`
-	NoIgnoreAlt             bool   `json:"noIgnore,omitempty"`
-	NoIgnoreDash            bool   `json:"no-ignore,omitempty"`
-	LongNoIgnore            bool   `json:"--no-ignore,omitempty"`
-	Multiline               bool   `json:"multiline,omitempty"`
-	LongMultiline           bool   `json:"--multiline,omitempty"`
-	MultilineDotall         bool   `json:"multiline-dotall,omitempty"`
-	LongMultilineDotall     bool   `json:"--multiline-dotall,omitempty"`
-	ShortMultiline          bool   `json:"-U,omitempty"`
+	Pattern                 string  `json:"pattern"`
+	Regex                   string  `json:"regex,omitempty"`
+	Regexp                  string  `json:"regexp,omitempty"`
+	LongRegexp              string  `json:"--regexp,omitempty"`
+	ShortRegexp             string  `json:"-e,omitempty"`
+	Path                    string  `json:"path,omitempty"`
+	Glob                    string  `json:"glob,omitempty"`
+	LongGlob                string  `json:"--glob,omitempty"`
+	ShortGlob               string  `json:"-g,omitempty"`
+	Type                    string  `json:"type,omitempty"`
+	LongType                string  `json:"--type,omitempty"`
+	ShortType               string  `json:"-t,omitempty"`
+	OutputMode              string  `json:"output_mode,omitempty"`
+	OutputModeAlt           string  `json:"outputMode,omitempty"`
+	Limit                   *int    `json:"limit,omitempty"`
+	HeadLimit               *int    `json:"head_limit,omitempty"`
+	HeadLimitAlt            *int    `json:"headLimit,omitempty"`
+	Offset                  *int    `json:"offset,omitempty"`
+	MaxCount                *int    `json:"max_count,omitempty"`
+	MaxCountAlt             *int    `json:"maxCount,omitempty"`
+	ShortMaxCount           *int    `json:"-m,omitempty"`
+	MaxColumns              *int    `json:"max_columns,omitempty"`
+	MaxColumnsAlt           *int    `json:"maxColumns,omitempty"`
+	MaxColumnsDash          *int    `json:"max-columns,omitempty"`
+	LongMaxColumns          *int    `json:"--max-columns,omitempty"`
+	MaxColumnsPreview       bool    `json:"max_columns_preview,omitempty"`
+	MaxColumnsPreviewAlt    bool    `json:"maxColumnsPreview,omitempty"`
+	MaxColumnsPreviewDash   bool    `json:"max-columns-preview,omitempty"`
+	LongMaxColumnsPreview   bool    `json:"--max-columns-preview,omitempty"`
+	NoMaxColumnsPreview     bool    `json:"no_max_columns_preview,omitempty"`
+	NoMaxColumnsPreviewAlt  bool    `json:"noMaxColumnsPreview,omitempty"`
+	NoMaxColumnsPreviewDash bool    `json:"no-max-columns-preview,omitempty"`
+	LongNoMaxColumnsPreview bool    `json:"--no-max-columns-preview,omitempty"`
+	Replace                 *string `json:"replace,omitempty"`
+	LongReplace             *string `json:"--replace,omitempty"`
+	ShortReplace            *string `json:"-r,omitempty"`
+	WithFilename            bool    `json:"with_filename,omitempty"`
+	WithFilenameAlt         bool    `json:"withFilename,omitempty"`
+	WithFilenameDash        bool    `json:"with-filename,omitempty"`
+	LongWithFilename        bool    `json:"--with-filename,omitempty"`
+	ShortWithFilename       bool    `json:"-H,omitempty"`
+	NoFilename              bool    `json:"no_filename,omitempty"`
+	NoFilenameAlt           bool    `json:"noFilename,omitempty"`
+	NoFilenameDash          bool    `json:"no-filename,omitempty"`
+	LongNoFilename          bool    `json:"--no-filename,omitempty"`
+	ShortNoFilename         bool    `json:"-I,omitempty"`
+	Sort                    string  `json:"sort,omitempty"`
+	LongSort                string  `json:"--sort,omitempty"`
+	SortReverse             string  `json:"sortr,omitempty"`
+	LongSortReverse         string  `json:"--sortr,omitempty"`
+	Context                 *int    `json:"context,omitempty"`
+	ShortContext            *int    `json:"-C,omitempty"`
+	BeforeContext           *int    `json:"before_context,omitempty"`
+	BeforeContextAlt        *int    `json:"beforeContext,omitempty"`
+	ShortBeforeContext      *int    `json:"-B,omitempty"`
+	AfterContext            *int    `json:"after_context,omitempty"`
+	AfterContextAlt         *int    `json:"afterContext,omitempty"`
+	ShortAfterContext       *int    `json:"-A,omitempty"`
+	LineNumbers             *bool   `json:"line_numbers,omitempty"`
+	LineNumbersAlt          *bool   `json:"lineNumbers,omitempty"`
+	LineNumbersDash         *bool   `json:"line-number,omitempty"`
+	LongLineNumbers         *bool   `json:"--line-number,omitempty"`
+	ShortLineNumbers        *bool   `json:"-n,omitempty"`
+	NoLineNumber            bool    `json:"no_line_number,omitempty"`
+	NoLineNumberAlt         bool    `json:"noLineNumber,omitempty"`
+	NoLineNumbers           bool    `json:"no_line_numbers,omitempty"`
+	NoLineNumbersAlt        bool    `json:"noLineNumbers,omitempty"`
+	NoLineNumberDash        bool    `json:"no-line-number,omitempty"`
+	NoLineNumbersDash       bool    `json:"no-line-numbers,omitempty"`
+	LongNoLineNumber        bool    `json:"--no-line-number,omitempty"`
+	ShortNoLineNumber       bool    `json:"-N,omitempty"`
+	Column                  bool    `json:"column,omitempty"`
+	ColumnNumbers           bool    `json:"column_numbers,omitempty"`
+	ColumnNumbersAlt        bool    `json:"columnNumbers,omitempty"`
+	ColumnNumbersDash       bool    `json:"column-number,omitempty"`
+	LongColumn              bool    `json:"--column,omitempty"`
+	IgnoreCase              bool    `json:"ignore_case,omitempty"`
+	CaseInsensitive         bool    `json:"case_insensitive,omitempty"`
+	CaseInsensitiveAlt      bool    `json:"caseInsensitive,omitempty"`
+	IgnoreCaseDash          bool    `json:"ignore-case,omitempty"`
+	LongIgnoreCase          bool    `json:"--ignore-case,omitempty"`
+	ShortIgnoreCase         bool    `json:"-i,omitempty"`
+	CaseSensitive           bool    `json:"case_sensitive,omitempty"`
+	CaseSensitiveAlt        bool    `json:"caseSensitive,omitempty"`
+	CaseSensitiveDash       bool    `json:"case-sensitive,omitempty"`
+	LongCaseSensitive       bool    `json:"--case-sensitive,omitempty"`
+	ShortCaseSensitive      bool    `json:"-s,omitempty"`
+	SmartCase               bool    `json:"smart_case,omitempty"`
+	SmartCaseAlt            bool    `json:"smartCase,omitempty"`
+	SmartCaseDash           bool    `json:"smart-case,omitempty"`
+	LongSmartCase           bool    `json:"--smart-case,omitempty"`
+	ShortSmartCase          bool    `json:"-S,omitempty"`
+	FixedStrings            bool    `json:"fixed_strings,omitempty"`
+	FixedStringsAlt         bool    `json:"fixedStrings,omitempty"`
+	FixedStringsDash        bool    `json:"fixed-strings,omitempty"`
+	LongFixedStrings        bool    `json:"--fixed-strings,omitempty"`
+	ShortFixedStrings       bool    `json:"-F,omitempty"`
+	Text                    bool    `json:"text,omitempty"`
+	LongText                bool    `json:"--text,omitempty"`
+	ShortText               bool    `json:"-a,omitempty"`
+	WordRegexp              bool    `json:"word_regexp,omitempty"`
+	WordRegexpAlt           bool    `json:"wordRegexp,omitempty"`
+	WordRegexpDash          bool    `json:"word-regexp,omitempty"`
+	LongWordRegexp          bool    `json:"--word-regexp,omitempty"`
+	ShortWordRegexp         bool    `json:"-w,omitempty"`
+	LineRegexp              bool    `json:"line_regexp,omitempty"`
+	LineRegexpAlt           bool    `json:"lineRegexp,omitempty"`
+	LineRegexpDash          bool    `json:"line-regexp,omitempty"`
+	LongLineRegexp          bool    `json:"--line-regexp,omitempty"`
+	ShortLineRegexp         bool    `json:"-x,omitempty"`
+	InvertMatch             bool    `json:"invert_match,omitempty"`
+	InvertMatchAlt          bool    `json:"invertMatch,omitempty"`
+	InvertMatchDash         bool    `json:"invert-match,omitempty"`
+	LongInvertMatch         bool    `json:"--invert-match,omitempty"`
+	ShortInvertMatch        bool    `json:"-v,omitempty"`
+	OnlyMatching            bool    `json:"only_matching,omitempty"`
+	OnlyMatchingAlt         bool    `json:"onlyMatching,omitempty"`
+	OnlyMatchingDash        bool    `json:"only-matching,omitempty"`
+	LongOnlyMatching        bool    `json:"--only-matching,omitempty"`
+	ShortOnlyMatching       bool    `json:"-o,omitempty"`
+	Vimgrep                 bool    `json:"vimgrep,omitempty"`
+	LongVimgrep             bool    `json:"--vimgrep,omitempty"`
+	Passthru                bool    `json:"passthru,omitempty"`
+	Passthrough             bool    `json:"passthrough,omitempty"`
+	LongPassthru            bool    `json:"--passthru,omitempty"`
+	LongPassthrough         bool    `json:"--passthrough,omitempty"`
+	Trim                    bool    `json:"trim,omitempty"`
+	LongTrim                bool    `json:"--trim,omitempty"`
+	NoTrim                  bool    `json:"no_trim,omitempty"`
+	NoTrimAlt               bool    `json:"noTrim,omitempty"`
+	NoTrimDash              bool    `json:"no-trim,omitempty"`
+	LongNoTrim              bool    `json:"--no-trim,omitempty"`
+	FilesWithMatch          bool    `json:"files_with_match,omitempty"`
+	FilesWithMatchAlt       bool    `json:"filesWithMatch,omitempty"`
+	FilesWithMatchDash      bool    `json:"files-with-match,omitempty"`
+	LongFilesWithMatch      bool    `json:"--files-with-match,omitempty"`
+	FilesWithMatches        bool    `json:"files_with_matches,omitempty"`
+	FilesWithMatchesAlt     bool    `json:"filesWithMatches,omitempty"`
+	FilesWithMatchesDash    bool    `json:"files-with-matches,omitempty"`
+	LongFilesWithMatches    bool    `json:"--files-with-matches,omitempty"`
+	ShortFilesWithMatches   bool    `json:"-l,omitempty"`
+	FilesWithoutMatch       bool    `json:"files_without_match,omitempty"`
+	FilesWithoutMatchAlt    bool    `json:"filesWithoutMatch,omitempty"`
+	FilesWithoutMatchDash   bool    `json:"files-without-match,omitempty"`
+	LongFilesWithoutMatch   bool    `json:"--files-without-match,omitempty"`
+	FilesWithoutMatches     bool    `json:"files_without_matches,omitempty"`
+	FilesWithoutMatchesAlt  bool    `json:"filesWithoutMatches,omitempty"`
+	FilesWithoutMatchesDash bool    `json:"files-without-matches,omitempty"`
+	LongFilesWithoutMatches bool    `json:"--files-without-matches,omitempty"`
+	ShortFilesWithoutMatch  bool    `json:"-L,omitempty"`
+	Count                   bool    `json:"count,omitempty"`
+	LongCount               bool    `json:"--count,omitempty"`
+	ShortCount              bool    `json:"-c,omitempty"`
+	CountMatches            bool    `json:"count_matches,omitempty"`
+	CountMatchesAlt         bool    `json:"countMatches,omitempty"`
+	CountMatchesDash        bool    `json:"count-matches,omitempty"`
+	LongCountMatches        bool    `json:"--count-matches,omitempty"`
+	NoIgnore                bool    `json:"no_ignore,omitempty"`
+	NoIgnoreAlt             bool    `json:"noIgnore,omitempty"`
+	NoIgnoreDash            bool    `json:"no-ignore,omitempty"`
+	LongNoIgnore            bool    `json:"--no-ignore,omitempty"`
+	Multiline               bool    `json:"multiline,omitempty"`
+	LongMultiline           bool    `json:"--multiline,omitempty"`
+	MultilineDotall         bool    `json:"multiline-dotall,omitempty"`
+	LongMultilineDotall     bool    `json:"--multiline-dotall,omitempty"`
+	ShortMultiline          bool    `json:"-U,omitempty"`
 }
 
 type fileSearchMatch struct {
@@ -283,6 +287,8 @@ type grepOptions struct {
 	MaxColumns    int
 	MaxPreview    bool
 	WithFilename  bool
+	HasReplace    bool
+	Replace       string
 	BeforeContext int
 	AfterContext  int
 	LineNumbers   bool
@@ -384,6 +390,9 @@ func NewGrepTool() tool.Tool {
 					"--no-max-columns-preview": map[string]any{
 						"type": "boolean",
 					},
+					"replace":         map[string]any{"type": "string"},
+					"--replace":       map[string]any{"type": "string"},
+					"-r":              map[string]any{"type": "string"},
 					"with_filename":   map[string]any{"type": "boolean"},
 					"withFilename":    map[string]any{"type": "boolean"},
 					"with-filename":   map[string]any{"type": "boolean"},
@@ -552,7 +561,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, -H/--with-filename and -I/--no-filename filename prefix control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, -H/--with-filename and -I/--no-filename filename prefix control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -718,6 +727,11 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}
 	trim := grepTrim(input) && mode == "content"
 	countMatches := grepCountMatches(input) && mode == "count" && !invertMatch
+	replace, hasReplace := grepReplacement(input)
+	if mode != "content" {
+		replace = ""
+		hasReplace = false
+	}
 	sortMode, sortReverse, sortExplicit, err := grepSort(input)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -730,6 +744,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		MaxColumns:    grepMaxColumns(input),
 		MaxPreview:    grepMaxColumnsPreview(input),
 		WithFilename:  grepWithFilename(input, mode),
+		HasReplace:    hasReplace,
+		Replace:       replace,
 		BeforeContext: before,
 		AfterContext:  after,
 		LineNumbers:   grepLineNumbers(input, mode),
@@ -775,6 +791,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"max_columns_preview": options.MaxPreview,
 			"with_filename":       options.WithFilename,
 			"no_filename":         !options.WithFilename && (mode == "content" || mode == "count"),
+			"replace":             replace,
+			"has_replace":         hasReplace,
 			"before_context":      options.BeforeContext,
 			"after_context":       options.AfterContext,
 			"line_numbers":        options.LineNumbers,
@@ -1069,9 +1087,9 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 	lines := strings.Split(content, "\n")
 	if options.OnlyMatching {
 		if options.Multiline {
-			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim)
+			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
 		}
-		return grepLineOnlyMatches(path, lines, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim)
+		return grepLineOnlyMatches(path, lines, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
 	}
 	matched := map[int]bool{}
 	included := map[int]bool{}
@@ -1099,7 +1117,7 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 				column = span[0] + 1
 			}
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayLine(lines[i], matched[i], options.MaxColumns, options.MaxPreview, options.Trim), Matched: matched[i]})
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayMatchedLine(expr, lines[i], matched[i], options), Matched: matched[i]})
 	}
 	return matches
 }
@@ -1110,7 +1128,7 @@ func grepVimgrepMatches(path string, lines []string, expr *regexp.Regexp, matche
 		if !included[i] {
 			continue
 		}
-		text := grepDisplayLine(lines[i], matched[i], options.MaxColumns, options.MaxPreview, options.Trim)
+		text := grepDisplayMatchedLine(expr, lines[i], matched[i], options)
 		if !matched[i] {
 			matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: text, Matched: false})
 			continue
@@ -1127,11 +1145,11 @@ func grepVimgrepMatches(path string, lines []string, expr *regexp.Regexp, matche
 	return matches
 }
 
-func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool) []grepMatch {
+func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool, options grepOptions) []grepMatch {
 	var matches []grepMatch
 	matchedLines := 0
 	for i, line := range lines {
-		spans := expr.FindAllStringIndex(line, -1)
+		spans := expr.FindAllStringSubmatchIndex(line, -1)
 		if len(spans) == 0 {
 			continue
 		}
@@ -1143,7 +1161,7 @@ func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCo
 				Path:    path,
 				Line:    i + 1,
 				Column:  span[0] + 1,
-				Text:    grepDisplayLine(line[span[0]:span[1]], true, maxColumns, maxPreview, trim),
+				Text:    grepDisplayLine(grepMatchedText(expr, line, span, options), true, maxColumns, maxPreview, trim),
 				Matched: true,
 			})
 		}
@@ -1152,13 +1170,13 @@ func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCo
 	return matches
 }
 
-func grepMultilineOnlyMatches(path string, lines []string, content string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool) []grepMatch {
+func grepMultilineOnlyMatches(path string, lines []string, content string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool, options grepOptions) []grepMatch {
 	if content == "" {
 		return nil
 	}
 	starts := grepLineStarts(lines)
 	var matches []grepMatch
-	for matchIndex, span := range expr.FindAllStringIndex(content, -1) {
+	for matchIndex, span := range expr.FindAllStringSubmatchIndex(content, -1) {
 		if maxCount > 0 && matchIndex >= maxCount {
 			break
 		}
@@ -1182,11 +1200,15 @@ func grepMultilineOnlyMatches(path string, lines []string, content string, expr 
 			if fragmentStart > fragmentEnd {
 				fragmentStart = fragmentEnd
 			}
+			text := lines[i][fragmentStart-lineStart : fragmentEnd-lineStart]
+			if options.HasReplace {
+				text = grepExpandReplacement(expr, content, span, options.Replace)
+			}
 			matches = append(matches, grepMatch{
 				Path:    path,
 				Line:    i + 1,
 				Column:  fragmentStart - lineStart + 1,
-				Text:    grepDisplayLine(lines[i][fragmentStart-lineStart:fragmentEnd-lineStart], true, maxColumns, maxPreview, trim),
+				Text:    grepDisplayLine(text, true, maxColumns, maxPreview, trim),
 				Matched: true,
 			})
 		}
@@ -1197,6 +1219,27 @@ func grepMultilineOnlyMatches(path string, lines []string, content string, expr 
 func normalizeGrepContent(content string) string {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	return strings.TrimSuffix(content, "\n")
+}
+
+func grepDisplayMatchedLine(expr *regexp.Regexp, line string, matched bool, options grepOptions) string {
+	if matched && options.HasReplace && !options.InvertMatch {
+		line = expr.ReplaceAllString(line, options.Replace)
+	}
+	return grepDisplayLine(line, matched, options.MaxColumns, options.MaxPreview, options.Trim)
+}
+
+func grepMatchedText(expr *regexp.Regexp, source string, span []int, options grepOptions) string {
+	if options.HasReplace {
+		return grepExpandReplacement(expr, source, span, options.Replace)
+	}
+	return source[span[0]:span[1]]
+}
+
+func grepExpandReplacement(expr *regexp.Regexp, source string, span []int, replacement string) string {
+	if len(span) < 2 {
+		return ""
+	}
+	return string(expr.ExpandString(nil, replacement, source, span))
 }
 
 func grepDisplayLine(line string, matched bool, maxColumns int, maxPreview bool, trim bool) string {
@@ -2044,6 +2087,19 @@ func grepMaxColumnsPreview(input grepInput) bool {
 		input.MaxColumnsPreviewAlt ||
 		input.MaxColumnsPreviewDash ||
 		input.LongMaxColumnsPreview
+}
+
+func grepReplacement(input grepInput) (string, bool) {
+	if input.Replace != nil {
+		return *input.Replace, true
+	}
+	if input.LongReplace != nil {
+		return *input.LongReplace, true
+	}
+	if input.ShortReplace != nil {
+		return *input.ShortReplace, true
+	}
+	return "", false
 }
 
 func grepWithFilename(input grepInput, mode string) bool {

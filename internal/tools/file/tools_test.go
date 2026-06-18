@@ -2608,6 +2608,72 @@ func TestGrepToolOnlyMatching(t *testing.T) {
 	}
 }
 
+func TestGrepToolReplace(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"before",
+		"ID-123 ID-456",
+		"after",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "tokens.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_replace",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-([0-9]+)","output_mode":"content","replace":"[$1]","context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "tokens.txt-1-before\ntokens.txt:2:[123] [456]\ntokens.txt-3-after"
+	if result.Content != want || result.StructuredContent["replace"] != "[$1]" || result.StructuredContent["has_replace"] != true {
+		t.Fatalf("replace result = %#v", result)
+	}
+
+	onlyResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_replace_only_matching",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-([0-9]+)","output_mode":"content","only_matching":true,"--replace":"<$1>"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOnly := "tokens.txt:2:<123>\ntokens.txt:2:<456>"
+	if onlyResult.Content != wantOnly || onlyResult.StructuredContent["replace"] != "<$1>" {
+		t.Fatalf("replace only-matching result = %#v", onlyResult)
+	}
+
+	vimgrepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_replace_vimgrep",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-([0-9]+)","output_mode":"content","--vimgrep":true,"-r":"[$1]"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVimgrep := "tokens.txt:2:1:[123] [456]\ntokens.txt:2:8:[123] [456]"
+	if vimgrepResult.Content != wantVimgrep || vimgrepResult.StructuredContent["vimgrep"] != true {
+		t.Fatalf("replace vimgrep result = %#v", vimgrepResult)
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_replace_count_ignored",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ID-([0-9]+)","output_mode":"count","replace":"[$1]"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if countResult.Content != "tokens.txt:1\n\nFound 1 total occurrence across 1 file." ||
+		countResult.StructuredContent["has_replace"] != false {
+		t.Fatalf("replace count result = %#v", countResult)
+	}
+}
+
 func TestGrepToolWordRegexp(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{
