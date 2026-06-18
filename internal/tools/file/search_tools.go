@@ -482,6 +482,7 @@ type grepMatch struct {
 	Line       int
 	Column     int
 	ByteOffset int
+	LineText   string
 	Text       string
 	Count      int
 	Matched    bool
@@ -1888,7 +1889,7 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 				column = span[0] + 1
 			}
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, ByteOffset: view.ByteStarts[i], Text: grepDisplayMatchedLine(expr, view.Lines[i], matched[i], options), Matched: matched[i]})
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, ByteOffset: view.ByteStarts[i], LineText: view.Lines[i], Text: grepDisplayMatchedLine(expr, view.Lines[i], matched[i], options), Matched: matched[i]})
 	}
 	return matches
 }
@@ -1901,16 +1902,16 @@ func grepVimgrepMatches(path string, lines []string, starts []int, expr *regexp.
 		}
 		text := grepDisplayMatchedLine(expr, lines[i], matched[i], options)
 		if !matched[i] {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, ByteOffset: starts[i], Text: text, Matched: false})
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, ByteOffset: starts[i], LineText: lines[i], Text: text, Matched: false})
 			continue
 		}
 		spans := expr.FindAllStringIndex(lines[i], -1)
 		if len(spans) == 0 {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: 1, ByteOffset: starts[i], Text: text, Matched: true})
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: 1, ByteOffset: starts[i], LineText: lines[i], Text: text, Matched: true})
 			continue
 		}
 		for _, span := range spans {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: span[0] + 1, ByteOffset: starts[i] + span[0], Text: text, Matched: true})
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: span[0] + 1, ByteOffset: starts[i] + span[0], LineText: lines[i], Text: text, Matched: true})
 		}
 	}
 	return matches
@@ -1933,6 +1934,7 @@ func grepLineOnlyMatches(path string, lines []string, starts []int, expr *regexp
 				Line:       i + 1,
 				Column:     span[0] + 1,
 				ByteOffset: starts[i] + span[0],
+				LineText:   line,
 				Text:       grepDisplayLine(grepMatchedText(expr, line, span, options), true, maxColumns, maxPreview, trim),
 				Matched:    true,
 			})
@@ -1980,6 +1982,7 @@ func grepMultilineOnlyMatches(path string, view grepContentView, expr *regexp.Re
 				Line:       i + 1,
 				Column:     fragmentStart - lineStart + 1,
 				ByteOffset: view.ByteStarts[i] + fragmentStart - lineStart,
+				LineText:   view.Lines[i],
 				Text:       grepDisplayLine(text, true, maxColumns, maxPreview, trim),
 				Matched:    true,
 			})
@@ -2479,7 +2482,7 @@ func grepJSONLineEvent(match grepMatch, options grepOptions) map[string]any {
 		"type": eventType,
 		"data": map[string]any{
 			"path":            grepJSONText(match.Path),
-			"lines":           grepJSONText(match.Text + "\n"),
+			"lines":           grepJSONText(grepJSONLineText(match) + "\n"),
 			"line_number":     match.Line,
 			"absolute_offset": match.ByteOffset,
 			"submatches":      grepJSONSubmatches(match, options),
@@ -2491,16 +2494,28 @@ func grepJSONSubmatches(match grepMatch, options grepOptions) []map[string]any {
 	if !match.Matched || options.InvertMatch || options.Expr == nil {
 		return []map[string]any{}
 	}
-	spans := options.Expr.FindAllStringIndex(match.Text, -1)
+	line := grepJSONLineText(match)
+	spans := options.Expr.FindAllStringSubmatchIndex(line, -1)
 	out := make([]map[string]any, 0, len(spans))
 	for _, span := range spans {
-		out = append(out, map[string]any{
-			"match": grepJSONText(match.Text[span[0]:span[1]]),
+		item := map[string]any{
+			"match": grepJSONText(line[span[0]:span[1]]),
 			"start": span[0],
 			"end":   span[1],
-		})
+		}
+		if options.HasReplace {
+			item["replacement"] = grepJSONText(grepExpandReplacement(options.Expr, line, span, options.Replace))
+		}
+		out = append(out, item)
 	}
 	return out
+}
+
+func grepJSONLineText(match grepMatch) string {
+	if match.LineText != "" {
+		return match.LineText
+	}
+	return match.Text
 }
 
 func grepJSONEndEvent(path string, stats grepFileStats, elapsed time.Duration) map[string]any {

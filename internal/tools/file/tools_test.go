@@ -1725,6 +1725,44 @@ func TestGrepToolJSONOutput(t *testing.T) {
 		t.Fatalf("quiet json event = %#v", quietEvent)
 	}
 
+	onlyResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_only_matching",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"-o":true,"sort":"path","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onlyEvents := strings.Split(onlyResult.Content.(string), "\n")
+	var onlyMatch map[string]any
+	if err := json.Unmarshal([]byte(onlyEvents[1]), &onlyMatch); err != nil {
+		t.Fatal(err)
+	}
+	onlyData := onlyMatch["data"].(map[string]any)
+	if onlyData["lines"].(map[string]any)["text"] != "Needle Needle\n" ||
+		len(onlyData["submatches"].([]any)) != 2 {
+		t.Fatalf("only-matching json match = %#v", onlyData)
+	}
+
+	replaceResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_replace",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"--replace":"X","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaceEvents := strings.Split(replaceResult.Content.(string), "\n")
+	var replaceMatch map[string]any
+	if err := json.Unmarshal([]byte(replaceEvents[1]), &replaceMatch); err != nil {
+		t.Fatal(err)
+	}
+	replaceSubmatches := replaceMatch["data"].(map[string]any)["submatches"].([]any)
+	firstReplacement := replaceSubmatches[0].(map[string]any)["replacement"].(map[string]any)["text"]
+	if firstReplacement != "X" {
+		t.Fatalf("replace json submatches = %#v", replaceSubmatches)
+	}
+
 	noJSONResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_json_override",
 		Name:  "Grep",
