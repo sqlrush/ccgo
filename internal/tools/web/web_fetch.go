@@ -610,7 +610,7 @@ func webFetchHTMLBaseURL(body string, fallback string) string {
 
 func resolveWebFetchBaseURL(raw string, fallback string) string {
 	raw = strings.TrimSpace(raw)
-	if raw == "" || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+	if raw == "" || hasUnsafeWebFetchHTMLURLScheme(raw) {
 		return ""
 	}
 	parsed, err := url.Parse(raw)
@@ -642,7 +642,7 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 	anchor := anchors[len(anchors)-1]
 	anchors = anchors[:len(anchors)-1]
 	href := strings.TrimSpace(anchor.Href)
-	if href == "" || strings.HasPrefix(href, "#") || strings.HasPrefix(strings.ToLower(href), "javascript:") {
+	if href == "" || strings.HasPrefix(href, "#") || hasUnsafeWebFetchHTMLURLScheme(href) {
 		return anchors, false
 	}
 	text := ""
@@ -766,7 +766,7 @@ func resolveWebFetchHTMLURL(raw string, baseURL string) string {
 	if raw == "" || strings.HasPrefix(raw, "#") {
 		return raw
 	}
-	if strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+	if hasUnsafeWebFetchHTMLURLScheme(raw) {
 		return ""
 	}
 	parsed, err := url.Parse(raw)
@@ -781,6 +781,20 @@ func resolveWebFetchHTMLURL(raw string, baseURL string) string {
 		return raw
 	}
 	return base.ResolveReference(parsed).String()
+}
+
+func hasUnsafeWebFetchHTMLURLScheme(raw string) bool {
+	idx := strings.IndexByte(raw, ':')
+	if idx <= 0 {
+		return false
+	}
+	scheme := strings.ToLower(strings.TrimSpace(raw[:idx]))
+	switch scheme {
+	case "javascript", "data", "blob", "vbscript":
+		return true
+	default:
+		return false
+	}
 }
 
 func htmlWebFetchAttr(rawTag string, name string) string {

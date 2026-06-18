@@ -242,6 +242,9 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
       <img alt="Picture data placeholder" src="/assets/picture-fallback.png">
     </picture>
     <a href="javascript:alert(1)">ignored script link</a>
+    <a href="data:text/plain;base64,SGVsbG8=">ignored data link</a>
+    <a href="blob:https://example.com/asset-id">ignored blob link</a>
+    <a href="vbscript:msgbox(1)">ignored vbscript link</a>
   </main>
 </body>
 </html>`))
@@ -290,7 +293,8 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	if !strings.Contains(rendered, "Image: Picture data placeholder ("+server.URL+"/assets/picture-real.png)") {
 		t.Fatalf("rendered body missing data-placeholder picture source text: %#v", rendered)
 	}
-	if strings.Contains(rendered, "javascript:alert") || strings.Contains(rendered, "data:image") || strings.Contains(rendered, "R0lGOD") {
+	if strings.Contains(rendered, "javascript:alert") || strings.Contains(rendered, "data:image") || strings.Contains(rendered, "R0lGOD") ||
+		strings.Contains(rendered, "data:text/plain") || strings.Contains(rendered, "blob:https://") || strings.Contains(rendered, "vbscript:") {
 		t.Fatalf("rendered body kept unsafe href: %#v", rendered)
 	}
 	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
