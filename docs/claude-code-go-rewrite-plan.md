@@ -219,7 +219,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep `glob`/`--glob`/`-g` 路径过滤现在支持 ripgrep 风格 `!pattern` 排除规则，可与正向 glob、逗号/空白多 pattern 和 brace alternation 组合；只有排除规则时默认包含未被排除的路径。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `text`/`--text`/`-a` 和 `no_text`/`--no-text`，可显式把二进制扩展名文件按文本读取参与匹配，也可用 no-text 覆盖 text 模式；`-a` 和 `--no-text` 都兼容 quoted semantic boolean。
 - 本轮补充：Grep 二进制过滤现在从扩展名跳过改为 ripgrep 风格 NUL 内容探测；默认跳过 NUL 文件，`binary`/`--binary` 会报告匹配的 NUL 文件，`text`/`--text`/`-a` 会按文本搜索 NUL 内容，`no_binary`/`--no-binary` 可覆盖 binary。
-- 本轮补充：Grep 输入现在接受 ripgrep 风格 `threads`/`--threads` 以及 `mmap`/`--mmap` 与 `no_mmap`/`--no-mmap` 后端选择提示；Go backend 继续使用普通读取路径，但 strict schema 不再拒绝官方配置里的并发/mmap 开关，并在 structured content 暴露最终状态。
+- 本轮补充：Grep 输入现在接受 ripgrep 风格 `threads`/`--threads`、`line_buffered`/`--line-buffered`、`block_buffered`/`--block-buffered`、`no_line_buffered`/`--no-line-buffered` 以及 `mmap`/`--mmap` 与 `no_mmap`/`--no-mmap` 后端/输出选择提示；Go backend 继续使用普通读取路径，但 strict schema 不再拒绝官方配置里的并发、buffering、mmap 开关，并在 structured content 暴露最终状态。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `passthru`/`passthrough`/`--passthru`/`--passthrough`，可输出被搜索文件的全部行并保留匹配行标记；启用后按官方语义覆盖 context 行数，quoted semantic boolean 同样兼容。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `trim`/`--trim` 和 `no_trim`/`--no-trim`，会删除每条已打印文本行开头的 ASCII 空白，同时保留原始匹配列号；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 输出现在支持 ripgrep 风格 `stats`/`--stats` 与 `no_stats`/`--no-stats`，在 content/count/匹配文件列表结果尾部追加 matches、matched lines、files searched、bytes searched/printed 和耗时统计，并在 structured content 暴露同源统计字段。

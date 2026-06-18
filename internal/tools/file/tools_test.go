@@ -3362,6 +3362,45 @@ func TestGrepToolThreadsControl(t *testing.T) {
 	}
 }
 
+func TestGrepToolBufferingControls(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hit.txt"), []byte("Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	lineResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_buffered",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--line-buffered":"true","--block-buffered":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lineResult.Content != "Found 1 file\nhit.txt" ||
+		lineResult.StructuredContent["line_buffered"] != true ||
+		lineResult.StructuredContent["block_buffered"] != false ||
+		lineResult.StructuredContent["no_line_buffered"] != false {
+		t.Fatalf("line-buffered result = %#v", lineResult)
+	}
+
+	blockResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_block_buffered",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","lineBuffered":true,"--no-line-buffered":"true","block_buffered":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blockResult.Content != "Found 1 file\nhit.txt" ||
+		blockResult.StructuredContent["line_buffered"] != false ||
+		blockResult.StructuredContent["block_buffered"] != true ||
+		blockResult.StructuredContent["no_line_buffered"] != true {
+		t.Fatalf("block-buffered result = %#v", blockResult)
+	}
+}
+
 func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	dir := t.TempDir()
 	longMatch := strings.Repeat("x", defaultGrepMaxColumns-len("Needle")) + "Needle"
