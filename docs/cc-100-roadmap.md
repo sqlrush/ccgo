@@ -818,6 +818,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Grep` 常用布尔参数继续补齐 ripgrep 长参数 aliases，覆盖 `--line-number`、`--ignore-case`、`--fixed-strings`、`--word-regexp`、`--invert-match` 和 `--only-matching`，并兼容 quoted semantic boolean。
 
+本轮补充：`Grep` 大小写策略继续补齐 ripgrep aliases：`case_sensitive`/`caseSensitive`/`case-sensitive`/`--case-sensitive`/`-s` 可强制大小写敏感，`smart_case`/`smartCase`/`smart-case`/`--smart-case`/`-S` 会在 pattern 不含大写字符时自动启用大小写不敏感；显式 case-sensitive 优先于 ignore-case，ignore-case 优先于 smart-case。
+
 本轮补充：`Grep` multiline 搜索现在支持 ripgrep 风格 `-U`、`--multiline`、`multiline-dotall` 和 `--multiline-dotall` aliases，统一映射到既有跨行 dotall 匹配逻辑并兼容 quoted semantic boolean。
 
 本轮补充：`Grep` 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore` 规则，同时继续排除 VCS metadata 目录并保留 `Read(...)` deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。

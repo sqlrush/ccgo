@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/permissions"
@@ -32,6 +33,8 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
+	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
+	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
@@ -52,6 +55,8 @@ var grepSemanticNumberKeys = map[string]struct{}{
 var grepSemanticBooleanKeys = map[string]struct{}{
 	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
+	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
+	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
@@ -113,6 +118,16 @@ type grepInput struct {
 	IgnoreCaseDash          bool   `json:"ignore-case,omitempty"`
 	LongIgnoreCase          bool   `json:"--ignore-case,omitempty"`
 	ShortIgnoreCase         bool   `json:"-i,omitempty"`
+	CaseSensitive           bool   `json:"case_sensitive,omitempty"`
+	CaseSensitiveAlt        bool   `json:"caseSensitive,omitempty"`
+	CaseSensitiveDash       bool   `json:"case-sensitive,omitempty"`
+	LongCaseSensitive       bool   `json:"--case-sensitive,omitempty"`
+	ShortCaseSensitive      bool   `json:"-s,omitempty"`
+	SmartCase               bool   `json:"smart_case,omitempty"`
+	SmartCaseAlt            bool   `json:"smartCase,omitempty"`
+	SmartCaseDash           bool   `json:"smart-case,omitempty"`
+	LongSmartCase           bool   `json:"--smart-case,omitempty"`
+	ShortSmartCase          bool   `json:"-S,omitempty"`
 	FixedStrings            bool   `json:"fixed_strings,omitempty"`
 	FixedStringsAlt         bool   `json:"fixedStrings,omitempty"`
 	FixedStringsDash        bool   `json:"fixed-strings,omitempty"`
@@ -297,6 +312,16 @@ func NewGrepTool() tool.Tool {
 					"ignore-case":      map[string]any{"type": "boolean"},
 					"--ignore-case":    map[string]any{"type": "boolean"},
 					"-i":               map[string]any{"type": "boolean"},
+					"case_sensitive":   map[string]any{"type": "boolean"},
+					"caseSensitive":    map[string]any{"type": "boolean"},
+					"case-sensitive":   map[string]any{"type": "boolean"},
+					"--case-sensitive": map[string]any{"type": "boolean"},
+					"-s":               map[string]any{"type": "boolean"},
+					"smart_case":       map[string]any{"type": "boolean"},
+					"smartCase":        map[string]any{"type": "boolean"},
+					"smart-case":       map[string]any{"type": "boolean"},
+					"--smart-case":     map[string]any{"type": "boolean"},
+					"-S":               map[string]any{"type": "boolean"},
 					"fixed_strings":    map[string]any{"type": "boolean"},
 					"fixedStrings":     map[string]any{"type": "boolean"},
 					"fixed-strings":    map[string]any{"type": "boolean"},
@@ -383,7 +408,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -581,7 +606,9 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"before_context":      options.BeforeContext,
 			"after_context":       options.AfterContext,
 			"line_numbers":        options.LineNumbers,
-			"case_insensitive":    grepCaseInsensitive(input),
+			"case_insensitive":    grepEffectiveCaseInsensitive(input),
+			"case_sensitive":      grepCaseSensitive(input),
+			"smart_case":          grepSmartCase(input),
 			"fixed_strings":       grepFixedStrings(input),
 			"word_regexp":         grepWordRegexp(input),
 			"invert_match":        grepInvertMatch(input),
@@ -1244,9 +1271,9 @@ func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
 		pattern = `\b(?:` + pattern + `)\b`
 	}
 	switch {
-	case grepCaseInsensitive(input) && grepMultiline(input):
+	case grepEffectiveCaseInsensitive(input) && grepMultiline(input):
 		pattern = "(?is:" + pattern + ")"
-	case grepCaseInsensitive(input):
+	case grepEffectiveCaseInsensitive(input):
 		pattern = "(?i:" + pattern + ")"
 	case grepMultiline(input):
 		pattern = "(?s:" + pattern + ")"
@@ -1281,6 +1308,41 @@ func grepCaseInsensitive(input grepInput) bool {
 		input.IgnoreCaseDash ||
 		input.LongIgnoreCase ||
 		input.ShortIgnoreCase
+}
+
+func grepCaseSensitive(input grepInput) bool {
+	return input.CaseSensitive ||
+		input.CaseSensitiveAlt ||
+		input.CaseSensitiveDash ||
+		input.LongCaseSensitive ||
+		input.ShortCaseSensitive
+}
+
+func grepSmartCase(input grepInput) bool {
+	return input.SmartCase ||
+		input.SmartCaseAlt ||
+		input.SmartCaseDash ||
+		input.LongSmartCase ||
+		input.ShortSmartCase
+}
+
+func grepEffectiveCaseInsensitive(input grepInput) bool {
+	if grepCaseSensitive(input) {
+		return false
+	}
+	if grepCaseInsensitive(input) {
+		return true
+	}
+	return grepSmartCase(input) && !grepPatternHasUpper(grepPattern(input))
+}
+
+func grepPatternHasUpper(pattern string) bool {
+	for _, r := range pattern {
+		if unicode.IsUpper(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func grepFixedStrings(input grepInput) bool {

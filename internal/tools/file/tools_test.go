@@ -1890,6 +1890,75 @@ func TestGrepToolCaseInsensitiveAndValidation(t *testing.T) {
 		t.Fatalf("long ignore-case result = %#v", longIgnoreCaseResult)
 	}
 
+	smartCaseLowerResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_smart_case_lower",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","--smart-case":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if smartCaseLowerResult.Content != "Found 1 file\nmixed.txt" ||
+		smartCaseLowerResult.StructuredContent["case_insensitive"] != true ||
+		smartCaseLowerResult.StructuredContent["smart_case"] != true {
+		t.Fatalf("smart-case lowercase result = %#v", smartCaseLowerResult)
+	}
+
+	smartCaseUpperResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_smart_case_upper",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","-S":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if smartCaseUpperResult.Content != "Found 1 file\nmixed.txt" ||
+		smartCaseUpperResult.StructuredContent["case_insensitive"] != true ||
+		smartCaseUpperResult.StructuredContent["smart_case"] != true {
+		t.Fatalf("smart-case short lowercase result = %#v", smartCaseUpperResult)
+	}
+
+	smartCaseSensitiveResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_smart_case_sensitive",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"ALPHA","smart_case":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if smartCaseSensitiveResult.Content != "No files found" ||
+		smartCaseSensitiveResult.StructuredContent["case_insensitive"] != false ||
+		smartCaseSensitiveResult.StructuredContent["smart_case"] != true {
+		t.Fatalf("smart-case sensitive result = %#v", smartCaseSensitiveResult)
+	}
+
+	caseSensitiveOverrideResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_case_sensitive_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","ignore_case":true,"--case-sensitive":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caseSensitiveOverrideResult.Content != "No files found" ||
+		caseSensitiveOverrideResult.StructuredContent["case_insensitive"] != false ||
+		caseSensitiveOverrideResult.StructuredContent["case_sensitive"] != true {
+		t.Fatalf("case-sensitive override result = %#v", caseSensitiveOverrideResult)
+	}
+
+	shortCaseSensitiveResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_case_sensitive_short",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"alpha","-i":true,"-s":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortCaseSensitiveResult.Content != "No files found" ||
+		shortCaseSensitiveResult.StructuredContent["case_sensitive"] != true {
+		t.Fatalf("short case-sensitive result = %#v", shortCaseSensitiveResult)
+	}
+
 	ignoredContextResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_ignored_context",
 		Name:  "Grep",
