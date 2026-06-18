@@ -220,6 +220,19 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
     <img alt="Architecture diagram" src="/assets/diagram.png">
     <img title="Release checklist" src="/assets/checklist.png">
     <img aria-label="Responsive diagram" srcset="/assets/responsive-1x.png 1x, /assets/responsive-2x.png 2x">
+    <picture>
+      <source media="(min-width: 800px)" srcset="/assets/hero-large.png 1x, /assets/hero-large@2x.png 2x">
+      <img alt="Hero diagram" src="/assets/hero-fallback.png">
+    </picture>
+    <picture>
+      <source srcset="javascript:alert(2)">
+      <source srcset="/assets/secondary-source.png">
+      <img alt="Secondary diagram" src="/assets/secondary-fallback.png">
+    </picture>
+    <picture>
+      <source srcset="javascript:alert(3)">
+      <img alt="Fallback diagram" src="/assets/fallback.png">
+    </picture>
     <a href="javascript:alert(1)">ignored script link</a>
   </main>
 </body>
@@ -250,6 +263,15 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Image: Responsive diagram ("+server.URL+"/assets/responsive-1x.png)") {
 		t.Fatalf("rendered body missing srcset image text: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Hero diagram ("+server.URL+"/assets/hero-large.png)") {
+		t.Fatalf("rendered body missing picture source image text: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Secondary diagram ("+server.URL+"/assets/secondary-source.png)") {
+		t.Fatalf("rendered body missing second picture source image text: %#v", rendered)
+	}
+	if !strings.Contains(rendered, "Image: Fallback diagram ("+server.URL+"/assets/fallback.png)") {
+		t.Fatalf("rendered body missing unsafe picture fallback image text: %#v", rendered)
 	}
 	if strings.Contains(rendered, "javascript:alert") {
 		t.Fatalf("rendered body kept unsafe href: %#v", rendered)

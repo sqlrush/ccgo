@@ -516,6 +516,8 @@ func findHTMLWebFetchBlockStart(lower string, name string) int {
 func stripHTMLWebFetchTags(body string, baseURL string) string {
 	var b strings.Builder
 	var anchors []htmlWebFetchAnchor
+	pictureDepth := 0
+	pictureSource := ""
 	for i := 0; i < len(body); {
 		if strings.HasPrefix(body[i:], "<!--") {
 			if end := strings.Index(body[i+4:], "-->"); end >= 0 {
@@ -537,6 +539,21 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 		}
 		rawTag := body[i+1 : i+end]
 		tag, closing := htmlWebFetchTagInfo(rawTag)
+		if tag == "picture" {
+			if closing {
+				if pictureDepth > 0 {
+					pictureDepth--
+				}
+				if pictureDepth == 0 {
+					pictureSource = ""
+				}
+			} else {
+				pictureDepth++
+				if pictureDepth == 1 {
+					pictureSource = ""
+				}
+			}
+		}
 		if tag == "a" {
 			if closing {
 				anchors, _ = appendHTMLWebFetchAnchorHref(&b, anchors)
@@ -545,8 +562,13 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 				anchors = append(anchors, htmlWebFetchAnchor{Href: resolveWebFetchHTMLURL(href, baseURL), Start: b.Len()})
 			}
 		}
+		if tag == "source" && !closing && pictureDepth > 0 && pictureSource == "" {
+			if candidate := firstWebFetchSrcsetURL(htmlWebFetchAttr(rawTag, "srcset")); resolveWebFetchHTMLURL(candidate, baseURL) != "" {
+				pictureSource = candidate
+			}
+		}
 		if tag == "img" && !closing {
-			appendHTMLWebFetchImageText(&b, rawTag, baseURL)
+			appendHTMLWebFetchImageText(&b, rawTag, baseURL, pictureSource)
 		}
 		if tag == "br" || isBlockHTMLWebFetchTag(tag) {
 			b.WriteByte('\n')
@@ -640,9 +662,9 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 	return anchors, true
 }
 
-func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string) {
+func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string, sourceOverride string) {
 	label := firstNonEmptyWebFetchAttr(rawTag, "alt", "title", "aria-label")
-	src := resolveWebFetchHTMLURL(webFetchImageSource(rawTag), baseURL)
+	src := resolveFirstWebFetchHTMLURL(baseURL, sourceOverride, webFetchImageSource(rawTag))
 	if label == "" {
 		return
 	}
@@ -672,6 +694,19 @@ func firstWebFetchSrcsetURL(raw string) string {
 		fields := strings.Fields(strings.TrimSpace(candidate))
 		if len(fields) > 0 {
 			return fields[0]
+		}
+	}
+	return ""
+}
+
+func resolveFirstWebFetchHTMLURL(baseURL string, rawValues ...string) string {
+	for _, raw := range rawValues {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if resolved := resolveWebFetchHTMLURL(raw, baseURL); resolved != "" {
+			return resolved
 		}
 	}
 	return ""
