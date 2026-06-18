@@ -59,6 +59,25 @@ func TestPromptDumperWritesInitNewUserMessagesAndResponses(t *testing.T) {
 	}
 }
 
+func TestClientExposesPromptDumpCache(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dump.jsonl")
+	dumper := NewPromptDumper(path)
+	client := NewClient(WithPromptDumper(dumper))
+	timestamp := dumper.DumpRequest([]byte(`{"model":"sonnet","messages":[{"role":"user","content":"hello"}]}`))
+
+	if client.PromptDumpPath() != path {
+		t.Fatalf("prompt dump path = %q", client.PromptDumpPath())
+	}
+	cached := client.CachedPromptDumpRequests()
+	if len(cached) != 1 || cached[0].Timestamp != timestamp || !json.Valid(cached[0].Request) {
+		t.Fatalf("cached requests = %#v", cached)
+	}
+	cached[0].Timestamp = "mutated"
+	if client.CachedPromptDumpRequests()[0].Timestamp == "mutated" {
+		t.Fatalf("cached requests should be copied")
+	}
+}
+
 func TestPromptDumperWritesStreamingResponseChunks(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dump-stream.jsonl")
 	dumper := NewPromptDumper(path)

@@ -209,6 +209,10 @@ func TestBuiltinCommandsExposeOfficialAliasesAndMetadata(t *testing.T) {
 	if !ok || !model.Immediate || model.ArgumentHint != "[model]" {
 		t.Fatalf("model metadata = %#v, %v", model, ok)
 	}
+	issue, ok := registry.Find("issue")
+	if !ok || issue.Type != contracts.CommandLocal || !issue.SupportsNonInteractive || issue.ArgumentHint != "[description]" {
+		t.Fatalf("issue metadata = %#v, %v", issue, ok)
+	}
 }
 
 func TestFromSourcesUsesCommandOrderAndDedupesDynamicSkills(t *testing.T) {

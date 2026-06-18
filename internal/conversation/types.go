@@ -25,6 +25,11 @@ type StreamingMessageClient interface {
 	StreamMessages(context.Context, anthropic.Request, func(anthropic.StreamEvent) error) error
 }
 
+type PromptDumpProvider interface {
+	CachedPromptDumpRequests() []anthropic.PromptDumpCacheEntry
+	PromptDumpPath() string
+}
+
 type EventType string
 
 const (

@@ -151,6 +151,20 @@ func WithPromptDumper(dumper *PromptDumper) Option {
 	}
 }
 
+func (c *Client) CachedPromptDumpRequests() []PromptDumpCacheEntry {
+	if c == nil || c.Dumper == nil {
+		return nil
+	}
+	return c.Dumper.CachedRequests()
+}
+
+func (c *Client) PromptDumpPath() string {
+	if c == nil || c.Dumper == nil {
+		return ""
+	}
+	return c.Dumper.Path
+}
+
 func WithMaxRetries(maxRetries int) Option {
 	return func(c *Client) {
 		c.Retry.MaxRetries = maxRetries

@@ -2,6 +2,8 @@ package conversation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -111,6 +113,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultCost {
 			return r.appendLocalTextResult(result, history, formatCostSummary(localResult.Value, originalHistory))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultIssue {
+			return r.appendLocalTextResult(result, history, r.formatIssueSummary(localResult.Value))
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultStatus {
 			return r.appendLocalTextResult(result, history, r.formatStatusSummary(localResult.Value))
@@ -630,6 +635,95 @@ func formatCostBreakdown(history []contracts.Message) string {
 		lines = append(lines, fmt.Sprintf("Showing 20 of %d messages with usage.", countUsageMessages(history)))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatIssueSummary(raw string) string {
+	lines := []string{"Issue report context"}
+	if description := strings.TrimSpace(raw); description != "" {
+		lines = append(lines, "Description: "+description)
+	}
+	if r.SessionID != "" {
+		lines = append(lines, "Session ID: "+string(r.SessionID))
+	}
+	if r.WorkingDirectory != "" {
+		lines = append(lines, "Working directory: "+r.WorkingDirectory)
+	}
+	if model := r.model(); model != "" {
+		lines = append(lines, "Model: "+model)
+	}
+	if provider, ok := r.Client.(PromptDumpProvider); ok {
+		path := strings.TrimSpace(provider.PromptDumpPath())
+		if path != "" {
+			lines = append(lines, "Prompt dump path: "+path)
+		}
+		entries := provider.CachedPromptDumpRequests()
+		lines = append(lines, fmt.Sprintf("Recent prompt dumps: %d", len(entries)))
+		for _, entry := range recentPromptDumpSummaries(entries, 3) {
+			lines = append(lines, "- "+entry)
+		}
+	} else {
+		lines = append(lines, "Prompt dump cache: unavailable")
+	}
+	lines = append(lines, "Submission: local context only; remote issue submission is not implemented in the Go runtime yet.")
+	return strings.Join(lines, "\n")
+}
+
+func recentPromptDumpSummaries(entries []anthropic.PromptDumpCacheEntry, limit int) []string {
+	if limit <= 0 || len(entries) == 0 {
+		return nil
+	}
+	start := len(entries) - limit
+	if start < 0 {
+		start = 0
+	}
+	out := make([]string, 0, len(entries)-start)
+	for _, entry := range entries[start:] {
+		out = append(out, summarizePromptDumpEntry(entry))
+	}
+	return out
+}
+
+func summarizePromptDumpEntry(entry anthropic.PromptDumpCacheEntry) string {
+	sum := sha256.Sum256(entry.Request)
+	hash := hex.EncodeToString(sum[:])
+	if len(hash) > 16 {
+		hash = hash[:16]
+	}
+	parts := []string{
+		"timestamp=" + emptyAsUnknown(entry.Timestamp),
+		"request_sha256=" + hash,
+	}
+	var req struct {
+		Model     string            `json:"model"`
+		Stream    bool              `json:"stream"`
+		MaxTokens int               `json:"max_tokens"`
+		System    json.RawMessage   `json:"system"`
+		Messages  []json.RawMessage `json:"messages"`
+		Tools     []json.RawMessage `json:"tools"`
+	}
+	if err := json.Unmarshal(entry.Request, &req); err != nil {
+		return strings.Join(append(parts, "parse_error="+err.Error()), ", ")
+	}
+	if req.Model != "" {
+		parts = append(parts, "model="+req.Model)
+	}
+	if req.MaxTokens > 0 {
+		parts = append(parts, fmt.Sprintf("max_tokens=%d", req.MaxTokens))
+	}
+	parts = append(parts,
+		fmt.Sprintf("stream=%t", req.Stream),
+		fmt.Sprintf("messages=%d", len(req.Messages)),
+		fmt.Sprintf("tools=%d", len(req.Tools)),
+		fmt.Sprintf("system=%t", len(req.System) > 0 && string(req.System) != "null"),
+	)
+	return strings.Join(parts, ", ")
+}
+
+func emptyAsUnknown(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "unknown"
+	}
+	return value
 }
 
 func costMessageLabel(message contracts.Message, index int) string {

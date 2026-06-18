@@ -47,6 +47,8 @@ type fakeClient struct {
 	requests   []anthropic.Request
 	streams    [][]anthropic.StreamEvent
 	streamErrs []error
+	dumpPath   string
+	dumpCache  []anthropic.PromptDumpCacheEntry
 }
 
 type fakeRunnerMCPClient struct {
@@ -92,6 +94,14 @@ func (f *fakeClient) StreamMessages(ctx context.Context, req anthropic.Request, 
 		return err
 	}
 	return nil
+}
+
+func (f *fakeClient) CachedPromptDumpRequests() []anthropic.PromptDumpCacheEntry {
+	return append([]anthropic.PromptDumpCacheEntry(nil), f.dumpCache...)
+}
+
+func (f *fakeClient) PromptDumpPath() string {
+	return f.dumpPath
 }
 
 func (f *fakeRunnerMCPClient) ListTools(_ context.Context, serverName string) ([]mcp.RemoteTool, error) {
@@ -1815,6 +1825,60 @@ func TestRunnerExecutesClearSlashCommandWithoutQuery(t *testing.T) {
 	}
 	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/clear</command-name>") {
 		t.Fatalf("clear message = %q", text)
+	}
+}
+
+func TestRunnerExecutesIssueSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{
+		dumpPath: filepath.Join(t.TempDir(), "prompt-dump.jsonl"),
+		dumpCache: []anthropic.PromptDumpCacheEntry{{
+			Timestamp: "2026-01-02T03:04:05Z",
+			Request:   json.RawMessage(`{"model":"sonnet","max_tokens":64,"stream":true,"system":"secret system","messages":[{"role":"user","content":"super secret prompt"}],"tools":[{"name":"SecretTool"}]}`),
+		}},
+	}
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_issue",
+		WorkingDirectory: "/repo",
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/issue auth failed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Issue report context",
+		"Description: auth failed",
+		"Session ID: sess_issue",
+		"Working directory: /repo",
+		"Model: sonnet",
+		"Prompt dump path: " + client.dumpPath,
+		"Recent prompt dumps: 1",
+		"timestamp=2026-01-02T03:04:05Z",
+		"request_sha256=",
+		"max_tokens=64",
+		"stream=true",
+		"messages=1",
+		"tools=1",
+		"system=true",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("issue summary missing %q in:\n%s", want, text)
+		}
+	}
+	for _, leaked := range []string{"super secret prompt", "secret system", "SecretTool"} {
+		if strings.Contains(text, leaked) {
+			t.Fatalf("issue summary leaked %q in:\n%s", leaked, text)
+		}
 	}
 }
 

@@ -520,6 +520,29 @@ func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashIssueReturnsLocalIssueResult(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	result, handled, err := ExecuteSlashCommand(registry, "/issue auth failed", SlashOptions{UUID: "user_issue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+		t.Fatalf("handled=%v result=%#v", handled, result)
+	}
+	if result.LocalResult.Type != LocalCommandResultIssue {
+		t.Fatalf("local result = %#v", result.LocalResult)
+	}
+	if result.LocalResult.Value != "auth failed" {
+		t.Fatalf("local result value = %q", result.LocalResult.Value)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].UUID != "user_issue" {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/issue</command-name>") {
+		t.Fatalf("issue command message = %q", text)
+	}
+}
+
 func TestExecuteSlashStatusReturnsLocalStatusResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/status show tools", SlashOptions{UUID: "user_status"})

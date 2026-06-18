@@ -49,6 +49,7 @@ const (
 	LocalCommandResultClear   LocalCommandResultType = "clear"
 	LocalCommandResultCompact LocalCommandResultType = "compact"
 	LocalCommandResultCost    LocalCommandResultType = "cost"
+	LocalCommandResultIssue   LocalCommandResultType = "issue"
 	LocalCommandResultStatus  LocalCommandResultType = "status"
 	LocalCommandResultModel   LocalCommandResultType = "model"
 	LocalCommandResultMCP     LocalCommandResultType = "mcp"
@@ -208,6 +209,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultCompact, Value: strings.TrimSpace(args)}, true
 	case "cost":
 		return LocalCommandResult{Type: LocalCommandResultCost, Value: strings.TrimSpace(args)}, true
+	case "issue":
+		return LocalCommandResult{Type: LocalCommandResultIssue, Value: strings.TrimSpace(args)}, true
 	case "status":
 		return LocalCommandResult{Type: LocalCommandResultStatus, Value: strings.TrimSpace(args)}, true
 	case "model":
