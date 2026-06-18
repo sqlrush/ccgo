@@ -1555,6 +1555,71 @@ func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
 	}
 }
 
+func TestGrepToolSortAliases(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Now().Add(-4 * time.Hour)
+	files := map[string]time.Time{
+		"a.txt": base,
+		"m.txt": base.Add(2 * time.Hour),
+		"z.txt": base.Add(3 * time.Hour),
+	}
+	for name, mtime := range files {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("Needle\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	pathResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_sort_path",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pathResult.Content != "Found 3 files\na.txt\nm.txt\nz.txt" ||
+		pathResult.StructuredContent["sort"] != "path" ||
+		pathResult.StructuredContent["sort_reverse"] != false ||
+		pathResult.StructuredContent["sort_explicit"] != true {
+		t.Fatalf("path sort result = %#v", pathResult)
+	}
+
+	reversePathResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_sort_reverse_path",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--sortr":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reversePathResult.Content != "Found 3 files\nz.txt\nm.txt\na.txt" ||
+		reversePathResult.StructuredContent["sort"] != "path" ||
+		reversePathResult.StructuredContent["sort_reverse"] != true {
+		t.Fatalf("reverse path sort result = %#v", reversePathResult)
+	}
+
+	modifiedCountResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_sort_modified_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","sort":"modified"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantModifiedCount := "a.txt:1\nm.txt:1\nz.txt:1\n\nFound 3 total occurrences across 3 files."
+	if modifiedCountResult.Content != wantModifiedCount ||
+		modifiedCountResult.StructuredContent["sort"] != "modified" ||
+		modifiedCountResult.StructuredContent["sort_reverse"] != false {
+		t.Fatalf("modified count sort result = %#v", modifiedCountResult)
+	}
+}
+
 func TestGrepToolContentContextAndPagination(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{

@@ -31,6 +31,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"pattern": {}, "regex": {}, "regexp": {}, "--regexp": {}, "-e": {}, "path": {}, "glob": {}, "--glob": {}, "-g": {}, "type": {}, "--type": {}, "-t": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
+	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"ignore_case": {}, "case_insensitive": {}, "caseInsensitive": {}, "ignore-case": {}, "--ignore-case": {}, "-i": {},
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
@@ -99,6 +100,10 @@ type grepInput struct {
 	MaxColumnsAlt           *int   `json:"maxColumns,omitempty"`
 	MaxColumnsDash          *int   `json:"max-columns,omitempty"`
 	LongMaxColumns          *int   `json:"--max-columns,omitempty"`
+	Sort                    string `json:"sort,omitempty"`
+	LongSort                string `json:"--sort,omitempty"`
+	SortReverse             string `json:"sortr,omitempty"`
+	LongSortReverse         string `json:"--sortr,omitempty"`
 	Context                 *int   `json:"context,omitempty"`
 	ShortContext            *int   `json:"-C,omitempty"`
 	BeforeContext           *int   `json:"before_context,omitempty"`
@@ -213,6 +218,9 @@ type grepOptions struct {
 	InvertMatch   bool
 	OnlyMatching  bool
 	CountMatches  bool
+	SortMode      string
+	SortReverse   bool
+	SortExplicit  bool
 }
 
 type searchWalkOptions struct {
@@ -288,6 +296,12 @@ func NewGrepTool() tool.Tool {
 					"max-columns": map[string]any{"type": "integer"},
 					"--max-columns": map[string]any{
 						"type": "integer",
+					},
+					"sort":   map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
+					"--sort": map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
+					"sortr":  map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
+					"--sortr": map[string]any{
+						"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"},
 					},
 					"context": map[string]any{"type": "integer"},
 					"-C":      map[string]any{"type": "integer"},
@@ -408,7 +422,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -523,6 +537,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if input.LongMaxColumns != nil && *input.LongMaxColumns < 0 {
 		return fmt.Errorf("max_columns must be non-negative")
 	}
+	if _, _, _, err := grepSort(input); err != nil {
+		return err
+	}
 	if _, err := grepTypeExtensions(grepTypeFilter(input)); err != nil {
 		return err
 	}
@@ -563,6 +580,10 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		after = 0
 	}
 	countMatches := grepCountMatches(input) && mode == "count" && !grepInvertMatch(input)
+	sortMode, sortReverse, sortExplicit, err := grepSort(input)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
 	options := grepOptions{
 		Mode:          mode,
 		Limit:         grepLimit(input),
@@ -576,6 +597,9 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		InvertMatch:   grepInvertMatch(input),
 		OnlyMatching:  onlyMatching,
 		CountMatches:  countMatches,
+		SortMode:      sortMode,
+		SortReverse:   sortReverse,
+		SortExplicit:  sortExplicit,
 	}
 	noIgnore := grepNoIgnore(input)
 	globFilter := grepGlobFilter(input)
@@ -619,6 +643,9 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"count_matches":       countMatches,
 			"no_ignore":           noIgnore,
 			"multiline":           grepMultiline(input),
+			"sort":                grepStructuredSortMode(options),
+			"sort_reverse":        grepStructuredSortReverse(options),
+			"sort_explicit":       sortExplicit,
 			"truncated":           truncated,
 		},
 	}, nil
@@ -798,6 +825,9 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 			matchOptions.AfterContext = 0
 		}
 		lineMatches := grepFileMatches(displayRel, content, expr, matchOptions)
+		for i := range lineMatches {
+			lineMatches[i].ModUnix = info.ModTime().UnixNano()
+		}
 		if options.Mode == "files_without_matches" {
 			if len(lineMatches) == 0 {
 				matches = append(matches, grepMatch{Path: displayRel, ModUnix: info.ModTime().UnixNano()})
@@ -815,7 +845,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 			if options.CountMatches {
 				count = len(lineMatches)
 			}
-			matches = append(matches, grepMatch{Path: displayRel, Count: count})
+			matches = append(matches, grepMatch{Path: displayRel, Count: count, ModUnix: info.ModTime().UnixNano()})
 		default:
 			matches = append(matches, lineMatches...)
 		}
@@ -824,18 +854,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 	if err != nil {
 		return nil, 0, false, err
 	}
-	sort.Slice(matches, func(i, j int) bool {
-		if grepModeIsFileList(options.Mode) && matches[i].ModUnix != matches[j].ModUnix {
-			return matches[i].ModUnix > matches[j].ModUnix
-		}
-		if matches[i].Path != matches[j].Path {
-			return matches[i].Path < matches[j].Path
-		}
-		if matches[i].Line != matches[j].Line {
-			return matches[i].Line < matches[j].Line
-		}
-		return matches[i].Column < matches[j].Column
-	})
+	sortGrepMatches(matches, options)
 	totalMatches := len(matches)
 	start := options.Offset
 	if start > len(matches) {
@@ -1251,6 +1270,101 @@ func normalizedGrepOutputMode(input grepInput) string {
 		return "files_without_matches"
 	}
 	return mode
+}
+
+func grepSort(input grepInput) (string, bool, bool, error) {
+	if raw := firstNonEmpty(input.SortReverse, input.LongSortReverse); raw != "" {
+		mode, err := normalizeGrepSortMode(raw)
+		return mode, true, true, err
+	}
+	if raw := firstNonEmpty(input.Sort, input.LongSort); raw != "" {
+		mode, err := normalizeGrepSortMode(raw)
+		return mode, false, true, err
+	}
+	return "", false, false, nil
+}
+
+func normalizeGrepSortMode(raw string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "":
+		return "", nil
+	case "path", "name", "file":
+		return "path", nil
+	case "modified", "mtime", "modtime", "time":
+		return "modified", nil
+	case "none":
+		return "none", nil
+	default:
+		return "", fmt.Errorf("sort must be one of path, modified, or none")
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func sortGrepMatches(matches []grepMatch, options grepOptions) {
+	if options.SortExplicit && options.SortMode == "none" {
+		return
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		switch {
+		case options.SortExplicit && options.SortMode == "modified":
+			return grepModifiedLess(matches[i], matches[j], options.SortReverse)
+		case options.SortExplicit && options.SortMode == "path":
+			return grepPathLess(matches[i], matches[j], options.SortReverse)
+		case grepModeIsFileList(options.Mode) && matches[i].ModUnix != matches[j].ModUnix:
+			return matches[i].ModUnix > matches[j].ModUnix
+		default:
+			return grepPathLess(matches[i], matches[j], false)
+		}
+	})
+}
+
+func grepModifiedLess(left grepMatch, right grepMatch, reverse bool) bool {
+	if left.ModUnix != right.ModUnix {
+		if reverse {
+			return left.ModUnix > right.ModUnix
+		}
+		return left.ModUnix < right.ModUnix
+	}
+	return grepPathLess(left, right, false)
+}
+
+func grepPathLess(left grepMatch, right grepMatch, reverse bool) bool {
+	if left.Path != right.Path {
+		if reverse {
+			return left.Path > right.Path
+		}
+		return left.Path < right.Path
+	}
+	if left.Line != right.Line {
+		return left.Line < right.Line
+	}
+	return left.Column < right.Column
+}
+
+func grepStructuredSortMode(options grepOptions) string {
+	if options.SortExplicit {
+		return options.SortMode
+	}
+	if grepModeIsFileList(options.Mode) {
+		return "modified"
+	}
+	return "path"
+}
+
+func grepStructuredSortReverse(options grepOptions) bool {
+	if options.SortExplicit {
+		return options.SortReverse
+	}
+	return grepModeIsFileList(options.Mode)
 }
 
 func grepPattern(input grepInput) string {

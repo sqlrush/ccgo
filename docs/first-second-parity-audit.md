@@ -130,6 +130,7 @@ Covered behavior:
 - `Grep` now accepts whole-word matching through `word_regexp`/`wordRegexp`/`word-regexp`/`-w`, applying word-boundary filtering for both regex and fixed-string patterns and preserving quoted boolean coercion.
 - `Grep` now accepts inverted matching through `invert_match`/`invertMatch`/`invert-match`/`-v`, applying the inverted line set consistently for files-with-matches, content, count, and multiline span output modes while preserving quoted boolean coercion.
 - `Grep` files-with-matches output now mirrors the official modified-time sort: newest files first, path tie-breaker, and pagination applied after sorting.
+- `Grep` now accepts ripgrep-style result ordering through `sort`/`--sort` and `sortr`/`--sortr`, covering path, modified-time, and none ordering for files/content/count modes with structured sort metadata.
 - `Glob`/`Grep` traversal now applies `Read(...)` deny rules from the permission context as extra search ignore rules, hiding denied basename, path, and directory patterns from search results.
 - `Read`/`Edit` now coerce quoted semantic strings for `offset`/`limit` and `replace_all`, including whole-decimal numeric strings such as `"2.0"` for integer fields while keeping fractional values rejected.
 - `Bash`/`BashOutput` now coerce quoted semantic strings for `timeout`, `run_in_background`/`runInBackground`, and `tail_lines`/`tailLines`, matching official SDK-style number/boolean inputs without relaxing unknown-field validation.
