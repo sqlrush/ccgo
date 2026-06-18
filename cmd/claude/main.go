@@ -2101,6 +2101,13 @@ func anthropicClientFromEnv(ctx context.Context, fastMode bool) (*anthropic.Clie
 	if len(beta) > 0 {
 		options = append(options, anthropic.WithBeta(beta...))
 	}
+	customHeaders, err := customHeadersFromEnv()
+	if err != nil {
+		return nil, "", err
+	}
+	if len(customHeaders) > 0 {
+		options = append(options, anthropic.WithHeaders(customHeaders))
+	}
 	return anthropic.NewClient(options...), string(credentials.Source), nil
 }
 
@@ -2131,6 +2138,122 @@ func splitEnvList(value string) []string {
 		}
 	}
 	return out
+}
+
+func customHeadersFromEnv() (http.Header, error) {
+	var headers http.Header
+	for _, name := range []string{"ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_CUSTOM_HEADERS"} {
+		parsed, err := parseCustomHeadersEnv(name, os.Getenv(name))
+		if err != nil {
+			return nil, err
+		}
+		for key, values := range parsed {
+			if headers == nil {
+				headers = http.Header{}
+			}
+			for _, value := range values {
+				headers.Add(key, value)
+			}
+		}
+	}
+	return headers, nil
+}
+
+func parseCustomHeadersEnv(name string, value string) (http.Header, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		return parseCustomHeadersJSON(name, []byte(trimmed))
+	}
+	headers := http.Header{}
+	for index, line := range strings.Split(trimmed, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		separator := strings.Index(line, ":")
+		if separator < 0 {
+			separator = strings.Index(line, "=")
+		}
+		if separator < 0 {
+			return nil, fmt.Errorf("%s line %d must use `Header: value` or `Header=value`", name, index+1)
+		}
+		if err := addCustomHeader(headers, line[:separator], line[separator+1:]); err != nil {
+			return nil, fmt.Errorf("%s line %d: %w", name, index+1, err)
+		}
+	}
+	if len(headers) == 0 {
+		return nil, nil
+	}
+	return headers, nil
+}
+
+func parseCustomHeadersJSON(name string, data []byte) (http.Header, error) {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("%s must be valid JSON object or header lines: %w", name, err)
+	}
+	headers := http.Header{}
+	for key, value := range raw {
+		switch typed := value.(type) {
+		case string:
+			if err := addCustomHeader(headers, key, typed); err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", name, key, err)
+			}
+		case []any:
+			for index, item := range typed {
+				text, ok := item.(string)
+				if !ok {
+					return nil, fmt.Errorf("%s.%s[%d] must be a string", name, key, index)
+				}
+				if err := addCustomHeader(headers, key, text); err != nil {
+					return nil, fmt.Errorf("%s.%s[%d]: %w", name, key, index, err)
+				}
+			}
+		case nil:
+			continue
+		default:
+			return nil, fmt.Errorf("%s.%s must be a string or string array", name, key)
+		}
+	}
+	if len(headers) == 0 {
+		return nil, nil
+	}
+	return headers, nil
+}
+
+func addCustomHeader(headers http.Header, key string, value string) error {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if !validHeaderName(key) {
+		return fmt.Errorf("invalid header name %q", key)
+	}
+	if strings.ContainsAny(value, "\r\n") {
+		return fmt.Errorf("header %q contains a newline", key)
+	}
+	headers.Add(http.CanonicalHeaderKey(key), value)
+	return nil
+}
+
+func validHeaderName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			continue
+		}
+		switch c {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func firstNonEmpty(values ...string) string {

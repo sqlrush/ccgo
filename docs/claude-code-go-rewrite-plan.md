@@ -138,6 +138,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：conversation runner 的 streaming request 现在在未收到任何 stream event 前失败时，会用同一请求安全回退到 non-streaming `CreateMessage`；一旦已有 stream event 对外发出，错误会原样返回，避免重复生成半截输出。
 - 本轮补充：新增 no-query `/issue [description]` 本地命令入口，Anthropic client 暴露只读 prompt dump cache 摘要接口；runner 会输出 session/cwd/model、dump path 和最近请求的结构化摘要/hash，不输出 prompt 正文、system 内容或 tool schema 名称，作为后续远端 issue 提交集成的安全上下文基础。
 - 本轮补充：`/cost` 本地命令现在会在 runner 带有 `SessionPath` 时从当前 session transcript 回填历史 usage，并按 message UUID/ID 与内存 history 去重，避免 resume 或新进程场景丢失/重复计算历史 cost。
+- 本轮补充：Anthropic CLI/env client 初始化现在支持 `ANTHROPIC_CUSTOM_HEADERS` 和 `CLAUDE_CODE_CUSTOM_HEADERS`，可用 JSON object 或 `Header: value`/`Header=value` 行格式注入 gateway/proxy 静态请求头；配置错误会在初始化阶段报错，避免静默遗漏代理必需 header。
 
 ### M4: Tool framework、permissions、sandbox
 

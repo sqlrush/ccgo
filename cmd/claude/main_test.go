@@ -2771,6 +2771,73 @@ func TestAnthropicClientFromEnvConfiguresOAuthRefreshProvider(t *testing.T) {
 	}
 }
 
+func TestAnthropicClientFromEnvAppliesCustomHeaders(t *testing.T) {
+	var seen bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = true
+		if got := r.Header.Get("x-gateway-auth"); got != "gateway" {
+			t.Fatalf("x-gateway-auth = %q", got)
+		}
+		if values := r.Header.Values("x-gateway-multi"); len(values) != 2 || values[0] != "one" || values[1] != "two" {
+			t.Fatalf("x-gateway-multi = %#v", values)
+		}
+		if got := r.Header.Get("x-proxy-tenant"); got != "acme" {
+			t.Fatalf("x-proxy-tenant = %q", got)
+		}
+		if got := r.Header.Get("x-proxy-mode"); got != "compat" {
+			t.Fatalf("x-proxy-mode = %q", got)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"sonnet","content":[]}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("ANTHROPIC_CUSTOM_HEADERS", `{"X-Gateway-Auth":"gateway","X-Gateway-Multi":["one","two"]}`)
+	t.Setenv("CLAUDE_CODE_CUSTOM_HEADERS", "X-Proxy-Tenant: acme\nX-Proxy-Mode=compat")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	client, source, err := anthropicClientFromEnv(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source != "api_key" {
+		t.Fatalf("source = %q", source)
+	}
+	if _, err := client.CreateMessage(context.Background(), anthropic.Request{
+		Model:     "sonnet",
+		MaxTokens: 32,
+		Messages:  []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("hello")}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !seen {
+		t.Fatal("server did not receive request")
+	}
+}
+
+func TestAnthropicClientFromEnvRejectsInvalidCustomHeaders(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("ANTHROPIC_CUSTOM_HEADERS", "not-a-header")
+	t.Setenv("CLAUDE_CODE_CUSTOM_HEADERS", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	_, _, err := anthropicClientFromEnv(context.Background(), false)
+	if err == nil || !strings.Contains(err.Error(), "ANTHROPIC_CUSTOM_HEADERS line 1") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestRunPrintJSONOutputsSetupError(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
