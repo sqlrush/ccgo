@@ -220,6 +220,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `text`/`--text`/`-a` 和 `no_text`/`--no-text`，可显式把二进制扩展名文件按文本读取参与匹配，也可用 no-text 覆盖 text 模式；`-a` 和 `--no-text` 都兼容 quoted semantic boolean。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `passthru`/`passthrough`/`--passthru`/`--passthrough`，可输出被搜索文件的全部行并保留匹配行标记；启用后按官方语义覆盖 context 行数，quoted semantic boolean 同样兼容。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `trim`/`--trim` 和 `no_trim`/`--no-trim`，会删除每条已打印文本行开头的 ASCII 空白，同时保留原始匹配列号；quoted semantic boolean 同样兼容。
+- 本轮补充：Grep 输出现在支持 ripgrep 风格 `stats`/`--stats` 与 `no_stats`/`--no-stats`，在 content/count/匹配文件列表结果尾部追加 matches、matched lines、files searched、bytes searched/printed 和耗时统计，并在 structured content 暴露同源统计字段；JSON 输出模式仍未宣称完成。
 - 本轮补充：Grep 长行输出现在支持 ripgrep 风格 `max_columns_preview`/`--max-columns-preview` 和 `no_max_columns_preview`/`--no-max-columns-preview`，会在 `max_columns` 触发时输出截断预览加官方 omitted-end 后缀；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `line_regexp`/`line-regexp`/`--line-regexp`/`-x`，将 pattern 限定为整行匹配，并按官方语义优先于 `word_regexp`；fixed-string、multiline 和 quoted semantic boolean 组合均兼容。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `vimgrep`/`--vimgrep`，匹配行按每个匹配重复输出 `path:line:column:text`，context 行保持单行输出，并兼容 `-N`、`only_matching` 和 quoted semantic boolean。

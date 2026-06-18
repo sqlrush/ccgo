@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -70,6 +71,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"vimgrep": {}, "--vimgrep": {},
 	"passthru": {}, "passthrough": {}, "--passthru": {}, "--passthrough": {},
 	"trim": {}, "--trim": {}, "no_trim": {}, "noTrim": {}, "no-trim": {}, "--no-trim": {},
+	"stats": {}, "--stats": {}, "no_stats": {}, "noStats": {}, "no-stats": {}, "--no-stats": {},
 	"files": {}, "--files": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {},
@@ -119,6 +121,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"vimgrep": {}, "--vimgrep": {},
 	"passthru": {}, "passthrough": {}, "--passthru": {}, "--passthrough": {},
 	"trim": {}, "--trim": {}, "no_trim": {}, "noTrim": {}, "no-trim": {}, "--no-trim": {},
+	"stats": {}, "--stats": {}, "no_stats": {}, "noStats": {}, "no-stats": {}, "--no-stats": {},
 	"files": {}, "--files": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {},
@@ -369,6 +372,12 @@ type grepInput struct {
 	NoTrimAlt                 bool    `json:"noTrim,omitempty"`
 	NoTrimDash                bool    `json:"no-trim,omitempty"`
 	LongNoTrim                bool    `json:"--no-trim,omitempty"`
+	Stats                     bool    `json:"stats,omitempty"`
+	LongStats                 bool    `json:"--stats,omitempty"`
+	NoStats                   bool    `json:"no_stats,omitempty"`
+	NoStatsAlt                bool    `json:"noStats,omitempty"`
+	NoStatsDash               bool    `json:"no-stats,omitempty"`
+	LongNoStats               bool    `json:"--no-stats,omitempty"`
 	Files                     bool    `json:"files,omitempty"`
 	LongFiles                 bool    `json:"--files,omitempty"`
 	FilesWithMatch            bool    `json:"files_with_match,omitempty"`
@@ -462,6 +471,17 @@ type grepMatch struct {
 	ModUnix    int64
 }
 
+type grepStats struct {
+	Matches          int
+	MatchedLines     int
+	FilesWithMatches int
+	FilesSearched    int
+	BytesPrinted     int
+	BytesSearched    int64
+	SearchDuration   time.Duration
+	TotalDuration    time.Duration
+}
+
 type grepOptions struct {
 	Mode                  string
 	Limit                 int
@@ -493,6 +513,7 @@ type grepOptions struct {
 	Vimgrep               bool
 	Passthru              bool
 	Trim                  bool
+	Stats                 bool
 	CountMatches          bool
 	IncludeZero           bool
 	ColumnNumbers         bool
@@ -808,6 +829,12 @@ func NewGrepTool() tool.Tool {
 					"noTrim":           map[string]any{"type": "boolean"},
 					"no-trim":          map[string]any{"type": "boolean"},
 					"--no-trim":        map[string]any{"type": "boolean"},
+					"stats":            map[string]any{"type": "boolean"},
+					"--stats":          map[string]any{"type": "boolean"},
+					"no_stats":         map[string]any{"type": "boolean"},
+					"noStats":          map[string]any{"type": "boolean"},
+					"no-stats":         map[string]any{"type": "boolean"},
+					"--no-stats":       map[string]any{"type": "boolean"},
 					"files":            map[string]any{"type": "boolean"},
 					"--files":          map[string]any{"type": "boolean"},
 					"files_with_match": map[string]any{
@@ -920,7 +947,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases, and pattern_file/--file/-f can read one pattern per line from a file. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, encoding/--encoding/-E to choose auto/none/utf-8/utf-16/utf-16le/utf-16be text decoding, null_data/--null-data to use NUL as the input line terminator, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases, and pattern_file/--file/-f can read one pattern per line from a file. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, stats/--stats aggregate statistics, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, max_filesize/--max-filesize with optional K/M/G suffix to skip larger files, follow/--follow/-L or no_follow/--no-follow to control symlink traversal, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, encoding/--encoding/-E to choose auto/none/utf-8/utf-16/utf-16le/utf-16be text decoding, null_data/--null-data to use NUL as the input line terminator, crlf/--crlf to treat CRLF/CR/LF as line terminators for anchors, text/-a/--text to search binary-extension files as text, no_text/--no-text to disable text mode, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -1082,6 +1109,7 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 }
 
 func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+	started := time.Now()
 	input, err := decodeGrep(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -1119,6 +1147,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		after = 0
 	}
 	trim := grepTrim(input) && mode == "content"
+	statsEnabled := grepStatsEnabled(input) && mode != "files"
 	heading := grepHeading(input) && mode == "content" && !vimgrep
 	pathSeparator := grepPathSeparator(input)
 	null := grepNull(input)
@@ -1179,6 +1208,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Vimgrep:               vimgrep,
 		Passthru:              passthru,
 		Trim:                  trim,
+		Stats:                 statsEnabled,
 		CountMatches:          countMatches,
 		IncludeZero:           includeZero,
 		ColumnNumbers:         grepColumnNumbers(input),
@@ -1202,13 +1232,18 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, globFilter, iglobFilter, globCaseInsensitive, typeFilter, typeNotFilter, expr, options, grepWalkOptions(ctx, root, noIgnore, ignoreVCS, ignoreDot, includeHidden, follow, maxDepth, customIgnoreRules))
+	matches, totalMatches, truncated, stats, err := collectGrepMatches(root, displayRoot, globFilter, iglobFilter, globCaseInsensitive, typeFilter, typeNotFilter, expr, options, grepWalkOptions(ctx, root, noIgnore, ignoreVCS, ignoreDot, includeHidden, follow, maxDepth, customIgnoreRules))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	content := formatGrepResultContent(matches, options, truncated)
+	stats.SearchDuration = time.Since(started)
+	content := formatGrepResultContent(matches, options, truncated, &stats)
+	stats.TotalDuration = time.Since(started)
 	if content == "" {
 		content = "No matches found"
+	}
+	if options.Stats {
+		content = appendGrepStats(content, stats)
 	}
 	return contracts.ToolResult{
 		Content: content,
@@ -1268,6 +1303,8 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"vimgrep":                 vimgrep,
 			"passthru":                passthru,
 			"trim":                    trim,
+			"stats_enabled":           statsEnabled,
+			"stats":                   grepStructuredStats(stats, statsEnabled),
 			"files":                   mode == "files",
 			"files_with_matches":      mode == "files_with_matches",
 			"files_without_match":     mode == "files_without_matches",
@@ -1479,18 +1516,19 @@ func collectGlobMatches(root string, displayRoot string, pattern string, limit i
 	return matches, truncated, nil
 }
 
-func collectGrepMatches(root string, displayRoot string, glob string, iglob string, globCaseInsensitive bool, typeFilter string, typeNotFilter string, expr *regexp.Regexp, options grepOptions, walkOptions searchWalkOptions) ([]grepMatch, int, bool, error) {
+func collectGrepMatches(root string, displayRoot string, glob string, iglob string, globCaseInsensitive bool, typeFilter string, typeNotFilter string, expr *regexp.Regexp, options grepOptions, walkOptions searchWalkOptions) ([]grepMatch, int, bool, grepStats, error) {
 	typeExtensions, err := grepTypeExtensions(typeFilter)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, false, grepStats{}, err
 	}
 	typeNotExtensions, err := grepTypeExtensions(typeNotFilter)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, false, grepStats{}, err
 	}
 	globPatterns := splitGrepGlobPatterns(glob, globCaseInsensitive)
 	globPatterns = append(globPatterns, splitGrepGlobPatterns(iglob, true)...)
 	var matches []grepMatch
+	var stats grepStats
 	err = walkSearchFiles(root, walkOptions, func(path string, rel string, info os.FileInfo) error {
 		if len(globPatterns) > 0 {
 			ok, err := matchAnyGrepGlobPath(globPatterns, rel)
@@ -1519,6 +1557,8 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 		if err != nil {
 			return nil
 		}
+		stats.FilesSearched++
+		stats.BytesSearched += info.Size()
 		matchOptions := options
 		if options.CountMatches {
 			matchOptions.OnlyMatching = true
@@ -1526,6 +1566,12 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 			matchOptions.AfterContext = 0
 		}
 		lineMatches := grepFileMatches(displayRel, content, expr, matchOptions)
+		fileMatches, fileMatchedLines := grepStatsForFile(content, expr, matchOptions, lineMatches)
+		stats.Matches += fileMatches
+		stats.MatchedLines += fileMatchedLines
+		if fileMatchedLines > 0 {
+			stats.FilesWithMatches++
+		}
 		for i := range lineMatches {
 			lineMatches[i].ModUnix = info.ModTime().UnixNano()
 		}
@@ -1556,7 +1602,7 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 		return nil
 	})
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, false, grepStats{}, err
 	}
 	sortGrepMatches(matches, options)
 	totalMatches := len(matches)
@@ -1573,7 +1619,75 @@ func collectGrepMatches(root string, displayRoot string, glob string, iglob stri
 	}
 	truncated := end < len(matches)
 	matches = matches[start:end]
-	return matches, totalMatches, truncated, nil
+	return matches, totalMatches, truncated, stats, nil
+}
+
+func grepStatsForFile(content string, expr *regexp.Regexp, options grepOptions, lineMatches []grepMatch) (int, int) {
+	matchedLines := countUniqueMatchedLines(lineMatches)
+	if options.InvertMatch {
+		return 0, matchedLines
+	}
+	if options.OnlyMatching || options.Vimgrep {
+		return countMatchedLines(lineMatches), matchedLines
+	}
+	view := newGrepContentView(content, options.CRLF, options.NullData)
+	if options.Multiline {
+		return grepMultilineStats(view, expr, options.MaxCount)
+	}
+	return grepLineStats(view.Lines, expr, options.MaxCount)
+}
+
+func grepLineStats(lines []string, expr *regexp.Regexp, maxCount int) (int, int) {
+	matches := 0
+	matchedLines := 0
+	for _, line := range lines {
+		spans := expr.FindAllStringIndex(line, -1)
+		if len(spans) == 0 {
+			continue
+		}
+		if maxCount > 0 && matchedLines >= maxCount {
+			break
+		}
+		matches += len(spans)
+		matchedLines++
+	}
+	return matches, matchedLines
+}
+
+func grepMultilineStats(view grepContentView, expr *regexp.Regexp, maxCount int) (int, int) {
+	if view.MatchContent == "" {
+		return 0, 0
+	}
+	matches := 0
+	lines := map[int]bool{}
+	for _, span := range expr.FindAllStringIndex(view.MatchContent, -1) {
+		if maxCount > 0 && matches >= maxCount {
+			break
+		}
+		matches++
+		for i, lineStart := range view.MatchStarts {
+			lineEnd := lineStart + len(view.Lines[i])
+			lineSpanEnd := lineEnd
+			if i < len(view.Lines)-1 {
+				lineSpanEnd++
+			}
+			if grepSpanTouchesLine(span[0], span[1], lineStart, lineEnd, lineSpanEnd) {
+				lines[i] = true
+			}
+		}
+	}
+	return matches, len(lines)
+}
+
+func countUniqueMatchedLines(matches []grepMatch) int {
+	lines := map[string]bool{}
+	for _, match := range matches {
+		if !match.Matched {
+			continue
+		}
+		lines[match.Path+":"+strconv.Itoa(match.Line)] = true
+	}
+	return len(lines)
 }
 
 func searchDisplayPath(displayRoot string, path string, fallback string) string {
@@ -2187,8 +2301,11 @@ func grepDisplayPath(path string, options grepOptions) string {
 	return strings.ReplaceAll(path, "/", options.PathSeparator)
 }
 
-func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated bool) string {
+func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated bool, stats *grepStats) string {
 	content := formatGrepMatches(matches, options)
+	if stats != nil && options.Mode == "content" {
+		stats.BytesPrinted = len([]byte(content))
+	}
 	switch options.Mode {
 	case "content":
 		return formatGrepContentResult(content, options, truncated)
@@ -2198,6 +2315,43 @@ func formatGrepResultContent(matches []grepMatch, options grepOptions, truncated
 		return formatGrepFilesResult(content, matches, options, truncated)
 	default:
 		return content
+	}
+}
+
+func appendGrepStats(content string, stats grepStats) string {
+	statsText := formatGrepStats(stats)
+	if strings.TrimSpace(content) == "" {
+		return statsText
+	}
+	return content + "\n\n" + statsText
+}
+
+func formatGrepStats(stats grepStats) string {
+	return fmt.Sprintf("%d matches\n%d matched lines\n%d files contained matches\n%d files searched\n%d bytes printed\n%d bytes searched\n%.6f seconds spent searching\n%.6f seconds total",
+		stats.Matches,
+		stats.MatchedLines,
+		stats.FilesWithMatches,
+		stats.FilesSearched,
+		stats.BytesPrinted,
+		stats.BytesSearched,
+		stats.SearchDuration.Seconds(),
+		stats.TotalDuration.Seconds(),
+	)
+}
+
+func grepStructuredStats(stats grepStats, enabled bool) any {
+	if !enabled {
+		return nil
+	}
+	return map[string]any{
+		"matches":            stats.Matches,
+		"matched_lines":      stats.MatchedLines,
+		"files_with_matches": stats.FilesWithMatches,
+		"files_searched":     stats.FilesSearched,
+		"bytes_printed":      stats.BytesPrinted,
+		"bytes_searched":     stats.BytesSearched,
+		"search_seconds":     stats.SearchDuration.Seconds(),
+		"total_seconds":      stats.TotalDuration.Seconds(),
 	}
 }
 
@@ -2779,6 +2933,13 @@ func grepTrim(input grepInput) bool {
 		return false
 	}
 	return input.Trim || input.LongTrim
+}
+
+func grepStatsEnabled(input grepInput) bool {
+	if input.NoStats || input.NoStatsAlt || input.NoStatsDash || input.LongNoStats {
+		return false
+	}
+	return input.Stats || input.LongStats
 }
 
 func grepHeading(input grepInput) bool {

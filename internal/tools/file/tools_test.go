@@ -1544,6 +1544,78 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 	}
 }
 
+func TestGrepToolStats(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\nother\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("none\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_stats",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--stats":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStatsBlock := "\n\n2 matches\n1 matched lines\n1 files contained matches\n2 files searched\n"
+	content := result.Content.(string)
+	if !strings.HasPrefix(content, "a.txt:1:Needle Needle") || !strings.Contains(content, wantStatsBlock) {
+		t.Fatalf("stats content = %#v", result.Content)
+	}
+	if result.StructuredContent["stats_enabled"] != true {
+		t.Fatalf("stats not enabled in structured content = %#v", result.StructuredContent)
+	}
+	stats := result.StructuredContent["stats"].(map[string]any)
+	if stats["matches"] != 2 ||
+		stats["matched_lines"] != 1 ||
+		stats["files_with_matches"] != 1 ||
+		stats["files_searched"] != 2 ||
+		stats["bytes_searched"] != int64(25) {
+		t.Fatalf("structured stats = %#v", stats)
+	}
+	if printed, ok := stats["bytes_printed"].(int); !ok || printed <= 0 {
+		t.Fatalf("bytes_printed stats = %#v", stats["bytes_printed"])
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_stats_count_matches",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","--count-matches":true,"stats":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	countContent := countResult.Content.(string)
+	if !strings.Contains(countContent, "\n\n2 matches\n1 matched lines\n1 files contained matches\n2 files searched\n0 bytes printed\n25 bytes searched\n") {
+		t.Fatalf("count stats content = %#v", countResult.Content)
+	}
+	countStats := countResult.StructuredContent["stats"].(map[string]any)
+	if countStats["matches"] != 2 || countStats["matched_lines"] != 1 || countStats["bytes_printed"] != 0 {
+		t.Fatalf("count structured stats = %#v", countStats)
+	}
+
+	noStatsResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_stats_override",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","stats":true,"--no-stats":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noStatsContent := noStatsResult.Content.(string)
+	if strings.Contains(noStatsContent, "matched lines") ||
+		noStatsResult.StructuredContent["stats_enabled"] != false ||
+		noStatsResult.StructuredContent["stats"] != nil {
+		t.Fatalf("no-stats override result = %#v", noStatsResult)
+	}
+}
+
 func TestGrepToolFilesMode(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
