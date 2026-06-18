@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	pluginpkg "ccgo/internal/plugins"
 	"ccgo/internal/skills"
@@ -33,6 +34,7 @@ type Options struct {
 	DisableProjectSkills bool
 	DisableBuiltins      bool
 	Settings             contracts.Settings
+	PolicySettings       contracts.Settings
 }
 
 type Registry struct {
@@ -42,7 +44,13 @@ type Registry struct {
 
 func Load(opts Options) Registry {
 	sources := opts.Sources
-	if !opts.DisableProjectSkills && opts.CWD != "" && len(sources.ProjectSkills) == 0 && len(sources.ProjectSkillPrompts) == 0 {
+	skillsLocked := config.IsRestrictedToPluginOnly(effectivePolicySettings(opts.Settings, opts.PolicySettings), config.CustomizationSurfaceSkills)
+	if skillsLocked {
+		sources.ProjectSkillPrompts = nil
+		sources.ProjectSkills = nil
+		sources.DynamicSkillPrompts = nil
+		sources.DynamicSkills = nil
+	} else if !opts.DisableProjectSkills && opts.CWD != "" && len(sources.ProjectSkills) == 0 && len(sources.ProjectSkillPrompts) == 0 {
 		sources.ProjectSkillPrompts = loadProjectSkillPrompts(opts.CWD)
 	}
 	if opts.CWD != "" && len(sources.PluginCommands) == 0 && len(sources.PluginSkillPrompts) == 0 && len(sources.PluginSkills) == 0 {
@@ -52,6 +60,13 @@ func Load(opts Options) Registry {
 		sources.Builtins = BuiltinCommands()
 	}
 	return FromSources(sources)
+}
+
+func effectivePolicySettings(settings contracts.Settings, policySettings contracts.Settings) contracts.Settings {
+	if policySettings.StrictPluginOnlyCustomization != nil {
+		return policySettings
+	}
+	return settings
 }
 
 func FromSources(sources Sources) Registry {

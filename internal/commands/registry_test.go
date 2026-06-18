@@ -278,6 +278,56 @@ func TestLoadDiscoversProjectPluginPromptCommands(t *testing.T) {
 	}
 }
 
+func TestLoadStrictPluginOnlyCustomizationSkipsProjectAndUserSkills(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeCommandSkill(t, filepath.Join(cwd, ".claude", "skills", "project"), `---
+description: Project skill
+---
+Project.
+`)
+	writeCommandSkill(t, filepath.Join(configHome, "skills", "personal"), `---
+description: User skill
+---
+Personal.
+`)
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"commands": [{"name": "demo:deploy", "prompt": "Deploy."}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := Load(Options{
+		CWD:            cwd,
+		PolicySettings: contracts.Settings{StrictPluginOnlyCustomization: []any{"skills"}},
+	})
+	if cmd, ok := registry.Find("project"); ok {
+		t.Fatalf("project skill loaded: %#v", cmd)
+	}
+	if cmd, ok := registry.Find("personal"); ok {
+		t.Fatalf("user skill loaded: %#v", cmd)
+	}
+	if cmd, ok := registry.Find("demo:deploy"); !ok || cmd.Source != contracts.CommandSourcePlugin {
+		t.Fatalf("plugin command missing: %#v ok=%v", cmd, ok)
+	}
+	if _, ok := registry.Find("help"); !ok {
+		t.Fatal("builtins should remain available")
+	}
+}
+
 func TestLoadSkipsDisabledProjectPluginCommands(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

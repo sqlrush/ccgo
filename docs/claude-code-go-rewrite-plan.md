@@ -140,6 +140,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`/cost` 本地命令现在会在 runner 带有 `SessionPath` 时从当前 session transcript 回填历史 usage，并按 message UUID/ID 与内存 history 去重，避免 resume 或新进程场景丢失/重复计算历史 cost。
 - 本轮补充：Anthropic CLI/env client 初始化现在支持 `ANTHROPIC_CUSTOM_HEADERS` 和 `CLAUDE_CODE_CUSTOM_HEADERS`，可用 JSON object 或 `Header: value`/`Header=value` 行格式注入 gateway/proxy 静态请求头；配置错误会在初始化阶段报错，避免静默遗漏代理必需 header。
 - 本轮补充：settings loader 现在会按官方优先级读取 managed policy：macOS MDM plist / Windows HKLM 优先，其次平台 managed file `managed-settings.json` 与 `managed-settings.d/*.json` drop-ins，最后 Windows HKCU；policy settings 已纳入 runner merged settings、headless model/fastMode 解析、permission engine policy source、MCP policy 和 `/config` 可见文件列表；`allowManagedPermissionRulesOnly` 会剥离非 policy permission rules。
+- 本轮补充：`strictPluginOnlyCustomization` 已开始按 policy settings 生效，当前覆盖已实现的 `skills`、`mcp` 和 `hooks` surfaces：锁定后 user/project/local skills 与 legacy commands 不加载，manual MCP server sources 不加载但 plugin/admin policy 仍保留，settings hooks 只保留 policy hooks 且 plugin hooks 继续运行。agents 与更深 frontmatter/runtime edge cases 仍按缺口追踪。
 
 ### M4: Tool framework、permissions、sandbox
 

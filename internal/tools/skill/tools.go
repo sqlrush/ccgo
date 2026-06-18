@@ -168,18 +168,25 @@ func registryForContext(ctx tool.Context, registry *commands.Registry) commands.
 	if registry != nil {
 		return *registry
 	}
-	return commands.Load(commands.Options{CWD: ctx.WorkingDirectory, Settings: settingsFromMetadata(ctx.Metadata)})
+	return commands.Load(commands.Options{CWD: ctx.WorkingDirectory, Settings: settingsFromMetadata(ctx.Metadata), PolicySettings: policySettingsFromMetadata(ctx.Metadata)})
 }
 
 func registryForPromptContext(ctx tool.PromptContext, registry *commands.Registry) commands.Registry {
 	if registry != nil {
 		return *registry
 	}
-	return commands.Load(commands.Options{CWD: ctx.WorkingDirectory, Settings: settingsFromMetadata(ctx.Metadata)})
+	return commands.Load(commands.Options{CWD: ctx.WorkingDirectory, Settings: settingsFromMetadata(ctx.Metadata), PolicySettings: policySettingsFromMetadata(ctx.Metadata)})
 }
 
 func settingsFromMetadata(metadata map[string]any) contracts.Settings {
 	if settings, ok := metadata[tool.MetadataSettingsKey].(contracts.Settings); ok {
+		return settings
+	}
+	return contracts.Settings{}
+}
+
+func policySettingsFromMetadata(metadata map[string]any) contracts.Settings {
+	if settings, ok := metadata[tool.MetadataPolicySettingsKey].(contracts.Settings); ok {
 		return settings
 	}
 	return contracts.Settings{}

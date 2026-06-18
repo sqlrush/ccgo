@@ -2457,21 +2457,30 @@ type mcpServerInitState struct {
 	Reason string
 }
 
-func runnerMCPServerStates(config *conversation.MCPConfig) map[string]mcpServerInitState {
-	if config == nil {
+func runnerMCPServerStates(cfg *conversation.MCPConfig) map[string]mcpServerInitState {
+	if cfg == nil {
 		return nil
 	}
-	user := loadMCPServersForInit(config.UserSettings, mcp.ScopeUser, config.ParseOptions)
-	project := loadMCPServersForInit(config.ProjectSettings, mcp.ScopeProject, config.ParseOptions)
-	local := loadMCPServersForInit(config.LocalSettings, mcp.ScopeLocal, config.ParseOptions)
-	if config.CWD != "" {
-		if chain, err := mcp.LoadProjectConfigChain(config.CWD, config.ParseOptions); err == nil {
-			project = mcp.MergeServers(project, chain.Servers)
+	mcpLocked := config.IsRestrictedToPluginOnly(cfg.PolicySettings, config.CustomizationSurfaceMCP)
+	var user map[string]contracts.MCPServer
+	var project map[string]contracts.MCPServer
+	var local map[string]contracts.MCPServer
+	if !mcpLocked {
+		user = loadMCPServersForInit(cfg.UserSettings, mcp.ScopeUser, cfg.ParseOptions)
+		project = loadMCPServersForInit(cfg.ProjectSettings, mcp.ScopeProject, cfg.ParseOptions)
+		local = loadMCPServersForInit(cfg.LocalSettings, mcp.ScopeLocal, cfg.ParseOptions)
+		if cfg.CWD != "" {
+			if chain, err := mcp.LoadProjectConfigChain(cfg.CWD, cfg.ParseOptions); err == nil {
+				project = mcp.MergeServers(project, chain.Servers)
+			}
 		}
 	}
-	policySettings := mergeMCPPolicySettingsForInit(config.UserSettings, config.ProjectSettings, config.LocalSettings, config.PolicySettings)
+	policySettings := cfg.PolicySettings
+	if !mcpLocked {
+		policySettings = mergeMCPPolicySettingsForInit(cfg.UserSettings, cfg.ProjectSettings, cfg.LocalSettings, cfg.PolicySettings)
+	}
 	manual := mcp.MergeServers(user, project, local)
-	plugin := mcp.DedupPluginServers(config.PluginServers, manual).Servers
+	plugin := mcp.DedupPluginServers(cfg.PluginServers, manual).Servers
 	for name := range plugin {
 		if _, exists := manual[name]; exists {
 			delete(plugin, name)
@@ -2513,7 +2522,7 @@ func mergeMCPPolicySettingsForInit(settings ...contracts.Settings) contracts.Set
 }
 
 func runnerSlashCommandNames(runner conversation.Runner) []string {
-	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory, Settings: runnerMergedSettings(runner)})
+	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory, Settings: runnerMergedSettings(runner), PolicySettings: runnerPolicySettings(runner)})
 	var names []string
 	for _, cmd := range registry.Visible() {
 		name := strings.TrimSpace(commands.UserFacingName(cmd))
@@ -2525,7 +2534,7 @@ func runnerSlashCommandNames(runner conversation.Runner) []string {
 }
 
 func runnerSkillNames(runner conversation.Runner) []string {
-	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory, Settings: runnerMergedSettings(runner)})
+	registry := commands.Load(commands.Options{CWD: runner.WorkingDirectory, Settings: runnerMergedSettings(runner), PolicySettings: runnerPolicySettings(runner)})
 	var names []string
 	for _, cmd := range registry.Visible() {
 		if cmd.Type != contracts.CommandPrompt || cmd.Source == contracts.CommandSourceBuiltin {
@@ -2576,6 +2585,13 @@ func runnerMergedSettings(runner conversation.Runner) contracts.Settings {
 		return contracts.Settings{}
 	}
 	return runner.MCP.MergedSettings()
+}
+
+func runnerPolicySettings(runner conversation.Runner) contracts.Settings {
+	if runner.MCP == nil {
+		return contracts.Settings{}
+	}
+	return runner.MCP.PolicySettings
 }
 
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {

@@ -724,7 +724,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 - CLI args/mode dispatch。
 - `--version`、`--help`、`--print`、resume/continue 等入口。
-- settings merge、managed policy、migrations、live reload。
+- settings merge、managed policy、`strictPluginOnlyCustomization` enforcement、migrations、live reload。
 - API key、OAuth、secure storage。
 - model aliases/capabilities/cost/provider registry。
 

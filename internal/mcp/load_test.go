@@ -358,6 +358,56 @@ func TestBuildConfiguredToolSetsUsesPolicySettings(t *testing.T) {
 	}
 }
 
+func TestBuildConfiguredToolSetsHonorsStrictPluginOnlyMCP(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{
+		"mcpServers": {"chain": {"command": "chain"}}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := BuildConfiguredToolSets(context.Background(), ConfiguredToolSetOptions{
+		UserSettings: contracts.Settings{
+			MCPServers:        map[string]contracts.MCPServer{"user": {Command: "user"}},
+			AllowedMCPServers: []contracts.MCPServerPolicyEntry{},
+		},
+		ProjectSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{"project": {Command: "project"}},
+		},
+		LocalSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{"local": {Command: "local"}},
+		},
+		PolicySettings: contracts.Settings{StrictPluginOnlyCustomization: []any{"mcp"}},
+		PluginServers: map[string]contracts.MCPServer{
+			"plugin": {Command: "plugin", PluginSource: "demo"},
+		},
+		CWD: root,
+		ToolOptions: ServerToolOptions{
+			DisableResources: true,
+			DisablePrompts:   true,
+			OpenClient: func(_ context.Context, _ string, _ contracts.MCPServer) (ClientHandle, error) {
+				return ClientHandle{Client: &fakeMCPClient{}}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Servers) != 1 {
+		t.Fatalf("servers = %#v", result.Servers)
+	}
+	if got := result.Servers["plugin"]; got.Command != "plugin" || got.PluginSource != "demo" {
+		t.Fatalf("plugin server = %#v", got)
+	}
+	for _, name := range []string{"user", "project", "local", "chain"} {
+		if _, ok := result.Servers[name]; ok {
+			t.Fatalf("%s server should be blocked by plugin-only policy: %#v", name, result.Servers)
+		}
+	}
+	if len(result.Blocked) != 0 {
+		t.Fatalf("plugin-only skipped servers should not appear as policy-blocked: %#v", result.Blocked)
+	}
+}
+
 func TestBuildConfiguredToolSetsAdvertisesCWDRoots(t *testing.T) {
 	root := t.TempDir()
 	var initializeParams string

@@ -244,7 +244,7 @@ func (r *Runner) initialUserMessages(user contracts.Message) ([]contracts.Messag
 	if !commands.IsSlashInput(text) {
 		return []contracts.Message{user}, true, nil, nil
 	}
-	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: r.mergedSettings()})
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: r.mergedSettings(), PolicySettings: r.policySettings()})
 	slash, handled, err := commands.ExecuteSlashCommand(registry, text, commands.SlashOptions{
 		SessionID: r.SessionID,
 		UUID:      user.UUID,
@@ -319,7 +319,8 @@ func (t *relevantMemoryPrefetchTask) requestContext(ctx context.Context) (releva
 func (r Runner) toolMetadata() map[string]any {
 	settings := r.mergedSettings()
 	metadata := map[string]any{
-		tool.MetadataSettingsKey: settings,
+		tool.MetadataSettingsKey:       settings,
+		tool.MetadataPolicySettingsKey: r.policySettings(),
 	}
 	if r.SessionPath != "" {
 		metadata[tool.MetadataSessionPathKey] = r.SessionPath
@@ -341,6 +342,13 @@ func (r Runner) toolMetadata() map[string]any {
 		}
 	}
 	return metadata
+}
+
+func (r Runner) policySettings() contracts.Settings {
+	if r.MCP == nil {
+		return contracts.Settings{}
+	}
+	return r.MCP.PolicySettings
 }
 
 func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInfo {
@@ -3151,7 +3159,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 	}
 	merged := r.mergedSettings()
-	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: merged})
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: merged, PolicySettings: r.policySettings()})
 	localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), merged)
 	pluginSkills := pluginSkillNames(localPlugins)
 	pluginCommands := pluginCommandNames(registry.Visible(), pluginSkills)

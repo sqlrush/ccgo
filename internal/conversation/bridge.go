@@ -41,7 +41,7 @@ func (r *Runner) maybeStartBridgeDirect(manifest bridgepkg.Manifest) {
 		return
 	}
 	settings := r.mergedSettings()
-	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: settings})
+	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: settings, PolicySettings: r.policySettings()})
 	handler := bridgepkg.NewDirectHandler(bridgepkg.DirectOptions{
 		SessionID:     r.SessionID,
 		Manifest:      manifest,

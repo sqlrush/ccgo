@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	compactpkg "ccgo/internal/compact"
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	hookpkg "ccgo/internal/hooks"
 	msgs "ccgo/internal/messages"
@@ -14,7 +15,11 @@ import (
 )
 
 func (r Runner) configuredHooks(settings contracts.Settings) []tool.Hook {
-	hooks := hookpkg.FromSettings(settings)
+	hookSettings := settings
+	if r.MCP != nil && config.IsRestrictedToPluginOnly(r.MCP.PolicySettings, config.CustomizationSurfaceHooks) {
+		hookSettings = r.MCP.PolicySettings
+	}
+	hooks := hookpkg.FromSettings(hookSettings)
 	hooks = append(hooks, r.pluginToolHooks(settings)...)
 	return hooks
 }

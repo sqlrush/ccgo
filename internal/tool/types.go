@@ -77,6 +77,7 @@ func NopProgressSink() ProgressSink {
 const (
 	MetadataInternalPathContextKey = "ccgo.permissions.internal_paths"
 	MetadataSettingsKey            = "ccgo.settings"
+	MetadataPolicySettingsKey      = "ccgo.policy_settings"
 	MetadataSessionPathKey         = "ccgo.session.path"
 	MetadataAvailableAgentsKey     = "ccgo.available_agents"
 

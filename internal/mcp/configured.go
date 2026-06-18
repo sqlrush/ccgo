@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 )
 
@@ -26,15 +27,26 @@ type ConfiguredToolSetResult struct {
 }
 
 func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptions) (ConfiguredToolSetResult, error) {
-	user, err := LoadSettingsServers(options.UserSettings, ScopeUser, options.ParseOptions)
+	mcpLocked := config.IsRestrictedToPluginOnly(options.PolicySettings, config.CustomizationSurfaceMCP)
+	var user LoadResult
+	var err error
+	if !mcpLocked {
+		user, err = LoadSettingsServers(options.UserSettings, ScopeUser, options.ParseOptions)
+	}
 	if err != nil {
 		return ConfiguredToolSetResult{}, err
 	}
-	project, err := LoadSettingsServers(options.ProjectSettings, ScopeProject, options.ParseOptions)
+	var project LoadResult
+	if !mcpLocked {
+		project, err = LoadSettingsServers(options.ProjectSettings, ScopeProject, options.ParseOptions)
+	}
 	if err != nil {
 		return ConfiguredToolSetResult{}, err
 	}
-	local, err := LoadSettingsServers(options.LocalSettings, ScopeLocal, options.ParseOptions)
+	var local LoadResult
+	if !mcpLocked {
+		local, err = LoadSettingsServers(options.LocalSettings, ScopeLocal, options.ParseOptions)
+	}
 	if err != nil {
 		return ConfiguredToolSetResult{}, err
 	}
@@ -44,7 +56,7 @@ func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptio
 	loadErrors = append(loadErrors, local.Errors...)
 
 	projectServers := project.Servers
-	if options.CWD != "" {
+	if options.CWD != "" && !mcpLocked {
 		projectChain, err := LoadProjectConfigChain(options.CWD, options.ParseOptions)
 		if err != nil {
 			return ConfiguredToolSetResult{}, err
@@ -53,12 +65,16 @@ func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptio
 		projectServers = MergeServers(projectServers, projectChain.Servers)
 	}
 
+	policySettings := options.PolicySettings
+	if !mcpLocked {
+		policySettings = mergeMCPPolicySettings(options.UserSettings, options.ProjectSettings, options.LocalSettings, options.PolicySettings)
+	}
 	manual := MergeManualConfigSources(ManualConfigSources{
 		User:    user.Servers,
 		Project: projectServers,
 		Local:   local.Servers,
 		Plugin:  options.PluginServers,
-		Policy:  PolicyFromSettings(mergeMCPPolicySettings(options.UserSettings, options.ProjectSettings, options.LocalSettings, options.PolicySettings)),
+		Policy:  PolicyFromSettings(policySettings),
 	})
 	toolOptions := options.ToolOptions
 	if len(toolOptions.ClientRoots) == 0 && options.CWD != "" {
