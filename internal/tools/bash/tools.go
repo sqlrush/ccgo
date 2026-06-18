@@ -2139,7 +2139,9 @@ func readOnlyWords(words []string) bool {
 		return readOnlySed(words[1:])
 	case "awk", "gawk", "mawk", "nawk":
 		return readOnlyAwk(words[1:])
-	case "pwd", "printf", "echo", "date", "whoami", "id", "uname", "printenv", "which", "type":
+	case "date":
+		return readOnlyDate(words[1:])
+	case "pwd", "printf", "echo", "whoami", "id", "uname", "printenv", "which", "type":
 		return true
 	case "env":
 		return readOnlyEnv(words)
@@ -2150,6 +2152,93 @@ func readOnlyWords(words []string) bool {
 	default:
 		return false
 	}
+}
+
+func readOnlyDate(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			for _, rest := range args[i+1:] {
+				if !safeDateFormat(rest) {
+					return false
+				}
+			}
+			return true
+		case arg == "-u" || arg == "--utc" || arg == "--universal" || arg == "-R" || arg == "--rfc-email" || arg == "--debug":
+			continue
+		case arg == "-s" || arg == "--set" || strings.HasPrefix(arg, "--set="):
+			return false
+		case arg == "-d" || arg == "--date":
+			i++
+			if i >= len(args) || !safeDateValue(args[i]) {
+				return false
+			}
+		case strings.HasPrefix(arg, "-d") && len(arg) > 2:
+			if !safeDateValue(arg[2:]) {
+				return false
+			}
+		case strings.HasPrefix(arg, "--date="):
+			if !safeDateValue(strings.TrimPrefix(arg, "--date=")) {
+				return false
+			}
+		case arg == "-r" || arg == "--reference" || arg == "-f" || arg == "--file":
+			i++
+			if i >= len(args) || !safeRelativeShellPathArg(args[i]) {
+				return false
+			}
+		case strings.HasPrefix(arg, "--reference="):
+			if !safeRelativeShellPathArg(strings.TrimPrefix(arg, "--reference=")) {
+				return false
+			}
+		case strings.HasPrefix(arg, "--file="):
+			if !safeRelativeShellPathArg(strings.TrimPrefix(arg, "--file=")) {
+				return false
+			}
+		case strings.HasPrefix(arg, "-"):
+			if !safeDateDisplayFlag(arg) {
+				return false
+			}
+		default:
+			if !safeDateFormat(arg) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func safeDateDisplayFlag(flag string) bool {
+	switch {
+	case flag == "-I":
+		return true
+	case strings.HasPrefix(flag, "-I"):
+		return safeDateValue(strings.TrimPrefix(flag, "-I"))
+	case strings.HasPrefix(flag, "--iso-8601"):
+		return safeOptionalDatePrecision(flag, "--iso-8601")
+	case strings.HasPrefix(flag, "--rfc-3339"):
+		return safeOptionalDatePrecision(flag, "--rfc-3339")
+	default:
+		return false
+	}
+}
+
+func safeOptionalDatePrecision(flag string, name string) bool {
+	if flag == name {
+		return true
+	}
+	value, ok := strings.CutPrefix(flag, name+"=")
+	return ok && safeDateValue(value)
+}
+
+func safeDateFormat(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return strings.HasPrefix(value, "+") && safeDateValue(value[1:])
+}
+
+func safeDateValue(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	return value != "" && !strings.ContainsAny(value, "$`\x00><|;&\n\r")
 }
 
 func readOnlyPathCommand(words []string) bool {

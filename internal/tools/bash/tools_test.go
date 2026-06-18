@@ -266,6 +266,11 @@ func TestBashCommandClassification(t *testing.T) {
 		"pwd # rm -rf build",
 		"printf '# rm -rf build'",
 		"printf '$(rm -rf build)'",
+		"date",
+		"date -u +%Y-%m-%dT%H:%M:%SZ",
+		"date --date 'next friday' +%F",
+		"date --reference README.md +%s",
+		"date --file dates.txt +%F",
 		"pwd\nls -la",
 	}
 	for _, command := range readOnly {
@@ -400,6 +405,11 @@ func TestBashCommandClassification(t *testing.T) {
 		"cat 'README.md",
 		"git status --short \"",
 		"printf hello \\",
+		"date -s tomorrow",
+		"date --set=tomorrow",
+		"date 010112002026",
+		"date --reference=/etc/passwd +%s",
+		"date -f ../dates.txt",
 		"cat 'README.md; rm -rf build",
 		"pwd\nmake build",
 		"pwd & ls -la",

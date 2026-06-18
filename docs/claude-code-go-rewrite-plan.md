@@ -256,6 +256,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash `grep`/`rg` read-only 分类现在会把 pattern-file 参数 `-f FILE`、`-fFILE` 和 `--file=FILE` 当作路径读取处理，缺值、绝对路径和 `..` 路径不再进入 read-only fast path。
 - 本轮补充：Bash `wc`/`du` 的 `--files0-from` 与 `find -files0-from` 不再进入 read-only fast path，避免通过受检列表文件间接读取未校验的绝对路径、父目录路径或敏感路径。
 - 本轮补充：Bash `file -f`/`--files-from` 这类间接路径列表读取，以及 `file -C`/`--compile` magic 编译形态不再进入 read-only fast path；普通 `file README.md` 和 `file --mime-type README.md` 保持只读。
+- 本轮补充：Bash `date` read-only 分类从无条件放行收敛到显示/解析/安全相对文件引用子集，拒绝 `date -s`/`--set`、legacy positional 设置时间和越界 `--reference`/`--file` 读取。
 - 本轮补充：Bash/PowerShell read-only 分类会先校验 tokenizer 视角的语法完整性，未闭合 quote 或末尾 escape/line-continuation 不再进入只读 fast path。
 - 本轮补充：Bash/PowerShell tokenizer 现在按 single-quoted literal 处理单引号内的 escape 字符，Bash 的 `\` 和 PowerShell 的 backtick 在单引号内不再导致错误的 quote/segment/token 状态。
 - 本轮补充：Bash/PowerShell 分类现在把未引用 newline 作为命令分隔符，并支持未引用 `#` 行注释剥离；注释文本不再污染分类，下一行命令仍保留 read-only/destructive 判断。
