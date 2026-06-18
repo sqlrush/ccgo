@@ -2157,6 +2157,85 @@ func TestGrepToolHeading(t *testing.T) {
 	}
 }
 
+func TestGrepToolPathSeparator(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src", "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "src", "other"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "pkg", "a.txt"), []byte("Needle alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "other", "b.txt"), []byte("Needle beta\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_path_separator_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--path-separator":"\\","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "src\\other\\b.txt:1:Needle beta\nsrc\\pkg\\a.txt:1:Needle alpha"
+	if contentResult.Content != wantContent || contentResult.StructuredContent["path_separator"] != `\` {
+		t.Fatalf("path-separator content result = %#v", contentResult)
+	}
+
+	headingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_path_separator_heading",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","heading":true,"pathSeparator":"\\","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHeading := "src\\other\\b.txt\n1:Needle beta\n\nsrc\\pkg\\a.txt\n1:Needle alpha"
+	if headingResult.Content != wantHeading {
+		t.Fatalf("path-separator heading result = %#v", headingResult)
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_path_separator_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","path-separator":"\\","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCount := "src\\other\\b.txt:1\nsrc\\pkg\\a.txt:1\n\nFound 2 total occurrences across 2 files."
+	if countResult.Content != wantCount {
+		t.Fatalf("path-separator count result = %#v", countResult)
+	}
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_path_separator_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"path_separator":"\\","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFiles := "Found 2 files\nsrc\\other\\b.txt\nsrc\\pkg\\a.txt"
+	if filesResult.Content != wantFiles {
+		t.Fatalf("path-separator files result = %#v", filesResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_bad_path_separator",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","path-separator":"::"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "path_separator must be exactly one byte") {
+		t.Fatalf("path_separator validation err = %v", err)
+	}
+}
+
 func TestGrepToolIncludeZero(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\n"), 0o644); err != nil {

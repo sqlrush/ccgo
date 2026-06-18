@@ -142,6 +142,7 @@ Covered behavior:
 - `Grep` content output now accepts `replace`/`--replace`/`-r`, applying display-only replacements to matching lines and only-matching/vimgrep output without changing context lines or count/list modes.
 - `Grep` count output now accepts `include_zero`/`--include-zero`, including zero-count files for both line counts and `count_matches` occurrence counts while preserving `--no-filename` output.
 - `Grep` content output now accepts `heading`/`--heading` plus `no_heading`/`--no-heading`, grouping output by file while keeping vimgrep/count modes ungrouped.
+- `Grep` path-bearing output now accepts `path_separator`/`--path-separator`, replacing visible `/` separators in content, count, file-list, and heading output while validating one-byte separators.
 - `Grep` content output now accepts `trim`/`--trim` plus `no_trim`/`--no-trim`, trimming leading ASCII whitespace from printed line text while preserving original match columns.
 - `Grep` long-line output now accepts `max_columns_preview`/`--max-columns-preview` plus `no_max_columns_preview`/`--no-max-columns-preview`, showing a ripgrep-style truncated preview when `max_columns` is exceeded.
 - `Glob`/`Grep` traversal now applies `Read(...)` deny rules from the permission context as extra search ignore rules, hiding denied basename, path, and directory patterns from search results.
