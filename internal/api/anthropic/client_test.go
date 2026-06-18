@@ -332,6 +332,43 @@ func TestBetaHeadersDedupedAndCustomHeadersApplied(t *testing.T) {
 	}
 }
 
+func TestCreateMessageAddsDynamicCacheBetaHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("anthropic-beta"); got != "one,prompt-caching-scope-2024-07-31,cache-editing-2025-01-24" {
+			t.Fatalf("anthropic-beta = %q", got)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"sonnet","content":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithBaseURL(server.URL), WithBeta("one", PromptCachingScopeBetaHeader))
+	_, err := client.CreateMessage(context.Background(), Request{
+		Model:     "sonnet",
+		MaxTokens: 32,
+		Messages: []contracts.APIMessage{{
+			Role: "user",
+			Content: []contracts.ContentBlock{
+				{
+					Type:         contracts.ContentText,
+					Text:         "hello",
+					CacheControl: &contracts.CacheControl{Type: "ephemeral", Scope: "global"},
+				},
+				{
+					Type: contracts.ContentCacheEdits,
+					Edits: []contracts.CacheEdit{{
+						Type:           "delete",
+						CacheReference: "toolu_old",
+					}},
+				},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAddCacheBreakpoints(t *testing.T) {
 	messages := []contracts.APIMessage{
 		{Role: "user", Content: []contracts.ContentBlock{{Type: contracts.ContentToolResult, ToolUseID: "toolu_1"}}},

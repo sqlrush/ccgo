@@ -289,8 +289,9 @@ func (c *Client) newJSONRequestWithDump(ctx context.Context, path string, payloa
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("accept", "application/json")
 	req.Header.Set("anthropic-version", c.version())
-	if len(c.Beta) > 0 {
-		req.Header.Set("anthropic-beta", BetaHeaderValue(c.Beta))
+	betas := MergeBetaHeaders(c.Beta, DynamicBetaHeaders(payload))
+	if len(betas) > 0 {
+		req.Header.Set("anthropic-beta", BetaHeaderValue(betas))
 	}
 	for key, values := range c.Headers {
 		for _, value := range values {
