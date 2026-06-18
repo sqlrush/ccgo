@@ -209,6 +209,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep `glob`/`--glob`/`-g` 路径过滤现在支持 ripgrep 风格 `!pattern` 排除规则，可与正向 glob、逗号/空白多 pattern 和 brace alternation 组合；只有排除规则时默认包含未被排除的路径。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `text`/`--text`/`-a`，可显式把二进制扩展名文件按文本读取参与匹配，structured content 会回传 `text` 状态；`-a` 同样兼容 quoted semantic boolean。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `passthru`/`passthrough`/`--passthru`/`--passthrough`，可输出被搜索文件的全部行并保留匹配行标记；启用后按官方语义覆盖 context 行数，quoted semantic boolean 同样兼容。
+- 本轮补充：Grep content 输出现在支持 ripgrep 风格 `trim`/`--trim` 和 `no_trim`/`--no-trim`，会删除每条已打印文本行开头的 ASCII 空白，同时保留原始匹配列号；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 常用布尔参数继续补齐 ripgrep 长参数 aliases，覆盖 `--line-number`、`--ignore-case`、`--fixed-strings`、`--word-regexp`、`--invert-match` 和 `--only-matching`，并兼容 quoted semantic boolean。
 - 本轮补充：Grep multiline 搜索现在支持 ripgrep 风格 `-U`、`--multiline`、`multiline-dotall` 和 `--multiline-dotall` aliases，统一映射到既有跨行 dotall 匹配逻辑并兼容 quoted semantic boolean。
 - 本轮补充：Grep 搜索现在支持 `no_ignore`/`noIgnore`/`no-ignore`/`--no-ignore`，可跳过 `.gitignore`/`.ignore` 规则，同时继续排除 VCS metadata 目录并保留 Read deny 额外 ignore 保护；`--no-ignore` 兼容 quoted boolean。

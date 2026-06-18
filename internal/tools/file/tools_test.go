@@ -1951,6 +1951,79 @@ func TestGrepToolColumnNumbers(t *testing.T) {
 	}
 }
 
+func TestGrepToolTrim(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"  Needle first",
+		"\tcontext line",
+		"  xNeedle second",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "trim.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tokens.txt"), []byte("  ID-1\nxx ID-2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_trim",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"trim.txt","output_mode":"content","--trim":true,"before_context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "trim.txt:1:Needle first\ntrim.txt-2-context line\ntrim.txt:3:xNeedle second"
+	if result.Content != want || result.StructuredContent["trim"] != true {
+		t.Fatalf("trim result = %#v", result)
+	}
+	matches := result.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 3 || matches[0]["text"] != "Needle first" || matches[1]["text"] != "context line" {
+		t.Fatalf("trim structured matches = %#v", matches)
+	}
+
+	noTrimResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_trim",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"trim.txt","output_mode":"content","trim":true,"--no-trim":"true","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNoTrim := "trim.txt:1:  Needle first\n\n[Showing results with pagination = limit: 1]"
+	if noTrimResult.Content != wantNoTrim || noTrimResult.StructuredContent["trim"] != false {
+		t.Fatalf("no-trim result = %#v", noTrimResult)
+	}
+
+	columnResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_trim_column",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"trim.txt","output_mode":"content","--trim":"true","--column":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantColumn := "trim.txt:1:3:Needle first\n\n[Showing results with pagination = limit: 1]"
+	if columnResult.Content != wantColumn || columnResult.StructuredContent["trim"] != true {
+		t.Fatalf("trim column result = %#v", columnResult)
+	}
+
+	onlyResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_trim_only_matching",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":" ID-[0-9]+","glob":"tokens.txt","output_mode":"content","only_matching":true,"--trim":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOnly := "tokens.txt:1:ID-1\ntokens.txt:2:ID-2"
+	if onlyResult.Content != wantOnly || onlyResult.StructuredContent["trim"] != true {
+		t.Fatalf("trim only-matching result = %#v", onlyResult)
+	}
+}
+
 func TestGrepToolTextSearchesBinaryExtensionFiles(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "payload.bin"), []byte("Needle\x00inside\n"), 0o644); err != nil {
