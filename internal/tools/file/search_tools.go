@@ -38,6 +38,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
+	"count": {}, "--count": {}, "-c": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
 }
@@ -57,6 +58,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
 	"files_with_match": {}, "filesWithMatch": {}, "files-with-match": {}, "--files-with-match": {}, "files_with_matches": {}, "filesWithMatches": {}, "files-with-matches": {}, "--files-with-matches": {}, "-l": {},
 	"files_without_match": {}, "filesWithoutMatch": {}, "files-without-match": {}, "--files-without-match": {}, "files_without_matches": {}, "filesWithoutMatches": {}, "files-without-matches": {}, "--files-without-matches": {}, "-L": {},
+	"count": {}, "--count": {}, "-c": {},
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
 }
@@ -145,6 +147,9 @@ type grepInput struct {
 	FilesWithoutMatchesDash bool   `json:"files-without-matches,omitempty"`
 	LongFilesWithoutMatches bool   `json:"--files-without-matches,omitempty"`
 	ShortFilesWithoutMatch  bool   `json:"-L,omitempty"`
+	Count                   bool   `json:"count,omitempty"`
+	LongCount               bool   `json:"--count,omitempty"`
+	ShortCount              bool   `json:"-c,omitempty"`
 	CountMatches            bool   `json:"count_matches,omitempty"`
 	CountMatchesAlt         bool   `json:"countMatches,omitempty"`
 	CountMatchesDash        bool   `json:"count-matches,omitempty"`
@@ -347,6 +352,9 @@ func NewGrepTool() tool.Tool {
 						"type": "boolean",
 					},
 					"-L":              map[string]any{"type": "boolean"},
+					"count":           map[string]any{"type": "boolean"},
+					"--count":         map[string]any{"type": "boolean"},
+					"-c":              map[string]any{"type": "boolean"},
 					"count_matches":   map[string]any{"type": "boolean"},
 					"countMatches":    map[string]any{"type": "boolean"},
 					"count-matches":   map[string]any{"type": "boolean"},
@@ -368,7 +376,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, and files_without_match or -L to list files without matches. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -573,6 +581,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"only_matching":       onlyMatching,
 			"files_with_matches":  mode == "files_with_matches",
 			"files_without_match": mode == "files_without_matches",
+			"count":               mode == "count",
 			"count_matches":       countMatches,
 			"no_ignore":           noIgnore,
 			"multiline":           grepMultiline(input),
@@ -1191,6 +1200,9 @@ func normalizedGrepOutputMode(input grepInput) string {
 	if grepFilesWithMatches(input) {
 		return "files_with_matches"
 	}
+	if grepCount(input) {
+		return "count"
+	}
 	mode := strings.TrimSpace(input.OutputMode)
 	if mode == "" {
 		mode = strings.TrimSpace(input.OutputModeAlt)
@@ -1317,6 +1329,10 @@ func grepFilesWithoutMatch(input grepInput) bool {
 		input.FilesWithoutMatchesDash ||
 		input.LongFilesWithoutMatches ||
 		input.ShortFilesWithoutMatch
+}
+
+func grepCount(input grepInput) bool {
+	return input.Count || input.LongCount || input.ShortCount
 }
 
 func grepCountMatches(input grepInput) bool {

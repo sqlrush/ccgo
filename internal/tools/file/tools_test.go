@@ -1330,6 +1330,35 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("count result = %#v", countResult.Content)
 	}
 
+	longCountResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_count_long_flag",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/*.go","--count":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longCountResult.Content != wantCount ||
+		longCountResult.StructuredContent["output_mode"] != "count" ||
+		longCountResult.StructuredContent["count"] != true ||
+		longCountResult.StructuredContent["count_matches"] != false {
+		t.Fatalf("long count flag result = %#v", longCountResult)
+	}
+
+	shortCountResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_count_short_flag",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/*.go","-c":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortCountResult.Content != wantCount ||
+		shortCountResult.StructuredContent["output_mode"] != "count" ||
+		shortCountResult.StructuredContent["count"] != true {
+		t.Fatalf("short count flag result = %#v", shortCountResult)
+	}
+
 	if err := os.WriteFile(filepath.Join(dir, "src", "multi.txt"), []byte("func func\nfunc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
