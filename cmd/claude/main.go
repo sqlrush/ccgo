@@ -2156,6 +2156,7 @@ type printJSONResult struct {
 	Error           string                   `json:"error,omitempty"`
 	ErrorType       string                   `json:"error_type,omitempty"`
 	StatusCode      int                      `json:"status_code,omitempty"`
+	RequestID       string                   `json:"request_id,omitempty"`
 	Message         *contracts.Message       `json:"message,omitempty"`
 	StopReason      string                   `json:"stop_reason,omitempty"`
 	Model           string                   `json:"model,omitempty"`
@@ -2199,6 +2200,7 @@ type printStreamEvent struct {
 	Error           string                   `json:"error,omitempty"`
 	ErrorType       string                   `json:"error_type,omitempty"`
 	StatusCode      int                      `json:"status_code,omitempty"`
+	RequestID       string                   `json:"request_id,omitempty"`
 	IsError         bool                     `json:"is_error,omitempty"`
 	DurationMS      *int64                   `json:"duration_ms,omitempty"`
 	DurationAPI     *int64                   `json:"duration_api_ms,omitempty"`
@@ -2467,21 +2469,21 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 	}
 	if event.Error != nil {
 		out.Error = event.Error.Error()
-		out.ErrorType, out.StatusCode = printAPIErrorMetadata(event.Error)
+		out.ErrorType, out.StatusCode, out.RequestID = printAPIErrorMetadata(event.Error)
 	}
 	return encoder.Encode(out)
 }
 
-func printAPIErrorMetadata(err error) (string, int) {
+func printAPIErrorMetadata(err error) (string, int, string) {
 	var apiErr anthropic.APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.Type, apiErr.StatusCode
+		return apiErr.Type, apiErr.StatusCode, apiErr.RequestID
 	}
 	var apiErrPtr *anthropic.APIError
 	if errors.As(err, &apiErrPtr) && apiErrPtr != nil {
-		return apiErrPtr.Type, apiErrPtr.StatusCode
+		return apiErrPtr.Type, apiErrPtr.StatusCode, apiErrPtr.RequestID
 	}
-	return "", 0
+	return "", 0, ""
 }
 
 func printStreamRetryFrom(retry *conversation.RetryInfo) *printStreamRetry {
@@ -2588,7 +2590,7 @@ func writePrintError(stdout io.Writer, runner conversation.Runner, err error, ou
 
 func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error, duration time.Duration, apiDuration time.Duration, modelsAttempted []string) error {
 	encoder := json.NewEncoder(stdout)
-	errorType, statusCode := printAPIErrorMetadata(err)
+	errorType, statusCode, requestID := printAPIErrorMetadata(err)
 	envelope := printJSONResult{
 		Type:            "result",
 		Subtype:         "error",
@@ -2600,6 +2602,7 @@ func writePrintJSONError(stdout io.Writer, runner conversation.Runner, err error
 		Error:           err.Error(),
 		ErrorType:       errorType,
 		StatusCode:      statusCode,
+		RequestID:       requestID,
 	}
 	applyPrintJSONRuntime(&envelope, runner)
 	return encoder.Encode(envelope)
@@ -2609,7 +2612,7 @@ func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err err
 	encoder := json.NewEncoder(stdout)
 	durationMS := durationMillis(duration)
 	durationAPI := durationMillis(apiDuration)
-	errorType, statusCode := printAPIErrorMetadata(err)
+	errorType, statusCode, requestID := printAPIErrorMetadata(err)
 	envelope := printStreamEvent{
 		Type:            "error",
 		SessionID:       runner.SessionID,
@@ -2617,6 +2620,7 @@ func writePrintStreamError(stdout io.Writer, runner conversation.Runner, err err
 		Error:           err.Error(),
 		ErrorType:       errorType,
 		StatusCode:      statusCode,
+		RequestID:       requestID,
 		IsError:         true,
 		DurationMS:      &durationMS,
 		DurationAPI:     &durationAPI,

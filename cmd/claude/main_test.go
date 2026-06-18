@@ -2242,6 +2242,7 @@ func TestWritePrintStreamEventRetryIncludesAPIErrorMetadata(t *testing.T) {
 		Model: "sonnet",
 		Error: fmt.Errorf("request failed: %w", anthropic.APIError{
 			StatusCode: http.StatusTooManyRequests,
+			RequestID:  "req_retry_1",
 			Type:       "rate_limit_error",
 			Message:    "try later",
 		}),
@@ -2260,7 +2261,7 @@ func TestWritePrintStreamEventRetryIncludesAPIErrorMetadata(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
 		t.Fatalf("invalid json %q: %v", stdout.String(), err)
 	}
-	if event["type"] != "retry" || event["error_type"] != "rate_limit_error" || event["status_code"] != float64(http.StatusTooManyRequests) {
+	if event["type"] != "retry" || event["error_type"] != "rate_limit_error" || event["status_code"] != float64(http.StatusTooManyRequests) || event["request_id"] != "req_retry_1" {
 		t.Fatalf("event = %#v", event)
 	}
 }
@@ -2347,6 +2348,7 @@ func TestWritePrintJSONErrorIncludesAPIErrorMetadata(t *testing.T) {
 	var stdout bytes.Buffer
 	err := writePrintJSONError(&stdout, conversation.Runner{SessionID: "sess_error"}, anthropic.APIError{
 		StatusCode: http.StatusServiceUnavailable,
+		RequestID:  "req_json_1",
 		Type:       "overloaded_error",
 		Message:    "temporarily overloaded",
 	}, time.Millisecond, 2*time.Millisecond, []string{"sonnet"})
@@ -2357,7 +2359,7 @@ func TestWritePrintJSONErrorIncludesAPIErrorMetadata(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
 	}
-	if payload["type"] != "result" || payload["subtype"] != "error" || payload["error_type"] != "overloaded_error" || payload["status_code"] != float64(http.StatusServiceUnavailable) {
+	if payload["type"] != "result" || payload["subtype"] != "error" || payload["error_type"] != "overloaded_error" || payload["status_code"] != float64(http.StatusServiceUnavailable) || payload["request_id"] != "req_json_1" {
 		t.Fatalf("payload = %#v", payload)
 	}
 }
@@ -2385,6 +2387,7 @@ func TestWritePrintStreamErrorIncludesAPIErrorMetadata(t *testing.T) {
 	var stdout bytes.Buffer
 	err := writePrintStreamError(&stdout, conversation.Runner{SessionID: "sess_error"}, anthropic.APIError{
 		StatusCode: http.StatusUnauthorized,
+		RequestID:  "req_stream_1",
 		Type:       "authentication_error",
 		Message:    "invalid api key",
 	}, time.Millisecond, 2*time.Millisecond, []string{"sonnet"})
@@ -2395,7 +2398,7 @@ func TestWritePrintStreamErrorIncludesAPIErrorMetadata(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
 		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
 	}
-	if event["type"] != "error" || event["is_error"] != true || event["error_type"] != "authentication_error" || event["status_code"] != float64(http.StatusUnauthorized) {
+	if event["type"] != "error" || event["is_error"] != true || event["error_type"] != "authentication_error" || event["status_code"] != float64(http.StatusUnauthorized) || event["request_id"] != "req_stream_1" {
 		t.Fatalf("event = %#v", event)
 	}
 }
