@@ -1424,6 +1424,7 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 	},
 	"out-host": {
 		allowAllFlags:          true,
+		unsafeFlags:            stringSet("paging"),
 		rejectExpressionValues: true,
 	},
 	"write-output": {
