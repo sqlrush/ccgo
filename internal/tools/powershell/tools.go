@@ -1129,6 +1129,7 @@ func powerShellWords(command string) []string {
 
 type powerShellReadOnlyConfig struct {
 	allowedFlags                 map[string]bool
+	unsafeFlags                  map[string]bool
 	pathFlags                    map[string]bool
 	valueFlags                   map[string]bool
 	allowAllFlags                bool
@@ -1171,6 +1172,7 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 	},
 	"get-content": {
 		allowedFlags:               stringSet("path", "literalpath", "totalcount", "head", "tail", "raw", "encoding", "delimiter", "readcount"),
+		unsafeFlags:                stringSet("wait"),
 		pathFlags:                  stringSet("path", "literalpath"),
 		valueFlags:                 stringSet("totalcount", "head", "tail", "encoding", "delimiter", "readcount"),
 		validatePositionalsAsPaths: true,
@@ -1532,7 +1534,7 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 		}
 		if strings.HasPrefix(word, "-") {
 			option, value, hasValue := splitPowerShellOption(word)
-			if unsafePowerShellOption(option) {
+			if unsafePowerShellOption(option) || config.unsafeFlags[option] {
 				return false
 			}
 			takesValue := config.pathFlags[option] || config.valueFlags[option] || powerShellCommonValueFlags[option]
