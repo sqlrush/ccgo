@@ -2485,6 +2485,95 @@ func TestGrepToolContextSeparators(t *testing.T) {
 	}
 }
 
+func TestGrepToolByteOffset(t *testing.T) {
+	dir := t.TempDir()
+	aContent := strings.Join([]string{
+		"alpha",
+		"xx Needle here",
+		"plain",
+		"Needle again",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(aContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("pre\nNeedle b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_byte_offset",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","byte-offset":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "a.txt:2:6:xx Needle here\na.txt:4:27:Needle again\nb.txt:2:4:Needle b"
+	if result.Content != want ||
+		result.StructuredContent["byte_offset"] != true {
+		t.Fatalf("byte offset result = %#v", result)
+	}
+	matches := result.StructuredContent["matches"].([]map[string]any)
+	if len(matches) != 3 || matches[0]["byte_offset"] != 6 || matches[1]["byte_offset"] != 27 || matches[2]["byte_offset"] != 4 {
+		t.Fatalf("byte offset structured matches = %#v", matches)
+	}
+
+	contextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_byte_offset_context",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","-b":"true","context":1,"field-match-separator":"::","field-context-separator":"~~","glob":"a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContext := "a.txt~~1~~0~~alpha\na.txt::2::6::xx Needle here\na.txt~~3~~21~~plain\na.txt::4::27::Needle again"
+	if contextResult.Content != wantContext ||
+		contextResult.StructuredContent["byte_offset"] != true {
+		t.Fatalf("byte offset context result = %#v", contextResult)
+	}
+
+	onlyMatchingResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_byte_offset_only_matching",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","only_matching":true,"column":true,"byte_offset":true,"glob":"a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOnlyMatching := "a.txt:2:4:9:Needle\na.txt:4:1:27:Needle"
+	if onlyMatchingResult.Content != wantOnlyMatching {
+		t.Fatalf("byte offset only-matching result = %#v", onlyMatchingResult)
+	}
+
+	vimgrepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_byte_offset_vimgrep",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--vimgrep":true,"--byte-offset":true,"glob":"a.txt"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVimgrep := "a.txt:2:4:9:xx Needle here\na.txt:4:1:27:Needle again"
+	if vimgrepResult.Content != wantVimgrep {
+		t.Fatalf("byte offset vimgrep result = %#v", vimgrepResult)
+	}
+
+	nullResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_byte_offset_null",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"content","--byte-offset":true,"--null":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNull := "a.txt\x002:6:xx Needle here\na.txt\x004:27:Needle again\nb.txt\x002:4:Needle b"
+	if nullResult.Content != wantNull {
+		t.Fatalf("byte offset null result = %#v", nullResult)
+	}
+}
+
 func TestGrepToolIncludeZero(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Needle Needle\n"), 0o644); err != nil {

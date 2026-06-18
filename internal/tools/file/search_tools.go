@@ -42,6 +42,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"field_context_separator": {}, "fieldContextSeparator": {}, "field-context-separator": {}, "--field-context-separator": {},
 	"context_separator": {}, "contextSeparator": {}, "context-separator": {}, "--context-separator": {},
 	"no_context_separator": {}, "noContextSeparator": {}, "no-context-separator": {}, "--no-context-separator": {},
+	"byte_offset": {}, "byteOffset": {}, "byte-offset": {}, "--byte-offset": {}, "-b": {},
 	"sort": {}, "--sort": {}, "sortr": {}, "--sortr": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
@@ -78,6 +79,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"heading": {}, "--heading": {}, "no_heading": {}, "noHeading": {}, "no-heading": {}, "--no-heading": {},
 	"null": {}, "--null": {}, "-0": {},
 	"no_context_separator": {}, "noContextSeparator": {}, "no-context-separator": {}, "--no-context-separator": {},
+	"byte_offset": {}, "byteOffset": {}, "byte-offset": {}, "--byte-offset": {}, "-b": {},
 	"line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
 	"no_line_number": {}, "noLineNumber": {}, "no_line_numbers": {}, "noLineNumbers": {}, "no-line-number": {}, "no-line-numbers": {}, "--no-line-number": {}, "-N": {},
 	"column": {}, "column_numbers": {}, "columnNumbers": {}, "column-number": {}, "--column": {},
@@ -182,6 +184,11 @@ type grepInput struct {
 	NoContextSeparatorAlt     bool    `json:"noContextSeparator,omitempty"`
 	NoContextSeparatorDash    bool    `json:"no-context-separator,omitempty"`
 	LongNoContextSeparator    bool    `json:"--no-context-separator,omitempty"`
+	ByteOffset                bool    `json:"byte_offset,omitempty"`
+	ByteOffsetAlt             bool    `json:"byteOffset,omitempty"`
+	ByteOffsetDash            bool    `json:"byte-offset,omitempty"`
+	LongByteOffset            bool    `json:"--byte-offset,omitempty"`
+	ShortByteOffset           bool    `json:"-b,omitempty"`
 	Sort                      string  `json:"sort,omitempty"`
 	LongSort                  string  `json:"--sort,omitempty"`
 	SortReverse               string  `json:"sortr,omitempty"`
@@ -315,13 +322,14 @@ type fileSearchMatch struct {
 }
 
 type grepMatch struct {
-	Path    string
-	Line    int
-	Column  int
-	Text    string
-	Count   int
-	Matched bool
-	ModUnix int64
+	Path       string
+	Line       int
+	Column     int
+	ByteOffset int
+	Text       string
+	Count      int
+	Matched    bool
+	ModUnix    int64
 }
 
 type grepOptions struct {
@@ -339,6 +347,7 @@ type grepOptions struct {
 	FieldContextSeparator string
 	ContextSeparator      string
 	NoContextSeparator    bool
+	ByteOffset            bool
 	HasReplace            bool
 	Replace               string
 	BeforeContext         int
@@ -487,6 +496,11 @@ func NewGrepTool() tool.Tool {
 					"noContextSeparator":        map[string]any{"type": "boolean"},
 					"no-context-separator":      map[string]any{"type": "boolean"},
 					"--no-context-separator":    map[string]any{"type": "boolean"},
+					"byte_offset":               map[string]any{"type": "boolean"},
+					"byteOffset":                map[string]any{"type": "boolean"},
+					"byte-offset":               map[string]any{"type": "boolean"},
+					"--byte-offset":             map[string]any{"type": "boolean"},
+					"-b":                        map[string]any{"type": "boolean"},
 					"sort":                      map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"--sort":                    map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
 					"sortr":                     map[string]any{"type": "string", "enum": []any{"path", "name", "file", "modified", "mtime", "modtime", "time", "none"}},
@@ -649,7 +663,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, and trim/--trim leading-whitespace trimming. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -824,6 +838,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	fieldContextSeparator := grepFieldContextSeparator(input)
 	contextSeparator := grepContextSeparator(input)
 	noContextSeparator := grepNoContextSeparator(input)
+	byteOffset := grepByteOffset(input)
 	countMatches := grepCountMatches(input) && mode == "count" && !invertMatch
 	includeZero := grepIncludeZero(input) && mode == "count"
 	replace, hasReplace := grepReplacement(input)
@@ -850,6 +865,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		FieldContextSeparator: fieldContextSeparator,
 		ContextSeparator:      contextSeparator,
 		NoContextSeparator:    noContextSeparator,
+		ByteOffset:            byteOffset,
 		HasReplace:            hasReplace,
 		Replace:               replace,
 		BeforeContext:         before,
@@ -889,7 +905,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"glob":                    globFilter,
 			"type_filter":             typeFilter,
 			"output_mode":             mode,
-			"matches":                 grepStructuredMatches(matches, mode),
+			"matches":                 grepStructuredMatches(matches, options),
 			"total_matches":           totalMatches,
 			"offset":                  options.Offset,
 			"limit":                   options.Limit,
@@ -905,6 +921,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"field_context_separator": fieldContextSeparator,
 			"context_separator":       contextSeparator,
 			"no_context_separator":    noContextSeparator,
+			"byte_offset":             byteOffset,
 			"replace":                 replace,
 			"has_replace":             hasReplace,
 			"before_context":          options.BeforeContext,
@@ -1203,11 +1220,12 @@ func readGrepText(path string, allowBinary bool) (string, error) {
 func grepFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) []grepMatch {
 	content = normalizeGrepContent(content)
 	lines := strings.Split(content, "\n")
+	starts := grepLineStarts(lines)
 	if options.OnlyMatching {
 		if options.Multiline {
 			return grepMultilineOnlyMatches(path, lines, content, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
 		}
-		return grepLineOnlyMatches(path, lines, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
+		return grepLineOnlyMatches(path, lines, starts, expr, options.MaxCount, options.MaxColumns, options.MaxPreview, options.Trim, options)
 	}
 	matched := map[int]bool{}
 	included := map[int]bool{}
@@ -1222,7 +1240,7 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 		}
 	}
 	if options.Vimgrep && !options.InvertMatch {
-		return grepVimgrepMatches(path, lines, expr, matched, included, options)
+		return grepVimgrepMatches(path, lines, starts, expr, matched, included, options)
 	}
 	matches := make([]grepMatch, 0, len(included))
 	for i := range lines {
@@ -1235,12 +1253,12 @@ func grepFileMatches(path string, content string, expr *regexp.Regexp, options g
 				column = span[0] + 1
 			}
 		}
-		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, Text: grepDisplayMatchedLine(expr, lines[i], matched[i], options), Matched: matched[i]})
+		matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: column, ByteOffset: starts[i], Text: grepDisplayMatchedLine(expr, lines[i], matched[i], options), Matched: matched[i]})
 	}
 	return matches
 }
 
-func grepVimgrepMatches(path string, lines []string, expr *regexp.Regexp, matched map[int]bool, included map[int]bool, options grepOptions) []grepMatch {
+func grepVimgrepMatches(path string, lines []string, starts []int, expr *regexp.Regexp, matched map[int]bool, included map[int]bool, options grepOptions) []grepMatch {
 	matches := make([]grepMatch, 0, len(included))
 	for i := range lines {
 		if !included[i] {
@@ -1248,22 +1266,22 @@ func grepVimgrepMatches(path string, lines []string, expr *regexp.Regexp, matche
 		}
 		text := grepDisplayMatchedLine(expr, lines[i], matched[i], options)
 		if !matched[i] {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, Text: text, Matched: false})
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, ByteOffset: starts[i], Text: text, Matched: false})
 			continue
 		}
 		spans := expr.FindAllStringIndex(lines[i], -1)
 		if len(spans) == 0 {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: 1, Text: text, Matched: true})
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: 1, ByteOffset: starts[i], Text: text, Matched: true})
 			continue
 		}
 		for _, span := range spans {
-			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: span[0] + 1, Text: text, Matched: true})
+			matches = append(matches, grepMatch{Path: path, Line: i + 1, Column: span[0] + 1, ByteOffset: starts[i] + span[0], Text: text, Matched: true})
 		}
 	}
 	return matches
 }
 
-func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool, options grepOptions) []grepMatch {
+func grepLineOnlyMatches(path string, lines []string, starts []int, expr *regexp.Regexp, maxCount int, maxColumns int, maxPreview bool, trim bool, options grepOptions) []grepMatch {
 	var matches []grepMatch
 	matchedLines := 0
 	for i, line := range lines {
@@ -1276,11 +1294,12 @@ func grepLineOnlyMatches(path string, lines []string, expr *regexp.Regexp, maxCo
 		}
 		for _, span := range spans {
 			matches = append(matches, grepMatch{
-				Path:    path,
-				Line:    i + 1,
-				Column:  span[0] + 1,
-				Text:    grepDisplayLine(grepMatchedText(expr, line, span, options), true, maxColumns, maxPreview, trim),
-				Matched: true,
+				Path:       path,
+				Line:       i + 1,
+				Column:     span[0] + 1,
+				ByteOffset: starts[i] + span[0],
+				Text:       grepDisplayLine(grepMatchedText(expr, line, span, options), true, maxColumns, maxPreview, trim),
+				Matched:    true,
 			})
 		}
 		matchedLines++
@@ -1323,11 +1342,12 @@ func grepMultilineOnlyMatches(path string, lines []string, content string, expr 
 				text = grepExpandReplacement(expr, content, span, options.Replace)
 			}
 			matches = append(matches, grepMatch{
-				Path:    path,
-				Line:    i + 1,
-				Column:  fragmentStart - lineStart + 1,
-				Text:    grepDisplayLine(text, true, maxColumns, maxPreview, trim),
-				Matched: true,
+				Path:       path,
+				Line:       i + 1,
+				Column:     fragmentStart - lineStart + 1,
+				ByteOffset: fragmentStart,
+				Text:       grepDisplayLine(text, true, maxColumns, maxPreview, trim),
+				Matched:    true,
 			})
 		}
 	}
@@ -1585,30 +1605,28 @@ func formatGrepContentMatch(match grepMatch, options grepOptions) string {
 	if !match.Matched {
 		separator = options.FieldContextSeparator
 	}
+	fields := grepContentFields(match, options)
 	if options.WithFilename {
 		path := grepDisplayPath(match.Path, options)
 		pathSeparator := grepPathFieldSeparator(options, separator)
-		if options.LineNumbers {
-			if (options.ColumnNumbers || options.Vimgrep) && match.Matched && match.Column > 0 {
-				return fmt.Sprintf("%s%s%d%s%d%s%s", path, pathSeparator, match.Line, separator, match.Column, separator, match.Text)
-			}
-			return fmt.Sprintf("%s%s%d%s%s", path, pathSeparator, match.Line, separator, match.Text)
-		}
-		if options.Vimgrep && match.Matched && match.Column > 0 {
-			return fmt.Sprintf("%s%s%d%s%s", path, pathSeparator, match.Column, separator, match.Text)
-		}
-		return fmt.Sprintf("%s%s%s", path, pathSeparator, match.Text)
+		return path + pathSeparator + strings.Join(fields, separator)
 	}
+	return strings.Join(fields, separator)
+}
+
+func grepContentFields(match grepMatch, options grepOptions) []string {
+	fields := make([]string, 0, 4)
 	if options.LineNumbers {
-		if (options.ColumnNumbers || options.Vimgrep) && match.Matched && match.Column > 0 {
-			return fmt.Sprintf("%d%s%d%s%s", match.Line, separator, match.Column, separator, match.Text)
-		}
-		return fmt.Sprintf("%d%s%s", match.Line, separator, match.Text)
+		fields = append(fields, strconv.Itoa(match.Line))
 	}
-	if options.Vimgrep && match.Matched && match.Column > 0 {
-		return fmt.Sprintf("%d%s%s", match.Column, separator, match.Text)
+	if (options.ColumnNumbers || options.Vimgrep) && match.Matched && match.Column > 0 {
+		fields = append(fields, strconv.Itoa(match.Column))
 	}
-	return match.Text
+	if options.ByteOffset {
+		fields = append(fields, strconv.Itoa(match.ByteOffset))
+	}
+	fields = append(fields, match.Text)
+	return fields
 }
 
 func grepPathFieldSeparator(options grepOptions, fallback string) string {
@@ -1705,17 +1723,20 @@ func pluralWord(count int, singular string, plural string) string {
 	return plural
 }
 
-func grepStructuredMatches(matches []grepMatch, mode string) []map[string]any {
+func grepStructuredMatches(matches []grepMatch, options grepOptions) []map[string]any {
 	out := make([]map[string]any, 0, len(matches))
 	for _, match := range matches {
 		item := map[string]any{"path": match.Path}
-		switch mode {
+		switch options.Mode {
 		case "content":
 			item["line"] = match.Line
 			item["text"] = match.Text
 			item["matched"] = match.Matched
 			if match.Column > 0 {
 				item["column"] = match.Column
+			}
+			if options.ByteOffset {
+				item["byte_offset"] = match.ByteOffset
 			}
 		case "count":
 			item["count"] = match.Count
@@ -2054,6 +2075,14 @@ func grepNoContextSeparator(input grepInput) bool {
 		input.NoContextSeparatorAlt ||
 		input.NoContextSeparatorDash ||
 		input.LongNoContextSeparator
+}
+
+func grepByteOffset(input grepInput) bool {
+	return input.ByteOffset ||
+		input.ByteOffsetAlt ||
+		input.ByteOffsetDash ||
+		input.LongByteOffset ||
+		input.ShortByteOffset
 }
 
 func firstStringPointer(values ...*string) (string, bool) {
