@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -119,6 +120,8 @@ func ValidateSettings(settings contracts.Settings, filePath string) []Validation
 	if settings.ExtraKnownMarketplaces != nil {
 		errors = append(errors, validateExtraKnownMarketplaces(settings.ExtraKnownMarketplaces, filePath)...)
 	}
+	errors = append(errors, validateMarketplaceSourceList("strictKnownMarketplaces", settings.StrictKnownMarketplaces, filePath)...)
+	errors = append(errors, validateMarketplaceSourceList("blockedMarketplaces", settings.BlockedMarketplaces, filePath)...)
 	if settings.CleanupPeriodDays != nil && *settings.CleanupPeriodDays < 0 {
 		errors = append(errors, ValidationError{
 			File:         filePath,
@@ -136,12 +139,28 @@ func validateExtraKnownMarketplaces(values map[string]any, filePath string) []Va
 	for key, rawEntry := range values {
 		entry, ok := rawEntry.(map[string]any)
 		if !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "extraKnownMarketplaces." + key,
+				Message:      "Invalid marketplace entry. Expected object",
+				Expected:     "object",
+				InvalidValue: rawEntry,
+			})
 			continue
 		}
 		source, ok := entry["source"].(map[string]any)
 		if !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         "extraKnownMarketplaces." + key + ".source",
+				Message:      "Invalid marketplace source. Expected object",
+				Expected:     "object",
+				InvalidValue: entry["source"],
+			})
 			continue
 		}
+		sourcePath := "extraKnownMarketplaces." + key + ".source"
+		errors = append(errors, validateMarketplaceSource(source, filePath, sourcePath)...)
 		if sourceType, _ := source["source"].(string); sourceType != "settings" {
 			continue
 		}
@@ -169,6 +188,232 @@ func validateExtraKnownMarketplaces(values map[string]any, filePath string) []Va
 		}
 	}
 	return errors
+}
+
+func validateMarketplaceSourceList(path string, values []any, filePath string) []ValidationError {
+	var errors []ValidationError
+	for i, raw := range values {
+		itemPath := fmt.Sprintf("%s[%d]", path, i)
+		source, ok := raw.(map[string]any)
+		if !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         itemPath,
+				Message:      "Invalid marketplace source. Expected object",
+				Expected:     "object",
+				InvalidValue: raw,
+			})
+			continue
+		}
+		errors = append(errors, validateMarketplaceSource(source, filePath, itemPath)...)
+	}
+	return errors
+}
+
+func validateMarketplaceSource(source map[string]any, filePath string, path string) []ValidationError {
+	sourceType, ok := source["source"].(string)
+	if !ok || strings.TrimSpace(sourceType) == "" {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path + ".source",
+			Message:      "Marketplace source type is required",
+			Expected:     "url | github | git | npm | file | directory | hostPattern | pathPattern | settings",
+			InvalidValue: source["source"],
+		}}
+	}
+	switch sourceType {
+	case "url":
+		var errors []ValidationError
+		errors = append(errors, validateMarketplaceSourceString(source, filePath, path, "url")...)
+		if raw, ok := source["url"].(string); ok && strings.TrimSpace(raw) != "" {
+			parsed, err := url.Parse(raw)
+			if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+				errors = append(errors, ValidationError{
+					File:         filePath,
+					Path:         path + ".url",
+					Message:      "Invalid marketplace URL source. Expected absolute URL",
+					Expected:     "absolute URL",
+					InvalidValue: raw,
+				})
+			}
+		}
+		if headers, ok := source["headers"]; ok {
+			errors = append(errors, validateStringRecord(headers, filePath, path+".headers")...)
+		}
+		return errors
+	case "github":
+		errors := validateMarketplaceSourceString(source, filePath, path, "repo")
+		errors = append(errors, validateOptionalString(source, filePath, path, "ref")...)
+		errors = append(errors, validateOptionalString(source, filePath, path, "path")...)
+		errors = append(errors, validateOptionalStringArray(source, filePath, path, "sparsePaths")...)
+		return errors
+	case "git":
+		errors := validateMarketplaceSourceString(source, filePath, path, "url")
+		errors = append(errors, validateOptionalString(source, filePath, path, "ref")...)
+		errors = append(errors, validateOptionalString(source, filePath, path, "path")...)
+		errors = append(errors, validateOptionalStringArray(source, filePath, path, "sparsePaths")...)
+		return errors
+	case "npm":
+		return validateMarketplaceSourceString(source, filePath, path, "package")
+	case "file", "directory":
+		return validateMarketplaceSourceString(source, filePath, path, "path")
+	case "hostPattern":
+		return validateMarketplaceSourceString(source, filePath, path, "hostPattern")
+	case "pathPattern":
+		return validateMarketplaceSourceString(source, filePath, path, "pathPattern")
+	case "settings":
+		errors := validateMarketplaceSourceString(source, filePath, path, "name")
+		if raw, ok := source["plugins"]; !ok {
+			errors = append(errors, ValidationError{
+				File:     filePath,
+				Path:     path + ".plugins",
+				Message:  "Settings-sourced marketplace plugins are required",
+				Expected: "array",
+			})
+		} else if _, ok := raw.([]any); !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         path + ".plugins",
+				Message:      "Settings-sourced marketplace plugins must be an array",
+				Expected:     "array",
+				InvalidValue: raw,
+			})
+		}
+		if name, ok := source["name"].(string); ok {
+			errors = append(errors, validateMarketplaceName(name, filePath, path+".name")...)
+		}
+		return errors
+	default:
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path + ".source",
+			Message:      "Invalid marketplace source type",
+			Expected:     "url | github | git | npm | file | directory | hostPattern | pathPattern | settings",
+			InvalidValue: sourceType,
+		}}
+	}
+}
+
+func validateMarketplaceSourceString(source map[string]any, filePath string, path string, field string) []ValidationError {
+	value, ok := source[field].(string)
+	if !ok || strings.TrimSpace(value) == "" {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path + "." + field,
+			Message:      "Marketplace source field is required",
+			Expected:     "non-empty string",
+			InvalidValue: source[field],
+		}}
+	}
+	return nil
+}
+
+func validateOptionalString(source map[string]any, filePath string, path string, field string) []ValidationError {
+	value, ok := source[field]
+	if !ok {
+		return nil
+	}
+	if _, ok := value.(string); !ok {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path + "." + field,
+			Message:      "Invalid marketplace source field. Expected string",
+			Expected:     "string",
+			InvalidValue: value,
+		}}
+	}
+	return nil
+}
+
+func validateOptionalStringArray(source map[string]any, filePath string, path string, field string) []ValidationError {
+	value, ok := source[field]
+	if !ok {
+		return nil
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path + "." + field,
+			Message:      "Invalid marketplace source field. Expected string array",
+			Expected:     "string[]",
+			InvalidValue: value,
+		}}
+	}
+	var errors []ValidationError
+	for i, item := range items {
+		if _, ok := item.(string); !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         fmt.Sprintf("%s.%s[%d]", path, field, i),
+				Message:      "Invalid marketplace source field item. Expected string",
+				Expected:     "string",
+				InvalidValue: item,
+			})
+		}
+	}
+	return errors
+}
+
+func validateStringRecord(value any, filePath string, path string) []ValidationError {
+	items, ok := value.(map[string]any)
+	if !ok {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path,
+			Message:      "Invalid marketplace source field. Expected string record",
+			Expected:     "object<string,string>",
+			InvalidValue: value,
+		}}
+	}
+	var errors []ValidationError
+	for key, raw := range items {
+		if _, ok := raw.(string); !ok {
+			errors = append(errors, ValidationError{
+				File:         filePath,
+				Path:         path + "." + key,
+				Message:      "Invalid marketplace source header value. Expected string",
+				Expected:     "string",
+				InvalidValue: raw,
+			})
+		}
+	}
+	return errors
+}
+
+func validateMarketplaceName(name string, filePath string, path string) []ValidationError {
+	switch {
+	case strings.TrimSpace(name) == "":
+		return []ValidationError{{File: filePath, Path: path, Message: "Marketplace must have a name", Expected: "non-empty string", InvalidValue: name}}
+	case strings.Contains(name, " "):
+		return []ValidationError{{File: filePath, Path: path, Message: "Marketplace name cannot contain spaces", Expected: "kebab-case name", InvalidValue: name}}
+	case strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") || name == ".":
+		return []ValidationError{{File: filePath, Path: path, Message: `Marketplace name cannot contain path separators, "..", or be "."`, Expected: "safe marketplace name", InvalidValue: name}}
+	case strings.EqualFold(name, "inline"):
+		return []ValidationError{{File: filePath, Path: path, Message: `Marketplace name "inline" is reserved for session plugins`, Expected: "non-reserved marketplace name", InvalidValue: name}}
+	case strings.EqualFold(name, "builtin"):
+		return []ValidationError{{File: filePath, Path: path, Message: `Marketplace name "builtin" is reserved for built-in plugins`, Expected: "non-reserved marketplace name", InvalidValue: name}}
+	case reservedOfficialMarketplaceName(name):
+		return []ValidationError{{File: filePath, Path: path, Message: "Reserved official marketplace names cannot be used with settings sources", Expected: "non-official marketplace name", InvalidValue: name}}
+	default:
+		return nil
+	}
+}
+
+func reservedOfficialMarketplaceName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "claude-code-marketplace",
+		"claude-code-plugins",
+		"claude-plugins-official",
+		"anthropic-marketplace",
+		"anthropic-plugins",
+		"agent-skills",
+		"life-sciences",
+		"knowledge-work-plugins":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateSandboxSetting(setting map[string]any, filePath string) []ValidationError {

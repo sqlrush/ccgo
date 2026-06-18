@@ -257,6 +257,66 @@ func TestValidateSettingsAllowsMatchingSettingsMarketplaceAndFetchedSources(t *t
 	}
 }
 
+func TestValidateSettingsWarnsForInvalidMarketplaceSources(t *testing.T) {
+	_, warnings, err := ParseSettingsJSON([]byte(`{
+		"extraKnownMarketplaces": {
+			"bad-url": {
+				"source": {
+					"source": "url",
+					"url": "not a url",
+					"headers": {"Authorization": 42}
+				}
+			},
+			"bad-settings": {
+				"source": {
+					"source": "settings",
+					"name": "inline"
+				}
+			},
+			"missing-repo": {
+				"source": {
+					"source": "github",
+					"sparsePaths": [".claude-plugin", 12]
+				}
+			}
+		},
+		"strictKnownMarketplaces": [
+			{"source": "git", "url": 42},
+			{"source": "unknown"}
+		],
+		"blockedMarketplaces": [
+			{"source": "file", "path": "/opt/marketplace.json"},
+			"bad"
+		]
+	}`), "settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]int{}
+	for _, warning := range warnings {
+		paths[warning.Path]++
+	}
+	for _, path := range []string{
+		"extraKnownMarketplaces.bad-url.source.url",
+		"extraKnownMarketplaces.bad-url.source.headers.Authorization",
+		"extraKnownMarketplaces.bad-settings.source.plugins",
+		"extraKnownMarketplaces.bad-settings.source.name",
+		"extraKnownMarketplaces.bad-settings.source.name",
+		"extraKnownMarketplaces.missing-repo.source.repo",
+		"extraKnownMarketplaces.missing-repo.source.sparsePaths[1]",
+		"strictKnownMarketplaces[0].url",
+		"strictKnownMarketplaces[1].source",
+		"blockedMarketplaces[1]",
+	} {
+		if paths[path] == 0 {
+			t.Fatalf("missing warning path %q in %#v warnings=%#v", path, paths, warnings)
+		}
+	}
+	if paths["blockedMarketplaces[0].path"] != 0 {
+		t.Fatalf("valid blocked marketplace produced warning paths=%#v warnings=%#v", paths, warnings)
+	}
+}
+
 func TestMergeSettings(t *testing.T) {
 	defaultWorktree := true
 	overrideWorktree := false
