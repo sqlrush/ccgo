@@ -2549,6 +2549,75 @@ func TestGrepToolWordRegexp(t *testing.T) {
 	}
 }
 
+func TestGrepToolLineRegexp(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Join([]string{
+		"cat",
+		"cat.",
+		"concatenate",
+		"a+b",
+		"xx a+b",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "lines.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_regexp",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"content","line_regexp":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contentResult.Content != "lines.txt:1:cat" || contentResult.StructuredContent["line_regexp"] != true {
+		t.Fatalf("line_regexp content result = %#v", contentResult)
+	}
+
+	shortResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_regexp_short",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"count","-x":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortResult.Content != "lines.txt:1\n\nFound 1 total occurrence across 1 file." ||
+		shortResult.StructuredContent["line_regexp"] != true {
+		t.Fatalf("short line-regexp result = %#v", shortResult)
+	}
+
+	longResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_regexp_long",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"cat","output_mode":"content","--line-regexp":true,"word_regexp":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if longResult.Content != "lines.txt:1:cat" ||
+		longResult.StructuredContent["line_regexp"] != true ||
+		longResult.StructuredContent["word_regexp"] != true {
+		t.Fatalf("long line-regexp result = %#v", longResult)
+	}
+
+	fixedResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_line_regexp_fixed",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"a+b","output_mode":"content","fixed_strings":true,"line-regexp":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixedResult.Content != "lines.txt:4:a+b" ||
+		fixedResult.StructuredContent["fixed_strings"] != true ||
+		fixedResult.StructuredContent["line_regexp"] != true {
+		t.Fatalf("fixed line-regexp result = %#v", fixedResult)
+	}
+}
+
 func TestGrepToolInvertMatch(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
