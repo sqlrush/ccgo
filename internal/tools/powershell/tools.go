@@ -1851,7 +1851,7 @@ func splitPowerShellOption(word string) (string, string, bool) {
 
 func unsafePowerShellOption(option string) bool {
 	switch strings.ToLower(strings.TrimSpace(option)) {
-	case "outfile", "out-file", "outvariable", "ov", "pipelinevariable", "pv":
+	case "asjob", "cimsession", "computername", "credential", "jobname", "outfile", "out-file", "outvariable", "ov", "pipelinevariable", "pv", "throttlelimit":
 		return true
 	default:
 		return false
