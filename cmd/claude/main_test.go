@@ -2749,6 +2749,28 @@ func TestRunPrintUsesStoredOAuthCredentials(t *testing.T) {
 	}
 }
 
+func TestAnthropicClientFromEnvConfiguresOAuthRefreshProvider(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.WriteFile(filepath.Join(configHome, "credentials.json"), []byte(`{"source":"oauth","access_token":"stored-access","refresh_token":"stored-refresh"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	client, source, err := anthropicClientFromEnv(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source != "oauth" || client.AccessToken != "stored-access" || client.AccessTokenProvider == nil {
+		t.Fatalf("source=%q token=%q provider=%T", source, client.AccessToken, client.AccessTokenProvider)
+	}
+}
+
 func TestRunPrintJSONOutputsSetupError(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")

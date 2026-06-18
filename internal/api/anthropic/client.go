@@ -15,19 +15,25 @@ import (
 )
 
 type Client struct {
-	BaseURL     string
-	Version     string
-	Beta        []string
-	Headers     http.Header
-	APIKey      string
-	AccessToken string
-	UserAgent   string
-	HTTPClient  *http.Client
-	Retry       RetryConfig
-	Dumper      *PromptDumper
+	BaseURL             string
+	Version             string
+	Beta                []string
+	Headers             http.Header
+	APIKey              string
+	AccessToken         string
+	AccessTokenProvider AccessTokenProvider
+	UserAgent           string
+	HTTPClient          *http.Client
+	Retry               RetryConfig
+	Dumper              *PromptDumper
 }
 
 type Option func(*Client)
+
+type AccessTokenProvider interface {
+	CurrentAccessToken(context.Context) (string, error)
+	RefreshAccessToken(context.Context) (string, error)
+}
 
 func NewClient(options ...Option) *Client {
 	c := &Client{
@@ -68,6 +74,12 @@ func WithAPIKey(apiKey string) Option {
 func WithAccessToken(token string) Option {
 	return func(c *Client) {
 		c.AccessToken = token
+	}
+}
+
+func WithAccessTokenProvider(provider AccessTokenProvider) Option {
+	return func(c *Client) {
+		c.AccessTokenProvider = provider
 	}
 }
 
@@ -172,6 +184,7 @@ func (c *Client) StreamMessages(ctx context.Context, request Request, handle fun
 	if err := validateRequest(request); err != nil {
 		return err
 	}
+	authRefreshed := false
 	for attempt := 1; ; attempt++ {
 		req, dumpTimestamp, err := c.newJSONRequestWithDump(ctx, "/v1/messages", request)
 		if err != nil {
@@ -190,12 +203,22 @@ func (c *Client) StreamMessages(ctx context.Context, request Request, handle fun
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			apiErr := decodeAPIError(resp)
 			resp.Body.Close()
+			var decoded APIError
+			if asAPIError(apiErr, &decoded) && canRefreshAuthorization(decoded) && !authRefreshed {
+				refreshed, refreshErr := c.refreshAccessToken(ctx)
+				if refreshErr != nil {
+					return fmt.Errorf("%w; oauth refresh failed: %v", apiErr, refreshErr)
+				}
+				if refreshed {
+					authRefreshed = true
+					continue
+				}
+			}
 			if attempt > c.Retry.MaxRetries || !ShouldRetryError(apiErr) {
 				return apiErr
 			}
 			retryAfter := ""
-			var decoded APIError
-			if asAPIError(apiErr, &decoded) {
+			if decoded.StatusCode != 0 {
 				retryAfter = decoded.Header.Get("retry-after")
 			}
 			if err := sleepWithConfig(ctx, RetryDelay(attempt, retryAfter, c.Retry), c.Retry); err != nil {
@@ -221,6 +244,7 @@ func (c *Client) StreamMessages(ctx context.Context, request Request, handle fun
 func (c *Client) doJSON(ctx context.Context, path string, payload any) (json.RawMessage, error) {
 	payloadForAttempt := payload
 	var lastErr error
+	authRefreshed := false
 	for attempt := 1; ; attempt++ {
 		body, err := c.doJSONOnce(ctx, path, payloadForAttempt)
 		if err == nil {
@@ -229,6 +253,16 @@ func (c *Client) doJSON(ctx context.Context, path string, payload any) (json.Raw
 		lastErr = err
 		var apiErr APIError
 		if asAPIError(err, &apiErr) {
+			if canRefreshAuthorization(apiErr) && !authRefreshed {
+				refreshed, refreshErr := c.refreshAccessToken(ctx)
+				if refreshErr != nil {
+					return nil, fmt.Errorf("%w; oauth refresh failed: %v", err, refreshErr)
+				}
+				if refreshed {
+					authRefreshed = true
+					continue
+				}
+			}
 			if overflow, ok := ParseMaxTokensContextOverflowError(apiErr); ok && attempt <= c.Retry.MaxRetries {
 				if adjusted, ok := adjustRequestPayloadForContextOverflow(payloadForAttempt, overflow); ok {
 					payloadForAttempt = adjusted
@@ -304,10 +338,51 @@ func (c *Client) newJSONRequestWithDump(ctx context.Context, path string, payloa
 	if c.APIKey != "" {
 		req.Header.Set("x-api-key", c.APIKey)
 	}
-	if c.AccessToken != "" {
-		req.Header.Set("authorization", "Bearer "+c.AccessToken)
+	accessToken, err := c.currentAccessToken(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	if accessToken != "" {
+		req.Header.Set("authorization", "Bearer "+accessToken)
 	}
 	return req, dumpTimestamp, nil
+}
+
+func (c *Client) currentAccessToken(ctx context.Context) (string, error) {
+	if c == nil {
+		return "", nil
+	}
+	if c.AccessTokenProvider != nil {
+		token, err := c.AccessTokenProvider.CurrentAccessToken(ctx)
+		if err != nil {
+			return "", err
+		}
+		if token = strings.TrimSpace(token); token != "" {
+			c.AccessToken = token
+			return token, nil
+		}
+	}
+	return strings.TrimSpace(c.AccessToken), nil
+}
+
+func (c *Client) refreshAccessToken(ctx context.Context) (bool, error) {
+	if c == nil || c.AccessTokenProvider == nil {
+		return false, nil
+	}
+	token, err := c.AccessTokenProvider.RefreshAccessToken(ctx)
+	if err != nil {
+		return false, err
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false, fmt.Errorf("oauth refresh returned empty access token")
+	}
+	c.AccessToken = token
+	return true, nil
+}
+
+func canRefreshAuthorization(err APIError) bool {
+	return err.AuthError()
 }
 
 func (c *Client) dumpRequest(path string, data []byte) string {

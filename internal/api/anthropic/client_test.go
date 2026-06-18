@@ -14,6 +14,24 @@ import (
 	"ccgo/internal/contracts"
 )
 
+type testAccessTokenProvider struct {
+	currentToken string
+	refreshToken string
+	currentCalls int
+	refreshCalls int
+}
+
+func (p *testAccessTokenProvider) CurrentAccessToken(context.Context) (string, error) {
+	p.currentCalls++
+	return p.currentToken, nil
+}
+
+func (p *testAccessTokenProvider) RefreshAccessToken(context.Context) (string, error) {
+	p.refreshCalls++
+	p.currentToken = p.refreshToken
+	return p.currentToken, nil
+}
+
 func TestCreateMessageSendsHeadersAndDecodesResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("x-api-key"); got != "test-key" {
@@ -71,6 +89,38 @@ func TestAPIErrorMapping(t *testing.T) {
 	}
 }
 
+func TestCreateMessageRefreshesOAuthTokenOnUnauthorized(t *testing.T) {
+	var authorizations []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorizations = append(authorizations, r.Header.Get("authorization"))
+		if len(authorizations) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":{"type":"authentication_error","message":"expired token"}}`))
+			return
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"sonnet","content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer server.Close()
+
+	provider := &testAccessTokenProvider{currentToken: "stale", refreshToken: "fresh"}
+	client := NewClient(WithBaseURL(server.URL), WithAccessTokenProvider(provider), WithMaxRetries(0))
+	resp, err := client.CreateMessage(context.Background(), Request{
+		Model:     "sonnet",
+		MaxTokens: 32,
+		Messages:  []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("hello")}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Content[0].Text != "ok" || provider.refreshCalls != 1 || provider.currentCalls != 2 || client.AccessToken != "fresh" {
+		t.Fatalf("resp=%#v provider=%#v client token=%q", resp, provider, client.AccessToken)
+	}
+	if strings.Join(authorizations, ",") != "Bearer stale,Bearer fresh" {
+		t.Fatalf("authorizations = %#v", authorizations)
+	}
+}
+
 func TestParseStream(t *testing.T) {
 	var events []StreamEvent
 	err := ParseStream(strings.NewReader("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n"), func(event StreamEvent) error {
@@ -107,6 +157,42 @@ func TestStreamMessages(t *testing.T) {
 	}
 	if len(seen) != 1 || seen[0].Message.ID != "msg_1" {
 		t.Fatalf("seen = %#v", seen)
+	}
+}
+
+func TestStreamMessagesRefreshesOAuthTokenOnUnauthorized(t *testing.T) {
+	var authorizations []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorizations = append(authorizations, r.Header.Get("authorization"))
+		if len(authorizations) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":{"type":"authentication_error","message":"expired token"}}`))
+			return
+		}
+		w.Header().Set("content-type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"sonnet\",\"content\":[]}}\n\n"))
+	}))
+	defer server.Close()
+
+	provider := &testAccessTokenProvider{currentToken: "stale", refreshToken: "fresh"}
+	client := NewClient(WithBaseURL(server.URL), WithAccessTokenProvider(provider), WithMaxRetries(0))
+	var seen []StreamEvent
+	err := client.StreamMessages(context.Background(), Request{
+		Model:     "sonnet",
+		MaxTokens: 32,
+		Messages:  []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("hello")}}},
+	}, func(event StreamEvent) error {
+		seen = append(seen, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0].Message.ID != "msg_stream" || provider.refreshCalls != 1 || provider.currentCalls != 2 || client.AccessToken != "fresh" {
+		t.Fatalf("seen=%#v provider=%#v client token=%q", seen, provider, client.AccessToken)
+	}
+	if strings.Join(authorizations, ",") != "Bearer stale,Bearer fresh" {
+		t.Fatalf("authorizations = %#v", authorizations)
 	}
 }
 

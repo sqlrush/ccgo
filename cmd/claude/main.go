@@ -2067,12 +2067,15 @@ func anthropicClientFromEnv(ctx context.Context, fastMode bool) (*anthropic.Clie
 	if credentials.Source == auth.SourceNone {
 		return nil, "", fmt.Errorf("missing Anthropic credentials; set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_REFRESH_TOKEN")
 	}
-	if credentials.Source == auth.SourceOAuth && strings.TrimSpace(credentials.AccessToken) == "" && strings.TrimSpace(credentials.RefreshToken) != "" {
-		provider := auth.NewOAuthTokenProvider(auth.OAuthTokenProviderOptions{
+	var tokenProvider *auth.OAuthTokenProvider
+	if credentials.Source == auth.SourceOAuth && strings.TrimSpace(credentials.RefreshToken) != "" {
+		tokenProvider = auth.NewOAuthTokenProvider(auth.OAuthTokenProviderOptions{
 			Credentials:     credentials,
 			CredentialStore: credentialStore,
 		})
-		token, err := provider.CurrentAccessToken(ctx)
+	}
+	if credentials.Source == auth.SourceOAuth && strings.TrimSpace(credentials.AccessToken) == "" && strings.TrimSpace(credentials.RefreshToken) != "" {
+		token, err := tokenProvider.CurrentAccessToken(ctx)
 		if err != nil {
 			return nil, "", err
 		}
@@ -2084,6 +2087,9 @@ func anthropicClientFromEnv(ctx context.Context, fastMode bool) (*anthropic.Clie
 	options := []anthropic.Option{
 		anthropic.WithCredentials(credentials),
 		anthropic.WithUserAgent("ccgo/" + version),
+	}
+	if tokenProvider != nil {
+		options = append(options, anthropic.WithAccessTokenProvider(tokenProvider))
 	}
 	if baseURL := strings.TrimSpace(os.Getenv("ANTHROPIC_BASE_URL")); baseURL != "" {
 		options = append(options, anthropic.WithBaseURL(baseURL))
