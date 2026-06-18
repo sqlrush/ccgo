@@ -2133,6 +2133,8 @@ func readOnlyWords(words []string) bool {
 	switch cmd {
 	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "cut", "uniq":
 		return readOnlyPathCommand(words)
+	case "sort":
+		return readOnlySort(words[1:])
 	case "sed":
 		return readOnlySed(words[1:])
 	case "awk", "gawk", "mawk", "nawk":
@@ -2185,6 +2187,66 @@ func readOnlyPathCommand(words []string) bool {
 			continue
 		}
 		if !safeRelativeShellPathArg(word) {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlySort(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			for _, path := range args[i+1:] {
+				if !safeRelativeShellPathArg(path) {
+					return false
+				}
+			}
+			return true
+		}
+		if strings.HasPrefix(arg, "--") {
+			if !safeSortLongFlag(arg) {
+				return false
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			if !safeSortShortFlags(arg) {
+				return false
+			}
+			continue
+		}
+		if !safeRelativeShellPathArg(arg) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeSortLongFlag(flag string) bool {
+	if strings.Contains(flag, "=") {
+		return false
+	}
+	switch flag {
+	case "--ignore-leading-blanks", "--dictionary-order", "--ignore-case",
+		"--general-numeric-sort", "--human-numeric-sort", "--month-sort",
+		"--numeric-sort", "--random-sort", "--reverse", "--version-sort",
+		"--unique", "--zero-terminated", "--check":
+		return true
+	default:
+		return false
+	}
+}
+
+func safeSortShortFlags(flags string) bool {
+	if flags == "" || flags[0] != '-' || flags == "-" {
+		return false
+	}
+	for _, r := range flags[1:] {
+		switch r {
+		case 'b', 'c', 'C', 'd', 'f', 'g', 'h', 'M', 'n', 'R', 'r', 'u', 'V', 'z':
+			continue
+		default:
 			return false
 		}
 	}
