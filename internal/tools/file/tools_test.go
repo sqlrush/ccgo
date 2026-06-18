@@ -389,7 +389,7 @@ func TestReadToolRendersNotebookCells(t *testing.T) {
 	dir := t.TempDir()
 	raw := `{
   "cells": [
-    {"cell_type": "markdown", "source": ["# Title\n", "body"]},
+    {"cell_type": "markdown", "id": "intro", "source": ["# Title\n", "body"]},
     {"cell_type": "code", "execution_count": 1, "source": "print('hi')\n", "outputs": [{"output_type": "stream", "name": "stdout", "text": ["hi\n"]}]}
   ],
   "metadata": {},
@@ -410,7 +410,7 @@ func TestReadToolRendersNotebookCells(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := result.Content.(string)
-	for _, want := range []string{"Notebook: analysis.ipynb", "Cell 1 [markdown]:\n# Title\nbody", "Cell 2 [code] execution_count=1:\nprint('hi')", "Outputs:\nhi"} {
+	for _, want := range []string{"Notebook: analysis.ipynb", "Cell 1 [markdown] cell_id=intro:\n# Title\nbody", "Cell 2 [code] cell_id=cell-1 execution_count=1:\nprint('hi')", "Outputs:\nhi"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("notebook content missing %q:\n%s", want, content)
 		}
@@ -419,6 +419,10 @@ func TestReadToolRendersNotebookCells(t *testing.T) {
 	cells := file["cells"].([]map[string]any)
 	if len(cells) != 2 || cells[0]["cell_type"] != "markdown" || cells[1]["cell_type"] != "code" {
 		t.Fatalf("structured notebook cells = %#v", cells)
+	}
+	if cells[0]["cell_id"] != "intro" || cells[0]["id"] != "intro" || cells[0]["fallback_cell_id"] != "cell-0" ||
+		cells[1]["cell_id"] != "cell-1" || cells[1]["id"] != "" || cells[1]["fallback_cell_id"] != "cell-1" {
+		t.Fatalf("structured notebook cell ids = %#v", cells)
 	}
 	record, ok := EnsureReadState(ctx).Get(path)
 	if !ok || !strings.Contains(record.Content, `"nbformat": 4`) || record.PartialView {

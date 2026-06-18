@@ -397,6 +397,7 @@ type notebookDocument struct {
 }
 
 type notebookCell struct {
+	ID             string           `json:"id"`
 	CellType       string           `json:"cell_type"`
 	Source         any              `json:"source"`
 	Outputs        []notebookOutput `json:"outputs"`
@@ -456,7 +457,13 @@ func renderNotebook(displayPath string, doc notebookDocument) (string, []map[str
 		}
 		source := strings.TrimRight(notebookText(cell.Source), "\n")
 		outputs := notebookOutputTexts(cell.Outputs)
-		fmt.Fprintf(&b, "\n\nCell %d [%s]", i+1, cellType)
+		cellID := strings.TrimSpace(cell.ID)
+		fallbackCellID := fmt.Sprintf("cell-%d", i)
+		displayCellID := cellID
+		if displayCellID == "" {
+			displayCellID = fallbackCellID
+		}
+		fmt.Fprintf(&b, "\n\nCell %d [%s] cell_id=%s", i+1, cellType, displayCellID)
 		if cell.ExecutionCount != nil && cellType == "code" {
 			fmt.Fprintf(&b, " execution_count=%v", cell.ExecutionCount)
 		}
@@ -472,11 +479,14 @@ func renderNotebook(displayPath string, doc notebookDocument) (string, []map[str
 			}
 		}
 		cells = append(cells, map[string]any{
-			"index":           i + 1,
-			"cell_type":       cellType,
-			"source":          source,
-			"outputs":         outputs,
-			"execution_count": cell.ExecutionCount,
+			"index":            i + 1,
+			"cell_id":          displayCellID,
+			"id":               cellID,
+			"fallback_cell_id": fallbackCellID,
+			"cell_type":        cellType,
+			"source":           source,
+			"outputs":          outputs,
+			"execution_count":  cell.ExecutionCount,
 		})
 	}
 	return b.String(), cells
