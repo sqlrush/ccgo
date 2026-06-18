@@ -39,6 +39,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
+	"text": {}, "--text": {}, "-a": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
@@ -63,6 +64,7 @@ var grepSemanticBooleanKeys = map[string]struct{}{
 	"case_sensitive": {}, "caseSensitive": {}, "case-sensitive": {}, "--case-sensitive": {}, "-s": {},
 	"smart_case": {}, "smartCase": {}, "smart-case": {}, "--smart-case": {}, "-S": {},
 	"fixed_strings": {}, "fixedStrings": {}, "fixed-strings": {}, "--fixed-strings": {}, "-F": {}, "multiline": {}, "--multiline": {}, "multiline-dotall": {}, "--multiline-dotall": {}, "-U": {},
+	"text": {}, "--text": {}, "-a": {},
 	"word_regexp": {}, "wordRegexp": {}, "word-regexp": {}, "--word-regexp": {}, "-w": {},
 	"invert_match": {}, "invertMatch": {}, "invert-match": {}, "--invert-match": {}, "-v": {},
 	"only_matching": {}, "onlyMatching": {}, "only-matching": {}, "--only-matching": {}, "-o": {},
@@ -155,6 +157,9 @@ type grepInput struct {
 	FixedStringsDash        bool   `json:"fixed-strings,omitempty"`
 	LongFixedStrings        bool   `json:"--fixed-strings,omitempty"`
 	ShortFixedStrings       bool   `json:"-F,omitempty"`
+	Text                    bool   `json:"text,omitempty"`
+	LongText                bool   `json:"--text,omitempty"`
+	ShortText               bool   `json:"-a,omitempty"`
 	WordRegexp              bool   `json:"word_regexp,omitempty"`
 	WordRegexpAlt           bool   `json:"wordRegexp,omitempty"`
 	WordRegexpDash          bool   `json:"word-regexp,omitempty"`
@@ -236,6 +241,7 @@ type grepOptions struct {
 	OnlyMatching  bool
 	CountMatches  bool
 	ColumnNumbers bool
+	Text          bool
 	SortMode      string
 	SortReverse   bool
 	SortExplicit  bool
@@ -372,6 +378,9 @@ func NewGrepTool() tool.Tool {
 					"fixed-strings":    map[string]any{"type": "boolean"},
 					"--fixed-strings":  map[string]any{"type": "boolean"},
 					"-F":               map[string]any{"type": "boolean"},
+					"text":             map[string]any{"type": "boolean"},
+					"--text":           map[string]any{"type": "boolean"},
+					"-a":               map[string]any{"type": "boolean"},
 					"word_regexp":      map[string]any{"type": "boolean"},
 					"wordRegexp":       map[string]any{"type": "boolean"},
 					"word-regexp":      map[string]any{"type": "boolean"},
@@ -453,7 +462,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use sort/--sort or sortr/--sortr with path or modified to control result ordering. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -629,6 +638,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		OnlyMatching:  onlyMatching,
 		CountMatches:  countMatches,
 		ColumnNumbers: grepColumnNumbers(input),
+		Text:          grepText(input),
 		SortMode:      sortMode,
 		SortReverse:   sortReverse,
 		SortExplicit:  sortExplicit,
@@ -667,6 +677,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"case_sensitive":      grepCaseSensitive(input),
 			"smart_case":          grepSmartCase(input),
 			"fixed_strings":       grepFixedStrings(input),
+			"text":                options.Text,
 			"word_regexp":         grepWordRegexp(input),
 			"invert_match":        grepInvertMatch(input),
 			"only_matching":       onlyMatching,
@@ -843,10 +854,10 @@ func collectGrepMatches(root string, displayRoot string, glob string, typeFilter
 		if len(typeExtensions) > 0 && !grepTypeMatches(path, typeExtensions) {
 			return nil
 		}
-		if hasBinaryExtension(path) {
+		if hasBinaryExtension(path) && !options.Text {
 			return nil
 		}
-		content, err := readText(path)
+		content, err := readGrepText(path, options.Text)
 		if err != nil {
 			return nil
 		}
@@ -934,6 +945,13 @@ func globBaseDirectory(pattern string) (string, string) {
 		base = string(filepath.Separator)
 	}
 	return filepath.Clean(base), pattern[lastSep+1:]
+}
+
+func readGrepText(path string, allowBinary bool) (string, error) {
+	if allowBinary {
+		return readTextAllowBinary(path)
+	}
+	return readText(path)
 }
 
 func grepFileMatches(path string, content string, expr *regexp.Regexp, options grepOptions) []grepMatch {
@@ -1508,6 +1526,10 @@ func grepFixedStrings(input grepInput) bool {
 		input.FixedStringsDash ||
 		input.LongFixedStrings ||
 		input.ShortFixedStrings
+}
+
+func grepText(input grepInput) bool {
+	return input.Text || input.LongText || input.ShortText
 }
 
 func grepWordRegexp(input grepInput) bool {

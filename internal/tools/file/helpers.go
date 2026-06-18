@@ -81,6 +81,15 @@ func readText(path string) (string, error) {
 	return string(data), nil
 }
 
+func readTextAllowBinary(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
+	return string(data), nil
+}
+
 func readTextForEdit(path string) (content string, existed bool, crlf bool, mode os.FileMode, err error) {
 	info, statErr := os.Stat(path)
 	if statErr != nil {

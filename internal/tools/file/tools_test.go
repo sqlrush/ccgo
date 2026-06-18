@@ -1919,6 +1919,52 @@ func TestGrepToolColumnNumbers(t *testing.T) {
 	}
 }
 
+func TestGrepToolTextSearchesBinaryExtensionFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "payload.bin"), []byte("Needle\x00inside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_binary_default",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Content != "No files found" || defaultResult.StructuredContent["text"] != false {
+		t.Fatalf("default binary result = %#v", defaultResult)
+	}
+
+	textResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_binary_text",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--text":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if textResult.Content != "Found 1 file\npayload.bin" || textResult.StructuredContent["text"] != true {
+		t.Fatalf("text binary result = %#v", textResult)
+	}
+
+	shortTextResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_binary_short_text",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","-a":"true"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantShortText := "payload.bin:1\n\nFound 1 total occurrence across 1 file."
+	if shortTextResult.Content != wantShortText || shortTextResult.StructuredContent["text"] != true {
+		t.Fatalf("short text binary result = %#v", shortTextResult)
+	}
+}
+
 func TestGrepToolMaxColumnsOmission(t *testing.T) {
 	dir := t.TempDir()
 	longMatch := strings.Repeat("x", defaultGrepMaxColumns-len("Needle")) + "Needle"
