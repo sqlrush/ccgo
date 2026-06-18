@@ -812,6 +812,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Grep` count 输出模式现在支持 ripgrep 风格 `count`/`--count`/`-c` 布尔参数，和 `output_mode=count` 统一归一；`--count-matches` 仍仅控制 count 模式下按 occurrence 计数，避免混淆输出模式和计数粒度。
 
+本轮补充：`Grep` 搜索表达式现在除 canonical `pattern` 外，还接受 `regex`、`regexp`、`--regexp` 和 `-e` aliases；执行、校验和 structured content 都统一归一到 canonical `pattern`，便于 SDK/rg 风格调用复用同一工具。
+
 本轮补充：`Grep` 路径过滤现在支持 ripgrep 风格 `--glob`/`-g` 和 `--type`/`-t` aliases，执行和 structured content 都统一使用归一化后的 glob/type 过滤值。
 
 本轮补充：`Grep` 常用布尔参数继续补齐 ripgrep 长参数 aliases，覆盖 `--line-number`、`--ignore-case`、`--fixed-strings`、`--word-regexp`、`--invert-match` 和 `--only-matching`，并兼容 quoted semantic boolean。

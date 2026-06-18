@@ -27,7 +27,7 @@ const grepOmittedLongContextLine = "[Omitted long context line]"
 var semanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 
 var allowedGrepInputKeys = map[string]struct{}{
-	"pattern": {}, "path": {}, "glob": {}, "--glob": {}, "-g": {}, "type": {}, "--type": {}, "-t": {}, "output_mode": {}, "outputMode": {}, "limit": {},
+	"pattern": {}, "regex": {}, "regexp": {}, "--regexp": {}, "-e": {}, "path": {}, "glob": {}, "--glob": {}, "-g": {}, "type": {}, "--type": {}, "-t": {}, "output_mode": {}, "outputMode": {}, "limit": {},
 	"head_limit": {}, "headLimit": {}, "offset": {}, "max_count": {}, "maxCount": {}, "-m": {},
 	"max_columns": {}, "maxColumns": {}, "max-columns": {}, "--max-columns": {},
 	"context": {}, "-C": {}, "before_context": {}, "beforeContext": {}, "-B": {}, "after_context": {}, "afterContext": {}, "-A": {}, "line_numbers": {}, "lineNumbers": {}, "line-number": {}, "--line-number": {}, "-n": {},
@@ -70,6 +70,10 @@ type globInput struct {
 
 type grepInput struct {
 	Pattern                 string `json:"pattern"`
+	Regex                   string `json:"regex,omitempty"`
+	Regexp                  string `json:"regexp,omitempty"`
+	LongRegexp              string `json:"--regexp,omitempty"`
+	ShortRegexp             string `json:"-e,omitempty"`
 	Path                    string `json:"path,omitempty"`
 	Glob                    string `json:"glob,omitempty"`
 	LongGlob                string `json:"--glob,omitempty"`
@@ -241,10 +245,13 @@ func NewGrepTool() tool.Tool {
 			ConcurrencySafe: true,
 			Strict:          true,
 			InputSchema: contracts.JSONSchema{
-				"type":     "object",
-				"required": []any{"pattern"},
+				"type": "object",
 				"properties": map[string]any{
 					"pattern":     map[string]any{"type": "string"},
+					"regex":       map[string]any{"type": "string"},
+					"regexp":      map[string]any{"type": "string"},
+					"--regexp":    map[string]any{"type": "string"},
+					"-e":          map[string]any{"type": "string"},
 					"path":        map[string]any{"type": "string"},
 					"glob":        map[string]any{"type": "string"},
 					"--glob":      map[string]any{"type": "string"},
@@ -376,7 +383,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files_with_matches, files_without_matches, content, or count; glob/-g/--glob and type/-t/--type optionally filter file paths. glob accepts whitespace/comma-separated patterns and brace alternation. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number line-number control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, and only_matching/-o/--only-matching matched-text output. Use files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts. Use fixed_strings/-F/--fixed-strings for literal matching, word_regexp/-w/--word-regexp for whole-word matches, ignore_case/-i/--ignore-case for case-insensitive search, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore files while still excluding VCS metadata and read-denied paths. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -446,7 +453,7 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(input.Pattern) == "" {
+	if strings.TrimSpace(grepPattern(input)) == "" {
 		return fmt.Errorf("pattern is required")
 	}
 	if _, err := compileGrepPattern(input); err != nil {
@@ -560,7 +567,7 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		Content: content,
 		StructuredContent: map[string]any{
 			"type":                "grep",
-			"pattern":             input.Pattern,
+			"pattern":             grepPattern(input),
 			"path":                input.Path,
 			"glob":                globFilter,
 			"type_filter":         typeFilter,
@@ -1219,8 +1226,17 @@ func normalizedGrepOutputMode(input grepInput) string {
 	return mode
 }
 
+func grepPattern(input grepInput) string {
+	for _, pattern := range []string{input.Pattern, input.Regex, input.Regexp, input.LongRegexp, input.ShortRegexp} {
+		if strings.TrimSpace(pattern) != "" {
+			return pattern
+		}
+	}
+	return ""
+}
+
 func compileGrepPattern(input grepInput) (*regexp.Regexp, error) {
-	pattern := input.Pattern
+	pattern := grepPattern(input)
 	if grepFixedStrings(input) {
 		pattern = regexp.QuoteMeta(pattern)
 	}

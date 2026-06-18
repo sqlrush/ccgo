@@ -1317,6 +1317,46 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("content result = %#v", contentResult.Content)
 	}
 
+	regexpAliasResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_regexp_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--regexp":"Alpha","glob":"**/*.go","output_mode":"content"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexpAliasResult.Content != "src/a.go:2:func Alpha() {}\nsrc/c.go:2:func AlphaBeta() {}" ||
+		regexpAliasResult.StructuredContent["pattern"] != "Alpha" {
+		t.Fatalf("regexp alias result = %#v", regexpAliasResult)
+	}
+
+	regexAliasResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_regex_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"regex":"Beta","glob":"**/*.go"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexAliasResult.Content != "Found 1 file\nsrc/c.go" ||
+		regexAliasResult.StructuredContent["pattern"] != "Beta" {
+		t.Fatalf("regex alias result = %#v", regexAliasResult)
+	}
+
+	shortRegexpAliasResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_short_regexp_alias",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"-e":"Alpha","glob":"**/*.go","output_mode":"count"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRegexpAliasCount := "src/a.go:1\nsrc/c.go:1\n\nFound 2 total occurrences across 2 files."
+	if shortRegexpAliasResult.Content != wantRegexpAliasCount ||
+		shortRegexpAliasResult.StructuredContent["pattern"] != "Alpha" {
+		t.Fatalf("short regexp alias result = %#v", shortRegexpAliasResult)
+	}
+
 	countResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_count",
 		Name:  "Grep",
