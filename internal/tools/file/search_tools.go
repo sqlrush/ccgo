@@ -68,6 +68,7 @@ var allowedGrepInputKeys = map[string]struct{}{
 	"count_matches": {}, "countMatches": {}, "count-matches": {}, "--count-matches": {},
 	"include_zero": {}, "includeZero": {}, "include-zero": {}, "--include-zero": {},
 	"no_ignore": {}, "noIgnore": {}, "no-ignore": {}, "--no-ignore": {},
+	"ignore_file": {}, "ignoreFile": {}, "ignore-file": {}, "--ignore-file": {},
 	"ignore_files": {}, "ignoreFiles": {}, "ignore-files": {}, "--ignore-files": {}, "no_ignore_files": {}, "noIgnoreFiles": {}, "no-ignore-files": {}, "--no-ignore-files": {},
 	"ignore_dot": {}, "ignoreDot": {}, "ignore-dot": {}, "--ignore-dot": {}, "no_ignore_dot": {}, "noIgnoreDot": {}, "no-ignore-dot": {}, "--no-ignore-dot": {},
 	"ignore_vcs": {}, "ignoreVCS": {}, "ignore-vcs": {}, "--ignore-vcs": {}, "no_ignore_vcs": {}, "noIgnoreVCS": {}, "no-ignore-vcs": {}, "--no-ignore-vcs": {},
@@ -354,6 +355,10 @@ type grepInput struct {
 	NoIgnoreAlt               bool    `json:"noIgnore,omitempty"`
 	NoIgnoreDash              bool    `json:"no-ignore,omitempty"`
 	LongNoIgnore              bool    `json:"--no-ignore,omitempty"`
+	IgnoreFile                string  `json:"ignore_file,omitempty"`
+	IgnoreFileAlt             string  `json:"ignoreFile,omitempty"`
+	IgnoreFileDash            string  `json:"ignore-file,omitempty"`
+	LongIgnoreFile            string  `json:"--ignore-file,omitempty"`
 	IgnoreFiles               bool    `json:"ignore_files,omitempty"`
 	IgnoreFilesAlt            bool    `json:"ignoreFiles,omitempty"`
 	IgnoreFilesDash           bool    `json:"ignore-files,omitempty"`
@@ -445,6 +450,8 @@ type searchWalkOptions struct {
 	ExcludeVCSDirs    bool
 	MaxDepth          int
 	ExtraIgnores      searchIgnoreRules
+	CustomIgnoreRules searchIgnoreRules
+	CustomIgnoreRoot  string
 }
 
 func NewGlobTool() tool.Tool {
@@ -756,6 +763,10 @@ func NewGrepTool() tool.Tool {
 					"noIgnore":        map[string]any{"type": "boolean"},
 					"no-ignore":       map[string]any{"type": "boolean"},
 					"--no-ignore":     map[string]any{"type": "boolean"},
+					"ignore_file":     map[string]any{"type": "string"},
+					"ignoreFile":      map[string]any{"type": "string"},
+					"ignore-file":     map[string]any{"type": "string"},
+					"--ignore-file":   map[string]any{"type": "string"},
 					"ignore_files":    map[string]any{"type": "boolean"},
 					"ignoreFiles":     map[string]any{"type": "boolean"},
 					"ignore-files":    map[string]any{"type": "boolean"},
@@ -799,7 +810,7 @@ func NewGrepTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, or no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
+			return "Searches text files under path using a regular expression or fixed string. pattern is the canonical search expression; regex/regexp/--regexp/-e are accepted aliases. output_mode may be files, files_with_matches, files_without_matches, content, or count; glob/-g/--glob, iglob/--iglob, type/-t/--type, and type_not/-T/--type-not optionally filter file paths. glob and iglob accept whitespace/comma-separated patterns, negation, and brace alternation; glob_case_insensitive/--glob-case-insensitive makes glob patterns ignore case. content mode supports context, before_context, after_context, -C, -B, -A, -n/--line-number and -N/--no-line-number line-number control, --column column-number output, byte_offset/--byte-offset/-b byte offset output, -H/--with-filename and -I/--no-filename filename prefix control, heading/--heading grouped file headings, path_separator/--path-separator display path separator control, null/--null NUL path terminators/separators, field_match_separator/--field-match-separator and field_context_separator/--field-context-separator output field separators, context_separator/--context-separator and no_context_separator/--no-context-separator context group separator control, offset, head_limit pagination, max_count/-m per-file match limiting, max_columns/--max-columns long-line omission, --max-columns-preview long-line previews, replace/--replace/-r display-only replacement, only_matching/-o/--only-matching matched-text output, vimgrep/--vimgrep per-match line output, passthru/--passthru/--passthrough all-line output, trim/--trim leading-whitespace trimming, and hidden/--hidden or no_hidden/--no-hidden hidden file traversal control. Use files/--files to list files that would be searched without requiring pattern, files_with_matches or -l to list files with matches, files_without_match or -L to list files without matches, and count/--count/-c for count mode. Count mode supports count_matches/--count-matches for occurrence counts and include_zero/--include-zero to include zero-count files. Use max_depth/--max-depth/-d to limit directory descent, and sort/--sort or sortr/--sortr with path or modified to control result ordering; --sort-files is accepted as a path-sort alias. Use fixed_strings/-F/--fixed-strings for literal matching, text/-a/--text to search binary-extension files as text, word_regexp/-w/--word-regexp for whole-word matches, line_regexp/-x/--line-regexp for whole-line matches, ignore_case/-i/--ignore-case for case-insensitive search, case_sensitive/-s/--case-sensitive to force case-sensitive matching, smart_case/-S/--smart-case for lowercase-only patterns, and invert_match/-v/--invert-match to select non-matching lines. Set no_ignore/--no-ignore to skip .gitignore/.ignore/.rgignore files, no_ignore_dot/--no-ignore-dot to skip .ignore/.rgignore while keeping .gitignore active, no_ignore_vcs/--no-ignore-vcs to skip .gitignore while keeping .ignore/.rgignore active, ignore_file/--ignore-file to add a gitignore-formatted file matched relative to the current working directory, or no_ignore_files/--no-ignore-files to ignore explicit ignore_file inputs; VCS metadata and read-denied paths remain excluded. Set multiline to allow patterns to span lines with dot matching newlines.", nil
 		},
 		NormalizeFunc:   normalizeGrepRawInput,
 		ValidateFunc:    validateGrep,
@@ -942,6 +953,9 @@ func validateGrep(ctx tool.Context, raw json.RawMessage) error {
 	if err := validateSearchPath(ctx.WorkingDirectory, input.Path, root, false); err != nil {
 		return err
 	}
+	if err := validateGrepIgnoreFile(ctx.WorkingDirectory, input); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1035,14 +1049,18 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	}
 	noIgnore := grepNoIgnore(input)
 	ignoreVCS := grepIgnoreVCS(input)
-	ignoreFiles := grepIgnoreFiles(input)
+	ignoreDot := grepIgnoreDot(input)
 	globFilter := grepGlobFilter(input)
 	iglobFilter := grepIGlobFilter(input)
 	globCaseInsensitive := grepGlobCaseInsensitive(input)
 	typeFilter := grepTypeFilter(input)
 	typeNotFilter := grepTypeNotFilter(input)
 	maxDepth := grepMaxDepth(input)
-	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, globFilter, iglobFilter, globCaseInsensitive, typeFilter, typeNotFilter, expr, options, grepWalkOptions(ctx, root, noIgnore, ignoreVCS, ignoreFiles, includeHidden, maxDepth))
+	customIgnoreRules, err := grepCustomIgnoreRules(ctx, input)
+	if err != nil {
+		return contracts.ToolResult{}, err
+	}
+	matches, totalMatches, truncated, err := collectGrepMatches(root, displayRoot, globFilter, iglobFilter, globCaseInsensitive, typeFilter, typeNotFilter, expr, options, grepWalkOptions(ctx, root, noIgnore, ignoreVCS, ignoreDot, includeHidden, maxDepth, customIgnoreRules))
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
@@ -1107,10 +1125,11 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"no_ignore":               noIgnore,
 			"ignore_vcs":              !noIgnore && ignoreVCS,
 			"no_ignore_vcs":           noIgnore || !ignoreVCS,
-			"ignore_dot":              !noIgnore && ignoreFiles,
-			"no_ignore_dot":           noIgnore || !ignoreFiles,
-			"ignore_files":            !noIgnore && ignoreFiles,
-			"no_ignore_files":         noIgnore || grepNoIgnoreFiles(input),
+			"ignore_dot":              !noIgnore && ignoreDot,
+			"no_ignore_dot":           noIgnore || !ignoreDot,
+			"ignore_file":             grepIgnoreFile(input),
+			"ignore_files":            !grepNoIgnoreFiles(input),
+			"no_ignore_files":         grepNoIgnoreFiles(input),
 			"hidden":                  includeHidden,
 			"no_hidden":               !includeHidden,
 			"multiline":               grepMultiline(input),
@@ -1227,6 +1246,47 @@ func validateSearchPath(cwd string, displayPath string, resolvedPath string, req
 		return fmt.Errorf("Path is not a directory: %s", displayPath)
 	}
 	return nil
+}
+
+func validateGrepIgnoreFile(cwd string, input grepInput) error {
+	raw := grepIgnoreFile(input)
+	if raw == "" || grepNoIgnoreFiles(input) {
+		return nil
+	}
+	path := resolvePath(cwd, raw)
+	if isBlockedDevicePath(path) {
+		return fmt.Errorf("cannot read ignore_file %q: this device path would block or produce infinite output", raw)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("ignore_file does not exist: %s", raw)
+		}
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("ignore_file is a directory: %s", raw)
+	}
+	return nil
+}
+
+func grepCustomIgnoreRules(ctx tool.Context, input grepInput) (searchIgnoreRules, error) {
+	raw := grepIgnoreFile(input)
+	if raw == "" || grepNoIgnoreFiles(input) {
+		return nil, nil
+	}
+	path := resolvePath(ctx.WorkingDirectory, raw)
+	if isBlockedDevicePath(path) {
+		return nil, fmt.Errorf("cannot read ignore_file %q: this device path would block or produce infinite output", raw)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("ignore_file does not exist: %s", raw)
+		}
+		return nil, err
+	}
+	return parseSearchIgnoreRules(string(data), ""), nil
 }
 
 func isUNCSearchPath(rawPath string, resolvedPath string) bool {
@@ -2424,15 +2484,18 @@ func grepNoIgnoreDot(input grepInput) bool {
 	return input.NoIgnoreDot ||
 		input.NoIgnoreDotAlt ||
 		input.NoIgnoreDotDash ||
-		input.LongNoIgnoreDot ||
-		grepNoIgnoreFiles(input)
+		input.LongNoIgnoreDot
 }
 
-func grepIgnoreFiles(input grepInput) bool {
+func grepIgnoreDot(input grepInput) bool {
 	if grepNoIgnoreDot(input) {
 		return false
 	}
 	return true
+}
+
+func grepIgnoreFile(input grepInput) string {
+	return strings.TrimSpace(firstNonEmpty(input.IgnoreFile, input.IgnoreFileAlt, input.IgnoreFileDash, input.LongIgnoreFile))
 }
 
 func grepColumnNumbers(input grepInput) bool {
@@ -2785,14 +2848,16 @@ func globWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 	}
 }
 
-func grepWalkOptions(ctx tool.Context, root string, noIgnore bool, ignoreVCS bool, ignoreFiles bool, includeHidden bool, maxDepth int) searchWalkOptions {
+func grepWalkOptions(ctx tool.Context, root string, noIgnore bool, ignoreVCS bool, ignoreDot bool, includeHidden bool, maxDepth int, customIgnoreRules searchIgnoreRules) searchWalkOptions {
 	return searchWalkOptions{
 		UseGitIgnoreFiles: !noIgnore && ignoreVCS,
-		UseIgnoreFiles:    !noIgnore && ignoreFiles,
+		UseIgnoreFiles:    !noIgnore && ignoreDot,
 		IncludeHidden:     includeHidden,
 		ExcludeVCSDirs:    true,
 		MaxDepth:          maxDepth,
 		ExtraIgnores:      readDenySearchIgnoreRules(ctx, root),
+		CustomIgnoreRules: customIgnoreRules,
+		CustomIgnoreRoot:  ctx.WorkingDirectory,
 	}
 }
 
@@ -2910,9 +2975,6 @@ func walkSearchFiles(root string, options searchWalkOptions, visit func(path str
 	if options.UseGitIgnoreFiles || options.UseIgnoreFiles {
 		ignoreRules = loadSearchIgnoreRules(root, "", options)
 	}
-	if len(options.ExtraIgnores) > 0 {
-		ignoreRules = append(ignoreRules, options.ExtraIgnores...)
-	}
 	return walkSearchDir(root, root, 0, options, ignoreRules, visit)
 }
 
@@ -2932,7 +2994,7 @@ func walkSearchDir(root string, dir string, depth int, options searchWalkOptions
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if (options.ExcludeVCSDirs && ignoredVCSDir(entry.Name())) || (len(ignoreRules) > 0 && ignoreRules.Ignored(rel, true)) {
+			if (options.ExcludeVCSDirs && ignoredVCSDir(entry.Name())) || searchPathIgnored(path, rel, true, options, ignoreRules) {
 				continue
 			}
 			if options.MaxDepth >= 0 && depth+1 >= options.MaxDepth {
@@ -2947,7 +3009,7 @@ func walkSearchDir(root string, dir string, depth int, options searchWalkOptions
 			}
 			continue
 		}
-		if len(ignoreRules) > 0 && ignoreRules.Ignored(rel, false) {
+		if searchPathIgnored(path, rel, false, options, ignoreRules) {
 			continue
 		}
 		info, err := entry.Info()
@@ -2959,6 +3021,38 @@ func walkSearchDir(root string, dir string, depth int, options searchWalkOptions
 		}
 	}
 	return nil
+}
+
+func searchPathIgnored(path string, rel string, isDir bool, options searchWalkOptions, ignoreRules searchIgnoreRules) bool {
+	ignored := len(ignoreRules) > 0 && ignoreRules.Ignored(rel, isDir)
+	if len(options.CustomIgnoreRules) > 0 {
+		if customRel, ok := searchCustomIgnoreRel(options.CustomIgnoreRoot, path); ok {
+			for _, rule := range options.CustomIgnoreRules {
+				if rule.Matches(customRel, isDir) {
+					ignored = !rule.Negate
+				}
+			}
+		}
+	}
+	if len(options.ExtraIgnores) > 0 && options.ExtraIgnores.Ignored(rel, isDir) {
+		return true
+	}
+	return ignored
+}
+
+func searchCustomIgnoreRel(root string, path string) (string, bool) {
+	if strings.TrimSpace(root) == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." {
+		return "", false
+	}
+	return rel, true
 }
 
 func ignoredVCSDir(name string) bool {

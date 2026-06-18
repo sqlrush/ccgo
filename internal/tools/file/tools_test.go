@@ -4099,6 +4099,7 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if grepResult.Content != "Found 3 files\nimportant.log\nkeep.txt\nsub/visible.txt" {
 		t.Fatalf("grep content = %#v", grepResult.Content)
 	}
+	expectedDefault := "Found 3 files\nimportant.log\nkeep.txt\nsub/visible.txt"
 
 	noIgnoreFilesResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_ignore_files",
@@ -4108,22 +4109,24 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedNoIgnoreFiles := "Found 6 files\n" +
+	if noIgnoreFilesResult.Content != expectedDefault {
+		t.Fatalf("grep no-ignore-files content = %#v", noIgnoreFilesResult.Content)
+	}
+	if noIgnoreFilesResult.StructuredContent["no_ignore"] != false ||
+		noIgnoreFilesResult.StructuredContent["ignore_dot"] != true ||
+		noIgnoreFilesResult.StructuredContent["no_ignore_dot"] != false ||
+		noIgnoreFilesResult.StructuredContent["ignore_files"] != false ||
+		noIgnoreFilesResult.StructuredContent["no_ignore_files"] != true {
+		t.Fatalf("grep no-ignore-files structured content = %#v", noIgnoreFilesResult.StructuredContent)
+	}
+
+	expectedNoIgnoreDot := "Found 6 files\n" +
 		"important.log\n" +
 		"keep.txt\n" +
 		"rgonly.txt\n" +
 		"scratch.txt\n" +
 		"sub/rgonly.md\n" +
 		"sub/visible.txt"
-	if noIgnoreFilesResult.Content != expectedNoIgnoreFiles {
-		t.Fatalf("grep no-ignore-files content = %#v", noIgnoreFilesResult.Content)
-	}
-	if noIgnoreFilesResult.StructuredContent["no_ignore"] != false ||
-		noIgnoreFilesResult.StructuredContent["ignore_files"] != false ||
-		noIgnoreFilesResult.StructuredContent["no_ignore_dot"] != true ||
-		noIgnoreFilesResult.StructuredContent["no_ignore_files"] != true {
-		t.Fatalf("grep no-ignore-files structured content = %#v", noIgnoreFilesResult.StructuredContent)
-	}
 
 	noIgnoreDotResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_no_ignore_dot",
@@ -4133,12 +4136,13 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if noIgnoreDotResult.Content != expectedNoIgnoreFiles {
+	if noIgnoreDotResult.Content != expectedNoIgnoreDot {
 		t.Fatalf("grep no-ignore-dot content = %#v", noIgnoreDotResult.Content)
 	}
 	if noIgnoreDotResult.StructuredContent["no_ignore"] != false ||
 		noIgnoreDotResult.StructuredContent["ignore_dot"] != false ||
 		noIgnoreDotResult.StructuredContent["no_ignore_dot"] != true ||
+		noIgnoreDotResult.StructuredContent["ignore_files"] != true ||
 		noIgnoreDotResult.StructuredContent["no_ignore_files"] != false {
 		t.Fatalf("grep no-ignore-dot structured content = %#v", noIgnoreDotResult.StructuredContent)
 	}
@@ -4193,6 +4197,108 @@ func TestGlobAndGrepRespectIgnoreFiles(t *testing.T) {
 	}
 	if noIgnoreResult.StructuredContent["no_ignore"] != true {
 		t.Fatalf("grep no-ignore structured content = %#v", noIgnoreResult.StructuredContent)
+	}
+}
+
+func TestGrepToolIgnoreFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("gitignored.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "extra.ignore"), []byte("manual.txt\nsub/manual.md\n!gitignored.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"gitignored.txt": "Needle unignored by explicit ignore file\n",
+		"keep.txt":       "Needle visible\n",
+		"manual.txt":     "Needle hidden by explicit ignore file\n",
+		"sub/manual.md":  "Needle hidden by explicit ignore file\n",
+	}
+	mtime := time.Now().Add(-time.Hour)
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	ignoreFileResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignore_file",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--ignore-file":"extra.ignore","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ignoreFileResult.Content != "Found 2 files\ngitignored.txt\nkeep.txt" {
+		t.Fatalf("grep ignore-file content = %#v", ignoreFileResult.Content)
+	}
+	if ignoreFileResult.StructuredContent["ignore_file"] != "extra.ignore" ||
+		ignoreFileResult.StructuredContent["ignore_files"] != true ||
+		ignoreFileResult.StructuredContent["no_ignore_files"] != false {
+		t.Fatalf("grep ignore-file structured content = %#v", ignoreFileResult.StructuredContent)
+	}
+
+	noIgnoreFilesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignore_file_disabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--ignore-file":"extra.ignore","--no-ignore-files":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noIgnoreFilesResult.Content != "Found 3 files\nkeep.txt\nmanual.txt\nsub/manual.md" {
+		t.Fatalf("grep ignore-file disabled content = %#v", noIgnoreFilesResult.Content)
+	}
+	if noIgnoreFilesResult.StructuredContent["ignore_files"] != false ||
+		noIgnoreFilesResult.StructuredContent["no_ignore_files"] != true {
+		t.Fatalf("grep ignore-file disabled structured content = %#v", noIgnoreFilesResult.StructuredContent)
+	}
+
+	noIgnoreResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_ignore_file_no_ignore",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--ignore-file":"extra.ignore","--no-ignore":"true","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noIgnoreResult.Content != "Found 2 files\ngitignored.txt\nkeep.txt" {
+		t.Fatalf("grep ignore-file no-ignore content = %#v", noIgnoreResult.Content)
+	}
+	if noIgnoreResult.StructuredContent["no_ignore"] != true ||
+		noIgnoreResult.StructuredContent["ignore_files"] != true ||
+		noIgnoreResult.StructuredContent["no_ignore_files"] != false {
+		t.Fatalf("grep ignore-file no-ignore structured content = %#v", noIgnoreResult.StructuredContent)
+	}
+
+	missingDisabledResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_missing_ignore_file_disabled",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--ignore-file":"missing.ignore","--no-ignore-files":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missingDisabledResult.Content != "Found 3 files\nkeep.txt\nmanual.txt\nsub/manual.md" {
+		t.Fatalf("grep missing ignore-file disabled content = %#v", missingDisabledResult.Content)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_missing_ignore_file",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--ignore-file":"missing.ignore","sort":"path"}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "ignore_file does not exist: missing.ignore") {
+		t.Fatalf("missing ignore-file error = %v", err)
 	}
 }
 
