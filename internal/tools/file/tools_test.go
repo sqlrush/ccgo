@@ -2009,6 +2009,86 @@ func TestGrepToolVimgrep(t *testing.T) {
 	}
 }
 
+func TestGrepToolFilenameControls(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("before\nNeedle Needle\nafter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	contentResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_filename_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"a.txt","output_mode":"content","--no-filename":"true","context":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantContent := "1-before\n2:Needle Needle\n3-after"
+	if contentResult.Content != wantContent ||
+		contentResult.StructuredContent["with_filename"] != false ||
+		contentResult.StructuredContent["no_filename"] != true {
+		t.Fatalf("no-filename content result = %#v", contentResult)
+	}
+
+	countResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_filename_count",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","output_mode":"count","no_filename":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCount := "1\n1\n\nFound 2 total occurrences across 2 files."
+	if countResult.Content != wantCount || countResult.StructuredContent["with_filename"] != false {
+		t.Fatalf("no-filename count result = %#v", countResult)
+	}
+
+	vimgrepResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_filename_vimgrep",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"a.txt","output_mode":"content","-I":true,"-N":true,"--vimgrep":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVimgrep := "1:Needle Needle\n8:Needle Needle"
+	if vimgrepResult.Content != wantVimgrep ||
+		vimgrepResult.StructuredContent["with_filename"] != false ||
+		vimgrepResult.StructuredContent["line_numbers"] != false {
+		t.Fatalf("no-filename vimgrep result = %#v", vimgrepResult)
+	}
+
+	filesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_no_filename_files",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--files-with-matches":true,"--no-filename":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filesResult.Content != "Found 2 files\na.txt\nb.txt" || filesResult.StructuredContent["with_filename"] != true {
+		t.Fatalf("no-filename files result = %#v", filesResult)
+	}
+
+	withResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_with_filename",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","glob":"a.txt","output_mode":"content","-H":true,"head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantWith := "a.txt:2:Needle Needle"
+	if withResult.Content != wantWith || withResult.StructuredContent["with_filename"] != true {
+		t.Fatalf("with-filename result = %#v", withResult)
+	}
+}
+
 func TestGrepToolTrim(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Join([]string{
