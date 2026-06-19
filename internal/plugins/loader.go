@@ -48,6 +48,7 @@ type LoadedPlugin struct {
 	Name            string
 	Version         string
 	Description     string
+	Marketplace     string
 	Commands        []contracts.Command
 	PromptTemplates []PromptTemplate
 	SkillCommands   []contracts.Command
@@ -59,17 +60,21 @@ type LoadedPlugin struct {
 }
 
 type manifest struct {
-	Name            string `json:"name"`
-	DisplayName     string `json:"displayName"`
-	Description     string `json:"description"`
-	Version         string `json:"version"`
-	Commands        any    `json:"commands"`
-	Skills          any    `json:"skills"`
-	Agents          any    `json:"agents"`
-	Hooks           any    `json:"hooks"`
-	OutputStyles    any    `json:"outputStyles"`
-	MCPServers      any    `json:"mcpServers"`
-	MCPServersSnake any    `json:"mcp_servers"`
+	Name             string `json:"name"`
+	DisplayName      string `json:"displayName"`
+	Description      string `json:"description"`
+	Version          string `json:"version"`
+	Marketplace      string `json:"marketplace"`
+	MarketplaceName  string `json:"marketplaceName"`
+	MarketplaceSnake string `json:"marketplace_name"`
+	Source           any    `json:"source"`
+	Commands         any    `json:"commands"`
+	Skills           any    `json:"skills"`
+	Agents           any    `json:"agents"`
+	Hooks            any    `json:"hooks"`
+	OutputStyles     any    `json:"outputStyles"`
+	MCPServers       any    `json:"mcpServers"`
+	MCPServersSnake  any    `json:"mcp_servers"`
 }
 
 type commandManifest struct {
@@ -123,7 +128,21 @@ func LoadPluginDirs(roots []string) []LoadedPlugin {
 }
 
 func LoadPluginDirsWithSettings(roots []string, settings contracts.Settings) []LoadedPlugin {
-	return FilterEnabledPlugins(LoadPluginDirs(roots), settings.EnabledPlugins)
+	return FilterPluginsWithSettings(LoadPluginDirs(roots), settings)
+}
+
+func FilterPluginsWithSettings(plugins []LoadedPlugin, settings contracts.Settings) []LoadedPlugin {
+	if len(plugins) == 0 {
+		return nil
+	}
+	policy := NewMarketplacePolicy(settings)
+	out := make([]LoadedPlugin, 0, len(plugins))
+	for _, plugin := range plugins {
+		if PluginEnabled(plugin, settings.EnabledPlugins) && PluginMarketplaceAllowed(plugin, policy) {
+			out = append(out, plugin)
+		}
+	}
+	return out
 }
 
 func FilterEnabledPlugins(plugins []LoadedPlugin, enabledPlugins map[string]any) []LoadedPlugin {
@@ -149,6 +168,13 @@ func PluginEnabled(plugin LoadedPlugin, enabledPlugins map[string]any) bool {
 		}
 	}
 	return true
+}
+
+func PluginMarketplaceAllowed(plugin LoadedPlugin, policy MarketplacePolicy) bool {
+	if strings.TrimSpace(plugin.Marketplace) == "" {
+		return true
+	}
+	return policy.Decision(plugin.Marketplace).Allowed
 }
 
 func pluginEnabledKeys(plugin LoadedPlugin) []string {
@@ -219,6 +245,7 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 		Name:        name,
 		Version:     strings.TrimSpace(parsed.Version),
 		Description: strings.TrimSpace(parsed.Description),
+		Marketplace: pluginMarketplaceName(parsed),
 	}
 	commands, prompts := pluginCommands(root, name, parsed.Commands)
 	loaded.Commands = append(loaded.Commands, commands...)
@@ -234,6 +261,10 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 	loaded.HookEvents = pluginHookEventsFromRaw(loaded.Hooks)
 	loaded.OutputStyles = pluginOutputStyles(root, name, parsed.OutputStyles)
 	return loaded, nil
+}
+
+func pluginMarketplaceName(parsed manifest) string {
+	return firstNonEmpty(parsed.Marketplace, parsed.MarketplaceName, parsed.MarketplaceSnake, marketplaceNameFromAny(parsed.Source))
 }
 
 func LoadMCPServers(roots []string) map[string]contracts.MCPServer {

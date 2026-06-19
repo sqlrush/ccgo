@@ -66,6 +66,7 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 		"name": "demo",
 		"version": "1.2.3",
 		"description": "Demo plugin",
+		"marketplace": "internal",
 		"commands": [{
 			"name": "plugin:deploy",
 			"description": "Deploy from plugin",
@@ -105,7 +106,7 @@ func TestLoadPluginDirLoadsPromptCommandsAndSkills(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plugin.Name != "demo" || plugin.Version != "1.2.3" || plugin.Description != "Demo plugin" {
+	if plugin.Name != "demo" || plugin.Version != "1.2.3" || plugin.Description != "Demo plugin" || plugin.Marketplace != "internal" {
 		t.Fatalf("plugin metadata = %#v", plugin)
 	}
 	if len(plugin.PromptTemplates) != 2 || len(plugin.Commands) != 0 {
@@ -210,6 +211,43 @@ func TestLoadPluginDirsWithSettingsSkipsDisabledPlugins(t *testing.T) {
 	}
 }
 
+func TestLoadPluginDirsWithSettingsEnforcesMarketplacePolicy(t *testing.T) {
+	root := t.TempDir()
+	localRoot := filepath.Join(root, "local")
+	allowedRoot := filepath.Join(root, "allowed")
+	blockedRoot := filepath.Join(root, "blocked")
+	strictBlockedRoot := filepath.Join(root, "strict-blocked")
+	disabledRoot := filepath.Join(root, "disabled")
+	for _, dir := range []string{localRoot, allowedRoot, blockedRoot, strictBlockedRoot, disabledRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifests := map[string]string{
+		filepath.Join(localRoot, ManifestFileName):         `{"name":"local"}`,
+		filepath.Join(allowedRoot, ManifestFileName):       `{"name":"allowed","source":{"name":"enterprise"}}`,
+		filepath.Join(blockedRoot, ManifestFileName):       `{"name":"blocked","marketplace":"blocked-market"}`,
+		filepath.Join(strictBlockedRoot, ManifestFileName): `{"name":"strict-blocked","marketplaceName":"internal"}`,
+		filepath.Join(disabledRoot, ManifestFileName):      `{"name":"disabled","marketplace_name":"enterprise"}`,
+	}
+	for path, data := range manifests {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plugins := LoadPluginDirsWithSettings([]string{localRoot, allowedRoot, blockedRoot, strictBlockedRoot, disabledRoot}, contracts.Settings{
+		EnabledPlugins: map[string]any{"disabled": false},
+		StrictKnownMarketplaces: []any{
+			map[string]any{"name": "enterprise"},
+		},
+		BlockedMarketplaces: []any{"blocked-market"},
+	})
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"local", "allowed"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+}
+
 func TestMarketplacePolicyEnforcesBlockedAndStrictSettings(t *testing.T) {
 	policy := NewMarketplacePolicy(contracts.Settings{
 		ExtraKnownMarketplaces: map[string]any{
@@ -262,6 +300,14 @@ func TestMarketplacePolicyDefaultsToAllowUnlessBlocked(t *testing.T) {
 	if decision := policy.Decision(" "); decision.Allowed || !strings.Contains(decision.Reason, "empty") {
 		t.Fatalf("empty decision = %#v", decision)
 	}
+}
+
+func loadedPluginNames(plugins []LoadedPlugin) []string {
+	names := make([]string, 0, len(plugins))
+	for _, plugin := range plugins {
+		names = append(names, plugin.Name)
+	}
+	return names
 }
 
 func TestProjectPluginDirsWalksToGitRoot(t *testing.T) {

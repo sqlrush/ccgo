@@ -3327,14 +3327,14 @@ func (r Runner) formatPluginShow(args []string) string {
 	if !ok {
 		return "Plugin " + name + " was not found in local plugin manifests."
 	}
-	state := "enabled"
-	if !pluginpkg.PluginEnabled(plugin, merged.EnabledPlugins) {
-		state = "disabled"
-	}
+	state := pluginRuntimeState(plugin, merged)
 	lines := []string{
 		"Plugin " + plugin.Name,
 		"State: " + state,
 		"Path: " + plugin.Root,
+	}
+	if strings.TrimSpace(plugin.Marketplace) != "" {
+		lines = append(lines, "Marketplace: "+plugin.Marketplace)
 	}
 	if strings.TrimSpace(plugin.Version) != "" {
 		lines = append(lines, "Version: "+plugin.Version)
@@ -3376,7 +3376,7 @@ func (r Runner) formatPluginSearch(query string) string {
 	query = strings.TrimSpace(query)
 	merged := r.mergedSettings()
 	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
-	results := pluginSearchResults(plugins, merged.EnabledPlugins, query)
+	results := pluginSearchResults(plugins, merged, query)
 	if len(results) == 0 {
 		return "No plugins matched " + query + "."
 	}
@@ -4155,6 +4155,19 @@ func pluginEnabledValueText(value any) (string, bool) {
 	return "", false
 }
 
+func pluginRuntimeState(plugin pluginpkg.LoadedPlugin, settings contracts.Settings) string {
+	if !pluginpkg.PluginEnabled(plugin, settings.EnabledPlugins) {
+		return "disabled"
+	}
+	if strings.TrimSpace(plugin.Marketplace) != "" {
+		decision := pluginpkg.NewMarketplacePolicy(settings).Decision(plugin.Marketplace)
+		if !decision.Allowed {
+			return "blocked: " + decision.Reason
+		}
+	}
+	return "enabled"
+}
+
 type pluginSearchResult struct {
 	Plugin  string
 	Version string
@@ -4162,17 +4175,14 @@ type pluginSearchResult struct {
 	Match   string
 }
 
-func pluginSearchResults(plugins []pluginpkg.LoadedPlugin, enabledPlugins map[string]any, query string) []pluginSearchResult {
+func pluginSearchResults(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings, query string) []pluginSearchResult {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
 		return nil
 	}
 	var results []pluginSearchResult
 	for _, plugin := range plugins {
-		state := "enabled"
-		if !pluginpkg.PluginEnabled(plugin, enabledPlugins) {
-			state = "disabled"
-		}
+		state := pluginRuntimeState(plugin, settings)
 		for _, match := range pluginSearchMatches(plugin, query) {
 			results = append(results, pluginSearchResult{
 				Plugin:  plugin.Name,

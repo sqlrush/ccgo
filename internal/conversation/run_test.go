@@ -4751,6 +4751,48 @@ func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginShowReportsMarketplaceBlockedLocalPlugin(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo","marketplace":"internal","commands":[{"name":"demo:deploy","prompt":"Deploy."}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_plugin_show_marketplace_blocked",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			StrictKnownMarketplaces: []any{"enterprise"},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin show demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin demo",
+		"State: blocked: not listed in settings strictKnownMarketplaces",
+		"Marketplace: internal",
+		"- /demo:deploy",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin show blocked missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerPluginSearchFindsLocalPluginMetadata(t *testing.T) {
 	client := &fakeClient{}
 	repo := filepath.Join(t.TempDir(), "repo")
