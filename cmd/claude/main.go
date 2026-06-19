@@ -339,6 +339,8 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 		return runPluginInstallCLI(state, args[1:], stdout, stderr)
 	case "update":
 		return runPluginUpdateCLI(state, args[1:], stdout, stderr)
+	case "validate":
+		return runPluginValidateCLI(state, args[1:], stdout, stderr)
 	case "enable":
 		return runPluginSetEnabledCLI(state, "enable", args[1:], stdout, stderr)
 	case "disable":
@@ -480,6 +482,31 @@ func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer,
 		return 1
 	}
 	writePluginUpdateResult(stdout, result)
+	return 0
+}
+
+func runPluginValidateCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin validate", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "ccgo plugin validate: usage: claude plugin validate <path>")
+		return 2
+	}
+	result, err := pluginpkg.ValidateManifestPath(flags.Arg(0), state.CWD())
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin validate: %v\n", err)
+		return 2
+	}
+	writePluginValidationResult(stdout, result)
+	if !result.Success {
+		return 1
+	}
 	return 0
 }
 
@@ -805,6 +832,79 @@ func writePluginUpdateResult(stdout io.Writer, result pluginpkg.PluginUpdateResu
 		}
 	}
 	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+}
+
+func writePluginValidationResult(stdout io.Writer, result pluginpkg.ManifestValidationResult) {
+	lines := []string{
+		fmt.Sprintf("Validating %s manifest: %s", result.FileType, result.FilePath),
+		"",
+	}
+	if len(result.Errors) > 0 {
+		lines = append(lines, fmt.Sprintf("Found %d %s:", len(result.Errors), pluralWord(len(result.Errors), "error", "errors")))
+		lines = append(lines, "")
+		for _, item := range result.Errors {
+			lines = append(lines, fmt.Sprintf("- %s: %s", pluginCLIValidationMessagePath(item.Path), item.Message))
+		}
+		lines = append(lines, "")
+	}
+	if len(result.Warnings) > 0 {
+		lines = append(lines, fmt.Sprintf("Found %d %s:", len(result.Warnings), pluralWord(len(result.Warnings), "warning", "warnings")))
+		lines = append(lines, "")
+		for _, item := range result.Warnings {
+			lines = append(lines, fmt.Sprintf("- %s: %s", pluginCLIValidationMessagePath(item.Path), item.Message))
+		}
+		lines = append(lines, "")
+	}
+	if result.Success && result.FileType == "plugin" {
+		lines = append(lines, "Plugin: "+result.Plugin.Name)
+		if result.Plugin.Version != "" {
+			lines = append(lines, "Version: "+result.Plugin.Version)
+		}
+		lines = append(lines,
+			fmt.Sprintf("Commands: %d", len(result.Plugin.Commands)+len(result.Plugin.PromptTemplates)),
+			fmt.Sprintf("Skills: %d", len(result.Plugin.SkillCommands)),
+			fmt.Sprintf("Agents: %d", len(result.Plugin.Agents)),
+			fmt.Sprintf("MCP servers: %d", len(result.Plugin.MCPServers)),
+			fmt.Sprintf("Output styles: %d", len(result.Plugin.OutputStyles)),
+			fmt.Sprintf("Hooks: %d", len(result.Plugin.HookEvents)),
+			"",
+		)
+	}
+	if result.Success && result.FileType == "marketplace" {
+		lines = append(lines, fmt.Sprintf("Marketplace plugins: %d", result.PluginCount))
+		for _, name := range firstPluginCLIStrings(result.MarketplaceIDs, 10) {
+			lines = append(lines, "- "+name)
+		}
+		if len(result.MarketplaceIDs) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d marketplace plugins.", len(result.MarketplaceIDs)))
+		}
+		lines = append(lines, "")
+	}
+	if result.Success {
+		if len(result.Warnings) > 0 {
+			lines = append(lines, "Validation passed with warnings")
+		} else {
+			lines = append(lines, "Validation passed")
+		}
+	} else {
+		lines = append(lines, "Validation failed")
+	}
+	fmt.Fprintln(stdout, strings.TrimRight(strings.Join(lines, "\n"), "\n"))
+}
+
+func firstPluginCLIStrings(values []string, limit int) []string {
+	if len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func pluginCLIValidationMessagePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "root"
+	}
+	return path
 }
 
 func pluginCLISettingsFromFiles(cwd string) (contracts.Settings, error) {

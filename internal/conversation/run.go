@@ -3390,6 +3390,8 @@ func (r Runner) formatPluginSummary(raw string) string {
 			return r.formatPluginConfig(args)
 		case "install", "i":
 			return r.installPluginSummary(subcommandRemainder(raw, args[0]))
+		case "validate":
+			return r.validatePluginSummary(subcommandRemainder(raw, args[0]))
 		case "uninstall", "remove", "rm":
 			return r.uninstallPluginSummary(subcommandRemainder(raw, args[0]))
 		case "update":
@@ -3544,6 +3546,109 @@ func pluginCommandHelp() string {
 		"/plugin help - Show this help",
 		"/plugins - Alias for /plugin",
 	}, "\n")
+}
+
+func pluginValidateUsage() string {
+	return strings.Join([]string{
+		"Usage: /plugin validate <path>",
+		"",
+		"Validate a plugin or marketplace manifest file or directory.",
+		"",
+		"Examples:",
+		"  /plugin validate .claude-plugin/plugin.json",
+		"  /plugin validate /path/to/plugin-directory",
+		"  /plugin validate .",
+		"",
+		"When given a directory, automatically validates .claude-plugin/marketplace.json",
+		"or .claude-plugin/plugin.json (prefers marketplace if both exist).",
+		"",
+		"Or from the command line:",
+		"  claude plugin validate <path>",
+	}, "\n")
+}
+
+func (r Runner) validatePluginSummary(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return pluginValidateUsage()
+	}
+	result, err := pluginpkg.ValidateManifestPath(path, r.WorkingDirectory)
+	if err != nil {
+		return "Unexpected error during validation: " + err.Error()
+	}
+	return formatPluginValidationResult(result)
+}
+
+func formatPluginValidationResult(result pluginpkg.ManifestValidationResult) string {
+	lines := []string{
+		fmt.Sprintf("Validating %s manifest: %s", result.FileType, result.FilePath),
+		"",
+	}
+	if len(result.Errors) > 0 {
+		lines = append(lines, fmt.Sprintf("Found %d %s:", len(result.Errors), pluginValidationPlural(len(result.Errors), "error")))
+		lines = append(lines, "")
+		for _, item := range result.Errors {
+			lines = append(lines, fmt.Sprintf("- %s: %s", pluginValidationMessagePath(item.Path), item.Message))
+		}
+		lines = append(lines, "")
+	}
+	if len(result.Warnings) > 0 {
+		lines = append(lines, fmt.Sprintf("Found %d %s:", len(result.Warnings), pluginValidationPlural(len(result.Warnings), "warning")))
+		lines = append(lines, "")
+		for _, item := range result.Warnings {
+			lines = append(lines, fmt.Sprintf("- %s: %s", pluginValidationMessagePath(item.Path), item.Message))
+		}
+		lines = append(lines, "")
+	}
+	if result.Success && result.FileType == "plugin" {
+		if result.Plugin.Name != "" {
+			lines = append(lines, "Plugin: "+result.Plugin.Name)
+		}
+		lines = append(lines,
+			fmt.Sprintf("Commands: %d", len(loadedPluginCommandNames(result.Plugin))),
+			fmt.Sprintf("Skills: %d", len(result.Plugin.SkillCommands)),
+			fmt.Sprintf("Agents: %d", len(result.Plugin.Agents)),
+			fmt.Sprintf("MCP servers: %d", len(result.Plugin.MCPServers)),
+			fmt.Sprintf("Output styles: %d", len(result.Plugin.OutputStyles)),
+			fmt.Sprintf("Hooks: %d", pluginHookCount([]pluginpkg.LoadedPlugin{result.Plugin})),
+			"",
+		)
+	}
+	if result.Success && result.FileType == "marketplace" {
+		lines = append(lines, fmt.Sprintf("Marketplace plugins: %d", result.PluginCount))
+		for _, name := range firstStrings(result.MarketplaceIDs, 10) {
+			lines = append(lines, "- "+name)
+		}
+		if len(result.MarketplaceIDs) > 10 {
+			lines = append(lines, fmt.Sprintf("Showing 10 of %d marketplace plugins.", len(result.MarketplaceIDs)))
+		}
+		lines = append(lines, "")
+	}
+	if result.Success {
+		if len(result.Warnings) > 0 {
+			lines = append(lines, "Validation passed with warnings")
+		} else {
+			lines = append(lines, "Validation passed")
+		}
+	} else {
+		lines = append(lines, "Validation failed")
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+func pluginValidationPlural(count int, singular string) string {
+	if count == 1 {
+		return singular
+	}
+	return singular + "s"
+}
+
+func pluginValidationMessagePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "root"
+	}
+	return path
 }
 
 func (r Runner) formatPluginShow(args []string) string {

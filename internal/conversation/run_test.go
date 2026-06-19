@@ -5358,6 +5358,84 @@ func TestRunnerPluginUninstallCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginValidateCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	cwd := t.TempDir()
+	pluginDir := filepath.Join(cwd, "demo-plugin")
+	if err := os.MkdirAll(filepath.Join(pluginDir, "commands"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "commands", "deploy.md"), []byte("---\ndescription: Deploy app\n---\nDeploy."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo-plugin",
+		"version": "1.0.0",
+		"description": "Demo plugin",
+		"author": {"name": "Team"}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	badPlugin := filepath.Join(cwd, "bad-plugin")
+	if err := os.MkdirAll(badPlugin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(badPlugin, "plugin.json"), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_validate",
+		WorkingDirectory: cwd,
+		MCP:              &MCPConfig{},
+	}
+	for _, item := range []struct {
+		prompt string
+		wants  []string
+	}{
+		{
+			prompt: "/plugin validate demo-plugin",
+			wants: []string{
+				"Validating plugin manifest: " + filepath.Join(pluginDir, "plugin.json"),
+				"Plugin: demo-plugin",
+				"Commands: 1",
+				"Validation passed",
+			},
+		},
+		{
+			prompt: "/plugin validate",
+			wants: []string{
+				"Usage: /plugin validate <path>",
+				"Validate a plugin or marketplace manifest file or directory.",
+				"claude plugin validate <path>",
+			},
+		},
+		{
+			prompt: "/plugin validate bad-plugin",
+			wants: []string{
+				"Validating plugin manifest: " + filepath.Join(badPlugin, "plugin.json"),
+				"Found 1 error:",
+				"json: Invalid JSON syntax",
+				"Validation failed",
+			},
+		},
+	} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(item.prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %#v", item.prompt, client.requests)
+		}
+		text := result.Messages[1].Content[0].Text
+		for _, want := range item.wants {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q: %q", item.prompt, want, text)
+			}
+		}
+	}
+}
+
 func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()

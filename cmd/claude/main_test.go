@@ -2145,6 +2145,65 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 	}
 }
 
+func TestRunPluginValidateCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	pluginDir := filepath.Join(project, "demo-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo-plugin",
+		"version": "1.0.0",
+		"description": "Demo plugin",
+		"author": {"name": "Team"}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expectedPluginDir, err := filepath.EvalSymlinks(pluginDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "validate", "demo-plugin"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Validating plugin manifest: " + filepath.Join(expectedPluginDir, "plugin.json"),
+		"Plugin: demo-plugin",
+		"Validation passed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+
+	badDir := filepath.Join(project, "bad-plugin")
+	if err := os.MkdirAll(badDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(badDir, "plugin.json"), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "validate", "bad-plugin"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Found 1 error:",
+		"json: Invalid JSON syntax",
+		"Validation failed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+}
+
 func TestRunPluginInstallCLI(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
