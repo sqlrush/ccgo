@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"strings"
 	"time"
 
 	"ccgo/internal/api/anthropic"
@@ -46,11 +47,96 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 		if err != nil {
 			return anthropic.Request{}, err
 		}
+		definitions = applyDiscoveredToolReferences(definitions, history)
 		if len(definitions) > 0 {
 			request.Tools = anthropic.ToolsFromContracts(definitions)
 		}
 	}
 	return request, nil
+}
+
+func applyDiscoveredToolReferences(definitions []contracts.ToolDefinition, history []contracts.Message) []contracts.ToolDefinition {
+	discovered := discoveredToolReferenceNames(history)
+	if len(discovered) == 0 || len(definitions) == 0 {
+		return definitions
+	}
+	out := make([]contracts.ToolDefinition, len(definitions))
+	copy(out, definitions)
+	for i := range out {
+		if toolDefinitionDiscovered(out[i], discovered) {
+			out[i].AlwaysLoad = true
+			out[i].ShouldDefer = false
+		}
+	}
+	return out
+}
+
+func toolDefinitionDiscovered(definition contracts.ToolDefinition, discovered map[string]struct{}) bool {
+	if _, ok := discovered[strings.ToLower(definition.Name)]; ok {
+		return true
+	}
+	for _, alias := range definition.Aliases {
+		if _, ok := discovered[strings.ToLower(alias)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func discoveredToolReferenceNames(history []contracts.Message) map[string]struct{} {
+	discovered := map[string]struct{}{}
+	for _, message := range history {
+		for _, block := range message.Content {
+			if block.Type != contracts.ContentToolResult {
+				continue
+			}
+			collectToolReferenceNames(block.Content, discovered)
+		}
+	}
+	return discovered
+}
+
+func collectToolReferenceNames(content any, discovered map[string]struct{}) {
+	switch typed := content.(type) {
+	case contracts.ToolReference:
+		addDiscoveredToolReference(typed.ToolName, discovered)
+	case []contracts.ToolReference:
+		for _, reference := range typed {
+			addDiscoveredToolReference(reference.ToolName, discovered)
+		}
+	case map[string]any:
+		if toolName, ok := stringMapField(typed, "tool_name", "toolName", "name"); ok && toolReferenceType(typed) {
+			addDiscoveredToolReference(toolName, discovered)
+		}
+	case []map[string]any:
+		for _, item := range typed {
+			collectToolReferenceNames(item, discovered)
+		}
+	case []any:
+		for _, item := range typed {
+			collectToolReferenceNames(item, discovered)
+		}
+	}
+}
+
+func toolReferenceType(item map[string]any) bool {
+	value, ok := stringMapField(item, "type")
+	return ok && value == "tool_reference"
+}
+
+func stringMapField(item map[string]any, names ...string) (string, bool) {
+	for _, name := range names {
+		if value, ok := item[name].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value), true
+		}
+	}
+	return "", false
+}
+
+func addDiscoveredToolReference(toolName string, discovered map[string]struct{}) {
+	if trimmed := strings.TrimSpace(toolName); trimmed != "" {
+		discovered[strings.ToLower(trimmed)] = struct{}{}
+	}
 }
 
 func appendRelevantMemoryPrefetch(history []contracts.Message, result memory.RelevantMemoryPrefetchResult) []contracts.Message {

@@ -7912,6 +7912,75 @@ func TestBuildRequestPreservesDeferredToolMetadata(t *testing.T) {
 	}
 }
 
+func TestBuildRequestLoadsDiscoveredToolReferences(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{
+		messages.UserText("find task"),
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{{
+				Type:      contracts.ContentToolResult,
+				ToolUseID: "toolu_search",
+				Content: []contracts.ToolReference{
+					contracts.NewToolReference("Task"),
+				},
+			}},
+		},
+	}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if req.Tools[0].DeferLoading {
+		t.Fatalf("task defer_loading = true after tool_reference discovery")
+	}
+}
+
+func TestBuildRequestLoadsDecodedToolReferenceMaps(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{{
+				Type:      contracts.ContentToolResult,
+				ToolUseID: "toolu_search",
+				Content: []any{
+					map[string]any{"type": "tool_reference", "tool_name": "Task"},
+				},
+			}},
+		},
+	}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if req.Tools[0].DeferLoading {
+		t.Fatalf("task defer_loading = true after decoded tool_reference discovery")
+	}
+}
+
 func TestRunnerGatesAdvancedLSPDiagnosticsTool(t *testing.T) {
 	requestForAdvancedSetting := func(t *testing.T, advanced *contracts.AdvancedSetting) anthropic.Request {
 		t.Helper()
