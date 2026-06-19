@@ -4771,6 +4771,104 @@ func TestRunnerPluginListIncludesSettingsMarketplacePlugins(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
+	client := &fakeClient{}
+	root := t.TempDir()
+	cwd := filepath.Join(root, "project")
+	pluginDir := filepath.Join(root, "marketplace-plugin")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "assets", "README.md"), []byte("market asset"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "market demo",
+		"commands": [{"name": "market:deploy", "description": "Deploy marketplace plugin", "prompt": "Deploy."}],
+		"mcpServers": {"plugin:docs": {"type": "http", "url": "https://docs.example/mcp"}}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_install_marketplace",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			ExtraKnownMarketplaces: map[string]any{
+				"team": map[string]any{"source": map[string]any{
+					"source":  "settings",
+					"name":    "team",
+					"plugins": []any{pluginDir},
+				}},
+			},
+			StrictKnownMarketplaces: []any{"team"},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin install market demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	installedDir := filepath.Join(cwd, ".claude", "plugins", "market-demo")
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin installed",
+		"Name: market demo",
+		"Source: " + pluginDir,
+		"Installed path: " + installedDir,
+		"Marketplace: team",
+		"Status: installed",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin install missing %q: %q", want, text)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "plugin.json")); err != nil {
+		t.Fatalf("installed plugin manifest: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "assets", "README.md")); err != nil || string(data) != "market asset" {
+		t.Fatalf("installed plugin asset = %q err=%v", data, err)
+	}
+	if runner.MCP.CWD != cwd {
+		t.Fatalf("runner MCP cwd = %q", runner.MCP.CWD)
+	}
+	server, ok := runner.MCP.PluginServers["plugin:docs"]
+	if !ok || server.URL != "https://docs.example/mcp" || server.PluginSource != "market demo" {
+		t.Fatalf("plugin MCP servers = %#v", runner.MCP.PluginServers)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin install market demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Status: already installed") {
+		t.Fatalf("plugin reinstall text = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Local plugin manifests: 1",
+		"- market demo",
+		"- /market:deploy",
+		"- plugin:docs",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin list after install missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

@@ -142,7 +142,28 @@ func loadPluginRootEntries(roots []pluginRootEntry) []LoadedPlugin {
 func LoadPluginDirsWithSettings(roots []string, settings contracts.Settings) []LoadedPlugin {
 	entries := pluginRootEntriesFromRoots(roots)
 	entries = append(entries, marketplacePluginRootEntries(settings)...)
-	return FilterPluginsWithSettings(loadPluginRootEntries(entries), settings)
+	return dedupeLoadedPlugins(FilterPluginsWithSettings(loadPluginRootEntries(entries), settings))
+}
+
+func dedupeLoadedPlugins(plugins []LoadedPlugin) []LoadedPlugin {
+	if len(plugins) == 0 {
+		return nil
+	}
+	out := make([]LoadedPlugin, 0, len(plugins))
+	seen := map[string]struct{}{}
+	for _, plugin := range plugins {
+		key := strings.TrimSpace(plugin.Name)
+		if key == "" {
+			key = cleanAbs(plugin.Root)
+		}
+		key = strings.ToLower(key)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, plugin)
+	}
+	return out
 }
 
 func FilterPluginsWithSettings(plugins []LoadedPlugin, settings contracts.Settings) []LoadedPlugin {

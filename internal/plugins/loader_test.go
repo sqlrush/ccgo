@@ -295,6 +295,37 @@ func TestLoadPluginDirsWithSettingsLoadsSettingsMarketplacePlugins(t *testing.T)
 	}
 }
 
+func TestLoadPluginDirsWithSettingsPrefersProjectPluginOverMarketplaceDuplicate(t *testing.T) {
+	root := t.TempDir()
+	projectRoot := filepath.Join(root, "project-plugin")
+	marketplaceRoot := filepath.Join(root, "marketplace-plugin")
+	for _, dir := range []string{projectRoot, marketplaceRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, ManifestFileName), []byte(`{"name":"demo","description":"installed"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketplaceRoot, ManifestFileName), []byte(`{"name":"demo","description":"marketplace"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins := LoadPluginDirsWithSettings([]string{projectRoot}, contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"team": map[string]any{"source": map[string]any{
+				"source":  "settings",
+				"name":    "team",
+				"plugins": []any{marketplaceRoot},
+			}},
+		},
+		StrictKnownMarketplaces: []any{"team"},
+	})
+	if len(plugins) != 1 || plugins[0].Root != cleanAbs(projectRoot) || plugins[0].Description != "installed" {
+		t.Fatalf("plugins = %#v", plugins)
+	}
+}
+
 func TestLoadPluginDirsWithSettingsLoadsDirectoryMarketplacePlugins(t *testing.T) {
 	root := t.TempDir()
 	marketplaceDir := filepath.Join(root, "marketplace")

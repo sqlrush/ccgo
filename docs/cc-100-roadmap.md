@@ -1435,10 +1435,10 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - `/help`、`/config`、`/mcp`、`/plugin`、`/skills`、`/memory`、`/resume` 等命令。
 - local commands、local-jsx command abstraction。
 - bundled/user/plugin/MCP skills discovery。
-- plugin manifest、marketplace、install/cache/update。
+- plugin manifest、marketplace、local install、remote download/cache/update。
 - plugin hooks/agents/MCP，其中本地 plugin 同步工具 hook 已接入，剩余完整 plugin agent/MCP 与 hook UI/policy parity。
 
-当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、agent-metadata strict plugin-only policy filtering、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的 manifest discovery，本地 plugin 同步工具 hook 执行，headless `/help`/`/skills` 列表与单项详情，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、TUI `/help`/`/skills` 面板、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 agents/MCP/output-style UI 接线。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、agent-metadata strict plugin-only policy filtering、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的 manifest discovery，本地 plugin 同步工具 hook 执行，headless `/plugin install <name>` 可从 settings/directory/file 配置的本地 marketplace 来源复制插件到项目 `.claude/plugins` 并刷新 plugin MCP server app-state，headless `/help`/`/skills` 列表与单项详情，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、TUI `/help`/`/skills` 面板、权限 UI/SDK 展示、远端 plugin marketplace download/cache/update、skill prompt shell injection 和完整 agents/MCP/output-style UI 接线。
 
 ### M9: MCP Platform
 
