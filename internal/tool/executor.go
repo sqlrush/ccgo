@@ -48,6 +48,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 		err := fmt.Errorf("%w: registry is nil", ErrUnknownTool)
 		return ErrorResult(use, err), err
 	}
+	ctx = e.withRegistryMetadata(ctx)
 	t, ok := e.Registry.Lookup(use.Name)
 	if !ok {
 		err := fmt.Errorf("%w: %s", ErrUnknownTool, use.Name)
@@ -141,6 +142,16 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	}
 	_ = SendProgress(sink, use.ID, "completed", map[string]any{"tool": t.Name()})
 	return result, nil
+}
+
+func (e Executor) withRegistryMetadata(ctx Context) Context {
+	if ctx.Metadata == nil {
+		ctx.Metadata = map[string]any{}
+	}
+	if _, ok := ctx.Metadata[MetadataToolRegistryKey]; !ok && e.Registry != nil {
+		ctx.Metadata[MetadataToolRegistryKey] = e.Registry
+	}
+	return ctx
 }
 
 type defaultToolUseProgressSink struct {

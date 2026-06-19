@@ -19,6 +19,7 @@ import (
 	"ccgo/internal/tool"
 	bashtools "ccgo/internal/tools/bash"
 	powershelltools "ccgo/internal/tools/powershell"
+	searchtools "ccgo/internal/tools/searchtools"
 	skilltools "ccgo/internal/tools/skill"
 	tasktools "ccgo/internal/tools/task"
 	todotools "ccgo/internal/tools/todo"
@@ -213,6 +214,7 @@ func BuiltinTools() []tool.Tool {
 		tasktools.NewScheduleCronTool(),
 		tasktools.NewRemoteTriggerTool(),
 		skilltools.NewSkillTool(),
+		searchtools.NewToolSearchTool(),
 		webtools.NewWebFetchTool(),
 		webtools.NewWebSearchTool(),
 	}

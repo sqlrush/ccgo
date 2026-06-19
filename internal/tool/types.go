@@ -80,6 +80,7 @@ const (
 	MetadataPolicySettingsKey      = "ccgo.policy_settings"
 	MetadataSessionPathKey         = "ccgo.session.path"
 	MetadataAvailableAgentsKey     = "ccgo.available_agents"
+	MetadataToolRegistryKey        = "ccgo.tool.registry"
 
 	HookPreToolUse        = "PreToolUse"
 	HookPostToolUse       = "PostToolUse"
