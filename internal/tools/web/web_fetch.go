@@ -517,6 +517,8 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 	var b strings.Builder
 	var anchors []htmlWebFetchAnchor
 	var buttons []htmlWebFetchLabeledControl
+	var textareas []htmlWebFetchLabeledControl
+	var selects []htmlWebFetchSelectControl
 	pictureDepth := 0
 	pictureSource := ""
 	for i := 0; i < len(body); {
@@ -528,6 +530,14 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			break
 		}
 		if body[i] != '<' {
+			if len(selects) > 0 {
+				idx := len(selects) - 1
+				if selects[idx].InOption {
+					selects[idx].OptionText += string(body[i])
+				}
+				i++
+				continue
+			}
 			b.WriteByte(body[i])
 			i++
 			continue
@@ -540,6 +550,34 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 		}
 		rawTag := body[i+1 : i+end]
 		tag, closing := htmlWebFetchTagInfo(rawTag)
+		if tag == "select" {
+			if closing {
+				if len(selects) > 0 {
+					idx := len(selects) - 1
+					selects[idx] = finishHTMLWebFetchSelectOption(selects[idx])
+					appendHTMLWebFetchSelectText(&b, selects[idx])
+					selects = selects[:idx]
+				}
+			} else {
+				label := firstNonEmptyWebFetchAttr(rawTag, "aria-label", "title")
+				selects = append(selects, htmlWebFetchSelectControl{Label: label})
+			}
+			i += end + 1
+			continue
+		}
+		if len(selects) > 0 {
+			idx := len(selects) - 1
+			if tag == "option" {
+				selects[idx] = finishHTMLWebFetchSelectOption(selects[idx])
+				if !closing {
+					selects[idx].InOption = true
+					selects[idx].OptionSelected = htmlWebFetchHasAttr(rawTag, "selected")
+					selects[idx].OptionText = ""
+				}
+			}
+			i += end + 1
+			continue
+		}
 		if tag == "picture" {
 			if closing {
 				if pictureDepth > 0 {
@@ -569,6 +607,14 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			} else {
 				label := firstNonEmptyWebFetchAttr(rawTag, "aria-label", "title", "value")
 				buttons = append(buttons, htmlWebFetchLabeledControl{Label: label, Start: b.Len()})
+			}
+		}
+		if tag == "textarea" {
+			if closing {
+				textareas, _ = appendHTMLWebFetchControlLabel(&b, textareas)
+			} else {
+				label := firstNonEmptyWebFetchAttr(rawTag, "placeholder", "aria-label", "title")
+				textareas = append(textareas, htmlWebFetchLabeledControl{Label: label, Start: b.Len()})
 			}
 		}
 		if tag == "source" && !closing && pictureDepth > 0 && pictureSource == "" {
@@ -652,6 +698,15 @@ type htmlWebFetchLabeledControl struct {
 	Start int
 }
 
+type htmlWebFetchSelectControl struct {
+	Label          string
+	FirstOption    string
+	SelectedOption string
+	InOption       bool
+	OptionSelected bool
+	OptionText     string
+}
+
 func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnchor) ([]htmlWebFetchAnchor, bool) {
 	if len(anchors) == 0 {
 		return anchors, false
@@ -699,6 +754,45 @@ func appendHTMLWebFetchControlLabel(b *strings.Builder, controls []htmlWebFetchL
 	b.WriteString(label)
 	b.WriteByte('\n')
 	return controls, true
+}
+
+func finishHTMLWebFetchSelectOption(control htmlWebFetchSelectControl) htmlWebFetchSelectControl {
+	if !control.InOption {
+		return control
+	}
+	text := strings.Join(strings.Fields(control.OptionText), " ")
+	if text != "" {
+		if control.FirstOption == "" {
+			control.FirstOption = text
+		}
+		if control.OptionSelected {
+			control.SelectedOption = text
+		}
+	}
+	control.InOption = false
+	control.OptionSelected = false
+	control.OptionText = ""
+	return control
+}
+
+func appendHTMLWebFetchSelectText(b *strings.Builder, control htmlWebFetchSelectControl) {
+	text := strings.TrimSpace(control.SelectedOption)
+	if text == "" {
+		text = strings.TrimSpace(control.FirstOption)
+	}
+	if text == "" {
+		text = strings.TrimSpace(control.Label)
+	}
+	if text == "" {
+		return
+	}
+	label := strings.TrimSpace(control.Label)
+	if label != "" && label != text {
+		text = label + ": " + text
+	}
+	b.WriteString("\nInput: ")
+	b.WriteString(text)
+	b.WriteByte('\n')
 }
 
 func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string, sourceOverride string) {
@@ -877,6 +971,70 @@ func htmlWebFetchAttr(rawTag string, name string) string {
 		}
 	}
 	return ""
+}
+
+func htmlWebFetchHasAttr(rawTag string, name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return false
+	}
+	raw := strings.TrimSpace(rawTag)
+	raw = strings.TrimLeft(raw, "/!?")
+	i := 0
+	for i < len(raw) && !unicode.IsSpace(rune(raw[i])) && raw[i] != '/' {
+		i++
+	}
+	for i < len(raw) {
+		for i < len(raw) && (unicode.IsSpace(rune(raw[i])) || raw[i] == '/') {
+			i++
+		}
+		start := i
+		for i < len(raw) && isHTMLWebFetchAttrNameByte(raw[i]) {
+			i++
+		}
+		if start == i {
+			i++
+			continue
+		}
+		attr := strings.ToLower(raw[start:i])
+		for i < len(raw) && unicode.IsSpace(rune(raw[i])) {
+			i++
+		}
+		if i < len(raw) && raw[i] == '=' {
+			i++
+			for i < len(raw) && unicode.IsSpace(rune(raw[i])) {
+				i++
+			}
+			if i < len(raw) && (raw[i] == '"' || raw[i] == '\'') {
+				quote := raw[i]
+				i++
+				for i < len(raw) && raw[i] != quote {
+					i++
+				}
+				if i < len(raw) {
+					i++
+				}
+			} else {
+				for i < len(raw) && !unicode.IsSpace(rune(raw[i])) && raw[i] != '/' {
+					i++
+				}
+			}
+		}
+		if attr == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isHTMLWebFetchAttrNameByte(value byte) bool {
+	return value == '_' ||
+		value == ':' ||
+		value == '.' ||
+		value == '-' ||
+		(value >= 'a' && value <= 'z') ||
+		(value >= 'A' && value <= 'Z') ||
+		(value >= '0' && value <= '9')
 }
 
 func htmlWebFetchTagInfo(raw string) (string, bool) {

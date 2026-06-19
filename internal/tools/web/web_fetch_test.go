@@ -319,6 +319,17 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
       <input type="checkbox" aria-label="Include archived docs">
       <button aria-label="Open filters"><svg><title>ignored svg</title></svg></button>
       <button aria-label="Visible label should not duplicate">Plain button text</button>
+      <textarea placeholder="Describe the rollout"></textarea>
+      <textarea placeholder="Draft placeholder">Existing note</textarea>
+      <select aria-label="Environment">
+        <option>Development</option>
+        <option selected>Production</option>
+        <option>Staging</option>
+      </select>
+      <select aria-label="Region">
+        <option>US East</option>
+        <option>EU West</option>
+      </select>
       <input type="hidden" value="csrf-secret">
       <input type="password" value="super-secret-password">
       <input type="file" value="/private/report.pdf">
@@ -349,6 +360,10 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
 		"Input: Include archived docs",
 		"Input: Open filters",
 		"Plain button text",
+		"Input: Describe the rollout",
+		"Existing note",
+		"Input: Environment: Production",
+		"Input: Region: US East",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered body missing %q: %#v", want, rendered)
@@ -357,7 +372,7 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
 	if strings.Contains(rendered, "Visible label should not duplicate") {
 		t.Fatalf("rendered body duplicated non-empty button label: %#v", rendered)
 	}
-	for _, leaked := range []string{"csrf-secret", "super-secret-password", "/private/report.pdf"} {
+	for _, leaked := range []string{"Draft placeholder", "Development", "Staging", "EU West", "csrf-secret", "super-secret-password", "/private/report.pdf"} {
 		if strings.Contains(rendered, leaked) {
 			t.Fatalf("rendered body leaked %q: %#v", leaked, rendered)
 		}

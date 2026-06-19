@@ -831,7 +831,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`WebFetch` HTML-to-text rendering 现在会保留 anchor `href` 作为链接上下文，并把 `img` 的 `alt`/`title`/`aria-label` 和 `src` 渲染成可见图片说明；prompt-focused excerpt 可以命中图片说明文本，同时避免重复 URL 链接文本和 `javascript:` href。
 
-本轮补充：`WebFetch` HTML-to-text rendering 现在会保留可见表单控件文本，包括 `input` placeholder/value/alt/accessibility label 和 icon-only `button` label；hidden/password/file value 会跳过，避免把非可见 secret 当页面文本暴露。
+本轮补充：`WebFetch` HTML-to-text rendering 现在会保留可见表单控件文本，包括 `input` placeholder/value/alt/accessibility label、icon-only `button` label、空 `textarea` placeholder，以及 `select` 的 selected/default option；hidden/password/file value 和未选中的 select option 会跳过，避免把非可见 secret 或菜单备选项当页面文本暴露。
 
 本轮补充：`WebFetch` GET 会记录 redirect 后的 `final_url`，HTML rendering 会按 final URL 解析相对 anchor/image URL，确保重定向页面中的相对链接和图片说明指向浏览器实际可见的目标地址。
 
