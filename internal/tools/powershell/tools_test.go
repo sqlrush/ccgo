@@ -487,6 +487,48 @@ func TestPowerShellRunInBackgroundAndReadOutput(t *testing.T) {
 	}
 }
 
+func TestPowerShellBackgroundProgressEvents(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	progressCh := make(chan contracts.ToolProgress, 8)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_progress",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Write-Output progress","run_in_background":true}`),
+	}, tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCh <- progress
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	powerShellID := result.StructuredContent["powershell_id"].(string)
+	started := waitForPowerShellProgress(t, progressCh, "powershell_background_started")
+	if started.ToolUseID != "toolu_powershell_background_progress" || started.Data["powershell_id"] != powerShellID || started.Data["status"] != "running" {
+		t.Fatalf("started progress = %#v", started)
+	}
+	if _, ok := started.Data["command"]; ok {
+		t.Fatalf("started progress should not expose command: %#v", started.Data)
+	}
+	finished := waitForPowerShellProgress(t, progressCh, "powershell_background_finished")
+	if finished.ToolUseID != "toolu_powershell_background_progress" || finished.Data["powershell_id"] != powerShellID || finished.Data["status"] != "completed" {
+		t.Fatalf("finished progress = %#v", finished)
+	}
+	if finished.Data["exit_code"] != 0 || finished.Data["timed_out"] != false || finished.Data["cancelled"] != false {
+		t.Fatalf("finished progress status = %#v", finished.Data)
+	}
+	if stdoutBytes, ok := finished.Data["stdout_bytes"].(int); !ok || stdoutBytes <= 0 {
+		t.Fatalf("finished stdout bytes = %#v", finished.Data)
+	}
+	if _, ok := finished.Data["command"]; ok {
+		t.Fatalf("finished progress should not expose command: %#v", finished.Data)
+	}
+}
+
 func TestPowerShellBackgroundTimeout(t *testing.T) {
 	requirePowerShell(t)
 	executor := powerShellExecutor(t)
@@ -808,6 +850,21 @@ func waitForPowerShellOutput(t *testing.T, executor tool.Executor, ctx tool.Cont
 			t.Fatalf("background PowerShell command %s did not finish; last output = %#v", powerShellID, output.StructuredContent)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func waitForPowerShellProgress(t *testing.T, progressCh <-chan contracts.ToolProgress, progressType string) contracts.ToolProgress {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case progress := <-progressCh:
+			if progress.Type == progressType {
+				return progress
+			}
+		case <-deadline:
+			t.Fatalf("progress %s not observed", progressType)
+		}
 	}
 }
 

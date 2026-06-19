@@ -917,14 +917,14 @@ func validateKillBash(_ tool.Context, raw json.RawMessage) error {
 	return nil
 }
 
-func callBash(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+func callBash(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodeBash(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
 	timeout := bashTimeout(input)
 	if input.runInBackground() {
-		return startBackgroundBash(ctx, input, timeout)
+		return startBackgroundBash(ctx, input, timeout, sink)
 	}
 	result := runBashCommand(ctx, strings.TrimSpace(input.Command), timeout)
 	return contracts.ToolResult{
@@ -1066,7 +1066,7 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 	}
 }
 
-func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duration) (contracts.ToolResult, error) {
+func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duration, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	state := EnsureBackgroundState(ctx)
 	if state == nil {
 		return contracts.ToolResult{}, fmt.Errorf("background bash state is not available")
@@ -1101,6 +1101,7 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 		return contracts.ToolResult{}, err
 	}
 	state.Add(task)
+	sendBashBackgroundProgress(sink, "bash_background_started", task.Snapshot())
 	go func() {
 		defer cancel()
 		err := cmd.Wait()
@@ -1125,6 +1126,7 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 			errText = "cancelled"
 		}
 		task.Finish(exitCode, timedOut, durationMS, errText, time.Now())
+		sendBashBackgroundProgress(sink, "bash_background_finished", task.Snapshot())
 	}()
 	return contracts.ToolResult{
 		Content: fmt.Sprintf("Command started in background with ID: %s", task.ID),
@@ -1139,6 +1141,37 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 		},
 	}, nil
+}
+
+func sendBashBackgroundProgress(sink tool.ProgressSink, progressType string, snapshot BackgroundTaskSnapshot) {
+	status := "running"
+	if !snapshot.Running {
+		switch {
+		case snapshot.Cancelled:
+			status = "cancelled"
+		case snapshot.TimedOut:
+			status = "timed_out"
+		case snapshot.ExitCode != 0:
+			status = "failed"
+		default:
+			status = "completed"
+		}
+	}
+	_ = tool.SendProgress(sink, "", progressType, map[string]any{
+		"shell":        "bash",
+		"bash_id":      snapshot.ID,
+		"status":       status,
+		"running":      snapshot.Running,
+		"exit_code":    snapshot.ExitCode,
+		"timed_out":    snapshot.TimedOut,
+		"cancelled":    snapshot.Cancelled,
+		"duration_ms":  snapshot.DurationMS,
+		"timeout_ms":   snapshot.TimeoutMS,
+		"stdout_bytes": len(snapshot.Stdout),
+		"stderr_bytes": len(snapshot.Stderr),
+		"started_at":   snapshot.StartedAt.UTC().Format(time.RFC3339Nano),
+		"ended_at":     formatOptionalTime(snapshot.EndedAt),
+	})
 }
 
 func shellCommand(command string) (string, []string) {

@@ -584,6 +584,47 @@ func TestBashRunInBackgroundAndReadOutput(t *testing.T) {
 	}
 }
 
+func TestBashBackgroundProgressEvents(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	progressCh := make(chan contracts.ToolProgress, 8)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_background_progress",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"printf progress","run_in_background":true}`),
+	}, tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCh <- progress
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bashID := result.StructuredContent["bash_id"].(string)
+	started := waitForBashProgress(t, progressCh, "bash_background_started")
+	if started.ToolUseID != "toolu_bash_background_progress" || started.Data["bash_id"] != bashID || started.Data["status"] != "running" {
+		t.Fatalf("started progress = %#v", started)
+	}
+	if _, ok := started.Data["command"]; ok {
+		t.Fatalf("started progress should not expose command: %#v", started.Data)
+	}
+	finished := waitForBashProgress(t, progressCh, "bash_background_finished")
+	if finished.ToolUseID != "toolu_bash_background_progress" || finished.Data["bash_id"] != bashID || finished.Data["status"] != "completed" {
+		t.Fatalf("finished progress = %#v", finished)
+	}
+	if finished.Data["exit_code"] != 0 || finished.Data["timed_out"] != false || finished.Data["cancelled"] != false {
+		t.Fatalf("finished progress status = %#v", finished.Data)
+	}
+	if finished.Data["stdout_bytes"] != len("progress") {
+		t.Fatalf("finished stdout bytes = %#v", finished.Data)
+	}
+	if _, ok := finished.Data["command"]; ok {
+		t.Fatalf("finished progress should not expose command: %#v", finished.Data)
+	}
+}
+
 func TestBashBackgroundTimeout(t *testing.T) {
 	executor := bashExecutor(t)
 	ctx := WithBackgroundState(tool.Context{
@@ -832,6 +873,21 @@ func assertBashOutputPersisted(t *testing.T, result contracts.ToolResult, want s
 	}
 	if !strings.Contains(result.Content.(string), "Tool output truncated") {
 		t.Fatalf("truncated content marker missing: %#v", result.Content)
+	}
+}
+
+func waitForBashProgress(t *testing.T, progressCh <-chan contracts.ToolProgress, progressType string) contracts.ToolProgress {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case progress := <-progressCh:
+			if progress.Type == progressType {
+				return progress
+			}
+		case <-deadline:
+			t.Fatalf("progress %s not observed", progressType)
+		}
 	}
 }
 

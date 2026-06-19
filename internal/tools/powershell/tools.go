@@ -212,13 +212,13 @@ func validateKillPowerShell(_ tool.Context, raw json.RawMessage) error {
 	return nil
 }
 
-func callPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+func callPowerShell(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	input, err := decodePowerShell(raw)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
 	if input.runInBackground() {
-		return startBackgroundPowerShell(ctx, input, powerShellTimeout(input))
+		return startBackgroundPowerShell(ctx, input, powerShellTimeout(input), sink)
 	}
 	result := runPowerShellCommand(ctx, strings.TrimSpace(input.Command), powerShellTimeout(input))
 	return contracts.ToolResult{
@@ -374,7 +374,7 @@ func runPowerShellCommand(ctx tool.Context, command string, timeout time.Duratio
 	return result
 }
 
-func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout time.Duration) (contracts.ToolResult, error) {
+func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout time.Duration, sink tool.ProgressSink) (contracts.ToolResult, error) {
 	state := EnsureBackgroundState(ctx)
 	if state == nil {
 		return contracts.ToolResult{}, fmt.Errorf("background powershell state is not available")
@@ -436,6 +436,7 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 		return contracts.ToolResult{}, err
 	}
 	state.Add(task)
+	sendPowerShellBackgroundProgress(sink, "powershell_background_started", task.Snapshot())
 	go func() {
 		defer cancel()
 		err := cmd.Wait()
@@ -460,6 +461,7 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 			errText = "cancelled"
 		}
 		task.Finish(exitCode, timedOut, durationMS, errText, time.Now())
+		sendPowerShellBackgroundProgress(sink, "powershell_background_finished", task.Snapshot())
 	}()
 	return contracts.ToolResult{
 		Content: fmt.Sprintf("PowerShell command started in background with ID: %s", task.ID),
@@ -475,6 +477,38 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 		},
 	}, nil
+}
+
+func sendPowerShellBackgroundProgress(sink tool.ProgressSink, progressType string, snapshot BackgroundTaskSnapshot) {
+	status := "running"
+	if !snapshot.Running {
+		switch {
+		case snapshot.Cancelled:
+			status = "cancelled"
+		case snapshot.TimedOut:
+			status = "timed_out"
+		case snapshot.ExitCode != 0:
+			status = "failed"
+		default:
+			status = "completed"
+		}
+	}
+	_ = tool.SendProgress(sink, "", progressType, map[string]any{
+		"shell":         "powershell",
+		"powershell_id": snapshot.ID,
+		"status":        status,
+		"running":       snapshot.Running,
+		"exit_code":     snapshot.ExitCode,
+		"timed_out":     snapshot.TimedOut,
+		"cancelled":     snapshot.Cancelled,
+		"duration_ms":   snapshot.DurationMS,
+		"timeout_ms":    snapshot.TimeoutMS,
+		"stdout_bytes":  len(snapshot.Stdout),
+		"stderr_bytes":  len(snapshot.Stderr),
+		"started_at":    snapshot.StartedAt.UTC().Format(time.RFC3339Nano),
+		"ended_at":      formatOptionalTime(snapshot.EndedAt),
+		"executable":    snapshot.Executable,
+	})
 }
 
 func powerShellExecutable() (string, bool) {
