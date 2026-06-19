@@ -134,6 +134,7 @@ func callSkill(registry *commands.Registry) tool.CallFunc {
 			"commandName": expanded.Command.Name,
 			"status":      "inline",
 		}
+		addCommandMetadata(structured, expanded.Command)
 		if len(allowedTools) > 0 {
 			structured["allowedTools"] = append([]string(nil), allowedTools...)
 		}
@@ -149,6 +150,54 @@ func callSkill(registry *commands.Registry) tool.CallFunc {
 			NewMessages:       newMessages,
 			StructuredContent: structured,
 		}, nil
+	}
+}
+
+func addCommandMetadata(structured map[string]any, cmd contracts.Command) {
+	if cmd.DisplayName != "" {
+		structured["displayName"] = cmd.DisplayName
+	}
+	if cmd.Description != "" {
+		structured["description"] = cmd.Description
+	}
+	if cmd.ArgumentHint != "" {
+		structured["argumentHint"] = cmd.ArgumentHint
+	}
+	if len(cmd.ArgumentNames) > 0 {
+		structured["argumentNames"] = append([]string(nil), cmd.ArgumentNames...)
+	}
+	if cmd.Source != "" {
+		structured["source"] = string(cmd.Source)
+	}
+	if cmd.LoadedFrom != "" {
+		structured["loadedFrom"] = cmd.LoadedFrom
+	}
+	if cmd.SkillRoot != "" {
+		structured["skillRoot"] = cmd.SkillRoot
+	}
+	if cmd.WhenToUse != "" {
+		structured["whenToUse"] = cmd.WhenToUse
+	}
+	if cmd.Version != "" {
+		structured["version"] = cmd.Version
+	}
+	if cmd.Context != "" {
+		structured["context"] = cmd.Context
+	}
+	if cmd.Agent != "" {
+		structured["agent"] = cmd.Agent
+	}
+	if cmd.Effort != "" {
+		structured["effort"] = cmd.Effort
+	}
+	if len(cmd.Paths) > 0 {
+		structured["paths"] = append([]string(nil), cmd.Paths...)
+	}
+	if cmd.ContentLength > 0 {
+		structured["contentLength"] = cmd.ContentLength
+	}
+	if cmd.ProgressMessage != "" {
+		structured["progressMessage"] = cmd.ProgressMessage
 	}
 }
 

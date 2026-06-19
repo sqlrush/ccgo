@@ -114,6 +114,85 @@ func TestSkillToolLoadsProjectSkillsFromWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestSkillToolLoadsPluginSkillAndReturnsCommandMetadata(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	pluginDir := filepath.Join(repo, ".claude", "plugins", "demo")
+	skillDir := filepath.Join(pluginDir, "skills", "review")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: Review Helper
+description: Review code
+argument-hint: "[target]"
+arguments: target
+allowed-tools: Read, Bash(git status:*)
+when_to_use: During reviews
+version: 1.2.3
+model: opus
+context: fork
+agent: reviewer
+effort: high
+paths: "**/*.go"
+---
+Review $target from ${CLAUDE_SKILL_DIR}.`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := skillExecutor(t)
+
+	result, err := executor.Execute(tool.Context{Context: context.Background(), WorkingDirectory: cwd, SessionID: "sess_plugin_skill"}, contracts.ToolUse{
+		ID:    "toolu_skill_plugin",
+		Name:  "Skill",
+		Input: json.RawMessage(`{"skill":"Review Helper","args":"api"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["commandName"] != "demo:review" ||
+		result.StructuredContent["displayName"] != "Review Helper" ||
+		result.StructuredContent["source"] != "plugin" ||
+		result.StructuredContent["loadedFrom"] != "plugin" ||
+		result.StructuredContent["skillRoot"] != skillDir ||
+		result.StructuredContent["description"] != "Review code" ||
+		result.StructuredContent["argumentHint"] != "[target]" ||
+		result.StructuredContent["whenToUse"] != "During reviews" ||
+		result.StructuredContent["version"] != "1.2.3" ||
+		result.StructuredContent["model"] != "opus" ||
+		result.StructuredContent["context"] != "fork" ||
+		result.StructuredContent["agent"] != "reviewer" ||
+		result.StructuredContent["effort"] != "high" ||
+		result.StructuredContent["progressMessage"] != "running" {
+		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+	if got, ok := result.StructuredContent["argumentNames"].([]string); !ok || len(got) != 1 || got[0] != "target" {
+		t.Fatalf("argument names = %#v", result.StructuredContent["argumentNames"])
+	}
+	if got, ok := result.StructuredContent["allowedTools"].([]string); !ok || len(got) != 2 || got[0] != "Read" || got[1] != "Bash(git status:*)" {
+		t.Fatalf("allowed tools = %#v", result.StructuredContent["allowedTools"])
+	}
+	if got, ok := result.StructuredContent["paths"].([]string); !ok || len(got) != 1 || got[0] != "**/*.go" {
+		t.Fatalf("paths = %#v", result.StructuredContent["paths"])
+	}
+	text := result.NewMessages[0].Content[0].Text
+	if !strings.Contains(text, "Review api from "+skillDir+".") {
+		t.Fatalf("expanded text = %q", text)
+	}
+	perms, ok := commands.CommandPermissionsFromMessage(result.NewMessages[1])
+	if !ok || perms.Model != "opus" || len(perms.AllowedTools) != 2 || perms.AllowedTools[1] != "Bash(git status:*)" {
+		t.Fatalf("command permissions = %#v ok=%v", perms, ok)
+	}
+}
+
 func TestSkillToolSkipsDisabledPluginSkillsFromMetadataSettings(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
