@@ -235,6 +235,7 @@ func TestValidateSettingsAllowsMatchingSettingsMarketplaceAndFetchedSources(t *t
 	_, warnings, err := ParseSettingsJSON([]byte(`{
 		"extraKnownMarketplaces": {
 			"team": {
+				"installLocation": "local",
 				"source": {
 					"source": "settings",
 					"name": "team",
@@ -285,6 +286,20 @@ func TestValidateSettingsWarnsForInvalidMarketplaceSources(t *testing.T) {
 					"source": "github",
 					"sparsePaths": [".claude-plugin", 12]
 				}
+			},
+			"bad-install-location": {
+				"installLocation": "machine",
+				"source": {
+					"source": "github",
+					"repo": "owner/repo"
+				}
+			},
+			"bad-install-location-type": {
+				"installLocation": 42,
+				"source": {
+					"source": "github",
+					"repo": "owner/repo"
+				}
 			}
 		},
 		"strictKnownMarketplaces": [
@@ -315,6 +330,8 @@ func TestValidateSettingsWarnsForInvalidMarketplaceSources(t *testing.T) {
 		"extraKnownMarketplaces.bad-settings-plugins.source.plugins[3]",
 		"extraKnownMarketplaces.missing-repo.source.repo",
 		"extraKnownMarketplaces.missing-repo.source.sparsePaths[1]",
+		"extraKnownMarketplaces.bad-install-location.installLocation",
+		"extraKnownMarketplaces.bad-install-location-type.installLocation",
 		"strictKnownMarketplaces[0].url",
 		"strictKnownMarketplaces[1].source",
 		"blockedMarketplaces[1]",

@@ -161,6 +161,9 @@ func validateExtraKnownMarketplaces(values map[string]any, filePath string) []Va
 		}
 		sourcePath := "extraKnownMarketplaces." + key + ".source"
 		errors = append(errors, validateMarketplaceSource(source, filePath, sourcePath)...)
+		if _, ok := entry["installLocation"]; ok {
+			errors = append(errors, validateMarketplaceInstallLocation(entry["installLocation"], filePath, "extraKnownMarketplaces."+key+".installLocation")...)
+		}
 		if sourceType, _ := source["source"].(string); sourceType != "settings" {
 			continue
 		}
@@ -188,6 +191,31 @@ func validateExtraKnownMarketplaces(values map[string]any, filePath string) []Va
 		}
 	}
 	return errors
+}
+
+func validateMarketplaceInstallLocation(value any, filePath string, path string) []ValidationError {
+	text, ok := value.(string)
+	if !ok {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path,
+			Message:      "Marketplace installLocation must be a string",
+			Expected:     "user, project, or local",
+			InvalidValue: value,
+		}}
+	}
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "user", "project", "local":
+		return nil
+	default:
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path,
+			Message:      "Marketplace installLocation must be user, project, or local",
+			Expected:     "user, project, or local",
+			InvalidValue: value,
+		}}
+	}
 }
 
 func validateMarketplaceSourceList(path string, values []any, filePath string) []ValidationError {

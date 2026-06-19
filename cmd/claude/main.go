@@ -416,7 +416,7 @@ func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, s
 func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("claude plugin install", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	scope := "project"
+	scope := ""
 	flags.StringVar(&scope, "scope", scope, "installation scope")
 	flags.StringVar(&scope, "s", scope, "installation scope")
 	if err := flags.Parse(args); err != nil {
@@ -426,15 +426,12 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 		return 2
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "ccgo plugin install: usage: claude plugin install [--scope project|user] <plugin>")
+		fmt.Fprintln(stderr, "ccgo plugin install: usage: claude plugin install [--scope project|user|local] <plugin>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
-	if scope == "" {
-		scope = "project"
-	}
-	if scope != "project" && scope != "user" {
-		fmt.Fprintf(stderr, "ccgo plugin install: scope %q is not supported yet; use project or user\n", scope)
+	if scope != "" && scope != "project" && scope != "user" && scope != "local" {
+		fmt.Fprintf(stderr, "ccgo plugin install: scope %q is not supported; use project, user, or local\n", scope)
 		return 2
 	}
 	settings, err := pluginCLISettingsFromFiles(state.CWD())
@@ -454,7 +451,7 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("claude plugin update", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	scope := "project"
+	scope := ""
 	flags.StringVar(&scope, "scope", scope, "installation scope")
 	flags.StringVar(&scope, "s", scope, "installation scope")
 	if err := flags.Parse(args); err != nil {
@@ -464,15 +461,12 @@ func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer,
 		return 2
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "ccgo plugin update: usage: claude plugin update [--scope project|user|all] <plugin>")
+		fmt.Fprintln(stderr, "ccgo plugin update: usage: claude plugin update [--scope project|user|local|all] <plugin>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
-	if scope == "" {
-		scope = "project"
-	}
-	if scope != "project" && scope != "user" && scope != "all" {
-		fmt.Fprintf(stderr, "ccgo plugin update: scope %q is not supported yet; use project, user, or all\n", scope)
+	if scope != "" && scope != "project" && scope != "user" && scope != "local" && scope != "all" {
+		fmt.Fprintf(stderr, "ccgo plugin update: scope %q is not supported; use project, user, local, or all\n", scope)
 		return 2
 	}
 	settings, err := pluginCLISettingsFromFiles(state.CWD())

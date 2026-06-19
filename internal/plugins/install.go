@@ -32,13 +32,17 @@ func InstallMarketplacePlugin(name string, cwd string, settings contracts.Settin
 }
 
 func InstallMarketplacePluginInScope(name string, cwd string, scope string, settings contracts.Settings) (PluginInstallResult, error) {
-	targetPluginsDir, err := installPluginsDirForScope(cwd, scope)
-	if err != nil {
-		return PluginInstallResult{}, err
-	}
 	plugin, ok := findLoadedPlugin(LoadPluginDirsWithSettings(nil, settings), name)
 	if !ok {
 		return PluginInstallResult{}, fmt.Errorf("not found in configured marketplace sources")
+	}
+	resolvedScope, err := resolvePluginInstallScope(scope, plugin, settings, false)
+	if err != nil {
+		return PluginInstallResult{}, err
+	}
+	targetPluginsDir, err := installPluginsDirForScope(cwd, resolvedScope)
+	if err != nil {
+		return PluginInstallResult{}, err
 	}
 	targetRoot := filepath.Join(targetPluginsDir, SafePluginInstallDirName(plugin))
 	if SameResolvedPath(plugin.Root, targetRoot) {
@@ -63,11 +67,15 @@ func UpdateInstalledMarketplacePlugins(name string, cwd string, settings contrac
 }
 
 func UpdateInstalledMarketplacePluginsInScope(name string, cwd string, scope string, settings contracts.Settings) (PluginUpdateResult, error) {
-	installedRoots, err := installedPluginDirsForScope(cwd, scope)
+	marketplacePlugins := LoadPluginDirsWithSettings(nil, settings)
+	resolvedScope, err := resolvePluginUpdateScope(scope, name, marketplacePlugins, settings)
 	if err != nil {
 		return PluginUpdateResult{}, err
 	}
-	marketplacePlugins := LoadPluginDirsWithSettings(nil, settings)
+	installedRoots, err := installedPluginDirsForScope(cwd, resolvedScope)
+	if err != nil {
+		return PluginUpdateResult{}, err
+	}
 	result := PluginUpdateResult{MarketplacePluginCount: len(marketplacePlugins)}
 	installedPlugins := LoadPluginDirs(installedRoots)
 	name = strings.TrimSpace(name)
@@ -115,16 +123,26 @@ func installPluginsDirForScope(cwd string, scope string) (string, error) {
 			return "", fmt.Errorf("working directory is unavailable")
 		}
 		return filepath.Join(cwd, ".claude", "plugins"), nil
+	case "local":
+		if strings.TrimSpace(cwd) == "" {
+			return "", fmt.Errorf("working directory is unavailable")
+		}
+		return filepath.Join(cwd, ".claude", "plugins"), nil
 	case "user":
 		return filepath.Join(platform.ClaudeHomeDir(), "plugins"), nil
 	default:
-		return "", fmt.Errorf("scope %q is not supported; use project or user", scope)
+		return "", fmt.Errorf("scope %q is not supported; use project, user, or local", scope)
 	}
 }
 
 func installedPluginDirsForScope(cwd string, scope string) ([]string, error) {
 	switch strings.ToLower(strings.TrimSpace(scope)) {
 	case "", "project":
+		if strings.TrimSpace(cwd) == "" {
+			return nil, fmt.Errorf("working directory is unavailable")
+		}
+		return ProjectPluginDirs(cwd), nil
+	case "local":
 		if strings.TrimSpace(cwd) == "" {
 			return nil, fmt.Errorf("working directory is unavailable")
 		}
@@ -137,8 +155,58 @@ func installedPluginDirsForScope(cwd string, scope string) ([]string, error) {
 		}
 		return InstalledPluginDirs(cwd), nil
 	default:
-		return nil, fmt.Errorf("scope %q is not supported; use project, user, or all", scope)
+		return nil, fmt.Errorf("scope %q is not supported; use project, user, local, or all", scope)
 	}
+}
+
+func resolvePluginInstallScope(scope string, plugin LoadedPlugin, settings contracts.Settings, allowAll bool) (string, error) {
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		scope = preferredMarketplaceInstallScope(plugin, settings)
+	}
+	if scope == "" {
+		scope = "project"
+	}
+	switch scope {
+	case "project", "user", "local":
+		return scope, nil
+	case "all":
+		if allowAll {
+			return scope, nil
+		}
+	}
+	return "", fmt.Errorf("scope %q is not supported; use project, user, or local", scope)
+}
+
+func resolvePluginUpdateScope(scope string, name string, marketplacePlugins []LoadedPlugin, settings contracts.Settings) (string, error) {
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" && strings.TrimSpace(name) != "" && !strings.EqualFold(strings.TrimSpace(name), "all") {
+		if plugin, ok := findLoadedPlugin(marketplacePlugins, name); ok {
+			scope = preferredMarketplaceInstallScope(plugin, settings)
+		}
+	}
+	if scope == "" {
+		scope = "project"
+	}
+	if scope == "all" {
+		return scope, nil
+	}
+	return resolvePluginInstallScope(scope, LoadedPlugin{}, settings, false)
+}
+
+func preferredMarketplaceInstallScope(plugin LoadedPlugin, settings contracts.Settings) string {
+	marketplace := strings.TrimSpace(plugin.Marketplace)
+	if marketplace == "" {
+		return ""
+	}
+	for name, raw := range settings.ExtraKnownMarketplaces {
+		if !strings.EqualFold(strings.TrimSpace(name), marketplace) {
+			continue
+		}
+		entry, _ := raw.(map[string]any)
+		return strings.ToLower(strings.TrimSpace(stringFromAnyMap(entry, "installLocation")))
+	}
+	return ""
 }
 
 func SafePluginInstallDirName(plugin LoadedPlugin) string {

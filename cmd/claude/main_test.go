@@ -2166,12 +2166,23 @@ func TestRunPluginInstallCLI(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(marketDir, "assets", "README.md"), []byte("asset"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	userDefaultDir := filepath.Join(t.TempDir(), "user-default")
+	if err := os.MkdirAll(filepath.Join(userDefaultDir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDefaultDir, "plugin.json"), []byte(`{"name":"user default","version":"1.0.0","description":"User preferred plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDefaultDir, "assets", "README.md"), []byte("user-default"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	settings := fmt.Sprintf(`{
 		"extraKnownMarketplaces": {
-			"team": {"source": {"source": "settings", "name": "team", "plugins": [%q]}}
+			"team": {"source": {"source": "settings", "name": "team", "plugins": [%q]}},
+			"personal": {"installLocation": "user", "source": {"source": "settings", "name": "personal", "plugins": [%q]}}
 		},
-		"strictKnownMarketplaces": ["team"]
-	}`, marketDir)
+		"strictKnownMarketplaces": ["team", "personal"]
+	}`, marketDir, userDefaultDir)
 	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(settings), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -2229,6 +2240,46 @@ func TestRunPluginInstallCLI(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "assets", "README.md")); err != nil || string(data) != "asset" {
 		t.Fatalf("user installed asset data=%q err=%v", data, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "install", "user default"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("preferred user install exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	userDefaultInstalledDir := filepath.Join(configHome, "plugins", "user-default")
+	for _, want := range []string{
+		"Plugin installed",
+		"Installed path: " + userDefaultInstalledDir,
+		"Status: installed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("preferred user install stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(userDefaultInstalledDir, "assets", "README.md")); err != nil || string(data) != "user-default" {
+		t.Fatalf("preferred user installed asset data=%q err=%v", data, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "install", "--scope", "local", "user default"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("local scope install exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	localInstalledDir := filepath.Join(resolvedProject, ".claude", "plugins", "user-default")
+	for _, want := range []string{
+		"Plugin installed",
+		"Installed path: " + localInstalledDir,
+		"Status: installed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("local install stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(localInstalledDir, "assets", "README.md")); err != nil || string(data) != "user-default" {
+		t.Fatalf("local installed asset data=%q err=%v", data, err)
 	}
 }
 
@@ -2333,6 +2384,35 @@ func TestRunPluginUpdateCLI(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "assets", "README.md")); err != nil || string(data) != "v3" {
 		t.Fatalf("user updated asset data=%q err=%v", data, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"4.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "assets", "README.md"), []byte("v4"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "update", "--scope", "local", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("local update exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Plugin update",
+		"Updated plugins: 1",
+		"- market demo -> " + installedDir,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("local update stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "plugin.json")); err != nil || !strings.Contains(string(data), `"version":"4.0.0"`) {
+		t.Fatalf("local updated plugin json=%q err=%v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "assets", "README.md")); err != nil || string(data) != "v4" {
+		t.Fatalf("local updated asset data=%q err=%v", data, err)
 	}
 
 	stdout.Reset()
@@ -2634,6 +2714,13 @@ func TestRunPluginMarketplaceAddRemoveCLI(t *testing.T) {
 	source := team["source"].(map[string]any)
 	if source["source"] != "directory" || source["path"] != marketDir || team["installLocation"] != "project" {
 		t.Fatalf("team marketplace settings = %#v", team)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "--install-location", "machine", "bad-scope", "github:owner/repo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "installLocation must be user, project, or local") {
+		t.Fatalf("bad install location exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 
 	stdout.Reset()
