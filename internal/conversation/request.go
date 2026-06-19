@@ -1,7 +1,10 @@
 package conversation
 
 import (
+	"net/url"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,7 +47,7 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 		if err != nil {
 			return anthropic.Request{}, err
 		}
-		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitions(defs, history)
+		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitions(defs, history, model)
 	}
 	apiMessages := msgs.NormalizeForAPI(history)
 	if !toolSearchActive {
@@ -67,12 +70,15 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 	return request, nil
 }
 
-func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message) ([]contracts.ToolDefinition, []string, bool) {
+func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message, model string) ([]contracts.ToolDefinition, []string, bool) {
 	if len(definitions) == 0 {
 		return definitions, nil, false
 	}
 	if !hasToolSearchDefinition(definitions) {
 		return applyDiscoveredToolReferences(definitions, history), nil, false
+	}
+	if !toolSearchEnabledForRequest(model) {
+		return loadAllDeferredTools(withoutToolSearchDefinition(definitions)), nil, false
 	}
 	deferredNames := deferredToolNames(definitions)
 	if len(deferredNames) == 0 {
@@ -92,6 +98,118 @@ func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history
 		}
 	}
 	return out, deferredNames, true
+}
+
+type toolSearchMode string
+
+const (
+	toolSearchModeTST      toolSearchMode = "tst"
+	toolSearchModeTSTAuto  toolSearchMode = "tst-auto"
+	toolSearchModeStandard toolSearchMode = "standard"
+)
+
+func toolSearchEnabledForRequest(model string) bool {
+	if !modelSupportsToolReference(model) {
+		return false
+	}
+	mode := toolSearchModeFromEnv()
+	if mode == toolSearchModeStandard {
+		return false
+	}
+	if os.Getenv("ENABLE_TOOL_SEARCH") == "" && !isFirstPartyAnthropicBaseURL(os.Getenv("ANTHROPIC_BASE_URL")) {
+		return false
+	}
+	return true
+}
+
+func modelSupportsToolReference(model string) bool {
+	return !strings.Contains(strings.ToLower(strings.TrimSpace(model)), "haiku")
+}
+
+func toolSearchModeFromEnv() toolSearchMode {
+	if session.IsEnvTruthy(os.Getenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")) {
+		return toolSearchModeStandard
+	}
+	value := os.Getenv("ENABLE_TOOL_SEARCH")
+	if percent, ok := autoToolSearchPercent(value); ok {
+		if percent == 0 {
+			return toolSearchModeTST
+		}
+		if percent == 100 {
+			return toolSearchModeStandard
+		}
+	}
+	if isAutoToolSearchMode(value) {
+		return toolSearchModeTSTAuto
+	}
+	if session.IsEnvTruthy(value) {
+		return toolSearchModeTST
+	}
+	if isEnvDefinedFalsy(value) {
+		return toolSearchModeStandard
+	}
+	return toolSearchModeTST
+}
+
+func autoToolSearchPercent(value string) (int, bool) {
+	if !strings.HasPrefix(value, "auto:") {
+		return 0, false
+	}
+	percent, err := strconv.Atoi(value[len("auto:"):])
+	if err != nil {
+		return 0, false
+	}
+	if percent < 0 {
+		return 0, true
+	}
+	if percent > 100 {
+		return 100, true
+	}
+	return percent, true
+}
+
+func isAutoToolSearchMode(value string) bool {
+	return value == "auto" || strings.HasPrefix(value, "auto:")
+}
+
+func isEnvDefinedFalsy(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "0", "false", "no", "off":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFirstPartyAnthropicBaseURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return true
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := parsed.Host
+	if host == "" {
+		return false
+	}
+	if host == "api.anthropic.com" {
+		return true
+	}
+	return os.Getenv("USER_TYPE") == "ant" && host == "api-staging.anthropic.com"
+}
+
+func loadAllDeferredTools(definitions []contracts.ToolDefinition) []contracts.ToolDefinition {
+	out := make([]contracts.ToolDefinition, len(definitions))
+	copy(out, definitions)
+	for i := range out {
+		if toolDefinitionDeferred(out[i]) {
+			out[i].AlwaysLoad = true
+			out[i].ShouldDefer = false
+		}
+	}
+	return out
 }
 
 func applyDiscoveredToolReferences(definitions []contracts.ToolDefinition, history []contracts.Message) []contracts.ToolDefinition {

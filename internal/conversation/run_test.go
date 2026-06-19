@@ -7873,6 +7873,13 @@ func requestHasTool(request anthropic.Request, name string) bool {
 	return false
 }
 
+func allowToolSearchForTest(t *testing.T) {
+	t.Helper()
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "true")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+}
+
 func requestTool(request anthropic.Request, name string) anthropic.ToolDefinition {
 	for _, definition := range request.Tools {
 		if definition.Name == name {
@@ -7997,6 +8004,7 @@ func TestBuildRequestPreservesDeferredToolMetadata(t *testing.T) {
 }
 
 func TestBuildRequestWithToolSearchOmitsUndiscoveredDeferredTools(t *testing.T) {
+	allowToolSearchForTest(t)
 	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
 	if err != nil {
 		t.Fatal(err)
@@ -8026,6 +8034,7 @@ func TestBuildRequestWithToolSearchOmitsUndiscoveredDeferredTools(t *testing.T) 
 }
 
 func TestBuildRequestWithToolSearchLoadsDiscoveredDeferredTools(t *testing.T) {
+	allowToolSearchForTest(t)
 	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
 	if err != nil {
 		t.Fatal(err)
@@ -8063,6 +8072,7 @@ func TestBuildRequestWithToolSearchLoadsDiscoveredDeferredTools(t *testing.T) {
 }
 
 func TestBuildRequestWithToolSearchButNoDeferredToolsOmitsToolSearch(t *testing.T) {
+	allowToolSearchForTest(t)
 	registry, err := tool.NewRegistry(
 		tool.FuncTool{DefinitionValue: contracts.ToolDefinition{
 			Name:        "Read",
@@ -8089,6 +8099,113 @@ func TestBuildRequestWithToolSearchButNoDeferredToolsOmitsToolSearch(t *testing.
 	}
 	if len(req.Messages) != 1 || req.Messages[0].Content[0].Text != "hi" {
 		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestBuildRequestWithToolSearchDisabledForHaikuLoadsDeferredTools(t *testing.T) {
+	allowToolSearchForTest(t)
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "claude-haiku-4-5-20251001",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "claude-haiku-4-5-20251001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" || req.Tools[0].DeferLoading {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Content[0].Text != "hi" {
+		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestBuildRequestWithToolSearchDisabledByEnvLoadsDeferredTools(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*testing.T)
+	}{
+		{
+			name: "enable_false",
+			setup: func(t *testing.T) {
+				t.Setenv("ENABLE_TOOL_SEARCH", "false")
+			},
+		},
+		{
+			name: "auto_100",
+			setup: func(t *testing.T) {
+				t.Setenv("ENABLE_TOOL_SEARCH", "auto:100")
+			},
+		},
+		{
+			name: "disable_experimental_betas",
+			setup: func(t *testing.T) {
+				t.Setenv("ENABLE_TOOL_SEARCH", "true")
+				t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "true")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ANTHROPIC_BASE_URL", "")
+			t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+			tc.setup(t)
+			registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner := Runner{
+				Tools:     tool.NewExecutor(registry),
+				Model:     "sonnet",
+				MaxTokens: 100,
+			}
+			req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(req.Tools) != 1 || req.Tools[0].Name != "Task" || req.Tools[0].DeferLoading {
+				t.Fatalf("tools = %#v", req.Tools)
+			}
+			if len(req.Messages) != 1 || req.Messages[0].Content[0].Text != "hi" {
+				t.Fatalf("messages = %#v", req.Messages)
+			}
+		})
+	}
+}
+
+func TestBuildRequestWithToolSearchDisabledForCustomBaseURLUnlessExplicitlyEnabled(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:12345")
+	t.Setenv("ENABLE_TOOL_SEARCH", "")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" || req.Tools[0].DeferLoading {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+
+	t.Setenv("ENABLE_TOOL_SEARCH", "true")
+	req, err = runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "ToolSearch" {
+		t.Fatalf("tools with explicit enable = %#v", req.Tools)
 	}
 }
 
@@ -8163,6 +8280,7 @@ func TestBuildRequestStripsOnlyToolReferencesFromMixedContentWhenInactive(t *tes
 }
 
 func TestBuildRequestKeepsToolReferencesWhenToolSearchActive(t *testing.T) {
+	allowToolSearchForTest(t)
 	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
 	if err != nil {
 		t.Fatal(err)

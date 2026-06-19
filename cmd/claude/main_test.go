@@ -90,8 +90,8 @@ func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
 	if !ok || len(messages) < 1 {
 		t.Fatalf("messages = %#v", requestBody["messages"])
 	}
-	if !hasAvailableDeferredToolsMessage(messages) {
-		t.Fatalf("missing deferred tools message: %#v", messages)
+	if hasAvailableDeferredToolsMessage(messages) {
+		t.Fatalf("unexpected deferred tools message for haiku: %#v", messages)
 	}
 	if got := messageTextAt(t, messages, 0); got != "say hello" {
 		t.Fatalf("prompt = %q", got)
@@ -99,6 +99,9 @@ func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
 	tools, ok := requestBody["tools"].([]any)
 	if !ok || len(tools) == 0 {
 		t.Fatalf("missing builtin tools: %#v", requestBody["tools"])
+	}
+	if requestToolsContainName(tools, "ToolSearch") {
+		t.Fatalf("haiku request should not include ToolSearch: %#v", tools)
 	}
 }
 
@@ -3963,6 +3966,19 @@ func isAvailableDeferredToolsMessage(message any) bool {
 	}
 	text, _ := block["text"].(string)
 	return strings.HasPrefix(text, "<available-deferred-tools>\n")
+}
+
+func requestToolsContainName(tools []any, name string) bool {
+	for _, item := range tools {
+		tool, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if tool["name"] == name {
+			return true
+		}
+	}
+	return false
 }
 
 func containsAnyString(values []any, want string) bool {
