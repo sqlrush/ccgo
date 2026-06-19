@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -48,12 +49,42 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 		if err != nil {
 			return anthropic.Request{}, err
 		}
-		definitions = applyDiscoveredToolReferences(definitions, history)
+		definitions, deferredToolNames := filterToolSearchDefinitions(definitions, history)
+		if len(deferredToolNames) > 0 {
+			request.Messages = prependAvailableDeferredToolsMessage(request.Messages, deferredToolNames)
+		}
 		if len(definitions) > 0 {
 			request.Tools = anthropic.ToolsFromContracts(definitions)
 		}
 	}
 	return request, nil
+}
+
+func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message) ([]contracts.ToolDefinition, []string) {
+	if len(definitions) == 0 {
+		return definitions, nil
+	}
+	if !hasToolSearchDefinition(definitions) {
+		return applyDiscoveredToolReferences(definitions, history), nil
+	}
+	deferredNames := deferredToolNames(definitions)
+	if len(deferredNames) == 0 {
+		return withoutToolSearchDefinition(definitions), nil
+	}
+	discovered := discoveredToolReferenceNames(history)
+	out := make([]contracts.ToolDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		if isToolSearchDefinition(definition) || !toolDefinitionDeferred(definition) {
+			out = append(out, definition)
+			continue
+		}
+		if toolDefinitionDiscovered(definition, discovered) {
+			definition.AlwaysLoad = true
+			definition.ShouldDefer = false
+			out = append(out, definition)
+		}
+	}
+	return out, deferredNames
 }
 
 func applyDiscoveredToolReferences(definitions []contracts.ToolDefinition, history []contracts.Message) []contracts.ToolDefinition {
@@ -70,6 +101,63 @@ func applyDiscoveredToolReferences(definitions []contracts.ToolDefinition, histo
 		}
 	}
 	return out
+}
+
+func prependAvailableDeferredToolsMessage(messages []contracts.APIMessage, toolNames []string) []contracts.APIMessage {
+	if len(toolNames) == 0 {
+		return messages
+	}
+	content := "<available-deferred-tools>\n" + strings.Join(toolNames, "\n") + "\n</available-deferred-tools>"
+	out := make([]contracts.APIMessage, 0, len(messages)+1)
+	out = append(out, contracts.APIMessage{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock(content)}})
+	out = append(out, messages...)
+	return out
+}
+
+func deferredToolNames(definitions []contracts.ToolDefinition) []string {
+	var names []string
+	for _, definition := range definitions {
+		if toolDefinitionDeferred(definition) {
+			names = append(names, definition.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func toolDefinitionDeferred(definition contracts.ToolDefinition) bool {
+	return definition.ShouldDefer && !definition.AlwaysLoad && !isToolSearchDefinition(definition)
+}
+
+func hasToolSearchDefinition(definitions []contracts.ToolDefinition) bool {
+	for _, definition := range definitions {
+		if isToolSearchDefinition(definition) {
+			return true
+		}
+	}
+	return false
+}
+
+func withoutToolSearchDefinition(definitions []contracts.ToolDefinition) []contracts.ToolDefinition {
+	out := make([]contracts.ToolDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		if !isToolSearchDefinition(definition) {
+			out = append(out, definition)
+		}
+	}
+	return out
+}
+
+func isToolSearchDefinition(definition contracts.ToolDefinition) bool {
+	if strings.EqualFold(strings.TrimSpace(definition.Name), "ToolSearch") {
+		return true
+	}
+	for _, alias := range definition.Aliases {
+		if strings.EqualFold(strings.TrimSpace(alias), "ToolSearch") {
+			return true
+		}
+	}
+	return false
 }
 
 func toolDefinitionDiscovered(definition contracts.ToolDefinition, discovered map[string]struct{}) bool {

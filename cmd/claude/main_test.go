@@ -87,20 +87,14 @@ func TestRunPrintSendsPromptAndPrintsAssistantText(t *testing.T) {
 		t.Fatalf("max_tokens = %#v", requestBody["max_tokens"])
 	}
 	messages, ok := requestBody["messages"].([]any)
-	if !ok || len(messages) != 1 {
+	if !ok || len(messages) < 1 {
 		t.Fatalf("messages = %#v", requestBody["messages"])
 	}
-	message, ok := messages[0].(map[string]any)
-	if !ok || message["role"] != "user" {
-		t.Fatalf("message = %#v", messages[0])
+	if !hasAvailableDeferredToolsMessage(messages) {
+		t.Fatalf("missing deferred tools message: %#v", messages)
 	}
-	content, ok := message["content"].([]any)
-	if !ok || len(content) != 1 {
-		t.Fatalf("content = %#v", message["content"])
-	}
-	block, ok := content[0].(map[string]any)
-	if !ok || block["type"] != "text" || block["text"] != "say hello" {
-		t.Fatalf("block = %#v", content[0])
+	if got := messageTextAt(t, messages, 0); got != "say hello" {
+		t.Fatalf("prompt = %q", got)
 	}
 	tools, ok := requestBody["tools"].([]any)
 	if !ok || len(tools) == 0 {
@@ -1049,8 +1043,7 @@ func TestRunPrintReadsPromptFromStdinAndSettingsModel(t *testing.T) {
 		t.Fatalf("model = %#v", requestBody["model"])
 	}
 	messages := requestBody["messages"].([]any)
-	content := messages[0].(map[string]any)["content"].([]any)
-	if got := content[0].(map[string]any)["text"]; got != "from stdin" {
+	if got := messageTextAt(t, messages, 0); got != "from stdin" {
 		t.Fatalf("prompt = %#v", got)
 	}
 }
@@ -2889,22 +2882,10 @@ func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 		t.Fatalf("exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
 	messages, ok := requestBody["messages"].([]any)
-	if !ok || len(messages) != 1 {
+	if !ok || len(messages) < 1 {
 		t.Fatalf("messages = %#v", requestBody["messages"])
 	}
-	message, ok := messages[0].(map[string]any)
-	if !ok {
-		t.Fatalf("message = %#v", messages[0])
-	}
-	content, ok := message["content"].([]any)
-	if !ok || len(content) != 1 {
-		t.Fatalf("content = %#v", message["content"])
-	}
-	block, ok := content[0].(map[string]any)
-	if !ok {
-		t.Fatalf("block = %#v", content[0])
-	}
-	prompt, _ := block["text"].(string)
+	prompt := messageTextAt(t, messages, 0)
 	if !strings.Contains(prompt, "stream prompt") || !strings.Contains(prompt, "stream hook context") {
 		t.Fatalf("prompt = %q", prompt)
 	}
@@ -3937,13 +3918,51 @@ func writeTestTranscript(t *testing.T, path string, sessionID contracts.ID, user
 
 func messageTextAt(t *testing.T, requestMessages []any, index int) string {
 	t.Helper()
-	if index >= len(requestMessages) {
+	filtered := nonDeferredToolMessages(requestMessages)
+	if index >= len(filtered) {
 		t.Fatalf("messages = %#v", requestMessages)
 	}
-	message := requestMessages[index].(map[string]any)
+	message := filtered[index].(map[string]any)
 	content := message["content"].([]any)
 	block := content[0].(map[string]any)
 	return block["text"].(string)
+}
+
+func nonDeferredToolMessages(requestMessages []any) []any {
+	filtered := make([]any, 0, len(requestMessages))
+	for _, message := range requestMessages {
+		if isAvailableDeferredToolsMessage(message) {
+			continue
+		}
+		filtered = append(filtered, message)
+	}
+	return filtered
+}
+
+func hasAvailableDeferredToolsMessage(requestMessages []any) bool {
+	for _, message := range requestMessages {
+		if isAvailableDeferredToolsMessage(message) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAvailableDeferredToolsMessage(message any) bool {
+	item, ok := message.(map[string]any)
+	if !ok || item["role"] != "user" {
+		return false
+	}
+	content, ok := item["content"].([]any)
+	if !ok || len(content) == 0 {
+		return false
+	}
+	block, ok := content[0].(map[string]any)
+	if !ok {
+		return false
+	}
+	text, _ := block["text"].(string)
+	return strings.HasPrefix(text, "<available-deferred-tools>\n")
 }
 
 func containsAnyString(values []any, want string) bool {

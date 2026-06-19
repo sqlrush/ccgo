@@ -36,6 +36,7 @@ import (
 	telemetrypkg "ccgo/internal/telemetry"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
+	searchtools "ccgo/internal/tools/searchtools"
 	skilltools "ccgo/internal/tools/skill"
 	tasktools "ccgo/internal/tools/task"
 )
@@ -7864,6 +7865,15 @@ func requestHasTool(request anthropic.Request, name string) bool {
 	return false
 }
 
+func requestTool(request anthropic.Request, name string) anthropic.ToolDefinition {
+	for _, definition := range request.Tools {
+		if definition.Name == name {
+			return definition
+		}
+	}
+	return anthropic.ToolDefinition{}
+}
+
 func bridgeManifestHasCommand(manifest bridgepkg.Manifest, name string) bool {
 	for _, command := range manifest.Commands {
 		if command.Name == name {
@@ -7975,6 +7985,102 @@ func TestBuildRequestPreservesDeferredToolMetadata(t *testing.T) {
 	}
 	if !req.Tools[0].Strict {
 		t.Fatalf("task strict = false, want true")
+	}
+}
+
+func TestBuildRequestWithToolSearchOmitsUndiscoveredDeferredTools(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "ToolSearch" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if len(req.Messages) != 2 {
+		t.Fatalf("messages = %#v", req.Messages)
+	}
+	deferred := req.Messages[0]
+	if deferred.Role != "user" || !strings.Contains(deferred.Content[0].Text, "<available-deferred-tools>\nTask\n</available-deferred-tools>") {
+		t.Fatalf("deferred tools message = %#v", deferred)
+	}
+	if got := req.Messages[1].Content[0].Text; got != "hi" {
+		t.Fatalf("original user message = %q", got)
+	}
+}
+
+func TestBuildRequestWithToolSearchLoadsDiscoveredDeferredTools(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{
+		messages.UserText("find task"),
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{{
+				Type:      contracts.ContentToolResult,
+				ToolUseID: "toolu_search",
+				Content:   []contracts.ToolReference{contracts.NewToolReference("Task")},
+			}},
+		},
+	}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !requestHasTool(req, "ToolSearch") || !requestHasTool(req, "Task") || len(req.Tools) != 2 {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	taskTool := requestTool(req, "Task")
+	if taskTool.DeferLoading {
+		t.Fatalf("discovered task defer_loading = true")
+	}
+	if len(req.Messages) < 1 || !strings.Contains(req.Messages[0].Content[0].Text, "<available-deferred-tools>\nTask\n</available-deferred-tools>") {
+		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestBuildRequestWithToolSearchButNoDeferredToolsOmitsToolSearch(t *testing.T) {
+	registry, err := tool.NewRegistry(
+		tool.FuncTool{DefinitionValue: contracts.ToolDefinition{
+			Name:        "Read",
+			Description: "read a file",
+			ReadOnly:    true,
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		}},
+		searchtools.NewToolSearchTool(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Read" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Content[0].Text != "hi" {
+		t.Fatalf("messages = %#v", req.Messages)
 	}
 }
 
