@@ -714,12 +714,14 @@ type gitConfigQuerySpec struct {
 }
 
 var gitConfigQueryActions = map[string]gitConfigQuerySpec{
-	"--get":          {MinPositionals: 1, MaxPositionals: 1},
-	"--get-all":      {MinPositionals: 1, MaxPositionals: 1},
-	"--get-regexp":   {MinPositionals: 1, MaxPositionals: 2},
-	"--get-urlmatch": {MinPositionals: 2, MaxPositionals: 2},
-	"--list":         {MinPositionals: 0, MaxPositionals: 0},
-	"-l":             {MinPositionals: 0, MaxPositionals: 0},
+	"--get":           {MinPositionals: 1, MaxPositionals: 1},
+	"--get-all":       {MinPositionals: 1, MaxPositionals: 1},
+	"--get-color":     {MinPositionals: 1, MaxPositionals: 2},
+	"--get-colorbool": {MinPositionals: 1, MaxPositionals: 2},
+	"--get-regexp":    {MinPositionals: 1, MaxPositionals: 2},
+	"--get-urlmatch":  {MinPositionals: 2, MaxPositionals: 2},
+	"--list":          {MinPositionals: 0, MaxPositionals: 0},
+	"-l":              {MinPositionals: 0, MaxPositionals: 0},
 }
 
 var bashSafeEnvVars = map[string]bool{

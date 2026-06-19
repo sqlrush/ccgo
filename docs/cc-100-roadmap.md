@@ -891,7 +891,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Bash` `go list` read-only 分类现在从“子命令即只读”收敛到参数级 allowlist，允许 `-json`、`-deps`、`-f`、`-m`、`-versions`、`-tags` 和 `-mod=readonly/vendor` 等查询形态，拒绝 `-mod=mod`、`-modfile`、`-overlay`、未知 flag、缺值 flag 和非本地 package pattern。
 
-本轮补充：`Bash` `git config` read-only 分类现在从单一 `--get` 扩展到 `--get`、`--get-all`、`--get-regexp`、`--get-urlmatch` 和 `--list`/`-l` 查询族，并允许与 `--global`、`--local`、`--show-origin`、`--show-scope`、`--name-only`、`--type` 等安全查询 flag 组合；`--file`、`--blob`、`--edit`、写入类 action、缺值和多余 positional 仍不会进入只读快路径。
+本轮补充：`Bash` `git config` read-only 分类现在从单一 `--get` 扩展到 `--get`、`--get-all`、`--get-color`、`--get-colorbool`、`--get-regexp`、`--get-urlmatch` 和 `--list`/`-l` 查询族，并允许与 `--global`、`--local`、`--show-origin`、`--show-scope`、`--name-only`、`--type` 等安全查询 flag 组合；`--file`、`--blob`、`--edit`、写入类 action、缺值和多余 positional 仍不会进入只读快路径。
 
 本轮补充：`Bash` `find` read-only 分类现在拒绝 `-delete`、`-fprint`、`-fprint0`、`-fprintf` 和 `-fls` 等删除/写文件 action，避免 `find . -delete` 或 `find . -fprint out.txt` 这类命令进入只读快路径。
 
