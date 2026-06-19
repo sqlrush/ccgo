@@ -3643,16 +3643,6 @@ func (r Runner) installPluginSummary(name string) string {
 	return strings.Join(lines, "\n")
 }
 
-type pluginUpdateResult struct {
-	MarketplacePluginCount int
-	Updated                []pluginUpdateItem
-}
-
-type pluginUpdateItem struct {
-	Plugin     pluginpkg.LoadedPlugin
-	TargetPath string
-}
-
 func (r Runner) installMarketplacePlugin(name string) (pluginpkg.PluginInstallResult, error) {
 	result, err := pluginpkg.InstallMarketplacePlugin(name, r.WorkingDirectory, r.mergedSettings())
 	if err != nil {
@@ -3684,48 +3674,10 @@ func (r Runner) updatePluginSummary(name string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (r Runner) updateMarketplacePlugins(name string) (pluginUpdateResult, error) {
-	if strings.TrimSpace(r.WorkingDirectory) == "" {
-		return pluginUpdateResult{}, fmt.Errorf("working directory is unavailable")
-	}
-	merged := r.mergedSettings()
-	marketplacePlugins := pluginpkg.LoadPluginDirsWithSettings(nil, merged)
-	result := pluginUpdateResult{MarketplacePluginCount: len(marketplacePlugins)}
-	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
-	if strings.TrimSpace(name) != "" && strings.TrimSpace(name) != "all" {
-		installed, ok := findLoadedPlugin(installedPlugins, name)
-		if !ok {
-			return result, fmt.Errorf("installed plugin %s was not found", name)
-		}
-		marketplacePlugin, ok := findLoadedPlugin(marketplacePlugins, installed.Name)
-		if !ok {
-			return result, fmt.Errorf("plugin %s was not found in configured marketplace sources", installed.Name)
-		}
-		if sameResolvedPath(marketplacePlugin.Root, installed.Root) {
-			return result, nil
-		}
-		if err := replacePluginDir(marketplacePlugin.Root, installed.Root); err != nil {
-			return result, err
-		}
-		result.Updated = append(result.Updated, pluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
-		r.refreshPluginMCPServers()
-		return result, nil
-	}
-	sort.SliceStable(installedPlugins, func(i, j int) bool {
-		if installedPlugins[i].Name == installedPlugins[j].Name {
-			return installedPlugins[i].Root < installedPlugins[j].Root
-		}
-		return installedPlugins[i].Name < installedPlugins[j].Name
-	})
-	for _, installed := range installedPlugins {
-		marketplacePlugin, ok := findLoadedPlugin(marketplacePlugins, installed.Name)
-		if !ok || sameResolvedPath(marketplacePlugin.Root, installed.Root) {
-			continue
-		}
-		if err := replacePluginDir(marketplacePlugin.Root, installed.Root); err != nil {
-			return result, err
-		}
-		result.Updated = append(result.Updated, pluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
+func (r Runner) updateMarketplacePlugins(name string) (pluginpkg.PluginUpdateResult, error) {
+	result, err := pluginpkg.UpdateInstalledMarketplacePlugins(name, r.WorkingDirectory, r.mergedSettings())
+	if err != nil {
+		return result, err
 	}
 	r.refreshPluginMCPServers()
 	return result, nil
@@ -3739,203 +3691,6 @@ func (r Runner) refreshPluginMCPServers() {
 		r.MCP.CWD = r.WorkingDirectory
 	}
 	r.MCP.refreshPluginServers()
-}
-
-func safePluginInstallDirName(plugin pluginpkg.LoadedPlugin) string {
-	name := strings.TrimSpace(plugin.Name)
-	if name == "" {
-		name = filepath.Base(plugin.Root)
-	}
-	var b strings.Builder
-	lastDash := false
-	for _, r := range name {
-		allowed := (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '-' ||
-			r == '_' ||
-			r == '.'
-		if allowed {
-			b.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if !lastDash {
-			b.WriteByte('-')
-			lastDash = true
-		}
-	}
-	name = strings.Trim(b.String(), ".-")
-	if name == "" {
-		return "plugin"
-	}
-	return name
-}
-
-func sameResolvedPath(a string, b string) bool {
-	a = cleanResolvedPath(a)
-	b = cleanResolvedPath(b)
-	return a != "" && b != "" && a == b
-}
-
-func cleanResolvedPath(path string) string {
-	if path == "" {
-		return ""
-	}
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = resolved
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return filepath.Clean(path)
-	}
-	return filepath.Clean(abs)
-}
-
-func copyPluginDir(src string, dst string) error {
-	src = cleanResolvedPath(src)
-	info, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("source plugin is not a directory")
-	}
-	if _, err := os.Stat(dst); err == nil {
-		return fmt.Errorf("target path already exists: %s", dst)
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	parent := filepath.Dir(dst)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return err
-	}
-	temp, cleanup, err := stagePluginDir(src, parent, filepath.Base(dst), info.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	defer cleanup(true)
-	if err := os.Rename(temp, dst); err != nil {
-		return err
-	}
-	cleanup(false)
-	return nil
-}
-
-func replacePluginDir(src string, dst string) error {
-	src = cleanResolvedPath(src)
-	info, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("source plugin is not a directory")
-	}
-	if _, err := os.Stat(dst); os.IsNotExist(err) {
-		return copyPluginDir(src, dst)
-	} else if err != nil {
-		return err
-	}
-	parent := filepath.Dir(dst)
-	temp, cleanupTemp, err := stagePluginDir(src, parent, filepath.Base(dst), info.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	defer cleanupTemp(true)
-	backup, err := os.MkdirTemp(parent, "."+filepath.Base(dst)+".old-*")
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(backup); err != nil {
-		_ = os.RemoveAll(backup)
-		return err
-	}
-	backupActive := false
-	defer func() {
-		if backupActive {
-			_ = os.RemoveAll(backup)
-		}
-	}()
-	if err := os.Rename(dst, backup); err != nil {
-		return err
-	}
-	backupActive = true
-	if err := os.Rename(temp, dst); err != nil {
-		if restoreErr := os.Rename(backup, dst); restoreErr != nil {
-			backupActive = false
-			return fmt.Errorf("%w; failed to restore backup %s: %v", err, backup, restoreErr)
-		}
-		backupActive = false
-		return err
-	}
-	cleanupTemp(false)
-	_ = os.RemoveAll(backup)
-	backupActive = false
-	return nil
-}
-
-func stagePluginDir(src string, parent string, base string, mode os.FileMode) (string, func(bool), error) {
-	temp, err := os.MkdirTemp(parent, "."+base+".tmp-*")
-	if err != nil {
-		return "", nil, err
-	}
-	cleanup := func(remove bool) {
-		if remove {
-			_ = os.RemoveAll(temp)
-		}
-	}
-	if mode == 0 {
-		mode = 0o755
-	}
-	if err := os.Chmod(temp, mode); err != nil {
-		cleanup(true)
-		return "", nil, err
-	}
-	if err := filepath.WalkDir(src, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		target := filepath.Join(temp, rel)
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refusing to install plugin symlink %s", rel)
-		}
-		if entry.IsDir() {
-			return os.MkdirAll(target, info.Mode().Perm())
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("refusing to install non-regular plugin file %s", rel)
-		}
-		return copyPluginFile(path, target, info.Mode().Perm())
-	}); err != nil {
-		cleanup(true)
-		return "", nil, err
-	}
-	return temp, cleanup, nil
-}
-
-func copyPluginFile(src string, dst string, mode os.FileMode) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	if mode == 0 {
-		mode = 0o644
-	}
-	return os.WriteFile(dst, data, mode)
 }
 
 func (r Runner) setPluginEnabledSummary(args []string) string {
@@ -4993,7 +4748,7 @@ func firstMarketplacePluginResults(values []marketplacePluginResult, limit int) 
 	return values[:limit]
 }
 
-func firstPluginUpdateItems(values []pluginUpdateItem, limit int) []pluginUpdateItem {
+func firstPluginUpdateItems(values []pluginpkg.PluginUpdateItem, limit int) []pluginpkg.PluginUpdateItem {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}

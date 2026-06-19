@@ -337,6 +337,8 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 		return runPluginListCLI(state, args[1:], stdout, stderr)
 	case "install", "i":
 		return runPluginInstallCLI(state, args[1:], stdout, stderr)
+	case "update":
+		return runPluginUpdateCLI(state, args[1:], stdout, stderr)
 	case "enable":
 		return runPluginSetEnabledCLI(state, "enable", args[1:], stdout, stderr)
 	case "disable":
@@ -446,6 +448,44 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 		return 1
 	}
 	writePluginInstallResult(stdout, result)
+	return 0
+}
+
+func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin update", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	scope := "project"
+	flags.StringVar(&scope, "scope", scope, "installation scope")
+	flags.StringVar(&scope, "s", scope, "installation scope")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "ccgo plugin update: usage: claude plugin update [--scope project] <plugin>")
+		return 2
+	}
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		scope = "project"
+	}
+	if scope != "project" {
+		fmt.Fprintf(stderr, "ccgo plugin update: scope %q is not supported yet; use project\n", scope)
+		return 2
+	}
+	settings, err := pluginCLISettingsFromFiles(state.CWD())
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin update: %v\n", err)
+		return 1
+	}
+	result, err := pluginpkg.UpdateInstalledMarketplacePlugins(strings.TrimSpace(flags.Arg(0)), state.CWD(), settings)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin update: %v\n", err)
+		return 1
+	}
+	writePluginUpdateResult(stdout, result)
 	return 0
 }
 
@@ -648,6 +688,21 @@ func writePluginInstallResult(stdout io.Writer, result pluginpkg.PluginInstallRe
 		lines = append(lines, "Status: already installed")
 	} else {
 		lines = append(lines, "Status: installed")
+	}
+	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+}
+
+func writePluginUpdateResult(stdout io.Writer, result pluginpkg.PluginUpdateResult) {
+	lines := []string{
+		"Plugin update",
+		fmt.Sprintf("Marketplace plugins: %d", result.MarketplacePluginCount),
+		fmt.Sprintf("Updated plugins: %d", len(result.Updated)),
+	}
+	if len(result.Updated) > 0 {
+		lines = append(lines, "Updated:")
+		for _, item := range result.Updated {
+			lines = append(lines, "- "+item.Plugin.Name+" -> "+item.TargetPath)
+		}
 	}
 	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
 }

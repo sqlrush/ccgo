@@ -2219,6 +2219,88 @@ func TestRunPluginInstallCLI(t *testing.T) {
 	}
 }
 
+func TestRunPluginUpdateCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marketDir := filepath.Join(t.TempDir(), "market-demo")
+	if err := os.MkdirAll(filepath.Join(marketDir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"1.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "assets", "README.md"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	settings := fmt.Sprintf(`{
+		"extraKnownMarketplaces": {
+			"team": {"source": {"source": "settings", "name": "team", "plugins": [%q]}}
+		},
+		"strictKnownMarketplaces": ["team"]
+	}`, marketDir)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "install", "--scope", "project", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("install exit = %d stderr=%s", code, stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"2.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "assets", "README.md"), []byte("v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolvedProject, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installedDir := filepath.Join(resolvedProject, ".claude", "plugins", "market-demo")
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "update", "--scope", "project", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("update exit = %d stderr=%s", code, stderr.String())
+	}
+	for _, want := range []string{
+		"Plugin update",
+		"Marketplace plugins: 1",
+		"Updated plugins: 1",
+		"- market demo -> " + installedDir,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "plugin.json")); err != nil || !strings.Contains(string(data), `"version":"2.0.0"`) {
+		t.Fatalf("updated plugin json=%q err=%v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "assets", "README.md")); err != nil || string(data) != "v2" {
+		t.Fatalf("updated asset data=%q err=%v", data, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "update", "--scope", "user", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), `scope "user" is not supported yet`) {
+		t.Fatalf("user scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "update", "missing"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "installed plugin missing was not found") {
+		t.Fatalf("missing exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPluginEnableDisableCLI(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)

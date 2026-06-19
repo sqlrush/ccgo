@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -13,6 +14,16 @@ type PluginInstallResult struct {
 	Plugin           LoadedPlugin
 	TargetPath       string
 	AlreadyInstalled bool
+}
+
+type PluginUpdateResult struct {
+	MarketplacePluginCount int
+	Updated                []PluginUpdateItem
+}
+
+type PluginUpdateItem struct {
+	Plugin     LoadedPlugin
+	TargetPath string
 }
 
 func InstallMarketplacePlugin(name string, cwd string, settings contracts.Settings) (PluginInstallResult, error) {
@@ -39,6 +50,51 @@ func InstallMarketplacePlugin(name string, cwd string, settings contracts.Settin
 		return PluginInstallResult{}, err
 	}
 	return PluginInstallResult{Plugin: plugin, TargetPath: targetRoot}, nil
+}
+
+func UpdateInstalledMarketplacePlugins(name string, cwd string, settings contracts.Settings) (PluginUpdateResult, error) {
+	if strings.TrimSpace(cwd) == "" {
+		return PluginUpdateResult{}, fmt.Errorf("working directory is unavailable")
+	}
+	marketplacePlugins := LoadPluginDirsWithSettings(nil, settings)
+	result := PluginUpdateResult{MarketplacePluginCount: len(marketplacePlugins)}
+	installedPlugins := LoadPluginDirs(ProjectPluginDirs(cwd))
+	name = strings.TrimSpace(name)
+	if name != "" && !strings.EqualFold(name, "all") {
+		installed, ok := findLoadedPlugin(installedPlugins, name)
+		if !ok {
+			return result, fmt.Errorf("installed plugin %s was not found", name)
+		}
+		marketplacePlugin, ok := findLoadedPlugin(marketplacePlugins, installed.Name)
+		if !ok {
+			return result, fmt.Errorf("plugin %s was not found in configured marketplace sources", installed.Name)
+		}
+		if SameResolvedPath(marketplacePlugin.Root, installed.Root) {
+			return result, nil
+		}
+		if err := ReplacePluginDir(marketplacePlugin.Root, installed.Root); err != nil {
+			return result, err
+		}
+		result.Updated = append(result.Updated, PluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
+		return result, nil
+	}
+	sort.SliceStable(installedPlugins, func(i, j int) bool {
+		if installedPlugins[i].Name == installedPlugins[j].Name {
+			return installedPlugins[i].Root < installedPlugins[j].Root
+		}
+		return installedPlugins[i].Name < installedPlugins[j].Name
+	})
+	for _, installed := range installedPlugins {
+		marketplacePlugin, ok := findLoadedPlugin(marketplacePlugins, installed.Name)
+		if !ok || SameResolvedPath(marketplacePlugin.Root, installed.Root) {
+			continue
+		}
+		if err := ReplacePluginDir(marketplacePlugin.Root, installed.Root); err != nil {
+			return result, err
+		}
+		result.Updated = append(result.Updated, PluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
+	}
+	return result, nil
 }
 
 func SafePluginInstallDirName(plugin LoadedPlugin) string {
@@ -119,6 +175,58 @@ func CopyPluginDir(src string, dst string) error {
 		return err
 	}
 	cleanup(false)
+	return nil
+}
+
+func ReplacePluginDir(src string, dst string) error {
+	src = cleanResolvedPath(src)
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("source plugin is not a directory")
+	}
+	if _, err := os.Stat(dst); os.IsNotExist(err) {
+		return CopyPluginDir(src, dst)
+	} else if err != nil {
+		return err
+	}
+	parent := filepath.Dir(dst)
+	temp, cleanupTemp, err := stagePluginDir(src, parent, filepath.Base(dst), info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	defer cleanupTemp(true)
+	backup, err := os.MkdirTemp(parent, "."+filepath.Base(dst)+".old-*")
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(backup); err != nil {
+		_ = os.RemoveAll(backup)
+		return err
+	}
+	backupActive := false
+	defer func() {
+		if backupActive {
+			_ = os.RemoveAll(backup)
+		}
+	}()
+	if err := os.Rename(dst, backup); err != nil {
+		return err
+	}
+	backupActive = true
+	if err := os.Rename(temp, dst); err != nil {
+		if restoreErr := os.Rename(backup, dst); restoreErr != nil {
+			backupActive = false
+			return fmt.Errorf("%w; failed to restore backup %s: %v", err, backup, restoreErr)
+		}
+		backupActive = false
+		return err
+	}
+	cleanupTemp(false)
+	_ = os.RemoveAll(backup)
+	backupActive = false
 	return nil
 }
 
