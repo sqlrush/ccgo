@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"strings"
 
 	"ccgo/internal/contracts"
 )
@@ -37,11 +38,20 @@ type ToolDefinition struct {
 func ToolFromContract(def contracts.ToolDefinition) ToolDefinition {
 	return ToolDefinition{
 		Name:         def.Name,
-		Description:  def.Description,
+		Description:  toolDescriptionFromContract(def),
 		InputSchema:  def.InputSchema,
 		Strict:       def.Strict,
 		DeferLoading: def.ShouldDefer && !def.AlwaysLoad,
 	}
+}
+
+func toolDescriptionFromContract(def contracts.ToolDefinition) string {
+	for _, value := range []string{def.Description, def.Prompt, def.SearchHint} {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func ToolsFromContracts(defs []contracts.ToolDefinition) []ToolDefinition {
