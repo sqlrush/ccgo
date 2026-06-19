@@ -192,6 +192,15 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		}
 		runner.emit(Event{Type: EventCompact, Compact: &compactResult})
 	}
+	if nextHistory, attachment, err := runner.maybeAppendDeferredToolsDeltaAttachment(ctx, history); err != nil {
+		return result, err
+	} else if attachment != nil {
+		history = nextHistory
+		result.Messages = append(result.Messages, *attachment)
+		if err := runner.appendTranscript(*attachment); err != nil {
+			return result, err
+		}
+	}
 	toolMetadata := runner.toolMetadata()
 	for round := 0; ; round++ {
 		if round >= runner.maxToolRounds() {

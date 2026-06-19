@@ -64,7 +64,7 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 	if !toolSearchActive {
 		apiMessages = stripToolReferenceBlocksFromAPIMessages(apiMessages)
 	}
-	if len(deferredToolNames) > 0 {
+	if len(deferredToolNames) > 0 && !deferredToolsDeltaEnabled() {
 		apiMessages = prependAvailableDeferredToolsMessage(apiMessages, deferredToolNames)
 	}
 	request := anthropic.Request{
@@ -560,6 +560,10 @@ func toolDefinitionDeferred(definition contracts.ToolDefinition) bool {
 		return false
 	}
 	return definition.MCP != nil || definition.ShouldDefer
+}
+
+func deferredToolsDeltaEnabled() bool {
+	return os.Getenv("USER_TYPE") == "ant"
 }
 
 func hasToolSearchDefinition(definitions []contracts.ToolDefinition) bool {

@@ -8239,9 +8239,9 @@ func TestBuildRequestWithToolSearchAutoAboveThresholdOmitsUndiscoveredDeferredTo
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	t.Setenv("ENABLE_TOOL_SEARCH", "auto:10suffix")
 	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
-	t.Setenv("USER_TYPE", "ant")
-	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "10")
-	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("LargeDeferred", strings.Repeat("large ", 12000)), searchtools.NewToolSearchTool())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -8257,8 +8257,51 @@ func TestBuildRequestWithToolSearchAutoAboveThresholdOmitsUndiscoveredDeferredTo
 	if len(req.Tools) != 1 || req.Tools[0].Name != "ToolSearch" {
 		t.Fatalf("tools = %#v", req.Tools)
 	}
-	if len(req.Messages) != 2 || !strings.Contains(req.Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
+	if len(req.Messages) != 2 || !strings.Contains(req.Messages[0].Content[0].Text, "<available-deferred-tools>\nLargeDeferred\n</available-deferred-tools>") {
 		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestBuildRequestWithDeferredToolsDeltaAttachment(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto:10")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "10")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{
+		deferredToolsDeltaMessage(deferredToolsDelta{
+			AddedNames: []string{"TinyDeferred"},
+			AddedLines: []string{"TinyDeferred"},
+		}),
+		messages.UserText("hi"),
+	}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "ToolSearch" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if len(req.Messages) != 2 {
+		t.Fatalf("messages = %#v", req.Messages)
+	}
+	if strings.Contains(req.Messages[0].Content[0].Text, "<available-deferred-tools>") ||
+		!strings.Contains(req.Messages[0].Content[0].Text, "The following deferred tools are now available via ToolSearch:\nTinyDeferred") {
+		t.Fatalf("delta message = %#v", req.Messages[0])
+	}
+	if req.Messages[1].Content[0].Text != "hi" {
+		t.Fatalf("user message = %#v", req.Messages[1])
 	}
 }
 
@@ -8439,6 +8482,67 @@ func TestRunnerToolSearchAutoDefersMCPTools(t *testing.T) {
 	}
 	if len(client.requests[0].Messages) != 2 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "<available-deferred-tools>\nmcp__github__search\n</available-deferred-tools>") {
 		t.Fatalf("request messages = %#v", client.requests[0].Messages)
+	}
+}
+
+func TestRunnerAddsDeferredToolsDeltaAttachmentForAnt(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "true")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "ant")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		calls: []fakeCall{{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}}},
+	}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	runner := Runner{
+		Client:      client,
+		Tools:       tool.NewExecutor(registry),
+		Model:       "sonnet",
+		MaxTokens:   100,
+		SessionID:   "sess_delta",
+		SessionPath: transcriptPath,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 3 || result.Messages[1].Type != contracts.MessageAttachment {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	payload, ok := deferredToolsDeltaAttachmentPayload(result.Messages[1])
+	if !ok || strings.Join(stringSliceValue(payload["addedNames"]), ",") != "TinyDeferred" {
+		t.Fatalf("attachment payload = %#v ok=%v", payload, ok)
+	}
+	if len(client.requests) != 1 || len(client.requests[0].Messages) != 2 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	requestText := client.requests[0].Messages[1].Content[0].Text
+	if strings.Contains(requestText, "<available-deferred-tools>") ||
+		!strings.Contains(requestText, "The following deferred tools are now available via ToolSearch:\nTinyDeferred") {
+		t.Fatalf("request delta text = %q", requestText)
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 || entries[1].Type != contracts.MessageAttachment || entries[1].Message == nil {
+		t.Fatalf("transcript entries = %#v", entries)
+	}
+	if _, ok := deferredToolsDeltaAttachmentPayload(*entries[1].Message); !ok {
+		t.Fatalf("transcript attachment = %#v", entries[1].Message)
 	}
 }
 

@@ -201,7 +201,9 @@ M8/M2 补充：当 `ToolSearch` 可用且存在 deferred 工具时，conversatio
 
 M8/M2 补充：conversation request 现在会在发送 beta `defer_loading` / `tool_reference` shape 前执行官方 ToolSearch enablement gate：Haiku 模型、`CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS`、falsy `ENABLE_TOOL_SEARCH`、`ENABLE_TOOL_SEARCH=auto:100`、未显式启用 ToolSearch 时的非一方 `ANTHROPIC_BASE_URL`、以及 `ENABLE_TOOL_SEARCH=auto` 下 deferred 工具描述体积低于阈值都会回落为标准 inline tool schema；显式 `ENABLE_TOOL_SEARCH=true` 仍可让支持 beta shape 的自定义网关 opt in。auto 模式已接入 Anthropic `/v1/messages/count_tokens` 精确计数路径，成功时减去官方固定 tool overhead 后按 token 阈值判断，失败时会用 Haiku message-create usage 作为官方第二层 fallback，再失败才按官方字符 fallback 计算阈值，覆盖 `auto:N` 百分比、`[1m]` context 和 ant-only context-window override；deferred tool token count 现在按官方 deferred tool name 列表做 in-process memoization，成功值和不可用结果都会缓存。token-count VCR 仍未宣称完成。
 
-M8/M2 补充：MCP tools 现在按官方 `isMcp` 语义进入 deferred tool pool，除非显式 `always_load` 覆盖；Anthropic tool schema 序列化会为 MCP tools 输出 `defer_loading`，ToolSearch auto 的 token-count 请求也会计入 MCP tools 但以 loaded schema 计数；configured MCP toolset attach/close 会清空 ToolSearch token-count cache，避免 MCP server lifecycle 变化后复用旧计数。token-count VCR 和更深的 delta-attachment pool-change surface 仍未完成。
+M8/M2 补充：MCP tools 现在按官方 `isMcp` 语义进入 deferred tool pool，除非显式 `always_load` 覆盖；Anthropic tool schema 序列化会为 MCP tools 输出 `defer_loading`，ToolSearch auto 的 token-count 请求也会计入 MCP tools 但以 loaded schema 计数；configured MCP toolset attach/close 会清空 ToolSearch token-count cache，避免 MCP server lifecycle 变化后复用旧计数。token-count VCR 仍未完成。
+
+M8/M2 补充：`USER_TYPE=ant` 下 ToolSearch deferred tool 公告改走官方 `deferred_tools_delta` attachment：runner 会扫描历史 attachment 计算新增/移除 deferred 工具，生成并持久化 attachment，API normalization 会把 attachment 渲染为官方 ToolSearch 可用/断开提示；delta 模式不再注入临时 `<available-deferred-tools>` prepend。更深的 analytics/pool-change telemetry 和非 ant feature gate 仍未完成。
 
 M8/M2 补充：当本次 request 未启用 `ToolSearch` 时，conversation request 现在会从 API user `tool_result.content` 中剥离历史 `tool_reference` blocks；纯 reference 结果会替换为官方占位文本 `[Tool references removed - tool search not enabled]`，剥离发生在 discovered-tool 扫描之后，避免影响后续 loaded 工具恢复。
 
