@@ -1579,6 +1579,8 @@ func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) stri
 		return nativeCommandUsage()
 	}
 	switch strings.ToLower(args[0]) {
+	case "status", "show":
+		return r.formatStatusNative()
 	case "clipboard":
 		return r.formatNativeClipboardCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "chrome":

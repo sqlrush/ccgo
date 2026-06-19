@@ -3377,6 +3377,62 @@ func TestRunnerNativeClipboardStatusCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerNativeStatusCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	sessionID := contracts.ID("sess_native_status")
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	manifestPath := nativepkg.SessionManifestPath(sessionPath, sessionID)
+	if err := nativepkg.WriteManifest(manifestPath, nativepkg.Manifest{
+		SessionID: sessionID,
+		GOOS:      "testos",
+		GOARCH:    "testarch",
+		Terminal:  "xterm-256color",
+		ClipboardAdapters: []nativepkg.ClipboardAdapter{
+			{Name: "osc52", Kind: nativepkg.ClipboardAdapterKindTerminal, Available: true},
+		},
+		Capabilities: []nativepkg.Capability{
+			{Name: "native_clipboard", Available: false},
+			{Name: "osc52_clipboard", Available: true},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		SessionID:        sessionID,
+		SessionPath:      sessionPath,
+		WorkingDirectory: dir,
+	}
+	for _, prompt := range []string{"/native status", "/native show"} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %d", prompt, len(client.requests))
+		}
+		text := result.Messages[len(result.Messages)-1].Content[0].Text
+		for _, want := range []string{
+			"Status native integrations",
+			"Enabled: disabled",
+			"Manifest path: " + manifestPath,
+			"Platform: testos/testarch",
+			"Capabilities: 2",
+			"Available capabilities: 1",
+			"Clipboard adapters: 1",
+			"Terminal: xterm-256color",
+			"- native_clipboard: unavailable",
+			"- osc52_clipboard: available",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s status missing %q: %q", prompt, want, text)
+			}
+		}
+	}
+}
+
 func TestRunnerExecutesNativeChromeInstallCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()
