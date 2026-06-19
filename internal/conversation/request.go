@@ -143,8 +143,7 @@ func toolSearchEnabledForRequest(model string, definitions []contracts.ToolDefin
 }
 
 func (r Runner) deferredToolTokenCounter(ctx context.Context, modelName string) deferredToolTokenCounter {
-	counter, ok := r.Client.(TokenCountingMessageClient)
-	if !ok || counter == nil {
+	if r.Client == nil {
 		return nil
 	}
 	return func(definitions []contracts.ToolDefinition) (int, bool) {
@@ -152,20 +151,46 @@ func (r Runner) deferredToolTokenCounter(ctx context.Context, modelName string) 
 		if len(tools) == 0 {
 			return 0, true
 		}
-		response, err := counter.CountTokens(ctx, anthropic.CountTokensRequest{
-			Model:    modelName,
-			Messages: []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("foo")}}},
-			Tools:    tools,
-		})
-		if err != nil || response == nil || response.InputTokens == 0 {
-			return 0, false
+		if counter, ok := r.Client.(TokenCountingMessageClient); ok && counter != nil {
+			response, err := counter.CountTokens(ctx, anthropic.CountTokensRequest{
+				Model:    modelName,
+				Messages: []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("foo")}}},
+				Tools:    tools,
+			})
+			if err == nil && response != nil && response.InputTokens > 0 {
+				return normalizeToolTokenCount(response.InputTokens), true
+			}
 		}
-		tokens := response.InputTokens - toolTokenCountOverhead
-		if tokens < 0 {
-			tokens = 0
+		if tokens, ok := r.countToolTokensViaHaikuFallback(ctx, tools); ok {
+			return tokens, true
 		}
-		return tokens, true
+		return 0, false
 	}
+}
+
+func (r Runner) countToolTokensViaHaikuFallback(ctx context.Context, tools []anthropic.ToolDefinition) (int, bool) {
+	response, err := r.Client.CreateMessage(ctx, anthropic.Request{
+		Model:     model.Claude45Haiku,
+		MaxTokens: 1,
+		Messages:  []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("count")}}},
+		Tools:     tools,
+	})
+	if err != nil || response == nil {
+		return 0, false
+	}
+	total := response.Usage.InputTokens + response.Usage.CacheCreationInputTokens + response.Usage.CacheReadInputTokens
+	if total == 0 {
+		return 0, false
+	}
+	return normalizeToolTokenCount(total), true
+}
+
+func normalizeToolTokenCount(inputTokens int) int {
+	tokens := inputTokens - toolTokenCountOverhead
+	if tokens < 0 {
+		return 0
+	}
+	return tokens
 }
 
 func countTokenToolDefinitions(definitions []contracts.ToolDefinition) []anthropic.ToolDefinition {

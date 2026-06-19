@@ -28,6 +28,7 @@ import (
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	"ccgo/internal/messages"
+	modelpkg "ccgo/internal/model"
 	nativepkg "ccgo/internal/native"
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
@@ -8304,6 +8305,71 @@ func TestRunnerToolSearchAutoUsesCountTokensWhenAvailable(t *testing.T) {
 	}
 	if len(client.requests[0].Messages) != 2 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
 		t.Fatalf("request messages = %#v", client.requests[0].Messages)
+	}
+}
+
+func TestRunnerToolSearchAutoFallsBackToHaikuTokenCount(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{{err: fmt.Errorf("count unavailable")}},
+		calls: []fakeCall{
+			{response: &anthropic.Response{
+				ID:    "msg_count",
+				Type:  "message",
+				Role:  "assistant",
+				Model: modelpkg.Claude45Haiku,
+				Usage: contracts.Usage{InputTokens: 20501},
+			}},
+			{response: &anthropic.Response{
+				ID:         "msg_done",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+			}},
+		},
+	}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	_, err = runner.RunTurn(context.Background(), nil, messages.UserText("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.countCalls) != 1 {
+		t.Fatalf("count token calls = %#v", client.countCalls)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	fallbackRequest := client.requests[0]
+	if fallbackRequest.Model != modelpkg.Claude45Haiku || fallbackRequest.MaxTokens != 1 {
+		t.Fatalf("fallback request = %#v", fallbackRequest)
+	}
+	if len(fallbackRequest.Messages) != 1 || fallbackRequest.Messages[0].Content[0].Text != "count" {
+		t.Fatalf("fallback messages = %#v", fallbackRequest.Messages)
+	}
+	if len(fallbackRequest.Tools) != 1 || fallbackRequest.Tools[0].Name != "TinyDeferred" || fallbackRequest.Tools[0].DeferLoading {
+		t.Fatalf("fallback tools = %#v", fallbackRequest.Tools)
+	}
+	mainRequest := client.requests[1]
+	if len(mainRequest.Tools) != 1 || mainRequest.Tools[0].Name != "ToolSearch" {
+		t.Fatalf("main request tools = %#v", mainRequest.Tools)
+	}
+	if len(mainRequest.Messages) != 2 || !strings.Contains(mainRequest.Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
+		t.Fatalf("main request messages = %#v", mainRequest.Messages)
 	}
 }
 
