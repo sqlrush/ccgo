@@ -27,6 +27,12 @@ type PluginUpdateItem struct {
 	TargetPath string
 }
 
+type PluginUninstallResult struct {
+	Plugin     LoadedPlugin
+	TargetPath string
+	Scope      string
+}
+
 func InstallMarketplacePlugin(name string, cwd string, settings contracts.Settings) (PluginInstallResult, error) {
 	return InstallMarketplacePluginInScope(name, cwd, "project", settings)
 }
@@ -116,6 +122,41 @@ func UpdateInstalledMarketplacePluginsInScope(name string, cwd string, scope str
 	return result, nil
 }
 
+func UninstallInstalledPluginInScope(name string, cwd string, scope string) (PluginUninstallResult, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return PluginUninstallResult{}, fmt.Errorf("plugin name is required")
+	}
+	searchScope := strings.ToLower(strings.TrimSpace(scope))
+	switch searchScope {
+	case "":
+		searchScope = "all"
+	case "project", "user", "local":
+	default:
+		return PluginUninstallResult{}, fmt.Errorf("scope %q is not supported; use project, user, or local", scope)
+	}
+	installedRoots, err := installedPluginDirsForScope(cwd, searchScope)
+	if err != nil {
+		return PluginUninstallResult{}, err
+	}
+	installedPlugins := LoadPluginDirs(installedRoots)
+	plugin, ok := findLoadedPlugin(installedPlugins, name)
+	if !ok {
+		return PluginUninstallResult{}, fmt.Errorf("installed plugin %s was not found", name)
+	}
+	if !pluginRootInInstalledRoots(plugin.Root, installedRoots) {
+		return PluginUninstallResult{}, fmt.Errorf("refusing to uninstall plugin outside installed plugin directories: %s", plugin.Root)
+	}
+	targetPath := plugin.Root
+	if strings.TrimSpace(targetPath) == "" || cleanAbs(targetPath) == string(filepath.Separator) {
+		return PluginUninstallResult{}, fmt.Errorf("refusing to uninstall unsafe plugin path: %s", targetPath)
+	}
+	if err := os.RemoveAll(targetPath); err != nil {
+		return PluginUninstallResult{}, err
+	}
+	return PluginUninstallResult{Plugin: plugin, TargetPath: targetPath, Scope: InstalledPluginScope(cwd, targetPath)}, nil
+}
+
 func installPluginsDirForScope(cwd string, scope string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(scope)) {
 	case "", "project":
@@ -192,6 +233,16 @@ func resolvePluginUpdateScope(scope string, name string, marketplacePlugins []Lo
 		return scope, nil
 	}
 	return resolvePluginInstallScope(scope, LoadedPlugin{}, settings, false)
+}
+
+func pluginRootInInstalledRoots(root string, installedRoots []string) bool {
+	rootClean := cleanAbs(root)
+	for _, installedRoot := range installedRoots {
+		if rootClean == cleanAbs(installedRoot) || SameResolvedPath(root, installedRoot) {
+			return true
+		}
+	}
+	return false
 }
 
 func preferredMarketplaceInstallScope(plugin LoadedPlugin, settings contracts.Settings) string {

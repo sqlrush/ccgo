@@ -3390,6 +3390,8 @@ func (r Runner) formatPluginSummary(raw string) string {
 			return r.formatPluginConfig(args)
 		case "install", "i":
 			return r.installPluginSummary(subcommandRemainder(raw, args[0]))
+		case "uninstall", "remove", "rm":
+			return r.uninstallPluginSummary(subcommandRemainder(raw, args[0]))
 		case "update":
 			return r.updatePluginSummary(subcommandRemainder(raw, args[0]))
 		case "enable", "disable":
@@ -3893,6 +3895,40 @@ func (r Runner) updateMarketplacePlugins(name string, scope string) (pluginpkg.P
 	result, err := pluginpkg.UpdateInstalledMarketplacePluginsInScope(name, r.WorkingDirectory, scope, r.mergedSettings())
 	if err != nil {
 		return result, err
+	}
+	r.refreshPluginMCPServers()
+	return result, nil
+}
+
+func (r Runner) uninstallPluginSummary(name string) string {
+	scope, pluginName, err := parsePluginInstallUpdateArgs(name, false)
+	if err != nil {
+		return "Failed to uninstall plugin: " + err.Error()
+	}
+	if strings.TrimSpace(pluginName) == "" {
+		return "Usage: /plugin uninstall [--scope project|user|local] <plugin-name>"
+	}
+	result, err := r.uninstallInstalledPlugin(pluginName, scope)
+	if err != nil {
+		return "Failed to uninstall plugin " + pluginName + ": " + err.Error()
+	}
+	lines := []string{
+		"Plugin uninstalled",
+		"Name: " + result.Plugin.Name,
+		"Removed path: " + result.TargetPath,
+		"Scope: " + result.Scope,
+		"Status: uninstalled",
+	}
+	if result.Plugin.Marketplace != "" {
+		lines = append(lines, "Marketplace: "+result.Plugin.Marketplace)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) uninstallInstalledPlugin(name string, scope string) (pluginpkg.PluginUninstallResult, error) {
+	result, err := pluginpkg.UninstallInstalledPluginInScope(name, r.WorkingDirectory, scope)
+	if err != nil {
+		return pluginpkg.PluginUninstallResult{}, err
 	}
 	r.refreshPluginMCPServers()
 	return result, nil

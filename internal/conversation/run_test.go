@@ -5293,6 +5293,71 @@ func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginUninstallCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	cwd := filepath.Join(t.TempDir(), "project")
+	pluginsDir := filepath.Join(cwd, ".claude", "plugins")
+	projectPlugin := filepath.Join(pluginsDir, "demo")
+	removePlugin := filepath.Join(pluginsDir, "remove-demo")
+	rmPlugin := filepath.Join(pluginsDir, "rm-demo")
+	userPlugin := filepath.Join(configHome, "plugins", "user-demo")
+	for path, name := range map[string]string{
+		projectPlugin: "demo",
+		removePlugin:  "remove-demo",
+		rmPlugin:      "rm-demo",
+		userPlugin:    "user-demo",
+	} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "plugin.json"), []byte(`{"name":"`+name+`"}`+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_uninstall",
+		WorkingDirectory: cwd,
+		MCP:              &MCPConfig{},
+	}
+	for _, item := range []struct {
+		prompt string
+		name   string
+		path   string
+		scope  string
+	}{
+		{prompt: "/plugin uninstall demo", name: "demo", path: projectPlugin, scope: "project"},
+		{prompt: "/plugin remove remove-demo", name: "remove-demo", path: removePlugin, scope: "project"},
+		{prompt: "/plugin rm rm-demo", name: "rm-demo", path: rmPlugin, scope: "project"},
+		{prompt: "/plugin rm --scope user user-demo", name: "user-demo", path: userPlugin, scope: "user"},
+	} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(item.prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %#v", item.prompt, client.requests)
+		}
+		text := result.Messages[1].Content[0].Text
+		for _, want := range []string{
+			"Plugin uninstalled",
+			"Name: " + item.name,
+			"Removed path: " + item.path,
+			"Scope: " + item.scope,
+			"Status: uninstalled",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q: %q", item.prompt, want, text)
+			}
+		}
+		if _, err := os.Stat(item.path); !os.IsNotExist(err) {
+			t.Fatalf("%s plugin still exists or unexpected stat err: %v", item.prompt, err)
+		}
+	}
+}
+
 func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()
