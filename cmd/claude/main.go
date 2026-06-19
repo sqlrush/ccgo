@@ -300,6 +300,7 @@ type pluginCLIListEntry struct {
 	Enabled     bool     `json:"enabled"`
 	InstallPath string   `json:"installPath"`
 	MCPServers  []string `json:"mcpServers,omitempty"`
+	Errors      []string `json:"errors,omitempty"`
 }
 
 type pluginCLIAvailableEntry struct {
@@ -380,8 +381,9 @@ func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, s
 		return 1
 	}
 	settings := runnerMergedSettings(runner)
-	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(runner.WorkingDirectory))
-	installed := pluginCLIInstalledEntries(installedPlugins, settings, runner.WorkingDirectory)
+	installedRoots := pluginpkg.InstalledPluginDirs(runner.WorkingDirectory)
+	installedPlugins := pluginpkg.LoadPluginDirs(installedRoots)
+	installed := pluginCLIInstalledEntriesFromRoots(installedRoots, installedPlugins, settings, runner.WorkingDirectory)
 	if *jsonOutput {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -412,7 +414,13 @@ func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, s
 		if plugin.Enabled {
 			stateText = "enabled"
 		}
+		if len(plugin.Errors) > 0 {
+			stateText = "failed to load"
+		}
 		fmt.Fprintf(stdout, "- %s %s (%s, %s)\n", plugin.ID, plugin.Version, plugin.Scope, stateText)
+		for _, loadErr := range plugin.Errors {
+			fmt.Fprintf(stdout, "  Error: %s\n", loadErr)
+		}
 	}
 	return 0
 }
@@ -1038,6 +1046,51 @@ func pluginCLIInstalledEntries(plugins []pluginpkg.LoadedPlugin, settings contra
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+func pluginCLIInstalledEntriesFromRoots(roots []string, plugins []pluginpkg.LoadedPlugin, settings contracts.Settings, cwd string) []pluginCLIListEntry {
+	out := pluginCLIInstalledEntries(plugins, settings, cwd)
+	seen := map[string]struct{}{}
+	for _, entry := range out {
+		seen[pluginCLIPathKey(entry.InstallPath)] = struct{}{}
+	}
+	for _, root := range roots {
+		key := pluginCLIPathKey(root)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		_, err := pluginpkg.LoadPluginDir(root)
+		if err == nil {
+			continue
+		}
+		out = append(out, pluginCLIListEntry{
+			ID:          filepath.Base(root) + "@local",
+			Version:     "unknown",
+			Scope:       pluginpkg.InstalledPluginScope(cwd, root),
+			Enabled:     false,
+			InstallPath: pluginCLICleanAbs(root),
+			Errors:      []string{err.Error()},
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ID != out[j].ID {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].InstallPath < out[j].InstallPath
+	})
+	return out
+}
+
+func pluginCLIPathKey(path string) string {
+	return strings.ToLower(filepath.ToSlash(pluginCLICleanAbs(path)))
+}
+
+func pluginCLICleanAbs(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	return filepath.Clean(abs)
 }
 
 func pluginCLIAvailableEntries(marketplacePlugins []pluginpkg.LoadedPlugin, installedPlugins []pluginpkg.LoadedPlugin) []pluginCLIAvailableEntry {

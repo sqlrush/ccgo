@@ -901,6 +901,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`/plugin uninstall|remove|rm [--scope project|user|local] <plugin>` 现在有 no-query 安全卸载路径，只删除 installed plugin directory 枚举出的插件 root，输出 removed path/scope/status，并刷新 plugin MCP server app-state。
 - 本轮补充：`/plugin validate <path>` 现在走 no-query 本地 manifest 验证路径，并与 CLI `plugin validate <path>` 共享 `internal/plugins` 验证 API；目录输入会按官方优先级检测 `.claude-plugin/marketplace.json` 再 `.claude-plugin/plugin.json`，同时兼容当前 Go root `marketplace.json`/`plugin.json` 布局，输出 JSON/类型/unknown-key/path-traversal 诊断、plugin warning 和 marketplace plugin summary；CLI 在官方 `.claude-plugin/plugin.json` 布局下还会扫描默认 skills/agents/commands markdown frontmatter 和 hooks/hooks.json。
 - 本轮补充：CLI `plugin uninstall|remove|rm [--scope user|project|local] [--keep-data] <plugin>` 现在复用共享安全卸载 API，默认 user scope，支持 remove/rm alias 和 `--keep-data` 兼容参数。
+- 本轮补充：CLI `plugin list` 现在会显式展示 installed plugin root 的加载错误，坏 manifest 会作为 `failed to load` entry 出现在文本输出中，JSON 输出也会带 `errors`，不再被 `LoadPluginDirs` 静默跳过。
 
 - 本轮补充：bridge-safe 内置本地命令 `/summary`、`/release-notes`、`/files` 现在已注册并接入 no-query runner 路径；`/summary` 输出确定性的会话/历史消息计数、工具使用计数、估算 token 和最近用户/助手预览，`/files` 只读列出当前工作目录第一层条目而不读取文件内容，`/release-notes` 明确报告当前 Go runtime 未打包 release notes。完整 local-jsx UI surface 和其它本地命令 parity 仍需继续补。
 

@@ -2074,14 +2074,18 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	installedDir := filepath.Join(project, ".claude", "plugins", "market-demo")
+	badInstalledDir := filepath.Join(project, ".claude", "plugins", "bad-plugin")
 	marketDir := filepath.Join(t.TempDir(), "market-demo")
 	lintDir := filepath.Join(t.TempDir(), "lint-tool")
-	for _, dir := range []string{installedDir, marketDir, lintDir} {
+	for _, dir := range []string{installedDir, badInstalledDir, marketDir, lintDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := os.WriteFile(filepath.Join(installedDir, "plugin.json"), []byte(`{"name":"market demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(badInstalledDir, "plugin.json"), []byte(`{"name":`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"2.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
@@ -2111,19 +2115,33 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
 	}
 	installed, ok := payload["installed"].([]any)
-	if !ok || len(installed) != 1 {
+	if !ok || len(installed) != 2 {
 		t.Fatalf("installed = %#v", payload["installed"])
 	}
-	installedPlugin, ok := installed[0].(map[string]any)
-	if !ok {
-		t.Fatalf("installed plugin = %#v", installed[0])
+	installedByID := map[string]map[string]any{}
+	for _, item := range installed {
+		plugin, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("installed plugin = %#v", item)
+		}
+		id, _ := plugin["id"].(string)
+		installedByID[id] = plugin
 	}
 	expectedInstalledDir, err := filepath.EvalSymlinks(installedDir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	installedPlugin := installedByID["market demo@local"]
 	if installedPlugin["id"] != "market demo@local" || installedPlugin["version"] != "1.0.0" || installedPlugin["enabled"] != false || installedPlugin["installPath"] != expectedInstalledDir {
 		t.Fatalf("installed plugin = %#v", installedPlugin)
+	}
+	badPlugin := installedByID["bad-plugin@local"]
+	if badPlugin["id"] != "bad-plugin@local" || badPlugin["version"] != "unknown" || badPlugin["enabled"] != false {
+		t.Fatalf("bad plugin = %#v", badPlugin)
+	}
+	errors, ok := badPlugin["errors"].([]any)
+	if !ok || len(errors) != 1 || !strings.Contains(fmt.Sprint(errors[0]), "unexpected end of JSON input") {
+		t.Fatalf("bad plugin errors = %#v", badPlugin["errors"])
 	}
 	available, ok := payload["available"].([]any)
 	if !ok || len(available) != 1 {
@@ -2135,6 +2153,23 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 	}
 	if availablePlugin["pluginId"] != "lint tool@team" || availablePlugin["name"] != "lint tool" || availablePlugin["marketplaceName"] != "team" || availablePlugin["version"] != "1.0.0" || availablePlugin["description"] != "Static checks" {
 		t.Fatalf("available plugin = %#v", availablePlugin)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "list"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("text list exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Installed plugins:",
+		"- bad-plugin@local unknown (project, failed to load)",
+		"Error: unexpected end of JSON input",
+		"- market demo@local 1.0.0 (project, disabled)",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("text list missing %q: %q", want, stdout.String())
+		}
 	}
 
 	stdout.Reset()
