@@ -43,7 +43,7 @@ M8 补充：`/plugin help|--help|-h` 已输出官方插件命令用法，`/plugi
 
 M8 补充：`/plugin uninstall|remove|rm [--scope project|user|local] <plugin>` 已接入 no-query 安全卸载路径，只允许删除 installed plugin directory 枚举出的插件 root，输出 removed path/scope/status，并刷新 plugin MCP server app-state。
 
-M8 补充：`/plugin validate <path>` 与 CLI `plugin validate <path>` 已接入共享 manifest 验证 API，支持官方 `.claude-plugin/marketplace.json` 优先目录检测、`.claude-plugin/plugin.json`、当前 Go root `marketplace.json`/`plugin.json` 兼容、未知文件内容推断、JSON/类型/unknown-key/path-traversal 诊断、plugin author/version/description/kebab-case warning 和 marketplace plugin count/duplicate/source 诊断；slash 路径不请求模型。
+M8 补充：`/plugin validate <path>` 与 CLI `plugin validate <path>` 已接入共享 manifest 验证 API，支持官方 `.claude-plugin/marketplace.json` 优先目录检测、`.claude-plugin/plugin.json`、当前 Go root `marketplace.json`/`plugin.json` 兼容、未知文件内容推断、JSON/类型/unknown-key/path-traversal 诊断、plugin author/version/description/kebab-case warning 和 marketplace plugin count/duplicate/source 诊断；CLI 在官方 `.claude-plugin/plugin.json` 布局下还会扫描默认 skills/agents/commands markdown frontmatter 和 hooks/hooks.json；slash 路径不请求模型。
 
 M8 补充：CLI `plugin uninstall|remove|rm [--scope user|project|local] [--keep-data] <plugin>` 现在复用共享安全卸载 API，默认按官方 CLI 使用 user scope，输出 removed path/scope/status，并保留 `--keep-data` 兼容参数。
 

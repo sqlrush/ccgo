@@ -2202,6 +2202,54 @@ func TestRunPluginValidateCLI(t *testing.T) {
 			t.Fatalf("stdout missing %q: %q", want, stdout.String())
 		}
 	}
+
+	officialPlugin := filepath.Join(project, "official-plugin")
+	officialManifestDir := filepath.Join(officialPlugin, ".claude-plugin")
+	if err := os.MkdirAll(officialManifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	expectedOfficialManifestDir, err := filepath.EvalSymlinks(officialManifestDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(officialPlugin, "skills", "audit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(officialPlugin, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(officialManifestDir, "plugin.json"), []byte(`{
+		"name": "official-plugin",
+		"version": "1.0.0",
+		"description": "Official layout plugin",
+		"author": {"name": "Team"}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(officialPlugin, "skills", "audit", "SKILL.md"), []byte("Audit."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(officialPlugin, "hooks", "hooks.json"), []byte(`{"hooks":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "validate", "official-plugin"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Validating plugin manifest: " + filepath.Join(expectedOfficialManifestDir, "plugin.json"),
+		"Validating skill:",
+		"frontmatter: No frontmatter block found",
+		"Validating hooks:",
+		"json: Invalid JSON syntax",
+		"Validation failed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
 }
 
 func TestRunPluginUninstallCLI(t *testing.T) {

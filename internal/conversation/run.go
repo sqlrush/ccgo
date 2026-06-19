@@ -3581,7 +3581,7 @@ func (r Runner) validatePluginSummary(path string) string {
 
 func formatPluginValidationResult(result pluginpkg.ManifestValidationResult) string {
 	lines := []string{
-		fmt.Sprintf("Validating %s manifest: %s", result.FileType, result.FilePath),
+		pluginValidationHeader(result),
 		"",
 	}
 	if len(result.Errors) > 0 {
@@ -3634,6 +3634,15 @@ func formatPluginValidationResult(result pluginpkg.ManifestValidationResult) str
 		lines = append(lines, "Validation failed")
 	}
 	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+func pluginValidationHeader(result pluginpkg.ManifestValidationResult) string {
+	switch result.FileType {
+	case "plugin", "marketplace":
+		return fmt.Sprintf("Validating %s manifest: %s", result.FileType, result.FilePath)
+	default:
+		return fmt.Sprintf("Validating %s: %s", result.FileType, result.FilePath)
+	}
 }
 
 func pluginValidationPlural(count int, singular string) string {

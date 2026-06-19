@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"ccgo/internal/memory"
 )
 
 type ManifestValidationMessage struct {
@@ -24,6 +26,32 @@ type ManifestValidationResult struct {
 	Plugin         LoadedPlugin
 	PluginCount    int
 	MarketplaceIDs []string
+}
+
+func ValidatePluginContents(pluginDir string) []ManifestValidationResult {
+	pluginDir = cleanAbs(pluginDir)
+	var results []ManifestValidationResult
+	for _, item := range []struct {
+		fileType string
+		dir      string
+		skills   bool
+	}{
+		{fileType: "skill", dir: filepath.Join(pluginDir, "skills"), skills: true},
+		{fileType: "agent", dir: filepath.Join(pluginDir, "agents")},
+		{fileType: "command", dir: filepath.Join(pluginDir, "commands")},
+	} {
+		for _, path := range collectPluginMarkdownFiles(item.dir, item.skills) {
+			result := validatePluginComponentFile(path, item.fileType)
+			if len(result.Errors) > 0 || len(result.Warnings) > 0 {
+				results = append(results, result)
+			}
+		}
+	}
+	hooksResult, ok := validatePluginHooksJSON(filepath.Join(pluginDir, "hooks", "hooks.json"))
+	if ok {
+		results = append(results, hooksResult)
+	}
+	return results
 }
 
 func ValidateManifestPath(path string, cwd string) (ManifestValidationResult, error) {
@@ -497,4 +525,101 @@ func stringFromValidationMap(values map[string]any, key string) string {
 	}
 	value, _ := values[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func collectPluginMarkdownFiles(dir string, skills bool) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	var out []string
+	if skills {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				path := filepath.Join(dir, entry.Name(), "SKILL.md")
+				if info, err := os.Stat(path); err == nil && !info.IsDir() {
+					out = append(out, path)
+				}
+			}
+		}
+		return out
+	}
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			out = append(out, collectPluginMarkdownFiles(path, false)...)
+			continue
+		}
+		if entry.Type().IsRegular() && strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func validatePluginComponentFile(path string, fileType string) ManifestValidationResult {
+	result := ManifestValidationResult{
+		Success:  true,
+		FilePath: cleanAbs(path),
+		FileType: fileType,
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		result.Success = false
+		result.Errors = append(result.Errors, ManifestValidationMessage{Path: "file", Message: "Failed to read: " + err.Error()})
+		return result
+	}
+	content := string(data)
+	if !strings.HasPrefix(strings.TrimLeft(content, "\ufeff"), "---") {
+		result.Warnings = append(result.Warnings, ManifestValidationMessage{Path: "frontmatter", Message: "No frontmatter block found. Add YAML frontmatter between --- delimiters at the top of the file to set description and other metadata."})
+		return result
+	}
+	frontmatter, body := memory.ParseFrontmatter(content)
+	if body == "" && len(frontmatter) == 0 {
+		result.Success = false
+		result.Errors = append(result.Errors, ManifestValidationMessage{Path: "frontmatter", Message: "Frontmatter block is not closed or could not be parsed."})
+		return result
+	}
+	if strings.TrimSpace(frontmatter["description"]) == "" {
+		result.Warnings = append(result.Warnings, ManifestValidationMessage{Path: "description", Message: fmt.Sprintf("No description in frontmatter. A description helps users and Claude understand when to use this %s.", fileType)})
+	}
+	if shell := strings.TrimSpace(frontmatter["shell"]); shell != "" {
+		normalized := strings.ToLower(shell)
+		if normalized != "bash" && normalized != "powershell" {
+			result.Success = false
+			result.Errors = append(result.Errors, ManifestValidationMessage{Path: "shell", Message: fmt.Sprintf("shell must be 'bash' or 'powershell', got %q.", shell)})
+		}
+	}
+	result.Success = len(result.Errors) == 0
+	return result
+}
+
+func validatePluginHooksJSON(path string) (ManifestValidationResult, bool) {
+	result := ManifestValidationResult{
+		Success:  true,
+		FilePath: cleanAbs(path),
+		FileType: "hooks",
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ManifestValidationResult{}, false
+		}
+		result.Success = false
+		result.Errors = append(result.Errors, ManifestValidationMessage{Path: "file", Message: "Failed to read file: " + err.Error()})
+		return result, true
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		result.Success = false
+		result.Errors = append(result.Errors, ManifestValidationMessage{Path: "json", Message: "Invalid JSON syntax: " + err.Error() + ". At runtime this breaks the entire plugin load."})
+		return result, true
+	}
+	if hooks := rawHooksFromAny(raw); len(hooks) == 0 {
+		result.Success = false
+		result.Errors = append(result.Errors, ManifestValidationMessage{Path: "hooks", Message: "hooks.json must contain a hooks object with at least one hook event."})
+		return result, true
+	}
+	return result, false
 }

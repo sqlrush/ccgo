@@ -136,6 +136,42 @@ func TestValidateManifestPathReportsWarningsAndTraversal(t *testing.T) {
 	}
 }
 
+func TestValidatePluginContentsReportsComponentWarningsAndHookErrors(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "skills", "audit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "commands"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "skills", "audit", "SKILL.md"), []byte("Audit."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "commands", "deploy.md"), []byte("---\nshell: fish\n---\nDeploy."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "hooks", "hooks.json"), []byte(`{"hooks":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results := ValidatePluginContents(root)
+	if len(results) != 3 {
+		t.Fatalf("results = %#v", results)
+	}
+	if !validationContains(results[0].Warnings, "frontmatter", "No frontmatter") {
+		t.Fatalf("skill result = %#v", results[0])
+	}
+	if !validationContains(results[1].Errors, "shell", "shell must be") {
+		t.Fatalf("command result = %#v", results[1])
+	}
+	if !validationContains(results[2].Errors, "json", "Invalid JSON syntax") {
+		t.Fatalf("hooks result = %#v", results[2])
+	}
+}
+
 func validationContains(messages []ManifestValidationMessage, path string, text string) bool {
 	for _, message := range messages {
 		if message.Path == path && strings.Contains(message.Message, text) {

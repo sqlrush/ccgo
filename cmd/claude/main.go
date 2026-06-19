@@ -506,7 +506,17 @@ func runPluginValidateCLI(state *bootstrap.State, args []string, stdout io.Write
 		return 2
 	}
 	writePluginValidationResult(stdout, result)
-	if !result.Success {
+	allSuccess := result.Success
+	if pluginRoot, ok := pluginCLIValidationContentRoot(result); ok {
+		for _, contentResult := range pluginpkg.ValidatePluginContents(pluginRoot) {
+			fmt.Fprintln(stdout)
+			writePluginValidationResult(stdout, contentResult)
+			if !contentResult.Success {
+				allSuccess = false
+			}
+		}
+	}
+	if !allSuccess {
 		return 1
 	}
 	return 0
@@ -887,7 +897,7 @@ func writePluginUninstallResult(stdout io.Writer, result pluginpkg.PluginUninsta
 
 func writePluginValidationResult(stdout io.Writer, result pluginpkg.ManifestValidationResult) {
 	lines := []string{
-		fmt.Sprintf("Validating %s manifest: %s", result.FileType, result.FilePath),
+		pluginCLIValidationHeader(result),
 		"",
 	}
 	if len(result.Errors) > 0 {
@@ -956,6 +966,26 @@ func pluginCLIValidationMessagePath(path string) string {
 		return "root"
 	}
 	return path
+}
+
+func pluginCLIValidationHeader(result pluginpkg.ManifestValidationResult) string {
+	switch result.FileType {
+	case "plugin", "marketplace":
+		return fmt.Sprintf("Validating %s manifest: %s", result.FileType, result.FilePath)
+	default:
+		return fmt.Sprintf("Validating %s: %s", result.FileType, result.FilePath)
+	}
+}
+
+func pluginCLIValidationContentRoot(result pluginpkg.ManifestValidationResult) (string, bool) {
+	if result.FileType != "plugin" {
+		return "", false
+	}
+	manifestDir := filepath.Dir(result.FilePath)
+	if !strings.EqualFold(filepath.Base(manifestDir), ".claude-plugin") {
+		return "", false
+	}
+	return filepath.Dir(manifestDir), true
 }
 
 func pluginCLISettingsFromFiles(cwd string) (contracts.Settings, error) {
