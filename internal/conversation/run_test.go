@@ -4774,6 +4774,8 @@ func TestRunnerPluginListIncludesSettingsMarketplacePlugins(t *testing.T) {
 
 func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
 	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
 	root := t.TempDir()
 	cwd := filepath.Join(root, "project")
 	pluginDir := filepath.Join(root, "marketplace-plugin")
@@ -4853,6 +4855,25 @@ func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
 		t.Fatalf("plugin reinstall text = %q", text)
 	}
 
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin install --scope user market demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	userInstalledDir := filepath.Join(configHome, "plugins", "market-demo")
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin installed",
+		"Installed path: " + userInstalledDir,
+		"Status: installed",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("user scoped plugin install missing %q: %q", want, text)
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "assets", "README.md")); err != nil || string(data) != "market asset" {
+		t.Fatalf("user scoped installed plugin asset = %q err=%v", data, err)
+	}
+
 	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin list"))
 	if err != nil {
 		t.Fatal(err)
@@ -4872,6 +4893,8 @@ func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
 
 func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
 	client := &fakeClient{}
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
 	root := t.TempDir()
 	cwd := filepath.Join(root, "project")
 	pluginDir := filepath.Join(root, "marketplace-plugin")
@@ -4917,7 +4940,7 @@ func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
 	}
 	installedDir := filepath.Join(cwd, ".claude", "plugins", "market-demo")
 	writeMarketDemo("2.0.0", "v2 asset")
-	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin update market demo"))
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin update --scope=local market demo"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4944,6 +4967,36 @@ func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(installedDir, "assets", "README.md")); err != nil || string(data) != "v2 asset" {
 		t.Fatalf("updated plugin asset = %q err=%v", data, err)
+	}
+
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin install --scope user market demo")); err != nil {
+		t.Fatal(err)
+	}
+	userInstalledDir := filepath.Join(configHome, "plugins", "market-demo")
+	writeMarketDemo("3.0.0", "v3 asset")
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin update --scope user market demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin update",
+		"Updated plugins: 1",
+		"- market demo -> " + userInstalledDir,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("user scoped plugin update missing %q: %q", want, text)
+		}
+	}
+	userInstalled, err := pluginpkg.LoadPluginDir(userInstalledDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userInstalled.Version != "3.0.0" {
+		t.Fatalf("user installed version = %q", userInstalled.Version)
+	}
+	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "assets", "README.md")); err != nil || string(data) != "v3 asset" {
+		t.Fatalf("user updated plugin asset = %q err=%v", data, err)
 	}
 }
 

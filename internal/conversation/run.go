@@ -3618,11 +3618,14 @@ func (r Runner) formatPluginConfig(args []string) string {
 }
 
 func (r Runner) installPluginSummary(name string) string {
-	if strings.TrimSpace(name) == "" {
-		return "Usage: /plugin install <plugin-name>"
+	scope, pluginName, err := parsePluginInstallUpdateArgs(name, false)
+	if err != nil {
+		return "Failed to install plugin: " + err.Error()
 	}
-	pluginName := strings.TrimSpace(name)
-	result, err := r.installMarketplacePlugin(pluginName)
+	if strings.TrimSpace(pluginName) == "" {
+		return "Usage: /plugin install [--scope project|user|local] <plugin-name>"
+	}
+	result, err := r.installMarketplacePlugin(pluginName, scope)
 	if err != nil {
 		return "Failed to install plugin " + pluginName + ": " + err.Error()
 	}
@@ -3643,8 +3646,8 @@ func (r Runner) installPluginSummary(name string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (r Runner) installMarketplacePlugin(name string) (pluginpkg.PluginInstallResult, error) {
-	result, err := pluginpkg.InstallMarketplacePlugin(name, r.WorkingDirectory, r.mergedSettings())
+func (r Runner) installMarketplacePlugin(name string, scope string) (pluginpkg.PluginInstallResult, error) {
+	result, err := pluginpkg.InstallMarketplacePluginInScope(name, r.WorkingDirectory, scope, r.mergedSettings())
 	if err != nil {
 		return pluginpkg.PluginInstallResult{}, err
 	}
@@ -3653,7 +3656,11 @@ func (r Runner) installMarketplacePlugin(name string) (pluginpkg.PluginInstallRe
 }
 
 func (r Runner) updatePluginSummary(name string) string {
-	result, err := r.updateMarketplacePlugins(strings.TrimSpace(name))
+	scope, pluginName, parseErr := parsePluginInstallUpdateArgs(name, true)
+	if parseErr != nil {
+		return "Failed to update plugins: " + parseErr.Error()
+	}
+	result, err := r.updateMarketplacePlugins(strings.TrimSpace(pluginName), scope)
 	if err != nil {
 		return "Failed to update plugins: " + err.Error()
 	}
@@ -3674,13 +3681,56 @@ func (r Runner) updatePluginSummary(name string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (r Runner) updateMarketplacePlugins(name string) (pluginpkg.PluginUpdateResult, error) {
-	result, err := pluginpkg.UpdateInstalledMarketplacePlugins(name, r.WorkingDirectory, r.mergedSettings())
+func (r Runner) updateMarketplacePlugins(name string, scope string) (pluginpkg.PluginUpdateResult, error) {
+	result, err := pluginpkg.UpdateInstalledMarketplacePluginsInScope(name, r.WorkingDirectory, scope, r.mergedSettings())
 	if err != nil {
 		return result, err
 	}
 	r.refreshPluginMCPServers()
 	return result, nil
+}
+
+func parsePluginInstallUpdateArgs(raw string, allowAllScope bool) (string, string, error) {
+	args := commands.ParseArguments(raw)
+	var scope string
+	var nameParts []string
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--scope" || arg == "-s":
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" {
+				return "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			scope = strings.ToLower(strings.TrimSpace(args[i+1]))
+			i++
+		case strings.HasPrefix(arg, "--scope="):
+			scope = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--scope=")))
+			if scope == "" {
+				return "", "", fmt.Errorf("--scope requires a value")
+			}
+		case strings.HasPrefix(arg, "-s="):
+			scope = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "-s=")))
+			if scope == "" {
+				return "", "", fmt.Errorf("-s requires a value")
+			}
+		default:
+			nameParts = append(nameParts, arg)
+		}
+	}
+	switch scope {
+	case "", "project", "user", "local":
+	case "all":
+		if !allowAllScope {
+			return "", "", fmt.Errorf("scope %q is not supported; use project, user, or local", scope)
+		}
+	default:
+		allowed := "project, user, or local"
+		if allowAllScope {
+			allowed = "project, user, local, or all"
+		}
+		return "", "", fmt.Errorf("scope %q is not supported; use %s", scope, allowed)
+	}
+	return scope, strings.TrimSpace(strings.Join(nameParts, " ")), nil
 }
 
 func (r Runner) refreshPluginMCPServers() {
