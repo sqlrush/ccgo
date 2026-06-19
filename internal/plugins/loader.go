@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,6 +27,7 @@ const ManifestFileName = "plugin.json"
 const maxMarketplaceCatalogBytes int64 = 1 << 20
 const marketplaceCatalogFetchTimeout = 10 * time.Second
 const marketplaceGitCommandTimeout = 30 * time.Second
+const marketplaceNPMCommandTimeout = 60 * time.Second
 
 type PromptTemplate struct {
 	Command contracts.Command
@@ -367,6 +370,10 @@ func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry
 			for _, root := range pluginRootsFromMarketplaceGitHub(source) {
 				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
 			}
+		case "npm":
+			for _, root := range pluginRootsFromMarketplaceNPM(source) {
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+			}
 		}
 	}
 	return entries
@@ -410,6 +417,22 @@ func pluginRootsFromMarketplaceGit(source map[string]any) []string {
 
 func pluginRootsFromMarketplaceGitHub(source map[string]any) []string {
 	return pluginRootsFromMarketplaceGitURL(githubMarketplaceGitURL(stringFromAnyMap(source, "repo")), source)
+}
+
+func pluginRootsFromMarketplaceNPM(source map[string]any) []string {
+	packageSpec := stringFromAnyMap(source, "package")
+	if packageSpec == "" {
+		return nil
+	}
+	packagePath, ok := ensureMarketplaceNPMCache(packageSpec)
+	if !ok {
+		return nil
+	}
+	marketplacePath := stringFromAnyMap(source, "path")
+	if marketplacePath == "" {
+		return pluginRootsFromMarketplacePath(packagePath)
+	}
+	return pluginRootsFromMarketplacePath(safeJoin(packagePath, marketplacePath))
 }
 
 func pluginRootsFromMarketplaceGitURL(gitURL string, source map[string]any) []string {
@@ -503,6 +526,167 @@ func runMarketplaceGitCommand(args ...string) error {
 		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 	return nil
+}
+
+func ensureMarketplaceNPMCache(packageSpec string) (string, bool) {
+	cachePath := marketplaceNPMCachePath(packageSpec)
+	if err := refreshMarketplaceNPMCache(packageSpec, cachePath); err != nil {
+		if _, statErr := os.Stat(cachePath); statErr == nil {
+			return cachePath, true
+		}
+		return "", false
+	}
+	return cachePath, true
+}
+
+func refreshMarketplaceNPMCache(packageSpec string, cachePath string) error {
+	if strings.TrimSpace(packageSpec) == "" {
+		return fmt.Errorf("npm package is empty")
+	}
+	parent := filepath.Dir(cachePath)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return err
+	}
+	staging, err := os.MkdirTemp(parent, "."+filepath.Base(cachePath)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+	packDir := filepath.Join(staging, "pack")
+	extractDir := filepath.Join(staging, "package")
+	if err := os.MkdirAll(packDir, 0o700); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(extractDir, 0o700); err != nil {
+		return err
+	}
+	tarball, err := npmPackMarketplacePackage(packageSpec, packDir)
+	if err != nil {
+		return err
+	}
+	if err := extractNPMTarball(tarball, extractDir); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(cachePath); err != nil {
+		return err
+	}
+	return os.Rename(extractDir, cachePath)
+}
+
+func npmPackMarketplacePackage(packageSpec string, packDir string) (string, error) {
+	npmCache := filepath.Join(platform.ClaudeHomeDir(), "marketplace-cache", "npm-cache")
+	if err := os.MkdirAll(npmCache, 0o700); err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), marketplaceNPMCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "npm", "pack", "--json", "--pack-destination", packDir, packageSpec)
+	cmd.Env = append(os.Environ(),
+		"NPM_CONFIG_AUDIT=false",
+		"NPM_CONFIG_FUND=false",
+		"NPM_CONFIG_UPDATE_NOTIFIER=false",
+		"NPM_CONFIG_CACHE="+npmCache,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("npm pack %s: %w: %s", packageSpec, err, strings.TrimSpace(string(output)))
+	}
+	if tarball := npmPackedTarballPath(output, packDir); tarball != "" {
+		return tarball, nil
+	}
+	return "", fmt.Errorf("npm pack %s did not produce a tarball", packageSpec)
+}
+
+func npmPackedTarballPath(output []byte, packDir string) string {
+	var packed []struct {
+		Filename string `json:"filename"`
+	}
+	if err := json.Unmarshal(output, &packed); err == nil {
+		for _, item := range packed {
+			filename := strings.TrimSpace(item.Filename)
+			if filename == "" {
+				continue
+			}
+			if !filepath.IsAbs(filename) {
+				filename = filepath.Join(packDir, filename)
+			}
+			if _, err := os.Stat(filename); err == nil {
+				return filename
+			}
+		}
+	}
+	matches, _ := filepath.Glob(filepath.Join(packDir, "*.tgz"))
+	sort.Strings(matches)
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	return ""
+}
+
+func extractNPMTarball(tarball string, dst string) error {
+	file, err := os.Open(tarball)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gzipReader.Close()
+	tarReader := tar.NewReader(gzipReader)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		rel := npmTarballRelativePath(header.Name)
+		if rel == "" {
+			continue
+		}
+		target := safeJoin(dst, rel)
+		mode := header.FileInfo().Mode().Perm()
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, mode); err != nil {
+				return err
+			}
+		case tar.TypeReg, tar.TypeRegA:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			if mode == 0 {
+				mode = 0o644
+			}
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(out, tarReader); err != nil {
+				_ = out.Close()
+				return err
+			}
+			if err := out.Close(); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("refusing to extract unsupported npm package entry %s", header.Name)
+		}
+	}
+}
+
+func npmTarballRelativePath(path string) string {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	path = strings.TrimPrefix(path, "/")
+	path = strings.TrimPrefix(path, "package/")
+	path = strings.Trim(path, "/")
+	if path == "." || strings.HasPrefix(path, "../") || path == ".." {
+		return ""
+	}
+	return filepath.FromSlash(path)
 }
 
 func marketplaceCatalogFromURL(source map[string]any, marketplace string) (any, bool) {
@@ -622,6 +806,12 @@ func marketplaceGitCachePath(gitURL string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(gitURL)))
 	hash := hex.EncodeToString(sum[:])[:16]
 	return filepath.Join(platform.ClaudeHomeDir(), "marketplace-cache", "git", hash)
+}
+
+func marketplaceNPMCachePath(packageSpec string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(packageSpec)))
+	hash := hex.EncodeToString(sum[:])[:16]
+	return filepath.Join(platform.ClaudeHomeDir(), "marketplace-cache", "npm", hash)
 }
 
 func safeMarketplaceCacheName(name string) string {

@@ -574,6 +574,56 @@ func TestLoadPluginDirsWithSettingsLoadsGitHubMarketplacePlugins(t *testing.T) {
 	}
 }
 
+func TestLoadPluginDirsWithSettingsLoadsNPMMarketplacePluginsAndUsesCache(t *testing.T) {
+	requirePluginTestNPM(t)
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "claude-home"))
+	packageDir := filepath.Join(root, "npm-package")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, "package.json"), []byte(`{
+		"name": "ccgo-plugin-market-test",
+		"version": "1.0.0",
+		"files": ["plugin.json"]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, ManifestFileName), []byte(`{"name":"npm-demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"npm-market": map[string]any{"source": map[string]any{
+				"source":  "npm",
+				"name":    "npm-market",
+				"package": packageDir,
+			}},
+		},
+		StrictKnownMarketplaces: []any{"npm-market"},
+	}
+
+	plugins := LoadPluginDirsWithSettings(nil, settings)
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"npm-demo"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+	if plugins[0].Marketplace != "npm-market" {
+		t.Fatalf("plugin marketplace = %#v", plugins)
+	}
+	if _, err := os.Stat(marketplaceNPMCachePath(packageDir)); err != nil {
+		t.Fatalf("npm cache missing: %v", err)
+	}
+
+	if err := os.RemoveAll(packageDir); err != nil {
+		t.Fatal(err)
+	}
+	plugins = LoadPluginDirsWithSettings(nil, settings)
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"npm-demo"}) {
+		t.Fatalf("cached plugins = %#v names=%#v", plugins, got)
+	}
+}
+
 func TestGitHubMarketplaceGitURL(t *testing.T) {
 	cases := map[string]string{
 		"owner/repo":                "https://github.com/owner/repo.git",
@@ -595,6 +645,13 @@ func requirePluginTestGit(t *testing.T) string {
 		t.Skip("git executable is not available")
 	}
 	return git
+}
+
+func requirePluginTestNPM(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("npm"); err != nil {
+		t.Skip("npm executable is not available")
+	}
 }
 
 func runPluginTestGit(t *testing.T, git string, args ...string) {
