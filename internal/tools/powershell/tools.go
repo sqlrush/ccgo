@@ -93,7 +93,7 @@ func NewPowerShellTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Runs a PowerShell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and interrupt controls are not implemented yet.", nil
+			return "Runs a PowerShell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and advanced interrupt controls are not implemented yet.", nil
 		},
 		NormalizeFunc:   normalizePowerShellRawInput,
 		ValidateFunc:    validatePowerShell,

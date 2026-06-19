@@ -171,6 +171,8 @@ M5 补充：Bash/PowerShell 现在会在前台模式阻断首个语句中的长 
 
 M5 补充：Bash/PowerShell 前台执行现在会把调用方 context cancellation 与 timeout/普通非零退出区分开，结构化结果返回 `cancelled=true`、`timed_out=false`、`exit_code=-1`，可见输出显示 cancelled 状态。
 
+M5 补充：Bash 和 Unix PowerShell 取消进程时现在会先对受管 process group 发送 SIGTERM，并通过短 `WaitDelay` 兜底 SIGKILL；配合 Bash trap 覆盖，合作式命令可完成清理，忽略信号的命令仍会被限时回收。
+
 M5 补充：Bash/PowerShell 现在接受官方 `dangerouslyDisableSandbox` semantic boolean 输入，并在 structured content 中记录该请求；真实 sandbox adapter/override 行为仍按 sandbox parity 项继续推进。
 
 M5 补充：Bash/PowerShell 的 `dangerouslyDisableSandbox` 现在会进入权限引擎；除可用的 `bypassPermissions` 模式外，sandbox override 会要求确认，`dontAsk` 模式下会拒绝，避免显式 allow rule 或 read-only 分类静默放行 sandbox override。
@@ -891,11 +893,11 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。
 - `Edit/Write`/`NotebookEdit` 的完整 git/notebook diff parity、LSP/IDE notify、file history、NotebookEdit UI/golden 和更广义 secret guard。
-- `Bash` 完整 shell parser、真实 sandbox、更完整 signal/interrupt 语义、后台任务完整生命周期、更细 read-only/destructive validation 和官方 golden 兼容。
+- `Bash` 完整 shell parser、真实 sandbox、更完整 signal lifecycle、后台任务完整生命周期、更细 read-only/destructive validation 和官方 golden 兼容。
 - `Glob/Grep` 完整 ripgrep parity 和剩余输出参数。
 - `TodoWrite` TUI 同步和官方 golden 兼容。
 - `WebFetch` browser 渲染、完整 prompt-aware summarization 和官方 golden；`WebSearch` 官方搜索后端、ranking parity 和 golden。
-- `PowerShell` 完整 parser、完整权限/path validation、更完整 signal/interrupt 语义、后台生命周期 edge cases、前台截断 golden、session 记录和官方 golden；Notebook fuller parity、MCP concrete tool semantics。
+- `PowerShell` 完整 parser、完整权限/path validation、更完整 signal lifecycle、后台生命周期 edge cases、前台截断 golden、session 记录和官方 golden；Notebook fuller parity、MCP concrete tool semantics。
 
 ### M6: Session, Memory, Compact
 

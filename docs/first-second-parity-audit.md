@@ -204,6 +204,7 @@ Covered behavior:
 - `PowerShell`/`PowerShellOutput` now coerce quoted semantic strings for `timeout`, `run_in_background`/`runInBackground`, and `tail_lines`/`tailLines`, matching the official PowerShell tool's semantic number/boolean schema without relaxing unknown-field validation.
 - `Bash`/`PowerShell` foreground validation now blocks leading long `sleep`/`Start-Sleep` statements (2 seconds or more) with the official-style `run_in_background` guidance while preserving short sleeps, fractional sleeps, PowerShell millisecond sleeps, and explicit background execution.
 - `Bash`/`PowerShell` foreground execution now distinguishes caller cancellation from timeout and ordinary nonzero exit in structured results: cancelled commands return `cancelled=true`, `timed_out=false`, `exit_code=-1`, and visible cancelled status text.
+- `Bash` and Unix `PowerShell` process cancellation now sends SIGTERM to the managed process group first and uses a short `WaitDelay` SIGKILL fallback, allowing cooperative shell cleanup while still bounding ignored-signal commands.
 - `Bash`/`PowerShell` now accept the official `dangerouslyDisableSandbox` semantic boolean input and record it in structured results; full sandbox adapter and override execution semantics remain a separate incomplete parity area.
 - `Bash`/`PowerShell` now surface `dangerouslyDisableSandbox` to the permission engine: normal/default/auto/plan/acceptEdits modes ask for confirmation, `dontAsk` denies it, and only available `bypassPermissions` mode allows it, preventing read-only classification or allow rules from silently approving sandbox override requests.
 - Settings now propagate `sandbox.allowUnsandboxedCommands` into the permission context; when it is `false`, sandbox override requests are denied even in `bypassPermissions`, and settings validation flags non-boolean values for the known sandbox boolean fields.
@@ -254,7 +255,7 @@ Still missing from full M5 parity:
 - Fuller PDF parity, fuller notebook render/edit parity, fuller token-budget parity, and fuller media parity in `Read`/`NotebookEdit`.
 - Fuller git/notebook diff parity plus LSP/IDE notifications/file-history integration for `Write`/`Edit`/`NotebookEdit`.
 - Skill activation, full permission prompt rendering, and broader secret guard parity beyond the current team-memory write guard.
-- Complete `Bash` parser/sandbox/interrupt/background lifecycle/golden parity, `PowerShell` full parser/full permission/path validation/background lifecycle edge cases/golden parity, `WebFetch` browser rendering/full prompt-aware summarization/golden parity, `WebSearch` official backend/ranking/golden parity, NotebookEdit UI/golden/file-history parity and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and TUI/golden compatibility for `TodoWrite`.
+- Complete `Bash` parser/sandbox/signal lifecycle/golden parity, `PowerShell` full parser/full permission/path validation/background lifecycle edge cases/golden parity, `WebFetch` browser rendering/full prompt-aware summarization/golden parity, `WebSearch` official backend/ranking/golden parity, NotebookEdit UI/golden/file-history parity and MCP concrete tool semantics, plus remaining ripgrep parity/output behavior for `Glob`/`Grep` and TUI/golden compatibility for `TodoWrite`.
 
 ## M6/M7 Initial Progress
 

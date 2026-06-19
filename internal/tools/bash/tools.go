@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	defaultTimeoutMillis = 120_000
-	maxTimeoutMillis     = 600_000
-	blockedSleepGuidance = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. For streaming events, use the Monitor tool. If you genuinely need a delay, keep it under 2 seconds."
+	defaultTimeoutMillis  = 120_000
+	maxTimeoutMillis      = 600_000
+	processInterruptGrace = 200 * time.Millisecond
+	blockedSleepGuidance  = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. For streaming events, use the Monitor tool. If you genuinely need a delay, keep it under 2 seconds."
 )
 
 var bashSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
@@ -797,7 +798,7 @@ func NewBashTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Runs a shell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and interrupt controls are not implemented yet.", nil
+			return "Runs a shell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and advanced interrupt controls are not implemented yet.", nil
 		},
 		NormalizeFunc:   normalizeBashRawInput,
 		ValidateFunc:    validateBash,
@@ -1151,16 +1152,17 @@ func configureBashCommand(cmd *exec.Cmd) {
 		return
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = processInterruptGrace
 	cmd.Cancel = func() error {
-		return killBashProcessGroup(cmd)
+		return signalBashProcessGroup(cmd, syscall.SIGTERM)
 	}
 }
 
-func killBashProcessGroup(cmd *exec.Cmd) error {
+func signalBashProcessGroup(cmd *exec.Cmd, signal syscall.Signal) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
-	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	err := syscall.Kill(-cmd.Process.Pid, signal)
 	if errors.Is(err, syscall.ESRCH) {
 		return nil
 	}

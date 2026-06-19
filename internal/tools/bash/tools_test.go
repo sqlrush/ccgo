@@ -625,7 +625,7 @@ func TestBashForegroundCancellation(t *testing.T) {
 		}, contracts.ToolUse{
 			ID:    "toolu_bash_cancel",
 			Name:  "Bash",
-			Input: json.RawMessage(`{"command":"printf started; while :; do sleep 1; done","timeout":5000}`),
+			Input: json.RawMessage(`{"command":"trap 'printf term; exit 42' TERM; printf started; while :; do sleep 1; done","timeout":5000}`),
 		}, nil)
 		done <- struct {
 			result contracts.ToolResult
@@ -647,6 +647,9 @@ func TestBashForegroundCancellation(t *testing.T) {
 		if got.result.StructuredContent["cancelled"] != true || got.result.StructuredContent["timed_out"] != false || got.result.StructuredContent["exit_code"] != -1 {
 			t.Fatalf("cancelled structured content = %#v", got.result.StructuredContent)
 		}
+		if !strings.Contains(got.result.StructuredContent["stdout"].(string), "term") {
+			t.Fatalf("cancelled stdout should include TERM trap output: %#v", got.result.StructuredContent["stdout"])
+		}
 		if !strings.Contains(got.result.Content.(string), "Command cancelled.") {
 			t.Fatalf("cancelled content = %#v", got.result.Content)
 		}
@@ -664,12 +667,13 @@ func TestKillBashCancelsBackgroundCommand(t *testing.T) {
 	start, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_background_kill_start",
 		Name:  "Bash",
-		Input: json.RawMessage(`{"command":"sleep 5","run_in_background":true,"timeout":5000}`),
+		Input: json.RawMessage(`{"command":"trap 'printf term; exit 42' TERM; while :; do sleep 1; done","run_in_background":true,"timeout":5000}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	bashID := start.StructuredContent["bash_id"].(string)
+	time.Sleep(50 * time.Millisecond)
 
 	killed, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_background_kill",
@@ -689,6 +693,9 @@ func TestKillBashCancelsBackgroundCommand(t *testing.T) {
 	}
 	if output.StructuredContent["cancelled"] != true || output.StructuredContent["timed_out"] != false {
 		t.Fatalf("cancelled structured content = %#v", output.StructuredContent)
+	}
+	if !strings.Contains(output.StructuredContent["stdout"].(string), "term") {
+		t.Fatalf("cancelled stdout should include TERM trap output: %#v", output.StructuredContent["stdout"])
 	}
 	if !strings.Contains(output.Content.(string), "was cancelled") {
 		t.Fatalf("cancelled content = %#v", output.Content)
