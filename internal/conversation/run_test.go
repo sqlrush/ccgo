@@ -29,6 +29,7 @@ import (
 	"ccgo/internal/messages"
 	nativepkg "ccgo/internal/native"
 	"ccgo/internal/permissions"
+	pluginpkg "ccgo/internal/plugins"
 	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/session"
 	telemetrypkg "ccgo/internal/telemetry"
@@ -4866,6 +4867,83 @@ func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("plugin list after install missing %q: %q", want, text)
 		}
+	}
+}
+
+func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
+	client := &fakeClient{}
+	root := t.TempDir()
+	cwd := filepath.Join(root, "project")
+	pluginDir := filepath.Join(root, "marketplace-plugin")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(pluginDir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeMarketDemo := func(version string, asset string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(pluginDir, "assets", "README.md"), []byte(asset), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		manifest := `{
+			"name": "market demo",
+			"version": "` + version + `",
+			"commands": [{"name": "market:deploy", "description": "Deploy marketplace plugin", "prompt": "Deploy."}]
+		}`
+		if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeMarketDemo("1.0.0", "v1 asset")
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_update_marketplace",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			ExtraKnownMarketplaces: map[string]any{
+				"team": map[string]any{"source": map[string]any{
+					"source":  "settings",
+					"name":    "team",
+					"plugins": []any{pluginDir},
+				}},
+			},
+			StrictKnownMarketplaces: []any{"team"},
+		}},
+	}
+
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin install market demo")); err != nil {
+		t.Fatal(err)
+	}
+	installedDir := filepath.Join(cwd, ".claude", "plugins", "market-demo")
+	writeMarketDemo("2.0.0", "v2 asset")
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin update market demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugin update",
+		"Marketplace plugins: 1",
+		"Updated plugins: 1",
+		"- market demo -> " + installedDir,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin update missing %q: %q", want, text)
+		}
+	}
+	installed, err := pluginpkg.LoadPluginDir(installedDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installed.Version != "2.0.0" {
+		t.Fatalf("installed version = %q", installed.Version)
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "assets", "README.md")); err != nil || string(data) != "v2 asset" {
+		t.Fatalf("updated plugin asset = %q err=%v", data, err)
 	}
 }
 

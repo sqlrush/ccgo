@@ -3202,6 +3202,8 @@ func (r Runner) formatPluginSummary(raw string) string {
 			return r.formatPluginConfig(args)
 		case "install":
 			return r.installPluginSummary(subcommandRemainder(raw, args[0]))
+		case "update":
+			return r.updatePluginSummary(subcommandRemainder(raw, args[0]))
 		case "enable", "disable":
 			return r.setPluginEnabledSummary(args)
 		default:
@@ -3533,6 +3535,16 @@ type pluginInstallResult struct {
 	AlreadyInstalled bool
 }
 
+type pluginUpdateResult struct {
+	MarketplacePluginCount int
+	Updated                []pluginUpdateItem
+}
+
+type pluginUpdateItem struct {
+	Plugin     pluginpkg.LoadedPlugin
+	TargetPath string
+}
+
 func (r Runner) installMarketplacePlugin(name string) (pluginInstallResult, error) {
 	if strings.TrimSpace(r.WorkingDirectory) == "" {
 		return pluginInstallResult{}, fmt.Errorf("working directory is unavailable")
@@ -3564,6 +3576,85 @@ func (r Runner) installMarketplacePlugin(name string) (pluginInstallResult, erro
 		r.MCP.refreshPluginServers()
 	}
 	return pluginInstallResult{Plugin: plugin, TargetPath: targetRoot}, nil
+}
+
+func (r Runner) updatePluginSummary(name string) string {
+	result, err := r.updateMarketplacePlugins(strings.TrimSpace(name))
+	if err != nil {
+		return "Failed to update plugins: " + err.Error()
+	}
+	lines := []string{
+		"Plugin update",
+		fmt.Sprintf("Marketplace plugins: %d", result.MarketplacePluginCount),
+		fmt.Sprintf("Updated plugins: %d", len(result.Updated)),
+	}
+	if len(result.Updated) > 0 {
+		lines = append(lines, "Updated:")
+		for _, item := range firstPluginUpdateItems(result.Updated, 20) {
+			lines = append(lines, "- "+item.Plugin.Name+" -> "+item.TargetPath)
+		}
+		if len(result.Updated) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d updated plugins.", len(result.Updated)))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) updateMarketplacePlugins(name string) (pluginUpdateResult, error) {
+	if strings.TrimSpace(r.WorkingDirectory) == "" {
+		return pluginUpdateResult{}, fmt.Errorf("working directory is unavailable")
+	}
+	merged := r.mergedSettings()
+	marketplacePlugins := pluginpkg.LoadPluginDirsWithSettings(nil, merged)
+	result := pluginUpdateResult{MarketplacePluginCount: len(marketplacePlugins)}
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	if strings.TrimSpace(name) != "" && strings.TrimSpace(name) != "all" {
+		installed, ok := findLoadedPlugin(installedPlugins, name)
+		if !ok {
+			return result, fmt.Errorf("installed plugin %s was not found", name)
+		}
+		marketplacePlugin, ok := findLoadedPlugin(marketplacePlugins, installed.Name)
+		if !ok {
+			return result, fmt.Errorf("plugin %s was not found in configured marketplace sources", installed.Name)
+		}
+		if sameResolvedPath(marketplacePlugin.Root, installed.Root) {
+			return result, nil
+		}
+		if err := replacePluginDir(marketplacePlugin.Root, installed.Root); err != nil {
+			return result, err
+		}
+		result.Updated = append(result.Updated, pluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
+		r.refreshPluginMCPServers()
+		return result, nil
+	}
+	sort.SliceStable(installedPlugins, func(i, j int) bool {
+		if installedPlugins[i].Name == installedPlugins[j].Name {
+			return installedPlugins[i].Root < installedPlugins[j].Root
+		}
+		return installedPlugins[i].Name < installedPlugins[j].Name
+	})
+	for _, installed := range installedPlugins {
+		marketplacePlugin, ok := findLoadedPlugin(marketplacePlugins, installed.Name)
+		if !ok || sameResolvedPath(marketplacePlugin.Root, installed.Root) {
+			continue
+		}
+		if err := replacePluginDir(marketplacePlugin.Root, installed.Root); err != nil {
+			return result, err
+		}
+		result.Updated = append(result.Updated, pluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
+	}
+	r.refreshPluginMCPServers()
+	return result, nil
+}
+
+func (r Runner) refreshPluginMCPServers() {
+	if r.MCP == nil {
+		return
+	}
+	if r.MCP.CWD == "" {
+		r.MCP.CWD = r.WorkingDirectory
+	}
+	r.MCP.refreshPluginServers()
 }
 
 func safePluginInstallDirName(plugin pluginpkg.LoadedPlugin) string {
@@ -3635,18 +3726,86 @@ func copyPluginDir(src string, dst string) error {
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return err
 	}
-	temp, err := os.MkdirTemp(parent, "."+filepath.Base(dst)+".tmp-*")
+	temp, cleanup, err := stagePluginDir(src, parent, filepath.Base(dst), info.Mode().Perm())
 	if err != nil {
 		return err
 	}
-	cleanup := true
+	defer cleanup(true)
+	if err := os.Rename(temp, dst); err != nil {
+		return err
+	}
+	cleanup(false)
+	return nil
+}
+
+func replacePluginDir(src string, dst string) error {
+	src = cleanResolvedPath(src)
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("source plugin is not a directory")
+	}
+	if _, err := os.Stat(dst); os.IsNotExist(err) {
+		return copyPluginDir(src, dst)
+	} else if err != nil {
+		return err
+	}
+	parent := filepath.Dir(dst)
+	temp, cleanupTemp, err := stagePluginDir(src, parent, filepath.Base(dst), info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	defer cleanupTemp(true)
+	backup, err := os.MkdirTemp(parent, "."+filepath.Base(dst)+".old-*")
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(backup); err != nil {
+		_ = os.RemoveAll(backup)
+		return err
+	}
+	backupActive := false
 	defer func() {
-		if cleanup {
-			_ = os.RemoveAll(temp)
+		if backupActive {
+			_ = os.RemoveAll(backup)
 		}
 	}()
-	if err := os.Chmod(temp, info.Mode().Perm()); err != nil {
+	if err := os.Rename(dst, backup); err != nil {
 		return err
+	}
+	backupActive = true
+	if err := os.Rename(temp, dst); err != nil {
+		if restoreErr := os.Rename(backup, dst); restoreErr != nil {
+			backupActive = false
+			return fmt.Errorf("%w; failed to restore backup %s: %v", err, backup, restoreErr)
+		}
+		backupActive = false
+		return err
+	}
+	cleanupTemp(false)
+	_ = os.RemoveAll(backup)
+	backupActive = false
+	return nil
+}
+
+func stagePluginDir(src string, parent string, base string, mode os.FileMode) (string, func(bool), error) {
+	temp, err := os.MkdirTemp(parent, "."+base+".tmp-*")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func(remove bool) {
+		if remove {
+			_ = os.RemoveAll(temp)
+		}
+	}
+	if mode == 0 {
+		mode = 0o755
+	}
+	if err := os.Chmod(temp, mode); err != nil {
+		cleanup(true)
+		return "", nil, err
 	}
 	if err := filepath.WalkDir(src, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -3675,13 +3834,10 @@ func copyPluginDir(src string, dst string) error {
 		}
 		return copyPluginFile(path, target, info.Mode().Perm())
 	}); err != nil {
-		return err
+		cleanup(true)
+		return "", nil, err
 	}
-	if err := os.Rename(temp, dst); err != nil {
-		return err
-	}
-	cleanup = false
-	return nil
+	return temp, cleanup, nil
 }
 
 func copyPluginFile(src string, dst string, mode os.FileMode) error {
@@ -4705,6 +4861,13 @@ func firstLoadedPlugins(values []pluginpkg.LoadedPlugin, limit int) []pluginpkg.
 }
 
 func firstPluginSearchResults(values []pluginSearchResult, limit int) []pluginSearchResult {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
+func firstPluginUpdateItems(values []pluginUpdateItem, limit int) []pluginUpdateItem {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}
