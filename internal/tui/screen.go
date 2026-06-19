@@ -145,6 +145,15 @@ func (s *REPLScreen) AppendMessage(message Message) {
 	s.Viewport.ScrollToBottom()
 }
 
+func (s *REPLScreen) ClearConversation() {
+	s.Messages = nil
+	s.SelectedViewportLine = -1
+	s.ReverseSearch = ReverseSearchState{}
+	s.Prompt.resetPastedIDFromDraft()
+	s.rebuildViewport()
+	s.Viewport.ScrollToTop()
+}
+
 func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	switch key.Type {
 	case KeyFocusIn:

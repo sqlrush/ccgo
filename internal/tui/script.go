@@ -28,6 +28,7 @@ type ScriptStep struct {
 	CancelAllTasks               bool
 	CancelTasksDetail            string
 	OpenTasksDialog              bool
+	ClearConversation            bool
 	ResizeWidth                  int
 	ResizeHeight                 int
 	SnapshotName                 string
@@ -222,6 +223,9 @@ func runInteractionScriptChecked(screen *REPLScreen, steps []ScriptStep, runtime
 				return result, dialogResults, fmt.Errorf("script step %d keybindings: %w", index, err)
 			}
 			screen.Keymap = keymap
+		}
+		if step.ClearConversation {
+			screen.ClearConversation()
 		}
 		if step.ResizeWidth > 0 {
 			width := step.ResizeWidth

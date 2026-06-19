@@ -595,6 +595,38 @@ func TestREPLScreenSeedsNextPastedIDFromMessages(t *testing.T) {
 	}
 }
 
+func TestREPLScreenClearConversationResetsTranscriptState(t *testing.T) {
+	screen := NewREPLScreen(40, 6, []string{"previous prompt"})
+	screen.SetMessages([]Message{
+		{Role: RoleUser, Text: "old [Image #9]"},
+		{Role: RoleAssistant, Text: "old answer"},
+		{Role: RoleUser, Text: "older [Pasted text #12]"},
+	})
+	screen.SelectedViewportLine = 1
+	screen.OpenReverseSearch("previous")
+	screen.Prompt.Text = "draft [Image #4]"
+	screen.Prompt.PastedContents = map[int]session.PastedContent{
+		4: {ID: 4, Type: session.PastedContentImage, Filename: "draft.png"},
+	}
+	screen.Prompt.NextPastedID = 13
+
+	screen.ClearConversation()
+
+	if len(screen.Messages) != 0 || len(screen.Viewport.Lines) != 0 || screen.Viewport.Offset != 0 {
+		t.Fatalf("screen transcript not cleared: messages=%#v viewport=%#v", screen.Messages, screen.Viewport)
+	}
+	if screen.SelectedViewportLine != -1 || screen.ReverseSearch.Active {
+		t.Fatalf("selection/search state = line %d reverse=%#v", screen.SelectedViewportLine, screen.ReverseSearch)
+	}
+	if screen.Prompt.Text != "draft [Image #4]" || screen.Prompt.NextPastedID != 5 || screen.Prompt.historyLength() != 1 {
+		t.Fatalf("prompt after clear = %#v", screen.Prompt)
+	}
+	screen.ApplyKey(ParseKey("\x1b]1337;File=name=next.png;type=image/png;inline=1:BBBB\a"))
+	if !strings.Contains(screen.Prompt.Text, "[Image #5]") || screen.Prompt.NextPastedID != 6 {
+		t.Fatalf("prompt pasted id after clear = %#v", screen.Prompt)
+	}
+}
+
 func TestPromptImageHintWritesImageCacheWhenEnabled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
@@ -11196,6 +11228,32 @@ func TestRunInteractionScriptChecksEventSequences(t *testing.T) {
 	}
 	if len(result.Events) != 2 || result.Events[0].Value != "a" || result.Events[1].Value != "b" {
 		t.Fatalf("events = %#v", result.Events)
+	}
+}
+
+func TestRunInteractionScriptAppliesConversationClearedAlias(t *testing.T) {
+	steps, err := ParseInteractionScript([]byte(`[
+		{"message": {"role": "user", "text": "old question"}},
+		{"message": {"role": "assistant", "text": "old answer"}},
+		{
+			"conversationCleared": true,
+			"expectSnapshotNotContains": ["old question", "old answer"],
+			"expectViewport": {"visibleNotContains": ["old question", "old answer"]},
+			"expectNoEvent": true
+		}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !steps[2].ClearConversation {
+		t.Fatalf("clear alias not parsed: %#v", steps[2])
+	}
+	screen := NewREPLScreen(40, 8, nil)
+	if _, err := RunInteractionScriptChecked(&screen, steps); err != nil {
+		t.Fatal(err)
+	}
+	if len(screen.Messages) != 0 || len(screen.Viewport.Lines) != 0 {
+		t.Fatalf("screen not cleared: messages=%#v viewport=%#v", screen.Messages, screen.Viewport)
 	}
 }
 

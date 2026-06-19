@@ -245,9 +245,9 @@ M8 补充：project legacy `.claude/commands/**/*.md` 和 user legacy `${CLAUDE_
 
 M8 补充：现有 Go 内置 slash command metadata 继续贴近官方源快照，补齐 `config`/`resume`/`clear` 的 aliases（`settings`、`continue`、`reset`、`new`），以及 `mcp`/`resume`/`model` 的 argument hint、`mcp`/`status`/`model` 的 immediate 标记和部分官方描述；大量内置 command 的真实 local/local-jsx UI 执行仍未完成。
 
-M8 补充：slash command 现在有基础 local command result 抽象，`/clear` 不再落入 unsupported 分支，会生成 local text result、保留 command metadata message，并且不会请求模型；完整 REPL conversation reset、local command text/compact/skip 全语义、`/cost`/`/status`/`/compact` 和 local-jsx UI 执行仍未完成。
+M8 补充：slash command 现在有基础 local command result 抽象，`/clear` 不再落入 unsupported 分支，会生成 local text result、保留 command metadata message，并且不会请求模型；REPL screen 已提供 clear-result 消费路径，可清空 transcript viewport/selection/reverse-search 并按当前 draft 重算 paste/image 引用编号；完整 local command text/compact/skip 全语义、`/cost`/`/status`/`/compact` 和 local-jsx UI 执行仍未完成。
 
-M8/M7 补充：`/clear` local command 现在返回专用 clear result，并在 conversation `Result.Cleared` 中暴露结构化清空信号；runner 仍保留 command metadata transcript 且不请求模型，完整 TUI/REPL 历史重置接线仍需由交互主循环消费该信号完成。
+M8/M7 补充：`/clear` local command 现在返回专用 clear result，并在 conversation `Result.Cleared` 中暴露结构化清空信号；`REPLScreen.ClearConversation` 和交互脚本 `conversationCleared` alias 可消费该信号，清空屏幕会话历史但保留 prompt 输入历史，runner 仍保留 command metadata transcript 且不请求模型。
 
 M8/CLI 补充：`--print --output-format json|stream-json` 现在会为 `/clear` 这类空文本本地结果输出 final result envelope，并用 `cleared: true` 暴露清空信号；普通空文本结果仍保持不输出，完整 SDK/control protocol clear event parity 仍需后续补齐。
 

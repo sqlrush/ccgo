@@ -712,6 +712,12 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 		OpenTasksCamel            *json.RawMessage `json:"openTasks"`
 		ShowTasks                 *json.RawMessage `json:"show_tasks"`
 		ShowTasksCamel            *json.RawMessage `json:"showTasks"`
+		ClearConversation         *json.RawMessage `json:"clear_conversation"`
+		ClearConversationCamel    *json.RawMessage `json:"clearConversation"`
+		ConversationCleared       *json.RawMessage `json:"conversation_cleared"`
+		ConversationClearedCamel  *json.RawMessage `json:"conversationCleared"`
+		ApplyClearResult          *json.RawMessage `json:"apply_clear_result"`
+		ApplyClearResultCamel     *json.RawMessage `json:"applyClearResult"`
 		ResizeWidth               *json.RawMessage `json:"resize_width"`
 		ResizeWidthCamel          *json.RawMessage `json:"resizeWidth"`
 		ResizeHeight              *json.RawMessage `json:"resize_height"`
@@ -1008,6 +1014,9 @@ func (step *ScriptStep) UnmarshalJSON(data []byte) error {
 	}
 	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "OpenTasksDialog", "open_tasks_dialog", "openTasksDialog", "OpenTasks", "open_tasks", "openTasks", "ShowTasks", "show_tasks", "showTasks"); ok {
 		step.OpenTasksDialog = value
+	}
+	if value, ok := scriptRuntimeMutationBoolField(fieldMap, "ClearConversation", "clear_conversation", "clearConversation", "ConversationCleared", "conversation_cleared", "conversationCleared", "ApplyClearResult", "apply_clear_result", "applyClearResult"); ok {
+		step.ClearConversation = value
 	}
 	if step.ResizeWidth <= 0 {
 		if width, ok := scriptNamedIntField(rawFieldMap,
@@ -1782,6 +1791,12 @@ func scriptStepJSONHasDirectFields(fields map[string]json.RawMessage) bool {
 		"task_status",
 		"taskStatus",
 		"dialog",
+		"clear_conversation",
+		"clearConversation",
+		"conversation_cleared",
+		"conversationCleared",
+		"apply_clear_result",
+		"applyClearResult",
 		"expect_event",
 		"expectEvent",
 		"expect_events",
@@ -1902,6 +1917,8 @@ func applyScriptStepActionAlias(step *ScriptStep, fields map[string]json.RawMess
 		}
 	case "opentasks", "open-tasks", "opentasksdialog", "open-tasks-dialog", "showtasks", "show-tasks":
 		step.OpenTasksDialog = scriptActionBoolField(fields, true)
+	case "clearconversation", "clear-conversation", "conversationcleared", "conversation-cleared", "applyclearresult", "apply-clear-result", "clearresult", "clear-result":
+		step.ClearConversation = scriptActionBoolField(fields, true)
 	case "cancelactivedialog", "cancel-active-dialog", "canceldialog", "cancel-dialog", "closedialog", "close-dialog":
 		step.CancelActiveDialog = scriptActionBoolField(fields, true)
 	case "cancelpermission", "cancel-permission":

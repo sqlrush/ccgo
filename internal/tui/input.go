@@ -943,6 +943,28 @@ func (p *PromptState) SeedNextPastedIDFromMessages(messages []Message) {
 	p.NextPastedID = next
 }
 
+func (p *PromptState) resetPastedIDFromDraft() {
+	if !p.UsePasteReferences {
+		return
+	}
+	next := 1
+	for id, content := range p.PastedContents {
+		contentID := id
+		if content.ID > 0 {
+			contentID = content.ID
+		}
+		if contentID >= next {
+			next = contentID + 1
+		}
+	}
+	for _, ref := range session.ParseReferences(p.Text) {
+		if ref.ID >= next {
+			next = ref.ID + 1
+		}
+	}
+	p.NextPastedID = next
+}
+
 func (p *PromptState) SetPasteReferenceRows(rows int) {
 	p.MaxInlinePasteLines = maxInlinePasteLines(rows)
 }
