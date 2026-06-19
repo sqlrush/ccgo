@@ -213,6 +213,12 @@ func TestBuiltinCommandsExposeOfficialAliasesAndMetadata(t *testing.T) {
 	if !ok || issue.Type != contracts.CommandLocal || !issue.SupportsNonInteractive || issue.ArgumentHint != "[description]" {
 		t.Fatalf("issue metadata = %#v, %v", issue, ok)
 	}
+	for _, name := range []string{"summary", "release-notes", "files"} {
+		cmd, ok := registry.Find(name)
+		if !ok || cmd.Type != contracts.CommandLocal || !cmd.SupportsNonInteractive {
+			t.Fatalf("%s metadata = %#v, %v", name, cmd, ok)
+		}
+	}
 }
 
 func TestFromSourcesUsesCommandOrderAndDedupesDynamicSkills(t *testing.T) {
@@ -612,6 +618,11 @@ func TestIsBridgeSafeCommand(t *testing.T) {
 	}
 	if !IsBridgeSafeCommand(contracts.Command{Name: "compact", Type: contracts.CommandLocal}) {
 		t.Fatalf("compact should be bridge-safe")
+	}
+	for _, name := range []string{"summary", "release-notes", "files"} {
+		if !IsBridgeSafeCommand(contracts.Command{Name: name, Type: contracts.CommandLocal}) {
+			t.Fatalf("%s should be bridge-safe", name)
+		}
 	}
 	if IsBridgeSafeCommand(contracts.Command{Name: "model", Type: contracts.CommandLocal}) {
 		t.Fatalf("model should not be bridge-safe without explicit allowlist")

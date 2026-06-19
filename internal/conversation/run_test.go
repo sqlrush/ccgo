@@ -2319,6 +2319,141 @@ func TestRunnerCostSlashCommandReportsBreakdown(t *testing.T) {
 	}
 }
 
+func TestRunnerExecutesSummarySlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_summary",
+		WorkingDirectory: "/tmp/project",
+	}
+	assistant := messages.AssistantText("done with tests", "sonnet", nil)
+	assistant.Content = append(assistant.Content, contracts.ContentBlock{
+		Type:  contracts.ContentToolUse,
+		ID:    "toolu_1",
+		Name:  "Read",
+		Input: json.RawMessage(`{"file_path":"README.md"}`),
+	})
+	history := []contracts.Message{
+		messages.UserText("old prompt"),
+		assistant,
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{{
+				Type:      contracts.ContentToolResult,
+				ToolUseID: "toolu_1",
+				Content:   "ok",
+			}},
+		},
+	}
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("/summary local commands"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if result.Assistant.Type != "" || result.FinalRequest.Model != "" {
+		t.Fatalf("unexpected model result = %#v", result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Conversation summary",
+		"Session ID: sess_summary",
+		"Working directory: /tmp/project",
+		"Messages: 3",
+		"User messages: 2",
+		"Assistant messages: 1",
+		"Tool uses: 1",
+		"Tool results: 1",
+		"Requested focus: local commands",
+		"Last user: old prompt",
+		"Last assistant: done with tests",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("summary text missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerExecutesFilesSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		Model:            "sonnet",
+		MaxTokens:        128,
+		SessionID:        "sess_files",
+		WorkingDirectory: dir,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/files src"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Workspace files",
+		"Working directory: " + dir,
+		"Entries: 2",
+		"Directories: 1",
+		"Files: 1",
+		"Requested filter: src",
+		"- a.txt",
+		"- subdir/",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("files text missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerExecutesReleaseNotesSlashCommandWithoutQuery(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{
+		Client:    client,
+		Model:     "sonnet",
+		MaxTokens: 128,
+		SessionID: "sess_release_notes",
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/release-notes plugins"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("result messages = %#v", result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Release notes",
+		"Bundled release notes: unavailable",
+		"Status: release notes are not packaged in this Go runtime yet.",
+		"Requested topic: plugins",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("release notes text missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	registry, err := tool.NewRegistry(tool.FuncTool{

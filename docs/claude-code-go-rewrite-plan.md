@@ -878,6 +878,8 @@ test/parity/                 # golden tests against TS/official behavior
 
 - 本轮补充：`/native clipboard status|show` 现在走 no-query 本地状态路径，只展示 session clipboard 文件路径、item 数、更新时间和 adapter 可用性/命令，不读取、不写入、不展示剪贴板文本内容；`/native clipboard` usage 同步暴露 status 子命令。
 
+- 本轮补充：bridge-safe 内置本地命令 `/summary`、`/release-notes`、`/files` 现在已注册并接入 no-query runner 路径；`/summary` 输出确定性的会话/历史消息计数、工具使用计数、估算 token 和最近用户/助手预览，`/files` 只读列出当前工作目录第一层条目而不读取文件内容，`/release-notes` 明确报告当前 Go runtime 未打包 release notes。完整 local-jsx UI surface 和其它本地命令 parity 仍需继续补。
+
 ### M12: Parity hardening
 
 产出：

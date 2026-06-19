@@ -116,6 +116,15 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		if localResult != nil && localResult.Type == commands.LocalCommandResultCost {
 			return r.appendLocalTextResult(result, history, formatCostSummary(localResult.Value, r.costHistory(originalHistory)))
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultSummary {
+			return r.appendLocalTextResult(result, history, r.formatConversationSummary(localResult.Value, originalHistory))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultRelease {
+			return r.appendLocalTextResult(result, history, r.formatReleaseNotesSummary(localResult.Value))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultFiles {
+			return r.appendLocalTextResult(result, history, r.formatFilesSummary(localResult.Value))
+		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultIssue {
 			return r.appendLocalTextResult(result, history, r.formatIssueSummary(localResult.Value))
 		}
@@ -743,6 +752,152 @@ func formatCostBreakdown(history []contracts.Message) string {
 	lines = append(lines, fmt.Sprintf("Messages with usage: %d", countUsageMessages(history)))
 	if countUsageMessages(history) > 20 {
 		lines = append(lines, fmt.Sprintf("Showing 20 of %d messages with usage.", countUsageMessages(history)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatConversationSummary(raw string, history []contracts.Message) string {
+	sessionID := string(r.SessionID)
+	if sessionID == "" {
+		sessionID = "(none)"
+	}
+	cwd := strings.TrimSpace(r.WorkingDirectory)
+	if cwd == "" {
+		cwd = "(unknown)"
+	}
+	var users, assistants, systems, attachments, progress, toolUses, toolResults int
+	var lastUser, lastAssistant string
+	for _, message := range history {
+		switch message.Type {
+		case contracts.MessageUser:
+			users++
+			if text := firstMessageText(message); text != "" {
+				lastUser = text
+			}
+		case contracts.MessageAssistant:
+			assistants++
+			if text := firstMessageText(message); text != "" {
+				lastAssistant = text
+			}
+		case contracts.MessageSystem:
+			systems++
+		case contracts.MessageAttachment:
+			attachments++
+		case contracts.MessageProgress:
+			progress++
+		}
+		for _, block := range message.Content {
+			switch block.Type {
+			case contracts.ContentToolUse:
+				toolUses++
+			case contracts.ContentToolResult:
+				toolResults++
+			}
+		}
+	}
+	lines := []string{
+		"Conversation summary",
+		"Session ID: " + sessionID,
+		"Working directory: " + cwd,
+		fmt.Sprintf("Messages: %d", len(history)),
+		fmt.Sprintf("User messages: %d", users),
+		fmt.Sprintf("Assistant messages: %d", assistants),
+		fmt.Sprintf("System messages: %d", systems),
+		fmt.Sprintf("Attachment messages: %d", attachments),
+		fmt.Sprintf("Progress messages: %d", progress),
+		fmt.Sprintf("Tool uses: %d", toolUses),
+		fmt.Sprintf("Tool results: %d", toolResults),
+		fmt.Sprintf("Estimated tokens: %d", compactpkg.EstimateTokens(history)),
+	}
+	if context := strings.TrimSpace(raw); context != "" {
+		lines = append(lines, "Requested focus: "+truncatePreviewLine(context))
+	}
+	if lastUser != "" {
+		lines = append(lines, "Last user: "+truncatePreviewLine(lastUser))
+	}
+	if lastAssistant != "" {
+		lines = append(lines, "Last assistant: "+truncatePreviewLine(lastAssistant))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func firstMessageText(message contracts.Message) string {
+	for _, block := range message.Content {
+		if block.Type == contracts.ContentText && strings.TrimSpace(block.Text) != "" {
+			return strings.TrimSpace(block.Text)
+		}
+	}
+	for _, block := range message.Content {
+		if strings.TrimSpace(block.Text) != "" {
+			return strings.TrimSpace(block.Text)
+		}
+	}
+	return ""
+}
+
+func (r Runner) formatReleaseNotesSummary(raw string) string {
+	lines := []string{
+		"Release notes",
+		"Bundled release notes: unavailable",
+		"Status: release notes are not packaged in this Go runtime yet.",
+	}
+	if query := strings.TrimSpace(raw); query != "" {
+		lines = append(lines, "Requested topic: "+truncatePreviewLine(query))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatFilesSummary(raw string) string {
+	cwd := strings.TrimSpace(r.WorkingDirectory)
+	if cwd == "" {
+		return strings.Join([]string{
+			"Workspace files",
+			"Working directory: (unknown)",
+			"Error: no working directory is configured.",
+		}, "\n")
+	}
+	entries, err := os.ReadDir(cwd)
+	if err != nil {
+		return strings.Join([]string{
+			"Workspace files",
+			"Working directory: " + cwd,
+			"Error: " + err.Error(),
+		}, "\n")
+	}
+	var directories, files int
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			directories++
+			name += "/"
+		} else {
+			files++
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	limit := 20
+	lines := []string{
+		"Workspace files",
+		"Working directory: " + cwd,
+		fmt.Sprintf("Entries: %d", len(entries)),
+		fmt.Sprintf("Directories: %d", directories),
+		fmt.Sprintf("Files: %d", files),
+	}
+	if query := strings.TrimSpace(raw); query != "" {
+		lines = append(lines, "Requested filter: "+truncatePreviewLine(query))
+	}
+	if len(names) == 0 {
+		lines = append(lines, "No entries found.")
+		return strings.Join(lines, "\n")
+	}
+	lines = append(lines, "Entries:")
+	for _, name := range firstStrings(names, limit) {
+		lines = append(lines, "- "+name)
+	}
+	if len(names) > limit {
+		lines = append(lines, fmt.Sprintf("Showing %d of %d entries.", limit, len(names)))
 	}
 	return strings.Join(lines, "\n")
 }

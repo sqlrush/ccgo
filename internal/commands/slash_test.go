@@ -520,6 +520,39 @@ func TestExecuteSlashCostReturnsLocalCostResult(t *testing.T) {
 	}
 }
 
+func TestExecuteSlashBridgeSafeLocalCommandsReturnLocalResults(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	tests := []struct {
+		input string
+		typ   LocalCommandResultType
+		value string
+	}{
+		{input: "/summary recent work", typ: LocalCommandResultSummary, value: "recent work"},
+		{input: "/release-notes plugins", typ: LocalCommandResultRelease, value: "plugins"},
+		{input: "/files src", typ: LocalCommandResultFiles, value: "src"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result, handled, err := ExecuteSlashCommand(registry, tt.input, SlashOptions{UUID: "user_local"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !handled || result.ShouldQuery || result.Unsupported || result.LocalResult == nil {
+				t.Fatalf("handled=%v result=%#v", handled, result)
+			}
+			if result.LocalResult.Type != tt.typ || result.LocalResult.Value != tt.value {
+				t.Fatalf("local result = %#v", result.LocalResult)
+			}
+			if len(result.Messages) != 1 || result.Messages[0].UUID != "user_local" {
+				t.Fatalf("messages = %#v", result.Messages)
+			}
+			if text := result.Messages[0].Content[0].Text; !strings.Contains(text, "<command-name>/"+strings.TrimPrefix(strings.Fields(tt.input)[0], "/")+"</command-name>") {
+				t.Fatalf("command message = %q", text)
+			}
+		})
+	}
+}
+
 func TestExecuteSlashIssueReturnsLocalIssueResult(t *testing.T) {
 	registry := FromSources(Sources{Builtins: BuiltinCommands()})
 	result, handled, err := ExecuteSlashCommand(registry, "/issue auth failed", SlashOptions{UUID: "user_issue"})
