@@ -516,6 +516,7 @@ func findHTMLWebFetchBlockStart(lower string, name string) int {
 func stripHTMLWebFetchTags(body string, baseURL string) string {
 	var b strings.Builder
 	var anchors []htmlWebFetchAnchor
+	var buttons []htmlWebFetchLabeledControl
 	pictureDepth := 0
 	pictureSource := ""
 	for i := 0; i < len(body); {
@@ -560,6 +561,14 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			} else {
 				href := strings.TrimSpace(htmlWebFetchAttr(rawTag, "href"))
 				anchors = append(anchors, htmlWebFetchAnchor{Href: resolveWebFetchHTMLURL(href, baseURL), Start: b.Len()})
+			}
+		}
+		if tag == "button" {
+			if closing {
+				buttons, _ = appendHTMLWebFetchControlLabel(&b, buttons)
+			} else {
+				label := firstNonEmptyWebFetchAttr(rawTag, "aria-label", "title", "value")
+				buttons = append(buttons, htmlWebFetchLabeledControl{Label: label, Start: b.Len()})
 			}
 		}
 		if tag == "source" && !closing && pictureDepth > 0 && pictureSource == "" {
@@ -638,6 +647,11 @@ type htmlWebFetchAnchor struct {
 	Start int
 }
 
+type htmlWebFetchLabeledControl struct {
+	Label string
+	Start int
+}
+
 func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnchor) ([]htmlWebFetchAnchor, bool) {
 	if len(anchors) == 0 {
 		return anchors, false
@@ -663,6 +677,28 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 	b.WriteString(href)
 	b.WriteByte(')')
 	return anchors, true
+}
+
+func appendHTMLWebFetchControlLabel(b *strings.Builder, controls []htmlWebFetchLabeledControl) ([]htmlWebFetchLabeledControl, bool) {
+	if len(controls) == 0 {
+		return controls, false
+	}
+	control := controls[len(controls)-1]
+	controls = controls[:len(controls)-1]
+	label := strings.TrimSpace(control.Label)
+	if label == "" {
+		return controls, false
+	}
+	current := b.String()
+	if control.Start >= 0 && control.Start <= len(current) {
+		if text := strings.Join(strings.Fields(current[control.Start:]), " "); text != "" {
+			return controls, false
+		}
+	}
+	b.WriteString("\nInput: ")
+	b.WriteString(label)
+	b.WriteByte('\n')
+	return controls, true
 }
 
 func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL string, sourceOverride string) {
