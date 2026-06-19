@@ -303,6 +303,64 @@ func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	}
 }
 
+func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <main>
+    <form>
+      <label for="query">Search</label>
+      <input id="query" type="search" placeholder="Search docs">
+      <input type="text" value="prefilled workspace">
+      <input type="submit" value="Run search">
+      <input type="image" alt="Search icon" src="/assets/search.png">
+      <input type="checkbox" aria-label="Include archived docs">
+      <input type="hidden" value="csrf-secret">
+      <input type="password" value="super-secret-password">
+      <input type="file" value="/private/report.pdf">
+    </form>
+  </main>
+</body>
+</html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_html_forms",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"run search"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	for _, want := range []string{
+		"Input: Search docs",
+		"Input: prefilled workspace",
+		"Input: Run search",
+		"Input: Search icon",
+		"Input: Include archived docs",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered body missing %q: %#v", want, rendered)
+		}
+	}
+	for _, leaked := range []string{"csrf-secret", "super-secret-password", "/private/report.pdf"} {
+		if strings.Contains(rendered, leaked) {
+			t.Fatalf("rendered body leaked %q: %#v", leaked, rendered)
+		}
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "Input: Run search") {
+		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
 func TestWebFetchResolvesHTMLLinksAgainstFinalURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

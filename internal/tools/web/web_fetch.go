@@ -570,6 +570,9 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 		if tag == "img" && !closing {
 			appendHTMLWebFetchImageText(&b, rawTag, baseURL, pictureSource)
 		}
+		if tag == "input" && !closing {
+			appendHTMLWebFetchInputText(&b, rawTag)
+		}
 		if tag == "br" || isBlockHTMLWebFetchTag(tag) {
 			b.WriteByte('\n')
 		}
@@ -677,6 +680,34 @@ func appendHTMLWebFetchImageText(b *strings.Builder, rawTag string, baseURL stri
 		b.WriteString(src)
 		b.WriteByte(')')
 	}
+	b.WriteByte('\n')
+}
+
+func appendHTMLWebFetchInputText(b *strings.Builder, rawTag string) {
+	inputType := strings.ToLower(strings.TrimSpace(htmlWebFetchAttr(rawTag, "type")))
+	if inputType == "" {
+		inputType = "text"
+	}
+	switch inputType {
+	case "hidden", "password", "file":
+		return
+	}
+	label := ""
+	switch inputType {
+	case "button", "submit", "reset":
+		label = firstNonEmptyWebFetchAttr(rawTag, "value", "aria-label", "title")
+	case "image":
+		label = firstNonEmptyWebFetchAttr(rawTag, "alt", "aria-label", "title", "value")
+	case "checkbox", "radio":
+		label = firstNonEmptyWebFetchAttr(rawTag, "aria-label", "title")
+	default:
+		label = firstNonEmptyWebFetchAttr(rawTag, "value", "placeholder", "aria-label", "title")
+	}
+	if label == "" {
+		return
+	}
+	b.WriteString("\nInput: ")
+	b.WriteString(label)
 	b.WriteByte('\n')
 }
 
