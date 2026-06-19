@@ -1,19 +1,27 @@
 package plugins
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
+	"ccgo/internal/platform"
 	"ccgo/internal/skills"
 )
 
 const ManifestFileName = "plugin.json"
+const maxMarketplaceCatalogBytes int64 = 1 << 20
+const marketplaceCatalogFetchTimeout = 10 * time.Second
 
 type PromptTemplate struct {
 	Command contracts.Command
@@ -344,6 +352,10 @@ func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry
 			for _, root := range pluginRootsFromMarketplaceFile(stringFromAnyMap(source, "path")) {
 				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
 			}
+		case "url":
+			for _, root := range pluginRootsFromMarketplaceURL(source, marketplace) {
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+			}
 		}
 	}
 	return entries
@@ -371,6 +383,151 @@ func pluginRootsFromMarketplaceFile(path string) []string {
 		return nil
 	}
 	return pluginRootsFromMarketplaceCatalog(raw)
+}
+
+func pluginRootsFromMarketplaceURL(source map[string]any, marketplace string) []string {
+	raw, ok := marketplaceCatalogFromURL(source, marketplace)
+	if !ok {
+		return nil
+	}
+	return pluginRootsFromMarketplaceCatalog(raw)
+}
+
+func marketplaceCatalogFromURL(source map[string]any, marketplace string) (any, bool) {
+	catalogURL := stringFromAnyMap(source, "url")
+	if catalogURL == "" {
+		return nil, false
+	}
+	if data, err := fetchMarketplaceCatalog(catalogURL, marketplaceHeadersFromSource(source)); err == nil {
+		var raw any
+		if err := json.Unmarshal(data, &raw); err == nil {
+			_ = writeMarketplaceCatalogCache(marketplace, catalogURL, data)
+			return raw, true
+		}
+	}
+	data, err := os.ReadFile(marketplaceCatalogCachePath(marketplace, catalogURL))
+	if err != nil {
+		return nil, false
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, false
+	}
+	return raw, true
+}
+
+func fetchMarketplaceCatalog(catalogURL string, headers map[string]string) ([]byte, error) {
+	client := &http.Client{Timeout: marketplaceCatalogFetchTimeout}
+	req, err := http.NewRequest(http.MethodGet, catalogURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("marketplace catalog returned status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxMarketplaceCatalogBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxMarketplaceCatalogBytes {
+		return nil, fmt.Errorf("marketplace catalog exceeds %d bytes", maxMarketplaceCatalogBytes)
+	}
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("marketplace catalog is not valid JSON")
+	}
+	return data, nil
+}
+
+func marketplaceHeadersFromSource(source map[string]any) map[string]string {
+	rawHeaders, ok := source["headers"].(map[string]any)
+	if !ok || len(rawHeaders) == 0 {
+		return nil
+	}
+	headers := make(map[string]string, len(rawHeaders))
+	for name, rawValue := range rawHeaders {
+		name = strings.TrimSpace(name)
+		value, ok := rawValue.(string)
+		if !ok || name == "" {
+			continue
+		}
+		headers[name] = value
+	}
+	return headers
+}
+
+func writeMarketplaceCatalogCache(marketplace string, catalogURL string, data []byte) error {
+	path := marketplaceCatalogCachePath(marketplace, catalogURL)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if _, err := temp.Write(data); err != nil {
+		_ = temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tempPath, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
+}
+
+func marketplaceCatalogCachePath(marketplace string, catalogURL string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(catalogURL)))
+	hash := hex.EncodeToString(sum[:])[:16]
+	name := safeMarketplaceCacheName(marketplace)
+	if name == "" {
+		name = "marketplace"
+	}
+	return filepath.Join(platform.ClaudeHomeDir(), "marketplace-cache", "catalogs", name+"-"+hash+".json")
+}
+
+func safeMarketplaceCacheName(name string) string {
+	name = strings.TrimSpace(name)
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		allowed := (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' ||
+			r == '_' ||
+			r == '.'
+		if allowed {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), ".-")
 }
 
 func pluginRootsFromMarketplaceCatalog(raw any) []string {

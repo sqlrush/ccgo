@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -400,6 +402,72 @@ func TestLoadPluginDirsWithSettingsLoadsFileMarketplacePlugins(t *testing.T) {
 		if plugin.Marketplace != "file-market" {
 			t.Fatalf("plugin marketplace = %#v", plugins)
 		}
+	}
+}
+
+func TestLoadPluginDirsWithSettingsLoadsURLMarketplacePluginsAndCachesCatalog(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "claude-home"))
+	alphaRoot := filepath.Join(root, "alpha")
+	betaRoot := filepath.Join(root, "beta")
+	for _, dir := range []string{alphaRoot, betaRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(alphaRoot, ManifestFileName), []byte(`{"name":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(betaRoot, ManifestFileName), []byte(`{"name":"beta"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	requests := 0
+	authorizationHeaders := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		authorizationHeaders = append(authorizationHeaders, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"plugins":["` + filepath.ToSlash(alphaRoot) + `",{"path":"` + filepath.ToSlash(betaRoot) + `"}]}`))
+	}))
+	url := server.URL + "/marketplace.json"
+	settings := contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"url-market": map[string]any{"source": map[string]any{
+				"source": "url",
+				"name":   "url-market",
+				"url":    url,
+				"headers": map[string]any{
+					"Authorization": "Bearer test-token",
+				},
+			}},
+		},
+		StrictKnownMarketplaces: []any{"url-market"},
+	}
+
+	plugins := LoadPluginDirsWithSettings(nil, settings)
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+	for _, plugin := range plugins {
+		if plugin.Marketplace != "url-market" {
+			t.Fatalf("plugin marketplace = %#v", plugins)
+		}
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d", requests)
+	}
+	if !reflect.DeepEqual(authorizationHeaders, []string{"Bearer test-token"}) {
+		t.Fatalf("authorization headers = %#v", authorizationHeaders)
+	}
+	if _, err := os.Stat(marketplaceCatalogCachePath("url-market", url)); err != nil {
+		t.Fatalf("catalog cache missing: %v", err)
+	}
+
+	server.Close()
+	plugins = LoadPluginDirsWithSettings(nil, settings)
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("cached plugins = %#v names=%#v", plugins, got)
 	}
 }
 
