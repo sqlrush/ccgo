@@ -66,6 +66,49 @@ func TestCreateMessageSendsHeadersAndDecodesResponse(t *testing.T) {
 	}
 }
 
+func TestCountTokensSendsRequestAndDecodesResponse(t *testing.T) {
+	var captured CountTokensRequest
+	var betaHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages/count_tokens" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		betaHeader = r.Header.Get("anthropic-beta")
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"input_tokens":1234}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithBaseURL(server.URL), WithAPIKey("test-key"))
+	resp, err := client.CountTokens(context.Background(), CountTokensRequest{
+		Model: "claude-sonnet-4-6[1m]",
+		Tools: []ToolDefinition{{
+			Name:        "Structured",
+			Description: "strict tool",
+			InputSchema: contracts.JSONSchema{"type": "object"},
+			Strict:      true,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.InputTokens != 1234 {
+		t.Fatalf("response = %#v", resp)
+	}
+	if captured.Model != "claude-sonnet-4-6[1m]" || len(captured.Messages) != 1 || captured.Messages[0].Content[0].Text != "foo" {
+		t.Fatalf("captured request = %#v", captured)
+	}
+	if len(captured.Tools) != 1 || captured.Tools[0].Name != "Structured" {
+		t.Fatalf("captured tools = %#v", captured.Tools)
+	}
+	if !strings.Contains(betaHeader, StructuredOutputsBetaHeader) || !strings.Contains(betaHeader, Context1MBetaHeader) {
+		t.Fatalf("anthropic-beta = %q", betaHeader)
+	}
+}
+
 func TestAPIErrorMapping(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("request-id", "req_1")

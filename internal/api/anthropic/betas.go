@@ -38,36 +38,43 @@ func BetaHeaderValue(headers []string) string {
 }
 
 func DynamicBetaHeaders(payload any) []string {
-	request, ok := payload.(Request)
-	if !ok {
+	switch request := payload.(type) {
+	case Request:
+		return dynamicBetaHeadersForRequest(request.Model, request.Messages, request.System, request.Tools)
+	case CountTokensRequest:
+		return dynamicBetaHeadersForRequest(request.Model, request.Messages, request.System, request.Tools)
+	default:
 		return nil
 	}
+}
+
+func dynamicBetaHeadersForRequest(modelName string, messages []contracts.APIMessage, system any, tools []ToolDefinition) []string {
 	var betas []string
-	if requestUsesPromptCaching(request) {
+	if requestUsesPromptCaching(messages, system, tools) {
 		betas = append(betas, PromptCachingScopeBetaHeader)
 	}
-	if requestUsesCacheEditing(request) {
+	if requestUsesCacheEditing(messages) {
 		betas = append(betas, CacheEditingBetaHeader)
 	}
-	if requestUsesStructuredOutputs(request) {
+	if requestUsesStructuredOutputs(tools) {
 		betas = append(betas, StructuredOutputsBetaHeader)
 	}
-	if requestUsesContext1M(request) {
+	if requestUsesContext1M(modelName) {
 		betas = append(betas, Context1MBetaHeader)
 	}
 	return betas
 }
 
-func requestUsesPromptCaching(request Request) bool {
-	for _, msg := range request.Messages {
+func requestUsesPromptCaching(messages []contracts.APIMessage, system any, tools []ToolDefinition) bool {
+	for _, msg := range messages {
 		if contentBlocksUsePromptCaching(msg.Content) {
 			return true
 		}
 	}
-	if systemBlocks, ok := request.System.([]contracts.ContentBlock); ok && contentBlocksUsePromptCaching(systemBlocks) {
+	if systemBlocks, ok := system.([]contracts.ContentBlock); ok && contentBlocksUsePromptCaching(systemBlocks) {
 		return true
 	}
-	for _, tool := range request.Tools {
+	for _, tool := range tools {
 		if tool.CacheControl != nil {
 			return true
 		}
@@ -75,8 +82,8 @@ func requestUsesPromptCaching(request Request) bool {
 	return false
 }
 
-func requestUsesCacheEditing(request Request) bool {
-	for _, msg := range request.Messages {
+func requestUsesCacheEditing(messages []contracts.APIMessage) bool {
+	for _, msg := range messages {
 		for _, block := range msg.Content {
 			if block.Type == contracts.ContentCacheEdits || len(block.Edits) > 0 {
 				return true
@@ -86,8 +93,8 @@ func requestUsesCacheEditing(request Request) bool {
 	return false
 }
 
-func requestUsesStructuredOutputs(request Request) bool {
-	for _, tool := range request.Tools {
+func requestUsesStructuredOutputs(tools []ToolDefinition) bool {
+	for _, tool := range tools {
 		if tool.Strict {
 			return true
 		}
@@ -95,8 +102,8 @@ func requestUsesStructuredOutputs(request Request) bool {
 	return false
 }
 
-func requestUsesContext1M(request Request) bool {
-	return strings.HasSuffix(strings.TrimSpace(strings.ToLower(request.Model)), "[1m]")
+func requestUsesContext1M(modelName string) bool {
+	return strings.HasSuffix(strings.TrimSpace(strings.ToLower(modelName)), "[1m]")
 }
 
 func contentBlocksUsePromptCaching(blocks []contracts.ContentBlock) bool {

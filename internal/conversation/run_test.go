@@ -46,13 +46,20 @@ type fakeCall struct {
 	err      error
 }
 
+type fakeCountTokensCall struct {
+	response *anthropic.CountTokensResponse
+	err      error
+}
+
 type fakeClient struct {
-	calls      []fakeCall
-	requests   []anthropic.Request
-	streams    [][]anthropic.StreamEvent
-	streamErrs []error
-	dumpPath   string
-	dumpCache  []anthropic.PromptDumpCacheEntry
+	calls       []fakeCall
+	requests    []anthropic.Request
+	countCalls  []anthropic.CountTokensRequest
+	countTokens []fakeCountTokensCall
+	streams     [][]anthropic.StreamEvent
+	streamErrs  []error
+	dumpPath    string
+	dumpCache   []anthropic.PromptDumpCacheEntry
 }
 
 type fakeRunnerMCPClient struct {
@@ -74,6 +81,16 @@ func (f *fakeClient) CreateMessage(ctx context.Context, req anthropic.Request) (
 	}
 	call := f.calls[0]
 	f.calls = f.calls[1:]
+	return call.response, call.err
+}
+
+func (f *fakeClient) CountTokens(ctx context.Context, req anthropic.CountTokensRequest) (*anthropic.CountTokensResponse, error) {
+	f.countCalls = append(f.countCalls, req)
+	if len(f.countTokens) == 0 {
+		return nil, fmt.Errorf("no fake count tokens call configured")
+	}
+	call := f.countTokens[0]
+	f.countTokens = f.countTokens[1:]
 	return call.response, call.err
 }
 
@@ -8241,6 +8258,52 @@ func TestBuildRequestWithToolSearchAutoAboveThresholdOmitsUndiscoveredDeferredTo
 	}
 	if len(req.Messages) != 2 || !strings.Contains(req.Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
 		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestRunnerToolSearchAutoUsesCountTokensWhenAvailable(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{{response: &anthropic.CountTokensResponse{InputTokens: 20501}}},
+		calls: []fakeCall{{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}}},
+	}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	_, err = runner.RunTurn(context.Background(), nil, messages.UserText("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.countCalls) != 1 {
+		t.Fatalf("count token calls = %#v", client.countCalls)
+	}
+	countRequest := client.countCalls[0]
+	if len(countRequest.Tools) != 1 || countRequest.Tools[0].Name != "TinyDeferred" || countRequest.Tools[0].DeferLoading {
+		t.Fatalf("count token tools = %#v", countRequest.Tools)
+	}
+	if len(client.requests) != 1 || len(client.requests[0].Tools) != 1 || client.requests[0].Tools[0].Name != "ToolSearch" {
+		t.Fatalf("request tools = %#v", client.requests)
+	}
+	if len(client.requests[0].Messages) != 2 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
+		t.Fatalf("request messages = %#v", client.requests[0].Messages)
 	}
 }
 

@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 	"os"
@@ -22,10 +23,11 @@ const (
 	defaultAutoToolSearchPercentage = 10
 	toolSearchCharsPerToken         = 2.5
 	modelContextWindowDefault       = 200000
+	toolTokenCountOverhead          = 500
 )
 
 func (r Runner) BuildRequest(history []contracts.Message, model string) (anthropic.Request, error) {
-	return r.buildRequest(history, model, relevantMemoryRequestContext{})
+	return r.buildRequest(context.Background(), history, model, relevantMemoryRequestContext{})
 }
 
 type relevantMemoryRequestContext struct {
@@ -33,7 +35,7 @@ type relevantMemoryRequestContext struct {
 	SkipSync bool
 }
 
-func (r Runner) buildRequest(history []contracts.Message, model string, relevantMemory relevantMemoryRequestContext) (anthropic.Request, error) {
+func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, model string, relevantMemory relevantMemoryRequestContext) (anthropic.Request, error) {
 	history, err := r.applySessionMemoryRecall(history)
 	if err != nil {
 		return anthropic.Request{}, err
@@ -55,7 +57,7 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 		if err != nil {
 			return anthropic.Request{}, err
 		}
-		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitions(defs, history, model)
+		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitions(defs, history, model, r.deferredToolTokenCounter(ctx, model))
 	}
 	apiMessages := msgs.NormalizeForAPI(history)
 	if !toolSearchActive {
@@ -78,14 +80,16 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 	return request, nil
 }
 
-func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message, model string) ([]contracts.ToolDefinition, []string, bool) {
+type deferredToolTokenCounter func([]contracts.ToolDefinition) (int, bool)
+
+func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message, model string, tokenCounter deferredToolTokenCounter) ([]contracts.ToolDefinition, []string, bool) {
 	if len(definitions) == 0 {
 		return definitions, nil, false
 	}
 	if !hasToolSearchDefinition(definitions) {
 		return applyDiscoveredToolReferences(definitions, history), nil, false
 	}
-	if !toolSearchEnabledForRequest(model, definitions) {
+	if !toolSearchEnabledForRequest(model, definitions, tokenCounter) {
 		return loadAllDeferredTools(withoutToolSearchDefinition(definitions)), nil, false
 	}
 	deferredNames := deferredToolNames(definitions)
@@ -116,7 +120,7 @@ const (
 	toolSearchModeStandard toolSearchMode = "standard"
 )
 
-func toolSearchEnabledForRequest(model string, definitions []contracts.ToolDefinition) bool {
+func toolSearchEnabledForRequest(model string, definitions []contracts.ToolDefinition, tokenCounter deferredToolTokenCounter) bool {
 	if !modelSupportsToolReference(model) {
 		return false
 	}
@@ -128,9 +132,53 @@ func toolSearchEnabledForRequest(model string, definitions []contracts.ToolDefin
 		return false
 	}
 	if mode == toolSearchModeTSTAuto {
+		if tokenCounter != nil {
+			if deferredToolTokens, ok := tokenCounter(definitions); ok {
+				return deferredToolTokens >= autoToolSearchTokenThreshold(model)
+			}
+		}
 		return deferredToolDescriptionChars(definitions) >= autoToolSearchCharThreshold(model)
 	}
 	return true
+}
+
+func (r Runner) deferredToolTokenCounter(ctx context.Context, modelName string) deferredToolTokenCounter {
+	counter, ok := r.Client.(TokenCountingMessageClient)
+	if !ok || counter == nil {
+		return nil
+	}
+	return func(definitions []contracts.ToolDefinition) (int, bool) {
+		tools := countTokenToolDefinitions(definitions)
+		if len(tools) == 0 {
+			return 0, true
+		}
+		response, err := counter.CountTokens(ctx, anthropic.CountTokensRequest{
+			Model:    modelName,
+			Messages: []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("foo")}}},
+			Tools:    tools,
+		})
+		if err != nil || response == nil || response.InputTokens == 0 {
+			return 0, false
+		}
+		tokens := response.InputTokens - toolTokenCountOverhead
+		if tokens < 0 {
+			tokens = 0
+		}
+		return tokens, true
+	}
+}
+
+func countTokenToolDefinitions(definitions []contracts.ToolDefinition) []anthropic.ToolDefinition {
+	deferred := make([]contracts.ToolDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		if !toolDefinitionDeferred(definition) {
+			continue
+		}
+		definition.AlwaysLoad = true
+		definition.ShouldDefer = false
+		deferred = append(deferred, definition)
+	}
+	return anthropic.ToolsFromContracts(deferred)
 }
 
 func modelSupportsToolReference(model string) bool {
@@ -224,8 +272,11 @@ func autoToolSearchPercentage() int {
 }
 
 func autoToolSearchCharThreshold(modelName string) int {
-	tokenThreshold := toolSearchContextWindowTokens(modelName) * autoToolSearchPercentage() / 100
-	return int(float64(tokenThreshold) * toolSearchCharsPerToken)
+	return int(float64(autoToolSearchTokenThreshold(modelName)) * toolSearchCharsPerToken)
+}
+
+func autoToolSearchTokenThreshold(modelName string) int {
+	return toolSearchContextWindowTokens(modelName) * autoToolSearchPercentage() / 100
 }
 
 func toolSearchContextWindowTokens(modelName string) int {

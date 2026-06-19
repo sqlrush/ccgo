@@ -25,6 +25,18 @@ type Request struct {
 	Stream      bool                   `json:"stream,omitempty"`
 }
 
+type CountTokensRequest struct {
+	Model    string                 `json:"model"`
+	Messages []contracts.APIMessage `json:"messages"`
+	System   any                    `json:"system,omitempty"`
+	Tools    []ToolDefinition       `json:"tools,omitempty"`
+	Thinking map[string]any         `json:"thinking,omitempty"`
+}
+
+type CountTokensResponse struct {
+	InputTokens int `json:"input_tokens"`
+}
+
 type ToolDefinition struct {
 	Name                string                  `json:"name"`
 	Description         string                  `json:"description,omitempty"`

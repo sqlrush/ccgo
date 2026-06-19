@@ -6136,7 +6136,7 @@ func (r Runner) send(ctx context.Context, history []contracts.Message, relevantM
 		if err != nil {
 			return anthropic.Request{}, attempts, nil, apiDuration, err
 		}
-		request, err := r.buildRequest(historyForRequest, model, relevantMemory)
+		request, err := r.buildRequest(ctx, historyForRequest, model, relevantMemory)
 		if err != nil {
 			return anthropic.Request{}, attempts, nil, apiDuration, err
 		}

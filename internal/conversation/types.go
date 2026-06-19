@@ -26,6 +26,10 @@ type StreamingMessageClient interface {
 	StreamMessages(context.Context, anthropic.Request, func(anthropic.StreamEvent) error) error
 }
 
+type TokenCountingMessageClient interface {
+	CountTokens(context.Context, anthropic.CountTokensRequest) (*anthropic.CountTokensResponse, error)
+}
+
 type PromptDumpProvider interface {
 	CachedPromptDumpRequests() []anthropic.PromptDumpCacheEntry
 	PromptDumpPath() string

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ccgo/internal/auth"
+	"ccgo/internal/contracts"
 )
 
 type Client struct {
@@ -190,6 +191,24 @@ func (c *Client) CreateMessage(ctx context.Context, request Request) (*Response,
 	}
 	response.Usage = UsageWithCost(modelName, response.Usage)
 	response.Raw = body
+	return &response, nil
+}
+
+func (c *Client) CountTokens(ctx context.Context, request CountTokensRequest) (*CountTokensResponse, error) {
+	if strings.TrimSpace(request.Model) == "" {
+		return nil, fmt.Errorf("anthropic count tokens request missing model")
+	}
+	if len(request.Messages) == 0 {
+		request.Messages = []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("foo")}}}
+	}
+	body, err := c.doJSON(ctx, "/v1/messages/count_tokens", request)
+	if err != nil {
+		return nil, err
+	}
+	var response CountTokensResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
 	return &response, nil
 }
 
