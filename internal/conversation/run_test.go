@@ -8377,6 +8377,71 @@ func TestRunnerToolSearchAutoFallsBackToHaikuTokenCount(t *testing.T) {
 	}
 }
 
+func TestRunnerToolSearchAutoDefersMCPTools(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{{response: &anthropic.CountTokensResponse{InputTokens: 20501}}},
+		calls: []fakeCall{{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}}},
+	}
+	mcpClient := &fakeRunnerMCPClient{tools: []mcp.RemoteTool{{
+		Name:        "search",
+		Description: "search issues",
+		ReadOnly:    true,
+	}}}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+		MCP: &MCPConfig{
+			UserSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
+				"github": {Command: "node"},
+			}},
+			ToolOptions: mcp.ServerToolOptions{
+				DisableResources: true,
+				DisablePrompts:   true,
+				OpenClient: func(context.Context, string, contracts.MCPServer) (mcp.ClientHandle, error) {
+					return mcp.ClientHandle{Client: mcpClient}, nil
+				},
+			},
+		},
+	}
+	_, err = runner.RunTurn(context.Background(), nil, messages.UserText("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.countCalls) != 1 {
+		t.Fatalf("count token calls = %#v", client.countCalls)
+	}
+	countRequest := client.countCalls[0]
+	if len(countRequest.Tools) != 1 || countRequest.Tools[0].Name != "mcp__github__search" || countRequest.Tools[0].DeferLoading {
+		t.Fatalf("count token tools = %#v", countRequest.Tools)
+	}
+	if len(client.requests) != 1 || len(client.requests[0].Tools) != 1 || client.requests[0].Tools[0].Name != "ToolSearch" {
+		t.Fatalf("request tools = %#v", client.requests)
+	}
+	if len(client.requests[0].Messages) != 2 || !strings.Contains(client.requests[0].Messages[0].Content[0].Text, "<available-deferred-tools>\nmcp__github__search\n</available-deferred-tools>") {
+		t.Fatalf("request messages = %#v", client.requests[0].Messages)
+	}
+}
+
 func TestRunnerToolSearchAutoCachesTokenCountByDeferredToolNames(t *testing.T) {
 	resetDeferredToolTokenCountCache()
 	t.Cleanup(resetDeferredToolTokenCountCache)
@@ -8432,6 +8497,91 @@ func TestRunnerToolSearchAutoCachesTokenCountByDeferredToolNames(t *testing.T) {
 		if len(request.Tools) != 1 || request.Tools[0].Name != "ToolSearch" {
 			t.Fatalf("request tools = %#v", request.Tools)
 		}
+	}
+}
+
+func TestRunnerToolSearchAutoInvalidatesTokenCountCacheOnMCPLifecycle(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{
+			{response: &anthropic.CountTokensResponse{InputTokens: 20501}},
+			{response: &anthropic.CountTokensResponse{InputTokens: 20501}},
+		},
+		calls: []fakeCall{
+			{response: &anthropic.Response{
+				ID:         "msg_done_1",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done one")},
+			}},
+			{response: &anthropic.Response{
+				ID:         "msg_done_2",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done two")},
+			}},
+		},
+	}
+	mcpClient := &fakeRunnerMCPClient{tools: []mcp.RemoteTool{{
+		Name:        "search",
+		Description: "search issues",
+		ReadOnly:    true,
+	}}}
+	openCount := 0
+	closeCount := 0
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+		MCP: &MCPConfig{
+			UserSettings: contracts.Settings{MCPServers: map[string]contracts.MCPServer{
+				"github": {Command: "node"},
+			}},
+			ToolOptions: mcp.ServerToolOptions{
+				DisableResources: true,
+				DisablePrompts:   true,
+				OpenClient: func(context.Context, string, contracts.MCPServer) (mcp.ClientHandle, error) {
+					openCount++
+					return mcp.ClientHandle{
+						Client: mcpClient,
+						Close: func() error {
+							closeCount++
+							return nil
+						},
+					}, nil
+				},
+			},
+		},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi again")); err != nil {
+		t.Fatal(err)
+	}
+	if openCount != 2 || closeCount != 2 {
+		t.Fatalf("open=%d close=%d", openCount, closeCount)
+	}
+	if len(client.countCalls) != 2 {
+		t.Fatalf("count token calls = %#v", client.countCalls)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %#v", client.requests)
 	}
 }
 

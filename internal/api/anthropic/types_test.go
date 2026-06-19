@@ -52,6 +52,26 @@ func TestToolFromContractAlwaysLoadOverridesShouldDefer(t *testing.T) {
 	}
 }
 
+func TestToolFromContractDefersMCPToolsUnlessAlwaysLoad(t *testing.T) {
+	got := ToolFromContract(contracts.ToolDefinition{
+		Name:        "mcp__github__search",
+		InputSchema: contracts.JSONSchema{"type": "object"},
+		MCP:         &contracts.MCPToolRef{ServerName: "github", ToolName: "search"},
+	})
+	if !got.DeferLoading {
+		t.Fatalf("defer loading = false, want true for MCP tools")
+	}
+	got = ToolFromContract(contracts.ToolDefinition{
+		Name:        "mcp__github__search",
+		InputSchema: contracts.JSONSchema{"type": "object"},
+		AlwaysLoad:  true,
+		MCP:         &contracts.MCPToolRef{ServerName: "github", ToolName: "search"},
+	})
+	if got.DeferLoading {
+		t.Fatalf("defer loading = true, want false when always_load is set")
+	}
+}
+
 func TestToolFromContractDescriptionFallback(t *testing.T) {
 	cases := []struct {
 		name string

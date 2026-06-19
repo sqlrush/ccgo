@@ -556,7 +556,10 @@ func deferredToolNames(definitions []contracts.ToolDefinition) []string {
 }
 
 func toolDefinitionDeferred(definition contracts.ToolDefinition) bool {
-	return definition.ShouldDefer && !definition.AlwaysLoad && !isToolSearchDefinition(definition)
+	if definition.AlwaysLoad || isToolSearchDefinition(definition) {
+		return false
+	}
+	return definition.MCP != nil || definition.ShouldDefer
 }
 
 func hasToolSearchDefinition(definitions []contracts.ToolDefinition) bool {

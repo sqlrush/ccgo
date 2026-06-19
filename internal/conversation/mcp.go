@@ -31,6 +31,14 @@ func (r Runner) withConfiguredMCPTools(ctx context.Context) (Runner, func() erro
 		return r, nil, err
 	}
 	closeMCP := configured.ToolSets.Close
+	if len(configured.ToolSets.Servers) > 0 {
+		resetDeferredToolTokenCountCache()
+		closeMCP = func() error {
+			err := configured.ToolSets.Close()
+			resetDeferredToolTokenCountCache()
+			return err
+		}
+	}
 	if len(configured.ToolSets.Tools) == 0 {
 		return r, closeMCP, nil
 	}

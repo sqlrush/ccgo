@@ -53,10 +53,17 @@ func ToolFromContract(def contracts.ToolDefinition) ToolDefinition {
 		Description:         toolDescriptionFromContract(def),
 		InputSchema:         def.InputSchema,
 		Strict:              def.Strict,
-		DeferLoading:        def.ShouldDefer && !def.AlwaysLoad,
+		DeferLoading:        toolDeferLoadingFromContract(def),
 		EagerInputStreaming: def.EagerInputStreaming,
 		CacheControl:        copyCacheControl(def.CacheControl),
 	}
+}
+
+func toolDeferLoadingFromContract(def contracts.ToolDefinition) bool {
+	if def.AlwaysLoad {
+		return false
+	}
+	return def.ShouldDefer || def.MCP != nil
 }
 
 func toolDescriptionFromContract(def contracts.ToolDefinition) string {
