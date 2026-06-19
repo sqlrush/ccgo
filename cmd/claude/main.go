@@ -413,6 +413,8 @@ func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Wr
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "list", "ls":
 		return runPluginMarketplaceListCLI(state, args[1:], stdout, stderr)
+	case "update":
+		return runPluginMarketplaceUpdateCLI(state, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ccgo plugin marketplace: unsupported subcommand %s\n", args[0])
 		return 2
@@ -433,12 +435,12 @@ func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout i
 		fmt.Fprintf(stderr, "ccgo plugin marketplace list: unexpected argument %s\n", flags.Arg(0))
 		return 2
 	}
-	runner, err := state.ConversationRunner()
+	settings, err := pluginCLISettingsFromFiles(state.CWD())
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin marketplace list: %v\n", err)
 		return 1
 	}
-	marketplaces := pluginCLIMarketplaceEntries(runnerMergedSettings(runner))
+	marketplaces := pluginCLIMarketplaceEntries(settings)
 	if *jsonOutput {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -463,6 +465,78 @@ func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout i
 		}
 	}
 	return 0
+}
+
+func runPluginMarketplaceUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin marketplace update", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() > 1 {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace update: unexpected argument %s\n", flags.Arg(1))
+		return 2
+	}
+	settings, err := pluginCLISettingsFromFiles(state.CWD())
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace update: %v\n", err)
+		return 1
+	}
+	marketplaces := pluginCLIMarketplaceEntries(settings)
+	name := strings.TrimSpace(flags.Arg(0))
+	if name == "" {
+		if len(marketplaces) == 0 {
+			fmt.Fprintln(stdout, "No marketplaces configured")
+			return 0
+		}
+		fmt.Fprintf(stdout, "Updating %d marketplace(s)...\n", len(marketplaces))
+		pluginpkg.LoadMarketplacePluginDirsWithSettings(settings)
+		fmt.Fprintf(stdout, "Successfully updated %d marketplace(s)\n", len(marketplaces))
+		return 0
+	}
+	filtered, matchedName, ok := pluginCLIMarketplaceSettingsForName(settings, name)
+	if !ok {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace update: marketplace %q not found. Available marketplaces: %s\n", name, pluginCLIMarketplaceAvailableNames(marketplaces))
+		return 1
+	}
+	fmt.Fprintf(stdout, "Updating marketplace: %s...\n", matchedName)
+	pluginpkg.LoadMarketplacePluginDirsWithSettings(filtered)
+	fmt.Fprintf(stdout, "Successfully updated marketplace: %s\n", matchedName)
+	return 0
+}
+
+func pluginCLISettingsFromFiles(cwd string) (contracts.Settings, error) {
+	userSettings, err := pluginCLILoadOptionalSettings(config.UserSettingsPath())
+	if err != nil {
+		return contracts.Settings{}, err
+	}
+	projectSettings, err := pluginCLILoadOptionalSettings(config.ProjectSettingsPath(cwd))
+	if err != nil {
+		return contracts.Settings{}, err
+	}
+	localSettings, err := pluginCLILoadOptionalSettings(config.LocalSettingsPath(cwd))
+	if err != nil {
+		return contracts.Settings{}, err
+	}
+	policySettings, err := config.LoadPolicySettings()
+	if err != nil {
+		return contracts.Settings{}, err
+	}
+	return config.MergeSettings(userSettings, projectSettings, localSettings, policySettings), nil
+}
+
+func pluginCLILoadOptionalSettings(path string) (contracts.Settings, error) {
+	settings, err := config.LoadSettingsFile(path)
+	if err == nil {
+		return settings, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return contracts.Settings{}, nil
+	}
+	return contracts.Settings{}, fmt.Errorf("load settings %s: %w", path, err)
 }
 
 func pluginCLIInstalledEntries(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings) []pluginCLIListEntry {
@@ -514,6 +588,36 @@ func pluginCLIAvailableEntries(marketplacePlugins []pluginpkg.LoadedPlugin, inst
 		return out[i].Source < out[j].Source
 	})
 	return out
+}
+
+func pluginCLIMarketplaceSettingsForName(settings contracts.Settings, name string) (contracts.Settings, string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return settings, "", true
+	}
+	for marketplaceName, raw := range settings.ExtraKnownMarketplaces {
+		if !strings.EqualFold(strings.TrimSpace(marketplaceName), name) {
+			continue
+		}
+		filtered := settings
+		filtered.ExtraKnownMarketplaces = map[string]any{marketplaceName: raw}
+		return filtered, marketplaceName, true
+	}
+	return settings, "", false
+}
+
+func pluginCLIMarketplaceAvailableNames(marketplaces []pluginCLIMarketplaceEntry) string {
+	names := make([]string, 0, len(marketplaces))
+	for _, marketplace := range marketplaces {
+		if strings.TrimSpace(marketplace.Name) != "" {
+			names = append(names, marketplace.Name)
+		}
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 func pluginCLIMarketplaceEntries(settings contracts.Settings) []pluginCLIMarketplaceEntry {

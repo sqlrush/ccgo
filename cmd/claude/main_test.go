@@ -2231,6 +2231,62 @@ func TestRunPluginMarketplaceListCLI(t *testing.T) {
 	}
 }
 
+func TestRunPluginMarketplaceUpdateCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pluginRoot := filepath.Join(t.TempDir(), "remote-tool")
+	if err := os.MkdirAll(pluginRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.json"), []byte(`{"name":"remote tool","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var hitCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitCount.Add(1)
+		w.Header().Set("content-type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"plugins":[%q]}`, filepath.ToSlash(pluginRoot))
+	}))
+	defer server.Close()
+	settings := fmt.Sprintf(`{
+		"extraKnownMarketplaces": {
+			"remote": {"source": {"source": "url", "url": %q}},
+			"inline": {"source": {"source": "settings", "name": "inline", "plugins": []}}
+		}
+	}`, server.URL)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "marketplace", "update", "remote"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if hitCount.Load() != 1 {
+		t.Fatalf("catalog hit count = %d", hitCount.Load())
+	}
+	for _, want := range []string{
+		"Updating marketplace: remote...",
+		"Successfully updated marketplace: remote",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "update", "missing"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), `marketplace "missing" not found`) || !strings.Contains(stderr.String(), "Available marketplaces: inline, remote") {
+		t.Fatalf("missing exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPluginMarketplaceListEmpty(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
@@ -2246,6 +2302,16 @@ func TestRunPluginMarketplaceListEmpty(t *testing.T) {
 	}
 	if got := strings.TrimSpace(stdout.String()); got != "No marketplaces configured" {
 		t.Fatalf("stdout = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "update"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("update exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "No marketplaces configured" {
+		t.Fatalf("update stdout = %q", stdout.String())
 	}
 
 	stdout.Reset()
