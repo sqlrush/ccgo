@@ -108,11 +108,20 @@ type skillManifest struct {
 	Description string `json:"description"`
 }
 
+type pluginRootEntry struct {
+	Root        string
+	Marketplace string
+}
+
 func LoadPluginDirs(roots []string) []LoadedPlugin {
+	return loadPluginRootEntries(pluginRootEntriesFromRoots(roots))
+}
+
+func loadPluginRootEntries(roots []pluginRootEntry) []LoadedPlugin {
 	out := make([]LoadedPlugin, 0, len(roots))
 	seen := map[string]struct{}{}
-	for _, root := range roots {
-		root = cleanAbs(root)
+	for _, entry := range roots {
+		root := cleanAbs(entry.Root)
 		key := normalizePath(root)
 		if _, ok := seen[key]; ok {
 			continue
@@ -122,13 +131,18 @@ func LoadPluginDirs(roots []string) []LoadedPlugin {
 		if err != nil {
 			continue
 		}
+		if strings.TrimSpace(entry.Marketplace) != "" {
+			plugin.Marketplace = strings.TrimSpace(entry.Marketplace)
+		}
 		out = append(out, plugin)
 	}
 	return out
 }
 
 func LoadPluginDirsWithSettings(roots []string, settings contracts.Settings) []LoadedPlugin {
-	return FilterPluginsWithSettings(LoadPluginDirs(roots), settings)
+	entries := pluginRootEntriesFromRoots(roots)
+	entries = append(entries, marketplacePluginRootEntries(settings)...)
+	return FilterPluginsWithSettings(loadPluginRootEntries(entries), settings)
 }
 
 func FilterPluginsWithSettings(plugins []LoadedPlugin, settings contracts.Settings) []LoadedPlugin {
@@ -265,6 +279,86 @@ func LoadPluginDir(root string) (LoadedPlugin, error) {
 
 func pluginMarketplaceName(parsed manifest) string {
 	return firstNonEmpty(parsed.Marketplace, parsed.MarketplaceName, parsed.MarketplaceSnake, marketplaceNameFromAny(parsed.Source))
+}
+
+func pluginRootEntriesFromRoots(roots []string) []pluginRootEntry {
+	entries := make([]pluginRootEntry, 0, len(roots))
+	for _, root := range roots {
+		if strings.TrimSpace(root) == "" {
+			continue
+		}
+		entries = append(entries, pluginRootEntry{Root: root})
+	}
+	return entries
+}
+
+func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry {
+	if len(settings.ExtraKnownMarketplaces) == 0 {
+		return nil
+	}
+	names := sortedMarketplaceMapKeys(settings.ExtraKnownMarketplaces)
+	var entries []pluginRootEntry
+	for _, name := range names {
+		source, ok := settingsMarketplaceSource(settings.ExtraKnownMarketplaces[name])
+		if !ok {
+			continue
+		}
+		if sourceType, _ := source["source"].(string); strings.TrimSpace(sourceType) != "settings" {
+			continue
+		}
+		marketplace := firstNonEmpty(stringFromAnyMap(source, "name"), name)
+		plugins, _ := source["plugins"].([]any)
+		for _, rawPlugin := range plugins {
+			root := settingsMarketplacePluginRoot(rawPlugin)
+			if root == "" {
+				continue
+			}
+			entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+		}
+	}
+	return entries
+}
+
+func settingsMarketplaceSource(raw any) (map[string]any, bool) {
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	source, ok := entry["source"].(map[string]any)
+	return source, ok
+}
+
+func settingsMarketplacePluginRoot(raw any) string {
+	if text, ok := raw.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	item, ok := raw.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, key := range []string{"path", "root", "dir", "directory"} {
+		if value := stringFromAnyMap(item, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func stringFromAnyMap(values map[string]any, key string) string {
+	value, _ := values[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func sortedMarketplaceMapKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func LoadMCPServers(roots []string) map[string]contracts.MCPServer {

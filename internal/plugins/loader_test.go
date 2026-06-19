@@ -248,6 +248,53 @@ func TestLoadPluginDirsWithSettingsEnforcesMarketplacePolicy(t *testing.T) {
 	}
 }
 
+func TestLoadPluginDirsWithSettingsLoadsSettingsMarketplacePlugins(t *testing.T) {
+	root := t.TempDir()
+	teamRoot := filepath.Join(root, "team-plugin")
+	teamObjectRoot := filepath.Join(root, "team-object-plugin")
+	blockedRoot := filepath.Join(root, "blocked-plugin")
+	for _, dir := range []string{teamRoot, teamObjectRoot, blockedRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifests := map[string]string{
+		filepath.Join(teamRoot, ManifestFileName):       `{"name":"team-plugin"}`,
+		filepath.Join(teamObjectRoot, ManifestFileName): `{"name":"team-object-plugin"}`,
+		filepath.Join(blockedRoot, ManifestFileName):    `{"name":"blocked-plugin"}`,
+	}
+	for path, data := range manifests {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plugins := LoadPluginDirsWithSettings(nil, contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"team": map[string]any{"source": map[string]any{
+				"source":  "settings",
+				"name":    "team",
+				"plugins": []any{teamRoot, map[string]any{"root": teamObjectRoot}},
+			}},
+			"blocked": map[string]any{"source": map[string]any{
+				"source":  "settings",
+				"name":    "blocked",
+				"plugins": []any{blockedRoot},
+			}},
+		},
+		StrictKnownMarketplaces: []any{"team"},
+		BlockedMarketplaces:     []any{"blocked"},
+	})
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"team-plugin", "team-object-plugin"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+	for _, plugin := range plugins {
+		if plugin.Marketplace != "team" {
+			t.Fatalf("plugin marketplace = %#v", plugins)
+		}
+	}
+}
+
 func TestMarketplacePolicyEnforcesBlockedAndStrictSettings(t *testing.T) {
 	policy := NewMarketplacePolicy(contracts.Settings{
 		ExtraKnownMarketplaces: map[string]any{

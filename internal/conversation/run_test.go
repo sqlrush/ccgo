@@ -4716,6 +4716,61 @@ func TestRunnerPluginShowReportsLocalPluginDetails(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginListIncludesSettingsMarketplacePlugins(t *testing.T) {
+	client := &fakeClient{}
+	root := t.TempDir()
+	cwd := filepath.Join(root, "project")
+	pluginDir := filepath.Join(root, "marketplace-plugin")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "market-demo",
+		"commands": [{"name": "market:deploy", "description": "Deploy marketplace plugin", "prompt": "Deploy."}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_settings_marketplace",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			ExtraKnownMarketplaces: map[string]any{
+				"team": map[string]any{"source": map[string]any{
+					"source":  "settings",
+					"name":    "team",
+					"plugins": []any{pluginDir},
+				}},
+			},
+			StrictKnownMarketplaces: []any{"team"},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin list"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Local plugin manifests: 1",
+		"Registered plugin commands: 1",
+		"Local plugins:",
+		"- market-demo",
+		"Plugin commands:",
+		"- /market:deploy",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin list missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")
