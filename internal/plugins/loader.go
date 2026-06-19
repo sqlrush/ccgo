@@ -303,20 +303,33 @@ func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry
 		if !ok {
 			continue
 		}
-		if sourceType, _ := source["source"].(string); strings.TrimSpace(sourceType) != "settings" {
-			continue
-		}
+		sourceType := strings.TrimSpace(stringFromAnyMap(source, "source"))
 		marketplace := firstNonEmpty(stringFromAnyMap(source, "name"), name)
-		plugins, _ := source["plugins"].([]any)
-		for _, rawPlugin := range plugins {
-			root := settingsMarketplacePluginRoot(rawPlugin)
-			if root == "" {
-				continue
+		switch sourceType {
+		case "settings":
+			plugins, _ := source["plugins"].([]any)
+			for _, rawPlugin := range plugins {
+				root := settingsMarketplacePluginRoot(rawPlugin)
+				if root == "" {
+					continue
+				}
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
 			}
-			entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+		case "directory":
+			for _, root := range pluginRootsFromDirectory(stringFromAnyMap(source, "path")) {
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+			}
 		}
 	}
 	return entries
+}
+
+func pluginRootsFromDirectory(path string) []string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	return appendPluginRoots(nil, map[string]struct{}{}, path)
 }
 
 func settingsMarketplaceSource(raw any) (map[string]any, bool) {
