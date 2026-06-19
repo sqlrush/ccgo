@@ -328,6 +328,75 @@ Personal.
 	}
 }
 
+func TestLoadStrictPluginOnlyAgentsStripsUntrustedAgentFrontmatter(t *testing.T) {
+	agentCommand := func(name string, source contracts.CommandSource, loadedFrom string) contracts.Command {
+		return contracts.Command{
+			Name:         name,
+			Type:         contracts.CommandPrompt,
+			Source:       source,
+			LoadedFrom:   loadedFrom,
+			Context:      "fork",
+			Agent:        "reviewer",
+			Effort:       "high",
+			Model:        "opus",
+			AllowedTools: []string{"Read"},
+		}
+	}
+
+	registry := Load(Options{
+		DisableBuiltins: true,
+		PolicySettings:  contracts.Settings{StrictPluginOnlyCustomization: []any{"agents"}},
+		Sources: Sources{
+			ProjectSkillPrompts: []PromptTemplate{{
+				Command: agentCommand("project", contracts.CommandSourceSkills, "skills"),
+				Content: "Project.",
+			}},
+			DynamicSkills: []contracts.Command{
+				agentCommand("dynamic", contracts.CommandSourceSkills, "skills"),
+			},
+			PluginSkillPrompts: []PromptTemplate{{
+				Command: agentCommand("plugin", contracts.CommandSourcePlugin, "plugin"),
+				Content: "Plugin.",
+			}},
+			BundledSkillPrompts: []PromptTemplate{{
+				Command: agentCommand("bundled", contracts.CommandSourceBundled, "bundled"),
+				Content: "Bundled.",
+			}},
+		},
+	})
+
+	for _, name := range []string{"project", "dynamic"} {
+		cmd, ok := registry.Find(name)
+		if !ok {
+			t.Fatalf("%s command missing", name)
+		}
+		if cmd.Context != "" || cmd.Agent != "" || cmd.Effort != "" {
+			t.Fatalf("%s agent frontmatter was not stripped: %#v", name, cmd)
+		}
+		if cmd.Model != "opus" || len(cmd.AllowedTools) != 1 || cmd.AllowedTools[0] != "Read" {
+			t.Fatalf("%s non-agent metadata should remain: %#v", name, cmd)
+		}
+	}
+
+	projectTemplate, ok := registry.PromptTemplate("project")
+	if !ok {
+		t.Fatal("project prompt template missing")
+	}
+	if projectTemplate.Command.Context != "" || projectTemplate.Command.Agent != "" || projectTemplate.Command.Effort != "" {
+		t.Fatalf("project prompt template agent metadata was not stripped: %#v", projectTemplate.Command)
+	}
+
+	for _, name := range []string{"plugin", "bundled"} {
+		cmd, ok := registry.Find(name)
+		if !ok {
+			t.Fatalf("%s command missing", name)
+		}
+		if cmd.Context != "fork" || cmd.Agent != "reviewer" || cmd.Effort != "high" {
+			t.Fatalf("%s trusted agent metadata should remain: %#v", name, cmd)
+		}
+	}
+}
+
 func TestLoadSkipsDisabledProjectPluginCommands(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

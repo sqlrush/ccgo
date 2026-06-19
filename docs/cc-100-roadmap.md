@@ -191,7 +191,7 @@ M8 补充：新增基础 slash command parser/executor，按官方 `/command arg
 
 M8 补充：本地 prompt skill 的 slash 调用和 `Skill` tool 现在都会生成 `command_permissions` attachment，按官方 `allowed-tools` 解析 comma/space 分隔且保留括号内模式；conversation runner 会在当前 turn 内把这些 `PermissionSourceCommand` allow rules 合并进 engine permission decider，让 skill frontmatter 授权的后续工具调用可在同一轮放行，并继续保留 model override attachment metadata。完整权限 UI 展示、SDK event surface、forked/MCP/plugin/bundled skill 权限继承仍未完成。
 
-M8 补充：skill frontmatter 标量兼容继续补齐，`allowed_tools`/`argument_hint`/`disable_model_invocation`/`user_invocable`/`when-to-use` 等相邻字段会映射到 canonical command metadata；`model: inherit` 不再误触发模型覆盖，`context: fork`、`agent`、`effort` 会保留在 command contract 中，为后续 forked skill/agent 执行接线提供 metadata。
+M8 补充：skill frontmatter 标量兼容继续补齐，`allowed_tools`/`argument_hint`/`disable_model_invocation`/`user_invocable`/`when-to-use` 等相邻字段会映射到 canonical command metadata；`model: inherit` 不再误触发模型覆盖，`context: fork`、`agent`、`effort` 会保留在 command contract 中，为后续 forked skill/agent 执行接线提供 metadata；当 policy 锁定 `agents` surface 时，非可信来源 prompt command 的这些 agent metadata 会在 registry 层清除，plugin/bundled/admin 来源保留。
 
 M8 补充：project legacy `.claude/commands/**/*.md` 和 user legacy `${CLAUDE_CONFIG_DIR}/commands/**/*.md` 现在会加载为 `commands_DEPRECATED` prompt command，并支持目录式 `SKILL.md` 命名空间（例如 `team/deploy/SKILL.md` -> `team:deploy`）、普通 markdown 命名空间、frontmatter metadata、SkillTool 可见性过滤和 prompt expansion；目录式 legacy command 会保留 base directory 前缀和 `${CLAUDE_SKILL_DIR}` 替换，并把对应 skill root 纳入工具内部只读 allowlist。完整 managed/remote commands、plugin command shell expansion、local/local-jsx 执行仍未完成。
 
@@ -1436,7 +1436,7 @@ M7 补充：terminal input parser 和 configurable keybinding name parser 现在
 - plugin manifest、marketplace、install/cache/update。
 - plugin hooks/agents/MCP，其中本地 plugin 同步工具 hook 已接入，剩余完整 plugin agent/MCP 与 hook UI/policy parity。
 
-当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的 manifest discovery，本地 plugin 同步工具 hook 执行，headless `/help`/`/skills` 列表与单项详情，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、TUI `/help`/`/skills` 面板、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 agents/MCP/output-style UI 接线。
+当前状态：已完成项目 skill discovery、目录式 `SKILL.md` prompt metadata loading、project legacy `.claude/commands` prompt command loading、command registry metadata/lookup/filter、agent-metadata strict plugin-only policy filtering、部分内置 slash command aliases/metadata、prompt expansion、基础 `Skill` tool inline 调用、本地项目 prompt skill 的基础 slash 调用接入、本地 prompt skill 的 command permissions attachment/current-turn 权限继承，本地 plugin command/skill/agent/MCP server/output style/hook 的 manifest discovery，本地 plugin 同步工具 hook 执行，headless `/help`/`/skills` 列表与单项详情，output style 系统提示注入，以及 `/clear` 基础 local command no-query 路径；仍缺 bundled/MCP/remote skills、forked skill/agent 执行、完整 local/local-jsx 实际执行、TUI `/help`/`/skills` 面板、权限 UI/SDK 展示、plugin marketplace/cache/update、skill prompt shell injection 和完整 agents/MCP/output-style UI 接线。
 
 ### M9: MCP Platform
 

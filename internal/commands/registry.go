@@ -44,7 +44,8 @@ type Registry struct {
 
 func Load(opts Options) Registry {
 	sources := opts.Sources
-	skillsLocked := config.IsRestrictedToPluginOnly(effectivePolicySettings(opts.Settings, opts.PolicySettings), config.CustomizationSurfaceSkills)
+	policy := effectivePolicySettings(opts.Settings, opts.PolicySettings)
+	skillsLocked := config.IsRestrictedToPluginOnly(policy, config.CustomizationSurfaceSkills)
 	if skillsLocked {
 		sources.ProjectSkillPrompts = nil
 		sources.ProjectSkills = nil
@@ -59,6 +60,9 @@ func Load(opts Options) Registry {
 	if !opts.DisableBuiltins && sources.Builtins == nil {
 		sources.Builtins = BuiltinCommands()
 	}
+	if config.IsRestrictedToPluginOnly(policy, config.CustomizationSurfaceAgents) {
+		sources = sanitizeAgentRestrictedSources(sources)
+	}
 	return FromSources(sources)
 }
 
@@ -67,6 +71,57 @@ func effectivePolicySettings(settings contracts.Settings, policySettings contrac
 		return policySettings
 	}
 	return settings
+}
+
+func sanitizeAgentRestrictedSources(sources Sources) Sources {
+	sources.BundledSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.BundledSkillPrompts)
+	sources.BundledSkills = sanitizeAgentRestrictedCommands(sources.BundledSkills)
+	sources.BuiltinPluginSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.BuiltinPluginSkillPrompts)
+	sources.BuiltinPluginSkills = sanitizeAgentRestrictedCommands(sources.BuiltinPluginSkills)
+	sources.ProjectSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.ProjectSkillPrompts)
+	sources.ProjectSkills = sanitizeAgentRestrictedCommands(sources.ProjectSkills)
+	sources.WorkflowCommands = sanitizeAgentRestrictedCommands(sources.WorkflowCommands)
+	sources.PluginCommands = sanitizeAgentRestrictedCommands(sources.PluginCommands)
+	sources.PluginSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.PluginSkillPrompts)
+	sources.PluginSkills = sanitizeAgentRestrictedCommands(sources.PluginSkills)
+	sources.DynamicSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.DynamicSkillPrompts)
+	sources.DynamicSkills = sanitizeAgentRestrictedCommands(sources.DynamicSkills)
+	sources.Builtins = sanitizeAgentRestrictedCommands(sources.Builtins)
+	return sources
+}
+
+func sanitizeAgentRestrictedPromptTemplates(prompts []PromptTemplate) []PromptTemplate {
+	if len(prompts) == 0 {
+		return nil
+	}
+	out := make([]PromptTemplate, len(prompts))
+	for i, prompt := range prompts {
+		prompt = clonePromptTemplate(prompt)
+		prompt.Command = sanitizeAgentRestrictedCommand(prompt.Command)
+		out[i] = prompt
+	}
+	return out
+}
+
+func sanitizeAgentRestrictedCommands(commands []contracts.Command) []contracts.Command {
+	if len(commands) == 0 {
+		return nil
+	}
+	out := make([]contracts.Command, len(commands))
+	for i, cmd := range commands {
+		out[i] = sanitizeAgentRestrictedCommand(cloneCommand(cmd))
+	}
+	return out
+}
+
+func sanitizeAgentRestrictedCommand(cmd contracts.Command) contracts.Command {
+	if config.IsAdminTrustedCustomizationSource(string(cmd.Source)) || config.IsAdminTrustedCustomizationSource(cmd.LoadedFrom) {
+		return cmd
+	}
+	cmd.Context = ""
+	cmd.Agent = ""
+	cmd.Effort = ""
+	return cmd
 }
 
 func FromSources(sources Sources) Registry {
