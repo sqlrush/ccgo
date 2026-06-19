@@ -2070,6 +2070,85 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPluginListJSONAvailable(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installedDir := filepath.Join(project, ".claude", "plugins", "market-demo")
+	marketDir := filepath.Join(t.TempDir(), "market-demo")
+	lintDir := filepath.Join(t.TempDir(), "lint-tool")
+	for _, dir := range []string{installedDir, marketDir, lintDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(installedDir, "plugin.json"), []byte(`{"name":"market demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"2.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lintDir, "plugin.json"), []byte(`{"name":"lint tool","version":"1.0.0","description":"Static checks"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	settings := fmt.Sprintf(`{
+		"enabledPlugins": {"market demo": false},
+		"extraKnownMarketplaces": {
+			"team": {"source": {"source": "settings", "name": "team", "plugins": [%q, %q]}}
+		},
+		"strictKnownMarketplaces": ["team"]
+	}`, marketDir, lintDir)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "list", "--json", "--available"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	installed, ok := payload["installed"].([]any)
+	if !ok || len(installed) != 1 {
+		t.Fatalf("installed = %#v", payload["installed"])
+	}
+	installedPlugin, ok := installed[0].(map[string]any)
+	if !ok {
+		t.Fatalf("installed plugin = %#v", installed[0])
+	}
+	expectedInstalledDir, err := filepath.EvalSymlinks(installedDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installedPlugin["id"] != "market demo@local" || installedPlugin["version"] != "1.0.0" || installedPlugin["enabled"] != false || installedPlugin["installPath"] != expectedInstalledDir {
+		t.Fatalf("installed plugin = %#v", installedPlugin)
+	}
+	available, ok := payload["available"].([]any)
+	if !ok || len(available) != 1 {
+		t.Fatalf("available = %#v", payload["available"])
+	}
+	availablePlugin, ok := available[0].(map[string]any)
+	if !ok {
+		t.Fatalf("available plugin = %#v", available[0])
+	}
+	if availablePlugin["pluginId"] != "lint tool@team" || availablePlugin["name"] != "lint tool" || availablePlugin["marketplaceName"] != "team" || availablePlugin["version"] != "1.0.0" || availablePlugin["description"] != "Static checks" {
+		t.Fatalf("available plugin = %#v", availablePlugin)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "list", "--available"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "--available requires --json") {
+		t.Fatalf("available without json exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

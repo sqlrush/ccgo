@@ -193,6 +193,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			HeartbeatInterval: *daemonHeartbeat,
 		}, stdout, stderr)
 	}
+	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "plugin") {
+		return runPluginCLI(context.Background(), state, flags.Args()[1:], stdout, stderr)
+	}
 	if *printMode {
 		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
 		if err != nil {
@@ -288,6 +291,191 @@ func runChromeNativeHost(stdin io.Reader, stdout io.Writer, stderr io.Writer) in
 			return 1
 		}
 	}
+}
+
+type pluginCLIListEntry struct {
+	ID          string   `json:"id"`
+	Version     string   `json:"version"`
+	Scope       string   `json:"scope"`
+	Enabled     bool     `json:"enabled"`
+	InstallPath string   `json:"installPath"`
+	MCPServers  []string `json:"mcpServers,omitempty"`
+}
+
+type pluginCLIAvailableEntry struct {
+	PluginID        string `json:"pluginId"`
+	Name            string `json:"name"`
+	Description     string `json:"description,omitempty"`
+	MarketplaceName string `json:"marketplaceName"`
+	Version         string `json:"version,omitempty"`
+	Source          string `json:"source,omitempty"`
+}
+
+type pluginCLIAvailableList struct {
+	Installed []pluginCLIListEntry      `json:"installed"`
+	Available []pluginCLIAvailableEntry `json:"available"`
+}
+
+func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	_ = ctx
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "ccgo plugin: missing subcommand")
+		return 2
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "list", "ls":
+		return runPluginListCLI(state, args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "ccgo plugin: unsupported subcommand %s\n", args[0])
+		return 2
+	}
+}
+
+func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin list", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOutput := flags.Bool("json", false, "output JSON")
+	available := flags.Bool("available", false, "include available marketplace plugins")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() > 0 {
+		fmt.Fprintf(stderr, "ccgo plugin list: unexpected argument %s\n", flags.Arg(0))
+		return 2
+	}
+	if *available && !*jsonOutput {
+		fmt.Fprintln(stderr, "ccgo plugin list: --available requires --json")
+		return 2
+	}
+	runner, err := state.ConversationRunner()
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin list: %v\n", err)
+		return 1
+	}
+	settings := runnerMergedSettings(runner)
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory))
+	installed := pluginCLIInstalledEntries(installedPlugins, settings)
+	if *jsonOutput {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if *available {
+			payload := pluginCLIAvailableList{
+				Installed: installed,
+				Available: pluginCLIAvailableEntries(pluginpkg.LoadMarketplacePluginDirsWithSettings(settings), installedPlugins),
+			}
+			if err := encoder.Encode(payload); err != nil {
+				fmt.Fprintf(stderr, "ccgo plugin list: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+		if err := encoder.Encode(installed); err != nil {
+			fmt.Fprintf(stderr, "ccgo plugin list: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if len(installed) == 0 {
+		fmt.Fprintln(stdout, "No plugins installed. Use `claude plugin install` to install a plugin.")
+		return 0
+	}
+	fmt.Fprintln(stdout, "Installed plugins:")
+	for _, plugin := range installed {
+		stateText := "disabled"
+		if plugin.Enabled {
+			stateText = "enabled"
+		}
+		fmt.Fprintf(stdout, "- %s %s (%s, %s)\n", plugin.ID, plugin.Version, plugin.Scope, stateText)
+	}
+	return 0
+}
+
+func pluginCLIInstalledEntries(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings) []pluginCLIListEntry {
+	out := make([]pluginCLIListEntry, 0, len(plugins))
+	for _, plugin := range plugins {
+		entry := pluginCLIListEntry{
+			ID:          pluginCLIID(plugin),
+			Version:     pluginCLIVersion(plugin.Version),
+			Scope:       "project",
+			Enabled:     pluginpkg.PluginEnabled(plugin, settings.EnabledPlugins),
+			InstallPath: plugin.Root,
+		}
+		if len(plugin.MCPServers) > 0 {
+			entry.MCPServers = pluginCLIMCPServerNames(plugin.MCPServers)
+		}
+		out = append(out, entry)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func pluginCLIAvailableEntries(marketplacePlugins []pluginpkg.LoadedPlugin, installedPlugins []pluginpkg.LoadedPlugin) []pluginCLIAvailableEntry {
+	installed := map[string]struct{}{}
+	for _, plugin := range installedPlugins {
+		if key := pluginCLINameKey(plugin.Name); key != "" {
+			installed[key] = struct{}{}
+		}
+	}
+	var out []pluginCLIAvailableEntry
+	for _, plugin := range marketplacePlugins {
+		if _, ok := installed[pluginCLINameKey(plugin.Name)]; ok {
+			continue
+		}
+		out = append(out, pluginCLIAvailableEntry{
+			PluginID:        pluginCLIID(plugin),
+			Name:            plugin.Name,
+			Description:     strings.TrimSpace(plugin.Description),
+			MarketplaceName: strings.TrimSpace(plugin.Marketplace),
+			Version:         strings.TrimSpace(plugin.Version),
+			Source:          plugin.Root,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].PluginID != out[j].PluginID {
+			return out[i].PluginID < out[j].PluginID
+		}
+		return out[i].Source < out[j].Source
+	})
+	return out
+}
+
+func pluginCLIID(plugin pluginpkg.LoadedPlugin) string {
+	name := strings.TrimSpace(plugin.Name)
+	if name == "" {
+		name = filepath.Base(plugin.Root)
+	}
+	marketplace := strings.TrimSpace(plugin.Marketplace)
+	if marketplace == "" {
+		marketplace = "local"
+	}
+	return name + "@" + marketplace
+}
+
+func pluginCLIVersion(version string) string {
+	if strings.TrimSpace(version) == "" {
+		return "unknown"
+	}
+	return strings.TrimSpace(version)
+}
+
+func pluginCLINameKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func pluginCLIMCPServerNames(servers map[string]contracts.MCPServer) []string {
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		if strings.TrimSpace(name) != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 var startDaemonProcess = startDaemonProcessDefault
