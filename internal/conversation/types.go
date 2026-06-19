@@ -7,6 +7,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	bridgepkg "ccgo/internal/bridge"
 	compactpkg "ccgo/internal/compact"
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
@@ -131,6 +132,8 @@ type MCPConfig struct {
 	CWD             string
 	ParseOptions    mcp.ParseOptions
 	ToolOptions     mcp.ServerToolOptions
+
+	settingsFileDetector *config.SettingsChangeDetector
 }
 
 type Result struct {

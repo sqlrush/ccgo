@@ -35,17 +35,47 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 		return nil, err
 	}
 	mergedSettings := config.MergeSettings(userSettings, projectSettings, localSettings, policySettings)
+	settingsFileDetector, err := config.NewSettingsChangeDetector(mcpConfigSettingsFilePaths(resolvedCWD))
+	if err != nil {
+		return nil, err
+	}
 	return &MCPConfig{
-		UserSettings:    userSettings,
-		ProjectSettings: projectSettings,
-		LocalSettings:   localSettings,
-		PolicySettings:  policySettings,
-		PluginServers:   pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(resolvedCWD), mergedSettings),
-		CWD:             resolvedCWD,
+		UserSettings:         userSettings,
+		ProjectSettings:      projectSettings,
+		LocalSettings:        localSettings,
+		PolicySettings:       policySettings,
+		PluginServers:        pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(resolvedCWD), mergedSettings),
+		CWD:                  resolvedCWD,
+		settingsFileDetector: settingsFileDetector,
 		ToolOptions: mcp.ServerToolOptions{
 			AccessTokenProvider: mcp.FileOAuthAccessTokenProvider(mcp.FileOAuthAccessTokenProviderOptions{}),
 		},
 	}, nil
+}
+
+func (c *MCPConfig) RefreshSettingsFiles() (bool, error) {
+	if c == nil || c.settingsFileDetector == nil {
+		return false, nil
+	}
+	changes, err := c.settingsFileDetector.DetectChanges(mcpConfigSettingsFilePaths(c.CWD))
+	if err != nil {
+		return false, err
+	}
+	if len(changes) == 0 {
+		return false, nil
+	}
+	userSettings, projectSettings, localSettings, err := loadMCPConfigSettingsFiles(c.CWD)
+	if err != nil {
+		return false, err
+	}
+	changed := !reflect.DeepEqual(c.UserSettings, userSettings) ||
+		!reflect.DeepEqual(c.ProjectSettings, projectSettings) ||
+		!reflect.DeepEqual(c.LocalSettings, localSettings)
+	c.UserSettings = userSettings
+	c.ProjectSettings = projectSettings
+	c.LocalSettings = localSettings
+	c.refreshPluginServers()
+	return changed, nil
 }
 
 func (c *MCPConfig) RefreshPolicySettings() (bool, error) {
@@ -58,13 +88,19 @@ func (c *MCPConfig) RefreshPolicySettings() (bool, error) {
 	}
 	changed := !reflect.DeepEqual(c.PolicySettings, policySettings)
 	c.PolicySettings = policySettings
-	mergedSettings := c.MergedSettings()
+	c.refreshPluginServers()
+	return changed, nil
+}
+
+func (c *MCPConfig) refreshPluginServers() {
+	if c == nil {
+		return
+	}
 	if c.CWD != "" {
-		c.PluginServers = pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(c.CWD), mergedSettings)
+		c.PluginServers = pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(c.CWD), c.MergedSettings())
 	} else {
 		c.PluginServers = nil
 	}
-	return changed, nil
 }
 
 func resolveMCPConfigCWD(cwd string) (string, error) {
@@ -94,4 +130,31 @@ func loadOptionalSettings(path string) (contracts.Settings, error) {
 		return contracts.Settings{}, nil
 	}
 	return contracts.Settings{}, fmt.Errorf("load settings %s: %w", path, err)
+}
+
+func loadMCPConfigSettingsFiles(cwd string) (contracts.Settings, contracts.Settings, contracts.Settings, error) {
+	userSettings, err := loadOptionalSettings(config.UserSettingsPath())
+	if err != nil {
+		return contracts.Settings{}, contracts.Settings{}, contracts.Settings{}, err
+	}
+	if cwd == "" {
+		return userSettings, contracts.Settings{}, contracts.Settings{}, nil
+	}
+	projectSettings, err := loadOptionalSettings(config.ProjectSettingsPath(cwd))
+	if err != nil {
+		return contracts.Settings{}, contracts.Settings{}, contracts.Settings{}, err
+	}
+	localSettings, err := loadOptionalSettings(config.LocalSettingsPath(cwd))
+	if err != nil {
+		return contracts.Settings{}, contracts.Settings{}, contracts.Settings{}, err
+	}
+	return userSettings, projectSettings, localSettings, nil
+}
+
+func mcpConfigSettingsFilePaths(cwd string) []string {
+	paths := []string{config.UserSettingsPath()}
+	if cwd != "" {
+		paths = append(paths, config.ProjectSettingsPath(cwd), config.LocalSettingsPath(cwd))
+	}
+	return paths
 }

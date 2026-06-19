@@ -171,6 +171,57 @@ func TestLoadMCPConfigFromSettingsFilesSkipsDisabledPluginServers(t *testing.T) 
 	}
 }
 
+func TestMCPConfigRefreshSettingsFilesUpdatesMergedSettingsAndPlugins(t *testing.T) {
+	root := t.TempDir()
+	claudeHome := filepath.Join(root, "home")
+	project := filepath.Join(root, "project")
+	pluginDir := filepath.Join(project, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(claudeHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "managed"))
+	writeSettingsFile(t, filepath.Join(claudeHome, "settings.json"), `{"model":"user"}`)
+	projectSettingsPath := filepath.Join(project, ".claude", "settings.json")
+	writeSettingsFile(t, projectSettingsPath, `{
+		"model": "project-a",
+		"enabledPlugins": {"demo": false}
+	}`)
+	writeSettingsFile(t, filepath.Join(pluginDir, "plugin.json"), `{
+		"name": "demo",
+		"mcpServers": {
+			"plugin:docs": {"type": "http", "url": "https://example.com/mcp"}
+		}
+	}`)
+
+	config, err := LoadMCPConfigFromSettingsFiles(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.MergedSettings().Model != "project-a" || len(config.PluginServers) != 0 {
+		t.Fatalf("initial merged=%#v plugin servers=%#v", config.MergedSettings(), config.PluginServers)
+	}
+
+	writeSettingsFile(t, projectSettingsPath, `{
+		"model": "project-bbbbb",
+		"enabledPlugins": {"demo": true}
+	}`)
+	changed, err := config.RefreshSettingsFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || config.ProjectSettings.Model != "project-bbbbb" || config.MergedSettings().Model != "project-bbbbb" {
+		t.Fatalf("settings = %#v merged=%#v changed=%v", config.ProjectSettings, config.MergedSettings(), changed)
+	}
+	if server := config.PluginServers["plugin:docs"]; server.URL != "https://example.com/mcp" || server.PluginSource != "demo" {
+		t.Fatalf("plugin servers = %#v", config.PluginServers)
+	}
+}
+
 func TestMCPConfigRefreshPolicySettingsUpdatesMergedSettingsAndPlugins(t *testing.T) {
 	root := t.TempDir()
 	project := filepath.Join(root, "project")

@@ -3979,6 +3979,58 @@ func TestRunnerRefreshesRemoteManagedPolicyAtTurnStart(t *testing.T) {
 	}
 }
 
+func TestRunnerRefreshesSettingsFilesAtTurnStart(t *testing.T) {
+	client := &fakeClient{}
+	root := t.TempDir()
+	configHome := filepath.Join(root, "home")
+	cwd := filepath.Join(root, "project")
+	if err := os.MkdirAll(configHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "missing-managed"))
+	settingsPath := filepath.Join(configHome, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(`{"model":"sonnet"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mcpConfig, err := LoadMCPConfigFromSettingsFiles(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:    client,
+		SessionID: "sess_settings_refresh",
+		MCP:       mcpConfig,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config show model"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Configured model: sonnet") {
+		t.Fatalf("text = %q", text)
+	}
+
+	if err := os.WriteFile(settingsPath, []byte(`{"model":"opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config show model"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Configured model: opus") || runner.MCP.UserSettings.Model != "opus" {
+		t.Fatalf("text = %q user settings=%#v", text, runner.MCP.UserSettings)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+}
+
 func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
