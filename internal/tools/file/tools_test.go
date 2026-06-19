@@ -2045,6 +2045,78 @@ func TestGrepToolMaxFilesize(t *testing.T) {
 	}
 }
 
+func TestGrepToolUnrestricted(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "visible.txt"), []byte("Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignored.txt"), []byte("Needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "binary.bin"), []byte("Needle\x00tail\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executor := fileExecutor(t)
+	ctx := fileToolContext(dir)
+
+	defaultResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_unrestricted_default",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultResult.Content != "Found 1 file\nvisible.txt" ||
+		defaultResult.StructuredContent["unrestricted"] != 0 ||
+		defaultResult.StructuredContent["no_ignore"] != false ||
+		defaultResult.StructuredContent["text"] != false {
+		t.Fatalf("default unrestricted result = %#v", defaultResult)
+	}
+
+	levelOneResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_unrestricted_one",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","-u":"1","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if levelOneResult.Content != "Found 2 files\nignored.txt\nvisible.txt" ||
+		levelOneResult.StructuredContent["unrestricted"] != 1 ||
+		levelOneResult.StructuredContent["no_ignore"] != true ||
+		levelOneResult.StructuredContent["text"] != false {
+		t.Fatalf("level-one unrestricted result = %#v", levelOneResult)
+	}
+
+	levelThreeResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_unrestricted_three",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--unrestricted":"uuu","sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if levelThreeResult.Content != "Found 3 files\nbinary.bin\nignored.txt\nvisible.txt" ||
+		levelThreeResult.StructuredContent["unrestricted"] != 3 ||
+		levelThreeResult.StructuredContent["no_ignore"] != true ||
+		levelThreeResult.StructuredContent["text"] != true {
+		t.Fatalf("level-three unrestricted result = %#v", levelThreeResult)
+	}
+
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_unrestricted_invalid",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","unrestricted":-1}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "unrestricted must be a non-negative integer") {
+		t.Fatalf("invalid unrestricted err = %v", err)
+	}
+}
+
 func TestGrepToolFilesWithMatchesSortsByModifiedTime(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-4 * time.Hour)

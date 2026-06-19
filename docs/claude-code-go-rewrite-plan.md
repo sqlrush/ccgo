@@ -265,6 +265,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `ignore_dot`/`--ignore-dot` 与 `no_ignore_dot`/`--no-ignore-dot` aliases；`--no-ignore-dot` 只跳过 `.ignore`/`.rgignore`，保留 `.gitignore` 规则继续生效，并兼容 quoted boolean。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `ignore_file`/`--ignore-file`，可读取一个相对当前工作目录匹配的 gitignore 格式规则文件；`no_ignore_files`/`--no-ignore-files` 现在只禁用这些显式 ignore 文件，不再影响 `.gitignore`、`.ignore` 或 `.rgignore`，并兼容 quoted boolean。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `ignore_vcs`/`--ignore-vcs` 与 `no_ignore_vcs`/`--no-ignore-vcs` aliases；`--no-ignore-vcs` 只跳过 `.gitignore`，保留 `.ignore`/`.rgignore` 规则继续生效，并兼容 quoted boolean。
+- 本轮补充：Grep 搜索现在支持 ripgrep 风格 `unrestricted`/`--unrestricted`/`-u` level，`1` 级开启 no-ignore traversal，`3` 级进一步开启 text-mode binary 搜索，并在 structured content 暴露有效 level。
 - 本轮补充：Glob/Grep 层级 ignore 文件现在支持 ripgrep 专用 `.rgignore`，并和 `.gitignore`/`.ignore` 共享解析、否定规则和目录规则语义。
 - 本轮补充：Grep 的 `files_with_matches` 输出现在按官方行为使用文件修改时间倒序排序，mtime 相同再按路径排序；分页和 `head_limit` 会在排序后应用。
 - 本轮补充：Grep 结果排序现在支持 ripgrep 风格 `sort`/`--sort` 和 `sortr`/`--sortr` 参数，覆盖 `path`/`modified`/`none` 及常见别名；显式排序会作用于 files/content/count 输出，structured content 会回传实际 sort、reverse 和 explicit 状态。
