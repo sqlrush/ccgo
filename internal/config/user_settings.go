@@ -84,6 +84,10 @@ func SetPluginsEnabledInSettingsFile(path string, states map[string]bool) error 
 }
 
 func SetUserMarketplace(name string, source map[string]any, installLocation string) (bool, error) {
+	return SetMarketplaceInSettingsFile(UserSettingsPath(), name, source, installLocation)
+}
+
+func SetMarketplaceInSettingsFile(path string, name string, source map[string]any, installLocation string) (bool, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return false, fmt.Errorf("marketplace name is required")
@@ -93,10 +97,10 @@ func SetUserMarketplace(name string, source map[string]any, installLocation stri
 	if installLocation = strings.TrimSpace(installLocation); installLocation != "" {
 		entry["installLocation"] = installLocation
 	}
-	if err := validateUserMarketplaceEntry(name, entry); err != nil {
+	if err := validateMarketplaceEntryInSettingsFile(path, name, entry); err != nil {
 		return false, err
 	}
-	document, err := ReadUserSettingsDocument()
+	document, err := ReadSettingsDocument(path)
 	if err != nil {
 		return false, err
 	}
@@ -110,15 +114,19 @@ func SetUserMarketplace(name string, source map[string]any, installLocation stri
 	_, existed := extraKnown[name]
 	extraKnown[name] = entry
 	document["extraKnownMarketplaces"] = extraKnown
-	return existed, WriteUserSettingsDocument(document)
+	return existed, WriteSettingsDocument(path, document)
 }
 
 func RemoveUserMarketplace(name string) (bool, error) {
+	return RemoveMarketplaceFromSettingsFile(UserSettingsPath(), name)
+}
+
+func RemoveMarketplaceFromSettingsFile(path string, name string) (bool, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return false, fmt.Errorf("marketplace name is required")
 	}
-	document, err := ReadUserSettingsDocument()
+	document, err := ReadSettingsDocument(path)
 	if err != nil {
 		return false, err
 	}
@@ -138,13 +146,13 @@ func RemoveUserMarketplace(name string) (bool, error) {
 	} else {
 		document["extraKnownMarketplaces"] = extraKnown
 	}
-	return true, WriteUserSettingsDocument(document)
+	return true, WriteSettingsDocument(path, document)
 }
 
-func validateUserMarketplaceEntry(name string, entry map[string]any) error {
+func validateMarketplaceEntryInSettingsFile(path string, name string, entry map[string]any) error {
 	warnings := ValidateSettings(contracts.Settings{
 		ExtraKnownMarketplaces: map[string]any{name: entry},
-	}, UserSettingsPath())
+	}, path)
 	if len(warnings) == 0 {
 		return nil
 	}

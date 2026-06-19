@@ -652,7 +652,6 @@ func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout i
 }
 
 func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
-	_ = state
 	flags := flag.NewFlagSet("claude plugin marketplace add", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	scope := "user"
@@ -670,15 +669,16 @@ func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io
 		return 2
 	}
 	if flags.NArg() != 2 {
-		fmt.Fprintln(stderr, "ccgo plugin marketplace add: usage: claude plugin marketplace add [--scope user] [--type url|github|git|npm|directory|file] <name> <source>")
+		fmt.Fprintln(stderr, "ccgo plugin marketplace add: usage: claude plugin marketplace add [--scope user|project|local] [--type url|github|git|npm|directory|file] <name> <source>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if scope == "" {
 		scope = "user"
 	}
-	if scope != "user" {
-		fmt.Fprintf(stderr, "ccgo plugin marketplace add: scope %q is not supported yet; use user\n", scope)
+	settingsPath, err := pluginCLISettingsPathForScope(state, scope)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace add: %v\n", err)
 		return 2
 	}
 	name := strings.TrimSpace(flags.Arg(0))
@@ -687,7 +687,7 @@ func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io
 		fmt.Fprintf(stderr, "ccgo plugin marketplace add: %v\n", err)
 		return 2
 	}
-	existed, err := config.SetUserMarketplace(name, source, installLocation)
+	existed, err := config.SetMarketplaceInSettingsFile(settingsPath, name, source, installLocation)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin marketplace add: %v\n", err)
 		return 1
@@ -701,7 +701,6 @@ func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io
 }
 
 func runPluginMarketplaceRemoveCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
-	_ = state
 	flags := flag.NewFlagSet("claude plugin marketplace remove", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	scope := "user"
@@ -714,25 +713,26 @@ func runPluginMarketplaceRemoveCLI(state *bootstrap.State, args []string, stdout
 		return 2
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "ccgo plugin marketplace remove: usage: claude plugin marketplace remove [--scope user] <name>")
+		fmt.Fprintln(stderr, "ccgo plugin marketplace remove: usage: claude plugin marketplace remove [--scope user|project|local] <name>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if scope == "" {
 		scope = "user"
 	}
-	if scope != "user" {
-		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: scope %q is not supported yet; use user\n", scope)
+	settingsPath, err := pluginCLISettingsPathForScope(state, scope)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: %v\n", err)
 		return 2
 	}
 	name := strings.TrimSpace(flags.Arg(0))
-	removed, err := config.RemoveUserMarketplace(name)
+	removed, err := config.RemoveMarketplaceFromSettingsFile(settingsPath, name)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: %v\n", err)
 		return 1
 	}
 	if !removed {
-		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: marketplace %q not found in user settings\n", name)
+		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: marketplace %q not found in %s settings\n", name, scope)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Marketplace %s removed.\n", name)

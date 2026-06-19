@@ -2654,8 +2654,38 @@ func TestRunPluginMarketplaceAddRemoveCLI(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "--scope", "project", "team", "owner/repo"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), `scope "project" is not supported yet`) {
+	if code != 0 {
 		t.Fatalf("project add scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	projectSettings := readTestSettingsJSON(t, filepath.Join(project, ".claude", "settings.json"))
+	team = projectSettings["extraKnownMarketplaces"].(map[string]any)["team"].(map[string]any)
+	source = team["source"].(map[string]any)
+	if source["source"] != "github" || source["repo"] != "owner/repo" {
+		t.Fatalf("project marketplace settings = %#v", team)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "--scope", "local", "local-tools", "npm:@example/tools"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("local add scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	localSettings := readTestSettingsJSON(t, filepath.Join(project, ".claude", "settings.local.json"))
+	localTools := localSettings["extraKnownMarketplaces"].(map[string]any)["local-tools"].(map[string]any)
+	source = localTools["source"].(map[string]any)
+	if source["source"] != "npm" || source["package"] != "@example/tools" {
+		t.Fatalf("local marketplace settings = %#v", localTools)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "remove", "--scope", "local", "local-tools"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("local remove scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	localSettings = readTestSettingsJSON(t, filepath.Join(project, ".claude", "settings.local.json"))
+	if _, ok := localSettings["extraKnownMarketplaces"]; ok {
+		t.Fatalf("local extraKnownMarketplaces should be removed: %#v", localSettings)
 	}
 }
 
