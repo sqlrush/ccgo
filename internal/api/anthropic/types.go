@@ -37,11 +37,13 @@ type ToolDefinition struct {
 
 func ToolFromContract(def contracts.ToolDefinition) ToolDefinition {
 	return ToolDefinition{
-		Name:         def.Name,
-		Description:  toolDescriptionFromContract(def),
-		InputSchema:  def.InputSchema,
-		Strict:       def.Strict,
-		DeferLoading: def.ShouldDefer && !def.AlwaysLoad,
+		Name:                def.Name,
+		Description:         toolDescriptionFromContract(def),
+		InputSchema:         def.InputSchema,
+		Strict:              def.Strict,
+		DeferLoading:        def.ShouldDefer && !def.AlwaysLoad,
+		EagerInputStreaming: def.EagerInputStreaming,
+		CacheControl:        copyCacheControl(def.CacheControl),
 	}
 }
 
@@ -52,6 +54,14 @@ func toolDescriptionFromContract(def contracts.ToolDefinition) string {
 		}
 	}
 	return ""
+}
+
+func copyCacheControl(value *contracts.CacheControl) *contracts.CacheControl {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
 }
 
 func ToolsFromContracts(defs []contracts.ToolDefinition) []ToolDefinition {

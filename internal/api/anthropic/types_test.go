@@ -7,14 +7,17 @@ import (
 )
 
 func TestToolFromContractPreservesStrictAndDeferLoading(t *testing.T) {
+	cacheControl := &contracts.CacheControl{Type: "ephemeral", Scope: "global", TTL: "1h"}
 	got := ToolFromContract(contracts.ToolDefinition{
 		Name:        "Task",
 		Description: "Start a task",
 		InputSchema: contracts.JSONSchema{
 			"type": "object",
 		},
-		Strict:      true,
-		ShouldDefer: true,
+		Strict:              true,
+		ShouldDefer:         true,
+		EagerInputStreaming: true,
+		CacheControl:        cacheControl,
 	})
 	if got.Name != "Task" || got.Description != "Start a task" || got.InputSchema["type"] != "object" {
 		t.Fatalf("tool = %#v", got)
@@ -24,6 +27,16 @@ func TestToolFromContractPreservesStrictAndDeferLoading(t *testing.T) {
 	}
 	if !got.DeferLoading {
 		t.Fatalf("defer loading = false, want true")
+	}
+	if !got.EagerInputStreaming {
+		t.Fatalf("eager input streaming = false, want true")
+	}
+	if got.CacheControl == nil || got.CacheControl.Type != "ephemeral" || got.CacheControl.Scope != "global" || got.CacheControl.TTL != "1h" {
+		t.Fatalf("cache control = %#v", got.CacheControl)
+	}
+	got.CacheControl.Scope = "mutated"
+	if cacheControl.Scope != "global" {
+		t.Fatalf("cache control was aliased: %#v", cacheControl)
 	}
 }
 

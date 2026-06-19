@@ -5,23 +5,25 @@ import "encoding/json"
 type JSONSchema map[string]any
 
 type ToolDefinition struct {
-	Name                string      `json:"name"`
-	Aliases             []string    `json:"aliases,omitempty"`
-	Description         string      `json:"description,omitempty"`
-	Prompt              string      `json:"prompt,omitempty"`
-	SearchHint          string      `json:"searchHint,omitempty"`
-	InputSchema         JSONSchema  `json:"input_schema,omitempty"`
-	OutputSchema        JSONSchema  `json:"output_schema,omitempty"`
-	ConcurrencySafe     bool        `json:"concurrency_safe,omitempty"`
-	ReadOnly            bool        `json:"read_only,omitempty"`
-	Destructive         bool        `json:"destructive,omitempty"`
-	RequiresInteraction bool        `json:"requires_interaction,omitempty"`
-	ShouldDefer         bool        `json:"should_defer,omitempty"`
-	AlwaysLoad          bool        `json:"always_load,omitempty"`
-	MaxResultSizeChars  int         `json:"max_result_size_chars,omitempty"`
-	Strict              bool        `json:"strict,omitempty"`
-	InterruptBehavior   string      `json:"interrupt_behavior,omitempty"`
-	MCP                 *MCPToolRef `json:"mcp,omitempty"`
+	Name                string        `json:"name"`
+	Aliases             []string      `json:"aliases,omitempty"`
+	Description         string        `json:"description,omitempty"`
+	Prompt              string        `json:"prompt,omitempty"`
+	SearchHint          string        `json:"searchHint,omitempty"`
+	InputSchema         JSONSchema    `json:"input_schema,omitempty"`
+	OutputSchema        JSONSchema    `json:"output_schema,omitempty"`
+	ConcurrencySafe     bool          `json:"concurrency_safe,omitempty"`
+	ReadOnly            bool          `json:"read_only,omitempty"`
+	Destructive         bool          `json:"destructive,omitempty"`
+	RequiresInteraction bool          `json:"requires_interaction,omitempty"`
+	ShouldDefer         bool          `json:"should_defer,omitempty"`
+	AlwaysLoad          bool          `json:"always_load,omitempty"`
+	EagerInputStreaming bool          `json:"eager_input_streaming,omitempty"`
+	CacheControl        *CacheControl `json:"cache_control,omitempty"`
+	MaxResultSizeChars  int           `json:"max_result_size_chars,omitempty"`
+	Strict              bool          `json:"strict,omitempty"`
+	InterruptBehavior   string        `json:"interrupt_behavior,omitempty"`
+	MCP                 *MCPToolRef   `json:"mcp,omitempty"`
 }
 
 type MCPToolRef struct {
