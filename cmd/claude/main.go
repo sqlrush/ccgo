@@ -335,6 +335,8 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "list", "ls":
 		return runPluginListCLI(state, args[1:], stdout, stderr)
+	case "install", "i":
+		return runPluginInstallCLI(state, args[1:], stdout, stderr)
 	case "marketplace", "marketplaces":
 		return runPluginMarketplaceCLI(state, args[1:], stdout, stderr)
 	default:
@@ -402,6 +404,44 @@ func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, s
 		}
 		fmt.Fprintf(stdout, "- %s %s (%s, %s)\n", plugin.ID, plugin.Version, plugin.Scope, stateText)
 	}
+	return 0
+}
+
+func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin install", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	scope := "project"
+	flags.StringVar(&scope, "scope", scope, "installation scope")
+	flags.StringVar(&scope, "s", scope, "installation scope")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "ccgo plugin install: usage: claude plugin install [--scope project] <plugin>")
+		return 2
+	}
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		scope = "project"
+	}
+	if scope != "project" {
+		fmt.Fprintf(stderr, "ccgo plugin install: scope %q is not supported yet; use project\n", scope)
+		return 2
+	}
+	settings, err := pluginCLISettingsFromFiles(state.CWD())
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
+		return 1
+	}
+	result, err := pluginpkg.InstallMarketplacePlugin(strings.TrimSpace(flags.Arg(0)), state.CWD(), settings)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
+		return 1
+	}
+	writePluginInstallResult(stdout, result)
 	return 0
 }
 
@@ -506,6 +546,24 @@ func runPluginMarketplaceUpdateCLI(state *bootstrap.State, args []string, stdout
 	pluginpkg.LoadMarketplacePluginDirsWithSettings(filtered)
 	fmt.Fprintf(stdout, "Successfully updated marketplace: %s\n", matchedName)
 	return 0
+}
+
+func writePluginInstallResult(stdout io.Writer, result pluginpkg.PluginInstallResult) {
+	lines := []string{
+		"Plugin installed",
+		"Name: " + result.Plugin.Name,
+		"Source: " + result.Plugin.Root,
+		"Installed path: " + result.TargetPath,
+	}
+	if result.Plugin.Marketplace != "" {
+		lines = append(lines, "Marketplace: "+result.Plugin.Marketplace)
+	}
+	if result.AlreadyInstalled {
+		lines = append(lines, "Status: already installed")
+	} else {
+		lines = append(lines, "Status: installed")
+	}
+	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
 }
 
 func pluginCLISettingsFromFiles(cwd string) (contracts.Settings, error) {

@@ -3643,12 +3643,6 @@ func (r Runner) installPluginSummary(name string) string {
 	return strings.Join(lines, "\n")
 }
 
-type pluginInstallResult struct {
-	Plugin           pluginpkg.LoadedPlugin
-	TargetPath       string
-	AlreadyInstalled bool
-}
-
 type pluginUpdateResult struct {
 	MarketplacePluginCount int
 	Updated                []pluginUpdateItem
@@ -3659,37 +3653,13 @@ type pluginUpdateItem struct {
 	TargetPath string
 }
 
-func (r Runner) installMarketplacePlugin(name string) (pluginInstallResult, error) {
-	if strings.TrimSpace(r.WorkingDirectory) == "" {
-		return pluginInstallResult{}, fmt.Errorf("working directory is unavailable")
+func (r Runner) installMarketplacePlugin(name string) (pluginpkg.PluginInstallResult, error) {
+	result, err := pluginpkg.InstallMarketplacePlugin(name, r.WorkingDirectory, r.mergedSettings())
+	if err != nil {
+		return pluginpkg.PluginInstallResult{}, err
 	}
-	merged := r.mergedSettings()
-	plugin, ok := findLoadedPlugin(pluginpkg.LoadPluginDirsWithSettings(nil, merged), name)
-	if !ok {
-		return pluginInstallResult{}, fmt.Errorf("not found in configured marketplace sources")
-	}
-	targetRoot := filepath.Join(r.WorkingDirectory, ".claude", "plugins", safePluginInstallDirName(plugin))
-	if sameResolvedPath(plugin.Root, targetRoot) {
-		return pluginInstallResult{Plugin: plugin, TargetPath: targetRoot, AlreadyInstalled: true}, nil
-	}
-	if _, err := os.Stat(targetRoot); err == nil {
-		if installed, loadErr := pluginpkg.LoadPluginDir(targetRoot); loadErr == nil && strings.TrimSpace(installed.Name) == strings.TrimSpace(plugin.Name) {
-			return pluginInstallResult{Plugin: plugin, TargetPath: targetRoot, AlreadyInstalled: true}, nil
-		}
-		return pluginInstallResult{}, fmt.Errorf("target path already exists: %s", targetRoot)
-	} else if err != nil && !os.IsNotExist(err) {
-		return pluginInstallResult{}, err
-	}
-	if err := copyPluginDir(plugin.Root, targetRoot); err != nil {
-		return pluginInstallResult{}, err
-	}
-	if r.MCP != nil {
-		if r.MCP.CWD == "" {
-			r.MCP.CWD = r.WorkingDirectory
-		}
-		r.MCP.refreshPluginServers()
-	}
-	return pluginInstallResult{Plugin: plugin, TargetPath: targetRoot}, nil
+	r.refreshPluginMCPServers()
+	return result, nil
 }
 
 func (r Runner) updatePluginSummary(name string) string {

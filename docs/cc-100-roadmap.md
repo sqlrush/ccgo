@@ -37,7 +37,7 @@ M4 补充：tool executor 会围绕 `PreToolUse`、`PostToolUse`、`PermissionDe
 
 M10 补充：plugin command/agent 的 allowed tool frontmatter 解析现在只在顶层逗号或空白处分隔，保留括号、方括号和引号内的逗号/空白，避免 `Bash(git commit -m "x,y")` 这类 tool pattern 被误拆。
 
-M8 补充：CLI `plugin marketplace list` 现在可列出 settings 中已配置的 marketplace；`--json` 输出按名称排序的 source/repo/url/path/package/installLocation 结构，普通文本输出与无配置提示也已覆盖。CLI `plugin marketplace update [name]` 现在可按全部或指定 marketplace 触发现有 URL/git/github/npm/settings cache 加载刷新路径，命名 update 会用轻量 settings 读取避免启动时提前刷新全部 marketplace。
+M8 补充：CLI `plugin marketplace list` 现在可列出 settings 中已配置的 marketplace；`--json` 输出按名称排序的 source/repo/url/path/package/installLocation 结构，普通文本输出与无配置提示也已覆盖。CLI `plugin marketplace update [name]` 现在可按全部或指定 marketplace 触发现有 URL/git/github/npm/settings cache 加载刷新路径，命名 update 会用轻量 settings 读取避免启动时提前刷新全部 marketplace。CLI `plugin install --scope project <plugin>` 现在复用 `internal/plugins` 共享安装 API，把 marketplace 插件复制到项目 `.claude/plugins/<safe-name>`，并保留冲突检测、重复安装识别和 symlink/non-regular file 拒绝。
 
 M10 补充：新增 `TaskOutput`/`AgentOutputTool` 和 `KillTask`/`TaskStop` 内置工具；`TaskOutput` 可列出当前 session 的 sidechain task，或按 task/sidechain ID 读取状态、summary、tail 输出和 agent metadata，`KillTask` 会通过 sidechain manager 写入 cancelled lifecycle summary。完整 AgentTool 执行循环、progress event streaming、resume command UI 和 worktree isolation 仍未完成。
 

@@ -2149,6 +2149,76 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 	}
 }
 
+func TestRunPluginInstallCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marketDir := filepath.Join(t.TempDir(), "market-demo")
+	if err := os.MkdirAll(filepath.Join(marketDir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"1.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "assets", "README.md"), []byte("asset"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	settings := fmt.Sprintf(`{
+		"extraKnownMarketplaces": {
+			"team": {"source": {"source": "settings", "name": "team", "plugins": [%q]}}
+		},
+		"strictKnownMarketplaces": ["team"]
+	}`, marketDir)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "install", "--scope", "project", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	resolvedProject, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installedDir := filepath.Join(resolvedProject, ".claude", "plugins", "market-demo")
+	for _, want := range []string{
+		"Plugin installed",
+		"Name: market demo",
+		"Marketplace: team",
+		"Installed path: " + installedDir,
+		"Status: installed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(installedDir, "assets", "README.md")); err != nil || string(data) != "asset" {
+		t.Fatalf("installed asset data=%q err=%v", data, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "install", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("second install exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Status: already installed") {
+		t.Fatalf("second install stdout = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "install", "--scope", "user", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), `scope "user" is not supported yet`) {
+		t.Fatalf("user scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPluginMarketplaceListCLI(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
