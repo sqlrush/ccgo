@@ -169,6 +169,8 @@ M5 补充：`Grep` count 输出现在支持 `count_matches`/`countMatches`/`coun
 
 M5 补充：Bash/PowerShell 现在会在前台模式阻断首个语句中的长 `sleep`/`Start-Sleep`（2 秒及以上）并提示使用 `run_in_background`；短 sleep、浮点 sleep、`Start-Sleep -Milliseconds` 和显式后台执行保持允许。
 
+M5 补充：Bash/PowerShell 前台执行现在会把调用方 context cancellation 与 timeout/普通非零退出区分开，结构化结果返回 `cancelled=true`、`timed_out=false`、`exit_code=-1`，可见输出显示 cancelled 状态。
+
 M5 补充：Bash/PowerShell 现在接受官方 `dangerouslyDisableSandbox` semantic boolean 输入，并在 structured content 中记录该请求；真实 sandbox adapter/override 行为仍按 sandbox parity 项继续推进。
 
 M5 补充：Bash/PowerShell 的 `dangerouslyDisableSandbox` 现在会进入权限引擎；除可用的 `bypassPermissions` 模式外，sandbox override 会要求确认，`dontAsk` 模式下会拒绝，避免显式 allow rule 或 read-only 分类静默放行 sandbox override。
@@ -812,7 +814,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 - 文本版 `Read`、PDF text/page-selection 初版（含常见 Page/Contents 间接对象、Pages/Kids 页序、FlateDecode 文本流和 UTF-16 BOM 字符串）、PNG/JPEG/GIF/WebP image Read、Jupyter notebook cell 渲染初版、Read 大文本 tool-result budget 截断/落盘、`Write`、`Edit` 初版已完成。
 - 已覆盖读前写、mtime stale guard、唯一匹配、`replace_all`、Write/Edit structured diff hunks、`.claude/settings.json`/`settings.local.json` 写前 JSON/语义校验、team-memory secret guard、Read 去重、跨 tool round read-state。
 - `NotebookEdit` 初版已完成，支持官方 `notebook_path`/`cell_id`/`new_source`/`cell_type`/`edit_mode` schema、replace/insert/delete 主路径、真实 cell id 和 `cell-N` 索引、code cell 修改后清空 outputs/execution_count、read-before-edit/stale guard、read-state 刷新、`notebook_path` 权限路径识别、结构化结果和 cell-level diff/hunks。
-- `Bash` 初版已完成，支持 command/timeout/description 输入校验、`/bin/sh -c` 执行、stdout/stderr/exit code/timeout 结构化结果、动态 read-only/concurrency-safe/destructive 分类、Git diff/log/show/status/ls-files/grep/rev-parse/branch/tag/ls-remote safe-flag 校验，Git remote/push/reflog/stash/worktree/merge-base/describe/cat-file/for-each-ref/rev-list/blame/shortlog/config-get 参数级安全分类、`git remote show/get-url` 参数收紧、`git ls-remote` URL/SSH/server-option guard、branch/tag 裸 positional 创建防护、`git reflog expire/delete`、`git stash drop/pop/clear` 和 `git worktree remove/prune` 破坏性分类、`find -delete/-exec rm` 与 `xargs rm` 破坏性分类、safe wrapper/env 前缀归一化（`time`/`nohup`/`timeout`/`nice`/`stdbuf`/`env`）后的只读/破坏性分类、临时环境赋值前缀后的破坏性命令识别、权限规则接入、后台启动、同会话 `BashOutput` 输出读取和 `KillBash` 取消。
+- `Bash` 初版已完成，支持 command/timeout/description 输入校验、`/bin/sh -c` 执行、stdout/stderr/exit code/timeout/cancel 结构化结果、动态 read-only/concurrency-safe/destructive 分类、Git diff/log/show/status/ls-files/grep/rev-parse/branch/tag/ls-remote safe-flag 校验，Git remote/push/reflog/stash/worktree/merge-base/describe/cat-file/for-each-ref/rev-list/blame/shortlog/config-get 参数级安全分类、`git remote show/get-url` 参数收紧、`git ls-remote` URL/SSH/server-option guard、branch/tag 裸 positional 创建防护、`git reflog expire/delete`、`git stash drop/pop/clear` 和 `git worktree remove/prune` 破坏性分类、`find -delete/-exec rm` 与 `xargs rm` 破坏性分类、safe wrapper/env 前缀归一化（`time`/`nohup`/`timeout`/`nice`/`stdbuf`/`env`）后的只读/破坏性分类、临时环境赋值前缀后的破坏性命令识别、权限规则接入、后台启动、同会话 `BashOutput` 输出读取和 `KillBash` 取消。
 - `Glob`/`Grep` 纯 Go 初版已完成，支持 `**` 递归 glob、Glob 绝对 pattern base-dir 提取、Glob 官方 pattern/path-only strict schema、Glob/Grep 输出工作目录相对路径、Glob 默认 no-ignore/hidden 搜索及 `CLAUDE_CODE_GLOB_NO_IGNORE`/`CLAUDE_CODE_GLOB_HIDDEN` env 切换、Grep 官方 VCS metadata 目录排除（`.git`/`.svn`/`.hg`/`.bzr`/`.jj`/`.sl`）、Grep 层级 `.gitignore`/`.ignore`、Glob oldest-first modified/path 排序、Glob 截断 tool-result 提示、Grep regex/fixed string (`fixed_strings`/`-F`)、multiline 跨行 dotall 搜索、glob/type 过滤、Grep glob 空白/逗号多 pattern 与 brace alternation、Glob/Grep path 存在性校验和 Glob directory-only path 校验、`output_mode`/`outputMode` 的 `files_with_matches`/`content`/`count` 输出模式、Grep files_with_matches file-count summary、Grep count-mode occurrence/file summary、Grep `--max-columns 500` 长匹配/上下文行省略占位、`context`/`before_context`/`after_context` 和 `-C`/`-B`/`-A` 上下文行及官方 precedence（非 content 模式忽略）、`line_numbers`/`lineNumbers`/`-n` line-number 控制、`max_count`/`maxCount`/`-m` per-file match limiting、`offset`/`head_limit` 分页和 content-mode pagination tool-result 提示、默认 250 条 Grep head limit、`head_limit=0` unlimited、`ignore_case`/`case_insensitive`/`caseInsensitive`/`-i` 大小写不敏感搜索，以及 Grep 数字/布尔参数的 quoted semantic string 兼容。
 - `TodoWrite` 初版已完成，支持完整 todo list 写入、状态/优先级校验、重复 id 拒绝、单个 `in_progress` 约束、结构化结果、tool metadata 状态保存和 session-scoped 本地持久化/恢复。
 - `WebFetch` 初版已完成，支持 URL/timeout/max_bytes 输入校验、HTTP GET、HEAD preflight、metadata/raw `skipWebFetchPreflight` skip-preflight、二进制 preflight 跳过 GET、文本/二进制判定、截断、非 2xx error 标记、结构化结果、HTML-to-text rendering、prompt-focused excerpt、prompt phrase scoring/metadata 和 `WebFetch(domain:...)` 权限规则适配。
@@ -889,11 +891,11 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 - `Read` 的完整 PDF parity、完整 notebook render parity、完整 token-budget parity、full media parity、binary edge cases。
 - `Edit/Write`/`NotebookEdit` 的完整 git/notebook diff parity、LSP/IDE notify、file history、NotebookEdit UI/golden 和更广义 secret guard。
-- `Bash` 完整 shell parser、真实 sandbox、interrupt、后台任务完整生命周期、更细 read-only/destructive validation 和官方 golden 兼容。
+- `Bash` 完整 shell parser、真实 sandbox、更完整 signal/interrupt 语义、后台任务完整生命周期、更细 read-only/destructive validation 和官方 golden 兼容。
 - `Glob/Grep` 完整 ripgrep parity 和剩余输出参数。
 - `TodoWrite` TUI 同步和官方 golden 兼容。
 - `WebFetch` browser 渲染、完整 prompt-aware summarization 和官方 golden；`WebSearch` 官方搜索后端、ranking parity 和 golden。
-- `PowerShell` 完整 parser、完整权限/path validation、后台生命周期 edge cases、前台截断 golden、session 记录和官方 golden；Notebook fuller parity、MCP concrete tool semantics。
+- `PowerShell` 完整 parser、完整权限/path validation、更完整 signal/interrupt 语义、后台生命周期 edge cases、前台截断 golden、session 记录和官方 golden；Notebook fuller parity、MCP concrete tool semantics。
 
 ### M6: Session, Memory, Compact
 

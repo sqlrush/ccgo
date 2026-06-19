@@ -610,6 +610,51 @@ func TestBashBackgroundTimeout(t *testing.T) {
 	}
 }
 
+func TestBashForegroundCancellation(t *testing.T) {
+	executor := bashExecutor(t)
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct {
+		result contracts.ToolResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := executor.Execute(tool.Context{
+			Context:  runCtx,
+			Metadata: map[string]any{},
+		}, contracts.ToolUse{
+			ID:    "toolu_bash_cancel",
+			Name:  "Bash",
+			Input: json.RawMessage(`{"command":"printf started; while :; do sleep 1; done","timeout":5000}`),
+		}, nil)
+		done <- struct {
+			result contracts.ToolResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if !got.result.IsError {
+			t.Fatalf("cancelled foreground command should be error: %#v", got.result)
+		}
+		if got.result.StructuredContent["cancelled"] != true || got.result.StructuredContent["timed_out"] != false || got.result.StructuredContent["exit_code"] != -1 {
+			t.Fatalf("cancelled structured content = %#v", got.result.StructuredContent)
+		}
+		if !strings.Contains(got.result.Content.(string), "Command cancelled.") {
+			t.Fatalf("cancelled content = %#v", got.result.Content)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("foreground bash command did not stop after context cancellation")
+	}
+}
+
 func TestKillBashCancelsBackgroundCommand(t *testing.T) {
 	executor := bashExecutor(t)
 	ctx := WithBackgroundState(tool.Context{

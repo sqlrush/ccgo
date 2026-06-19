@@ -758,6 +758,7 @@ type bashResult struct {
 	Stderr     string
 	ExitCode   int
 	TimedOut   bool
+	Cancelled  bool
 	DurationMS int64
 	TimeoutMS  int
 }
@@ -935,6 +936,7 @@ func callBash(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 			"stderr":                      result.Stderr,
 			"exit_code":                   result.ExitCode,
 			"timed_out":                   result.TimedOut,
+			"cancelled":                   result.Cancelled,
 			"duration_ms":                 result.DurationMS,
 			"timeout_ms":                  result.TimeoutMS,
 			"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
@@ -1039,6 +1041,7 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 	err := cmd.Run()
 	durationMS := time.Since(start).Milliseconds()
 	timedOut := errors.Is(runCtx.Err(), context.DeadlineExceeded)
+	cancelled := errors.Is(runCtx.Err(), context.Canceled)
 	exitCode := 0
 	if err != nil {
 		exitCode = 1
@@ -1046,7 +1049,7 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
-		if timedOut {
+		if timedOut || cancelled {
 			exitCode = -1
 		}
 	}
@@ -1055,6 +1058,7 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 		Stderr:     stderr.String(),
 		ExitCode:   exitCode,
 		TimedOut:   timedOut,
+		Cancelled:  cancelled,
 		DurationMS: durationMS,
 		TimeoutMS:  int(timeout / time.Millisecond),
 	}
@@ -1178,6 +1182,9 @@ func formatBashContent(result bashResult) string {
 	if result.TimedOut {
 		return appendStatusLine(content, fmt.Sprintf("Command timed out after %dms.", result.TimeoutMS))
 	}
+	if result.Cancelled {
+		return appendStatusLine(content, "Command cancelled.")
+	}
 	if result.ExitCode != 0 {
 		return appendStatusLine(content, fmt.Sprintf("Command exited with code %d.", result.ExitCode))
 	}
@@ -1210,6 +1217,7 @@ func formatBackgroundOutput(snapshot BackgroundTaskSnapshot) string {
 		Stderr:    snapshot.Stderr,
 		ExitCode:  snapshot.ExitCode,
 		TimedOut:  snapshot.TimedOut,
+		Cancelled: snapshot.Cancelled,
 		TimeoutMS: snapshot.TimeoutMS,
 	})
 	if snapshot.Running && snapshot.Stdout == "" && snapshot.Stderr == "" {

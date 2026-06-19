@@ -515,6 +515,52 @@ func TestPowerShellBackgroundTimeout(t *testing.T) {
 	}
 }
 
+func TestPowerShellForegroundCancellation(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct {
+		result contracts.ToolResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := executor.Execute(tool.Context{
+			Context:  runCtx,
+			Metadata: map[string]any{},
+		}, contracts.ToolUse{
+			ID:    "toolu_powershell_cancel",
+			Name:  "PowerShell",
+			Input: json.RawMessage(`{"command":"Write-Output started; while ($true) { Start-Sleep -Milliseconds 100 }","timeout":5000}`),
+		}, nil)
+		done <- struct {
+			result contracts.ToolResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if !got.result.IsError {
+			t.Fatalf("cancelled foreground command should be error: %#v", got.result)
+		}
+		if got.result.StructuredContent["cancelled"] != true || got.result.StructuredContent["timed_out"] != false || got.result.StructuredContent["exit_code"] != -1 {
+			t.Fatalf("cancelled structured content = %#v", got.result.StructuredContent)
+		}
+		if !strings.Contains(got.result.Content.(string), "Command cancelled.") {
+			t.Fatalf("cancelled content = %#v", got.result.Content)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("foreground PowerShell command did not stop after context cancellation")
+	}
+}
+
 func TestKillPowerShellCancelsBackgroundCommand(t *testing.T) {
 	requirePowerShell(t)
 	executor := powerShellExecutor(t)

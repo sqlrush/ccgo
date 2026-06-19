@@ -53,6 +53,7 @@ type powerShellResult struct {
 	Stderr     string
 	ExitCode   int
 	TimedOut   bool
+	Cancelled  bool
 	DurationMS int64
 	TimeoutMS  int
 	Executable string
@@ -231,6 +232,7 @@ func callPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 			"stderr":                      result.Stderr,
 			"exit_code":                   result.ExitCode,
 			"timed_out":                   result.TimedOut,
+			"cancelled":                   result.Cancelled,
 			"duration_ms":                 result.DurationMS,
 			"timeout_ms":                  result.TimeoutMS,
 			"executable":                  result.Executable,
@@ -352,6 +354,11 @@ func runPowerShellCommand(ctx tool.Context, command string, timeout time.Duratio
 		result.ExitCode = -1
 		return result
 	}
+	if runCtx.Err() == context.Canceled {
+		result.Cancelled = true
+		result.ExitCode = -1
+		return result
+	}
 	if err == nil {
 		result.ExitCode = 0
 		return result
@@ -391,6 +398,7 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 				"stderr":                      result.Stderr,
 				"exit_code":                   result.ExitCode,
 				"timed_out":                   false,
+				"cancelled":                   false,
 				"duration_ms":                 result.DurationMS,
 				"timeout_ms":                  result.TimeoutMS,
 				"executable":                  "",
@@ -486,6 +494,8 @@ func formatPowerShellContent(result powerShellResult) string {
 	switch {
 	case result.TimedOut:
 		status = fmt.Sprintf("Command timed out after %dms.", result.TimeoutMS)
+	case result.Cancelled:
+		status = "Command cancelled."
 	case result.ExitCode != 0:
 		status = fmt.Sprintf("Command exited with code %d.", result.ExitCode)
 	}
@@ -520,6 +530,7 @@ func formatBackgroundOutput(snapshot BackgroundTaskSnapshot) string {
 		Stderr:    snapshot.Stderr,
 		ExitCode:  snapshot.ExitCode,
 		TimedOut:  snapshot.TimedOut,
+		Cancelled: snapshot.Cancelled,
 		TimeoutMS: snapshot.TimeoutMS,
 	})
 	if snapshot.Running && snapshot.Stdout == "" && snapshot.Stderr == "" {
