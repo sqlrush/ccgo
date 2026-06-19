@@ -372,10 +372,14 @@ func (r *Runner) maybeRefreshSettingsFiles() {
 }
 
 func (r *Runner) maybeRefreshRemoteManagedPolicy() {
+	_, _ = r.RefreshRemoteManagedPolicyIfConfigured()
+}
+
+func (r *Runner) RefreshRemoteManagedPolicyIfConfigured() (bool, error) {
 	if !config.RemoteManagedSettingsConfigured() {
-		return
+		return false, nil
 	}
-	_, _ = r.RefreshPolicySettings()
+	return r.RefreshPolicySettings()
 }
 
 func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInfo {

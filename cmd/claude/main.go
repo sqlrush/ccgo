@@ -701,6 +701,7 @@ func runDaemon(ctx context.Context, state *bootstrap.State, options daemonOption
 	runTick := func(now time.Time) (contracts.ToolResult, error) {
 		tickMu.Lock()
 		defer tickMu.Unlock()
+		_, _ = runner.RefreshRemoteManagedPolicyIfConfigured()
 		if err := writeHeartbeat(now); err != nil {
 			return contracts.ToolResult{}, err
 		}

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -792,6 +793,46 @@ func TestRunDaemonTickSkipsRemotePollWhenWebSocketStreamRegistered(t *testing.T)
 	}
 	if pump.RuntimeState != "" {
 		t.Fatalf("pump should not be overwritten by skipped tick: %#v", pump)
+	}
+}
+
+func TestRunDaemonOnceRefreshesRemoteManagedPolicyOnTick(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "home"))
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "missing-managed"))
+	var requests int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"settings":{"model":"remote-daemon"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("CLAUDE_CODE_REMOTE_MANAGED_SETTINGS_URL", server.URL+"/policy")
+	cwd := filepath.Join(root, "project")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedCWD, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SetCWD(resolvedCWD)
+
+	var stdout, stderr bytes.Buffer
+	code := runDaemon(context.Background(), state, daemonOptions{Once: true, HeartbeatInterval: time.Millisecond}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runDaemon code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if got := atomic.LoadInt32(&requests); got < 2 {
+		t.Fatalf("remote managed policy requests = %d, want initial load plus daemon tick refresh", got)
+	}
+	if !strings.Contains(stdout.String(), "ccgo daemon running") {
+		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
 
