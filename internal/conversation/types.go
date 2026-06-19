@@ -48,6 +48,7 @@ const (
 	EventCompact            EventType = "compact"
 	EventStreamEvent        EventType = "stream_event"
 	EventDeferredPoolChange EventType = "tengu_deferred_tools_pool_change"
+	EventToolSearchDecision EventType = "tengu_tool_search_mode_decision"
 )
 
 type TokenWarning struct {
@@ -76,6 +77,19 @@ type DeferredToolsPoolChange struct {
 	AttachmentTypesSeen     string
 }
 
+type ToolSearchModeDecision struct {
+	Enabled                      bool
+	Mode                         string
+	Reason                       string
+	CheckedModel                 string
+	MCPToolCount                 int
+	UserType                     string
+	DeferredToolTokens           int
+	Threshold                    int
+	DeferredToolDescriptionChars int
+	CharThreshold                int
+}
+
 type Event struct {
 	Type                    EventType
 	Message                 *contracts.Message
@@ -87,6 +101,7 @@ type Event struct {
 	Compact                 *compactpkg.Result
 	StreamEvent             *anthropic.StreamEvent
 	DeferredToolsPoolChange *DeferredToolsPoolChange
+	ToolSearchModeDecision  *ToolSearchModeDecision
 	Model                   string
 	Error                   error
 }

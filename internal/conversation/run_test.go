@@ -8355,6 +8355,79 @@ func TestRunnerToolSearchAutoUsesCountTokensWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestRunnerRecordsToolSearchModeDecisionTelemetry(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{{response: &anthropic.CountTokensResponse{InputTokens: 20501}}},
+		calls: []fakeCall{{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}}},
+	}
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "session.jsonl")
+	telemetryEnabled := true
+	runner := Runner{
+		Client:      client,
+		Tools:       tool.NewExecutor(registry),
+		Model:       "sonnet",
+		MaxTokens:   100,
+		SessionID:   "sess_tool_search_mode",
+		SessionPath: transcriptPath,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{Telemetry: &telemetryEnabled},
+		}},
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi")); err != nil {
+		t.Fatal(err)
+	}
+	telemetryPath := telemetrypkg.SessionPath(transcriptPath, "sess_tool_search_mode")
+	telemetryData, err := os.ReadFile(telemetryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(telemetryData), "TinyDeferred") {
+		t.Fatalf("telemetry leaked deferred tool name: %q", telemetryData)
+	}
+	events, err := telemetrypkg.Load(telemetryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decision *telemetrypkg.Event
+	for i := range events {
+		if events[i].Type == string(EventToolSearchDecision) {
+			decision = &events[i]
+			break
+		}
+	}
+	if decision == nil {
+		t.Fatalf("tool-search mode telemetry event not found: %#v", events)
+	}
+	if decision.ToolSearchEnabled == nil || !*decision.ToolSearchEnabled ||
+		decision.ToolSearchMode != string(toolSearchModeTSTAuto) ||
+		decision.ToolSearchReason != "auto_above_threshold" ||
+		decision.ToolSearchCheckedModel != "sonnet" ||
+		decision.ToolSearchUserType != "external" ||
+		decision.ToolSearchDeferredToolTokens != 20001 ||
+		decision.ToolSearchThreshold != 20000 {
+		t.Fatalf("tool-search mode telemetry = %#v", decision)
+	}
+}
+
 func TestRunnerToolSearchAutoFallsBackToHaikuTokenCount(t *testing.T) {
 	resetDeferredToolTokenCountCache()
 	t.Cleanup(resetDeferredToolTokenCountCache)

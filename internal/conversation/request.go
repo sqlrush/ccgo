@@ -58,7 +58,9 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 		if err != nil {
 			return anthropic.Request{}, err
 		}
-		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitions(defs, history, model, r.deferredToolTokenCounter(ctx, model))
+		decision := toolSearchDecisionForRequest(model, defs, r.deferredToolTokenCounter(ctx, model))
+		r.emitToolSearchModeDecision(decision)
+		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitionsWithDecision(defs, history, decision.Enabled)
 	}
 	apiMessages := msgs.NormalizeForAPI(history)
 	if !toolSearchActive {
@@ -91,13 +93,17 @@ type deferredToolTokenCountCacheEntry struct {
 var deferredToolTokenCountCache sync.Map
 
 func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message, model string, tokenCounter deferredToolTokenCounter) ([]contracts.ToolDefinition, []string, bool) {
+	return filterToolSearchDefinitionsWithDecision(definitions, history, toolSearchDecisionForRequest(model, definitions, tokenCounter).Enabled)
+}
+
+func filterToolSearchDefinitionsWithDecision(definitions []contracts.ToolDefinition, history []contracts.Message, toolSearchEnabled bool) ([]contracts.ToolDefinition, []string, bool) {
 	if len(definitions) == 0 {
 		return definitions, nil, false
 	}
 	if !hasToolSearchDefinition(definitions) {
 		return applyDiscoveredToolReferences(definitions, history), nil, false
 	}
-	if !toolSearchEnabledForRequest(model, definitions, tokenCounter) {
+	if !toolSearchEnabled {
 		return loadAllDeferredTools(withoutToolSearchDefinition(definitions)), nil, false
 	}
 	deferredNames := deferredToolNames(definitions)
@@ -128,26 +134,111 @@ const (
 	toolSearchModeStandard toolSearchMode = "standard"
 )
 
+type toolSearchDecision struct {
+	Enabled                      bool
+	Mode                         toolSearchMode
+	Reason                       string
+	CheckedModel                 string
+	MCPToolCount                 int
+	UserType                     string
+	DeferredToolTokens           int
+	Threshold                    int
+	DeferredToolDescriptionChars int
+	CharThreshold                int
+}
+
 func toolSearchEnabledForRequest(model string, definitions []contracts.ToolDefinition, tokenCounter deferredToolTokenCounter) bool {
-	if !modelSupportsToolReference(model) {
-		return false
-	}
+	return toolSearchDecisionForRequest(model, definitions, tokenCounter).Enabled
+}
+
+func toolSearchDecisionForRequest(model string, definitions []contracts.ToolDefinition, tokenCounter deferredToolTokenCounter) toolSearchDecision {
 	mode := toolSearchModeFromEnv()
+	decision := toolSearchDecision{
+		Mode:         mode,
+		CheckedModel: model,
+		MCPToolCount: countMCPToolDefinitions(definitions),
+		UserType:     toolSearchUserType(),
+	}
+	if !modelSupportsToolReference(model) {
+		decision.Mode = toolSearchModeStandard
+		decision.Reason = "model_unsupported"
+		return decision
+	}
+	if !hasToolSearchDefinition(definitions) {
+		decision.Mode = toolSearchModeStandard
+		decision.Reason = "mcp_search_unavailable"
+		return decision
+	}
 	if mode == toolSearchModeStandard {
-		return false
+		decision.Reason = "standard_mode"
+		return decision
 	}
 	if os.Getenv("ENABLE_TOOL_SEARCH") == "" && !isFirstPartyAnthropicBaseURL(os.Getenv("ANTHROPIC_BASE_URL")) {
-		return false
+		decision.Reason = "non_first_party_base_url"
+		return decision
 	}
 	if mode == toolSearchModeTSTAuto {
+		threshold := autoToolSearchTokenThreshold(model)
 		if tokenCounter != nil {
 			if deferredToolTokens, ok := tokenCounter(definitions); ok {
-				return deferredToolTokens >= autoToolSearchTokenThreshold(model)
+				decision.DeferredToolTokens = deferredToolTokens
+				decision.Threshold = threshold
+				decision.Enabled = deferredToolTokens >= threshold
+				if decision.Enabled {
+					decision.Reason = "auto_above_threshold"
+				} else {
+					decision.Reason = "auto_below_threshold"
+				}
+				return decision
 			}
 		}
-		return deferredToolDescriptionChars(definitions) >= autoToolSearchCharThreshold(model)
+		chars := deferredToolDescriptionChars(definitions)
+		charThreshold := autoToolSearchCharThreshold(model)
+		decision.DeferredToolDescriptionChars = chars
+		decision.CharThreshold = charThreshold
+		decision.Enabled = chars >= charThreshold
+		if decision.Enabled {
+			decision.Reason = "auto_above_threshold"
+		} else {
+			decision.Reason = "auto_below_threshold"
+		}
+		return decision
 	}
-	return true
+	decision.Enabled = true
+	decision.Reason = "tst_enabled"
+	return decision
+}
+
+func countMCPToolDefinitions(definitions []contracts.ToolDefinition) int {
+	count := 0
+	for _, definition := range definitions {
+		if definition.MCP != nil {
+			count++
+		}
+	}
+	return count
+}
+
+func toolSearchUserType() string {
+	if userType := strings.TrimSpace(os.Getenv("USER_TYPE")); userType != "" {
+		return userType
+	}
+	return "external"
+}
+
+func (r Runner) emitToolSearchModeDecision(decision toolSearchDecision) {
+	r.emit(Event{Type: EventToolSearchDecision, ToolSearchModeDecision: &ToolSearchModeDecision{
+		Enabled:                      decision.Enabled,
+		Mode:                         string(decision.Mode),
+		Reason:                       decision.Reason,
+		CheckedModel:                 decision.CheckedModel,
+		MCPToolCount:                 decision.MCPToolCount,
+		UserType:                     decision.UserType,
+		DeferredToolTokens:           decision.DeferredToolTokens,
+		Threshold:                    decision.Threshold,
+		DeferredToolDescriptionChars: decision.DeferredToolDescriptionChars,
+		CharThreshold:                decision.CharThreshold,
+	}})
 }
 
 func (r Runner) deferredToolTokenCounter(ctx context.Context, modelName string) deferredToolTokenCounter {

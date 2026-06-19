@@ -88,6 +88,22 @@ func (r Runner) telemetryEvent(event Event) telemetrypkg.Event {
 		out.DeferredToolsDeltaQuerySource = event.DeferredToolsPoolChange.QuerySource
 		out.DeferredToolAttachmentTypes = event.DeferredToolsPoolChange.AttachmentTypesSeen
 	}
+	if event.ToolSearchModeDecision != nil {
+		enabled := event.ToolSearchModeDecision.Enabled
+		out.ToolSearchEnabled = &enabled
+		out.ToolSearchMode = event.ToolSearchModeDecision.Mode
+		out.ToolSearchReason = event.ToolSearchModeDecision.Reason
+		out.ToolSearchCheckedModel = event.ToolSearchModeDecision.CheckedModel
+		out.ToolSearchMCPToolCount = event.ToolSearchModeDecision.MCPToolCount
+		out.ToolSearchUserType = event.ToolSearchModeDecision.UserType
+		out.ToolSearchDeferredToolTokens = event.ToolSearchModeDecision.DeferredToolTokens
+		out.ToolSearchThreshold = event.ToolSearchModeDecision.Threshold
+		out.ToolSearchDeferredToolDescriptionChars = event.ToolSearchModeDecision.DeferredToolDescriptionChars
+		out.ToolSearchCharThreshold = event.ToolSearchModeDecision.CharThreshold
+		if out.Model == "" {
+			out.Model = event.ToolSearchModeDecision.CheckedModel
+		}
+	}
 	if event.Error != nil {
 		out.Error = event.Error.Error()
 	}

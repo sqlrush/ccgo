@@ -3409,6 +3409,9 @@ func runnerPolicySettings(runner conversation.Runner) contracts.Settings {
 }
 
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {
+	if !printStreamEventVisible(event.Type) {
+		return nil
+	}
 	out := printStreamEvent{
 		Type:         event.Type,
 		Message:      event.Message,
@@ -3432,6 +3435,15 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 		out.ErrorType, out.StatusCode, out.RequestID = printAPIErrorMetadata(event.Error)
 	}
 	return encoder.Encode(out)
+}
+
+func printStreamEventVisible(eventType conversation.EventType) bool {
+	switch eventType {
+	case conversation.EventToolSearchDecision, conversation.EventDeferredPoolChange:
+		return false
+	default:
+		return true
+	}
 }
 
 func printAPIErrorMetadata(err error) (string, int, string) {
