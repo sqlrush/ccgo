@@ -529,6 +529,81 @@ func TestPowerShellBackgroundProgressEvents(t *testing.T) {
 	}
 }
 
+func TestPowerShellBackgroundTimeoutProgressEvent(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	progressCh := make(chan contracts.ToolProgress, 8)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_timeout_progress",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Start-Sleep -Milliseconds 1000","run_in_background":true,"timeout":50}`),
+	}, tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCh <- progress
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	powerShellID := result.StructuredContent["powershell_id"].(string)
+	finished := waitForPowerShellProgress(t, progressCh, "powershell_background_finished")
+	if finished.ToolUseID != "toolu_powershell_background_timeout_progress" || finished.Data["powershell_id"] != powerShellID || finished.Data["status"] != "timed_out" {
+		t.Fatalf("finished progress = %#v", finished)
+	}
+	if finished.Data["exit_code"] != -1 || finished.Data["timed_out"] != true || finished.Data["cancelled"] != false {
+		t.Fatalf("timeout progress status = %#v", finished.Data)
+	}
+	if _, ok := finished.Data["command"]; ok {
+		t.Fatalf("timeout progress should not expose command: %#v", finished.Data)
+	}
+}
+
+func TestPowerShellBackgroundCancelProgressEvent(t *testing.T) {
+	requirePowerShell(t)
+	executor := powerShellExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	progressCh := make(chan contracts.ToolProgress, 8)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_cancel_progress",
+		Name:  "PowerShell",
+		Input: json.RawMessage(`{"command":"Start-Sleep -Seconds 5","run_in_background":true,"timeout":5000}`),
+	}, tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCh <- progress
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	powerShellID := result.StructuredContent["powershell_id"].(string)
+	started := waitForPowerShellProgress(t, progressCh, "powershell_background_started")
+	if started.Data["powershell_id"] != powerShellID {
+		t.Fatalf("started progress = %#v", started)
+	}
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_powershell_background_cancel_progress_kill",
+		Name:  "KillPowerShell",
+		Input: json.RawMessage(`{"powershell_id":` + strconvQuote(powerShellID) + `}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	finished := waitForPowerShellProgress(t, progressCh, "powershell_background_finished")
+	if finished.ToolUseID != "toolu_powershell_background_cancel_progress" || finished.Data["powershell_id"] != powerShellID || finished.Data["status"] != "cancelled" {
+		t.Fatalf("finished progress = %#v", finished)
+	}
+	if finished.Data["exit_code"] != -1 || finished.Data["timed_out"] != false || finished.Data["cancelled"] != true {
+		t.Fatalf("cancel progress status = %#v", finished.Data)
+	}
+	if _, ok := finished.Data["command"]; ok {
+		t.Fatalf("cancel progress should not expose command: %#v", finished.Data)
+	}
+}
+
 func TestPowerShellBackgroundTimeout(t *testing.T) {
 	requirePowerShell(t)
 	executor := powerShellExecutor(t)

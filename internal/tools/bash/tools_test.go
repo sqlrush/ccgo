@@ -625,6 +625,80 @@ func TestBashBackgroundProgressEvents(t *testing.T) {
 	}
 }
 
+func TestBashBackgroundTimeoutProgressEvent(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	progressCh := make(chan contracts.ToolProgress, 8)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_background_timeout_progress",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"sleep 1","run_in_background":true,"timeout":50}`),
+	}, tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCh <- progress
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bashID := result.StructuredContent["bash_id"].(string)
+	finished := waitForBashProgress(t, progressCh, "bash_background_finished")
+	if finished.ToolUseID != "toolu_bash_background_timeout_progress" || finished.Data["bash_id"] != bashID || finished.Data["status"] != "timed_out" {
+		t.Fatalf("finished progress = %#v", finished)
+	}
+	if finished.Data["exit_code"] != -1 || finished.Data["timed_out"] != true || finished.Data["cancelled"] != false {
+		t.Fatalf("timeout progress status = %#v", finished.Data)
+	}
+	if _, ok := finished.Data["command"]; ok {
+		t.Fatalf("timeout progress should not expose command: %#v", finished.Data)
+	}
+}
+
+func TestBashBackgroundCancelProgressEvent(t *testing.T) {
+	executor := bashExecutor(t)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, NewBackgroundState())
+	progressCh := make(chan contracts.ToolProgress, 8)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_background_cancel_progress",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"trap 'printf term; exit 42' TERM; while :; do sleep 1; done","run_in_background":true,"timeout":5000}`),
+	}, tool.ProgressFunc(func(progress contracts.ToolProgress) error {
+		progressCh <- progress
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bashID := result.StructuredContent["bash_id"].(string)
+	started := waitForBashProgress(t, progressCh, "bash_background_started")
+	if started.Data["bash_id"] != bashID {
+		t.Fatalf("started progress = %#v", started)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if _, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_background_cancel_progress_kill",
+		Name:  "KillBash",
+		Input: json.RawMessage(`{"bash_id":` + strconvQuote(bashID) + `}`),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	finished := waitForBashProgress(t, progressCh, "bash_background_finished")
+	if finished.ToolUseID != "toolu_bash_background_cancel_progress" || finished.Data["bash_id"] != bashID || finished.Data["status"] != "cancelled" {
+		t.Fatalf("finished progress = %#v", finished)
+	}
+	if finished.Data["exit_code"] != -1 || finished.Data["timed_out"] != false || finished.Data["cancelled"] != true {
+		t.Fatalf("cancel progress status = %#v", finished.Data)
+	}
+	if _, ok := finished.Data["command"]; ok {
+		t.Fatalf("cancel progress should not expose command: %#v", finished.Data)
+	}
+}
+
 func TestBashBackgroundTimeout(t *testing.T) {
 	executor := bashExecutor(t)
 	ctx := WithBackgroundState(tool.Context{

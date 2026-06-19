@@ -206,7 +206,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash/PowerShell 前台执行现在区分调用方 cancellation、timeout 和普通非零退出；context 取消会返回 `cancelled=true`、`timed_out=false`、`exit_code=-1`，并显示 cancelled 状态文本。
 - 本轮补充：Bash 和 Unix PowerShell 工具取消现在会先向受管 process group 发 SIGTERM，再用短 `WaitDelay` 兜底 SIGKILL；Bash 前台/后台取消测试通过 `trap TERM` 证明 cleanup signal 可被脚本收到。
 - 本轮补充：`BashOutput` 现在设置 100k 最大结果大小，和前台 `Bash` 一起覆盖大输出 tool-result preview 截断、完整输出落盘及 `full_output_path` 元数据。
-- 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且测试确保 progress 不携带 command 文本。
+- 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且 completed、timed_out、cancelled 终态测试确保 progress 不携带 command 文本。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。
 - 本轮补充：通用 tool schema validator 现在支持 `enum`，可直接执行 Grep output mode、NotebookEdit edit mode/cell type、Todo status/priority、Task target/action、LSP severity 等工具 schema 的枚举契约。
 - 本轮补充：通用 tool schema validator 现在支持数字 `minimum`/`maximum`，可直接执行 LSPDiagnostics `limit` 等工具 schema 的数值范围契约。
