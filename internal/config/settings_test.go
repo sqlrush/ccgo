@@ -351,6 +351,8 @@ func TestMergeSettings(t *testing.T) {
 	bridgeEnabled := true
 	telemetryDisabled := false
 	telemetryEnabled := true
+	tenguDisabled := false
+	tenguEnabled := true
 	a := contracts.Settings{
 		Env: map[string]string{"A": "1"},
 		Permissions: &contracts.PermissionsSetting{
@@ -363,8 +365,9 @@ func TestMergeSettings(t *testing.T) {
 			SymlinkDirectories: []string{"cache"},
 		},
 		Advanced: &contracts.AdvancedSetting{
-			Bridge:    &bridgeEnabled,
-			Telemetry: &telemetryDisabled,
+			Bridge:          &bridgeEnabled,
+			Telemetry:       &telemetryDisabled,
+			TenguGlacier2XR: &tenguDisabled,
 		},
 		TelemetryExport: &contracts.TelemetryExportSetting{
 			Path: "/tmp/old.jsonl",
@@ -390,7 +393,8 @@ func TestMergeSettings(t *testing.T) {
 			SymlinkDirectories: []string{"node_modules"},
 		},
 		Advanced: &contracts.AdvancedSetting{
-			Telemetry: &telemetryEnabled,
+			Telemetry:       &telemetryEnabled,
+			TenguGlacier2XR: &tenguEnabled,
 		},
 		TelemetryExport: &contracts.TelemetryExportSetting{
 			Path: "/tmp/new.jsonl",
@@ -422,7 +426,10 @@ func TestMergeSettings(t *testing.T) {
 	if len(merged.Worktree.SymlinkDirectories) != 2 || merged.Worktree.SymlinkDirectories[0] != "cache" || merged.Worktree.SymlinkDirectories[1] != "node_modules" {
 		t.Fatalf("worktree symlink dirs = %#v", merged.Worktree.SymlinkDirectories)
 	}
-	if merged.Advanced == nil || merged.Advanced.Bridge == nil || !*merged.Advanced.Bridge || merged.Advanced.Telemetry == nil || !*merged.Advanced.Telemetry {
+	if merged.Advanced == nil ||
+		merged.Advanced.Bridge == nil || !*merged.Advanced.Bridge ||
+		merged.Advanced.Telemetry == nil || !*merged.Advanced.Telemetry ||
+		merged.Advanced.TenguGlacier2XR == nil || !*merged.Advanced.TenguGlacier2XR {
 		t.Fatalf("advanced = %#v", merged.Advanced)
 	}
 	if merged.TelemetryExport == nil ||

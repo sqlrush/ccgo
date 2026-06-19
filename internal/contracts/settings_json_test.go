@@ -32,7 +32,7 @@ func TestSettingsPreservesUnknownFields(t *testing.T) {
 }
 
 func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
-	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true},"telemetryExport":{"path":"/tmp/events.jsonl","url":"https://example.com/telemetry","headers":{"Authorization":"Bearer token"}},"remote":{"defaultEnvironmentId":"env-prod","registrationUrl":"https://example.com/register","authToken":"remote-token"}}`)
+	input := []byte(`{"advanced":{"bridge":true,"lsp":false,"telemetry":true,"computerUse":true,"tengu_glacier_2xr":true},"telemetryExport":{"path":"/tmp/events.jsonl","url":"https://example.com/telemetry","headers":{"Authorization":"Bearer token"}},"remote":{"defaultEnvironmentId":"env-prod","registrationUrl":"https://example.com/register","authToken":"remote-token"}}`)
 	var settings Settings
 	if err := json.Unmarshal(input, &settings); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,9 @@ func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
 	if settings.Advanced.LSP == nil || *settings.Advanced.LSP {
 		t.Fatalf("advanced lsp = %#v", settings.Advanced)
 	}
-	if settings.Advanced.Telemetry == nil || !*settings.Advanced.Telemetry || settings.Advanced.ComputerUse == nil || !*settings.Advanced.ComputerUse {
+	if settings.Advanced.Telemetry == nil || !*settings.Advanced.Telemetry ||
+		settings.Advanced.ComputerUse == nil || !*settings.Advanced.ComputerUse ||
+		settings.Advanced.TenguGlacier2XR == nil || !*settings.Advanced.TenguGlacier2XR {
 		t.Fatalf("advanced gates = %#v", settings.Advanced)
 	}
 	if settings.Extra["advanced"] != nil {
@@ -66,6 +68,17 @@ func TestSettingsParsesAdvancedFeatureGates(t *testing.T) {
 	}
 	if settings.Extra["remote"] != nil {
 		t.Fatalf("remote should be a known setting, extra = %#v", settings.Extra)
+	}
+}
+
+func TestSettingsParsesAdvancedTenguGlacierCamelAlias(t *testing.T) {
+	input := []byte(`{"advanced":{"tenguGlacier2xr":true}}`)
+	var settings Settings
+	if err := json.Unmarshal(input, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings.Advanced == nil || settings.Advanced.TenguGlacier2XR == nil || !*settings.Advanced.TenguGlacier2XR {
+		t.Fatalf("advanced = %#v", settings.Advanced)
 	}
 }
 

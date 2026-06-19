@@ -203,7 +203,7 @@ M8/M2 补充：conversation request 现在会在发送 beta `defer_loading` / `t
 
 M8/M2 补充：MCP tools 现在按官方 `isMcp` 语义进入 deferred tool pool，除非显式 `always_load` 覆盖；Anthropic tool schema 序列化会为 MCP tools 输出 `defer_loading`，ToolSearch auto 的 token-count 请求也会计入 MCP tools 但以 loaded schema 计数；configured MCP toolset attach/close 会清空 ToolSearch token-count cache，避免 MCP server lifecycle 变化后复用旧计数。token-count VCR 仍未完成。
 
-M8/M2 补充：`USER_TYPE=ant` 下 ToolSearch deferred tool 公告改走官方 `deferred_tools_delta` attachment：runner 会扫描历史 attachment 计算新增/移除 deferred 工具，生成并持久化 attachment，API normalization 会把 attachment 渲染为官方 ToolSearch 可用/断开提示；delta 模式不再注入临时 `<available-deferred-tools>` prepend。更深的 analytics/pool-change telemetry 和非 ant feature gate 仍未完成。
+M8/M2 补充：`USER_TYPE=ant` 或 settings `advanced.tengu_glacier_2xr`/`advanced.tenguGlacier2xr` 启用时，ToolSearch deferred tool 公告改走官方 `deferred_tools_delta` attachment：runner 会扫描历史 attachment 计算新增/移除 deferred 工具，生成并持久化 attachment，API normalization 会把 attachment 渲染为官方 ToolSearch 可用/断开提示；delta 模式不再注入临时 `<available-deferred-tools>` prepend。更深的 analytics/pool-change telemetry 仍未完成。
 
 M8/M2 补充：当本次 request 未启用 `ToolSearch` 时，conversation request 现在会从 API user `tool_result.content` 中剥离历史 `tool_reference` blocks；纯 reference 结果会替换为官方占位文本 `[Tool references removed - tool search not enabled]`，剥离发生在 discovered-tool 扫描之后，避免影响后续 loaded 工具恢复。
 

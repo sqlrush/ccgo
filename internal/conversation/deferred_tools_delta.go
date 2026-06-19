@@ -15,7 +15,7 @@ type deferredToolsDelta struct {
 }
 
 func (r Runner) maybeAppendDeferredToolsDeltaAttachment(ctx context.Context, history []contracts.Message) ([]contracts.Message, *contracts.Message, error) {
-	if !deferredToolsDeltaEnabled() || r.Tools.Registry == nil {
+	if !r.deferredToolsDeltaEnabled() || r.Tools.Registry == nil {
 		return history, nil, nil
 	}
 	definitions, err := r.Tools.Registry.Definitions(toolPromptContext(r))

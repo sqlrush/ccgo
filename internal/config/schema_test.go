@@ -76,7 +76,8 @@ func TestSettingsJSONSchemaIncludesNestedTypesAndEnums(t *testing.T) {
 	advanced := properties["advanced"].(map[string]any)
 	advancedProps := advanced["properties"].(map[string]any)
 	if advancedProps["bridge"].(map[string]any)["type"] != "boolean" ||
-		advancedProps["computerUse"].(map[string]any)["type"] != "boolean" {
+		advancedProps["computerUse"].(map[string]any)["type"] != "boolean" ||
+		advancedProps["tengu_glacier_2xr"].(map[string]any)["type"] != "boolean" {
 		t.Fatalf("advanced schema = %#v", advancedProps)
 	}
 }

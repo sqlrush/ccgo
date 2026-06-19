@@ -4457,6 +4457,7 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"Chrome: (unset)",
 		"Computer use: (unset)",
 		"Native integrations: (unset)",
+		"tengu_glacier_2xr: (unset)",
 	}, nil)
 	assertConfigShow("/config integrations", []string{
 		"Config advanced integrations",
@@ -4466,6 +4467,7 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"Chrome: (unset)",
 		"Computer use: (unset)",
 		"Native integrations: (unset)",
+		"tengu_glacier_2xr: (unset)",
 	}, nil)
 	assertConfigShow("/config show schema", []string{
 		"Config settings schema",
@@ -8543,6 +8545,68 @@ func TestRunnerAddsDeferredToolsDeltaAttachmentForAnt(t *testing.T) {
 	}
 	if _, ok := deferredToolsDeltaAttachmentPayload(*entries[1].Message); !ok {
 		t.Fatalf("transcript attachment = %#v", entries[1].Message)
+	}
+}
+
+func TestRunnerAddsDeferredToolsDeltaAttachmentForFeatureGate(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "true")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		calls: []fakeCall{{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}}},
+	}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	enabled := true
+	runner := Runner{
+		Client:      client,
+		Tools:       tool.NewExecutor(registry),
+		Model:       "sonnet",
+		MaxTokens:   100,
+		SessionID:   "sess_delta_feature",
+		SessionPath: transcriptPath,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			Advanced: &contracts.AdvancedSetting{TenguGlacier2XR: &enabled},
+		}},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 3 || result.Messages[1].Type != contracts.MessageAttachment {
+		t.Fatalf("messages = %#v", result.Messages)
+	}
+	payload, ok := deferredToolsDeltaAttachmentPayload(result.Messages[1])
+	if !ok || strings.Join(stringSliceValue(payload["addedNames"]), ",") != "TinyDeferred" {
+		t.Fatalf("attachment payload = %#v ok=%v", payload, ok)
+	}
+	if len(client.requests) != 1 || len(client.requests[0].Messages) != 2 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	requestText := client.requests[0].Messages[1].Content[0].Text
+	if strings.Contains(requestText, "<available-deferred-tools>") ||
+		!strings.Contains(requestText, "The following deferred tools are now available via ToolSearch:\nTinyDeferred") {
+		t.Fatalf("request delta text = %q", requestText)
+	}
+	entries, err := session.Load(transcriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 || entries[1].Type != contracts.MessageAttachment || entries[1].Message == nil {
+		t.Fatalf("transcript entries = %#v", entries)
 	}
 }
 

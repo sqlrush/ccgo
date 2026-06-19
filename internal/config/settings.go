@@ -324,6 +324,9 @@ func mergeAdvancedSetting(a, b *contracts.AdvancedSetting) *contracts.AdvancedSe
 		if b.NativeIntegrations != nil {
 			cp.NativeIntegrations = clonePtr(b.NativeIntegrations)
 		}
+		if b.TenguGlacier2XR != nil {
+			cp.TenguGlacier2XR = clonePtr(b.TenguGlacier2XR)
+		}
 		return &cp
 	}
 	out := *a
@@ -348,6 +351,9 @@ func mergeAdvancedSetting(a, b *contracts.AdvancedSetting) *contracts.AdvancedSe
 	if a.NativeIntegrations != nil {
 		out.NativeIntegrations = clonePtr(a.NativeIntegrations)
 	}
+	if a.TenguGlacier2XR != nil {
+		out.TenguGlacier2XR = clonePtr(a.TenguGlacier2XR)
+	}
 	if b.Bridge != nil {
 		out.Bridge = clonePtr(b.Bridge)
 	}
@@ -368,6 +374,9 @@ func mergeAdvancedSetting(a, b *contracts.AdvancedSetting) *contracts.AdvancedSe
 	}
 	if b.NativeIntegrations != nil {
 		out.NativeIntegrations = clonePtr(b.NativeIntegrations)
+	}
+	if b.TenguGlacier2XR != nil {
+		out.TenguGlacier2XR = clonePtr(b.TenguGlacier2XR)
 	}
 	return &out
 }

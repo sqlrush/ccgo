@@ -132,6 +132,7 @@ type AdvancedSetting struct {
 	Voice              *bool `json:"voice,omitempty"`
 	ComputerUse        *bool `json:"computerUse,omitempty"`
 	NativeIntegrations *bool `json:"nativeIntegrations,omitempty"`
+	TenguGlacier2XR    *bool `json:"tengu_glacier_2xr,omitempty"`
 }
 
 type PermissionsSetting struct {

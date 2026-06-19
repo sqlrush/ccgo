@@ -3061,6 +3061,7 @@ func formatAdvancedSettings(setting *contracts.AdvancedSetting) string {
 		"Voice: " + boolPtrEnabledText(advancedBool(setting, "voice")),
 		"Computer use: " + boolPtrEnabledText(advancedBool(setting, "computerUse")),
 		"Native integrations: " + boolPtrEnabledText(advancedBool(setting, "nativeIntegrations")),
+		"tengu_glacier_2xr: " + boolPtrEnabledText(advancedBool(setting, "tengu_glacier_2xr")),
 	}, "\n")
 }
 
@@ -3076,6 +3077,7 @@ func addConfigAdvancedSearchResults(add func(string, string, ...string), setting
 		{Name: "voice", Value: advancedBool(setting, "voice")},
 		{Name: "computer use", Value: advancedBool(setting, "computerUse")},
 		{Name: "native integrations", Value: advancedBool(setting, "nativeIntegrations")},
+		{Name: "tengu_glacier_2xr", Value: advancedBool(setting, "tengu_glacier_2xr")},
 	} {
 		state := boolPtrEnabledText(item.Value)
 		add("advanced", item.Name+" "+state, item.Name, state)
@@ -3101,6 +3103,8 @@ func advancedBool(setting *contracts.AdvancedSetting, name string) *bool {
 		return setting.ComputerUse
 	case "nativeIntegrations":
 		return setting.NativeIntegrations
+	case "tengu_glacier_2xr", "tenguGlacier2xr":
+		return setting.TenguGlacier2XR
 	default:
 		return nil
 	}
