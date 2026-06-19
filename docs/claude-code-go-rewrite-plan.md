@@ -316,6 +316,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`/cost status`、`/cost current` 和 `/cost usage` 现在复用 `/cost` totals no-query 本地路径，未知 cost 子命令仍保持显式未实现提示，`/cost breakdown`/`show` 继续输出逐消息明细。
 - 本轮补充：`/memory files` 和 `/memory ls` 现在复用 `/memory list` 的 no-query 本地记忆文件列表路径，`/memory status` 仍保持会话/相关记忆概览。
 - 本轮补充：`/status <section>` 现在复用 `/status show <section>` 的 section alias normalization，`/status integrations`、`/status diagnostics` 等直接调用不会再落入 unsupported subcommand 分支。
+- 本轮补充：`/mcp refresh` 和 `/mcp reload` 现在走 no-query 本地刷新路径，会重新检查 settings 文件变化并刷新 plugin MCP server app-state，返回刷新摘要而不是落入 unsupported subcommand。
 - 本轮补充：Bash destructive 分类会递归检查未 single-quoted 的 `$()`、backtick 和 subshell `(...)` 内容，嵌套破坏性命令会触发 destructive 标记。
 - 本轮补充：PowerShell destructive 分类会递归检查未 single-quoted 的括号表达式、`$()` 子表达式和 scriptblock `{...}`，嵌套 `Remove-Item`/mutating cmdlet 不再只停留在 not-read-only 状态。
 - 本轮补充：PowerShell read-only 分类补齐常见 pipeline alias canonicalization，包括 `select`/`sort`/`group`/`where`/`?`、`ft`/`fl`/`fw`/`fc` 和 `measure`，复用现有参数表达式 guard。

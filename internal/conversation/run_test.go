@@ -6470,6 +6470,55 @@ func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunnerMCPSlashCommandRefreshesPluginServerState(t *testing.T) {
+	project := t.TempDir()
+	pluginDir := filepath.Join(project, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+		"name": "demo",
+		"mcpServers": {
+			"plugin:docs": {"type": "http", "url": "https://example.com/mcp"}
+		}
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_mcp_refresh",
+		WorkingDirectory: project,
+		MCP:              &MCPConfig{CWD: project},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp refresh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP configuration refreshed.",
+		"Settings files changed: false",
+		"Plugin MCP servers: 1",
+		"Configured MCP servers: 1",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp refresh missing %q: %q", want, text)
+		}
+	}
+	if server := runner.MCP.PluginServers["plugin:docs"]; server.URL != "https://example.com/mcp" || server.PluginSource != "demo" {
+		t.Fatalf("plugin MCP servers = %#v", runner.MCP.PluginServers)
+	}
+
+	usage, err := runner.RunTurn(context.Background(), result.Messages, messages.UserText("/mcp refresh alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := usage.Messages[len(usage.Messages)-1].Content[0].Text; got != "Usage: /mcp refresh" {
+		t.Fatalf("mcp refresh usage = %q", got)
+	}
+}
+
 func TestRunnerMCPSlashCommandUpdatesPolicySettings(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)

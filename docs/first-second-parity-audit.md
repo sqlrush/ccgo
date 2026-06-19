@@ -84,6 +84,7 @@ Anthropic API 和 conversation：
 - `/memory list`, `/memory files`, and `/memory ls` now take the no-query local file-list path used by `/memory show`, while `/memory status` continues to report the session/relevant-memory summary.
 - `/native clipboard status|show` now takes a no-query local status path that reports the session clipboard state and adapter availability without reading, writing, or displaying clipboard text.
 - `/native voice status|show` and `/native computer status|show` now take no-query local status paths that report the session plan path, adapter availability, selected commands, and voice/computer-use runtime parameters without starting capture or input actions.
+- `/mcp refresh` and `/mcp reload` now take a no-query local refresh path that checks settings-file changes, refreshes plugin MCP server app-state, and reports configured/plugin MCP server counts instead of falling into the unsupported-subcommand branch.
 - `/mcp <server-name>` now takes the no-query local server-detail path used by `/mcp show <server-name>` when the name matches a configured settings or plugin MCP server, while unknown one-word subcommands still report unsupported.
 - `/plugin <plugin-name>` now takes the no-query local plugin-detail path used by `/plugin show <plugin-name>` when the name matches a local plugin manifest, while unknown one-word subcommands still report unsupported.
 - `/model show`, `/model info`, and `/model current` now take the no-query current-model path instead of treating those words as custom model names and mutating the runner model.

@@ -5562,6 +5562,8 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		case "list", "status":
 		case "show", "info":
 			return r.formatMCPServerShow(args)
+		case "refresh", "reload":
+			return r.formatMCPRefreshSummary(args)
 		case "search", "find":
 			query := subcommandRemainder(raw, args[0])
 			if strings.TrimSpace(query) == "" {
@@ -5593,6 +5595,26 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		lines = append(lines, fmt.Sprintf("- %s (%s): %s%s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config), status))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMCPRefreshSummary(args []string) string {
+	if len(args) > 1 {
+		return "Usage: /mcp " + args[0]
+	}
+	if r.MCP == nil {
+		return "No MCP configuration is loaded."
+	}
+	settingsChanged, err := r.RefreshSettingsFiles()
+	if err != nil {
+		return "Failed to refresh MCP settings files: " + err.Error()
+	}
+	r.MCP.refreshPluginServers()
+	return strings.Join([]string{
+		"MCP configuration refreshed.",
+		"Settings files changed: " + strconv.FormatBool(settingsChanged),
+		fmt.Sprintf("Plugin MCP servers: %d", len(r.MCP.PluginServers)),
+		fmt.Sprintf("Configured MCP servers: %d", len(r.mcpServers())),
+	}, "\n")
 }
 
 func (r Runner) formatMCPServerSearch(query string) string {
