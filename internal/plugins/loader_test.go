@@ -210,6 +210,60 @@ func TestLoadPluginDirsWithSettingsSkipsDisabledPlugins(t *testing.T) {
 	}
 }
 
+func TestMarketplacePolicyEnforcesBlockedAndStrictSettings(t *testing.T) {
+	policy := NewMarketplacePolicy(contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"internal": map[string]any{"url": "https://market.example"},
+		},
+		StrictKnownMarketplaces: []any{
+			"official",
+			map[string]any{"name": "enterprise"},
+		},
+		BlockedMarketplaces: []any{
+			"official",
+			map[string]any{"hostPattern": "*.blocked.example"},
+		},
+	})
+
+	if !policy.StrictMode() {
+		t.Fatal("strict mode should be active")
+	}
+	if decision := policy.Decision("official"); decision.Allowed || !strings.Contains(decision.Reason, "blocked") {
+		t.Fatalf("official decision = %#v", decision)
+	}
+	if decision := policy.Decision("enterprise"); !decision.Allowed {
+		t.Fatalf("enterprise decision = %#v", decision)
+	}
+	if decision := policy.Decision("internal"); decision.Allowed || !strings.Contains(decision.Reason, "strictKnownMarketplaces") {
+		t.Fatalf("internal decision = %#v", decision)
+	}
+	if decision := policy.Decision("*.blocked.example"); decision.Allowed || !strings.Contains(decision.Reason, "blocked") {
+		t.Fatalf("hostPattern decision = %#v", decision)
+	}
+}
+
+func TestMarketplacePolicyDefaultsToAllowUnlessBlocked(t *testing.T) {
+	policy := NewMarketplacePolicy(contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"internal": map[string]any{"url": "https://market.example"},
+		},
+		BlockedMarketplaces: []any{"blocked"},
+	})
+
+	if decision := policy.Decision("internal"); !decision.Allowed || decision.Name != "internal" {
+		t.Fatalf("internal decision = %#v", decision)
+	}
+	if decision := policy.Decision("new-market"); !decision.Allowed || decision.Name != "new-market" {
+		t.Fatalf("new market decision = %#v", decision)
+	}
+	if decision := policy.Decision("blocked"); decision.Allowed || !strings.Contains(decision.Reason, "blocked") {
+		t.Fatalf("blocked decision = %#v", decision)
+	}
+	if decision := policy.Decision(" "); decision.Allowed || !strings.Contains(decision.Reason, "empty") {
+		t.Fatalf("empty decision = %#v", decision)
+	}
+}
+
 func TestProjectPluginDirsWalksToGitRoot(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg", "sub")

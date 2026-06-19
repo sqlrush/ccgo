@@ -4872,13 +4872,14 @@ func TestRunnerPluginReportsMarketplacesAndConfigDetails(t *testing.T) {
 		"Extra known marketplaces: 1",
 		"Strict known marketplaces: 2",
 		"Blocked marketplaces: 1",
+		"Marketplace policy: strict allowlist active",
 		"Extra known marketplaces:",
-		"- internal",
+		"- internal (blocked: not listed in settings strictKnownMarketplaces)",
 		"Strict known marketplaces:",
-		"- enterprise",
-		"- official",
+		"- enterprise (allowed)",
+		"- official (allowed)",
 		"Blocked marketplaces:",
-		"- blocked",
+		"- blocked (blocked: blocked by settings blockedMarketplaces)",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("plugin marketplaces missing %q: %q", want, text)

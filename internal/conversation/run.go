@@ -3395,16 +3395,22 @@ func (r Runner) formatPluginSearch(query string) string {
 
 func (r Runner) formatPluginMarketplaces() string {
 	merged := r.mergedSettings()
+	policy := pluginpkg.NewMarketplacePolicy(merged)
 	lines := []string{
 		"Plugin marketplaces",
 		fmt.Sprintf("Extra known marketplaces: %d", len(merged.ExtraKnownMarketplaces)),
 		fmt.Sprintf("Strict known marketplaces: %d", len(merged.StrictKnownMarketplaces)),
 		fmt.Sprintf("Blocked marketplaces: %d", len(merged.BlockedMarketplaces)),
 	}
+	if policy.StrictMode() {
+		lines = append(lines, "Marketplace policy: strict allowlist active")
+	} else {
+		lines = append(lines, "Marketplace policy: allow unless blocked")
+	}
 	if len(merged.ExtraKnownMarketplaces) > 0 {
 		lines = append(lines, "Extra known marketplaces:")
-		for _, name := range firstStrings(sortedAnyMapKeys(merged.ExtraKnownMarketplaces), 20) {
-			lines = append(lines, "- "+name)
+		for _, name := range firstStrings(policy.ExtraNames(), 20) {
+			lines = append(lines, formatMarketplacePolicyLine(name, policy))
 		}
 		if len(merged.ExtraKnownMarketplaces) > 20 {
 			lines = append(lines, fmt.Sprintf("Showing 20 of %d extra known marketplaces.", len(merged.ExtraKnownMarketplaces)))
@@ -3412,8 +3418,8 @@ func (r Runner) formatPluginMarketplaces() string {
 	}
 	if len(merged.StrictKnownMarketplaces) > 0 {
 		lines = append(lines, "Strict known marketplaces:")
-		for _, name := range firstStrings(pluginAnyListLabels(merged.StrictKnownMarketplaces), 20) {
-			lines = append(lines, "- "+name)
+		for _, name := range firstStrings(policy.StrictNames(), 20) {
+			lines = append(lines, formatMarketplacePolicyLine(name, policy))
 		}
 		if len(merged.StrictKnownMarketplaces) > 20 {
 			lines = append(lines, fmt.Sprintf("Showing 20 of %d strict known marketplaces.", len(merged.StrictKnownMarketplaces)))
@@ -3421,14 +3427,23 @@ func (r Runner) formatPluginMarketplaces() string {
 	}
 	if len(merged.BlockedMarketplaces) > 0 {
 		lines = append(lines, "Blocked marketplaces:")
-		for _, name := range firstStrings(pluginAnyListLabels(merged.BlockedMarketplaces), 20) {
-			lines = append(lines, "- "+name)
+		for _, name := range firstStrings(policy.BlockedNames(), 20) {
+			lines = append(lines, formatMarketplacePolicyLine(name, policy))
 		}
 		if len(merged.BlockedMarketplaces) > 20 {
 			lines = append(lines, fmt.Sprintf("Showing 20 of %d blocked marketplaces.", len(merged.BlockedMarketplaces)))
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatMarketplacePolicyLine(name string, policy pluginpkg.MarketplacePolicy) string {
+	decision := policy.Decision(name)
+	status := "allowed"
+	if !decision.Allowed {
+		status = "blocked: " + decision.Reason
+	}
+	return fmt.Sprintf("- %s (%s)", name, status)
 }
 
 func (r Runner) formatPluginConfig(args []string) string {
