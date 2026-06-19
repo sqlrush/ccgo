@@ -2534,6 +2534,99 @@ func TestRunPluginMarketplaceUpdateCLI(t *testing.T) {
 	}
 }
 
+func TestRunPluginMarketplaceAddRemoveCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marketDir := filepath.Join(t.TempDir(), "team-market")
+	if err := os.MkdirAll(marketDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "marketplace", "add", "--type", "directory", "--install-location", "project", "team", marketDir}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("add exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Marketplace team added.") {
+		t.Fatalf("add stdout = %q", stdout.String())
+	}
+	settings := readTestSettingsJSON(t, filepath.Join(configHome, "settings.json"))
+	extraKnown := settings["extraKnownMarketplaces"].(map[string]any)
+	team := extraKnown["team"].(map[string]any)
+	source := team["source"].(map[string]any)
+	if source["source"] != "directory" || source["path"] != marketDir || team["installLocation"] != "project" {
+		t.Fatalf("team marketplace settings = %#v", team)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "list"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("list exit = %d stderr=%s", code, stderr.String())
+	}
+	for _, want := range []string{
+		"Configured marketplaces:",
+		"- team",
+		"Source: Directory (" + marketDir + ")",
+		"Install location: project",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("list stdout missing %q: %q", want, stdout.String())
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "team", "github:owner/repo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("update add exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Marketplace team updated.") {
+		t.Fatalf("update add stdout = %q", stdout.String())
+	}
+	settings = readTestSettingsJSON(t, filepath.Join(configHome, "settings.json"))
+	team = settings["extraKnownMarketplaces"].(map[string]any)["team"].(map[string]any)
+	source = team["source"].(map[string]any)
+	if source["source"] != "github" || source["repo"] != "owner/repo" {
+		t.Fatalf("updated team marketplace settings = %#v", team)
+	}
+	if _, ok := team["installLocation"]; ok {
+		t.Fatalf("installLocation should be cleared on update: %#v", team)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "remove", "team"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("remove exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Marketplace team removed.") {
+		t.Fatalf("remove stdout = %q", stdout.String())
+	}
+	settings = readTestSettingsJSON(t, filepath.Join(configHome, "settings.json"))
+	if _, ok := settings["extraKnownMarketplaces"]; ok {
+		t.Fatalf("extraKnownMarketplaces should be removed: %#v", settings)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "remove", "team"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), `marketplace "team" not found in user settings`) {
+		t.Fatalf("missing remove exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "--scope", "project", "team", "owner/repo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), `scope "project" is not supported yet`) {
+		t.Fatalf("project add scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPluginMarketplaceListEmpty(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)

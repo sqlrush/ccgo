@@ -577,8 +577,12 @@ func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Wr
 		return 2
 	}
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "add":
+		return runPluginMarketplaceAddCLI(state, args[1:], stdout, stderr)
 	case "list", "ls":
 		return runPluginMarketplaceListCLI(state, args[1:], stdout, stderr)
+	case "remove", "rm":
+		return runPluginMarketplaceRemoveCLI(state, args[1:], stdout, stderr)
 	case "update":
 		return runPluginMarketplaceUpdateCLI(state, args[1:], stdout, stderr)
 	default:
@@ -630,6 +634,94 @@ func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout i
 			fmt.Fprintf(stdout, "  Install location: %s\n", marketplace.InstallLocation)
 		}
 	}
+	return 0
+}
+
+func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	_ = state
+	flags := flag.NewFlagSet("claude plugin marketplace add", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	scope := "user"
+	sourceType := ""
+	installLocation := ""
+	flags.StringVar(&scope, "scope", scope, "settings scope")
+	flags.StringVar(&scope, "s", scope, "settings scope")
+	flags.StringVar(&sourceType, "type", sourceType, "marketplace source type")
+	flags.StringVar(&sourceType, "t", sourceType, "marketplace source type")
+	flags.StringVar(&installLocation, "install-location", installLocation, "preferred install location")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 2 {
+		fmt.Fprintln(stderr, "ccgo plugin marketplace add: usage: claude plugin marketplace add [--scope user] [--type url|github|git|npm|directory|file] <name> <source>")
+		return 2
+	}
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		scope = "user"
+	}
+	if scope != "user" {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace add: scope %q is not supported yet; use user\n", scope)
+		return 2
+	}
+	name := strings.TrimSpace(flags.Arg(0))
+	source, err := pluginCLIMarketplaceSourceFromArg(sourceType, strings.TrimSpace(flags.Arg(1)))
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace add: %v\n", err)
+		return 2
+	}
+	existed, err := config.SetUserMarketplace(name, source, installLocation)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace add: %v\n", err)
+		return 1
+	}
+	action := "added"
+	if existed {
+		action = "updated"
+	}
+	fmt.Fprintf(stdout, "Marketplace %s %s.\n", name, action)
+	return 0
+}
+
+func runPluginMarketplaceRemoveCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	_ = state
+	flags := flag.NewFlagSet("claude plugin marketplace remove", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	scope := "user"
+	flags.StringVar(&scope, "scope", scope, "settings scope")
+	flags.StringVar(&scope, "s", scope, "settings scope")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "ccgo plugin marketplace remove: usage: claude plugin marketplace remove [--scope user] <name>")
+		return 2
+	}
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		scope = "user"
+	}
+	if scope != "user" {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: scope %q is not supported yet; use user\n", scope)
+		return 2
+	}
+	name := strings.TrimSpace(flags.Arg(0))
+	removed, err := config.RemoveUserMarketplace(name)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: %v\n", err)
+		return 1
+	}
+	if !removed {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace remove: marketplace %q not found in user settings\n", name)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Marketplace %s removed.\n", name)
 	return 0
 }
 
@@ -892,6 +984,73 @@ func pluginCLIMarketplaceSourceText(marketplace pluginCLIMarketplaceEntry) strin
 		return "Settings"
 	}
 	return strings.TrimSpace(marketplace.Source)
+}
+
+func pluginCLIMarketplaceSourceFromArg(sourceType string, value string) (map[string]any, error) {
+	sourceType, value = pluginCLINormalizeMarketplaceSourceArg(sourceType, value)
+	if strings.TrimSpace(value) == "" {
+		return nil, fmt.Errorf("marketplace source is required")
+	}
+	if sourceType == "" {
+		sourceType = pluginCLIInferMarketplaceSourceType(value)
+	}
+	switch sourceType {
+	case "url":
+		return map[string]any{"source": "url", "url": value}, nil
+	case "github":
+		return map[string]any{"source": "github", "repo": value}, nil
+	case "git":
+		return map[string]any{"source": "git", "url": value}, nil
+	case "npm":
+		return map[string]any{"source": "npm", "package": value}, nil
+	case "directory":
+		return map[string]any{"source": "directory", "path": value}, nil
+	case "file":
+		return map[string]any{"source": "file", "path": value}, nil
+	default:
+		return nil, fmt.Errorf("unsupported marketplace source type %q; use --type url|github|git|npm|directory|file", sourceType)
+	}
+}
+
+func pluginCLINormalizeMarketplaceSourceArg(sourceType string, value string) (string, string) {
+	sourceType = strings.ToLower(strings.TrimSpace(sourceType))
+	value = strings.TrimSpace(value)
+	if sourceType != "" {
+		return sourceType, value
+	}
+	for _, prefix := range []string{"github:", "git:", "npm:", "directory:", "file:", "url:"} {
+		if !strings.HasPrefix(strings.ToLower(value), prefix) {
+			continue
+		}
+		return strings.TrimSuffix(prefix, ":"), strings.TrimSpace(value[len(prefix):])
+	}
+	return "", value
+}
+
+func pluginCLIInferMarketplaceSourceType(value string) string {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		if strings.HasSuffix(lower, ".git") {
+			return "git"
+		}
+		return "url"
+	}
+	if strings.HasPrefix(value, "git@") || strings.HasSuffix(lower, ".git") {
+		return "git"
+	}
+	if info, err := os.Stat(value); err == nil {
+		if info.IsDir() {
+			return "directory"
+		}
+		return "file"
+	}
+	if strings.HasPrefix(value, "@") {
+		return "npm"
+	}
+	if strings.Count(value, "/") == 1 && !strings.ContainsAny(value, `\ :`) && !strings.HasPrefix(value, ".") {
+		return "github"
+	}
+	return ""
 }
 
 func pluginCLIID(plugin pluginpkg.LoadedPlugin) string {
