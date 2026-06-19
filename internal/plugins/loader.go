@@ -363,6 +363,10 @@ func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry
 			for _, root := range pluginRootsFromMarketplaceGit(source) {
 				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
 			}
+		case "github":
+			for _, root := range pluginRootsFromMarketplaceGitHub(source) {
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+			}
 		}
 	}
 	return entries
@@ -401,7 +405,14 @@ func pluginRootsFromMarketplaceURL(source map[string]any, marketplace string) []
 }
 
 func pluginRootsFromMarketplaceGit(source map[string]any) []string {
-	gitURL := stringFromAnyMap(source, "url")
+	return pluginRootsFromMarketplaceGitURL(stringFromAnyMap(source, "url"), source)
+}
+
+func pluginRootsFromMarketplaceGitHub(source map[string]any) []string {
+	return pluginRootsFromMarketplaceGitURL(githubMarketplaceGitURL(stringFromAnyMap(source, "repo")), source)
+}
+
+func pluginRootsFromMarketplaceGitURL(gitURL string, source map[string]any) []string {
 	if gitURL == "" {
 		return nil
 	}
@@ -414,6 +425,20 @@ func pluginRootsFromMarketplaceGit(source map[string]any) []string {
 		return pluginRootsFromMarketplacePath(repoPath)
 	}
 	return pluginRootsFromMarketplacePath(safeJoin(repoPath, marketplacePath))
+}
+
+func githubMarketplaceGitURL(repo string) string {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return ""
+	}
+	if strings.Contains(repo, "://") || strings.HasPrefix(repo, "git@") || filepath.IsAbs(repo) || strings.HasPrefix(repo, ".") {
+		return repo
+	}
+	repo = strings.TrimPrefix(repo, "github.com/")
+	repo = strings.TrimPrefix(repo, "www.github.com/")
+	repo = strings.TrimSuffix(repo, ".git")
+	return "https://github.com/" + repo + ".git"
 }
 
 func pluginRootsFromMarketplacePath(path string) []string {

@@ -537,6 +537,57 @@ func TestLoadPluginDirsWithSettingsLoadsGitMarketplacePluginsAndUpdatesCache(t *
 	}
 }
 
+func TestLoadPluginDirsWithSettingsLoadsGitHubMarketplacePlugins(t *testing.T) {
+	git := requirePluginTestGit(t)
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "claude-home"))
+	repo := filepath.Join(root, "github-marketplace-repo")
+	pluginRoot := filepath.Join(repo, "market", "demo")
+	if err := os.MkdirAll(pluginRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, ManifestFileName), []byte(`{"name":"github-demo"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runPluginTestGit(t, git, "init", repo)
+	runPluginTestGit(t, git, "-C", repo, "config", "user.email", "test@example.com")
+	runPluginTestGit(t, git, "-C", repo, "config", "user.name", "Test User")
+	runPluginTestGit(t, git, "-C", repo, "add", ".")
+	runPluginTestGit(t, git, "-C", repo, "commit", "-m", "add github marketplace plugin")
+
+	plugins := LoadPluginDirsWithSettings(nil, contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"github-market": map[string]any{"source": map[string]any{
+				"source": "github",
+				"name":   "github-market",
+				"repo":   repo,
+				"path":   "market/demo",
+			}},
+		},
+		StrictKnownMarketplaces: []any{"github-market"},
+	})
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"github-demo"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+	if plugins[0].Marketplace != "github-market" {
+		t.Fatalf("plugin marketplace = %#v", plugins)
+	}
+}
+
+func TestGitHubMarketplaceGitURL(t *testing.T) {
+	cases := map[string]string{
+		"owner/repo":                "https://github.com/owner/repo.git",
+		"github.com/owner/repo.git": "https://github.com/owner/repo.git",
+		"https://example/repo.git":  "https://example/repo.git",
+		"git@github.com:o/r.git":    "git@github.com:o/r.git",
+	}
+	for input, want := range cases {
+		if got := githubMarketplaceGitURL(input); got != want {
+			t.Fatalf("githubMarketplaceGitURL(%q) = %q want %q", input, got, want)
+		}
+	}
+}
+
 func requirePluginTestGit(t *testing.T) string {
 	t.Helper()
 	git, err := exec.LookPath("git")
