@@ -2,6 +2,8 @@ package conversation
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -165,6 +167,57 @@ func TestLoadMCPConfigFromSettingsFilesSkipsDisabledPluginServers(t *testing.T) 
 		t.Fatal(err)
 	}
 	if len(config.PluginServers) != 0 {
+		t.Fatalf("plugin servers = %#v", config.PluginServers)
+	}
+}
+
+func TestMCPConfigRefreshPolicySettingsUpdatesMergedSettingsAndPlugins(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "project")
+	pluginDir := filepath.Join(project, ".claude", "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSettingsFile(t, filepath.Join(pluginDir, "plugin.json"), `{
+		"name": "demo",
+		"mcpServers": {
+			"plugin:docs": {"type": "http", "url": "https://example.com/mcp"}
+		}
+	}`)
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "missing-managed"))
+	current := `{"settings":{"model":"remote-a","enabledPlugins":{"demo":false}}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(current))
+	}))
+	defer server.Close()
+	t.Setenv("CLAUDE_CODE_REMOTE_MANAGED_SETTINGS_URL", server.URL+"/policy")
+
+	config := &MCPConfig{
+		UserSettings: contracts.Settings{Model: "user"},
+		CWD:          project,
+	}
+	changed, err := config.RefreshPolicySettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || config.PolicySettings.Model != "remote-a" || config.MergedSettings().Model != "remote-a" {
+		t.Fatalf("policy settings = %#v merged=%#v changed=%v", config.PolicySettings, config.MergedSettings(), changed)
+	}
+	if len(config.PluginServers) != 0 {
+		t.Fatalf("disabled plugin servers = %#v", config.PluginServers)
+	}
+
+	current = `{"settings":{"model":"remote-b","enabledPlugins":{"demo":true}}}`
+	changed, err = config.RefreshPolicySettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || config.PolicySettings.Model != "remote-b" || config.MergedSettings().Model != "remote-b" {
+		t.Fatalf("policy settings = %#v merged=%#v changed=%v", config.PolicySettings, config.MergedSettings(), changed)
+	}
+	if server := config.PluginServers["plugin:docs"]; server.URL != "https://example.com/mcp" || server.PluginSource != "demo" {
 		t.Fatalf("plugin servers = %#v", config.PluginServers)
 	}
 }

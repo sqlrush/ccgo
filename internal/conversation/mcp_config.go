@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
@@ -45,6 +46,25 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 			AccessTokenProvider: mcp.FileOAuthAccessTokenProvider(mcp.FileOAuthAccessTokenProviderOptions{}),
 		},
 	}, nil
+}
+
+func (c *MCPConfig) RefreshPolicySettings() (bool, error) {
+	if c == nil {
+		return false, nil
+	}
+	policySettings, err := config.LoadPolicySettings()
+	if err != nil {
+		return false, err
+	}
+	changed := !reflect.DeepEqual(c.PolicySettings, policySettings)
+	c.PolicySettings = policySettings
+	mergedSettings := c.MergedSettings()
+	if c.CWD != "" {
+		c.PluginServers = pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(c.CWD), mergedSettings)
+	} else {
+		c.PluginServers = nil
+	}
+	return changed, nil
 }
 
 func resolveMCPConfigCWD(cwd string) (string, error) {

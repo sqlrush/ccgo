@@ -48,6 +48,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if r.Client == nil {
 		return Result{}, fmt.Errorf("conversation runner missing client")
 	}
+	r.maybeRefreshRemoteManagedPolicy()
 	r.maybeWriteBridgeManifest()
 	r.maybeWriteNativeManifest()
 	r.maybeWriteIntegrationsManifest()
@@ -349,6 +350,20 @@ func (r Runner) policySettings() contracts.Settings {
 		return contracts.Settings{}
 	}
 	return r.MCP.PolicySettings
+}
+
+func (r *Runner) RefreshPolicySettings() (bool, error) {
+	if r == nil || r.MCP == nil {
+		return false, nil
+	}
+	return r.MCP.RefreshPolicySettings()
+}
+
+func (r *Runner) maybeRefreshRemoteManagedPolicy() {
+	if !config.RemoteManagedSettingsConfigured() {
+		return
+	}
+	_, _ = r.RefreshPolicySettings()
 }
 
 func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInfo {

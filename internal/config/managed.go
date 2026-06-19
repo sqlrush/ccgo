@@ -52,6 +52,10 @@ func LoadPolicySettings() (contracts.Settings, error) {
 	return LoadPolicySettingsWithOptions(ManagedPolicyOptions{})
 }
 
+func RemoteManagedSettingsConfigured() bool {
+	return strings.TrimSpace(os.Getenv(remoteManagedSettingsURLEnv)) != ""
+}
+
 func LoadPolicySettingsWithOptions(options ManagedPolicyOptions) (contracts.Settings, error) {
 	options = normalizeManagedPolicyOptions(options)
 	if settings, ok, err := loadAdminManagedSettings(options); err != nil || ok {

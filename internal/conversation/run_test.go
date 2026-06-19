@@ -3937,6 +3937,48 @@ func TestRunnerExecutesConfigSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerRefreshesRemoteManagedPolicyAtTurnStart(t *testing.T) {
+	client := &fakeClient{}
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "home"))
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MANAGED_SETTINGS_PATH", filepath.Join(root, "missing-managed"))
+	current := `{"settings":{"model":"remote-a"}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(current))
+	}))
+	defer server.Close()
+	t.Setenv("CLAUDE_CODE_REMOTE_MANAGED_SETTINGS_URL", server.URL+"/policy")
+
+	runner := Runner{
+		Client:    client,
+		SessionID: "sess_remote_policy_refresh",
+		MCP:       &MCPConfig{},
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config show model"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Configured model: remote-a") || runner.MCP.PolicySettings.Model != "remote-a" {
+		t.Fatalf("text = %q policy=%#v", text, runner.MCP.PolicySettings)
+	}
+
+	current = `{"settings":{"model":"remote-b"}}`
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/config show model"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Configured model: remote-b") || runner.MCP.PolicySettings.Model != "remote-b" {
+		t.Fatalf("text = %q policy=%#v", text, runner.MCP.PolicySettings)
+	}
+}
+
 func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
