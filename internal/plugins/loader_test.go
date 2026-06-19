@@ -332,6 +332,46 @@ func TestLoadPluginDirsWithSettingsLoadsDirectoryMarketplacePlugins(t *testing.T
 	}
 }
 
+func TestLoadPluginDirsWithSettingsLoadsFileMarketplacePlugins(t *testing.T) {
+	root := t.TempDir()
+	alphaRoot := filepath.Join(root, "alpha")
+	betaRoot := filepath.Join(root, "beta")
+	for _, dir := range []string{alphaRoot, betaRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(alphaRoot, ManifestFileName), []byte(`{"name":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(betaRoot, ManifestFileName), []byte(`{"name":"beta"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalogPath := filepath.Join(root, "marketplace.json")
+	catalog := `{"plugins":["` + filepath.ToSlash(alphaRoot) + `",{"path":"` + filepath.ToSlash(betaRoot) + `"},{"path":"` + filepath.ToSlash(filepath.Join(root, "missing")) + `"}]}`
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins := LoadPluginDirsWithSettings(nil, contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"file-market": map[string]any{"source": map[string]any{
+				"source": "file",
+				"path":   catalogPath,
+			}},
+		},
+		StrictKnownMarketplaces: []any{"file-market"},
+	})
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+	for _, plugin := range plugins {
+		if plugin.Marketplace != "file-market" {
+			t.Fatalf("plugin marketplace = %#v", plugins)
+		}
+	}
+}
+
 func TestMarketplacePolicyEnforcesBlockedAndStrictSettings(t *testing.T) {
 	policy := NewMarketplacePolicy(contracts.Settings{
 		ExtraKnownMarketplaces: map[string]any{

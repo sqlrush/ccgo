@@ -319,6 +319,10 @@ func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry
 			for _, root := range pluginRootsFromDirectory(stringFromAnyMap(source, "path")) {
 				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
 			}
+		case "file":
+			for _, root := range pluginRootsFromMarketplaceFile(stringFromAnyMap(source, "path")) {
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+			}
 		}
 	}
 	return entries
@@ -330,6 +334,43 @@ func pluginRootsFromDirectory(path string) []string {
 		return nil
 	}
 	return appendPluginRoots(nil, map[string]struct{}{}, path)
+}
+
+func pluginRootsFromMarketplaceFile(path string) []string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	return pluginRootsFromMarketplaceCatalog(raw)
+}
+
+func pluginRootsFromMarketplaceCatalog(raw any) []string {
+	switch value := raw.(type) {
+	case []any:
+		roots := make([]string, 0, len(value))
+		for _, item := range value {
+			if root := settingsMarketplacePluginRoot(item); root != "" {
+				roots = append(roots, root)
+			}
+		}
+		return roots
+	case map[string]any:
+		if plugins, ok := value["plugins"].([]any); ok {
+			return pluginRootsFromMarketplaceCatalog(plugins)
+		}
+		if root := settingsMarketplacePluginRoot(value); root != "" {
+			return []string{root}
+		}
+	}
+	return nil
 }
 
 func settingsMarketplaceSource(raw any) (map[string]any, bool) {
