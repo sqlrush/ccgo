@@ -199,6 +199,8 @@ M8/M6 补充：compact plan 现在会把 compact 前已发现的 `tool_reference
 
 M8/M2 补充：当 `ToolSearch` 可用且存在 deferred 工具时，conversation request 现在会按官方 dynamic tool loading 过滤请求工具：未发现 deferred 工具不发送 schema，已发现 deferred 工具作为 loaded tool 发送，`ToolSearch` 保持可调用，并在 API messages 前置 `<available-deferred-tools>` 名称列表；没有 deferred 工具时会从请求中移除 `ToolSearch`。
 
+M8/M2 补充：当本次 request 未启用 `ToolSearch` 时，conversation request 现在会从 API user `tool_result.content` 中剥离历史 `tool_reference` blocks；纯 reference 结果会替换为官方占位文本 `[Tool references removed - tool search not enabled]`，剥离发生在 discovered-tool 扫描之后，避免影响后续 loaded 工具恢复。
+
 M8/M2 补充：Anthropic request tool 转换现在会保留 contract 的 `strict`、`eager_input_streaming`、`cache_control` 与 `should_defer`，将 deferred 工具序列化为 API `defer_loading`，并用 `always_load` 覆盖 deferred hint；API tool description 会按 description、prompt、searchHint 顺序 fallback，conversation runner 构造请求时会把 `Task` 等 deferred tool 的 strict/defer_loading 元数据带到最终请求。完整 deferred/lazy tool discovery 仍未完成。
 
 M8/M5 补充：tool executor 现在会在未通过 `ToolSearch` 发现的 deferred 工具输入 schema 校验失败时追加 schema-not-sent 恢复提示，指导模型先调用 `ToolSearch` 的 `select:<tool>` 再重试；conversation runner 会把当前 turn messages 放进工具 metadata，提示判断兼容普通 `tool_reference` 结果和 compact boundary 已发现工具快照。

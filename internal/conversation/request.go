@@ -36,40 +36,47 @@ func (r Runner) buildRequest(history []contracts.Message, model string, relevant
 		}
 	}
 	history = memory.ExpandRelevantMemoryAttachments(history, time.Time{})
+	var definitions []contracts.ToolDefinition
+	var deferredToolNames []string
+	toolSearchActive := false
+	if r.Tools.Registry != nil {
+		defs, err := r.Tools.Registry.Definitions(toolPromptContext(r))
+		if err != nil {
+			return anthropic.Request{}, err
+		}
+		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitions(defs, history)
+	}
+	apiMessages := msgs.NormalizeForAPI(history)
+	if !toolSearchActive {
+		apiMessages = stripToolReferenceBlocksFromAPIMessages(apiMessages)
+	}
+	if len(deferredToolNames) > 0 {
+		apiMessages = prependAvailableDeferredToolsMessage(apiMessages, deferredToolNames)
+	}
 	request := anthropic.Request{
 		Model:     model,
 		MaxTokens: r.maxTokens(),
-		Messages:  msgs.NormalizeForAPI(history),
+		Messages:  apiMessages,
 	}
 	if system := r.systemPromptWithOutputStyle(); system != "" {
 		request.System = system
 	}
-	if r.Tools.Registry != nil {
-		definitions, err := r.Tools.Registry.Definitions(toolPromptContext(r))
-		if err != nil {
-			return anthropic.Request{}, err
-		}
-		definitions, deferredToolNames := filterToolSearchDefinitions(definitions, history)
-		if len(deferredToolNames) > 0 {
-			request.Messages = prependAvailableDeferredToolsMessage(request.Messages, deferredToolNames)
-		}
-		if len(definitions) > 0 {
-			request.Tools = anthropic.ToolsFromContracts(definitions)
-		}
+	if len(definitions) > 0 {
+		request.Tools = anthropic.ToolsFromContracts(definitions)
 	}
 	return request, nil
 }
 
-func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message) ([]contracts.ToolDefinition, []string) {
+func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message) ([]contracts.ToolDefinition, []string, bool) {
 	if len(definitions) == 0 {
-		return definitions, nil
+		return definitions, nil, false
 	}
 	if !hasToolSearchDefinition(definitions) {
-		return applyDiscoveredToolReferences(definitions, history), nil
+		return applyDiscoveredToolReferences(definitions, history), nil, false
 	}
 	deferredNames := deferredToolNames(definitions)
 	if len(deferredNames) == 0 {
-		return withoutToolSearchDefinition(definitions), nil
+		return withoutToolSearchDefinition(definitions), nil, false
 	}
 	discovered := discoveredToolReferenceNames(history)
 	out := make([]contracts.ToolDefinition, 0, len(definitions))
@@ -84,7 +91,7 @@ func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history
 			out = append(out, definition)
 		}
 	}
-	return out, deferredNames
+	return out, deferredNames, true
 }
 
 func applyDiscoveredToolReferences(definitions []contracts.ToolDefinition, history []contracts.Message) []contracts.ToolDefinition {
@@ -112,6 +119,89 @@ func prependAvailableDeferredToolsMessage(messages []contracts.APIMessage, toolN
 	out = append(out, contracts.APIMessage{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock(content)}})
 	out = append(out, messages...)
 	return out
+}
+
+func stripToolReferenceBlocksFromAPIMessages(messages []contracts.APIMessage) []contracts.APIMessage {
+	out := make([]contracts.APIMessage, len(messages))
+	for i, message := range messages {
+		out[i] = message
+		if message.Role != "user" {
+			continue
+		}
+		out[i].Content = stripToolReferenceBlocksFromContent(message.Content)
+	}
+	return out
+}
+
+func stripToolReferenceBlocksFromContent(content []contracts.ContentBlock) []contracts.ContentBlock {
+	out := make([]contracts.ContentBlock, len(content))
+	for i, block := range content {
+		out[i] = block
+		if block.Type != contracts.ContentToolResult {
+			continue
+		}
+		if stripped, ok := stripToolReferenceItems(block.Content); ok {
+			out[i].Content = stripped
+		}
+	}
+	return out
+}
+
+func stripToolReferenceItems(content any) (any, bool) {
+	items, ok := toolResultContentItems(content)
+	if !ok {
+		return content, false
+	}
+	filtered := make([]any, 0, len(items))
+	removed := false
+	for _, item := range items {
+		if toolReferenceItem(item) {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if !removed {
+		return content, false
+	}
+	if len(filtered) == 0 {
+		return []contracts.ContentBlock{contracts.NewTextBlock("[Tool references removed - tool search not enabled]")}, true
+	}
+	return filtered, true
+}
+
+func toolResultContentItems(content any) ([]any, bool) {
+	switch typed := content.(type) {
+	case []any:
+		return typed, true
+	case []contracts.ToolReference:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, item)
+		}
+		return out, true
+	case []contracts.ContentBlock:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, item)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func toolReferenceItem(item any) bool {
+	switch typed := item.(type) {
+	case contracts.ToolReference:
+		return typed.Type == "tool_reference"
+	case map[string]any:
+		return toolReferenceType(typed)
+	case contracts.ContentBlock:
+		return typed.Type == "tool_reference"
+	default:
+		return false
+	}
 }
 
 func deferredToolNames(definitions []contracts.ToolDefinition) []string {

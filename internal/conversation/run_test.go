@@ -354,8 +354,16 @@ func TestRunnerPreservesToolReferenceResultContent(t *testing.T) {
 		Model:     "sonnet",
 		MaxTokens: 128,
 	}
-	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("find tools")); err != nil {
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("find tools"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	references, ok := result.ToolResults[0].Content.([]contracts.ToolReference)
+	if !ok || len(references) != 2 || references[0].ToolName != "Read" || references[1].ToolName != "Edit" {
+		t.Fatalf("runner tool result content = %#v", result.ToolResults[0].Content)
 	}
 	if len(client.requests) != 2 {
 		t.Fatalf("requests = %d, want 2", len(client.requests))
@@ -364,8 +372,8 @@ func TestRunnerPreservesToolReferenceResultContent(t *testing.T) {
 	if last.Role != "user" || len(last.Content) != 1 || last.Content[0].Type != contracts.ContentToolResult {
 		t.Fatalf("last api message = %#v", last)
 	}
-	references, ok := last.Content[0].Content.([]contracts.ToolReference)
-	if !ok || len(references) != 2 || references[0].ToolName != "Read" || references[1].ToolName != "Edit" {
+	placeholder, ok := last.Content[0].Content.([]contracts.ContentBlock)
+	if !ok || len(placeholder) != 1 || placeholder[0].Text != "[Tool references removed - tool search not enabled]" {
 		t.Fatalf("tool result content = %#v", last.Content[0].Content)
 	}
 }
@@ -8081,6 +8089,104 @@ func TestBuildRequestWithToolSearchButNoDeferredToolsOmitsToolSearch(t *testing.
 	}
 	if len(req.Messages) != 1 || req.Messages[0].Content[0].Text != "hi" {
 		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestBuildRequestStripsToolReferencesWhenToolSearchInactive(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{{
+		Type: contracts.MessageUser,
+		Content: []contracts.ContentBlock{{
+			Type:      contracts.ContentToolResult,
+			ToolUseID: "toolu_search",
+			Content:   []contracts.ToolReference{contracts.NewToolReference("Task")},
+		}},
+	}}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Messages) != 1 {
+		t.Fatalf("messages = %#v", req.Messages)
+	}
+	block := req.Messages[0].Content[0]
+	items, ok := block.Content.([]contracts.ContentBlock)
+	if !ok || len(items) != 1 || items[0].Text != "[Tool references removed - tool search not enabled]" {
+		t.Fatalf("tool result content = %#v", block.Content)
+	}
+	if !requestHasTool(req, "Task") || requestTool(req, "Task").DeferLoading {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+}
+
+func TestBuildRequestStripsOnlyToolReferencesFromMixedContentWhenInactive(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{{
+		Type: contracts.MessageUser,
+		Content: []contracts.ContentBlock{{
+			Type:      contracts.ContentToolResult,
+			ToolUseID: "toolu_search",
+			Content: []any{
+				map[string]any{"type": "text", "text": "kept"},
+				map[string]any{"type": "tool_reference", "tool_name": "Task"},
+			},
+		}},
+	}}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, ok := req.Messages[0].Content[0].Content.([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("tool result content = %#v", req.Messages[0].Content[0].Content)
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok || item["type"] != "text" || item["text"] != "kept" {
+		t.Fatalf("kept item = %#v", items[0])
+	}
+}
+
+func TestBuildRequestKeepsToolReferencesWhenToolSearchActive(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool(), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{{
+		Type: contracts.MessageUser,
+		Content: []contracts.ContentBlock{{
+			Type:      contracts.ContentToolResult,
+			ToolUseID: "toolu_search",
+			Content:   []contracts.ToolReference{contracts.NewToolReference("Task")},
+		}},
+	}}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, ok := req.Messages[1].Content[0].Content.([]contracts.ToolReference)
+	if !ok || len(items) != 1 || items[0].ToolName != "Task" {
+		t.Fatalf("tool result content = %#v", req.Messages[1].Content[0].Content)
 	}
 }
 
