@@ -6220,6 +6220,7 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		use := use
 		r.emit(Event{Type: EventToolUse, ToolUse: &use})
 	}
+	metadata = toolMetadataWithTurnMessages(metadata, turnMessages)
 	toolCtx := tool.Context{
 		Context:          ctx,
 		WorkingDirectory: r.WorkingDirectory,
@@ -6267,6 +6268,14 @@ func (r Runner) executeToolUses(ctx context.Context, uses []contracts.ToolUse, m
 		toolResults = append(toolResults, result)
 	}
 	return toolMessages, toolResults
+}
+
+func toolMetadataWithTurnMessages(metadata map[string]any, turnMessages []contracts.Message) map[string]any {
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	metadata[tool.MetadataMessagesKey] = append([]contracts.Message(nil), turnMessages...)
+	return metadata
 }
 
 func (r Runner) permissionsForTurn(messages []contracts.Message) tool.PermissionDecider {

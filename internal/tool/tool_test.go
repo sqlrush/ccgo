@@ -331,6 +331,93 @@ func TestExecutorRunsAllowedTool(t *testing.T) {
 	}
 }
 
+func TestExecutorAddsSchemaNotSentHintForUndiscoveredDeferredTool(t *testing.T) {
+	registry := deferredArrayRegistry(t)
+	result, err := NewExecutor(registry).Execute(Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataMessagesKey: []contracts.Message{{Type: contracts.MessageUser, Content: []contracts.ContentBlock{contracts.NewTextBlock("call it")}}},
+		},
+	}, contracts.ToolUse{ID: "toolu_deferred", Name: "DeferredArray", Input: json.RawMessage(`{"items":"one"}`)}, nil)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	text := fmt.Sprint(result.Content)
+	if !strings.Contains(text, "This tool's schema was not sent to the API") || !strings.Contains(text, `ToolSearch with query "select:DeferredArray"`) {
+		t.Fatalf("content = %q", text)
+	}
+}
+
+func TestExecutorDoesNotAddSchemaNotSentHintForDiscoveredDeferredTool(t *testing.T) {
+	registry := deferredArrayRegistry(t)
+	history := []contracts.Message{{
+		Type: contracts.MessageUser,
+		Content: []contracts.ContentBlock{{
+			Type:    contracts.ContentToolResult,
+			Content: []contracts.ToolReference{contracts.NewToolReference("DeferredArray")},
+		}},
+	}}
+	result, err := NewExecutor(registry).Execute(Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{MetadataMessagesKey: history},
+	}, contracts.ToolUse{ID: "toolu_deferred", Name: "DeferredArray", Input: json.RawMessage(`{"items":"one"}`)}, nil)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if text := fmt.Sprint(result.Content); strings.Contains(text, "schema was not sent") {
+		t.Fatalf("unexpected schema hint in %q", text)
+	}
+}
+
+func TestExecutorDoesNotAddSchemaNotSentHintForCompactBoundaryDiscoveredTool(t *testing.T) {
+	registry := deferredArrayRegistry(t)
+	history := []contracts.Message{{
+		Type:    contracts.MessageSystem,
+		Subtype: "compact_boundary",
+		Raw: map[string]any{
+			"compactMetadata": struct {
+				PreCompactDiscoveredTools []string
+			}{PreCompactDiscoveredTools: []string{"DeferredArray"}},
+		},
+	}}
+	result, err := NewExecutor(registry).Execute(Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{MetadataMessagesKey: history},
+	}, contracts.ToolUse{ID: "toolu_deferred", Name: "DeferredArray", Input: json.RawMessage(`{"items":"one"}`)}, nil)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if text := fmt.Sprint(result.Content); strings.Contains(text, "schema was not sent") {
+		t.Fatalf("unexpected schema hint in %q", text)
+	}
+}
+
+func deferredArrayRegistry(t *testing.T) *Registry {
+	t.Helper()
+	registry, err := NewRegistry(
+		FuncTool{DefinitionValue: contracts.ToolDefinition{
+			Name:        "DeferredArray",
+			ShouldDefer: true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"items"},
+				"properties": map[string]any{
+					"items": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		}},
+		FuncTool{DefinitionValue: contracts.ToolDefinition{
+			Name:        "ToolSearch",
+			ReadOnly:    true,
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registry
+}
+
 func TestExecutorHooksCanUpdateInputAndEmitProgress(t *testing.T) {
 	var seenInput string
 	var progress []contracts.ToolProgress

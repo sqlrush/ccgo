@@ -199,6 +199,8 @@ M8/M6 补充：compact plan 现在会把 compact 前已发现的 `tool_reference
 
 M8/M2 补充：Anthropic request tool 转换现在会保留 contract 的 `strict`、`eager_input_streaming`、`cache_control` 与 `should_defer`，将 deferred 工具序列化为 API `defer_loading`，并用 `always_load` 覆盖 deferred hint；API tool description 会按 description、prompt、searchHint 顺序 fallback，conversation runner 构造请求时会把 `Task` 等 deferred tool 的 strict/defer_loading 元数据带到最终请求。完整 deferred/lazy tool discovery 仍未完成。
 
+M8/M5 补充：tool executor 现在会在未通过 `ToolSearch` 发现的 deferred 工具输入 schema 校验失败时追加 schema-not-sent 恢复提示，指导模型先调用 `ToolSearch` 的 `select:<tool>` 再重试；conversation runner 会把当前 turn messages 放进工具 metadata，提示判断兼容普通 `tool_reference` 结果和 compact boundary 已发现工具快照。
+
 M8 补充：新增基础 slash command parser/executor，按官方 `/command args` 与 `/mcp:tool (MCP) args` 形态解析，并把本地项目 prompt skill slash 调用接入 conversation runner：`/skill args` 会生成 `<command-name>/<command-message>/<command-args>` metadata user message 和展开后的 meta prompt message，写入 transcript/parent chain 后再请求模型；skill frontmatter `model` 可覆盖本轮请求模型。local/local-jsx 命令目前只返回未实现输出，不会误发给模型；command permissions attachment、forked skill、MCP/plugin/bundled slash 来源和 UI 仍未完成。
 
 M8 补充：本地 prompt skill 的 slash 调用和 `Skill` tool 现在都会生成 `command_permissions` attachment，按官方 `allowed-tools` 解析 comma/space 分隔且保留括号内模式；conversation runner 会在当前 turn 内把这些 `PermissionSourceCommand` allow rules 合并进 engine permission decider，让 skill frontmatter 授权的后续工具调用可在同一轮放行，并继续保留 model override attachment metadata。完整权限 UI 展示、SDK event surface、forked/MCP/plugin/bundled skill 权限继承仍未完成。

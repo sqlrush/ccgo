@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"ccgo/internal/contracts"
@@ -56,6 +57,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	}
 	raw := normalizeRawInput(use.Input)
 	if err := t.Validate(ctx, raw); err != nil {
+		err = e.validationErrorWithSchemaHint(ctx, t, err)
 		return ErrorResult(use, err), err
 	}
 	raw, err := e.runPreHooks(ctx, use, t, raw, sink)
@@ -63,6 +65,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 		return ErrorResult(use, err), err
 	}
 	if err := t.Validate(ctx, raw); err != nil {
+		err = e.validationErrorWithSchemaHint(ctx, t, err)
 		return ErrorResult(use, err), err
 	}
 	if err := contextError(ctx); err != nil {
@@ -113,6 +116,7 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 			return result, PermissionError{Decision: *hookDecision}
 		}
 		if err := t.Validate(ctx, raw); err != nil {
+			err = e.validationErrorWithSchemaHint(ctx, t, err)
 			return ErrorResult(use, err), err
 		}
 		_ = SendProgress(sink, use.ID, "permission_allowed", map[string]any{"tool": t.Name(), "behavior": string(hookDecision.Behavior)})
@@ -142,6 +146,219 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	}
 	_ = SendProgress(sink, use.ID, "completed", map[string]any{"tool": t.Name()})
 	return result, nil
+}
+
+func (e Executor) validationErrorWithSchemaHint(ctx Context, t Tool, err error) error {
+	if err == nil {
+		return nil
+	}
+	hint := e.schemaNotSentHint(ctx, t)
+	if hint == "" || strings.Contains(err.Error(), "This tool's schema was not sent to the API") {
+		return err
+	}
+	return fmt.Errorf("%v%s", err, hint)
+}
+
+func (e Executor) schemaNotSentHint(ctx Context, t Tool) string {
+	registry := e.Registry
+	if registry == nil {
+		registry = registryFromMetadata(ctx.Metadata)
+	}
+	if registry == nil || !toolSearchAvailable(registry) {
+		return ""
+	}
+	messages, ok := messagesFromMetadata(ctx.Metadata)
+	if !ok {
+		return ""
+	}
+	definition, err := Definition(PromptContext{
+		WorkingDirectory: ctx.WorkingDirectory,
+		Metadata:         ctx.Metadata,
+	}, t)
+	if err != nil || !definition.ShouldDefer || definition.AlwaysLoad {
+		return ""
+	}
+	discovered := discoveredToolNamesFromMessages(messages)
+	if toolDefinitionNameDiscovered(definition, discovered) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"\n\nThis tool's schema was not sent to the API - it was not in the discovered-tool set derived from message history. "+
+			"Without the schema in your prompt, typed parameters can be emitted as strings and the client-side parser rejects them. "+
+			"Load the tool first: call ToolSearch with query \"select:%s\", then retry this call.",
+		definition.Name,
+	)
+}
+
+func registryFromMetadata(metadata map[string]any) *Registry {
+	if metadata == nil {
+		return nil
+	}
+	switch typed := metadata[MetadataToolRegistryKey].(type) {
+	case *Registry:
+		return typed
+	default:
+		return nil
+	}
+}
+
+func toolSearchAvailable(registry *Registry) bool {
+	if registry == nil {
+		return false
+	}
+	_, ok := registry.Lookup("ToolSearch")
+	return ok
+}
+
+func messagesFromMetadata(metadata map[string]any) ([]contracts.Message, bool) {
+	if metadata == nil {
+		return nil, false
+	}
+	switch typed := metadata[MetadataMessagesKey].(type) {
+	case []contracts.Message:
+		return typed, true
+	case *[]contracts.Message:
+		if typed != nil {
+			return *typed, true
+		}
+	}
+	return nil, false
+}
+
+func discoveredToolNamesFromMessages(messages []contracts.Message) map[string]struct{} {
+	discovered := map[string]struct{}{}
+	for _, message := range messages {
+		collectCompactMetadataToolNames(message, discovered)
+		for _, block := range message.Content {
+			if block.Type != contracts.ContentToolResult {
+				continue
+			}
+			collectToolReferenceNames(block.Content, discovered)
+		}
+	}
+	return discovered
+}
+
+func collectCompactMetadataToolNames(message contracts.Message, discovered map[string]struct{}) {
+	if message.Type != contracts.MessageSystem || message.Subtype != "compact_boundary" || len(message.Raw) == 0 {
+		return
+	}
+	for _, key := range []string{"compactMetadata", "compact_metadata"} {
+		if metadata, ok := message.Raw[key]; ok {
+			collectPreCompactDiscoveredTools(metadata, discovered)
+		}
+	}
+}
+
+func collectPreCompactDiscoveredTools(metadata any, discovered map[string]struct{}) {
+	switch typed := metadata.(type) {
+	case map[string]any:
+		for _, key := range []string{"preCompactDiscoveredTools", "pre_compact_discovered_tools"} {
+			collectStringSliceToolReferences(typed[key], discovered)
+		}
+	case map[string][]string:
+		for _, key := range []string{"preCompactDiscoveredTools", "pre_compact_discovered_tools"} {
+			collectStringSliceToolReferences(typed[key], discovered)
+		}
+	default:
+		collectPreCompactDiscoveredToolsFromStruct(metadata, discovered)
+	}
+}
+
+func collectPreCompactDiscoveredToolsFromStruct(metadata any, discovered map[string]struct{}) {
+	value := reflect.ValueOf(metadata)
+	if !value.IsValid() {
+		return
+	}
+	for value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return
+	}
+	field := value.FieldByName("PreCompactDiscoveredTools")
+	if !field.IsValid() || field.Kind() != reflect.Slice {
+		return
+	}
+	for i := 0; i < field.Len(); i++ {
+		item := field.Index(i)
+		if item.Kind() == reflect.String {
+			addDiscoveredToolName(item.String(), discovered)
+		}
+	}
+}
+
+func collectStringSliceToolReferences(value any, discovered map[string]struct{}) {
+	switch typed := value.(type) {
+	case []string:
+		for _, toolName := range typed {
+			addDiscoveredToolName(toolName, discovered)
+		}
+	case []any:
+		for _, item := range typed {
+			if toolName, ok := item.(string); ok {
+				addDiscoveredToolName(toolName, discovered)
+			}
+		}
+	}
+}
+
+func collectToolReferenceNames(content any, discovered map[string]struct{}) {
+	switch typed := content.(type) {
+	case contracts.ToolReference:
+		addDiscoveredToolName(typed.ToolName, discovered)
+	case []contracts.ToolReference:
+		for _, reference := range typed {
+			addDiscoveredToolName(reference.ToolName, discovered)
+		}
+	case map[string]any:
+		if toolName, ok := stringMapField(typed, "tool_name", "toolName", "name"); ok && toolReferenceType(typed) {
+			addDiscoveredToolName(toolName, discovered)
+		}
+	case []map[string]any:
+		for _, item := range typed {
+			collectToolReferenceNames(item, discovered)
+		}
+	case []any:
+		for _, item := range typed {
+			collectToolReferenceNames(item, discovered)
+		}
+	}
+}
+
+func toolReferenceType(item map[string]any) bool {
+	value, ok := stringMapField(item, "type")
+	return ok && value == "tool_reference"
+}
+
+func stringMapField(item map[string]any, names ...string) (string, bool) {
+	for _, name := range names {
+		if value, ok := item[name].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value), true
+		}
+	}
+	return "", false
+}
+
+func toolDefinitionNameDiscovered(definition contracts.ToolDefinition, discovered map[string]struct{}) bool {
+	if _, ok := discovered[strings.ToLower(definition.Name)]; ok {
+		return true
+	}
+	for _, alias := range definition.Aliases {
+		if _, ok := discovered[strings.ToLower(alias)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func addDiscoveredToolName(toolName string, discovered map[string]struct{}) {
+	if trimmed := strings.TrimSpace(toolName); trimmed != "" {
+		discovered[strings.ToLower(trimmed)] = struct{}{}
+	}
 }
 
 func (e Executor) withRegistryMetadata(ctx Context) Context {

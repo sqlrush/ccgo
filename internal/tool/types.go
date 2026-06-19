@@ -81,6 +81,7 @@ const (
 	MetadataSessionPathKey         = "ccgo.session.path"
 	MetadataAvailableAgentsKey     = "ccgo.available_agents"
 	MetadataToolRegistryKey        = "ccgo.tool.registry"
+	MetadataMessagesKey            = "ccgo.messages"
 
 	HookPreToolUse        = "PreToolUse"
 	HookPostToolUse       = "PostToolUse"

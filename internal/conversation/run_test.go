@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -231,6 +232,71 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 	if entries[1].Message.ParentUUID == nil {
 		t.Fatalf("assistant transcript entry missing parent")
+	}
+}
+
+func TestRunnerToolValidationMentionsUndiscoveredDeferredSchema(t *testing.T) {
+	registry, err := tool.NewRegistry(
+		tool.FuncTool{DefinitionValue: contracts.ToolDefinition{
+			Name:        "DeferredArray",
+			Description: "expects typed array input",
+			ShouldDefer: true,
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"items"},
+				"properties": map[string]any{
+					"items": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		}},
+		tool.FuncTool{DefinitionValue: contracts.ToolDefinition{
+			Name:        "ToolSearch",
+			ReadOnly:    true,
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_deferred",
+				Name:  "DeferredArray",
+				Input: json.RawMessage(`{"items":"one"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 128,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("call deferred directly"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ToolResults) != 1 || !result.ToolResults[0].IsError {
+		t.Fatalf("tool results = %#v", result.ToolResults)
+	}
+	text := fmt.Sprint(result.ToolResults[0].Content)
+	if !strings.Contains(text, "This tool's schema was not sent to the API") || !strings.Contains(text, `ToolSearch with query "select:DeferredArray"`) {
+		t.Fatalf("tool result content = %q", text)
 	}
 }
 
