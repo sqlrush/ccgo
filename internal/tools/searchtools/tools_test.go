@@ -14,13 +14,20 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	registry, err := tool.NewRegistry(
 		tool.FuncTool{
 			DefinitionValue: contracts.ToolDefinition{
-				Name:              "Read",
-				Aliases:           []string{"View"},
-				Description:       "Read files from the workspace",
-				ReadOnly:          true,
-				ConcurrencySafe:   true,
-				InterruptBehavior: "block",
-				InputSchema:       contracts.JSONSchema{"type": "object"},
+				Name:                "Read",
+				Aliases:             []string{"View"},
+				Description:         "Read files from the workspace",
+				ReadOnly:            true,
+				ConcurrencySafe:     true,
+				RequiresInteraction: true,
+				ShouldDefer:         true,
+				AlwaysLoad:          true,
+				EagerInputStreaming: true,
+				Strict:              true,
+				InterruptBehavior:   "block",
+				MaxResultSizeChars:  1024,
+				CacheControl:        &contracts.CacheControl{Type: "ephemeral"},
+				InputSchema:         contracts.JSONSchema{"type": "object"},
 			},
 			CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
 				return contracts.ToolResult{Content: "read"}, nil
@@ -65,6 +72,17 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	}
 	if results[0]["name"] != "Read" || results[0]["read_only"] != true || results[0]["concurrency_safe"] != true {
 		t.Fatalf("result item = %#v", results[0])
+	}
+	for _, key := range []string{"requires_interaction", "should_defer", "always_load", "eager_input_streaming", "strict"} {
+		if results[0][key] != true {
+			t.Fatalf("%s = %#v, result item = %#v", key, results[0][key], results[0])
+		}
+	}
+	if results[0]["max_result_size_chars"] != 1024 {
+		t.Fatalf("max_result_size_chars = %#v", results[0]["max_result_size_chars"])
+	}
+	if cacheControl, ok := results[0]["cache_control"].(contracts.CacheControl); !ok || cacheControl.Type != "ephemeral" {
+		t.Fatalf("cache_control = %#v", results[0]["cache_control"])
 	}
 	if aliases, ok := results[0]["aliases"].([]string); !ok || len(aliases) != 1 || aliases[0] != "View" {
 		t.Fatalf("aliases = %#v", results[0]["aliases"])

@@ -122,12 +122,23 @@ func callToolSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 	}
 	for _, result := range results {
 		entry := map[string]any{
-			"name":              result.Definition.Name,
-			"score":             result.Score,
-			"read_only":         result.Definition.ReadOnly,
-			"concurrency_safe":  result.Definition.ConcurrencySafe,
-			"destructive":       result.Definition.Destructive,
-			"interruptBehavior": result.Definition.InterruptBehavior,
+			"name":                  result.Definition.Name,
+			"score":                 result.Score,
+			"read_only":             result.Definition.ReadOnly,
+			"concurrency_safe":      result.Definition.ConcurrencySafe,
+			"destructive":           result.Definition.Destructive,
+			"requires_interaction":  result.Definition.RequiresInteraction,
+			"should_defer":          result.Definition.ShouldDefer,
+			"always_load":           result.Definition.AlwaysLoad,
+			"eager_input_streaming": result.Definition.EagerInputStreaming,
+			"strict":                result.Definition.Strict,
+			"interruptBehavior":     result.Definition.InterruptBehavior,
+		}
+		if result.Definition.MaxResultSizeChars > 0 {
+			entry["max_result_size_chars"] = result.Definition.MaxResultSizeChars
+		}
+		if result.Definition.CacheControl != nil {
+			entry["cache_control"] = *result.Definition.CacheControl
 		}
 		if len(result.Definition.Aliases) > 0 {
 			entry["aliases"] = append([]string(nil), result.Definition.Aliases...)
