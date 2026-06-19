@@ -339,6 +339,8 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 		return runPluginInstallCLI(state, args[1:], stdout, stderr)
 	case "update":
 		return runPluginUpdateCLI(state, args[1:], stdout, stderr)
+	case "uninstall", "remove", "rm":
+		return runPluginUninstallCLI(state, args[1:], stdout, stderr)
 	case "validate":
 		return runPluginValidateCLI(state, args[1:], stdout, stderr)
 	case "enable":
@@ -507,6 +509,38 @@ func runPluginValidateCLI(state *bootstrap.State, args []string, stdout io.Write
 	if !result.Success {
 		return 1
 	}
+	return 0
+}
+
+func runPluginUninstallCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin uninstall", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	scope := "user"
+	keepData := false
+	flags.StringVar(&scope, "scope", scope, "installation scope")
+	flags.StringVar(&scope, "s", scope, "installation scope")
+	flags.BoolVar(&keepData, "keep-data", keepData, "keep plugin data")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "ccgo plugin uninstall: usage: claude plugin uninstall [--scope user|project|local] [--keep-data] <plugin>")
+		return 2
+	}
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope != "project" && scope != "user" && scope != "local" {
+		fmt.Fprintf(stderr, "ccgo plugin uninstall: scope %q is not supported; use project, user, or local\n", scope)
+		return 2
+	}
+	result, err := pluginpkg.UninstallInstalledPluginInScope(strings.TrimSpace(flags.Arg(0)), state.CWD(), scope)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin uninstall: %v\n", err)
+		return 1
+	}
+	writePluginUninstallResult(stdout, result, keepData)
 	return 0
 }
 
@@ -830,6 +864,23 @@ func writePluginUpdateResult(stdout io.Writer, result pluginpkg.PluginUpdateResu
 		for _, item := range result.Updated {
 			lines = append(lines, "- "+item.Plugin.Name+" -> "+item.TargetPath)
 		}
+	}
+	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
+}
+
+func writePluginUninstallResult(stdout io.Writer, result pluginpkg.PluginUninstallResult, keepData bool) {
+	lines := []string{
+		"Plugin uninstalled",
+		"Name: " + result.Plugin.Name,
+		"Removed path: " + result.TargetPath,
+		"Scope: " + result.Scope,
+		"Status: uninstalled",
+	}
+	if result.Plugin.Marketplace != "" {
+		lines = append(lines, "Marketplace: "+result.Plugin.Marketplace)
+	}
+	if keepData {
+		lines = append(lines, "Data: kept")
 	}
 	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
 }

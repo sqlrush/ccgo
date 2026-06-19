@@ -2204,6 +2204,84 @@ func TestRunPluginValidateCLI(t *testing.T) {
 	}
 }
 
+func TestRunPluginUninstallCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	projectPlugin := filepath.Join(project, ".claude", "plugins", "demo")
+	userPlugin := filepath.Join(configHome, "plugins", "demo")
+	aliasPlugin := filepath.Join(configHome, "plugins", "alias-demo")
+	for path, name := range map[string]string{
+		projectPlugin: "demo",
+		userPlugin:    "demo",
+		aliasPlugin:   "alias-demo",
+	} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "plugin.json"), []byte(`{"name":"`+name+`"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "uninstall", "demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Plugin uninstalled",
+		"Name: demo",
+		"Scope: user",
+		"Status: uninstalled",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if _, err := os.Stat(userPlugin); !os.IsNotExist(err) {
+		t.Fatalf("user plugin still exists or unexpected stat err: %v", err)
+	}
+	if _, err := os.Stat(projectPlugin); err != nil {
+		t.Fatalf("project plugin should remain: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "remove", "--scope", "project", "--keep-data", "demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Name: demo",
+		"Scope: project",
+		"Data: kept",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if _, err := os.Stat(projectPlugin); !os.IsNotExist(err) {
+		t.Fatalf("project plugin still exists or unexpected stat err: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "rm", "-s", "user", "alias-demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "Name: alias-demo") {
+		t.Fatalf("alias exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(aliasPlugin); !os.IsNotExist(err) {
+		t.Fatalf("alias plugin still exists or unexpected stat err: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "uninstall", "--scope", "system", "demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), `scope "system" is not supported`) {
+		t.Fatalf("invalid scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPluginInstallCLI(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
