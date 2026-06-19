@@ -257,6 +257,8 @@ func toolSearchDocument(definition contracts.ToolDefinition) bm25Document {
 	addWeightedField(&document, definition.Description, 1.4)
 	addWeightedField(&document, definition.SearchHint, 1.3)
 	addWeightedField(&document, definition.Prompt, 1.0)
+	addSchemaSearchFields(&document, definition.InputSchema, 1.0)
+	addSchemaSearchFields(&document, definition.OutputSchema, 0.9)
 	return document
 }
 
@@ -264,6 +266,77 @@ func addWeightedField(document *bm25Document, text string, weight float64) {
 	for _, term := range searchTokens(text) {
 		document.TermFrequencies[term] += weight
 		document.Length += weight
+	}
+}
+
+func addSchemaSearchFields(document *bm25Document, schema contracts.JSONSchema, weight float64) {
+	if len(schema) == 0 {
+		return
+	}
+	addSchemaSearchMap(document, map[string]any(schema), weight)
+}
+
+func addSchemaSearchMap(document *bm25Document, schema map[string]any, weight float64) {
+	for _, key := range []string{"title", "description", "$comment"} {
+		addSchemaSearchText(document, schema[key], weight)
+	}
+	for _, key := range []string{"required", "enum", "const", "default", "examples"} {
+		addSchemaSearchText(document, schema[key], weight*1.1)
+	}
+	for _, key := range []string{"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"} {
+		addSchemaNamedChildren(document, schema[key], weight)
+	}
+	for _, key := range []string{"items", "additionalProperties", "contains", "not", "if", "then", "else"} {
+		addSchemaSearchValue(document, schema[key], weight)
+	}
+	for _, key := range []string{"oneOf", "anyOf", "allOf", "prefixItems"} {
+		addSchemaSearchValue(document, schema[key], weight)
+	}
+}
+
+func addSchemaNamedChildren(document *bm25Document, value any, weight float64) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for name, child := range typed {
+			addWeightedField(document, name, weight*2.2)
+			addSchemaSearchValue(document, child, weight)
+		}
+	case contracts.JSONSchema:
+		addSchemaNamedChildren(document, map[string]any(typed), weight)
+	}
+}
+
+func addSchemaSearchValue(document *bm25Document, value any, weight float64) {
+	switch typed := value.(type) {
+	case map[string]any:
+		addSchemaSearchMap(document, typed, weight)
+	case contracts.JSONSchema:
+		addSchemaSearchMap(document, map[string]any(typed), weight)
+	case []any:
+		for _, child := range typed {
+			addSchemaSearchValue(document, child, weight)
+		}
+	case []string:
+		for _, child := range typed {
+			addWeightedField(document, child, weight)
+		}
+	case string:
+		addWeightedField(document, typed, weight)
+	}
+}
+
+func addSchemaSearchText(document *bm25Document, value any, weight float64) {
+	switch typed := value.(type) {
+	case string:
+		addWeightedField(document, typed, weight)
+	case []any:
+		for _, child := range typed {
+			addSchemaSearchText(document, child, weight)
+		}
+	case []string:
+		for _, child := range typed {
+			addWeightedField(document, child, weight)
+		}
 	}
 }
 

@@ -148,6 +148,55 @@ func TestToolSearchBM25RanksCamelCaseToolName(t *testing.T) {
 	}
 }
 
+func TestToolSearchMatchesInputSchemaFields(t *testing.T) {
+	results := matchToolDefinitions([]contracts.ToolDefinition{
+		{
+			Name:        "Runner",
+			Description: "Execute configured actions",
+			InputSchema: contracts.JSONSchema{
+				"type":     "object",
+				"required": []any{"file_path"},
+				"properties": map[string]any{
+					"file_path": map[string]any{
+						"description": "Absolute path to inspect",
+					},
+				},
+			},
+		},
+		{
+			Name:        "Other",
+			Description: "General helper",
+		},
+	}, "file path", 2)
+	if len(results) != 1 || results[0].Definition.Name != "Runner" {
+		t.Fatalf("results = %#v, want Runner from input schema match", results)
+	}
+}
+
+func TestToolSearchMatchesOutputSchemaFields(t *testing.T) {
+	results := matchToolDefinitions([]contracts.ToolDefinition{
+		{
+			Name:        "Collector",
+			Description: "Collects server output",
+			OutputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"severity": map[string]any{
+						"enum": []any{"error", "warning"},
+					},
+				},
+			},
+		},
+		{
+			Name:        "Other",
+			Description: "General helper",
+		},
+	}, "severity warning", 2)
+	if len(results) != 1 || results[0].Definition.Name != "Collector" {
+		t.Fatalf("results = %#v, want Collector from output schema match", results)
+	}
+}
+
 func TestCopyJSONSchemaDeepCopiesNestedMapsAndSlices(t *testing.T) {
 	original := contracts.JSONSchema{
 		"type":     "object",
