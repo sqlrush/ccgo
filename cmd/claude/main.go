@@ -316,6 +316,16 @@ type pluginCLIAvailableList struct {
 	Available []pluginCLIAvailableEntry `json:"available"`
 }
 
+type pluginCLIMarketplaceEntry struct {
+	Name            string `json:"name"`
+	Source          string `json:"source,omitempty"`
+	Repo            string `json:"repo,omitempty"`
+	URL             string `json:"url,omitempty"`
+	Path            string `json:"path,omitempty"`
+	Package         string `json:"package,omitempty"`
+	InstallLocation string `json:"installLocation,omitempty"`
+}
+
 func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
 	_ = ctx
 	if len(args) == 0 {
@@ -325,6 +335,8 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "list", "ls":
 		return runPluginListCLI(state, args[1:], stdout, stderr)
+	case "marketplace", "marketplaces":
+		return runPluginMarketplaceCLI(state, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ccgo plugin: unsupported subcommand %s\n", args[0])
 		return 2
@@ -393,6 +405,66 @@ func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, s
 	return 0
 }
 
+func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "ccgo plugin marketplace: missing subcommand")
+		return 2
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "list", "ls":
+		return runPluginMarketplaceListCLI(state, args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "ccgo plugin marketplace: unsupported subcommand %s\n", args[0])
+		return 2
+	}
+}
+
+func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin marketplace list", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOutput := flags.Bool("json", false, "output JSON")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() > 0 {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace list: unexpected argument %s\n", flags.Arg(0))
+		return 2
+	}
+	runner, err := state.ConversationRunner()
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace list: %v\n", err)
+		return 1
+	}
+	marketplaces := pluginCLIMarketplaceEntries(runnerMergedSettings(runner))
+	if *jsonOutput {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(marketplaces); err != nil {
+			fmt.Fprintf(stderr, "ccgo plugin marketplace list: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if len(marketplaces) == 0 {
+		fmt.Fprintln(stdout, "No marketplaces configured")
+		return 0
+	}
+	fmt.Fprintln(stdout, "Configured marketplaces:")
+	for _, marketplace := range marketplaces {
+		fmt.Fprintf(stdout, "- %s\n", marketplace.Name)
+		if source := pluginCLIMarketplaceSourceText(marketplace); source != "" {
+			fmt.Fprintf(stdout, "  Source: %s\n", source)
+		}
+		if marketplace.InstallLocation != "" {
+			fmt.Fprintf(stdout, "  Install location: %s\n", marketplace.InstallLocation)
+		}
+	}
+	return 0
+}
+
 func pluginCLIInstalledEntries(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings) []pluginCLIListEntry {
 	out := make([]pluginCLIListEntry, 0, len(plugins))
 	for _, plugin := range plugins {
@@ -444,6 +516,81 @@ func pluginCLIAvailableEntries(marketplacePlugins []pluginpkg.LoadedPlugin, inst
 	return out
 }
 
+func pluginCLIMarketplaceEntries(settings contracts.Settings) []pluginCLIMarketplaceEntry {
+	names := make([]string, 0, len(settings.ExtraKnownMarketplaces))
+	for name := range settings.ExtraKnownMarketplaces {
+		if strings.TrimSpace(name) != "" {
+			names = append(names, strings.TrimSpace(name))
+		}
+	}
+	sort.Strings(names)
+	out := make([]pluginCLIMarketplaceEntry, 0, len(names))
+	for _, name := range names {
+		rawEntry, _ := settings.ExtraKnownMarketplaces[name].(map[string]any)
+		source := pluginCLIMarketplaceSource(rawEntry)
+		sourceType := strings.TrimSpace(pluginCLIStringFromMap(source, "source"))
+		entry := pluginCLIMarketplaceEntry{
+			Name:            name,
+			Source:          sourceType,
+			InstallLocation: strings.TrimSpace(pluginCLIStringFromMap(rawEntry, "installLocation")),
+		}
+		switch sourceType {
+		case "github":
+			entry.Repo = pluginCLIStringFromMap(source, "repo")
+		case "git", "url":
+			entry.URL = pluginCLIStringFromMap(source, "url")
+		case "directory", "file":
+			entry.Path = pluginCLIStringFromMap(source, "path")
+		case "npm":
+			entry.Package = pluginCLIStringFromMap(source, "package")
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func pluginCLIMarketplaceSource(rawEntry map[string]any) map[string]any {
+	if len(rawEntry) == 0 {
+		return nil
+	}
+	if source, ok := rawEntry["source"].(map[string]any); ok {
+		return source
+	}
+	return rawEntry
+}
+
+func pluginCLIMarketplaceSourceText(marketplace pluginCLIMarketplaceEntry) string {
+	switch marketplace.Source {
+	case "github":
+		if marketplace.Repo != "" {
+			return "GitHub (" + marketplace.Repo + ")"
+		}
+	case "git":
+		if marketplace.URL != "" {
+			return "Git (" + marketplace.URL + ")"
+		}
+	case "url":
+		if marketplace.URL != "" {
+			return "URL (" + marketplace.URL + ")"
+		}
+	case "directory":
+		if marketplace.Path != "" {
+			return "Directory (" + marketplace.Path + ")"
+		}
+	case "file":
+		if marketplace.Path != "" {
+			return "File (" + marketplace.Path + ")"
+		}
+	case "npm":
+		if marketplace.Package != "" {
+			return "NPM (" + marketplace.Package + ")"
+		}
+	case "settings":
+		return "Settings"
+	}
+	return strings.TrimSpace(marketplace.Source)
+}
+
 func pluginCLIID(plugin pluginpkg.LoadedPlugin) string {
 	name := strings.TrimSpace(plugin.Name)
 	if name == "" {
@@ -465,6 +612,14 @@ func pluginCLIVersion(version string) string {
 
 func pluginCLINameKey(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func pluginCLIStringFromMap(values map[string]any, key string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	value, _ := values[key].(string)
+	return strings.TrimSpace(value)
 }
 
 func pluginCLIMCPServerNames(servers map[string]contracts.MCPServer) []string {

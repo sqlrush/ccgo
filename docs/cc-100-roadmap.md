@@ -37,6 +37,8 @@ M4 补充：tool executor 会围绕 `PreToolUse`、`PostToolUse`、`PermissionDe
 
 M10 补充：plugin command/agent 的 allowed tool frontmatter 解析现在只在顶层逗号或空白处分隔，保留括号、方括号和引号内的逗号/空白，避免 `Bash(git commit -m "x,y")` 这类 tool pattern 被误拆。
 
+M8 补充：CLI `plugin marketplace list` 现在可列出 settings 中已配置的 marketplace；`--json` 输出按名称排序的 source/repo/url/path/package/installLocation 结构，普通文本输出与无配置提示也已覆盖。
+
 M10 补充：新增 `TaskOutput`/`AgentOutputTool` 和 `KillTask`/`TaskStop` 内置工具；`TaskOutput` 可列出当前 session 的 sidechain task，或按 task/sidechain ID 读取状态、summary、tail 输出和 agent metadata，`KillTask` 会通过 sidechain manager 写入 cancelled lifecycle summary。完整 AgentTool 执行循环、progress event streaming、resume command UI 和 worktree isolation 仍未完成。
 
 M10 补充：新增 `ResumeTask`/`TaskResume` 只读工具，复用 sidechain resume context builder 返回 `can_resume`、截断状态、message limit、agent metadata 和恢复用 tail message 摘要；plugin agent prompt 被 tail 截断时会自动以前置 system meta message 恢复。完整恢复后的 agent 执行循环和 UI picker 仍未完成。

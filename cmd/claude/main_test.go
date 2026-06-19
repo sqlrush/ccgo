@@ -2149,6 +2149,113 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 	}
 }
 
+func TestRunPluginMarketplaceListCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	directoryMarket := filepath.Join(t.TempDir(), "team-market")
+	fileMarket := filepath.Join(t.TempDir(), "catalog.json")
+	settings := fmt.Sprintf(`{
+		"extraKnownMarketplaces": {
+			"team": {
+				"source": {"source": "directory", "path": %q},
+				"installLocation": "project"
+			},
+			"remote": {"source": {"source": "url", "url": "https://example.com/catalog.json"}},
+			"github": {"source": {"source": "github", "repo": "owner/repo"}},
+			"npm-tools": {"source": {"source": "npm", "package": "@example/tools"}},
+			"file": {"source": {"source": "file", "path": %q}}
+		}
+	}`, directoryMarket, fileMarket)
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "marketplace", "list", "--json"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	var payload []map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	if len(payload) != 5 {
+		t.Fatalf("marketplaces = %#v", payload)
+	}
+	byName := map[string]map[string]any{}
+	for _, marketplace := range payload {
+		name, _ := marketplace["name"].(string)
+		byName[name] = marketplace
+	}
+	if byName["team"]["source"] != "directory" || byName["team"]["path"] != directoryMarket || byName["team"]["installLocation"] != "project" {
+		t.Fatalf("team marketplace = %#v", byName["team"])
+	}
+	if byName["remote"]["source"] != "url" || byName["remote"]["url"] != "https://example.com/catalog.json" {
+		t.Fatalf("remote marketplace = %#v", byName["remote"])
+	}
+	if byName["github"]["source"] != "github" || byName["github"]["repo"] != "owner/repo" {
+		t.Fatalf("github marketplace = %#v", byName["github"])
+	}
+	if byName["npm-tools"]["source"] != "npm" || byName["npm-tools"]["package"] != "@example/tools" {
+		t.Fatalf("npm marketplace = %#v", byName["npm-tools"])
+	}
+	if byName["file"]["source"] != "file" || byName["file"]["path"] != fileMarket {
+		t.Fatalf("file marketplace = %#v", byName["file"])
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "list"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("text exit = %d stderr=%s", code, stderr.String())
+	}
+	for _, want := range []string{
+		"Configured marketplaces:",
+		"- team",
+		"Source: Directory (" + directoryMarket + ")",
+		"Install location: project",
+		"- remote",
+		"Source: URL (https://example.com/catalog.json)",
+		"- github",
+		"Source: GitHub (owner/repo)",
+		"- npm-tools",
+		"Source: NPM (@example/tools)",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("text output missing %q: %q", want, stdout.String())
+		}
+	}
+}
+
+func TestRunPluginMarketplaceListEmpty(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "marketplace", "list"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "No marketplaces configured" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "refresh"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "unsupported subcommand refresh") {
+		t.Fatalf("unsupported exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
