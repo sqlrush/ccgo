@@ -94,6 +94,9 @@ func ContractMessageFromTranscript(message TranscriptMessage) (contracts.Message
 		if clone.Type == "" {
 			clone.Type = contracts.MessageType(message.Type)
 		}
+		if message.CompactMetadata != nil {
+			ensureCompactMetadataRaw(clone, message.CompactMetadata)
+		}
 		return *clone, true
 	}
 	messageType := contracts.MessageType(message.Type)
@@ -112,6 +115,10 @@ func ContractMessageFromTranscript(message TranscriptMessage) (contracts.Message
 	if messageType == contracts.MessageAttachment {
 		raw = transcriptRawMap(message.Raw)
 	}
+	if message.CompactMetadata != nil {
+		raw = ensureRawMap(raw)
+		raw["compactMetadata"] = *message.CompactMetadata
+	}
 	return contracts.Message{
 		Type:       messageType,
 		UUID:       message.UUID,
@@ -122,6 +129,23 @@ func ContractMessageFromTranscript(message TranscriptMessage) (contracts.Message
 		Content:    content,
 		Raw:        raw,
 	}, true
+}
+
+func ensureCompactMetadataRaw(message *contracts.Message, metadata *CompactMetadata) {
+	if message == nil || metadata == nil {
+		return
+	}
+	message.Raw = ensureRawMap(message.Raw)
+	if _, ok := message.Raw["compactMetadata"]; !ok {
+		message.Raw["compactMetadata"] = *metadata
+	}
+}
+
+func ensureRawMap(raw map[string]any) map[string]any {
+	if raw != nil {
+		return raw
+	}
+	return map[string]any{}
 }
 
 func transcriptRawMap(raw json.RawMessage) map[string]any {

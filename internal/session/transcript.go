@@ -67,11 +67,12 @@ type TranscriptMessage struct {
 }
 
 type CompactMetadata struct {
-	Trigger            string            `json:"trigger,omitempty"`
-	PreTokens          int               `json:"preTokens,omitempty"`
-	UserContext        string            `json:"userContext,omitempty"`
-	MessagesSummarized int               `json:"messagesSummarized,omitempty"`
-	PreservedSegment   *PreservedSegment `json:"preservedSegment,omitempty"`
+	Trigger                   string            `json:"trigger,omitempty"`
+	PreTokens                 int               `json:"preTokens,omitempty"`
+	UserContext               string            `json:"userContext,omitempty"`
+	MessagesSummarized        int               `json:"messagesSummarized,omitempty"`
+	PreCompactDiscoveredTools []string          `json:"preCompactDiscoveredTools,omitempty"`
+	PreservedSegment          *PreservedSegment `json:"preservedSegment,omitempty"`
 }
 
 type PreservedSegment struct {

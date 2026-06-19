@@ -8,6 +8,7 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
 
@@ -86,6 +87,7 @@ func toolDefinitionDiscovered(definition contracts.ToolDefinition, discovered ma
 func discoveredToolReferenceNames(history []contracts.Message) map[string]struct{} {
 	discovered := map[string]struct{}{}
 	for _, message := range history {
+		collectCompactBoundaryToolReferences(message, discovered)
 		for _, block := range message.Content {
 			if block.Type != contracts.ContentToolResult {
 				continue
@@ -94,6 +96,52 @@ func discoveredToolReferenceNames(history []contracts.Message) map[string]struct
 		}
 	}
 	return discovered
+}
+
+func collectCompactBoundaryToolReferences(message contracts.Message, discovered map[string]struct{}) {
+	if message.Type != contracts.MessageSystem || message.Subtype != "compact_boundary" {
+		return
+	}
+	if len(message.Raw) == 0 {
+		return
+	}
+	for _, key := range []string{"compactMetadata", "compact_metadata"} {
+		if metadata, ok := message.Raw[key]; ok {
+			collectCompactMetadataToolReferences(metadata, discovered)
+		}
+	}
+}
+
+func collectCompactMetadataToolReferences(metadata any, discovered map[string]struct{}) {
+	switch typed := metadata.(type) {
+	case session.CompactMetadata:
+		for _, toolName := range typed.PreCompactDiscoveredTools {
+			addDiscoveredToolReference(toolName, discovered)
+		}
+	case *session.CompactMetadata:
+		if typed != nil {
+			collectCompactMetadataToolReferences(*typed, discovered)
+		}
+	case map[string]any:
+		for _, key := range []string{"preCompactDiscoveredTools", "pre_compact_discovered_tools"} {
+			collectStringSliceToolReferences(typed[key], discovered)
+		}
+	}
+}
+
+func collectStringSliceToolReferences(value any, discovered map[string]struct{}) {
+	switch typed := value.(type) {
+	case []string:
+		for _, toolName := range typed {
+			addDiscoveredToolReference(toolName, discovered)
+		}
+	case []any:
+		for _, item := range typed {
+			if toolName, ok := item.(string); ok {
+				addDiscoveredToolReference(toolName, discovered)
+			}
+		}
+	}
 }
 
 func collectToolReferenceNames(content any, discovered map[string]struct{}) {

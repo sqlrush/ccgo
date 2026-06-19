@@ -7981,6 +7981,72 @@ func TestBuildRequestLoadsDecodedToolReferenceMaps(t *testing.T) {
 	}
 }
 
+func TestBuildRequestLoadsCompactBoundaryDiscoveredTools(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{
+		{
+			Type:    contracts.MessageSystem,
+			Subtype: "compact_boundary",
+			Raw: map[string]any{
+				"compactMetadata": session.CompactMetadata{
+					PreCompactDiscoveredTools: []string{"Task"},
+				},
+			},
+		},
+	}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if req.Tools[0].DeferLoading {
+		t.Fatalf("task defer_loading = true after compact-boundary discovery")
+	}
+}
+
+func TestBuildRequestLoadsDecodedCompactBoundaryDiscoveredTools(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	history := []contracts.Message{
+		{
+			Type:    contracts.MessageSystem,
+			Subtype: "compact_boundary",
+			Raw: map[string]any{
+				"compact_metadata": map[string]any{
+					"pre_compact_discovered_tools": []any{"Task"},
+				},
+			},
+		},
+	}
+	req, err := runner.BuildRequest(history, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if req.Tools[0].DeferLoading {
+		t.Fatalf("task defer_loading = true after decoded compact-boundary discovery")
+	}
+}
+
 func TestRunnerGatesAdvancedLSPDiagnosticsTool(t *testing.T) {
 	requestForAdvancedSetting := func(t *testing.T, advanced *contracts.AdvancedSetting) anthropic.Request {
 		t.Helper()

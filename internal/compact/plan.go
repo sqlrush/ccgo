@@ -62,10 +62,11 @@ func BuildPlan(history []contracts.Message, options PlanOptions) Plan {
 		trigger = string(TriggerManual)
 	}
 	metadata := session.CompactMetadata{
-		Trigger:            trigger,
-		PreTokens:          options.PreTokens,
-		UserContext:        options.UserContext,
-		MessagesSummarized: len(summarized),
+		Trigger:                   trigger,
+		PreTokens:                 options.PreTokens,
+		UserContext:               options.UserContext,
+		MessagesSummarized:        len(summarized),
+		PreCompactDiscoveredTools: discoveredToolReferences(history),
 	}
 	boundary := contracts.Message{
 		Type:      contracts.MessageSystem,
@@ -103,6 +104,54 @@ func BuildPlan(history []contracts.Message, options PlanOptions) Plan {
 		Output:     output,
 		Metadata:   metadata,
 	}
+}
+
+func discoveredToolReferences(history []contracts.Message) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	for _, message := range history {
+		for _, block := range message.Content {
+			if block.Type != contracts.ContentToolResult {
+				continue
+			}
+			collectToolReferenceNames(block.Content, seen, &out)
+		}
+	}
+	return out
+}
+
+func collectToolReferenceNames(content any, seen map[string]struct{}, out *[]string) {
+	switch typed := content.(type) {
+	case contracts.ToolReference:
+		addToolReferenceName(typed.ToolName, seen, out)
+	case []contracts.ToolReference:
+		for _, reference := range typed {
+			addToolReferenceName(reference.ToolName, seen, out)
+		}
+	case map[string]any:
+		if typeName, _ := typed["type"].(string); typeName == "tool_reference" {
+			if toolName, _ := typed["tool_name"].(string); toolName != "" {
+				addToolReferenceName(toolName, seen, out)
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			collectToolReferenceNames(item, seen, out)
+		}
+	}
+}
+
+func addToolReferenceName(name string, seen map[string]struct{}, out *[]string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	key := strings.ToLower(name)
+	if _, ok := seen[key]; ok {
+		return
+	}
+	seen[key] = struct{}{}
+	*out = append(*out, name)
 }
 
 func BoundaryTranscriptMessage(message contracts.Message, metadata session.CompactMetadata) session.TranscriptMessage {

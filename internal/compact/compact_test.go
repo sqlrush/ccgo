@@ -69,6 +69,32 @@ func TestBuildPlanCreatesBoundarySummaryAndPreservesRecentMessages(t *testing.T)
 	}
 }
 
+func TestBuildPlanCarriesDiscoveredToolReferences(t *testing.T) {
+	history := []contracts.Message{
+		msgs.UserText("find tools"),
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{{
+				Type:      contracts.ContentToolResult,
+				ToolUseID: "toolu_search",
+				Content: []contracts.ToolReference{
+					contracts.NewToolReference("Read"),
+					contracts.NewToolReference("Edit"),
+					contracts.NewToolReference("read"),
+				},
+			}},
+		},
+	}
+	plan := BuildPlan(history, PlanOptions{
+		Trigger: TriggerManual,
+		Summary: "summary",
+	})
+	got := plan.Metadata.PreCompactDiscoveredTools
+	if len(got) != 2 || got[0] != "Read" || got[1] != "Edit" {
+		t.Fatalf("pre-compact discovered tools = %#v", got)
+	}
+}
+
 func TestEstimateTokensAndShouldRun(t *testing.T) {
 	history := []contracts.Message{msgs.UserText(strings.Repeat("x", 400))}
 	if got := EstimateTokens(history); got < 90 || got > 110 {

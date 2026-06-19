@@ -195,6 +195,8 @@ M8 补充：新增基础 `ToolSearch` tool 并注册到默认内置工具集，e
 
 M8/M2 补充：conversation `BuildRequest` 现在会扫描历史 `tool_result.content` 中的 `tool_reference`，并把已发现工具在后续 API request 中作为 loaded tool 发送，不再携带 `defer_loading`；扫描兼容运行时 `ToolReference` 值和 transcript/JSON 解码后的 map 形态。完整官方 tool-reference expansion/filtering 仍未完成。
 
+M8/M6 补充：compact plan 现在会把 compact 前已发现的 `tool_reference` 名称快照进 `compactMetadata.preCompactDiscoveredTools`，session transcript alias/resume 转换会保留该 metadata，conversation `BuildRequest` 可在 tool-result 消息被 summary 替换后继续从 compact boundary 恢复已发现工具并取消 `defer_loading`。完整官方 compact/snipping 边界策略仍未完成。
+
 M8/M2 补充：Anthropic request tool 转换现在会保留 contract 的 `strict`、`eager_input_streaming`、`cache_control` 与 `should_defer`，将 deferred 工具序列化为 API `defer_loading`，并用 `always_load` 覆盖 deferred hint；API tool description 会按 description、prompt、searchHint 顺序 fallback，conversation runner 构造请求时会把 `Task` 等 deferred tool 的 strict/defer_loading 元数据带到最终请求。完整 deferred/lazy tool discovery 仍未完成。
 
 M8 补充：新增基础 slash command parser/executor，按官方 `/command args` 与 `/mcp:tool (MCP) args` 形态解析，并把本地项目 prompt skill slash 调用接入 conversation runner：`/skill args` 会生成 `<command-name>/<command-message>/<command-args>` metadata user message 和展开后的 meta prompt message，写入 transcript/parent chain 后再请求模型；skill frontmatter `model` 可覆盖本轮请求模型。local/local-jsx 命令目前只返回未实现输出，不会误发给模型；command permissions attachment、forked skill、MCP/plugin/bundled slash 来源和 UI 仍未完成。

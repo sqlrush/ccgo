@@ -320,10 +320,11 @@ func (m *CompactMetadata) UnmarshalJSON(data []byte) error {
 	type CompactMetadataJSON CompactMetadata
 	var aux struct {
 		*CompactMetadataJSON
-		PreTokensSnake          int               `json:"pre_tokens"`
-		UserContextSnake        string            `json:"user_context"`
-		MessagesSummarizedSnake int               `json:"messages_summarized"`
-		PreservedSegmentSnake   *PreservedSegment `json:"preserved_segment"`
+		PreTokensSnake                 int               `json:"pre_tokens"`
+		UserContextSnake               string            `json:"user_context"`
+		MessagesSummarizedSnake        int               `json:"messages_summarized"`
+		PreCompactDiscoveredToolsSnake []string          `json:"pre_compact_discovered_tools"`
+		PreservedSegmentSnake          *PreservedSegment `json:"preserved_segment"`
 	}
 	base := CompactMetadataJSON{}
 	aux.CompactMetadataJSON = &base
@@ -339,6 +340,9 @@ func (m *CompactMetadata) UnmarshalJSON(data []byte) error {
 	}
 	if m.MessagesSummarized == 0 {
 		m.MessagesSummarized = aux.MessagesSummarizedSnake
+	}
+	if len(m.PreCompactDiscoveredTools) == 0 {
+		m.PreCompactDiscoveredTools = append([]string(nil), aux.PreCompactDiscoveredToolsSnake...)
 	}
 	if m.PreservedSegment == nil {
 		m.PreservedSegment = aux.PreservedSegmentSnake
