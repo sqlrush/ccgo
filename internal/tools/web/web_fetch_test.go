@@ -330,6 +330,15 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
         <option>US East</option>
         <option>EU West</option>
       </select>
+      <select aria-label="Tier">
+        <option label="Starter tier" value="starter-secret"></option>
+        <option label="Enterprise tier" selected value="enterprise-secret"></option>
+      </select>
+      <select aria-label="Datacenters" multiple>
+        <option selected>AMS</option>
+        <option>LHR</option>
+        <option selected>IAD</option>
+      </select>
       <input type="hidden" value="csrf-secret">
       <input type="password" value="super-secret-password">
       <input type="file" value="/private/report.pdf">
@@ -364,6 +373,8 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
 		"Existing note",
 		"Input: Environment: Production",
 		"Input: Region: US East",
+		"Input: Tier: Enterprise tier",
+		"Input: Datacenters: AMS, IAD",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered body missing %q: %#v", want, rendered)
@@ -372,7 +383,7 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
 	if strings.Contains(rendered, "Visible label should not duplicate") {
 		t.Fatalf("rendered body duplicated non-empty button label: %#v", rendered)
 	}
-	for _, leaked := range []string{"Draft placeholder", "Development", "Staging", "EU West", "csrf-secret", "super-secret-password", "/private/report.pdf"} {
+	for _, leaked := range []string{"Draft placeholder", "Development", "Staging", "EU West", "Starter tier", "starter-secret", "enterprise-secret", "LHR", "csrf-secret", "super-secret-password", "/private/report.pdf"} {
 		if strings.Contains(rendered, leaked) {
 			t.Fatalf("rendered body leaked %q: %#v", leaked, rendered)
 		}

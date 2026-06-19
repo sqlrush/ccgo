@@ -560,7 +560,7 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 				}
 			} else {
 				label := firstNonEmptyWebFetchAttr(rawTag, "aria-label", "title")
-				selects = append(selects, htmlWebFetchSelectControl{Label: label})
+				selects = append(selects, htmlWebFetchSelectControl{Label: label, Multiple: htmlWebFetchHasAttr(rawTag, "multiple")})
 			}
 			i += end + 1
 			continue
@@ -573,6 +573,7 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 					selects[idx].InOption = true
 					selects[idx].OptionSelected = htmlWebFetchHasAttr(rawTag, "selected")
 					selects[idx].OptionText = ""
+					selects[idx].OptionLabel = firstNonEmptyWebFetchAttr(rawTag, "label")
 				}
 			}
 			i += end + 1
@@ -699,12 +700,15 @@ type htmlWebFetchLabeledControl struct {
 }
 
 type htmlWebFetchSelectControl struct {
-	Label          string
-	FirstOption    string
-	SelectedOption string
-	InOption       bool
-	OptionSelected bool
-	OptionText     string
+	Label           string
+	FirstOption     string
+	SelectedOption  string
+	SelectedOptions []string
+	Multiple        bool
+	InOption        bool
+	OptionSelected  bool
+	OptionText      string
+	OptionLabel     string
 }
 
 func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnchor) ([]htmlWebFetchAnchor, bool) {
@@ -760,23 +764,37 @@ func finishHTMLWebFetchSelectOption(control htmlWebFetchSelectControl) htmlWebFe
 	if !control.InOption {
 		return control
 	}
-	text := strings.Join(strings.Fields(control.OptionText), " ")
+	text := strings.TrimSpace(control.OptionLabel)
+	if text == "" {
+		text = strings.Join(strings.Fields(control.OptionText), " ")
+	}
 	if text != "" {
 		if control.FirstOption == "" {
 			control.FirstOption = text
 		}
 		if control.OptionSelected {
-			control.SelectedOption = text
+			if control.Multiple {
+				control.SelectedOptions = append(control.SelectedOptions, text)
+			} else {
+				control.SelectedOption = text
+			}
 		}
 	}
 	control.InOption = false
 	control.OptionSelected = false
 	control.OptionText = ""
+	control.OptionLabel = ""
 	return control
 }
 
 func appendHTMLWebFetchSelectText(b *strings.Builder, control htmlWebFetchSelectControl) {
-	text := strings.TrimSpace(control.SelectedOption)
+	text := ""
+	if control.Multiple && len(control.SelectedOptions) > 0 {
+		text = strings.Join(control.SelectedOptions, ", ")
+	}
+	if text == "" {
+		text = strings.TrimSpace(control.SelectedOption)
+	}
 	if text == "" {
 		text = strings.TrimSpace(control.FirstOption)
 	}
