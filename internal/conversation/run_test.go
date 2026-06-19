@@ -7818,6 +7818,31 @@ func TestBuildRequestIncludesToolDefinitions(t *testing.T) {
 	}
 }
 
+func TestBuildRequestPreservesDeferredToolMetadata(t *testing.T) {
+	registry, err := tool.NewRegistry(tasktools.NewTaskTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "Task" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if !req.Tools[0].DeferLoading {
+		t.Fatalf("task defer_loading = false, want true")
+	}
+	if !req.Tools[0].Strict {
+		t.Fatalf("task strict = false, want true")
+	}
+}
+
 func TestRunnerGatesAdvancedLSPDiagnosticsTool(t *testing.T) {
 	requestForAdvancedSetting := func(t *testing.T, advanced *contracts.AdvancedSetting) anthropic.Request {
 		t.Helper()

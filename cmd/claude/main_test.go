@@ -1997,7 +1997,7 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
 	}
-	if betaHeader != "beta-one,beta-two,fast-mode-2025-01-24" {
+	if betaHeader != "beta-one,beta-two,fast-mode-2025-01-24,structured-outputs-2025-11-13" {
 		t.Fatalf("anthropic-beta = %q", betaHeader)
 	}
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")

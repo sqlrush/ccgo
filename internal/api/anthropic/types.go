@@ -36,9 +36,11 @@ type ToolDefinition struct {
 
 func ToolFromContract(def contracts.ToolDefinition) ToolDefinition {
 	return ToolDefinition{
-		Name:        def.Name,
-		Description: def.Description,
-		InputSchema: def.InputSchema,
+		Name:         def.Name,
+		Description:  def.Description,
+		InputSchema:  def.InputSchema,
+		Strict:       def.Strict,
+		DeferLoading: def.ShouldDefer && !def.AlwaysLoad,
 	}
 }
 
