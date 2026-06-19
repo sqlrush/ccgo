@@ -7880,6 +7880,18 @@ func allowToolSearchForTest(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
 }
 
+func testDeferredToolDefinition(name string, description string) tool.FuncTool {
+	return tool.FuncTool{DefinitionValue: contracts.ToolDefinition{
+		Name:        name,
+		Description: description,
+		ShouldDefer: true,
+		InputSchema: contracts.JSONSchema{
+			"type":       "object",
+			"properties": map[string]any{"value": map[string]any{"type": "string"}},
+		},
+	}}
+}
+
 func requestTool(request anthropic.Request, name string) anthropic.ToolDefinition {
 	for _, definition := range request.Tools {
 		if definition.Name == name {
@@ -8175,6 +8187,60 @@ func TestBuildRequestWithToolSearchDisabledByEnvLoadsDeferredTools(t *testing.T)
 				t.Fatalf("messages = %#v", req.Messages)
 			}
 		})
+	}
+}
+
+func TestBuildRequestWithToolSearchAutoBelowThresholdLoadsDeferredTools(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "TinyDeferred" || req.Tools[0].DeferLoading {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if len(req.Messages) != 1 || strings.HasPrefix(req.Messages[0].Content[0].Text, "<available-deferred-tools>") {
+		t.Fatalf("messages = %#v", req.Messages)
+	}
+}
+
+func TestBuildRequestWithToolSearchAutoAboveThresholdOmitsUndiscoveredDeferredTools(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto:10suffix")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "10")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "ToolSearch" {
+		t.Fatalf("tools = %#v", req.Tools)
+	}
+	if len(req.Messages) != 2 || !strings.Contains(req.Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
+		t.Fatalf("messages = %#v", req.Messages)
 	}
 }
 

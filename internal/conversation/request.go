@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"encoding/json"
 	"net/url"
 	"os"
 	"sort"
@@ -12,8 +13,15 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/model"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
+)
+
+const (
+	defaultAutoToolSearchPercentage = 10
+	toolSearchCharsPerToken         = 2.5
+	modelContextWindowDefault       = 200000
 )
 
 func (r Runner) BuildRequest(history []contracts.Message, model string) (anthropic.Request, error) {
@@ -77,7 +85,7 @@ func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history
 	if !hasToolSearchDefinition(definitions) {
 		return applyDiscoveredToolReferences(definitions, history), nil, false
 	}
-	if !toolSearchEnabledForRequest(model) {
+	if !toolSearchEnabledForRequest(model, definitions) {
 		return loadAllDeferredTools(withoutToolSearchDefinition(definitions)), nil, false
 	}
 	deferredNames := deferredToolNames(definitions)
@@ -108,7 +116,7 @@ const (
 	toolSearchModeStandard toolSearchMode = "standard"
 )
 
-func toolSearchEnabledForRequest(model string) bool {
+func toolSearchEnabledForRequest(model string, definitions []contracts.ToolDefinition) bool {
 	if !modelSupportsToolReference(model) {
 		return false
 	}
@@ -118,6 +126,9 @@ func toolSearchEnabledForRequest(model string) bool {
 	}
 	if os.Getenv("ENABLE_TOOL_SEARCH") == "" && !isFirstPartyAnthropicBaseURL(os.Getenv("ANTHROPIC_BASE_URL")) {
 		return false
+	}
+	if mode == toolSearchModeTSTAuto {
+		return deferredToolDescriptionChars(definitions) >= autoToolSearchCharThreshold(model)
 	}
 	return true
 }
@@ -155,8 +166,8 @@ func autoToolSearchPercent(value string) (int, bool) {
 	if !strings.HasPrefix(value, "auto:") {
 		return 0, false
 	}
-	percent, err := strconv.Atoi(value[len("auto:"):])
-	if err != nil {
+	percent, ok := parseLeadingInt(value[len("auto:"):])
+	if !ok {
 		return 0, false
 	}
 	if percent < 0 {
@@ -168,8 +179,103 @@ func autoToolSearchPercent(value string) (int, bool) {
 	return percent, true
 }
 
+func parseLeadingInt(value string) (int, bool) {
+	value = strings.TrimLeft(value, " \t\r\n")
+	if value == "" {
+		return 0, false
+	}
+	sign := 1
+	if value[0] == '-' || value[0] == '+' {
+		if value[0] == '-' {
+			sign = -1
+		}
+		value = value[1:]
+	}
+	i := 0
+	for i < len(value) && value[i] >= '0' && value[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return 0, false
+	}
+	parsed := 0
+	for j := 0; j < i; j++ {
+		if parsed > 100 {
+			break
+		}
+		parsed = parsed*10 + int(value[j]-'0')
+	}
+	return sign * parsed, true
+}
+
 func isAutoToolSearchMode(value string) bool {
 	return value == "auto" || strings.HasPrefix(value, "auto:")
+}
+
+func autoToolSearchPercentage() int {
+	value := os.Getenv("ENABLE_TOOL_SEARCH")
+	if value == "auto" {
+		return defaultAutoToolSearchPercentage
+	}
+	if percent, ok := autoToolSearchPercent(value); ok {
+		return percent
+	}
+	return defaultAutoToolSearchPercentage
+}
+
+func autoToolSearchCharThreshold(modelName string) int {
+	tokenThreshold := toolSearchContextWindowTokens(modelName) * autoToolSearchPercentage() / 100
+	return int(float64(tokenThreshold) * toolSearchCharsPerToken)
+}
+
+func toolSearchContextWindowTokens(modelName string) int {
+	if os.Getenv("USER_TYPE") == "ant" {
+		if override, err := strconv.Atoi(os.Getenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS")); err == nil && override > 0 {
+			return override
+		}
+	}
+	lookupName := modelName
+	if session.IsEnvTruthy(os.Getenv("CLAUDE_CODE_DISABLE_1M_CONTEXT")) {
+		lookupName = trimOneMillionContextSuffix(lookupName)
+	}
+	if capability, ok := model.DefaultRegistry().Resolve(lookupName); ok && capability.ContextWindowTokens > 0 {
+		return capability.ContextWindowTokens
+	}
+	return modelContextWindowDefault
+}
+
+func trimOneMillionContextSuffix(modelName string) string {
+	trimmed := strings.TrimSpace(modelName)
+	if strings.HasSuffix(strings.ToLower(trimmed), "[1m]") {
+		return strings.TrimSpace(trimmed[:len(trimmed)-len("[1m]")])
+	}
+	return modelName
+}
+
+func deferredToolDescriptionChars(definitions []contracts.ToolDefinition) int {
+	total := 0
+	for _, definition := range definitions {
+		if !toolDefinitionDeferred(definition) {
+			continue
+		}
+		total += len(definition.Name)
+		total += len(toolSearchDescriptionText(definition))
+		if len(definition.InputSchema) > 0 {
+			if encoded, err := json.Marshal(definition.InputSchema); err == nil {
+				total += len(encoded)
+			}
+		}
+	}
+	return total
+}
+
+func toolSearchDescriptionText(definition contracts.ToolDefinition) string {
+	for _, value := range []string{definition.Description, definition.Prompt, definition.SearchHint} {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func isEnvDefinedFalsy(value string) bool {
