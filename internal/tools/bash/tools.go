@@ -708,6 +708,20 @@ var gitConfigGetFlagsWithArgs = map[string]bool{
 	"--type":    true,
 }
 
+type gitConfigQuerySpec struct {
+	MinPositionals int
+	MaxPositionals int
+}
+
+var gitConfigQueryActions = map[string]gitConfigQuerySpec{
+	"--get":          {MinPositionals: 1, MaxPositionals: 1},
+	"--get-all":      {MinPositionals: 1, MaxPositionals: 1},
+	"--get-regexp":   {MinPositionals: 1, MaxPositionals: 2},
+	"--get-urlmatch": {MinPositionals: 2, MaxPositionals: 2},
+	"--list":         {MinPositionals: 0, MaxPositionals: 0},
+	"-l":             {MinPositionals: 0, MaxPositionals: 0},
+}
+
 var bashSafeEnvVars = map[string]bool{
 	"GOEXPERIMENT":                   true,
 	"GOOS":                           true,
@@ -2983,10 +2997,90 @@ func readOnlyGitWorktree(args []string) bool {
 }
 
 func readOnlyGitConfig(args []string) bool {
-	if len(args) == 0 || args[0] != "--get" {
+	if len(args) == 0 {
 		return false
 	}
-	return argsAllowPositionals(args[1:], gitConfigGetAllowedFlags, gitConfigGetFlagsWithArgs, 1)
+	action := ""
+	positionals := []string{}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return false
+		}
+		if strings.HasPrefix(arg, "--") {
+			if strings.Contains(arg, "=") {
+				name, value, _ := strings.Cut(arg, "=")
+				if gitConfigGetFlagsWithArgs[name] {
+					if !safeGitConfigValue(value) {
+						return false
+					}
+					continue
+				}
+				return false
+			}
+			if _, ok := gitConfigQueryActions[arg]; ok {
+				if action != "" {
+					return false
+				}
+				action = arg
+				continue
+			}
+			if gitConfigGetFlagsWithArgs[arg] {
+				if i+1 >= len(args) || !safeGitConfigValue(args[i+1]) {
+					return false
+				}
+				i++
+				continue
+			}
+			if gitConfigGetAllowedFlags[arg] {
+				continue
+			}
+			return false
+		}
+		if strings.HasPrefix(arg, "-") {
+			if _, ok := gitConfigQueryActions[arg]; ok {
+				if action != "" {
+					return false
+				}
+				action = arg
+				continue
+			}
+			if gitConfigGetAllowedFlags[arg] {
+				continue
+			}
+			return false
+		}
+		if action == "" || !safeGitConfigValue(arg) {
+			return false
+		}
+		positionals = append(positionals, arg)
+	}
+	spec, ok := gitConfigQueryActions[action]
+	return ok && len(positionals) >= spec.MinPositionals && len(positionals) <= spec.MaxPositionals
+}
+
+func safeGitConfigValue(value string) bool {
+	return strings.TrimSpace(value) != "" &&
+		!strings.HasPrefix(value, "-") &&
+		!strings.ContainsAny(value, "`\x00\n\r") &&
+		!hasShellExpansion(value)
+}
+
+func hasShellExpansion(value string) bool {
+	for i := 0; i < len(value); i++ {
+		if value[i] != '$' || i+1 >= len(value) {
+			continue
+		}
+		next := value[i+1]
+		if next == '(' || next == '{' || next == '_' ||
+			next >= 'A' && next <= 'Z' ||
+			next >= 'a' && next <= 'z' ||
+			next >= '0' && next <= '9' ||
+			strings.ContainsRune("?!*@#-", rune(next)) {
+			return true
+		}
+	}
+	return false
 }
 
 func destructiveWords(words []string) bool {
