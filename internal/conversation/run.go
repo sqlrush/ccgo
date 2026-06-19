@@ -3197,7 +3197,23 @@ func (r Runner) formatPluginSummary(raw string) string {
 			}
 			return r.formatPluginSearch(query)
 		case "marketplaces", "marketplace":
+			if len(args) > 1 {
+				switch args[1] {
+				case "plugins", "available", "browse", "discover":
+					return r.formatMarketplacePlugins(dropLeadingFields(raw, 2))
+				case "search", "find":
+					query := dropLeadingFields(raw, 2)
+					if strings.TrimSpace(query) == "" {
+						return "Usage: /plugin " + args[0] + " " + args[1] + " <query>"
+					}
+					return r.formatMarketplacePlugins(query)
+				case "show", "info":
+					return r.formatMarketplacePluginShow(dropLeadingFields(raw, 2))
+				}
+			}
 			return r.formatPluginMarketplaces()
+		case "available", "browse", "discover":
+			return r.formatMarketplacePlugins(subcommandRemainder(raw, args[0]))
 		case "config", "settings":
 			return r.formatPluginConfig(args)
 		case "install":
@@ -3398,6 +3414,104 @@ func (r Runner) formatPluginSearch(query string) string {
 	if len(results) > 20 {
 		lines = append(lines, fmt.Sprintf("Showing 20 of %d plugin matches.", len(results)))
 	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMarketplacePlugins(query string) string {
+	query = strings.TrimSpace(query)
+	merged := r.mergedSettings()
+	marketplacePlugins := pluginpkg.LoadMarketplacePluginDirsWithSettings(merged)
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	results := marketplacePluginResults(marketplacePlugins, installedPlugins, query)
+	if len(results) == 0 {
+		if len(marketplacePlugins) == 0 {
+			return "No marketplace plugins available from configured sources."
+		}
+		return "No marketplace plugins matched " + query + "."
+	}
+	lines := []string{
+		"Marketplace plugins",
+		fmt.Sprintf("Marketplace plugins: %d", len(marketplacePlugins)),
+		fmt.Sprintf("Matches: %d", len(results)),
+	}
+	if query != "" {
+		lines = append(lines, "Query: "+query)
+	}
+	for _, result := range firstMarketplacePluginResults(results, 20) {
+		name := result.Plugin.Name
+		if result.Plugin.Version != "" {
+			name += "@" + result.Plugin.Version
+		}
+		if result.Plugin.Marketplace != "" {
+			name += " [" + result.Plugin.Marketplace + "]"
+		}
+		line := "- " + name + " (" + result.State + ")"
+		if description := firstTextLine(result.Plugin.Description); description != "" {
+			line += ": " + description
+		}
+		if result.Match != "" {
+			line += "; match: " + result.Match
+		}
+		lines = append(lines, line)
+	}
+	if len(results) > 20 {
+		lines = append(lines, fmt.Sprintf("Showing 20 of %d marketplace plugin matches.", len(results)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r Runner) formatMarketplacePluginShow(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "Usage: /plugin marketplace show <plugin-name>"
+	}
+	merged := r.mergedSettings()
+	plugin, ok := findLoadedPlugin(pluginpkg.LoadMarketplacePluginDirsWithSettings(merged), name)
+	if !ok {
+		return "Marketplace plugin " + name + " was not found in configured marketplace sources."
+	}
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	lines := []string{
+		"Marketplace plugin " + plugin.Name,
+		"State: " + marketplacePluginState(plugin, installedPluginByName(installedPlugins)),
+		"Source: " + plugin.Root,
+	}
+	if strings.TrimSpace(plugin.Marketplace) != "" {
+		lines = append(lines, "Marketplace: "+plugin.Marketplace)
+	}
+	if strings.TrimSpace(plugin.Version) != "" {
+		lines = append(lines, "Version: "+plugin.Version)
+	}
+	if strings.TrimSpace(plugin.Description) != "" {
+		lines = append(lines, "Description: "+firstTextLine(plugin.Description))
+	}
+	commandNames := loadedPluginCommandNames(plugin)
+	lines = append(lines,
+		fmt.Sprintf("Commands: %d", len(commandNames)),
+		fmt.Sprintf("Skills: %d", len(plugin.SkillCommands)),
+		fmt.Sprintf("Agents: %d", len(plugin.Agents)),
+		fmt.Sprintf("MCP servers: %d", len(plugin.MCPServers)),
+		fmt.Sprintf("Output styles: %d", len(plugin.OutputStyles)),
+		fmt.Sprintf("Hooks: %d", pluginHookCount([]pluginpkg.LoadedPlugin{plugin})),
+	)
+	appendPluginShowSection := func(title string, values []string) {
+		if len(values) == 0 {
+			return
+		}
+		lines = append(lines, title+":")
+		for _, value := range firstStrings(values, 20) {
+			lines = append(lines, "- "+value)
+		}
+		if len(values) > 20 {
+			lines = append(lines, fmt.Sprintf("Showing 20 of %d %s.", len(values), strings.ToLower(title)))
+		}
+	}
+	appendPluginShowSection("Commands", commandNames)
+	appendPluginShowSection("Skills", loadedPluginSkillNames(plugin))
+	appendPluginShowSection("Agents", loadedPluginAgentNames(plugin))
+	appendPluginShowSection("MCP servers", loadedPluginMCPServerNames(plugin))
+	appendPluginShowSection("Output styles", loadedPluginOutputStyleNames(plugin))
+	appendPluginShowSection("Hook events", loadedPluginHookEventLines(plugin))
 	return strings.Join(lines, "\n")
 }
 
@@ -4530,6 +4644,12 @@ type pluginSearchResult struct {
 	Match   string
 }
 
+type marketplacePluginResult struct {
+	Plugin pluginpkg.LoadedPlugin
+	State  string
+	Match  string
+}
+
 func pluginSearchResults(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings, query string) []pluginSearchResult {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
@@ -4559,6 +4679,64 @@ func pluginSearchResults(plugins []pluginpkg.LoadedPlugin, settings contracts.Se
 	return results
 }
 
+func marketplacePluginResults(marketplacePlugins []pluginpkg.LoadedPlugin, installedPlugins []pluginpkg.LoadedPlugin, query string) []marketplacePluginResult {
+	query = strings.ToLower(strings.TrimSpace(query))
+	installedByName := installedPluginByName(installedPlugins)
+	var results []marketplacePluginResult
+	for _, plugin := range marketplacePlugins {
+		state := marketplacePluginState(plugin, installedByName)
+		if query == "" {
+			results = append(results, marketplacePluginResult{Plugin: plugin, State: state})
+			continue
+		}
+		for _, match := range pluginSearchMatches(plugin, query) {
+			results = append(results, marketplacePluginResult{Plugin: plugin, State: state, Match: match})
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Plugin.Name != results[j].Plugin.Name {
+			return results[i].Plugin.Name < results[j].Plugin.Name
+		}
+		if results[i].Plugin.Marketplace != results[j].Plugin.Marketplace {
+			return results[i].Plugin.Marketplace < results[j].Plugin.Marketplace
+		}
+		if results[i].State != results[j].State {
+			return results[i].State < results[j].State
+		}
+		return results[i].Match < results[j].Match
+	})
+	return results
+}
+
+func installedPluginByName(plugins []pluginpkg.LoadedPlugin) map[string]pluginpkg.LoadedPlugin {
+	out := map[string]pluginpkg.LoadedPlugin{}
+	for _, plugin := range plugins {
+		key := pluginNameKey(plugin.Name)
+		if key == "" {
+			continue
+		}
+		if _, ok := out[key]; !ok {
+			out[key] = plugin
+		}
+	}
+	return out
+}
+
+func marketplacePluginState(plugin pluginpkg.LoadedPlugin, installedByName map[string]pluginpkg.LoadedPlugin) string {
+	installed, ok := installedByName[pluginNameKey(plugin.Name)]
+	if !ok {
+		return "available"
+	}
+	if strings.TrimSpace(plugin.Version) != "" && strings.TrimSpace(installed.Version) != "" && strings.TrimSpace(plugin.Version) != strings.TrimSpace(installed.Version) {
+		return "update available: installed " + installed.Version + " at " + installed.Root
+	}
+	return "installed: " + installed.Root
+}
+
+func pluginNameKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
 func pluginSearchMatches(plugin pluginpkg.LoadedPlugin, query string) []string {
 	seen := map[string]struct{}{}
 	var matches []string
@@ -4577,7 +4755,7 @@ func pluginSearchMatches(plugin pluginpkg.LoadedPlugin, query string) []string {
 			}
 		}
 	}
-	add("plugin metadata", plugin.Name, plugin.Version, plugin.Description, plugin.Root)
+	add("plugin metadata", plugin.Name, plugin.Version, plugin.Description, plugin.Marketplace, plugin.Root)
 	for _, command := range plugin.Commands {
 		add("command /"+commands.UserFacingName(command), command.Name, command.DisplayName, command.Description, command.WhenToUse, command.ArgumentHint)
 	}
@@ -4867,11 +5045,28 @@ func firstPluginSearchResults(values []pluginSearchResult, limit int) []pluginSe
 	return values[:limit]
 }
 
+func firstMarketplacePluginResults(values []marketplacePluginResult, limit int) []marketplacePluginResult {
+	if limit <= 0 || len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
 func firstPluginUpdateItems(values []pluginUpdateItem, limit int) []pluginUpdateItem {
 	if limit <= 0 || len(values) <= limit {
 		return values
 	}
 	return values[:limit]
+}
+
+func firstTextLine(value string) string {
+	for _, line := range strings.Split(value, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func countSessionSummaries(root string) int {

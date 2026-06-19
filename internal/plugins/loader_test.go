@@ -298,6 +298,50 @@ func TestLoadPluginDirsWithSettingsLoadsSettingsMarketplacePlugins(t *testing.T)
 	}
 }
 
+func TestLoadMarketplacePluginDirsWithSettingsIgnoresInstalledEnabledState(t *testing.T) {
+	root := t.TempDir()
+	teamRoot := filepath.Join(root, "team-plugin")
+	blockedRoot := filepath.Join(root, "blocked-plugin")
+	for _, dir := range []string{teamRoot, blockedRoot} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifests := map[string]string{
+		filepath.Join(teamRoot, ManifestFileName):    `{"name":"team-plugin"}`,
+		filepath.Join(blockedRoot, ManifestFileName): `{"name":"blocked-plugin"}`,
+	}
+	for path, data := range manifests {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plugins := LoadMarketplacePluginDirsWithSettings(contracts.Settings{
+		EnabledPlugins: map[string]any{"team-plugin": false},
+		ExtraKnownMarketplaces: map[string]any{
+			"team": map[string]any{"source": map[string]any{
+				"source":  "settings",
+				"name":    "team",
+				"plugins": []any{teamRoot},
+			}},
+			"blocked": map[string]any{"source": map[string]any{
+				"source":  "settings",
+				"name":    "blocked",
+				"plugins": []any{blockedRoot},
+			}},
+		},
+		StrictKnownMarketplaces: []any{"team"},
+		BlockedMarketplaces:     []any{"blocked"},
+	})
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"team-plugin"}) {
+		t.Fatalf("marketplace plugins = %#v names=%#v", plugins, got)
+	}
+	if plugins[0].Marketplace != "team" {
+		t.Fatalf("plugin marketplace = %#v", plugins)
+	}
+}
+
 func TestLoadPluginDirsWithSettingsPrefersProjectPluginOverMarketplaceDuplicate(t *testing.T) {
 	root := t.TempDir()
 	projectRoot := filepath.Join(root, "project-plugin")

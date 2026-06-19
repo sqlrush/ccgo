@@ -4947,6 +4947,105 @@ func TestRunnerPluginUpdateRefreshesInstalledMarketplacePlugin(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginAvailableListsMarketplacePlugins(t *testing.T) {
+	client := &fakeClient{}
+	root := t.TempDir()
+	cwd := filepath.Join(root, "project")
+	marketDir := filepath.Join(root, "marketplace-plugin")
+	lintDir := filepath.Join(root, "lint-plugin")
+	installedDir := filepath.Join(cwd, ".claude", "plugins", "market-demo")
+	for _, dir := range []string{cwd, marketDir, lintDir, installedDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{
+		"name": "market demo",
+		"version": "2.0.0",
+		"description": "Deploy marketplace plugin",
+		"commands": [{"name": "market:deploy", "description": "Deploy marketplace plugin", "prompt": "Deploy."}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lintDir, "plugin.json"), []byte(`{
+		"name": "lint tool",
+		"version": "1.0.0",
+		"description": "Static checks"
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installedDir, "plugin.json"), []byte(`{
+		"name": "market demo",
+		"version": "1.0.0",
+		"commands": [{"name": "market:deploy", "description": "Deploy installed plugin", "prompt": "Deploy."}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		SessionID:        "sess_plugin_available_marketplace",
+		WorkingDirectory: cwd,
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			EnabledPlugins: map[string]any{"market demo": false},
+			ExtraKnownMarketplaces: map[string]any{
+				"team": map[string]any{"source": map[string]any{
+					"source":  "settings",
+					"name":    "team",
+					"plugins": []any{marketDir, lintDir},
+				}},
+			},
+			StrictKnownMarketplaces: []any{"team"},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin available"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Marketplace plugins",
+		"Marketplace plugins: 2",
+		"Matches: 2",
+		"- lint tool@1.0.0 [team] (available): Static checks",
+		"- market demo@2.0.0 [team] (update available: installed 1.0.0 at " + installedDir + "): Deploy marketplace plugin",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin available missing %q: %q", want, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin marketplace show market demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Marketplace plugin market demo",
+		"State: update available: installed 1.0.0 at " + installedDir,
+		"Marketplace: team",
+		"Version: 2.0.0",
+		"Commands: 1",
+		"- /market:deploy",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin marketplace show missing %q: %q", want, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin marketplace search lint"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Query: lint") || !strings.Contains(text, "- lint tool@1.0.0 [team] (available)") || strings.Contains(text, "market demo@2.0.0") {
+		t.Fatalf("plugin marketplace search text = %q", text)
+	}
+}
+
 func TestRunnerPluginShowReportsDisabledLocalPlugin(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	cwd := filepath.Join(repo, "pkg")

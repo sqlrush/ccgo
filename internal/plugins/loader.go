@@ -159,6 +159,10 @@ func LoadPluginDirsWithSettings(roots []string, settings contracts.Settings) []L
 	return dedupeLoadedPlugins(FilterPluginsWithSettings(loadPluginRootEntries(entries), settings))
 }
 
+func LoadMarketplacePluginDirsWithSettings(settings contracts.Settings) []LoadedPlugin {
+	return dedupeLoadedPlugins(FilterMarketplacePluginsWithSettings(loadPluginRootEntries(marketplacePluginRootEntries(settings)), settings))
+}
+
 func dedupeLoadedPlugins(plugins []LoadedPlugin) []LoadedPlugin {
 	if len(plugins) == 0 {
 		return nil
@@ -188,6 +192,20 @@ func FilterPluginsWithSettings(plugins []LoadedPlugin, settings contracts.Settin
 	out := make([]LoadedPlugin, 0, len(plugins))
 	for _, plugin := range plugins {
 		if PluginEnabled(plugin, settings.EnabledPlugins) && PluginMarketplaceAllowed(plugin, policy) {
+			out = append(out, plugin)
+		}
+	}
+	return out
+}
+
+func FilterMarketplacePluginsWithSettings(plugins []LoadedPlugin, settings contracts.Settings) []LoadedPlugin {
+	if len(plugins) == 0 {
+		return nil
+	}
+	policy := NewMarketplacePolicy(settings)
+	out := make([]LoadedPlugin, 0, len(plugins))
+	for _, plugin := range plugins {
+		if PluginMarketplaceAllowed(plugin, policy) {
 			out = append(out, plugin)
 		}
 	}
