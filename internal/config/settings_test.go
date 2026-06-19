@@ -273,6 +273,13 @@ func TestValidateSettingsWarnsForInvalidMarketplaceSources(t *testing.T) {
 					"name": "inline"
 				}
 			},
+			"bad-settings-plugins": {
+				"source": {
+					"source": "settings",
+					"name": "bad-settings-plugins",
+					"plugins": ["", {"path": 42}, {"label": "missing"}, 17]
+				}
+			},
 			"missing-repo": {
 				"source": {
 					"source": "github",
@@ -302,6 +309,10 @@ func TestValidateSettingsWarnsForInvalidMarketplaceSources(t *testing.T) {
 		"extraKnownMarketplaces.bad-settings.source.plugins",
 		"extraKnownMarketplaces.bad-settings.source.name",
 		"extraKnownMarketplaces.bad-settings.source.name",
+		"extraKnownMarketplaces.bad-settings-plugins.source.plugins[0]",
+		"extraKnownMarketplaces.bad-settings-plugins.source.plugins[1].path",
+		"extraKnownMarketplaces.bad-settings-plugins.source.plugins[2]",
+		"extraKnownMarketplaces.bad-settings-plugins.source.plugins[3]",
 		"extraKnownMarketplaces.missing-repo.source.repo",
 		"extraKnownMarketplaces.missing-repo.source.sparsePaths[1]",
 		"strictKnownMarketplaces[0].url",

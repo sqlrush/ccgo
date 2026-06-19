@@ -270,7 +270,7 @@ func validateMarketplaceSource(source map[string]any, filePath string, path stri
 				Message:  "Settings-sourced marketplace plugins are required",
 				Expected: "array",
 			})
-		} else if _, ok := raw.([]any); !ok {
+		} else if plugins, ok := raw.([]any); !ok {
 			errors = append(errors, ValidationError{
 				File:         filePath,
 				Path:         path + ".plugins",
@@ -278,6 +278,8 @@ func validateMarketplaceSource(source map[string]any, filePath string, path stri
 				Expected:     "array",
 				InvalidValue: raw,
 			})
+		} else {
+			errors = append(errors, validateSettingsMarketplacePlugins(plugins, filePath, path+".plugins")...)
 		}
 		if name, ok := source["name"].(string); ok {
 			errors = append(errors, validateMarketplaceName(name, filePath, path+".name")...)
@@ -414,6 +416,62 @@ func reservedOfficialMarketplaceName(name string) bool {
 	default:
 		return false
 	}
+}
+
+func validateSettingsMarketplacePlugins(plugins []any, filePath string, path string) []ValidationError {
+	var errors []ValidationError
+	for i, plugin := range plugins {
+		itemPath := fmt.Sprintf("%s[%d]", path, i)
+		errors = append(errors, validateSettingsMarketplacePlugin(plugin, filePath, itemPath)...)
+	}
+	return errors
+}
+
+func validateSettingsMarketplacePlugin(plugin any, filePath string, path string) []ValidationError {
+	if text, ok := plugin.(string); ok {
+		if strings.TrimSpace(text) != "" {
+			return nil
+		}
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path,
+			Message:      "Settings-sourced marketplace plugin path must be non-empty",
+			Expected:     "non-empty string or object with path/root/dir/directory",
+			InvalidValue: plugin,
+		}}
+	}
+	item, ok := plugin.(map[string]any)
+	if !ok {
+		return []ValidationError{{
+			File:         filePath,
+			Path:         path,
+			Message:      "Invalid settings-sourced marketplace plugin. Expected path string or object",
+			Expected:     "string | object",
+			InvalidValue: plugin,
+		}}
+	}
+	for _, field := range []string{"path", "root", "dir", "directory"} {
+		if value, ok := item[field]; ok {
+			text, ok := value.(string)
+			if ok && strings.TrimSpace(text) != "" {
+				return nil
+			}
+			return []ValidationError{{
+				File:         filePath,
+				Path:         path + "." + field,
+				Message:      "Settings-sourced marketplace plugin field must be a non-empty string",
+				Expected:     "non-empty string",
+				InvalidValue: value,
+			}}
+		}
+	}
+	return []ValidationError{{
+		File:         filePath,
+		Path:         path,
+		Message:      "Settings-sourced marketplace plugin object must include path, root, dir, or directory",
+		Expected:     "object with path/root/dir/directory",
+		InvalidValue: plugin,
+	}}
 }
 
 func validateSandboxSetting(setting map[string]any, filePath string) []ValidationError {
