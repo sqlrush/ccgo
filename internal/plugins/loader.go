@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -22,6 +24,7 @@ import (
 const ManifestFileName = "plugin.json"
 const maxMarketplaceCatalogBytes int64 = 1 << 20
 const marketplaceCatalogFetchTimeout = 10 * time.Second
+const marketplaceGitCommandTimeout = 30 * time.Second
 
 type PromptTemplate struct {
 	Command contracts.Command
@@ -356,6 +359,10 @@ func marketplacePluginRootEntries(settings contracts.Settings) []pluginRootEntry
 			for _, root := range pluginRootsFromMarketplaceURL(source, marketplace) {
 				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
 			}
+		case "git":
+			for _, root := range pluginRootsFromMarketplaceGit(source) {
+				entries = append(entries, pluginRootEntry{Root: root, Marketplace: marketplace})
+			}
 		}
 	}
 	return entries
@@ -382,7 +389,7 @@ func pluginRootsFromMarketplaceFile(path string) []string {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil
 	}
-	return pluginRootsFromMarketplaceCatalog(raw)
+	return pluginRootsFromMarketplaceCatalogWithBase(raw, filepath.Dir(path))
 }
 
 func pluginRootsFromMarketplaceURL(source map[string]any, marketplace string) []string {
@@ -391,6 +398,86 @@ func pluginRootsFromMarketplaceURL(source map[string]any, marketplace string) []
 		return nil
 	}
 	return pluginRootsFromMarketplaceCatalog(raw)
+}
+
+func pluginRootsFromMarketplaceGit(source map[string]any) []string {
+	gitURL := stringFromAnyMap(source, "url")
+	if gitURL == "" {
+		return nil
+	}
+	repoPath, ok := ensureMarketplaceGitCache(gitURL, stringFromAnyMap(source, "ref"))
+	if !ok {
+		return nil
+	}
+	marketplacePath := stringFromAnyMap(source, "path")
+	if marketplacePath == "" {
+		return pluginRootsFromMarketplacePath(repoPath)
+	}
+	return pluginRootsFromMarketplacePath(safeJoin(repoPath, marketplacePath))
+}
+
+func pluginRootsFromMarketplacePath(path string) []string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	if info.IsDir() {
+		if _, err := os.Stat(filepath.Join(path, ManifestFileName)); err == nil {
+			return []string{path}
+		}
+		return pluginRootsFromDirectory(path)
+	}
+	return pluginRootsFromMarketplaceFile(path)
+}
+
+func ensureMarketplaceGitCache(gitURL string, ref string) (string, bool) {
+	cachePath := marketplaceGitCachePath(gitURL)
+	if marketplaceGitCacheUsable(cachePath) {
+		_ = runMarketplaceGitCommand("-C", cachePath, "fetch", "--quiet", "origin")
+		if ref != "" {
+			if err := runMarketplaceGitCommand("-C", cachePath, "-c", "advice.detachedHead=false", "checkout", "--quiet", ref); err != nil {
+				return cachePath, true
+			}
+		} else {
+			_ = runMarketplaceGitCommand("-C", cachePath, "pull", "--ff-only", "--quiet")
+		}
+		return cachePath, true
+	}
+	if err := os.RemoveAll(cachePath); err != nil {
+		return "", false
+	}
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
+		return "", false
+	}
+	if err := runMarketplaceGitCommand("clone", "--quiet", gitURL, cachePath); err != nil {
+		return "", false
+	}
+	if ref != "" {
+		_ = runMarketplaceGitCommand("-C", cachePath, "-c", "advice.detachedHead=false", "checkout", "--quiet", ref)
+	}
+	return cachePath, true
+}
+
+func marketplaceGitCacheUsable(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(path, ".git")); err != nil {
+		return false
+	}
+	return runMarketplaceGitCommand("-C", path, "rev-parse", "--is-inside-work-tree") == nil
+}
+
+func runMarketplaceGitCommand(args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), marketplaceGitCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func marketplaceCatalogFromURL(source map[string]any, marketplace string) (any, bool) {
@@ -506,6 +593,12 @@ func marketplaceCatalogCachePath(marketplace string, catalogURL string) string {
 	return filepath.Join(platform.ClaudeHomeDir(), "marketplace-cache", "catalogs", name+"-"+hash+".json")
 }
 
+func marketplaceGitCachePath(gitURL string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(gitURL)))
+	hash := hex.EncodeToString(sum[:])[:16]
+	return filepath.Join(platform.ClaudeHomeDir(), "marketplace-cache", "git", hash)
+}
+
 func safeMarketplaceCacheName(name string) string {
 	name = strings.TrimSpace(name)
 	var b strings.Builder
@@ -531,24 +624,36 @@ func safeMarketplaceCacheName(name string) string {
 }
 
 func pluginRootsFromMarketplaceCatalog(raw any) []string {
+	return pluginRootsFromMarketplaceCatalogWithBase(raw, "")
+}
+
+func pluginRootsFromMarketplaceCatalogWithBase(raw any, baseDir string) []string {
 	switch value := raw.(type) {
 	case []any:
 		roots := make([]string, 0, len(value))
 		for _, item := range value {
 			if root := settingsMarketplacePluginRoot(item); root != "" {
-				roots = append(roots, root)
+				roots = append(roots, resolveMarketplaceCatalogRoot(root, baseDir))
 			}
 		}
 		return roots
 	case map[string]any:
 		if plugins, ok := value["plugins"].([]any); ok {
-			return pluginRootsFromMarketplaceCatalog(plugins)
+			return pluginRootsFromMarketplaceCatalogWithBase(plugins, baseDir)
 		}
 		if root := settingsMarketplacePluginRoot(value); root != "" {
-			return []string{root}
+			return []string{resolveMarketplaceCatalogRoot(root, baseDir)}
 		}
 	}
 	return nil
+}
+
+func resolveMarketplaceCatalogRoot(root string, baseDir string) string {
+	root = strings.TrimSpace(root)
+	if root == "" || baseDir == "" || filepath.IsAbs(root) {
+		return root
+	}
+	return filepath.Join(baseDir, root)
 }
 
 func settingsMarketplaceSource(raw any) (map[string]any, bool) {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -468,6 +469,90 @@ func TestLoadPluginDirsWithSettingsLoadsURLMarketplacePluginsAndCachesCatalog(t 
 	plugins = LoadPluginDirsWithSettings(nil, settings)
 	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
 		t.Fatalf("cached plugins = %#v names=%#v", plugins, got)
+	}
+}
+
+func TestLoadPluginDirsWithSettingsLoadsGitMarketplacePluginsAndUpdatesCache(t *testing.T) {
+	git := requirePluginTestGit(t)
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "claude-home"))
+	repo := filepath.Join(root, "marketplace-repo")
+	alphaRoot := filepath.Join(repo, "plugins", "alpha")
+	if err := os.MkdirAll(alphaRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(alphaRoot, ManifestFileName), []byte(`{"name":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "catalog.json"), []byte(`{"plugins":[{"path":"plugins/alpha"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runPluginTestGit(t, git, "init", repo)
+	runPluginTestGit(t, git, "-C", repo, "config", "user.email", "test@example.com")
+	runPluginTestGit(t, git, "-C", repo, "config", "user.name", "Test User")
+	runPluginTestGit(t, git, "-C", repo, "add", ".")
+	runPluginTestGit(t, git, "-C", repo, "commit", "-m", "initial catalog")
+
+	settings := contracts.Settings{
+		ExtraKnownMarketplaces: map[string]any{
+			"git-market": map[string]any{"source": map[string]any{
+				"source": "git",
+				"name":   "git-market",
+				"url":    repo,
+				"path":   "catalog.json",
+			}},
+		},
+		StrictKnownMarketplaces: []any{"git-market"},
+	}
+
+	plugins := LoadPluginDirsWithSettings(nil, settings)
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"alpha"}) {
+		t.Fatalf("plugins = %#v names=%#v", plugins, got)
+	}
+	for _, plugin := range plugins {
+		if plugin.Marketplace != "git-market" {
+			t.Fatalf("plugin marketplace = %#v", plugins)
+		}
+	}
+	if _, err := os.Stat(marketplaceGitCachePath(repo)); err != nil {
+		t.Fatalf("git cache missing: %v", err)
+	}
+
+	betaRoot := filepath.Join(repo, "plugins", "beta")
+	if err := os.MkdirAll(betaRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(betaRoot, ManifestFileName), []byte(`{"name":"beta"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "catalog.json"), []byte(`{"plugins":[{"path":"plugins/alpha"},{"path":"plugins/beta"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runPluginTestGit(t, git, "-C", repo, "add", ".")
+	runPluginTestGit(t, git, "-C", repo, "commit", "-m", "add beta")
+
+	plugins = LoadPluginDirsWithSettings(nil, settings)
+	if got := loadedPluginNames(plugins); !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("updated plugins = %#v names=%#v", plugins, got)
+	}
+}
+
+func requirePluginTestGit(t *testing.T) string {
+	t.Helper()
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git executable is not available")
+	}
+	return git
+}
+
+func runPluginTestGit(t *testing.T, git string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(git, args...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 }
 
