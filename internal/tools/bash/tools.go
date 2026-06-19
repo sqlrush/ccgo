@@ -812,12 +812,13 @@ func NewBashTool() tool.Tool {
 func NewBashOutputTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
-			Name:            "BashOutput",
-			Description:     "Read output from a background Bash command.",
-			SearchHint:      "read background shell command output",
-			ReadOnly:        true,
-			ConcurrencySafe: true,
-			Strict:          true,
+			Name:               "BashOutput",
+			Description:        "Read output from a background Bash command.",
+			SearchHint:         "read background shell command output",
+			ReadOnly:           true,
+			ConcurrencySafe:    true,
+			Strict:             true,
+			MaxResultSizeChars: 100_000,
 			InputSchema: contracts.JSONSchema{
 				"type": "object",
 				"properties": map[string]any{

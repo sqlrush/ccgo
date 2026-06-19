@@ -3,6 +3,7 @@ package bashtools
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -732,6 +733,58 @@ func TestBashOutputValidationAndMissingTask(t *testing.T) {
 	}
 }
 
+func TestBashOutputPersistsOversizedBackgroundOutput(t *testing.T) {
+	executor := bashExecutor(t)
+	executor.ResultStoreDir = t.TempDir()
+	state := NewBackgroundState()
+	task := &BackgroundTask{
+		ID:          "bash_large",
+		Command:     "printf large",
+		Description: "large output",
+		StartedAt:   time.Now().Add(-time.Second),
+		EndedAt:     time.Now(),
+		TimeoutMS:   defaultTimeoutMillis,
+		Running:     false,
+		ExitCode:    0,
+	}
+	_, _ = task.stdout.Write([]byte(strings.Repeat("x", 110_000)))
+	state.Add(task)
+	ctx := WithBackgroundState(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, state)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bash_large_output",
+		Name:  "BashOutput",
+		Input: json.RawMessage(`{"bash_id":"bash_large"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBashOutputPersisted(t, result, strings.Repeat("x", 110_000))
+}
+
+func TestBashForegroundPersistsOversizedOutput(t *testing.T) {
+	executor := bashExecutor(t)
+	executor.ResultStoreDir = t.TempDir()
+	result, err := executor.Execute(tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{},
+	}, contracts.ToolUse{
+		ID:    "toolu_bash_large_foreground",
+		Name:  "Bash",
+		Input: json.RawMessage(`{"command":"i=0; while [ \"$i\" -lt 110000 ]; do printf x; i=$((i+1)); done"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stdout := result.StructuredContent["stdout"].(string); len(stdout) != 110000 {
+		t.Fatalf("structured stdout length = %d", len(stdout))
+	}
+	assertBashOutputPersisted(t, result, strings.Repeat("x", 110_000))
+}
+
 func TestKillBashValidationAndMissingTask(t *testing.T) {
 	executor := bashExecutor(t)
 	ctx := WithBackgroundState(tool.Context{
@@ -758,6 +811,27 @@ func TestKillBashValidationAndMissingTask(t *testing.T) {
 				t.Fatalf("err = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func assertBashOutputPersisted(t *testing.T, result contracts.ToolResult, want string) {
+	t.Helper()
+	if result.Meta["truncated"] != true {
+		t.Fatalf("result should be truncated: meta=%#v", result.Meta)
+	}
+	path, _ := result.Meta["full_output_path"].(string)
+	if path == "" {
+		t.Fatalf("full output path missing: meta=%#v", result.Meta)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("persisted output does not contain full stdout")
+	}
+	if !strings.Contains(result.Content.(string), "Tool output truncated") {
+		t.Fatalf("truncated content marker missing: %#v", result.Content)
 	}
 }
 
