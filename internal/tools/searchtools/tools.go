@@ -3,9 +3,11 @@ package searchtools
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -149,6 +151,7 @@ func callToolSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 			"query":   strings.TrimSpace(input.Query),
 			"limit":   limit,
 			"matches": len(results),
+			"ranking": "bm25",
 			"results": structuredResults,
 		},
 	}, nil
@@ -156,22 +159,35 @@ func callToolSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 
 type scoredDefinition struct {
 	Definition contracts.ToolDefinition
-	Score      int
+	Score      float64
+}
+
+type bm25Document struct {
+	Definition      contracts.ToolDefinition
+	TermFrequencies map[string]float64
+	Length          float64
+}
+
+type bm25Corpus struct {
+	Documents      []bm25Document
+	DocumentCounts map[string]int
+	AverageDocSize float64
+	TotalDocuments int
 }
 
 func matchToolDefinitions(definitions []contracts.ToolDefinition, query string, limit int) []scoredDefinition {
-	query = strings.ToLower(strings.TrimSpace(query))
-	terms := strings.Fields(query)
+	terms := uniqueStrings(searchTokens(query))
 	if len(terms) == 0 {
 		return nil
 	}
+	corpus := buildBM25Corpus(definitions)
 	var results []scoredDefinition
-	for _, definition := range definitions {
-		score := toolDefinitionScore(definition, terms)
+	for _, document := range corpus.Documents {
+		score := bm25Score(document, corpus, terms)
 		if score <= 0 {
 			continue
 		}
-		results = append(results, scoredDefinition{Definition: definition, Score: score})
+		results = append(results, scoredDefinition{Definition: document.Definition, Score: roundScore(score)})
 	}
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].Score != results[j].Score {
@@ -185,41 +201,138 @@ func matchToolDefinitions(definitions []contracts.ToolDefinition, query string, 
 	return results
 }
 
-func toolDefinitionScore(definition contracts.ToolDefinition, terms []string) int {
-	name := strings.ToLower(definition.Name)
-	aliases := make([]string, 0, len(definition.Aliases))
-	for _, alias := range definition.Aliases {
-		aliases = append(aliases, strings.ToLower(alias))
+func buildBM25Corpus(definitions []contracts.ToolDefinition) bm25Corpus {
+	documents := make([]bm25Document, 0, len(definitions))
+	documentCounts := map[string]int{}
+	var totalLength float64
+	for _, definition := range definitions {
+		document := toolSearchDocument(definition)
+		if len(document.TermFrequencies) == 0 {
+			continue
+		}
+		documents = append(documents, document)
+		totalLength += document.Length
+		for term := range document.TermFrequencies {
+			documentCounts[term]++
+		}
 	}
-	text := strings.ToLower(strings.Join([]string{definition.Description, definition.Prompt, definition.SearchHint}, " "))
-	score := 0
+	averageDocSize := 1.0
+	if len(documents) > 0 {
+		averageDocSize = totalLength / float64(len(documents))
+	}
+	return bm25Corpus{
+		Documents:      documents,
+		DocumentCounts: documentCounts,
+		AverageDocSize: averageDocSize,
+		TotalDocuments: len(documents),
+	}
+}
+
+func toolSearchDocument(definition contracts.ToolDefinition) bm25Document {
+	document := bm25Document{
+		Definition:      definition,
+		TermFrequencies: map[string]float64{},
+	}
+	addWeightedField(&document, definition.Name, 4.0)
+	for _, alias := range definition.Aliases {
+		addWeightedField(&document, alias, 3.0)
+	}
+	addWeightedField(&document, definition.Description, 1.4)
+	addWeightedField(&document, definition.SearchHint, 1.3)
+	addWeightedField(&document, definition.Prompt, 1.0)
+	return document
+}
+
+func addWeightedField(document *bm25Document, text string, weight float64) {
+	for _, term := range searchTokens(text) {
+		document.TermFrequencies[term] += weight
+		document.Length += weight
+	}
+}
+
+func bm25Score(document bm25Document, corpus bm25Corpus, terms []string) float64 {
+	if corpus.TotalDocuments == 0 || document.Length == 0 {
+		return 0
+	}
+	const k1 = 1.2
+	const b = 0.75
+	var score float64
 	for _, term := range terms {
-		matched := false
-		if name == term {
-			score += 20
-			matched = true
-		} else if strings.Contains(name, term) {
-			score += 12
-			matched = true
+		tf := document.TermFrequencies[term]
+		if tf == 0 {
+			continue
 		}
-		for _, alias := range aliases {
-			if alias == term {
-				score += 16
-				matched = true
-			} else if strings.Contains(alias, term) {
-				score += 8
-				matched = true
-			}
-		}
-		if strings.Contains(text, term) {
-			score += 4
-			matched = true
-		}
-		if !matched {
-			return 0
-		}
+		df := corpus.DocumentCounts[term]
+		idf := math.Log(1 + (float64(corpus.TotalDocuments)-float64(df)+0.5)/(float64(df)+0.5))
+		denominator := tf + k1*(1-b+b*(document.Length/corpus.AverageDocSize))
+		score += idf * ((tf * (k1 + 1)) / denominator)
 	}
 	return score
+}
+
+func roundScore(score float64) float64 {
+	return math.Round(score*10000) / 10000
+}
+
+func searchTokens(text string) []string {
+	var builder strings.Builder
+	var previous rune
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if shouldSplitCamel(previous, r) {
+				builder.WriteByte(' ')
+			}
+			builder.WriteRune(unicode.ToLower(r))
+		} else {
+			builder.WriteByte(' ')
+		}
+		previous = r
+	}
+	terms := strings.Fields(builder.String())
+	compact := compactToken(text)
+	if compact != "" && len(terms) > 1 && !stringSliceContains(terms, compact) {
+		terms = append(terms, compact)
+	}
+	return terms
+}
+
+func shouldSplitCamel(previous rune, current rune) bool {
+	return previous != 0 && unicode.IsLower(previous) && unicode.IsUpper(current)
+}
+
+func compactToken(text string) string {
+	var builder strings.Builder
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return builder.String()
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeSearchInput(raw json.RawMessage) (searchInput, error) {

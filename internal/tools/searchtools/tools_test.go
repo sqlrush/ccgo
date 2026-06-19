@@ -56,6 +56,9 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	if result.StructuredContent["matches"] != 1 || result.StructuredContent["limit"] != 1 {
 		t.Fatalf("structured content = %#v", result.StructuredContent)
 	}
+	if result.StructuredContent["ranking"] != "bm25" {
+		t.Fatalf("ranking = %#v", result.StructuredContent["ranking"])
+	}
 	results, ok := result.StructuredContent["results"].([]map[string]any)
 	if !ok || len(results) != 1 {
 		t.Fatalf("results = %#v", result.StructuredContent["results"])
@@ -65,6 +68,32 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	}
 	if aliases, ok := results[0]["aliases"].([]string); !ok || len(aliases) != 1 || aliases[0] != "View" {
 		t.Fatalf("aliases = %#v", results[0]["aliases"])
+	}
+}
+
+func TestToolSearchBM25RanksCamelCaseToolName(t *testing.T) {
+	results := matchToolDefinitions([]contracts.ToolDefinition{
+		{
+			Name:        "GenericFetcher",
+			Description: "Search web snippets and fetch fetch fetch repeated context",
+		},
+		{
+			Name:        "WebFetch",
+			Description: "Fetch web page content",
+		},
+		{
+			Name:        "FetchWebTelemetry",
+			Description: "Fetch telemetry from web services",
+		},
+	}, "web fetch", 3)
+	if len(results) == 0 {
+		t.Fatal("expected results")
+	}
+	if results[0].Definition.Name != "WebFetch" {
+		t.Fatalf("first result = %s, want WebFetch; results = %#v", results[0].Definition.Name, results)
+	}
+	if results[0].Score <= 0 {
+		t.Fatalf("score = %v, want positive", results[0].Score)
 	}
 }
 
