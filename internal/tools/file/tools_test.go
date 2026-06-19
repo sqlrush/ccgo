@@ -1431,6 +1431,21 @@ func TestGrepToolOutputModesAndGlobFilter(t *testing.T) {
 		t.Fatalf("quoted countMatches result = %#v", quotedCountMatchesResult)
 	}
 
+	standaloneCountMatchesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_standalone_count_matches",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"func","glob":"**/multi.txt","--count-matches":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if standaloneCountMatchesResult.Content != wantCountMatches ||
+		standaloneCountMatchesResult.StructuredContent["output_mode"] != "count" ||
+		standaloneCountMatchesResult.StructuredContent["count"] != true ||
+		standaloneCountMatchesResult.StructuredContent["count_matches"] != true {
+		t.Fatalf("standalone count-matches result = %#v", standaloneCountMatchesResult)
+	}
+
 	camelModeResult, err := executor.Execute(ctx, contracts.ToolUse{
 		ID:    "toolu_grep_camel_output_mode",
 		Name:  "Grep",
@@ -1779,6 +1794,67 @@ func TestGrepToolJSONOutput(t *testing.T) {
 		noJSONResult.StructuredContent["json"] != false ||
 		noJSONResult.StructuredContent["no_json"] != true {
 		t.Fatalf("no-json override result = %#v", noJSONResult)
+	}
+
+	defaultJSONResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_default_content",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"sort":"path","head_limit":1}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultJSONEvents := strings.Split(defaultJSONResult.Content.(string), "\n")
+	var defaultBegin map[string]any
+	if err := json.Unmarshal([]byte(defaultJSONEvents[0]), &defaultBegin); err != nil {
+		t.Fatal(err)
+	}
+	if defaultBegin["type"] != "begin" ||
+		defaultJSONResult.StructuredContent["json"] != true ||
+		defaultJSONResult.StructuredContent["output_mode"] != "content" {
+		t.Fatalf("default json result = %#v first=%#v", defaultJSONResult, defaultBegin)
+	}
+
+	jsonCountResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_count_ignored",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"-c":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonCountResult.Content != "a.txt:1\n\nFound 1 total occurrence across 1 file." ||
+		jsonCountResult.StructuredContent["json"] != false ||
+		jsonCountResult.StructuredContent["output_mode"] != "count" {
+		t.Fatalf("json count result = %#v", jsonCountResult)
+	}
+
+	jsonFilesWithMatchesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_files_with_matches_ignored",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"pattern":"Needle","--json":true,"-l":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonFilesWithMatchesResult.Content != "Found 1 file\na.txt" ||
+		jsonFilesWithMatchesResult.StructuredContent["json"] != false ||
+		jsonFilesWithMatchesResult.StructuredContent["output_mode"] != "files_with_matches" {
+		t.Fatalf("json files-with-matches result = %#v", jsonFilesWithMatchesResult)
+	}
+
+	jsonFilesResult, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_grep_json_files_ignored",
+		Name:  "Grep",
+		Input: json.RawMessage(`{"--json":true,"--files":true,"sort":"path"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonFilesResult.Content != "Found 2 files\na.txt\nb.txt" ||
+		jsonFilesResult.StructuredContent["json"] != false ||
+		jsonFilesResult.StructuredContent["output_mode"] != "files" {
+		t.Fatalf("json files result = %#v", jsonFilesResult)
 	}
 }
 

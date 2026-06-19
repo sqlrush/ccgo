@@ -220,7 +220,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep 现在支持 ripgrep 风格 pattern file 输入 `pattern_file`/`patternFile`/`pattern-file`/`--file`/`-f`，按一行一个 pattern 与显式 pattern 取 OR，空文件不提供 pattern、空行保留匹配空串语义，并兼容 fixed-string、smart-case、word/line-regexp 组合。
 - 本轮补充：Grep 现在支持反向匹配参数 `invert_match`/`invertMatch`/`invert-match`/`-v`，`files_with_matches`、`content`、`count` 和 multiline 模式都会按非匹配行/未覆盖行输出，并兼容 quoted boolean 输入。
 - 本轮补充：Grep content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
-- 本轮补充：Grep count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
+- 本轮补充：Grep count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；`--count-matches` 可直接选择 count 输出，默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
 - 本轮补充：Grep 长行省略阈值现在支持 `max_columns`/`maxColumns`/`max-columns`/`--max-columns`，默认保持 500，传 `0` 可关闭省略，quoted semantic number 同样兼容。
 - 本轮补充：Grep 文件过滤现在支持 ripgrep 风格 `max_filesize`/`maxFilesize`/`max-filesize`/`--max-filesize`，接受 byte 数字或带 `K`/`M`/`G` 后缀的字符串，递归搜索时跳过超过阈值的文件并在 structured content 回传解析后的 byte 数。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `crlf`/`--crlf` 与 `no_crlf`/`--no-crlf`，默认不再把 CRLF 隐式归一成 LF 参与 `$` 锚点匹配，开启 CRLF 模式时会按原文件字节保留 byte offset。
@@ -243,7 +243,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `trim`/`--trim` 和 `no_trim`/`--no-trim`，会删除每条已打印文本行开头的 ASCII 空白，同时保留原始匹配列号；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 输出现在支持 ripgrep 风格 `stats`/`--stats` 与 `no_stats`/`--no-stats`，在 content/count/匹配文件列表结果尾部追加 matches、matched lines、files searched、bytes searched/printed 和耗时统计，并在 structured content 暴露同源统计字段。
 - 本轮补充：Grep 输出现在支持 ripgrep 风格 `quiet`/`--quiet`/`-q` 与 `no_quiet`/`--no-quiet`，可抑制文本输出但保留结构化搜索结果和总数；quiet 会关闭 stats 文本输出，quoted semantic boolean 同样兼容。
-- 本轮补充：Grep 输出现在支持 ripgrep 风格 `json`/`--json` 与 `no_json`/`--no-json` 基础 NDJSON 事件，输出 begin/match/context/end/summary 事件并隐式启用 summary stats；`--json --quiet` 会保留 summary-only 输出，summary 与 per-file end stats 会回填 `bytes_printed`，`--json --binary` 会输出匹配事件并在 end 事件暴露 `binary_offset`，非 UTF-8 JSON 文本会按 ripgrep 风格用 `bytes` base64 表示，且 `--json` 与 `only_matching`/`vimgrep` 组合仍输出原始整行、`replace` 会在 submatch 中暴露 replacement。完整 ripgrep JSON 的所有 flag 组合仍需继续对齐。
+- 本轮补充：Grep 输出现在支持 ripgrep 风格 `json`/`--json` 与 `no_json`/`--no-json` 基础 NDJSON 事件，输出 begin/match/context/end/summary 事件并隐式启用 summary stats；`--json --quiet` 会保留 summary-only 输出，summary 与 per-file end stats 会回填 `bytes_printed`，`--json --binary` 会输出匹配事件并在 end 事件暴露 `binary_offset`，非 UTF-8 JSON 文本会按 ripgrep 风格用 `bytes` base64 表示，且 `--json` 与 `only_matching`/`vimgrep` 组合仍输出原始整行、`replace` 会在 submatch 中暴露 replacement；显式 `-c`/`-l`/`--files` 等 count/files 输出会按 ripgrep 行为压制 JSON 事件并保留普通输出。完整 ripgrep JSON 的所有 flag 组合仍需继续对齐。
 - 本轮补充：Grep 长行输出现在支持 ripgrep 风格 `max_columns_preview`/`--max-columns-preview` 和 `no_max_columns_preview`/`--no-max-columns-preview`，会在 `max_columns` 触发时输出截断预览加官方 omitted-end 后缀；quoted semantic boolean 同样兼容。
 - 本轮补充：Grep 搜索现在支持 ripgrep 风格 `line_regexp`/`line-regexp`/`--line-regexp`/`-x`，将 pattern 限定为整行匹配，并按官方语义优先于 `word_regexp`；fixed-string、multiline 和 quoted semantic boolean 组合均兼容。
 - 本轮补充：Grep content 输出现在支持 ripgrep 风格 `vimgrep`/`--vimgrep`，匹配行按每个匹配重复输出 `path:line:column:text`，context 行保持单行输出，并兼容 `-N`、`only_matching` 和 quoted semantic boolean。

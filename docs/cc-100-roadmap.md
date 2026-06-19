@@ -165,7 +165,7 @@ M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted
 
 M5 补充：`Grep` content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
 
-M5 补充：`Grep` count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
+M5 补充：`Grep` count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；`--count-matches` 可直接选择 count 输出，默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。
 
 M5 补充：Bash/PowerShell 现在会在前台模式阻断首个语句中的长 `sleep`/`Start-Sleep`（2 秒及以上）并提示使用 `run_in_background`；短 sleep、浮点 sleep、`Start-Sleep -Milliseconds` 和显式后台执行保持允许。
 
@@ -849,7 +849,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`Grep` 文件列表输出现在显式支持 `files_with_match(es)`/`filesWithMatch(es)`/`files-with-match(es)`/`--files-with-match(es)`/`-l`，并接受 `output_mode` 的 `files_with_match` alias，统一归一为 `files_with_matches`。
 
-本轮补充：`Grep` count 输出模式现在支持 ripgrep 风格 `count`/`--count`/`-c` 布尔参数，和 `output_mode=count` 统一归一；`--count-matches` 仍仅控制 count 模式下按 occurrence 计数，避免混淆输出模式和计数粒度。
+本轮补充：`Grep` count 输出模式现在支持 ripgrep 风格 `count`/`--count`/`-c` 布尔参数，和 `output_mode=count` 统一归一；`--count-matches` 也会选择 count 输出并按 occurrence 计数，和 ripgrep standalone `--count-matches` 行为对齐。
 
 本轮补充：`Grep` 搜索表达式现在除 canonical `pattern` 外，还接受 `regex`、`regexp`、`--regexp` 和 `-e` aliases；执行、校验和 structured content 都统一归一到 canonical `pattern`，便于 SDK/rg 风格调用复用同一工具。
 

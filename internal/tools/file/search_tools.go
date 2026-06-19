@@ -1230,9 +1230,10 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 	displayRoot := searchRoot(ctx.WorkingDirectory, ".")
 	root := searchRoot(ctx.WorkingDirectory, input.Path)
 	mode := normalizedGrepOutputMode(input)
-	jsonOutput := grepJSON(input) && mode != "files"
-	if jsonOutput {
+	jsonOutput := grepJSONApplies(input, mode)
+	if grepJSON(input) && !grepExplicitOutputMode(input) {
 		mode = "content"
+		jsonOutput = true
 	}
 	var expr *regexp.Regexp
 	var patterns []string
@@ -2915,7 +2916,7 @@ func normalizedGrepOutputMode(input grepInput) string {
 	if grepFilesWithMatches(input) {
 		return "files_with_matches"
 	}
-	if grepCount(input) {
+	if grepCount(input) || grepCountMatches(input) {
 		return "count"
 	}
 	mode := strings.TrimSpace(input.OutputMode)
@@ -2935,6 +2936,26 @@ func normalizedGrepOutputMode(input grepInput) string {
 		return "files_without_matches"
 	}
 	return mode
+}
+
+func grepExplicitOutputMode(input grepInput) bool {
+	return strings.TrimSpace(input.OutputMode) != "" ||
+		strings.TrimSpace(input.OutputModeAlt) != "" ||
+		grepFiles(input) ||
+		grepFilesWithMatches(input) ||
+		grepFilesWithoutMatch(input) ||
+		grepCount(input) ||
+		grepCountMatches(input)
+}
+
+func grepJSONApplies(input grepInput, mode string) bool {
+	if !grepJSON(input) {
+		return false
+	}
+	if !grepExplicitOutputMode(input) {
+		return true
+	}
+	return mode == "content"
 }
 
 func grepSort(input grepInput) (string, bool, bool, error) {
