@@ -320,7 +320,7 @@ func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 }
 
 func loadProjectPluginCommands(cwd string, settings contracts.Settings) ([]PromptTemplate, []contracts.Command) {
-	loaded := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(cwd), settings)
+	loaded := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(cwd), settings)
 	var prompts []PromptTemplate
 	var commands []contracts.Command
 	for _, plugin := range loaded {

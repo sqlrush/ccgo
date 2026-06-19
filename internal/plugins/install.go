@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/platform"
 )
 
 type PluginInstallResult struct {
@@ -27,14 +28,19 @@ type PluginUpdateItem struct {
 }
 
 func InstallMarketplacePlugin(name string, cwd string, settings contracts.Settings) (PluginInstallResult, error) {
-	if strings.TrimSpace(cwd) == "" {
-		return PluginInstallResult{}, fmt.Errorf("working directory is unavailable")
+	return InstallMarketplacePluginInScope(name, cwd, "project", settings)
+}
+
+func InstallMarketplacePluginInScope(name string, cwd string, scope string, settings contracts.Settings) (PluginInstallResult, error) {
+	targetPluginsDir, err := installPluginsDirForScope(cwd, scope)
+	if err != nil {
+		return PluginInstallResult{}, err
 	}
 	plugin, ok := findLoadedPlugin(LoadPluginDirsWithSettings(nil, settings), name)
 	if !ok {
 		return PluginInstallResult{}, fmt.Errorf("not found in configured marketplace sources")
 	}
-	targetRoot := filepath.Join(cwd, ".claude", "plugins", SafePluginInstallDirName(plugin))
+	targetRoot := filepath.Join(targetPluginsDir, SafePluginInstallDirName(plugin))
 	if SameResolvedPath(plugin.Root, targetRoot) {
 		return PluginInstallResult{Plugin: plugin, TargetPath: targetRoot, AlreadyInstalled: true}, nil
 	}
@@ -53,12 +59,17 @@ func InstallMarketplacePlugin(name string, cwd string, settings contracts.Settin
 }
 
 func UpdateInstalledMarketplacePlugins(name string, cwd string, settings contracts.Settings) (PluginUpdateResult, error) {
-	if strings.TrimSpace(cwd) == "" {
-		return PluginUpdateResult{}, fmt.Errorf("working directory is unavailable")
+	return UpdateInstalledMarketplacePluginsInScope(name, cwd, "project", settings)
+}
+
+func UpdateInstalledMarketplacePluginsInScope(name string, cwd string, scope string, settings contracts.Settings) (PluginUpdateResult, error) {
+	installedRoots, err := installedPluginDirsForScope(cwd, scope)
+	if err != nil {
+		return PluginUpdateResult{}, err
 	}
 	marketplacePlugins := LoadPluginDirsWithSettings(nil, settings)
 	result := PluginUpdateResult{MarketplacePluginCount: len(marketplacePlugins)}
-	installedPlugins := LoadPluginDirs(ProjectPluginDirs(cwd))
+	installedPlugins := LoadPluginDirs(installedRoots)
 	name = strings.TrimSpace(name)
 	if name != "" && !strings.EqualFold(name, "all") {
 		installed, ok := findLoadedPlugin(installedPlugins, name)
@@ -95,6 +106,39 @@ func UpdateInstalledMarketplacePlugins(name string, cwd string, settings contrac
 		result.Updated = append(result.Updated, PluginUpdateItem{Plugin: marketplacePlugin, TargetPath: installed.Root})
 	}
 	return result, nil
+}
+
+func installPluginsDirForScope(cwd string, scope string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "", "project":
+		if strings.TrimSpace(cwd) == "" {
+			return "", fmt.Errorf("working directory is unavailable")
+		}
+		return filepath.Join(cwd, ".claude", "plugins"), nil
+	case "user":
+		return filepath.Join(platform.ClaudeHomeDir(), "plugins"), nil
+	default:
+		return "", fmt.Errorf("scope %q is not supported; use project or user", scope)
+	}
+}
+
+func installedPluginDirsForScope(cwd string, scope string) ([]string, error) {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "", "project":
+		if strings.TrimSpace(cwd) == "" {
+			return nil, fmt.Errorf("working directory is unavailable")
+		}
+		return ProjectPluginDirs(cwd), nil
+	case "user":
+		return UserPluginDirs(), nil
+	case "all":
+		if strings.TrimSpace(cwd) == "" {
+			return nil, fmt.Errorf("working directory is unavailable")
+		}
+		return InstalledPluginDirs(cwd), nil
+	default:
+		return nil, fmt.Errorf("scope %q is not supported; use project, user, or all", scope)
+	}
 }
 
 func SafePluginInstallDirName(plugin LoadedPlugin) string {

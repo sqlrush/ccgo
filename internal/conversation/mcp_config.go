@@ -44,7 +44,7 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 		ProjectSettings:      projectSettings,
 		LocalSettings:        localSettings,
 		PolicySettings:       policySettings,
-		PluginServers:        pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(resolvedCWD), mergedSettings),
+		PluginServers:        pluginpkg.LoadMCPServersWithSettings(pluginpkg.InstalledPluginDirs(resolvedCWD), mergedSettings),
 		CWD:                  resolvedCWD,
 		settingsFileDetector: settingsFileDetector,
 		ToolOptions: mcp.ServerToolOptions{
@@ -97,7 +97,7 @@ func (c *MCPConfig) refreshPluginServers() {
 		return
 	}
 	if c.CWD != "" {
-		c.PluginServers = pluginpkg.LoadMCPServersWithSettings(pluginpkg.ProjectPluginDirs(c.CWD), c.MergedSettings())
+		c.PluginServers = pluginpkg.LoadMCPServersWithSettings(pluginpkg.InstalledPluginDirs(c.CWD), c.MergedSettings())
 	} else {
 		c.PluginServers = nil
 	}

@@ -376,8 +376,8 @@ func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, s
 		return 1
 	}
 	settings := runnerMergedSettings(runner)
-	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory))
-	installed := pluginCLIInstalledEntries(installedPlugins, settings)
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(runner.WorkingDirectory))
+	installed := pluginCLIInstalledEntries(installedPlugins, settings, runner.WorkingDirectory)
 	if *jsonOutput {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -426,15 +426,15 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 		return 2
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "ccgo plugin install: usage: claude plugin install [--scope project] <plugin>")
+		fmt.Fprintln(stderr, "ccgo plugin install: usage: claude plugin install [--scope project|user] <plugin>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if scope == "" {
 		scope = "project"
 	}
-	if scope != "project" {
-		fmt.Fprintf(stderr, "ccgo plugin install: scope %q is not supported yet; use project\n", scope)
+	if scope != "project" && scope != "user" {
+		fmt.Fprintf(stderr, "ccgo plugin install: scope %q is not supported yet; use project or user\n", scope)
 		return 2
 	}
 	settings, err := pluginCLISettingsFromFiles(state.CWD())
@@ -442,7 +442,7 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
 		return 1
 	}
-	result, err := pluginpkg.InstallMarketplacePlugin(strings.TrimSpace(flags.Arg(0)), state.CWD(), settings)
+	result, err := pluginpkg.InstallMarketplacePluginInScope(strings.TrimSpace(flags.Arg(0)), state.CWD(), scope, settings)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
 		return 1
@@ -464,15 +464,15 @@ func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer,
 		return 2
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "ccgo plugin update: usage: claude plugin update [--scope project] <plugin>")
+		fmt.Fprintln(stderr, "ccgo plugin update: usage: claude plugin update [--scope project|user|all] <plugin>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if scope == "" {
 		scope = "project"
 	}
-	if scope != "project" {
-		fmt.Fprintf(stderr, "ccgo plugin update: scope %q is not supported yet; use project\n", scope)
+	if scope != "project" && scope != "user" && scope != "all" {
+		fmt.Fprintf(stderr, "ccgo plugin update: scope %q is not supported yet; use project, user, or all\n", scope)
 		return 2
 	}
 	settings, err := pluginCLISettingsFromFiles(state.CWD())
@@ -480,7 +480,7 @@ func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer,
 		fmt.Fprintf(stderr, "ccgo plugin update: %v\n", err)
 		return 1
 	}
-	result, err := pluginpkg.UpdateInstalledMarketplacePlugins(strings.TrimSpace(flags.Arg(0)), state.CWD(), settings)
+	result, err := pluginpkg.UpdateInstalledMarketplacePluginsInScope(strings.TrimSpace(flags.Arg(0)), state.CWD(), scope, settings)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin update: %v\n", err)
 		return 1
@@ -546,7 +546,7 @@ func runPluginDisableAllCLI(state *bootstrap.State, settingsPath string, stdout 
 		fmt.Fprintf(stderr, "ccgo plugin disable: %v\n", err)
 		return 1
 	}
-	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(state.CWD()))
+	plugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(state.CWD()))
 	states := map[string]bool{}
 	for _, plugin := range plugins {
 		if pluginpkg.PluginEnabled(plugin, settings.EnabledPlugins) && strings.TrimSpace(plugin.Name) != "" {
@@ -844,13 +844,13 @@ func pluginCLILoadOptionalSettings(path string) (contracts.Settings, error) {
 	return contracts.Settings{}, fmt.Errorf("load settings %s: %w", path, err)
 }
 
-func pluginCLIInstalledEntries(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings) []pluginCLIListEntry {
+func pluginCLIInstalledEntries(plugins []pluginpkg.LoadedPlugin, settings contracts.Settings, cwd string) []pluginCLIListEntry {
 	out := make([]pluginCLIListEntry, 0, len(plugins))
 	for _, plugin := range plugins {
 		entry := pluginCLIListEntry{
 			ID:          pluginCLIID(plugin),
 			Version:     pluginCLIVersion(plugin.Version),
-			Scope:       "project",
+			Scope:       pluginpkg.InstalledPluginScope(cwd, plugin.Root),
 			Enabled:     pluginpkg.PluginEnabled(plugin, settings.EnabledPlugins),
 			InstallPath: plugin.Root,
 		}
@@ -3397,7 +3397,7 @@ func runnerPluginSummaries(runner conversation.Runner) []printStreamPlugin {
 }
 
 func runnerLocalPlugins(runner conversation.Runner) []pluginpkg.LoadedPlugin {
-	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(runner.WorkingDirectory), runnerMergedSettings(runner))
+	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(runner.WorkingDirectory), runnerMergedSettings(runner))
 }
 
 func runnerMergedSettings(runner conversation.Runner) contracts.Settings {

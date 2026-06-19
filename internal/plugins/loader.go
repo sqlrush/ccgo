@@ -970,6 +970,36 @@ func ProjectPluginDirs(cwd string) []string {
 	return out
 }
 
+func UserPluginDirs() []string {
+	return appendPluginRoots(nil, map[string]struct{}{}, filepath.Join(platform.ClaudeHomeDir(), "plugins"))
+}
+
+func InstalledPluginDirs(cwd string) []string {
+	out := ProjectPluginDirs(cwd)
+	seen := map[string]struct{}{}
+	for _, root := range out {
+		seen[normalizePath(root)] = struct{}{}
+	}
+	for _, root := range UserPluginDirs() {
+		key := normalizePath(root)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, root)
+	}
+	return out
+}
+
+func InstalledPluginScope(cwd string, root string) string {
+	userPluginsDir := cleanAbs(filepath.Join(platform.ClaudeHomeDir(), "plugins"))
+	root = cleanAbs(root)
+	if rel, err := filepath.Rel(userPluginsDir, root); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
+		return "user"
+	}
+	return "project"
+}
+
 func pluginCommands(root string, pluginName string, raw any) ([]contracts.Command, []PromptTemplate) {
 	seen := map[string]struct{}{}
 	return pluginCommandsWithSeen(root, pluginName, raw, seen)

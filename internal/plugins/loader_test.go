@@ -797,6 +797,41 @@ func TestProjectPluginDirsWalksToGitRoot(t *testing.T) {
 	}
 }
 
+func TestInstalledPluginDirsIncludesUserAfterProject(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "pkg")
+	projectPlugin := filepath.Join(repo, ".claude", "plugins", "project")
+	userPlugin := filepath.Join(configHome, "plugins", "user")
+	for _, dir := range []string{
+		filepath.Join(repo, ".git"),
+		cwd,
+		projectPlugin,
+		userPlugin,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projectPlugin, ManifestFileName), []byte(`{"name":"project"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userPlugin, ManifestFileName), []byte(`{"name":"user"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dirs := InstalledPluginDirs(cwd)
+	if len(dirs) != 2 || dirs[0] != projectPlugin || dirs[1] != userPlugin {
+		t.Fatalf("dirs = %#v", dirs)
+	}
+	if scope := InstalledPluginScope(cwd, userPlugin); scope != "user" {
+		t.Fatalf("user scope = %q", scope)
+	}
+	if scope := InstalledPluginScope(cwd, projectPlugin); scope != "project" {
+		t.Fatalf("project scope = %q", scope)
+	}
+}
+
 func TestLoadPluginDirLoadsCommandMarkdownDirectoryAndManifestPaths(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "demo")
 	if err := os.MkdirAll(filepath.Join(root, "commands", "team"), 0o755); err != nil {

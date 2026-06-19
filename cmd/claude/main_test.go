@@ -2214,8 +2214,21 @@ func TestRunPluginInstallCLI(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = run([]string{"--cwd", project, "plugin", "install", "--scope", "user", "market demo"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), `scope "user" is not supported yet`) {
+	if code != 0 {
 		t.Fatalf("user scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	userInstalledDir := filepath.Join(configHome, "plugins", "market-demo")
+	for _, want := range []string{
+		"Plugin installed",
+		"Installed path: " + userInstalledDir,
+		"Status: installed",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("user install stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "assets", "README.md")); err != nil || string(data) != "asset" {
+		t.Fatalf("user installed asset data=%q err=%v", data, err)
 	}
 }
 
@@ -2288,9 +2301,38 @@ func TestRunPluginUpdateCLI(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "install", "--scope", "user", "market demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("user install exit = %d stderr=%s", code, stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "plugin.json"), []byte(`{"name":"market demo","version":"3.0.0","description":"Deploy marketplace plugin"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(marketDir, "assets", "README.md"), []byte("v3"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	userInstalledDir := filepath.Join(configHome, "plugins", "market-demo")
+
+	stdout.Reset()
+	stderr.Reset()
 	code = run([]string{"--cwd", project, "plugin", "update", "--scope", "user", "market demo"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), `scope "user" is not supported yet`) {
-		t.Fatalf("user scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	if code != 0 {
+		t.Fatalf("user update exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Plugin update",
+		"Updated plugins: 1",
+		"- market demo -> " + userInstalledDir,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("user update stdout missing %q: %q", want, stdout.String())
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "plugin.json")); err != nil || !strings.Contains(string(data), `"version":"3.0.0"`) {
+		t.Fatalf("user updated plugin json=%q err=%v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(userInstalledDir, "assets", "README.md")); err != nil || string(data) != "v3" {
+		t.Fatalf("user updated asset data=%q err=%v", data, err)
 	}
 
 	stdout.Reset()

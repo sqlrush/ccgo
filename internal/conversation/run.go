@@ -386,7 +386,7 @@ func (r Runner) toolAvailableAgents(settings contracts.Settings) []tool.AgentInf
 	if r.WorkingDirectory == "" {
 		return nil
 	}
-	plugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), settings)
+	plugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(r.WorkingDirectory), settings)
 	var agents []tool.AgentInfo
 	for _, plugin := range plugins {
 		for _, agent := range plugin.Agents {
@@ -1017,7 +1017,7 @@ func (r Runner) formatStatusShow(raw string) string {
 		return strings.Join(lines, "\n")
 	case "plugins":
 		merged := r.mergedSettings()
-		localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), merged)
+		localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(r.WorkingDirectory), merged)
 		lines := []string{
 			"Status plugins",
 			fmt.Sprintf("Enabled plugin entries: %d", len(merged.EnabledPlugins)),
@@ -3224,7 +3224,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 			return r.setPluginEnabledSummary(args)
 		default:
 			if len(args) == 1 {
-				if plugin, ok := findLoadedPlugin(pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory)), args[0]); ok {
+				if plugin, ok := findLoadedPlugin(pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(r.WorkingDirectory)), args[0]); ok {
 					return r.formatPluginShow([]string{"show", plugin.Name})
 				}
 			}
@@ -3233,7 +3233,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 	}
 	merged := r.mergedSettings()
 	registry := commands.Load(commands.Options{CWD: r.WorkingDirectory, Settings: merged, PolicySettings: r.policySettings()})
-	localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), merged)
+	localPlugins := pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(r.WorkingDirectory), merged)
 	pluginSkills := pluginSkillNames(localPlugins)
 	pluginCommands := pluginCommandNames(registry.Visible(), pluginSkills)
 	pluginAgents := pluginAgentNames(localPlugins)
@@ -3342,7 +3342,7 @@ func (r Runner) formatPluginShow(args []string) string {
 	}
 	name := strings.TrimSpace(args[1])
 	merged := r.mergedSettings()
-	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	localPlugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(r.WorkingDirectory))
 	plugin, ok := findLoadedPlugin(localPlugins, name)
 	if !ok {
 		return "Plugin " + name + " was not found in local plugin manifests."
@@ -3395,7 +3395,7 @@ func (r Runner) formatPluginShow(args []string) string {
 func (r Runner) formatPluginSearch(query string) string {
 	query = strings.TrimSpace(query)
 	merged := r.mergedSettings()
-	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	plugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(r.WorkingDirectory))
 	results := pluginSearchResults(plugins, merged, query)
 	if len(results) == 0 {
 		return "No plugins matched " + query + "."
@@ -3421,7 +3421,7 @@ func (r Runner) formatMarketplacePlugins(query string) string {
 	query = strings.TrimSpace(query)
 	merged := r.mergedSettings()
 	marketplacePlugins := pluginpkg.LoadMarketplacePluginDirsWithSettings(merged)
-	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(r.WorkingDirectory))
 	results := marketplacePluginResults(marketplacePlugins, installedPlugins, query)
 	if len(results) == 0 {
 		if len(marketplacePlugins) == 0 {
@@ -3470,7 +3470,7 @@ func (r Runner) formatMarketplacePluginShow(name string) string {
 	if !ok {
 		return "Marketplace plugin " + name + " was not found in configured marketplace sources."
 	}
-	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(r.WorkingDirectory))
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(r.WorkingDirectory))
 	lines := []string{
 		"Marketplace plugin " + plugin.Name,
 		"State: " + marketplacePluginState(plugin, installedPluginByName(installedPlugins)),
@@ -4067,7 +4067,7 @@ func (r Runner) outputStylePlugins() []pluginpkg.LoadedPlugin {
 	if strings.TrimSpace(r.WorkingDirectory) == "" {
 		return nil
 	}
-	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), r.mergedSettings())
+	return pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(r.WorkingDirectory), r.mergedSettings())
 }
 
 func (r Runner) pluginToolHooks(settings contracts.Settings) []tool.Hook {
@@ -4085,7 +4085,7 @@ func (r Runner) pluginToolHooks(settings contracts.Settings) []tool.Hook {
 		HTTPHookAllowedEnvVars: settings.HTTPHookAllowedEnvVars,
 	}
 	var out []tool.Hook
-	for _, plugin := range pluginpkg.LoadPluginDirsWithSettings(pluginpkg.ProjectPluginDirs(r.WorkingDirectory), settings) {
+	for _, plugin := range pluginpkg.LoadPluginDirsWithSettings(pluginpkg.InstalledPluginDirs(r.WorkingDirectory), settings) {
 		out = append(out, hookpkg.FromRaw(plugin.Hooks, options)...)
 	}
 	return out
