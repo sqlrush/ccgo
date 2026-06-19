@@ -2371,8 +2371,40 @@ func TestRunPluginEnableDisableCLI(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = run([]string{"--cwd", project, "plugin", "enable", "--scope", "project", "demo"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), `scope "project" is not supported yet`) {
-		t.Fatalf("project scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	if code != 0 {
+		t.Fatalf("project scope enable exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Plugin demo enabled.") {
+		t.Fatalf("project enable stdout = %q", stdout.String())
+	}
+	projectSettings := readTestSettingsJSON(t, filepath.Join(project, ".claude", "settings.json"))
+	if enabled := projectSettings["enabledPlugins"].(map[string]any)["demo"]; enabled != true {
+		t.Fatalf("project enabled plugin state = %#v", projectSettings["enabledPlugins"])
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "disable", "--scope", "project", "--all"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("project disable all exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Disabled 1 plugin") {
+		t.Fatalf("project disable all stdout = %q", stdout.String())
+	}
+	projectSettings = readTestSettingsJSON(t, filepath.Join(project, ".claude", "settings.json"))
+	if enabled := projectSettings["enabledPlugins"].(map[string]any)["demo"]; enabled != false {
+		t.Fatalf("project disabled plugin state = %#v", projectSettings["enabledPlugins"])
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "enable", "--scope", "local", "market/plugin"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("local scope enable exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	localSettings := readTestSettingsJSON(t, filepath.Join(project, ".claude", "settings.local.json"))
+	if enabled := localSettings["enabledPlugins"].(map[string]any)["market/plugin"]; enabled != true {
+		t.Fatalf("local enabled plugin state = %#v", localSettings["enabledPlugins"])
 	}
 
 	stdout.Reset()

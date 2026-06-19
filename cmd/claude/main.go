@@ -510,8 +510,9 @@ func runPluginSetEnabledCLI(state *bootstrap.State, action string, args []string
 	if scope == "" {
 		scope = "user"
 	}
-	if scope != "user" {
-		fmt.Fprintf(stderr, "ccgo plugin %s: scope %q is not supported yet; use user\n", action, scope)
+	settingsPath, err := pluginCLISettingsPathForScope(state, scope)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin %s: %v\n", action, err)
 		return 2
 	}
 	if all {
@@ -519,15 +520,15 @@ func runPluginSetEnabledCLI(state *bootstrap.State, action string, args []string
 			fmt.Fprintln(stderr, "ccgo plugin disable: cannot use --all with a specific plugin")
 			return 2
 		}
-		return runPluginDisableAllCLI(state, stdout, stderr)
+		return runPluginDisableAllCLI(state, settingsPath, stdout, stderr)
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintf(stderr, "ccgo plugin %s: usage: claude plugin %s [--scope user] <plugin>\n", action, action)
+		fmt.Fprintf(stderr, "ccgo plugin %s: usage: claude plugin %s [--scope user|project|local] <plugin>\n", action, action)
 		return 2
 	}
 	name := strings.TrimSpace(flags.Arg(0))
 	enabled := action == "enable"
-	if err := config.SetUserPluginEnabled(name, enabled); err != nil {
+	if err := config.SetPluginEnabledInSettingsFile(settingsPath, name, enabled); err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin %s: %v\n", action, err)
 		return 1
 	}
@@ -539,7 +540,7 @@ func runPluginSetEnabledCLI(state *bootstrap.State, action string, args []string
 	return 0
 }
 
-func runPluginDisableAllCLI(state *bootstrap.State, stdout io.Writer, stderr io.Writer) int {
+func runPluginDisableAllCLI(state *bootstrap.State, settingsPath string, stdout io.Writer, stderr io.Writer) int {
 	settings, err := pluginCLISettingsFromFiles(state.CWD())
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin disable: %v\n", err)
@@ -556,12 +557,25 @@ func runPluginDisableAllCLI(state *bootstrap.State, stdout io.Writer, stderr io.
 		fmt.Fprintln(stdout, "No enabled plugins to disable")
 		return 0
 	}
-	if err := config.SetUserPluginsEnabled(states); err != nil {
+	if err := config.SetPluginsEnabledInSettingsFile(settingsPath, states); err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin disable: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Disabled %d %s\n", len(states), pluralWord(len(states), "plugin", "plugins"))
 	return 0
+}
+
+func pluginCLISettingsPathForScope(state *bootstrap.State, scope string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "", "user":
+		return config.UserSettingsPath(), nil
+	case "project":
+		return config.ProjectSettingsPath(state.CWD()), nil
+	case "local":
+		return config.LocalSettingsPath(state.CWD()), nil
+	default:
+		return "", fmt.Errorf("scope %q is not supported; use user, project, or local", scope)
+	}
 }
 
 func pluralWord(count int, singular string, plural string) string {

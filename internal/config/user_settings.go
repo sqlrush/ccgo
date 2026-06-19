@@ -11,7 +11,10 @@ import (
 )
 
 func ReadUserSettingsDocument() (map[string]any, error) {
-	path := UserSettingsPath()
+	return ReadSettingsDocument(UserSettingsPath())
+}
+
+func ReadSettingsDocument(path string) (map[string]any, error) {
 	document := map[string]any{}
 	data, err := os.ReadFile(path)
 	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
@@ -25,7 +28,10 @@ func ReadUserSettingsDocument() (map[string]any, error) {
 }
 
 func WriteUserSettingsDocument(document map[string]any) error {
-	path := UserSettingsPath()
+	return WriteSettingsDocument(UserSettingsPath(), document)
+}
+
+func WriteSettingsDocument(path string, document map[string]any) error {
 	data, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
 		return err
@@ -42,11 +48,23 @@ func SetUserPluginEnabled(name string, enabled bool) error {
 	if name == "" {
 		return fmt.Errorf("plugin name is required")
 	}
-	return SetUserPluginsEnabled(map[string]bool{name: enabled})
+	return SetPluginEnabledInSettingsFile(UserSettingsPath(), name, enabled)
 }
 
 func SetUserPluginsEnabled(states map[string]bool) error {
-	document, err := ReadUserSettingsDocument()
+	return SetPluginsEnabledInSettingsFile(UserSettingsPath(), states)
+}
+
+func SetPluginEnabledInSettingsFile(path string, name string, enabled bool) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("plugin name is required")
+	}
+	return SetPluginsEnabledInSettingsFile(path, map[string]bool{name: enabled})
+}
+
+func SetPluginsEnabledInSettingsFile(path string, states map[string]bool) error {
+	document, err := ReadSettingsDocument(path)
 	if err != nil {
 		return err
 	}
@@ -62,7 +80,7 @@ func SetUserPluginsEnabled(states map[string]bool) error {
 		enabledPlugins[name] = enabled
 	}
 	document["enabledPlugins"] = enabledPlugins
-	return WriteUserSettingsDocument(document)
+	return WriteSettingsDocument(path, document)
 }
 
 func SetUserMarketplace(name string, source map[string]any, installLocation string) (bool, error) {
