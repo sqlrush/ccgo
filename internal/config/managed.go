@@ -2,7 +2,12 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -18,22 +23,29 @@ import (
 )
 
 const (
-	macOSPreferenceDomain      = "com.anthropic.claudecode"
-	windowsRegistryKeyPathHKLM = `HKLM\SOFTWARE\Policies\ClaudeCode`
-	windowsRegistryKeyPathHKCU = `HKCU\SOFTWARE\Policies\ClaudeCode`
-	windowsRegistryValueName   = "Settings"
-	plutilPath                 = "/usr/bin/plutil"
-	defaultPolicyReadTimeout   = 5 * time.Second
+	macOSPreferenceDomain         = "com.anthropic.claudecode"
+	windowsRegistryKeyPathHKLM    = `HKLM\SOFTWARE\Policies\ClaudeCode`
+	windowsRegistryKeyPathHKCU    = `HKCU\SOFTWARE\Policies\ClaudeCode`
+	windowsRegistryValueName      = "Settings"
+	plutilPath                    = "/usr/bin/plutil"
+	defaultPolicyReadTimeout      = 5 * time.Second
+	defaultRemotePolicyLimit      = int64(1 << 20)
+	remoteManagedSettingsURLEnv   = "CLAUDE_CODE_REMOTE_MANAGED_SETTINGS_URL"
+	remoteManagedSettingsTokenEnv = "CLAUDE_CODE_REMOTE_MANAGED_SETTINGS_TOKEN"
 )
 
 type CommandRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
 
 type ManagedPolicyOptions struct {
-	GOOS       string
-	Username   string
-	ManagedDir string
-	Timeout    time.Duration
-	RunCommand CommandRunner
+	GOOS                   string
+	Username               string
+	ManagedDir             string
+	Timeout                time.Duration
+	RunCommand             CommandRunner
+	RemoteURL              string
+	RemoteAuthToken        string
+	HTTPClient             *http.Client
+	MaxRemoteResponseBytes int64
 }
 
 func LoadPolicySettings() (contracts.Settings, error) {
@@ -46,6 +58,9 @@ func LoadPolicySettingsWithOptions(options ManagedPolicyOptions) (contracts.Sett
 		return settings, err
 	}
 	if settings, ok, err := loadManagedFileSettingsFromDir(options.ManagedDir); err != nil || ok {
+		return settings, err
+	}
+	if settings, ok, err := loadRemoteManagedSettings(options); err != nil || ok {
 		return settings, err
 	}
 	if settings, ok, err := loadUserManagedSettings(options); err != nil || ok {
@@ -66,6 +81,18 @@ func normalizeManagedPolicyOptions(options ManagedPolicyOptions) ManagedPolicyOp
 	}
 	if options.RunCommand == nil {
 		options.RunCommand = defaultCommandRunner
+	}
+	if strings.TrimSpace(options.RemoteURL) == "" {
+		options.RemoteURL = strings.TrimSpace(os.Getenv(remoteManagedSettingsURLEnv))
+	}
+	if strings.TrimSpace(options.RemoteAuthToken) == "" {
+		options.RemoteAuthToken = strings.TrimSpace(os.Getenv(remoteManagedSettingsTokenEnv))
+	}
+	if options.HTTPClient == nil {
+		options.HTTPClient = http.DefaultClient
+	}
+	if options.MaxRemoteResponseBytes <= 0 {
+		options.MaxRemoteResponseBytes = defaultRemotePolicyLimit
 	}
 	return options
 }
@@ -98,6 +125,64 @@ func loadUserManagedSettings(options ManagedPolicyOptions) (contracts.Settings, 
 		return contracts.Settings{}, false, nil
 	}
 	return loadWindowsRegistrySettings(options, windowsRegistryKeyPathHKCU)
+}
+
+func loadRemoteManagedSettings(options ManagedPolicyOptions) (contracts.Settings, bool, error) {
+	rawURL := strings.TrimSpace(options.RemoteURL)
+	if rawURL == "" {
+		return contracts.Settings{}, false, nil
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return contracts.Settings{}, false, fmt.Errorf("invalid remote managed settings URL %q", rawURL)
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return contracts.Settings{}, false, fmt.Errorf("invalid remote managed settings URL scheme %q", parsed.Scheme)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), options.Timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return contracts.Settings{}, false, err
+	}
+	req.Header.Set("accept", "application/json")
+	if token := strings.TrimSpace(options.RemoteAuthToken); token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
+	}
+
+	resp, err := options.HTTPClient.Do(req)
+	if err != nil {
+		return contracts.Settings{}, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotModified {
+		return contracts.Settings{}, false, nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, options.MaxRemoteResponseBytes+1))
+	if err != nil {
+		return contracts.Settings{}, false, err
+	}
+	if int64(len(body)) > options.MaxRemoteResponseBytes {
+		return contracts.Settings{}, false, fmt.Errorf("remote managed settings response exceeds %d bytes", options.MaxRemoteResponseBytes)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return contracts.Settings{}, false, fmt.Errorf("remote managed settings status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	payload, err := remoteManagedSettingsPayload(body)
+	if err != nil {
+		return contracts.Settings{}, false, err
+	}
+	settings, _, err := ParseSettingsJSON(payload, remoteManagedSettingsSourceLabel(parsed))
+	if err != nil {
+		return contracts.Settings{}, false, err
+	}
+	if !settingsHasContent(settings) {
+		return contracts.Settings{}, false, nil
+	}
+	return settings, true, nil
 }
 
 func loadWindowsRegistrySettings(options ManagedPolicyOptions, key string) (contracts.Settings, bool, error) {
@@ -229,6 +314,40 @@ func parseManagedCommandJSON(data []byte, source string) (contracts.Settings, bo
 		return contracts.Settings{}, false, nil
 	}
 	return settings, true, nil
+}
+
+func remoteManagedSettingsPayload(data []byte) ([]byte, error) {
+	if strings.TrimSpace(string(data)) == "" {
+		return data, nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"settings", "policy", "managedSettings", "managed_settings"} {
+		if nested, ok := raw[key].(map[string]any); ok {
+			return json.Marshal(nested)
+		}
+	}
+	if dataValue, ok := raw["data"].(map[string]any); ok {
+		for _, key := range []string{"settings", "policy", "managedSettings", "managed_settings"} {
+			if nested, ok := dataValue[key].(map[string]any); ok {
+				return json.Marshal(nested)
+			}
+		}
+	}
+	return data, nil
+}
+
+func remoteManagedSettingsSourceLabel(parsed *url.URL) string {
+	if parsed == nil {
+		return "Remote managed settings"
+	}
+	cleaned := *parsed
+	cleaned.User = nil
+	cleaned.RawQuery = ""
+	cleaned.Fragment = ""
+	return "Remote managed settings: " + cleaned.String()
 }
 
 func parseRegQuerySettingsValue(stdout string, valueName string) string {
