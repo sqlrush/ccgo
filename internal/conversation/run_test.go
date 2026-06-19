@@ -4942,6 +4942,53 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 			t.Fatalf("plugin text missing %q: %q", want, text)
 		}
 	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin manage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Plugins",
+		"Local plugin manifests: 1",
+		"Plugin commands:",
+		"- /plugin:deploy",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin manage text missing %q: %q", want, text)
+		}
+	}
+
+	for _, prompt := range []string{"/plugin help", "/plugin --help", "/plugin -h", "/plugins help", "/marketplace help"} {
+		result, err = runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s queried model, requests = %#v", prompt, client.requests)
+		}
+		text = result.Messages[1].Content[0].Text
+		for _, want := range []string{
+			"Plugin Command Usage:",
+			"Installation:",
+			"/plugin install <plugin>@<market> - Install plugin from marketplace",
+			"Management:",
+			"/plugin manage - Manage installed plugins",
+			"Marketplaces:",
+			"/plugin marketplace list - List all marketplaces",
+			"Validation:",
+			"/plugin validate <path> - Validate a manifest file or directory",
+			"Other:",
+			"/plugin help - Show this help",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s help missing %q: %q", prompt, want, text)
+			}
+		}
+	}
 }
 
 func TestRunnerPluginShowReportsLocalPluginDetails(t *testing.T) {
@@ -5166,7 +5213,7 @@ func TestRunnerPluginInstallCopiesSettingsMarketplacePlugin(t *testing.T) {
 		}},
 	}
 
-	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin install market demo"))
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin i market demo"))
 	if err != nil {
 		t.Fatal(err)
 	}

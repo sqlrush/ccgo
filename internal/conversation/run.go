@@ -3357,7 +3357,9 @@ func (r Runner) formatPluginSummary(raw string) string {
 	args := strings.Fields(strings.TrimSpace(raw))
 	if len(args) > 0 {
 		switch args[0] {
-		case "list", "status":
+		case "list", "status", "manage":
+		case "help", "--help", "-h":
+			return pluginCommandHelp()
 		case "show", "info":
 			return r.formatPluginShow(args)
 		case "search", "find":
@@ -3386,7 +3388,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 			return r.formatMarketplacePlugins(subcommandRemainder(raw, args[0]))
 		case "config", "settings":
 			return r.formatPluginConfig(args)
-		case "install":
+		case "install", "i":
 			return r.installPluginSummary(subcommandRemainder(raw, args[0]))
 		case "update":
 			return r.updatePluginSummary(subcommandRemainder(raw, args[0]))
@@ -3504,6 +3506,42 @@ func (r Runner) formatPluginSummary(raw string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func pluginCommandHelp() string {
+	return strings.Join([]string{
+		"Plugin Command Usage:",
+		"",
+		"Installation:",
+		"/plugin install - Browse and install plugins",
+		"/plugin install <marketplace> - Install from specific marketplace",
+		"/plugin install <plugin> - Install specific plugin",
+		"/plugin install <plugin>@<market> - Install plugin from marketplace",
+		"",
+		"Management:",
+		"/plugin manage - Manage installed plugins",
+		"/plugin enable <plugin> - Enable a plugin",
+		"/plugin disable <plugin> - Disable a plugin",
+		"/plugin uninstall <plugin> - Uninstall a plugin",
+		"",
+		"Marketplaces:",
+		"/plugin marketplace - Marketplace management menu",
+		"/plugin marketplace add - Add a marketplace",
+		"/plugin marketplace add <path/url> - Add marketplace directly",
+		"/plugin marketplace update - Update marketplaces",
+		"/plugin marketplace update <name> - Update specific marketplace",
+		"/plugin marketplace remove - Remove a marketplace",
+		"/plugin marketplace remove <name> - Remove specific marketplace",
+		"/plugin marketplace list - List all marketplaces",
+		"",
+		"Validation:",
+		"/plugin validate <path> - Validate a manifest file or directory",
+		"",
+		"Other:",
+		"/plugin - Main plugin menu",
+		"/plugin help - Show this help",
+		"/plugins - Alias for /plugin",
+	}, "\n")
 }
 
 func (r Runner) formatPluginShow(args []string) string {

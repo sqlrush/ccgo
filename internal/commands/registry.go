@@ -288,7 +288,7 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "help", Description: "Show help and available commands", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "config", Aliases: []string{"settings"}, Description: "Open config panel", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "mcp", Description: "Manage MCP servers", ArgumentHint: "[enable|disable [server-name]]", Source: contracts.CommandSourceBuiltin, Immediate: true},
-		{Type: contracts.CommandLocalJSX, Name: "plugin", Description: "Manage plugins", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "plugin", Aliases: []string{"plugins", "marketplace"}, Description: "Manage plugins", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "skills", Description: "List available skills", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "memory", Description: "Edit memory files", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocal, Name: "native", Description: "Run explicit native integration commands", ArgumentHint: "clipboard|chrome|voice|computer", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
