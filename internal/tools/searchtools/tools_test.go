@@ -27,7 +27,18 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 				InterruptBehavior:   "block",
 				MaxResultSizeChars:  1024,
 				CacheControl:        &contracts.CacheControl{Type: "ephemeral"},
-				InputSchema:         contracts.JSONSchema{"type": "object"},
+				InputSchema: contracts.JSONSchema{
+					"type": "object",
+					"properties": map[string]any{
+						"path": map[string]any{"type": "string"},
+					},
+				},
+				OutputSchema: contracts.JSONSchema{
+					"type": "object",
+					"properties": map[string]any{
+						"content": map[string]any{"type": "string"},
+					},
+				},
 			},
 			CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
 				return contracts.ToolResult{Content: "read"}, nil
@@ -84,6 +95,28 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	if cacheControl, ok := results[0]["cache_control"].(contracts.CacheControl); !ok || cacheControl.Type != "ephemeral" {
 		t.Fatalf("cache_control = %#v", results[0]["cache_control"])
 	}
+	inputSchema, ok := results[0]["input_schema"].(contracts.JSONSchema)
+	if !ok || inputSchema["type"] != "object" {
+		t.Fatalf("input_schema = %#v", results[0]["input_schema"])
+	}
+	inputProperties, ok := inputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("input schema properties = %#v", inputSchema["properties"])
+	}
+	if pathProperty, ok := inputProperties["path"].(map[string]any); !ok || pathProperty["type"] != "string" {
+		t.Fatalf("path property = %#v", inputProperties["path"])
+	}
+	outputSchema, ok := results[0]["output_schema"].(contracts.JSONSchema)
+	if !ok || outputSchema["type"] != "object" {
+		t.Fatalf("output_schema = %#v", results[0]["output_schema"])
+	}
+	outputProperties, ok := outputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("output schema properties = %#v", outputSchema["properties"])
+	}
+	if contentProperty, ok := outputProperties["content"].(map[string]any); !ok || contentProperty["type"] != "string" {
+		t.Fatalf("content property = %#v", outputProperties["content"])
+	}
 	if aliases, ok := results[0]["aliases"].([]string); !ok || len(aliases) != 1 || aliases[0] != "View" {
 		t.Fatalf("aliases = %#v", results[0]["aliases"])
 	}
@@ -112,6 +145,27 @@ func TestToolSearchBM25RanksCamelCaseToolName(t *testing.T) {
 	}
 	if results[0].Score <= 0 {
 		t.Fatalf("score = %v, want positive", results[0].Score)
+	}
+}
+
+func TestCopyJSONSchemaDeepCopiesNestedMapsAndSlices(t *testing.T) {
+	original := contracts.JSONSchema{
+		"type":     "object",
+		"required": []any{"path"},
+		"properties": map[string]any{
+			"path": map[string]any{"type": "string"},
+		},
+	}
+	copied := copyJSONSchema(original)
+	copied["required"].([]any)[0] = "other"
+	copied["properties"].(map[string]any)["path"].(map[string]any)["type"] = "number"
+
+	if original["required"].([]any)[0] != "path" {
+		t.Fatalf("original required was mutated: %#v", original["required"])
+	}
+	pathProperty := original["properties"].(map[string]any)["path"].(map[string]any)
+	if pathProperty["type"] != "string" {
+		t.Fatalf("original nested property was mutated: %#v", pathProperty)
 	}
 }
 

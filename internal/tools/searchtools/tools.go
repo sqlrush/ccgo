@@ -134,6 +134,12 @@ func callToolSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 			"strict":                result.Definition.Strict,
 			"interruptBehavior":     result.Definition.InterruptBehavior,
 		}
+		if len(result.Definition.InputSchema) > 0 {
+			entry["input_schema"] = copyJSONSchema(result.Definition.InputSchema)
+		}
+		if len(result.Definition.OutputSchema) > 0 {
+			entry["output_schema"] = copyJSONSchema(result.Definition.OutputSchema)
+		}
 		if result.Definition.MaxResultSizeChars > 0 {
 			entry["max_result_size_chars"] = result.Definition.MaxResultSizeChars
 		}
@@ -383,6 +389,38 @@ func trimSearchSnippet(text string) string {
 		return text
 	}
 	return text[:limit-3] + "..."
+}
+
+func copyJSONSchema(schema contracts.JSONSchema) contracts.JSONSchema {
+	if schema == nil {
+		return nil
+	}
+	copied := make(contracts.JSONSchema, len(schema))
+	for key, value := range schema {
+		copied[key] = copySchemaValue(value)
+	}
+	return copied
+}
+
+func copySchemaValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		copied := make(map[string]any, len(typed))
+		for key, child := range typed {
+			copied[key] = copySchemaValue(child)
+		}
+		return copied
+	case contracts.JSONSchema:
+		return copyJSONSchema(typed)
+	case []any:
+		copied := make([]any, len(typed))
+		for i, child := range typed {
+			copied[i] = copySchemaValue(child)
+		}
+		return copied
+	default:
+		return value
+	}
 }
 
 func firstString(obj map[string]any, keys ...string) (string, bool) {
