@@ -2219,6 +2219,101 @@ func TestRunPluginInstallCLI(t *testing.T) {
 	}
 }
 
+func TestRunPluginEnableDisableCLI(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "plugin", "enable", "market/plugin"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("enable exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Plugin market/plugin enabled.") {
+		t.Fatalf("enable stdout = %q", stdout.String())
+	}
+	settings := readTestSettingsJSON(t, filepath.Join(configHome, "settings.json"))
+	if enabled := settings["enabledPlugins"].(map[string]any)["market/plugin"]; enabled != true {
+		t.Fatalf("enabled plugin state = %#v", settings["enabledPlugins"])
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "disable", "market/plugin"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("disable exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Plugin market/plugin disabled.") {
+		t.Fatalf("disable stdout = %q", stdout.String())
+	}
+	settings = readTestSettingsJSON(t, filepath.Join(configHome, "settings.json"))
+	if enabled := settings["enabledPlugins"].(map[string]any)["market/plugin"]; enabled != false {
+		t.Fatalf("disabled plugin state = %#v", settings["enabledPlugins"])
+	}
+
+	demoDir := filepath.Join(project, ".claude", "plugins", "demo")
+	offDir := filepath.Join(project, ".claude", "plugins", "already-off")
+	for _, dir := range []string{demoDir, offDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(demoDir, "plugin.json"), []byte(`{"name":"demo","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(offDir, "plugin.json"), []byte(`{"name":"already-off","version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "settings.json"), []byte(`{"enabledPlugins":{"already-off":false}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "disable", "--all"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("disable all exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Disabled 1 plugin") {
+		t.Fatalf("disable all stdout = %q", stdout.String())
+	}
+	settings = readTestSettingsJSON(t, filepath.Join(configHome, "settings.json"))
+	enabledPlugins := settings["enabledPlugins"].(map[string]any)
+	if enabledPlugins["demo"] != false || enabledPlugins["already-off"] != false {
+		t.Fatalf("disable all enabledPlugins = %#v", enabledPlugins)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "enable", "--scope", "project", "demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), `scope "project" is not supported yet`) {
+		t.Fatalf("project scope exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "disable", "--all", "demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "cannot use --all with a specific plugin") {
+		t.Fatalf("disable all with plugin exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func readTestSettingsJSON(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	return document
+}
+
 func TestRunPluginMarketplaceListCLI(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)

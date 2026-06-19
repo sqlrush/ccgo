@@ -337,6 +337,10 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 		return runPluginListCLI(state, args[1:], stdout, stderr)
 	case "install", "i":
 		return runPluginInstallCLI(state, args[1:], stdout, stderr)
+	case "enable":
+		return runPluginSetEnabledCLI(state, "enable", args[1:], stdout, stderr)
+	case "disable":
+		return runPluginSetEnabledCLI(state, "disable", args[1:], stdout, stderr)
 	case "marketplace", "marketplaces":
 		return runPluginMarketplaceCLI(state, args[1:], stdout, stderr)
 	default:
@@ -443,6 +447,88 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 	}
 	writePluginInstallResult(stdout, result)
 	return 0
+}
+
+func runPluginSetEnabledCLI(state *bootstrap.State, action string, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin "+action, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	scope := "user"
+	flags.StringVar(&scope, "scope", scope, "settings scope")
+	flags.StringVar(&scope, "s", scope, "settings scope")
+	all := false
+	if action == "disable" {
+		flags.BoolVar(&all, "all", false, "disable all plugins")
+		flags.BoolVar(&all, "a", false, "disable all plugins")
+	}
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		scope = "user"
+	}
+	if scope != "user" {
+		fmt.Fprintf(stderr, "ccgo plugin %s: scope %q is not supported yet; use user\n", action, scope)
+		return 2
+	}
+	if all {
+		if flags.NArg() > 0 {
+			fmt.Fprintln(stderr, "ccgo plugin disable: cannot use --all with a specific plugin")
+			return 2
+		}
+		return runPluginDisableAllCLI(state, stdout, stderr)
+	}
+	if flags.NArg() != 1 {
+		fmt.Fprintf(stderr, "ccgo plugin %s: usage: claude plugin %s [--scope user] <plugin>\n", action, action)
+		return 2
+	}
+	name := strings.TrimSpace(flags.Arg(0))
+	enabled := action == "enable"
+	if err := config.SetUserPluginEnabled(name, enabled); err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin %s: %v\n", action, err)
+		return 1
+	}
+	stateText := "disabled"
+	if enabled {
+		stateText = "enabled"
+	}
+	fmt.Fprintf(stdout, "Plugin %s %s.\n", name, stateText)
+	return 0
+}
+
+func runPluginDisableAllCLI(state *bootstrap.State, stdout io.Writer, stderr io.Writer) int {
+	settings, err := pluginCLISettingsFromFiles(state.CWD())
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin disable: %v\n", err)
+		return 1
+	}
+	plugins := pluginpkg.LoadPluginDirs(pluginpkg.ProjectPluginDirs(state.CWD()))
+	states := map[string]bool{}
+	for _, plugin := range plugins {
+		if pluginpkg.PluginEnabled(plugin, settings.EnabledPlugins) && strings.TrimSpace(plugin.Name) != "" {
+			states[plugin.Name] = false
+		}
+	}
+	if len(states) == 0 {
+		fmt.Fprintln(stdout, "No enabled plugins to disable")
+		return 0
+	}
+	if err := config.SetUserPluginsEnabled(states); err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin disable: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Disabled %d %s\n", len(states), pluralWord(len(states), "plugin", "plugins"))
+	return 0
+}
+
+func pluralWord(count int, singular string, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
 }
 
 func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {

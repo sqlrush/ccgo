@@ -3961,17 +3961,7 @@ func (r Runner) setPluginEnabledSummary(args []string) string {
 }
 
 func setUserPluginEnabled(name string, enabled bool) error {
-	document, err := readUserSettingsDocument()
-	if err != nil {
-		return err
-	}
-	enabledPlugins, _ := document["enabledPlugins"].(map[string]any)
-	if enabledPlugins == nil {
-		enabledPlugins = map[string]any{}
-	}
-	enabledPlugins[name] = enabled
-	document["enabledPlugins"] = enabledPlugins
-	return writeUserSettingsDocument(document)
+	return config.SetUserPluginEnabled(name, enabled)
 }
 
 func setUserMCPServerEnabled(name string, enabled bool, allowlistActive bool) error {
@@ -4131,30 +4121,11 @@ func setUserPermissionMode(mode contracts.PermissionMode) error {
 }
 
 func readUserSettingsDocument() (map[string]any, error) {
-	path := config.UserSettingsPath()
-	document := map[string]any{}
-	data, err := os.ReadFile(path)
-	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
-		if err := json.Unmarshal(data, &document); err != nil {
-			return nil, fmt.Errorf("decode %s: %w", path, err)
-		}
-	} else if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	return document, nil
+	return config.ReadUserSettingsDocument()
 }
 
 func writeUserSettingsDocument(document map[string]any) error {
-	path := config.UserSettingsPath()
-	data, err := json.MarshalIndent(document, "", "  ")
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o600)
+	return config.WriteUserSettingsDocument(document)
 }
 
 func (r Runner) formatMemorySummary(raw string) string {
