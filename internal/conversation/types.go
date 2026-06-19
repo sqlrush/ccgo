@@ -38,15 +38,16 @@ type PromptDumpProvider interface {
 type EventType string
 
 const (
-	EventUserMessage      EventType = "user_message"
-	EventAssistantMessage EventType = "assistant_message"
-	EventToolUse          EventType = "tool_use"
-	EventToolResult       EventType = "tool_result"
-	EventToolProgress     EventType = "tool_progress"
-	EventRetry            EventType = "retry"
-	EventTokenWarning     EventType = "token_warning"
-	EventCompact          EventType = "compact"
-	EventStreamEvent      EventType = "stream_event"
+	EventUserMessage        EventType = "user_message"
+	EventAssistantMessage   EventType = "assistant_message"
+	EventToolUse            EventType = "tool_use"
+	EventToolResult         EventType = "tool_result"
+	EventToolProgress       EventType = "tool_progress"
+	EventRetry              EventType = "retry"
+	EventTokenWarning       EventType = "token_warning"
+	EventCompact            EventType = "compact"
+	EventStreamEvent        EventType = "stream_event"
+	EventDeferredPoolChange EventType = "tengu_deferred_tools_pool_change"
 )
 
 type TokenWarning struct {
@@ -63,18 +64,31 @@ type RetryInfo struct {
 	Fallback    bool
 }
 
+type DeferredToolsPoolChange struct {
+	AddedCount              int
+	RemovedCount            int
+	PriorAnnouncedCount     int
+	MessagesLength          int
+	AttachmentCount         int
+	DeferredToolsDeltaCount int
+	CallSite                string
+	QuerySource             string
+	AttachmentTypesSeen     string
+}
+
 type Event struct {
-	Type         EventType
-	Message      *contracts.Message
-	ToolUse      *contracts.ToolUse
-	ToolResult   *contracts.ToolResult
-	ToolProgress *contracts.ToolProgress
-	TokenWarning *TokenWarning
-	Retry        *RetryInfo
-	Compact      *compactpkg.Result
-	StreamEvent  *anthropic.StreamEvent
-	Model        string
-	Error        error
+	Type                    EventType
+	Message                 *contracts.Message
+	ToolUse                 *contracts.ToolUse
+	ToolResult              *contracts.ToolResult
+	ToolProgress            *contracts.ToolProgress
+	TokenWarning            *TokenWarning
+	Retry                   *RetryInfo
+	Compact                 *compactpkg.Result
+	StreamEvent             *anthropic.StreamEvent
+	DeferredToolsPoolChange *DeferredToolsPoolChange
+	Model                   string
+	Error                   error
 }
 
 type Runner struct {

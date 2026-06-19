@@ -8579,7 +8579,7 @@ func TestRunnerAddsDeferredToolsDeltaAttachmentForFeatureGate(t *testing.T) {
 		SessionID:   "sess_delta_feature",
 		SessionPath: transcriptPath,
 		MCP: &MCPConfig{UserSettings: contracts.Settings{
-			Advanced: &contracts.AdvancedSetting{TenguGlacier2XR: &enabled},
+			Advanced: &contracts.AdvancedSetting{Telemetry: &enabled, TenguGlacier2XR: &enabled},
 		}},
 	}
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi"))
@@ -8607,6 +8607,38 @@ func TestRunnerAddsDeferredToolsDeltaAttachmentForFeatureGate(t *testing.T) {
 	}
 	if len(entries) != 3 || entries[1].Type != contracts.MessageAttachment || entries[1].Message == nil {
 		t.Fatalf("transcript entries = %#v", entries)
+	}
+	telemetryPath := telemetrypkg.SessionPath(transcriptPath, "sess_delta_feature")
+	telemetryData, err := os.ReadFile(telemetryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(telemetryData), "TinyDeferred") {
+		t.Fatalf("telemetry leaked deferred tool name: %q", telemetryData)
+	}
+	events, err := telemetrypkg.Load(telemetryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var poolChange *telemetrypkg.Event
+	for i := range events {
+		if events[i].Type == string(EventDeferredPoolChange) {
+			poolChange = &events[i]
+			break
+		}
+	}
+	if poolChange == nil {
+		t.Fatalf("pool-change telemetry event not found: %#v", events)
+	}
+	if poolChange.DeferredToolAddedCount != 1 ||
+		poolChange.DeferredToolRemovedCount != 0 ||
+		poolChange.DeferredToolPriorAnnounced != 0 ||
+		poolChange.DeferredToolMessagesLength != 1 ||
+		poolChange.DeferredToolAttachmentCount != 0 ||
+		poolChange.DeferredToolsDeltaCount != 0 ||
+		poolChange.DeferredToolsDeltaCallSite != "attachments_main" ||
+		poolChange.DeferredToolsDeltaQuerySource != "unknown" {
+		t.Fatalf("pool-change telemetry = %#v", poolChange)
 	}
 }
 

@@ -17,29 +17,38 @@ import (
 )
 
 type Event struct {
-	Timestamp      string       `json:"timestamp"`
-	SessionID      contracts.ID `json:"session_id,omitempty"`
-	TraceID        string       `json:"trace_id,omitempty"`
-	SpanID         string       `json:"span_id,omitempty"`
-	ParentSpanID   string       `json:"parent_span_id,omitempty"`
-	Type           string       `json:"type"`
-	Model          string       `json:"model,omitempty"`
-	MessageType    string       `json:"message_type,omitempty"`
-	MessageUUID    contracts.ID `json:"message_uuid,omitempty"`
-	ToolUseID      contracts.ID `json:"tool_use_id,omitempty"`
-	ToolName       string       `json:"tool_name,omitempty"`
-	ToolResultErr  bool         `json:"tool_result_error,omitempty"`
-	ProgressType   string       `json:"progress_type,omitempty"`
-	ProgressKeys   []string     `json:"progress_keys,omitempty"`
-	RetryAttempt   int          `json:"retry_attempt,omitempty"`
-	RetryMax       int          `json:"retry_max_attempts,omitempty"`
-	RetryFailed    string       `json:"retry_failed_model,omitempty"`
-	RetryNext      string       `json:"retry_next_model,omitempty"`
-	RetryFallback  bool         `json:"retry_fallback,omitempty"`
-	TokenState     string       `json:"token_state,omitempty"`
-	TokenUsage     int          `json:"token_usage,omitempty"`
-	CompactTrigger string       `json:"compact_trigger,omitempty"`
-	Error          string       `json:"error,omitempty"`
+	Timestamp                     string       `json:"timestamp"`
+	SessionID                     contracts.ID `json:"session_id,omitempty"`
+	TraceID                       string       `json:"trace_id,omitempty"`
+	SpanID                        string       `json:"span_id,omitempty"`
+	ParentSpanID                  string       `json:"parent_span_id,omitempty"`
+	Type                          string       `json:"type"`
+	Model                         string       `json:"model,omitempty"`
+	MessageType                   string       `json:"message_type,omitempty"`
+	MessageUUID                   contracts.ID `json:"message_uuid,omitempty"`
+	ToolUseID                     contracts.ID `json:"tool_use_id,omitempty"`
+	ToolName                      string       `json:"tool_name,omitempty"`
+	ToolResultErr                 bool         `json:"tool_result_error,omitempty"`
+	ProgressType                  string       `json:"progress_type,omitempty"`
+	ProgressKeys                  []string     `json:"progress_keys,omitempty"`
+	RetryAttempt                  int          `json:"retry_attempt,omitempty"`
+	RetryMax                      int          `json:"retry_max_attempts,omitempty"`
+	RetryFailed                   string       `json:"retry_failed_model,omitempty"`
+	RetryNext                     string       `json:"retry_next_model,omitempty"`
+	RetryFallback                 bool         `json:"retry_fallback,omitempty"`
+	TokenState                    string       `json:"token_state,omitempty"`
+	TokenUsage                    int          `json:"token_usage,omitempty"`
+	CompactTrigger                string       `json:"compact_trigger,omitempty"`
+	DeferredToolAddedCount        int          `json:"deferred_tool_added_count,omitempty"`
+	DeferredToolRemovedCount      int          `json:"deferred_tool_removed_count,omitempty"`
+	DeferredToolPriorAnnounced    int          `json:"deferred_tool_prior_announced_count,omitempty"`
+	DeferredToolMessagesLength    int          `json:"deferred_tool_messages_length,omitempty"`
+	DeferredToolAttachmentCount   int          `json:"deferred_tool_attachment_count,omitempty"`
+	DeferredToolsDeltaCount       int          `json:"deferred_tools_delta_count,omitempty"`
+	DeferredToolsDeltaCallSite    string       `json:"deferred_tools_delta_call_site,omitempty"`
+	DeferredToolsDeltaQuerySource string       `json:"deferred_tools_delta_query_source,omitempty"`
+	DeferredToolAttachmentTypes   string       `json:"deferred_tool_attachment_types_seen,omitempty"`
+	Error                         string       `json:"error,omitempty"`
 }
 
 type Filter struct {
@@ -160,6 +169,9 @@ func SpanID(event Event) string {
 		event.ProgressType,
 		event.TokenState,
 		event.CompactTrigger,
+		event.DeferredToolsDeltaCallSite,
+		event.DeferredToolsDeltaQuerySource,
+		event.DeferredToolAttachmentTypes,
 		event.Error,
 	}
 	return traceHex(strings.Join(parts, "\x00"), 8)

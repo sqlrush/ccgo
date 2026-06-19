@@ -77,6 +77,17 @@ func (r Runner) telemetryEvent(event Event) telemetrypkg.Event {
 			out.Model = event.Compact.Response.Model
 		}
 	}
+	if event.DeferredToolsPoolChange != nil {
+		out.DeferredToolAddedCount = event.DeferredToolsPoolChange.AddedCount
+		out.DeferredToolRemovedCount = event.DeferredToolsPoolChange.RemovedCount
+		out.DeferredToolPriorAnnounced = event.DeferredToolsPoolChange.PriorAnnouncedCount
+		out.DeferredToolMessagesLength = event.DeferredToolsPoolChange.MessagesLength
+		out.DeferredToolAttachmentCount = event.DeferredToolsPoolChange.AttachmentCount
+		out.DeferredToolsDeltaCount = event.DeferredToolsPoolChange.DeferredToolsDeltaCount
+		out.DeferredToolsDeltaCallSite = event.DeferredToolsPoolChange.CallSite
+		out.DeferredToolsDeltaQuerySource = event.DeferredToolsPoolChange.QuerySource
+		out.DeferredToolAttachmentTypes = event.DeferredToolsPoolChange.AttachmentTypesSeen
+	}
 	if event.Error != nil {
 		out.Error = event.Error.Error()
 	}

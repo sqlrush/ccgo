@@ -12,6 +12,7 @@ type deferredToolsDelta struct {
 	AddedNames   []string
 	AddedLines   []string
 	RemovedNames []string
+	PoolChange   DeferredToolsPoolChange
 }
 
 func (r Runner) maybeAppendDeferredToolsDeltaAttachment(ctx context.Context, history []contracts.Message) ([]contracts.Message, *contracts.Message, error) {
@@ -32,6 +33,12 @@ func (r Runner) maybeAppendDeferredToolsDeltaAttachment(ctx context.Context, his
 	if delta == nil {
 		return history, nil, nil
 	}
+	poolChange := delta.PoolChange
+	poolChange.CallSite = "attachments_main"
+	if poolChange.QuerySource == "" {
+		poolChange.QuerySource = "unknown"
+	}
+	r.emit(Event{Type: EventDeferredPoolChange, DeferredToolsPoolChange: &poolChange})
 	message := deferredToolsDeltaMessage(*delta)
 	next, message := appendMessage(history, message)
 	return next, &message, nil
@@ -39,11 +46,21 @@ func (r Runner) maybeAppendDeferredToolsDeltaAttachment(ctx context.Context, his
 
 func deferredToolsDeltaFromHistory(definitions []contracts.ToolDefinition, history []contracts.Message) *deferredToolsDelta {
 	announced := map[string]struct{}{}
+	attachmentTypesSeen := map[string]struct{}{}
+	attachmentCount := 0
+	deferredToolsDeltaCount := 0
 	for _, message := range history {
+		if message.Type == contracts.MessageAttachment {
+			attachmentCount++
+			if attachmentType := attachmentMessageType(message); attachmentType != "" {
+				attachmentTypesSeen[attachmentType] = struct{}{}
+			}
+		}
 		payload, ok := deferredToolsDeltaAttachmentPayload(message)
 		if !ok {
 			continue
 		}
+		deferredToolsDeltaCount++
 		for _, name := range stringSliceValue(payload["addedNames"], payload["added_names"]) {
 			announced[name] = struct{}{}
 		}
@@ -85,10 +102,19 @@ func deferredToolsDeltaFromHistory(definitions []contracts.ToolDefinition, histo
 	if len(addedNames) == 0 && len(removedNames) == 0 {
 		return nil
 	}
+	poolChange := DeferredToolsPoolChange{
+		AddedCount:              len(addedNames),
+		RemovedCount:            len(removedNames),
+		PriorAnnouncedCount:     len(announced),
+		MessagesLength:          len(history),
+		AttachmentCount:         attachmentCount,
+		DeferredToolsDeltaCount: deferredToolsDeltaCount,
+		AttachmentTypesSeen:     strings.Join(sortedStringSet(attachmentTypesSeen), ","),
+	}
 	sort.Strings(addedNames)
 	sort.Strings(addedLines)
 	sort.Strings(removedNames)
-	return &deferredToolsDelta{AddedNames: addedNames, AddedLines: addedLines, RemovedNames: removedNames}
+	return &deferredToolsDelta{AddedNames: addedNames, AddedLines: addedLines, RemovedNames: removedNames, PoolChange: poolChange}
 }
 
 func deferredToolsDeltaMessage(delta deferredToolsDelta) contracts.Message {
@@ -134,8 +160,36 @@ func deferredToolsDeltaAttachmentPayload(message contracts.Message) (map[string]
 	return payload, true
 }
 
+func attachmentMessageType(message contracts.Message) string {
+	if message.Type != contracts.MessageAttachment || len(message.Raw) == 0 {
+		return ""
+	}
+	payload, ok := message.Raw["attachment"].(map[string]any)
+	if !ok {
+		if nested, nestedOK := message.Raw["attachment"].(map[string]string); nestedOK {
+			return strings.TrimSpace(nested["type"])
+		}
+		return ""
+	}
+	return strings.TrimSpace(stringValue(payload["type"]))
+}
+
 func formatDeferredToolLine(definition contracts.ToolDefinition) string {
 	return definition.Name
+}
+
+func sortedStringSet(values map[string]struct{}) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func stringSliceValue(values ...any) []string {
