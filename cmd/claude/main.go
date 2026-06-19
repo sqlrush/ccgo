@@ -730,11 +730,13 @@ func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io
 	scope := "user"
 	sourceType := ""
 	installLocation := ""
+	var sparsePaths repeatedStringFlag
 	flags.StringVar(&scope, "scope", scope, "settings scope")
 	flags.StringVar(&scope, "s", scope, "settings scope")
 	flags.StringVar(&sourceType, "type", sourceType, "marketplace source type")
 	flags.StringVar(&sourceType, "t", sourceType, "marketplace source type")
 	flags.StringVar(&installLocation, "install-location", installLocation, "preferred install location")
+	flags.Var(&sparsePaths, "sparse", "sparse checkout path for github/git marketplace sources")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
@@ -742,7 +744,7 @@ func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io
 		return 2
 	}
 	if flags.NArg() != 2 {
-		fmt.Fprintln(stderr, "ccgo plugin marketplace add: usage: claude plugin marketplace add [--scope user|project|local] [--type url|github|git|npm|directory|file] <name> <source>")
+		fmt.Fprintln(stderr, "ccgo plugin marketplace add: usage: claude plugin marketplace add [--scope user|project|local] [--type url|github|git|npm|directory|file] [--sparse path] <name> <source>")
 		return 2
 	}
 	scope = strings.ToLower(strings.TrimSpace(scope))
@@ -759,6 +761,14 @@ func runPluginMarketplaceAddCLI(state *bootstrap.State, args []string, stdout io
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin marketplace add: %v\n", err)
 		return 2
+	}
+	if len(sparsePaths) > 0 {
+		sourceKind := pluginCLIStringFromMap(source, "source")
+		if sourceKind != "github" && sourceKind != "git" {
+			fmt.Fprintf(stderr, "ccgo plugin marketplace add: --sparse is only supported for github and git marketplace sources (got: %s)\n", sourceKind)
+			return 2
+		}
+		source["sparsePaths"] = compactPluginCLISparsePaths(sparsePaths)
 	}
 	existed, err := config.SetMarketplaceInSettingsFile(settingsPath, name, source, installLocation)
 	if err != nil {
@@ -1267,6 +1277,23 @@ func pluginCLINormalizeMarketplaceSourceArg(sourceType string, value string) (st
 		return strings.TrimSuffix(prefix, ":"), strings.TrimSpace(value[len(prefix):])
 	}
 	return "", value
+}
+
+func compactPluginCLISparsePaths(paths []string) []any {
+	out := make([]any, 0, len(paths))
+	seen := map[string]struct{}{}
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+	return out
 }
 
 func pluginCLIInferMarketplaceSourceType(value string) string {

@@ -2958,7 +2958,7 @@ func TestRunPluginMarketplaceAddRemoveCLI(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "team", "github:owner/repo"}, strings.NewReader(""), &stdout, &stderr)
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "--sparse", ".claude-plugin", "--sparse", "plugins/demo", "team", "github:owner/repo"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("update add exit = %d stderr=%s", code, stderr.String())
 	}
@@ -2971,8 +2971,19 @@ func TestRunPluginMarketplaceAddRemoveCLI(t *testing.T) {
 	if source["source"] != "github" || source["repo"] != "owner/repo" {
 		t.Fatalf("updated team marketplace settings = %#v", team)
 	}
+	sparsePaths, ok := source["sparsePaths"].([]any)
+	if !ok || len(sparsePaths) != 2 || sparsePaths[0] != ".claude-plugin" || sparsePaths[1] != "plugins/demo" {
+		t.Fatalf("updated team sparsePaths = %#v", source["sparsePaths"])
+	}
 	if _, ok := team["installLocation"]; ok {
 		t.Fatalf("installLocation should be cleared on update: %#v", team)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "add", "--type", "directory", "--sparse", "plugins/demo", "bad-sparse", marketDir}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "--sparse is only supported for github and git marketplace sources") {
+		t.Fatalf("bad sparse exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 
 	stdout.Reset()
