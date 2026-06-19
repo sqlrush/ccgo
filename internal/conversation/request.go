@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ccgo/internal/api/anthropic"
@@ -82,6 +83,13 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 
 type deferredToolTokenCounter func([]contracts.ToolDefinition) (int, bool)
 
+type deferredToolTokenCountCacheEntry struct {
+	Tokens int
+	OK     bool
+}
+
+var deferredToolTokenCountCache sync.Map
+
 func filterToolSearchDefinitions(definitions []contracts.ToolDefinition, history []contracts.Message, model string, tokenCounter deferredToolTokenCounter) ([]contracts.ToolDefinition, []string, bool) {
 	if len(definitions) == 0 {
 		return definitions, nil, false
@@ -151,21 +159,53 @@ func (r Runner) deferredToolTokenCounter(ctx context.Context, modelName string) 
 		if len(tools) == 0 {
 			return 0, true
 		}
-		if counter, ok := r.Client.(TokenCountingMessageClient); ok && counter != nil {
-			response, err := counter.CountTokens(ctx, anthropic.CountTokensRequest{
-				Model:    modelName,
-				Messages: []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("foo")}}},
-				Tools:    tools,
-			})
-			if err == nil && response != nil && response.InputTokens > 0 {
-				return normalizeToolTokenCount(response.InputTokens), true
+		cacheKey := deferredToolTokenCountCacheKey(definitions)
+		if cacheKey != "" {
+			if cached, ok := deferredToolTokenCountCache.Load(cacheKey); ok {
+				entry := cached.(deferredToolTokenCountCacheEntry)
+				return entry.Tokens, entry.OK
 			}
 		}
-		if tokens, ok := r.countToolTokensViaHaikuFallback(ctx, tools); ok {
-			return tokens, true
+		tokens, ok := r.countDeferredToolTokens(ctx, modelName, tools)
+		if cacheKey != "" {
+			deferredToolTokenCountCache.Store(cacheKey, deferredToolTokenCountCacheEntry{Tokens: tokens, OK: ok})
 		}
-		return 0, false
+		return tokens, ok
 	}
+}
+
+func (r Runner) countDeferredToolTokens(ctx context.Context, modelName string, tools []anthropic.ToolDefinition) (int, bool) {
+	if len(tools) == 0 {
+		return 0, true
+	}
+	if counter, ok := r.Client.(TokenCountingMessageClient); ok && counter != nil {
+		response, err := counter.CountTokens(ctx, anthropic.CountTokensRequest{
+			Model:    modelName,
+			Messages: []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("foo")}}},
+			Tools:    tools,
+		})
+		if err == nil && response != nil && response.InputTokens > 0 {
+			return normalizeToolTokenCount(response.InputTokens), true
+		}
+	}
+	if tokens, ok := r.countToolTokensViaHaikuFallback(ctx, tools); ok {
+		return tokens, true
+	}
+	return 0, false
+}
+
+func deferredToolTokenCountCacheKey(definitions []contracts.ToolDefinition) string {
+	names := make([]string, 0, len(definitions))
+	for _, definition := range definitions {
+		if toolDefinitionDeferred(definition) {
+			names = append(names, definition.Name)
+		}
+	}
+	return strings.Join(names, ",")
+}
+
+func resetDeferredToolTokenCountCache() {
+	deferredToolTokenCountCache = sync.Map{}
 }
 
 func (r Runner) countToolTokensViaHaikuFallback(ctx context.Context, tools []anthropic.ToolDefinition) (int, bool) {

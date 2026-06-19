@@ -8263,6 +8263,8 @@ func TestBuildRequestWithToolSearchAutoAboveThresholdOmitsUndiscoveredDeferredTo
 }
 
 func TestRunnerToolSearchAutoUsesCountTokensWhenAvailable(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
 	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
@@ -8309,6 +8311,8 @@ func TestRunnerToolSearchAutoUsesCountTokensWhenAvailable(t *testing.T) {
 }
 
 func TestRunnerToolSearchAutoFallsBackToHaikuTokenCount(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
 	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
@@ -8370,6 +8374,129 @@ func TestRunnerToolSearchAutoFallsBackToHaikuTokenCount(t *testing.T) {
 	}
 	if len(mainRequest.Messages) != 2 || !strings.Contains(mainRequest.Messages[0].Content[0].Text, "<available-deferred-tools>\nTinyDeferred\n</available-deferred-tools>") {
 		t.Fatalf("main request messages = %#v", mainRequest.Messages)
+	}
+}
+
+func TestRunnerToolSearchAutoCachesTokenCountByDeferredToolNames(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{{response: &anthropic.CountTokensResponse{InputTokens: 20501}}},
+		calls: []fakeCall{
+			{response: &anthropic.Response{
+				ID:         "msg_done_1",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done one")},
+			}},
+			{response: &anthropic.Response{
+				ID:         "msg_done_2",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done two")},
+			}},
+		},
+	}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi again")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.countCalls) != 1 {
+		t.Fatalf("count token calls = %#v", client.countCalls)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	for _, request := range client.requests {
+		if len(request.Tools) != 1 || request.Tools[0].Name != "ToolSearch" {
+			t.Fatalf("request tools = %#v", request.Tools)
+		}
+	}
+}
+
+func TestRunnerToolSearchAutoCachesUnavailableTokenCount(t *testing.T) {
+	resetDeferredToolTokenCountCache()
+	t.Cleanup(resetDeferredToolTokenCountCache)
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ENABLE_TOOL_SEARCH", "auto")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "")
+	registry, err := tool.NewRegistry(testDeferredToolDefinition("TinyDeferred", "small"), searchtools.NewToolSearchTool())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeClient{
+		countTokens: []fakeCountTokensCall{{err: fmt.Errorf("count unavailable")}},
+		calls: []fakeCall{
+			{err: fmt.Errorf("haiku unavailable")},
+			{response: &anthropic.Response{
+				ID:         "msg_done_1",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done one")},
+			}},
+			{response: &anthropic.Response{
+				ID:         "msg_done_2",
+				Type:       "message",
+				Role:       "assistant",
+				Model:      "sonnet",
+				StopReason: "end_turn",
+				Content:    []contracts.ContentBlock{contracts.NewTextBlock("done two")},
+			}},
+		},
+	}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 100,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("hi again")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.countCalls) != 1 {
+		t.Fatalf("count token calls = %#v", client.countCalls)
+	}
+	if len(client.requests) != 3 {
+		t.Fatalf("requests = %#v", client.requests)
+	}
+	if client.requests[0].Model != modelpkg.Claude45Haiku {
+		t.Fatalf("fallback request = %#v", client.requests[0])
+	}
+	for _, request := range client.requests[1:] {
+		if len(request.Tools) != 1 || request.Tools[0].Name != "TinyDeferred" || request.Tools[0].DeferLoading {
+			t.Fatalf("request tools = %#v", request.Tools)
+		}
+		if len(request.Messages) != 1 || strings.HasPrefix(request.Messages[0].Content[0].Text, "<available-deferred-tools>") {
+			t.Fatalf("request messages = %#v", request.Messages)
+		}
 	}
 }
 
