@@ -35,12 +35,37 @@ func NewToolSearchTool() tool.Tool {
 				"properties": map[string]any{
 					"query": map[string]any{
 						"type":        "string",
-						"description": "Search query for available tools.",
+						"description": "Search query for available tools. Use select:ToolA,ToolB to fetch exact tool references.",
 					},
 					"topn": map[string]any{
 						"type":        "integer",
 						"description": "Maximum number of matching tools to return.",
 					},
+				},
+			},
+			OutputSchema: contracts.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"query":      map[string]any{"type": "string"},
+					"limit":      map[string]any{"type": "integer"},
+					"matches":    map[string]any{"type": "integer"},
+					"ranking":    map[string]any{"type": "string"},
+					"query_type": map[string]any{"type": "string", "enum": []any{"keyword", "select"}},
+					"text":       map[string]any{"type": "string"},
+					"requested":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"missing":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"tool_references": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type":     "object",
+							"required": []any{"type", "tool_name"},
+							"properties": map[string]any{
+								"type":      map[string]any{"const": "tool_reference"},
+								"tool_name": map[string]any{"type": "string"},
+							},
+						},
+					},
+					"results": map[string]any{"type": "array"},
 				},
 			},
 		},
@@ -114,13 +139,27 @@ func callToolSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	results := matchToolDefinitions(definitions, input.Query, limit)
+	queryType := "keyword"
+	ranking := "bm25"
+	var requested []string
+	var missing []string
+	var results []scoredDefinition
+	if selectNames, ok := parseSelectQuery(input.Query); ok {
+		queryType = "select"
+		ranking = "select"
+		requested = selectNames
+		results, missing = selectToolDefinitions(definitions, selectNames)
+	} else {
+		results = matchToolDefinitions(definitions, input.Query, limit)
+	}
 	structuredResults := make([]map[string]any, 0, len(results))
 	lines := []string{
 		"Tool search: " + strings.TrimSpace(input.Query),
 		fmt.Sprintf("Matches: %d", len(results)),
 	}
+	toolReferences := make([]contracts.ToolReference, 0, len(results))
 	for _, result := range results {
+		toolReferences = append(toolReferences, contracts.NewToolReference(result.Definition.Name))
 		entry := map[string]any{
 			"name":                  result.Definition.Name,
 			"score":                 result.Score,
@@ -162,15 +201,31 @@ func callToolSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) 
 	if len(results) == 0 {
 		lines = append(lines, "No tools matched.")
 	}
+	if len(missing) > 0 {
+		lines = append(lines, "Missing: "+strings.Join(missing, ", "))
+	}
+	text := strings.Join(lines, "\n")
+	content := any(text)
+	if len(toolReferences) > 0 {
+		content = toolReferences
+	}
+	structured := map[string]any{
+		"query":           strings.TrimSpace(input.Query),
+		"limit":           limit,
+		"matches":         len(results),
+		"ranking":         ranking,
+		"query_type":      queryType,
+		"text":            text,
+		"tool_references": toolReferences,
+		"results":         structuredResults,
+	}
+	if queryType == "select" {
+		structured["requested"] = requested
+		structured["missing"] = missing
+	}
 	return contracts.ToolResult{
-		Content: strings.Join(lines, "\n"),
-		StructuredContent: map[string]any{
-			"query":   strings.TrimSpace(input.Query),
-			"limit":   limit,
-			"matches": len(results),
-			"ranking": "bm25",
-			"results": structuredResults,
-		},
+		Content:           content,
+		StructuredContent: structured,
 	}, nil
 }
 
@@ -216,6 +271,55 @@ func matchToolDefinitions(definitions []contracts.ToolDefinition, query string, 
 		results = results[:limit]
 	}
 	return results
+}
+
+func parseSelectQuery(query string) ([]string, bool) {
+	trimmed := strings.TrimSpace(query)
+	if !strings.HasPrefix(strings.ToLower(trimmed), "select:") {
+		return nil, false
+	}
+	rawNames := strings.Split(trimmed[len("select:"):], ",")
+	names := make([]string, 0, len(rawNames))
+	for _, rawName := range rawNames {
+		name := strings.TrimSpace(rawName)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names, true
+}
+
+func selectToolDefinitions(definitions []contracts.ToolDefinition, names []string) ([]scoredDefinition, []string) {
+	selected := make([]scoredDefinition, 0, len(names))
+	missing := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, name := range names {
+		definition, ok := findToolDefinition(definitions, name)
+		if !ok {
+			missing = append(missing, name)
+			continue
+		}
+		if _, ok := seen[definition.Name]; ok {
+			continue
+		}
+		seen[definition.Name] = struct{}{}
+		selected = append(selected, scoredDefinition{Definition: definition, Score: 1})
+	}
+	return selected, missing
+}
+
+func findToolDefinition(definitions []contracts.ToolDefinition, name string) (contracts.ToolDefinition, bool) {
+	for _, definition := range definitions {
+		if strings.EqualFold(definition.Name, name) {
+			return definition, true
+		}
+		for _, alias := range definition.Aliases {
+			if strings.EqualFold(alias, name) {
+				return definition, true
+			}
+		}
+	}
+	return contracts.ToolDefinition{}, false
 }
 
 func buildBM25Corpus(definitions []contracts.ToolDefinition) bm25Corpus {

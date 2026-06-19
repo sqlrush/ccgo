@@ -68,14 +68,25 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(result.Content.(string), "Tool search: view files") || !strings.Contains(result.Content.(string), "- Read: Read files from the workspace") {
-		t.Fatalf("content = %#v", result.Content)
-	}
 	if result.StructuredContent["matches"] != 1 || result.StructuredContent["limit"] != 1 {
 		t.Fatalf("structured content = %#v", result.StructuredContent)
 	}
 	if result.StructuredContent["ranking"] != "bm25" {
 		t.Fatalf("ranking = %#v", result.StructuredContent["ranking"])
+	}
+	if result.StructuredContent["query_type"] != "keyword" {
+		t.Fatalf("query_type = %#v", result.StructuredContent["query_type"])
+	}
+	if text, ok := result.StructuredContent["text"].(string); !ok || !strings.Contains(text, "Tool search: view files") || !strings.Contains(text, "- Read: Read files from the workspace") {
+		t.Fatalf("text = %#v", result.StructuredContent["text"])
+	}
+	contentReferences, ok := result.Content.([]contracts.ToolReference)
+	if !ok || len(contentReferences) != 1 || contentReferences[0].ToolName != "Read" || contentReferences[0].Type != "tool_reference" {
+		t.Fatalf("content references = %#v", result.Content)
+	}
+	toolReferences, ok := result.StructuredContent["tool_references"].([]contracts.ToolReference)
+	if !ok || len(toolReferences) != 1 || toolReferences[0].ToolName != "Read" || toolReferences[0].Type != "tool_reference" {
+		t.Fatalf("tool references = %#v", result.StructuredContent["tool_references"])
 	}
 	results, ok := result.StructuredContent["results"].([]map[string]any)
 	if !ok || len(results) != 1 {
@@ -119,6 +130,72 @@ func TestToolSearchFindsToolsFromExecutorRegistry(t *testing.T) {
 	}
 	if aliases, ok := results[0]["aliases"].([]string); !ok || len(aliases) != 1 || aliases[0] != "View" {
 		t.Fatalf("aliases = %#v", results[0]["aliases"])
+	}
+}
+
+func TestToolSearchSelectReturnsToolReferences(t *testing.T) {
+	definitions := []contracts.ToolDefinition{
+		{
+			Name:        "Read",
+			Aliases:     []string{"View"},
+			Description: "Read files",
+		},
+		{
+			Name:        "Edit",
+			Description: "Modify files",
+		},
+	}
+	results, missing := selectToolDefinitions(definitions, []string{"Edit", "Missing", "view", "Read"})
+	if len(results) != 2 || results[0].Definition.Name != "Edit" || results[1].Definition.Name != "Read" {
+		t.Fatalf("selected = %#v", results)
+	}
+	if len(missing) != 1 || missing[0] != "Missing" {
+		t.Fatalf("missing = %#v", missing)
+	}
+
+	registry, err := tool.NewRegistry(
+		tool.FuncTool{
+			DefinitionValue: definitions[0],
+			CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
+				return contracts.ToolResult{Content: "read"}, nil
+			},
+		},
+		tool.FuncTool{
+			DefinitionValue: definitions[1],
+			CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
+				return contracts.ToolResult{Content: "edit"}, nil
+			},
+		},
+		NewToolSearchTool(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := tool.NewExecutor(registry).Execute(tool.Context{Context: context.Background()}, contracts.ToolUse{
+		ID:    "toolu_search_select",
+		Name:  "ToolSearch",
+		Input: json.RawMessage(`{"query":"select:Edit,Missing,View"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StructuredContent["query_type"] != "select" || result.StructuredContent["ranking"] != "select" || result.StructuredContent["matches"] != 2 {
+		t.Fatalf("structured content = %#v", result.StructuredContent)
+	}
+	contentReferences, ok := result.Content.([]contracts.ToolReference)
+	if !ok || len(contentReferences) != 2 || contentReferences[0].ToolName != "Edit" || contentReferences[1].ToolName != "Read" {
+		t.Fatalf("content references = %#v", result.Content)
+	}
+	toolReferences, ok := result.StructuredContent["tool_references"].([]contracts.ToolReference)
+	if !ok || len(toolReferences) != 2 || toolReferences[0].ToolName != "Edit" || toolReferences[1].ToolName != "Read" {
+		t.Fatalf("tool references = %#v", result.StructuredContent["tool_references"])
+	}
+	missingNames, ok := result.StructuredContent["missing"].([]string)
+	if !ok || len(missingNames) != 1 || missingNames[0] != "Missing" {
+		t.Fatalf("missing = %#v", result.StructuredContent["missing"])
+	}
+	if text := result.StructuredContent["text"].(string); !strings.Contains(text, "Missing: Missing") {
+		t.Fatalf("text = %#v", text)
 	}
 }
 

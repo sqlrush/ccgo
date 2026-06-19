@@ -46,6 +46,15 @@ type ToolResult struct {
 	Meta              map[string]any `json:"_meta,omitempty"`
 }
 
+type ToolReference struct {
+	Type     string `json:"type"`
+	ToolName string `json:"tool_name"`
+}
+
+func NewToolReference(name string) ToolReference {
+	return ToolReference{Type: "tool_reference", ToolName: name}
+}
+
 type ToolProgress struct {
 	ToolUseID ID             `json:"tool_use_id"`
 	Type      string         `json:"type"`

@@ -234,6 +234,75 @@ func TestRunnerExecutesToolUseAndContinuesConversation(t *testing.T) {
 	}
 }
 
+func TestRunnerPreservesToolReferenceResultContent(t *testing.T) {
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        "ToolSearch",
+			Description: "selects tool references",
+			ReadOnly:    true,
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{
+				Content: []contracts.ToolReference{
+					contracts.NewToolReference("Read"),
+					contracts.NewToolReference("Edit"),
+				},
+				StructuredContent: map[string]any{
+					"matches": 2,
+				},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_search",
+				Name:  "ToolSearch",
+				Input: json.RawMessage(`{"query":"select:Read,Edit"}`),
+			}},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_done",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("done")},
+		}},
+	}}
+	runner := Runner{
+		Client:    client,
+		Tools:     tool.NewExecutor(registry),
+		Model:     "sonnet",
+		MaxTokens: 128,
+	}
+	if _, err := runner.RunTurn(context.Background(), nil, messages.UserText("find tools")); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(client.requests))
+	}
+	last := client.requests[1].Messages[len(client.requests[1].Messages)-1]
+	if last.Role != "user" || len(last.Content) != 1 || last.Content[0].Type != contracts.ContentToolResult {
+		t.Fatalf("last api message = %#v", last)
+	}
+	references, ok := last.Content[0].Content.([]contracts.ToolReference)
+	if !ok || len(references) != 2 || references[0].ToolName != "Read" || references[1].ToolName != "Edit" {
+		t.Fatalf("tool result content = %#v", last.Content[0].Content)
+	}
+}
+
 func TestRunnerExecutesSettingsCommandHookForToolUse(t *testing.T) {
 	registry, err := tool.NewRegistry(tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
