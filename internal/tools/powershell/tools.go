@@ -1268,6 +1268,7 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		pathFlags:                  stringSet("path", "literalpath"),
 		valueFlags:                 stringSet("algorithm"),
 		validatePositionalsAsPaths: true,
+		rejectExpressionValues:     true,
 	},
 	"get-acl": {
 		allowedFlags:               stringSet("path", "literalpath", "audit", "filter", "include", "exclude"),
@@ -1345,12 +1346,14 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		pathFlags:                  stringSet("path", "literalpath"),
 		valueFlags:                 stringSet("name"),
 		validatePositionalsAsPaths: true,
+		rejectExpressionValues:     true,
 	},
 	"get-itempropertyvalue": {
 		allowedFlags:               stringSet("path", "literalpath", "name"),
 		pathFlags:                  stringSet("path", "literalpath"),
 		valueFlags:                 stringSet("name"),
 		validatePositionalsAsPaths: true,
+		rejectExpressionValues:     true,
 	},
 	"get-hotfix": {
 		allowedFlags: stringSet("id", "description"),
