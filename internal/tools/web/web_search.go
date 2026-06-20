@@ -376,7 +376,13 @@ func jsonSearchURLField(obj map[string]any) string {
 		"canonicalUrl", "canonicalURL", "canonical_url",
 		"linkUrl", "linkURL", "link_url",
 		"resultUrl", "resultURL", "result_url",
+		"destinationUrl", "destinationURL", "destination_url",
+		"redirectUrl", "redirectURL", "redirect_url",
+		"clickUrl", "clickURL", "click_url",
+		"finalUrl", "finalURL", "final_url",
+		"resolvedUrl", "resolvedURL", "resolved_url",
 		"sourceLink", "source_link",
+		"permalink", "canonical",
 		"website", "site",
 	); raw != "" {
 		return raw
