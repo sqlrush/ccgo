@@ -3604,6 +3604,26 @@ func TestRunnerNativeStatusCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerNativeCommandReportsUsageForUnknownCommand(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_native_unknown"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/native unknown"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.Messages[len(result.Messages)-1].Content[0].Text
+	for _, want := range []string{
+		"Unknown native command: unknown",
+		"Usage: /native <clipboard|chrome|voice|computer>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("unknown native result missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "not implemented") {
+		t.Fatalf("unknown native should not report not implemented: %q", got)
+	}
+}
+
 func TestRunnerExecutesNativeChromeInstallCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()

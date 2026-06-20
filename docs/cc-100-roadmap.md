@@ -37,7 +37,7 @@ M4 补充：tool executor 会围绕 `PreToolUse`、`PostToolUse`、`PermissionDe
 
 M4/M11 补充：bridge-safe 内置本地命令 `/summary`、`/release-notes`、`/files` 已注册并接入 no-query runner 路径；`/summary` 输出本地会话/历史摘要，`/files` 只读列出当前工作目录第一层条目，`/release-notes` 报告当前 Go runtime 未打包 release notes。完整 local-jsx UI surface 和其它本地命令 parity 仍未完成。
 
-M11 补充：`/native status|show` 已接入 no-query 本地路径，复用 `/status show native` 的 session native manifest 审计输出，报告平台、capability、clipboard adapter、file index 和 clipboard state，不请求模型且不调用外部 adapter。
+M11 补充：`/native status|show` 已接入 no-query 本地路径，复用 `/status show native` 的 session native manifest 审计输出，报告平台、capability、clipboard adapter、file index 和 clipboard state，不请求模型且不调用外部 adapter；未知 `/native` 一级命令现在返回 usage 而不是未实现占位。
 
 M8 补充：`/plugin help|--help|-h` 已输出官方插件命令用法，`/plugin manage` 复用 installed plugin summary，`/plugin i` 作为 install alias 复用安装路径；builtin command registry 同步声明官方 `/plugins` 与 `/marketplace` 顶层别名。
 

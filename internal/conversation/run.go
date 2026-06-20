@@ -1761,8 +1761,10 @@ func (r Runner) formatNativeCommandSummary(ctx context.Context, raw string) stri
 		return r.formatNativeVoiceCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
 	case "computer", "computer-use", "computer_use":
 		return r.formatNativeComputerCommand(ctx, strings.TrimSpace(dropLeadingFields(raw, 1)))
+	case "help", "-h", "--help":
+		return nativeCommandUsage()
 	default:
-		return "Native command is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+		return "Unknown native command: " + strings.Join(args, " ") + "\n" + nativeCommandUsage()
 	}
 }
 
