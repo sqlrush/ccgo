@@ -443,6 +443,8 @@ M5 补充：WebSearch `query` schema 现在按官方 `min(2)` 约束拒绝单字
 
 M5 补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。
 
+M5 补充：WebSearch domain filters 现在会 canonicalize 为小写、去尾点、去 `*.` 前缀并去重；过滤匹配和 structured content 暴露同一域名口径。
+
 M5 补充：通用 tool schema validator 现在支持 `enum`，可直接执行 Grep output mode、NotebookEdit edit mode/cell type、Todo status/priority、Task target/action、LSP severity 等工具 schema 的枚举契约。
 
 M5 补充：通用 tool schema validator 现在支持数字 `minimum`/`maximum`，可直接执行 LSPDiagnostics `limit` 等工具 schema 的数值范围契约。

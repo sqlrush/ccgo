@@ -818,13 +818,24 @@ func webSearchBlockedDomainsRaw(input webSearchInput) []string {
 
 func normalizeDomains(domains []string) []string {
 	out := make([]string, 0, len(domains))
+	seen := make(map[string]struct{}, len(domains))
 	for _, domain := range domains {
-		domain = strings.TrimSpace(strings.ToLower(domain))
-		if domain != "" {
-			out = append(out, domain)
+		domain = canonicalWebSearchDomain(domain)
+		if domain == "" {
+			continue
 		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		out = append(out, domain)
 	}
 	return out
+}
+
+func canonicalWebSearchDomain(domain string) string {
+	domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	return strings.TrimPrefix(domain, "*.")
 }
 
 func validateDomains(field string, domains []string) error {

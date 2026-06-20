@@ -210,6 +210,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
 - 本轮补充：WebSearch JSON parser 现在继续覆盖 `answerBox`/`answer_box`、`knowledgeGraph`/`knowledge_graph`、`news`/`news_results`、`topStories`、`peopleAlsoAsk` 和 `related_questions` 等常见搜索后端 wrapper，并识别 `website`/`sourceLink` URL alias、`question` title alias、`answer`/`excerpt` snippet alias。
 - 本轮补充：WebSearch `query` schema 现在按官方 `min(2)` 约束拒绝单字符查询，通用 tool schema validator 同步支持 `minLength`，让工具定义可直接表达字符串最小长度契约。
+- 本轮补充：WebSearch domain filters 现在会 canonicalize 为小写、去尾点、去 `*.` 前缀并去重；过滤匹配和 structured content 暴露同一域名口径。
 - 本轮补充：Bash/PowerShell 前台执行现在区分调用方 cancellation、timeout 和普通非零退出；context 取消会返回 `cancelled=true`、`timed_out=false`、`exit_code=-1`，并显示 cancelled 状态文本。
 - 本轮补充：Bash 和 Unix PowerShell 工具取消现在会先向受管 process group 发 SIGTERM，再用短 `WaitDelay` 兜底 SIGKILL；Bash 前台/后台取消测试通过 `trap TERM` 证明 cleanup signal 可被脚本收到。
 - 本轮补充：Bash read-only classifier 现在把常见文件比较命令 `diff`/`cmp` 归入只读路径命令族，并明确拒绝 `diff --output` 这类写文件形态以及越界路径，减少安全工具误走权限确认。

@@ -68,6 +68,40 @@ func TestWebSearchReturnsParsedResults(t *testing.T) {
 	}
 }
 
+func TestWebSearchCanonicalizesDomainFilters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+			<html><body>
+				<a href="https://docs.example.com/one">One</a>
+				<a href="https://blocked.example.net/two">Two</a>
+			</body></html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL + "/search",
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_domain_canonical",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"domain filters","allowed_domains":["*.Example.COM.","example.com"]}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := result.StructuredContent["results"].([]map[string]any)
+	if len(results) != 1 || results[0]["url"] != "https://docs.example.com/one" {
+		t.Fatalf("results = %#v", results)
+	}
+	allowed := result.StructuredContent["allowed_domains"].([]string)
+	if len(allowed) != 1 || allowed[0] != "example.com" {
+		t.Fatalf("allowed domains = %#v", allowed)
+	}
+}
+
 func TestWebSearchResolvesHTMLResultsAgainstBaseHref(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
