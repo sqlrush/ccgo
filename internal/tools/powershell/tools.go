@@ -1601,6 +1601,8 @@ func readOnlyWords(words []string) bool {
 	switch command {
 	case "git":
 		return bashtools.IsReadOnlyCommand(powerShellGitCommand(words))
+	case "certutil":
+		return readOnlyCertutil(words[1:])
 	case "docker":
 		return readOnlyDocker(words[1:])
 	case "dotnet":
@@ -1796,6 +1798,33 @@ func readOnlyDotnet(words []string) bool {
 		}
 	}
 	return true
+}
+
+func readOnlyCertutil(words []string) bool {
+	if len(words) < 2 || len(words) > 3 {
+		return false
+	}
+	for _, word := range words {
+		if strings.TrimSpace(word) == "--%" {
+			return false
+		}
+	}
+	if strings.ToLower(strings.Trim(strings.TrimSpace(words[0]), `"'`)) != "-hashfile" {
+		return false
+	}
+	if !safeRelativePowerShellPath(words[1]) {
+		return false
+	}
+	return len(words) == 2 || safeCertutilHashAlgorithm(words[2])
+}
+
+func safeCertutilHashAlgorithm(value string) bool {
+	switch strings.ToLower(strings.Trim(strings.TrimSpace(value), `"'`)) {
+	case "md2", "md4", "md5", "sha1", "sha256", "sha384", "sha512":
+		return true
+	default:
+		return false
+	}
 }
 
 func readOnlyDocker(words []string) bool {
