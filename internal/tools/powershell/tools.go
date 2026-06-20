@@ -1617,6 +1617,8 @@ func readOnlyWords(words []string) bool {
 		return readOnlyNativeTwoPathCompare(words[1:], powerShellCompReadOnlyFlags, powerShellCompValueFlags)
 	case "sort.exe":
 		return readOnlyNativeOnePathCommand(words[1:], powerShellNativeSortReadOnlyFlags, nil)
+	case "more.com":
+		return readOnlyNativeOnePathCommand(words[1:], nil, nil)
 	case "docker":
 		return readOnlyDocker(words[1:])
 	case "dotnet":
@@ -2135,7 +2137,7 @@ func stripPowerShellExecutableSuffix(name string) (string, bool) {
 
 func preservePowerShellNativeExecutableStem(name string) bool {
 	switch name {
-	case "comp":
+	case "comp", "more":
 		return true
 	default:
 		return false
