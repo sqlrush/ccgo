@@ -2146,7 +2146,7 @@ func destructiveWords(words []string) bool {
 	switch command {
 	case "git":
 		return bashtools.IsDestructiveCommand(powerShellGitCommand(words))
-	case "remove-item", "set-content", "add-content", "clear-content", "clear-item", "clear-itemproperty", "out-file", "new-item", "move-item", "move-itemproperty", "copy-item", "copy-itemproperty", "rename-item", "rename-itemproperty", "set-item", "set-itemproperty", "start-job", "stop-job", "remove-job", "stop-process", "start-service", "stop-service", "restart-service", "set-service", "restart-computer", "stop-computer", "suspend-computer", "shutdown", "invoke-expression", "iex", "start-process", "start-transcript", "stop-transcript":
+	case "remove-item", "set-content", "add-content", "clear-content", "clear-item", "clear-itemproperty", "out-file", "new-item", "move-item", "move-itemproperty", "copy-item", "copy-itemproperty", "rename-item", "rename-itemproperty", "set-item", "set-itemproperty", "start-job", "stop-job", "remove-job", "stop-process", "start-service", "stop-service", "restart-service", "set-service", "restart-computer", "stop-computer", "suspend-computer", "shutdown", "invoke-command", "invoke-expression", "iex", "start-process", "start-transcript", "stop-transcript":
 		return true
 	default:
 		return strings.HasPrefix(command, "remove-") || strings.HasPrefix(command, "set-") || strings.HasPrefix(command, "new-") || strings.HasPrefix(command, "export-")
@@ -2285,6 +2285,8 @@ func powerShellAliasTarget(name string) string {
 		return "stop-job"
 	case "rjb":
 		return "remove-job"
+	case "icm":
+		return "invoke-command"
 	case "gal":
 		return "get-alias"
 	case "gdr":

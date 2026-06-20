@@ -589,6 +589,8 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"Stop-Computer -Force",
 		"Suspend-Computer",
 		"shutdown.exe /s /t 0",
+		"Invoke-Command -ScriptBlock { Get-Process }",
+		"icm -ScriptBlock { Get-Process }",
 		"start calc.exe",
 		"saps calc.exe",
 		"Invoke-Expression $x",
