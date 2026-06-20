@@ -2079,18 +2079,21 @@ func TestRunnerExecutesClearSlashCommandWithoutQuery(t *testing.T) {
 }
 
 func TestRunnerExecutesIssueSlashCommandWithoutQuery(t *testing.T) {
+	dir := t.TempDir()
 	client := &fakeClient{
-		dumpPath: filepath.Join(t.TempDir(), "prompt-dump.jsonl"),
+		dumpPath: filepath.Join(dir, "prompt-dump.jsonl"),
 		dumpCache: []anthropic.PromptDumpCacheEntry{{
 			Timestamp: "2026-01-02T03:04:05Z",
 			Request:   json.RawMessage(`{"model":"sonnet","max_tokens":64,"stream":true,"system":"secret system","messages":[{"role":"user","content":"super secret prompt"}],"tools":[{"name":"SecretTool"}]}`),
 		}},
 	}
+	transcriptPath := filepath.Join(dir, "session.jsonl")
 	runner := Runner{
 		Client:           client,
 		Model:            "sonnet",
 		MaxTokens:        128,
 		SessionID:        "sess_issue",
+		SessionPath:      transcriptPath,
 		WorkingDirectory: "/repo",
 	}
 
@@ -2120,6 +2123,8 @@ func TestRunnerExecutesIssueSlashCommandWithoutQuery(t *testing.T) {
 		"messages=1",
 		"tools=1",
 		"system=true",
+		"Issue bundle path: " + filepath.Join(dir, "sess_issue", "issue-report.json"),
+		"Submission: local issue bundle prepared.",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("issue summary missing %q in:\n%s", want, text)
@@ -2128,6 +2133,32 @@ func TestRunnerExecutesIssueSlashCommandWithoutQuery(t *testing.T) {
 	for _, leaked := range []string{"super secret prompt", "secret system", "SecretTool"} {
 		if strings.Contains(text, leaked) {
 			t.Fatalf("issue summary leaked %q in:\n%s", leaked, text)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "sess_issue", "issue-report.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bundle struct {
+		Description       string   `json:"description"`
+		SessionID         string   `json:"session_id"`
+		WorkingDirectory  string   `json:"working_directory"`
+		Model             string   `json:"model"`
+		PromptDumpPath    string   `json:"prompt_dump_path"`
+		RecentPromptDumps []string `json:"recent_prompt_dumps"`
+	}
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatal(err)
+	}
+	if bundle.Description != "auth failed" || bundle.SessionID != "sess_issue" || bundle.WorkingDirectory != "/repo" || bundle.Model != "sonnet" || bundle.PromptDumpPath != client.dumpPath {
+		t.Fatalf("issue bundle = %#v", bundle)
+	}
+	if len(bundle.RecentPromptDumps) != 1 || !strings.Contains(bundle.RecentPromptDumps[0], "request_sha256=") {
+		t.Fatalf("issue bundle prompt summaries = %#v", bundle.RecentPromptDumps)
+	}
+	for _, leaked := range []string{"super secret prompt", "secret system", "SecretTool"} {
+		if strings.Contains(string(data), leaked) {
+			t.Fatalf("issue bundle leaked %q in:\n%s", leaked, data)
 		}
 	}
 }

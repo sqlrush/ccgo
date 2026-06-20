@@ -1045,9 +1045,17 @@ func (r Runner) formatFilesSummary(raw string) string {
 }
 
 func (r Runner) formatIssueSummary(raw string) string {
+	description := strings.TrimSpace(raw)
 	lines := []string{"Issue report context"}
-	if description := strings.TrimSpace(raw); description != "" {
+	if description != "" {
 		lines = append(lines, "Description: "+description)
+	}
+	bundle := issueReportBundle{
+		GeneratedAt:      time.Now().UTC().Format(time.RFC3339Nano),
+		Description:      description,
+		SessionID:        r.SessionID,
+		WorkingDirectory: strings.TrimSpace(r.WorkingDirectory),
+		Model:            r.model(),
 	}
 	if r.SessionID != "" {
 		lines = append(lines, "Session ID: "+string(r.SessionID))
@@ -1062,17 +1070,61 @@ func (r Runner) formatIssueSummary(raw string) string {
 		path := strings.TrimSpace(provider.PromptDumpPath())
 		if path != "" {
 			lines = append(lines, "Prompt dump path: "+path)
+			bundle.PromptDumpPath = path
 		}
 		entries := provider.CachedPromptDumpRequests()
 		lines = append(lines, fmt.Sprintf("Recent prompt dumps: %d", len(entries)))
-		for _, entry := range recentPromptDumpSummaries(entries, 3) {
-			lines = append(lines, "- "+entry)
+		summaries := recentPromptDumpSummaries(entries, 3)
+		bundle.RecentPromptDumps = summaries
+		for _, summary := range summaries {
+			lines = append(lines, "- "+summary)
 		}
 	} else {
 		lines = append(lines, "Prompt dump cache: unavailable")
 	}
-	lines = append(lines, "Submission: local context only; remote issue submission is not implemented in the Go runtime yet.")
+	if path := r.issueReportBundlePath(); path != "" {
+		if err := writeIssueReportBundle(path, bundle); err != nil {
+			lines = append(lines, "Issue bundle error: "+err.Error())
+		} else {
+			lines = append(lines, "Issue bundle path: "+path)
+			lines = append(lines, "Submission: local issue bundle prepared.")
+		}
+	} else {
+		lines = append(lines, "Issue bundle path: (not configured)")
+		lines = append(lines, "Submission: local issue context prepared.")
+	}
 	return strings.Join(lines, "\n")
+}
+
+type issueReportBundle struct {
+	GeneratedAt       string       `json:"generated_at"`
+	Description       string       `json:"description,omitempty"`
+	SessionID         contracts.ID `json:"session_id,omitempty"`
+	WorkingDirectory  string       `json:"working_directory,omitempty"`
+	Model             string       `json:"model,omitempty"`
+	PromptDumpPath    string       `json:"prompt_dump_path,omitempty"`
+	RecentPromptDumps []string     `json:"recent_prompt_dumps,omitempty"`
+}
+
+func (r Runner) issueReportBundlePath() string {
+	if strings.TrimSpace(r.SessionPath) == "" || r.SessionID == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(r.SessionPath), string(r.SessionID), "issue-report.json")
+}
+
+func writeIssueReportBundle(path string, bundle issueReportBundle) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(bundle, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
 func recentPromptDumpSummaries(entries []anthropic.PromptDumpCacheEntry, limit int) []string {
