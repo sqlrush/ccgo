@@ -1439,36 +1439,73 @@ func webFetchWordVariants(word string) []string {
 		return nil
 	}
 	variants := []string{word}
+	seen := map[string]bool{word: true}
+	add := func(variant string) {
+		variant = strings.TrimSpace(variant)
+		if variant == "" || seen[variant] {
+			return
+		}
+		seen[variant] = true
+		variants = append(variants, variant)
+	}
 	if utf8.RuneCountInString(word) <= 3 {
 		return variants
 	}
 	switch {
 	case strings.HasSuffix(word, "ies") && utf8.RuneCountInString(word) > 4:
-		variants = append(variants, strings.TrimSuffix(word, "ies")+"y")
+		add(strings.TrimSuffix(word, "ies") + "y")
 	case strings.HasSuffix(word, "es") && utf8.RuneCountInString(word) > 4:
-		variants = append(variants, strings.TrimSuffix(word, "es"))
-	case strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss"):
-		variants = append(variants, strings.TrimSuffix(word, "s"))
+		add(strings.TrimSuffix(word, "es"))
+	case strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss") && !strings.HasSuffix(word, "us"):
+		add(strings.TrimSuffix(word, "s"))
+	}
+	switch {
+	case strings.HasSuffix(word, "y") && utf8.RuneCountInString(word) > 4:
+		add(strings.TrimSuffix(word, "y") + "ies")
+	case strings.HasSuffix(word, "ss") || strings.HasSuffix(word, "us") || strings.HasSuffix(word, "x") || strings.HasSuffix(word, "z") || strings.HasSuffix(word, "ch") || strings.HasSuffix(word, "sh"):
+		add(word + "es")
+	case strings.HasSuffix(word, "s"):
+		// Likely already plural-looking; keep reverse singular variants only.
+	default:
+		add(word + "s")
 	}
 	return variants
 }
 
 func countWebFetchPhraseOccurrences(normalized string, phrase string) int {
-	phrase = strings.TrimSpace(strings.ToLower(phrase))
-	if normalized == "" || phrase == "" {
+	phrase = normalizedWebFetchSearchText(phrase)
+	haystackWords := strings.Fields(normalized)
+	phraseWords := strings.Fields(phrase)
+	if len(haystackWords) == 0 || len(phraseWords) == 0 || len(phraseWords) > len(haystackWords) {
 		return 0
 	}
-	haystack := " " + normalized + " "
-	needle := " " + phrase + " "
 	count := 0
-	for {
-		idx := strings.Index(haystack, needle)
-		if idx < 0 {
-			return count
+	for i := 0; i+len(phraseWords) <= len(haystackWords); i++ {
+		matched := true
+		for j, phraseWord := range phraseWords {
+			if !webFetchWordsMatchVariant(haystackWords[i+j], phraseWord) {
+				matched = false
+				break
+			}
 		}
-		count++
-		haystack = haystack[idx+len(needle)-1:]
+		if matched {
+			count++
+		}
 	}
+	return count
+}
+
+func webFetchWordsMatchVariant(left string, right string) bool {
+	leftVariants := webFetchWordVariants(left)
+	rightVariants := webFetchWordVariants(right)
+	for _, leftVariant := range leftVariants {
+		for _, rightVariant := range rightVariants {
+			if leftVariant == rightVariant {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func truncateWebFetchRunes(text string, limit int) string {

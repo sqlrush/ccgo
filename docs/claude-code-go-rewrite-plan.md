@@ -198,7 +198,8 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch 现在按官方 cross-host redirect 语义处理跨 host 跳转，HEAD preflight 和 GET 都不会自动触达新 host，而是返回包含 original URL、redirect URL 和 status 的 redirect notice；同 host redirect 仍继续跟随并保留 `final_url`。
 - 本轮补充：WebFetch input schema 现在与官方对齐，`url` 和 `prompt` 都是必填字段；既有本地扩展 `timeout`、`max_bytes`/`maxBytes` 仍保持可选。
 - 本轮补充：WebFetch 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
-- 本轮补充：WebFetch prompt-focused excerpt 的 term scoring 现在会匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`，同时仍保持词边界匹配避免子串误命中。
+- 本轮补充：WebFetch prompt-focused excerpt 的 term scoring 现在会双向匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`、prompt `candidates` 可命中正文 `candidate`，同时仍保持词边界匹配避免子串误命中。
+- 本轮补充：WebFetch prompt-focused excerpt 的 phrase scoring 现在也会逐词匹配常见单复数变体，例如 prompt `release candidates` 可按短语命中正文 `release candidate`，同时继续保持词序和词边界。
 - 本轮补充：WebFetch HTML-to-text rendering 现在会跳过 `hidden`、`aria-hidden="true"`、CSS `display:none`/`visibility:hidden` 的不可见元素子树，隐藏文本和图片说明不会进入 rendered body 或 prompt-focused excerpt。
 - 本轮补充：WebFetch HTML-to-text rendering 现在会为无可见文本但带 `aria-label`/`title` 的链接保留可访问名称和 resolved href，icon-only 链接可进入 rendered body 与 prompt-focused excerpt。
 - 本轮补充：WebFetch HTML-to-text rendering 现在按浏览器可见性处理 closed `<details>` 和 `<dialog>`：closed details 只渲染第一个 summary 子树，隐藏正文不会进入 excerpt；未带 `open` 的 dialog 会作为不可见子树跳过，open details/dialog 仍正常渲染。

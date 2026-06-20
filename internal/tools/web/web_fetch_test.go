@@ -801,6 +801,13 @@ func TestWebFetchPromptPhraseScoring(t *testing.T) {
 	if exact <= separate {
 		t.Fatalf("exact phrase score = %d, separate term score = %d", exact, separate)
 	}
+	pluralTerms := webFetchPromptTerms("release candidates")
+	pluralPhrases := webFetchPromptPhrases("release candidates")
+	pluralPhraseScore := scoreWebFetchPassage("The release candidate is ready.", pluralTerms, pluralPhrases)
+	pluralTermOnlyScore := scoreWebFetchPassage("The release candidate is ready.", pluralTerms, nil)
+	if pluralPhraseScore <= pluralTermOnlyScore {
+		t.Fatalf("plural phrase score = %d, term-only score = %d", pluralPhraseScore, pluralTermOnlyScore)
+	}
 	if score := scoreWebFetchPassage("Trust the process.", []string{"rust"}, nil); score != 0 {
 		t.Fatalf("substring term should not match word-boundary scoring: %d", score)
 	}

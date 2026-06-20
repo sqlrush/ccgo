@@ -179,7 +179,7 @@ M5 补充：BashOutput/PowerShellOutput structured content 现在会回传实际
 
 M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted semantic string 输入；whole-decimal 数字字符串如 `"2.0"` 会按官方 `semanticNumber(...int())` 语义归一为整数，fractional 数字仍会被拒绝。
 
-M5 补充：WebFetch prompt-focused excerpt 的 term scoring 现在会匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`，同时仍保持词边界匹配避免子串误命中。
+M5 补充：WebFetch prompt-focused excerpt 的 term scoring 现在会双向匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`、prompt `candidates` 可命中正文 `candidate`，同时仍保持词边界匹配避免子串误命中。
 
 M5 补充：WebFetch HTML-to-text rendering 现在会跳过 `hidden`、`aria-hidden="true"`、CSS `display:none`/`visibility:hidden` 的不可见元素子树，隐藏文本和图片说明不会进入 rendered body 或 prompt-focused excerpt。
 
@@ -954,6 +954,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 本轮补充：`WebFetch` GET 会记录 redirect 后的 `final_url`，HTML rendering 会按 final URL 解析相对 anchor/image URL，确保重定向页面中的相对链接和图片说明指向浏览器实际可见的目标地址。
 
 本轮补充：`WebFetch` 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
+
+本轮补充：`WebFetch` prompt-focused excerpt 的 phrase scoring 现在也会逐词匹配常见单复数变体，例如 prompt `release candidates` 可按短语命中正文 `release candidate`，同时继续保持词序和词边界。
 
 本轮补充：`WebFetch` HTML-to-text rendering 现在会先解析 `<base href>` 再跳过 `<head>` 子树，`<title>` 等 head-only metadata 不再污染 rendered body 或 prompt-focused excerpt，同时不破坏相对链接解析。
 
