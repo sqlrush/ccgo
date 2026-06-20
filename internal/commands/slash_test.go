@@ -109,7 +109,7 @@ func TestExecuteSlashNonCommandPathFallsThrough(t *testing.T) {
 	}
 }
 
-func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
+func TestExecuteSlashLocalCommandWithoutExecutorReturnsUnavailableOutput(t *testing.T) {
 	registry := FromSources(Sources{Builtins: []contracts.Command{{
 		Type:   contracts.CommandLocalJSX,
 		Name:   "unsupported",
@@ -125,8 +125,30 @@ func TestExecuteSlashLocalCommandReturnsUnsupportedOutput(t *testing.T) {
 	if len(result.Messages) != 2 || result.Messages[0].UUID != "user_unsupported" {
 		t.Fatalf("messages = %#v", result.Messages)
 	}
-	if !strings.Contains(result.Messages[1].Content[0].Text, "<local-command-stderr>") {
+	stderrText := result.Messages[1].Content[0].Text
+	if !strings.Contains(stderrText, "<local-command-stderr>") {
 		t.Fatalf("stderr message = %#v", result.Messages[1])
+	}
+	if !strings.Contains(stderrText, "this runtime cannot execute it") || strings.Contains(stderrText, "not implemented") {
+		t.Fatalf("unavailable stderr = %q", stderrText)
+	}
+}
+
+func TestExecuteSlashBuiltinLocalCommandsHaveExecutors(t *testing.T) {
+	registry := FromSources(Sources{Builtins: BuiltinCommands()})
+	for _, cmd := range BuiltinCommands() {
+		if cmd.Type != contracts.CommandLocal && cmd.Type != contracts.CommandLocalJSX {
+			continue
+		}
+		t.Run(cmd.Name, func(t *testing.T) {
+			local, ok := ExecuteBuiltinLocalCommand(registry, cmd, "")
+			if !ok {
+				t.Fatalf("builtin local command %q has no executor", cmd.Name)
+			}
+			if local.Type == "" {
+				t.Fatalf("builtin local command %q returned empty local result", cmd.Name)
+			}
+		})
 	}
 }
 

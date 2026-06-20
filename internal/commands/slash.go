@@ -177,7 +177,7 @@ func ExecuteSlashCommand(registry Registry, input string, opts SlashOptions) (Sl
 				LocalResult: &local,
 			}, true, nil
 		}
-		errText := fmt.Sprintf("Slash command /%s is not implemented in the Go runtime yet.", cmd.Name)
+		errText := fmt.Sprintf("Slash command /%s is registered as a local command, but this runtime cannot execute it.", cmd.Name)
 		return SlashResult{
 			Command: cmd,
 			Messages: []contracts.Message{

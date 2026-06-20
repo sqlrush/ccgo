@@ -237,7 +237,7 @@ M8/M2 补充：Anthropic request tool 转换现在会保留 contract 的 `strict
 
 M8/M5 补充：tool executor 现在会在未通过 `ToolSearch` 发现的 deferred 工具输入 schema 校验失败时追加 schema-not-sent 恢复提示，指导模型先调用 `ToolSearch` 的 `select:<tool>` 再重试；conversation runner 会把当前 turn messages 放进工具 metadata，提示判断兼容普通 `tool_reference` 结果和 compact boundary 已发现工具快照。
 
-M8 补充：新增基础 slash command parser/executor，按官方 `/command args` 与 `/mcp:tool (MCP) args` 形态解析，并把本地项目 prompt skill slash 调用接入 conversation runner：`/skill args` 会生成 `<command-name>/<command-message>/<command-args>` metadata user message 和展开后的 meta prompt message，写入 transcript/parent chain 后再请求模型；skill frontmatter `model` 可覆盖本轮请求模型。local/local-jsx 命令目前只返回未实现输出，不会误发给模型；command permissions attachment、forked skill、MCP/plugin/bundled slash 来源和 UI 仍未完成。
+M8 补充：新增基础 slash command parser/executor，按官方 `/command args` 与 `/mcp:tool (MCP) args` 形态解析，并把本地项目 prompt skill slash 调用接入 conversation runner：`/skill args` 会生成 `<command-name>/<command-message>/<command-args>` metadata user message 和展开后的 meta prompt message，写入 transcript/parent chain 后再请求模型；skill frontmatter `model` 可覆盖本轮请求模型。local/local-jsx 命令有 no-query 本地结果抽象，未接执行器的注册命令会返回本地不可执行错误且不会误发给模型；command permissions attachment、forked skill、MCP/plugin/bundled slash 来源和 UI 仍未完成。
 
 M8 补充：本地 prompt skill 的 slash 调用和 `Skill` tool 现在都会生成 `command_permissions` attachment，按官方 `allowed-tools` 解析 comma/space 分隔且保留括号内模式；conversation runner 会在当前 turn 内把这些 `PermissionSourceCommand` allow rules 合并进 engine permission decider，让 skill frontmatter 授权的后续工具调用可在同一轮放行，并继续保留 model override attachment metadata。完整权限 UI 展示、SDK event surface、forked/MCP/plugin/bundled skill 权限继承仍未完成。
 
@@ -248,6 +248,8 @@ M8 补充：project legacy `.claude/commands/**/*.md` 和 user legacy `${CLAUDE_
 M8 补充：现有 Go 内置 slash command metadata 继续贴近官方源快照，补齐 `config`/`resume`/`clear` 的 aliases（`settings`、`continue`、`reset`、`new`），以及 `mcp`/`resume`/`model` 的 argument hint、`mcp`/`status`/`model` 的 immediate 标记和部分官方描述；大量内置 command 的真实 local/local-jsx UI 执行仍未完成。
 
 M8 补充：slash command 现在有基础 local command result 抽象，`/clear` 不再落入 unsupported 分支，会生成 local text result、保留 command metadata message，并且不会请求模型；REPL screen 已提供 clear-result 消费路径，可清空 transcript viewport/selection/reverse-search 并按当前 draft 重算 paste/image 引用编号；完整 local command text/compact/skip 全语义、`/cost`/`/status`/`/compact` 和 local-jsx UI 执行仍未完成。
+
+M8 补充：内置 local/local-jsx slash command 现在有回归测试保证都存在本地执行器；防御性 fallback 对外报告“runtime cannot execute it”，不再输出 `not implemented in the Go runtime yet` 占位文案。
 
 M8/M7 补充：`/clear` local command 现在返回专用 clear result，并在 conversation `Result.Cleared` 中暴露结构化清空信号；`REPLScreen.ClearConversation` 和交互脚本 `conversationCleared` alias 可消费该信号，清空屏幕会话历史但保留 prompt 输入历史，runner 仍保留 command metadata transcript 且不请求模型。
 
