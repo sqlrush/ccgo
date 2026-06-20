@@ -303,6 +303,8 @@ M8 补充：补齐 deprecated `/output-style` built-in local-jsx 命令，当前
 
 M8/CLI 补充：stream-json init event 继续补齐 slash command、skill、agent 和 plugin 只读元数据字段，供 SDK/headless 客户端渲染命令/扩展列表；permission mode、API key source、betas、fast mode 和 MCP server status object 已接入，完整 account profile/org 详情与真实 MCP 连接态仍待补齐。
 
+M8/CLI 补充：headless `/compact` 现在有 JSON 与 stream-json 端到端回归覆盖，验证 `--resume` 历史 manual compact 不把 command metadata 泄露进 compact prompt，并在 compact event 与 final result 中暴露 trigger、userContext、messagesSummarized 等轻量 metadata。
+
 M8/CLI 补充：stream-json init event 现在会暴露当前 permission mode、API key source、ANTHROPIC_BETA 去重列表和 settings-derived fast mode，使 headless/SDK 客户端能渲染基础运行状态；完整账户 profile/org 详情仍待补齐。
 
 M8/CLI 补充：stream-json init event 的 `mcp_servers` 现在输出只读 status object，包含 name、configured status、transport type、scope/source 和 plugin_source，并复用 settings/project-chain/plugin/policy 合并结果；真实连接中/已连接/失败的运行时状态仍需和 MCP lifecycle 接线。

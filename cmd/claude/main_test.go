@@ -1860,6 +1860,138 @@ func TestRunPrintJSONLocalTextResult(t *testing.T) {
 	}
 }
 
+func TestRunPrintJSONCompactIncludesMetadata(t *testing.T) {
+	var requestBody map[string]any
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_cli_compact",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"manual compact summary"}],
+			"stop_reason":"end_turn",
+			"usage":{"input_tokens":5,"output_tokens":7}
+		}`))
+	}))
+	defer server.Close()
+
+	project := t.TempDir()
+	transcriptPath := session.TranscriptPath(project, "sess_cli_compact")
+	writeTestTranscript(t, transcriptPath, "sess_cli_compact", "old prompt", "old answer")
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "--print", "--output-format", "json", "--resume", transcriptPath, "/compact keep auth details"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if requests != 1 {
+		t.Fatalf("compact requests = %d", requests)
+	}
+	requestMessages, ok := requestBody["messages"].([]any)
+	if !ok || len(requestMessages) < 3 {
+		t.Fatalf("request messages = %#v", requestBody["messages"])
+	}
+	for _, message := range requestMessages {
+		text := fmt.Sprint(message)
+		if strings.Contains(text, "<command-name>/compact</command-name>") {
+			t.Fatalf("compact request leaked command metadata: %#v", requestMessages)
+		}
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json stdout %q: %v", stdout.String(), err)
+	}
+	compactPayload, ok := payload["compact"].(map[string]any)
+	if payload["type"] != "result" || payload["subtype"] != "success" || payload["compacted"] != true || !ok {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if payload["result"] != "Context summary from previous conversation:\n\nmanual compact summary" {
+		t.Fatalf("compact result = %#v", payload["result"])
+	}
+	if compactPayload["trigger"] != "manual" || compactPayload["userContext"] != "keep auth details" || compactPayload["messagesSummarized"] != float64(2) {
+		t.Fatalf("compact payload = %#v", compactPayload)
+	}
+}
+
+func TestRunPrintStreamJSONCompactIncludesEventAndFinalMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_cli_stream_compact",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"content":[{"type":"text","text":"stream compact summary"}],
+			"stop_reason":"end_turn"
+		}`))
+	}))
+	defer server.Close()
+
+	project := t.TempDir()
+	transcriptPath := session.TranscriptPath(project, "sess_cli_stream_compact")
+	writeTestTranscript(t, transcriptPath, "sess_cli_stream_compact", "old prompt", "old answer")
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	t.Setenv("CLAUDE_MODEL", "")
+	t.Setenv("ANTHROPIC_BETA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--cwd", project, "--print", "--output-format", "stream-json", "--resume", transcriptPath, "/compact keep stream details"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var sawCompactEvent bool
+	var final map[string]any
+	for _, line := range lines {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("invalid json line %q: %v", line, err)
+		}
+		switch event["type"] {
+		case "compact":
+			compactPayload, ok := event["compact"].(map[string]any)
+			if !ok || compactPayload["trigger"] != "manual" || compactPayload["userContext"] != "keep stream details" || compactPayload["messagesSummarized"] != float64(2) {
+				t.Fatalf("compact event = %#v", event)
+			}
+			sawCompactEvent = true
+		case "result":
+			final = event
+		}
+	}
+	if !sawCompactEvent {
+		t.Fatalf("missing compact event in %q", stdout.String())
+	}
+	compactPayload, ok := final["compact"].(map[string]any)
+	if final["type"] != "result" || final["subtype"] != "success" || final["compacted"] != true || !ok {
+		t.Fatalf("final = %#v", final)
+	}
+	if final["result"] != "Context summary from previous conversation:\n\nstream compact summary" {
+		t.Fatalf("final result = %#v", final["result"])
+	}
+	if compactPayload["trigger"] != "manual" || compactPayload["userContext"] != "keep stream details" || compactPayload["messagesSummarized"] != float64(2) {
+		t.Fatalf("final compact payload = %#v", compactPayload)
+	}
+}
+
 func TestRunPrintTextLocalTextResult(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	t.Setenv("ANTHROPIC_BASE_URL", "")
