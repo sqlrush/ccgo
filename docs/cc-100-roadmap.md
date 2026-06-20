@@ -181,6 +181,8 @@ M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted
 
 M5 补充：WebFetch prompt-focused excerpt 的 term scoring 现在会匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`，同时仍保持词边界匹配避免子串误命中。
 
+M5 补充：WebFetch HTML-to-text rendering 现在会跳过 `hidden`、`aria-hidden="true"`、CSS `display:none`/`visibility:hidden` 的不可见元素子树，隐藏文本和图片说明不会进入 rendered body 或 prompt-focused excerpt。
+
 M5 补充：WebSearch HTML snippet 提取现在识别 Bing 风格 `b_caption`/`b_snippet` 以及常见搜索摘要 class，标题 anchor 后的可见摘要会进入文本输出和 structured result。
 
 M5 补充：WebSearch HTML 结果 anchor 现在会识别 `data-href`/`data-url` 等常见 data 属性中的真实结果 URL，并跳过 `href="#"`/`javascript:` 占位链接，覆盖搜索页用 JS 事件承载跳转地址的形态。

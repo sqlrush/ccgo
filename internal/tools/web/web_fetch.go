@@ -519,6 +519,7 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 	var buttons []htmlWebFetchLabeledControl
 	var textareas []htmlWebFetchLabeledControl
 	var selects []htmlWebFetchSelectControl
+	var hiddenTags []string
 	pictureDepth := 0
 	pictureSource := ""
 	for i := 0; i < len(body); {
@@ -530,6 +531,10 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			break
 		}
 		if body[i] != '<' {
+			if len(hiddenTags) > 0 {
+				i++
+				continue
+			}
 			if len(selects) > 0 {
 				idx := len(selects) - 1
 				if selects[idx].InOption {
@@ -550,6 +555,22 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 		}
 		rawTag := body[i+1 : i+end]
 		tag, closing := htmlWebFetchTagInfo(rawTag)
+		if len(hiddenTags) > 0 {
+			if closing {
+				hiddenTags = popHTMLWebFetchHiddenTag(hiddenTags, tag)
+			} else if isHiddenHTMLWebFetchElement(rawTag) && tag != "" && !isVoidHTMLWebFetchTag(tag) && !isSelfClosingHTMLWebFetchTag(rawTag) {
+				hiddenTags = append(hiddenTags, tag)
+			}
+			i += end + 1
+			continue
+		}
+		if !closing && isHiddenHTMLWebFetchElement(rawTag) {
+			if tag != "" && !isVoidHTMLWebFetchTag(tag) && !isSelfClosingHTMLWebFetchTag(rawTag) {
+				hiddenTags = append(hiddenTags, tag)
+			}
+			i += end + 1
+			continue
+		}
 		if tag == "select" {
 			if closing {
 				if len(selects) > 0 {
@@ -635,6 +656,46 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 		i += end + 1
 	}
 	return b.String()
+}
+
+func isHiddenHTMLWebFetchElement(rawTag string) bool {
+	if htmlWebFetchHasAttr(rawTag, "hidden") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(htmlWebFetchAttr(rawTag, "aria-hidden")), "true") {
+		return true
+	}
+	style := strings.ToLower(htmlWebFetchAttr(rawTag, "style"))
+	style = strings.ReplaceAll(style, " ", "")
+	style = strings.ReplaceAll(style, "\t", "")
+	style = strings.ReplaceAll(style, "\n", "")
+	style = strings.ReplaceAll(style, "\r", "")
+	return strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden")
+}
+
+func popHTMLWebFetchHiddenTag(hiddenTags []string, tag string) []string {
+	if len(hiddenTags) == 0 || tag == "" {
+		return hiddenTags
+	}
+	for i := len(hiddenTags) - 1; i >= 0; i-- {
+		if hiddenTags[i] == tag {
+			return hiddenTags[:i]
+		}
+	}
+	return hiddenTags
+}
+
+func isSelfClosingHTMLWebFetchTag(rawTag string) bool {
+	return strings.HasSuffix(strings.TrimSpace(rawTag), "/")
+}
+
+func isVoidHTMLWebFetchTag(tag string) bool {
+	switch tag {
+	case "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr":
+		return true
+	default:
+		return false
+	}
 }
 
 func webFetchHTMLBaseURL(body string, fallback string) string {

@@ -241,6 +241,61 @@ func TestWebFetchPromptExcerptMatchesPluralVariants(t *testing.T) {
 	}
 }
 
+func TestWebFetchHTMLRenderingSkipsHiddenElements(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <main>
+    <div hidden>
+      <p>Hidden pricing says the enterprise plan is free.</p>
+      <span>Nested hidden text should not leak.</span>
+    </div>
+    <p aria-hidden="true">Invisible beta pricing should not be excerpted.</p>
+    <section style="display: none !important"><p>Display none pricing leak.</p></section>
+    <section style="visibility: hidden"><p>Visibility hidden pricing leak.</p></section>
+    <img hidden alt="Hidden architecture diagram" src="/hidden.png">
+    <p>The visible pricing plan costs $30 and includes audit logs.</p>
+  </main>
+</body>
+</html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_html_hidden",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"pricing"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok || !strings.Contains(rendered, "The visible pricing plan costs $30") {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	for _, leaked := range []string{
+		"enterprise plan is free",
+		"Nested hidden text",
+		"Invisible beta pricing",
+		"Display none pricing",
+		"Visibility hidden pricing",
+		"Hidden architecture diagram",
+	} {
+		if strings.Contains(rendered, leaked) {
+			t.Fatalf("rendered body leaked hidden text %q: %#v", leaked, rendered)
+		}
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "The visible pricing plan costs $30") {
+		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+	if strings.Contains(excerpt, "enterprise plan is free") || strings.Contains(excerpt, "Invisible beta pricing") {
+		t.Fatalf("prompt excerpt used hidden text: %#v", excerpt)
+	}
+}
+
 func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
