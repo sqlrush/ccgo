@@ -2164,6 +2164,8 @@ func powerShellAliasTarget(name string) string {
 		return "get-location"
 	case "gi":
 		return "get-item"
+	case "rvpa":
+		return "resolve-path"
 	case "gp", "gip":
 		return "get-itemproperty"
 	case "gpv":
