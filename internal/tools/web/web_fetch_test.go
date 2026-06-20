@@ -147,7 +147,7 @@ func TestWebFetchRendersHTMLAndPromptExcerpt(t *testing.T) {
 		_, _ = w.Write([]byte(`<!doctype html>
 <html>
 <head>
-  <title>Plans</title>
+  <title>Invisible beta pricing title leak</title>
   <script>window.secret = "script noise";</script>
   <style>body { color: red; }</style>
 </head>
@@ -185,11 +185,11 @@ func TestWebFetchRendersHTMLAndPromptExcerpt(t *testing.T) {
 	if !ok || !strings.Contains(rendered, "Alpha plan") || !strings.Contains(rendered, "beta pricing plan") {
 		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
 	}
-	if strings.Contains(rendered, "script noise") || strings.Contains(rendered, "color: red") {
+	if strings.Contains(rendered, "script noise") || strings.Contains(rendered, "color: red") || strings.Contains(rendered, "Invisible beta pricing title leak") {
 		t.Fatalf("rendered body leaked removed blocks: %#v", rendered)
 	}
 	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
-	if !ok || !strings.Contains(excerpt, "beta pricing plan") || strings.Contains(excerpt, "Alpha plan") {
+	if !ok || !strings.Contains(excerpt, "beta pricing plan") || strings.Contains(excerpt, "Alpha plan") || strings.Contains(excerpt, "Invisible beta pricing title leak") {
 		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
 	}
 	terms, ok := result.StructuredContent["prompt_terms"].([]string)

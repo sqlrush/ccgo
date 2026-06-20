@@ -955,6 +955,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`WebFetch` 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
 
+本轮补充：`WebFetch` HTML-to-text rendering 现在会先解析 `<base href>` 再跳过 `<head>` 子树，`<title>` 等 head-only metadata 不再污染 rendered body 或 prompt-focused excerpt，同时不破坏相对链接解析。
+
 本轮补充：`WebSearch` JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见搜索后端 wrapper，并继续保留 URL 去重和 allowed/blocked domain filter。
 
 本轮补充：`WebSearch` JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`canonicalUrl`/`linkUrl`/`resultUrl`/`destinationUrl`/`clickUrl`/`finalUrl`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL alias object，以及 `deepLinks`/`siteLinks` 子结果递归解析。

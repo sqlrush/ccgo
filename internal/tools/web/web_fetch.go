@@ -444,6 +444,7 @@ func renderWebFetchBody(contentType string, body string, baseURL string) (string
 	}
 	stripped := removeHTMLWebFetchBlocks(body, "script", "style", "noscript", "template", "svg", "canvas")
 	resolvedBaseURL := webFetchHTMLBaseURL(stripped, baseURL)
+	stripped = removeHTMLWebFetchBlocks(stripped, "head")
 	rendered := stripHTMLWebFetchTags(stripped, resolvedBaseURL)
 	rendered = html.UnescapeString(rendered)
 	return normalizeWebFetchText(rendered), true
