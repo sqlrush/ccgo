@@ -1602,6 +1602,8 @@ var powerShellCompReadOnlyFlags = stringSet("/d", "/a", "/l", "/c", "/n", "/off[
 
 var powerShellCompValueFlags = stringSet("/n")
 
+var powerShellNativeSortReadOnlyFlags = stringSet("/r")
+
 func readOnlyWords(words []string) bool {
 	command := canonicalCommand(words[0])
 	switch command {
@@ -1613,6 +1615,8 @@ func readOnlyWords(words []string) bool {
 		return readOnlyNativeTwoPathCompare(words[1:], powerShellFCReadOnlyFlags, nil)
 	case "comp.exe":
 		return readOnlyNativeTwoPathCompare(words[1:], powerShellCompReadOnlyFlags, powerShellCompValueFlags)
+	case "sort.exe":
+		return readOnlyNativeOnePathCommand(words[1:], powerShellNativeSortReadOnlyFlags, nil)
 	case "docker":
 		return readOnlyDocker(words[1:])
 	case "dotnet":
@@ -1870,6 +1874,41 @@ func readOnlyNativeTwoPathCompare(words []string, allowedFlags map[string]bool, 
 		paths++
 	}
 	return paths == 2
+}
+
+func readOnlyNativeOnePathCommand(words []string, allowedFlags map[string]bool, valueFlags map[string]bool) bool {
+	paths := 0
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		if strings.TrimSpace(word) == "--%" {
+			return false
+		}
+		name, value, hasValue, isFlag := splitNativeFlag(word)
+		if isFlag {
+			if !allowedFlags[name] {
+				return false
+			}
+			takesValue := valueFlags[name]
+			if hasValue {
+				if !takesValue || !safeNativeValue(value) {
+					return false
+				}
+				continue
+			}
+			if takesValue {
+				i++
+				if i >= len(words) || looksLikeNativeFlag(words[i]) || !safeNativeValue(words[i]) {
+					return false
+				}
+			}
+			continue
+		}
+		if !safeRelativePowerShellPath(word) {
+			return false
+		}
+		paths++
+	}
+	return paths == 1
 }
 
 func readOnlyDocker(words []string) bool {
