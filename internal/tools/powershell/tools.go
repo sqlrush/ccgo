@@ -2317,6 +2317,8 @@ func powerShellAliasTarget(name string) string {
 		return "set-item"
 	case "sp":
 		return "set-itemproperty"
+	case "np":
+		return "new-itemproperty"
 	case "cpp":
 		return "copy-itemproperty"
 	case "mp":

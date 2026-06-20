@@ -181,7 +181,7 @@ M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted
 
 M5 补充：WebFetch prompt-focused excerpt 的 term scoring 现在会双向匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`、prompt `candidates` 可命中正文 `candidate`，同时仍保持词边界匹配避免子串误命中。
 
-M5 补充：PowerShell command canonicalization 现在补齐 mutating ItemProperty aliases：`sp`/`clp`/`cpp`/`mp`/`rp`/`rnp` 会分别归入 `Set/Clear/Copy/Move/Remove/Rename-ItemProperty` destructive 分类，避免属性变更 alias 被当成未知普通命令。
+M5 补充：PowerShell command canonicalization 现在补齐 mutating ItemProperty aliases：`sp`/`np`/`clp`/`cpp`/`mp`/`rp`/`rnp` 会分别归入 `Set/New/Clear/Copy/Move/Remove/Rename-ItemProperty` destructive 分类，避免属性变更 alias 被当成未知普通命令。
 
 M5 补充：PowerShell command canonicalization 现在补齐 mutating service aliases：`sasv`/`spsv`/`rsv`/`ssv` 会分别归入 `Start/Stop/Restart/Set-Service` destructive 分类，避免服务状态或配置变更 alias 被当成未知普通命令。
 

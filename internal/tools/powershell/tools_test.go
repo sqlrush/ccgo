@@ -554,6 +554,8 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"si variable:x 1",
 		"Set-ItemProperty . -Name Mode -Value x",
 		"sp . -Name Mode -Value x",
+		"New-ItemProperty . -Name Mode -Value x",
+		"np . -Name Mode -Value x",
 		"Clear-ItemProperty . -Name Mode",
 		"clp . -Name Mode",
 		"Copy-ItemProperty . other -Name Mode",
