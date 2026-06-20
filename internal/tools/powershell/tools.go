@@ -1241,9 +1241,10 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		validatePositionalsAsPaths: true,
 	},
 	"get-filehash": {
-		allowedFlags:               stringSet("path", "literalpath", "algorithm", "inputstream"),
+		allowedFlags:               stringSet("path", "literalpath", "algorithm"),
+		unsafeFlags:                stringSet("inputstream"),
 		pathFlags:                  stringSet("path", "literalpath"),
-		valueFlags:                 stringSet("algorithm", "inputstream"),
+		valueFlags:                 stringSet("algorithm"),
 		validatePositionalsAsPaths: true,
 	},
 	"get-acl": {
@@ -1548,9 +1549,52 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		validatePositionalsAsPaths:   true,
 		pathPositionalsAfterLiterals: 1,
 	},
+	"md5sum":    powerShellChecksumReadOnlyConfig,
+	"sha1sum":   powerShellChecksumReadOnlyConfig,
+	"sha224sum": powerShellChecksumReadOnlyConfig,
+	"sha256sum": powerShellChecksumReadOnlyConfig,
+	"sha384sum": powerShellChecksumReadOnlyConfig,
+	"sha512sum": powerShellChecksumReadOnlyConfig,
+	"b2sum":     powerShellB2SumReadOnlyConfig,
+	"shasum":    powerShellSHASumReadOnlyConfig,
+	"cksum":     powerShellCKSumReadOnlyConfig,
+	"sum":       powerShellSumReadOnlyConfig,
 }
 
 var powerShellDotnetReadOnlyFlags = stringSet("--version", "--info", "--list-runtimes", "--list-sdks")
+
+var powerShellChecksumReadOnlyConfig = powerShellNativeReadOnlyConfig{
+	allowedFlags:               stringSet("-b", "--binary", "-t", "--text", "--tag", "-z", "--zero"),
+	allowPositionals:           true,
+	validatePositionalsAsPaths: true,
+}
+
+var powerShellB2SumReadOnlyConfig = powerShellNativeReadOnlyConfig{
+	allowedFlags:               stringSet("-b", "--binary", "-l", "--length", "--tag", "-z", "--zero"),
+	valueFlags:                 stringSet("-l", "--length"),
+	allowPositionals:           true,
+	validatePositionalsAsPaths: true,
+}
+
+var powerShellSHASumReadOnlyConfig = powerShellNativeReadOnlyConfig{
+	allowedFlags:               stringSet("-a", "--algorithm", "-b", "--binary", "-t", "--text", "-u", "--universal", "-0", "--portable"),
+	valueFlags:                 stringSet("-a", "--algorithm"),
+	allowPositionals:           true,
+	validatePositionalsAsPaths: true,
+}
+
+var powerShellCKSumReadOnlyConfig = powerShellNativeReadOnlyConfig{
+	allowedFlags:               stringSet("-a", "--algorithm", "--base64", "--raw"),
+	valueFlags:                 stringSet("-a", "--algorithm"),
+	allowPositionals:           true,
+	validatePositionalsAsPaths: true,
+}
+
+var powerShellSumReadOnlyConfig = powerShellNativeReadOnlyConfig{
+	allowedFlags:               stringSet("-r", "-s"),
+	allowPositionals:           true,
+	validatePositionalsAsPaths: true,
+}
 
 func readOnlyWords(words []string) bool {
 	command := canonicalCommand(words[0])

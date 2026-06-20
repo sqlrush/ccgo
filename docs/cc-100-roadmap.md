@@ -207,6 +207,8 @@ M5 补充：Bash read-only classifier 继续覆盖 `comm` 文件比较命令，`
 
 M5 补充：Bash read-only classifier 现在覆盖常见 checksum 命令 `md5sum`/`sha*sum`/`b2sum`/`shasum`/`cksum`/`sum` 的普通文件读取形态，同时阻断 `-c`/`--check` 校验清单模式，避免清单内路径绕过路径权限。
 
+M5 补充：PowerShell read-only classifier 现在覆盖 `Get-FileHash` 的安全路径读取和常见 native checksum 命令 `md5sum`/`sha*sum`/`b2sum`/`shasum`/`cksum`/`sum`，同时拒绝 `Get-FileHash -InputStream` 表达式和 `-c`/`--check` 校验清单模式。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。
