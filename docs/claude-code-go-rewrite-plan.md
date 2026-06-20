@@ -207,7 +207,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebSearch HTML snippet 提取现在识别 Bing 风格 `b_caption`/`b_snippet` 以及常见搜索摘要 class，标题 anchor 后的可见摘要会进入文本输出和 structured result。
 - 本轮补充：WebSearch HTML 结果 anchor 现在会识别 `data-href`/`data-url` 等常见 data 属性中的真实结果 URL，并跳过 `href="#"`/`javascript:` 占位链接，覆盖搜索页用 JS 事件承载跳转地址的形态。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。
-- 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`canonicalUrl`/`linkUrl`/`resultUrl`/`destinationUrl`/`clickUrl`/`finalUrl`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
+- 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`canonicalUrl`/`linkUrl`/`resultUrl`/`destinationUrl`/`clickUrl`/`finalUrl`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL alias object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
 - 本轮补充：WebSearch JSON parser 现在继续覆盖 `answerBox`/`answer_box`、`knowledgeGraph`/`knowledge_graph`、`news`/`news_results`、`topStories`、`peopleAlsoAsk` 和 `related_questions` 等常见搜索后端 wrapper，并识别 `website`/`sourceLink` URL alias、`question` title alias、`answer`/`excerpt` snippet alias。
 - 本轮补充：WebSearch `query` schema 现在按官方 `min(2)` 约束拒绝单字符查询，通用 tool schema validator 同步支持 `minLength`，让工具定义可直接表达字符串最小长度契约。
 - 本轮补充：WebSearch domain filters 现在会 canonicalize 为小写、去尾点、去 `*.` 前缀并去重；过滤匹配和 structured content 暴露同一域名口径。

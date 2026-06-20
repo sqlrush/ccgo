@@ -498,6 +498,7 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 					{"title": "Link URL Result", "linkUrl": {"value": "https://docs.example.com/link-url"}, "text": "Link URL snippet"},
 					{"title": "Destination Result", "destinationUrl": "https://example.com/destination", "snippet": "Destination snippet"},
 					{"title": "Click URL Result", "clickUrl": "https://www.google.com/url?q=https%3A%2F%2Fdocs.example.com%2Fclick-url", "snippet": "Click URL snippet"},
+					{"title": "Nested Final URL Result", "resultUrl": {"finalUrl": "https://example.com/nested-final"}, "snippet": "Nested final snippet"},
 					{"title": "Display Only", "displayUrl": "example.com/not-a-real-url", "snippet": "ignored"}
 				]
 			}
@@ -513,13 +514,13 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 	}, contracts.ToolUse{
 		ID:    "toolu_search_alias_json",
 		Name:  "WebSearch",
-		Input: json.RawMessage(`{"query":"alias json","max_results":8}`),
+		Input: json.RawMessage(`{"query":"alias json","max_results":9}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	results, ok := result.StructuredContent["results"].([]map[string]any)
-	if !ok || len(results) != 8 {
+	if !ok || len(results) != 9 {
 		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
 	}
 	if results[0]["title"] != "Alias Result" || results[0]["url"] != "https://example.com/alias" || results[0]["snippet"] != "Alias snippet" {
@@ -545,6 +546,9 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 	}
 	if results[7]["title"] != "Click URL Result" || results[7]["url"] != "https://docs.example.com/click-url" || results[7]["snippet"] != "Click URL snippet" {
 		t.Fatalf("click url result = %#v", results[7])
+	}
+	if results[8]["title"] != "Nested Final URL Result" || results[8]["url"] != "https://example.com/nested-final" || results[8]["snippet"] != "Nested final snippet" {
+		t.Fatalf("nested final url result = %#v", results[8])
 	}
 	content := result.Content.(string)
 	if strings.Contains(content, "Display Only") || strings.Contains(content, "<b>") {

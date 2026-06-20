@@ -68,6 +68,30 @@ type webSearchResult struct {
 	DurationMS int64
 }
 
+var jsonSearchPrimaryURLFieldNames = []string{
+	"url", "link", "href", "@id",
+	"pageUrl", "pageURL", "page_url",
+	"targetUrl", "targetURL", "target_url",
+	"webUrl", "webURL", "web_url",
+	"sourceUrl", "sourceURL", "source_url",
+	"canonicalUrl", "canonicalURL", "canonical_url",
+	"linkUrl", "linkURL", "link_url",
+	"resultUrl", "resultURL", "result_url",
+	"destinationUrl", "destinationURL", "destination_url",
+	"redirectUrl", "redirectURL", "redirect_url",
+	"clickUrl", "clickURL", "click_url",
+	"finalUrl", "finalURL", "final_url",
+	"resolvedUrl", "resolvedURL", "resolved_url",
+	"sourceLink", "source_link",
+	"permalink", "canonical",
+	"website", "site",
+}
+
+var jsonSearchDisplayURLFieldNames = []string{
+	"displayUrl", "displayURL", "display_url",
+	"formattedUrl", "formattedURL", "formatted_url",
+}
+
 func NewWebSearchTool() tool.Tool {
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
@@ -367,30 +391,10 @@ func searchResultFromJSONObject(obj map[string]any, base *url.URL) (searchResult
 }
 
 func jsonSearchURLField(obj map[string]any) string {
-	if raw := jsonStringField(obj,
-		"url", "link", "href", "@id",
-		"pageUrl", "pageURL", "page_url",
-		"targetUrl", "targetURL", "target_url",
-		"webUrl", "webURL", "web_url",
-		"sourceUrl", "sourceURL", "source_url",
-		"canonicalUrl", "canonicalURL", "canonical_url",
-		"linkUrl", "linkURL", "link_url",
-		"resultUrl", "resultURL", "result_url",
-		"destinationUrl", "destinationURL", "destination_url",
-		"redirectUrl", "redirectURL", "redirect_url",
-		"clickUrl", "clickURL", "click_url",
-		"finalUrl", "finalURL", "final_url",
-		"resolvedUrl", "resolvedURL", "resolved_url",
-		"sourceLink", "source_link",
-		"permalink", "canonical",
-		"website", "site",
-	); raw != "" {
+	if raw := jsonStringField(obj, jsonSearchPrimaryURLFieldNames...); raw != "" {
 		return raw
 	}
-	raw := jsonStringField(obj,
-		"displayUrl", "displayURL", "display_url",
-		"formattedUrl", "formattedURL", "formatted_url",
-	)
+	raw := jsonStringField(obj, jsonSearchDisplayURLFieldNames...)
 	if isAbsoluteSearchURL(raw) {
 		return raw
 	}
@@ -415,8 +419,10 @@ func jsonSearchString(value any) string {
 	case float64:
 		return strings.TrimSpace(fmt.Sprintf("%.0f", typed))
 	case map[string]any:
+		if text := jsonSearchURLField(typed); text != "" {
+			return text
+		}
 		return jsonStringField(typed,
-			"url", "link", "href", "@id",
 			"raw", "value", "text", "content",
 			"title", "name", "headline", "heading",
 		)
