@@ -1217,10 +1217,10 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		validatePositionalsAsPaths: true,
 	},
 	"get-content": {
-		allowedFlags:               stringSet("path", "literalpath", "totalcount", "head", "tail", "raw", "encoding", "delimiter", "readcount"),
+		allowedFlags:               stringSet("path", "literalpath", "totalcount", "head", "first", "tail", "raw", "encoding", "delimiter", "readcount"),
 		unsafeFlags:                stringSet("wait"),
 		pathFlags:                  stringSet("path", "literalpath"),
-		valueFlags:                 stringSet("totalcount", "head", "tail", "encoding", "delimiter", "readcount"),
+		valueFlags:                 stringSet("totalcount", "head", "first", "tail", "encoding", "delimiter", "readcount"),
 		validatePositionalsAsPaths: true,
 	},
 	"get-item": {
