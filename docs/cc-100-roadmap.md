@@ -267,6 +267,8 @@ M5 补充：PowerShell read-only classifier 收紧 `Get-WinEvent`，普通查询
 
 M5 补充：PowerShell native read-only classifier 收紧 `ver`，裸命令仍按只读处理，但不再接受任意 flag 或位置参数。
 
+M5 补充：PowerShell native read-only classifier 补齐 `netstat -p <protocol>` 只读协议查询形态，协议值走 literal guard，缺值和动态表达式值仍拒绝。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。

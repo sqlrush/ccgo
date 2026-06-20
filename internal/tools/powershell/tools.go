@@ -1550,6 +1550,7 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 	},
 	"netstat": {
 		allowedFlags: stringSet("-a", "-b", "-e", "-f", "-n", "-o", "-p", "-q", "-r", "-s", "-t", "-x", "-y"),
+		valueFlags:   stringSet("-p"),
 	},
 	"systeminfo": {
 		allowedFlags: stringSet("/fo", "/nh"),
