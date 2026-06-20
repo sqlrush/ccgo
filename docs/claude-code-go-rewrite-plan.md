@@ -318,6 +318,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`/config all|full|dump` 和 `/config show all` 会组合输出全部已知 config section，复用现有脱敏展示逻辑；未知 `/config` 一级子命令返回 usage 而不是未实现占位。
 - 本轮补充：`/memory files` 和 `/memory ls` 现在复用 `/memory list` 的 no-query 本地记忆文件列表路径，`/memory status` 仍保持会话/相关记忆概览。
 - 本轮补充：`/memory save|add|write <relative.md> <content>` 和 `/memory remove|rm|delete <relative.md>` 现在可在配置的 relevant memory directory 内安全维护 markdown 记忆文件，拒绝未配置目录、越界路径、非 markdown 文件、目录和 symlink 目标，并保持 no-query 本地结果。
+- 本轮补充：未知 `/plugin`、`/memory` 和 `/mcp` 一级子命令现在返回对应 help/usage，而不是未实现占位；`/memory help` 和 `/mcp help` 也走 no-query 本地 usage 路径。
 - 本轮补充：`/status <section>` 现在复用 `/status show <section>` 的 section alias normalization，`/status integrations`、`/status diagnostics` 等直接调用不会再落入 unsupported subcommand 分支；`/status all|full|dump` 和 `/status show all` 会组合输出全部已知 status section，未知 section 返回 usage 而不是未实现占位。
 - 本轮补充：`/mcp refresh` 和 `/mcp reload` 现在走 no-query 本地刷新路径，会重新检查 settings 文件变化并刷新 plugin MCP server app-state，返回刷新摘要而不是落入 unsupported subcommand。
 - 本轮补充：`/mcp restart` 和 `/mcp reconnect [server]` 现在走 headless stateless restart 路径，会刷新 settings/plugin MCP server 状态、校验指定 server 是否存在，并明确 server 会在下一次 tool call 重新打开，不再误报 unsupported。

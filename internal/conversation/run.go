@@ -3619,7 +3619,7 @@ func (r Runner) formatPluginSummary(raw string) string {
 					return r.formatPluginShow([]string{"show", plugin.Name})
 				}
 			}
-			return "Plugin subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+			return "Unknown plugin subcommand: " + strings.Join(args, " ") + "\n" + pluginCommandHelp()
 		}
 	}
 	merged := r.mergedSettings()
@@ -5008,8 +5008,10 @@ func (r Runner) formatMemorySummary(raw string) string {
 			return r.saveMemoryFileSummary(args[0], subcommandRemainder(raw, args[0]))
 		case "remove", "rm", "delete", "del":
 			return r.removeMemoryFileSummary(args[0], subcommandRemainder(raw, args[0]))
+		case "help", "-h", "--help":
+			return memoryCommandUsage()
 		default:
-			return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+			return "Unknown memory subcommand: " + strings.Join(args, " ") + "\n" + memoryCommandUsage()
 		}
 	}
 	sessionRoot := r.SessionMemoryRoot
@@ -5034,6 +5036,10 @@ func (r Runner) formatMemorySummary(raw string) string {
 		"Session memory recall: " + boolEnabledText(r.EnableSessionMemoryRecall),
 		"Turn-end memory extraction: " + boolEnabledText(r.EnableMemoryExtraction),
 	}, "\n")
+}
+
+func memoryCommandUsage() string {
+	return "Usage: /memory [status|list|show [file]|search <query>|save <relative.md> <content>|remove <relative.md>]"
 }
 
 func (r Runner) formatMemoryShow() string {
@@ -6646,13 +6652,15 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 			return r.removeMCPServerSummary(args)
 		case "enable", "disable":
 			return r.setMCPServerEnabledSummary(args)
+		case "help", "-h", "--help":
+			return mcpCommandUsage()
 		default:
 			if len(args) == 1 {
 				if server, ok := findMCPServerSummary(r.mcpServers(), args[0]); ok {
 					return r.formatMCPServerShow([]string{"show", server.Name})
 				}
 			}
-			return "MCP subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+			return "Unknown MCP subcommand: " + strings.Join(args, " ") + "\n" + mcpCommandUsage()
 		}
 	}
 	servers := r.mcpServers()
@@ -6669,6 +6677,10 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 		lines = append(lines, fmt.Sprintf("- %s (%s): %s%s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config), status))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func mcpCommandUsage() string {
+	return "Usage: /mcp [list|status|show <server>|search <query>|refresh|restart [server]|enable <server>|disable <server>|remove <server>]"
 }
 
 func (r Runner) formatMCPRefreshSummary(args []string) string {

@@ -5217,6 +5217,24 @@ func TestRunnerExecutesPluginSlashCommandWithoutQuery(t *testing.T) {
 			}
 		}
 	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/plugin unknown"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Unknown plugin subcommand: unknown",
+		"Plugin Command Usage:",
+		"/plugin help - Show this help",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("plugin unknown missing %q: %q", want, text)
+		}
+	}
+	if strings.Contains(text, "not implemented") {
+		t.Fatalf("plugin unknown should not report not implemented: %q", text)
+	}
 }
 
 func TestRunnerPluginShowReportsLocalPluginDetails(t *testing.T) {
@@ -6393,6 +6411,34 @@ func TestRunnerExecutesMemorySlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerMemorySlashCommandReportsUsageForUnknownSubcommand(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_memory_unknown"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/memory unknown"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Unknown memory subcommand: unknown",
+		"Usage: /memory [status|list|show [file]|search <query>|save <relative.md> <content>|remove <relative.md>]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("memory unknown result missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "not implemented") {
+		t.Fatalf("memory unknown should not report not implemented: %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory help"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /memory [status|list|show [file]|search <query>|save <relative.md> <content>|remove <relative.md>]" {
+		t.Fatalf("memory help result = %q", got)
+	}
+}
+
 func TestRunnerMemoryShowListsMemoryFiles(t *testing.T) {
 	client := &fakeClient{}
 	sessionRoot := t.TempDir()
@@ -7254,7 +7300,7 @@ func TestRunnerMCPSlashCommandRefusesToRemoveProjectServerFromUserSettings(t *te
 	}
 }
 
-func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
+func TestRunnerMCPSlashCommandReportsUsageForUnknownSubcommand(t *testing.T) {
 	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_subcommand"}
 	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp unknown alpha"))
 	if err != nil {
@@ -7263,8 +7309,25 @@ func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
 	if len(result.Messages) != 2 {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}
-	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: unknown alpha" {
-		t.Fatalf("mcp text = %q", got)
+	got := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Unknown MCP subcommand: unknown alpha",
+		"Usage: /mcp [list|status|show <server>|search <query>|refresh|restart [server]|enable <server>|disable <server>|remove <server>]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("mcp unknown result missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "not implemented") {
+		t.Fatalf("mcp unknown should not report not implemented: %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/mcp help"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Usage: /mcp [list|status|show <server>|search <query>|refresh|restart [server]|enable <server>|disable <server>|remove <server>]" {
+		t.Fatalf("mcp help text = %q", got)
 	}
 }
 
