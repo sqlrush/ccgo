@@ -213,6 +213,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：Bash/PowerShell 前台执行现在区分调用方 cancellation、timeout 和普通非零退出；context 取消会返回 `cancelled=true`、`timed_out=false`、`exit_code=-1`，并显示 cancelled 状态文本。
 - 本轮补充：Bash 和 Unix PowerShell 工具取消现在会先向受管 process group 发 SIGTERM，再用短 `WaitDelay` 兜底 SIGKILL；Bash 前台/后台取消测试通过 `trap TERM` 证明 cleanup signal 可被脚本收到。
 - 本轮补充：Bash read-only classifier 现在把常见文件比较命令 `diff`/`cmp` 归入只读路径命令族，并明确拒绝 `diff --output` 这类写文件形态以及越界路径，减少安全工具误走权限确认。
+- 本轮补充：Bash read-only classifier 继续覆盖 `comm` 文件比较命令，`comm -12 old.txt new.txt`、`comm --check-order ...` 这类只读比较不再误触发写权限确认，同时仍拒绝越界路径。
 - 本轮补充：`BashOutput` 现在设置 100k 最大结果大小，和前台 `Bash` 一起覆盖大输出 tool-result preview 截断、完整输出落盘及 `full_output_path` 元数据。
 - 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且 completed、timed_out、cancelled 终态测试确保 progress 不携带 command 文本。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。
