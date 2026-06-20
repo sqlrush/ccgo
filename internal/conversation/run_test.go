@@ -5890,6 +5890,117 @@ func TestRunnerPluginReportsMarketplacesAndConfigDetails(t *testing.T) {
 	}
 }
 
+func TestRunnerPluginMarketplaceAddRemoveUpdateCommands(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.MkdirAll(configHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	marketDir := filepath.Join(t.TempDir(), "team-market")
+	if err := os.MkdirAll(marketDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_plugin_marketplace_write",
+		WorkingDirectory: project,
+		MCP:              &MCPConfig{CWD: project},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/plugin marketplace add --type directory --install-location project team "+marketDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Marketplace team added." {
+		t.Fatalf("marketplace add text = %q", got)
+	}
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := marketplaceDocumentEntry(t, document, "team")
+	source, _ := entry["source"].(map[string]any)
+	if source["source"] != "directory" || source["path"] != marketDir || entry["installLocation"] != "project" {
+		t.Fatalf("user marketplace entry = %#v", entry)
+	}
+	if _, ok := runner.MCP.UserSettings.ExtraKnownMarketplaces["team"]; !ok {
+		t.Fatalf("runner user marketplaces = %#v", runner.MCP.UserSettings.ExtraKnownMarketplaces)
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/plugin marketplace update team"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[len(result.Messages)-1].Content[0].Text
+	for _, want := range []string{
+		"Updating marketplace: team...",
+		"Successfully updated marketplace: team",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("marketplace update missing %q: %q", want, text)
+		}
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/plugin marketplace remove team"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[len(result.Messages)-1].Content[0].Text; got != "Marketplace team removed." {
+		t.Fatalf("marketplace remove text = %q", got)
+	}
+	document, err = readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := document["extraKnownMarketplaces"]; ok {
+		t.Fatalf("user extraKnownMarketplaces should be removed: %#v", document)
+	}
+	if len(runner.MCP.UserSettings.ExtraKnownMarketplaces) != 0 {
+		t.Fatalf("runner user marketplaces should be empty: %#v", runner.MCP.UserSettings.ExtraKnownMarketplaces)
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/plugin marketplace add --scope local local-tools npm:@example/tools"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[len(result.Messages)-1].Content[0].Text; got != "Marketplace local-tools added." {
+		t.Fatalf("marketplace local add text = %q", got)
+	}
+	localDocument, err := config.ReadSettingsDocument(config.LocalSettingsPath(project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry = marketplaceDocumentEntry(t, localDocument, "local-tools")
+	source, _ = entry["source"].(map[string]any)
+	if source["source"] != "npm" || source["package"] != "@example/tools" {
+		t.Fatalf("local marketplace entry = %#v", entry)
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/plugin marketplace remove --scope local local-tools"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[len(result.Messages)-1].Content[0].Text; got != "Marketplace local-tools removed." {
+		t.Fatalf("marketplace local remove text = %q", got)
+	}
+	localDocument, err = config.ReadSettingsDocument(config.LocalSettingsPath(project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := localDocument["extraKnownMarketplaces"]; ok {
+		t.Fatalf("local extraKnownMarketplaces should be removed: %#v", localDocument)
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/plugin marketplace add --type directory --sparse plugins/demo bad-sparse "+marketDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[len(result.Messages)-1].Content[0].Text; !strings.Contains(got, "--sparse is only supported for github and git marketplace sources") {
+		t.Fatalf("marketplace bad sparse text = %q", got)
+	}
+}
+
 func TestRunnerExecutesPluginEnableDisableWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	configHome := t.TempDir()
@@ -7019,6 +7130,19 @@ func hasMCPServerDocumentEntry(value any, name string) bool {
 		}
 	}
 	return false
+}
+
+func marketplaceDocumentEntry(t *testing.T, document map[string]any, name string) map[string]any {
+	t.Helper()
+	extraKnown, ok := document["extraKnownMarketplaces"].(map[string]any)
+	if !ok {
+		t.Fatalf("extraKnownMarketplaces = %#v", document["extraKnownMarketplaces"])
+	}
+	entry, ok := extraKnown[name].(map[string]any)
+	if !ok {
+		t.Fatalf("marketplace %q = %#v", name, extraKnown[name])
+	}
+	return entry
 }
 
 func TestRunnerExecutesResumeSlashCommandWithoutQuery(t *testing.T) {

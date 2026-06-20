@@ -287,6 +287,8 @@ M8 补充：`/plugin list|status` headless/local summary 现在会复用本地 p
 
 M8 补充：`/plugin marketplaces` 现在会只读列出 settings 中的 extra/strict/blocked marketplace 来源，`/plugin config <name>` 会展示 plugin config option keys、MCP server config names 和 legacy settings keys 且不泄露配置值；真实 marketplace TUI 浏览、install/update/cache lifecycle 仍未完成。
 
+M8 补充：`/plugin marketplace add/remove/update|refresh|reload` 现在有 headless no-query 路径；add 支持 `--scope user|project|local`、`--type`、`--install-location`、github/git `--sparse` 和 source 前缀推断，remove 按 scope 删除 `extraKnownMarketplaces`，update 会按全部或指定 marketplace 触发现有 marketplace cache 加载刷新，并同步 runner settings/plugin MCP server 状态。
+
 M8/M9 补充：本地 plugin manifest 现在可声明 `mcpServers`/`mcp_servers`，并支持默认 `.mcp.json`、manifest path、array 和 inline server map 形态；`LoadMCPConfigFromSettingsFiles` 会把 cwd 发现到的 plugin MCP servers 传入 runner；configured MCP toolset merge 会对 plugin servers 做手工配置同名/同签名去重，并继续套用现有 MCP allow/deny policy，`/mcp list` 也会显示 plugin MCP server。完整 plugin MCP lifecycle、MCPB 下载/提取、启停 UI、marketplace 安装来源和 health check 仍未完成。
 
 M8 补充：本地 plugin manifest loader 现在会发现默认 `agents/`、manifest `agents` 额外 markdown 文件/目录、默认 `hooks/hooks.json` 和 manifest `hooks` inline/path 配置，并在 `/plugin list|status` headless summary 中显示 plugin command、skill、agent、MCP server 和 hook event/hook count；这些 hooks 已接入同步工具 hook executor，agents 仍仅作为 manifest 元数据暴露，尚未接入 agent runtime。

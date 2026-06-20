@@ -3371,6 +3371,12 @@ func (r Runner) formatPluginSummary(raw string) string {
 		case "marketplaces", "marketplace":
 			if len(args) > 1 {
 				switch args[1] {
+				case "add":
+					return r.addPluginMarketplaceSummary(dropLeadingFields(raw, 2))
+				case "remove", "rm":
+					return r.removePluginMarketplaceSummary(dropLeadingFields(raw, 2))
+				case "update", "refresh", "reload":
+					return r.updatePluginMarketplaceSummary(dropLeadingFields(raw, 2))
 				case "plugins", "available", "browse", "discover":
 					return r.formatMarketplacePlugins(dropLeadingFields(raw, 2))
 				case "search", "find":
@@ -3890,6 +3896,396 @@ func formatMarketplacePolicyLine(name string, policy pluginpkg.MarketplacePolicy
 		status = "blocked: " + decision.Reason
 	}
 	return fmt.Sprintf("- %s (%s)", name, status)
+}
+
+func (r Runner) addPluginMarketplaceSummary(raw string) string {
+	spec, err := parsePluginMarketplaceAddArgs(raw)
+	if err != nil {
+		return "Failed to add marketplace: " + err.Error()
+	}
+	if spec.Name == "" || spec.SourceValue == "" {
+		return "Usage: /plugin marketplace add [--scope user|project|local] [--type url|github|git|npm|directory|file] [--install-location user|project|local] [--sparse path] <name> <source>"
+	}
+	settingsPath, err := r.settingsPathForScope(spec.Scope)
+	if err != nil {
+		return "Failed to add marketplace: " + err.Error()
+	}
+	source, err := pluginMarketplaceSourceFromArg(spec.SourceType, spec.SourceValue)
+	if err != nil {
+		return "Failed to add marketplace: " + err.Error()
+	}
+	if len(spec.SparsePaths) > 0 {
+		sourceKind := pluginMarketplaceStringFromMap(source, "source")
+		if sourceKind != "github" && sourceKind != "git" {
+			return fmt.Sprintf("Failed to add marketplace: --sparse is only supported for github and git marketplace sources (got: %s)", sourceKind)
+		}
+		source["sparsePaths"] = pluginMarketplaceSparsePaths(spec.SparsePaths)
+	}
+	existed, err := config.SetMarketplaceInSettingsFile(settingsPath, spec.Name, source, spec.InstallLocation)
+	if err != nil {
+		return "Failed to add marketplace: " + err.Error()
+	}
+	if r.MCP != nil {
+		setMarketplaceInSettings(r.settingsForScope(spec.Scope), spec.Name, source, spec.InstallLocation)
+		r.refreshPluginMCPServers()
+	}
+	action := "added"
+	if existed {
+		action = "updated"
+	}
+	return fmt.Sprintf("Marketplace %s %s.", spec.Name, action)
+}
+
+func (r Runner) removePluginMarketplaceSummary(raw string) string {
+	scope, name, err := parsePluginMarketplaceRemoveArgs(raw)
+	if err != nil {
+		return "Failed to remove marketplace: " + err.Error()
+	}
+	if name == "" {
+		return "Usage: /plugin marketplace remove [--scope user|project|local] <name>"
+	}
+	settingsPath, err := r.settingsPathForScope(scope)
+	if err != nil {
+		return "Failed to remove marketplace: " + err.Error()
+	}
+	removed, err := config.RemoveMarketplaceFromSettingsFile(settingsPath, name)
+	if err != nil {
+		return "Failed to remove marketplace: " + err.Error()
+	}
+	if !removed {
+		return fmt.Sprintf("Marketplace %s was not found in %s settings.", name, normalizedSettingsScope(scope))
+	}
+	if r.MCP != nil {
+		removeMarketplaceFromSettings(r.settingsForScope(scope), name)
+		r.refreshPluginMCPServers()
+	}
+	return fmt.Sprintf("Marketplace %s removed.", name)
+}
+
+func (r Runner) updatePluginMarketplaceSummary(raw string) string {
+	args := commands.ParseArguments(raw)
+	if len(args) > 1 {
+		return "Usage: /plugin marketplace update [name]"
+	}
+	name := ""
+	if len(args) == 1 {
+		name = strings.TrimSpace(args[0])
+	}
+	settings := r.mergedSettings()
+	if name == "" {
+		if len(settings.ExtraKnownMarketplaces) == 0 {
+			return "No marketplaces configured"
+		}
+		pluginpkg.LoadMarketplacePluginDirsWithSettings(settings)
+		return strings.Join([]string{
+			fmt.Sprintf("Updating %d marketplace(s)...", len(settings.ExtraKnownMarketplaces)),
+			fmt.Sprintf("Successfully updated %d marketplace(s)", len(settings.ExtraKnownMarketplaces)),
+		}, "\n")
+	}
+	filtered, matchedName, ok := pluginMarketplaceSettingsForName(settings, name)
+	if !ok {
+		return fmt.Sprintf("Marketplace %s was not found. Available marketplaces: %s", name, strings.Join(sortedAnyMapKeys(settings.ExtraKnownMarketplaces), ", "))
+	}
+	pluginpkg.LoadMarketplacePluginDirsWithSettings(filtered)
+	return strings.Join([]string{
+		"Updating marketplace: " + matchedName + "...",
+		"Successfully updated marketplace: " + matchedName,
+	}, "\n")
+}
+
+type pluginMarketplaceAddSpec struct {
+	Scope           string
+	SourceType      string
+	InstallLocation string
+	Name            string
+	SourceValue     string
+	SparsePaths     []string
+}
+
+func parsePluginMarketplaceAddArgs(raw string) (pluginMarketplaceAddSpec, error) {
+	args := commands.ParseArguments(raw)
+	spec := pluginMarketplaceAddSpec{Scope: "user"}
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--scope" || arg == "-s":
+			value, ok := nextPluginMarketplaceFlagValue(args, &i, arg)
+			if !ok {
+				return spec, fmt.Errorf("%s requires a value", arg)
+			}
+			spec.Scope = strings.ToLower(value)
+		case strings.HasPrefix(arg, "--scope="):
+			spec.Scope = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--scope=")))
+		case strings.HasPrefix(arg, "-s="):
+			spec.Scope = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "-s=")))
+		case arg == "--type" || arg == "-t":
+			value, ok := nextPluginMarketplaceFlagValue(args, &i, arg)
+			if !ok {
+				return spec, fmt.Errorf("%s requires a value", arg)
+			}
+			spec.SourceType = strings.ToLower(value)
+		case strings.HasPrefix(arg, "--type="):
+			spec.SourceType = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--type=")))
+		case strings.HasPrefix(arg, "-t="):
+			spec.SourceType = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "-t=")))
+		case arg == "--install-location":
+			value, ok := nextPluginMarketplaceFlagValue(args, &i, arg)
+			if !ok {
+				return spec, fmt.Errorf("%s requires a value", arg)
+			}
+			spec.InstallLocation = strings.ToLower(value)
+		case strings.HasPrefix(arg, "--install-location="):
+			spec.InstallLocation = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--install-location=")))
+		case arg == "--sparse":
+			value, ok := nextPluginMarketplaceFlagValue(args, &i, arg)
+			if !ok {
+				return spec, fmt.Errorf("%s requires a value", arg)
+			}
+			spec.SparsePaths = append(spec.SparsePaths, value)
+		case strings.HasPrefix(arg, "--sparse="):
+			spec.SparsePaths = append(spec.SparsePaths, strings.TrimSpace(strings.TrimPrefix(arg, "--sparse=")))
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if err := validateSettingsScope(spec.Scope); err != nil {
+		return spec, err
+	}
+	if len(positional) > 2 {
+		return spec, fmt.Errorf("unexpected argument %s", positional[2])
+	}
+	if len(positional) > 0 {
+		spec.Name = strings.TrimSpace(positional[0])
+	}
+	if len(positional) > 1 {
+		spec.SourceValue = strings.TrimSpace(positional[1])
+	}
+	return spec, nil
+}
+
+func parsePluginMarketplaceRemoveArgs(raw string) (string, string, error) {
+	args := commands.ParseArguments(raw)
+	scope := "user"
+	var nameParts []string
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--scope" || arg == "-s":
+			value, ok := nextPluginMarketplaceFlagValue(args, &i, arg)
+			if !ok {
+				return "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			scope = strings.ToLower(value)
+		case strings.HasPrefix(arg, "--scope="):
+			scope = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--scope=")))
+		case strings.HasPrefix(arg, "-s="):
+			scope = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "-s=")))
+		default:
+			nameParts = append(nameParts, arg)
+		}
+	}
+	if err := validateSettingsScope(scope); err != nil {
+		return "", "", err
+	}
+	return scope, strings.TrimSpace(strings.Join(nameParts, " ")), nil
+}
+
+func nextPluginMarketplaceFlagValue(args []string, index *int, flagName string) (string, bool) {
+	if *index+1 >= len(args) || strings.TrimSpace(args[*index+1]) == "" {
+		return "", false
+	}
+	*index = *index + 1
+	return strings.TrimSpace(args[*index]), true
+}
+
+func validateSettingsScope(scope string) error {
+	switch normalizedSettingsScope(scope) {
+	case "user", "project", "local":
+		return nil
+	default:
+		return fmt.Errorf("scope %q is not supported; use user, project, or local", scope)
+	}
+}
+
+func normalizedSettingsScope(scope string) string {
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "" {
+		return "user"
+	}
+	return scope
+}
+
+func (r Runner) settingsPathForScope(scope string) (string, error) {
+	switch normalizedSettingsScope(scope) {
+	case "user":
+		return config.UserSettingsPath(), nil
+	case "project":
+		return config.ProjectSettingsPath(r.WorkingDirectory), nil
+	case "local":
+		return config.LocalSettingsPath(r.WorkingDirectory), nil
+	default:
+		return "", fmt.Errorf("scope %q is not supported; use user, project, or local", scope)
+	}
+}
+
+func (r Runner) settingsForScope(scope string) *contracts.Settings {
+	if r.MCP == nil {
+		return nil
+	}
+	switch normalizedSettingsScope(scope) {
+	case "project":
+		return &r.MCP.ProjectSettings
+	case "local":
+		return &r.MCP.LocalSettings
+	default:
+		return &r.MCP.UserSettings
+	}
+}
+
+func setMarketplaceInSettings(settings *contracts.Settings, name string, source map[string]any, installLocation string) {
+	if settings == nil {
+		return
+	}
+	if settings.ExtraKnownMarketplaces == nil {
+		settings.ExtraKnownMarketplaces = map[string]any{}
+	}
+	entry := map[string]any{"source": cloneMarketplaceMap(source)}
+	if installLocation = strings.TrimSpace(installLocation); installLocation != "" {
+		entry["installLocation"] = installLocation
+	}
+	settings.ExtraKnownMarketplaces[name] = entry
+}
+
+func removeMarketplaceFromSettings(settings *contracts.Settings, name string) {
+	if settings == nil || len(settings.ExtraKnownMarketplaces) == 0 {
+		return
+	}
+	if _, ok := settings.ExtraKnownMarketplaces[name]; ok {
+		delete(settings.ExtraKnownMarketplaces, name)
+	} else {
+		for key := range settings.ExtraKnownMarketplaces {
+			if strings.EqualFold(strings.TrimSpace(key), strings.TrimSpace(name)) {
+				delete(settings.ExtraKnownMarketplaces, key)
+				break
+			}
+		}
+	}
+	if len(settings.ExtraKnownMarketplaces) == 0 {
+		settings.ExtraKnownMarketplaces = nil
+	}
+}
+
+func pluginMarketplaceSourceFromArg(sourceType string, value string) (map[string]any, error) {
+	sourceType, value = normalizePluginMarketplaceSourceArg(sourceType, value)
+	if strings.TrimSpace(value) == "" {
+		return nil, fmt.Errorf("marketplace source is required")
+	}
+	if sourceType == "" {
+		sourceType = inferPluginMarketplaceSourceType(value)
+	}
+	switch sourceType {
+	case "url":
+		return map[string]any{"source": "url", "url": value}, nil
+	case "github":
+		return map[string]any{"source": "github", "repo": value}, nil
+	case "git":
+		return map[string]any{"source": "git", "url": value}, nil
+	case "npm":
+		return map[string]any{"source": "npm", "package": value}, nil
+	case "directory":
+		return map[string]any{"source": "directory", "path": value}, nil
+	case "file":
+		return map[string]any{"source": "file", "path": value}, nil
+	default:
+		return nil, fmt.Errorf("unsupported marketplace source type %q; use --type url|github|git|npm|directory|file", sourceType)
+	}
+}
+
+func normalizePluginMarketplaceSourceArg(sourceType string, value string) (string, string) {
+	sourceType = strings.ToLower(strings.TrimSpace(sourceType))
+	value = strings.TrimSpace(value)
+	if sourceType != "" {
+		return sourceType, value
+	}
+	for _, prefix := range []string{"github:", "git:", "npm:", "directory:", "file:", "url:"} {
+		if strings.HasPrefix(strings.ToLower(value), prefix) {
+			return strings.TrimSuffix(prefix, ":"), strings.TrimSpace(value[len(prefix):])
+		}
+	}
+	return "", value
+}
+
+func inferPluginMarketplaceSourceType(value string) string {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		if strings.HasSuffix(lower, ".git") {
+			return "git"
+		}
+		return "url"
+	}
+	if strings.HasPrefix(value, "git@") || strings.HasSuffix(lower, ".git") {
+		return "git"
+	}
+	if info, err := os.Stat(value); err == nil {
+		if info.IsDir() {
+			return "directory"
+		}
+		return "file"
+	}
+	if strings.HasPrefix(value, "@") {
+		return "npm"
+	}
+	if strings.Count(value, "/") == 1 && !strings.ContainsAny(value, `\ :`) && !strings.HasPrefix(value, ".") {
+		return "github"
+	}
+	return ""
+}
+
+func pluginMarketplaceSparsePaths(paths []string) []any {
+	values := make([]any, 0, len(paths))
+	seen := map[string]struct{}{}
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		values = append(values, path)
+	}
+	return values
+}
+
+func pluginMarketplaceStringFromMap(values map[string]any, key string) string {
+	value, _ := values[key].(string)
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func cloneMarketplaceMap(values map[string]any) map[string]any {
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func pluginMarketplaceSettingsForName(settings contracts.Settings, name string) (contracts.Settings, string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return settings, "", true
+	}
+	for marketplaceName, raw := range settings.ExtraKnownMarketplaces {
+		if !strings.EqualFold(strings.TrimSpace(marketplaceName), name) {
+			continue
+		}
+		filtered := settings
+		filtered.ExtraKnownMarketplaces = map[string]any{marketplaceName: raw}
+		return filtered, marketplaceName, true
+	}
+	return settings, "", false
 }
 
 func (r Runner) formatPluginConfig(args []string) string {
