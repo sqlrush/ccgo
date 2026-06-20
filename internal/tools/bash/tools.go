@@ -2196,6 +2196,10 @@ func readOnlyWords(words []string) bool {
 		return readOnlyPathCommand(words)
 	case "sort":
 		return readOnlySort(words[1:])
+	case "basename":
+		return readOnlyBasename(words[1:])
+	case "dirname":
+		return readOnlyDirname(words[1:])
 	case "sed":
 		return readOnlySed(words[1:])
 	case "awk", "gawk", "mawk", "nawk":
@@ -2213,6 +2217,73 @@ func readOnlyWords(words []string) bool {
 	default:
 		return false
 	}
+}
+
+func readOnlyBasename(args []string) bool {
+	positionals := 0
+	allowMultiple := false
+	stopFlags := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !stopFlags && arg == "--" {
+			stopFlags = true
+			continue
+		}
+		if !stopFlags && strings.HasPrefix(arg, "-") {
+			switch {
+			case arg == "-a" || arg == "--multiple":
+				allowMultiple = true
+			case arg == "-z" || arg == "--zero":
+				continue
+			case arg == "-s" || arg == "--suffix":
+				i++
+				if i >= len(args) || !safeRelativeShellPathArg(args[i]) {
+					return false
+				}
+			case strings.HasPrefix(arg, "-s") && len(arg) > 2:
+				if !safeRelativeShellPathArg(arg[2:]) {
+					return false
+				}
+			case strings.HasPrefix(arg, "--suffix="):
+				if !safeRelativeShellPathArg(strings.TrimPrefix(arg, "--suffix=")) {
+					return false
+				}
+			default:
+				return false
+			}
+			continue
+		}
+		if !safeRelativeShellPathArg(arg) {
+			return false
+		}
+		positionals++
+	}
+	if allowMultiple {
+		return positionals > 0
+	}
+	return positionals == 1 || positionals == 2
+}
+
+func readOnlyDirname(args []string) bool {
+	positionals := 0
+	stopFlags := false
+	for _, arg := range args {
+		if !stopFlags && arg == "--" {
+			stopFlags = true
+			continue
+		}
+		if !stopFlags && strings.HasPrefix(arg, "-") {
+			if arg == "-z" || arg == "--zero" {
+				continue
+			}
+			return false
+		}
+		if !safeRelativeShellPathArg(arg) {
+			return false
+		}
+		positionals++
+	}
+	return positionals > 0
 }
 
 func readOnlyDate(args []string) bool {

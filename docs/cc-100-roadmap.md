@@ -203,6 +203,8 @@ M5 补充：Bash 和 Unix PowerShell 取消进程时现在会先对受管 proces
 
 M5 补充：Bash read-only classifier 现在把常见文件比较命令 `diff`/`cmp` 归入只读路径命令族，并明确拒绝 `diff --output` 这类写文件形态以及越界路径，减少安全工具误走权限确认。
 
+M5 补充：Bash read-only classifier 新增 `basename`/`dirname` 安全路径字符串子集，允许安全相对路径、`basename` suffix/multiple 和 `dirname -z` 形态，同时拒绝绝对路径、父目录、变量、未知 flag 和缺参。
+
 M5 补充：Bash read-only classifier 继续覆盖 `comm` 文件比较命令，`comm -12 old.txt new.txt`、`comm --check-order ...` 这类只读比较不再误触发写权限确认，同时仍拒绝越界路径。
 
 M5 补充：Bash read-only classifier 现在覆盖常见 checksum 命令 `md5sum`/`sha*sum`/`b2sum`/`shasum`/`cksum`/`sum` 的普通文件读取形态，同时阻断 `-c`/`--check` 校验清单模式，避免清单内路径绕过路径权限。
