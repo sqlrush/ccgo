@@ -437,6 +437,8 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"ipconfig /flushdns",
 		"hostname new-hostname",
 		"hostname -F hostname.txt",
+		"ver /?",
+		"ver anything",
 		"route add 10.0.0.0 mask 255.0.0.0 192.168.1.1 print",
 		"netsh interface ipv4 show addresses",
 		"arp -d 127.0.0.1",

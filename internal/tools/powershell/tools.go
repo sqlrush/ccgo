@@ -1573,9 +1573,7 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		allowedFlags: stringSet("/user", "/groups", "/claims", "/priv", "/logonid", "/all", "/fo", "/nh"),
 		valueFlags:   stringSet("/fo"),
 	},
-	"ver": {
-		allowAllFlags: true,
-	},
+	"ver": {},
 	"arp": {
 		allowedFlags: stringSet("-a", "-g", "-v", "-n"),
 		valueFlags:   stringSet("-n"),
