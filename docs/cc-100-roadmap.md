@@ -201,6 +201,8 @@ M5 补充：Bash/PowerShell 前台执行现在会把调用方 context cancellati
 
 M5 补充：Bash 和 Unix PowerShell 取消进程时现在会先对受管 process group 发送 SIGTERM，并通过短 `WaitDelay` 兜底 SIGKILL；配合 Bash trap 覆盖，合作式命令可完成清理，忽略信号的命令仍会被限时回收。
 
+M5 补充：Bash read-only classifier 现在把常见文件比较命令 `diff`/`cmp` 归入只读路径命令族，并明确拒绝 `diff --output` 这类写文件形态以及越界路径，减少安全工具误走权限确认。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。

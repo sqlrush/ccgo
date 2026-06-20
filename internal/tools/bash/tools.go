@@ -2191,7 +2191,7 @@ func readOnlyWords(words []string) bool {
 	}
 	cmd := filepathBase(words[0])
 	switch cmd {
-	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "cut", "uniq":
+	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "cut", "uniq", "diff", "cmp":
 		return readOnlyPathCommand(words)
 	case "sort":
 		return readOnlySort(words[1:])
@@ -2664,6 +2664,9 @@ func unsafeReadOnlyPathFlag(command string, word string) bool {
 		}
 	}
 	if command == "rg" && (word == "--pre" || strings.HasPrefix(word, "--pre=")) {
+		return true
+	}
+	if command == "diff" && (word == "--output" || strings.HasPrefix(word, "--output=")) {
 		return true
 	}
 	if (command == "du" || command == "wc") && (word == "--files0-from" || strings.HasPrefix(word, "--files0-from=")) {
