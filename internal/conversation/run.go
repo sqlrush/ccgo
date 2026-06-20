@@ -632,8 +632,12 @@ func formatCostSummary(raw string, history []contracts.Message) string {
 		case "summary", "total", "totals", "status", "current", "usage":
 		case "show", "breakdown", "details", "detail":
 			return formatCostBreakdown(history)
+		case "json", "export":
+			return formatCostJSON(history)
+		case "help", "-h", "--help":
+			return costUsageText()
 		default:
-			return "Cost subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+			return "Unknown cost subcommand: " + strings.Join(args, " ") + "\n" + costUsageText()
 		}
 	}
 	return formatCostTotals(history)
@@ -715,7 +719,7 @@ func formatCostTotals(history []contracts.Message) string {
 	if !found {
 		return "No cost data available for this session."
 	}
-	return fmt.Sprintf(
+	lines := []string{fmt.Sprintf(
 		"Total cost: $%.6f\nInput tokens: %d\nOutput tokens: %d\nCache creation input tokens: %d\nCache read input tokens: %d\nWeb search requests: %d\nWeb fetch requests: %d",
 		usage.CostUSD,
 		usage.InputTokens,
@@ -724,7 +728,15 @@ func formatCostTotals(history []contracts.Message) string {
 		usage.CacheReadInputTokens,
 		usage.ServerToolUse.WebSearchRequests,
 		usage.ServerToolUse.WebFetchRequests,
-	)
+	)}
+	if timing, ok := costSessionTiming(history); ok {
+		lines = append(lines,
+			"Session started: "+timing.StartedAt,
+			"Session updated: "+timing.UpdatedAt,
+			"Session duration: "+timing.Duration,
+		)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatCostBreakdown(history []contracts.Message) string {
@@ -735,6 +747,13 @@ func formatCostBreakdown(history []contracts.Message) string {
 	lines := []string{
 		"Cost breakdown",
 		fmt.Sprintf("Total cost: $%.6f", total.CostUSD),
+	}
+	if timing, ok := costSessionTiming(history); ok {
+		lines = append(lines,
+			"Session started: "+timing.StartedAt,
+			"Session updated: "+timing.UpdatedAt,
+			"Session duration: "+timing.Duration,
+		)
 	}
 	var withUsage int
 	for index, message := range history {
@@ -763,6 +782,120 @@ func formatCostBreakdown(history []contracts.Message) string {
 		lines = append(lines, fmt.Sprintf("Showing 20 of %d messages with usage.", countUsageMessages(history)))
 	}
 	return strings.Join(lines, "\n")
+}
+
+type costTimingSummary struct {
+	StartedAt string `json:"started_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	Duration  string `json:"duration,omitempty"`
+	Seconds   int64  `json:"duration_seconds,omitempty"`
+	Messages  int    `json:"messages_with_timestamps,omitempty"`
+}
+
+type costJSONMessage struct {
+	Label     string          `json:"label"`
+	Type      string          `json:"type,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	UUID      string          `json:"uuid,omitempty"`
+	Model     string          `json:"model,omitempty"`
+	Timestamp string          `json:"timestamp,omitempty"`
+	Usage     contracts.Usage `json:"usage"`
+}
+
+type costJSONSummary struct {
+	Available         bool               `json:"available"`
+	Messages          int                `json:"messages"`
+	MessagesWithUsage int                `json:"messages_with_usage"`
+	TotalCostUSD      float64            `json:"total_cost_usd,omitempty"`
+	Usage             contracts.Usage    `json:"usage,omitempty"`
+	Timing            *costTimingSummary `json:"timing,omitempty"`
+	Breakdown         []costJSONMessage  `json:"breakdown,omitempty"`
+}
+
+func formatCostJSON(history []contracts.Message) string {
+	usage, found := historyUsage(history)
+	out := costJSONSummary{
+		Available:         found,
+		Messages:          len(history),
+		MessagesWithUsage: countUsageMessages(history),
+	}
+	if found {
+		out.TotalCostUSD = usage.CostUSD
+		out.Usage = usage
+		for index, message := range history {
+			if message.Usage == nil || !usageHasValues(*message.Usage) {
+				continue
+			}
+			out.Breakdown = append(out.Breakdown, costJSONMessage{
+				Label:     costMessageLabel(message, index),
+				Type:      string(message.Type),
+				ID:        strings.TrimSpace(message.ID),
+				UUID:      strings.TrimSpace(string(message.UUID)),
+				Model:     strings.TrimSpace(message.Model),
+				Timestamp: strings.TrimSpace(message.Timestamp),
+				Usage:     *message.Usage,
+			})
+		}
+	}
+	if timing, ok := costSessionTiming(history); ok {
+		out.Timing = &timing
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return `{"available":false,"error":"failed to encode cost summary"}`
+	}
+	return string(data)
+}
+
+func costUsageText() string {
+	return "Usage: /cost [summary|status|current|usage|breakdown|show|details|json|export]"
+}
+
+func costSessionTiming(history []contracts.Message) (costTimingSummary, bool) {
+	var first time.Time
+	var last time.Time
+	var count int
+	for _, message := range history {
+		when, ok := parseMessageTimestamp(message.Timestamp)
+		if !ok {
+			continue
+		}
+		if count == 0 || when.Before(first) {
+			first = when
+		}
+		if count == 0 || when.After(last) {
+			last = when
+		}
+		count++
+	}
+	if count == 0 {
+		return costTimingSummary{}, false
+	}
+	duration := last.Sub(first)
+	if duration < 0 {
+		duration = 0
+	}
+	return costTimingSummary{
+		StartedAt: first.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: last.UTC().Format(time.RFC3339Nano),
+		Duration:  duration.Round(time.Second).String(),
+		Seconds:   int64(duration.Seconds()),
+		Messages:  count,
+	}, true
+}
+
+func parseMessageTimestamp(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	if when, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return when, true
+	}
+	if when, err := time.Parse(time.RFC3339, value); err == nil {
+		return when, true
+	}
+	return time.Time{}, false
 }
 
 func (r Runner) formatConversationSummary(raw string, history []contracts.Message) string {

@@ -259,7 +259,7 @@ M6/CLI 补充：final JSON/stream-json result envelope 现在会在发生 manual
 
 M8 补充：`/compact` built-in local command 现在会产生 compact local result，并在 conversation runner 中触发现有手动 compact runner；命令 metadata 会写入 transcript，但摘要输入使用命令前 history，compact boundary/summary、session memory 和 compact event 复用现有 compact pipeline。完整 TUI compact UI、progress/status 展示和 `/cost`/`/status` 仍未完成。
 
-M8 补充：`/cost` built-in local command 现在会在 conversation runner 中按当前 history 的 message usage 汇总 total cost、input/output/cache token 和 web search/fetch 请求数，作为 local text result 写入 result/transcript，且不会请求模型或打开 MCP；`/cost breakdown` 会保留 slash args 并输出最多 20 条带 usage 的消息级成本/token 贡献。完整 TUI cost panel、session duration 和 account/billing 细节仍未完成。
+M8 补充：`/cost` built-in local command 现在会在 conversation runner 中按当前 history 的 message usage 汇总 total cost、input/output/cache token 和 web search/fetch 请求数，作为 local text result 写入 result/transcript，且不会请求模型或打开 MCP；`/cost breakdown` 会保留 slash args 并输出最多 20 条带 usage 的消息级成本/token 贡献，`/cost json|export` 会输出同口径 JSON 汇总和 message breakdown；当 history/transcript 含 timestamp 时，文本与 JSON 都会给出 session started/updated/duration。完整 TUI cost panel 和 account/billing 细节仍未完成。
 
 M8 补充：`/mcp refresh`/`/mcp reload` 现在会走 no-query 本地刷新路径，重新检查 settings 文件变化并刷新 plugin MCP server app-state，返回 settings changed、plugin MCP server count 和 configured MCP server count；该路径不请求模型，也不声称重启 turn-scoped MCP toolset 连接。
 

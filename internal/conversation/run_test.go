@@ -2481,6 +2481,109 @@ func TestRunnerCostSlashCommandReportsBreakdown(t *testing.T) {
 	}
 }
 
+func TestRunnerCostSlashCommandReportsJSONAndDuration(t *testing.T) {
+	client := &fakeClient{}
+	runner := Runner{Client: client, SessionID: "sess_cost_json"}
+	firstUsage := contracts.Usage{
+		InputTokens:  10,
+		OutputTokens: 20,
+		CostUSD:      0.25,
+	}
+	secondUsage := contracts.Usage{
+		InputTokens:  5,
+		OutputTokens: 7,
+		CostUSD:      0.5,
+	}
+	user := messages.UserText("old one")
+	user.Timestamp = time.Unix(90, 0).UTC().Format(time.RFC3339Nano)
+	first := messages.AssistantText("old two", "sonnet", &firstUsage)
+	first.UUID = "cost_json_one"
+	first.Timestamp = time.Unix(100, 0).UTC().Format(time.RFC3339Nano)
+	second := messages.AssistantText("old three", "opus", &secondUsage)
+	second.UUID = "cost_json_two"
+	second.Timestamp = time.Unix(160, 0).UTC().Format(time.RFC3339Nano)
+	history := []contracts.Message{user, first, second}
+
+	result, err := runner.RunTurn(context.Background(), history, messages.UserText("/cost json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	var payload struct {
+		Available         bool            `json:"available"`
+		Messages          int             `json:"messages"`
+		MessagesWithUsage int             `json:"messages_with_usage"`
+		TotalCostUSD      float64         `json:"total_cost_usd"`
+		Usage             contracts.Usage `json:"usage"`
+		Timing            struct {
+			StartedAt string `json:"started_at"`
+			UpdatedAt string `json:"updated_at"`
+			Duration  string `json:"duration"`
+			Seconds   int64  `json:"duration_seconds"`
+			Messages  int    `json:"messages_with_timestamps"`
+		} `json:"timing"`
+		Breakdown []struct {
+			Label     string          `json:"label"`
+			Model     string          `json:"model"`
+			Timestamp string          `json:"timestamp"`
+			Usage     contracts.Usage `json:"usage"`
+		} `json:"breakdown"`
+	}
+	text := result.Messages[1].Content[0].Text
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		t.Fatalf("cost json should be valid JSON: %v\n%s", err, text)
+	}
+	if !payload.Available || payload.Messages != 3 || payload.MessagesWithUsage != 2 {
+		t.Fatalf("cost json counts = %#v", payload)
+	}
+	if payload.TotalCostUSD != 0.75 || payload.Usage.InputTokens != 15 || payload.Usage.OutputTokens != 27 {
+		t.Fatalf("cost json usage = %#v", payload)
+	}
+	if payload.Timing.Duration != "1m10s" || payload.Timing.Seconds != 70 || payload.Timing.Messages != 3 {
+		t.Fatalf("cost json timing = %#v", payload.Timing)
+	}
+	if len(payload.Breakdown) != 2 || payload.Breakdown[0].Label != "assistant cost_json_one (sonnet)" || payload.Breakdown[1].Model != "opus" {
+		t.Fatalf("cost json breakdown = %#v", payload.Breakdown)
+	}
+
+	result, err = runner.RunTurn(context.Background(), history, messages.UserText("/cost"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Session started: 1970-01-01T00:01:30Z",
+		"Session updated: 1970-01-01T00:02:40Z",
+		"Session duration: 1m10s",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("cost duration missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestRunnerCostSlashCommandReportsUsageForUnknownSubcommand(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_cost_unknown"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/cost nope"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Unknown cost subcommand: nope",
+		"Usage: /cost [summary|status|current|usage|breakdown|show|details|json|export]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("unknown cost result missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "not implemented") {
+		t.Fatalf("unknown cost should not report not implemented: %q", got)
+	}
+}
+
 func TestRunnerExecutesSummarySlashCommandWithoutQuery(t *testing.T) {
 	client := &fakeClient{}
 	runner := Runner{
