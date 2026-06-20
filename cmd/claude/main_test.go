@@ -2782,7 +2782,7 @@ func TestRunPluginMarketplaceListCLI(t *testing.T) {
 				"installLocation": "project"
 			},
 			"remote": {"source": {"source": "url", "url": "https://example.com/catalog.json"}},
-			"github": {"source": {"source": "github", "repo": "owner/repo"}},
+			"github": {"source": {"source": "github", "repo": "owner/repo", "sparsePaths": [".claude-plugin", "plugins/demo"]}},
 			"npm-tools": {"source": {"source": "npm", "package": "@example/tools"}},
 			"file": {"source": {"source": "file", "path": %q}}
 		}
@@ -2817,6 +2817,10 @@ func TestRunPluginMarketplaceListCLI(t *testing.T) {
 	if byName["github"]["source"] != "github" || byName["github"]["repo"] != "owner/repo" {
 		t.Fatalf("github marketplace = %#v", byName["github"])
 	}
+	githubSparsePaths, ok := byName["github"]["sparsePaths"].([]any)
+	if !ok || len(githubSparsePaths) != 2 || githubSparsePaths[0] != ".claude-plugin" || githubSparsePaths[1] != "plugins/demo" {
+		t.Fatalf("github sparse paths = %#v", byName["github"]["sparsePaths"])
+	}
 	if byName["npm-tools"]["source"] != "npm" || byName["npm-tools"]["package"] != "@example/tools" {
 		t.Fatalf("npm marketplace = %#v", byName["npm-tools"])
 	}
@@ -2839,6 +2843,7 @@ func TestRunPluginMarketplaceListCLI(t *testing.T) {
 		"Source: URL (https://example.com/catalog.json)",
 		"- github",
 		"Source: GitHub (owner/repo)",
+		"Sparse paths: .claude-plugin, plugins/demo",
 		"- npm-tools",
 		"Source: NPM (@example/tools)",
 	} {

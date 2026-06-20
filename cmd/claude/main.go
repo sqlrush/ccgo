@@ -318,13 +318,14 @@ type pluginCLIAvailableList struct {
 }
 
 type pluginCLIMarketplaceEntry struct {
-	Name            string `json:"name"`
-	Source          string `json:"source,omitempty"`
-	Repo            string `json:"repo,omitempty"`
-	URL             string `json:"url,omitempty"`
-	Path            string `json:"path,omitempty"`
-	Package         string `json:"package,omitempty"`
-	InstallLocation string `json:"installLocation,omitempty"`
+	Name            string   `json:"name"`
+	Source          string   `json:"source,omitempty"`
+	Repo            string   `json:"repo,omitempty"`
+	URL             string   `json:"url,omitempty"`
+	Path            string   `json:"path,omitempty"`
+	Package         string   `json:"package,omitempty"`
+	SparsePaths     []string `json:"sparsePaths,omitempty"`
+	InstallLocation string   `json:"installLocation,omitempty"`
 }
 
 func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
@@ -716,6 +717,9 @@ func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout i
 		fmt.Fprintf(stdout, "- %s\n", marketplace.Name)
 		if source := pluginCLIMarketplaceSourceText(marketplace); source != "" {
 			fmt.Fprintf(stdout, "  Source: %s\n", source)
+		}
+		if len(marketplace.SparsePaths) > 0 {
+			fmt.Fprintf(stdout, "  Sparse paths: %s\n", strings.Join(marketplace.SparsePaths, ", "))
 		}
 		if marketplace.InstallLocation != "" {
 			fmt.Fprintf(stdout, "  Install location: %s\n", marketplace.InstallLocation)
@@ -1184,7 +1188,11 @@ func pluginCLIMarketplaceEntries(settings contracts.Settings) []pluginCLIMarketp
 		switch sourceType {
 		case "github":
 			entry.Repo = pluginCLIStringFromMap(source, "repo")
-		case "git", "url":
+			entry.SparsePaths = pluginCLIStringSliceFromMap(source, "sparsePaths")
+		case "git":
+			entry.URL = pluginCLIStringFromMap(source, "url")
+			entry.SparsePaths = pluginCLIStringSliceFromMap(source, "sparsePaths")
+		case "url":
 			entry.URL = pluginCLIStringFromMap(source, "url")
 		case "directory", "file":
 			entry.Path = pluginCLIStringFromMap(source, "path")
@@ -1280,17 +1288,9 @@ func pluginCLINormalizeMarketplaceSourceArg(sourceType string, value string) (st
 }
 
 func compactPluginCLISparsePaths(paths []string) []any {
+	paths = compactPluginCLIStrings(paths)
 	out := make([]any, 0, len(paths))
-	seen := map[string]struct{}{}
 	for _, path := range paths {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			continue
-		}
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
 		out = append(out, path)
 	}
 	return out
@@ -1351,6 +1351,43 @@ func pluginCLIStringFromMap(values map[string]any, key string) string {
 	}
 	value, _ := values[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func pluginCLIStringSliceFromMap(values map[string]any, key string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	switch raw := values[key].(type) {
+	case []string:
+		return compactPluginCLIStrings(raw)
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if value, ok := item.(string); ok {
+				out = append(out, value)
+			}
+		}
+		return compactPluginCLIStrings(out)
+	default:
+		return nil
+	}
+}
+
+func compactPluginCLIStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func pluginCLIMCPServerNames(servers map[string]contracts.MCPServer) []string {
