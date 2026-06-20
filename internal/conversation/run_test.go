@@ -6702,16 +6702,103 @@ func TestRunnerMCPSlashCommandReportsMissingServerDetails(t *testing.T) {
 	}
 }
 
+func TestRunnerMCPSlashCommandRemovesUserServer(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	if err := os.MkdirAll(configHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(configHome, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(`{
+		"mcpServers": {
+			"alpha": {"command": "node", "args": ["alpha.js"]},
+			"beta": {"type": "http", "url": "https://beta.example/mcp"}
+		},
+		"allowedMcpServers": [{"serverName": "alpha"}],
+		"deniedMcpServers": [{"serverName": "alpha"}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:    &fakeClient{},
+		SessionID: "sess_mcp_remove",
+		MCP: &MCPConfig{UserSettings: contracts.Settings{
+			MCPServers: map[string]contracts.MCPServer{
+				"alpha": {Command: "node", Args: []string{"alpha.js"}, Scope: mcp.ScopeUser},
+				"beta":  {Type: "http", URL: "https://beta.example/mcp", Scope: mcp.ScopeUser},
+			},
+			AllowedMCPServers: []contracts.MCPServerPolicyEntry{{ServerName: "alpha"}},
+			DeniedMCPServers:  []contracts.MCPServerPolicyEntry{{ServerName: "alpha"}},
+		}},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp delete alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "MCP server alpha removed from user settings." {
+		t.Fatalf("mcp remove text = %q", got)
+	}
+	if _, ok := runner.MCP.UserSettings.MCPServers["alpha"]; ok {
+		t.Fatalf("alpha server should be removed from runner settings: %#v", runner.MCP.UserSettings.MCPServers)
+	}
+	if _, ok := runner.MCP.UserSettings.MCPServers["beta"]; !ok {
+		t.Fatalf("beta server should remain in runner settings: %#v", runner.MCP.UserSettings.MCPServers)
+	}
+	if hasMCPPolicyEntry(runner.MCP.UserSettings.AllowedMCPServers, "alpha") || hasMCPPolicyEntry(runner.MCP.UserSettings.DeniedMCPServers, "alpha") {
+		t.Fatalf("alpha policy should be removed from runner settings: %#v %#v", runner.MCP.UserSettings.AllowedMCPServers, runner.MCP.UserSettings.DeniedMCPServers)
+	}
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasMCPServerDocumentEntry(document["mcpServers"], "alpha") || !hasMCPServerDocumentEntry(document["mcpServers"], "beta") {
+		t.Fatalf("settings document mcpServers = %#v", document["mcpServers"])
+	}
+	if hasMCPPolicyDocumentEntry(document["allowedMcpServers"], "alpha") || hasMCPPolicyDocumentEntry(document["deniedMcpServers"], "alpha") {
+		t.Fatalf("settings document policy = %#v %#v", document["allowedMcpServers"], document["deniedMcpServers"])
+	}
+
+	result, err = runner.RunTurn(context.Background(), result.Messages, messages.UserText("/mcp rm beta"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[len(result.Messages)-1].Content[0].Text; got != "MCP server beta removed from user settings." {
+		t.Fatalf("mcp rm text = %q", got)
+	}
+	document, err = readUserSettingsDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := document["mcpServers"]; ok {
+		t.Fatalf("mcpServers should be removed when empty: %#v", document)
+	}
+}
+
+func TestRunnerMCPSlashCommandRefusesToRemoveProjectServerFromUserSettings(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_remove_project", MCP: &MCPConfig{ProjectSettings: contracts.Settings{
+		MCPServers: map[string]contracts.MCPServer{"alpha": {Command: "python", Scope: mcp.ScopeProject}},
+	}}}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp delete alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "MCP server alpha is defined in project settings; remove it from that source." {
+		t.Fatalf("mcp remove project text = %q", got)
+	}
+}
+
 func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
 	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_subcommand"}
-	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp delete alpha"))
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp unknown alpha"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Messages) != 2 {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}
-	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: delete alpha" {
+	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: unknown alpha" {
 		t.Fatalf("mcp text = %q", got)
 	}
 }
@@ -6918,6 +7005,16 @@ func hasMCPPolicyDocumentEntry(value any, name string) bool {
 	entries, _ := value.([]any)
 	for _, entry := range entries {
 		if mcpPolicyEntryValueMatches(entry, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPServerDocumentEntry(value any, name string) bool {
+	servers, _ := value.(map[string]any)
+	for key := range servers {
+		if strings.TrimSpace(key) == name {
 			return true
 		}
 	}

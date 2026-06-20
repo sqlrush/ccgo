@@ -4154,6 +4154,64 @@ func setUserMCPServerEnabled(name string, enabled bool, allowlistActive bool) er
 	return writeUserSettingsDocument(document)
 }
 
+func removeUserMCPServer(name string) (bool, error) {
+	document, err := readUserSettingsDocument()
+	if err != nil {
+		return false, err
+	}
+	removedName, removed := removeMCPServerDocumentEntry(document, name)
+	if !removed {
+		return false, nil
+	}
+	if strings.TrimSpace(removedName) != "" {
+		name = removedName
+	}
+	if allowed, ok := removeMCPPolicyEntryValue(document["allowedMcpServers"], name, false); ok {
+		document["allowedMcpServers"] = allowed
+	} else {
+		delete(document, "allowedMcpServers")
+	}
+	if denied, ok := removeMCPPolicyEntryValue(document["deniedMcpServers"], name, false); ok {
+		document["deniedMcpServers"] = denied
+	} else {
+		delete(document, "deniedMcpServers")
+	}
+	return true, writeUserSettingsDocument(document)
+}
+
+func removeMCPServerDocumentEntry(document map[string]any, name string) (string, bool) {
+	servers, _ := document["mcpServers"].(map[string]any)
+	if len(servers) == 0 {
+		return "", false
+	}
+	key := findMCPServerDocumentKey(servers, name)
+	if key == "" {
+		return "", false
+	}
+	delete(servers, key)
+	if len(servers) == 0 {
+		delete(document, "mcpServers")
+	} else {
+		document["mcpServers"] = servers
+	}
+	return key, true
+}
+
+func findMCPServerDocumentKey(servers map[string]any, name string) string {
+	name = strings.TrimSpace(name)
+	for key := range servers {
+		if strings.TrimSpace(key) == name {
+			return key
+		}
+	}
+	for key := range servers {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			return key
+		}
+	}
+	return ""
+}
+
 func setMCPServerEnabledInSettings(settings *contracts.Settings, name string, enabled bool, allowlistActive bool) {
 	if settings == nil {
 		return
@@ -4169,6 +4227,37 @@ func setMCPServerEnabledInSettings(settings *contracts.Settings, name string, en
 		settings.AllowedMCPServers = removeMCPPolicyEntries(settings.AllowedMCPServers, name)
 	}
 	settings.DeniedMCPServers = appendMCPPolicyEntry(settings.DeniedMCPServers, name)
+}
+
+func removeMCPServerFromSettings(settings *contracts.Settings, name string) {
+	if settings == nil {
+		return
+	}
+	if len(settings.MCPServers) > 0 {
+		if key := findMCPServerConfigKey(settings.MCPServers, name); key != "" {
+			delete(settings.MCPServers, key)
+			if len(settings.MCPServers) == 0 {
+				settings.MCPServers = nil
+			}
+		}
+	}
+	settings.AllowedMCPServers = removeMCPPolicyEntries(settings.AllowedMCPServers, name)
+	settings.DeniedMCPServers = removeMCPPolicyEntries(settings.DeniedMCPServers, name)
+}
+
+func findMCPServerConfigKey(servers map[string]contracts.MCPServer, name string) string {
+	name = strings.TrimSpace(name)
+	for key := range servers {
+		if strings.TrimSpace(key) == name {
+			return key
+		}
+	}
+	for key := range servers {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			return key
+		}
+	}
+	return ""
 }
 
 func removeMCPPolicyEntries(entries []contracts.MCPServerPolicyEntry, name string) []contracts.MCPServerPolicyEntry {
@@ -5762,6 +5851,8 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 				return "Usage: /mcp " + args[0] + " <query>"
 			}
 			return r.formatMCPServerSearch(query)
+		case "remove", "rm", "delete":
+			return r.removeMCPServerSummary(args)
 		case "enable", "disable":
 			return r.setMCPServerEnabledSummary(args)
 		default:
@@ -5983,6 +6074,33 @@ func (r Runner) setMCPServerEnabledSummary(args []string) string {
 		state = "enabled"
 	}
 	return fmt.Sprintf("MCP server %s %s.", name, state)
+}
+
+func (r Runner) removeMCPServerSummary(args []string) string {
+	if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
+		return "Usage: /mcp " + args[0] + " <server-name>"
+	}
+	name := strings.TrimSpace(args[1])
+	if r.MCP != nil {
+		if server, ok := findMCPServerSummary(r.mcpServers(), name); ok {
+			source := mcpServerSource(server.Config)
+			if source != "" && source != "settings" && source != mcp.ScopeUser {
+				return fmt.Sprintf("MCP server %s is defined in %s settings; remove it from that source.", server.Name, source)
+			}
+			name = server.Name
+		}
+	}
+	removed, err := removeUserMCPServer(name)
+	if err != nil {
+		return fmt.Sprintf("Failed to remove MCP server %s: %v", name, err)
+	}
+	if !removed {
+		return "MCP server " + name + " was not found in user settings."
+	}
+	if r.MCP != nil {
+		removeMCPServerFromSettings(&r.MCP.UserSettings, name)
+	}
+	return "MCP server " + name + " removed from user settings."
 }
 
 type mcpServerSummary struct {
