@@ -2176,8 +2176,18 @@ func powerShellAliasTarget(name string) string {
 		return "start-process"
 	case "gsv":
 		return "get-service"
-	case "h", "history":
+	case "gal":
+		return "get-alias"
+	case "gdr":
+		return "get-psdrive"
+	case "gmo":
+		return "get-module"
+	case "h", "history", "ghy":
 		return "get-history"
+	case "gm":
+		return "get-member"
+	case "gu":
+		return "get-unique"
 	case "rm", "rmdir", "ri":
 		return "remove-item"
 	case "rd", "del", "erase":

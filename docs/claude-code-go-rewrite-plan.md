@@ -226,6 +226,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PowerShell read-only classifier 现在识别常用 common parameter aliases `-EA`/`-EV`/`-WA`/`-WV`/`-Infa`/`-IV`/`-Proga`/`-OB` 和 `-VB`/`-DB`，同时继续拒绝 `-OV`/`-PV` 这类会写入变量的 common aliases。
 - 本轮补充：PowerShell command canonicalization 现在补齐 `Select-String` 的 `sls` alias，复用既有 pattern/path guard，`sls TODO README.md` 可按只读搜索处理，越界路径仍拒绝。
 - 本轮补充：PowerShell command canonicalization 现在补齐 `Get-ItemProperty`/`Get-ItemPropertyValue` 的 `gip`/`gpv` aliases，继续复用 registry/provider 路径 guard，注册表 provider 和越界文件路径仍拒绝。
+- 本轮补充：PowerShell command canonicalization 现在补齐 `Get-Alias`/`Get-PSDrive`/`Get-Module`/`Get-History`/`Get-Member`/`Get-Unique` 的 `gal`/`gdr`/`gmo`/`ghy`/`gm`/`gu` aliases，继续复用现有远程参数和变量输出 guard。
 - 本轮补充：`BashOutput` 现在设置 100k 最大结果大小，和前台 `Bash` 一起覆盖大输出 tool-result preview 截断、完整输出落盘及 `full_output_path` 元数据。
 - 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且 completed、timed_out、cancelled 终态测试确保 progress 不携带 command 文本。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。
