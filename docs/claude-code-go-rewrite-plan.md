@@ -203,6 +203,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch HTML-to-text rendering 现在会为无可见文本但带 `aria-label`/`title` 的链接保留可访问名称和 resolved href，icon-only 链接可进入 rendered body 与 prompt-focused excerpt。
 - 本轮补充：WebFetch HTML-to-text rendering 现在按浏览器可见性处理 closed `<details>` 和 `<dialog>`：closed details 只渲染第一个 summary 子树，隐藏正文不会进入 excerpt；未带 `open` 的 dialog 会作为不可见子树跳过，open details/dialog 仍正常渲染。
 - 本轮补充：WebFetch HTML-to-text rendering 现在会先解析 `<base href>` 再跳过 `<head>` 子树，`<title>` 等 head-only metadata 不再污染 rendered body 或 prompt-focused excerpt，同时不破坏相对链接解析。
+- 本轮补充：WebFetch HTML-to-text rendering 现在会跳过 `<iframe>` fallback 子树，iframe 内的备用文本不会被当成当前页面可见正文或 prompt-focused excerpt。
 - 本轮补充：WebSearch HTML 结果解析现在会按搜索页首个有效 `<base href>` 解析相对结果 anchor，覆盖镜像/自定义搜索页中浏览器可见结果 URL 与请求路径不一致的情况。
 - 本轮补充：WebSearch HTML 结果解析现在会读取 `application/ld+json` JSON-LD 结果，递归抽取 `@graph`、`ItemList.itemListElement.item`，支持 JSON-LD `@id` URL alias，并与后续 anchor 结果按 URL 去重。
 - 本轮补充：WebSearch HTML snippet 提取现在识别 Bing 风格 `b_caption`/`b_snippet` 以及常见搜索摘要 class，标题 anchor 后的可见摘要会进入文本输出和 structured result。
