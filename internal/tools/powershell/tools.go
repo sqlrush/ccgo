@@ -1364,12 +1364,14 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		valueFlags:   stringSet("psprovider"),
 	},
 	"get-process": {
-		allowedFlags: stringSet("name", "id", "module", "fileversioninfo", "includeusername"),
-		valueFlags:   stringSet("name", "id"),
+		allowedFlags:           stringSet("name", "id", "module", "fileversioninfo", "includeusername"),
+		valueFlags:             stringSet("name", "id"),
+		rejectExpressionValues: true,
 	},
 	"get-service": {
-		allowedFlags: stringSet("name", "displayname", "dependentservices", "requiredservices", "include", "exclude"),
-		valueFlags:   stringSet("name", "displayname", "include", "exclude"),
+		allowedFlags:           stringSet("name", "displayname", "dependentservices", "requiredservices", "include", "exclude"),
+		valueFlags:             stringSet("name", "displayname", "include", "exclude"),
+		rejectExpressionValues: true,
 	},
 	"get-location": {
 		allowedFlags: stringSet("psprovider", "psdrive", "stack", "stackname"),
