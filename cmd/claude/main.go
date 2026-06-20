@@ -335,9 +335,13 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 	_ = ctx
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "ccgo plugin: missing subcommand")
+		fmt.Fprintln(stderr, pluginCLIUsage())
 		return 2
 	}
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "help", "-h", "--help":
+		fmt.Fprintln(stdout, pluginCLIUsage())
+		return 0
 	case "list", "ls":
 		return runPluginListCLI(state, args[1:], stdout, stderr)
 	case "install", "i":
@@ -355,9 +359,14 @@ func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, st
 	case "marketplace", "marketplaces":
 		return runPluginMarketplaceCLI(state, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "ccgo plugin: unsupported subcommand %s\n", args[0])
+		fmt.Fprintf(stderr, "ccgo plugin: unknown subcommand %s\n", args[0])
+		fmt.Fprintln(stderr, pluginCLIUsage())
 		return 2
 	}
+}
+
+func pluginCLIUsage() string {
+	return "Usage: claude plugin <list|install|update|uninstall|validate|enable|disable|marketplace>"
 }
 
 func runPluginListCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
@@ -665,9 +674,13 @@ func pluralWord(count int, singular string, plural string) string {
 func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "ccgo plugin marketplace: missing subcommand")
+		fmt.Fprintln(stderr, pluginMarketplaceCLIUsage())
 		return 2
 	}
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "help", "-h", "--help":
+		fmt.Fprintln(stdout, pluginMarketplaceCLIUsage())
+		return 0
 	case "add":
 		return runPluginMarketplaceAddCLI(state, args[1:], stdout, stderr)
 	case "list", "ls":
@@ -681,9 +694,14 @@ func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Wr
 	case "show", "info":
 		return runPluginMarketplaceShowCLI(state, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "ccgo plugin marketplace: unsupported subcommand %s\n", args[0])
+		fmt.Fprintf(stderr, "ccgo plugin marketplace: unknown subcommand %s\n", args[0])
+		fmt.Fprintln(stderr, pluginMarketplaceCLIUsage())
 		return 2
 	}
+}
+
+func pluginMarketplaceCLIUsage() string {
+	return "Usage: claude plugin marketplace <list|add|remove|update|plugins|show>"
 }
 
 func runPluginMarketplaceListCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {

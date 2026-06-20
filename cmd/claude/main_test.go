@@ -2198,6 +2198,87 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunPluginCLIUsageForHelpAndUnknown(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
+	project := t.TempDir()
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantStdout []string
+		wantStderr []string
+		notStderr  []string
+	}{
+		{
+			name:       "plugin help",
+			args:       []string{"--cwd", project, "plugin", "help"},
+			wantCode:   0,
+			wantStdout: []string{"Usage: claude plugin <list|install|update|uninstall|validate|enable|disable|marketplace>"},
+		},
+		{
+			name:       "plugin missing",
+			args:       []string{"--cwd", project, "plugin"},
+			wantCode:   2,
+			wantStderr: []string{"ccgo plugin: missing subcommand", "Usage: claude plugin <list|install|update|uninstall|validate|enable|disable|marketplace>"},
+			notStderr:  []string{"unsupported"},
+		},
+		{
+			name:       "plugin unknown",
+			args:       []string{"--cwd", project, "plugin", "nope"},
+			wantCode:   2,
+			wantStderr: []string{"ccgo plugin: unknown subcommand nope", "Usage: claude plugin <list|install|update|uninstall|validate|enable|disable|marketplace>"},
+			notStderr:  []string{"unsupported"},
+		},
+		{
+			name:       "marketplace help",
+			args:       []string{"--cwd", project, "plugin", "marketplace", "help"},
+			wantCode:   0,
+			wantStdout: []string{"Usage: claude plugin marketplace <list|add|remove|update|plugins|show>"},
+		},
+		{
+			name:       "marketplace missing",
+			args:       []string{"--cwd", project, "plugin", "marketplace"},
+			wantCode:   2,
+			wantStderr: []string{"ccgo plugin marketplace: missing subcommand", "Usage: claude plugin marketplace <list|add|remove|update|plugins|show>"},
+			notStderr:  []string{"unsupported"},
+		},
+		{
+			name:       "marketplace unknown",
+			args:       []string{"--cwd", project, "plugin", "marketplace", "nope"},
+			wantCode:   2,
+			wantStderr: []string{"ccgo plugin marketplace: unknown subcommand nope", "Usage: claude plugin marketplace <list|add|remove|update|plugins|show>"},
+			notStderr:  []string{"unsupported"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)
+			if code != tc.wantCode {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			for _, want := range tc.wantStdout {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout missing %q: %q", want, stdout.String())
+				}
+			}
+			for _, want := range tc.wantStderr {
+				if !strings.Contains(stderr.String(), want) {
+					t.Fatalf("stderr missing %q: %q", want, stderr.String())
+				}
+			}
+			for _, unwanted := range tc.notStderr {
+				if strings.Contains(stderr.String(), unwanted) {
+					t.Fatalf("stderr contains %q: %q", unwanted, stderr.String())
+				}
+			}
+		})
+	}
+}
+
 func TestRunPluginListJSONAvailable(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configHome)
