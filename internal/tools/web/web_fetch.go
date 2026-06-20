@@ -442,7 +442,7 @@ func renderWebFetchBody(contentType string, body string, baseURL string) (string
 	if !isHTMLWebFetchContent(contentType, body) {
 		return body, false
 	}
-	stripped := removeHTMLWebFetchBlocks(body, "script", "style", "noscript", "template", "svg", "canvas", "iframe", "audio", "video")
+	stripped := removeHTMLWebFetchBlocks(body, "script", "style", "noscript", "template", "svg", "canvas", "iframe", "audio", "video", "datalist")
 	resolvedBaseURL := webFetchHTMLBaseURL(stripped, baseURL)
 	stripped = removeHTMLWebFetchBlocks(stripped, "head")
 	rendered := stripHTMLWebFetchTags(stripped, resolvedBaseURL)

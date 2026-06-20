@@ -589,6 +589,11 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
         <option>LHR</option>
         <option selected>IAD</option>
       </select>
+      <input list="plans" placeholder="Choose plan">
+      <datalist id="plans">
+        <option value="Hidden datalist starter plan"></option>
+        <option>Hidden datalist enterprise plan</option>
+      </datalist>
       <input type="hidden" value="csrf-secret">
       <input type="password" value="super-secret-password">
       <input type="file" value="/private/report.pdf">
@@ -625,6 +630,7 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
 		"Input: Region: US East",
 		"Input: Tier: Enterprise tier",
 		"Input: Datacenters: AMS, IAD",
+		"Input: Choose plan",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered body missing %q: %#v", want, rendered)
@@ -633,7 +639,7 @@ func TestWebFetchHTMLRenderingPreservesVisibleFormControls(t *testing.T) {
 	if strings.Contains(rendered, "Visible label should not duplicate") {
 		t.Fatalf("rendered body duplicated non-empty button label: %#v", rendered)
 	}
-	for _, leaked := range []string{"Draft placeholder", "Development", "Staging", "EU West", "Starter tier", "starter-secret", "enterprise-secret", "LHR", "csrf-secret", "super-secret-password", "/private/report.pdf"} {
+	for _, leaked := range []string{"Draft placeholder", "Development", "Staging", "EU West", "Starter tier", "starter-secret", "enterprise-secret", "LHR", "Hidden datalist starter plan", "Hidden datalist enterprise plan", "csrf-secret", "super-secret-password", "/private/report.pdf"} {
 		if strings.Contains(rendered, leaked) {
 			t.Fatalf("rendered body leaked %q: %#v", leaked, rendered)
 		}

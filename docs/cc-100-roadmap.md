@@ -959,6 +959,8 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`WebFetch` HTML-to-text rendering 现在会跳过 `<iframe>`、`<audio>`、`<video>` fallback 子树，嵌入内容的备用文本不会被当成当前页面可见正文或 prompt-focused excerpt。
 
+本轮补充：`WebFetch` HTML-to-text rendering 现在会跳过 `<datalist>` 候选项子树，保留关联 input 的可见 placeholder/value，但不会把自动补全备选项当作页面正文。
+
 本轮补充：`WebSearch` JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见搜索后端 wrapper，并继续保留 URL 去重和 allowed/blocked domain filter。
 
 本轮补充：`WebSearch` JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`canonicalUrl`/`linkUrl`/`resultUrl`/`destinationUrl`/`clickUrl`/`finalUrl`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL alias object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
