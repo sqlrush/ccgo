@@ -337,6 +337,68 @@ func TestWebFetchHTMLRenderingPreservesAccessibleLinkLabels(t *testing.T) {
 	}
 }
 
+func TestWebFetchHTMLRenderingHonorsDetailsAndDialogVisibility(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <main>
+    <details>
+      <summary>Billing details</summary>
+      <p>Hidden discount text should not render.</p>
+    </details>
+    <details open>
+      <summary>Open release notes</summary>
+      <p>Visible open details include migration timing.</p>
+    </details>
+    <dialog><p>Hidden modal warning should not render.</p></dialog>
+    <dialog open><p>Visible modal confirmation appears.</p></dialog>
+  </main>
+</body>
+</html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_html_details_dialog",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"billing details"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	for _, want := range []string{
+		"Billing details",
+		"Open release notes",
+		"Visible open details include migration timing.",
+		"Visible modal confirmation appears.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered body missing %q: %#v", want, rendered)
+		}
+	}
+	for _, leaked := range []string{
+		"Hidden discount text",
+		"Hidden modal warning",
+	} {
+		if strings.Contains(rendered, leaked) {
+			t.Fatalf("rendered body leaked %q: %#v", leaked, rendered)
+		}
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "Billing details") {
+		t.Fatalf("prompt excerpt missing summary text: %#v", result.StructuredContent["prompt_excerpt"])
+	}
+	if strings.Contains(excerpt, "Hidden discount text") {
+		t.Fatalf("prompt excerpt used collapsed details body: %#v", excerpt)
+	}
+}
+
 func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -185,6 +185,8 @@ M5 补充：WebFetch HTML-to-text rendering 现在会跳过 `hidden`、`aria-hid
 
 M5 补充：WebFetch HTML-to-text rendering 现在会为无可见文本但带 `aria-label`/`title` 的链接保留可访问名称和 resolved href，icon-only 链接可进入 rendered body 与 prompt-focused excerpt。
 
+M5 补充：WebFetch HTML-to-text rendering 现在按浏览器可见性处理 closed `<details>` 和 `<dialog>`：closed details 只渲染第一个 summary 子树，隐藏正文不会进入 excerpt；未带 `open` 的 dialog 会作为不可见子树跳过，open details/dialog 仍正常渲染。
+
 M5 补充：WebSearch HTML snippet 提取现在识别 Bing 风格 `b_caption`/`b_snippet` 以及常见搜索摘要 class，标题 anchor 后的可见摘要会进入文本输出和 structured result。
 
 M5 补充：WebSearch HTML 结果 anchor 现在会识别 `data-href`/`data-url` 等常见 data 属性中的真实结果 URL，并跳过 `href="#"`/`javascript:` 占位链接，覆盖搜索页用 JS 事件承载跳转地址的形态。

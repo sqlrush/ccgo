@@ -520,6 +520,7 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 	var textareas []htmlWebFetchLabeledControl
 	var selects []htmlWebFetchSelectControl
 	var hiddenTags []string
+	var detailsStack []htmlWebFetchDetailsState
 	pictureDepth := 0
 	pictureSource := ""
 	for i := 0; i < len(body); {
@@ -531,7 +532,7 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			break
 		}
 		if body[i] != '<' {
-			if len(hiddenTags) > 0 {
+			if len(hiddenTags) > 0 || htmlWebFetchDetailsContentHidden(detailsStack) {
 				i++
 				continue
 			}
@@ -568,6 +569,42 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 			if tag != "" && !isVoidHTMLWebFetchTag(tag) && !isSelfClosingHTMLWebFetchTag(rawTag) {
 				hiddenTags = append(hiddenTags, tag)
 			}
+			i += end + 1
+			continue
+		}
+		if tag == "details" {
+			if closing {
+				detailsStack = popHTMLWebFetchDetails(detailsStack)
+			} else {
+				detailsStack = append(detailsStack, htmlWebFetchDetailsState{Open: htmlWebFetchHasAttr(rawTag, "open")})
+			}
+			if isBlockHTMLWebFetchTag(tag) {
+				b.WriteByte('\n')
+			}
+			i += end + 1
+			continue
+		}
+		if tag == "summary" && len(detailsStack) > 0 {
+			idx := len(detailsStack) - 1
+			if !detailsStack[idx].Open {
+				if closing {
+					if detailsStack[idx].SummaryDepth > 0 {
+						detailsStack[idx].SummaryDepth--
+						if detailsStack[idx].SummaryDepth == 0 {
+							detailsStack[idx].InSummary = false
+						}
+					}
+				} else if !detailsStack[idx].SawSummary || detailsStack[idx].InSummary {
+					detailsStack[idx].SawSummary = true
+					detailsStack[idx].InSummary = true
+					detailsStack[idx].SummaryDepth++
+				}
+				b.WriteByte('\n')
+				i += end + 1
+				continue
+			}
+		}
+		if htmlWebFetchDetailsContentHidden(detailsStack) {
 			i += end + 1
 			continue
 		}
@@ -659,7 +696,17 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 	return b.String()
 }
 
+type htmlWebFetchDetailsState struct {
+	Open         bool
+	SawSummary   bool
+	InSummary    bool
+	SummaryDepth int
+}
+
 func isHiddenHTMLWebFetchElement(rawTag string) bool {
+	if tag, closing := htmlWebFetchTagInfo(rawTag); tag == "dialog" && !closing && !htmlWebFetchHasAttr(rawTag, "open") {
+		return true
+	}
 	if htmlWebFetchHasAttr(rawTag, "hidden") {
 		return true
 	}
@@ -672,6 +719,22 @@ func isHiddenHTMLWebFetchElement(rawTag string) bool {
 	style = strings.ReplaceAll(style, "\n", "")
 	style = strings.ReplaceAll(style, "\r", "")
 	return strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden")
+}
+
+func htmlWebFetchDetailsContentHidden(detailsStack []htmlWebFetchDetailsState) bool {
+	for _, state := range detailsStack {
+		if !state.Open && !state.InSummary {
+			return true
+		}
+	}
+	return false
+}
+
+func popHTMLWebFetchDetails(detailsStack []htmlWebFetchDetailsState) []htmlWebFetchDetailsState {
+	if len(detailsStack) == 0 {
+		return detailsStack
+	}
+	return detailsStack[:len(detailsStack)-1]
 }
 
 func popHTMLWebFetchHiddenTag(hiddenTags []string, tag string) []string {
