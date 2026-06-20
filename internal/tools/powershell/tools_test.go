@@ -350,6 +350,8 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"certutil -hashfile README.md SHA256 extra",
 		"certutil --% -hashfile README.md SHA256",
 		"certutil -urlcache -split -f https://example.com/file out.bin",
+		"fc.exe README.md /etc/passwd",
+		"sort.exe /etc/passwd",
 		"dotnet build",
 		"dotnet --info $env:SECRET",
 		"docker run alpine",
@@ -420,6 +422,9 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		if !IsDestructiveCommand(command) {
 			t.Fatalf("%q should be destructive", command)
 		}
+	}
+	if IsDestructiveCommand("sc.exe query") {
+		t.Fatalf("native sc.exe should not be classified as Set-Content alias")
 	}
 }
 

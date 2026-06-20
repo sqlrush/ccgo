@@ -2026,17 +2026,30 @@ func safeRelativePowerShellPath(path string) bool {
 
 func canonicalCommand(command string) string {
 	name := strings.ToLower(strings.Trim(strings.TrimSpace(command), `"'`))
-	if name == "where.exe" {
-		return name
-	}
 	if !strings.ContainsAny(name, `/\`) {
-		for _, suffix := range []string{".exe", ".cmd", ".bat", ".com"} {
-			if strings.HasSuffix(name, suffix) {
-				name = strings.TrimSuffix(name, suffix)
-				break
+		if stem, ok := stripPowerShellExecutableSuffix(name); ok {
+			if powerShellAliasTarget(stem) != "" {
+				return name
 			}
+			name = stem
 		}
 	}
+	if target := powerShellAliasTarget(name); target != "" {
+		return target
+	}
+	return name
+}
+
+func stripPowerShellExecutableSuffix(name string) (string, bool) {
+	for _, suffix := range []string{".exe", ".cmd", ".bat", ".com"} {
+		if strings.HasSuffix(name, suffix) {
+			return strings.TrimSuffix(name, suffix), true
+		}
+	}
+	return name, false
+}
+
+func powerShellAliasTarget(name string) string {
 	switch name {
 	case "cat", "gc":
 		return "get-content"
@@ -2105,6 +2118,6 @@ func canonicalCommand(command string) string {
 	case "measure":
 		return "measure-object"
 	default:
-		return name
+		return ""
 	}
 }
