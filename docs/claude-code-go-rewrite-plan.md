@@ -223,7 +223,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PowerShell native read-only classifier 现在覆盖 Windows `sort.exe <path>`/`sort.exe /R <path>` 的安全相对路径读取子集，并拒绝空输入、`/O` 输出文件、pass-through 和越界路径。
 - 本轮补充：PowerShell native read-only classifier 现在覆盖显式 `more.com <path>` 的安全相对路径读取子集，并拒绝裸 `more`、空输入、pass-through 和越界路径。
 - 本轮补充：PowerShell read-only classifier 现在把 `Get-Content -First` 作为 `-TotalCount`/`-Head` 的安全读取 alias 处理，保留缺值和越界路径拒绝。
-- 本轮补充：PowerShell read-only classifier 现在识别常用 common parameter aliases `-EA`/`-EV`/`-WA`/`-WV`/`-Infa`/`-OB` 和 `-VB`/`-DB`，同时继续拒绝 `-OV`/`-PV` 这类会写入变量的 common aliases。
+- 本轮补充：PowerShell read-only classifier 现在识别常用 common parameter aliases `-EA`/`-EV`/`-WA`/`-WV`/`-Infa`/`-IV`/`-Proga`/`-OB` 和 `-VB`/`-DB`，同时继续拒绝 `-OV`/`-PV` 这类会写入变量的 common aliases。
 - 本轮补充：`BashOutput` 现在设置 100k 最大结果大小，和前台 `Bash` 一起覆盖大输出 tool-result preview 截断、完整输出落盘及 `full_output_path` 元数据。
 - 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且 completed、timed_out、cancelled 终态测试确保 progress 不携带 command 文本。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。

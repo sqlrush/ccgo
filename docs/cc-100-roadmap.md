@@ -223,7 +223,7 @@ M5 补充：PowerShell native read-only classifier 现在覆盖显式 `more.com 
 
 M5 补充：PowerShell read-only classifier 现在把 `Get-Content -First` 作为 `-TotalCount`/`-Head` 的安全读取 alias 处理，保留缺值和越界路径拒绝。
 
-M5 补充：PowerShell read-only classifier 现在识别常用 common parameter aliases `-EA`/`-EV`/`-WA`/`-WV`/`-Infa`/`-OB` 和 `-VB`/`-DB`，同时继续拒绝 `-OV`/`-PV` 这类会写入变量的 common aliases。
+M5 补充：PowerShell read-only classifier 现在识别常用 common parameter aliases `-EA`/`-EV`/`-WA`/`-WV`/`-Infa`/`-IV`/`-Proga`/`-OB` 和 `-VB`/`-DB`，同时继续拒绝 `-OV`/`-PV` 这类会写入变量的 common aliases。
 
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 

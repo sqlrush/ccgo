@@ -1206,11 +1206,13 @@ var powerShellCommonValueFlags = stringSet(
 	"informationaction",
 	"infa",
 	"progressaction",
+	"proga",
 	"errorvariable",
 	"ev",
 	"warningvariable",
 	"wv",
 	"informationvariable",
+	"iv",
 	"outbuffer",
 	"ob",
 )
