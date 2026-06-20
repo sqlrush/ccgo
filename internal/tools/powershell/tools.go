@@ -1179,6 +1179,7 @@ type powerShellReadOnlyConfig struct {
 	valueFlags                   map[string]bool
 	allowAllFlags                bool
 	rejectExpressionValues       bool
+	rejectPositionals            bool
 	validatePositionalsAsPaths   bool
 	pathPositionalsAfterLiterals int
 }
@@ -1409,19 +1410,27 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		rejectExpressionValues: true,
 	},
 	"get-computerinfo": {
-		allowAllFlags: true,
+		allowedFlags:           stringSet("property"),
+		valueFlags:             stringSet("property"),
+		rejectExpressionValues: true,
 	},
 	"get-host": {
-		allowAllFlags: true,
+		rejectExpressionValues: true,
+		rejectPositionals:      true,
 	},
 	"get-culture": {
-		allowAllFlags: true,
+		allowedFlags:           stringSet("nouseroverrides"),
+		rejectExpressionValues: true,
+		rejectPositionals:      true,
 	},
 	"get-uiculture": {
-		allowAllFlags: true,
+		rejectExpressionValues: true,
+		rejectPositionals:      true,
 	},
 	"get-uptime": {
-		allowAllFlags: true,
+		allowedFlags:           stringSet("since"),
+		rejectExpressionValues: true,
+		rejectPositionals:      true,
 	},
 	"get-netadapter": {
 		allowedFlags:           stringSet("name", "interfacedescription", "interfaceindex", "physical"),
@@ -1736,6 +1745,8 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 			if !safeRelativePowerShellPath(word) {
 				return false
 			}
+		} else if config.rejectPositionals {
+			return false
 		} else if !safePowerShellParameterValue(word, config.rejectExpressionValues) {
 			return false
 		}
