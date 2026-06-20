@@ -373,6 +373,9 @@ func jsonSearchURLField(obj map[string]any) string {
 		"targetUrl", "targetURL", "target_url",
 		"webUrl", "webURL", "web_url",
 		"sourceUrl", "sourceURL", "source_url",
+		"canonicalUrl", "canonicalURL", "canonical_url",
+		"linkUrl", "linkURL", "link_url",
+		"resultUrl", "resultURL", "result_url",
 		"sourceLink", "source_link",
 		"website", "site",
 	); raw != "" {

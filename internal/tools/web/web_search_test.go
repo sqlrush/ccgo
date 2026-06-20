@@ -494,6 +494,8 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 					},
 					{"name": "Source Result", "source_url": "https://example.com/source", "abstract": "Source abstract"},
 					{"headline": "Formatted Result", "formattedUrl": "https://example.com/formatted", "caption": "Formatted caption"},
+					{"title": "Canonical Result", "canonicalUrl": "https://example.com/canonical", "snippet": "Canonical snippet"},
+					{"title": "Link URL Result", "linkUrl": {"value": "https://docs.example.com/link-url"}, "text": "Link URL snippet"},
 					{"title": "Display Only", "displayUrl": "example.com/not-a-real-url", "snippet": "ignored"}
 				]
 			}
@@ -509,13 +511,13 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 	}, contracts.ToolUse{
 		ID:    "toolu_search_alias_json",
 		Name:  "WebSearch",
-		Input: json.RawMessage(`{"query":"alias json","max_results":5}`),
+		Input: json.RawMessage(`{"query":"alias json","max_results":6}`),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	results, ok := result.StructuredContent["results"].([]map[string]any)
-	if !ok || len(results) != 4 {
+	if !ok || len(results) != 6 {
 		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
 	}
 	if results[0]["title"] != "Alias Result" || results[0]["url"] != "https://example.com/alias" || results[0]["snippet"] != "Alias snippet" {
@@ -529,6 +531,12 @@ func TestWebSearchParsesAlternateJSONFieldAliases(t *testing.T) {
 	}
 	if results[3]["title"] != "Formatted Result" || results[3]["url"] != "https://example.com/formatted" || results[3]["snippet"] != "Formatted caption" {
 		t.Fatalf("formatted result = %#v", results[3])
+	}
+	if results[4]["title"] != "Canonical Result" || results[4]["url"] != "https://example.com/canonical" || results[4]["snippet"] != "Canonical snippet" {
+		t.Fatalf("canonical result = %#v", results[4])
+	}
+	if results[5]["title"] != "Link URL Result" || results[5]["url"] != "https://docs.example.com/link-url" || results[5]["snippet"] != "Link URL snippet" {
+		t.Fatalf("link url result = %#v", results[5])
 	}
 	content := result.Content.(string)
 	if strings.Contains(content, "Display Only") || strings.Contains(content, "<b>") {
