@@ -1223,6 +1223,7 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		pathFlags:                  stringSet("path", "literalpath"),
 		valueFlags:                 stringSet("filter", "include", "exclude", "depth", "attributes"),
 		validatePositionalsAsPaths: true,
+		rejectExpressionValues:     true,
 	},
 	"get-content": {
 		allowedFlags:               stringSet("path", "literalpath", "totalcount", "head", "first", "tail", "raw", "encoding", "delimiter", "readcount"),
