@@ -1289,6 +1289,7 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		valueFlags:                   stringSet("pattern", "inputobject", "encoding", "context"),
 		validatePositionalsAsPaths:   true,
 		pathPositionalsAfterLiterals: 1,
+		rejectExpressionValues:       true,
 	},
 	"convertto-json": {
 		allowedFlags: stringSet("inputobject", "depth", "compress", "enumsasstrings", "asarray"),
