@@ -198,6 +198,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch 现在按官方 cross-host redirect 语义处理跨 host 跳转，HEAD preflight 和 GET 都不会自动触达新 host，而是返回包含 original URL、redirect URL 和 status 的 redirect notice；同 host redirect 仍继续跟随并保留 `final_url`。
 - 本轮补充：WebFetch input schema 现在与官方对齐，`url` 和 `prompt` 都是必填字段；既有本地扩展 `timeout`、`max_bytes`/`maxBytes` 仍保持可选。
 - 本轮补充：WebFetch 文本 body 现在会按 BOM、`Content-Type` charset 或 HTML `<meta charset>`/`http-equiv` charset 解码常见网页编码，包括 UTF-8/UTF-16LE/UTF-16BE、Latin-1 和 Windows-1252，并在 structured content 暴露归一化 `charset`。
+- 本轮补充：WebFetch prompt-focused excerpt 的 term scoring 现在会匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`，同时仍保持词边界匹配避免子串误命中。
 - 本轮补充：WebSearch HTML 结果解析现在会按搜索页首个有效 `<base href>` 解析相对结果 anchor，覆盖镜像/自定义搜索页中浏览器可见结果 URL 与请求路径不一致的情况。
 - 本轮补充：WebSearch HTML 结果解析现在会读取 `application/ld+json` JSON-LD 结果，递归抽取 `@graph`、`ItemList.itemListElement.item`，支持 JSON-LD `@id` URL alias，并与后续 anchor 结果按 URL 去重。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。

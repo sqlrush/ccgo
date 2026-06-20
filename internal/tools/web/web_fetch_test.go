@@ -208,6 +208,39 @@ func TestWebFetchRendersHTMLAndPromptExcerpt(t *testing.T) {
 	}
 }
 
+func TestWebFetchPromptExcerptMatchesPluralVariants(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <main>
+    <p>Overview page with general launch notes.</p>
+    <p>The beta plan costs $20 and includes priority support.</p>
+  </main>
+</body>
+</html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_html_plural_excerpt",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"cost"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := result.Content.(string)
+	if !strings.Contains(content, "Relevant excerpt:") || !strings.Contains(content, "The beta plan costs $20") {
+		t.Fatalf("content = %#v", content)
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "The beta plan costs $20") || strings.Contains(excerpt, "Overview page") {
+		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
 func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -547,6 +580,12 @@ func TestWebFetchPromptPhraseScoring(t *testing.T) {
 	}
 	if score := scoreWebFetchPassage("Trust the process.", []string{"rust"}, nil); score != 0 {
 		t.Fatalf("substring term should not match word-boundary scoring: %d", score)
+	}
+	if score := scoreWebFetchPassage("The beta plan costs $20.", []string{"cost"}, nil); score == 0 {
+		t.Fatalf("singular prompt term should match plural passage word")
+	}
+	if score := scoreWebFetchPassage("The beta plan cost $20.", []string{"costs"}, nil); score == 0 {
+		t.Fatalf("plural prompt term should match singular passage word")
 	}
 }
 

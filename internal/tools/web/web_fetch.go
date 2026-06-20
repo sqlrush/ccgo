@@ -1163,7 +1163,7 @@ func webFetchPromptPhrases(prompt string) []string {
 
 func isWebFetchStopWord(word string) bool {
 	switch word {
-	case "the", "and", "for", "with", "from", "this", "that", "you", "your", "are", "was", "were", "what", "when", "where", "which", "who", "why", "how", "summarize", "summary", "about", "please":
+	case "the", "and", "for", "with", "from", "this", "that", "you", "your", "are", "was", "were", "what", "when", "where", "which", "who", "why", "how", "does", "did", "much", "summarize", "summary", "about", "please", "extract", "find", "show", "tell":
 		return true
 	default:
 		return false
@@ -1255,7 +1255,7 @@ func scoreWebFetchPassage(passage string, terms []string, phrases []string) int 
 		}
 	}
 	for _, term := range terms {
-		count := termCounts[term]
+		count := webFetchTermMatchCount(termCounts, term)
 		if count > 0 {
 			score += 2 + count
 		}
@@ -1274,8 +1274,48 @@ func webFetchSearchWordCounts(normalized string) map[string]int {
 	counts := map[string]int{}
 	for _, word := range strings.Fields(normalized) {
 		counts[word]++
+		for _, variant := range webFetchWordVariants(word) {
+			if variant != word {
+				counts[variant]++
+			}
+		}
 	}
 	return counts
+}
+
+func webFetchTermMatchCount(counts map[string]int, term string) int {
+	best := 0
+	seen := map[string]bool{}
+	for _, variant := range webFetchWordVariants(term) {
+		if seen[variant] {
+			continue
+		}
+		seen[variant] = true
+		if counts[variant] > best {
+			best = counts[variant]
+		}
+	}
+	return best
+}
+
+func webFetchWordVariants(word string) []string {
+	word = strings.TrimSpace(strings.ToLower(word))
+	if word == "" {
+		return nil
+	}
+	variants := []string{word}
+	if utf8.RuneCountInString(word) <= 3 {
+		return variants
+	}
+	switch {
+	case strings.HasSuffix(word, "ies") && utf8.RuneCountInString(word) > 4:
+		variants = append(variants, strings.TrimSuffix(word, "ies")+"y")
+	case strings.HasSuffix(word, "es") && utf8.RuneCountInString(word) > 4:
+		variants = append(variants, strings.TrimSuffix(word, "es"))
+	case strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss"):
+		variants = append(variants, strings.TrimSuffix(word, "s"))
+	}
+	return variants
 }
 
 func countWebFetchPhraseOccurrences(normalized string, phrase string) int {
