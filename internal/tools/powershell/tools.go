@@ -2169,6 +2169,8 @@ func powerShellAliasTarget(name string) string {
 		return "format-wide"
 	case "fc":
 		return "format-custom"
+	case "compare", "diff":
+		return "compare-object"
 	case "measure":
 		return "measure-object"
 	default:

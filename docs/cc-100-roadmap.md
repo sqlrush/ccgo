@@ -215,6 +215,8 @@ M5 补充：PowerShell command canonicalization 现在保留与 PowerShell alias
 
 M5 补充：PowerShell native read-only classifier 现在覆盖 Windows `fc.exe` 和 `comp.exe` 的双文件比较安全子集，要求刚好两个安全相对路径，并拒绝空/单路径、裸 `comp`、越界路径、pass-through 和动态 `/n` 参数。
 
+M5 补充：PowerShell command canonicalization 现在补齐 `Compare-Object` 的常见 `compare`/`diff` alias，同时继续保留 `diff.exe` 这类原生命令后缀，避免外部命令误套 cmdlet 分类。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。
