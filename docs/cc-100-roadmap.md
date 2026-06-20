@@ -181,6 +181,8 @@ M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted
 
 M5 补充：WebFetch prompt-focused excerpt 的 term scoring 现在会双向匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`、prompt `candidates` 可命中正文 `candidate`，同时仍保持词边界匹配避免子串误命中。
 
+M5 补充：PowerShell command canonicalization 现在补齐 mutating ItemProperty aliases：`sp`/`clp`/`cpp`/`mp`/`rp`/`rnp` 会分别归入 `Set/Clear/Copy/Move/Remove/Rename-ItemProperty` destructive 分类，避免属性变更 alias 被当成未知普通命令。
+
 M5 补充：WebFetch HTML-to-text rendering 现在会跳过 `hidden`、`aria-hidden="true"`、CSS `display:none`/`visibility:hidden` 的不可见元素子树，隐藏文本和图片说明不会进入 rendered body 或 prompt-focused excerpt。
 
 M5 补充：WebFetch HTML-to-text rendering 现在会为无可见文本但带 `aria-label`/`title` 的链接保留可访问名称和 resolved href，icon-only 链接可进入 rendered body 与 prompt-focused excerpt。

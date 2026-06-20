@@ -252,6 +252,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PowerShell native read-only classifier 补齐 `netstat -p <protocol>` 只读协议查询形态，协议值走 literal guard，缺值和动态表达式值仍拒绝。
 - 本轮补充：PowerShell native read-only classifier 收紧短 flag 合并校验，`netstat -ano` 这类纯开关组合仍允许，但包含 value/path flag 的组合（如 `-anop`）不再绕过缺值校验。
 - 本轮补充：PowerShell native read-only classifier 收紧 `/FO` 输出格式参数，`systeminfo`/`tasklist`/`whoami`/`getmac` 只接受 `CSV`/`LIST`/`TABLE` literal 值，无效格式和动态值不再进入只读 fast path。
+- 本轮补充：PowerShell command canonicalization 现在补齐 mutating ItemProperty aliases：`sp`/`clp`/`cpp`/`mp`/`rp`/`rnp` 会分别归入 `Set/Clear/Copy/Move/Remove/Rename-ItemProperty` destructive 分类，避免属性变更 alias 被当成未知普通命令。
 - 本轮补充：`BashOutput` 现在设置 100k 最大结果大小，和前台 `Bash` 一起覆盖大输出 tool-result preview 截断、完整输出落盘及 `full_output_path` 元数据。
 - 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且 completed、timed_out、cancelled 终态测试确保 progress 不携带 command 文本。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。

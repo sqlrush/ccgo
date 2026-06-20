@@ -2146,7 +2146,7 @@ func destructiveWords(words []string) bool {
 	switch command {
 	case "git":
 		return bashtools.IsDestructiveCommand(powerShellGitCommand(words))
-	case "remove-item", "set-content", "add-content", "clear-content", "clear-item", "out-file", "new-item", "move-item", "copy-item", "rename-item", "set-item", "stop-process", "stop-service", "restart-computer", "invoke-expression", "iex", "start-process", "start-transcript", "stop-transcript":
+	case "remove-item", "set-content", "add-content", "clear-content", "clear-item", "clear-itemproperty", "out-file", "new-item", "move-item", "move-itemproperty", "copy-item", "copy-itemproperty", "rename-item", "rename-itemproperty", "set-item", "set-itemproperty", "stop-process", "stop-service", "restart-computer", "invoke-expression", "iex", "start-process", "start-transcript", "stop-transcript":
 		return true
 	default:
 		return strings.HasPrefix(command, "remove-") || strings.HasPrefix(command, "set-") || strings.HasPrefix(command, "new-") || strings.HasPrefix(command, "export-")
@@ -2303,8 +2303,20 @@ func powerShellAliasTarget(name string) string {
 		return "clear-content"
 	case "cli":
 		return "clear-item"
+	case "clp":
+		return "clear-itemproperty"
 	case "si":
 		return "set-item"
+	case "sp":
+		return "set-itemproperty"
+	case "cpp":
+		return "copy-itemproperty"
+	case "mp":
+		return "move-itemproperty"
+	case "rp":
+		return "remove-itemproperty"
+	case "rnp":
+		return "rename-itemproperty"
 	case "sls":
 		return "select-string"
 	case "echo", "write":
