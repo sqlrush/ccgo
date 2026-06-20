@@ -316,6 +316,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：`/compact` 的 headless CLI 路径补齐 JSON/stream-json 端到端回归覆盖：从 `--resume` 历史触发 manual compact 时只请求 compact summary、不把 command metadata 泄露进 compact prompt，final result 与 compact event 都暴露 manual trigger、userContext 和 messagesSummarized metadata。
 - 本轮补充：`/cost status`、`/cost current` 和 `/cost usage` 现在复用 `/cost` totals no-query 本地路径，未知 cost 子命令仍保持显式未实现提示，`/cost breakdown`/`show` 继续输出逐消息明细。
 - 本轮补充：`/memory files` 和 `/memory ls` 现在复用 `/memory list` 的 no-query 本地记忆文件列表路径，`/memory status` 仍保持会话/相关记忆概览。
+- 本轮补充：`/memory save|add|write <relative.md> <content>` 和 `/memory remove|rm|delete <relative.md>` 现在可在配置的 relevant memory directory 内安全维护 markdown 记忆文件，拒绝未配置目录、越界路径、非 markdown 文件、目录和 symlink 目标，并保持 no-query 本地结果。
 - 本轮补充：`/status <section>` 现在复用 `/status show <section>` 的 section alias normalization，`/status integrations`、`/status diagnostics` 等直接调用不会再落入 unsupported subcommand 分支。
 - 本轮补充：`/mcp refresh` 和 `/mcp reload` 现在走 no-query 本地刷新路径，会重新检查 settings 文件变化并刷新 plugin MCP server app-state，返回刷新摘要而不是落入 unsupported subcommand。
 - 本轮补充：`/mcp restart` 和 `/mcp reconnect [server]` 现在走 headless stateless restart 路径，会刷新 settings/plugin MCP server 状态、校验指定 server 是否存在，并明确 server 会在下一次 tool call 重新打开，不再误报 unsupported。

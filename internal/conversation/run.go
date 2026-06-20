@@ -4795,6 +4795,10 @@ func (r Runner) formatMemorySummary(raw string) string {
 				return "Usage: /memory " + args[0] + " <query>"
 			}
 			return r.formatMemorySearch(query)
+		case "add", "write", "save", "set":
+			return r.saveMemoryFileSummary(args[0], subcommandRemainder(raw, args[0]))
+		case "remove", "rm", "delete", "del":
+			return r.removeMemoryFileSummary(args[0], subcommandRemainder(raw, args[0]))
 		default:
 			return "Memory subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
 		}
@@ -4888,6 +4892,97 @@ func (r Runner) formatMemoryFileShow(query string) string {
 		preview,
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r Runner) saveMemoryFileSummary(command string, raw string) string {
+	args := commands.ParseArguments(strings.TrimSpace(raw))
+	if len(args) < 2 {
+		return "Usage: /memory " + command + " <relative .md path> <content>"
+	}
+	content := strings.Join(args[1:], " ")
+	if strings.TrimSpace(content) == "" {
+		return "Usage: /memory " + command + " <relative .md path> <content>"
+	}
+	target, err := r.resolveWritableRelevantMemoryFile(args[0])
+	if err != nil {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	if err := os.MkdirAll(target.RootAbs, 0o755); err != nil {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	if err := ensureNoSymlinkMemoryPath(target.RootAbs, filepath.Dir(target.Path)); err != nil {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	if err := os.MkdirAll(filepath.Dir(target.Path), 0o755); err != nil {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	if err := ensureNoSymlinkMemoryPath(target.RootAbs, filepath.Dir(target.Path)); err != nil {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	if info, err := os.Lstat(target.Path); err == nil {
+		if info.IsDir() {
+			return "Memory file could not be saved: target path is a directory"
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "Memory file could not be saved: target path is a symlink"
+		}
+	} else if !os.IsNotExist(err) {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(target.Path, []byte(content), 0o644); err != nil {
+		return "Memory file could not be saved: " + err.Error()
+	}
+	info, err := os.Stat(target.Path)
+	size := int64(len(content))
+	if err == nil {
+		size = info.Size()
+	}
+	return strings.Join([]string{
+		"Memory file saved",
+		"Root: Relevant memory directory",
+		"Path: " + target.RelPath,
+		"Absolute path: " + target.Path,
+		fmt.Sprintf("Size: %d bytes", size),
+	}, "\n")
+}
+
+func (r Runner) removeMemoryFileSummary(command string, raw string) string {
+	args := commands.ParseArguments(strings.TrimSpace(raw))
+	if len(args) != 1 {
+		return "Usage: /memory " + command + " <relative .md path>"
+	}
+	target, err := r.resolveWritableRelevantMemoryFile(args[0])
+	if err != nil {
+		return "Memory file could not be removed: " + err.Error()
+	}
+	if err := ensureNoSymlinkMemoryPath(target.RootAbs, filepath.Dir(target.Path)); err != nil {
+		return "Memory file could not be removed: " + err.Error()
+	}
+	info, err := os.Lstat(target.Path)
+	if os.IsNotExist(err) {
+		return "Memory file " + target.RelPath + " was not found."
+	}
+	if err != nil {
+		return "Memory file could not be removed: " + err.Error()
+	}
+	if info.IsDir() {
+		return "Memory file could not be removed: target path is a directory"
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "Memory file could not be removed: target path is a symlink"
+	}
+	if err := os.Remove(target.Path); err != nil {
+		return "Memory file could not be removed: " + err.Error()
+	}
+	return strings.Join([]string{
+		"Memory file removed",
+		"Root: Relevant memory directory",
+		"Path: " + target.RelPath,
+		"Absolute path: " + target.Path,
+	}, "\n")
 }
 
 func (r Runner) memoryRoots() []memoryRoot {
@@ -5717,6 +5812,12 @@ type memoryMarkdownFile struct {
 	ModTime   time.Time
 }
 
+type memoryWriteTarget struct {
+	RootAbs string
+	Path    string
+	RelPath string
+}
+
 type memorySearchResult struct {
 	RootLabel string
 	RelPath   string
@@ -5935,6 +6036,91 @@ func memoryMarkdownFileFromPath(root memoryRoot, rootAbs string, path string) (m
 		Size:      info.Size(),
 		ModTime:   info.ModTime(),
 	}, true
+}
+
+func (r Runner) resolveWritableRelevantMemoryFile(path string) (memoryWriteTarget, error) {
+	root := strings.TrimSpace(r.RelevantMemoryDir)
+	if root == "" {
+		return memoryWriteTarget{}, fmt.Errorf("relevant memory directory is not configured")
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return memoryWriteTarget{}, fmt.Errorf("path is required")
+	}
+	if filepath.IsAbs(path) || filepath.IsAbs(filepath.FromSlash(path)) {
+		return memoryWriteTarget{}, fmt.Errorf("path must be relative to the relevant memory directory")
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return memoryWriteTarget{}, fmt.Errorf("path must stay inside the relevant memory directory")
+	}
+	if !strings.EqualFold(filepath.Ext(clean), ".md") {
+		return memoryWriteTarget{}, fmt.Errorf("path must use .md extension")
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return memoryWriteTarget{}, err
+	}
+	targetAbs, err := filepath.Abs(filepath.Join(rootAbs, clean))
+	if err != nil {
+		return memoryWriteTarget{}, err
+	}
+	if !pathWithinRoot(targetAbs, rootAbs) {
+		return memoryWriteTarget{}, fmt.Errorf("path must stay inside the relevant memory directory")
+	}
+	rel, err := filepath.Rel(rootAbs, targetAbs)
+	if err != nil {
+		return memoryWriteTarget{}, err
+	}
+	return memoryWriteTarget{
+		RootAbs: rootAbs,
+		Path:    targetAbs,
+		RelPath: filepath.ToSlash(rel),
+	}, nil
+}
+
+func ensureNoSymlinkMemoryPath(rootAbs string, parentAbs string) error {
+	rootAbs, err := filepath.Abs(rootAbs)
+	if err != nil {
+		return err
+	}
+	parentAbs, err = filepath.Abs(parentAbs)
+	if err != nil {
+		return err
+	}
+	if !pathWithinRoot(parentAbs, rootAbs) {
+		return fmt.Errorf("path must stay inside the relevant memory directory")
+	}
+	rel, err := filepath.Rel(rootAbs, parentAbs)
+	if err != nil {
+		return err
+	}
+	if rel == "." {
+		return nil
+	}
+	current := rootAbs
+	var seen []string
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "" || part == "." {
+			continue
+		}
+		seen = append(seen, part)
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("path includes symlink directory %s", filepath.ToSlash(filepath.Join(seen...)))
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("path component %s is not a directory", filepath.ToSlash(filepath.Join(seen...)))
+		}
+	}
+	return nil
 }
 
 func pathWithinRoot(path string, root string) bool {

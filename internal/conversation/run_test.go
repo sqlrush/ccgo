@@ -6349,6 +6349,132 @@ func TestRunnerMemoryShowDisplaysSingleMemoryFile(t *testing.T) {
 	}
 }
 
+func TestRunnerMemoryWritesAndRemovesRelevantMemoryFile(t *testing.T) {
+	client := &fakeClient{}
+	relevantRoot := t.TempDir()
+	runner := Runner{
+		Client:            client,
+		SessionID:         "sess_memory_write",
+		RelevantMemoryDir: relevantRoot,
+	}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/memory save team/runbook.md remember blue deploys"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("model should not be queried, requests = %#v", client.requests)
+	}
+	memoryPath := filepath.Join(relevantRoot, "team", "runbook.md")
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory file saved",
+		"Root: Relevant memory directory",
+		"Path: team/runbook.md",
+		"Absolute path: " + memoryPath,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory save missing %q: %q", want, text)
+		}
+	}
+	data, err := os.ReadFile(memoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "remember blue deploys\n" {
+		t.Fatalf("memory file content = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory show team/runbook.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := result.Messages[1].Content[0].Text; !strings.Contains(text, "remember blue deploys") {
+		t.Fatalf("memory show written file = %q", text)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory save ../outside.md nope"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Memory file could not be saved: path must stay inside the relevant memory directory" {
+		t.Fatalf("outside save result = %q", got)
+	}
+	outside := filepath.Join(filepath.Dir(relevantRoot), "outside.md")
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Fatalf("outside file should not exist, stat err = %v", err)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory save team/runbook.txt nope"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Memory file could not be saved: path must use .md extension" {
+		t.Fatalf("non-markdown save result = %q", got)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory rm team/runbook.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Memory file removed",
+		"Path: team/runbook.md",
+		"Absolute path: " + memoryPath,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("memory remove missing %q: %q", want, text)
+		}
+	}
+	if _, err := os.Stat(memoryPath); !os.IsNotExist(err) {
+		t.Fatalf("memory file should be removed, stat err = %v", err)
+	}
+
+	result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory delete team/runbook.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Memory file team/runbook.md was not found." {
+		t.Fatalf("missing remove result = %q", got)
+	}
+
+	outsideTarget := filepath.Join(filepath.Dir(relevantRoot), "outside-target.md")
+	if err := os.WriteFile(outsideTarget, []byte("outside target\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideTarget, memoryPath); err == nil {
+		result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory save team/runbook.md nope"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := result.Messages[1].Content[0].Text; got != "Memory file could not be saved: target path is a symlink" {
+			t.Fatalf("symlink save result = %q", got)
+		}
+
+		result, err = runner.RunTurn(context.Background(), nil, messages.UserText("/memory rm team/runbook.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := result.Messages[1].Content[0].Text; got != "Memory file could not be removed: target path is a symlink" {
+			t.Fatalf("symlink remove result = %q", got)
+		}
+		if err := os.Remove(memoryPath); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		t.Logf("skipping symlink target assertions: %v", err)
+	}
+
+	noConfigRunner := Runner{Client: &fakeClient{}, SessionID: "sess_memory_write_no_config"}
+	result, err = noConfigRunner.RunTurn(context.Background(), nil, messages.UserText("/memory save team/runbook.md remember"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Messages[1].Content[0].Text; got != "Memory file could not be saved: relevant memory directory is not configured" {
+		t.Fatalf("no config save result = %q", got)
+	}
+}
+
 func TestRunnerExecutesModelSlashCommandWithoutQuery(t *testing.T) {
 	runner := Runner{
 		Client:    &fakeClient{},
