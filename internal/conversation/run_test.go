@@ -6704,14 +6704,14 @@ func TestRunnerMCPSlashCommandReportsMissingServerDetails(t *testing.T) {
 
 func TestRunnerMCPSlashCommandReportsUnsupportedSubcommand(t *testing.T) {
 	runner := Runner{Client: &fakeClient{}, SessionID: "sess_mcp_subcommand"}
-	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp restart alpha"))
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp delete alpha"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Messages) != 2 {
 		t.Fatalf("result messages = %#v", result.Messages)
 	}
-	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: restart alpha" {
+	if got := result.Messages[1].Content[0].Text; got != "MCP subcommand is not implemented in the Go runtime yet: delete alpha" {
 		t.Fatalf("mcp text = %q", got)
 	}
 }
@@ -6762,6 +6762,48 @@ func TestRunnerMCPSlashCommandRefreshesPluginServerState(t *testing.T) {
 	}
 	if got := usage.Messages[len(usage.Messages)-1].Content[0].Text; got != "Usage: /mcp refresh" {
 		t.Fatalf("mcp refresh usage = %q", got)
+	}
+}
+
+func TestRunnerMCPSlashCommandRestartsStatelessServer(t *testing.T) {
+	project := t.TempDir()
+	runner := Runner{
+		Client:           &fakeClient{},
+		SessionID:        "sess_mcp_restart",
+		WorkingDirectory: project,
+		MCP: &MCPConfig{
+			CWD: project,
+			UserSettings: contracts.Settings{
+				MCPServers: map[string]contracts.MCPServer{
+					"alpha": {Command: "python", Args: []string{"server.py"}},
+				},
+			},
+		},
+	}
+
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/mcp restart alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"MCP server alpha restart requested.",
+		"Settings files changed: false",
+		"Plugin MCP servers: 0",
+		"Configured MCP servers: 1",
+		"Runtime lifecycle: stateless; server will be reopened on the next tool call.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mcp restart missing %q: %q", want, text)
+		}
+	}
+
+	missing, err := runner.RunTurn(context.Background(), result.Messages, messages.UserText("/mcp reconnect missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := missing.Messages[len(missing.Messages)-1].Content[0].Text; got != "MCP server missing was not found." {
+		t.Fatalf("mcp reconnect missing = %q", got)
 	}
 }
 

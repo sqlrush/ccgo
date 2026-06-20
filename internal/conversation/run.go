@@ -5754,6 +5754,8 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 			return r.formatMCPServerShow(args)
 		case "refresh", "reload":
 			return r.formatMCPRefreshSummary(args)
+		case "restart", "reconnect":
+			return r.formatMCPRestartSummary(args)
 		case "search", "find":
 			query := subcommandRemainder(raw, args[0])
 			if strings.TrimSpace(query) == "" {
@@ -5804,6 +5806,42 @@ func (r Runner) formatMCPRefreshSummary(args []string) string {
 		"Settings files changed: " + strconv.FormatBool(settingsChanged),
 		fmt.Sprintf("Plugin MCP servers: %d", len(r.MCP.PluginServers)),
 		fmt.Sprintf("Configured MCP servers: %d", len(r.mcpServers())),
+	}, "\n")
+}
+
+func (r Runner) formatMCPRestartSummary(args []string) string {
+	if len(args) > 2 {
+		return "Usage: /mcp " + args[0] + " [server-name]"
+	}
+	if r.MCP == nil {
+		return "No MCP configuration is loaded."
+	}
+	settingsChanged, err := r.RefreshSettingsFiles()
+	if err != nil {
+		return "Failed to refresh MCP settings files: " + err.Error()
+	}
+	r.MCP.refreshPluginServers()
+	servers := r.mcpServers()
+	if len(args) == 2 {
+		name := strings.TrimSpace(args[1])
+		server, ok := findMCPServerSummary(servers, name)
+		if !ok {
+			return "MCP server " + name + " was not found."
+		}
+		return strings.Join([]string{
+			"MCP server " + server.Name + " restart requested.",
+			"Settings files changed: " + strconv.FormatBool(settingsChanged),
+			fmt.Sprintf("Plugin MCP servers: %d", len(r.MCP.PluginServers)),
+			fmt.Sprintf("Configured MCP servers: %d", len(servers)),
+			"Runtime lifecycle: stateless; server will be reopened on the next tool call.",
+		}, "\n")
+	}
+	return strings.Join([]string{
+		"MCP configuration restart requested.",
+		"Settings files changed: " + strconv.FormatBool(settingsChanged),
+		fmt.Sprintf("Plugin MCP servers: %d", len(r.MCP.PluginServers)),
+		fmt.Sprintf("Configured MCP servers: %d", len(servers)),
+		"Runtime lifecycle: stateless; configured servers will be reopened on the next tool call.",
 	}, "\n")
 }
 
