@@ -2198,6 +2198,8 @@ func powerShellAliasTarget(name string) string {
 		return "clear-item"
 	case "si":
 		return "set-item"
+	case "sls":
+		return "select-string"
 	case "echo", "write":
 		return "write-output"
 	case "sleep":
