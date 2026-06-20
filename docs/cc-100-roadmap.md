@@ -255,6 +255,8 @@ M5 补充：PowerShell read-only classifier 收紧 `Get-ItemProperty`/`Get-ItemP
 
 M5 补充：PowerShell read-only classifier 收紧 `Get-Process`/`Get-Service`，继续允许普通 literal name/id/displayName/include/exclude 查询参数，但拒绝动态表达式参数。
 
+M5 补充：PowerShell read-only classifier 收紧 metadata 查询类 cmdlet，`Get-Location`/`Get-Date`/`Get-PSDrive`/`Get-Module`/`Get-Alias`/`Get-History`/`Get-TimeZone` 继续允许普通 literal 参数，但拒绝动态表达式参数。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。
