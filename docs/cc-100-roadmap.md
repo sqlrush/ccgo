@@ -271,6 +271,8 @@ M5 补充：PowerShell native read-only classifier 补齐 `netstat -p <protocol>
 
 M5 补充：PowerShell native read-only classifier 收紧短 flag 合并校验，`netstat -ano` 这类纯开关组合仍允许，但包含 value/path flag 的组合（如 `-anop`）不再绕过缺值校验。
 
+M5 补充：PowerShell native read-only classifier 收紧 `/FO` 输出格式参数，`systeminfo`/`tasklist`/`whoami`/`getmac` 只接受 `CSV`/`LIST`/`TABLE` literal 值，无效格式和动态值不再进入只读 fast path。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。

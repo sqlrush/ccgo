@@ -1190,6 +1190,7 @@ type powerShellNativeReadOnlyConfig struct {
 	pathFlags                    map[string]bool
 	pathListFlags                map[string]bool
 	valueFlags                   map[string]bool
+	enumValueFlags               map[string]map[string]bool
 	literalValueFlags            map[string]bool
 	allowAllFlags                bool
 	allowPositionals             bool
@@ -1553,12 +1554,14 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		valueFlags:   stringSet("-p"),
 	},
 	"systeminfo": {
-		allowedFlags: stringSet("/fo", "/nh"),
-		valueFlags:   stringSet("/fo"),
+		allowedFlags:   stringSet("/fo", "/nh"),
+		valueFlags:     stringSet("/fo"),
+		enumValueFlags: map[string]map[string]bool{"/fo": stringSet("csv", "list", "table")},
 	},
 	"tasklist": {
-		allowedFlags: stringSet("/m", "/svc", "/v", "/fi", "/fo", "/nh"),
-		valueFlags:   stringSet("/m", "/fi", "/fo"),
+		allowedFlags:   stringSet("/m", "/svc", "/v", "/fi", "/fo", "/nh"),
+		valueFlags:     stringSet("/m", "/fi", "/fo"),
+		enumValueFlags: map[string]map[string]bool{"/fo": stringSet("csv", "list", "table")},
 	},
 	"where.exe": {
 		allowedFlags:     stringSet("/r", "/q", "/f", "/t"),
@@ -1571,8 +1574,9 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		rejectPositionals: true,
 	},
 	"whoami": {
-		allowedFlags: stringSet("/user", "/groups", "/claims", "/priv", "/logonid", "/all", "/fo", "/nh"),
-		valueFlags:   stringSet("/fo"),
+		allowedFlags:   stringSet("/user", "/groups", "/claims", "/priv", "/logonid", "/all", "/fo", "/nh"),
+		valueFlags:     stringSet("/fo"),
+		enumValueFlags: map[string]map[string]bool{"/fo": stringSet("csv", "list", "table")},
 	},
 	"ver": {},
 	"arp": {
@@ -1580,8 +1584,9 @@ var powerShellNativeReadOnlyCommands = map[string]powerShellNativeReadOnlyConfig
 		valueFlags:   stringSet("-n"),
 	},
 	"getmac": {
-		allowedFlags: stringSet("/fo", "/nh", "/v"),
-		valueFlags:   stringSet("/fo"),
+		allowedFlags:   stringSet("/fo", "/nh", "/v"),
+		valueFlags:     stringSet("/fo"),
+		enumValueFlags: map[string]map[string]bool{"/fo": stringSet("csv", "list", "table")},
 	},
 	"file": {
 		allowedFlags:               stringSet("-b", "--brief", "-i", "--mime", "-l", "--dereference", "--mime-type", "--mime-encoding", "-z", "--uncompress", "-p", "--preserve-date", "-k", "--keep-going", "-r", "--raw", "-v", "--version", "-0", "--print0", "-s", "--special-files", "-l", "--separator", "-e", "-p", "-n", "--no-pad", "-e", "--extension"),
@@ -1812,7 +1817,7 @@ func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) b
 					if !safeNativePathValue(name, value, config) {
 						return false
 					}
-				} else if !safeNativeValue(value) {
+				} else if !safeNativeValueForFlag(name, value, config) {
 					return false
 				}
 				if config.literalValueFlags[name] && positionals < config.pathPositionalsAfterLiterals {
@@ -1829,7 +1834,7 @@ func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) b
 					if !safeNativePathValue(name, words[i], config) {
 						return false
 					}
-				} else if !safeNativeValue(words[i]) {
+				} else if !safeNativeValueForFlag(name, words[i], config) {
 					return false
 				}
 				if config.literalValueFlags[name] && positionals < config.pathPositionalsAfterLiterals {
@@ -1858,6 +1863,17 @@ func safeNativePathValue(name string, value string, config powerShellNativeReadO
 		return safeRelativePowerShellPathList(value)
 	}
 	return safeRelativePowerShellPath(value)
+}
+
+func safeNativeValueForFlag(name string, value string, config powerShellNativeReadOnlyConfig) bool {
+	if !safeNativeValue(value) {
+		return false
+	}
+	if allowed, ok := config.enumValueFlags[name]; ok {
+		normalized := strings.ToLower(strings.Trim(strings.TrimSpace(value), `"'`))
+		return allowed[normalized]
+	}
+	return true
 }
 
 func safeRelativePowerShellPathList(value string) bool {
