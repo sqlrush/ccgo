@@ -905,6 +905,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：CLI `plugin uninstall|remove|rm [--scope user|project|local] [--keep-data] <plugin>` 现在复用共享安全卸载 API，默认 user scope，支持 remove/rm alias 和 `--keep-data` 兼容参数。
 - 本轮补充：CLI `plugin list` 现在会显式展示 installed plugin root 的加载错误，坏 manifest 会作为 `failed to load` entry 出现在文本输出中，JSON 输出也会带 `errors`，不再被 `LoadPluginDirs` 静默跳过。
 - 本轮补充：CLI `plugin marketplace add` 现在支持官方 `--sparse <path>` repeat 参数，仅允许 github/git marketplace source 使用，并写入 settings source 的 `sparsePaths`。
+- 本轮补充：CLI `plugin marketplace show|info [--json] <plugin>` 现在可查看 configured marketplace 中单个插件详情，支持 name、`name@marketplace`、`name@version` 精确匹配，并输出 marketplace、version、source、description、installed version/path 和 available/installed/update 状态。
 
 - 本轮补充：bridge-safe 内置本地命令 `/summary`、`/release-notes`、`/files` 现在已注册并接入 no-query runner 路径；`/summary` 输出确定性的会话/历史消息计数、工具使用计数、估算 token 和最近用户/助手预览，`/files` 只读列出当前工作目录第一层条目而不读取文件内容，`/release-notes` 明确报告当前 Go runtime 未打包 release notes。完整 local-jsx UI surface 和其它本地命令 parity 仍需继续补。
 

@@ -678,6 +678,8 @@ func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Wr
 		return runPluginMarketplaceUpdateCLI(state, args[1:], stdout, stderr)
 	case "plugins", "available", "browse", "discover", "search", "find":
 		return runPluginMarketplacePluginsCLI(state, args[1:], stdout, stderr)
+	case "show", "info":
+		return runPluginMarketplaceShowCLI(state, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ccgo plugin marketplace: unsupported subcommand %s\n", args[0])
 		return 2
@@ -944,6 +946,82 @@ func runPluginMarketplacePluginsCLI(state *bootstrap.State, args []string, stdou
 		fmt.Fprintln(stdout, line)
 	}
 	return 0
+}
+
+func runPluginMarketplaceShowCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("claude plugin marketplace show", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOutput := flags.Bool("json", false, "output JSON")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	name := strings.TrimSpace(strings.Join(flags.Args(), " "))
+	if name == "" {
+		fmt.Fprintln(stderr, "ccgo plugin marketplace show: usage: claude plugin marketplace show [--json] <plugin>")
+		return 2
+	}
+	runner, err := state.ConversationRunner()
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace show: %v\n", err)
+		return 1
+	}
+	settings := runnerMergedSettings(runner)
+	marketplacePlugins := pluginpkg.LoadMarketplacePluginDirsWithSettings(settings)
+	installedPlugins := pluginpkg.LoadPluginDirs(pluginpkg.InstalledPluginDirs(runner.WorkingDirectory))
+	entries := pluginCLIMarketplacePluginEntries(marketplacePlugins, installedPlugins, "")
+	entry, ok := pluginCLIMarketplaceFindEntry(entries, name)
+	if !ok {
+		fmt.Fprintf(stderr, "ccgo plugin marketplace show: plugin %q not found in configured marketplaces\n", name)
+		return 1
+	}
+	if *jsonOutput {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(entry); err != nil {
+			fmt.Fprintf(stderr, "ccgo plugin marketplace show: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	writePluginMarketplaceShowResult(stdout, entry)
+	return 0
+}
+
+func writePluginMarketplaceShowResult(stdout io.Writer, plugin pluginCLIAvailableEntry) {
+	status := plugin.Status
+	if status == "" {
+		status = "available"
+	}
+	lines := []string{
+		"Marketplace plugin",
+		"Name: " + plugin.Name,
+	}
+	if plugin.PluginID != "" {
+		lines = append(lines, "Plugin ID: "+plugin.PluginID)
+	}
+	if plugin.MarketplaceName != "" {
+		lines = append(lines, "Marketplace: "+plugin.MarketplaceName)
+	}
+	if plugin.Version != "" {
+		lines = append(lines, "Version: "+plugin.Version)
+	}
+	lines = append(lines, "Status: "+status)
+	if plugin.InstalledVersion != "" {
+		lines = append(lines, "Installed version: "+plugin.InstalledVersion)
+	}
+	if plugin.InstallPath != "" {
+		lines = append(lines, "Installed path: "+plugin.InstallPath)
+	}
+	if plugin.Source != "" {
+		lines = append(lines, "Source: "+plugin.Source)
+	}
+	if description := strings.TrimSpace(plugin.Description); description != "" {
+		lines = append(lines, "Description: "+description)
+	}
+	fmt.Fprintln(stdout, strings.Join(lines, "\n"))
 }
 
 func writePluginInstallResult(stdout io.Writer, result pluginpkg.PluginInstallResult) {
@@ -1256,6 +1334,37 @@ func pluginCLIMarketplacePluginEntries(marketplacePlugins []pluginpkg.LoadedPlug
 		return out[i].Source < out[j].Source
 	})
 	return out
+}
+
+func pluginCLIMarketplaceFindEntry(entries []pluginCLIAvailableEntry, name string) (pluginCLIAvailableEntry, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return pluginCLIAvailableEntry{}, false
+	}
+	for _, entry := range entries {
+		for _, candidate := range pluginCLIMarketplaceEntryNames(entry) {
+			if strings.EqualFold(candidate, name) {
+				return entry, true
+			}
+		}
+	}
+	return pluginCLIAvailableEntry{}, false
+}
+
+func pluginCLIMarketplaceEntryNames(entry pluginCLIAvailableEntry) []string {
+	var names []string
+	for _, candidate := range []string{
+		entry.PluginID,
+		entry.Name,
+		entry.Name + "@" + entry.MarketplaceName,
+		entry.Name + "@" + entry.Version,
+	} {
+		candidate = strings.TrimSpace(strings.Trim(candidate, "@"))
+		if candidate != "" {
+			names = append(names, candidate)
+		}
+	}
+	return names
 }
 
 func pluginCLIMarketplaceEntryMatches(entry pluginCLIAvailableEntry, query string) bool {

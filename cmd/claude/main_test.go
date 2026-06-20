@@ -2352,6 +2352,49 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 	if len(marketplacePayload) != 1 || marketplacePayload[0]["pluginId"] != "lint tool@team" || marketplacePayload[0]["status"] != "available" {
 		t.Fatalf("marketplace json = %#v", marketplacePayload)
 	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "show", "market", "demo"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("marketplace show exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Marketplace plugin",
+		"Name: market demo",
+		"Plugin ID: market demo@team",
+		"Marketplace: team",
+		"Version: 2.0.0",
+		"Status: update available",
+		"Installed version: 1.0.0",
+		"Installed path: " + expectedInstalledDir,
+		"Description: Deploy marketplace plugin",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("marketplace show missing %q: %q", want, stdout.String())
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "info", "--json", "lint tool@team"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("marketplace info json exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var marketplaceInfo map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &marketplaceInfo); err != nil {
+		t.Fatalf("invalid marketplace info json stdout %q: %v", stdout.String(), err)
+	}
+	if marketplaceInfo["pluginId"] != "lint tool@team" || marketplaceInfo["name"] != "lint tool" || marketplaceInfo["status"] != "available" {
+		t.Fatalf("marketplace info json = %#v", marketplaceInfo)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "show", "missing"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), `plugin "missing" not found`) {
+		t.Fatalf("marketplace missing exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
 }
 
 func TestRunPluginValidateCLI(t *testing.T) {
