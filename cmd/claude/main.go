@@ -671,7 +671,7 @@ func runPluginMarketplaceCLI(state *bootstrap.State, args []string, stdout io.Wr
 		return runPluginMarketplaceListCLI(state, args[1:], stdout, stderr)
 	case "remove", "rm":
 		return runPluginMarketplaceRemoveCLI(state, args[1:], stdout, stderr)
-	case "update":
+	case "update", "refresh", "reload":
 		return runPluginMarketplaceUpdateCLI(state, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ccgo plugin marketplace: unsupported subcommand %s\n", args[0])

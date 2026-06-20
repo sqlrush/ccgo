@@ -3212,8 +3212,11 @@ func TestRunPluginMarketplaceListEmpty(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = run([]string{"--cwd", project, "plugin", "marketplace", "refresh"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), "unsupported subcommand refresh") {
-		t.Fatalf("unsupported exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	if code != 0 {
+		t.Fatalf("refresh exit = %d stderr=%s", code, stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "No marketplaces configured" {
+		t.Fatalf("refresh stdout = %q", stdout.String())
 	}
 }
 
