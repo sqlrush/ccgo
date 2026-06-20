@@ -323,6 +323,8 @@ M8 补充：headless `/plugin enable <name>` 与 `/plugin disable <name>` 现在
 
 M8/CLI 补充：`claude plugin marketplace refresh` 与 `reload` 现在作为 `update` 的别名进入同一 marketplace cache 刷新路径，不再被 CLI 分发层误报 unsupported；空 marketplace 状态与 `update` 保持一致。
 
+M8/CLI 补充：`claude plugin marketplace plugins|available|browse|discover|search|find [--json] [query]` 现在可直接浏览 configured marketplace 插件，文本与 JSON 输出都会标注 marketplace、version、description 和 available/installed/update-available 状态，复用当前 settings marketplace loader 和本地 installed plugin detection。
+
 M8 补充：headless `/plugin list|status` 现在会按 `enabledPlugins` 的 true/false 统计 enabled 数量并列出 enabled/disabled/configured 状态明细，方便验证本地 plugin lifecycle 状态。
 
 M8 补充：`enabledPlugins` 的 disabled 状态现在会过滤本地 plugin manifest 产生的 slash command、Skill tool prompt、agent/MCP/output-style/status/stream-init metadata，`/plugin disable <name>` 写入配置后不再只影响展示层；marketplace 下载/安装、版本解析、动态 refresh lifecycle 和完整 UI 管理仍待补齐。

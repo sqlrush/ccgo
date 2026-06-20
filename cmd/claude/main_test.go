@@ -2310,6 +2310,48 @@ func TestRunPluginListJSONAvailable(t *testing.T) {
 	if code != 2 || !strings.Contains(stderr.String(), "--available requires --json") {
 		t.Fatalf("available without json exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "plugins"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("marketplace plugins exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Marketplace plugins:",
+		"Marketplace plugins: 2",
+		"Matches: 2",
+		"- lint tool@1.0.0 [team] (available): Static checks",
+		"- market demo@2.0.0 [team] (update available: installed 1.0.0): Deploy marketplace plugin",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("marketplace plugins missing %q: %q", want, stdout.String())
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "search", "lint"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("marketplace search exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Query: lint") || !strings.Contains(stdout.String(), "- lint tool@1.0.0 [team] (available)") || strings.Contains(stdout.String(), "market demo@2.0.0") {
+		t.Fatalf("marketplace search stdout = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--cwd", project, "plugin", "marketplace", "plugins", "--json", "lint"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("marketplace plugins json exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var marketplacePayload []map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &marketplacePayload); err != nil {
+		t.Fatalf("invalid marketplace json stdout %q: %v", stdout.String(), err)
+	}
+	if len(marketplacePayload) != 1 || marketplacePayload[0]["pluginId"] != "lint tool@team" || marketplacePayload[0]["status"] != "available" {
+		t.Fatalf("marketplace json = %#v", marketplacePayload)
+	}
 }
 
 func TestRunPluginValidateCLI(t *testing.T) {
