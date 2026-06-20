@@ -1881,7 +1881,8 @@ func nativeFlagAllowed(name string, config powerShellNativeReadOnlyConfig) bool 
 		return false
 	}
 	for _, r := range name[1:] {
-		if !config.allowedFlags["-"+string(r)] {
+		short := "-" + string(r)
+		if !config.allowedFlags[short] || config.valueFlags[short] || config.pathFlags[short] || config.pathListFlags[short] || config.literalValueFlags[short] {
 			return false
 		}
 	}

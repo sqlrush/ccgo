@@ -442,6 +442,8 @@ func TestPowerShellCommandClassification(t *testing.T) {
 		"ver anything",
 		"route add 10.0.0.0 mask 255.0.0.0 192.168.1.1 print",
 		"netsh interface ipv4 show addresses",
+		"netstat -anop",
+		"netstat -anop tcp",
 		"netstat -p $env:PROTO",
 		"netstat -p @{N='tcp'}",
 		"netstat -p",
