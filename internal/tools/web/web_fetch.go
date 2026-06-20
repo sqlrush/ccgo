@@ -620,7 +620,8 @@ func stripHTMLWebFetchTags(body string, baseURL string) string {
 				anchors, _ = appendHTMLWebFetchAnchorHref(&b, anchors)
 			} else {
 				href := strings.TrimSpace(htmlWebFetchAttr(rawTag, "href"))
-				anchors = append(anchors, htmlWebFetchAnchor{Href: resolveWebFetchHTMLURL(href, baseURL), Start: b.Len()})
+				label := firstNonEmptyWebFetchAttr(rawTag, "aria-label", "title")
+				anchors = append(anchors, htmlWebFetchAnchor{Href: resolveWebFetchHTMLURL(href, baseURL), Label: label, Start: b.Len()})
 			}
 		}
 		if tag == "button" {
@@ -752,6 +753,7 @@ func resolveWebFetchBaseURL(raw string, fallback string) string {
 
 type htmlWebFetchAnchor struct {
 	Href  string
+	Label string
 	Start int
 }
 
@@ -786,6 +788,14 @@ func appendHTMLWebFetchAnchorHref(b *strings.Builder, anchors []htmlWebFetchAnch
 	current := b.String()
 	if anchor.Start >= 0 && anchor.Start <= len(current) {
 		text = strings.Join(strings.Fields(current[anchor.Start:]), " ")
+	}
+	if text == "" && strings.TrimSpace(anchor.Label) != "" {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString("Link: ")
+		b.WriteString(strings.TrimSpace(anchor.Label))
+		text = strings.TrimSpace(anchor.Label)
 	}
 	if text != "" && (text == href || strings.Contains(text, href)) {
 		return anchors, false

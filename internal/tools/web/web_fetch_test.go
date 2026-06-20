@@ -296,6 +296,47 @@ func TestWebFetchHTMLRenderingSkipsHiddenElements(t *testing.T) {
 	}
 }
 
+func TestWebFetchHTMLRenderingPreservesAccessibleLinkLabels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html>
+<html>
+<body>
+  <main>
+    <a href="/reports/q4" aria-label="Download quarterly report"><svg><title>ignored download icon</title></svg></a>
+    <a href="/help" title="Help center"></a>
+    <a href="javascript:alert(1)" aria-label="Unsafe menu"></a>
+  </main>
+</body>
+</html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{Context: context.Background(), Metadata: map[string]any{}}, contracts.ToolUse{
+		ID:    "toolu_web_html_accessible_links",
+		Name:  "WebFetch",
+		Input: json.RawMessage(`{"url":` + strconvQuote(server.URL) + `,"prompt":"quarterly report"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, ok := result.StructuredContent["rendered_body"].(string)
+	if !ok {
+		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
+	}
+	if !strings.Contains(rendered, "Link: Download quarterly report ("+server.URL+"/reports/q4)") ||
+		!strings.Contains(rendered, "Link: Help center ("+server.URL+"/help)") {
+		t.Fatalf("rendered body missing accessible link labels: %#v", rendered)
+	}
+	if strings.Contains(rendered, "ignored download icon") || strings.Contains(rendered, "Unsafe menu") || strings.Contains(rendered, "javascript:alert") {
+		t.Fatalf("rendered body leaked hidden/unsafe accessible link text: %#v", rendered)
+	}
+	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
+	if !ok || !strings.Contains(excerpt, "Download quarterly report") {
+		t.Fatalf("prompt excerpt missing accessible link label: %#v", result.StructuredContent["prompt_excerpt"])
+	}
+}
+
 func TestWebFetchHTMLRenderingPreservesLinksAndImageText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
