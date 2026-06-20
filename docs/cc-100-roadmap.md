@@ -181,6 +181,8 @@ M5 补充：Read/Edit 现在接受 `offset`/`limit` 和 `replace_all` 的 quoted
 
 M5 补充：WebFetch prompt-focused excerpt 的 term scoring 现在会匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`，同时仍保持词边界匹配避免子串误命中。
 
+M5 补充：WebSearch HTML snippet 提取现在识别 Bing 风格 `b_caption`/`b_snippet` 以及常见搜索摘要 class，标题 anchor 后的可见摘要会进入文本输出和 structured result。
+
 M5 补充：`Grep` content 输出现在支持 `only_matching`/`onlyMatching`/`only-matching`/`-o`，只输出匹配片段而不是整行，并在 structured matches 中暴露片段 column；`-o` 同样接受 quoted boolean。
 
 M5 补充：`Grep` count 输出现在支持 `count_matches`/`countMatches`/`count-matches`/`--count-matches`，需要时按匹配片段次数计数；`--count-matches` 可直接选择 count 输出，默认 count 继续保持匹配行计数，`countMatches` 同样接受 quoted boolean。

@@ -201,6 +201,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：WebFetch prompt-focused excerpt 的 term scoring 现在会匹配常见单复数变体，例如 prompt `cost` 可命中正文 `costs`，同时仍保持词边界匹配避免子串误命中。
 - 本轮补充：WebSearch HTML 结果解析现在会按搜索页首个有效 `<base href>` 解析相对结果 anchor，覆盖镜像/自定义搜索页中浏览器可见结果 URL 与请求路径不一致的情况。
 - 本轮补充：WebSearch HTML 结果解析现在会读取 `application/ld+json` JSON-LD 结果，递归抽取 `@graph`、`ItemList.itemListElement.item`，支持 JSON-LD `@id` URL alias，并与后续 anchor 结果按 URL 去重。
+- 本轮补充：WebSearch HTML snippet 提取现在识别 Bing 风格 `b_caption`/`b_snippet` 以及常见搜索摘要 class，标题 anchor 后的可见摘要会进入文本输出和 structured result。
 - 本轮补充：WebSearch JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见后端 wrapper，保留 URL 去重和 domain filter。
 - 本轮补充：WebSearch JSON result parser 现在支持 `pageUrl`/`targetUrl`/`source_url`/`formattedUrl` 等 URL aliases、`htmlTitle`/`htmlSnippet` 等 HTML 标记字段清理、嵌套 URL object，以及 `deepLinks`/`siteLinks` 子结果递归解析。
 - 本轮补充：WebSearch JSON parser 现在继续覆盖 `answerBox`/`answer_box`、`knowledgeGraph`/`knowledge_graph`、`news`/`news_results`、`topStories`、`peopleAlsoAsk` 和 `related_questions` 等常见搜索后端 wrapper，并识别 `website`/`sourceLink` URL alias、`question` title alias、`answer`/`excerpt` snippet alias。

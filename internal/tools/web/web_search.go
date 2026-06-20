@@ -441,7 +441,7 @@ var (
 	scriptTagRe   = regexp.MustCompile(`(?is)<script\b([^>]*)>(.*?)</script>`)
 	htmlCommentRe = regexp.MustCompile(`(?is)<!--.*?-->`)
 	hrefRe        = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
-	snippetRe     = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
+	snippetRe     = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet|b_caption|b_snippet|VwiC3b|hgKElc|lyLwlc)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
 	tagRe         = regexp.MustCompile(`(?is)<[^>]+>`)
 	jsonHTMLTagRe = regexp.MustCompile(`(?is)</?[a-z][a-z0-9:-]*(?:\s[^>]*)?>`)
 )

@@ -161,6 +161,46 @@ func TestWebSearchUnwrapsCommonRedirectResultURLs(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesBingStyleCaptionSnippets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+			<html><body>
+				<ol id="b_results">
+					<li class="b_algo">
+						<h2><a href="https://example.com/bing">Bing Style Result</a></h2>
+						<div class="b_caption"><p>Bing style caption with <strong>highlighted</strong> details.</p></div>
+					</li>
+				</ol>
+			</body></html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL + "/search",
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_bing_caption",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"bing caption","max_results":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["title"] != "Bing Style Result" || results[0]["url"] != "https://example.com/bing" || results[0]["snippet"] != "Bing style caption with highlighted details." {
+		t.Fatalf("result = %#v", results[0])
+	}
+	if !strings.Contains(result.Content.(string), "Bing style caption with highlighted details.") {
+		t.Fatalf("content = %#v", result.Content)
+	}
+}
+
 func TestWebSearchParsesHTMLJSONLDResults(t *testing.T) {
 	page := `
 		<html><head><base href="/catalog/"></head><body>
