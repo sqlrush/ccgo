@@ -201,6 +201,48 @@ func TestWebSearchParsesBingStyleCaptionSnippets(t *testing.T) {
 	}
 }
 
+func TestWebSearchParsesDataAttributeResultURLs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+			<html><body>
+				<a class="result__a" href="#" data-href="https://example.com/data">Data Href Result</a>
+				<div class="result__snippet">Data href snippet</div>
+				<a class="result__a" href="javascript:void(0)" data-url="https://docs.example.com/data-url">Data URL Result</a>
+				<div class="result__snippet">Data url snippet</div>
+			</body></html>`))
+	}))
+	defer server.Close()
+	executor := webExecutor(t)
+	result, err := executor.Execute(tool.Context{
+		Context: context.Background(),
+		Metadata: map[string]any{
+			MetadataWebSearchEndpointKey: server.URL + "/search",
+		},
+	}, contracts.ToolUse{
+		ID:    "toolu_search_data_attrs",
+		Name:  "WebSearch",
+		Input: json.RawMessage(`{"query":"data attrs","max_results":3}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, ok := result.StructuredContent["results"].([]map[string]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("structured results = %#v", result.StructuredContent["results"])
+	}
+	if results[0]["title"] != "Data Href Result" || results[0]["url"] != "https://example.com/data" || results[0]["snippet"] != "Data href snippet" {
+		t.Fatalf("first result = %#v", results[0])
+	}
+	if results[1]["title"] != "Data URL Result" || results[1]["url"] != "https://docs.example.com/data-url" || results[1]["snippet"] != "Data url snippet" {
+		t.Fatalf("second result = %#v", results[1])
+	}
+	content := result.Content.(string)
+	if strings.Contains(content, server.URL+"/search#") || strings.Contains(content, "javascript:void") {
+		t.Fatalf("content kept placeholder hrefs: %#v", content)
+	}
+}
+
 func TestWebSearchParsesHTMLJSONLDResults(t *testing.T) {
 	page := `
 		<html><head><base href="/catalog/"></head><body>

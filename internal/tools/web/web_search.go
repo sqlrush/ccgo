@@ -236,8 +236,7 @@ func parseHTMLSearchResults(body string, base *url.URL) []searchResult {
 		if label == "" {
 			continue
 		}
-		href := hrefFromAttrs(attrs)
-		resolved := resolveSearchURL(href, resultBase)
+		resolved := searchAnchorURLFromAttrs(attrs, resultBase)
 		if resolved == "" || isSearchChromeURL(resolved) {
 			continue
 		}
@@ -441,6 +440,7 @@ var (
 	scriptTagRe   = regexp.MustCompile(`(?is)<script\b([^>]*)>(.*?)</script>`)
 	htmlCommentRe = regexp.MustCompile(`(?is)<!--.*?-->`)
 	hrefRe        = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
+	attrRe        = regexp.MustCompile(`(?is)\b([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
 	snippetRe     = regexp.MustCompile(`(?is)<(?:a|div|span|td|p)\b[^>]*(?:result__snippet|snippet|b_caption|b_snippet|VwiC3b|hgKElc|lyLwlc)[^>]*>(.*?)</(?:a|div|span|td|p)>`)
 	tagRe         = regexp.MustCompile(`(?is)<[^>]+>`)
 	jsonHTMLTagRe = regexp.MustCompile(`(?is)</?[a-z][a-z0-9:-]*(?:\s[^>]*)?>`)
@@ -457,6 +457,58 @@ func hrefFromAttrs(attrs string) string {
 		}
 	}
 	return ""
+}
+
+func searchAnchorURLFromAttrs(attrs string, base *url.URL) string {
+	for _, raw := range attrValuesFromAttrs(attrs,
+		"data-href", "data-url", "data-result-url", "data-redirect-url", "data-link", "data-rurl", "data-u",
+		"href",
+	) {
+		if isSearchPlaceholderURL(raw) {
+			continue
+		}
+		resolved := resolveSearchURL(raw, base)
+		if resolved == "" || isSearchChromeURL(resolved) {
+			continue
+		}
+		return resolved
+	}
+	return ""
+}
+
+func attrValuesFromAttrs(attrs string, names ...string) []string {
+	if attrs == "" || len(names) == 0 {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		wanted[strings.ToLower(name)] = struct{}{}
+	}
+	var values []string
+	for _, match := range attrRe.FindAllStringSubmatch(attrs, -1) {
+		if len(match) < 5 {
+			continue
+		}
+		if _, ok := wanted[strings.ToLower(match[1])]; !ok {
+			continue
+		}
+		for _, item := range match[2:] {
+			if item != "" {
+				values = append(values, htmlstd.UnescapeString(item))
+				break
+			}
+		}
+	}
+	return values
+}
+
+func isSearchPlaceholderURL(raw string) bool {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	return raw == "" ||
+		raw == "#" ||
+		strings.HasPrefix(raw, "#") ||
+		strings.HasPrefix(raw, "javascript:") ||
+		strings.HasPrefix(raw, "about:")
 }
 
 func stripHTML(value string) string {
