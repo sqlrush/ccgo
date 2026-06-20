@@ -240,6 +240,7 @@ test/parity/                 # golden tests against TS/official behavior
 - 本轮补充：PowerShell read-only classifier 收紧 `Get-Process`/`Get-Service`，继续允许普通 literal name/id/displayName/include/exclude 查询参数，但拒绝动态表达式参数。
 - 本轮补充：PowerShell read-only classifier 收紧 metadata 查询类 cmdlet，`Get-Location`/`Get-Date`/`Get-PSDrive`/`Get-Module`/`Get-Alias`/`Get-History`/`Get-TimeZone` 继续允许普通 literal 参数，但拒绝动态表达式参数。
 - 本轮补充：PowerShell read-only classifier 收紧网络/DNS 查询类 cmdlet，`Get-NetAdapter`/`Get-NetIPAddress`/`Get-NetIPConfiguration`/`Get-NetRoute`/`Get-DnsClientCache`/`Get-DnsClient` 继续允许普通 literal 查询参数，但拒绝 `$env:`、hashtable 等动态表达式参数。
+- 本轮补充：PowerShell read-only classifier 收紧事件日志/CIM 查询类 cmdlet，`Get-EventLog` 和 `Get-CimClass` 继续允许普通 literal 查询参数，但拒绝 `$env:`、hashtable 等动态表达式参数。
 - 本轮补充：`BashOutput` 现在设置 100k 最大结果大小，和前台 `Bash` 一起覆盖大输出 tool-result preview 截断、完整输出落盘及 `full_output_path` 元数据。
 - 本轮补充：Bash/PowerShell 后台命令现在会通过 tool progress 通道发 started/finished 事件，记录后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和 stdout/stderr byte count，且 completed、timed_out、cancelled 终态测试确保 progress 不携带 command 文本。
 - 本轮补充：WebSearch domain filters 现在在 schema 层声明 array `items:string`，通用 tool schema validator 同步支持 `items` 校验；`allowed_domains`/`blocked_domains` 会拒绝空字符串、URL/port、非法 wildcard 和非域名 label。

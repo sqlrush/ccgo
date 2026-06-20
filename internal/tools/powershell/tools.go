@@ -1454,8 +1454,9 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		rejectExpressionValues: true,
 	},
 	"get-eventlog": {
-		allowedFlags: stringSet("logname", "newest", "after", "before", "entrytype", "index", "instanceid", "message", "source", "username", "asbaseobject", "list"),
-		valueFlags:   stringSet("logname", "newest", "after", "before", "entrytype", "index", "instanceid", "message", "source", "username"),
+		allowedFlags:           stringSet("logname", "newest", "after", "before", "entrytype", "index", "instanceid", "message", "source", "username", "asbaseobject", "list"),
+		valueFlags:             stringSet("logname", "newest", "after", "before", "entrytype", "index", "instanceid", "message", "source", "username"),
+		rejectExpressionValues: true,
 	},
 	"get-winevent": {
 		allowedFlags:               stringSet("logname", "listlog", "listprovider", "providername", "path", "maxevents", "filterxpath", "force", "oldest"),
@@ -1464,8 +1465,9 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		validatePositionalsAsPaths: true,
 	},
 	"get-cimclass": {
-		allowedFlags: stringSet("classname", "namespace", "methodname", "propertyname", "qualifiername"),
-		valueFlags:   stringSet("classname", "namespace", "methodname", "propertyname", "qualifiername"),
+		allowedFlags:           stringSet("classname", "namespace", "methodname", "propertyname", "qualifiername"),
+		valueFlags:             stringSet("classname", "namespace", "methodname", "propertyname", "qualifiername"),
+		rejectExpressionValues: true,
 	},
 	"start-sleep": {
 		allowedFlags:           stringSet("seconds", "milliseconds", "duration"),
