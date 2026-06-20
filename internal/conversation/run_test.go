@@ -4733,6 +4733,43 @@ func TestRunnerExecutesConfigShowSectionsWithoutQuery(t *testing.T) {
 		"schema",
 		"advanced",
 	}, nil)
+
+	for _, prompt := range []string{"/config all", "/config show all"} {
+		assertConfigShow(prompt, []string{
+			"Config all",
+			"Config settings files",
+			"Config model",
+			"Config output style",
+			"Config auth",
+			"Config env",
+			"Config permissions",
+			"Config MCP servers",
+			"Config plugins",
+			"Plugin marketplaces",
+			"Config settings schema",
+			"Config advanced integrations",
+		}, []string{"secret-value", "hidden-token", "plugin-secret"})
+	}
+}
+
+func TestRunnerConfigSlashCommandReportsUsageForUnknownSubcommand(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_config_unknown"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/config nope"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Unknown config subcommand: nope",
+		"Usage: /config [all|settings|model|output-style|auth|fast-mode|betas|env|permissions|mcp|hooks|plugins|marketplaces|sandbox|schema|advanced|show <section>|search <query>|output-style <name>|fast-mode <on|off>|model <name>|permission-mode <mode>]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("unknown config result missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "not implemented") {
+		t.Fatalf("unknown config should not report not implemented: %q", got)
+	}
 }
 
 func TestRunnerConfigSearchFindsSettingsWithoutLeakingValues(t *testing.T) {

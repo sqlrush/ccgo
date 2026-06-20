@@ -2783,6 +2783,9 @@ func (r *Runner) formatConfigSummary(raw string) string {
 		switch args[0] {
 		case "show", "list":
 			if len(args) > 1 && strings.TrimSpace(args[1]) != "" {
+				if isAllConfigSection(args[1]) {
+					return r.formatConfigAll()
+				}
 				return r.formatConfigShow(args[1])
 			}
 		case "search", "find":
@@ -2799,11 +2802,18 @@ func (r *Runner) formatConfigSummary(raw string) string {
 			return r.setConfigModelSummary(args)
 		case "permission-mode", "permissionMode":
 			return r.setPermissionModeSummary(args)
+		case "all", "full", "dump":
+			return r.formatConfigAll()
+		case "help", "-h", "--help":
+			return configUsageText()
 		default:
+			if isAllConfigSection(args[0]) {
+				return r.formatConfigAll()
+			}
 			if section := normalizeConfigSection(args[0]); isKnownConfigSection(section) {
 				return r.formatConfigShow(args[0])
 			}
-			return "Config subcommand is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+			return "Unknown config subcommand: " + strings.Join(args, " ") + "\n" + configUsageText()
 		}
 	}
 	cwd := strings.TrimSpace(r.WorkingDirectory)
@@ -2833,6 +2843,14 @@ func (r *Runner) formatConfigSummary(raw string) string {
 		"- permission rules: " + permissionsText,
 		fmt.Sprintf("- hooks: %d", len(merged.Hooks)),
 		fmt.Sprintf("- enabled plugins: %d", len(merged.EnabledPlugins)),
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r *Runner) formatConfigAll() string {
+	lines := []string{"Config all"}
+	for _, section := range configSectionNames() {
+		lines = append(lines, "", strings.TrimSpace(r.formatConfigShow(section)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3019,7 +3037,7 @@ func (r *Runner) formatConfigShow(raw string) string {
 	case "advanced":
 		return formatAdvancedSettings(merged.Advanced)
 	default:
-		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: settings, model, output-style, auth, fast-mode, betas, env, permissions, mcp, hooks, plugins, marketplaces, sandbox, schema, advanced"
+		return "Unknown config section " + strings.TrimSpace(raw) + ". Available sections: " + strings.Join(configSectionNames(), ", ")
 	}
 }
 
@@ -3085,6 +3103,23 @@ func normalizeConfigSection(raw string) string {
 func isKnownConfigSection(section string) bool {
 	switch normalizeConfigSection(section) {
 	case "settings", "model", "output-style", "auth", "fast-mode", "betas", "env", "permissions", "mcp", "hooks", "plugins", "marketplaces", "sandbox", "schema", "advanced":
+		return true
+	default:
+		return false
+	}
+}
+
+func configSectionNames() []string {
+	return []string{"settings", "model", "output-style", "auth", "fast-mode", "betas", "env", "permissions", "mcp", "hooks", "plugins", "marketplaces", "sandbox", "schema", "advanced"}
+}
+
+func configUsageText() string {
+	return "Usage: /config [all|" + strings.Join(configSectionNames(), "|") + "|show <section>|search <query>|output-style <name>|fast-mode <on|off>|model <name>|permission-mode <mode>]"
+}
+
+func isAllConfigSection(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(strings.TrimPrefix(raw, "--"))) {
+	case "all", "full", "dump", "everything":
 		return true
 	default:
 		return false
