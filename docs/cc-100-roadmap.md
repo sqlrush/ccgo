@@ -235,6 +235,8 @@ M5 补充：PowerShell command canonicalization 现在补齐 `Get-Alias`/`Get-PS
 
 M5 补充：PowerShell command canonicalization 现在补齐 `Resolve-Path` 的 `rvpa` alias，继续复用相对路径 guard，绝对路径和父目录路径仍拒绝。
 
+M5 补充：PowerShell read-only classifier 新增 `Split-Path` 安全路径字符串子集，允许安全相对 `Path`/`LiteralPath` 和 leaf/parent/qualifier/isAbsolute 输出形态，同时拒绝 `-Resolve`、绝对路径、父目录和变量路径。
+
 M5 补充：Bash 前台输出和 `BashOutput` 现在都走统一 tool-result budget 截断/落盘路径；`BashOutput` 增加 100k 最大结果限制，大后台输出会保存完整内容并返回 `full_output_path` 元数据。
 
 M5 补充：Bash/PowerShell 后台任务现在会发 `*_background_started` 和 `*_background_finished` tool progress 事件，包含后台 ID、shell/status、exit/timed_out/cancelled、duration、时间戳和输出字节数，不携带 command 文本；completed、timed_out、cancelled 终态均已覆盖测试。

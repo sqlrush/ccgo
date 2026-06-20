@@ -1248,6 +1248,11 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		pathFlags:                  stringSet("path", "literalpath"),
 		validatePositionalsAsPaths: true,
 	},
+	"split-path": {
+		allowedFlags:               stringSet("path", "literalpath", "parent", "leaf", "leafbase", "extension", "qualifier", "noqualifier", "isabsolute"),
+		pathFlags:                  stringSet("path", "literalpath"),
+		validatePositionalsAsPaths: true,
+	},
 	"get-filehash": {
 		allowedFlags:               stringSet("path", "literalpath", "algorithm"),
 		unsafeFlags:                stringSet("inputstream"),
