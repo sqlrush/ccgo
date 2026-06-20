@@ -1242,6 +1242,7 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 		pathFlags:                  stringSet("path", "literalpath"),
 		valueFlags:                 stringSet("pathtype", "filter", "include", "exclude", "newerthan", "olderthan"),
 		validatePositionalsAsPaths: true,
+		rejectExpressionValues:     true,
 	},
 	"resolve-path": {
 		allowedFlags:               stringSet("path", "literalpath", "relative"),
