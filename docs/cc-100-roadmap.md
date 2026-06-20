@@ -957,7 +957,7 @@ M7 补充：prompt history `LogEntry` 读取现在接受 `sessionID`/`session`/`
 
 本轮补充：`WebFetch` HTML-to-text rendering 现在会先解析 `<base href>` 再跳过 `<head>` 子树，`<title>` 等 head-only metadata 不再污染 rendered body 或 prompt-focused excerpt，同时不破坏相对链接解析。
 
-本轮补充：`WebFetch` HTML-to-text rendering 现在会跳过 `<iframe>` fallback 子树，iframe 内的备用文本不会被当成当前页面可见正文或 prompt-focused excerpt。
+本轮补充：`WebFetch` HTML-to-text rendering 现在会跳过 `<iframe>`、`<audio>`、`<video>` fallback 子树，嵌入内容的备用文本不会被当成当前页面可见正文或 prompt-focused excerpt。
 
 本轮补充：`WebSearch` JSON parser 现在会递归解包 `web`、`response`、`search`、`hits`、`documents`、`records`、`entries` 等常见搜索后端 wrapper，并继续保留 URL 去重和 allowed/blocked domain filter。
 

@@ -399,7 +399,7 @@ func TestWebFetchHTMLRenderingHonorsDetailsAndDialogVisibility(t *testing.T) {
 	}
 }
 
-func TestWebFetchHTMLRenderingSkipsIframeFallbackContent(t *testing.T) {
+func TestWebFetchHTMLRenderingSkipsEmbeddedFallbackContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(`<!doctype html>
@@ -409,7 +409,13 @@ func TestWebFetchHTMLRenderingSkipsIframeFallbackContent(t *testing.T) {
     <iframe src="/embedded">
       <p>Hidden iframe pricing leak should not render.</p>
     </iframe>
-    <p>Visible iframe pricing guidance appears in the page body.</p>
+    <audio controls>
+      Hidden audio pricing leak should not render.
+    </audio>
+    <video controls>
+      Hidden video pricing leak should not render.
+    </video>
+    <p>Visible embedded pricing guidance appears in the page body.</p>
   </main>
 </body>
 </html>`))
@@ -425,15 +431,30 @@ func TestWebFetchHTMLRenderingSkipsIframeFallbackContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered, ok := result.StructuredContent["rendered_body"].(string)
-	if !ok || !strings.Contains(rendered, "Visible iframe pricing guidance") {
+	if !ok || !strings.Contains(rendered, "Visible embedded pricing guidance") {
 		t.Fatalf("rendered body = %#v", result.StructuredContent["rendered_body"])
 	}
-	if strings.Contains(rendered, "Hidden iframe pricing leak") {
-		t.Fatalf("rendered body leaked iframe fallback text: %#v", rendered)
+	for _, leaked := range []string{
+		"Hidden iframe pricing leak",
+		"Hidden audio pricing leak",
+		"Hidden video pricing leak",
+	} {
+		if strings.Contains(rendered, leaked) {
+			t.Fatalf("rendered body leaked embedded fallback text %q: %#v", leaked, rendered)
+		}
 	}
 	excerpt, ok := result.StructuredContent["prompt_excerpt"].(string)
-	if !ok || !strings.Contains(excerpt, "Visible iframe pricing guidance") || strings.Contains(excerpt, "Hidden iframe pricing leak") {
+	if !ok || !strings.Contains(excerpt, "Visible embedded pricing guidance") {
 		t.Fatalf("prompt excerpt = %#v", result.StructuredContent["prompt_excerpt"])
+	}
+	for _, leaked := range []string{
+		"Hidden iframe pricing leak",
+		"Hidden audio pricing leak",
+		"Hidden video pricing leak",
+	} {
+		if strings.Contains(excerpt, leaked) {
+			t.Fatalf("prompt excerpt used embedded fallback text %q: %#v", leaked, excerpt)
+		}
 	}
 }
 
