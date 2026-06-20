@@ -187,6 +187,8 @@ M5 补充：PowerShell command canonicalization 现在补齐 mutating service al
 
 M5 补充：PowerShell destructive classifier 现在明确覆盖 `Stop-Computer`、`Suspend-Computer` 和 native `shutdown(.exe)`，这类关机/休眠路径不再落入未知普通命令分类。
 
+M5 补充：PowerShell command canonicalization 现在补齐 mutating job aliases：`sajb`/`spjb`/`rjb` 会分别归入 `Start/Stop/Remove-Job` destructive 分类，避免后台 job 创建、停止和删除 alias 被当成未知普通命令。
+
 M5 补充：WebFetch HTML-to-text rendering 现在会跳过 `hidden`、`aria-hidden="true"`、CSS `display:none`/`visibility:hidden` 的不可见元素子树，隐藏文本和图片说明不会进入 rendered body 或 prompt-focused excerpt。
 
 M5 补充：WebFetch HTML-to-text rendering 现在会为无可见文本但带 `aria-label`/`title` 的链接保留可访问名称和 resolved href，icon-only 链接可进入 rendered body 与 prompt-focused excerpt。
