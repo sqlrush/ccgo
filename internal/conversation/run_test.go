@@ -2792,6 +2792,74 @@ func TestRunnerExecutesStatusSlashCommandWithoutQuery(t *testing.T) {
 	}
 }
 
+func TestRunnerStatusSlashCommandReportsAllSections(t *testing.T) {
+	client := &fakeClient{}
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{Name: "Read", InputSchema: contracts.JSONSchema{"type": "object"}},
+		CallFunc: func(tool.Context, json.RawMessage, tool.ProgressSink) (contracts.ToolResult, error) {
+			t.Fatal("status should not call tools")
+			return contracts.ToolResult{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := Runner{
+		Client:           client,
+		Tools:            tool.NewExecutor(registry),
+		Model:            "sonnet",
+		SessionID:        "sess_status_all",
+		SessionPath:      filepath.Join(t.TempDir(), "session.jsonl"),
+		WorkingDirectory: t.TempDir(),
+	}
+	for _, prompt := range []string{"/status all", "/status show all"} {
+		result, err := runner.RunTurn(context.Background(), nil, messages.UserText(prompt))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("%s should not query model, requests = %#v", prompt, client.requests)
+		}
+		text := result.Messages[1].Content[0].Text
+		for _, want := range []string{
+			"Status all",
+			"Status session",
+			"Status model",
+			"Status auth",
+			"Status tools",
+			"Status plugins",
+			"Status telemetry",
+			"Status bridge",
+			"Status native",
+			"Status advanced integrations",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q: %q", prompt, want, text)
+			}
+		}
+	}
+}
+
+func TestRunnerStatusSlashCommandReportsUsageForUnknownSection(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_status_unknown"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/status unknown-section"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.Messages[1].Content[0].Text
+	for _, want := range []string{
+		"Unknown status section: unknown-section",
+		"Usage: /status <all|session|model|auth|tools|mcp|plugins|telemetry|bridge|remote|daemon|lsp|native|integrations>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("unknown status result missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "not implemented") {
+		t.Fatalf("unknown status should not report not implemented: %q", got)
+	}
+}
+
 func TestRunnerTelemetryDisabledByDefault(t *testing.T) {
 	client := &fakeClient{}
 	dir := t.TempDir()

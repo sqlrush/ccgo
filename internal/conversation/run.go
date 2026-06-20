@@ -1196,16 +1196,26 @@ func (r Runner) formatStatusSummary(raw string) string {
 		switch args[0] {
 		case "show", "info":
 			if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-				return "Usage: /status " + args[0] + " <session|model|auth|tools|mcp|plugins|telemetry|bridge|remote|daemon|lsp|native|integrations>"
+				return statusUsageText(args[0])
+			}
+			if isAllStatusSection(args[1]) {
+				return r.formatStatusAll()
 			}
 			return r.formatStatusShow(args[1])
 		case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native", "integrations":
 			return r.formatStatusShow(args[0])
+		case "all", "full", "dump":
+			return r.formatStatusAll()
+		case "help", "-h", "--help":
+			return statusUsageText("")
 		default:
+			if isAllStatusSection(args[0]) {
+				return r.formatStatusAll()
+			}
 			if section := normalizeStatusSection(args[0]); isKnownStatusSection(section) {
 				return r.formatStatusShow(args[0])
 			}
-			return "Status section is not implemented in the Go runtime yet: " + strings.Join(args, " ")
+			return "Unknown status section: " + strings.Join(args, " ") + "\n" + statusUsageText("")
 		}
 	}
 	model := r.model()
@@ -1239,6 +1249,14 @@ func (r Runner) formatStatusSummary(raw string) string {
 		toolCount,
 		mcpText,
 	)
+}
+
+func (r Runner) formatStatusAll() string {
+	lines := []string{"Status all"}
+	for _, section := range statusSectionNames() {
+		lines = append(lines, "", strings.TrimSpace(r.formatStatusShow(section)))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) formatStatusShow(raw string) string {
@@ -1360,13 +1378,34 @@ func (r Runner) formatStatusShow(raw string) string {
 	}
 }
 
-func isKnownStatusSection(section string) bool {
-	switch section {
-	case "session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native", "integrations":
+func statusSectionNames() []string {
+	return []string{"session", "model", "auth", "tools", "mcp", "plugins", "telemetry", "bridge", "remote", "daemon", "lsp", "native", "integrations"}
+}
+
+func statusUsageText(command string) string {
+	prefix := "/status"
+	if strings.TrimSpace(command) != "" {
+		prefix += " " + strings.TrimSpace(command)
+	}
+	return "Usage: " + prefix + " <all|" + strings.Join(statusSectionNames(), "|") + ">"
+}
+
+func isAllStatusSection(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(strings.TrimPrefix(raw, "--"))) {
+	case "all", "full", "dump", "everything":
 		return true
 	default:
 		return false
 	}
+}
+
+func isKnownStatusSection(section string) bool {
+	for _, known := range statusSectionNames() {
+		if section == known {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeStatusSection(raw string) string {
