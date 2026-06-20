@@ -1196,17 +1196,22 @@ type powerShellNativeReadOnlyConfig struct {
 	pathPositionalsAfterLiterals int
 }
 
-var powerShellCommonSwitchFlags = stringSet("verbose", "debug")
+var powerShellCommonSwitchFlags = stringSet("verbose", "vb", "debug", "db")
 
 var powerShellCommonValueFlags = stringSet(
 	"erroraction",
+	"ea",
 	"warningaction",
+	"wa",
 	"informationaction",
 	"progressaction",
 	"errorvariable",
+	"ev",
 	"warningvariable",
+	"wv",
 	"informationvariable",
 	"outbuffer",
+	"ob",
 )
 
 var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
