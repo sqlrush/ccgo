@@ -1177,6 +1177,7 @@ type powerShellReadOnlyConfig struct {
 	unsafeFlags                  map[string]bool
 	pathFlags                    map[string]bool
 	valueFlags                   map[string]bool
+	xpathFlags                   map[string]bool
 	allowAllFlags                bool
 	rejectExpressionValues       bool
 	rejectPositionals            bool
@@ -1470,7 +1471,9 @@ var powerShellReadOnlyCmdlets = map[string]powerShellReadOnlyConfig{
 	"get-winevent": {
 		allowedFlags:               stringSet("logname", "listlog", "listprovider", "providername", "path", "maxevents", "filterxpath", "force", "oldest"),
 		pathFlags:                  stringSet("path"),
-		valueFlags:                 stringSet("logname", "listlog", "listprovider", "providername", "maxevents", "filterxpath"),
+		valueFlags:                 stringSet("logname", "listlog", "listprovider", "providername", "maxevents"),
+		xpathFlags:                 stringSet("filterxpath"),
+		rejectExpressionValues:     true,
 		validatePositionalsAsPaths: true,
 	},
 	"get-cimclass": {
@@ -1700,7 +1703,7 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 			if unsafePowerShellOption(option) || config.unsafeFlags[option] {
 				return false
 			}
-			takesValue := config.pathFlags[option] || config.valueFlags[option] || powerShellCommonValueFlags[option]
+			takesValue := config.pathFlags[option] || config.valueFlags[option] || config.xpathFlags[option] || powerShellCommonValueFlags[option]
 			switch {
 			case config.allowAllFlags || config.allowedFlags[option] || powerShellCommonSwitchFlags[option] || powerShellCommonValueFlags[option]:
 			default:
@@ -1712,6 +1715,12 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 				}
 				if config.pathFlags[option] {
 					if !safeRelativePowerShellPath(value) {
+						return false
+					}
+					continue
+				}
+				if config.xpathFlags[option] {
+					if !safePowerShellXPathLiteral(value) {
 						return false
 					}
 					continue
@@ -1731,6 +1740,12 @@ func readOnlyPowerShellArgs(words []string, config powerShellReadOnlyConfig) boo
 				}
 				if config.pathFlags[option] {
 					if !safeRelativePowerShellPath(value) {
+						return false
+					}
+					continue
+				}
+				if config.xpathFlags[option] {
+					if !safePowerShellXPathLiteral(value) {
 						return false
 					}
 					continue
@@ -1761,6 +1776,20 @@ func safePowerShellParameterValue(value string, rejectExpressions bool) bool {
 		return false
 	}
 	return !rejectExpressions || !strings.ContainsAny(value, "$@{[")
+}
+
+func safePowerShellXPathLiteral(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	if value == "" || value == "--%" || strings.ContainsRune(value, '\x00') {
+		return false
+	}
+	if strings.ContainsAny(value, "$`{};&|") || strings.Contains(value, "@{") || strings.Contains(value, "@(") {
+		return false
+	}
+	if strings.HasPrefix(value, "(") || strings.HasSuffix(value, ")") {
+		return false
+	}
+	return true
 }
 
 func readOnlyNativeArgs(words []string, config powerShellNativeReadOnlyConfig) bool {
