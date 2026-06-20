@@ -2191,7 +2191,8 @@ func readOnlyWords(words []string) bool {
 	}
 	cmd := filepathBase(words[0])
 	switch cmd {
-	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "cut", "uniq", "diff", "cmp", "comm":
+	case "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "find", "stat", "file", "du", "df", "cut", "uniq", "diff", "cmp", "comm",
+		"md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum", "b2sum", "shasum", "cksum", "sum":
 		return readOnlyPathCommand(words)
 	case "sort":
 		return readOnlySort(words[1:])
@@ -2669,6 +2670,9 @@ func unsafeReadOnlyPathFlag(command string, word string) bool {
 	if command == "diff" && (word == "--output" || strings.HasPrefix(word, "--output=")) {
 		return true
 	}
+	if isChecksumCommand(command) && checksumCheckFlag(word) {
+		return true
+	}
 	if (command == "du" || command == "wc") && (word == "--files0-from" || strings.HasPrefix(word, "--files0-from=")) {
 		return true
 	}
@@ -2681,6 +2685,22 @@ func unsafeReadOnlyPathFlag(command string, word string) bool {
 		}
 	}
 	return false
+}
+
+func isChecksumCommand(command string) bool {
+	switch command {
+	case "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum", "b2sum", "shasum", "cksum":
+		return true
+	default:
+		return false
+	}
+}
+
+func checksumCheckFlag(word string) bool {
+	if word == "--check" || strings.HasPrefix(word, "--check=") {
+		return true
+	}
+	return strings.HasPrefix(word, "-") && !strings.HasPrefix(word, "--") && strings.Contains(strings.TrimLeft(word, "-"), "c")
 }
 
 func safeRelativeShellPathArg(value string) bool {
