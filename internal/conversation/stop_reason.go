@@ -87,6 +87,25 @@ func (r Runner) pauseTurnLimitMessage() contracts.Message {
 	return msg
 }
 
+// stripTrailingEmptyAssistant removes the last element of history if it is an
+// assistant message with no content. This is needed before compaction on a
+// model_context_window_exceeded response: the loop appends an empty-content
+// assistant message to history before the stop_reason switch, and that empty
+// turn must be dropped so neither the compacted history nor the retry request
+// ends with an invalid assistant turn (the Anthropic API rejects such inputs).
+// Returns a new slice (reslice of the original); safe to pass to forceCompact
+// which copies the slice internally.
+func stripTrailingEmptyAssistant(history []contracts.Message) []contracts.Message {
+	if len(history) == 0 {
+		return history
+	}
+	last := history[len(history)-1]
+	if last.Type == contracts.MessageAssistant && len(last.Content) == 0 {
+		return history[:len(history)-1]
+	}
+	return history
+}
+
 // forceCompact runs a one-shot forced compaction for ctx-window recovery,
 // reusing the existing auto-compaction machinery with Force enabled.
 // Returns (compactedHistory, compactResult, ok, err). ok==false means compaction

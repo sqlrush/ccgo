@@ -256,7 +256,8 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			// surface the error message and stop — no infinite loop.
 			if !contextWindowRecovered {
 				contextWindowRecovered = true
-				compactedHistory, compactResult, ok, cerr := runner.forceCompact(ctx, history)
+				compactInput := stripTrailingEmptyAssistant(history)
+				compactedHistory, compactResult, ok, cerr := runner.forceCompact(ctx, compactInput)
 				if cerr != nil {
 					return result, cerr
 				}

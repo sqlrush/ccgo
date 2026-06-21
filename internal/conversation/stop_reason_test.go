@@ -293,3 +293,75 @@ func TestRunTurnContextWindowExceededIsBounded(t *testing.T) {
 		t.Fatalf("StopReason = %q want model_context_window_exceeded", res.StopReason)
 	}
 }
+
+// TestRunTurnContextWindowRetryHasNoEmptyAssistant asserts that the history sent
+// on the retry request (3rd API call) after ctx-window compaction does NOT contain
+// an assistant message with empty content. Before the fix, the loop appended an
+// empty-content assistant message to history before detecting the stop_reason, and
+// that empty turn was forwarded to the retry — which the real Anthropic API rejects.
+func TestRunTurnContextWindowRetryHasNoEmptyAssistant(t *testing.T) {
+	client := &fakeClient{calls: []fakeCall{
+		// Call 1: ctx-window exceeded — response.Content is nil.
+		{response: &anthropic.Response{
+			ID:         "msg_ctx_exceeded",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "model_context_window_exceeded",
+			Content:    nil,
+		}},
+		// Call 2: compact summary.
+		{response: &anthropic.Response{
+			ID:         "msg_summary",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("compacted summary")},
+		}},
+		// Call 3: retry after compaction.
+		{response: &anthropic.Response{
+			ID:         "msg_recovered",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("recovered")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	r := Runner{
+		Client:        client,
+		CompactClient: client,
+		Model:         "sonnet",
+		MaxTokens:     128,
+		SessionID:     "sess_no_empty_assistant",
+		SessionPath:   transcriptPath,
+		AutoCompact: &compactpkg.AutoConfig{
+			Enabled:  true,
+			Force:    false,
+			KeepLast: 1,
+		},
+	}
+	history := []contracts.Message{
+		msgs.UserText("old message one"),
+		msgs.AssistantText("old reply one", "sonnet", nil),
+		msgs.UserText("old message two"),
+		msgs.AssistantText("old reply two", "sonnet", nil),
+	}
+	_, err := r.RunTurn(context.Background(), history, msgs.UserText("continue"))
+	if err != nil {
+		t.Fatalf("RunTurn err: %v", err)
+	}
+	// There must be exactly 3 recorded requests (initial, compact summary, retry).
+	if len(client.requests) != 3 {
+		t.Fatalf("expected 3 API requests; got %d", len(client.requests))
+	}
+	// Inspect the 3rd (retry) request — no message may be an assistant with empty content.
+	retryReq := client.requests[2]
+	for i, m := range retryReq.Messages {
+		if m.Role == "assistant" && len(m.Content) == 0 {
+			t.Fatalf("retry request message[%d] is an assistant message with empty content — empty assistant turn not stripped before compaction retry", i)
+		}
+	}
+}
