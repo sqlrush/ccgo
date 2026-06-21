@@ -89,6 +89,8 @@ var knownSettingsJSONKeys = []string{
 	"terminalTitleFromRename",
 	"alwaysThinkingEnabled",
 	"effortLevel",
+	"theme",
+	"editorMode",
 	"advisorModel",
 	"fastMode",
 	"fastModePerSessionOptIn",

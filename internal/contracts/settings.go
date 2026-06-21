@@ -53,6 +53,8 @@ type Settings struct {
 	TerminalTitleFromRename         *bool                       `json:"terminalTitleFromRename,omitempty"`
 	AlwaysThinkingEnabled           *bool                       `json:"alwaysThinkingEnabled,omitempty"`
 	EffortLevel                     string                      `json:"effortLevel,omitempty"`
+	Theme                           string                      `json:"theme,omitempty"`
+	EditorMode                      string                      `json:"editorMode,omitempty"`
 	AdvisorModel                    string                      `json:"advisorModel,omitempty"`
 	FastMode                        *bool                       `json:"fastMode,omitempty"`
 	FastModePerSessionOptIn         *bool                       `json:"fastModePerSessionOptIn,omitempty"`

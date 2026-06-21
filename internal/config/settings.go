@@ -187,6 +187,12 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 		if s.EffortLevel != "" {
 			out.EffortLevel = s.EffortLevel
 		}
+		if s.Theme != "" {
+			out.Theme = s.Theme
+		}
+		if s.EditorMode != "" {
+			out.EditorMode = s.EditorMode
+		}
 		if s.AdvisorModel != "" {
 			out.AdvisorModel = s.AdvisorModel
 		}
