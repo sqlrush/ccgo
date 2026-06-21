@@ -141,15 +141,12 @@ func TestControlAskerCtxCancelUnblocks(t *testing.T) {
 
 func TestControlAskerConcurrentRequestsCorrelate(t *testing.T) {
 	var mu sync.Mutex
-	requests := make(map[string]ControlRequest)
+	requestsByID := make(map[string]int) // maps request_id -> original goroutine index
 	reqCh := make(chan ControlRequest, 10)
 	counter := 0
 
 	asker := newControlAsker(
 		func(req ControlRequest) error {
-			mu.Lock()
-			requests[req.RequestID] = req
-			mu.Unlock()
 			reqCh <- req
 			return nil
 		},
@@ -179,33 +176,57 @@ func TestControlAskerConcurrentRequestsCorrelate(t *testing.T) {
 		}()
 	}
 
-	// Collect all n requests and resolve them in reverse order.
+	// Collect all n requests and map each by its request_id to the original goroutine index.
 	collected := make([]ControlRequest, 0, n)
 	timeout := time.After(5 * time.Second)
 	for len(collected) < n {
 		select {
 		case req := <-reqCh:
 			collected = append(collected, req)
+			// Extract original index from uid-<idx>.
+			toolUseID, _ := req.Request["tool_use_id"].(string)
+			var idx int
+			fmt.Sscanf(toolUseID, "uid-%d", &idx)
+			mu.Lock()
+			requestsByID[req.RequestID] = idx
+			mu.Unlock()
 		case <-timeout:
 			t.Fatalf("only got %d/%d requests", len(collected), n)
 		}
 	}
 
-	// Resolve each with a unique behavior — allow for even, deny for odd index.
-	for i, req := range collected {
+	// Resolve each request with a decision whose identity is the original goroutine index.
+	for _, req := range collected {
+		mu.Lock()
+		idx := requestsByID[req.RequestID]
+		mu.Unlock()
 		behavior := contracts.PermissionAllow
-		if i%2 == 1 {
+		if idx%2 == 1 {
 			behavior = contracts.PermissionDeny
 		}
-		asker.Resolve(req.RequestID, contracts.PermissionDecision{Behavior: behavior})
+		asker.Resolve(req.RequestID, contracts.PermissionDecision{
+			Behavior: behavior,
+			Message:  fmt.Sprintf("decision-%d", idx),
+		})
 	}
 
-	// Verify all goroutines received exactly one response.
+	// Verify all goroutines received exactly one response with the correct identity.
 	timeout2 := time.After(5 * time.Second)
 	for i := 0; i < n; i++ {
 		select {
 		case d := <-results[i]:
-			_ = d // just confirm it arrived
+			// Assert the decision matches what was resolved for this goroutine's request.
+			expectedBehavior := contracts.PermissionAllow
+			if i%2 == 1 {
+				expectedBehavior = contracts.PermissionDeny
+			}
+			if d.Behavior != expectedBehavior {
+				t.Errorf("goroutine %d: behavior = %v want %v", i, d.Behavior, expectedBehavior)
+			}
+			expectedMsg := fmt.Sprintf("decision-%d", i)
+			if d.Message != expectedMsg {
+				t.Errorf("goroutine %d: message = %q want %q (indicates crossed wires)", i, d.Message, expectedMsg)
+			}
 		case <-timeout2:
 			t.Fatalf("goroutine %d never received decision", i)
 		}

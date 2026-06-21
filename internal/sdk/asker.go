@@ -77,12 +77,17 @@ func (a *controlAsker) Ask(ctx context.Context, req tool.PermissionAskRequest) (
 
 // Resolve delivers a decision for a pending can_use_tool request. Called by the
 // SDK read-loop when a control_response with matching request_id arrives.
-// No-op if requestID is not pending (e.g. ctx was already cancelled).
+// No-op if requestID is not pending (e.g. ctx was already cancelled or already resolved).
+// Uses non-blocking send to guard against duplicate delivery.
 func (a *controlAsker) Resolve(requestID string, decision contracts.PermissionDecision) {
 	a.mu.Lock()
 	ch := a.waiting[requestID]
+	delete(a.waiting, requestID)
 	a.mu.Unlock()
 	if ch != nil {
-		ch <- decision
+		select {
+		case ch <- decision:
+		default:
+		}
 	}
 }
