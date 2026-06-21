@@ -25,7 +25,7 @@ func NewSlashMenu(cmds []contracts.Command, query string) *SlashMenu {
 
 func (m *SlashMenu) refilter() {
 	q := strings.ToLower(strings.TrimSpace(m.query))
-	filtered := m.filtered[:0]
+	filtered := make([]contracts.Command, 0, len(m.all))
 	for _, cmd := range m.all {
 		if cmd.Hidden {
 			continue
