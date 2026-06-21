@@ -1,6 +1,10 @@
 package repl
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
 
 func TestApplyResizeUpdatesScreen(t *testing.T) {
 	ft := NewFakeTerminal("", 80, 24)
@@ -23,5 +27,21 @@ func TestApplyResizeIgnoresNonPositive(t *testing.T) {
 	l.applyResize(resizeEvent{Width: 0, Height: -5})
 	if l.width != 80 || l.height != 24 {
 		t.Fatalf("non-positive resize must be ignored, got %dx%d", l.width, l.height)
+	}
+}
+
+func TestStartResizeListenerNoOpForNonTTY(t *testing.T) {
+	ft := NewFakeTerminal("", 80, 24)
+	ft.TTY = false
+	ctx := context.Background()
+	out := make(chan resizeEvent, 1)
+
+	startResizeListener(ctx, ft, out)
+
+	select {
+	case <-out:
+		t.Fatal("expected no event on channel for non-tty")
+	case <-time.After(50 * time.Millisecond):
+		// Correct: no-op confirmed
 	}
 }
