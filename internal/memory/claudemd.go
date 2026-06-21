@@ -9,6 +9,8 @@ type ClaudeFile struct {
 	Path  string
 	Root  string
 	Depth int
+	Scope Scope
+	Label string
 }
 
 func DiscoverClaudeFiles(cwd string) ([]ClaudeFile, error) {
