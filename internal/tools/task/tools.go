@@ -11,6 +11,7 @@ import (
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/orchestration"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -35,13 +36,16 @@ const (
 )
 
 type taskInput struct {
-	ID           string `json:"id,omitempty"`
-	Description  string `json:"description"`
-	Prompt       string `json:"prompt"`
-	SubagentType string `json:"subagent_type"`
-	Worktree     bool   `json:"worktree,omitempty"`
-	WorktreeSet  bool   `json:"-"`
-	Run          bool   `json:"run,omitempty"`
+	ID            string `json:"id,omitempty"`
+	Description   string `json:"description"`
+	Prompt        string `json:"prompt"`
+	SubagentType  string `json:"subagent_type"`
+	Worktree      bool   `json:"worktree,omitempty"`
+	WorktreeSet   bool   `json:"-"`
+	Run           bool   `json:"run,omitempty"`
+	Model         string `json:"model,omitempty"`
+	Isolation     string `json:"isolation,omitempty"`
+	RunBackground bool   `json:"run_in_background,omitempty"`
 }
 
 type taskOutputInput struct {
@@ -184,6 +188,20 @@ func NewTaskTool() tool.Tool {
 					"run": map[string]any{
 						"type":        "boolean",
 						"description": "Run the subagent synchronously after recording the task.",
+					},
+					"model": map[string]any{
+						"type":        "string",
+						"description": "Model alias override for this task (sonnet, opus, haiku).",
+						"enum":        []any{"", "sonnet", "opus", "haiku"},
+					},
+					"isolation": map[string]any{
+						"type":        "string",
+						"description": "Isolation strategy: worktree creates an isolated git worktree. Remote is not supported.",
+						"enum":        []any{"", "worktree"},
+					},
+					"run_in_background": map[string]any{
+						"type":        "boolean",
+						"description": "Launch the task asynchronously; retrieve the result later via TaskOutput.",
 					},
 				},
 			},
@@ -731,6 +749,20 @@ func taskInputSchema(ctx tool.PromptContext) contracts.JSONSchema {
 				"type":        "boolean",
 				"description": "Run the subagent synchronously after recording the task.",
 			},
+			"model": map[string]any{
+				"type":        "string",
+				"description": "Model alias override for this task (sonnet, opus, haiku).",
+				"enum":        []any{"", "sonnet", "opus", "haiku"},
+			},
+			"isolation": map[string]any{
+				"type":        "string",
+				"description": "Isolation strategy: worktree creates an isolated git worktree. Remote is not supported.",
+				"enum":        []any{"", "worktree"},
+			},
+			"run_in_background": map[string]any{
+				"type":        "boolean",
+				"description": "Launch the task asynchronously; retrieve the result later via TaskOutput.",
+			},
 		},
 	}
 	metadataAgents := taskAgentsFromMetadata(ctx.Metadata)
@@ -778,6 +810,15 @@ func normalizeTaskInput(raw json.RawMessage) (json.RawMessage, error) {
 	if value, ok := firstBool(obj, "run", "execute", "sync", "synchronous", "await", "wait"); ok {
 		input.Run = value
 	}
+	if value, ok := firstString(obj, "model", "model_alias", "modelAlias"); ok {
+		input.Model = value
+	}
+	if value, ok := firstString(obj, "isolation"); ok {
+		input.Isolation = value
+	}
+	if value, ok := firstBool(obj, "run_in_background", "runInBackground", "background", "async"); ok {
+		input.RunBackground = value
+	}
 	data, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
@@ -821,6 +862,12 @@ func validateTask(ctx tool.Context, raw json.RawMessage) error {
 	}
 	if len(taskAgentsFromMetadata(ctx.Metadata)) > 0 && !taskAgentAllowed(input.SubagentType, availableTaskAgents(ctx.Metadata)) {
 		return fmt.Errorf("subagent_type %q is not available (available: %s)", input.SubagentType, strings.Join(taskAgentNames(availableTaskAgents(ctx.Metadata)), ", "))
+	}
+	if _, err := orchestration.ValidateIsolation(input.Isolation); err != nil {
+		return fmt.Errorf("invalid isolation: %w", err)
+	}
+	if _, err := orchestration.ValidateModelAlias(input.Model); err != nil {
+		return fmt.Errorf("invalid model: %w", err)
 	}
 	return nil
 }
