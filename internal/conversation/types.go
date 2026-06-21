@@ -121,6 +121,8 @@ type Runner struct {
 	MaxTokens                 int
 	MaxToolRounds             int
 	UseStreaming              bool
+	EnablePromptCaching       bool
+	PromptCacheTTL            string
 	SessionID                 contracts.ID
 	SessionPath               string
 	WorkingDirectory          string

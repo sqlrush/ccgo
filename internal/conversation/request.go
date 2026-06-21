@@ -69,6 +69,11 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 	if len(deferredToolNames) > 0 && !r.deferredToolsDeltaEnabled() {
 		apiMessages = prependAvailableDeferredToolsMessage(apiMessages, deferredToolNames)
 	}
+	if r.EnablePromptCaching {
+		apiMessages = anthropic.AddCacheBreakpoints(apiMessages, true, anthropic.CacheBreakpointOptions{
+			CacheControl: contracts.CacheControl{Type: "ephemeral", TTL: r.PromptCacheTTL},
+		})
+	}
 	request := anthropic.Request{
 		Model:     model,
 		MaxTokens: r.maxTokens(),
