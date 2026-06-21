@@ -463,7 +463,7 @@ func TestBetaHeadersDedupedAndCustomHeadersApplied(t *testing.T) {
 
 func TestCreateMessageAddsDynamicCacheBetaHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("anthropic-beta"); got != "one,prompt-caching-scope-2024-07-31,cache-editing-2025-01-24" {
+		if got := r.Header.Get("anthropic-beta"); got != "one,prompt-caching-scope-2026-01-05,cache-editing-2025-01-24" {
 			t.Fatalf("anthropic-beta = %q", got)
 		}
 		w.Header().Set("content-type", "application/json")

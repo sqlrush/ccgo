@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	PromptCachingScopeBetaHeader = "prompt-caching-scope-2024-07-31"
+	PromptCachingScopeBetaHeader = "prompt-caching-scope-2026-01-05"
 	Context1MBetaHeader          = "context-1m-2025-08-07"
 	StructuredOutputsBetaHeader  = "structured-outputs-2025-11-13"
 	FastModeBetaHeader           = "fast-mode-2025-01-24"
