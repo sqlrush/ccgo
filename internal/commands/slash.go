@@ -68,6 +68,7 @@ const (
 	LocalCommandResultVim        LocalCommandResultType = "vim"
 	LocalCommandResultContext    LocalCommandResultType = "context"
 	LocalCommandResultPermissions LocalCommandResultType = "permissions"
+	LocalCommandResultExport      LocalCommandResultType = "export"
 )
 
 type LocalCommandResult struct {
@@ -255,6 +256,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultContext, Value: strings.TrimSpace(args)}, true
 	case "permissions":
 		return LocalCommandResult{Type: LocalCommandResultPermissions, Value: strings.TrimSpace(args)}, true
+	case "export":
+		return LocalCommandResult{Type: LocalCommandResultExport, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}

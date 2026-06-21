@@ -119,6 +119,7 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	router.Register("vim", vimHandler())
 	router.Register("permissions", permissionsHandler())
 	router.Register("allowed-tools", permissionsHandler())
+	router.Register("export", exportHandler(base.WorkingDirectory))
 	loop.onCommand = func(input string) (CommandOutcome, bool) {
 		cc := CommandContext{
 			Screen:  &loop.screen,
