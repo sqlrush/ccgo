@@ -12,10 +12,14 @@ import (
 
 // newTurnLoop builds a Loop wired to run real conversation turns. Callers may
 // set loop.onTurnDone before calling loop.Run for test synchronization.
-func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, history []contracts.Message) *Loop {
+// recorder is called best-effort on each submitted prompt; history failures
+// must not abort the turn.
+func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, history []contracts.Message, recorder HistoryRecorder) *Loop {
 	loop := NewLoop(term, nil)
 	loop.history = history
 	loop.StartTurn = func(input string) {
+		// Record submitted prompt to ~/.claude/history.jsonl (best-effort).
+		_ = recorder.Record(input)
 		user := messages.UserText(input)
 		turnHistory := append([]contracts.Message(nil), loop.history...)
 		turnCtx, turnCancel := context.WithCancel(ctx)
@@ -87,6 +91,13 @@ func RunInteractive(ctx context.Context, term Terminal, base conversation.Runner
 	return RunInteractiveWithOptions(ctx, term, base, history, InteractiveOptions{})
 }
 
+// newTurnLoopForRunner creates a turn loop with a HistoryRecorder derived from
+// the runner's WorkingDirectory and SessionID.
+func newTurnLoopForRunner(ctx context.Context, term Terminal, base conversation.Runner, history []contracts.Message) *Loop {
+	recorder := NewHistoryRecorder(base.WorkingDirectory, base.SessionID)
+	return newTurnLoop(ctx, term, base, history, recorder)
+}
+
 // newProductionRouter builds the canonical CommandRouter wired by RunInteractiveWithOptions.
 // It is extracted so that the parity test can enumerate registered names without
 // duplicating the registration list.
@@ -118,7 +129,7 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	loop := newTurnLoop(ctx, term, base, history)
+	loop := newTurnLoopForRunner(ctx, term, base, history)
 	if opts.Settings != nil {
 		loop.SetSettingsWriter(opts.Settings)
 	}

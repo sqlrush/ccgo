@@ -78,7 +78,7 @@ func TestRunInteractiveOneTurn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	loop := newTurnLoop(ctx, term, base, nil)
+	loop := newTurnLoop(ctx, term, base, nil, HistoryRecorder{Skip: true})
 	loop.onTurnDone = func() { close(gate) }
 
 	if err := loop.Run(ctx); err != nil {
