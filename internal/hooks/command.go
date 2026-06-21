@@ -324,7 +324,15 @@ func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.H
 	if event.Phase != h.Phase {
 		return tool.HookResult{}, nil
 	}
-	if !matchesPattern(event.ToolName, h.Matcher) || !h.matchesIf(event, ctx.WorkingDirectory) {
+	// For lifecycle phases (SessionStart, SessionEnd, Notification, etc.) the
+	// matcher is applied externally by filterByMatcher against the payload key
+	// (source/reason/notification_type), not against event.ToolName. Only check
+	// matchesPattern against event.ToolName for tool-call phases where ToolName
+	// is populated and meaningful.
+	if !IsLifecyclePhase(h.Phase) && !matchesPattern(event.ToolName, h.Matcher) {
+		return tool.HookResult{}, nil
+	}
+	if !h.matchesIf(event, ctx.WorkingDirectory) {
 		return tool.HookResult{}, nil
 	}
 	input, err := hookInput(ctx, event)
@@ -345,7 +353,12 @@ func (h HTTPHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.Hook
 	if event.Phase != h.Phase {
 		return tool.HookResult{}, nil
 	}
-	if !matchesPattern(event.ToolName, h.Matcher) || !h.matchesIf(event, ctx.WorkingDirectory) {
+	// For lifecycle phases the matcher is applied externally by filterByMatcher;
+	// skip the tool_name pattern check for those phases.
+	if !IsLifecyclePhase(h.Phase) && !matchesPattern(event.ToolName, h.Matcher) {
+		return tool.HookResult{}, nil
+	}
+	if !h.matchesIf(event, ctx.WorkingDirectory) {
 		return tool.HookResult{}, nil
 	}
 	input, err := hookInput(ctx, event)

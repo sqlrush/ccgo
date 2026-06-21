@@ -129,6 +129,28 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Fire SessionStart once at the session boundary. Source is "startup" for a
+	// fresh session (no prior history) and "resume" when seeded with history.
+	// If the hook injects additionalContext, prepend it as a user message.
+	source := conversation.SessionStartStartup
+	if len(history) > 0 {
+		source = conversation.SessionStartResume
+	}
+	if injected, err := base.RunSessionStartHooks(ctx, source); err != nil {
+		return err
+	} else if injected != "" {
+		history = append([]contracts.Message(nil), history...)
+		history = append(history, messages.UserText(injected))
+	}
+
+	// SessionEnd fires when RunInteractiveWithOptions returns (before cancel, due
+	// to LIFO ordering with defer cancel() declared above). Use context.Background()
+	// so the call is not affected by the parent ctx cancellation that may have
+	// triggered the exit.
+	defer func() {
+		_ = base.RunSessionEndHooks(context.Background(), conversation.SessionEndPromptInputExit)
+	}()
+
 	loop := newTurnLoopForRunner(ctx, term, base, history)
 	if opts.Settings != nil {
 		loop.SetSettingsWriter(opts.Settings)
