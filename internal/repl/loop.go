@@ -8,6 +8,7 @@ import (
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/tool"
 	"ccgo/internal/tui"
 )
 
@@ -15,12 +16,8 @@ import (
 // used by tests to confirm clean teardown.
 const ExitAlternateMarker = "\x1b[?1049l"
 
-// PermissionAskRequest is a placeholder for the Task 6 permission dialog wire-up.
-// TODO(task-6): replace with tool.PermissionAskRequest once internal/tool defines it.
-type PermissionAskRequest struct{}
-
 type askRequest struct {
-	req   PermissionAskRequest
+	req   tool.PermissionAskRequest
 	reply chan contracts.PermissionDecision
 }
 
@@ -45,7 +42,13 @@ type Loop struct {
 	// turn (typically in a goroutine) and posts to eventCh/askCh/doneCh.
 	StartTurn func(input string)
 
-	history []contracts.Message
+	history    []contracts.Message
+	pendingAsk *askRequest
+
+	// onPermissionShown is a test seam; nil in production. Called at the end of
+	// showPermission so tests can synchronize input delivery after the dialog is
+	// rendered.
+	onPermissionShown func()
 
 	running bool
 	width   int
@@ -108,6 +111,11 @@ func (l *Loop) Run(ctx context.Context) error {
 			if err := l.render(); err != nil {
 				return err
 			}
+		case ar := <-l.askCh:
+			l.showPermission(ar)
+			if err := l.render(); err != nil {
+				return err
+			}
 		case ev := <-l.eventCh:
 			l.applyEvent(ev)
 			if err := l.render(); err != nil {
@@ -164,6 +172,21 @@ func (l *Loop) readInput(ctx context.Context) {
 // It returns true when the loop should exit.
 func (l *Loop) handleKey(key tui.Key) bool {
 	event := l.screen.ApplyKey(key)
+
+	if l.pendingAsk != nil &&
+		(event.Type == tui.ScreenEventDialogAction || event.Type == tui.ScreenEventCancelled) {
+		result := l.dialog.ResolveScreenEvent(&l.screen, event, l.screen.Status)
+		if result.Found {
+			behavior := decisionFromAction(result.Action)
+			if result.Status == tui.DialogResultCancelled || result.Status == tui.DialogResultDenied {
+				behavior = contracts.PermissionDeny
+			}
+			l.pendingAsk.reply <- contracts.PermissionDecision{Behavior: behavior}
+			l.pendingAsk = nil
+		}
+		return false
+	}
+
 	switch event.Type {
 	case tui.ScreenEventExit:
 		return true
@@ -175,6 +198,23 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		}
 	}
 	return false
+}
+
+// showPermission registers a permission dialog with the dialog runtime and
+// applies it to the screen. onPermissionShown (if set) is called last so tests
+// can gate input delivery until the dialog is visible.
+func (l *Loop) showPermission(ar askRequest) {
+	l.pendingAsk = &ar
+	l.dialog.RequestPermission(tui.PermissionRequest{
+		ID:          string(ar.req.ToolUseID),
+		ToolName:    ar.req.ToolName,
+		Path:        ar.req.Path,
+		Description: ar.req.Description,
+	})
+	l.dialog.ApplyToScreen(&l.screen, l.screen.Status)
+	if l.onPermissionShown != nil {
+		l.onPermissionShown()
+	}
 }
 
 func (l *Loop) render() error {
