@@ -984,24 +984,24 @@ func TestRunHelpExitsSuccessfully(t *testing.T) {
 	}
 }
 
-func TestRunCWDFlagSetsScaffoldWorkingDirectory(t *testing.T) {
+func TestRunInteractiveWithoutCredentialsFails(t *testing.T) {
 	project := t.TempDir()
-	resolvedProject, err := filepath.EvalSymlinks(project)
-	if err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	// Clear every credential env var the auth path reads:
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_SCOPES", "")
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--cwd", project}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	if code != 1 {
+		t.Fatalf("exit = %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "cwd="+resolvedProject) {
-		t.Fatalf("stdout = %q", stdout.String())
-	}
-	if stderr.Len() != 0 {
+	if !strings.Contains(stderr.String(), "missing Anthropic credentials") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "scaffold ready") {
+		t.Fatalf("scaffold stub should be gone, got stdout = %q", stdout.String())
 	}
 }
 
