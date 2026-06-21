@@ -48,6 +48,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Type           ContentBlockType `json:"type"`
 		Text           string           `json:"text"`
+		Thinking       string           `json:"thinking"`
 		Source         any              `json:"source"`
 		ID             ID               `json:"id"`
 		Name           string           `json:"name"`
@@ -63,9 +64,16 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	canonicalType := canonicalContentBlockType(string(aux.Type))
+	// For thinking blocks, the reasoning is stored under the "thinking" JSON key.
+	// Prefer aux.Thinking over aux.Text so the canonical wire format is honoured.
+	text := aux.Text
+	if canonicalType == ContentThinking && aux.Thinking != "" {
+		text = aux.Thinking
+	}
 	*b = ContentBlock{
-		Type:           canonicalContentBlockType(string(aux.Type)),
-		Text:           aux.Text,
+		Type:           canonicalType,
+		Text:           text,
 		Source:         aux.Source,
 		ID:             string(aux.ID),
 		Name:           aux.Name,
@@ -112,6 +120,28 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		}
 	}
 	return nil
+}
+
+// MarshalJSON encodes ContentBlock to JSON, emitting thinking blocks with the
+// canonical Anthropic wire format: {"type":"thinking","thinking":"<reasoning>","signature":"<sig>"}.
+// All other block types are encoded via the default struct-tag marshaling so
+// their output is byte-identical to what encoding/json would produce on its own.
+func (b ContentBlock) MarshalJSON() ([]byte, error) {
+	if b.Type == ContentThinking {
+		type thinkingBlock struct {
+			Type      ContentBlockType `json:"type"`
+			Thinking  string           `json:"thinking,omitempty"`
+			Signature string           `json:"signature,omitempty"`
+		}
+		return json.Marshal(thinkingBlock{
+			Type:      b.Type,
+			Thinking:  b.Text,
+			Signature: b.Signature,
+		})
+	}
+	// Use a type alias to avoid infinite recursion while preserving all struct tags.
+	type alias ContentBlock
+	return json.Marshal(alias(b))
 }
 
 type CacheControl struct {
