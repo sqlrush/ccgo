@@ -162,6 +162,12 @@ func (l *Loop) finishTurn(out turnOutcome) {
 }
 
 // readInput segments the terminal byte stream into keys and posts them.
+// NOTE: when the tty is closed this goroutine may remain blocked inside
+// OSTerminal.Read / os.Stdin.Read, which is a blocking syscall not preemptable
+// by ctx cancellation. This is benign for cmd/claude (the process exits
+// immediately after Run returns), but a long-lived host embedding RunInteractive
+// would leak this goroutine — mirrors the cancel-limitation noted in
+// runLineMode above.
 func (l *Loop) readInput(ctx context.Context) {
 	defer close(l.inputCh)
 	scanner := NewSequenceScanner(readerFunc(l.term.Read))
@@ -202,8 +208,9 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	case tui.ScreenEventExit:
 		return true
 	case tui.ScreenEventPromptSubmitted:
-		// Ignore empty/whitespace-only submissions silently.
-		if l.StartTurn != nil && strings.TrimSpace(event.Value) != "" {
+		// Ignore empty/whitespace-only submissions and in-flight turns silently.
+		// l.running is only accessed in the loop goroutine, so no lock is needed.
+		if l.StartTurn != nil && !l.running && strings.TrimSpace(event.Value) != "" {
 			l.running = true
 			l.StartTurn(event.Value)
 		}

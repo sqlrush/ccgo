@@ -12,6 +12,24 @@ import (
 	"ccgo/internal/tui"
 )
 
+// blockingClient blocks in CreateMessage until ctx is cancelled, then signals
+// via clientReturned (buffered-1) that it has returned. Used to prove that
+// RunInteractive's internal cancel propagates to an in-flight turn goroutine.
+type blockingClient struct {
+	clientReturned chan struct{}
+}
+
+func (c blockingClient) CreateMessage(ctx context.Context, _ anthropic.Request) (*anthropic.Response, error) {
+	<-ctx.Done()
+	// Non-blocking send: buffered channel ensures the signal is never lost even
+	// if nobody is waiting (RunInteractive has already returned).
+	select {
+	case c.clientReturned <- struct{}{}:
+	default:
+	}
+	return nil, ctx.Err()
+}
+
 type fakeClient struct{}
 
 func (fakeClient) CreateMessage(_ context.Context, req anthropic.Request) (*anthropic.Response, error) {
@@ -69,5 +87,38 @@ func TestRunInteractiveOneTurn(t *testing.T) {
 	visible := tui.TerminalVisibleText(ft.Out.String())
 	if !strings.Contains(visible, "assistant-reply") {
 		t.Fatalf("assistant reply not rendered; got: %q", visible)
+	}
+}
+
+// TestRunInteractiveCancelsTurnOnExit proves that when RunInteractive returns
+// (e.g. the user exits while a turn is in flight) the internal cancel propagates
+// to the turn goroutine's RunTurn context, unblocking any in-flight API call.
+// Without the ctx, cancel := context.WithCancel / defer cancel() fix in
+// RunInteractive, the blockingClient would never receive ctx.Done() and the
+// goroutine would leak.
+func TestRunInteractiveCancelsTurnOnExit(t *testing.T) {
+	clientReturned := make(chan struct{}, 1)
+	base := conversation.Runner{
+		Client:    blockingClient{clientReturned: clientReturned},
+		Model:     "x",
+		MaxTokens: 8,
+	}
+
+	// FakeTerminal with "hello\r" followed by immediate EOF.  The loop submits
+	// the prompt (launching the blocking turn goroutine), then exits because the
+	// input stream closes — while the client is still blocked in CreateMessage.
+	term := NewFakeTerminal("hello\r", 80, 24)
+
+	if err := RunInteractive(context.Background(), term, base, nil); err != nil {
+		t.Fatalf("RunInteractive error: %v", err)
+	}
+
+	// After RunInteractive returns, the deferred cancel() must have fired,
+	// causing blockingClient.CreateMessage to unblock and signal clientReturned.
+	select {
+	case <-clientReturned:
+		// pass: turn goroutine was cancelled and unblocked
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn goroutine leaked: CreateMessage was not cancelled within 2s")
 	}
 }
