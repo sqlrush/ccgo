@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,11 @@ func Resolve(ctx tool.Context, hooks []tool.Hook, event tool.HookEvent) (Resolut
 	for i := range hooks {
 		go func(i int) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					outcomes[i] = hookOutcome{err: fmt.Errorf("hook %d panicked: %v", i, r)}
+				}
+			}()
 			result, err := hooks[i].RunToolHook(ctx, event)
 			outcomes[i] = hookOutcome{result: result, err: err}
 		}(i)
@@ -74,11 +80,14 @@ func Resolve(ctx tool.Context, hooks []tool.Hook, event tool.HookEvent) (Resolut
 		if hr.PermissionDecision != nil {
 			next := hr.PermissionDecision.Behavior
 			behavior = foldBehavior(behavior, next)
-			// Prefer the deny message; otherwise keep first non-empty message.
-			if next == contracts.PermissionDeny && strings.TrimSpace(hr.PermissionDecision.Message) != "" {
+			// First deny message wins (first-by-index), consistent with UpdatedInput.
+			if next == contracts.PermissionDeny && strings.TrimSpace(hr.PermissionDecision.Message) != "" && decisionMessage == "" {
 				decisionMessage = hr.PermissionDecision.Message
-			} else if decisionMessage == "" {
-				decisionMessage = hr.PermissionDecision.Message
+			} else if decisionMessage == "" && next != contracts.PermissionDeny {
+				// If no deny yet, accept first non-empty message from other behaviors.
+				if msg := strings.TrimSpace(hr.PermissionDecision.Message); msg != "" {
+					decisionMessage = msg
+				}
 			}
 		}
 	}

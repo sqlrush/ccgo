@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 
@@ -115,5 +116,68 @@ func TestResolveEmpty(t *testing.T) {
 	res, err := Resolve(tool.Context{Context: context.Background()}, nil, tool.HookEvent{})
 	if err != nil || res.Block || res.PermissionDecision != nil {
 		t.Fatalf("empty resolve = %#v, %v", res, err)
+	}
+}
+
+// panicHook panics in RunToolHook.
+type panicHook struct{}
+
+func (h panicHook) RunToolHook(_ tool.Context, _ tool.HookEvent) (tool.HookResult, error) {
+	panic("intentional test panic")
+}
+
+// testHook wraps a HookResult for testing.
+type testHook struct {
+	result tool.HookResult
+}
+
+func (h *testHook) RunToolHook(_ tool.Context, _ tool.HookEvent) (tool.HookResult, error) {
+	return h.result, nil
+}
+
+func TestResolveRecoversHookPanic(t *testing.T) {
+	hooks := []tool.Hook{
+		&testHook{result: allow()},
+		panicHook{},
+		&testHook{result: allow()},
+	}
+
+	err := func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("Resolve panicked instead of recovering: %v", r)
+			}
+		}()
+		_, err = Resolve(tool.Context{Context: context.Background()}, hooks, tool.HookEvent{Phase: tool.HookPreToolUse})
+		return err
+	}()
+
+	// We expect an error from the panicked hook.
+	if err == nil {
+		t.Fatalf("expected error from panic, got nil")
+	}
+	if !strings.Contains(err.Error(), "panicked") {
+		t.Fatalf("expected panic error, got: %v", err)
+	}
+}
+
+func TestResolveFirstDenyMessageWins(t *testing.T) {
+	hooks := []tool.Hook{
+		&testHook{result: tool.HookResult{PermissionDecision: &contracts.PermissionDecision{Behavior: contracts.PermissionDeny, Message: "first deny"}}},
+		&testHook{result: tool.HookResult{PermissionDecision: &contracts.PermissionDecision{Behavior: contracts.PermissionDeny, Message: "second deny"}}},
+	}
+
+	res, err := Resolve(tool.Context{Context: context.Background()}, hooks, tool.HookEvent{Phase: tool.HookPreToolUse})
+	if err != nil {
+		t.Fatalf("Resolve err: %v", err)
+	}
+	if res.PermissionDecision == nil {
+		t.Fatalf("nil decision")
+	}
+	if res.PermissionDecision.Behavior != contracts.PermissionDeny {
+		t.Fatalf("behavior = %v want %v", res.PermissionDecision.Behavior, contracts.PermissionDeny)
+	}
+	if res.PermissionDecision.Message != "first deny" {
+		t.Fatalf("message = %q, want %q", res.PermissionDecision.Message, "first deny")
 	}
 }
