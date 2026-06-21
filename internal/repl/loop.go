@@ -33,10 +33,11 @@ type Loop struct {
 	life   tui.ScreenLifecycle
 	dialog *tui.DialogRuntime
 
-	inputCh chan tui.Key
-	eventCh chan conversation.Event
-	askCh   chan askRequest
-	doneCh  chan turnOutcome
+	inputCh  chan tui.Key
+	eventCh  chan conversation.Event
+	askCh    chan askRequest
+	doneCh   chan turnOutcome
+	resizeCh chan resizeEvent
 
 	// StartTurn is invoked when the user submits a prompt. It runs the model
 	// turn (typically in a goroutine) and posts to eventCh/askCh/doneCh.
@@ -67,15 +68,16 @@ func NewLoop(t Terminal, history []string) *Loop {
 		w, h = 80, 24
 	}
 	return &Loop{
-		term:    t,
-		screen:  tui.NewREPLScreen(w, h, history),
-		dialog:  tui.NewDialogRuntime(),
-		inputCh: make(chan tui.Key, 64),
-		eventCh: make(chan conversation.Event, 256),
-		askCh:   make(chan askRequest, 4),
-		doneCh:  make(chan turnOutcome, 1),
-		width:   w,
-		height:  h,
+		term:     t,
+		screen:   tui.NewREPLScreen(w, h, history),
+		dialog:   tui.NewDialogRuntime(),
+		inputCh:  make(chan tui.Key, 64),
+		eventCh:  make(chan conversation.Event, 256),
+		askCh:    make(chan askRequest, 4),
+		doneCh:   make(chan turnOutcome, 1),
+		resizeCh: make(chan resizeEvent, 1),
+		width:    w,
+		height:   h,
 	}
 }
 
@@ -99,6 +101,7 @@ func (l *Loop) Run(ctx context.Context) error {
 	defer func() { _ = l.term.WriteString(l.life.ExitInteractive()) }()
 
 	go l.readInput(ctx)
+	startResizeListener(ctx, l.term, l.resizeCh)
 
 	if err := l.render(); err != nil {
 		return err
@@ -130,6 +133,11 @@ func (l *Loop) Run(ctx context.Context) error {
 			}
 		case out := <-l.doneCh:
 			l.finishTurn(out)
+			if err := l.render(); err != nil {
+				return err
+			}
+		case rev := <-l.resizeCh:
+			l.applyResize(rev)
 			if err := l.render(); err != nil {
 				return err
 			}
