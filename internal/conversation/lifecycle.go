@@ -22,11 +22,11 @@ const (
 type SessionEndReason string
 
 const (
-	SessionEndClear                   SessionEndReason = "clear"
-	SessionEndResume                  SessionEndReason = "resume"
-	SessionEndLogout                  SessionEndReason = "logout"
-	SessionEndPromptInputExit         SessionEndReason = "prompt_input_exit"
-	SessionEndOther                   SessionEndReason = "other"
+	SessionEndClear                     SessionEndReason = "clear"
+	SessionEndResume                    SessionEndReason = "resume"
+	SessionEndLogout                    SessionEndReason = "logout"
+	SessionEndPromptInputExit           SessionEndReason = "prompt_input_exit"
+	SessionEndOther                     SessionEndReason = "other"
 	SessionEndBypassPermissionsDisabled SessionEndReason = "bypass_permissions_disabled"
 )
 
