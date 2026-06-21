@@ -32,6 +32,7 @@ type Executor struct {
 	Registry       *Registry
 	ResultStoreDir string
 	Hooks          []Hook
+	Asker          PermissionAsker
 }
 
 func NewExecutor(registry *Registry) Executor {
@@ -103,23 +104,38 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 		}
 		var hookDecision *contracts.PermissionDecision
 		result, hookDecision, raw = e.runPermissionRequestHooks(ctx, use, t, raw, decision, result, permissionErr, sink)
-		if hookDecision == nil || hookDecision.Behavior == contracts.PermissionAsk {
-			_ = SendProgress(sink, use.ID, "permission_requested", map[string]any{"tool": t.Name(), "behavior": string(decision.Behavior)})
-			return result, permissionErr
-		}
-		if hookDecision.Behavior == contracts.PermissionDeny {
-			if hookDecision.Message != "" {
-				result.Content = hookDecision.Message
+		resolved := hookDecision
+		if resolved == nil || resolved.Behavior == contracts.PermissionAsk {
+			if e.Asker == nil {
+				_ = SendProgress(sink, use.ID, "permission_requested", map[string]any{"tool": t.Name(), "behavior": string(decision.Behavior)})
+				return result, permissionErr
 			}
-			result.Meta["permission"] = *hookDecision
-			_ = SendProgress(sink, use.ID, "permission_denied", map[string]any{"tool": t.Name(), "behavior": string(hookDecision.Behavior)})
-			return result, PermissionError{Decision: *hookDecision}
+			asked, askErr := e.Asker.Ask(ctx.Context, PermissionAskRequest{
+				ToolUseID:   use.ID,
+				ToolName:    t.Name(),
+				Path:        decision.BlockedPath,
+				Description: decision.Message,
+				Decision:    decision,
+			})
+			if askErr != nil {
+				return ErrorResult(use, askErr), askErr
+			}
+			resolved = &asked
+		}
+		// resolved is now non-nil and not Ask.
+		if resolved.Behavior == contracts.PermissionDeny {
+			if resolved.Message != "" {
+				result.Content = resolved.Message
+			}
+			result.Meta["permission"] = *resolved
+			_ = SendProgress(sink, use.ID, "permission_denied", map[string]any{"tool": t.Name(), "behavior": string(resolved.Behavior)})
+			return result, PermissionError{Decision: *resolved}
 		}
 		if err := t.Validate(ctx, raw); err != nil {
 			err = e.validationErrorWithSchemaHint(ctx, t, err)
 			return ErrorResult(use, err), err
 		}
-		_ = SendProgress(sink, use.ID, "permission_allowed", map[string]any{"tool": t.Name(), "behavior": string(hookDecision.Behavior)})
+		_ = SendProgress(sink, use.ID, "permission_allowed", map[string]any{"tool": t.Name(), "behavior": string(resolved.Behavior)})
 	}
 	if err := contextError(ctx); err != nil {
 		_ = SendProgress(sink, use.ID, "cancelled", map[string]any{"tool": t.Name(), "error": err.Error()})
