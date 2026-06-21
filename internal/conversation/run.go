@@ -726,6 +726,7 @@ func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Messag
 		return history, result, false, nil
 	}
 	compactpkg.RecordSuccess(r.AutoCompact)
+	_ = r.runPostCompactHooks(ctx, compactpkg.TriggerAuto, msgs.TextContent(result.Plan.Summary))
 	return result.Plan.Output, result, true, nil
 }
 
@@ -763,6 +764,7 @@ func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, 
 		return result, err
 	}
 	r.emit(Event{Type: EventCompact, Compact: &result})
+	_ = r.runPostCompactHooks(ctx, compactpkg.TriggerManual, msgs.TextContent(result.Plan.Summary))
 	return result, nil
 }
 

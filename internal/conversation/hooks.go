@@ -84,6 +84,29 @@ func (r Runner) runSubagentStopHooks(ctx context.Context, payload map[string]any
 	return nil
 }
 
+func (r Runner) runSubagentStartHooks(ctx context.Context, payload map[string]any) error {
+	result, err := r.runConversationHooks(ctx, tool.HookSubagentStart, payload)
+	if err != nil {
+		return err
+	}
+	if result.Block {
+		message := result.Message
+		if strings.TrimSpace(message) == "" {
+			message = "blocked by SubagentStart hook"
+		}
+		return fmt.Errorf("%s", message)
+	}
+	return nil
+}
+
+func (r Runner) runPostCompactHooks(ctx context.Context, trigger compactpkg.Trigger, summary string) error {
+	_, err := r.runConversationHooks(ctx, tool.HookPostCompact, map[string]any{
+		"trigger":         string(trigger),
+		"compact_summary": summary,
+	})
+	return err
+}
+
 func (r Runner) runPreCompactHooks(ctx context.Context, trigger compactpkg.Trigger, tokenUsage int, messageCount int, userContext string, extraInstructions string) (string, bool, error) {
 	payload := map[string]any{
 		"trigger":             string(trigger),

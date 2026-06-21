@@ -145,6 +145,15 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 		subRunner.Model = state.Metadata.AgentModel
 	}
 	history := append([]contracts.Message(nil), conversation.Messages...)
+	startRunner := subRunner
+	startRunner.MCP = r.MCP
+	if err := startRunner.runSubagentStartHooks(ctx, map[string]any{
+		"agent_id":   state.ID,
+		"agent_type": state.Metadata.AgentType,
+		"task_id":    state.ID,
+	}); err != nil {
+		return taskSubagentOutcome{}, r.finishTaskSubagentError(ctx, manager, state, err)
+	}
 	for round := 0; ; round++ {
 		if round >= subRunner.maxToolRounds() {
 			err := fmt.Errorf("task %s exceeded maximum subagent tool rounds: %d", state.ID, subRunner.maxToolRounds())
