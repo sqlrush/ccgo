@@ -16,6 +16,7 @@ import (
 const ExitAlternateMarker = "\x1b[?1049l"
 
 // PermissionAskRequest is a placeholder for the Task 6 permission dialog wire-up.
+// TODO(task-6): replace with tool.PermissionAskRequest once internal/tool defines it.
 type PermissionAskRequest struct{}
 
 type askRequest struct {
@@ -77,13 +78,13 @@ func (l *Loop) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer restore() //nolint:errcheck
+	defer restore()
 
 	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true}
 	if err := l.term.WriteString(l.life.EnterInteractive(opts)); err != nil {
 		return err
 	}
-	defer l.term.WriteString(l.life.ExitInteractive()) //nolint:errcheck
+	defer func() { _ = l.term.WriteString(l.life.ExitInteractive()) }()
 
 	go l.readInput(ctx)
 
@@ -134,6 +135,7 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	case tui.ScreenEventExit:
 		return true
 	case tui.ScreenEventPromptSubmitted:
+		// Ignore empty/whitespace-only submissions silently.
 		if l.StartTurn != nil && strings.TrimSpace(event.Value) != "" {
 			l.running = true
 			l.StartTurn(event.Value)
@@ -149,6 +151,7 @@ func (l *Loop) render() error {
 // runLineMode is the non-tty fallback: read lines, submit each as a prompt.
 func (l *Loop) runLineMode(ctx context.Context) error {
 	reader := bufio.NewReader(readerFunc(l.term.Read))
+	// NOTE: bufio ReadString blocks on the underlying reader; a ctx cancel mid-read is not preempted until the next newline or EOF. Acceptable for the non-tty fallback; the tty path (readInput) honors ctx.Done() promptly.
 	for {
 		select {
 		case <-ctx.Done():
