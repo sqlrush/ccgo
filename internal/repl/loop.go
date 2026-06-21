@@ -93,6 +93,12 @@ type Loop struct {
 	// that don't exercise the overlay action routing.
 	onOverlaySubmit func(string)
 
+	// onCommand is a test/host seam for routing live-effect slash commands.
+	// When non-nil, it is called before StartTurn for every prompt submission.
+	// If it returns (outcome, true), the outcome is applied and the model is
+	// not called. Production code wires a CommandRouter.Dispatch closure here.
+	onCommand func(input string) (CommandOutcome, bool)
+
 	running    bool
 	turnCancel context.CancelFunc
 	width      int
@@ -320,13 +326,32 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	case tui.ScreenEventPromptSubmitted:
 		// Ignore empty/whitespace-only submissions and in-flight turns silently.
 		// l.running is only accessed in the loop goroutine, so no lock is needed.
-		if l.StartTurn != nil && !l.running && strings.TrimSpace(event.Value) != "" {
-			l.running = true
-			l.StartTurn(event.Value)
-			l.startSpinner()
+		if l.StartTurn == nil || l.running || strings.TrimSpace(event.Value) == "" {
+			break
 		}
+		if l.onCommand != nil {
+			if outcome, handled := l.onCommand(event.Value); handled {
+				l.applyCommandOutcome(outcome)
+				break
+			}
+		}
+		l.running = true
+		l.StartTurn(event.Value)
+		l.startSpinner()
 	}
 	return false
+}
+
+// applyCommandOutcome applies a handled live-effect command's result to the
+// screen and history without sending anything to the model.
+func (l *Loop) applyCommandOutcome(outcome CommandOutcome) {
+	if outcome.ReplaceHistory {
+		l.history = outcome.NewHistory
+		l.screen.SetMessages(historyToScreen(l.history))
+	}
+	if outcome.Status != "" {
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: outcome.Status})
+	}
 }
 
 // enqueueAsk adds an ask to the active slot if empty, otherwise to the backlog.

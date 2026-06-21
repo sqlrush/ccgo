@@ -3,10 +3,39 @@ package repl
 import (
 	"fmt"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
 	"ccgo/internal/tui"
 )
+
+// historyToScreen converts a contracts.Message slice to tui.Message slice for
+// display. Messages with no text content are omitted.
+func historyToScreen(history []contracts.Message) []tui.Message {
+	result := make([]tui.Message, 0, len(history))
+	for _, m := range history {
+		var role tui.Role
+		switch m.Type {
+		case contracts.MessageUser:
+			role = tui.RoleUser
+		case contracts.MessageAssistant:
+			role = tui.RoleAssistant
+		default:
+			continue
+		}
+		var text string
+		for _, block := range m.Content {
+			if block.Type == contracts.ContentText {
+				text += block.Text
+			}
+		}
+		if text == "" {
+			continue
+		}
+		result = append(result, tui.Message{Role: role, Text: text})
+	}
+	return result
+}
 
 // messageFromEvent maps a conversation event to a renderable screen message.
 // Returns false for events that should not appear in the transcript view.
