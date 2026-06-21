@@ -205,6 +205,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "mcp") {
 		return runMCPCommand(flags.Args()[1:], stdout, stderr, defaultMCPCLIEnv(state.CWD()))
 	}
+	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "agents") {
+		return runAgentsCLI(state.CWD(), flags.Args()[1:], stdout, stderr)
+	}
 	if *printMode {
 		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
 		if err != nil {
