@@ -318,6 +318,8 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "permissions", Aliases: []string{"allowed-tools"}, Description: "List and edit allow/deny/ask permission rules", ArgumentHint: "[list | allow <rule> | deny <rule> | ask <rule> | remove <allow|deny|ask> <rule>]", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "export", Description: "Export the conversation transcript to a text file", ArgumentHint: "[filename]", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "doctor", Description: "Run health checks and diagnostics", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "hooks", Description: "View configured hooks (read-only)", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "ide", Description: "Detect connected IDEs", ArgumentHint: "[list|open]", Source: contracts.CommandSourceBuiltin},
 	})
 }
 

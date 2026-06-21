@@ -3,6 +3,7 @@ package repl
 import (
 	"context"
 
+	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
@@ -120,6 +121,11 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	router.Register("permissions", permissionsHandler())
 	router.Register("allowed-tools", permissionsHandler())
 	router.Register("export", exportHandler(base.WorkingDirectory))
+	router.Register("hooks", hooksHandler(func() contracts.Settings {
+		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
+		return s
+	}))
+	router.Register("ide", ideHandler(nil)) // nil → defaultIDEDetect
 	loop.onCommand = func(input string) (CommandOutcome, bool) {
 		cc := CommandContext{
 			Screen:  &loop.screen,
