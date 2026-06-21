@@ -58,6 +58,14 @@ type Loop struct {
 	activeAsk *askRequest
 	askQueue  []askRequest
 
+	// activeOverlay, when non-nil, receives all key events before normal
+	// prompt handling.  Cleared when the overlay submits or is dismissed.
+	activeOverlay Overlay
+
+	// registry holds the slash-command list used to populate the slash menu.
+	// Set via SetRegistry; nil means slash-menu is disabled.
+	registry []contracts.Command
+
 	// lastToolUse tracks the most recent EventToolUse so that the subsequent
 	// EventToolResult can be rendered with the richer diff output.
 	lastToolUse *contracts.ToolUse
@@ -89,6 +97,10 @@ type Loop struct {
 // SetSettingsWriter wires the settings writer used to persist "allow always"
 // permission rules. Called from run.go during Task 13 wiring.
 func (l *Loop) SetSettingsWriter(w ruleWriter) { l.settings = w }
+
+// SetRegistry sets the command list used to populate the slash-command overlay.
+// Call this from run.go once the command registry is loaded.
+func (l *Loop) SetRegistry(cmds []contracts.Command) { l.registry = cmds }
 
 func NewLoop(t Terminal, history []string) *Loop {
 	w, h, err := t.Size()
@@ -239,7 +251,30 @@ func (l *Loop) readInput(ctx context.Context) {
 // handleKey applies one key to the screen and acts on the resulting event.
 // It returns true when the loop should exit.
 func (l *Loop) handleKey(key tui.Key) bool {
+	// Route keys to the active overlay before any other handling.
+	if l.activeOverlay != nil {
+		res, handled := l.activeOverlay.ApplyKey(key)
+		if handled {
+			if res.Dismissed {
+				l.activeOverlay = nil
+			} else if res.Submit != "" {
+				l.activeOverlay = nil
+				if l.StartTurn != nil && !l.running {
+					l.running = true
+					l.startSpinner()
+					l.StartTurn(res.Submit)
+				}
+			}
+			return false
+		}
+	}
+
 	event := l.screen.ApplyKey(key)
+
+	// Open the slash menu when the prompt text is exactly "/" (first keystroke).
+	if l.activeOverlay == nil && l.registry != nil && l.screen.Prompt.Text == "/" {
+		l.activeOverlay = NewSlashMenu(l.registry, "")
+	}
 
 	if l.activeAsk != nil &&
 		(event.Type == tui.ScreenEventDialogAction || event.Type == tui.ScreenEventCancelled) {
@@ -360,6 +395,11 @@ func (l *Loop) denyPendingAsks() {
 }
 
 func (l *Loop) render() error {
+	if l.activeOverlay != nil {
+		lines := l.activeOverlay.Render(l.width, l.height)
+		prefix := l.life.ReassertInteractive(tui.TerminalModeOptions{})
+		return l.term.WriteString(prefix + strings.Join(lines, "\r\n") + "\r\n")
+	}
 	return l.term.WriteString(l.screen.Render())
 }
 
