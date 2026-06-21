@@ -293,7 +293,7 @@ Copied into each phase plan's "Global Constraints". Verbatim values:
 | 2 | `2026-06-21-phase2-interactive-completeness.md` | ✅ implemented | 13 |
 | 3 | `2026-06-21-phase3-agent-loop-wiring.md` | ✅ implemented | 9 |
 | 4 | `2026-06-21-phase4-auth-oauth.md` | ✅ implemented | 7 |
-| 5 | `2026-06-21-phase5-tools.md` | ✅ written | 10 |
+| 5 | `2026-06-21-phase5-tools.md` | ✅ implemented | 10 |
 | 6a | `2026-06-21-phase6a-mcp-cli-remote-oauth.md` | ✅ written | 10 |
 | 6b | `2026-06-21-phase6b-commands.md` | ✅ written | 13 |
 | 6c | `2026-06-21-phase6c-memory-claudemd-rewind.md` | ✅ written | 8 |
