@@ -295,7 +295,7 @@ Copied into each phase plan's "Global Constraints". Verbatim values:
 | 4 | `2026-06-21-phase4-auth-oauth.md` | ✅ implemented | 7 |
 | 5 | `2026-06-21-phase5-tools.md` | ✅ implemented | 10 |
 | 6a | `2026-06-21-phase6a-mcp-cli-remote-oauth.md` | ✅ implemented | 10 |
-| 6b | `2026-06-21-phase6b-commands.md` | ✅ written | 13 |
+| 6b | `2026-06-21-phase6b-commands.md` | ✅ implemented | 13 |
 | 6c | `2026-06-21-phase6c-memory-claudemd-rewind.md` | ✅ written | 8 |
 | 6d | `2026-06-21-phase6d-hooks-lifecycle.md` | ✅ written | 9 |
 | 7 | `2026-06-21-phase7-sandbox-team-sdk.md` | ✅ written | 9 |
