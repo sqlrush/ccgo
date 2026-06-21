@@ -345,3 +345,12 @@ StructuredDiff). The remaining work skews even further toward **wiring** than th
   (`/permissions`), and Phase 6d (hook `settingsOverride`) — keep one writer, coordinate callers.
 - Phase 2 competes with Phase 5 (plan-mode UI) and Phase 6b (command router) for
   `internal/repl`/`internal/tui` files — sequence Phase 2 first or isolate in a worktree.
+- **Phase 2 → Phase 6b (implemented 2026-06-21):** Phase 2 BUILT + TESTED the help / resume /
+  theme / memory overlays and the TrustDialog, plus the slash-command *menu* (opens on `/`). But
+  *opening* the help/resume/theme/memory overlays and *executing* a selected `/command` need the
+  slash-command **dispatch** (the command router), which is Phase 6b's deliverable. Until 6b lands,
+  a selected `/command` is sent to the model as literal text and those four overlays have no trigger.
+  This is a **conscious, documented deferral** (Phase-2 opus whole-branch review, finding #2), not a
+  gap: the components exist and pass tests; 6b wires `InteractiveOptions.{OnOverlay,ResumeEntries,
+  Themes,MemoryFiles,Trust}` + a slash dispatcher in `cmd/claude`. The TrustDialog also needs
+  `cmd/claude` to set `opts.Trust` from a first-run folder scan (6b/onboarding).
