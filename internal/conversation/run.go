@@ -180,8 +180,17 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		defer relevantMemoryPrefetch.cancel()
 	}
 
-	if microHistory, _, ok := runner.maybeMicroCompact(history); ok {
+	// Micro-compaction is an ephemeral per-turn pre-pass (CC query.ts:412-426): it
+	// summarises old history before sending the API request but the boundary and
+	// summary are intentionally NOT appended to result.Messages or the transcript.
+	// Auto-compaction appends to result.Messages because it represents a permanent
+	// history change; micro-compaction is recomputed from the full history each turn,
+	// so writing it into result.Messages (which the caller persists) would make it
+	// permanent and defeat the ephemeral design. MicroCompact is set only for
+	// observability so callers can tell that micro-compaction fired.
+	if microHistory, microResult, ok := runner.maybeMicroCompact(history); ok {
 		history = microHistory
+		result.MicroCompact = microResult
 	}
 	if compactedHistory, compactResult, ok, err := runner.maybeAutoCompact(ctx, history); err != nil {
 		return result, err

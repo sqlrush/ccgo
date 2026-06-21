@@ -187,6 +187,14 @@ type Result struct {
 	ModelsAttempt []string
 	Compacted     bool
 	Compact       *compactpkg.Result
+	// MicroCompact holds the result of ephemeral micro-compaction when it fired
+	// during this turn. It is set for observability only — the micro boundary and
+	// summary are intentionally NOT appended to Messages (unlike auto-compaction)
+	// because the caller persists result.Messages to its history, which would make
+	// the compaction permanent and defeat micro-compaction's per-turn ephemeral
+	// semantics (see CC query.ts:412-426). MicroCompact is nil when micro-compaction
+	// is disabled or did not fire.
+	MicroCompact  *compactpkg.MicroResult
 	Cleared       bool
 }
 

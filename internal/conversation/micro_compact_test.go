@@ -1,8 +1,11 @@
 package conversation
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 
+	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 )
@@ -103,5 +106,94 @@ func TestMaybeMicroCompactKeepLastAll(t *testing.T) {
 	}
 	if len(out) != len(history) {
 		t.Fatalf("history changed when nothing to summarize: %d -> %d", len(history), len(out))
+	}
+}
+
+// TestRunTurnMicroCompactObservability verifies that when micro-compaction fires,
+// result.MicroCompact is populated (observability) but the micro boundary and summary
+// are NOT appended to result.Messages (ephemeral semantics: the caller persists
+// result.Messages to history and appending would make the compaction permanent,
+// defeating CC query.ts:412-426 ephemeral design).
+func TestRunTurnMicroCompactObservability(t *testing.T) {
+	history := microCompactableHistory(t, 4) // 4 messages — micro fires with KeepLast=1
+
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_micro_obs",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("ok")},
+			Usage:      contracts.Usage{InputTokens: 10, OutputTokens: 3},
+		}},
+	}}
+
+	runner := Runner{
+		Client:               client,
+		Model:                "sonnet",
+		MaxTokens:            128,
+		SessionID:            "sess_micro_obs",
+		SessionPath:          filepath.Join(t.TempDir(), "session.jsonl"),
+		EnableMicroCompact:   true,
+		MicroCompactKeepLast: 1,
+	}
+
+	result, err := runner.RunTurn(context.Background(), history, msgs.UserText("ping"))
+	if err != nil {
+		t.Fatalf("RunTurn error: %v", err)
+	}
+
+	// Observability: MicroCompact must be set when micro-compaction fired.
+	if result.MicroCompact == nil {
+		t.Fatal("result.MicroCompact is nil — observability field not set when micro-compact fired")
+	}
+	if result.MicroCompact.MessagesSummarized == 0 {
+		t.Fatal("result.MicroCompact.MessagesSummarized = 0, want > 0")
+	}
+
+	// Ephemeral invariant: micro boundary (Subtype "compact_boundary") must NOT appear
+	// in result.Messages. The caller (repl loop) appends result.Messages to its
+	// persistent history; adding the micro output would make it permanent.
+	for _, msg := range result.Messages {
+		if msg.Subtype == "compact_boundary" {
+			t.Errorf("compact_boundary message found in result.Messages (UUID=%q) — micro-compact output must be ephemeral and not persisted to history", msg.UUID)
+		}
+	}
+}
+
+// TestRunTurnMicroCompactDisabledResultNil verifies that result.MicroCompact is nil
+// when micro-compaction is disabled, so callers can safely check the field.
+func TestRunTurnMicroCompactDisabledResultNil(t *testing.T) {
+	history := microCompactableHistory(t, 4)
+
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_micro_dis",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("ok")},
+			Usage:      contracts.Usage{InputTokens: 10, OutputTokens: 3},
+		}},
+	}}
+
+	runner := Runner{
+		Client:      client,
+		Model:       "sonnet",
+		MaxTokens:   128,
+		SessionID:   "sess_micro_dis",
+		SessionPath: filepath.Join(t.TempDir(), "session.jsonl"),
+		// EnableMicroCompact intentionally omitted (false)
+	}
+
+	result, err := runner.RunTurn(context.Background(), history, msgs.UserText("ping"))
+	if err != nil {
+		t.Fatalf("RunTurn error: %v", err)
+	}
+
+	if result.MicroCompact != nil {
+		t.Fatalf("result.MicroCompact should be nil when disabled, got %+v", result.MicroCompact)
 	}
 }
