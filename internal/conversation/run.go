@@ -223,6 +223,14 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	toolRounds := 0
 	firstSend := true
 	for {
+		// The tool-round budget caps the number of model requests in a tool
+		// loop, so it is checked BEFORE each send. Only genuine tool-execution
+		// rounds increment toolRounds (recovery continues below do not), so
+		// recoveries cannot starve the budget.
+		if toolRounds >= runner.maxToolRounds() {
+			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
+		}
+
 		var roundRelevantMemoryPrefetch *relevantMemoryPrefetchTask
 		if firstSend {
 			firstSend = false
@@ -352,10 +360,8 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			}
 			return result, nil
 		}
-		// Only genuine tool-execution rounds count against the budget.
-		if toolRounds >= runner.maxToolRounds() {
-			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
-		}
+		// Only genuine tool-execution rounds count against the budget (the
+		// limit itself is enforced at the top of the loop, before the send).
 		toolRounds++
 		toolMessages, toolResults := runner.executeToolUses(ctx, uses, toolMetadata, result.Messages)
 		if orphans := synthesizeOrphanedToolResults(runner.SessionID, assistant, toolMessages, "Tool execution was interrupted."); len(orphans) > 0 {
