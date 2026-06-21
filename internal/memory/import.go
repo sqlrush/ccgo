@@ -186,12 +186,21 @@ func resolveImportPath(target string, opts ImportOptions) (string, bool) {
 
 	// Path traversal defence: reject paths that escape AllowedRoot when
 	// AllowExternal is false.
-	if !opts.AllowExternal && opts.AllowedRoot != "" {
-		root, err := filepath.Abs(opts.AllowedRoot)
+	if !opts.AllowExternal {
+		// Default AllowedRoot to BaseDir if not set (security: no traversal by default).
+		root := opts.AllowedRoot
+		if root == "" {
+			root = opts.BaseDir
+		}
+		// If both are empty, reject the import (no safe default).
+		if root == "" {
+			return "", false
+		}
+		absRoot, err := filepath.Abs(root)
 		if err != nil {
 			return "", false
 		}
-		rel, err := filepath.Rel(root, abs)
+		rel, err := filepath.Rel(absRoot, abs)
 		if err != nil {
 			return "", false
 		}

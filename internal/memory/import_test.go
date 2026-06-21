@@ -64,6 +64,33 @@ func TestResolveImportsBlocksTraversal(t *testing.T) {
 	}
 }
 
+// TestResolveImportsDefaultAllowedRootToBaseDir ensures that when AllowExternal
+// is false and AllowedRoot is empty, the default root is BaseDir, so traversal
+// protection is on by default even if the caller forgets AllowedRoot.
+func TestResolveImportsDefaultAllowedRootToBaseDir(t *testing.T) {
+	root := t.TempDir()
+	sibling := t.TempDir()
+	doc := docFor(t, filepath.Join(root, "CLAUDE.md"), "")
+
+	// Attempt relative traversal outside BaseDir (to sibling dir).
+	escapeAttempt := filepath.Join(sibling, "secret.md")
+	writeFile(t, escapeAttempt, "secret data")
+
+	// Try to import it using a path like @../sibling/secret.md from root.
+	relativePath := filepath.Join("..", filepath.Base(sibling), "secret.md")
+	doc.Content = "@" + relativePath + "\n"
+
+	// AllowExternal=false, AllowedRoot="" (empty) — should default to BaseDir.
+	opts := ImportOptions{BaseDir: root, AllowedRoot: "", MaxDepth: 5, AllowExternal: false}
+	imported, err := ResolveImports(doc, opts)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(imported) != 0 {
+		t.Fatalf("expected traversal to be blocked (default AllowedRoot=BaseDir); got %v imported docs", len(imported))
+	}
+}
+
 func TestResolveImportsDepthCap(t *testing.T) {
 	root := t.TempDir()
 	// chain c0 -> c1 -> ... -> c10
