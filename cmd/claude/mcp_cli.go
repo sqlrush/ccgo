@@ -29,6 +29,20 @@ func defaultMCPCLIEnv(projectRoot string) mcpCLIEnv {
 	}
 }
 
+// pathForScope resolves a scope name to the corresponding settings file path.
+func (e mcpCLIEnv) pathForScope(scope string) (string, error) {
+	switch scope {
+	case mcp.ScopeUser:
+		return e.UserPath, nil
+	case mcp.ScopeProject:
+		return config.ProjectSettingsPath(e.ProjectRoot), nil
+	case mcp.ScopeLocal:
+		return config.LocalSettingsPath(e.ProjectRoot), nil
+	default:
+		return "", fmt.Errorf("unknown scope %q", scope)
+	}
+}
+
 // runMCPCommand is the top-level dispatcher for all `claude mcp` subcommands.
 func runMCPCommand(args []string, stdout, stderr io.Writer, env mcpCLIEnv) int {
 	if len(args) == 0 {
@@ -194,11 +208,6 @@ func mcpGet(args []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
 // ---------------------------------------------------------------------------
 // Stubs for subcommands implemented in later tasks.
 // ---------------------------------------------------------------------------
-
-func mcpAdd(args []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "ccgo mcp add: not yet implemented")
-	return 1
-}
 
 func mcpAddJSON(args []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stderr, "ccgo mcp add-json: not yet implemented")
