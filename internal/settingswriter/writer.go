@@ -53,7 +53,8 @@ func (w Writer) Apply(update contracts.PermissionUpdate) error {
 	}
 
 	// Build a new permissions map (do not mutate the one from doc).
-	existing := asStringSet(asMap(doc["permissions"])[key])
+	origPerms := asMap(doc["permissions"])
+	existing := asStringSet(origPerms[key])
 	for _, value := range update.Rules {
 		rule := permissions.PermissionRuleValueToString(value)
 		existing[rule] = struct{}{}
@@ -61,7 +62,7 @@ func (w Writer) Apply(update contracts.PermissionUpdate) error {
 
 	// Build a new top-level doc to avoid mutating the doc map in-place with
 	// a reference we don't own.
-	newPerms := copyMap(asMap(doc["permissions"]))
+	newPerms := copyMap(origPerms)
 	newPerms[key] = sortedKeys(existing)
 
 	newDoc := copyMap(doc)
@@ -98,9 +99,9 @@ func behaviorKey(behavior contracts.PermissionBehavior) (string, error) {
 	}
 }
 
-// asMap safely casts v to map[string]any, returning a fresh empty map if the
-// cast fails. It does NOT return the original map to prevent callers from
-// accidentally mutating shared state.
+// asMap safely casts v to map[string]any, returning the original map on
+// successful cast, or a fresh empty map otherwise. Callers must use copyMap
+// before writing to avoid mutating shared state.
 func asMap(v any) map[string]any {
 	if m, ok := v.(map[string]any); ok {
 		return m

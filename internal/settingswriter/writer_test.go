@@ -84,3 +84,41 @@ func TestApplyRejectsEmptyRules(t *testing.T) {
 		t.Fatal("expected error for update with no rules")
 	}
 }
+
+func TestApplyPreservesSiblingPermissionsKeys(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "settings.json")
+	initial := map[string]any{
+		"theme": "dark",
+		"permissions": map[string]any{
+			"deny": []any{"Bash(rm -rf:*)"},
+		},
+	}
+	data, _ := json.MarshalIndent(initial, "", "  ")
+	if err := os.MkdirAll(filepath.Dir(userPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	w := New(userPath, filepath.Join(dir, "proj.json"))
+	if err := w.Apply(contracts.PermissionUpdate{
+		Type:        "addRules",
+		Destination: "userSettings",
+		Behavior:    contracts.PermissionAllow,
+		Rules:       []contracts.PermissionRuleValue{{ToolName: "Read"}},
+	}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	doc := readDoc(t, userPath)
+	if doc["theme"] != "dark" {
+		t.Errorf("theme key clobbered: %v", doc["theme"])
+	}
+	perms := doc["permissions"].(map[string]any)
+	if deny, _ := perms["deny"].([]any); len(deny) != 1 || deny[0] != "Bash(rm -rf:*)" {
+		t.Errorf("deny key clobbered: %v", perms["deny"])
+	}
+	if allow, _ := perms["allow"].([]any); len(allow) != 1 || allow[0] != "Read" {
+		t.Errorf("allow not written: %v", perms["allow"])
+	}
+}
