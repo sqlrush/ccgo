@@ -198,6 +198,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "plugin") {
 		return runPluginCLI(context.Background(), state, flags.Args()[1:], stdout, stderr)
 	}
+	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "auth") {
+		return runAuthCLI(context.Background(), state, flags.Args()[1:], stdin, stdout, stderr)
+	}
 	if *printMode {
 		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
 		if err != nil {
@@ -373,6 +376,107 @@ type pluginCLIMarketplaceEntry struct {
 	Package         string   `json:"package,omitempty"`
 	SparsePaths     []string `json:"sparsePaths,omitempty"`
 	InstallLocation string   `json:"installLocation,omitempty"`
+}
+
+// runAuthCLI handles the "claude auth" top-level subcommand with subcommands
+// login, logout, and status. It mirrors the runPluginCLI dispatch pattern.
+func runAuthCLI(ctx context.Context, _ *bootstrap.State, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "ccgo auth: missing subcommand (login|logout|status)")
+		return 2
+	}
+	store := auth.NewKeychainCredentialStore("")
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "login":
+		return runAuthLogin(ctx, args[1:], store, stdin, stdout, stderr)
+	case "logout":
+		return runAuthLogout(ctx, store, stderr, stdout)
+	case "status":
+		return runAuthStatus(ctx, store, stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "ccgo auth: unknown subcommand %q (login|logout|status)\n", args[0])
+		return 2
+	}
+}
+
+// runAuthLogin implements "claude auth login" with a gray-zone consent gate.
+// The user must explicitly confirm before any OAuth flow starts. Consent can
+// be bypassed non-interactively with the --yes / -y flag.
+func runAuthLogin(ctx context.Context, args []string, store auth.CredentialStore, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	// Parse --yes / -y consent-bypass flag.
+	loginFlags := flag.NewFlagSet("auth login", flag.ContinueOnError)
+	loginFlags.SetOutput(stderr)
+	yesFlag := loginFlags.Bool("yes", false, "skip the consent prompt")
+	loginFlags.BoolVar(yesFlag, "y", false, "skip the consent prompt")
+	if err := loginFlags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+
+	// Gray-zone consent gate: print the notice and require explicit confirmation.
+	fmt.Fprintln(stdout, "OAuth login uses Anthropic's official client and endpoints.")
+	fmt.Fprintln(stdout, "This is a ToS/account-policy gray area for unofficial clients.")
+	fmt.Fprintln(stdout, "Proceeding means you accept responsibility for this usage.")
+	if !*yesFlag {
+		fmt.Fprint(stdout, "Continue? [y/N] ")
+		var answer string
+		buf := make([]byte, 256)
+		n, _ := stdin.Read(buf)
+		if n > 0 {
+			answer = strings.TrimSpace(string(buf[:n]))
+		}
+		if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+			fmt.Fprintln(stderr, "ccgo auth: login cancelled (no consent)")
+			return 1
+		}
+	}
+
+	creds, err := auth.RunLoginFlow(ctx, auth.LoginOptions{
+		Browser:           auth.NewOSBrowserOpener(),
+		Store:             store,
+		LoginWithClaudeAI: true,
+		OnURL: func(u string) {
+			fmt.Fprintf(stdout, "If your browser did not open, visit:\n%s\n", u)
+		},
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo auth: login failed: %v\n", err)
+		return 1
+	}
+	_ = creds // never print tokens
+	fmt.Fprintln(stdout, "Login successful.")
+	return 0
+}
+
+// runAuthLogout implements "claude auth logout" by deleting stored credentials.
+func runAuthLogout(ctx context.Context, store auth.CredentialStore, stderr io.Writer, stdout io.Writer) int {
+	if err := store.Delete(ctx); err != nil {
+		fmt.Fprintf(stderr, "ccgo auth: logout failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, "Signed out. Stored credentials removed.")
+	return 0
+}
+
+// runAuthStatus implements "claude auth status". It reports whether credentials
+// are present WITHOUT printing any token value.
+func runAuthStatus(ctx context.Context, store auth.CredentialStore, stdout io.Writer, stderr io.Writer) int {
+	creds, err := store.Load(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo auth: %v\n", err)
+		return 1
+	}
+	switch creds.Source {
+	case auth.SourceOAuth:
+		fmt.Fprintln(stdout, "Authenticated via OAuth.")
+	case auth.SourceAPIKey:
+		fmt.Fprintln(stdout, "Authenticated via API key.")
+	default:
+		fmt.Fprintln(stdout, "Not authenticated. Run `claude auth login` or set ANTHROPIC_API_KEY.")
+	}
+	return 0
 }
 
 func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
@@ -3303,7 +3407,8 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
 
-	client, apiKeySource, err := anthropicClientFromEnv(ctx, runner.FastMode)
+	mergedSettings := runnerMergedSettings(runner)
+	client, apiKeySource, err := anthropicClientFromEnv(ctx, runner.FastMode, mergedSettings.APIKeyHelper)
 	if err != nil {
 		return runner, err
 	}
@@ -3503,8 +3608,8 @@ func resolveCLIModel(flagValue string, mcpConfig *conversation.MCPConfig) string
 	return strings.TrimSpace(raw)
 }
 
-func anthropicClientFromEnv(ctx context.Context, fastMode bool) (*anthropic.Client, string, error) {
-	credentials, credentialStore, err := credentialsFromEnvOrStore(ctx)
+func anthropicClientFromEnv(ctx context.Context, fastMode bool, apiKeyHelperCmd string) (*anthropic.Client, string, error) {
+	credentials, credentialStore, err := credentialsFromEnvOrStore(ctx, apiKeyHelperCmd)
 	if err != nil {
 		return nil, "", err
 	}
@@ -3555,20 +3660,40 @@ func anthropicClientFromEnv(ctx context.Context, fastMode bool) (*anthropic.Clie
 	return anthropic.NewClient(options...), string(credentials.Source), nil
 }
 
-func credentialsFromEnvOrStore(ctx context.Context) (auth.Credentials, auth.CredentialStore, error) {
+func credentialsFromEnvOrStore(ctx context.Context, apiKeyHelperCmd string) (auth.Credentials, auth.CredentialStore, error) {
+	// apiKeyHelper wins over all other sources when configured (matches CC's
+	// utils/auth.ts:320-335 precedence: helper > env > keychain).
+	if helperCmd := strings.TrimSpace(apiKeyHelperCmd); helperCmd != "" {
+		if key, err := auth.NewAPIKeyHelperResolver(helperCmd).Resolve(ctx); err == nil && key != "" {
+			return auth.Credentials{Source: auth.SourceAPIKey, APIKey: key}, nil, nil
+		}
+		// On helper error, fall through to env/keychain (do not abort).
+	}
 	credentials := auth.FromEnv()
 	if credentials.Source != auth.SourceNone {
 		return credentials, nil, nil
 	}
-	store := auth.NewFileCredentialStore("")
-	stored, err := store.Load(ctx)
+	// Try keychain-backed store (macOS keychain; file on other platforms).
+	keychainStore := auth.NewKeychainCredentialStore("")
+	stored, err := keychainStore.Load(ctx)
 	if err != nil {
 		return auth.Credentials{}, nil, err
 	}
-	if stored.Source == auth.SourceNone {
-		return stored, nil, nil
+	if stored.Source != auth.SourceNone {
+		return stored, keychainStore, nil
 	}
-	return stored, store, nil
+	// Migration fallback: also check the plain credentials.json file so users
+	// who stored credentials before the keychain store was introduced continue
+	// to work without needing to re-login.
+	fileStore := auth.NewFileCredentialStore("")
+	fileCreds, err := fileStore.Load(ctx)
+	if err != nil {
+		return auth.Credentials{}, nil, err
+	}
+	if fileCreds.Source == auth.SourceNone {
+		return fileCreds, nil, nil
+	}
+	return fileCreds, fileStore, nil
 }
 
 func splitEnvList(value string) []string {

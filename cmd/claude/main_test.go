@@ -4141,7 +4141,7 @@ func TestAnthropicClientFromEnvConfiguresOAuthRefreshProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client, source, err := anthropicClientFromEnv(context.Background(), false)
+	client, source, err := anthropicClientFromEnv(context.Background(), false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4181,7 +4181,7 @@ func TestAnthropicClientFromEnvAppliesCustomHeaders(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_CUSTOM_HEADERS", "X-Proxy-Tenant: acme\nX-Proxy-Mode=compat")
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
-	client, source, err := anthropicClientFromEnv(context.Background(), false)
+	client, source, err := anthropicClientFromEnv(context.Background(), false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4211,7 +4211,7 @@ func TestAnthropicClientFromEnvRejectsInvalidCustomHeaders(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_CUSTOM_HEADERS", "")
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
-	_, _, err := anthropicClientFromEnv(context.Background(), false)
+	_, _, err := anthropicClientFromEnv(context.Background(), false, "")
 	if err == nil || !strings.Contains(err.Error(), "ANTHROPIC_CUSTOM_HEADERS line 1") {
 		t.Fatalf("error = %v", err)
 	}
@@ -4611,4 +4611,54 @@ func writeDaemonTestWebSocketFrame(t *testing.T, conn net.Conn, opcode byte, pay
 func daemonTestWebSocketAccept(key string) string {
 	sum := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
 	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+// TestAuthStatusLoggedOut verifies that "claude auth status" reports not-authenticated
+// when no credentials are stored and ANTHROPIC_API_KEY is unset.
+func TestAuthStatusLoggedOut(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"auth", "status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Not authenticated") {
+		t.Fatalf("expected 'Not authenticated' in output, got %q", got)
+	}
+	// Token must never appear in status output (there is none here, but check defensively).
+	if strings.Contains(got, "Bearer") || strings.Contains(got, "sk-") {
+		t.Fatalf("status output must not contain token material: %q", got)
+	}
+}
+
+// TestAuthLoginRequiresConsent verifies that "claude auth login" (without --yes)
+// presents the gray-zone consent prompt and does NOT start the login flow when
+// the user declines (empty/no input on stdin → "n").
+func TestAuthLoginRequiresConsent(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+
+	var stdout, stderr bytes.Buffer
+	// Pass "n\n" on stdin so the consent prompt is answered with "no".
+	code := run([]string{"auth", "login"}, strings.NewReader("n\n"), &stdout, &stderr)
+	// Must exit non-zero when consent denied.
+	if code == 0 {
+		t.Fatalf("expected non-zero exit when consent denied; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	combined := stdout.String() + stderr.String()
+	// The consent message must be present.
+	if !strings.Contains(combined, "gray area") && !strings.Contains(combined, "gray-area") &&
+		!strings.Contains(combined, "ToS") && !strings.Contains(combined, "consent") {
+		t.Fatalf("expected consent/ToS note in output; got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	// No token material must appear.
+	if strings.Contains(combined, "Bearer") || strings.Contains(combined, "sk-") {
+		t.Fatalf("token material must not appear in output: %q", combined)
+	}
 }
