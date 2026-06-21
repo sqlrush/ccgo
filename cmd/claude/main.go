@@ -34,6 +34,7 @@ import (
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	"ccgo/internal/repl"
+	"ccgo/internal/settingswriter"
 	filetools "ccgo/internal/tools/file"
 	tasktools "ccgo/internal/tools/task"
 )
@@ -297,7 +298,21 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return 1
 	}
 	term := repl.NewOSTerminal(os.Stdin, os.Stdout)
-	if err := repl.RunInteractive(ctx, term, runner, history); err != nil {
+	cmdRegistry := commands.Load(commands.Options{
+		CWD:            runner.WorkingDirectory,
+		Settings:       runnerMergedSettings(runner),
+		PolicySettings: runnerPolicySettings(runner),
+	})
+	writer := settingswriter.New(
+		config.UserSettingsPath(),
+		config.ProjectSettingsPath(runner.WorkingDirectory),
+	)
+	opts := repl.InteractiveOptions{
+		Settings: writer,
+		Registry: cmdRegistry.Visible(),
+		Mode:     runner.PermissionMode,
+	}
+	if err := repl.RunInteractiveWithOptions(ctx, term, runner, history, opts); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}

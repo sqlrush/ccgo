@@ -9,6 +9,7 @@ import (
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/tool"
 	"ccgo/internal/tui"
 )
 
@@ -96,6 +97,60 @@ func TestRunInteractiveOneTurn(t *testing.T) {
 // Without the ctx, cancel := context.WithCancel / defer cancel() fix in
 // RunInteractive, the blockingClient would never receive ctx.Done() and the
 // goroutine would leak.
+func TestRunInteractivePersistsAllowAlways(t *testing.T) {
+	// Drive: a permission ask arrives, user picks "always" (action index 1).
+	// Assert that the recording ruleWriter receives exactly one update.
+	//
+	// We use a gatedTerminal so that the input bytes (\x1b[B = Down, \r = Enter)
+	// are not read before the dialog is shown. Once onPermissionShown fires, the
+	// gate is closed and the Read proceeds.  After the two-byte key sequence is
+	// consumed, the next Read returns EOF which causes the loop to exit cleanly.
+	ft := NewFakeTerminal("\x1b[B\r", 80, 24) // Down + Enter selects action[1] = "Allow always"
+	gate := make(chan struct{})
+	gt := &gatedTerminal{FakeTerminal: ft, gate: gate}
+	l := NewLoop(gt, nil)
+
+	var persisted []contracts.PermissionUpdate
+	l.SetSettingsWriter(recordingWriter{onApply: func(u contracts.PermissionUpdate) error {
+		persisted = append(persisted, u)
+		return nil
+	}})
+
+	// Release input only after the dialog is rendered (test seam).
+	l.onPermissionShown = func() { close(gate) }
+
+	asker := loopAsker{askCh: l.askCh}
+	decisionCh := make(chan contracts.PermissionDecision, 1)
+	go func() {
+		d, err := asker.Ask(context.Background(), tool.PermissionAskRequest{
+			ToolUseID: "u1", ToolName: "Read", Path: "/tmp/x",
+		})
+		if err == nil {
+			decisionCh <- d
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = l.Run(ctx)
+
+	select {
+	case d := <-decisionCh:
+		if d.Behavior != contracts.PermissionAllow {
+			t.Fatalf("decision = %v want allow", d.Behavior)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("asker never received a decision within 2s")
+	}
+	if len(persisted) != 1 {
+		t.Fatalf("expected 1 persisted rule, got %d", len(persisted))
+	}
+}
+
+type recordingWriter struct{ onApply func(contracts.PermissionUpdate) error }
+
+func (w recordingWriter) Apply(u contracts.PermissionUpdate) error { return w.onApply(u) }
+
 func TestRunInteractiveCancelsTurnOnExit(t *testing.T) {
 	clientReturned := make(chan struct{}, 1)
 	base := conversation.Runner{

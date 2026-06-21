@@ -88,6 +88,11 @@ type Loop struct {
 	// PermissionUpdate that would be persisted by an "allow always" choice.
 	onRulePersisted func(contracts.PermissionUpdate)
 
+	// onOverlaySubmit is a host/test seam called when an overlay submission is
+	// handled internally (resume:/theme:/memory:/trust: prefixes). Nil in tests
+	// that don't exercise the overlay action routing.
+	onOverlaySubmit func(string)
+
 	running    bool
 	turnCancel context.CancelFunc
 	width      int
@@ -262,10 +267,12 @@ func (l *Loop) handleKey(key tui.Key) bool {
 				l.activeOverlay = nil
 			} else if res.Submit != "" {
 				l.activeOverlay = nil
-				if l.StartTurn != nil && !l.running {
-					l.running = true
-					l.startSpinner()
-					l.StartTurn(res.Submit)
+				if handled := l.handleOverlaySubmit(res.Submit); !handled {
+					if l.StartTurn != nil && !l.running {
+						l.running = true
+						l.startSpinner()
+						l.StartTurn(res.Submit)
+					}
 				}
 			}
 			return false
@@ -447,6 +454,21 @@ func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
 func (l *Loop) SetMode(mode contracts.PermissionMode) {
 	l.mode = mode
 	l.refreshBaseStatus()
+}
+
+// handleOverlaySubmit consumes structured overlay results (resume:/theme:/
+// memory:/trust:). It returns true when the submit was handled internally and
+// should NOT be forwarded to the model. onOverlaySubmit is a host/test seam.
+func (l *Loop) handleOverlaySubmit(submit string) bool {
+	for _, prefix := range []string{"resume:", "theme:", "memory:", "trust:"} {
+		if strings.HasPrefix(submit, prefix) {
+			if l.onOverlaySubmit != nil {
+				l.onOverlaySubmit(submit)
+			}
+			return true
+		}
+	}
+	return false // "/command" and plain text fall through to the model/command pipeline
 }
 
 // refreshBaseStatus recomputes baseStatus from the current mode + vim state
