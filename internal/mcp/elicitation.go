@@ -101,3 +101,23 @@ func elicitationResponseFromJSON(raw json.RawMessage) map[string]any {
 	params := rawParamMap(raw)
 	return NormalizeElicitationResponse(params)
 }
+
+// ElicitationPrompt is the UI seam an interactive front-end implements to
+// resolve an elicitation/create request. Returning a non-nil error (or a nil
+// prompt) is treated as a cancel, never propagated as a protocol error.
+type ElicitationPrompt func(ctx context.Context, req ElicitationRequest) (action string, content map[string]any, err error)
+
+// InteractiveElicitationHandler adapts an ElicitationPrompt into an
+// ElicitationHandler. A nil prompt or a prompt error cancels the elicitation.
+func InteractiveElicitationHandler(prompt ElicitationPrompt) ElicitationHandler {
+	return func(ctx context.Context, req ElicitationRequest) (map[string]any, error) {
+		if prompt == nil {
+			return CancelElicitationResponse(), nil
+		}
+		action, content, err := prompt(ctx, req)
+		if err != nil {
+			return CancelElicitationResponse(), nil
+		}
+		return ElicitationResponse(action, content), nil
+	}
+}
