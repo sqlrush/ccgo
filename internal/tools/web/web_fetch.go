@@ -77,7 +77,7 @@ func NewWebFetchTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Fetches a web URL and returns text content. Provide url, prompt, and optionally timeout in milliseconds and max_bytes. HTML responses are rendered to readable text, and prompts produce a focused excerpt when matching text is found. Browser rendering and model summarization are not implemented yet.", nil
+			return "Fetches a web URL and returns text content. Provide url, prompt, and optionally timeout in milliseconds and max_bytes. HTML responses are rendered to readable text, and prompts produce a focused excerpt when matching text is found. When a small fast model is configured, the rendered content is summarized against your prompt.", nil
 		},
 		NormalizeFunc: normalizeWebFetchRawInput,
 		ValidateFunc:  validateWebFetch,
@@ -162,6 +162,17 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 		return contracts.ToolResult{}, err
 	}
 	result = prepareWebFetchResult(result, input.Prompt)
+	if !result.Binary && !result.RedirectDetected {
+		body := result.RenderedBody
+		if body == "" {
+			body = result.Body
+		}
+		summary, sumErr := summarizeWebFetch(ctx.Context, secondaryModelClient(ctx.Metadata), body, input.Prompt)
+		if sumErr != nil {
+			return contracts.ToolResult{}, fmt.Errorf("web fetch summarization: %w", sumErr)
+		}
+		result.Summary = summary
+	}
 	content := formatWebFetchContent(input, result)
 	return contracts.ToolResult{
 		Content: content,
@@ -181,6 +192,7 @@ func callWebFetch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 			"prompt_terms":      result.PromptTerms,
 			"prompt_phrases":    result.PromptPhrases,
 			"prompt_excerpt":    result.PromptExcerpt,
+			"summary":           result.Summary,
 			"bytes":             result.Bytes,
 			"truncated":         result.Truncated,
 			"binary":            result.Binary,
@@ -203,6 +215,7 @@ type fetchResult struct {
 	PromptTerms   []string
 	PromptPhrases []string
 	PromptExcerpt string
+	Summary       string
 	Bytes         int
 	Truncated     bool
 	Binary        bool
@@ -425,6 +438,11 @@ func formatWebFetchContent(input webFetchInput, result fetchResult) string {
 	body := result.RenderedBody
 	if body == "" {
 		body = result.Body
+	}
+	if result.Summary != "" {
+		b.WriteString("\n\nSummary:\n")
+		b.WriteString(result.Summary)
+		return strings.TrimRight(b.String(), "\n")
 	}
 	if input.Prompt != "" && result.PromptExcerpt != "" && result.PromptExcerpt != body {
 		b.WriteString("\n\nRelevant excerpt:\n")
