@@ -57,6 +57,67 @@ func TestLoopAskerAllow(t *testing.T) {
 	}
 }
 
+func TestLoopAskerDeny(t *testing.T) {
+	// Esc produces ScreenEventCancelled which resolves to PermissionDeny.
+	esc := "\x1b"
+	ft := NewFakeTerminal(esc, 80, 24)
+	gate := make(chan struct{})
+	gt := &gatedTerminal{FakeTerminal: ft, gate: gate}
+	l := NewLoop(gt, nil)
+	l.onPermissionShown = func() { close(gate) }
+
+	asker := loopAsker{askCh: l.askCh}
+	decisionCh := make(chan contracts.PermissionDecision, 1)
+	go func() {
+		d, err := asker.Ask(context.Background(), tool.PermissionAskRequest{
+			ToolUseID:   "u2",
+			ToolName:    "Bash",
+			Description: "run rm -rf",
+		})
+		if err == nil {
+			decisionCh <- d
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = l.Run(ctx)
+
+	select {
+	case d := <-decisionCh:
+		if d.Behavior != contracts.PermissionDeny {
+			t.Fatalf("decision = %v want deny", d.Behavior)
+		}
+	default:
+		t.Fatal("asker never received a decision")
+	}
+}
+
+func TestLoopDenyPendingOnExit(t *testing.T) {
+	// Empty input -> immediate EOF -> Run exits -> denyPendingAsks fires.
+	ft := NewFakeTerminal("", 80, 24)
+	l := NewLoop(ft, nil)
+
+	reply := make(chan contracts.PermissionDecision, 1)
+	l.askCh <- askRequest{
+		req:   tool.PermissionAskRequest{ToolUseID: "u1", ToolName: "Bash"},
+		reply: reply,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = l.Run(ctx)
+
+	select {
+	case d := <-reply:
+		if d.Behavior != contracts.PermissionDeny {
+			t.Fatalf("want deny, got %v", d.Behavior)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("asker not unblocked on exit")
+	}
+}
+
 func TestDecisionFromAction(t *testing.T) {
 	tests := []struct {
 		action string

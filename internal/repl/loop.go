@@ -42,8 +42,9 @@ type Loop struct {
 	// turn (typically in a goroutine) and posts to eventCh/askCh/doneCh.
 	StartTurn func(input string)
 
-	history    []contracts.Message
-	pendingAsk *askRequest
+	history   []contracts.Message
+	activeAsk *askRequest
+	askQueue  []askRequest
 
 	// onPermissionShown is a test seam; nil in production. Called at the end of
 	// showPermission so tests can synchronize input delivery after the dialog is
@@ -84,6 +85,7 @@ func (l *Loop) Run(ctx context.Context) error {
 		return err
 	}
 	defer restore()
+	defer l.denyPendingAsks()
 
 	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true}
 	if err := l.term.WriteString(l.life.EnterInteractive(opts)); err != nil {
@@ -112,7 +114,7 @@ func (l *Loop) Run(ctx context.Context) error {
 				return err
 			}
 		case ar := <-l.askCh:
-			l.showPermission(ar)
+			l.enqueueAsk(ar)
 			if err := l.render(); err != nil {
 				return err
 			}
@@ -173,7 +175,7 @@ func (l *Loop) readInput(ctx context.Context) {
 func (l *Loop) handleKey(key tui.Key) bool {
 	event := l.screen.ApplyKey(key)
 
-	if l.pendingAsk != nil &&
+	if l.activeAsk != nil &&
 		(event.Type == tui.ScreenEventDialogAction || event.Type == tui.ScreenEventCancelled) {
 		result := l.dialog.ResolveScreenEvent(&l.screen, event, l.screen.Status)
 		if result.Found {
@@ -181,8 +183,9 @@ func (l *Loop) handleKey(key tui.Key) bool {
 			if result.Status == tui.DialogResultCancelled || result.Status == tui.DialogResultDenied {
 				behavior = contracts.PermissionDeny
 			}
-			l.pendingAsk.reply <- contracts.PermissionDecision{Behavior: behavior}
-			l.pendingAsk = nil
+			l.activeAsk.reply <- contracts.PermissionDecision{Behavior: behavior}
+			l.activeAsk = nil
+			l.showNext()
 		}
 		return false
 	}
@@ -200,11 +203,30 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	return false
 }
 
+// enqueueAsk adds an ask to the active slot if empty, otherwise to the backlog.
+func (l *Loop) enqueueAsk(ar askRequest) {
+	if l.activeAsk == nil {
+		l.showPermission(ar)
+		return
+	}
+	l.askQueue = append(l.askQueue, ar)
+}
+
+// showNext promotes the next queued ask (if any) to active.
+func (l *Loop) showNext() {
+	if l.activeAsk != nil || len(l.askQueue) == 0 {
+		return
+	}
+	next := l.askQueue[0]
+	l.askQueue = l.askQueue[1:]
+	l.showPermission(next)
+}
+
 // showPermission registers a permission dialog with the dialog runtime and
 // applies it to the screen. onPermissionShown (if set) is called last so tests
 // can gate input delivery until the dialog is visible.
 func (l *Loop) showPermission(ar askRequest) {
-	l.pendingAsk = &ar
+	l.activeAsk = &ar
 	l.dialog.RequestPermission(tui.PermissionRequest{
 		ID:          string(ar.req.ToolUseID),
 		ToolName:    ar.req.ToolName,
@@ -214,6 +236,29 @@ func (l *Loop) showPermission(ar askRequest) {
 	l.dialog.ApplyToScreen(&l.screen, l.screen.Status)
 	if l.onPermissionShown != nil {
 		l.onPermissionShown()
+	}
+}
+
+// denyPendingAsks unblocks every asker still waiting when the loop exits,
+// so executor goroutines never hang. Drains the active ask, the queue, and
+// anything still buffered in askCh, replying Deny to each.
+func (l *Loop) denyPendingAsks() {
+	deny := contracts.PermissionDecision{Behavior: contracts.PermissionDeny}
+	if l.activeAsk != nil {
+		l.activeAsk.reply <- deny
+		l.activeAsk = nil
+	}
+	for _, ar := range l.askQueue {
+		ar.reply <- deny
+	}
+	l.askQueue = nil
+	for {
+		select {
+		case ar := <-l.askCh:
+			ar.reply <- deny
+		default:
+			return
+		}
 	}
 }
 
