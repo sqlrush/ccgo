@@ -44,8 +44,11 @@ func TestWebFetchSummarizesWithSecondaryModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Call err: %v", err)
 	}
-	if sum.gotPrompt != "When does it ship?" {
-		t.Fatalf("summarizer prompt = %q", sum.gotPrompt)
+	if !strings.Contains(sum.gotPrompt, "When does it ship?") {
+		t.Fatalf("summarizer prompt missing original question: %q", sum.gotPrompt)
+	}
+	if !strings.Contains(sum.gotPrompt, "Web page content:") {
+		t.Fatalf("summarizer prompt missing template framing: %q", sum.gotPrompt)
 	}
 	if !strings.Contains(sum.gotContent, "ships on Tuesday") {
 		t.Fatalf("summarizer did not receive rendered content: %q", sum.gotContent)
@@ -86,6 +89,12 @@ func TestMakeSecondaryModelPromptStructure(t *testing.T) {
 	got := makeSecondaryModelPrompt("BODY", "QUESTION")
 	if !strings.Contains(got, "Web page content:") || !strings.Contains(got, "BODY") || !strings.Contains(got, "QUESTION") {
 		t.Fatalf("prompt structure wrong: %q", got)
+	}
+	if !strings.Contains(got, "---") {
+		t.Fatalf("prompt missing delimiter: %q", got)
+	}
+	if !strings.Contains(got, "125") {
+		t.Fatalf("prompt missing quote guideline: %q", got)
 	}
 }
 

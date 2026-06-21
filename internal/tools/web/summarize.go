@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"unicode/utf8"
+
+	"ccgo/internal/model"
 )
 
 // maxSummarizeMarkdown caps content sent to the secondary model.
@@ -11,8 +13,7 @@ import (
 const maxSummarizeMarkdown = 100_000
 
 // secondaryModelName is the small/fast model WebFetch summarizes with.
-// Confirmed: grep -n "Claude45Haiku" internal/model/model.go → "claude-haiku-4-5-20251001"
-const secondaryModelName = "claude-haiku-4-5-20251001"
+var secondaryModelName = model.Claude45Haiku
 
 const summarizeSystemPrompt = "You are summarizing web page content to answer a specific question. Be concise and factual; quote at most 125 characters at a time."
 
@@ -59,6 +60,6 @@ func summarizeWebFetch(ctx context.Context, client SecondaryModelClient, content
 		Model:        secondaryModelName,
 		SystemPrompt: summarizeSystemPrompt,
 		Content:      capped,
-		Prompt:       prompt,
+		Prompt:       makeSecondaryModelPrompt(capped, prompt),
 	})
 }
