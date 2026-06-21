@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
@@ -38,6 +39,10 @@ type Loop struct {
 	askCh    chan askRequest
 	doneCh   chan turnOutcome
 	resizeCh chan resizeEvent
+	tickCh   <-chan time.Time
+	stopTick func()
+	spinner  Spinner
+	baseStatus string
 
 	// StartTurn is invoked when the user submits a prompt. It runs the model
 	// turn (typically in a goroutine) and posts to eventCh/askCh/doneCh.
@@ -141,6 +146,11 @@ func (l *Loop) Run(ctx context.Context) error {
 			if err := l.render(); err != nil {
 				return err
 			}
+		case <-l.tickCh:
+			l.tick()
+			if err := l.render(); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -156,6 +166,7 @@ func (l *Loop) applyEvent(ev conversation.Event) {
 // error message on failure, then clears the running flag.
 func (l *Loop) finishTurn(out turnOutcome) {
 	l.running = false
+	l.stopSpinner()
 	if out.err != nil {
 		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: out.err.Error()})
 		return
@@ -221,6 +232,7 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		if l.StartTurn != nil && !l.running && strings.TrimSpace(event.Value) != "" {
 			l.running = true
 			l.StartTurn(event.Value)
+			l.startSpinner()
 		}
 	}
 	return false
@@ -317,3 +329,27 @@ func (l *Loop) runLineMode(ctx context.Context) error {
 type readerFunc func(p []byte) (int, error)
 
 func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
+
+func (l *Loop) startSpinner() {
+	l.baseStatus = l.screen.Status
+	l.spinner = NewSpinner(time.Now())
+	ticker := time.NewTicker(spinnerInterval)
+	l.tickCh = ticker.C
+	l.stopTick = ticker.Stop
+	l.screen.Status = l.spinner.Line(time.Now())
+}
+
+func (l *Loop) stopSpinner() {
+	if l.stopTick != nil {
+		l.stopTick()
+		l.stopTick = nil
+	}
+	l.tickCh = nil
+	l.screen.Status = l.baseStatus
+}
+
+func (l *Loop) tick() {
+	if l.running {
+		l.screen.Status = l.spinner.Line(time.Now())
+	}
+}
