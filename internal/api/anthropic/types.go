@@ -10,12 +10,24 @@ import (
 const DefaultVersion = "2023-06-01"
 const DefaultBaseURL = "https://api.anthropic.com"
 
+// ServerToolDefinition is an Anthropic server-side tool (e.g. web search) that
+// runs on the API rather than client-side. Mirrors BetaWebSearchTool20250305
+// (CC WebSearchTool.ts:76-84).
+type ServerToolDefinition struct {
+	Type           string   `json:"type"`                       // "web_search_20250305"
+	Name           string   `json:"name"`                       // "web_search"
+	AllowedDomains []string `json:"allowed_domains,omitempty"`
+	BlockedDomains []string `json:"blocked_domains,omitempty"`
+	MaxUses        int      `json:"max_uses,omitempty"`
+}
+
 type Request struct {
 	Model       string                 `json:"model"`
 	MaxTokens   int                    `json:"max_tokens"`
 	Messages    []contracts.APIMessage `json:"messages"`
 	System      any                    `json:"system,omitempty"`
 	Tools       []ToolDefinition       `json:"tools,omitempty"`
+	ServerTools []ServerToolDefinition `json:"server_tools,omitempty"`
 	ToolChoice  any                    `json:"tool_choice,omitempty"`
 	Temperature *float64               `json:"temperature,omitempty"`
 	TopP        *float64               `json:"top_p,omitempty"`

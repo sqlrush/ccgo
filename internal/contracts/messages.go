@@ -20,12 +20,14 @@ const (
 type ContentBlockType string
 
 const (
-	ContentText       ContentBlockType = "text"
-	ContentToolUse    ContentBlockType = "tool_use"
-	ContentToolResult ContentBlockType = "tool_result"
-	ContentImage      ContentBlockType = "image"
-	ContentThinking   ContentBlockType = "thinking"
-	ContentCacheEdits ContentBlockType = "cache_edits"
+	ContentText                ContentBlockType = "text"
+	ContentToolUse             ContentBlockType = "tool_use"
+	ContentToolResult          ContentBlockType = "tool_result"
+	ContentImage               ContentBlockType = "image"
+	ContentThinking            ContentBlockType = "thinking"
+	ContentCacheEdits          ContentBlockType = "cache_edits"
+	ContentServerToolUse       ContentBlockType = "server_tool_use"
+	ContentWebSearchToolResult ContentBlockType = "web_search_tool_result"
 )
 
 type ContentBlock struct {

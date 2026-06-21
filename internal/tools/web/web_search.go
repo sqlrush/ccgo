@@ -118,7 +118,7 @@ func NewWebSearchTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Searches the web for a query and returns result titles and URLs. Supports optional allowed_domains, blocked_domains, max_results, and timeout. Official search backend parity is not implemented yet.", nil
+			return "Searches the web for a query and returns result titles and URLs. Supports optional allowed_domains, blocked_domains, max_results, and timeout. When the official web-search server tool is configured, results come directly from the API.", nil
 		},
 		NormalizeFunc:   normalizeWebSearchRawInput,
 		ValidateFunc:    validateWebSearch,
@@ -169,12 +169,23 @@ func callWebSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
-	endpoint := webSearchEndpoint(ctx.Metadata)
 	limit := webSearchLimit(input)
+	if client := serverSearchClient(ctx.Metadata); client != nil {
+		result, err := runServerSearch(ctx.Context, client, input, limit)
+		if err != nil {
+			return contracts.ToolResult{}, err
+		}
+		return webSearchToolResult(input, result), nil
+	}
+	endpoint := webSearchEndpoint(ctx.Metadata)
 	result, err := runWebSearch(ctx.Context, endpoint, input, limit)
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
+	return webSearchToolResult(input, result), nil
+}
+
+func webSearchToolResult(input webSearchInput, result webSearchResult) contracts.ToolResult {
 	return contracts.ToolResult{
 		Content: formatWebSearchContent(input.Query, result.Results),
 		IsError: result.StatusCode < 200 || result.StatusCode >= 300,
@@ -188,7 +199,7 @@ func callWebSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (
 			"status_code":     result.StatusCode,
 			"duration_ms":     result.DurationMS,
 		},
-	}, nil
+	}
 }
 
 func runWebSearch(ctx context.Context, endpoint string, input webSearchInput, limit int) (webSearchResult, error) {
