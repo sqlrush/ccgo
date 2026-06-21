@@ -320,6 +320,7 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "doctor", Description: "Run health checks and diagnostics", Source: contracts.CommandSourceBuiltin, Immediate: true},
 		{Type: contracts.CommandLocalJSX, Name: "hooks", Description: "View configured hooks (read-only)", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "ide", Description: "Detect connected IDEs", ArgumentHint: "[list|open]", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "agents", Description: "List, create, delete, and inspect agent files", ArgumentHint: "[list | create <name> | delete <name> | show <name>]", Source: contracts.CommandSourceBuiltin},
 	})
 }
 

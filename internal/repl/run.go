@@ -87,6 +87,28 @@ func RunInteractive(ctx context.Context, term Terminal, base conversation.Runner
 	return RunInteractiveWithOptions(ctx, term, base, history, InteractiveOptions{})
 }
 
+// newProductionRouter builds the canonical CommandRouter wired by RunInteractiveWithOptions.
+// It is extracted so that the parity test can enumerate registered names without
+// duplicating the registration list.
+func newProductionRouter(cwd string) *CommandRouter {
+	router := NewCommandRouter()
+	router.Register("resume", resumeHandler(cwd))
+	router.Register("continue", resumeHandler(cwd))
+	router.Register("agents", agentsHandler(cwd))
+	router.Register("theme", themeHandler())
+	router.Register("effort", effortHandler())
+	router.Register("vim", vimHandler())
+	router.Register("permissions", permissionsHandler())
+	router.Register("allowed-tools", permissionsHandler())
+	router.Register("export", exportHandler(cwd))
+	router.Register("hooks", hooksHandler(func() contracts.Settings {
+		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
+		return s
+	}))
+	router.Register("ide", ideHandler(nil)) // nil → defaultIDEDetect
+	return router
+}
+
 // RunInteractiveWithOptions launches the interactive REPL with the given options.
 // A cancelable child context is derived so that when Run returns (on user exit,
 // EOF, or error) the cancel fires, causing any in-flight turn goroutine's
@@ -111,21 +133,7 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 
 	// Wire the command router so /resume (and future live-effect commands) are
 	// handled without falling through to the model.
-	router := NewCommandRouter()
-	router.Register("resume", resumeHandler(base.WorkingDirectory))
-	router.Register("continue", resumeHandler(base.WorkingDirectory))
-	router.Register("agents", agentsHandler(base.WorkingDirectory))
-	router.Register("theme", themeHandler())
-	router.Register("effort", effortHandler())
-	router.Register("vim", vimHandler())
-	router.Register("permissions", permissionsHandler())
-	router.Register("allowed-tools", permissionsHandler())
-	router.Register("export", exportHandler(base.WorkingDirectory))
-	router.Register("hooks", hooksHandler(func() contracts.Settings {
-		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
-		return s
-	}))
-	router.Register("ide", ideHandler(nil)) // nil → defaultIDEDetect
+	router := newProductionRouter(base.WorkingDirectory)
 	loop.onCommand = func(input string) (CommandOutcome, bool) {
 		cc := CommandContext{
 			Screen:  &loop.screen,

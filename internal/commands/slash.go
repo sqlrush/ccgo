@@ -44,25 +44,25 @@ type SlashResult struct {
 type LocalCommandResultType string
 
 const (
-	LocalCommandResultText    LocalCommandResultType = "text"
-	LocalCommandResultSkip    LocalCommandResultType = "skip"
-	LocalCommandResultClear   LocalCommandResultType = "clear"
-	LocalCommandResultCompact LocalCommandResultType = "compact"
-	LocalCommandResultCost    LocalCommandResultType = "cost"
-	LocalCommandResultSummary LocalCommandResultType = "summary"
-	LocalCommandResultRelease LocalCommandResultType = "release-notes"
-	LocalCommandResultFiles   LocalCommandResultType = "files"
-	LocalCommandResultIssue   LocalCommandResultType = "issue"
-	LocalCommandResultStatus  LocalCommandResultType = "status"
-	LocalCommandResultModel   LocalCommandResultType = "model"
-	LocalCommandResultMCP     LocalCommandResultType = "mcp"
-	LocalCommandResultResume  LocalCommandResultType = "resume"
-	LocalCommandResultConfig  LocalCommandResultType = "config"
-	LocalCommandResultPlugin  LocalCommandResultType = "plugin"
-	LocalCommandResultMemory  LocalCommandResultType = "memory"
-	LocalCommandResultNative  LocalCommandResultType = "native"
-	LocalCommandResultLogin   LocalCommandResultType = "login"
-	LocalCommandResultLogout  LocalCommandResultType = "logout"
+	LocalCommandResultText        LocalCommandResultType = "text"
+	LocalCommandResultSkip        LocalCommandResultType = "skip"
+	LocalCommandResultClear       LocalCommandResultType = "clear"
+	LocalCommandResultCompact     LocalCommandResultType = "compact"
+	LocalCommandResultCost        LocalCommandResultType = "cost"
+	LocalCommandResultSummary     LocalCommandResultType = "summary"
+	LocalCommandResultRelease     LocalCommandResultType = "release-notes"
+	LocalCommandResultFiles       LocalCommandResultType = "files"
+	LocalCommandResultIssue       LocalCommandResultType = "issue"
+	LocalCommandResultStatus      LocalCommandResultType = "status"
+	LocalCommandResultModel       LocalCommandResultType = "model"
+	LocalCommandResultMCP         LocalCommandResultType = "mcp"
+	LocalCommandResultResume      LocalCommandResultType = "resume"
+	LocalCommandResultConfig      LocalCommandResultType = "config"
+	LocalCommandResultPlugin      LocalCommandResultType = "plugin"
+	LocalCommandResultMemory      LocalCommandResultType = "memory"
+	LocalCommandResultNative      LocalCommandResultType = "native"
+	LocalCommandResultLogin       LocalCommandResultType = "login"
+	LocalCommandResultLogout      LocalCommandResultType = "logout"
 	LocalCommandResultTheme       LocalCommandResultType = "theme"
 	LocalCommandResultEffort      LocalCommandResultType = "effort"
 	LocalCommandResultVim         LocalCommandResultType = "vim"
@@ -72,6 +72,7 @@ const (
 	LocalCommandResultDoctor      LocalCommandResultType = "doctor"
 	LocalCommandResultHooks       LocalCommandResultType = "hooks"
 	LocalCommandResultIDE         LocalCommandResultType = "ide"
+	LocalCommandResultAgents      LocalCommandResultType = "agents"
 )
 
 type LocalCommandResult struct {
@@ -267,6 +268,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultHooks, Value: strings.TrimSpace(args)}, true
 	case "ide":
 		return LocalCommandResult{Type: LocalCommandResultIDE, Value: strings.TrimSpace(args)}, true
+	case "agents":
+		return LocalCommandResult{Type: LocalCommandResultAgents, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}

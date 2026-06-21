@@ -46,6 +46,16 @@ func (r *CommandRouter) Register(name string, h CommandHandler) {
 	r.handlers[strings.TrimSpace(name)] = h
 }
 
+// Names returns the set of command names registered on the router (without leading slash).
+// It is used by tests to enumerate the production router's command surface.
+func (r *CommandRouter) Names() []string {
+	names := make([]string, 0, len(r.handlers))
+	for name := range r.handlers {
+		names = append(names, name)
+	}
+	return names
+}
+
 // Dispatch routes a raw input line. If it is a slash command with a registered
 // handler, the handler runs with cc.Args set to the parsed arguments.
 // If the input is not a slash command, or the command is not registered,

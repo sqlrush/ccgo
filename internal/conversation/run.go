@@ -15,15 +15,16 @@ import (
 	"strings"
 	"time"
 
+	"ccgo/internal/agentfile"
 	"ccgo/internal/api/anthropic"
 	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
-	contextreport "ccgo/internal/contextreport"
 	"ccgo/internal/config"
-	"ccgo/internal/doctor"
+	"ccgo/internal/contextreport"
 	"ccgo/internal/contracts"
 	daemonpkg "ccgo/internal/daemon"
+	"ccgo/internal/doctor"
 	hookpkg "ccgo/internal/hooks"
 	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
@@ -178,6 +179,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 				CWD: r.WorkingDirectory,
 			})
 			return r.appendLocalTextResult(result, history, doctor.Format(report))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultAgents {
+			return r.appendLocalTextResult(result, history, r.formatAgentsSummary(localResult.Value))
 		}
 		return result, nil
 	}
@@ -817,6 +821,48 @@ func (r Runner) formatContextReport(history []contracts.Message) string {
 		SystemTokens: systemTokens,
 	}
 	return contextreport.Format(rep)
+}
+
+// formatAgentsSummary lists project and user agents for /agents in headless mode.
+// It reuses the same agentfile.List logic as the REPL agentsHandler so the
+// output is identical whether the command runs interactively or via --print.
+func (r Runner) formatAgentsSummary(raw string) string {
+	// Delegate to agentsList-equivalent logic: project scope then user scope.
+	projectDir := agentfile.ProjectDir(r.WorkingDirectory)
+	projectAgents, _ := agentfile.List(projectDir)
+
+	var userAgents []agentfile.AgentFile
+	if userDir, err := agentfile.UserDir(); err == nil {
+		userAgents, _ = agentfile.List(userDir)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Agents:\n")
+	sb.WriteString("\nProject agents:\n")
+	if len(projectAgents) == 0 {
+		sb.WriteString("  (none)\n")
+	} else {
+		for _, a := range projectAgents {
+			desc := a.Description
+			if desc == "" {
+				desc = "(no description)"
+			}
+			sb.WriteString(fmt.Sprintf("  %s — %s\n", a.Name, desc))
+		}
+	}
+	sb.WriteString("\nUser agents:\n")
+	if len(userAgents) == 0 {
+		sb.WriteString("  (none)\n")
+	} else {
+		for _, a := range userAgents {
+			desc := a.Description
+			if desc == "" {
+				desc = "(no description)"
+			}
+			sb.WriteString(fmt.Sprintf("  %s — %s\n", a.Name, desc))
+		}
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func formatCostSummary(raw string, history []contracts.Message) string {
