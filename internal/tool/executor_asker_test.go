@@ -3,6 +3,7 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -11,10 +12,14 @@ import (
 type fakeAsker struct {
 	behavior contracts.PermissionBehavior
 	called   bool
+	err      error
 }
 
 func (f *fakeAsker) Ask(_ context.Context, _ PermissionAskRequest) (contracts.PermissionDecision, error) {
 	f.called = true
+	if f.err != nil {
+		return contracts.PermissionDecision{}, f.err
+	}
 	return contracts.PermissionDecision{Behavior: f.behavior}, nil
 }
 
@@ -79,5 +84,40 @@ func TestExecutorNilAskerPreservesOldBehavior(t *testing.T) {
 	_, err := exec.Execute(ctx, use, NopProgressSink())
 	if _, ok := err.(PermissionError); !ok {
 		t.Fatalf("nil asker should still return PermissionError, got %v", err)
+	}
+}
+
+func TestExecutorAskerErrorBlocksTool(t *testing.T) {
+	askErr := errors.New("ask failed")
+	asker := &fakeAsker{err: askErr}
+	exec, use, ctx := newAskExecutor(t, asker)
+	res, err := exec.Execute(ctx, use, NopProgressSink())
+	if err == nil {
+		t.Fatal("expected non-nil error when asker returns error")
+	}
+	if _, ok := err.(PermissionError); ok {
+		t.Fatalf("expected raw ask error (not PermissionError), got PermissionError: %v", err)
+	}
+	if !errors.Is(err, askErr) {
+		t.Fatalf("expected error to wrap ask error, got %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected IsError=true when asker errors")
+	}
+	if asker.called && res.Content == "ok" {
+		t.Fatal("tool must not have run when asker returned error")
+	}
+}
+
+func TestExecutorAskerNonAllowBlocksTool(t *testing.T) {
+	// A confused asker returning PermissionAsk should be blocked by the fail-safe.
+	asker := &fakeAsker{behavior: contracts.PermissionAsk}
+	exec, use, ctx := newAskExecutor(t, asker)
+	res, err := exec.Execute(ctx, use, NopProgressSink())
+	if _, ok := err.(PermissionError); !ok {
+		t.Fatalf("expected PermissionError from fail-safe, got %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected IsError=true when non-Allow decision blocks tool")
 	}
 }

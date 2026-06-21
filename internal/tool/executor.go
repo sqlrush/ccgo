@@ -131,6 +131,11 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 			_ = SendProgress(sink, use.ID, "permission_denied", map[string]any{"tool": t.Name(), "behavior": string(resolved.Behavior)})
 			return result, PermissionError{Decision: *resolved}
 		}
+		if resolved.Behavior != contracts.PermissionAllow {
+			// Fail safe: any non-Allow resolution (Ask/Passthrough/unknown) blocks the tool.
+			_ = SendProgress(sink, use.ID, "permission_requested", map[string]any{"tool": t.Name(), "behavior": string(resolved.Behavior)})
+			return result, permissionErr
+		}
 		if err := t.Validate(ctx, raw); err != nil {
 			err = e.validationErrorWithSchemaHint(ctx, t, err)
 			return ErrorResult(use, err), err
