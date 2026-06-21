@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -51,12 +50,13 @@ func TestCallbackListenerStateMismatch(t *testing.T) {
 	}
 	defer l.Close()
 
-	var status atomic.Int32
+	// Make the request in a goroutine to avoid blocking the test,
+	// but capture the response for immediate assertion once it arrives.
+	respChan := make(chan *http.Response, 1)
 	go func() {
 		resp, err := http.Get(l.RedirectURI() + "?code=X&state=WRONG")
 		if err == nil {
-			status.Store(int32(resp.StatusCode))
-			resp.Body.Close()
+			respChan <- resp
 		}
 	}()
 
@@ -70,10 +70,18 @@ func TestCallbackListenerStateMismatch(t *testing.T) {
 	if strings.Contains(err.Error(), "WRONG") {
 		t.Fatalf("error leaked attacker-controlled state: %v", err)
 	}
-	// Give the goroutine a moment; the HTTP response should be a 4xx.
-	time.Sleep(50 * time.Millisecond)
-	if st := status.Load(); st != 0 && (st < 400 || st >= 500) {
-		t.Fatalf("callback status = %d want 4xx", st)
+
+	// The HTTP response is the synchronization point: we only receive
+	// on respChan once the handler has responded. Deterministically
+	// assert the response status is 400 (Bad Request) for state mismatch.
+	select {
+	case resp := <-respChan:
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("callback status = %d want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for callback response")
 	}
 }
 
