@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/tool"
 )
 
 func TestClassifyStopReason(t *testing.T) {
@@ -363,5 +365,111 @@ func TestRunTurnContextWindowRetryHasNoEmptyAssistant(t *testing.T) {
 		if m.Role == "assistant" && len(m.Content) == 0 {
 			t.Fatalf("retry request message[%d] is an assistant message with empty content — empty assistant turn not stripped before compaction retry", i)
 		}
+	}
+}
+
+// TestRunTurnPauseTurnCapReachableWithoutToolRoundError verifies that N pause_turn responses
+// where N > maxToolRounds default (8) hit the graceful pauseTurnLimitMessage, NOT the hard
+// "maximum tool rounds exceeded" error. This was previously broken because each pause_turn
+// resume consumed the shared tool-round budget.
+func TestRunTurnPauseTurnCapReachableWithoutToolRoundError(t *testing.T) {
+	// Build maxPauseTurnResumes+1 pause_turn responses (11 total: 1 initial + 10 resumes),
+	// followed by a final end_turn that must never be reached because the cap fires first.
+	// We need maxPauseTurnResumes+1 pause_turns: the first sends, then resumes 1..10,
+	// then on the 11th send the cap check fires before sending.
+	calls := make([]fakeCall, maxPauseTurnResumes+1)
+	for i := range calls {
+		calls[i] = fakeCall{response: &anthropic.Response{
+			ID:         "msg_pause",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "pause_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("pausing")},
+		}}
+	}
+	// Append one more end_turn that is never reached (cap fires first).
+	calls = append(calls, fakeCall{response: &anthropic.Response{
+		ID:         "msg_end",
+		Type:       "message",
+		Role:       "assistant",
+		Model:      "sonnet",
+		StopReason: "end_turn",
+		Content:    []contracts.ContentBlock{contracts.NewTextBlock("never reached")},
+	}})
+	client := &fakeClient{calls: calls}
+	// Use default MaxToolRounds (8) — the pause cap (10) exceeds it; with the fix,
+	// the graceful cap message is reachable without hitting the tool-round error.
+	r := newMinimalRunner(t, client)
+	res, err := r.RunTurn(context.Background(), nil, msgs.UserText("go"))
+	// Must not return an error (the hard tool-round error must NOT fire).
+	if err != nil {
+		t.Fatalf("RunTurn returned unexpected error (tool-round budget must not starve pause_turn cap): %v", err)
+	}
+	// The graceful pause cap message must have been surfaced.
+	if !containsText(res.Messages, pauseTurnLimitText) {
+		t.Fatalf("expected pause-cap message %q surfaced; messages = %v", pauseTurnLimitText, res.Messages)
+	}
+	// Exactly maxPauseTurnResumes+1 calls consumed (initial + 10 resumes; cap fires
+	// before the 12th send so the end_turn call is never consumed).
+	consumed := len(calls) - len(client.calls)
+	if consumed != maxPauseTurnResumes+1 {
+		t.Fatalf("expected %d API calls consumed (initial+%d resumes); got %d", maxPauseTurnResumes+1, maxPauseTurnResumes, consumed)
+	}
+}
+
+// TestRunTurnGenuineToolRoundsBounded verifies that genuine tool-execution rounds
+// are still bounded by maxToolRounds. This ensures the fix to I1 (excluding recoveries
+// from the budget) does not inadvertently remove the tool-loop safety backstop.
+func TestRunTurnGenuineToolRoundsBounded(t *testing.T) {
+	// Register a trivial no-op tool so tool calls are actually executed.
+	registry, err := tool.NewRegistry(tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        "Noop",
+			Description: "does nothing",
+			ReadOnly:    true,
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		},
+		CallFunc: func(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{Content: "ok"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Build maxToolRounds+1 tool_use responses so the loop exhausts the budget.
+	maxRounds := 3 // small value to keep test fast
+	calls := make([]fakeCall, maxRounds+1)
+	for i := range calls {
+		calls[i] = fakeCall{response: &anthropic.Response{
+			ID:         "msg_tool",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "tool_use",
+			Content: []contracts.ContentBlock{{
+				Type:  contracts.ContentToolUse,
+				ID:    "toolu_loop",
+				Name:  "Noop",
+				Input: json.RawMessage(`{}`),
+			}},
+		}}
+	}
+	client := &fakeClient{calls: calls}
+	r := Runner{
+		Client:        client,
+		Tools:         tool.NewExecutor(registry),
+		Model:         "sonnet",
+		MaxTokens:     128,
+		MaxToolRounds: maxRounds,
+		SessionID:     "sess_tool_round_limit",
+	}
+	_, err = r.RunTurn(context.Background(), nil, msgs.UserText("loop"))
+	if err == nil {
+		t.Fatal("expected 'maximum tool rounds exceeded' error but got nil")
+	}
+	if !strings.Contains(err.Error(), "maximum tool rounds exceeded") {
+		t.Fatalf("expected tool-round limit error; got %v", err)
 	}
 }

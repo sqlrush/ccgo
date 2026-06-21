@@ -217,12 +217,15 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	maxTokensRecoveries := 0
 	pauseTurnResumes := 0
 	contextWindowRecovered := false
-	for round := 0; ; round++ {
-		if round >= runner.maxToolRounds() {
-			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
-		}
+	// toolRounds counts only iterations that actually execute tool calls.
+	// Recovery continues (pause_turn resume, max_tokens nudge, ctx-window compact+retry)
+	// do NOT increment toolRounds so they cannot starve the genuine tool-call budget.
+	toolRounds := 0
+	firstSend := true
+	for {
 		var roundRelevantMemoryPrefetch *relevantMemoryPrefetchTask
-		if round == 0 {
+		if firstSend {
+			firstSend = false
 			roundRelevantMemoryPrefetch = relevantMemoryPrefetch
 			relevantMemoryPrefetch = nil
 		}
@@ -349,6 +352,11 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			}
 			return result, nil
 		}
+		// Only genuine tool-execution rounds count against the budget.
+		if toolRounds >= runner.maxToolRounds() {
+			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
+		}
+		toolRounds++
 		toolMessages, toolResults := runner.executeToolUses(ctx, uses, toolMetadata, result.Messages)
 		if orphans := synthesizeOrphanedToolResults(runner.SessionID, assistant, toolMessages, "Tool execution was interrupted."); len(orphans) > 0 {
 			toolMessages = append(toolMessages, orphans...)

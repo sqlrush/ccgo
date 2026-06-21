@@ -86,7 +86,7 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 		request.Tools = anthropic.ToolsFromContracts(definitions)
 	}
 	if capability, ok := modelpkg.DefaultRegistry().Resolve(model); ok {
-		if thinking := thinkingRequestConfig(capability, r.ThinkingBudgetTokens); thinking != nil {
+		if thinking := thinkingRequestConfig(capability, r.ThinkingBudgetTokens, r.maxTokens()); thinking != nil {
 			request.Thinking = thinking
 		}
 	}
