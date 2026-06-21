@@ -1,0 +1,115 @@
+package hooks
+
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+	"sync"
+
+	"ccgo/internal/contracts"
+	"ccgo/internal/tool"
+)
+
+// Resolution is the folded outcome of running all matched hooks for one event.
+type Resolution struct {
+	Block              bool
+	Message            string
+	AdditionalContext  []string
+	PermissionDecision *contracts.PermissionDecision
+	UpdatedInput       json.RawMessage
+	Metadata           map[string]any
+}
+
+type hookOutcome struct {
+	result tool.HookResult
+	err    error
+}
+
+// Resolve runs every hook concurrently and folds the results with permission
+// precedence deny > ask > allow (CC utils/hooks.ts:2820-2847), concatenated
+// context, sticky Block, and deterministic (config-order) UpdatedInput/Metadata.
+// It never mutates the input slice. The first hook error (by index) aborts with that error.
+func Resolve(ctx tool.Context, hooks []tool.Hook, event tool.HookEvent) (Resolution, error) {
+	if len(hooks) == 0 {
+		return Resolution{}, nil
+	}
+
+	outcomes := make([]hookOutcome, len(hooks))
+	var wg sync.WaitGroup
+	wg.Add(len(hooks))
+	for i := range hooks {
+		go func(i int) {
+			defer wg.Done()
+			result, err := hooks[i].RunToolHook(ctx, event)
+			outcomes[i] = hookOutcome{result: result, err: err}
+		}(i)
+	}
+	wg.Wait()
+
+	var res Resolution
+	var behavior contracts.PermissionBehavior // "" until a hook sets one
+	var decisionMessage string
+
+	for i, oc := range outcomes {
+		if oc.err != nil {
+			return Resolution{}, oc.err
+		}
+		hr := oc.result
+
+		if msg := strings.TrimSpace(hr.Message); msg != "" {
+			res.AdditionalContext = append(res.AdditionalContext, msg)
+		}
+		if hr.Block {
+			res.Block = true
+		}
+		if len(hr.UpdatedInput) > 0 && len(res.UpdatedInput) == 0 {
+			res.UpdatedInput = hr.UpdatedInput
+		}
+		if len(hr.Metadata) > 0 {
+			if res.Metadata == nil {
+				res.Metadata = map[string]any{}
+			}
+			res.Metadata["hook_"+strconv.Itoa(i)] = hr.Metadata
+		}
+		if hr.PermissionDecision != nil {
+			next := hr.PermissionDecision.Behavior
+			behavior = foldBehavior(behavior, next)
+			// Prefer the deny message; otherwise keep first non-empty message.
+			if next == contracts.PermissionDeny && strings.TrimSpace(hr.PermissionDecision.Message) != "" {
+				decisionMessage = hr.PermissionDecision.Message
+			} else if decisionMessage == "" {
+				decisionMessage = hr.PermissionDecision.Message
+			}
+		}
+	}
+
+	res.Message = strings.Join(res.AdditionalContext, "\n")
+	if behavior != "" {
+		res.PermissionDecision = &contracts.PermissionDecision{Behavior: behavior, Message: decisionMessage}
+		if behavior == contracts.PermissionDeny {
+			res.Block = true
+		}
+	}
+	return res, nil
+}
+
+// foldBehavior applies deny > ask > allow precedence (passthrough is a no-op).
+// Matches CC utils/hooks.ts:2820-2847.
+func foldBehavior(current, next contracts.PermissionBehavior) contracts.PermissionBehavior {
+	switch next {
+	case contracts.PermissionDeny:
+		return contracts.PermissionDeny // deny always wins
+	case contracts.PermissionAsk:
+		if current != contracts.PermissionDeny {
+			return contracts.PermissionAsk
+		}
+		return current
+	case contracts.PermissionAllow:
+		if current == "" {
+			return contracts.PermissionAllow // only fills an empty slot
+		}
+		return current
+	default:
+		return current // passthrough / unknown: no change
+	}
+}
