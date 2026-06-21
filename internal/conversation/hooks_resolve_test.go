@@ -23,6 +23,47 @@ func denyShellCommand() string {
 	return `printf '%s\n' 'stop blocked' >&2; exit 2`
 }
 
+// TestRunConversationHooksMatcherSkip verifies that a hook whose Matcher does
+// not match the query is silently dropped when the phase is honored=true
+// (e.g. PreToolUse, where the query is the tool_name field of the payload).
+func TestRunConversationHooksMatcherSkip(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+	r := Runner{
+		WorkingDirectory: dir,
+		SessionID:        "sess_matcher_skip",
+		settingsOverride: &contracts.Settings{
+			Hooks: map[string]any{
+				// PreToolUse is honored=true; MatchQuery returns payload["tool_name"].
+				"PreToolUse": []any{map[string]any{
+					"matcher": "Bash", // hook only fires for the "Bash" tool
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "touch " + shellQuoteConv(marker),
+						},
+					},
+				}},
+			},
+		},
+	}
+	// Payload carries tool_name "Write", which does not match matcher "Bash".
+	result, err := r.runConversationHooks(context.Background(), tool.HookPreToolUse, map[string]any{
+		"tool_name": "Write",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Hook must have been skipped: marker should not exist.
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("hook ran despite matcher mismatch; marker file was written")
+	}
+	// No hook ran, so Block must be false.
+	if result.Block {
+		t.Fatalf("expected Block=false when hook skipped; result=%#v", result)
+	}
+}
+
 func TestRunConversationHooksParallelBlock(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "ran")
