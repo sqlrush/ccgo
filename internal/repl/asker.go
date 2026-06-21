@@ -32,13 +32,3 @@ func (a loopAsker) Ask(ctx context.Context, req tool.PermissionAskRequest) (cont
 	}
 }
 
-// decisionFromAction maps a dialog action label to a PermissionBehavior.
-// "Allow" and "Allow Session" grant access; anything else denies.
-func decisionFromAction(action string) contracts.PermissionBehavior {
-	switch action {
-	case "Allow", "Allow Session":
-		return contracts.PermissionAllow
-	default:
-		return contracts.PermissionDeny
-	}
-}

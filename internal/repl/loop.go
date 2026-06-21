@@ -28,6 +28,11 @@ type turnOutcome struct {
 	err    error
 }
 
+// ruleWriter persists a permission-rule update. settingswriter.Writer satisfies it.
+type ruleWriter interface {
+	Apply(update contracts.PermissionUpdate) error
+}
+
 // Loop is the terminal runtime that drives the existing tui.REPLScreen.
 type Loop struct {
 	term   Terminal
@@ -53,6 +58,10 @@ type Loop struct {
 	activeAsk *askRequest
 	askQueue  []askRequest
 
+	// settings is the optional writer for persisting "allow always" rules.
+	// Set via SetSettingsWriter; nil in tests that don't exercise persistence.
+	settings ruleWriter
+
 	// onPermissionShown is a test seam; nil in production. Called at the end of
 	// showPermission so tests can synchronize input delivery after the dialog is
 	// rendered.
@@ -63,11 +72,19 @@ type Loop struct {
 	// is updated (mirrors onPermissionShown).
 	onTurnDone func()
 
+	// onRulePersisted is a test seam; nil in production. Called for each
+	// PermissionUpdate that would be persisted by an "allow always" choice.
+	onRulePersisted func(contracts.PermissionUpdate)
+
 	running    bool
 	turnCancel context.CancelFunc
 	width      int
 	height     int
 }
+
+// SetSettingsWriter wires the settings writer used to persist "allow always"
+// permission rules. Called from run.go during Task 13 wiring.
+func (l *Loop) SetSettingsWriter(w ruleWriter) { l.settings = w }
 
 func NewLoop(t Terminal, history []string) *Loop {
 	w, h, err := t.Size()
@@ -216,11 +233,14 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		(event.Type == tui.ScreenEventDialogAction || event.Type == tui.ScreenEventCancelled) {
 		result := l.dialog.ResolveScreenEvent(&l.screen, event, l.screen.Status)
 		if result.Found {
-			behavior := decisionFromAction(result.Action)
+			var decision contracts.PermissionDecision
 			if result.Status == tui.DialogResultCancelled || result.Status == tui.DialogResultDenied {
-				behavior = contracts.PermissionDeny
+				decision = contracts.PermissionDecision{Behavior: contracts.PermissionDeny}
+			} else {
+				decision = decisionForAction(l.activeAsk.req, result.Action)
+				l.persistDecision(decision)
 			}
-			l.activeAsk.reply <- contracts.PermissionDecision{Behavior: behavior}
+			l.activeAsk.reply <- decision
 			l.activeAsk = nil
 			l.showNext()
 		}
@@ -268,15 +288,35 @@ func (l *Loop) showNext() {
 // can gate input delivery until the dialog is visible.
 func (l *Loop) showPermission(ar askRequest) {
 	l.activeAsk = &ar
+	actions := permissionActions(ar.req)
 	l.dialog.RequestPermission(tui.PermissionRequest{
 		ID:          string(ar.req.ToolUseID),
 		ToolName:    ar.req.ToolName,
 		Path:        ar.req.Path,
 		Description: ar.req.Description,
+		Actions:     actions.Actions,
 	})
 	l.dialog.ApplyToScreen(&l.screen, l.screen.Status)
 	if l.onPermissionShown != nil {
 		l.onPermissionShown()
+	}
+}
+
+// persistDecision applies any rule suggestions carried by an "always" choice:
+// it writes the update via the settings writer and notifies the test seam.
+func (l *Loop) persistDecision(decision contracts.PermissionDecision) {
+	for _, update := range decision.Suggestions {
+		if l.settings != nil {
+			if err := l.settings.Apply(update); err != nil {
+				l.screen.AppendMessage(tui.Message{
+					Role: tui.RoleSystem,
+					Text: "failed to save permission rule: " + err.Error(),
+				})
+			}
+		}
+		if l.onRulePersisted != nil {
+			l.onRulePersisted(update)
+		}
 	}
 }
 

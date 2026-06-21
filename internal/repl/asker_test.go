@@ -118,20 +118,3 @@ func TestLoopDenyPendingOnExit(t *testing.T) {
 	}
 }
 
-func TestDecisionFromAction(t *testing.T) {
-	tests := []struct {
-		action string
-		want   contracts.PermissionBehavior
-	}{
-		{"Allow", contracts.PermissionAllow},
-		{"Allow Session", contracts.PermissionAllow},
-		{"Deny", contracts.PermissionDeny},
-		{"anything", contracts.PermissionDeny},
-	}
-	for _, tc := range tests {
-		got := decisionFromAction(tc.action)
-		if got != tc.want {
-			t.Errorf("decisionFromAction(%q) = %v, want %v", tc.action, got, tc.want)
-		}
-	}
-}
