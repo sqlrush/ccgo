@@ -43,6 +43,7 @@ func segment(buf []byte, atEOF bool) (string, int, bool) {
 	// Multi-byte UTF-8 rune.
 	n := runeLen(b0)
 	if n == 0 {
+		// 0xFF and other invalid lead bytes can never form a valid sequence; emit immediately.
 		return string(buf[:1]), 1, true // invalid lead byte; consume one
 	}
 	if len(buf) < n {
@@ -116,9 +117,10 @@ func indexOf(b, sub []byte) int {
 
 // SequenceScanner reads raw bytes from r and yields complete input sequences.
 type SequenceScanner struct {
-	r   io.Reader
-	buf []byte
-	eof bool
+	r       io.Reader
+	buf     []byte
+	eof     bool
+	readBuf [1024]byte
 }
 
 func NewSequenceScanner(r io.Reader) *SequenceScanner {
@@ -142,10 +144,9 @@ func (s *SequenceScanner) Next() (string, error) {
 			}
 			return "", io.EOF
 		}
-		chunk := make([]byte, 1024)
-		n, err := s.r.Read(chunk)
+		n, err := s.r.Read(s.readBuf[:])
 		if n > 0 {
-			s.buf = append(s.buf, chunk[:n]...)
+			s.buf = append(s.buf, s.readBuf[:n]...)
 		}
 		if err == io.EOF {
 			s.eof = true

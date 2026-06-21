@@ -27,7 +27,7 @@ func TestSegment(t *testing.T) {
 		{"lone-esc-need-more", "\x1b", false, "", 0, false},
 		{"utf8-2byte", "é", false, "é", 2, true}, // é
 		{"utf8-split", "\xc3", false, "", 0, false},        // first byte of é, need more
-		{"paste", "\x1b[200~hi\x1b[201~", false, "\x1b[200~hi\x1b[201~", 14, true},
+		{"paste", "\x1b[200~hi\x1b[201~", false, "\x1b[200~hi\x1b[201~", 14, true}, // bracketed paste
 		{"paste-incomplete", "\x1b[200~hi", false, "", 0, false},
 	}
 	for _, tc := range cases {
