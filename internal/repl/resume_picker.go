@@ -21,12 +21,10 @@ type ResumePicker struct {
 }
 
 func NewResumePicker(entries []ResumeEntry) *ResumePicker {
-	// Make a defensive copy to ensure immutability
-	copy := make([]ResumeEntry, len(entries))
-	for i := range entries {
-		copy[i] = entries[i]
-	}
-	return &ResumePicker{entries: copy}
+	// Make a defensive copy to ensure immutability.
+	copied := make([]ResumeEntry, len(entries))
+	copy(copied, entries)
+	return &ResumePicker{entries: copied}
 }
 
 func (p *ResumePicker) Selected() (ResumeEntry, bool) {
