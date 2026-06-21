@@ -449,7 +449,10 @@ func (e Executor) runPermissionRequestHooks(ctx Context, use contracts.ToolUse, 
 
 func (e Executor) runPermissionHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, decision contracts.PermissionDecision, result contracts.ToolResult, originalErr error, sink ProgressSink, phase string, metaKey string) (contracts.ToolResult, *contracts.PermissionDecision, json.RawMessage) {
 	current := raw
-	var hookDecision *contracts.PermissionDecision
+	// accumBehavior tracks the folded decision with deny > ask > allow precedence.
+	// The empty string means no hook has returned a decision yet.
+	var accumBehavior contracts.PermissionBehavior
+	var accumMessage string
 	for idx, hook := range e.hooksForPhase(phase) {
 		_ = e.sendHookProgress(sink, use.ID, t, phase, idx, "hook_started", map[string]any{"behavior": string(decision.Behavior)})
 		hookResult, err := hook.RunToolHook(ctx, HookEvent{Phase: phase, ToolUse: use, ToolName: t.Name(), Input: current, Decision: &decision, Result: &result, Error: originalErr.Error()})
@@ -471,14 +474,16 @@ func (e Executor) runPermissionHooks(ctx Context, use contracts.ToolUse, t Tool,
 			current = normalizeRawInput(hookResult.UpdatedInput)
 		}
 		if hookResult.PermissionDecision != nil {
-			decisionCopy := *hookResult.PermissionDecision
-			hookDecision = &decisionCopy
-		} else if hookResult.Block {
-			message := hookResult.Message
-			if message == "" {
-				message = "blocked by " + phase + " hook"
+			folded := foldPermissionBehavior(accumBehavior, hookResult.PermissionDecision.Behavior)
+			if folded != accumBehavior {
+				accumBehavior = folded
+				if hookResult.PermissionDecision.Behavior == contracts.PermissionDeny {
+					accumMessage = firstNonEmptyExec(hookResult.PermissionDecision.Message, hookResult.Message, accumMessage)
+				}
 			}
-			hookDecision = &contracts.PermissionDecision{Behavior: contracts.PermissionDeny, Message: message}
+		} else if hookResult.Block {
+			accumBehavior = contracts.PermissionDeny
+			accumMessage = firstNonEmptyExec(hookResult.Message, accumMessage, "blocked by "+phase+" hook")
 		}
 		data := map[string]any{"behavior": string(decision.Behavior)}
 		if hookResult.Message != "" {
@@ -491,6 +496,10 @@ func (e Executor) runPermissionHooks(ctx Context, use contracts.ToolUse, t Tool,
 			data["permission_behavior"] = string(hookResult.PermissionDecision.Behavior)
 		}
 		_ = e.sendHookProgress(sink, use.ID, t, phase, idx, "hook_completed", data)
+	}
+	var hookDecision *contracts.PermissionDecision
+	if accumBehavior != "" {
+		hookDecision = &contracts.PermissionDecision{Behavior: accumBehavior, Message: accumMessage}
 	}
 	return result, hookDecision, current
 }
@@ -527,6 +536,40 @@ func (e Executor) runPostHooks(ctx Context, use contracts.ToolUse, t Tool, raw j
 		_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUse, idx, "hook_completed", data)
 	}
 	return result, nil
+}
+
+// foldPermissionBehavior applies deny > ask > allow precedence across hook decisions.
+// Passthrough and unknown values are no-ops. Mirrors internal/hooks.foldBehavior
+// (deliberate duplication: internal/hooks imports internal/tool, so the reverse import
+// would create a cycle).
+func foldPermissionBehavior(current, next contracts.PermissionBehavior) contracts.PermissionBehavior {
+	switch next {
+	case contracts.PermissionDeny:
+		return contracts.PermissionDeny
+	case contracts.PermissionAsk:
+		if current != contracts.PermissionDeny {
+			return contracts.PermissionAsk
+		}
+		return current
+	case contracts.PermissionAllow:
+		if current == "" {
+			return contracts.PermissionAllow
+		}
+		return current
+	default:
+		return current
+	}
+}
+
+// firstNonEmptyExec returns the first non-empty string among its arguments.
+func firstNonEmptyExec(a, b, c string) string {
+	if a != "" {
+		return a
+	}
+	if b != "" {
+		return b
+	}
+	return c
 }
 
 func (e Executor) hooksForPhase(phase string) []Hook {
