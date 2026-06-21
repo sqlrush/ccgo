@@ -941,7 +941,7 @@ func callBash(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		return startBackgroundBash(ctx, input, timeout, sink)
 	}
 	command := strings.TrimSpace(input.Command)
-	result := runBashCommand(ctx, command, timeout)
+	result := runBashCommand(ctx, command, timeout, input.DangerouslyDisableSandbox)
 	if !result.TimedOut && !result.Cancelled {
 		updateBashCWD(ctx, command)
 	}
@@ -1039,7 +1039,7 @@ func callKillBash(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (c
 	}, nil
 }
 
-func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bashResult {
+func runBashCommand(ctx tool.Context, command string, timeout time.Duration, dangerouslyDisableSandbox bool) bashResult {
 	baseCtx := ctx.Context
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -1048,7 +1048,8 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 	runCtx, cancel := context.WithTimeout(baseCtx, timeout)
 	defer cancel()
 
-	name, args := shellCommand(command)
+	policy := sandboxPolicyFromContext(ctx)
+	name, args := sandboxedShellCommand(command, policy, dangerouslyDisableSandbox)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	configureBashCommand(cmd)
 	if dir := bashEffectiveCWD(ctx); dir != "" {
@@ -1091,7 +1092,8 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	}
 	command := strings.TrimSpace(input.Command)
 	runCtx, cancel := context.WithTimeout(context.Background(), timeout)
-	name, args := shellCommand(command)
+	policy := sandboxPolicyFromContext(ctx)
+	name, args := sandboxedShellCommand(command, policy, input.DangerouslyDisableSandbox)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	configureBashCommand(cmd)
 	if dir := bashEffectiveCWD(ctx); dir != "" {
