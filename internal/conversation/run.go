@@ -267,11 +267,21 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			// pause_turn is a documented Anthropic API stop_reason indicating the assistant's
 			// turn is paused (e.g. during server-tool execution). Re-send the history unchanged
 			// to let the server resume the paused turn. Bound to avoid infinite loops.
-			const maxPauseTurnResumes = 10
 			if pauseTurnResumes >= maxPauseTurnResumes {
+				// Surface message when pause_turn cap is reached, mirroring refusal/context-window behavior.
+				pauseMsg := runner.pauseTurnLimitMessage()
+				history, pauseMsg = appendMessage(history, pauseMsg)
+				result.Messages = append(result.Messages, pauseMsg)
+				if err := runner.appendTranscript(pauseMsg); err != nil {
+					return result, err
+				}
+				runner.emit(Event{Type: EventAssistantMessage, Message: &pauseMsg, Model: response.Model})
 				return result, nil
 			}
 			pauseTurnResumes++
+			// NOTE: pause_turn is expected for server-tool turns with no client tool_use.
+			// If client tool uses were present they are not executed on this re-send path;
+			// the turn continues without executing those tool calls.
 			continue
 
 		case stopActionRecoverMaxTokens:

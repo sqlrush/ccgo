@@ -18,6 +18,10 @@ const (
 // maxOutputTokensRecoveryLimit mirrors CC's MAX_OUTPUT_TOKENS_RECOVERY_LIMIT (query.ts:164).
 const maxOutputTokensRecoveryLimit = 3
 
+// maxPauseTurnResumes bounds the number of times pause_turn can be resumed within a single turn,
+// preventing infinite loops if the server continuously returns pause_turn.
+const maxPauseTurnResumes = 10
+
 // classifyStopReason maps an Anthropic stop_reason string to the agent loop's control action.
 func classifyStopReason(reason string) stopAction {
 	switch reason {
@@ -41,6 +45,8 @@ const maxTokensRecoveryText = "[The previous response was truncated because it r
 
 const contextWindowExceededText = "The conversation reached the model's context window limit. Older messages must be compacted (/compact) before continuing."
 
+const pauseTurnLimitText = "Turn paused too many times; stopping."
+
 // refusalMessage builds the surfaced assistant message for a usage-policy refusal.
 func (r Runner) refusalMessage() contracts.Message {
 	msg := msgs.AssistantText(refusalMessageText, "", nil)
@@ -63,6 +69,15 @@ func (r Runner) maxTokensContinuationMessage() contracts.Message {
 // Full compaction recovery is implemented in Task 6; here we only surface the message and stop.
 func (r Runner) contextWindowExceededMessage() contracts.Message {
 	msg := msgs.AssistantText(contextWindowExceededText, "", nil)
+	if r.SessionID != "" {
+		msg.SessionID = r.SessionID
+	}
+	return msg
+}
+
+// pauseTurnLimitMessage builds the surfaced message when pause_turn resume limit is reached.
+func (r Runner) pauseTurnLimitMessage() contracts.Message {
+	msg := msgs.AssistantText(pauseTurnLimitText, "", nil)
 	if r.SessionID != "" {
 		msg.SessionID = r.SessionID
 	}
