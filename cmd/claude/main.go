@@ -208,6 +208,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "agents") {
 		return runAgentsCLI(state.CWD(), flags.Args()[1:], stdout, stderr)
 	}
+	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "doctor") {
+		return runDoctorCommand(flags.Args()[1:], state.CWD(), stdout, stderr)
+	}
 	if *printMode {
 		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
 		if err != nil {

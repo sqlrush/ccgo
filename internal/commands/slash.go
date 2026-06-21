@@ -69,6 +69,7 @@ const (
 	LocalCommandResultContext    LocalCommandResultType = "context"
 	LocalCommandResultPermissions LocalCommandResultType = "permissions"
 	LocalCommandResultExport      LocalCommandResultType = "export"
+	LocalCommandResultDoctor      LocalCommandResultType = "doctor"
 )
 
 type LocalCommandResult struct {
@@ -258,6 +259,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultPermissions, Value: strings.TrimSpace(args)}, true
 	case "export":
 		return LocalCommandResult{Type: LocalCommandResultExport, Value: strings.TrimSpace(args)}, true
+	case "doctor":
+		return LocalCommandResult{Type: LocalCommandResultDoctor, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}

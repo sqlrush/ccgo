@@ -21,6 +21,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	contextreport "ccgo/internal/contextreport"
 	"ccgo/internal/config"
+	"ccgo/internal/doctor"
 	"ccgo/internal/contracts"
 	daemonpkg "ccgo/internal/daemon"
 	hookpkg "ccgo/internal/hooks"
@@ -171,6 +172,12 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		}
 		if localResult != nil && localResult.Type == commands.LocalCommandResultContext {
 			return r.appendLocalTextResult(result, history, r.formatContextReport(originalHistory))
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultDoctor {
+			report := doctor.Run(doctor.Input{
+				CWD: r.WorkingDirectory,
+			})
+			return r.appendLocalTextResult(result, history, doctor.Format(report))
 		}
 		return result, nil
 	}
