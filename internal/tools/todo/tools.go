@@ -32,12 +32,11 @@ func NewTodoWriteTool() tool.Tool {
 						"type": "array",
 						"items": map[string]any{
 							"type":     "object",
-							"required": []any{"id", "content", "status", "priority"},
+							"required": []any{"content", "status", "activeForm"},
 							"properties": map[string]any{
-								"id":       map[string]any{"type": "string"},
-								"content":  map[string]any{"type": "string"},
-								"status":   map[string]any{"type": "string", "enum": []any{"pending", "in_progress", "completed"}},
-								"priority": map[string]any{"type": "string", "enum": []any{"high", "medium", "low"}},
+								"content":    map[string]any{"type": "string"},
+								"status":     map[string]any{"type": "string", "enum": []any{"pending", "in_progress", "completed"}},
+								"activeForm": map[string]any{"type": "string"},
 							},
 						},
 					},
@@ -45,7 +44,7 @@ func NewTodoWriteTool() tool.Tool {
 			},
 		},
 		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Updates the session todo list. Provide the complete todos array with id, content, status, and priority. Status must be pending, in_progress, or completed; priority must be high, medium, or low. Keep at most one todo in_progress.", nil
+			return "Updates the session todo list. Provide the complete todos array with content (imperative phrase describing the task), status (pending, in_progress, or completed), and activeForm (present-continuous phrase shown while in_progress, e.g. \"Writing the parser\"). Keep at most one todo in_progress.", nil
 		},
 		ValidateFunc:    validateTodoWrite,
 		CallFunc:        callTodoWrite,
@@ -63,25 +62,17 @@ func validateTodoWrite(_ tool.Context, raw json.RawMessage) error {
 }
 
 func validateTodos(todos []Todo) error {
-	seen := map[string]struct{}{}
 	inProgress := 0
 	for i, todo := range todos {
 		prefix := fmt.Sprintf("todos[%d]", i)
-		if strings.TrimSpace(todo.ID) == "" {
-			return fmt.Errorf("%s.id is required", prefix)
-		}
-		if _, ok := seen[todo.ID]; ok {
-			return fmt.Errorf("%s.id duplicates todo id %q", prefix, todo.ID)
-		}
-		seen[todo.ID] = struct{}{}
 		if strings.TrimSpace(todo.Content) == "" {
 			return fmt.Errorf("%s.content is required", prefix)
 		}
+		if strings.TrimSpace(todo.ActiveForm) == "" {
+			return fmt.Errorf("%s.activeForm is required", prefix)
+		}
 		if !validTodoStatus(todo.Status) {
 			return fmt.Errorf("%s.status must be one of pending, in_progress, or completed", prefix)
-		}
-		if !validTodoPriority(todo.Priority) {
-			return fmt.Errorf("%s.priority must be one of high, medium, or low", prefix)
 		}
 		if todo.Status == "in_progress" {
 			inProgress++
@@ -163,17 +154,16 @@ func validateTodoKeys(index int, raw json.RawMessage) error {
 		return fmt.Errorf("todos[%d] must be object", index)
 	}
 	allowed := map[string]struct{}{
-		"id":       {},
-		"content":  {},
-		"status":   {},
-		"priority": {},
+		"content":    {},
+		"status":     {},
+		"activeForm": {},
 	}
 	for key := range obj {
 		if _, ok := allowed[key]; !ok {
 			return fmt.Errorf("todos[%d].%s is not allowed", index, key)
 		}
 	}
-	for _, key := range []string{"id", "content", "status", "priority"} {
+	for _, key := range []string{"content", "status", "activeForm"} {
 		if _, ok := obj[key]; !ok {
 			return fmt.Errorf("todos[%d].%s is required", index, key)
 		}
@@ -190,23 +180,13 @@ func validTodoStatus(status string) bool {
 	}
 }
 
-func validTodoPriority(priority string) bool {
-	switch priority {
-	case "high", "medium", "low":
-		return true
-	default:
-		return false
-	}
-}
-
 func structuredTodos(todos []Todo) []map[string]any {
 	out := make([]map[string]any, 0, len(todos))
 	for _, todo := range todos {
 		out = append(out, map[string]any{
-			"id":       todo.ID,
-			"content":  todo.Content,
-			"status":   todo.Status,
-			"priority": todo.Priority,
+			"content":    todo.Content,
+			"status":     todo.Status,
+			"activeForm": todo.ActiveForm,
 		})
 	}
 	return out

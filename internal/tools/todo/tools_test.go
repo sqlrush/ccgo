@@ -44,8 +44,8 @@ func TestTodoWriteStoresStateAndStructuredContent(t *testing.T) {
 		ID:   "toolu_todo",
 		Name: "TodoWrite",
 		Input: json.RawMessage(`{"todos":[
-			{"id":"todo-1","content":"Implement TodoWrite","status":"in_progress","priority":"high"},
-			{"id":"todo-2","content":"Run tests","status":"pending","priority":"medium"}
+			{"content":"Implement TodoWrite","status":"in_progress","activeForm":"Implementing TodoWrite"},
+			{"content":"Run tests","status":"pending","activeForm":"Running tests"}
 		]}`),
 	}, nil)
 	if err != nil {
@@ -56,7 +56,7 @@ func TestTodoWriteStoresStateAndStructuredContent(t *testing.T) {
 	}
 	state := EnsureState(ctx)
 	todos := state.Snapshot()
-	if len(todos) != 2 || todos[0].ID != "todo-1" || todos[0].Status != "in_progress" || todos[1].Priority != "medium" {
+	if len(todos) != 2 || todos[0].Content != "Implement TodoWrite" || todos[0].Status != "in_progress" || todos[1].ActiveForm != "Running tests" {
 		t.Fatalf("todos = %#v", todos)
 	}
 	if result.StructuredContent["type"] != "todo_list" {
@@ -71,7 +71,7 @@ func TestTodoWriteStoresStateAndStructuredContent(t *testing.T) {
 		ID:   "toolu_todo_update",
 		Name: "TodoWrite",
 		Input: json.RawMessage(`{"todos":[
-			{"id":"todo-1","content":"Implement TodoWrite","status":"completed","priority":"high"}
+			{"content":"Implement TodoWrite","status":"completed","activeForm":"Implementing TodoWrite"}
 		]}`),
 	}, nil)
 	if err != nil {
@@ -92,8 +92,8 @@ func TestTodoWritePersistsAndRestoresSessionState(t *testing.T) {
 		ID:   "toolu_todo_persist",
 		Name: "TodoWrite",
 		Input: json.RawMessage(`{"todos":[
-			{"id":"todo-1","content":"Persist todos","status":"in_progress","priority":"high"},
-			{"id":"todo-2","content":"Restore todos","status":"pending","priority":"medium"}
+			{"content":"Persist todos","status":"in_progress","activeForm":"Persisting todos"},
+			{"content":"Restore todos","status":"pending","activeForm":"Restoring todos"}
 		]}`),
 	}, nil)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestTodoWritePersistsAndRestoresSessionState(t *testing.T) {
 		t.Fatal(err)
 	}
 	todos := state.Snapshot()
-	if len(todos) != 2 || todos[0].ID != "todo-1" || todos[0].Status != "in_progress" || todos[1].Content != "Restore todos" {
+	if len(todos) != 2 || todos[0].Content != "Persist todos" || todos[0].Status != "in_progress" || todos[1].Content != "Restore todos" {
 		t.Fatalf("restored todos = %#v", todos)
 	}
 }
@@ -142,27 +142,22 @@ func TestTodoWriteValidatesInput(t *testing.T) {
 		},
 		{
 			name:  "unknown todo field",
-			input: `{"todos":[{"id":"1","content":"x","status":"pending","priority":"low","extra":true}]}`,
+			input: `{"todos":[{"content":"x","status":"pending","activeForm":"Doing x","extra":true}]}`,
 			want:  "todos[0].extra is not allowed",
 		},
 		{
 			name:  "invalid status",
-			input: `{"todos":[{"id":"1","content":"x","status":"blocked","priority":"low"}]}`,
+			input: `{"todos":[{"content":"x","status":"blocked","activeForm":"Doing x"}]}`,
 			want:  "input.todos[0].status must be one of pending, in_progress, completed",
 		},
 		{
-			name:  "invalid priority",
-			input: `{"todos":[{"id":"1","content":"x","status":"pending","priority":"urgent"}]}`,
-			want:  "input.todos[0].priority must be one of high, medium, low",
-		},
-		{
-			name:  "duplicate id",
-			input: `{"todos":[{"id":"1","content":"x","status":"pending","priority":"low"},{"id":"1","content":"y","status":"pending","priority":"low"}]}`,
-			want:  "duplicates todo id",
+			name:  "missing activeForm",
+			input: `{"todos":[{"content":"x","status":"pending"}]}`,
+			want:  "todos[0].activeForm is required",
 		},
 		{
 			name:  "multiple in progress",
-			input: `{"todos":[{"id":"1","content":"x","status":"in_progress","priority":"low"},{"id":"2","content":"y","status":"in_progress","priority":"low"}]}`,
+			input: `{"todos":[{"content":"x","status":"in_progress","activeForm":"Doing x"},{"content":"y","status":"in_progress","activeForm":"Doing y"}]}`,
 			want:  "only one todo can be in_progress",
 		},
 	}

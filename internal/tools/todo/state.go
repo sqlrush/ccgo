@@ -17,10 +17,9 @@ const MetadataTodoStateKey = "ccgo.tools.todo.state"
 const MetadataTodoStorePathKey = "ccgo.tools.todo.store_path"
 
 type Todo struct {
-	ID       string `json:"id"`
-	Content  string `json:"content"`
-	Status   string `json:"status"`
-	Priority string `json:"priority"`
+	Content    string `json:"content"`
+	Status     string `json:"status"`
+	ActiveForm string `json:"activeForm"`
 }
 
 type State struct {
