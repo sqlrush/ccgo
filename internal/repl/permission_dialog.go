@@ -10,6 +10,23 @@ const (
 	actionDeny      = "Deny"
 )
 
+// scopeRequiredTools is the set of tools where a bare (unscoped) allow rule is
+// dangerous: persisting "allow all Bash commands" or "allow all WebFetch hosts"
+// is a least-privilege violation. For these tools we must have a concrete scope
+// before writing any persistence rule.
+var scopeRequiredTools = map[string]bool{
+	"Bash":       true,
+	"PowerShell": true,
+	"WebFetch":   true,
+	"WebSearch":  true,
+}
+
+// scopeRequired reports whether tool must have a concrete scope before we are
+// allowed to write a persistence rule on its behalf.
+func scopeRequired(toolName string) bool {
+	return scopeRequiredTools[toolName]
+}
+
 // permActions is the action set for a tool's permission dialog plus the index
 // of the persistence ("always") action.
 type permActions struct {
@@ -42,7 +59,10 @@ func alwaysLabel(req tool.PermissionAskRequest) string {
 }
 
 // decisionForAction maps a chosen action label to a PermissionDecision. The
-// "always" action additionally carries a Suggestions update the loop persists.
+// "always" action additionally carries a Suggestions update the loop persists,
+// unless the tool is scope-required and no concrete scope could be derived — in
+// that case the decision is allowed for this call only (no persistence rule is
+// written, preventing a silent over-grant).
 func decisionForAction(req tool.PermissionAskRequest, action string) contracts.PermissionDecision {
 	switch action {
 	case actionDeny:
@@ -51,6 +71,15 @@ func decisionForAction(req tool.PermissionAskRequest, action string) contracts.P
 		return contracts.PermissionDecision{Behavior: contracts.PermissionAllow}
 	default:
 		// Any non-deny, non-once action is the tool-specific "always" label.
+		if scopeRequired(req.ToolName) && persistScope(req) == "" {
+			// Cannot derive a scoped rule: persist nothing to avoid a broad
+			// allow-all rule (e.g. bare "Bash" which grants every command).
+			// The call is still allowed this turn.
+			return contracts.PermissionDecision{
+				Behavior: contracts.PermissionAllow,
+				Message:  "Allowed for this call only (could not derive a rule to remember).",
+			}
+		}
 		return contracts.PermissionDecision{
 			Behavior:    contracts.PermissionAllow,
 			Suggestions: []contracts.PermissionUpdate{persistUpdate(req)},
