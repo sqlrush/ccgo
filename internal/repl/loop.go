@@ -34,14 +34,14 @@ type Loop struct {
 	life   tui.ScreenLifecycle
 	dialog *tui.DialogRuntime
 
-	inputCh  chan tui.Key
-	eventCh  chan conversation.Event
-	askCh    chan askRequest
-	doneCh   chan turnOutcome
-	resizeCh chan resizeEvent
-	tickCh   <-chan time.Time
-	stopTick func()
-	spinner  Spinner
+	inputCh    chan tui.Key
+	eventCh    chan conversation.Event
+	askCh      chan askRequest
+	doneCh     chan turnOutcome
+	resizeCh   chan resizeEvent
+	tickCh     <-chan time.Time
+	stopTick   func()
+	spinner    Spinner
 	baseStatus string
 
 	// StartTurn is invoked when the user submits a prompt. It runs the model
@@ -331,12 +331,13 @@ type readerFunc func(p []byte) (int, error)
 func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
 
 func (l *Loop) startSpinner() {
+	now := time.Now()
 	l.baseStatus = l.screen.Status
-	l.spinner = NewSpinner(time.Now())
+	l.spinner = NewSpinner(now)
 	ticker := time.NewTicker(spinnerInterval)
 	l.tickCh = ticker.C
 	l.stopTick = ticker.Stop
-	l.screen.Status = l.spinner.Line(time.Now())
+	l.screen.Status = l.spinner.Line(now)
 }
 
 func (l *Loop) stopSpinner() {
