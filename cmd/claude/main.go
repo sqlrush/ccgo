@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -392,7 +393,10 @@ func runAuthCLI(ctx context.Context, _ *bootstrap.State, args []string, stdin io
 	case "logout":
 		return runAuthLogout(ctx, store, stderr, stdout)
 	case "status":
-		return runAuthStatus(ctx, store, stdout, stderr)
+		// apiKeyHelper is sourced from runner merged settings when available;
+		// the auth subcommand has no runner, so we pass "" which covers
+		// env-var → keychain → file — the same precedence as headlessRunner.
+		return runAuthStatus(ctx, "" /* apiKeyHelperCmd */, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ccgo auth: unknown subcommand %q (login|logout|status)\n", args[0])
 		return 2
@@ -421,12 +425,14 @@ func runAuthLogin(ctx context.Context, args []string, store auth.CredentialStore
 	fmt.Fprintln(stdout, "Proceeding means you accept responsibility for this usage.")
 	if !*yesFlag {
 		fmt.Fprint(stdout, "Continue? [y/N] ")
-		var answer string
-		buf := make([]byte, 256)
-		n, _ := stdin.Read(buf)
-		if n > 0 {
-			answer = strings.TrimSpace(string(buf[:n]))
+		line, err := bufio.NewReader(stdin).ReadString('\n')
+		if err != nil {
+			// Read error (e.g. EOF on non-interactive stdin) → treat as denied
+			// to avoid proceeding with login on ambiguous input.
+			fmt.Fprintln(stderr, "ccgo auth: login cancelled (no consent)")
+			return 1
 		}
+		answer := strings.TrimSpace(line)
 		if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
 			fmt.Fprintln(stderr, "ccgo auth: login cancelled (no consent)")
 			return 1
@@ -460,19 +466,33 @@ func runAuthLogout(ctx context.Context, store auth.CredentialStore, stderr io.Wr
 	return 0
 }
 
-// runAuthStatus implements "claude auth status". It reports whether credentials
-// are present WITHOUT printing any token value.
-func runAuthStatus(ctx context.Context, store auth.CredentialStore, stdout io.Writer, stderr io.Writer) int {
-	creds, err := store.Load(ctx)
+// runAuthStatus implements "claude auth status". It reports the resolved
+// credential source using the same precedence as the headless runner:
+//
+//	apiKeyHelper (when configured) → env vars → keychain → credentials file
+//
+// The token/key value is NEVER printed — only the source label.
+func runAuthStatus(ctx context.Context, apiKeyHelperCmd string, stdout io.Writer, stderr io.Writer) int {
+	creds, _, err := credentialsFromEnvOrStore(ctx, apiKeyHelperCmd)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo auth: %v\n", err)
 		return 1
 	}
 	switch creds.Source {
 	case auth.SourceOAuth:
-		fmt.Fprintln(stdout, "Authenticated via OAuth.")
+		fmt.Fprintln(stdout, "Authenticated via OAuth (keychain).")
 	case auth.SourceAPIKey:
-		fmt.Fprintln(stdout, "Authenticated via API key.")
+		// Distinguish between helper and environment sources when possible.
+		// After resolution the Credentials struct doesn't carry sub-source, so
+		// we infer: if the env var is set we know it came from there (helper
+		// takes precedence but leaves no distinct marker in Credentials).
+		if strings.TrimSpace(apiKeyHelperCmd) != "" {
+			fmt.Fprintln(stdout, "Authenticated via API key (apiKeyHelper or environment).")
+		} else if strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) != "" {
+			fmt.Fprintln(stdout, "Authenticated via API key (environment).")
+		} else {
+			fmt.Fprintln(stdout, "Authenticated via API key.")
+		}
 	default:
 		fmt.Fprintln(stdout, "Not authenticated. Run `claude auth login` or set ANTHROPIC_API_KEY.")
 	}
