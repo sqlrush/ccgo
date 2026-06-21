@@ -121,6 +121,7 @@ const (
 	MetadataSettingsKey            = "ccgo.settings"
 	MetadataPolicySettingsKey      = "ccgo.policy_settings"
 	MetadataSessionPathKey         = "ccgo.session.path"
+	MetadataPermissionModeKey      = "ccgo.permissions.mode"
 	MetadataAvailableAgentsKey     = "ccgo.available_agents"
 	MetadataToolRegistryKey        = "ccgo.tool.registry"
 	MetadataMessagesKey            = "ccgo.messages"

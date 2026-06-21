@@ -360,35 +360,7 @@ func (h HTTPHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.Hook
 }
 
 func hookInput(ctx tool.Context, event tool.HookEvent) (string, error) {
-	payload := map[string]any{
-		"session_id":      string(ctx.SessionID),
-		"transcript_path": metadataString(ctx.Metadata, tool.MetadataSessionPathKey),
-		"cwd":             ctx.WorkingDirectory,
-		"hook_event_name": event.Phase,
-		"tool_use_id":     string(event.ToolUse.ID),
-		"tool_name":       event.ToolName,
-		"tool_input":      json.RawMessage(event.Input),
-	}
-	if event.Decision != nil {
-		payload["permission_decision"] = event.Decision
-	}
-	if event.Result != nil {
-		payload["tool_response"] = event.Result
-	}
-	if event.Error != "" {
-		payload["error"] = event.Error
-	}
-	for key, value := range event.Payload {
-		key = strings.TrimSpace(key)
-		if key != "" {
-			payload[key] = value
-		}
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+	return BuildInput(ctx, event)
 }
 
 func metadataString(metadata map[string]any, key string) string {
@@ -688,11 +660,12 @@ func applyHookSpecificOutput(result *tool.HookResult, phase string, hookSpecific
 				result.PermissionDecision = &contracts.PermissionDecision{Behavior: contracts.PermissionDeny, Message: message}
 			}
 		}
-	case tool.HookPostToolUse:
-		if value := stringField(hookSpecific, "additionalContext"); value != "" {
-			result.Message = value
-		}
-	case tool.HookUserPromptSubmit, tool.HookStop, tool.HookSubagentStop, tool.HookPreCompact:
+	case tool.HookPostToolUse, tool.HookUserPromptSubmit, tool.HookStop,
+		tool.HookSubagentStop, tool.HookPreCompact, tool.HookSessionStart,
+		tool.HookSessionEnd, tool.HookNotification, tool.HookSubagentStart,
+		tool.HookPostCompact, tool.HookStopFailure:
+		// additionalContext is supported for tool-post and all lifecycle phases.
+		// initialUserMessage/watchPaths are deferred (Phase 2/6c UI concern).
 		if value := stringField(hookSpecific, "additionalContext"); value != "" {
 			result.Message = value
 		}
