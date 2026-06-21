@@ -107,5 +107,24 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)
 	}
+
+	// Wire the command router so /resume (and future live-effect commands) are
+	// handled without falling through to the model.
+	router := NewCommandRouter()
+	router.Register("resume", resumeHandler(base.WorkingDirectory))
+	router.Register("continue", resumeHandler(base.WorkingDirectory))
+	loop.onCommand = func(input string) (CommandOutcome, bool) {
+		cc := CommandContext{
+			Screen:  &loop.screen,
+			History: loop.history,
+			CWD:     base.WorkingDirectory,
+		}
+		outcome, err := router.Dispatch(ctx, input, cc)
+		if err != nil {
+			return CommandOutcome{Handled: true, Status: "Error: " + err.Error()}, true
+		}
+		return outcome, outcome.Handled
+	}
+
 	return loop.Run(ctx)
 }
