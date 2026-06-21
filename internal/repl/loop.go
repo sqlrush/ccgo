@@ -51,6 +51,11 @@ type Loop struct {
 	// rendered.
 	onPermissionShown func()
 
+	// onTurnDone is a test seam; nil in production. Called at the end of
+	// finishTurn so tests can synchronize after the turn completes and history
+	// is updated (mirrors onPermissionShown).
+	onTurnDone func()
+
 	running bool
 	width   int
 	height  int
@@ -151,6 +156,9 @@ func (l *Loop) finishTurn(out turnOutcome) {
 	copy(newHistory, l.history)
 	copy(newHistory[len(l.history):], out.result.Messages)
 	l.history = newHistory
+	if l.onTurnDone != nil {
+		l.onTurnDone()
+	}
 }
 
 // readInput segments the terminal byte stream into keys and posts them.
