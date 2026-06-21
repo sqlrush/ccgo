@@ -114,6 +114,9 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	router.Register("resume", resumeHandler(base.WorkingDirectory))
 	router.Register("continue", resumeHandler(base.WorkingDirectory))
 	router.Register("agents", agentsHandler(base.WorkingDirectory))
+	router.Register("theme", themeHandler())
+	router.Register("effort", effortHandler())
+	router.Register("vim", vimHandler())
 	loop.onCommand = func(input string) (CommandOutcome, bool) {
 		cc := CommandContext{
 			Screen:  &loop.screen,

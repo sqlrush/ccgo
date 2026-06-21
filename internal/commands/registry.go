@@ -305,6 +305,9 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "output-style", Description: "Deprecated: use /config to change output style", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "login", Description: "Sign in with your Claude account (OAuth)", Source: contracts.CommandSourceBuiltin, Immediate: true},
 		{Type: contracts.CommandLocalJSX, Name: "logout", Description: "Sign out and remove stored credentials", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "theme", Description: "Set the color theme", ArgumentHint: "<name>", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "effort", Description: "Set the effort level for responses", ArgumentHint: "<low|medium|high|max|auto>", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "vim", Description: "Toggle vim keybinding mode", Source: contracts.CommandSourceBuiltin},
 	})
 }
 
