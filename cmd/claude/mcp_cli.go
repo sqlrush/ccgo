@@ -205,8 +205,3 @@ func mcpGet(args []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// mcpServe is a stub for the `claude mcp serve` subcommand (implemented in Task 7).
-func mcpServe(args []string, stdout, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "ccgo mcp serve: not yet implemented")
-	return 1
-}
