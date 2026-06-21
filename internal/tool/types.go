@@ -133,6 +133,12 @@ const (
 	HookStop              = "Stop"
 	HookSubagentStop      = "SubagentStop"
 	HookPreCompact        = "PreCompact"
+	HookSessionStart      = "SessionStart"
+	HookSessionEnd        = "SessionEnd"
+	HookNotification      = "Notification"
+	HookSubagentStart     = "SubagentStart"
+	HookPostCompact       = "PostCompact"
+	HookStopFailure       = "StopFailure"
 )
 
 type HookEvent struct {
