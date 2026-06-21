@@ -72,7 +72,10 @@ func ApplyLandlockSeccomp(p Policy) error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return fmt.Errorf("sandbox: no_new_privs: %w", err)
 	}
-	filter := buildSeccompNetworkFilter(p.AllowNetwork)
+	filter, err := buildSeccompNetworkFilter(p.AllowNetwork)
+	if err != nil {
+		return fmt.Errorf("sandbox: seccomp filter: %w", err)
+	}
 	if len(filter) > 0 {
 		if err := installSeccomp(filter); err != nil {
 			return fmt.Errorf("sandbox: seccomp: %w", err)
@@ -84,8 +87,10 @@ func ApplyLandlockSeccomp(p Policy) error {
 // applyLandlock sets up a landlock ruleset from Policy.
 //
 // Baseline: read-only access everywhere (/). Writable: cwd + AllowWrite
-// paths. DenyRead / DenyWrite paths are excluded from the allow rules
-// (landlock is a deny-by-default allowlist once activated).
+// paths. NOTE: DenyRead / DenyWrite paths are NOT YET implemented — landlock
+// operates as a deny-by-default allowlist once activated, but per-path
+// exclusion from the allow rules requires additional work and is tracked as
+// future work. Currently these fields are silently ignored.
 //
 // Graceful degradation: BestEffort() negotiates the highest available ABI
 // version. On kernels that don't support landlock at all (< 5.13), this
