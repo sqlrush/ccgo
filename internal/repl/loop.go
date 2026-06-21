@@ -303,16 +303,20 @@ func (l *Loop) showPermission(ar askRequest) {
 }
 
 // persistDecision applies any rule suggestions carried by an "always" choice:
-// it writes the update via the settings writer and notifies the test seam.
+// it writes the update via the settings writer and, only on a successful write,
+// notifies the test seam. With no writer configured nothing is persisted and the
+// seam does not fire, so onRulePersisted is an honest "rule was persisted" signal.
 func (l *Loop) persistDecision(decision contracts.PermissionDecision) {
 	for _, update := range decision.Suggestions {
-		if l.settings != nil {
-			if err := l.settings.Apply(update); err != nil {
-				l.screen.AppendMessage(tui.Message{
-					Role: tui.RoleSystem,
-					Text: "failed to save permission rule: " + err.Error(),
-				})
-			}
+		if l.settings == nil {
+			continue
+		}
+		if err := l.settings.Apply(update); err != nil {
+			l.screen.AppendMessage(tui.Message{
+				Role: tui.RoleSystem,
+				Text: "failed to save permission rule: " + err.Error(),
+			})
+			continue
 		}
 		if l.onRulePersisted != nil {
 			l.onRulePersisted(update)
