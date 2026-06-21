@@ -813,9 +813,7 @@ func NewBashTool() tool.Tool {
 				},
 			},
 		},
-		PromptFunc: func(tool.PromptContext) (string, error) {
-			return "Runs a shell command in the current working directory. Provide command, optional timeout in milliseconds, optional short description, and run_in_background for background commands. Full sandbox parity and advanced interrupt controls are not implemented yet.", nil
-		},
+		PromptFunc:      BashPrompt,
 		NormalizeFunc:   normalizeBashRawInput,
 		ValidateFunc:    validateBash,
 		CallFunc:        callBash,
