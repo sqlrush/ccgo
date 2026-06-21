@@ -3,7 +3,6 @@ package repl
 import (
 	"fmt"
 
-	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
 	"ccgo/internal/tui"
@@ -27,19 +26,8 @@ func messageFromEvent(ev conversation.Event) (tui.Message, bool) {
 			return tui.Message{}, false
 		}
 		return tui.Message{Role: tui.RoleTool, Text: fmt.Sprintf("⏺ %s", ev.ToolUse.Name)}, true
-	case conversation.EventToolResult:
-		if ev.ToolResult == nil {
-			return tui.Message{}, false
-		}
-		return tui.Message{Role: tui.RoleTool, Text: toolResultLine(*ev.ToolResult)}, true
 	default:
 		return tui.Message{}, false
 	}
 }
 
-func toolResultLine(r contracts.ToolResult) string {
-	if r.IsError {
-		return "  ⎿ error"
-	}
-	return "  ⎿ ok"
-}

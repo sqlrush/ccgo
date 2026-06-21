@@ -58,6 +58,10 @@ type Loop struct {
 	activeAsk *askRequest
 	askQueue  []askRequest
 
+	// lastToolUse tracks the most recent EventToolUse so that the subsequent
+	// EventToolResult can be rendered with the richer diff output.
+	lastToolUse *contracts.ToolUse
+
 	// settings is the optional writer for persisting "allow always" rules.
 	// Set via SetSettingsWriter; nil in tests that don't exercise persistence.
 	settings ruleWriter
@@ -176,6 +180,14 @@ func (l *Loop) Run(ctx context.Context) error {
 
 // applyEvent renders a single conversation event to the screen transcript.
 func (l *Loop) applyEvent(ev conversation.Event) {
+	if ev.Type == conversation.EventToolUse {
+		l.lastToolUse = ev.ToolUse
+	}
+	if ev.Type == conversation.EventToolResult {
+		text := renderToolResultText(l.lastToolUse, ev.ToolResult)
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleTool, Text: text})
+		return
+	}
 	if msg, ok := messageFromEvent(ev); ok {
 		l.screen.AppendMessage(msg)
 	}

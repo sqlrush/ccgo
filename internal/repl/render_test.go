@@ -1,6 +1,7 @@
 package repl
 
 import (
+	"encoding/json"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -49,30 +50,31 @@ func TestMessageFromEventToolUse(t *testing.T) {
 	}
 }
 
-func TestMessageFromEventToolResult(t *testing.T) {
+func TestMessageFromEventToolResultSkipped(t *testing.T) {
+	// EventToolResult is now handled by applyEvent via renderToolResultText;
+	// messageFromEvent must not render it (returns false).
 	res := contracts.ToolResult{IsError: false}
 	ev := conversation.Event{Type: conversation.EventToolResult, ToolResult: &res}
-	msg, ok := messageFromEvent(ev)
-	if !ok {
-		t.Fatal("expected renderable message for tool_result event")
-	}
-	if msg.Role != tui.RoleTool {
-		t.Fatalf("msg.Role = %q want %q", msg.Role, tui.RoleTool)
-	}
-	if msg.Text != "  ⎿ ok" {
-		t.Fatalf("msg.Text = %q want %q", msg.Text, "  ⎿ ok")
+	if _, ok := messageFromEvent(ev); ok {
+		t.Fatal("EventToolResult should no longer be rendered by messageFromEvent")
 	}
 }
 
-func TestMessageFromEventToolResultError(t *testing.T) {
-	res := contracts.ToolResult{IsError: true}
-	ev := conversation.Event{Type: conversation.EventToolResult, ToolResult: &res}
-	msg, ok := messageFromEvent(ev)
-	if !ok {
-		t.Fatal("expected renderable message for tool_result error event")
+func TestRenderToolResultTextOkSummary(t *testing.T) {
+	tu := &contracts.ToolUse{ID: "r1", Name: "Read", Input: json.RawMessage(`{}`)}
+	tr := &contracts.ToolResult{ToolUseID: "r1", IsError: false}
+	out := renderToolResultText(tu, tr)
+	if out != "  ⎿ ok" {
+		t.Fatalf("renderToolResultText ok = %q want %q", out, "  ⎿ ok")
 	}
-	if msg.Text != "  ⎿ error" {
-		t.Fatalf("msg.Text = %q want %q", msg.Text, "  ⎿ error")
+}
+
+func TestRenderToolResultTextErrorSummary(t *testing.T) {
+	tu := &contracts.ToolUse{ID: "r2", Name: "Read", Input: json.RawMessage(`{}`)}
+	tr := &contracts.ToolResult{ToolUseID: "r2", IsError: true}
+	out := renderToolResultText(tu, tr)
+	if out != "  ⎿ error" {
+		t.Fatalf("renderToolResultText error = %q want %q", out, "  ⎿ error")
 	}
 }
 
