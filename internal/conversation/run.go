@@ -338,6 +338,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			return result, nil
 		}
 		toolMessages, toolResults := runner.executeToolUses(ctx, uses, toolMetadata, result.Messages)
+		if orphans := synthesizeOrphanedToolResults(runner.SessionID, assistant, toolMessages, "Tool execution was interrupted."); len(orphans) > 0 {
+			toolMessages = append(toolMessages, orphans...)
+		}
 		for i := range toolMessages {
 			history, toolMessages[i] = appendMessage(history, toolMessages[i])
 			result.Messages = append(result.Messages, toolMessages[i])
@@ -349,6 +352,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			runner.Model = commandPermissions.Model
 		}
 		result.ToolResults = append(result.ToolResults, toolResults...)
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 	}
 }
 
