@@ -41,6 +41,7 @@ type ContentBlock struct {
 	CacheControl   *CacheControl    `json:"cache_control,omitempty"`
 	CacheReference string           `json:"cache_reference,omitempty"`
 	Edits          []CacheEdit      `json:"edits,omitempty"`
+	Signature      string           `json:"signature,omitempty"`
 }
 
 func (b *ContentBlock) UnmarshalJSON(data []byte) error {
@@ -57,6 +58,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		CacheControl   *CacheControl    `json:"cache_control"`
 		CacheReference string           `json:"cache_reference"`
 		Edits          []CacheEdit      `json:"edits"`
+		Signature      string           `json:"signature"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -74,6 +76,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		CacheControl:   aux.CacheControl,
 		CacheReference: aux.CacheReference,
 		Edits:          aux.Edits,
+		Signature:      aux.Signature,
 	}
 
 	fields := map[string]json.RawMessage{}
