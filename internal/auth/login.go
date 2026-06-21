@@ -46,7 +46,7 @@ func RunLoginFlow(ctx context.Context, opts LoginOptions) (Credentials, error) {
 
 	listener, err := StartCallbackListener(state)
 	if err != nil {
-		return Credentials{}, err
+		return Credentials{}, fmt.Errorf("auth: start callback listener: %w", err)
 	}
 	defer listener.Close()
 
@@ -61,7 +61,7 @@ func RunLoginFlow(ctx context.Context, opts LoginOptions) (Credentials, error) {
 		Config:            config,
 	})
 	if err != nil {
-		return Credentials{}, err
+		return Credentials{}, fmt.Errorf("auth: build authorize URL: %w", err)
 	}
 
 	// Attempt the browser open first (non-fatal), then surface the URL.
@@ -77,6 +77,9 @@ func RunLoginFlow(ctx context.Context, opts LoginOptions) (Credentials, error) {
 	if err != nil {
 		return Credentials{}, err
 	}
+	if result.State != state {
+		return Credentials{}, fmt.Errorf("auth: callback state mismatch")
+	}
 
 	creds, err := ExchangeAuthorizationCode(ctx, opts.HTTPClient, config, ExchangeParams{
 		Code:         result.Code,
@@ -85,7 +88,7 @@ func RunLoginFlow(ctx context.Context, opts LoginOptions) (Credentials, error) {
 		State:        state,
 	})
 	if err != nil {
-		return Credentials{}, err
+		return Credentials{}, fmt.Errorf("auth: exchange authorization code: %w", err)
 	}
 
 	if opts.Store != nil {
