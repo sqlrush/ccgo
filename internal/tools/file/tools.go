@@ -17,7 +17,10 @@ import (
 	"ccgo/internal/permissions"
 	"ccgo/internal/skills"
 	"ccgo/internal/tool"
+	asktools "ccgo/internal/tools/ask"
 	bashtools "ccgo/internal/tools/bash"
+	lsptools "ccgo/internal/tools/lsp"
+	plantools "ccgo/internal/tools/plan"
 	powershelltools "ccgo/internal/tools/powershell"
 	searchtools "ccgo/internal/tools/searchtools"
 	skilltools "ccgo/internal/tools/skill"
@@ -217,6 +220,10 @@ func BuiltinTools() []tool.Tool {
 		searchtools.NewToolSearchTool(),
 		webtools.NewWebFetchTool(),
 		webtools.NewWebSearchTool(),
+		asktools.NewAskUserQuestionTool(),
+		plantools.NewEnterPlanModeTool(),
+		plantools.NewExitPlanModeTool(),
+		lsptools.NewLSPTool(),
 	}
 }
 
