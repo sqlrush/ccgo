@@ -134,6 +134,10 @@ type Runner struct {
 	AutoCompact               *compactpkg.AutoConfig
 	CompactClient             compactpkg.MessageClient
 	CompactMaxTokens          int
+	EnableMicroCompact        bool
+	MicroCompactKeepLast      int
+	MicroCompactMaxChars      int
+	MicroCompactDir           string
 	SessionMemoryRoot         string
 	EnableSessionMemoryRecall bool
 	SessionMemoryRecallRoot   string

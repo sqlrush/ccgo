@@ -180,6 +180,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		defer relevantMemoryPrefetch.cancel()
 	}
 
+	if microHistory, _, ok := runner.maybeMicroCompact(history); ok {
+		history = microHistory
+	}
 	if compactedHistory, compactResult, ok, err := runner.maybeAutoCompact(ctx, history); err != nil {
 		return result, err
 	} else if ok {
