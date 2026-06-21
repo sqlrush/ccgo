@@ -16,16 +16,19 @@ func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, h
 	loop.StartTurn = func(input string) {
 		user := messages.UserText(input)
 		turnHistory := append([]contracts.Message(nil), loop.history...)
+		turnCtx, turnCancel := context.WithCancel(ctx)
+		loop.SetTurnCancel(turnCancel)
 		go func() {
+			defer turnCancel()
 			r := base // copy by value; do not mutate the shared base
 			r.OnEvent = func(ev conversation.Event) {
 				select {
 				case loop.eventCh <- ev:
-				case <-ctx.Done():
+				case <-turnCtx.Done():
 				}
 			}
 			r.Tools.Asker = loopAsker{askCh: loop.askCh}
-			result, err := r.RunTurn(ctx, turnHistory, user)
+			result, err := r.RunTurn(turnCtx, turnHistory, user)
 			select {
 			case loop.doneCh <- turnOutcome{result: result, err: err}:
 			case <-ctx.Done():

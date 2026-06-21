@@ -3,6 +3,7 @@ package repl
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"time"
@@ -62,9 +63,10 @@ type Loop struct {
 	// is updated (mirrors onPermissionShown).
 	onTurnDone func()
 
-	running bool
-	width   int
-	height  int
+	running    bool
+	turnCancel context.CancelFunc
+	width      int
+	height     int
 }
 
 func NewLoop(t Terminal, history []string) *Loop {
@@ -168,7 +170,9 @@ func (l *Loop) finishTurn(out turnOutcome) {
 	l.running = false
 	l.stopSpinner()
 	if out.err != nil {
-		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: out.err.Error()})
+		if !errors.Is(out.err, context.Canceled) {
+			l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: out.err.Error()})
+		}
 		return
 	}
 	newHistory := make([]contracts.Message, len(l.history)+len(out.result.Messages))
@@ -226,6 +230,8 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	switch event.Type {
 	case tui.ScreenEventExit:
 		return true
+	case tui.ScreenEventInterrupted:
+		l.interruptTurn()
 	case tui.ScreenEventPromptSubmitted:
 		// Ignore empty/whitespace-only submissions and in-flight turns silently.
 		// l.running is only accessed in the loop goroutine, so no lock is needed.
