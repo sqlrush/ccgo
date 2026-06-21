@@ -45,6 +45,8 @@ type Loop struct {
 	// turn (typically in a goroutine) and posts to eventCh/askCh/doneCh.
 	StartTurn func(input string)
 
+	history []contracts.Message
+
 	running bool
 	width   int
 	height  int
@@ -106,8 +108,39 @@ func (l *Loop) Run(ctx context.Context) error {
 			if err := l.render(); err != nil {
 				return err
 			}
+		case ev := <-l.eventCh:
+			l.applyEvent(ev)
+			if err := l.render(); err != nil {
+				return err
+			}
+		case out := <-l.doneCh:
+			l.finishTurn(out)
+			if err := l.render(); err != nil {
+				return err
+			}
 		}
 	}
+}
+
+// applyEvent renders a single conversation event to the screen transcript.
+func (l *Loop) applyEvent(ev conversation.Event) {
+	if msg, ok := messageFromEvent(ev); ok {
+		l.screen.AppendMessage(msg)
+	}
+}
+
+// finishTurn handles turn completion: updates history on success or shows an
+// error message on failure, then clears the running flag.
+func (l *Loop) finishTurn(out turnOutcome) {
+	l.running = false
+	if out.err != nil {
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: out.err.Error()})
+		return
+	}
+	newHistory := make([]contracts.Message, len(l.history)+len(out.result.Messages))
+	copy(newHistory, l.history)
+	copy(newHistory[len(l.history):], out.result.Messages)
+	l.history = newHistory
 }
 
 // readInput segments the terminal byte stream into keys and posts them.
