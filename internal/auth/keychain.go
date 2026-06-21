@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,25 +64,30 @@ func (m *macOSKeychainStore) Get(account, service string) (string, error) {
 }
 
 // Set stores value via stdin (using security -i) so the secret never appears
-// in argv / process listings. The entire command, including the secret, is fed
-// to stdin so the process listing shows only "security -i".
-// We pass the value via -w flag inside the stdin command so the secret value
-// is in stdin, not argv. %q-quoting handles embedded quotes/backslashes in the
-// account, service, and value strings.
+// in argv / process listings. The secret is hex-encoded with -X to eliminate
+// all quoting concerns: hex is [0-9a-f] only, with no special characters that
+// could be mis-parsed by security's POSIX-shell-like stdin tokenizer. This
+// matches CC's approach in macOsKeychainStorage.ts (Buffer.from(...).toString('hex')
+// with -X flag). Account and service are double-quoted strings (simple ASCII).
 func (m *macOSKeychainStore) Set(account, service, value string) error {
-	// security -i reads commands from stdin; -w takes the password inline.
-	// All three strings are %q-quoted to safely handle JSON characters.
-	// The secret travels only through stdin — never through argv.
-	stdin := fmt.Sprintf("add-generic-password -U -a %q -s %q -w %q\n", account, service, value)
+	// Hex-encode the secret value so it is safe for any tokenizer and contains
+	// no embedded quotes, backslashes, or JSON special characters.
+	hexVal := hex.EncodeToString([]byte(value))
+	// security -i reads commands from stdin; -X takes hex-encoded data.
+	// The process listing shows only "security -i" — no payload visible.
+	stdin := fmt.Sprintf("add-generic-password -U -a %q -s %q -X %s\n", account, service, hexVal)
 	_, err := m.run(stdin, "-i")
 	return err
 }
 
-// Delete removes a keychain item; "not found" is treated as success.
+// Delete removes a keychain item. ANY error (including "not found" and exec
+// failures) is treated as a no-op success, matching CC's delete() which
+// catches all exceptions and returns false without propagating them. Callers
+// should not rely on Delete to signal exec failure.
 func (m *macOSKeychainStore) Delete(account, service string) error {
 	_, err := m.run("", "delete-generic-password", "-a", account, "-s", service)
 	if err != nil {
-		// Treat "not found" as a no-op, not an error.
+		// Treat any error as a no-op (mirrors CC's catch-all in delete()).
 		return nil
 	}
 	return nil
