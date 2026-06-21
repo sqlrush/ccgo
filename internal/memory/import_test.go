@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -111,4 +112,92 @@ func TestResolveImportsDepthCap(t *testing.T) {
 		t.Fatalf("depth cap not honored: %d imported docs", len(imported))
 	}
 	_ = time.Now
+}
+
+// TestResolveImportsRejectsSymlinkEscapingRoot proves that a symlink placed
+// INSIDE AllowedRoot whose target is OUTSIDE AllowedRoot is rejected by the
+// containment check AFTER symlink resolution — and is therefore not read.
+func TestResolveImportsRejectsSymlinkEscapingRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	// Create the secret file outside root.
+	secret := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(secret, []byte("exfiltrated"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink inside root pointing to the outside secret.
+	symlink := filepath.Join(root, "link.txt")
+	if err := os.Symlink(secret, symlink); err != nil {
+		t.Skipf("os.Symlink not supported: %v", err)
+	}
+
+	doc := Document{
+		Header:  Header{Path: filepath.Join(root, "CLAUDE.md")},
+		Content: "@./link.txt\n",
+	}
+	opts := ImportOptions{BaseDir: root, AllowedRoot: root, MaxDepth: 5, AllowExternal: false}
+	imported, err := ResolveImports(doc, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, d := range imported {
+		if strings.Contains(d.Content, "exfiltrated") {
+			t.Fatal("symlink-escaped content was read into model context — SECURITY BUG")
+		}
+	}
+	if len(imported) != 0 {
+		t.Fatalf("expected symlink import to be rejected; got %d docs", len(imported))
+	}
+}
+
+// TestResolveImportsAllowsNormalInRootFile verifies that EvalSymlinks does not
+// break ordinary (non-symlink) file imports that reside inside AllowedRoot.
+func TestResolveImportsAllowsNormalInRootFile(t *testing.T) {
+	root := t.TempDir()
+	normal := filepath.Join(root, "normal.md")
+	writeFile(t, normal, "normal content\n")
+
+	doc := Document{
+		Header:  Header{Path: filepath.Join(root, "CLAUDE.md")},
+		Content: "@./normal.md\n",
+	}
+	opts := ImportOptions{BaseDir: root, AllowedRoot: root, MaxDepth: 5, AllowExternal: false}
+	imported, err := ResolveImports(doc, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(imported) != 1 || imported[0].Content != "normal content\n" {
+		t.Fatalf("expected normal in-root file to be imported; got %v", imported)
+	}
+}
+
+// TestResolveImportsAllowExternalFollowsSymlink verifies that when
+// AllowExternal is true, symlinks are followed without the containment check.
+func TestResolveImportsAllowExternalFollowsSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	external := filepath.Join(outside, "external.md")
+	if err := os.WriteFile(external, []byte("external content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	symlink := filepath.Join(root, "ext-link.md")
+	if err := os.Symlink(external, symlink); err != nil {
+		t.Skipf("os.Symlink not supported: %v", err)
+	}
+
+	doc := Document{
+		Header:  Header{Path: filepath.Join(root, "CLAUDE.md")},
+		Content: "@./ext-link.md\n",
+	}
+	opts := ImportOptions{BaseDir: root, AllowedRoot: root, MaxDepth: 5, AllowExternal: true}
+	imported, err := ResolveImports(doc, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(imported) != 1 || imported[0].Content != "external content\n" {
+		t.Fatalf("AllowExternal=true should follow symlink; got %v", imported)
+	}
 }

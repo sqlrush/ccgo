@@ -2,7 +2,6 @@ package rewind
 
 import (
 	"ccgo/internal/contracts"
-	"ccgo/internal/session"
 )
 
 // SnapshotType is the transcript line type for file history snapshots.
@@ -30,19 +29,4 @@ type snapshotLine struct {
 	MessageID        contracts.ID `json:"messageId"`
 	IsSnapshotUpdate bool         `json:"isSnapshotUpdate"`
 	Snapshot         Snapshot     `json:"snapshot"`
-}
-
-// SnapshotTranscriptMessage builds a session.TranscriptMessage whose Type and
-// UUID are set correctly so the session parser recognises the line as a
-// file-history-snapshot and indexes it by the snapshot's messageId (via the
-// uuid fallback in parseSnapshotMessageID).
-//
-// When the line is marshaled by Writer.Record it is written as a snapshotLine
-// directly; this function is used by callers that need a TranscriptMessage
-// handle (e.g. tests writing their own JSONL).
-func SnapshotTranscriptMessage(snap Snapshot, _ bool) session.TranscriptMessage {
-	return session.TranscriptMessage{
-		Type: SnapshotType,
-		UUID: snap.MessageID,
-	}
 }

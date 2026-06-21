@@ -34,7 +34,7 @@ func TestRewindToMessageDelegates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := RewindToMessage(transcriptPath, "msg-1", sessionDir)
+	res, err := RewindToMessage(transcriptPath, "msg-1", sessionDir, work)
 	if err != nil {
 		t.Fatalf("RewindToMessage: %v", err)
 	}

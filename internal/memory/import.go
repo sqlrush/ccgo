@@ -184,6 +184,19 @@ func resolveImportPath(target string, opts ImportOptions) (string, bool) {
 		return "", false
 	}
 
+	// Resolve symlinks so a symlink inside AllowedRoot that points outside is
+	// caught before the containment check. EvalSymlinks errors on missing files;
+	// treat that the same as a missing import (skip, don't crash).
+	if !opts.AllowExternal {
+		resolved, err := filepath.EvalSymlinks(abs)
+		if err != nil {
+			// File does not exist yet or symlink is dangling — skip gracefully.
+			// (If AllowExternal is true we let the ReadFile below handle it.)
+			return "", false
+		}
+		abs = resolved
+	}
+
 	// Path traversal defence: reject paths that escape AllowedRoot when
 	// AllowExternal is false.
 	if !opts.AllowExternal {
@@ -199,6 +212,11 @@ func resolveImportPath(target string, opts ImportOptions) (string, bool) {
 		absRoot, err := filepath.Abs(root)
 		if err != nil {
 			return "", false
+		}
+		// Resolve symlinks on the root too so both sides of the comparison use
+		// the same canonical form (critical on macOS where /var → /private/var).
+		if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
+			absRoot = resolved
 		}
 		rel, err := filepath.Rel(absRoot, abs)
 		if err != nil {

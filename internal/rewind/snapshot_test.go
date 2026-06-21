@@ -1,7 +1,6 @@
 package rewind
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +9,11 @@ import (
 	"ccgo/internal/session"
 )
 
+// TestCaptureAndSnapshotLineRoundTrips verifies that Writer.Record produces a
+// lossless round-trip: the transcript line must be parsed as a
+// file-history-snapshot and indexed by the snapshot's messageId.
+// (SnapshotTranscriptMessage was deleted in favour of Writer.Record which
+// carries the full payload and is the only production-used write path.)
 func TestCaptureAndSnapshotLineRoundTrips(t *testing.T) {
 	work := t.TempDir()
 	src := filepath.Join(work, "a.go")
@@ -30,17 +34,10 @@ func TestCaptureAndSnapshotLineRoundTrips(t *testing.T) {
 		t.Fatalf("backup content = %q,%v", data, err)
 	}
 
-	// Build a transcript line and confirm it parses as file-history-snapshot.
-	msg := SnapshotTranscriptMessage(snap, false)
-	if msg.Type != "file-history-snapshot" {
-		t.Fatalf("type = %q want file-history-snapshot", msg.Type)
-	}
-	encoded, err := json.Marshal(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Write the snapshot using Writer.Record (the canonical write path that
+	// carries the full payload) and confirm the session parser indexes it.
 	tp := filepath.Join(work, "session.jsonl")
-	if err := os.WriteFile(tp, append(encoded, '\n'), 0o644); err != nil {
+	if err := (Writer{TranscriptPath: tp}).Record(snap, false); err != nil {
 		t.Fatal(err)
 	}
 	tr, err := session.LoadTranscript(tp)
