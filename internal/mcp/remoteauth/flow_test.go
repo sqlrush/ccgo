@@ -140,6 +140,94 @@ func TestAcquireTokenConfiguredClientIDSkipsDCR(t *testing.T) {
 	}
 }
 
+// --- Test D: defensive flow.go tests ---
+
+// TestAcquireTokenZeroAuthorizationServersReturnsError verifies that when the
+// protected-resource metadata document lists no authorization_servers, AcquireToken
+// returns an error instead of panicking on a nil slice index.
+// Note: DiscoverProtectedResource also guards this, so the error is surfaced early.
+func TestAcquireTokenZeroAuthorizationServersReturnsError(t *testing.T) {
+	mux := http.NewServeMux()
+	// Return a protected-resource document with an empty authorization_servers list.
+	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource":"https://example.com","authorization_servers":[]}`))
+	})
+	srv := httptest.NewTLSServer(mux)
+	defer srv.Close()
+
+	authz := &fakeAuthorizer{code: "NOSERVERS"}
+	_, _, err := AcquireToken(context.Background(), AcquireOptions{
+		ServerURL:    srv.URL,
+		CallbackPort: 7782,
+		HTTPClient:   srv.Client(),
+		Authorizer:   authz,
+	})
+	if err == nil {
+		t.Fatal("expected error for zero authorization_servers, got nil")
+	}
+}
+
+// TestBuildAuthorizeURLInvalidEndpointReturnsError verifies that buildAuthorizeURL
+// returns an error (instead of the bare invalid string) when the endpoint is not
+// a valid URL.
+func TestBuildAuthorizeURLInvalidEndpointReturnsError(t *testing.T) {
+	// url.Parse is extremely permissive; the only case that produces an error
+	// is a control character in the URL (see net/url source).
+	invalidEndpoint := "http://host\x00/path"
+	_, err := buildAuthorizeURL(invalidEndpoint, "client", "http://localhost/cb", "challenge", "state", "")
+	if err == nil {
+		t.Fatal("expected error for invalid endpoint URL, got nil")
+	}
+}
+
+// TestAcquireTokenPopulatesTokenEndpointURL verifies that after a successful
+// AcquireToken the returned Credentials have TokenEndpointURL set to the
+// discovered token endpoint (not empty, not Anthropic's endpoint).
+func TestAcquireTokenPopulatesTokenEndpointURL(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
+		base := serverURLFromReq(r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource":"` + base + `","authorization_servers":["` + base + `"]}`))
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		base := serverURLFromReq(r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"issuer":"` + base + `","authorization_endpoint":"` + base + `/authorize","token_endpoint":"` + base + `/token","registration_endpoint":"` + base + `/register"}`))
+	})
+	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"ep-client"}`))
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"EP_AT","refresh_token":"EP_RT","expires_in":3600}`))
+	})
+	srv := httptest.NewTLSServer(mux)
+	defer srv.Close()
+
+	authz := &fakeAuthorizer{code: "EPCODE"}
+	creds, _, err := AcquireToken(context.Background(), AcquireOptions{
+		ServerURL:    srv.URL,
+		CallbackPort: 7783,
+		HTTPClient:   srv.Client(),
+		Authorizer:   authz,
+	})
+	if err != nil {
+		t.Fatalf("AcquireToken: %v", err)
+	}
+	wantEndpoint := srv.URL + "/token"
+	if creds.TokenEndpointURL != wantEndpoint {
+		t.Fatalf("TokenEndpointURL = %q, want %q", creds.TokenEndpointURL, wantEndpoint)
+	}
+	// Must NOT be the Anthropic production endpoint.
+	if strings.Contains(creds.TokenEndpointURL, "platform.claude.com") {
+		t.Fatalf("TokenEndpointURL points to Anthropic endpoint: %q", creds.TokenEndpointURL)
+	}
+}
+
 func TestAcquireTokenPKCSStateInURL(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {

@@ -16,12 +16,19 @@ const (
 )
 
 type Credentials struct {
-	Source       CredentialSource `json:"source"`
-	APIKey       string           `json:"api_key,omitempty"`
-	AccessToken  string           `json:"access_token,omitempty"`
-	RefreshToken string           `json:"refresh_token,omitempty"`
-	Scopes       []string         `json:"scopes,omitempty"`
-	ExpiresAt    time.Time        `json:"expires_at,omitempty"`
+	Source           CredentialSource `json:"source"`
+	APIKey           string           `json:"api_key,omitempty"`
+	AccessToken      string           `json:"access_token,omitempty"`
+	RefreshToken     string           `json:"refresh_token,omitempty"`
+	Scopes           []string         `json:"scopes,omitempty"`
+	ExpiresAt        time.Time        `json:"expires_at,omitempty"`
+	// TokenEndpointURL is the token endpoint discovered during remote MCP OAuth
+	// acquisition. When non-empty, token refresh must target this URL instead of
+	// the Anthropic production endpoint so that third-party OAuth tokens are
+	// refreshed against the correct authorization server.
+	// omitempty keeps the field absent in existing Anthropic OAuth credentials,
+	// preserving backward-compatible serialization.
+	TokenEndpointURL string           `json:"token_endpoint_url,omitempty"`
 }
 
 func FromEnv() Credentials {

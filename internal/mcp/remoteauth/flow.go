@@ -73,6 +73,11 @@ func AcquireToken(ctx context.Context, opts AcquireOptions) (auth.Credentials, R
 		return auth.Credentials{}, RegisteredClient{}, fmt.Errorf("remoteauth: discover protected resource: %w", err)
 	}
 
+	// Guard: protected-resource must advertise at least one authorization server.
+	if len(pr.AuthorizationServers) == 0 {
+		return auth.Credentials{}, RegisteredClient{}, fmt.Errorf("remoteauth: protected resource metadata has no authorization_servers")
+	}
+
 	// Step 2: RFC 8414 — authorization-server metadata.
 	as, err := DiscoverAuthorizationServer(ctx, hc, pr.AuthorizationServers[0], defaultFlowMaxBytes)
 	if err != nil {
@@ -117,7 +122,10 @@ func AcquireToken(ctx context.Context, opts AcquireOptions) (auth.Credentials, R
 	}
 	challenge := auth.GenerateCodeChallenge(verifier)
 
-	authURL := buildAuthorizeURL(as.AuthorizationEndpoint, clientID, redirectURI, challenge, state, opts.Scope)
+	authURL, err := buildAuthorizeURL(as.AuthorizationEndpoint, clientID, redirectURI, challenge, state, opts.Scope)
+	if err != nil {
+		return auth.Credentials{}, RegisteredClient{}, err
+	}
 
 	code, err := opts.Authorizer.Authorize(ctx, authURL, redirectURI, state)
 	if err != nil {
@@ -138,14 +146,18 @@ func AcquireToken(ctx context.Context, opts AcquireOptions) (auth.Credentials, R
 	if err != nil {
 		return auth.Credentials{}, RegisteredClient{}, fmt.Errorf("remoteauth: exchange authorization code: %w", err)
 	}
+	// Persist the discovered token endpoint so that refresh requests on process
+	// restart target the correct authorization server, not Anthropic's endpoint.
+	creds.TokenEndpointURL = as.TokenEndpoint
 	return creds, rc, nil
 }
 
 // buildAuthorizeURL constructs the authorization URL with PKCE and CSRF parameters.
-func buildAuthorizeURL(endpoint, clientID, redirectURI, challenge, state, scope string) string {
+// It returns an error when endpoint is not a valid URL.
+func buildAuthorizeURL(endpoint, clientID, redirectURI, challenge, state, scope string) (string, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return endpoint
+		return "", fmt.Errorf("remoteauth: parse authorization endpoint %q: %w", endpoint, err)
 	}
 	q := u.Query()
 	q.Set("response_type", "code")
@@ -158,5 +170,5 @@ func buildAuthorizeURL(endpoint, clientID, redirectURI, challenge, state, scope 
 		q.Set("scope", scope)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return u.String(), nil
 }

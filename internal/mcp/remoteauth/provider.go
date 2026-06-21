@@ -21,12 +21,10 @@ import (
 // The existing mcp.FileOAuthAccessTokenProvider is refresh-only; this provider
 // adds the initial acquisition step.
 //
-// LIMITATION (Phase 6a): the token-endpoint URL discovered during AcquireToken
-// is not persisted alongside the credentials, so the refresh path falls back to
-// ProductionOAuthConfig().TokenURL (Anthropic's endpoint). For third-party remote
-// MCP servers the access token is used until expiry, at which point a full
-// re-acquisition runs. A future phase should cache the discovered token_endpoint
-// (e.g. extend auth.Credentials or a sidecar metadata file).
+// Token refresh uses the endpoint stored in Credentials.TokenEndpointURL (set
+// during AcquireToken from the discovered authorization-server metadata). When
+// that field is absent (Anthropic OAuth credentials) the refresh falls back to
+// ProductionOAuthConfig().TokenURL, preserving existing behavior.
 func RemoteOAuthAccessTokenProvider(store auth.CredentialStore, opts AcquireOptions) mcp.ServerAccessTokenProvider {
 	return func(ctx context.Context, name string, server contracts.MCPServer) (mcp.AccessTokenProvider, error) {
 		if server.OAuth == nil {
@@ -62,9 +60,15 @@ func RemoteOAuthAccessTokenProvider(store auth.CredentialStore, opts AcquireOpti
 			creds = acquired
 		}
 
-		// Build the token-provider config. ClientID prefers the explicit server OAuth
-		// config or the opts override; otherwise falls back to ProductionOAuthConfig.
+		// Build the token-provider config. TokenURL comes from the discovered
+		// endpoint persisted in creds (third-party MCP servers) so that refresh
+		// requests target the correct authorization server on process restart.
+		// When TokenEndpointURL is absent (Anthropic OAuth creds) we fall back to
+		// ProductionOAuthConfig so existing behavior is unchanged.
 		cfg := auth.ProductionOAuthConfig()
+		if creds.TokenEndpointURL != "" {
+			cfg.TokenURL = creds.TokenEndpointURL
+		}
 		if clientID := firstNonEmptyString(server.OAuth.ClientID, opts.ConfiguredClientID); clientID != "" {
 			cfg.ClientID = clientID
 		}
