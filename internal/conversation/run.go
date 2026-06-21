@@ -202,6 +202,8 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		}
 	}
 	toolMetadata := runner.toolMetadata()
+	maxTokensRecoveries := 0
+	pauseTurnResumes := 0
 	for round := 0; ; round++ {
 		if round >= runner.maxToolRounds() {
 			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
@@ -230,6 +232,69 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			return result, err
 		}
 		runner.emit(Event{Type: EventAssistantMessage, Message: &assistant, Model: response.Model})
+
+		// Inspect stop_reason before the tool-use check; refusal and
+		// model_context_window_exceeded arrive with no tool uses but must surface a
+		// message rather than silently returning; pause_turn needs re-sending;
+		// max_tokens (no tool uses) needs a bounded recovery re-query.
+		switch classifyStopReason(response.StopReason) {
+		case stopActionRefusal:
+			// Surface a usage-policy refusal message and stop — do NOT retry.
+			refusal := runner.refusalMessage()
+			history, refusal = appendMessage(history, refusal)
+			result.Messages = append(result.Messages, refusal)
+			if err := runner.appendTranscript(refusal); err != nil {
+				return result, err
+			}
+			runner.emit(Event{Type: EventAssistantMessage, Message: &refusal, Model: response.Model})
+			return result, nil
+
+		case stopActionContextWindowExceeded:
+			// NOTE Task 6 seam: full compaction recovery is not implemented here.
+			// For now, surface the error message and stop so the user knows to /compact.
+			ctxMsg := runner.contextWindowExceededMessage()
+			history, ctxMsg = appendMessage(history, ctxMsg)
+			result.Messages = append(result.Messages, ctxMsg)
+			if err := runner.appendTranscript(ctxMsg); err != nil {
+				return result, err
+			}
+			runner.emit(Event{Type: EventAssistantMessage, Message: &ctxMsg, Model: response.Model})
+			return result, nil
+
+		case stopActionResumePauseTurn:
+			// NOTE: pause_turn is a deliberate addition beyond the CC reference implementation
+			// (grep -rn "pause_turn" /Users/sqlrush/agent/claude-code/src → zero hits).
+			// pause_turn is a documented Anthropic API stop_reason indicating the assistant's
+			// turn is paused (e.g. during server-tool execution). Re-send the history unchanged
+			// to let the server resume the paused turn. Bound to avoid infinite loops.
+			const maxPauseTurnResumes = 10
+			if pauseTurnResumes >= maxPauseTurnResumes {
+				return result, nil
+			}
+			pauseTurnResumes++
+			continue
+
+		case stopActionRecoverMaxTokens:
+			// Only inject a nudge when there are no tool uses; if tool uses are present,
+			// fall through to normal tool execution (the tool_use may be truncated but
+			// the tool executor handles that gracefully).
+			if len(ToolUses(assistant)) == 0 {
+				if maxTokensRecoveries >= maxOutputTokensRecoveryLimit {
+					// Recovery cap reached — stop to avoid an infinite loop.
+					return result, nil
+				}
+				maxTokensRecoveries++
+				nudge := runner.maxTokensContinuationMessage()
+				history, nudge = appendMessage(history, nudge)
+				result.Messages = append(result.Messages, nudge)
+				if err := runner.appendTranscript(nudge); err != nil {
+					return result, err
+				}
+				runner.emit(Event{Type: EventUserMessage, Message: &nudge})
+				continue
+			}
+			// max_tokens with tool uses present: fall through to normal tool handling.
+		}
 
 		uses := ToolUses(assistant)
 		if len(uses) == 0 {
