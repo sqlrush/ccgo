@@ -308,6 +308,7 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "theme", Description: "Set the color theme", ArgumentHint: "<name>", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "effort", Description: "Set the effort level for responses", ArgumentHint: "<low|medium|high|max|auto>", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "vim", Description: "Toggle vim keybinding mode", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "permissions", Aliases: []string{"allowed-tools"}, Description: "List and edit allow/deny/ask permission rules", ArgumentHint: "[list | allow <rule> | deny <rule> | ask <rule> | remove <allow|deny|ask> <rule>]", Source: contracts.CommandSourceBuiltin},
 	})
 }
 
