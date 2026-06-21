@@ -673,6 +673,38 @@ func builtinCommand(name string) contracts.Command {
 	}
 }
 
+func TestInitAndReviewAreExpandablePromptCommands(t *testing.T) {
+	reg := Load(Options{})
+	for _, name := range []string{"init", "review"} {
+		cmd, ok := reg.Find(name)
+		if !ok {
+			t.Fatalf("/%s not registered", name)
+		}
+		if cmd.Type != contracts.CommandPrompt {
+			t.Fatalf("/%s type = %q want prompt", name, cmd.Type)
+		}
+		expanded, err := reg.ExpandPrompt(name, "", "")
+		if err != nil {
+			t.Fatalf("ExpandPrompt(%s) err: %v", name, err)
+		}
+		if len(expanded.Message.Content) == 0 {
+			t.Fatalf("/%s expanded to empty content", name)
+		}
+	}
+}
+
+func TestReviewInterpolatesArgs(t *testing.T) {
+	reg := Load(Options{})
+	expanded, err := reg.ExpandPrompt("review", "123", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := expanded.Message.Content[0].Text
+	if !strings.Contains(text, "123") {
+		t.Fatalf("review prompt did not interpolate PR arg: %q", text)
+	}
+}
+
 func sameCommandNames(a []string, b []string) bool {
 	if len(a) != len(b) {
 		return false

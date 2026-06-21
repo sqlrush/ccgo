@@ -13,6 +13,7 @@ import (
 const loadedFromCommandsDeprecated = "commands_DEPRECATED"
 
 type Sources struct {
+	BuiltinPrompts            []PromptTemplate
 	BundledSkillPrompts       []PromptTemplate
 	BundledSkills             []contracts.Command
 	BuiltinPluginSkillPrompts []PromptTemplate
@@ -60,6 +61,9 @@ func Load(opts Options) Registry {
 	if !opts.DisableBuiltins && sources.Builtins == nil {
 		sources.Builtins = BuiltinCommands()
 	}
+	if !opts.DisableBuiltins && sources.BuiltinPrompts == nil {
+		sources.BuiltinPrompts = BuiltinPromptTemplates()
+	}
 	if config.IsRestrictedToPluginOnly(policy, config.CustomizationSurfaceAgents) {
 		sources = sanitizeAgentRestrictedSources(sources)
 	}
@@ -74,6 +78,7 @@ func effectivePolicySettings(settings contracts.Settings, policySettings contrac
 }
 
 func sanitizeAgentRestrictedSources(sources Sources) Sources {
+	sources.BuiltinPrompts = sanitizeAgentRestrictedPromptTemplates(sources.BuiltinPrompts)
 	sources.BundledSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.BundledSkillPrompts)
 	sources.BundledSkills = sanitizeAgentRestrictedCommands(sources.BundledSkills)
 	sources.BuiltinPluginSkillPrompts = sanitizeAgentRestrictedPromptTemplates(sources.BuiltinPluginSkillPrompts)
@@ -155,6 +160,7 @@ func FromSources(sources Sources) Registry {
 		base = append(base, cloneCommand(cmd))
 	}
 
+	base = appendPromptCommands(base, promptTemplates, sources.BuiltinPrompts)
 	base = append(base, cloneCommands(sources.Builtins)...)
 	return Registry{commands: base, promptTemplates: promptTemplates}
 }
