@@ -2,10 +2,12 @@ package conversation
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"ccgo/internal/api/anthropic"
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 )
@@ -173,5 +175,121 @@ func TestRunTurnMaxTokensRecoveryIsBounded(t *testing.T) {
 	// After cap, stop_reason should still be max_tokens.
 	if res.StopReason != "max_tokens" {
 		t.Fatalf("StopReason = %q want max_tokens after recovery cap", res.StopReason)
+	}
+}
+
+// TestRunTurnContextWindowExceededRecoversViaCompact verifies that a
+// model_context_window_exceeded stop_reason triggers a forced compaction and retries
+// the API call once, ultimately returning the end_turn result.
+func TestRunTurnContextWindowExceededRecoversViaCompact(t *testing.T) {
+	// First call: ctx-window exceeded (triggers compaction).
+	// Second call: compact summary.
+	// Third call: retry after compaction succeeds.
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_ctx_exceeded",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "model_context_window_exceeded",
+			Content:    nil,
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_summary",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("compacted summary")},
+		}},
+		{response: &anthropic.Response{
+			ID:         "msg_recovered",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "end_turn",
+			Content:    []contracts.ContentBlock{contracts.NewTextBlock("recovered")},
+		}},
+	}}
+	transcriptPath := filepath.Join(t.TempDir(), "session.jsonl")
+	r := Runner{
+		Client:        client,
+		CompactClient: client,
+		Model:         "sonnet",
+		MaxTokens:     128,
+		SessionID:     "sess_ctx_window_recovery",
+		SessionPath:   transcriptPath,
+		// Enabled but NOT Force — the initial maybeAutoCompact at RunTurn entry
+		// won't fire (token usage is low), but forceCompact sets Force=true internally
+		// to trigger compaction on ctx-window recovery.
+		AutoCompact: &compactpkg.AutoConfig{
+			Enabled:  true,
+			Force:    false,
+			KeepLast: 1,
+		},
+	}
+	// Provide some history to compact.
+	history := []contracts.Message{
+		msgs.UserText("old message one"),
+		msgs.AssistantText("old reply one", "sonnet", nil),
+		msgs.UserText("old message two"),
+		msgs.AssistantText("old reply two", "sonnet", nil),
+	}
+	res, err := r.RunTurn(context.Background(), history, msgs.UserText("continue"))
+	if err != nil {
+		t.Fatalf("RunTurn err: %v", err)
+	}
+	if !res.Compacted {
+		t.Fatalf("expected compaction to be triggered for ctx-window recovery; result = %#v", res)
+	}
+	// 3 API calls: main request → compact summary → retry after compact.
+	if len(client.calls) != 0 {
+		t.Fatalf("expected all 3 calls consumed; remaining = %d", len(client.calls))
+	}
+	if res.StopReason != "end_turn" {
+		t.Fatalf("final StopReason = %q want end_turn", res.StopReason)
+	}
+}
+
+// TestRunTurnContextWindowExceededIsBounded verifies that if compaction cannot reduce
+// history (ok==false from forceCompact), the error message is surfaced and the loop stops
+// without retrying — no infinite loop.
+func TestRunTurnContextWindowExceededIsBounded(t *testing.T) {
+	// Single call: ctx-window exceeded. No compact client configured, so
+	// forceCompact will fail to reduce history (ShouldRun returns false without
+	// a proper AutoCompact config that enables Force). We test by NOT setting
+	// AutoCompact, so forceCompact's internal forced runner still has no client
+	// that returns a summary — and we just get the fallback surface+stop.
+	client := &fakeClient{calls: []fakeCall{
+		{response: &anthropic.Response{
+			ID:         "msg_ctx_exceeded",
+			Type:       "message",
+			Role:       "assistant",
+			Model:      "sonnet",
+			StopReason: "model_context_window_exceeded",
+			Content:    nil,
+		}},
+	}}
+	// Runner with NO AutoCompact set — forceCompact will see no config and return ok=false.
+	r := newMinimalRunner(t, client)
+	res, err := r.RunTurn(context.Background(), nil, msgs.UserText("hi"))
+	if err != nil {
+		t.Fatalf("RunTurn err: %v", err)
+	}
+	// No compaction should have occurred.
+	if res.Compacted {
+		t.Fatalf("should not have compacted without AutoCompact config; result = %#v", res)
+	}
+	// Only one API call was made (no retry).
+	if len(client.calls) != 0 {
+		t.Fatalf("should have consumed exactly 1 call; remaining = %d", len(client.calls))
+	}
+	// The context window error message must be surfaced.
+	if !containsText(res.Messages, "context window") {
+		t.Fatalf("expected ctx-window error message surfaced; messages = %v", res.Messages)
+	}
+	// StopReason stays as model_context_window_exceeded.
+	if res.StopReason != "model_context_window_exceeded" {
+		t.Fatalf("StopReason = %q want model_context_window_exceeded", res.StopReason)
 	}
 }

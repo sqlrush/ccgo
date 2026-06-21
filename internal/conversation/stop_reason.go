@@ -1,6 +1,9 @@
 package conversation
 
 import (
+	"context"
+
+	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
 )
@@ -82,4 +85,21 @@ func (r Runner) pauseTurnLimitMessage() contracts.Message {
 		msg.SessionID = r.SessionID
 	}
 	return msg
+}
+
+// forceCompact runs a one-shot forced compaction for ctx-window recovery,
+// reusing the existing auto-compaction machinery with Force enabled.
+// Returns (compactedHistory, compactResult, ok, err). ok==false means compaction
+// was not performed (e.g. no AutoCompact config or ShouldRun returned false).
+func (r Runner) forceCompact(ctx context.Context, history []contracts.Message) ([]contracts.Message, compactpkg.Result, bool, error) {
+	forced := r
+	if forced.AutoCompact == nil {
+		forced.AutoCompact = &compactpkg.AutoConfig{}
+	} else {
+		cfg := *forced.AutoCompact
+		forced.AutoCompact = &cfg
+	}
+	forced.AutoCompact.Enabled = true
+	forced.AutoCompact.Force = true
+	return forced.maybeAutoCompact(ctx, history)
 }

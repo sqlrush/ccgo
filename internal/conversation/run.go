@@ -204,6 +204,7 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	toolMetadata := runner.toolMetadata()
 	maxTokensRecoveries := 0
 	pauseTurnResumes := 0
+	contextWindowRecovered := false
 	for round := 0; ; round++ {
 		if round >= runner.maxToolRounds() {
 			return result, fmt.Errorf("maximum tool rounds exceeded: %d", runner.maxToolRounds())
@@ -250,8 +251,27 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			return result, nil
 
 		case stopActionContextWindowExceeded:
-			// NOTE Task 6 seam: full compaction recovery is not implemented here.
-			// For now, surface the error message and stop so the user knows to /compact.
+			// Attempt one forced compaction then retry. If compaction cannot help
+			// (ok==false) or has already been attempted (contextWindowRecovered==true),
+			// surface the error message and stop — no infinite loop.
+			if !contextWindowRecovered {
+				contextWindowRecovered = true
+				compactedHistory, compactResult, ok, cerr := runner.forceCompact(ctx, history)
+				if cerr != nil {
+					return result, cerr
+				}
+				if ok {
+					history = compactedHistory
+					result.Compacted = true
+					result.Compact = &compactResult
+					result.Messages = append(result.Messages, compactResult.Plan.Boundary, compactResult.Plan.Summary)
+					if err := runner.appendCompactTranscript(compactResult.Plan); err != nil {
+						return result, err
+					}
+					runner.emit(Event{Type: EventCompact, Compact: &compactResult})
+					continue
+				}
+			}
 			ctxMsg := runner.contextWindowExceededMessage()
 			history, ctxMsg = appendMessage(history, ctxMsg)
 			result.Messages = append(result.Messages, ctxMsg)
