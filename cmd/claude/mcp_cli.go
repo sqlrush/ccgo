@@ -63,8 +63,9 @@ type scopedServer struct {
 }
 
 // allConfiguredServers merges user+project+local scopes. Later scopes win on
-// name collision (local > project > user), matching CC precedence. Files that
-// do not exist are silently skipped.
+// name collision (local > project > user), matching CC precedence. Also loads
+// .mcp.json files from project config chain and merges them into project scope.
+// Files that do not exist are silently skipped.
 func allConfiguredServers(env mcpCLIEnv) (map[string]scopedServer, error) {
 	scoped := map[string]scopedServer{}
 	order := []struct {
@@ -88,6 +89,20 @@ func allConfiguredServers(env mcpCLIEnv) (map[string]scopedServer, error) {
 			scoped[name] = scopedServer{scope: o.scope, server: server}
 		}
 	}
+
+	// Load .mcp.json files from project config chain and merge into project scope.
+	// This matches the runtime behavior in configured.go:60-65.
+	projectChain, err := mcp.LoadProjectConfigChain(env.ProjectRoot, mcp.ParseOptions{})
+	if err != nil {
+		// LoadProjectConfigChain returns an error only on non-missing failures;
+		// missing .mcp.json files are handled gracefully inside it.
+		return nil, fmt.Errorf("load .mcp.json chain: %w", err)
+	}
+	for name, server := range projectChain.Servers {
+		// .mcp.json servers are treated as project scope and override user scope.
+		scoped[name] = scopedServer{scope: mcp.ScopeProject, server: server}
+	}
+
 	return scoped, nil
 }
 
