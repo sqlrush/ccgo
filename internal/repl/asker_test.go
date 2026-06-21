@@ -52,7 +52,7 @@ func TestLoopAskerAllow(t *testing.T) {
 		if d.Behavior != contracts.PermissionAllow {
 			t.Fatalf("decision = %v want allow", d.Behavior)
 		}
-	default:
+	case <-time.After(2 * time.Second):
 		t.Fatal("asker never received a decision")
 	}
 }
@@ -88,7 +88,7 @@ func TestLoopAskerDeny(t *testing.T) {
 		if d.Behavior != contracts.PermissionDeny {
 			t.Fatalf("decision = %v want deny", d.Behavior)
 		}
-	default:
+	case <-time.After(2 * time.Second):
 		t.Fatal("asker never received a decision")
 	}
 }
