@@ -149,6 +149,10 @@ func AcquireToken(ctx context.Context, opts AcquireOptions) (auth.Credentials, R
 	// Persist the discovered token endpoint so that refresh requests on process
 	// restart target the correct authorization server, not Anthropic's endpoint.
 	creds.TokenEndpointURL = as.TokenEndpoint
+	// Persist the OAuth client_id issued by the authorization server so that
+	// refresh requests use the correct client_id for the third-party server,
+	// not Anthropic's client_id.
+	creds.ClientID = clientID
 	return creds, rc, nil
 }
 

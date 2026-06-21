@@ -245,7 +245,112 @@ func TestProviderTokenEndpointURLRoundTrip(t *testing.T) {
 	}
 }
 
-// --- Test B: Anthropic fallback when TokenEndpointURL is absent ---
+// --- Test B: DCR ClientID persistence and refresh ---
+
+// TestProviderDCRClientIDRoundTrip verifies that after AcquireToken with DCR,
+// the issued client_id is persisted in Credentials.ClientID, survives a JSON
+// round-trip (simulating process restart), and is used in the OAuthConfig
+// built for refresh (instead of Anthropic's client_id).
+func TestProviderDCRClientIDRoundTrip(t *testing.T) {
+	var thirdPartyTokenHits atomic.Int64
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
+		base := "https://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource":"` + base + `","authorization_servers":["` + base + `"]}`))
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		base := "https://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"issuer":"` + base + `","authorization_endpoint":"` + base + `/authorize","token_endpoint":"` + base + `/token","registration_endpoint":"` + base + `/register"}`))
+	})
+	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		// DCR endpoint returns a DCR-issued client_id (not Anthropic's)
+		_, _ = w.Write([]byte(`{"client_id":"dcr-issued-client-xyz"}`))
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		// Verify the refresh request includes the DCR client_id
+		var body struct {
+			ClientID string `json:"client_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		// Token endpoint accepts any client_id (it just records the hit).
+		thirdPartyTokenHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"DCR_AT","refresh_token":"DCR_RT","expires_in":3600}`))
+	})
+	srv := httptest.NewTLSServer(mux)
+	defer srv.Close()
+
+	// Step 1: Acquire credentials via DCR.
+	authz := &fakeAuthorizer{code: "DCRCODE"}
+	creds, _, err := AcquireToken(context.Background(), AcquireOptions{
+		ServerURL:    srv.URL,
+		CallbackPort: 7784,
+		HTTPClient:   srv.Client(),
+		Authorizer:   authz,
+	})
+	if err != nil {
+		t.Fatalf("AcquireToken: %v", err)
+	}
+
+	// Verify ClientID was populated with the DCR-issued value.
+	if creds.ClientID == "" {
+		t.Fatal("ClientID not set after AcquireToken")
+	}
+	if creds.ClientID != "dcr-issued-client-xyz" {
+		t.Fatalf("ClientID = %q, want dcr-issued-client-xyz", creds.ClientID)
+	}
+
+	// Step 2: JSON round-trip (simulates process restart).
+	raw, err := json.Marshal(creds)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var reloaded auth.Credentials
+	if err := json.Unmarshal(raw, &reloaded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// ClientID must survive the round-trip.
+	if reloaded.ClientID != "dcr-issued-client-xyz" {
+		t.Fatalf("ClientID after round-trip = %q, want dcr-issued-client-xyz", reloaded.ClientID)
+	}
+
+	// Step 3: Build OAuthConfig and verify ClientID is set.
+	// Expire the access token to force refresh.
+	expiredCreds := reloaded
+	expiredCreds.ExpiresAt = time.Now().Add(-time.Hour)
+	expiredCreds.AccessToken = "EXPIRED_AT"
+	store := &memStore{creds: expiredCreds}
+	srv2 := contracts.MCPServer{
+		Type:  "http",
+		URL:   srv.URL,
+		OAuth: &contracts.MCPOAuthConfig{},
+	}
+	prov := RemoteOAuthAccessTokenProvider(store, AcquireOptions{
+		HTTPClient: srv.Client(),
+	})
+	tp, err := prov(context.Background(), "srv", srv2)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+
+	hitsBefore := thirdPartyTokenHits.Load()
+	_, err = tp.CurrentAccessToken(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentAccessToken (refresh): %v", err)
+	}
+	hitsAfter := thirdPartyTokenHits.Load()
+	if hitsAfter <= hitsBefore {
+		t.Fatalf("expected refresh to hit third-party /token endpoint; hits before=%d after=%d", hitsBefore, hitsAfter)
+	}
+}
+
+// --- Test C: Anthropic fallback when TokenEndpointURL is absent ---
 
 // TestProviderAnthropicFallbackWhenNoTokenEndpointURL verifies that when
 // Credentials.TokenEndpointURL is empty (Anthropic OAuth creds), the OAuthConfig

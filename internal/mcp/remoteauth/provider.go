@@ -69,7 +69,14 @@ func RemoteOAuthAccessTokenProvider(store auth.CredentialStore, opts AcquireOpti
 		if creds.TokenEndpointURL != "" {
 			cfg.TokenURL = creds.TokenEndpointURL
 		}
-		if clientID := firstNonEmptyString(server.OAuth.ClientID, opts.ConfiguredClientID); clientID != "" {
+		// ClientID can come from multiple sources (in priority order):
+		// 1. persisted ClientID from DCR (third-party MCP OAuth)
+		// 2. server-specific OAuth config
+		// 3. options-provided configured client ID
+		// When all are absent, fall back to Anthropic's default (ProductionOAuthConfig).
+		if creds.ClientID != "" {
+			cfg.ClientID = creds.ClientID
+		} else if clientID := firstNonEmptyString(server.OAuth.ClientID, opts.ConfiguredClientID); clientID != "" {
 			cfg.ClientID = clientID
 		}
 		return auth.NewOAuthTokenProvider(auth.OAuthTokenProviderOptions{

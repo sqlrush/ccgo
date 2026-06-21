@@ -29,6 +29,13 @@ type Credentials struct {
 	// omitempty keeps the field absent in existing Anthropic OAuth credentials,
 	// preserving backward-compatible serialization.
 	TokenEndpointURL string           `json:"token_endpoint_url,omitempty"`
+	// ClientID is the OAuth client_id issued by the authorization server during
+	// Dynamic Client Registration. When non-empty, token refresh must use this
+	// client_id instead of falling back to Anthropic's client_id, ensuring that
+	// refresh requests to third-party OAuth servers identify correctly.
+	// omitempty keeps the field absent in existing Anthropic OAuth credentials,
+	// preserving backward-compatible serialization.
+	ClientID string           `json:"client_id,omitempty"`
 }
 
 func FromEnv() Credentials {

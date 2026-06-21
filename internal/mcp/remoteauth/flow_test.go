@@ -228,6 +228,52 @@ func TestAcquireTokenPopulatesTokenEndpointURL(t *testing.T) {
 	}
 }
 
+// TestAcquireTokenPopulatesClientID verifies that after a successful AcquireToken
+// with DCR, the returned Credentials have ClientID set to the DCR-issued client_id
+// (not empty, not Anthropic's client_id).
+func TestAcquireTokenPopulatesClientID(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
+		base := serverURLFromReq(r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource":"` + base + `","authorization_servers":["` + base + `"]}`))
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		base := serverURLFromReq(r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"issuer":"` + base + `","authorization_endpoint":"` + base + `/authorize","token_endpoint":"` + base + `/token","registration_endpoint":"` + base + `/register"}`))
+	})
+	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"dcr-client-123"}`))
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"CLIENT_ID_AT","refresh_token":"CLIENT_ID_RT","expires_in":3600}`))
+	})
+	srv := httptest.NewTLSServer(mux)
+	defer srv.Close()
+
+	authz := &fakeAuthorizer{code: "CIDCODE"}
+	creds, _, err := AcquireToken(context.Background(), AcquireOptions{
+		ServerURL:    srv.URL,
+		CallbackPort: 7785,
+		HTTPClient:   srv.Client(),
+		Authorizer:   authz,
+	})
+	if err != nil {
+		t.Fatalf("AcquireToken: %v", err)
+	}
+	if creds.ClientID != "dcr-client-123" {
+		t.Fatalf("ClientID = %q, want dcr-client-123", creds.ClientID)
+	}
+	// Must NOT be the Anthropic production client_id.
+	if creds.ClientID == "9d1c250a-e61b-44d9-88ed-5944d1962f5e" {
+		t.Fatalf("ClientID is Anthropic's client_id: %q", creds.ClientID)
+	}
+}
+
 func TestAcquireTokenPKCSStateInURL(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
