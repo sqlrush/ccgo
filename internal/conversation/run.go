@@ -5519,6 +5519,9 @@ func subcommandRemainder(raw string, subcommand string) string {
 }
 
 func (r Runner) mergedSettings() contracts.Settings {
+	if r.settingsOverride != nil {
+		return *r.settingsOverride
+	}
 	if r.MCP == nil {
 		return contracts.Settings{}
 	}

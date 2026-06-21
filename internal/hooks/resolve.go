@@ -102,6 +102,24 @@ func Resolve(ctx tool.Context, hooks []tool.Hook, event tool.HookEvent) (Resolut
 	return res, nil
 }
 
+// Matches reports whether the hook's matcher accepts the given query string.
+// A hook with no matcher (or "*") matches everything. Delegates to the same
+// matchesPattern predicate used by CommandHook/HTTPHook at run time.
+func Matches(hook tool.Hook, query string) bool {
+	return matchesPattern(query, matcherOf(hook))
+}
+
+func matcherOf(hook tool.Hook) string {
+	switch h := hook.(type) {
+	case CommandHook:
+		return h.Matcher
+	case HTTPHook:
+		return h.Matcher
+	default:
+		return ""
+	}
+}
+
 // foldBehavior applies deny > ask > allow precedence (passthrough is a no-op).
 // Matches CC utils/hooks.ts:2820-2847.
 func foldBehavior(current, next contracts.PermissionBehavior) contracts.PermissionBehavior {

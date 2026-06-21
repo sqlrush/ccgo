@@ -166,6 +166,10 @@ type Runner struct {
 	// CredentialStore is used by /logout to delete stored OAuth credentials.
 	// When nil, /logout reports that no credentials are stored (safe default).
 	CredentialStore auth.CredentialStore
+
+	// settingsOverride bypasses MCP settings entirely when non-nil. Used only
+	// in tests to inject a known Settings without needing a full MCPConfig.
+	settingsOverride *contracts.Settings
 }
 
 type MCPConfig struct {

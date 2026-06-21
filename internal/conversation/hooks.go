@@ -102,8 +102,9 @@ func (r Runner) runPreCompactHooks(ctx context.Context, trigger compactpkg.Trigg
 
 func (r Runner) runConversationHooks(ctx context.Context, phase string, payload map[string]any) (tool.HookResult, error) {
 	settings := r.mergedSettings()
-	hooks := conversationHooksForPhase(r.configuredHooks(settings), phase)
-	if len(hooks) == 0 {
+	candidates := conversationHooksForPhase(r.configuredHooks(settings), phase)
+	matched := filterByMatcher(phase, candidates, payload)
+	if len(matched) == 0 {
 		return tool.HookResult{}, nil
 	}
 	input, err := json.Marshal(payload)
@@ -116,38 +117,40 @@ func (r Runner) runConversationHooks(ctx context.Context, phase string, payload 
 		SessionID:        r.SessionID,
 		Metadata:         r.toolMetadata(),
 	}
-	var combined tool.HookResult
-	var messages []string
-	for idx, hook := range hooks {
+	for idx := range matched {
 		r.emitConversationHookProgress(phase, idx, "hook_started", nil)
-		result, err := hook.RunToolHook(toolCtx, tool.HookEvent{Phase: phase, Input: input, Payload: payload})
-		if err != nil {
-			r.emitConversationHookProgress(phase, idx, "hook_failed", map[string]any{"error": err.Error()})
-			return combined, err
-		}
-		if len(result.Metadata) > 0 {
-			if combined.Metadata == nil {
-				combined.Metadata = map[string]any{}
-			}
-			combined.Metadata[fmt.Sprintf("hook_%d", idx)] = result.Metadata
-		}
-		if strings.TrimSpace(result.Message) != "" {
-			messages = append(messages, strings.TrimSpace(result.Message))
-		}
-		if result.Block {
-			combined.Block = true
-			combined.Message = strings.Join(messages, "\n")
-			r.emitConversationHookProgress(phase, idx, "hook_blocked", map[string]any{"message": combined.Message})
-			return combined, nil
-		}
-		data := map[string]any{}
-		if result.Message != "" {
-			data["message"] = result.Message
-		}
-		r.emitConversationHookProgress(phase, idx, "hook_completed", data)
 	}
-	combined.Message = strings.Join(messages, "\n")
-	return combined, nil
+	resolution, err := hookpkg.Resolve(toolCtx, matched, tool.HookEvent{Phase: phase, Input: input, Payload: payload})
+	if err != nil {
+		r.emitConversationHookProgress(phase, 0, "hook_failed", map[string]any{"error": err.Error()})
+		return tool.HookResult{}, err
+	}
+	if resolution.Block {
+		r.emitConversationHookProgress(phase, 0, "hook_blocked", map[string]any{"message": resolution.Message})
+	} else {
+		r.emitConversationHookProgress(phase, 0, "hook_completed", map[string]any{"message": resolution.Message})
+	}
+	return tool.HookResult{
+		Block:              resolution.Block,
+		Message:            resolution.Message,
+		UpdatedInput:       resolution.UpdatedInput,
+		PermissionDecision: resolution.PermissionDecision,
+		Metadata:           resolution.Metadata,
+	}, nil
+}
+
+func filterByMatcher(phase string, candidates []tool.Hook, payload map[string]any) []tool.Hook {
+	query, honored := hookpkg.MatchQuery(phase, payload)
+	if !honored {
+		return candidates
+	}
+	out := make([]tool.Hook, 0, len(candidates))
+	for _, hook := range candidates {
+		if hookpkg.Matches(hook, query) {
+			out = append(out, hook)
+		}
+	}
+	return out
 }
 
 func (r Runner) emitConversationHookProgress(phase string, index int, progressType string, data map[string]any) {
