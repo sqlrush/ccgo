@@ -50,10 +50,10 @@ type ToolDefinition struct {
 	// Client-tool fields.
 	Name                string                  `json:"name"`
 	Description         string                  `json:"description,omitempty"`
-	InputSchema         contracts.JSONSchema     `json:"input_schema,omitempty"`
+	InputSchema         contracts.JSONSchema    `json:"input_schema,omitempty"`
 	Strict              bool                    `json:"strict,omitempty"`
 	DeferLoading        bool                    `json:"defer_loading,omitempty"`
-	EagerInputStreaming  bool                    `json:"eager_input_streaming,omitempty"`
+	EagerInputStreaming bool                    `json:"eager_input_streaming,omitempty"`
 	CacheControl        *contracts.CacheControl `json:"cache_control,omitempty"`
 
 	// Server-tool fields (omitempty — absent for all client tools).

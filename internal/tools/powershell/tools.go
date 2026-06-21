@@ -20,7 +20,7 @@ import (
 const (
 	defaultTimeoutMillis = 120_000
 	maxTimeoutMillis     = 600_000
-	blockedSleepGuidance = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. For streaming events, use the Monitor tool. If you genuinely need a delay, keep it under 2 seconds."
+	blockedSleepGuidance = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. Use BashOutput to read output from a background command. If you genuinely need a delay, keep it under 2 seconds."
 )
 
 var powerShellSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
@@ -92,7 +92,7 @@ func NewPowerShellTool() tool.Tool {
 				},
 			},
 		},
-		PromptFunc: PowerShellPrompt,
+		PromptFunc:      PowerShellPrompt,
 		NormalizeFunc:   normalizePowerShellRawInput,
 		ValidateFunc:    validatePowerShell,
 		CallFunc:        callPowerShell,

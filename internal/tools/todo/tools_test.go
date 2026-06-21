@@ -175,6 +175,70 @@ func TestTodoWriteValidatesInput(t *testing.T) {
 	}
 }
 
+// TestTodoWriteSelfHealsLegacyFile verifies that a pre-existing on-disk todo
+// file in an old/invalid format (e.g. missing activeForm) does not prevent a
+// valid TodoWrite from succeeding, and that the stale file is overwritten.
+// It also confirms that the write-path validation is still strict: an incoming
+// todos array that is itself invalid is still rejected.
+func TestTodoWriteSelfHealsLegacyFile(t *testing.T) {
+	dir := t.TempDir()
+	// Write a legacy-format todo file (id/priority fields, no activeForm).
+	storePath := filepath.Join(dir, ".claude", "todos", "legacy_session.json")
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacyData := []byte(`{"todos":[{"id":"1","content":"Old task","status":"pending","priority":"high"}]}`)
+	if err := os.WriteFile(storePath, legacyData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := tool.Context{
+		Context:          context.Background(),
+		WorkingDirectory: dir,
+		SessionID:        "legacy_session",
+	}
+	executor := todoExecutor(t)
+
+	// A valid write must succeed even though the existing file is legacy-format.
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_selfheal",
+		Name: "TodoWrite",
+		Input: json.RawMessage(`{"todos":[
+			{"content":"New valid task","status":"in_progress","activeForm":"Working on new task"}
+		]}`),
+	}, nil)
+	if err != nil {
+		t.Fatalf("expected self-heal success, got err: %v", err)
+	}
+	if result.Content != todoWriteSuccess {
+		t.Fatalf("unexpected content: %q", result.Content)
+	}
+
+	// The file should now contain the new valid content (stale file overwritten).
+	data, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "New valid task") {
+		t.Fatalf("store file not overwritten: %s", data)
+	}
+	if strings.Contains(string(data), "Old task") {
+		t.Fatalf("legacy content still present in store: %s", data)
+	}
+
+	// Write-path validation must still be strict: an incoming invalid array is rejected.
+	_, err = executor.Execute(ctx, contracts.ToolUse{
+		ID:   "toolu_strictwrite",
+		Name: "TodoWrite",
+		Input: json.RawMessage(`{"todos":[
+			{"content":"Missing activeForm task","status":"pending"}
+		]}`),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "activeForm is required") {
+		t.Fatalf("expected strict validation error for missing activeForm, got: %v", err)
+	}
+}
+
 func TestTodoWriteDefinitionIsPermissionSafeButOrdered(t *testing.T) {
 	todo := NewTodoWriteTool()
 	if !todo.IsReadOnly(nil) {

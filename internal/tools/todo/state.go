@@ -3,7 +3,6 @@ package todotools
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,6 +177,13 @@ type todoStoreFile struct {
 	Todos []Todo `json:"todos"`
 }
 
+// LoadTodos reads the todo store at path and returns its contents.
+// If the file does not exist, nil is returned (no error).
+// If the file exists but cannot be parsed or fails validation (e.g. a
+// legacy/corrupt format), LoadTodos silently returns nil so that a
+// subsequent valid write can overwrite the stale file (self-heal).
+// The WRITE path independently validates any incoming payload — this
+// leniency only applies to what is already on disk.
 func LoadTodos(path string) ([]Todo, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -188,10 +194,13 @@ func LoadTodos(path string) ([]Todo, error) {
 	}
 	var store todoStoreFile
 	if err := json.Unmarshal(data, &store); err != nil {
-		return nil, fmt.Errorf("load todo state: %w", err)
+		// Corrupt or unrecognised format — treat as empty so a valid write
+		// can overwrite it.
+		return nil, nil
 	}
 	if err := validateTodos(store.Todos); err != nil {
-		return nil, fmt.Errorf("load todo state: %w", err)
+		// Legacy format (e.g. missing activeForm) — treat as empty.
+		return nil, nil
 	}
 	return append([]Todo(nil), store.Todos...), nil
 }

@@ -72,7 +72,7 @@ func bashInstructionsSection() string {
 		"   - If your command is long running and you would like to be notified when it finishes — use `run_in_background`. No sleep needed.",
 		"   - Do not retry failing commands in a sleep loop — diagnose the root cause.",
 		"   - If waiting for a background task you started with `run_in_background`, you will be notified when it completes — do not poll.",
-		"   - Long leading `sleep` commands are blocked. To poll until a condition is met, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`) — you get a notification when the loop exits. Do not chain shorter sleeps to work around the block.",
+		"   - Long leading `sleep` commands are blocked. To poll until a condition is met, run the command with run_in_background: true and use BashOutput to read its output when done. Do not chain shorter sleeps to work around the block.",
 		" - When running `find`, search from `.` (or a specific path), not `/` — scanning the full filesystem can exhaust system resources on large trees.",
 		" - When using `find -regex` with alternation, put the longest alternative first. Example: use `'.*\\.\\(tsx\\|ts\\)'` not `'.*\\.\\(ts\\|tsx\\)'` — the second form silently skips `.tsx` files.",
 		"",

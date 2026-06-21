@@ -62,10 +62,10 @@ type searchResult struct {
 }
 
 type webSearchResult struct {
-	Results         []searchResult
-	SourceURL       string
-	StatusCode      int
-	DurationMS      int64
+	Results    []searchResult
+	SourceURL  string
+	StatusCode int
+	DurationMS int64
 	// InterleavedText holds any model-generated text emitted by the server tool
 	// alongside search result blocks (e.g. reasoning or summaries). Populated
 	// by runServerSearch from ServerSearchResponse.Text.

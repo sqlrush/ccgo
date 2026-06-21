@@ -17,7 +17,7 @@ func TestBashPromptHasCoreSections(t *testing.T) {
 		"# Committing changes with git",
 		"# Creating pull requests",
 		"# Instructions",
-		"Glob",  // tool preference
+		"Glob", // tool preference
 		"Grep",
 		"Read",
 		"quote file paths that contain spaces",

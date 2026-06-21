@@ -23,7 +23,7 @@ const (
 	defaultTimeoutMillis  = 120_000
 	maxTimeoutMillis      = 600_000
 	processInterruptGrace = 200 * time.Millisecond
-	blockedSleepGuidance  = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. For streaming events, use the Monitor tool. If you genuinely need a delay, keep it under 2 seconds."
+	blockedSleepGuidance  = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. Use BashOutput to read streaming output from a background command. If you genuinely need a delay, keep it under 2 seconds."
 )
 
 var bashSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)

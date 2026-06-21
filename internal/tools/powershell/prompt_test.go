@@ -15,11 +15,11 @@ func TestPowerShellPromptHasCoreSections(t *testing.T) {
 	for _, want := range []string{
 		"PowerShell",
 		"Verb-Noun",
-		"backtick",         // escape rule
-		"$env:",            // env var syntax
+		"backtick", // escape rule
+		"$env:",    // env var syntax
 		"-NonInteractive",
-		"Read-Host",        // forbidden interactive cmdlet
-		"Glob",             // cmdlet preference
+		"Read-Host", // forbidden interactive cmdlet
+		"Glob",      // cmdlet preference
 		"Select-String",
 		"-Confirm:$false",
 	} {
