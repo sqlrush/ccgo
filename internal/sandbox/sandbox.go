@@ -9,6 +9,11 @@ import (
 // current platform has no enforcement backend.
 var ErrUnsupported = errors.New("sandbox not supported on this platform")
 
+// ChildSentinel is the special argv[0] value that triggers the Linux re-exec
+// sandbox child entrypoint. cmd/claude/main.go checks this before flag parsing.
+// The value is intentionally unusual to avoid accidental collisions.
+const ChildSentinel = "__sandbox_child"
+
 // Supported reports whether OS-level enforcement is available here.
 func Supported() bool {
 	return runtime.GOOS == "darwin" || runtime.GOOS == "linux"

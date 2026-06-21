@@ -8,3 +8,8 @@ package sandbox
 func wrap(name string, args []string, p Policy) (string, []string, error) {
 	return "", nil, ErrUnsupported
 }
+
+// RunChild is only meaningful on Linux (re-exec confinement). On unsupported
+// platforms the child sentinel is never dispatched; this stub exists so
+// cmd/claude compiles on all platforms.
+func RunChild(_ []string) error { return ErrUnsupported }

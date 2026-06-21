@@ -32,6 +32,7 @@ import (
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
 	remotepkg "ccgo/internal/remote"
+	"ccgo/internal/sandbox"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	"ccgo/internal/repl"
@@ -102,6 +103,17 @@ func (f *repeatedStringFlag) Set(value string) error {
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	// Sandbox child entrypoint: dispatched before flag parsing so that the
+	// confined child re-exec (Linux only) applies landlock+seccomp and then
+	// exec's the real command, replacing this process image.
+	if len(args) >= 1 && args[0] == sandbox.ChildSentinel {
+		if err := sandbox.RunChild(args[1:]); err != nil {
+			fmt.Fprintf(stderr, "ccgo: sandbox child: %v\n", err)
+			return 1
+		}
+		return 0 // unreachable on success — unix.Exec replaces the process
+	}
+
 	flags := flag.NewFlagSet("claude", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
