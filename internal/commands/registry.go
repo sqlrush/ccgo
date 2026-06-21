@@ -303,6 +303,8 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "status", Description: "Show Claude Code status including version, model, account, API connectivity, and tool statuses", Source: contracts.CommandSourceBuiltin, Immediate: true},
 		{Type: contracts.CommandLocalJSX, Name: "model", Description: "Set the AI model for Claude Code", ArgumentHint: "[model]", Source: contracts.CommandSourceBuiltin, Immediate: true},
 		{Type: contracts.CommandLocalJSX, Name: "output-style", Description: "Deprecated: use /config to change output style", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "login", Description: "Sign in with your Claude account (OAuth)", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "logout", Description: "Sign out and remove stored credentials", Source: contracts.CommandSourceBuiltin, Immediate: true},
 	})
 }
 

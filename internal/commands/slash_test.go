@@ -7,6 +7,28 @@ import (
 	"ccgo/internal/contracts"
 )
 
+func TestExecuteBuiltinLoginLogout(t *testing.T) {
+	reg := FromSources(Sources{Builtins: BuiltinCommands()})
+
+	loginCmd, ok := reg.Find("login")
+	if !ok {
+		t.Fatal("login builtin not registered")
+	}
+	res, ok := ExecuteBuiltinLocalCommand(reg, loginCmd, "")
+	if !ok || res.Type != LocalCommandResultLogin {
+		t.Fatalf("login result = %+v ok=%v", res, ok)
+	}
+
+	logoutCmd, ok := reg.Find("logout")
+	if !ok {
+		t.Fatal("logout builtin not registered")
+	}
+	res, ok = ExecuteBuiltinLocalCommand(reg, logoutCmd, "")
+	if !ok || res.Type != LocalCommandResultLogout {
+		t.Fatalf("logout result = %+v ok=%v", res, ok)
+	}
+}
+
 func TestParseSlashCommandSupportsMCPMarker(t *testing.T) {
 	parsed, ok := ParseSlashCommand("/mcp:search (MCP) foo bar")
 	if !ok {

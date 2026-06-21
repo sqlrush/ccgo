@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"ccgo/internal/api/anthropic"
+	"ccgo/internal/auth"
 	bridgepkg "ccgo/internal/bridge"
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
@@ -161,6 +162,10 @@ type Runner struct {
 	NativeComputerUseRunner     integrationspkg.ComputerUseCommandRunner
 
 	OnEvent func(Event)
+
+	// CredentialStore is used by /logout to delete stored OAuth credentials.
+	// When nil, /logout reports that no credentials are stored (safe default).
+	CredentialStore auth.CredentialStore
 }
 
 type MCPConfig struct {
@@ -196,6 +201,12 @@ type Result struct {
 	// is disabled or did not fire.
 	MicroCompact  *compactpkg.MicroResult
 	Cleared       bool
+	// Login signals that the caller (interactive REPL or CLI) should run the OAuth
+	// login ceremony. The runner itself does not open a browser — it has no terminal.
+	Login     bool
+	// LoggedOut is true when /logout successfully deleted (or confirmed absence of)
+	// stored credentials.
+	LoggedOut bool
 }
 
 func (r Runner) maxTokens() int {

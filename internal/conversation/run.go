@@ -156,6 +156,18 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			}
 			return r.appendLocalTextResult(result, history, text)
 		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultLogin {
+			result.Login = true
+			return r.appendLocalTextResult(result, history, "Run `claude auth login` to sign in, or use /login in an interactive session.")
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultLogout {
+			text, err := r.runLogout(ctx)
+			if err != nil {
+				return result, err
+			}
+			result.LoggedOut = true
+			return r.appendLocalTextResult(result, history, text)
+		}
 		return result, nil
 	}
 	turnModel := r.Model
@@ -751,6 +763,16 @@ func (r Runner) appendLocalTextResult(result Result, history []contracts.Message
 	}
 	r.emit(Event{Type: EventUserMessage, Message: &message})
 	return result, nil
+}
+
+func (r *Runner) runLogout(ctx context.Context) (string, error) {
+	if r.CredentialStore == nil {
+		return "No stored credentials to remove.", nil
+	}
+	if err := r.CredentialStore.Delete(ctx); err != nil {
+		return "", fmt.Errorf("logout: %w", err)
+	}
+	return "Signed out. Stored credentials removed.", nil
 }
 
 func formatCostSummary(raw string, history []contracts.Message) string {

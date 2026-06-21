@@ -10474,6 +10474,27 @@ func TestConversationLSPServerHelper(t *testing.T) {
 	os.Exit(0)
 }
 
+func TestRunnerLogoutSlashCommandWithoutCredentialStore(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_logout"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/logout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.Client.(*fakeClient).requests) != 0 {
+		t.Fatalf("model should not be queried for /logout")
+	}
+	if !result.LoggedOut {
+		t.Fatalf("result.LoggedOut should be true, got false")
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("expected 2 messages (user + assistant), got %d: %#v", len(result.Messages), result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "No stored credentials") {
+		t.Fatalf("logout text = %q, want 'No stored credentials...'", text)
+	}
+}
+
 func TestMain(m *testing.M) {
 	if shouldRunConversationLSPHelper() {
 		os.Setenv("GO_WANT_CONVERSATION_LSP_HELPER", "1")
