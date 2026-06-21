@@ -940,7 +940,11 @@ func callBash(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	if input.runInBackground() {
 		return startBackgroundBash(ctx, input, timeout, sink)
 	}
-	result := runBashCommand(ctx, strings.TrimSpace(input.Command), timeout)
+	command := strings.TrimSpace(input.Command)
+	result := runBashCommand(ctx, command, timeout)
+	if !result.TimedOut && !result.Cancelled {
+		updateBashCWD(ctx, command)
+	}
 	return contracts.ToolResult{
 		Content: formatBashContent(result),
 		IsError: result.TimedOut || result.ExitCode != 0,
@@ -1047,8 +1051,8 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration) bas
 	name, args := shellCommand(command)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	configureBashCommand(cmd)
-	if ctx.WorkingDirectory != "" {
-		cmd.Dir = ctx.WorkingDirectory
+	if dir := bashEffectiveCWD(ctx); dir != "" {
+		cmd.Dir = dir
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -1090,8 +1094,8 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	name, args := shellCommand(command)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	configureBashCommand(cmd)
-	if ctx.WorkingDirectory != "" {
-		cmd.Dir = ctx.WorkingDirectory
+	if dir := bashEffectiveCWD(ctx); dir != "" {
+		cmd.Dir = dir
 	}
 	task := &BackgroundTask{
 		ID:          "bash_" + string(contracts.NewID()),
