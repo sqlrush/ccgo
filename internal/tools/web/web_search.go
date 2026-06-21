@@ -62,10 +62,14 @@ type searchResult struct {
 }
 
 type webSearchResult struct {
-	Results    []searchResult
-	SourceURL  string
-	StatusCode int
-	DurationMS int64
+	Results         []searchResult
+	SourceURL       string
+	StatusCode      int
+	DurationMS      int64
+	// InterleavedText holds any model-generated text emitted by the server tool
+	// alongside search result blocks (e.g. reasoning or summaries). Populated
+	// by runServerSearch from ServerSearchResponse.Text.
+	InterleavedText string
 }
 
 var jsonSearchPrimaryURLFieldNames = []string{
@@ -186,8 +190,12 @@ func callWebSearch(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (
 }
 
 func webSearchToolResult(input webSearchInput, result webSearchResult) contracts.ToolResult {
+	content := formatWebSearchContent(input.Query, result.Results)
+	if result.InterleavedText != "" {
+		content += "\n\n" + result.InterleavedText
+	}
 	return contracts.ToolResult{
-		Content: formatWebSearchContent(input.Query, result.Results),
+		Content: content,
 		IsError: result.StatusCode < 200 || result.StatusCode >= 300,
 		StructuredContent: map[string]any{
 			"type":            "web_search",

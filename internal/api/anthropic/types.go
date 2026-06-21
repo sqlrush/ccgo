@@ -10,24 +10,12 @@ import (
 const DefaultVersion = "2023-06-01"
 const DefaultBaseURL = "https://api.anthropic.com"
 
-// ServerToolDefinition is an Anthropic server-side tool (e.g. web search) that
-// runs on the API rather than client-side. Mirrors BetaWebSearchTool20250305
-// (CC WebSearchTool.ts:76-84).
-type ServerToolDefinition struct {
-	Type           string   `json:"type"`                       // "web_search_20250305"
-	Name           string   `json:"name"`                       // "web_search"
-	AllowedDomains []string `json:"allowed_domains,omitempty"`
-	BlockedDomains []string `json:"blocked_domains,omitempty"`
-	MaxUses        int      `json:"max_uses,omitempty"`
-}
-
 type Request struct {
 	Model       string                 `json:"model"`
 	MaxTokens   int                    `json:"max_tokens"`
 	Messages    []contracts.APIMessage `json:"messages"`
 	System      any                    `json:"system,omitempty"`
 	Tools       []ToolDefinition       `json:"tools,omitempty"`
-	ServerTools []ServerToolDefinition `json:"server_tools,omitempty"`
 	ToolChoice  any                    `json:"tool_choice,omitempty"`
 	Temperature *float64               `json:"temperature,omitempty"`
 	TopP        *float64               `json:"top_p,omitempty"`
@@ -49,14 +37,48 @@ type CountTokensResponse struct {
 	InputTokens int `json:"input_tokens"`
 }
 
+// ToolDefinition covers both client-side tools and server-side tools (e.g.
+// web_search_20250305). Server-tool fields are omitempty so they are absent
+// from the JSON of ordinary client tools — the serialized shape is therefore
+// byte-identical to before this change for all existing client tool requests.
+//
+// The Anthropic API expects server tools to appear as entries inside the same
+// "tools" array as client tools (not a separate top-level key). Use
+// NewWebSearchToolDefinition to construct the server-tool entry.
+// Reference: CC WebSearchTool.ts:76-84, extraToolSchemas line 284.
 type ToolDefinition struct {
+	// Client-tool fields.
 	Name                string                  `json:"name"`
 	Description         string                  `json:"description,omitempty"`
-	InputSchema         contracts.JSONSchema    `json:"input_schema"`
+	InputSchema         contracts.JSONSchema     `json:"input_schema,omitempty"`
 	Strict              bool                    `json:"strict,omitempty"`
 	DeferLoading        bool                    `json:"defer_loading,omitempty"`
-	EagerInputStreaming bool                    `json:"eager_input_streaming,omitempty"`
+	EagerInputStreaming  bool                    `json:"eager_input_streaming,omitempty"`
 	CacheControl        *contracts.CacheControl `json:"cache_control,omitempty"`
+
+	// Server-tool fields (omitempty — absent for all client tools).
+	// When Type is set (e.g. "web_search_20250305") the entry is a server tool
+	// and Name/Description/InputSchema are ignored by the API.
+	Type           string   `json:"type,omitempty"`
+	AllowedDomains []string `json:"allowed_domains,omitempty"`
+	BlockedDomains []string `json:"blocked_domains,omitempty"`
+	MaxUses        int      `json:"max_uses,omitempty"`
+}
+
+// NewWebSearchToolDefinition returns a ToolDefinition that represents the
+// web_search_20250305 server tool. Append it to Request.Tools to enable
+// server-side web search. Mirrors CC WebSearchTool.ts makeToolSchema (line 76).
+func NewWebSearchToolDefinition(allowedDomains, blockedDomains []string, maxUses int) ToolDefinition {
+	if maxUses <= 0 {
+		maxUses = 8 // CC default (WebSearchTool.ts:82)
+	}
+	return ToolDefinition{
+		Type:           "web_search_20250305",
+		Name:           "web_search",
+		AllowedDomains: allowedDomains,
+		BlockedDomains: blockedDomains,
+		MaxUses:        maxUses,
+	}
 }
 
 func ToolFromContract(def contracts.ToolDefinition) ToolDefinition {

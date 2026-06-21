@@ -60,5 +60,10 @@ func runServerSearch(ctx context.Context, client ServerSearchClient, input webSe
 		return webSearchResult{}, fmt.Errorf("server search failed: %w", err)
 	}
 	results := filterSearchResults(resp.Results, webSearchAllowedDomains(input), webSearchBlockedDomains(input), limit)
-	return webSearchResult{Results: results, StatusCode: 200}, nil
+	// resp.Text holds any interleaved model-generated text from the server tool
+	// (e.g. reasoning or summaries emitted between search result blocks). Surface
+	// it in the result so the formatted output can include it.
+	// TODO(loop-wiring): when streaming is live, surface resp.Text interleaved
+	// with individual hits in real-time rather than appending it at the end.
+	return webSearchResult{Results: results, StatusCode: 200, InterleavedText: resp.Text}, nil
 }
