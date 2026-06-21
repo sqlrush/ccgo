@@ -36,6 +36,14 @@ func (a *StreamAccumulator) Add(event StreamEvent) error {
 			if text, ok := event.Delta["text"].(string); ok {
 				block.Text += text
 			}
+		case "thinking_delta":
+			if text, ok := event.Delta["thinking"].(string); ok {
+				block.Text += text
+			}
+		case "signature_delta":
+			if sig, ok := event.Delta["signature"].(string); ok {
+				block.Signature = sig
+			}
 		case "input_json_delta":
 			if partial, ok := event.Delta["partial_json"].(string); ok {
 				a.jsonBuf[event.Index] += partial

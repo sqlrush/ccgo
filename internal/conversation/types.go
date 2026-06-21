@@ -119,6 +119,7 @@ type Runner struct {
 	FallbackModels            []string
 	SystemPrompt              string
 	MaxTokens                 int
+	ThinkingBudgetTokens      int
 	MaxToolRounds             int
 	UseStreaming              bool
 	EnablePromptCaching       bool

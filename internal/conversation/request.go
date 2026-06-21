@@ -15,7 +15,7 @@ import (
 	"ccgo/internal/contracts"
 	"ccgo/internal/memory"
 	msgs "ccgo/internal/messages"
-	"ccgo/internal/model"
+	modelpkg "ccgo/internal/model"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -84,6 +84,11 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 	}
 	if len(definitions) > 0 {
 		request.Tools = anthropic.ToolsFromContracts(definitions)
+	}
+	if capability, ok := modelpkg.DefaultRegistry().Resolve(model); ok {
+		if thinking := thinkingRequestConfig(capability, r.ThinkingBudgetTokens); thinking != nil {
+			request.Thinking = thinking
+		}
 	}
 	return request, nil
 }
@@ -306,7 +311,7 @@ func resetDeferredToolTokenCountCache() {
 
 func (r Runner) countToolTokensViaHaikuFallback(ctx context.Context, tools []anthropic.ToolDefinition) (int, bool) {
 	response, err := r.Client.CreateMessage(ctx, anthropic.Request{
-		Model:     model.Claude45Haiku,
+		Model:     modelpkg.Claude45Haiku,
 		MaxTokens: 1,
 		Messages:  []contracts.APIMessage{{Role: "user", Content: []contracts.ContentBlock{contracts.NewTextBlock("count")}}},
 		Tools:     tools,
@@ -450,7 +455,7 @@ func toolSearchContextWindowTokens(modelName string) int {
 	if session.IsEnvTruthy(os.Getenv("CLAUDE_CODE_DISABLE_1M_CONTEXT")) {
 		lookupName = trimOneMillionContextSuffix(lookupName)
 	}
-	if capability, ok := model.DefaultRegistry().Resolve(lookupName); ok && capability.ContextWindowTokens > 0 {
+	if capability, ok := modelpkg.DefaultRegistry().Resolve(lookupName); ok && capability.ContextWindowTokens > 0 {
 		return capability.ContextWindowTokens
 	}
 	return modelContextWindowDefault
