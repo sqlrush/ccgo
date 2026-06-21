@@ -44,6 +44,10 @@ func TestExchangeAuthorizationCodeSuccess(t *testing.T) {
 	if gotBody["client_id"] == "" || gotBody["client_id"] == nil {
 		t.Fatalf("client_id missing in body: %#v", gotBody)
 	}
+	// Verify state is included in the request body.
+	if gotBody["state"] != "the-state" {
+		t.Fatalf("state not sent in request body: %#v", gotBody)
+	}
 }
 
 func TestExchangeAuthorizationCodeHTTPError(t *testing.T) {
@@ -61,6 +65,14 @@ func TestExchangeAuthorizationCodeHTTPError(t *testing.T) {
 	// Error must surface status but MUST NOT echo a token-bearing body wholesale.
 	if !strings.Contains(err.Error(), "400") {
 		t.Fatalf("error should mention status: %v", err)
+	}
+	// Verify error does not leak secrets from the response body.
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "super-secret") {
+		t.Fatalf("error leaked secret hint: %v", err)
+	}
+	if strings.Contains(errMsg, "secret_hint") {
+		t.Fatalf("error leaked response body field: %v", err)
 	}
 }
 
