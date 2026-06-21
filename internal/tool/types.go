@@ -50,6 +50,33 @@ type PermissionAsker interface {
 	Ask(ctx context.Context, req PermissionAskRequest) (contracts.PermissionDecision, error)
 }
 
+// Question models a single multiple-choice question for the AskUserQuestion tool.
+type Question struct {
+	Header      string
+	Question    string
+	Options     []QuestionOption
+	MultiSelect bool
+}
+
+// QuestionOption is a single selectable choice within a Question.
+type QuestionOption struct {
+	Label       string
+	Description string
+}
+
+// QuestionAnswer holds the user's selection(s) for one Question.
+type QuestionAnswer struct {
+	Header   string
+	Selected []string
+}
+
+// QuestionAsker renders interactive multiple-choice questions. The TUI
+// implements it and injects it via MetadataQuestionAskerKey; headless
+// callers leave it unset and the tool errors cleanly.
+type QuestionAsker interface {
+	AskQuestions(ctx context.Context, questions []Question) ([]QuestionAnswer, error)
+}
+
 type Tool interface {
 	Name() string
 	Aliases() []string
