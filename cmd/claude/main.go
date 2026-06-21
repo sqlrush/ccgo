@@ -33,6 +33,7 @@ import (
 	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
+	"ccgo/internal/repl"
 	filetools "ccgo/internal/tools/file"
 	tasktools "ccgo/internal/tools/task"
 )
@@ -266,12 +267,40 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		return 0
 	}
-	if _, err := state.ConversationRunner(); err != nil {
+	effectiveMode, err := effectivePermissionMode(*permissionMode, *skipPermissions)
+	if err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
-
-	fmt.Fprintf(stdout, "ccgo scaffold ready\nsession_id=%s\ncwd=%s\n", state.SessionID(), state.CWD())
+	ctx := context.Background()
+	runner, err := interactiveRunner(ctx, state, cliOptions{
+		Model:           *modelName,
+		MaxTokens:       *maxTokens,
+		MaxTurns:        *maxTurns,
+		PermissionMode:  effectiveMode,
+		SkipPermissions: *skipPermissions,
+		MCPConfig:       *mcpConfig,
+		Stream:          *stream,
+		SystemPrompt:    *systemPrompt,
+		AppendSystem:    *appendSystemPrompt,
+		AllowedTools:    append([]string(nil), allowedTools...),
+		DeniedTools:     append([]string(nil), deniedTools...),
+		AddDirs:         append([]string(nil), addDirs...),
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo: %v\n", err)
+		return 1
+	}
+	history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo: %v\n", err)
+		return 1
+	}
+	term := repl.NewOSTerminal(os.Stdin, os.Stdout)
+	if err := repl.RunInteractive(ctx, term, runner, history); err != nil {
+		fmt.Fprintf(stderr, "ccgo: %v\n", err)
+		return 1
+	}
 	return 0
 }
 
@@ -3203,6 +3232,13 @@ func normalizeCLIFormatValue(raw string) string {
 	default:
 		return format
 	}
+}
+
+// interactiveRunner builds a fully-wired runner for the interactive REPL.
+// It delegates to headlessRunner; kept as a separate seam for future
+// interactive-only wiring (e.g., interactive default permission mode).
+func interactiveRunner(ctx context.Context, state *bootstrap.State, options cliOptions) (conversation.Runner, error) {
+	return headlessRunner(ctx, state, options)
 }
 
 func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOptions) (conversation.Runner, error) {

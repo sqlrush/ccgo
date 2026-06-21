@@ -35,6 +35,21 @@ type PermissionDecider interface {
 	DecideTool(tool Tool, input json.RawMessage, ctx Context) (contracts.PermissionDecision, error)
 }
 
+// PermissionAskRequest describes a tool call awaiting an interactive decision.
+type PermissionAskRequest struct {
+	ToolUseID   contracts.ID
+	ToolName    string
+	Path        string
+	Description string
+	Decision    contracts.PermissionDecision
+}
+
+// PermissionAsker resolves an "ask" permission decision interactively.
+// Implementations block until the user answers (or ctx is cancelled).
+type PermissionAsker interface {
+	Ask(ctx context.Context, req PermissionAskRequest) (contracts.PermissionDecision, error)
+}
+
 type Tool interface {
 	Name() string
 	Aliases() []string
