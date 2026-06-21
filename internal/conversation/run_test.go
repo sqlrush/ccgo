@@ -10516,6 +10516,27 @@ func TestRunnerLoginSlashCommandWithoutCredentialStore(t *testing.T) {
 	}
 }
 
+func TestRunnerContextSlashCommandReturnsReport(t *testing.T) {
+	runner := Runner{Client: &fakeClient{}, SessionID: "sess_context", Model: "claude-sonnet-4-6"}
+	result, err := runner.RunTurn(context.Background(), nil, messages.UserText("/context"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.Client.(*fakeClient).requests) != 0 {
+		t.Fatalf("model should not be queried for /context")
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("expected 2 messages (user + report), got %d: %#v", len(result.Messages), result.Messages)
+	}
+	text := result.Messages[1].Content[0].Text
+	if !strings.Contains(text, "Context window usage") {
+		t.Fatalf("/context report missing header: %q", text)
+	}
+	if !strings.Contains(text, "%") {
+		t.Fatalf("/context report missing percentage: %q", text)
+	}
+}
+
 func TestMain(m *testing.M) {
 	if shouldRunConversationLSPHelper() {
 		os.Setenv("GO_WANT_CONVERSATION_LSP_HELPER", "1")

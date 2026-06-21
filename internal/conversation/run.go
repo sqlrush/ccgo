@@ -19,6 +19,7 @@ import (
 	bridgepkg "ccgo/internal/bridge"
 	"ccgo/internal/commands"
 	compactpkg "ccgo/internal/compact"
+	contextreport "ccgo/internal/contextreport"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	daemonpkg "ccgo/internal/daemon"
@@ -167,6 +168,9 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			}
 			result.LoggedOut = true
 			return r.appendLocalTextResult(result, history, text)
+		}
+		if localResult != nil && localResult.Type == commands.LocalCommandResultContext {
+			return r.appendLocalTextResult(result, history, r.formatContextReport(originalHistory))
 		}
 		return result, nil
 	}
@@ -773,6 +777,39 @@ func (r *Runner) runLogout(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("logout: %w", err)
 	}
 	return "Signed out. Stored credentials removed.", nil
+}
+
+// formatContextReport builds a context-window usage report for /context.
+// It estimates token usage from the conversation history and looks up the
+// model's effective context window via the model registry.
+func (r Runner) formatContextReport(history []contracts.Message) string {
+	promptTokens := compactpkg.EstimateTokens(history)
+	// Estimate system prompt tokens using the same 4-chars-per-token heuristic.
+	systemChars := len(r.SystemPrompt)
+	systemTokens := systemChars / 4
+	if systemChars%4 != 0 {
+		systemTokens++
+	}
+
+	modelName := r.model()
+	var windowTokens int
+	if cap, ok := modelpkg.DefaultRegistry().Resolve(modelName); ok {
+		var windowCfg compactpkg.WindowConfig
+		if r.AutoCompact != nil {
+			windowCfg = r.AutoCompact.Window
+		}
+		windowCfg.ContextWindow = cap.ContextWindowTokens
+		windowCfg.MaxOutputTokens = cap.MaxOutputTokens
+		windowTokens = compactpkg.EffectiveContextWindow(windowCfg)
+	}
+
+	rep := contextreport.Report{
+		ModelName:    modelName,
+		WindowTokens: windowTokens,
+		PromptTokens: promptTokens,
+		SystemTokens: systemTokens,
+	}
+	return contextreport.Format(rep)
 }
 
 func formatCostSummary(raw string, history []contracts.Message) string {

@@ -66,6 +66,7 @@ const (
 	LocalCommandResultTheme   LocalCommandResultType = "theme"
 	LocalCommandResultEffort  LocalCommandResultType = "effort"
 	LocalCommandResultVim     LocalCommandResultType = "vim"
+	LocalCommandResultContext LocalCommandResultType = "context"
 )
 
 type LocalCommandResult struct {
@@ -249,6 +250,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultEffort, Value: strings.TrimSpace(args)}, true
 	case "vim":
 		return LocalCommandResult{Type: LocalCommandResultVim, Value: strings.TrimSpace(args)}, true
+	case "context":
+		return LocalCommandResult{Type: LocalCommandResultContext, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}

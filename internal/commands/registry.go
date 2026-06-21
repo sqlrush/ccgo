@@ -296,6 +296,7 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocal, Name: "clear", Aliases: []string{"reset", "new"}, Description: "Clear conversation history and free up context", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "compact", Description: "Compact the current conversation", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "cost", Description: "Show the total cost and duration of the current session", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocal, Name: "context", Description: "Show context window token usage for the current conversation", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "summary", Description: "Show a local conversation summary", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "release-notes", Description: "Show bundled release notes status", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
 		{Type: contracts.CommandLocal, Name: "files", Description: "Show local workspace files", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
