@@ -92,6 +92,9 @@ type Loop struct {
 	turnCancel context.CancelFunc
 	width      int
 	height     int
+
+	// mode is the current permission mode, cycled by Shift+Tab.
+	mode contracts.PermissionMode
 }
 
 // SetSettingsWriter wires the settings writer used to persist "allow always"
@@ -269,6 +272,14 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		}
 	}
 
+	// Shift+Tab cycles the permission mode and refreshes the status line.
+	// Intercept before screen.ApplyKey so the screen does not consume the key.
+	if key.Type == tui.KeyShiftTab {
+		l.mode = cycleMode(l.mode)
+		l.refreshBaseStatus()
+		return false
+	}
+
 	event := l.screen.ApplyKey(key)
 
 	// Open the slash menu when the prompt text is exactly "/" (first keystroke).
@@ -431,6 +442,21 @@ func (l *Loop) runLineMode(ctx context.Context) error {
 type readerFunc func(p []byte) (int, error)
 
 func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
+
+// SetMode sets the initial permission mode (called from run.go if needed).
+func (l *Loop) SetMode(mode contracts.PermissionMode) {
+	l.mode = mode
+	l.refreshBaseStatus()
+}
+
+// refreshBaseStatus recomputes baseStatus from the current mode + vim state
+// and, when the spinner is not running, propagates it to screen.Status immediately.
+func (l *Loop) refreshBaseStatus() {
+	l.baseStatus = modeIndicator(l.mode, l.screen.VimEnabled, l.screen.VimMode)
+	if !l.running {
+		l.screen.Status = l.baseStatus
+	}
+}
 
 func (l *Loop) startSpinner() {
 	now := time.Now()
