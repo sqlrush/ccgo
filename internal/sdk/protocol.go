@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 )
 
 // ControlRequest is an inbound SDK control message (controlSchemas.ts:578-584).
@@ -106,7 +107,9 @@ func (d *Decoder) Next() (ControlRequest, error) {
 // Encoder writes NDJSON control messages to a stream.
 // Each message is serialised as a single JSON object followed by a newline,
 // matching CC's ndjsonSafeStringify(message) + '\n' (structuredIO.ts:466).
+// The mu field synchronizes concurrent writes to prevent NDJSON corruption.
 type Encoder struct {
+	mu  sync.Mutex
 	enc *json.Encoder
 }
 
@@ -117,6 +120,8 @@ func NewEncoder(w io.Writer) *Encoder {
 
 // WriteResponse serialises resp as a single NDJSON line.
 func (e *Encoder) WriteResponse(resp ControlResponse) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if err := e.enc.Encode(resp); err != nil {
 		return fmt.Errorf("sdk: write control_response: %w", err)
 	}
@@ -125,6 +130,8 @@ func (e *Encoder) WriteResponse(resp ControlResponse) error {
 
 // WriteRequest serialises req as a single NDJSON line.
 func (e *Encoder) WriteRequest(req ControlRequest) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if err := e.enc.Encode(req); err != nil {
 		return fmt.Errorf("sdk: write control_request: %w", err)
 	}

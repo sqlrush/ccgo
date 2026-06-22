@@ -2,9 +2,11 @@ package sdk
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -106,5 +108,73 @@ func TestDecoderMalformedLine(t *testing.T) {
 	_, err := dec.Next()
 	if err == nil {
 		t.Fatal("expected error for malformed JSON, got nil")
+	}
+}
+
+// TestConcurrentEncoderWriteRace verifies that concurrent WriteRequest and
+// WriteResponse calls do not race or corrupt NDJSON output.
+// Run with: go test -race ./internal/sdk/
+func TestConcurrentEncoderWriteRace(t *testing.T) {
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+
+	// Spawn multiple goroutines, each issuing many writes concurrently.
+	// With the mutex in place, this should be race-clean and produce
+	// valid, non-interleaved NDJSON.
+	const numGoroutines = 4
+	const writesPerGoroutine = 50
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < writesPerGoroutine; j++ {
+				// Alternate between WriteRequest and WriteResponse to maximize contention.
+				if (id+j)%2 == 0 {
+					_ = enc.WriteRequest(ControlRequest{
+						Type:      "control_request",
+						RequestID: "req-id",
+						Request:   map[string]any{"subtype": "test"},
+					})
+				} else {
+					_ = enc.WriteResponse(SuccessResponse("resp-id", map[string]any{"status": "ok"}))
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Parse the output as NDJSON: split by newlines and validate each line is
+	// a complete, parseable JSON object. Interleaved writes would produce
+	// malformed lines or partial JSON.
+	output := buf.String()
+	lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+	if len(lines) != numGoroutines*writesPerGoroutine {
+		t.Fatalf("expected %d lines, got %d", numGoroutines*writesPerGoroutine, len(lines))
+	}
+
+	var lineCount int
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		lineCount++
+
+		// Each line must be valid JSON and complete (not truncated).
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Fatalf("line %d not valid JSON: %q (err: %v)", lineCount, line, err)
+		}
+
+		// Verify the line has expected structure (either control_request or control_response).
+		msgType, ok := obj["type"].(string)
+		if !ok || (msgType != "control_request" && msgType != "control_response") {
+			t.Fatalf("line %d has invalid type: %+v", lineCount, obj)
+		}
+	}
+
+	if lineCount != numGoroutines*writesPerGoroutine {
+		t.Fatalf("expected %d valid JSON lines, parsed %d", numGoroutines*writesPerGoroutine, lineCount)
 	}
 }

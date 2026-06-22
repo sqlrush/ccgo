@@ -141,15 +141,6 @@ func Query(ctx context.Context, opts Options) error {
 // control_request fires, distinguishing it from a parent ctx cancellation.
 var errInterrupted = errors.New("sdk: interrupted by control request")
 
-// wireEnvelope is a raw JSON envelope that can represent both inbound
-// control_request and control_response messages without loss of fields.
-// We decode into a map[string]json.RawMessage so we can route by "type"
-// before further parsing.
-type wireEnvelope struct {
-	Type     string          // from "type" field
-	raw      map[string]json.RawMessage
-}
-
 // readControlLoop reads raw NDJSON from r line-by-line. For each line it:
 //   - If type == "control_request" → Controller.Handle, writes response to enc.
 //   - If type == "control_response" → resolves a pending can_use_tool via asker.Resolve.
