@@ -1,102 +1,99 @@
-# CC-Parity Functional Test Checklist — Design Spec
+# CC 全功能对照测试清单 — 设计 Spec
 
-**Date:** 2026-06-22
-**Goal:** A functional test checklist that, referencing Claude Code's *actual* feature surface,
-aims to cover **100% of CC's functionality**. Each item is a pass/fail functional check with a
-current-status verdict for ccgo. The checklist is then the source for (a) a wiring + optimization
-worklist (drive the ⚠️/❌ rows to ✅) and (b) a regression test suite (the AUTO rows → Go `e2e/`).
+**日期：** 2026-06-22
+**目标：** 一份对照 Claude Code **真实功能面**的功能测试清单，力求覆盖 **CC 100% 的功能**。每条
+是一个 pass/fail 的功能检查，并给出 ccgo 的当前状态判定。清单随后作为两件事的来源：(a) 一份接线
+与优化 worklist（把 ⚠️/❌ 行推到 ✅）；(b) 一套回归测试套件（AUTO 行 → Go `e2e/`）。
 
-**Source of truth:** CC reference source `/Users/sqlrush/agent/claude-code/src` (audited directly,
-NOT self-reported roadmap docs), cross-checked against ccgo code for current status.
+**事实来源：** CC 参考源码 `/Users/sqlrush/agent/claude-code/src`（直接审计，**不**信自述 roadmap
+文档），并与 ccgo 代码交叉核对当前状态。
 
-**Locked scope reference:** `docs/gap-audit-2026-06-21.md` §10 (IN/OUT). OUT-of-scope CC features
-are still ENUMERATED here (marked `N/A`) so the checklist reflects the full CC surface.
-
----
-
-## 1. Decisions (confirmed with user 2026-06-22)
-
-1. **Scope:** enumerate ALL CC features; OUT-of-scope items listed and marked `N/A` + reason.
-2. **Execution model:** layered — `AUTO` (headless `claude --print` / programmatic, machine-assertable)
-   + `MANUAL` (interactive TUI / dialogs, human-run with expected result).
-3. **Output:** checklist first (Markdown), then sediment the `AUTO` rows into a runnable Go suite.
+**锁定范围参照：** `docs/gap-audit-2026-06-21.md` §10（IN/OUT）。OUT-of-scope 的 CC 功能在本清单
+里**仍然枚举**（标 `N/A`），以便清单反映 CC 的完整功能面。
 
 ---
 
-## 2. Deliverable & row format
+## 1. 决策（已与用户确认 2026-06-22）
 
-One master Markdown checklist: `docs/cc-parity/functional-tests.md` (+ this design spec).
-Organized into chapters by feature area (§4). Every test item is one table row:
+1. **范围：** 枚举 CC 全部功能；OUT-of-scope 项逐条列出并标 `N/A` + 原因。
+2. **执行模型：** 分层 —— `AUTO`（headless `claude --print` / 程序化，可机器断言）
+   + `MANUAL`（交互 TUI / 对话框，人工跑、带预期结果）。
+3. **产物：** 先出清单（Markdown），再把 `AUTO` 行沉淀为可运行的 Go 套件。
 
-| Column | Meaning |
+---
+
+## 2. 交付物 & 行格式
+
+一份主清单 Markdown：`docs/cc-parity/functional-tests.md`（外加本设计 spec）。按功能域分章（§4）。
+每条测试项为一行：
+
+| 列 | 含义 |
 |---|---|
-| **ID** | Stable id, `AREA-FEATURE-NN` (e.g. `TOOL-BASH-03`, `MCP-OAUTH-02`). Referenced by the worklist + suite. |
-| **Feature** | The specific CC behavior under test. |
-| **Layer** | `AUTO` (headless-assertable) / `MANUAL` (interactive TUI) / `N/A` (out-of-scope). |
-| **Test (given → when → then)** | Precondition → action → **expected result** (the pass criterion). |
-| **CC ref** | `src/…:line` proving CC actually does this (anti-hallucination). |
-| **Status** | `✅ pass` / `⚠️ built-not-wired` (code+tests exist, unreachable in the running app) / `❌ missing` / `N/A`. |
+| **ID** | 稳定编号，`AREA-FEATURE-NN`（如 `TOOL-BASH-03`、`MCP-OAUTH-02`）。供 worklist + 套件引用。 |
+| **功能** | 受测的 CC 具体行为。 |
+| **执行层** | `AUTO`（headless 可断言）/ `MANUAL`（交互 TUI）/ `N/A`（out-of-scope）。 |
+| **测试（given → when → then）** | 前置 → 操作 → **预期结果**（即通过判据）。 |
+| **CC 参照** | `src/…:line`，证明 CC 确实有此行为（防臆造）。 |
+| **状态** | `✅ 通过` / `⚠️ 已建未接`（代码+测试在，但运行路径不可达）/ `❌ 缺失` / `N/A`。 |
 
-The **Status** column IS the gap analysis. Roll-ups at the end of each chapter + a top summary
-(counts per status). `⚠️` rows → wiring work; `❌` rows → true gaps; together = the worklist.
+**状态列即 gap 分析。** 每章末尾 + 顶部汇总给出各状态计数。`⚠️` 行 → 接线工作；`❌` 行 → 真缺口；
+二者合起来 = worklist。
 
-### Example rows (so the format is concrete)
+### 样例行（让格式具体可见）
 
 ```
-| TOOL-BASH-01 | Bash runs a shell command, returns stdout/stderr/exit | AUTO | given a repo; when `claude --print "run: echo hi"` triggers Bash `echo hi`; then result contains "hi", exit 0 | src/tools/BashTool/*.ts | ✅ pass |
-| PERM-MODE-03 | Shift+Tab cycles permission mode (default→acceptEdits→plan→bypass) | MANUAL | given the REPL; when Shift+Tab pressed 4×; then status line indicator cycles and returns to default | src/components/PromptInput/PromptInputFooterLeftSide.tsx:70 | ✅ pass |
-| CMD-RESUME-02 | `/resume` opens an interactive session picker | MANUAL | given prior sessions; when `/resume` (no arg); then a picker dialog lists same-repo sessions, arrow+enter loads one | src/screens/ResumeConversation.tsx | ⚠️ built-not-wired (functional resume works via `/resume <id|N>`; picker DIALOG needs P2 trigger) |
-| SDK-QUERY-01 | `claude` exposes an importable SDK query() entrypoint over the CLI | AUTO | given the binary; when invoked in SDK/control mode; then control_request/response NDJSON drives a turn | src/entrypoints/agentSdkTypes.ts:112 | ⚠️ built-not-wired (sdk.Query exists+tested; no cmd/claude subcommand) |
-| REMOTE-TELEPORT-01 | Teleport to a cloud remote agent session | N/A | — | src/… | N/A (cloud stack OUT of scope §10) |
+| TOOL-BASH-01 | Bash 执行 shell 命令，返回 stdout/stderr/退出码 | AUTO | 前置:一个仓库;操作:`claude --print "run: echo hi"` 触发 Bash `echo hi`;预期:结果含 "hi",exit 0 | src/tools/BashTool/*.ts | ✅ 通过 |
+| PERM-MODE-03 | Shift+Tab 循环切换权限模式(default→acceptEdits→plan→bypass) | MANUAL | 前置:REPL 中;操作:按 Shift+Tab 4 次;预期:状态行指示器循环并回到 default | src/components/PromptInput/PromptInputFooterLeftSide.tsx:70 | ✅ 通过 |
+| CMD-RESUME-02 | `/resume` 打开交互式会话选择器 | MANUAL | 前置:有历史会话;操作:`/resume`(无参);预期:选择器对话框列出同仓库会话,方向键+回车加载 | src/screens/ResumeConversation.tsx | ⚠️ 已建未接(经 `/resume <id|N>` 的功能恢复可用;选择器对话框需 P2 触发器) |
+| SDK-QUERY-01 | `claude` 暴露可 import 的 SDK query() 入口(经 CLI) | AUTO | 前置:二进制;操作:以 SDK/控制模式调用;预期:control_request/response NDJSON 驱动一个回合 | src/entrypoints/agentSdkTypes.ts:112 | ⚠️ 已建未接(sdk.Query 已建+已测;无 cmd/claude 子命令) |
+| REMOTE-TELEPORT-01 | teleport 到云端远程 agent 会话 | N/A | — | src/… | N/A(云端栈 OUT-of-scope §10) |
 ```
 
 ---
 
-## 3. How the checklist is produced (Approach A — confirmed)
+## 3. 清单如何产出（方案 A —— 已确认）
 
-**Hybrid + real-source audit.** Per feature area (§4), a dedicated pass:
-1. **Enumerate** CC's features for the area by reading `/Users/sqlrush/agent/claude-code/src`
-   (cite file:line), seeded by the gap audit / phase plans as a checklist of where to look — but the
-   CC source is authoritative for "what exists".
-2. **Write** one functional test row per feature (given→when→then + expected), tagging the Layer.
-3. **Determine ccgo status** by checking ccgo code (`grep`/`go doc`): is it implemented + wired
-   (`✅`), built-but-unreachable (`⚠️`), missing (`❌`), or out-of-scope (`N/A`)?
+**混合 + 真源审计。** 逐功能域（§4）做一遍：
+1. **枚举** 该域的 CC 功能 —— 读 `/Users/sqlrush/agent/claude-code/src`（标 file:line），以 gap 审计 /
+   phase 计划作为"去哪儿看"的线索清单，但 CC 源码对"有什么"是权威。
+2. **写** 每个功能一行功能测试（given→when→then + 预期），打 Layer 标签。
+3. **判定 ccgo 状态** —— 核对 ccgo 代码（`grep`/`go doc`）：已实现+已接线（`✅`）、已建但不可达
+   （`⚠️`）、缺失（`❌`）、还是 out-of-scope（`N/A`）？
 
-Production is fanned out: one agent per feature area (parallel), each returning its area's rows; the
-controller assembles the master doc. (Same method as the original gap audit — `dispatching-parallel-agents`.)
-This is a research/enumeration deliverable, not a code build, so it does not go through writing-plans;
-the writing-plans step applies later, to the wiring worklist the checklist produces.
+产出采用扇出：每个功能域一个 agent（并行），各自返回本域的行，由 controller 汇成主文档。（与最初
+gap 审计同法 —— `dispatching-parallel-agents`。）这是研究/枚举型交付物、不是写代码，所以不走
+writing-plans；writing-plans 留到后面，用于清单产出的接线 worklist。
 
 ---
 
-## 4. Feature-area chapters (CC full surface)
+## 4. 功能域分章（CC 全功能面）
 
-1. **CLI & entrypoints** — `claude`, `--print`, all flags, subcommands (`mcp`/`auth`/`agents`/`doctor`/`update`/`completion`/`config`/`plugin`/`mcp serve`).
-2. **Interactive REPL / TUI** — raw input + editing, live streaming render, spinner/progress, resize, Ctrl-C/ESC interrupt, vim mode, mode-switch UI, bracketed paste, alt-screen.
-3. **Overlays & dialogs** — slash menu + autocomplete, resume picker, theme picker, `/memory` selector, HelpV2, Doctor screen, onboarding/TrustDialog, all permission dialogs (Bash/Edit/Write/WebFetch/Skill/NotebookEdit/AskUserQuestion/Plan…), status/cost/context panels, notifications.
-4. **Agent loop / API** — streaming, extended thinking + signature, prompt caching, model fallback, `stop_reason` control flow (max_tokens/pause_turn/refusal/ctx-window), orphaned tool_result, micro + auto compaction, token budget.
-5. **Tools** — Read/Write/Edit/MultiEdit/NotebookEdit/Bash/BashOutput/KillShell/Glob/Grep/WebFetch/WebSearch/Task/TodoWrite/AskUserQuestion/EnterPlanMode/ExitPlanMode/LSP/Skill/StructuredOutput/Worktree/Config — schema, behavior, prompts.
-6. **Permissions** — rule matching, 4 modes (default/acceptEdits/plan/bypass), interactive ask, allow-once/allow-always persistence, `/permissions`, per-tool dialogs.
-7. **Slash commands** — the full ~78-command registry, each: dispatch + effect.
-8. **CLI subcommands** — `doctor`/`update`/`agents`/`completion`/`mcp …`/`auth …`/`config`/`plugin`.
-9. **MCP** — stdio/SSE/HTTP/WS transports, `claude mcp add/add-json/list/get/remove/serve`, remote OAuth (RFC 8414/9728/7591) + token cache/refresh, elicitation, reconnect/backoff, `.mcp.json` + settings scopes.
-10. **Hooks** — full event taxonomy (SessionStart/End/PreToolUse/PostToolUse/UserPromptSubmit/Stop/SubagentStart/Stop/Notification/PreCompact/PostCompact/…), matchers, parallel deny>ask>allow, input/output schema.
-11. **Sessions / memory / compact** — resume/continue, rewind/checkpoint, CLAUDE.md scope hierarchy + `@import`, `history.jsonl`, cost persistence, post-compact file restoration.
-12. **Config / plugins / skills / output-styles** — settings hierarchy (user/project/local/managed), plugins, skills (bundled + discovery + activation), output styles.
-13. **Auth** — interactive OAuth login (callback/browser/exchange), `/login`·`/logout`·`claude auth`, keychain, apiKeyHelper, API-key/env precedence.
-14. **Orchestration** — sync subagents, async/background (`run_in_background`), real local Team (dispatch/coordinate), git-worktree isolation, Task `model`/`isolation`.
-15. **Sandbox** — macOS seatbelt, Linux landlock+seccomp, `dangerouslyDisableSandbox` semantics, fail-closed.
-16. **SDK** — control protocol (control_request/response), `canUseTool`/interrupt/set_model, importable `Query` entrypoint.
-17. **OUT-of-scope appendix** (`N/A`) — cloud stack (teleport/RemoteAgentTask/CCR/cloud cron/remote CLIs), GitHub/Slack apps + session share, IDE/desktop/Chrome/mobile/voice companions, server-driven feature-flags/AB (statsig), internal telemetry + debug-only commands.
+1. **CLI 与入口** —— `claude`、`--print`、所有 flag、子命令（`mcp`/`auth`/`agents`/`doctor`/`update`/`completion`/`config`/`plugin`/`mcp serve`）。
+2. **交互 REPL / TUI** —— 原始输入+编辑、实时流式渲染、spinner/进度、resize、Ctrl-C/ESC 中断、vim 模式、模式切换 UI、bracketed paste、alt-screen。
+3. **Overlay 与对话框** —— slash 菜单+autocomplete、resume 选择器、theme 选择器、`/memory` 选择器、HelpV2、Doctor 屏、onboarding/TrustDialog、全部权限对话框（Bash/Edit/Write/WebFetch/Skill/NotebookEdit/AskUserQuestion/Plan…）、status/cost/context 面板、通知。
+4. **agent 循环 / API** —— 流式、扩展思考+signature、prompt 缓存、模型 fallback、`stop_reason` 控制流（max_tokens/pause_turn/refusal/ctx-window）、孤儿 tool_result、micro + auto 压缩、token 预算。
+5. **工具** —— Read/Write/Edit/MultiEdit/NotebookEdit/Bash/BashOutput/KillShell/Glob/Grep/WebFetch/WebSearch/Task/TodoWrite/AskUserQuestion/EnterPlanMode/ExitPlanMode/LSP/Skill/StructuredOutput/Worktree/Config —— schema、行为、prompt。
+6. **权限** —— 规则匹配、4 种模式（default/acceptEdits/plan/bypass）、交互 ask、allow-once/allow-always 持久化、`/permissions`、各工具对话框。
+7. **slash 命令** —— 完整 ~78 命令注册表，每条:分发 + 效果。
+8. **CLI 子命令** —— `doctor`/`update`/`agents`/`completion`/`mcp …`/`auth …`/`config`/`plugin`。
+9. **MCP** —— stdio/SSE/HTTP/WS 传输、`claude mcp add/add-json/list/get/remove/serve`、远程 OAuth（RFC 8414/9728/7591）+ token 缓存/刷新、elicitation、reconnect/backoff、`.mcp.json` + settings 作用域。
+10. **Hooks** —— 完整事件分类（SessionStart/End/PreToolUse/PostToolUse/UserPromptSubmit/Stop/SubagentStart/Stop/Notification/PreCompact/PostCompact/…）、matcher、并行 deny>ask>allow、输入/输出 schema。
+11. **会话 / 记忆 / 压缩** —— resume/continue、rewind/checkpoint、CLAUDE.md 作用域层级 + `@import`、`history.jsonl`、cost 持久化、压缩后文件还原。
+12. **配置 / 插件 / skills / output-styles** —— 设置层级（user/project/local/managed）、插件、skills（内置 + 发现 + 激活）、输出样式。
+13. **认证** —— 交互式 OAuth 登录（callback/浏览器/交换）、`/login`·`/logout`·`claude auth`、keychain、apiKeyHelper、API-key/env 优先级。
+14. **编排** —— 同步子 agent、异步/后台（`run_in_background`）、真实本地 Team（dispatch/coordinate）、git-worktree 隔离、Task `model`/`isolation`。
+15. **沙箱** —— macOS seatbelt、Linux landlock+seccomp、`dangerouslyDisableSandbox` 语义、fail-closed。
+16. **SDK** —— 控制协议（control_request/response）、`canUseTool`/interrupt/set_model、可 import 的 `Query` 入口。
+17. **OUT-of-scope 附录**（`N/A`）—— 云端栈（teleport/RemoteAgentTask/CCR/云端 cron/远程 CLI）、GitHub/Slack App + 会话分享、IDE/桌面/Chrome/移动/语音伴生端、服务端 feature-flag/AB（statsig）、内部遥测 + debug-only 命令。
 
 ---
 
-## 5. Follow-on (after the checklist)
+## 5. 后续闭环（清单之后）
 
-1. User reviews the checklist.
-2. Roll up `⚠️ built-not-wired` + `❌ missing` → a **wiring & optimization worklist**, dependency-ordered
-   (e.g. real Team execution, SDK CLI entrypoint, rewind snapshot-write trigger, overlay slash-triggers,
-   remote-MCP-OAuth `cmd/claude` wiring, PowerShell sandbox parity, …).
-3. With "make these test rows go ✅" as the goal, implement the worklist (TDD micro-commits, per
-   `writing-plans` + `subagent-driven-development` — that's when writing-plans is invoked).
-4. Sediment the `AUTO` rows into `e2e/` Go tests as they pass (CI-runnable regression suite).
+1. 用户 review 清单。
+2. 把 `⚠️ 已建未接` + `❌ 缺失` 汇总成一份**接线 & 优化 worklist**，按依赖排序
+   （如:真实 Team 执行、SDK CLI 入口、rewind 快照写触发、overlay slash 触发器、
+   远程-MCP-OAuth 的 `cmd/claude` 接线、PowerShell 沙箱对齐 …）。
+3. 以"让这些测试行转 ✅"为目标实现 worklist（TDD 微提交，依 `writing-plans` +
+   `subagent-driven-development` —— 此时才调用 writing-plans）。
+4. 把 `AUTO` 行随转绿沉淀为 `e2e/` Go 测试（CI 可跑回归套件）。
