@@ -1,0 +1,120 @@
+## 1. CLI 与入口
+
+本章覆盖 `claude` 二进制的所有顶层标志（flag）、主入口行为（交互 REPL / headless `--print`）、以及每个子命令（subcommand），逐项对照 CC 源码与 ccgo 当前实现状态。
+
+| ID | 功能 | 执行层 | 测试（given → when → then） | CC 参照 | 状态 |
+|---|---|---|---|---|---|
+| CLI-01 | `claude`（无参数）启动交互式 REPL | MANUAL | 前置：已认证环境；操作：`claude`；预期：进入 REPL 提示符，可输入消息并收到 AI 回复 | `src/main.tsx:968`（`program.name('claude')`），`src/replLauncher.js` | ✅ 通过 |
+| CLI-02 | `claude <prompt>` 以位置参数传递 prompt 进入交互模式 | MANUAL | 前置：已认证；操作：`claude "hello"`；预期：REPL 启动并预填该 prompt | `src/main.tsx:968`（`.argument('[prompt]', ...)`) | ✅ 通过 |
+| CLI-03 | `claude --version` / `-v` / `-V` 输出版本号并退出 | AUTO | 前置：二进制；操作：`claude --version`；预期：输出包含版本字符串，exit 0 | `src/entrypoints/cli.tsx:37` | ✅ 通过 |
+| CLI-04 | `claude -p "prompt"` / `--print` headless 模式：单轮输出后退出 | AUTO | 前置：已认证；操作：`claude -p "echo hi"`；预期：stdout 含 AI 回复，exit 0 | `src/main.tsx:976`（`-p, --print`） | ✅ 通过 |
+| CLI-FLAG-01 | `--model <model>` 指定模型（支持别名如 `sonnet`） | AUTO | 前置：已认证；操作：`claude -p "hi" --model claude-sonnet-4-6`；预期：使用指定模型，响应正常 | `src/main.tsx:993`（`--model`) | ✅ 通过 |
+| CLI-FLAG-02 | `--max-tokens <n>` 限制最大 token 数 | AUTO | 前置：已认证；操作：`claude -p "hi" --max-tokens 10`；预期：输出 token 数受限 | `src/main.tsx:976`（hidden，通过 `--max-turns` 同组） / `src/main.tsx:137` | ✅ 通过 |
+| CLI-FLAG-03 | `--max-turns <n>` 限制非交互模式最大 tool-use 轮次 | AUTO | 前置：已认证；操作：`claude -p "list files" --max-turns 1`；预期：超过 1 轮时提前退出 | `src/main.tsx:976`（`--max-turns`） | ✅ 通过 |
+| CLI-FLAG-04 | `--permission-mode <mode>` 设置权限模式（default/acceptEdits/plan/bypassPermissions） | AUTO | 前置：已认证；操作：`claude -p "ls" --permission-mode bypassPermissions`；预期：跳过权限提示 | `src/main.tsx:988`（`--permission-mode`） | ✅ 通过 |
+| CLI-FLAG-05 | `--dangerously-skip-permissions` 绕过所有权限检查 | AUTO | 前置：已认证；操作：`claude -p "ls" --dangerously-skip-permissions`；预期：无权限提示，exit 0 | `src/main.tsx:976`（`--dangerously-skip-permissions`） | ✅ 通过 |
+| CLI-FLAG-06 | `--allowed-tools <tools>` / `--allowedTools` 限制可用工具白名单 | AUTO | 前置：已认证；操作：`claude -p "run ls" --allowed-tools "Bash(ls:*)"` ；预期：仅允许匹配工具 | `src/main.tsx:988`（`--allowedTools, --allowed-tools`） | ✅ 通过 |
+| CLI-FLAG-07 | `--disallowed-tools <tools>` / `--disallowedTools` 工具黑名单 | AUTO | 前置：已认证；操作：`claude -p "edit a.go" --disallowed-tools Edit`；预期：Edit 工具被拒绝 | `src/main.tsx:988`（`--disallowedTools, --disallowed-tools`） | ✅ 通过 |
+| CLI-FLAG-08 | `--add-dir <dir>` 追加工具访问目录（可重复） | AUTO | 前置：有 `/tmp/extra` 目录；操作：`claude -p "ls /tmp/extra" --add-dir /tmp/extra`；预期：Read 工具可访问该目录 | `src/main.tsx:1000`（`--add-dir`） | ✅ 通过 |
+| CLI-FLAG-09 | `--mcp-config <file>` 从 JSON 文件或字符串加载 MCP 服务器 | AUTO | 前置：有合法 mcp.json；操作：`claude -p "list mcp" --mcp-config ./mcp.json`；预期：MCP 服务器被加载 | `src/main.tsx:988`（`--mcp-config`） | ✅ 通过 |
+| CLI-FLAG-10 | `-c` / `--continue` 继续最近一次会话 | AUTO | 前置：已有会话记录；操作：`claude -p "continue" --continue`；预期：加载最近会话历史 | `src/main.tsx:988`（`-c, --continue`） | ✅ 通过 |
+| CLI-FLAG-11 | `-r` / `--resume <id>` 通过 session ID 恢复会话 | AUTO | 前置：已有会话 UUID；操作：`claude -p "hi" --resume <uuid>`；预期：加载该会话历史 | `src/main.tsx:988`（`-r, --resume [value]`） | ✅ 通过 |
+| CLI-FLAG-12 | `--resume`（无参数）打开交互式会话选择器 | MANUAL | 前置：有历史会话；操作：`claude --resume`（无值）；预期：显示会话列表供选择 | `src/main.tsx:988`（`value => value || true`） | ❌ 缺失（ccgo `--resume` 要求字符串值，无 interactive picker） |
+| CLI-FLAG-13 | `--output-format <format>` 设置 headless 输出格式（text/json/stream-json） | AUTO | 前置：已认证；操作：`claude -p "hi" --output-format json`；预期：输出合法 JSON 对象 | `src/main.tsx:976`（`--output-format`） | ✅ 通过 |
+| CLI-FLAG-14 | `--input-format <format>` 设置 headless 输入格式（text/stream-json） | AUTO | 前置：已认证；操作：`echo '{"role":"user","content":"hi"}' \| claude -p --input-format stream-json`；预期：stream-json 消息被正确解析 | `src/main.tsx:976`（`--input-format`） | ✅ 通过 |
+| CLI-FLAG-15 | `--system-prompt <prompt>` 覆盖系统提示 | AUTO | 前置：已认证；操作：`claude -p "who are you" --system-prompt "You are Bob"`；预期：回复中使用 "Bob" 身份 | `src/main.tsx:988`（`--system-prompt`） | ✅ 通过 |
+| CLI-FLAG-16 | `--append-system-prompt <text>` 在默认系统提示后追加 | AUTO | 前置：已认证；操作：`claude -p "who" --append-system-prompt "Always answer in French"`；预期：回复为法语 | `src/main.tsx:988`（`--append-system-prompt`） | ✅ 通过 |
+| CLI-FLAG-17 | `--verbose` 覆盖 verbose 模式（调试输出） | AUTO | 前置：已认证；操作：`claude -p "hi" --verbose`；预期：stderr 有调试输出 | `src/main.tsx:976`（`--verbose`) | ❌ 缺失（ccgo 无 `--verbose` 标志） |
+| CLI-FLAG-18 | `--debug [-d]` 启用调试模式（可选分类过滤，如 `"api,hooks"`） | AUTO | 前置：已认证；操作：`claude -p "hi" --debug`；预期：stderr 有调试输出 | `src/main.tsx:971`（`-d, --debug [filter]`） | ❌ 缺失（ccgo 无 `--debug` 标志） |
+| CLI-FLAG-19 | `--settings <file-or-json>` 从文件或 JSON 字符串加载额外设置 | AUTO | 前置：有合法 settings.json；操作：`claude -p "hi" --settings ./extra.json`；预期：设置被加载并生效 | `src/main.tsx:1000`（`--settings`） | ❌ 缺失（ccgo 无 `--settings` 标志） |
+| CLI-FLAG-20 | `--session-id <uuid>` 使用指定 UUID 作为会话 ID | AUTO | 前置：已认证；操作：`claude -p "hi" --session-id <uuid>`；预期：会话以该 UUID 存储 | `src/main.tsx:1000`（`--session-id`） | ❌ 缺失（ccgo 无 `--session-id` 标志） |
+| CLI-FLAG-21 | `--no-session-persistence` 禁用会话持久化（仅 --print 有效） | AUTO | 前置：已认证；操作：`claude -p "hi" --no-session-persistence`；预期：无 .jsonl 文件生成 | `src/main.tsx:991`（`--no-session-persistence`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-22 | `--fork-session` 恢复时创建新 session ID | AUTO | 前置：有历史会话；操作：`claude --resume <id> --fork-session`；预期：使用新 session ID | `src/main.tsx:988`（`--fork-session`） | ❌ 缺失（ccgo 无 `--fork-session` 标志） |
+| CLI-FLAG-23 | `-n` / `--name <name>` 为会话设置显示名称 | AUTO | 前置：已认证；操作：`claude -p "hi" --name "my-session"`；预期：会话以该名称存储 | `src/main.tsx:1000`（`-n, --name`） | ❌ 缺失（ccgo 无 `--name` 标志） |
+| CLI-FLAG-24 | `--bare` 最简模式（跳过 hooks/LSP/plugin-sync 等，设置 `CLAUDE_CODE_SIMPLE=1`） | AUTO | 前置：已认证；操作：`claude -p "hi" --bare`；预期：跳过 hooks 启动，响应更快 | `src/main.tsx:976`（`--bare`），`src/entrypoints/cli.tsx:283` | ❌ 缺失（ccgo 无 `--bare` 标志） |
+| CLI-FLAG-25 | `--thinking <mode>` 思考模式（enabled/adaptive/disabled） | AUTO | 前置：已认证，支持 thinking 的模型；操作：`claude -p "complex math" --thinking enabled`；预期：扩展思考 token 被使用 | `src/main.tsx:976`（`--thinking`） | ❌ 缺失（ccgo 无 `--thinking` 标志） |
+| CLI-FLAG-26 | `--effort <level>` 设置 effort level（low/medium/high/max） | AUTO | 前置：已认证；操作：`claude -p "hi" --effort high`；预期：使用 high effort 配置 | `src/main.tsx:993`（`--effort`） | ❌ 缺失（ccgo 无 `--effort` 标志） |
+| CLI-FLAG-27 | `--agent <agent>` 覆盖 agent 设置 | AUTO | 前置：已认证，有自定义 agent；操作：`claude -p "review" --agent code-reviewer`；预期：使用指定 agent | `src/main.tsx:1000`（`--agent`） | ❌ 缺失（ccgo 无 `--agent` 标志） |
+| CLI-FLAG-28 | `--agents <json>` 内联 JSON 定义 custom agents | AUTO | 前置：已认证；操作：`claude -p "hi" --agents '{"test":{"description":"Test","prompt":"Be a tester"}}'`；预期：agent 被加载可用 | `src/main.tsx:1000`（`--agents`） | ❌ 缺失（ccgo 无 `--agents` 标志） |
+| CLI-FLAG-29 | `--fallback-model <model>` 主模型过载时自动 fallback（仅 --print） | AUTO | 前置：已认证；操作：`claude -p "hi" --fallback-model claude-haiku-3-5`；预期：过载时使用 fallback 模型 | `src/main.tsx:1000`（`--fallback-model`） | ❌ 缺失（ccgo 无 `--fallback-model` 标志） |
+| CLI-FLAG-30 | `--betas <betas>` 向 API 请求添加 beta header（API key 用户） | AUTO | 前置：API key 认证；操作：`claude -p "hi" --betas interleaved-thinking-2025-05-14`；预期：请求含 beta header | `src/main.tsx:1000`（`--betas`） | ❌ 缺失（ccgo 无 `--betas` 标志） |
+| CLI-FLAG-31 | `--tools <tools>` 指定可用内置工具集合 | AUTO | 前置：已认证；操作：`claude -p "read file" --tools "Read,Bash"`；预期：仅 Read 和 Bash 工具可用 | `src/main.tsx:988`（`--tools`） | ❌ 缺失（ccgo 无 `--tools` 标志） |
+| CLI-FLAG-32 | `--strict-mcp-config` 仅使用 --mcp-config 中的 MCP 服务器，忽略其他配置 | AUTO | 前置：已认证，有用户/项目 MCP 配置；操作：`claude -p "list mcp" --mcp-config ./m.json --strict-mcp-config`；预期：仅加载 m.json 中的服务器 | `src/main.tsx:1000`（`--strict-mcp-config`） | ❌ 缺失（ccgo 无 `--strict-mcp-config` 标志） |
+| CLI-FLAG-33 | `--setting-sources <sources>` 逗号分隔加载的设置来源（user/project/local） | AUTO | 前置：已认证；操作：`claude -p "hi" --setting-sources user`；预期：仅加载 user 级别设置 | `src/main.tsx:1000`（`--setting-sources`） | ❌ 缺失（ccgo 无 `--setting-sources` 标志） |
+| CLI-FLAG-34 | `--worktree [-w]` 为会话创建新 git worktree（可选命名） | MANUAL | 前置：git 仓库；操作：`claude --worktree`；预期：创建新 worktree 并在其中启动 REPL | `src/main.tsx:3811`（`-w, --worktree`） | ❌ 缺失（ccgo 无 `--worktree` 标志） |
+| CLI-FLAG-35 | `--tmux` 为 worktree 创建 tmux 会话（配合 --worktree） | MANUAL | 前置：git 仓库，tmux 可用；操作：`claude --worktree --tmux`；预期：在 tmux 会话中启动 REPL | `src/main.tsx:3812`（`--tmux`） | ❌ 缺失（ccgo 无 `--tmux` 标志） |
+| CLI-FLAG-36 | `--ide` 自动连接 IDE（启动时若恰好只有一个有效 IDE） | MANUAL | 前置：已认证，IDE 扩展运行中；操作：`claude --ide`；预期：自动连接 IDE | `src/main.tsx:1000`（`--ide`） | ❌ 缺失（ccgo 无 `--ide` 标志） |
+| CLI-FLAG-37 | `--chrome` / `--no-chrome` 启用/禁用 Claude in Chrome 集成 | MANUAL | 前置：Chrome 扩展已安装；操作：`claude --chrome`；预期：Chrome 集成被激活 | `src/main.tsx:1006`（`--chrome, --no-chrome`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-38 | `--file <specs>` 启动时下载文件资源（格式：`file_id:path`） | AUTO | 前置：已认证 Files API；操作：`claude -p "read doc" --file file_abc:doc.txt`；预期：doc.txt 被下载 | `src/main.tsx:1006`（`--file`） | ❌ 缺失（ccgo 无 `--file` 标志） |
+| CLI-FLAG-39 | `--from-pr [value]` 通过 PR 编号/URL 恢复关联会话 | MANUAL | 前置：已认证，有关联 PR 的会话；操作：`claude --from-pr 123`；预期：加载关联会话 | `src/main.tsx:991`（`--from-pr`） | ❌ 缺失（ccgo 无 `--from-pr` 标志） |
+| CLI-FLAG-40 | `--json-schema <schema>` 结构化输出 JSON Schema 验证 | AUTO | 前置：已认证；操作：`claude -p "return name" --json-schema '{"type":"object","properties":{"name":{"type":"string"}}}'`；预期：输出符合 schema | `src/main.tsx:976`（`--json-schema`） | ❌ 缺失（ccgo 无 `--json-schema` 标志） |
+| CLI-FLAG-41 | `--include-hook-events` 在 stream-json 输出中包含 hook 生命周期事件 | AUTO | 前置：已认证，有 hooks 配置；操作：`claude -p "hi" --output-format stream-json --include-hook-events`；预期：输出流中有 hook 事件 | `src/main.tsx:976`（`--include-hook-events`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-42 | `--include-partial-messages` stream-json 输出中包含部分消息块 | AUTO | 前置：已认证；操作：`claude -p "hi" --output-format stream-json --include-partial-messages`；预期：输出流中含 partial 消息 | `src/main.tsx:976`（`--include-partial-messages`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-43 | `--replay-user-messages` 将用户消息从 stdin 回显到 stdout（stream-json 模式） | AUTO | 前置：已认证；操作：stream-json 输入 + `--replay-user-messages`；预期：用户消息被回显 | `src/main.tsx:988`（`--replay-user-messages`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-44 | `--permission-prompt-tool <tool>` 使用 MCP 工具处理权限提示（仅 --print） | AUTO | 前置：已认证，有 MCP 权限工具；操作：`claude -p "edit" --permission-prompt-tool perm_tool`；预期：权限决策委托给 MCP 工具 | `src/main.tsx:988`（`--permission-prompt-tool`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-45 | `--system-prompt-file <file>` 从文件读取系统提示（隐藏） | AUTO | 前置：已认证，有系统提示文件；操作：`claude -p "hi" --system-prompt-file ./sp.txt`；预期：使用文件内容作为系统提示 | `src/main.tsx:988`（`--system-prompt-file`，hideHelp） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-46 | `--append-system-prompt-file <file>` 从文件读取并追加系统提示（隐藏） | AUTO | 前置：已认证，有附加提示文件；操作：`claude -p "hi" --append-system-prompt-file ./extra.txt`；预期：文件内容被追加到默认系统提示 | `src/main.tsx:988`（`--append-system-prompt-file`，hideHelp） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-47 | `--plugin-dir <path>` 从目录加载插件（可重复） | AUTO | 前置：已认证，有插件目录；操作：`claude -p "hi" --plugin-dir ./myplugin`；预期：插件被加载 | `src/main.tsx:1006`（`--plugin-dir`） | ❌ 缺失（ccgo 无 `--plugin-dir` 标志） |
+| CLI-FLAG-48 | `--disable-slash-commands` 禁用所有 skill/slash 命令 | AUTO | 前置：已认证；操作：`claude -p "hi" --disable-slash-commands`；预期：slash 命令不可用 | `src/main.tsx:1006`（`--disable-slash-commands`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-49 | `--max-budget-usd <amount>` 限制最大 API 调用费用（仅 --print） | AUTO | 前置：已认证；操作：`claude -p "hi" --max-budget-usd 0.01`；预期：超出预算时中断 | `src/main.tsx:976`（`--max-budget-usd`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-50 | `--allow-dangerously-skip-permissions` 允许 bypass 权限（不默认启用） | AUTO | 前置：已认证；操作：`claude --allow-dangerously-skip-permissions`（不自动 bypass）；预期：标志存在，但只是许可 | `src/main.tsx:976`（`--allow-dangerously-skip-permissions`） | ❌ 缺失（ccgo 无此标志） |
+| CLI-FLAG-51 | `--cwd <dir>` 设置工作目录 | AUTO | 前置：二进制；操作：`claude -p "pwd" --cwd /tmp`；预期：工作目录为 /tmp | `src/main.tsx:968`（隐含于 cwd 处理）；ccgo `src/cmd/claude/main.go:133` | ✅ 通过（ccgo 有 `--cwd` 标志） |
+| CLI-FLAG-52 | `--stream` 使用流式 API（ccgo 内部标志） | AUTO | 前置：已认证；操作：`claude -p "hi" --stream`；预期：使用 streaming API | `src/cmd/claude/main.go:147`（ccgo 扩展） | ✅ 通过（ccgo 特有，非 CC 标志） |
+| CLI-SUBCMD-01 | `claude mcp` 顶层子命令：显示用法 | AUTO | 前置：二进制；操作：`claude mcp`（无子命令）；预期：输出用法并 exit 1 | `src/main.tsx:3894`（`program.command('mcp')`） | ✅ 通过 |
+| CLI-SUBCMD-02 | `claude mcp list` 列出所有已配置 MCP 服务器 | AUTO | 前置：有 MCP 配置；操作：`claude mcp list`；预期：输出服务器名称、transport、scope | `src/main.tsx:3924` | ✅ 通过 |
+| CLI-SUBCMD-03 | `claude mcp get <name>` 显示单个 MCP 服务器详情 | AUTO | 前置：有 MCP 配置；操作：`claude mcp get my-server`；预期：输出 scope/transport/url/command | `src/main.tsx:3930` | ✅ 通过 |
+| CLI-SUBCMD-04 | `claude mcp add <name> <cmd>` 添加 stdio MCP 服务器 | AUTO | 前置：二进制；操作：`claude mcp add fs npx @anthropic/fs-server`；预期：服务器写入 local settings | `src/main.tsx:（registerMcpAddCommand）` | ✅ 通过 |
+| CLI-SUBCMD-05 | `claude mcp add <name> <url>` 添加 HTTP/SSE MCP 服务器 | AUTO | 前置：二进制；操作：`claude mcp add remote https://my.server`；预期：服务器写入 local settings | `src/main.tsx:（registerMcpAddCommand）` | ✅ 通过 |
+| CLI-SUBCMD-06 | `claude mcp add-json <name> <json>` 通过 JSON 字符串添加 MCP 服务器 | AUTO | 前置：二进制；操作：`claude mcp add-json fs '{"type":"stdio","command":"npx","args":["@anthropic/fs"]}'`；预期：服务器写入 local settings | `src/main.tsx:3936` | ✅ 通过 |
+| CLI-SUBCMD-07 | `claude mcp add-json --scope` 选择配置 scope（local/user/project） | AUTO | 前置：二进制；操作：`claude mcp add-json fs '...' --scope user`；预期：写入 user settings | `src/main.tsx:3936`（`--scope`） | ✅ 通过 |
+| CLI-SUBCMD-08 | `claude mcp remove <name>` 删除已配置 MCP 服务器 | AUTO | 前置：有 MCP 配置；操作：`claude mcp remove fs`；预期：从 settings 删除该服务器 | `src/main.tsx:3916` | ✅ 通过 |
+| CLI-SUBCMD-09 | `claude mcp serve` 将 Claude Code 本身作为 MCP 服务器启动 | MANUAL | 前置：已认证；操作：`claude mcp serve`；预期：进程作为 MCP stdio 服务器监听，可被其他 MCP 客户端连接 | `src/main.tsx:3895` | ✅ 通过 |
+| CLI-SUBCMD-10 | `claude mcp add-from-claude-desktop` 从 Claude Desktop 导入 MCP 服务器配置 | AUTO | 前置：有 Claude Desktop MCP 配置；操作：`claude mcp add-from-claude-desktop`；预期：服务器被导入 | `src/main.tsx:3945` | ❌ 缺失（ccgo mcp CLI 无此子命令） |
+| CLI-SUBCMD-11 | `claude mcp reset-project-choices` 重置项目级 MCP 服务器审批/拒绝记录 | AUTO | 前置：有已批准/拒绝的项目级 .mcp.json 服务器；操作：`claude mcp reset-project-choices`；预期：选择记录被清空 | `src/main.tsx:3953` | ❌ 缺失（ccgo mcp CLI 无此子命令） |
+| CLI-SUBCMD-12 | `claude auth` 顶层认证子命令（无子命令时显示用法） | AUTO | 前置：二进制；操作：`claude auth`；预期：输出用法（login/logout/status）并 exit 2 | `src/main.tsx:4100` | ✅ 通过 |
+| CLI-SUBCMD-13 | `claude auth login` 通过 OAuth 登录 | MANUAL | 前置：未登录；操作：`claude auth login`；预期：打开浏览器 OAuth 流程，完成后存储凭据 | `src/main.tsx:4101`（`auth.command('login')`） | ✅ 通过 |
+| CLI-SUBCMD-14 | `claude auth login --email` 预填 email 地址 | MANUAL | 前置：未登录；操作：`claude auth login --email foo@bar.com`；预期：登录页面预填 email | `src/main.tsx:4101`（`--email`） | ❌ 缺失（ccgo auth login 无 `--email` 标志） |
+| CLI-SUBCMD-15 | `claude auth login --sso` 强制使用 SSO 登录流程 | MANUAL | 前置：企业账户；操作：`claude auth login --sso`；预期：使用 SSO 流程 | `src/main.tsx:4101`（`--sso`） | ❌ 缺失（ccgo auth login 无 `--sso` 标志） |
+| CLI-SUBCMD-16 | `claude auth login --console` 使用 Console（API 计费）而非 Claude.ai 订阅 | MANUAL | 前置：Anthropic Console 账户；操作：`claude auth login --console`；预期：通过 Console 登录 | `src/main.tsx:4101`（`--console`） | ❌ 缺失（ccgo auth login 无 `--console` 标志） |
+| CLI-SUBCMD-17 | `claude auth status` 显示认证状态 | AUTO | 前置：已认证；操作：`claude auth status`；预期：输出认证来源（OAuth/API key/env），exit 0 | `src/main.tsx:4122` | ✅ 通过 |
+| CLI-SUBCMD-18 | `claude auth status --json` / `--text` 输出格式控制 | AUTO | 前置：已认证；操作：`claude auth status --json`；预期：输出 JSON 格式认证状态 | `src/main.tsx:4122`（`--json, --text`） | ❌ 缺失（ccgo auth status 无格式标志） |
+| CLI-SUBCMD-19 | `claude auth logout` 登出并删除存储的凭据 | AUTO | 前置：已认证（keychain）；操作：`claude auth logout`；预期：keychain 条目被删除，退出 0 | `src/main.tsx:4131` | ✅ 通过 |
+| CLI-SUBCMD-20 | `claude agents` 列出已配置的 agents | AUTO | 前置：有 agents 配置；操作：`claude agents`；预期：输出 project 和 user 级别的 agent 列表 | `src/main.tsx:4278` | ✅ 通过 |
+| CLI-SUBCMD-21 | `claude agents --setting-sources <sources>` 限制加载来源 | AUTO | 前置：有多级别 agent 配置；操作：`claude agents --setting-sources user`；预期：仅输出 user 级别 agents | `src/main.tsx:4278`（`--setting-sources`） | ❌ 缺失（ccgo agents 子命令无此选项） |
+| CLI-SUBCMD-22 | `claude doctor` 检查自动更新器健康状态 | AUTO | 前置：二进制；操作：`claude doctor`；预期：输出诊断报告，exit 0（无错误时） | `src/main.tsx:4346` | ✅ 通过 |
+| CLI-SUBCMD-23 | `claude update` / `claude upgrade` 检查并安装更新 | AUTO | 前置：二进制；操作：`claude update`；预期：检查更新并输出结果 | `src/main.tsx:4362`（`.alias('upgrade')`） | ⚠️ 已建未接（ccgo `update` 命令存在但为 stub，无网络检查，未对接实际更新机制；`upgrade` 别名缺失） |
+| CLI-SUBCMD-24 | `claude completion <shell>` 生成 shell 补全脚本（bash/zsh/fish） | AUTO | 前置：二进制；操作：`claude completion bash`；预期：输出 bash 补全脚本，exit 0 | `src/main.tsx:4492` | ✅ 通过 |
+| CLI-SUBCMD-25 | `claude plugin` 顶层插件子命令（显示用法） | AUTO | 前置：二进制；操作：`claude plugin`（无子命令）；预期：输出用法并 exit 2 | `src/main.tsx:4148` | ✅ 通过 |
+| CLI-SUBCMD-26 | `claude plugin list` 列出已安装插件 | AUTO | 前置：有插件安装；操作：`claude plugin list`；预期：输出已安装插件列表 | `src/main.tsx:4159` | ✅ 通过 |
+| CLI-SUBCMD-27 | `claude plugin list --json` / `--available` JSON 输出或含 marketplace 插件 | AUTO | 前置：有插件及 marketplace；操作：`claude plugin list --json --available`；预期：JSON 含 installed 和 available | `src/main.tsx:4159`（`--json, --available`） | ✅ 通过 |
+| CLI-SUBCMD-28 | `claude plugin install <plugin>` 从 marketplace 安装插件 | AUTO | 前置：有 marketplace 配置，插件可用；操作：`claude plugin install myplugin`；预期：插件被安装 | `src/main.tsx:4209` | ✅ 通过 |
+| CLI-SUBCMD-29 | `claude plugin uninstall <plugin>` / `remove` / `rm` 卸载插件 | AUTO | 前置：已安装插件；操作：`claude plugin uninstall myplugin`；预期：插件被卸载 | `src/main.tsx:4220`（`.alias('remove').alias('rm')`） | ✅ 通过 |
+| CLI-SUBCMD-30 | `claude plugin enable <plugin>` 启用已禁用插件 | AUTO | 前置：有已禁用插件；操作：`claude plugin enable myplugin`；预期：插件被启用 | `src/main.tsx:4232` | ✅ 通过 |
+| CLI-SUBCMD-31 | `claude plugin disable <plugin>` 禁用插件，`--all` 禁用全部 | AUTO | 前置：有已启用插件；操作：`claude plugin disable myplugin`；预期：插件被禁用 | `src/main.tsx:4243`（`-a, --all`） | ✅ 通过 |
+| CLI-SUBCMD-32 | `claude plugin update <plugin>` 更新插件到最新版本 | AUTO | 前置：有已安装插件且有更新；操作：`claude plugin update myplugin`；预期：插件被更新 | `src/main.tsx:4255` | ✅ 通过 |
+| CLI-SUBCMD-33 | `claude plugin validate <path>` 验证插件或 marketplace manifest | AUTO | 前置：有 plugin manifest；操作：`claude plugin validate ./.claude-plugin/manifest.json`；预期：输出验证结果 | `src/main.tsx:4149` | ✅ 通过 |
+| CLI-SUBCMD-34 | `claude plugin marketplace` 管理 marketplace（list/add/remove/update/plugins/show） | AUTO | 前置：有 marketplace 配置；操作：`claude plugin marketplace list`；预期：输出已配置的 marketplace | `src/main.tsx:4171`（`marketplaceCmd`） | ✅ 通过 |
+| CLI-SUBCMD-35 | `claude setup-token` 设置长效认证 token（需要 Claude 订阅） | MANUAL | 前置：有 Claude 订阅；操作：`claude setup-token`；预期：引导用户设置 token | `src/main.tsx:4267` | ❌ 缺失（ccgo 无 `setup-token` 子命令） |
+| CLI-SUBCMD-36 | `claude install [target]` 安装 Claude Code 本地 build | MANUAL | 前置：二进制；操作：`claude install`；预期：安装或更新 Claude Code | `src/main.tsx:4395` | ❌ 缺失（ccgo 无 `install` 子命令） |
+| CLI-SUBCMD-37 | `claude server`（ANT-only）启动 Claude Code 会话服务器（HTTP/unix） | N/A | — | `src/main.tsx:3962`（ANT-only feature gate） | N/A（内部 Anthropic 特性 `feature('SERVER')` gate，OUT-of-scope §10 云端栈） |
+| CLI-SUBCMD-38 | `claude ssh <host> [dir]`（ANT-only）通过 SSH 在远程主机运行 | N/A | — | `src/main.tsx:4046`（ANT-only feature gate） | N/A（云端/远程栈 OUT-of-scope §10） |
+| CLI-SUBCMD-39 | `claude open <cc-url>`（ANT-only）连接到 Claude Code server | N/A | — | `src/main.tsx:4059`（ANT-only feature gate） | N/A（云端/远程栈 OUT-of-scope §10） |
+| CLI-SUBCMD-40 | `claude remote-control`（ANT-only）启动 Remote Control 模式 | N/A | — | `src/main.tsx:4323`（ANT-only feature gate） | N/A（云端/远程栈 OUT-of-scope §10） |
+| CLI-SUBCMD-41 | `claude daemon`（ANT-only feature gate）长运行 supervisor | N/A | — | `src/entrypoints/cli.tsx:165`（`feature('DAEMON')`） | N/A（ccgo 有 daemon 实现但以标志形式 `--daemon` 而非子命令；CC 的 `daemon` 子命令是 feature-gated 内部栈） |
+| CLI-SUBCMD-42 | `claude ps` / `logs` / `attach` / `kill`（ANT-only，`BG_SESSIONS` feature gate）后台会话管理 | N/A | — | `src/entrypoints/cli.tsx:185`（`feature('BG_SESSIONS')`） | N/A（ANT-only feature gate，OUT-of-scope §10） |
+| CLI-SUBCMD-43 | `claude auto-mode`（ANT-only）检查 auto mode 分类器配置 | N/A | — | `src/main.tsx:4289`（`feature('TRANSCRIPT_CLASSIFIER')`） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-44 | `claude rollback`（ANT-only）回滚到之前版本 | N/A | — | `src/main.tsx:4382`（ANT-only） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-45 | `claude up`（ANT-only）初始化或升级本地开发环境 | N/A | — | `src/main.tsx:4371`（ANT-only） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-46 | `claude log`（ANT-only）管理会话日志 | N/A | — | `src/main.tsx:4412`（ANT-only） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-47 | `claude error`（ANT-only）查看错误日志 | N/A | — | `src/main.tsx:4420`（ANT-only） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-48 | `claude export`（ANT-only）导出会话为文本文件 | N/A | — | `src/main.tsx:4428`（ANT-only） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-49 | `claude task`（ANT-only）管理 task list 任务 | N/A | — | `src/main.tsx:4440`（ANT-only feature gate） | N/A（ANT-only，OUT-of-scope §10） |
+| CLI-SUBCMD-50 | `claude remote-control` / `rc` / `remote` / `sync` / `bridge`（BRIDGE_MODE feature gate）本地机器作为 bridge | N/A | — | `src/entrypoints/cli.tsx:112`（`feature('BRIDGE_MODE')`） | N/A（云端栈 OUT-of-scope §10） |
+| CLI-SUBCMD-51 | `claude environment-runner`（BYOC_ENVIRONMENT_RUNNER feature gate）headless BYOC runner | N/A | — | `src/entrypoints/cli.tsx:226`（`feature('BYOC_ENVIRONMENT_RUNNER')`） | N/A（云端栈 OUT-of-scope §10） |
+| CLI-SUBCMD-52 | `claude self-hosted-runner`（SELF_HOSTED_RUNNER feature gate）自托管 runner | N/A | — | `src/entrypoints/cli.tsx:238`（`feature('SELF_HOSTED_RUNNER')`） | N/A（云端栈 OUT-of-scope §10） |
+| CLI-SUBCMD-53 | `--claude-in-chrome-mcp`（内部快速路径）Chrome 扩展 MCP server | N/A | — | `src/entrypoints/cli.tsx:72` | N/A（Chrome 扩展内部快速路径，OUT-of-scope §10） |
+| CLI-SUBCMD-54 | `--chrome-native-host` Chrome 原生消息宿主 | AUTO | 前置：二进制；操作：`claude --chrome-native-host`（带 Chrome native messaging 协议消息）；预期：正确的 JSON 消息处理 | `src/entrypoints/cli.tsx:79` | ✅ 通过（ccgo `cmd/claude/main.go:178`） |
+| CLI-SDK-01 | SDK/control 模式：暴露可 import 的 `Query()` 入口 | AUTO | 前置：二进制；操作：以 SDK/control 模式调用（control_request/response NDJSON）；预期：control_request 驱动一个回合 | `src/entrypoints/agentSdkTypes.ts:112` | ⚠️ 已建未接（`internal/sdk.Query` 已建+已测；ccgo `cmd/claude/main.go` 无对应子命令或标志入口，无法从 CLI 触发） |
+| CLI-SDK-02 | SDK 模式：`canUseTool` / `interrupt` / `set_model` 控制请求 | AUTO | 前置：SDK control 模式；操作：发送 `set_model` 控制请求；预期：模型被切换 | `src/entrypoints/sdk/controlSchemas.ts` | ⚠️ 已建未接（`internal/sdk.Controller` 实现了 Handle，但无 CLI 入口触发） |
+
+小计: 112 项 — ✅ 48 / ⚠️ 3 / ❌ 44 / N·A 17

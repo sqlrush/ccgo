@@ -1,0 +1,81 @@
+## 7. slash 命令
+
+本章对照 CC `COMMANDS()` 注册表（`src/commands.ts:258-346`）中所有 ~60 个公开 slash 命令逐条测试，验证 ccgo 的分发和效果实现情况。内部/调试/ANT 专用命令（`ant-trace`、`heapdump`、`thinkback*` 等）标 `N/A`，原因见 §10 OUT OF SCOPE。
+
+| ID | 功能 | 执行层 | 测试（given → when → then） | CC 参照 | 状态 |
+|---|---|---|---|---|---|
+| CMD-HELP-01 | `/help` 列出所有可用命令和描述 | AUTO | 前置:任意会话; 操作:`/help`; 预期:输出包含每个内置命令名称和描述文本 | `src/commands/help/index.ts:5` / `commands.ts:281` | ✅ 通过 |
+| CMD-CLEAR-01 | `/clear`（alias: `/reset`, `/new`）清空对话历史并释放上下文 | AUTO | 前置:有多轮历史; 操作:`/clear`; 预期:`Result.Cleared=true`，对话历史被重置为空 | `src/commands/clear/index.ts:5` / `commands.ts:265` | ✅ 通过 |
+| CMD-COMPACT-01 | `/compact` 主动压缩当前对话上下文 | AUTO | 前置:上下文非空; 操作:`/compact`; 预期:调用 `manualCompact()`，压缩后历史被替换为摘要消息 | `src/commands/compact/index.ts:5` / `commands.ts:267` | ✅ 通过 |
+| CMD-COST-01 | `/cost` 显示本次会话的 token 用量与费用统计 | AUTO | 前置:有至少一个 API 轮次; 操作:`/cost`; 预期:输出含输入/输出 token 数和估算费用 | `src/commands/cost/index.ts:5` / `commands.ts:273` | ✅ 通过 |
+| CMD-CONTEXT-01 | `/context` 显示当前会话的上下文窗口 token 占用情况 | AUTO | 前置:有对话历史; 操作:`/context`; 预期:输出含 token 数及上下文窗口百分比 | `src/commands/context/index.ts:5` / `commands.ts:271` | ✅ 通过 |
+| CMD-STATUS-01 | `/status` 显示 Claude Code 运行状态（版本、模型、账号、API 连通性） | AUTO | 前置:初始化完成; 操作:`/status`; 预期:输出含版本号、当前模型名、API 状态 | `src/commands/status/index.ts:5` / `commands.ts:302` | ✅ 通过 |
+| CMD-DOCTOR-01 | `/doctor` 运行健康检查诊断 | AUTO | 前置:任意; 操作:`/doctor`; 预期:执行 `doctor.Run()`，输出各项检查结果（API key、网络等） | `src/commands/doctor/index.ts:5` / `commands.ts:275` | ✅ 通过 |
+| CMD-LOGOUT-01 | `/logout` 移除已存储的凭证 | MANUAL | 前置:已登录状态; 操作:`/logout`; 预期:调用 `runLogout()`，凭证文件被删除，会话变为未认证 | `src/commands/logout/index.ts` / `commands.ts:337` | ✅ 通过 |
+| CMD-THEME-01 | `/theme <name>` 设置颜色主题并持久化到用户配置 | AUTO | 前置:任意; 操作:`/theme dark`; 预期:`theme` 键写入用户 settings JSON，下次启动生效 | `src/commands/theme/index.ts:5` / `commands.ts:306` | ✅ 通过 |
+| CMD-EFFORT-01 | `/effort <low\|medium\|high\|max\|auto>` 设置响应努力等级 | AUTO | 前置:任意; 操作:`/effort high`; 预期:`effortLevel` 写入用户 settings JSON | `src/commands/effort/index.ts:5` / `commands.ts:276` | ✅ 通过 |
+| CMD-VIM-01 | `/vim` 切换 vim 键绑定模式 | MANUAL | 前置:REPL 中; 操作:`/vim`; 预期:即时切换 `VimEnabled` 并写入 `editorMode` 到 settings | `src/commands/vim/index.ts:5` / `commands.ts:319` | ✅ 通过 |
+| CMD-PERMISSIONS-01 | `/permissions list` 列出当前权限规则 | AUTO | 前置:有已配置的 allow/deny 规则; 操作:`/permissions list`; 预期:输出 allow/deny/ask 规则列表 | `src/commands/permissions/index.ts:5` / `commands.ts:331` | ✅ 通过 |
+| CMD-PERMISSIONS-02 | `/permissions allow <rule>` 添加 allow 规则并持久化 | AUTO | 前置:任意; 操作:`/permissions allow Bash(git:*)` ; 预期:规则写入 settings，下次会话生效 | `src/commands/permissions/index.ts:5` / `commands.ts:331` | ✅ 通过 |
+| CMD-EXPORT-01 | `/export [filename]` 将对话记录写入磁盘文本文件 | AUTO | 前置:有对话历史; 操作:`/export`; 预期:在工作目录生成 `.txt` 文件，包含完整对话内容 | `src/commands/export/index.ts:5` / `commands.ts:335` | ✅ 通过 |
+| CMD-HOOKS-01 | `/hooks` 显示当前已配置的 hook 规则 | AUTO | 前置:settings 含 hooks 配置; 操作:`/hooks`; 预期:格式化输出事件类型和 matcher 规则 | `src/commands/hooks/index.ts:5` / `commands.ts:334` | ✅ 通过 |
+| CMD-AGENTS-01 | `/agents list` 列出 `.claude/agents/` 下的 agent 文件 | AUTO | 前置:`.claude/agents/` 有至少一个 .md 文件; 操作:`/agents list`; 预期:输出 agent 名称列表 | `src/commands/agents/index.ts:5` / `commands.ts:261` | ✅ 通过 |
+| CMD-AGENTS-02 | `/agents create <name>` 创建新 agent 文件 | AUTO | 前置:任意; 操作:`/agents create mybot`; 预期:`.claude/agents/mybot.md` 文件被创建 | `src/commands/agents/index.ts:5` / `commands.ts:261` | ✅ 通过 |
+| CMD-RESUME-01 | `/resume <id>` 按 ID 或序号加载历史会话 | AUTO | 前置:有历史会话文件; 操作:`/resume 1`; 预期:对话历史被替换为指定会话内容 | `src/commands/resume/index.ts:5` / `commands.ts:298` | ✅ 通过 |
+| CMD-INIT-01 | `/init` 向模型发送"分析并初始化 CLAUDE.md"提示模板 | AUTO | 前置:仓库目录; 操作:`claude --print "/init"`; 预期:模型收到 init 提示并返回 CLAUDE.md 草稿 | `src/commands/init.ts:228` / `commands.ts:283` | ✅ 通过 |
+| CMD-REVIEW-01 | `/review` 向模型发送代码审查提示模板 | AUTO | 前置:有未提交变更; 操作:`claude --print "/review"`; 预期:模型收到 review 提示并返回审查结果 | `src/commands/review.ts:35` / `commands.ts:308` | ✅ 通过 |
+| CMD-FILES-01 | `/files` 列出工作目录中的文件 | AUTO | 前置:有文件的工作目录; 操作:`/files`; 预期:输出工作区文件列表 | `src/commands/files/index.ts:5` / `commands.ts:279` | ✅ 通过 |
+| CMD-RELEASENOTES-01 | `/release-notes` 显示内置的发布说明 | AUTO | 前置:任意; 操作:`/release-notes`; 预期:输出预打包的 release notes 文本 | `src/commands/release-notes/index.ts:5` / `commands.ts:295` | ✅ 通过 |
+| CMD-SKILLS-01 | `/skills` 列出可用 skill 命令 | AUTO | 前置:任意; 操作:`/skills`; 预期:输出 skill 名称和描述列表 | `src/commands/skills/index.ts:5` / `commands.ts:300` | ✅ 通过 |
+| CMD-OUTPUTSTYLE-01 | `/output-style` 显示已弃用提示（建议用 `/config`） | AUTO | 前置:任意; 操作:`/output-style`; 预期:返回"deprecated, use /config"提示文本 | `src/commands/output-style/index.ts:5` / `commands.ts:291` | ✅ 通过 |
+| CMD-CONFIG-01 | `/config` 打开配置面板（交互模式）或显示当前配置摘要（headless） | MANUAL | 前置:REPL 中; 操作:`/config`; 预期:打开交互式配置面板，可浏览并修改设置项 | `src/commands/config/index.ts:5` / `commands.ts:268` | ⚠️ 已建未接（headless 下输出 `formatConfigSummary()` 文本；交互模式下无配置面板 overlay，无法修改设置） |
+| CMD-LOGIN-01 | `/login` 触发 OAuth 登录流程 | MANUAL | 前置:未登录; 操作:`/login`; 预期:启动浏览器 OAuth 流程，获取并存储 token | `src/commands/login/index.ts` / `commands.ts:337` | ⚠️ 已建未接（返回 `Result.Login=true`，打印"请在终端执行 `claude auth login`"；未实现 OAuth 重定向流程） |
+| CMD-MCP-01 | `/mcp` 显示 MCP 服务器状态列表 | AUTO | 前置:有 MCP 服务器配置; 操作:`/mcp`; 预期:输出各 MCP 服务器名称、状态和工具数量 | `src/commands/mcp/index.ts:5` / `commands.ts:287` | ⚠️ 已建未接（输出 `formatMCPCommandSummary()` 文本；无交互式 enable/disable overlay，无法通过 `/mcp enable <name>` 操作） |
+| CMD-MEMORY-01 | `/memory` 打开内存文件编辑器 | MANUAL | 前置:有 CLAUDE.md 等内存文件; 操作:`/memory`; 预期:打开交互式文件选择器，可选择并编辑内存文件 | `src/commands/memory/index.ts:5` / `commands.ts:288` | ⚠️ 已建未接（headless 下输出 `formatMemorySummary()` 文本列表；无编辑器 overlay；交互模式下也不打开选择器） |
+| CMD-MODEL-01 | `/model [name]` 显示或切换当前 AI 模型 | MANUAL | 前置:REPL 中; 操作:`/model`（无参数）; 预期:打开模型选择器 overlay，可交互选择模型 | `src/commands/model/index.ts:5` / `commands.ts:290` | ⚠️ 已建未接（输出当前模型名文本；无交互式模型选择 overlay；带参数时行为未验证） |
+| CMD-PLUGIN-01 | `/plugin` 打开插件管理界面 | MANUAL | 前置:REPL 中; 操作:`/plugin`; 预期:打开插件浏览/管理 overlay，可安装或禁用插件 | `src/commands/plugin/index.tsx:4` / `commands.ts:293` | ⚠️ 已建未接（输出 `formatPluginSummary()` 文本；无插件管理 overlay） |
+| CMD-RESUME-02 | `/resume`（无参数）打开交互式会话选择器 | MANUAL | 前置:有历史会话; 操作:`/resume`; 预期:弹出会话列表选择器，方向键+回车加载目标会话 | `src/commands/resume/index.ts:5` / `commands.ts:298` | ⚠️ 已建未接（无参数时路由到 `resumeHandler`，列出会话文本后等待参数；无 TUI 选择器 overlay） |
+| CMD-IDE-01 | `/ide` 检测并连接已打开的 IDE | MANUAL | 前置:有 IDE 进程运行; 操作:`/ide`; 预期:检测到 IDE 连接信息并显示，或提示未找到 IDE | `src/commands/ide/index.ts:5` / `commands.ts:282` | ⚠️ 已建未接（`defaultIDEDetect()` 为硬编码 stub，始终返回 nil；"deferred for a future task" 注释） |
+| CMD-ADDIR-01 | `/add-dir <path>` 将目录添加到受信任路径列表 | AUTO | 前置:任意; 操作:`/add-dir /some/path`; 预期:路径写入 settings 的 additionalDirectories，工具可访问该目录 | `src/commands/add-dir/index.ts:5` / `commands.ts:259` | ❌ 缺失（ccgo `BuiltinCommands()` 中无注册；无对应处理器） |
+| CMD-REWIND-01 | `/rewind` 回滚到某条消息前的文件快照状态 | MANUAL | 前置:有文件修改历史; 操作:`/rewind`; 预期:打开消息选择器，确认后将文件恢复到该消息之前的状态 | `src/commands/rewind/index.ts:5` / `commands.ts:310` | ❌ 缺失（`repl/rewind_command.go` 中有 `RewindToMessage()` 函数实现，但无 slash 命令注册；不可通过 `/rewind` 触发） |
+| CMD-PLAN-01 | `/plan` 切换 plan 模式（仅分析不执行工具） | MANUAL | 前置:REPL 中; 操作:`/plan`; 预期:模式切换到 plan，状态栏指示器更新，后续工具调用不执行 | `src/commands/plan/index.ts:5` / `commands.ts:332` | ❌ 缺失（ccgo 中无 `/plan` slash 命令注册；plan 模式本身已实现但无命令入口） |
+| CMD-PRCMTS-01 | `/pr-comments` 显示当前 PR 的审查评论 | AUTO | 前置:在 git 仓库且有关联 PR; 操作:`/pr-comments`; 预期:输出 GitHub PR 评论列表 | `src/commands/pr_comments/index.ts:5` / `commands.ts:294` | ❌ 缺失（ccgo 中无注册） |
+| CMD-TERMSETUP-01 | `/terminal-setup` 配置终端字体和颜色 | MANUAL | 前置:REPL 中; 操作:`/terminal-setup`; 预期:打开终端配置向导，检测并提示字体/颜色配置 | `src/commands/terminal-setup/index.ts:5` / `commands.ts:312` | ❌ 缺失（ccgo 中无注册） |
+| CMD-BRANCH-01 | `/branch` 打开 git 分支管理界面 | MANUAL | 前置:git 仓库中; 操作:`/branch`; 预期:打开分支列表和切换界面 | `src/commands/branch/index.ts:5` / `commands.ts:262` | ❌ 缺失（ccgo 中无注册） |
+| CMD-RENAME-01 | `/rename <name>` 重命名当前会话 | AUTO | 前置:有当前会话; 操作:`/rename my-session`; 预期:会话名称更新并持久化 | `src/commands/rename/index.ts:5` / `commands.ts:297` | ❌ 缺失（ccgo 中无注册） |
+| CMD-DIFF-01 | `/diff` 显示当前 git 变更的 diff | AUTO | 前置:有未提交变更; 操作:`/diff`; 预期:输出 git diff 内容 | `src/commands/diff/index.ts:5` / `commands.ts:274` | ❌ 缺失（ccgo 中无注册） |
+| CMD-COPY-01 | `/copy` 将最后一条 assistant 消息复制到剪贴板 | MANUAL | 前置:有 assistant 响应; 操作:`/copy`; 预期:最后一条响应内容写入系统剪贴板 | `src/commands/copy/index.ts:5` / `commands.ts:269` | ❌ 缺失（ccgo 中无注册） |
+| CMD-EXIT-01 | `/exit` 退出 REPL | MANUAL | 前置:REPL 中; 操作:`/exit`; 预期:REPL 正常退出（ccgo 通过 Ctrl-D/Ctrl-C 退出） | `src/commands/exit/index.ts:5` / `commands.ts:277` | ❌ 缺失（ccgo 中无注册；通过 Ctrl-D/Ctrl-C 代替） |
+| CMD-FAST-01 | `/fast` 切换 fast 模式（使用 Haiku 快速模型） | AUTO | 前置:任意; 操作:`/fast`; 预期:模型切换为 Haiku，后续响应更快 | `src/commands/fast/index.ts:5` / `commands.ts:278` | ❌ 缺失（ccgo 中无注册） |
+| CMD-STATS-01 | `/stats` 显示历史使用统计 | AUTO | 前置:有历史会话; 操作:`/stats`; 预期:输出跨会话的 token 使用量和费用统计 | `src/commands/stats/index.ts:5` / `commands.ts:301` | ❌ 缺失（ccgo 中无注册） |
+| CMD-TAG-01 | `/tag <name>` 为当前会话打标签 | AUTO | 前置:有当前会话; 操作:`/tag bugfix`; 预期:标签关联到会话，可按标签筛选 | `src/commands/tag/index.ts:5` / `commands.ts:305` | ❌ 缺失（ccgo 中无注册） |
+| CMD-TASKS-01 | `/tasks` 打开任务管理界面 | MANUAL | 前置:REPL 中; 操作:`/tasks`; 预期:打开任务列表 overlay | `src/commands/tasks/index.ts:5` / `commands.ts:340` | ❌ 缺失（ccgo 中无注册） |
+| CMD-KEYBIND-01 | `/keybindings` 打开键绑定管理界面 | MANUAL | 前置:REPL 中; 操作:`/keybindings`; 预期:打开键绑定配置 overlay | `src/commands/keybindings/index.ts:5` / `commands.ts:284` | ❌ 缺失（ccgo 中无注册） |
+| CMD-RELOADPLUGINS-01 | `/reload-plugins` 重新加载插件缓存 | AUTO | 前置:有已安装插件; 操作:`/reload-plugins`; 预期:插件缓存被清空并重新加载 | `src/commands/reload-plugins/index.ts:5` / `commands.ts:296` | ❌ 缺失（ccgo 中无注册） |
+| CMD-COLOR-01 | `/color <color\|default>` 设置本次会话的提示栏颜色 | MANUAL | 前置:REPL 中; 操作:`/color blue`; 预期:提示栏颜色即时更改 | `src/commands/color/index.ts:9` / `commands.ts:266` | ❌ 缺失（ccgo 中无注册） |
+| CMD-REMOTEENV-01 | `/remote-env` 管理远程环境变量 | AUTO | 前置:远程 agent 配置; 操作:`/remote-env`; 预期:列出远程环境变量 | `src/commands/remote-env/index.ts:5` / `commands.ts:292` | N/A（云端远程栈 OUT OF SCOPE §10） |
+| CMD-INSTGITHUB-01 | `/install-github-app` 安装 Claude GitHub App | MANUAL | — | `src/commands/install-github-app/index.ts:5` / `commands.ts:285` | N/A（需要 GitHub 账号和 Anthropic 后端，云端功能 OUT OF SCOPE §10） |
+| CMD-INSTSLACK-01 | `/install-slack-app` 安装 Claude Slack App | MANUAL | — | `src/commands/install-slack-app/index.ts:5` / `commands.ts:286` | N/A（需要 Slack 账号和 Anthropic 后端，云端功能 OUT OF SCOPE §10） |
+| CMD-MOBILE-01 | `/mobile` 生成手机配对 QR 码 | MANUAL | — | `src/commands/mobile/index.ts:5` / `commands.ts:289` | N/A（依赖云端配对服务 OUT OF SCOPE §10） |
+| CMD-SESSION-01 | `/session` 生成会话分享链接或 QR 码 | MANUAL | — | `src/commands/session/index.ts:5` / `commands.ts:299` | N/A（依赖云端 session relay 服务 OUT OF SCOPE §10） |
+| CMD-DESKTOP-01 | `/desktop` 打开桌面 app 集成 | MANUAL | — | `src/commands/desktop/index.ts:5` / `commands.ts:270` | N/A（依赖闭源桌面应用 OUT OF SCOPE §10） |
+| CMD-CHROME-01 | `/chrome` 打开 Chrome 扩展集成 | MANUAL | — | `src/commands/chrome/index.ts:5` / `commands.ts:264` | N/A（依赖闭源 Chrome 扩展 OUT OF SCOPE §10） |
+| CMD-VOICE-01 | `/voice` 启动语音 STT 输入模式 | MANUAL | — | `src/commands/voice/index.ts:9` / `commands.ts` feature-gated | N/A（依赖语音 STT 模型 OUT OF SCOPE §10） |
+| CMD-FEEDBACK-01 | `/feedback` 发送用户反馈 | MANUAL | — | `src/commands/feedback/index.ts:5` / `commands.ts:307` | N/A（发送到 Anthropic 遥测端点 OUT OF SCOPE §10） |
+| CMD-PRIVACY-01 | `/privacy-settings` 管理隐私设置 | MANUAL | — | `src/commands/privacy-settings/index.ts:5` / `commands.ts:333` | N/A（关联 Anthropic 账号服务 OUT OF SCOPE §10） |
+| CMD-USAGE-01 | `/usage` 显示账号用量和计费信息 | MANUAL | — | `src/commands/usage/index.ts:5` / `commands.ts:317` | N/A（需要 Anthropic 账号 API OUT OF SCOPE §10） |
+| CMD-PASSES-01 | `/passes` 管理 Claude 订阅 passes | MANUAL | — | `src/commands/passes/index.ts:5` / `commands.ts:338` | N/A（Anthropic 订阅服务 OUT OF SCOPE §10） |
+| CMD-SANDBOX-01 | `/sandbox` 切换沙箱执行模式 | MANUAL | — | `src/commands/sandbox-toggle/index.ts:5` / `commands.ts:336` | N/A（OS sandbox 集成 OUT OF SCOPE §10，依赖平台特定隔离机制） |
+| CMD-UPGRADE-01 | `/upgrade` 自升级 Claude Code 到最新版 | AUTO | — | `src/commands/upgrade/index.ts:5` / `commands.ts:313` | N/A（ccgo 为 Go 二进制，npm 升级机制不适用；如需实现应重新设计） |
+| CMD-HEAPDUMP-01 | `/heapdump` 生成 Node.js 堆转储文件 | — | — | `src/commands/heapdump/index.ts:5` / `commands.ts:280` | N/A（Node.js 专用调试命令；Go 运行时不适用 OUT OF SCOPE §10） |
+| CMD-STICKERS-01 | `/stickers` 使用表情 sticker 反应 | — | — | `src/commands/stickers` / `commands.ts` internal | N/A（ANT 内部调试命令 OUT OF SCOPE §10） |
+| CMD-BTW-01 | `/btw` 快速备注命令 | — | — | `src/commands/btw` / `commands.ts` internal | N/A（ANT 内部命令 OUT OF SCOPE §10） |
+| CMD-THINKBACK-01 | `/think-back` Thinkback 分析命令 | — | — | `src/commands/thinkback/index.ts:5` / `commands.ts:329` | N/A（ANT 内部命令 OUT OF SCOPE §10） |
+| CMD-THINKBACKPLAY-01 | `/thinkback-play` Thinkback Play 命令 | — | — | `src/commands/thinkback-play/index.ts:5` / `commands.ts:330` | N/A（ANT 内部命令 OUT OF SCOPE §10） |
+| CMD-SECREVIEW-01 | `/security-review` 安全审查 skill（ANT 内部） | — | — | `src/commands/security-review.ts:199` / `commands.ts:311` | N/A（ANT 内部 skill OUT OF SCOPE §10） |
+| CMD-ULTRAREVIEW-01 | `/ultrareview` 扩展代码审查（ANT 内部） | — | — | `src/commands/review.ts:50` / `commands.ts:309` | N/A（ANT 内部 skill OUT OF SCOPE §10） |
+| CMD-INSIGHTS-01 | `/insights` 使用分析报告 | — | — | `src/commands/insights.ts:3041` / `commands.ts:190` | N/A（Anthropic 内部分析端点 OUT OF SCOPE §10） |
+| CMD-ADVISOR-01 | `/advisor` ANT 内部 advisor 功能 | — | — | `src/commands/advisor.ts:98` / `commands.ts:260` | N/A（ANT 内部功能 OUT OF SCOPE §10） |
+| CMD-STATUSLINE-01 | `/statusline` 切换状态栏显示 | MANUAL | 前置:REPL 中; 操作:`/statusline`; 预期:状态栏显示/隐藏切换 | `src/commands/statusline.tsx:10` / `commands.ts:303` | ❌ 缺失（ccgo 中无注册） |
+
+小计: 65 项 — ✅ 24 / ⚠️ 8 / ❌ 16 / N/A 17

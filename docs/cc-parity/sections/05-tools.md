@@ -1,0 +1,109 @@
+## 5. 工具 (Tools)
+
+CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / BashOutput / KillBash（TaskStop 别名）/ PowerShell / PowerShellOutput / KillPowerShell / Glob / Grep / WebFetch / WebSearch / AgentTool（Task）/ TaskOutput / KillTask / SendMessage / Team 系列 / TodoWrite / AskUserQuestion / EnterPlanMode / ExitPlanMode / Skill / ToolSearch / EnterWorktree / ExitWorktree / LSP / LSPDiagnostics / Config / Brief / Sleep / ScheduleCron / RemoteTrigger / TaskCreate/Get/Update/List（ant-only）/ StructuredOutput（SyntheticOutput）。本章对每个工具的核心行为逐行审计。执行层以 AUTO 为主（工具调用在 headless `--print` 模式下可程序化断言）；需要 TUI 对话框的标 MANUAL。
+
+| ID | 功能 | 执行层 | 测试（given → when → then） | CC 参照 | 状态 |
+|---|---|---|---|---|---|
+| TOOL-READ-01 | Read 读取文本文件并附行号 | AUTO | 前置:存在一个文本文件;操作:`claude --print "Read /tmp/foo.txt"` 触发 Read;预期:结果含行号前缀（`1\t…`）、完整内容 | src/tools/FileReadTool/FileReadTool.ts | ✅ 通过 |
+| TOOL-READ-02 | Read offset+limit 分段读取 | AUTO | 前置:长文本文件;操作:Read `{offset:10,limit:20}`;预期:仅返回第 10 行起的 20 行 | src/tools/FileReadTool/FileReadTool.ts | ✅ 通过 |
+| TOOL-READ-03 | Read 读取图片，返回 image block | AUTO | 前置:PNG 文件;操作:Read PNG;预期:tool_result content 含 `type:image` block，base64 编码 | src/tools/FileReadTool/FileReadTool.ts，imageProcessor.ts | ✅ 通过 |
+| TOOL-READ-04 | Read 读取 PDF 并按 pages 范围提取 | AUTO | 前置:.pdf 文件;操作:Read `{pages:"1-3"}`;预期:返回第 1-3 页文本，pages 与 offset/limit 不能同用 | src/tools/FileReadTool/FileReadTool.ts，limits.ts | ✅ 通过 |
+| TOOL-READ-05 | Read 读取 .ipynb notebook | AUTO | 前置:.ipynb 文件;操作:Read notebook_path;预期:返回所有 cell 内容（含 cell 类型标记） | src/tools/FileReadTool/FileReadTool.ts | ✅ 通过 |
+| TOOL-READ-06 | Read 遇到 offset/limit 与 PDF/图片/notebook 的不兼容组合时报错 | AUTO | 前置:PDF 文件;操作:Read `{offset:1}`;预期:返回错误"offset and limit are only supported for text files" | src/tools/FileReadTool/FileReadTool.ts | ✅ 通过 |
+| TOOL-READ-07 | Read 超出 token 上限（约 25000 tokens）时抛出前读取错误 | AUTO | 前置:超大文本文件;操作:Read 无 offset/limit;预期:工具报告文件过大错误，不返回截断内容 | src/tools/FileReadTool/limits.ts | ✅ 通过 |
+| TOOL-WRITE-01 | Write 写入新文件 | AUTO | 前置:目标路径不存在;操作:`claude --print "Write /tmp/new.txt content"`;预期:文件被创建，内容正确 | src/tools/FileWriteTool/FileWriteTool.ts | ✅ 通过 |
+| TOOL-WRITE-02 | Write 对已存在文件要求先 Read（需 readFileState 记录）| AUTO | 前置:已存在文件，未经 Read;操作:直接 Write;预期:工具报错"File has not been read yet" | src/tools/FileWriteTool/FileWriteTool.ts:198-204 | ✅ 通过 |
+| TOOL-WRITE-03 | Write 文件被外部修改后 Write 报"modified since read"| AUTO | 前置:Read 后，外部 touch/改文件;操作:Write 原内容;预期:报错并拒绝写入 | src/tools/FileWriteTool/FileWriteTool.ts:209-212 | ✅ 通过 |
+| TOOL-EDIT-01 | Edit 精确字符串替换 | AUTO | 前置:Read 文件，old_string 在文件中唯一;操作:Edit `{old_string,new_string}`;预期:文件只替换一处，余下不变 | src/tools/FileEditTool/FileEditTool.ts | ✅ 通过 |
+| TOOL-EDIT-02 | Edit replace_all 替换全部匹配 | AUTO | 前置:文件含 3 处相同字符串;操作:Edit `{replace_all:true}`;预期:三处均被替换 | src/tools/FileEditTool/FileEditTool.ts，types.ts | ✅ 通过 |
+| TOOL-EDIT-03 | Edit 多处匹配且 replace_all=false 时报错 | AUTO | 前置:文件含 2 处相同字符串;操作:Edit `{replace_all:false}`;预期:报错"Found 2 matches … replace_all is false" | src/tools/FileEditTool/FileEditTool.ts（errorCode 9） | ✅ 通过 |
+| TOOL-EDIT-04 | Edit 目标字符串不存在时报错 | AUTO | 前置:Read 文件，old_string 不在文件中;操作:Edit;预期:报错"String to replace not found" | src/tools/FileEditTool/FileEditTool.ts（errorCode 8） | ✅ 通过 |
+| TOOL-EDIT-05 | Edit 在未 Read 文件时报错 | AUTO | 前置:文件未经 Read;操作:Edit;预期:报错"File has not been read yet" | src/tools/FileEditTool/FileEditTool.ts（errorCode 6） | ✅ 通过 |
+| TOOL-EDIT-06 | Edit old_string=="" 且文件不存在时创建新文件 | AUTO | 前置:目标路径不存在;操作:Edit `{old_string:"",new_string:"content"}`;预期:创建文件并写入内容 | src/tools/FileEditTool/FileEditTool.ts（errorCode 0 path） | ✅ 通过 |
+| TOOL-EDIT-07 | Edit .ipynb 文件时拒绝并提示使用 NotebookEdit | AUTO | 前置:Read .ipynb;操作:Edit .ipynb;预期:报错并说明应使用 NotebookEdit | src/tools/FileEditTool/FileEditTool.ts（errorCode 5） | ✅ 通过 |
+| TOOL-EDIT-08 | Edit 文件修改后（外部改动）报"unexpectedly modified" | AUTO | 前置:Read 后外部改文件;操作:Edit;预期:运行时报错"File has been unexpectedly modified" | src/tools/FileEditTool/FileEditTool.ts，constants.ts | ✅ 通过 |
+| TOOL-NB-01 | NotebookEdit replace 模式替换 cell 内容 | AUTO | 前置:.ipynb 文件;操作:NotebookEdit `{cell_id,new_source,edit_mode:"replace"}`;预期:指定 cell 内容被替换 | src/tools/NotebookEditTool/NotebookEditTool.ts | ✅ 通过 |
+| TOOL-NB-02 | NotebookEdit insert 插入新 cell | AUTO | 前置:.ipynb 文件;操作:NotebookEdit `{edit_mode:"insert",cell_type:"code"}`;预期:新 cell 被插入 notebook | src/tools/NotebookEditTool/NotebookEditTool.ts | ✅ 通过 |
+| TOOL-NB-03 | NotebookEdit delete 删除 cell | AUTO | 前置:.ipynb 文件;操作:NotebookEdit `{cell_id,edit_mode:"delete"}`;预期:指定 cell 被删除 | src/tools/NotebookEditTool/NotebookEditTool.ts | ✅ 通过 |
+| TOOL-NB-04 | NotebookEdit insert 时缺少 cell_type 报错 | AUTO | 前置:.ipynb 文件;操作:NotebookEdit `{edit_mode:"insert"}` 不带 cell_type;预期:报错"Cell type is required when using edit_mode=insert" | src/tools/NotebookEditTool/NotebookEditTool.ts:210-213 | ✅ 通过 |
+| TOOL-BASH-01 | Bash 执行命令返回 stdout/stderr/退出码 | AUTO | 前置:仓库;操作:Bash `{command:"echo hi"}`;预期:stdout="hi\n",exit 0 | src/tools/BashTool/BashTool.tsx | ✅ 通过 |
+| TOOL-BASH-02 | Bash 默认 timeout 120s，最大 600s | AUTO | 前置:仓库;操作:Bash `{timeout:300000}`;预期:命令允许最长 300s 运行；超过 600s 被截断 | src/tools/BashTool/BashTool.tsx:229 | ✅ 通过 |
+| TOOL-BASH-03 | Bash run_in_background=true 启动后台命令，返回 task_id | AUTO | 前置:仓库;操作:Bash `{command:"sleep 30",run_in_background:true}`;预期:立即返回，结果含 background task ID | src/tools/BashTool/BashTool.tsx:241 | ✅ 通过 |
+| TOOL-BASH-04 | BashOutput 读取后台命令输出 | AUTO | 前置:后台 Bash 命令已启动;操作:BashOutput `{id}`;预期:返回 stdout/stderr 快照及状态 | src/tools/BashTool/BashTool.tsx | ✅ 通过 |
+| TOOL-BASH-05 | KillBash/TaskStop 取消后台命令 | AUTO | 前置:后台 Bash 命令已启动;操作:KillBash `{id}`;预期:命令被终止，后续 BashOutput 反映 cancelled 状态 | src/tools/TaskStopTool/TaskStopTool.ts（aliases:KillShell） | ✅ 通过 |
+| TOOL-BASH-06 | Bash dangerouslyDisableSandbox=true 跳过沙箱 | AUTO | 前置:沙箱已启用;操作:Bash `{command:"...",dangerouslyDisableSandbox:true}`;预期:命令在沙箱外执行（无 sandbox policy 限制） | src/tools/BashTool/BashTool.tsx:242 | ✅ 通过 |
+| TOOL-BASH-07 | Bash 超大 stdout 截断（32 MB）| AUTO | 前置:命令产生超过 32MB 输出;操作:Bash 大量输出命令;预期:输出被从末尾截断，Content 不超过阈值 | src/tools/BashTool/BashTool.tsx:731（64MB copy 上限） src/utils/stringUtils.ts:88（2^25 chars） | ⚠️ 已建未接（ccgo formatBashContent 不截断 stdout，可能输出超大内容） |
+| TOOL-BASH-08 | Bash sleep 命令被拦截提示使用 run_in_background | AUTO | 前置:MONITOR_TOOL 特性开启;操作:Bash `{command:"sleep 10"}`;预期:工具返回阻塞提示，建议用 run_in_background | src/tools/BashTool/BashTool.tsx:525-530 | ❌ 缺失（ccgo 无此 sleep 拦截逻辑） |
+| TOOL-BASH-09 | Bash 保持 cwd 跨调用（shell 状态持久化）| AUTO | 前置:仓库;操作:Bash `cd /tmp`，再 Bash `pwd`;预期:第二次输出 /tmp | src/tools/BashTool/BashTool.tsx（getCwd/setCwd） | ✅ 通过 |
+| TOOL-GLOB-01 | Glob 按通配符模式匹配文件 | AUTO | 前置:仓库含多个 .go 文件;操作:Glob `{pattern:"**/*.go"}`;预期:返回所有 .go 路径列表 | src/tools/GlobTool/GlobTool.ts | ✅ 通过 |
+| TOOL-GLOB-02 | Glob 超过 100 个结果时截断并标注 truncated=true | AUTO | 前置:目录含 200+ 文件;操作:Glob `{pattern:"**/*"}`;预期:返回最多 100 个路径，truncated=true | src/tools/GlobTool/GlobTool.ts:157-172 | ✅ 通过 |
+| TOOL-GLOB-03 | Glob path 参数指定搜索根目录 | AUTO | 前置:嵌套仓库;操作:Glob `{pattern:"*.ts",path:"/src"}`;预期:只在 /src 下搜索 | src/tools/GlobTool/GlobTool.ts | ✅ 通过 |
+| TOOL-GREP-01 | Grep 正则搜索文件内容，返回 files_with_matches | AUTO | 前置:含 "TODO" 注释的代码仓库;操作:Grep `{pattern:"TODO"}`;预期:返回含"TODO"的文件路径列表 | src/tools/GrepTool/GrepTool.ts | ✅ 通过 |
+| TOOL-GREP-02 | Grep output_mode=content 返回匹配行及上下文 | AUTO | 前置:代码仓库;操作:Grep `{pattern:"func",output_mode:"content","-A":2}`;预期:返回每处匹配行及其后 2 行 | src/tools/GrepTool/GrepTool.ts:52-68 | ✅ 通过 |
+| TOOL-GREP-03 | Grep output_mode=count 返回匹配数量 | AUTO | 前置:代码仓库;操作:Grep `{pattern:"import",output_mode:"count"}`;预期:每个文件返回 import 数量 | src/tools/GrepTool/GrepTool.ts:53 | ✅ 通过 |
+| TOOL-GREP-04 | Grep glob 参数过滤文件类型 | AUTO | 前置:仓库含 .ts 和 .go 文件;操作:Grep `{pattern:"func",glob:"*.go"}`;预期:只搜索 .go 文件 | src/tools/GrepTool/GrepTool.ts:46-50 | ✅ 通过 |
+| TOOL-GREP-05 | Grep head_limit 限制返回行数 | AUTO | 前置:大型仓库;操作:Grep `{head_limit:10}`;预期:最多返回 10 个条目 | src/tools/GrepTool/GrepTool.ts:80-85 | ✅ 通过 |
+| TOOL-WEB-01 | WebFetch 获取 URL 内容并对 prompt 提取相关摘要 | AUTO | 前置:网络可用;操作:WebFetch `{url:"https://example.com",prompt:"title"}`;预期:返回 HTML 渲染文本，含 prompt 相关内容 | src/tools/WebFetchTool/WebFetchTool.ts | ✅ 通过 |
+| TOOL-WEB-02 | WebFetch 返回 HTTP 状态码及大小 | AUTO | 前置:网络可用;操作:WebFetch;预期:结果含 code/codeText/bytes/durationMs | src/tools/WebFetchTool/WebFetchTool.ts:34-43 | ✅ 通过 |
+| TOOL-WEB-03 | WebFetch 预批准主机名不需要权限确认 | AUTO | 前置:目标 URL 在预批准列表;操作:WebFetch;预期:无需权限对话框直接执行 | src/tools/WebFetchTool/preapproved.ts | ✅ 通过 |
+| TOOL-WEB-04 | WebSearch 执行关键词搜索返回标题+URL 列表 | AUTO | 前置:网络可用;操作:WebSearch `{query:"golang channels"}`;预期:返回带 title/url 的 results 数组 | src/tools/WebSearchTool/WebSearchTool.ts | ✅ 通过 |
+| TOOL-WEB-05 | WebSearch allowed_domains 限制只返回指定域名结果 | AUTO | 前置:网络可用;操作:WebSearch `{query:"...",allowed_domains:["golang.org"]}`;预期:结果只含 golang.org 来源 | src/tools/WebSearchTool/WebSearchTool.ts:29-32 | ✅ 通过 |
+| TOOL-WEB-06 | WebSearch blocked_domains 过滤结果 | AUTO | 前置:网络可用;操作:WebSearch `{blocked_domains:["spam.com"]}`;预期:结果不含被屏蔽域名 | src/tools/WebSearchTool/WebSearchTool.ts:33-37 | ✅ 通过 |
+| TOOL-TASK-01 | Agent（Task）工具同步启动子 agent 并返回结果 | AUTO | 前置:仓库;操作:Task `{description:"...",prompt:"echo hi"}` 无 run_in_background;预期:阻塞直到子 agent 完成，返回完整结果 | src/tools/AgentTool/AgentTool.tsx | ✅ 通过 |
+| TOOL-TASK-02 | Task run_in_background=true 异步启动后台 agent | AUTO | 前置:仓库;操作:Task `{run_in_background:true,...}`;预期:立即返回 task_id，后台继续执行 | src/tools/AgentTool/AgentTool.tsx:87,567 | ⚠️ 已建未接（input.RunBackground 已解析，但 callTask 中未读取该字段驱动异步路径；所有子 agent 同步执行） |
+| TOOL-TASK-03 | Task isolation=worktree 创建隔离 git worktree | AUTO | 前置:git 仓库;操作:Task `{isolation:"worktree",...}`;预期:子 agent 在独立 worktree 中运行，主仓库不受影响 | src/tools/AgentTool/AgentTool.tsx:430-431 | ✅ 通过 |
+| TOOL-TASK-04 | Task model 参数覆盖子 agent 模型 | AUTO | 前置:仓库;操作:Task `{model:"haiku",...}`;预期:子 agent 使用 haiku 模型（而非默认模型） | src/tools/AgentTool/AgentTool.tsx:86,418 | ⚠️ 已建未接（input.Model 仅校验合法性，未传入 SidechainOptions.AgentModel；model 被忽略） |
+| TOOL-TASK-05 | Task subagent_type 指定内置 agent 类型 | AUTO | 前置:仓库，已注册内置 agents;操作:Task `{subagent_type:"general-purpose",...}`;预期:子 agent 使用对应类型的配置（prompt/tools） | src/tools/AgentTool/AgentTool.tsx:85 | ✅ 通过 |
+| TOOL-TASK-06 | TaskOutput 读取运行中后台 agent 的输出快照 | AUTO | 前置:已启动后台 Task;操作:TaskOutput `{task_id:"..."}`;预期:返回已产生的 stdout 及任务状态 | src/tools/TaskOutputTool/TaskOutputTool.tsx | ✅ 通过 |
+| TOOL-TASK-07 | KillTask 终止后台 agent | AUTO | 前置:已启动后台 Task;操作:KillTask `{task_id:"..."}`;预期:任务被取消，状态变为 cancelled | src/tools/AgentTool/AgentTool.tsx，TaskStopTool | ✅ 通过 |
+| TOOL-TODO-01 | TodoWrite 写入 todos 数组 | AUTO | 前置:仓库;操作:TodoWrite `{todos:[{content:"...",status:"pending",activeForm:"..."}]}`;预期:工具结果含 oldTodos/newTodos | src/tools/TodoWriteTool/TodoWriteTool.ts | ✅ 通过 |
+| TOOL-TODO-02 | TodoWrite 拒绝同时有 2 个 in_progress todo | AUTO | 前置:仓库;操作:TodoWrite 含 2 个 status=in_progress 条目;预期:校验失败，报错"only one todo can be in_progress" | src/tools/TodoWriteTool/TodoWriteTool.ts | ✅ 通过 |
+| TOOL-TODO-03 | TodoWrite 所有 todo 完成时清空列表 | AUTO | 前置:仓库;操作:TodoWrite 所有条目 status=completed;预期:内部存储清空（newTodos=[]） | src/tools/TodoWriteTool/TodoWriteTool.ts:63-64 | ✅ 通过 |
+| TOOL-ASK-01 | AskUserQuestion 弹出多选题对话框 | MANUAL | 前置:交互 REPL;操作:触发 AskUserQuestion `{questions:[{question:"...",options:[...]}]}`;预期:TUI 显示 chip 对话框，用户选择后结果填入 answers | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx | ⚠️ 已建未接（工具已注册 + schema 已实现；headless 下 QuestionAsker 缺席返回错误而不挂起；TUI 对话框 wiring 待 P2）|
+| TOOL-ASK-02 | AskUserQuestion 1-4 道题，每题 2-4 个选项 | AUTO | 前置:仓库;操作:AskUserQuestion 含 5 道题;预期:校验失败，报"1-4 questions" | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx:62-63 | ✅ 通过 |
+| TOOL-ASK-03 | AskUserQuestion multiSelect=true 允许多选 | MANUAL | 前置:交互 REPL;操作:AskUserQuestion `{multiSelect:true}`;预期:对话框允许勾选多个选项，答案逗号分隔 | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx:22 | ⚠️ 已建未接（schema 已支持 multiSelect；TUI 渲染未接线） |
+| TOOL-PLAN-01 | EnterPlanMode 切换到 plan 模式 | AUTO | 前置:仓库;操作:触发 EnterPlanMode（无参数）;预期:工具返回"Entered plan mode"，权限模式切换为 plan | src/tools/EnterPlanModeTool/EnterPlanModeTool.ts | ✅ 通过 |
+| TOOL-PLAN-02 | ExitPlanMode 从 plan 模式退出并请求批准 | MANUAL | 前置:已进入 plan 模式，有 plan 文件;操作:ExitPlanMode;预期:TUI 弹出批准对话框，批准后切换回 default 模式 | src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts | ⚠️ 已建未接（ExitPlanModeTool 已实现 plan 文件读写；TUI 审批对话框未接线，headless 下直接返回 OK） |
+| TOOL-PLAN-03 | ExitPlanMode headless 模式自动批准 | AUTO | 前置:已进入 plan 模式（headless `--print`）;操作:ExitPlanMode;预期:返回批准确认，模式恢复 | src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts | ✅ 通过 |
+| TOOL-SKILL-01 | Skill 按名称调用可用的 prompt skill | AUTO | 前置:存在 `.claude/commands/foo.md`;操作:Skill `{skill:"foo",args:"bar"}`;预期:以 args 为输入执行 foo 的 forked agent，返回结果 | src/tools/SkillTool/SkillTool.ts | ✅ 通过 |
+| TOOL-SKILL-02 | Skill 调用不存在的 skill 名时报错 | AUTO | 前置:无对应 skill 文件;操作:Skill `{skill:"nonexistent"}`;预期:工具报错"skill not found" | src/tools/SkillTool/SkillTool.ts | ✅ 通过 |
+| TOOL-SKILL-03 | Skill 动态列出当前可用 skill（prompt 内容）| AUTO | 前置:存在多个 skill 文件;操作:拉取 SkillTool prompt;预期:prompt 含所有可用 skill 名称列表 | src/tools/SkillTool/SkillTool.ts | ✅ 通过 |
+| TOOL-TSEARCH-01 | ToolSearch 按关键词搜索工具定义 | AUTO | 前置:工具注册表已加载;操作:ToolSearch `{query:"bash shell"}`;预期:返回 Bash 工具的 schema 定义 | src/tools/ToolSearchTool/ToolSearchTool.ts | ✅ 通过 |
+| TOOL-TSEARCH-02 | ToolSearch select: 精确按名称获取工具 schema | AUTO | 前置:工具注册表;操作:ToolSearch `{query:"select:Read,Edit"}`;预期:返回 Read 和 Edit 的完整 schema | src/tools/ToolSearchTool/ToolSearchTool.ts | ✅ 通过 |
+| TOOL-LSP-01 | LSP goToDefinition 跳转定义 | AUTO | 前置:LSP server 已启动连接;操作:LSP `{operation:"goToDefinition",filePath,line,character}`;预期:返回定义位置 | src/tools/LSPTool/LSPTool.ts:441 | ⚠️ 已建未接（ccgo LSP tool schema 注册正确；dispatchLSP 目前对全部 9 个操作返回 supported=false；实际调用降级为"not supported"错误） |
+| TOOL-LSP-02 | LSP findReferences 查找引用 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"findReferences",...}`;预期:返回所有引用位置 | src/tools/LSPTool/LSPTool.ts:449 | ⚠️ 已建未接（同 TOOL-LSP-01）|
+| TOOL-LSP-03 | LSP hover 查看符号文档 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"hover",...}`;预期:返回 hover markdown 文档 | src/tools/LSPTool/LSPTool.ts:456-458 | ⚠️ 已建未接（同 TOOL-LSP-01）|
+| TOOL-LSP-04 | LSP documentSymbol 列出文件符号 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"documentSymbol",...}`;预期:返回文件内函数/类等符号列表 | src/tools/LSPTool/LSPTool.ts | ⚠️ 已建未接（同 TOOL-LSP-01）|
+| TOOL-LSP-05 | LSPDiagnostics 读取 LSP 诊断信息（错误/警告）| AUTO | 前置:LSP server 已产生诊断;操作:LSPDiagnostics `{severity:"error"}`;预期:返回当前会话的 error 级诊断 | src/services/lsp/LSPDiagnosticRegistry.ts:193 | ⚠️ 已建未接（LSPDiagnostics 工具在 advanced_tools.go 中仅当 settings.Advanced.LSP=true 时注册；ccgo lsp.Store 诊断写入路径依赖 LSP server manager，后者尚未完整接线到运行时）|
+| TOOL-WORKTREE-01 | EnterWorktree 创建 git worktree 并切换 session cwd | MANUAL | 前置:git 仓库;操作:触发 EnterWorktree `{name:"my-branch"}`;预期:创建新 worktree，session cwd 切换到该 worktree 路径 | src/tools/EnterWorktreeTool/EnterWorktreeTool.ts | ❌ 缺失（ccgo 无 EnterWorktreeTool；worktree 隔离只通过 Task isolation 参数支持，无独立工具）|
+| TOOL-WORKTREE-02 | ExitWorktree 结束 worktree 会话，可选 keep/remove | MANUAL | 前置:session 在 worktree 中;操作:ExitWorktree `{action:"keep"}`;预期:session cwd 恢复原路径，worktree 保留或删除 | src/tools/ExitWorktreeTool/ExitWorktreeTool.ts | ❌ 缺失（ccgo 无 ExitWorktreeTool）|
+| TOOL-CONFIG-01 | Config get 读取配置项当前值 | AUTO | 前置:配置已存在;操作:Config `{setting:"theme"}`;预期:返回当前 theme 值 | src/tools/ConfigTool/ConfigTool.ts:111-142 | ❌ 缺失（ccgo 无 ConfigTool；该工具在 CC 中为 ant-only `process.env.USER_TYPE==="ant"` 特性）|
+| TOOL-CONFIG-02 | Config set 更新配置项 | AUTO | 前置:配置可写;操作:Config `{setting:"theme",value:"dark"}`;预期:配置被更新，返回 previousValue 和 newValue | src/tools/ConfigTool/ConfigTool.ts:148-211 | ❌ 缺失（同 TOOL-CONFIG-01）|
+| TOOL-BRIEF-01 | Brief 发送通知消息给用户（含可选附件）| MANUAL | 前置:proactive/Kairos 模式活跃;操作:Brief `{message:"任务完成",status:"proactive"}`;预期:用户看到通知消息，含附件预览 | src/tools/BriefTool/BriefTool.ts | ✅ 通过 |
+| TOOL-BRIEF-02 | Brief attachments 附件路径上传并显示 | MANUAL | 前置:存在文件;操作:Brief `{attachments:["/tmp/result.png"]}`;预期:附件 metadata 含 isImage/size/file_uuid | src/tools/BriefTool/BriefTool.ts，attachments.ts | ✅ 通过 |
+| TOOL-SLEEP-01 | Sleep 等待指定毫秒数 | AUTO | 前置:仓库;操作:Sleep `{duration_ms:500}`;预期:工具阻塞 ~500ms 后返回 | src/tools/SleepTool/prompt.ts（SLEEP_TOOL_NAME） | ✅ 通过 |
+| TOOL-SLEEP-02 | Sleep 最长等待不超过 60s | AUTO | 前置:仓库;操作:Sleep `{duration_ms:120000}`;预期:被限制到 60s（maxSleepDuration） | src/tools/SleepTool/prompt.ts（CC ccgo maxSleepDuration=60s） | ✅ 通过 |
+| TOOL-CRON-01 | ScheduleCron create 创建定时 agent 任务 | AUTO | 前置:仓库;操作:ScheduleCron `{action:"create",schedule:"0 * * * *",prompt:"..."}`;预期:返回 cron_id，任务被注册 | src/tools/ScheduleCronTool/CronCreateTool.ts | ✅ 通过 |
+| TOOL-CRON-02 | ScheduleCron list 列出所有定时任务 | AUTO | 前置:已有定时任务;操作:ScheduleCron `{action:"list"}`;预期:返回已注册的定时任务列表 | src/tools/ScheduleCronTool/CronListTool.ts | ✅ 通过 |
+| TOOL-CRON-03 | ScheduleCron delete 删除定时任务 | AUTO | 前置:已有定时任务;操作:ScheduleCron `{action:"delete",id:"..."}`;预期:任务被删除 | src/tools/ScheduleCronTool/CronDeleteTool.ts | ✅ 通过 |
+| TOOL-SEND-01 | SendMessage 向运行中的后台 agent 发消息 | AUTO | 前置:后台 Task 已启动;操作:SendMessage `{task_id:"...",message:"check status"}`;预期:消息被追加到 agent transcript，agent 继续处理 | src/tools/SendMessageTool/SendMessageTool.ts | ✅ 通过 |
+| TOOL-TEAM-01 | TeamCreate 创建 multi-agent team | AUTO | 前置:已启动多个 Task;操作:TeamCreate `{task_ids:[...]}`;预期:返回 team_id，team 成员关联 | src/tools/TeamCreateTool/TeamCreateTool.ts | ✅ 通过 |
+| TOOL-TEAM-02 | TeamDispatch 向 team 成员分发任务 | AUTO | 前置:team 已创建;操作:TeamDispatch `{team_id,assignments:[...]}`;预期:各成员收到分配的任务 | src/tools/AgentTool/agentToolUtils.ts，task/tools.go:1849 | ✅ 通过 |
+| TOOL-REMOTE-01 | RemoteTrigger 触发远程云端 agent（N/A）| N/A | — | src/tools/RemoteTriggerTool/RemoteTriggerTool.ts | N/A（云端栈 OUT-of-scope §10；ccgo RemoteTriggerTool 已注册但仅为 schema stub）|
+| TOOL-STRUCTURED-01 | StructuredOutput（SyntheticOutput）提交 SDK 结构化输出 | AUTO | 前置:SDK 控制协议会话;操作:StructuredOutput `{...}`;预期:输出 NDJSON control_response | src/tools/SyntheticOutputTool/SyntheticOutputTool.ts | ❌ 缺失（ccgo 无 StructuredOutput 工具；SyntheticOutputTool 在 CC 中为 SDK 控制路径专用）|
+| TOOL-TASKCRUD-01 | TaskCreate 在 TodoV2 模式创建任务（ant-only）| AUTO | 前置:USER_TYPE=ant，TodoV2 enabled;操作:TaskCreate `{subject,description}`;预期:返回 task.id | src/tools/TaskCreateTool/TaskCreateTool.ts | ❌ 缺失（ccgo 无 TaskCreate/Get/Update/List；该套工具 CC ant-only + TodoV2 特性门控）|
+| TOOL-TASKCRUD-02 | TaskGet/TaskUpdate/TaskList（ant-only）| AUTO | 前置:TodoV2 enabled;操作:TaskGet/Update/List;预期:正常 CRUD | src/tools/TaskGetTool，TaskUpdateTool，TaskListTool | ❌ 缺失（同 TOOL-TASKCRUD-01）|
+| TOOL-PS-01 | PowerShell 执行 PowerShell 命令（Windows）| AUTO | 前置:Windows 环境;操作:PowerShell `{command:"Get-Date"}`;预期:返回当前日期，exit 0 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过（ccgo 有 NewPowerShellTool/Output/Kill；Unix 下优雅退出）|
+| TOOL-PS-02 | PowerShellOutput/KillPowerShell 读取/终止后台 PS 任务 | AUTO | 前置:PowerShell run_in_background;操作:PowerShellOutput/Kill;预期:行为与 BashOutput/KillBash 对称 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过 |
+
+小计：**61 行**，其中 ✅ 通过 42，⚠️ 已建未接 11，❌ 缺失 8，N/A 1。
+
+**⚠️ 已建未接（前 3）：**
+1. `TOOL-TASK-02`：`run_in_background` 字段已解析但在 `callTask` 执行路径中从未读取，所有子 agent 均同步阻塞。
+2. `TOOL-TASK-04`：`model` 字段仅做合法性校验，未传入 `SidechainOptions.AgentModel`，模型覆盖被静默忽略。
+3. `TOOL-LSP-01~04`：LSP 工具 schema 完整注册，但 `dispatchLSP` 对全部 9 个操作一律返回 `supported=false`，实际提供"not supported"错误而非真实 LSP 结果。
+
+**❌ 缺失（前 3）：**
+1. `TOOL-WORKTREE-01/02`：无 `EnterWorktreeTool`/`ExitWorktreeTool`，独立 worktree session 切换完全缺失。
+2. `TOOL-STRUCTURED-01`：无 `StructuredOutput` 工具，SDK 控制协议结构化输出路径缺失。
+3. `TOOL-BASH-08`：Bash `sleep` 命令拦截逻辑缺失，模型可能无谓持有 shell 进程而非使用 `Sleep` 工具。

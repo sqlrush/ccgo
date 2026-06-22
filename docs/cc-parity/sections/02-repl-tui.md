@@ -1,0 +1,68 @@
+## 2. 交互 REPL / TUI
+
+本章覆盖交互 REPL 运行时的全部机制：原始终端输入与行编辑、流式渲染、spinner/thinking 指示器、终端 resize、中断控制流、vim 模式、权限模式切换、bracketed paste、alt-screen/raw mode、流式过程中的输入队列、双击行为，以及快捷键自定义。不含 overlay 对话框（见第 3 章）。
+
+| ID | 功能 | 执行层 | 测试（given → when → then） | CC 参照 | 状态 |
+|---|---|---|---|---|---|
+| REPL-01 | 光标左移（←、Ctrl+B） | MANUAL | 前置：REPL 提示符有文本；操作：按 ← 或 Ctrl+B；预期：光标向左移动一个字符 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-02 | 光标右移（→、Ctrl+F） | MANUAL | 前置：REPL 提示符有文本且光标不在末尾；操作：按 → 或 Ctrl+F；预期：光标向右移动一个字符 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-03 | 按词左移（Alt+B、Alt+←、Ctrl+←） | MANUAL | 前置：输入多词文本；操作：按 Alt+B；预期：光标跳到前一个单词开头 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-04 | 按词右移（Alt+F、Alt+→、Ctrl+→） | MANUAL | 前置：输入多词文本；操作：按 Alt+F；预期：光标跳到下一个单词末尾 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-05 | 移到行首（Home、Ctrl+A） | MANUAL | 前置：输入文本，光标在中间；操作：按 Home 或 Ctrl+A；预期：光标跳到最前 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-06 | 移到行尾（End、Ctrl+E） | MANUAL | 前置：输入文本，光标在中间；操作：按 End 或 Ctrl+E；预期：光标跳到最后 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-07 | 删除向后一字符（Backspace） | MANUAL | 前置：输入文本；操作：按 Backspace；预期：删除光标左侧一个字符 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-08 | 删除向前一字符（Delete、Ctrl+D 在非空输入） | MANUAL | 前置：输入文本，光标不在末尾；操作：按 Delete；预期：删除光标右侧一个字符；若输入非空且不在末尾，Ctrl+D 同效 | `src/keybindings/defaultBindings.ts:41` | ✅ 通过 |
+| REPL-09 | Kill 到行首（Ctrl+U） | MANUAL | 前置：输入文本，光标在中间；操作：按 Ctrl+U；预期：光标左侧全部文本被删除并放入 kill-ring | `src/components/PromptInput/PromptInput.tsx:1904` | ✅ 通过 |
+| REPL-10 | Kill 到行尾（Ctrl+K） | MANUAL | 前置：输入文本，光标不在末尾；操作：按 Ctrl+K；预期：光标右侧全部文本被删除并放入 kill-ring | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-11 | Kill 向前一词（Alt+D） | MANUAL | 前置：输入多词文本；操作：按 Alt+D；预期：从光标向右删除到下一个单词边界，进入 kill-ring | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-12 | Kill 向后一词（Alt+Backspace） | MANUAL | 前置：输入多词文本；操作：按 Alt+Backspace；预期：从光标向左删除到上一单词边界，进入 kill-ring | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-13 | Yank（Ctrl+Y） | MANUAL | 前置：已执行 kill 操作；操作：按 Ctrl+Y；预期：kill-ring 最新内容粘贴到光标处 | `src/components/PromptInput/PromptInput.tsx:1639` | ✅ 通过 |
+| REPL-14 | Yank-pop（Alt+Y） | MANUAL | 前置：已 yank；操作：按 Alt+Y；预期：撤回最近 yank 并粘贴 kill-ring 下一条 | `src/keybindings/defaultBindings.ts` | ✅ 通过 |
+| REPL-15 | 历史向上（↑，在第一行且在最顶部时） | MANUAL | 前置：有提交历史；操作：输入为空，按 ↑；预期：填入最近一条历史条目 | `src/hooks/useArrowKeyHistory.ts` | ✅ 通过 |
+| REPL-16 | 历史向下（↓） | MANUAL | 前置：已滚动到历史条目；操作：按 ↓；预期：向更新历史移动；到末尾时恢复草稿 | `src/hooks/useArrowKeyHistory.ts` | ✅ 通过 |
+| REPL-17 | 多行输入（Shift+Enter 插入换行） | MANUAL | 前置：REPL 提示符；操作：按 Shift+Enter；预期：在光标处插入换行，不提交 | `src/types/textInputTypes.ts:139` | ✅ 通过 |
+| REPL-18 | Enter 提交 | MANUAL | 前置：输入非空文本；操作：按 Enter；预期：文本提交、模型调用开始 | `src/components/PromptInput/PromptInput.tsx` | ✅ 通过 |
+| REPL-19 | 空提示符忽略 Enter | MANUAL | 前置：提示符为空；操作：按 Enter；预期：不提交（不调用模型） | `src/screens/REPL.tsx:326` | ✅ 通过 |
+| REPL-20 | Ctrl+R 历史增量反向搜索 | MANUAL | 前置：有历史；操作：按 Ctrl+R，输入搜索词；预期：实时过滤历史匹配项；Enter 选中并填入提示符 | `src/hooks/useHistorySearch.ts` | ✅ 通过 |
+| REPL-21 | 流式渲染——助手响应逐 token 实时追加 | MANUAL | 前置：提交 prompt；操作：等待模型流式输出；预期：每到一个 text_delta 立即显示新内容，不等整轮完成 | `src/screens/REPL.tsx:1461` | ❌ 缺失（ccgo loop 仅处理 `EventAssistantMessage`（整轮），不处理 `EventStreamEvent` / text_delta；`internal/repl/render.go:43`） |
+| REPL-22 | Spinner 动画（turn 进行中） | MANUAL | 前置：提交 prompt；操作：等待模型响应；预期：状态行显示 Braille-dot 动画旋转 + 时间/动词 | `src/components/Spinner.tsx:62` | ✅ 通过（`internal/repl/spinner.go` Braille-dot + 100ms ticker） |
+| REPL-23 | "thinking…" 专用 spinner 模式（extended thinking） | MANUAL | 前置：启用 extended thinking；操作：提交需要深度思考的请求；预期：spinner 显示 "thinking…" 字样，完成后显示思考耗时（≥2s 展示） | `src/components/Spinner.tsx:123` | ❌ 缺失（ccgo spinner 无 thinking 模式；`internal/repl/render.go` 不处理 thinking block 的流式事件） |
+| REPL-24 | BriefIdleStatus——流式文本可见时隐藏 spinner | MANUAL | 前置：模型流式输出长文本；操作：观察界面；预期：streaming text 出现后 spinner 隐藏（文本本身即反馈） | `src/screens/REPL.tsx:1683` | ❌ 缺失（ccgo 无 streaming text 显示，spinner 与文本无互斥逻辑） |
+| REPL-25 | 终端 resize（SIGWINCH）自动重排 | MANUAL | 前置：REPL 运行中；操作：拖动终端窗口改变宽高；预期：transcript 与 prompt 立即重排以适应新尺寸 | `src/hooks/useTerminalSize.ts` | ✅ 通过（`internal/repl/resize_unix.go` 监听 SIGWINCH；`internal/repl/resize.go:17`） |
+| REPL-26 | Ctrl+C 中断正在进行的 turn | MANUAL | 前置：模型 turn 进行中；操作：按 Ctrl+C；预期：turn 被取消，显示 "Interrupted by user." | `src/hooks/useCancelRequest.ts` | ✅ 通过（`internal/repl/interrupt.go:18`） |
+| REPL-27 | 空闲时 Ctrl+C 双击退出（第一次显示提示） | MANUAL | 前置：REPL 空闲（无 turn 进行）；操作：按 Ctrl+C；预期：显示 "Press Ctrl-C again to exit"；800ms 内再按一次 Ctrl-C 退出 | `src/hooks/useExitOnCtrlCD.ts:63` | ✅ 通过（`internal/tui/screen.go:302–309`，`DoublePressTimeout`） |
+| REPL-28 | Ctrl+D 双击退出（空输入或 dialog 时） | MANUAL | 前置：输入为空或有 dialog；操作：按 Ctrl+D；预期：第一次显示 "Press Ctrl-D again to exit"；再按一次退出 | `src/hooks/useExitOnCtrlCD.ts:78` | ✅ 通过（`internal/tui/screen.go:202–211`） |
+| REPL-29 | ESC 取消特殊模式（bash 模式 / dialog） | MANUAL | 前置：输入以 `!` 前缀进入 bash 模式，或有 dialog；操作：按 ESC；预期：退出 bash 模式或取消 dialog | `src/hooks/useCancelRequest.ts:131` | ✅ 通过 |
+| REPL-30 | ESC 双击展示 MessageSelector（空输入） | MANUAL | 前置：输入为空；操作：800ms 内连按两次 ESC；预期：展开 MessageSelector overlay（可选消息回退起点） | `src/components/PromptInput/PromptInput.tsx:1254` | ❌ 缺失（ccgo 无 MessageSelector 组件；`internal/repl/loop.go` 的 ESC 仅处理 cancel/interrupt） |
+| REPL-31 | vim 模式（editorMode: 'vim' 配置启用） | MANUAL | 前置：`~/.claude/settings.json` 中 `editorMode: "vim"`；操作：启动 REPL；预期：进入 INSERT 模式；Esc 切到 NORMAL；h/l/w/b 等 vim motion 生效 | `src/components/PromptInput/utils.ts:12` | ⚠️ 已建未接（`internal/tui/vim.go` 全量实现 + 完整测试；但 `cmd/claude/main.go:341` 构建 `InteractiveOptions` 时未从 config.editorMode 读值，`loop.go` 从未调 `SetVimEnabled`） |
+| REPL-32 | vim NORMAL 模式方向键映射 h/j/k/l | MANUAL | 前置：vim 模式已启用，NORMAL 模式；操作：按 h/l/j/k；预期：等效 ←/→/↑/↓ | `src/hooks/useVimInput.ts:263` | ⚠️ 已建未接（同 REPL-31） |
+| REPL-33 | vim 模式 INSERT 指示器显示 | MANUAL | 前置：vim 模式已启用，INSERT 模式；操作：观察状态行；预期：状态行显示 `-- INSERT --` | `src/components/PromptInput/PromptInputFooter.tsx` | ⚠️ 已建未接（`internal/repl/mode_switch.go:modeIndicator` 已实现 `-- INSERT --`；但 vim 未从 config 接通） |
+| REPL-34 | Shift+Tab 循环权限模式（default→acceptEdits→plan→bypass→default） | MANUAL | 前置：REPL 空闲；操作：按 Shift+Tab 4 次；预期：状态行指示器依序循环并回到 default | `src/keybindings/defaultBindings.ts:69` | ✅ 通过（`internal/repl/loop.go:290`） |
+| REPL-35 | 权限模式状态指示器（acceptEdits/plan/bypass 显示在状态行） | MANUAL | 前置：Shift+Tab 切到 acceptEdits；操作：观察状态行；预期：显示 "accept edits" | `src/components/PromptInput/PromptInputFooterLeftSide.tsx:70` | ✅ 通过（`internal/repl/mode_switch.go:modeIndicator`） |
+| REPL-36 | Bracketed paste 启用（DEC mode 2004） | AUTO | 前置：进入 REPL 交互模式；操作：检查写入终端的初始化序列；预期：序列包含 `\x1b[?2004h` | `src/ink/components/App.tsx:232` | ✅ 通过（`internal/repl/loop.go:151` `BracketedPaste: true` → `EnterInteractive`） |
+| REPL-37 | Bracketed paste 处理——多行文本粘贴不触发提交 | MANUAL | 前置：REPL 提示符；操作：向终端粘贴包含换行的文本（触发 `\x1b[200~…\x1b[201~`）；预期：文本完整出现在输入框，不自动提交 | `src/components/BaseTextInput.tsx:60` | ✅ 通过（`internal/tui/input.go:parseBracketedPaste`） |
+| REPL-38 | 大段粘贴文本自动折叠为 paste-reference | MANUAL | 前置：粘贴 >800 字符的文本；操作：观察输入框；预期：文本以 `[Pasted text #N +M lines]` 占位符显示，实际内容由 PastedContents 映射持有 | `src/components/PromptInput/useMaybeTruncateInput.ts` | ✅ 通过（`internal/tui/input.go:pasteReferenceThreshold=800`） |
+| REPL-39 | Alt-screen 模式进入（启动时写入 `\x1b[?1049h`） | AUTO | 前置：执行 `claude`（交互）；操作：检查 stdout 初始字节；预期：包含 `\x1b[?1049h` 切换到 alt-screen | `src/ink/ink.tsx:149` | ✅ 通过（`internal/tui/lifecycle.go:EnterAlternate`；`internal/repl/loop_test.go:34` 验证了退出序列） |
+| REPL-40 | Alt-screen 退出（退出时写入 `\x1b[?1049l`） | AUTO | 前置：REPL 正常退出；操作：检查 stdout 末尾字节；预期：包含 `\x1b[?1049l` | `src/ink/ink.tsx:366` | ✅ 通过（`internal/repl/loop_test.go:34` 验证） |
+| REPL-41 | 视口滚动向上（↑/PgUp/Ctrl+U 在 transcript 中） | MANUAL | 前置：transcript 内容超过屏幕高度；操作：按 PgUp；预期：视口向上滚动 | `src/keybindings/defaultBindings.ts:198` | ✅ 通过（`internal/tui/keybinding.go:ActionPageUp`；`internal/tui/screen.go:219`） |
+| REPL-42 | 视口滚动向下（↓/PgDown） | MANUAL | 前置：视口不在底部；操作：按 PgDown；预期：视口向下滚动 | `src/keybindings/defaultBindings.ts:199` | ✅ 通过（`internal/tui/keybinding.go:ActionPageDown`） |
+| REPL-43 | 半页滚动（Ctrl+U / Ctrl+D——仅 transcript/scroll 上下文） | MANUAL | 前置：transcript 内容超屏；操作：按 Ctrl+U；预期：视口向上滚动半屏 | `src/components/ScrollKeybindingHandler.tsx:520` | ✅ 通过（`internal/tui/keybinding.go:ActionHalfPageUp/Down`） |
+| REPL-44 | 滚到顶部 / 底部（Ctrl+Home / Ctrl+End） | MANUAL | 前置：在 transcript 中；操作：按 Ctrl+End；预期：视口立即滚到最底部 | `src/keybindings/defaultBindings.ts:203` | ✅ 通过（`internal/tui/keybinding.go:ActionScrollToTop/Bottom`） |
+| REPL-45 | Ctrl+L 强制重绘 | MANUAL | 前置：REPL 运行中；操作：按 Ctrl+L；预期：终端全屏重绘，消除乱码 | `src/keybindings/defaultBindings.ts:42` | ✅ 通过（`internal/tui/keybinding.go:ActionRedraw`；screen 事件 `ScreenEventRedraw` 已定义，但 `internal/repl/loop.go` switch 未处理该事件——screen 内部仍触发重排，渲染管道会输出完整帧；功能可达） |
+| REPL-46 | Ctrl+S 暂存 / 取回草稿 prompt（stash/unstash） | MANUAL | 前置：已在提示符输入部分文本；操作：按 Ctrl+S；预期：文本被清空并暂存；再按 Ctrl+S 取回 | `src/components/PromptInput/PromptInput.tsx:822` | ⚠️ 已建未接（`internal/tui/screen.go:256 applyStashPrompt` 全量实现 + 测试；但 `internal/repl/loop.go` switch 未处理 `ScreenEventStashPrompt`，暂存/取回无外部效果） |
+| REPL-47 | Ctrl+G / Ctrl+X Ctrl+E 调用外部编辑器编辑 prompt | MANUAL | 前置：设置了 `$EDITOR` 或 `$VISUAL`；操作：按 Ctrl+G；预期：临时文件用编辑器打开；保存退出后文本填回提示符 | `src/utils/promptEditor.ts` | ⚠️ 已建未接（`internal/tui/screen.go:187` 产生 `ScreenEventExternalEditor`；但 `internal/repl/loop.go` switch 无此 case，$EDITOR 调用未实现） |
+| REPL-48 | Ctrl+O 切换 transcript（历史记录查看/隐藏） | MANUAL | 前置：REPL 运行中；操作：按 Ctrl+O；预期：切换完整历史 transcript 的显示/隐藏 | `src/screens/REPL.tsx:331` | ⚠️ 已建未接（`internal/tui/screen.go:182` 产生 `ScreenEventToggleTranscript`；`internal/repl/loop.go` switch 无此 case；TUI screen 端的 transcript 切换逻辑已有基础，未接上 loop） |
+| REPL-49 | `!` 前缀 bash 模式（输入 `!cmd` 直接执行 shell） | MANUAL | 前置：REPL 提示符；操作：输入 `!echo hi` 并按 Enter；预期：执行 bash `echo hi`，输出添加到对话 | `src/components/PromptInput/inputModes.ts` | ❌ 缺失（ccgo `internal/tui/input.go` 无 `!` 前缀模式处理；`internal/repl/loop.go` 无 bash-mode 分发） |
+| REPL-50 | 用户提交时忽略 in-flight turn 的重复输入 | MANUAL | 前置：模型 turn 正在进行；操作：按 Enter 再次提交；预期：静默忽略，不排队第二次 turn | `src/screens/REPL.tsx:2882` | ✅ 通过（`internal/repl/loop.go:329` `if l.running … break`） |
+| REPL-51 | 用户可在 turn 进行中继续编辑提示符 | MANUAL | 前置：模型 turn 进行中；操作：在 prompt 区域打字；预期：可正常输入，不影响进行中的 turn；提交仍被忽略 | `src/screens/REPL.tsx` | ✅ 通过（ccgo loop 的 input 读取与 eventCh 是分开的 goroutine；键入不会阻塞） |
+| REPL-52 | 图片粘贴（从系统剪贴板 Ctrl+V / 终端直接粘贴图片） | MANUAL | 前置：macOS/Linux 剪贴板有图片；操作：Ctrl+V 粘贴；预期：图片以 `[Image]` 占位符显示在输入框，随消息发送给模型 | `src/utils/imagePaste.ts:124` | ❌ 缺失（`internal/tui/input.go:KeyImageHint` 存在解析逻辑，但 ccgo REPL 无图片从 macOS/Linux 剪贴板读取、转 OSC 序列到 stdin 的路径；`internal/repl/run.go` 不处理 `KeyImageHint`） |
+| REPL-53 | 语音输入模式（VOICE_MODE feature flag） | N/A | — | `src/screens/REPL.tsx:98,4409` | N/A（VOICE_MODE 为 ant-only feature flag，OUT-of-scope §10） |
+| REPL-54 | 用户自定义快捷键（`~/.claude/keybindings.json`） | MANUAL | 前置：在 `~/.claude/keybindings.json` 写入自定义绑定如 `{"ctrl+p": "history_previous"}`；操作：启动 REPL 并按 Ctrl+P；预期：执行 `history_previous` 动作 | `src/keybindings/defaultBindings.ts:9` | ⚠️ 已建未接（`internal/tui/keybinding_loader.go:LoadKeyBindingSpecs` 和 `KeymapFromSpecs` 全量实现；但 `cmd/claude/main.go` 启动时未读取用户 keybindings.json 文件并传入 Loop） |
+| REPL-55 | keybinding 多键和弦（chord，如 Ctrl+X Ctrl+E） | MANUAL | 前置：REPL 运行；操作：按 Ctrl+X 然后按 Ctrl+E；预期：执行 `external_editor` 动作（chord 完整匹配） | `src/keybindings/defaultBindings.ts:82` | ✅ 通过（`internal/tui/keybinding.go:Keymap.Dispatch` 支持 ChordBindings；DefaultKeymap 含 `ctrl_x ctrl_g`→`external_editor` 等） |
+| REPL-56 | SIGCONT 恢复后重绘（Ctrl+Z 挂起 / fg 恢复） | MANUAL | 前置：REPL 运行中；操作：按 Ctrl+Z 挂起，再 `fg` 恢复；预期：终端恢复 alt-screen，内容完整重绘 | `src/ink/ink.tsx:960` | ❌ 缺失（ccgo 无 SIGCONT 信号处理；`internal/repl/` 无 `signal.Notify(SIGCONT)` 逻辑） |
+| REPL-57 | 焦点事件（FocusIn / FocusOut DEC mode 1004） | MANUAL | 前置：终端支持焦点事件；操作：切换窗口焦点；预期：REPL 收到焦点事件，可用于 stash 提示等界面行为 | `src/ink/ink.tsx:226` | ⚠️ 已建未接（`internal/tui/lifecycle.go:TerminalModeOptions.FocusEvents=true` 启用序列；`internal/tui/input.go:KeyFocusIn/Out` 解析；`internal/repl/loop.go:151` 传入 `FocusEvents: true`；但 `loop.go` switch 无 `ScreenEventFocusIn/Out` case，焦点事件无实际业务效果） |
+| REPL-58 | 终端标题更新（`\x1b]0;…\x07` OSC-0） | MANUAL | 前置：REPL 运行，turn 开始；操作：观察终端 tab 标题；预期：标题反映当前会话名或 "thinking…" 等状态 | `src/ink/ink.tsx:useTerminalTitle` | ❌ 缺失（ccgo 无 OSC-0 标题更新） |
+| REPL-59 | 通知提示（OS 通知 / 终端铃声） | MANUAL | 前置：turn 完成时 REPL 失焦；操作：等待 turn 完成；预期：触发 OS 通知或终端铃声 | `src/screens/REPL.tsx:useNotifications` | ❌ 缺失（ccgo 无 OS 通知或铃声机制） |
+| REPL-60 | 扩展键序列（Kitty keyboard protocol） | MANUAL | 前置：Kitty 终端；操作：启动 REPL；预期：REPL 发送 `\x1b[>4m` 启用扩展键，Shift+Enter 等复合键正确识别 | `src/ink/ink.tsx:1430` | ⚠️ 已建未接（`internal/tui/lifecycle.go:TerminalModeOptions.ExtendedKeys` 已实现；`internal/repl/loop.go:151` 传入 `FocusEvents: true` 但 `ExtendedKeys` 未设置，Kitty protocol 未启用） |
+
+小计: 60 项 — ✅ 30 / ⚠️ 9 / ❌ 11 / N/A 1 · (注: REPL-45 Ctrl+L 标注 ✅，因渲染链实际生效；REPL-31/32/33 同一根因计为 ⚠️ 各一行)
