@@ -298,7 +298,7 @@ Copied into each phase plan's "Global Constraints". Verbatim values:
 | 6b | `2026-06-21-phase6b-commands.md` | ✅ implemented | 13 |
 | 6c | `2026-06-21-phase6c-memory-claudemd-rewind.md` | ✅ implemented | 8 |
 | 6d | `2026-06-21-phase6d-hooks-lifecycle.md` | ✅ implemented | 9 |
-| 7 | `2026-06-21-phase7-sandbox-team-sdk.md` | ✅ written | 9 |
+| 7 | `2026-06-21-phase7-sandbox-team-sdk.md` | ✅ implemented | 9 |
 
 **All phase plans written 2026-06-21** (~18K lines total; 88 TDD tasks across P2–P7). Each was
 authored by reading the real code on both sides (ccgo + CC reference), not the roadmap docs.
