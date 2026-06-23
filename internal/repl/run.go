@@ -304,6 +304,13 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		return outcome, outcome.Handled
 	}
 
+	// Wire Notification hooks: fire when a permission dialog is shown (the
+	// system is idle, awaiting the user's permission decision). HOOK-35.
+	loop.onPermissionAskNotify = func(toolName string) {
+		_ = base.RunNotificationHooks(context.Background(), "permission_requested",
+			"Awaiting permission for "+toolName, "")
+	}
+
 	return loop.Run(ctx)
 }
 

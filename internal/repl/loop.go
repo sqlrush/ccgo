@@ -82,6 +82,12 @@ type Loop struct {
 	// rendered.
 	onPermissionShown func()
 
+	// onPermissionAskNotify, when non-nil, is called in a goroutine each time a
+	// permission dialog is displayed. Production code wires this to
+	// runner.RunNotificationHooks (HOOK-35: Notification fires when idle/awaiting
+	// permission). Errors are intentionally discarded to keep the REPL alive.
+	onPermissionAskNotify func(toolName string)
+
 	// onTurnDone is a test seam; nil in production. Called at the end of
 	// finishTurn so tests can synchronize after the turn completes and history
 	// is updated (mirrors onPermissionShown).
@@ -486,6 +492,11 @@ func (l *Loop) showPermission(ar askRequest) {
 		Actions:     actions.Actions,
 	})
 	l.dialog.ApplyToScreen(&l.screen, l.screen.Status)
+	// Fire Notification hook in background (HOOK-35: notification when idle/
+	// awaiting permission). Errors are discarded to keep the REPL alive.
+	if l.onPermissionAskNotify != nil {
+		go l.onPermissionAskNotify(ar.req.ToolName)
+	}
 	if l.onPermissionShown != nil {
 		l.onPermissionShown()
 	}

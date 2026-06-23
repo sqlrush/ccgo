@@ -47,13 +47,26 @@ func (r Runner) applyUserPromptSubmitHooks(ctx context.Context, messages []contr
 }
 
 func (r Runner) runStopHooks(ctx context.Context, responseModel string, stopReason string, stopSequence string, assistant contracts.Message) error {
+	return r.runStopHooksWithActive(ctx, responseModel, stopReason, stopSequence, assistant, false)
+}
+
+// runStopHooksWithActive is the implementation that carries the stop_hook_active
+// flag per CC utils/hooks.ts:3643–3684. stopHookActive is true when this call
+// is nested inside another Stop hook (re-entrant), which hooks can inspect to
+// avoid infinite re-triggering.
+func (r Runner) runStopHooksWithActive(ctx context.Context, responseModel string, stopReason string, stopSequence string, assistant contracts.Message, stopHookActive bool) error {
+	lastAssistantText := msgs.TextContent(assistant)
 	payload := map[string]any{
-		"model":          responseModel,
-		"stop_reason":    stopReason,
-		"stop_sequence":  stopSequence,
-		"assistant_text": msgs.TextContent(assistant),
-		"message_id":     assistant.ID,
-		"message_uuid":   string(assistant.UUID),
+		// CC-standard Stop hook fields (HOOK-30)
+		"stop_hook_active":       stopHookActive,
+		"last_assistant_message": lastAssistantText,
+		// Additional fields present in ccgo implementation
+		"model":         responseModel,
+		"stop_reason":   stopReason,
+		"stop_sequence": stopSequence,
+		"assistant_text": lastAssistantText, // legacy alias kept for compatibility
+		"message_id":    assistant.ID,
+		"message_uuid":  string(assistant.UUID),
 	}
 	result, err := r.runConversationHooks(ctx, tool.HookStop, payload)
 	if err != nil {

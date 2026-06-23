@@ -47,6 +47,47 @@ func (s *ReadState) Set(path string, state ReadFileState) {
 	s.files[path] = state
 }
 
+// ReadStateEntry is a snapshot of a single file's tracked state, suitable for
+// conversion to compact.ReadFileEntry.
+type ReadStateEntry struct {
+	Path      string
+	Content   string
+	Timestamp int64
+}
+
+// Paths returns the sorted list of all tracked file paths.
+func (s *ReadState) Paths() []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	paths := make([]string, 0, len(s.files))
+	for p := range s.files {
+		paths = append(paths, p)
+	}
+	return paths
+}
+
+// Entries returns a snapshot of all tracked files as ReadStateEntry values.
+// The slice is safe to hold without locking after the call returns.
+func (s *ReadState) Entries() []ReadStateEntry {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := make([]ReadStateEntry, 0, len(s.files))
+	for path, state := range s.files {
+		entries = append(entries, ReadStateEntry{
+			Path:      path,
+			Content:   state.Content,
+			Timestamp: state.Timestamp,
+		})
+	}
+	return entries
+}
+
 func WithReadState(ctx tool.Context, state *ReadState) tool.Context {
 	if ctx.Metadata == nil {
 		ctx.Metadata = map[string]any{}

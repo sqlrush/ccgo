@@ -41,6 +41,7 @@ import (
 	"ccgo/internal/skills"
 	telemetrypkg "ccgo/internal/telemetry"
 	"ccgo/internal/tool"
+	filetools "ccgo/internal/tools/file"
 	tasktools "ccgo/internal/tools/task"
 )
 
@@ -68,6 +69,12 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if r.SessionID != "" {
 		user.SessionID = r.SessionID
 	}
+	// Capture a file-history snapshot keyed by the user message UUID before
+	// executing the turn. This enables /rewind to restore tracked files to their
+	// state at the start of this turn. Errors are non-fatal — a snapshot failure
+	// must not abort the user's turn. Mirrors CC QueryEngine.ts:641-654 where
+	// fileHistoryMakeSnapshot fires per user message. (REWIND-01)
+	r.maybeCaptureRewindSnapshot(user.UUID)
 	initialMessages, shouldQuery, localResult, err := r.initialUserMessages(user)
 	if err != nil {
 		return Result{}, err
@@ -516,6 +523,11 @@ func (r Runner) toolMetadata() map[string]any {
 			SkillDirs:     skillDirs,
 		}
 	}
+	// Inject the shared ReadState so file tools record their reads into the
+	// session-scoped tracker. Used for post-compact file reattachment (COMPACT-05).
+	if r.ReadState != nil {
+		metadata[filetools.MetadataReadStateKey] = r.ReadState
+	}
 	return metadata
 }
 
@@ -727,7 +739,13 @@ func (r Runner) maybeAutoCompact(ctx context.Context, history []contracts.Messag
 	}
 	compactpkg.RecordSuccess(r.AutoCompact)
 	_ = r.runPostCompactHooks(ctx, compactpkg.TriggerAuto, msgs.TextContent(result.Plan.Summary))
-	return result.Plan.Output, result, true, nil
+	compactedHistory := result.Plan.Output
+	// Re-attach recently-read files after compaction so the model retains
+	// context about files it was working with (COMPACT-05).
+	if attachments := r.buildPostCompactAttachments(nil); len(attachments) > 0 {
+		compactedHistory = append(compactedHistory, attachments...)
+	}
+	return compactedHistory, result, true, nil
 }
 
 func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, userContext string) (compactpkg.Result, error) {
@@ -765,6 +783,11 @@ func (r Runner) manualCompact(ctx context.Context, history []contracts.Message, 
 	}
 	r.emit(Event{Type: EventCompact, Compact: &result})
 	_ = r.runPostCompactHooks(ctx, compactpkg.TriggerManual, msgs.TextContent(result.Plan.Summary))
+	// Re-attach recently-read files so the model retains context after manual
+	// compaction (COMPACT-05).
+	if attachments := r.buildPostCompactAttachments(nil); len(attachments) > 0 {
+		result.Plan.Output = append(result.Plan.Output, attachments...)
+	}
 	return result, nil
 }
 

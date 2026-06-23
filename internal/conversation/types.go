@@ -15,8 +15,10 @@ import (
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	nativepkg "ccgo/internal/native"
+	"ccgo/internal/rewind"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
+	filetools "ccgo/internal/tools/file"
 )
 
 type MessageClient interface {
@@ -170,6 +172,20 @@ type Runner struct {
 	// settingsOverride bypasses MCP settings entirely when non-nil. Used only
 	// in tests to inject a known Settings without needing a full MCPConfig.
 	settingsOverride *contracts.Settings
+
+	// ReadState tracks files read/edited by tools across all turns. When non-nil
+	// it is injected into every tool execution context so tools can record their
+	// file accesses. Used by BuildPostCompactAttachments (COMPACT-05) to re-attach
+	// recently-read files after compaction.
+	ReadState *filetools.ReadState
+
+	// RewindWriter, when non-nil, records a file-history snapshot at the start of
+	// each user turn (REWIND-01). When nil, rewind snapshot writing is disabled.
+	RewindWriter *rewind.Writer
+
+	// RewindStore, when non-nil, holds the content-addressed backup store used by
+	// RewindWriter.Capture. Must be set together with RewindWriter.
+	RewindStore *rewind.Store
 }
 
 type MCPConfig struct {

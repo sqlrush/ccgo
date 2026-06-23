@@ -62,3 +62,60 @@ func TestBuildInputRejectsInvalidPayload(t *testing.T) {
 	}
 	_ = contracts.PermissionAllow // keep import
 }
+
+// TestBuildInputAgentIDAndType verifies that agent_id and agent_type from the
+// event payload are included in the base hook input (HOOK-54).
+func TestBuildInputAgentIDAndType(t *testing.T) {
+	ctx := tool.Context{
+		WorkingDirectory: "/work",
+		SessionID:        "sess_agent",
+	}
+	event := tool.HookEvent{
+		Phase: tool.HookSubagentStop,
+		Payload: map[string]any{
+			"agent_id":   "subagent-42",
+			"agent_type": "task",
+		},
+	}
+	raw, err := BuildInput(ctx, event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["agent_id"] != "subagent-42" {
+		t.Fatalf("agent_id = %v want %q", got["agent_id"], "subagent-42")
+	}
+	if got["agent_type"] != "task" {
+		t.Fatalf("agent_type = %v want %q", got["agent_type"], "task")
+	}
+}
+
+// TestBuildInputAgentFieldsAbsentWhenNotInPayload verifies that agent_id and
+// agent_type are omitted when not present in the event payload (main thread hooks).
+func TestBuildInputAgentFieldsAbsentWhenNotInPayload(t *testing.T) {
+	ctx := tool.Context{
+		WorkingDirectory: "/work",
+		SessionID:        "sess_main",
+	}
+	event := tool.HookEvent{
+		Phase:   tool.HookStop,
+		Payload: map[string]any{},
+	}
+	raw, err := BuildInput(ctx, event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["agent_id"]; ok {
+		t.Fatal("agent_id must not be present for main-thread hooks")
+	}
+	if _, ok := got["agent_type"]; ok {
+		t.Fatal("agent_type must not be present when not in payload")
+	}
+}

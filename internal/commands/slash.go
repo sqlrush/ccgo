@@ -73,6 +73,7 @@ const (
 	LocalCommandResultHooks       LocalCommandResultType = "hooks"
 	LocalCommandResultIDE         LocalCommandResultType = "ide"
 	LocalCommandResultAgents      LocalCommandResultType = "agents"
+	LocalCommandResultRewind      LocalCommandResultType = "rewind"
 )
 
 type LocalCommandResult struct {
@@ -270,6 +271,8 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultIDE, Value: strings.TrimSpace(args)}, true
 	case "agents":
 		return LocalCommandResult{Type: LocalCommandResultAgents, Value: strings.TrimSpace(args)}, true
+	case "rewind":
+		return LocalCommandResult{Type: LocalCommandResultRewind, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}
