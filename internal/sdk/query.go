@@ -16,6 +16,7 @@ import (
 	"ccgo/internal/conversation"
 	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
+	pluginspkg "ccgo/internal/plugins"
 )
 
 // Options configures a programmatic SDK query (CC agentSdkTypes.ts:112-122).
@@ -248,6 +249,19 @@ func Query(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// G13: wire reload_plugins → plugins.LoadPluginDirsWithSettings (SDK-40).
+	// Re-scans the installed plugin directories using the runner's current
+	// working directory and merged settings, returns the CC-wire result shape.
+	// CC ref: controlSchemas.ts:405-433.
+	reloadPlugins := reloadPluginsFromRunner(runner)
+
+	// G13: wire apply_flag_settings → merge settings into runner.MCP.LocalSettings
+	// and apply model override directly to runner.Model (SDK-44).
+	// CC ref: controlSchemas.ts:464-473.
+	applyFlagSettings := func(settings map[string]any) error {
+		return applyFlagSettingsToRunner(runner, settings)
+	}
+
 	// Controller: handles all control subtypes with live backend callbacks.
 	controller := &Controller{
 		interrupt:          func() { cancelTurn(errInterrupted) },
@@ -260,10 +274,13 @@ func Query(ctx context.Context, opts Options) error {
 		cancelAsyncMessage: cancelAsyncMessage,
 		stopTask:           stopTask,
 		// G11: live MCP manager callbacks (non-nil when MCPManager is set).
-		mcpMessage:   mcpMessage,
+		mcpMessage:    mcpMessage,
 		mcpSetServers: mcpSetServers,
-		mcpReconnect: mcpReconnect,
-		mcpToggle:    mcpToggle,
+		mcpReconnect:  mcpReconnect,
+		mcpToggle:     mcpToggle,
+		// G13: real plugin reload and flag-settings merge.
+		reloadPlugins:    reloadPlugins,
+		applyFlagSettings: applyFlagSettings,
 		// Remaining subtypes without a live backend return ⚠️ "not supported"
 		// responses (CC bridgeMessaging.ts:339).
 	}
@@ -601,4 +618,126 @@ func settingsToMap(s any) map[string]any {
 		return map[string]any{}
 	}
 	return out
+}
+
+// ── G13 helpers ───────────────────────────────────────────────────────────────
+
+// reloadPluginsFromRunner builds a reload_plugins callback that rescans the
+// installed plugin directories using the runner's working directory and merged
+// settings.  Returns empty-list success when WorkingDirectory is empty (safe
+// degradation — no-op reload when the runner has no CWD).
+// CC ref: controlSchemas.ts:405-433 (SDK-40).
+func reloadPluginsFromRunner(r *conversation.Runner) func() (*ReloadPluginsResult, error) {
+	return func() (*ReloadPluginsResult, error) {
+		cwd := strings.TrimSpace(r.WorkingDirectory)
+		var loaded []pluginspkg.LoadedPlugin
+		if cwd != "" {
+			var settings contracts.Settings
+			if r.MCP != nil {
+				settings = r.MCP.MergedSettings()
+			}
+			loaded = pluginspkg.LoadPluginDirsWithSettings(
+				pluginspkg.InstalledPluginDirs(cwd),
+				settings,
+			)
+		}
+
+		// Convert to CC-wire shape: each plugin becomes one entry.
+		plugins := make([]any, 0, len(loaded))
+		commands := []any{}
+		agents := []any{}
+		mcpServers := []any{}
+
+		for _, p := range loaded {
+			plugins = append(plugins, map[string]any{
+				"name":    p.Name,
+				"version": p.Version,
+				"root":    p.Root,
+			})
+			for _, cmd := range p.Commands {
+				commands = append(commands, map[string]any{
+					"name":        cmd.Name,
+					"description": cmd.Description,
+				})
+			}
+			for _, agent := range p.Agents {
+				agents = append(agents, map[string]any{
+					"name": agent.Name,
+				})
+			}
+			for name := range p.MCPServers {
+				mcpServers = append(mcpServers, map[string]any{
+					"name": name,
+				})
+			}
+		}
+
+		return &ReloadPluginsResult{
+			Commands:   commands,
+			Agents:     agents,
+			Plugins:    plugins,
+			MCPServers: mcpServers,
+			ErrorCount: 0,
+		}, nil
+	}
+}
+
+// applyFlagSettingsToRunner merges a raw settings map into the runner's
+// active state (SDK-44).  It:
+//  1. Applies "model" directly to runner.Model when present and non-empty.
+//  2. JSON-round-trips the map into contracts.Settings and merges into
+//     runner.MCP.LocalSettings when runner.MCP is non-nil.
+//
+// This is intentionally best-effort; unknown keys are silently ignored by the
+// JSON unmarshaller.  The caller (Controller) returns success after this
+// function returns nil.
+// CC ref: controlSchemas.ts:464-473 (SDK-44).
+func applyFlagSettingsToRunner(r *conversation.Runner, settings map[string]any) error {
+	if len(settings) == 0 {
+		return nil
+	}
+
+	// 1. Apply model directly so the next turn uses the new model immediately.
+	if model, ok := settings["model"].(string); ok && strings.TrimSpace(model) != "" {
+		r.Model = strings.TrimSpace(model)
+	}
+
+	// 2. Merge into MCP LocalSettings via JSON round-trip.
+	if r.MCP == nil {
+		return nil
+	}
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("apply_flag_settings: marshal settings: %w", err)
+	}
+	var overlay contracts.Settings
+	if err := json.Unmarshal(data, &overlay); err != nil {
+		// Unknown fields fail silently — best-effort merge.
+		return nil
+	}
+	r.MCP.LocalSettings = mergeSettingsOverlay(r.MCP.LocalSettings, overlay)
+	return nil
+}
+
+// mergeSettingsOverlay returns a new contracts.Settings with non-zero fields
+// from overlay applied on top of base, via JSON round-trip map merge.
+// This is immutable: neither base nor overlay is modified.
+func mergeSettingsOverlay(base, overlay contracts.Settings) contracts.Settings {
+	baseMap := settingsToMap(base)
+	overMap := settingsToMap(overlay)
+	// Merge: overMap non-null fields win.
+	for k, v := range overMap {
+		if v != nil {
+			baseMap[k] = v
+		}
+	}
+	merged, err := json.Marshal(baseMap)
+	if err != nil {
+		return base
+	}
+	var result contracts.Settings
+	if err := json.Unmarshal(merged, &result); err != nil {
+		return base
+	}
+	return result
 }
