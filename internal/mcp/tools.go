@@ -120,10 +120,13 @@ func buildTool(options ToolBuildOptions, remote RemoteTool) tool.Tool {
 	if schema == nil {
 		schema = contracts.JSONSchema{"type": "object"}
 	}
+	// MCP-49: truncate tool description to MaxMCPDescriptionLength.
+	// CC ref: src/services/mcp/client.ts:1791-1793.
+	description := TruncateMCPText(remote.Description)
 	return tool.FuncTool{
 		DefinitionValue: contracts.ToolDefinition{
 			Name:               fullName,
-			Description:        remote.Description,
+			Description:        description,
 			InputSchema:        schema,
 			OutputSchema:       remote.OutputSchema,
 			ReadOnly:           remote.ReadOnly,

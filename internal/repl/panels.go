@@ -57,6 +57,34 @@ func modeLabel(mode contracts.PermissionMode) string {
 	}
 }
 
+// MCPServerEntry is a snapshot of one MCP server's status for the /mcp panel.
+// CC ref: src/commands/mcp/mcp.tsx:83 (MCPSettings component).
+type MCPServerEntry struct {
+	Name      string // server name (as registered)
+	Transport string // stdio / http / sse / ws
+	Target    string // URL or command
+	Status    string // "connected" | "error" | "pending" | "disabled"
+	Error     string // error message when Status == "error"
+}
+
+// mcpStatusPanel renders the /mcp status list as a multi-line string.
+// CC ref: src/commands/mcp/mcp.tsx:83 (MCPSettings panel).
+func mcpStatusPanel(entries []MCPServerEntry) string {
+	if len(entries) == 0 {
+		return "No MCP servers configured."
+	}
+	var b strings.Builder
+	b.WriteString("MCP servers:\n")
+	for _, e := range entries {
+		b.WriteString(fmt.Sprintf("  %s [%s] %s — %s", e.Name, e.Transport, e.Target, e.Status))
+		if e.Error != "" {
+			b.WriteString(": " + e.Error)
+		}
+		b.WriteByte('\n')
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 // DoctorCheck is one diagnostic line in the /doctor report.
 type DoctorCheck struct {
 	Name   string

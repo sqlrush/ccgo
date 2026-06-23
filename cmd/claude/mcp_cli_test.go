@@ -138,3 +138,41 @@ func TestMCPGetRedactsHeaders(t *testing.T) {
 		t.Fatalf("output should not contain secret values: %q", got)
 	}
 }
+
+// TestMCPAddBlockedByEnterpriseConfig verifies that mcp add is rejected when
+// managed-mcp.json is present (MCP-27).
+// CC ref: src/services/mcp/config.ts:650-653.
+func TestMCPAddBlockedByEnterpriseConfig(t *testing.T) {
+	env := newMCPTestEnv(t)
+	// Write a managed-mcp.json to simulate enterprise control.
+	entPath := filepath.Join(t.TempDir(), "managed-mcp.json")
+	if err := os.WriteFile(entPath, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.EnterpriseMCPPath = entPath
+
+	var out, errb bytes.Buffer
+	code := runMCPCommand([]string{"add", "myserver", "/usr/bin/mcp"}, &out, &errb, env)
+	if code == 0 {
+		t.Fatal("expected non-zero exit when enterprise MCP config is active")
+	}
+	if !strings.Contains(errb.String(), "enterprise") {
+		t.Fatalf("expected enterprise error message, got: %q", errb.String())
+	}
+}
+
+// TestMCPAddAllowedWithoutEnterpriseConfig verifies that mcp add succeeds
+// when managed-mcp.json is absent (MCP-27 negative path).
+func TestMCPAddAllowedWithoutEnterpriseConfig(t *testing.T) {
+	env := newMCPTestEnv(t)
+	env.EnterpriseMCPPath = filepath.Join(t.TempDir(), "absent-managed-mcp.json")
+
+	var out, errb bytes.Buffer
+	code := runMCPCommand([]string{"add", "myserver", "/usr/bin/mcp", "-s", "local"}, &out, &errb, env)
+	if code != 0 {
+		t.Fatalf("expected zero exit, got %d stderr=%q", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "myserver") {
+		t.Fatalf("expected success output containing server name: %q", out.String())
+	}
+}

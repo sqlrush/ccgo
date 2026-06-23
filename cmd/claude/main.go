@@ -603,15 +603,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	}
 
 	opts := repl.InteractiveOptions{
-		Settings:      writer,
-		Registry:      cmdRegistry.Visible(),
-		Mode:          runner.PermissionMode,
-		Engine:        engineFromDecider(runner.Permissions),
-		EditorMode:    mergedSettings.EditorMode,
-		PromptHistory: promptHistory,
-		MemoryFiles:   memoryFiles,
-		ResumeEntries: resumeEntries,
-		CustomKeymap:  customKeymap,
+		Settings:        writer,
+		Registry:        cmdRegistry.Visible(),
+		Mode:            runner.PermissionMode,
+		Engine:          engineFromDecider(runner.Permissions),
+		EditorMode:      mergedSettings.EditorMode,
+		PromptHistory:   promptHistory,
+		MemoryFiles:     memoryFiles,
+		ResumeEntries:   resumeEntries,
+		CustomKeymap:    customKeymap,
+		MCPApprovalPath: config.LocalSettingsPath(runner.WorkingDirectory),
 	}
 	if err := repl.RunInteractiveWithOptions(ctx, term, runner, history, opts); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)

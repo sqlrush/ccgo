@@ -388,6 +388,52 @@ func TestBuildPromptToolsListAndGetPrompt(t *testing.T) {
 	}
 }
 
+// TestBuildToolTruncatesLongDescription verifies that tool descriptions
+// exceeding MaxMCPDescriptionLength are truncated (MCP-49).
+// CC ref: src/services/mcp/client.ts:1792-1793.
+func TestBuildToolTruncatesLongDescription(t *testing.T) {
+	longDesc := strings.Repeat("y", MaxMCPDescriptionLength+50)
+	client := &fakeMCPClient{
+		tools: []RemoteTool{{Name: "do-thing", Description: longDesc}},
+	}
+	tools, err := BuildTools(context.Background(), ToolBuildOptions{ServerName: "srv", Client: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+	def, err := tool.Definition(tool.PromptContext{}, tools[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(def.Description, "… [truncated]") {
+		t.Fatalf("description not truncated: len=%d suffix=%q", len(def.Description), def.Description[len(def.Description)-20:])
+	}
+	if len(def.Description) > MaxMCPDescriptionLength+len("… [truncated]") {
+		t.Fatalf("description too long after truncation: len=%d", len(def.Description))
+	}
+}
+
+// TestBuildToolDoesNotTruncateShortDescription verifies that short descriptions
+// pass through unchanged (MCP-49).
+func TestBuildToolDoesNotTruncateShortDescription(t *testing.T) {
+	client := &fakeMCPClient{
+		tools: []RemoteTool{{Name: "ping", Description: "Short description"}},
+	}
+	tools, err := BuildTools(context.Background(), ToolBuildOptions{ServerName: "srv", Client: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := tool.Definition(tool.PromptContext{}, tools[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def.Description != "Short description" {
+		t.Fatalf("description = %q", def.Description)
+	}
+}
+
 func quoteJSON(value string) string {
 	data, _ := json.Marshal(value)
 	return string(data)

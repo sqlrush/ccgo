@@ -107,6 +107,62 @@ type InteractiveOptions struct {
 	// OnOverlay is called when an overlay submission is handled internally
 	// (resume:/theme:/memory:/trust: prefixes). Nil is fine.
 	OnOverlay func(string)
+
+	// MCPApprovalPath is the local settings file path where project-scope MCP
+	// trust decisions (from MCPServerApprovalDialog) are persisted.
+	// When non-empty, overlay submissions matching "mcp:yes_all:*",
+	// "mcp:yes:*", and "mcp:no:*" are written to this file.
+	// CC ref: src/services/mcpServerApproval.tsx (F8-C04).
+	MCPApprovalPath string
+}
+
+// buildOverlaySubmitHandler composes a single overlay-submit handler that
+// (a) persists MCP trust decisions to mcpApprovalPath when non-empty, and
+// (b) delegates to the caller-supplied onOverlay hook (may be nil).
+//
+// MCP approval format: "mcp:yes_all:<serverName>", "mcp:yes:<serverName>",
+// "mcp:no:<serverName>".  CC ref: src/services/mcpServerApproval.tsx.
+func buildOverlaySubmitHandler(onOverlay func(string), mcpApprovalPath string) func(string) {
+	if onOverlay == nil && mcpApprovalPath == "" {
+		return nil
+	}
+	return func(submit string) {
+		// Persist MCP trust decisions when we have a path to write to.
+		if mcpApprovalPath != "" {
+			tryApplyMCPApproval(mcpApprovalPath, submit)
+		}
+		if onOverlay != nil {
+			onOverlay(submit)
+		}
+	}
+}
+
+// tryApplyMCPApproval parses an overlay submit string for mcp:* prefixes and
+// calls config.ApplyMCPApproval.  Errors are silently discarded (best-effort).
+func tryApplyMCPApproval(path string, submit string) {
+	// Accepted formats:
+	//   mcp:yes_all:<serverName>
+	//   mcp:yes:<serverName>
+	//   mcp:no:<serverName>
+	for _, prefix := range []string{"mcp:yes_all:", "mcp:yes:", "mcp:no:"} {
+		if strings.HasPrefix(submit, prefix) {
+			serverName := submit[len(prefix):]
+			if serverName == "" {
+				return
+			}
+			var action config.MCPApprovalAction
+			switch prefix {
+			case "mcp:yes_all:":
+				action = config.MCPApprovalYesAll
+			case "mcp:yes:":
+				action = config.MCPApprovalYes
+			case "mcp:no:":
+				action = config.MCPApprovalNo
+			}
+			_ = config.ApplyMCPApproval(path, action, serverName) // best-effort
+			return
+		}
+	}
 }
 
 // RunInteractive launches the interactive REPL against a fully-wired runner.
@@ -271,7 +327,7 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		loop.SetRegistry(opts.Registry)
 	}
 	loop.SetMode(opts.Mode)
-	loop.onOverlaySubmit = opts.OnOverlay
+	loop.onOverlaySubmit = buildOverlaySubmitHandler(opts.OnOverlay, opts.MCPApprovalPath)
 	if opts.CustomKeymap != nil {
 		loop.screen.Keymap = *opts.CustomKeymap
 	}

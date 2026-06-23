@@ -264,6 +264,9 @@ func (c *ProtocolClient) Initialize(ctx context.Context, options InitializeOptio
 		if err := json.Unmarshal(raw, &result); err != nil {
 			return InitializeResult{}, err
 		}
+		// MCP-48: truncate server instructions to MaxMCPDescriptionLength.
+		// CC ref: src/services/mcp/client.ts:1160-1169.
+		result.Instructions = TruncateMCPText(result.Instructions)
 		if !supportsProtocolVersion(result.ProtocolVersion, options.SupportedProtocolVersions) {
 			return InitializeResult{}, fmt.Errorf("mcp server protocol version %q is not supported", result.ProtocolVersion)
 		}

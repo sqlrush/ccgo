@@ -13,20 +13,28 @@ import (
 	"ccgo/internal/mcp"
 )
 
-const mcpUsage = "Usage: claude mcp <add|add-json|list|get|remove|serve>"
+const mcpUsage = "Usage: claude mcp <add|add-json|add-from-claude-desktop|list|get|remove|serve>"
 
 // mcpCLIEnv injects settings file locations so tests avoid the real $HOME.
 type mcpCLIEnv struct {
-	UserPath    string
-	ProjectRoot string
+	UserPath          string
+	ProjectRoot       string
+	EnterpriseMCPPath string // path to managed-mcp.json; empty = use config.EnterpriseMCPPath()
+	DesktopConfigPath string // path to claude_desktop_config.json; empty = use platform default
 }
 
 // defaultMCPCLIEnv builds a production env from config helpers.
 func defaultMCPCLIEnv(projectRoot string) mcpCLIEnv {
 	return mcpCLIEnv{
-		UserPath:    config.UserSettingsPath(),
-		ProjectRoot: projectRoot,
+		UserPath:          config.UserSettingsPath(),
+		ProjectRoot:       projectRoot,
+		EnterpriseMCPPath: config.EnterpriseMCPPath(),
 	}
+}
+
+// enterpriseMCPPath returns the effective enterprise MCP path.
+func (e mcpCLIEnv) enterpriseMCPPath() string {
+	return e.EnterpriseMCPPath
 }
 
 // pathForScope resolves a scope name to the corresponding settings file path.
@@ -56,13 +64,15 @@ func runMCPCommand(args []string, stdout, stderr io.Writer, env mcpCLIEnv) int {
 	case "get":
 		return mcpGet(args[1:], env, stdout, stderr)
 	case "add":
-		return mcpAdd(args[1:], env, stdout, stderr) // implemented in Task 2
+		return mcpAdd(args[1:], env, stdout, stderr)
 	case "add-json":
-		return mcpAddJSON(args[1:], env, stdout, stderr) // implemented in Task 3
+		return mcpAddJSON(args[1:], env, stdout, stderr)
+	case "add-from-claude-desktop":
+		return mcpAddFromClaudeDesktop(args[1:], env, stdout, stderr)
 	case "remove":
-		return mcpRemove(args[1:], env, stdout, stderr) // implemented in Task 4
+		return mcpRemove(args[1:], env, stdout, stderr)
 	case "serve":
-		return mcpServe(args[1:], stdout, stderr) // implemented in Task 7
+		return mcpServe(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ccgo mcp: unknown subcommand %q\n", args[0])
 		fmt.Fprintln(stderr, mcpUsage)

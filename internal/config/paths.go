@@ -36,6 +36,14 @@ func ManagedSettingsDir() string {
 	}
 }
 
+// EnterpriseMCPPath returns the path to the enterprise-managed MCP
+// configuration file (managed-mcp.json).  When it exists, ccgo treats it as
+// having exclusive control over all MCP servers (MCP-27).
+// CC ref: src/services/mcp/config.ts:63 (getEnterpriseMcpFilePath).
+func EnterpriseMCPPath() string {
+	return filepath.Join(ManagedSettingsDir(), "managed-mcp.json")
+}
+
 func ProjectSettingsPath(root string) string {
 	return filepath.Join(root, ".claude", "settings.json")
 }

@@ -1059,7 +1059,80 @@ func TestProtocolClientRPCErrorAndSessionExpired(t *testing.T) {
 	}
 }
 
+// truncationTestTransport is a lifecycle-capable transport that returns
+// configurable instructions in the initialize response (for MCP-48 tests).
+type truncationTestTransport struct {
+	instructions string
+	requests     []RPCRequest
+	notifications []RPCNotification
+}
+
+func (t *truncationTestTransport) RoundTrip(_ context.Context, req RPCRequest) (RPCResponse, error) {
+	t.requests = append(t.requests, req)
+	if req.Method != "initialize" {
+		return RPCResponse{ID: req.ID, Result: json.RawMessage(`{}`)}, nil
+	}
+	instrJSON, _ := json.Marshal(t.instructions)
+	return RPCResponse{
+		JSONRPC: JSONRPCVersion,
+		ID:      req.ID,
+		Result: json.RawMessage(`{
+			"protocolVersion":"2025-06-18",
+			"capabilities":{"tools":{}},
+			"serverInfo":{"name":"t","version":"1"},
+			"instructions":` + string(instrJSON) + `
+		}`),
+	}, nil
+}
+
+func (t *truncationTestTransport) SendNotification(_ context.Context, n RPCNotification) error {
+	t.notifications = append(t.notifications, n)
+	return nil
+}
+
+// TestProtocolClientTruncatesLongInstructions verifies that server
+// instructions exceeding MaxMCPDescriptionLength are truncated on
+// Initialize (MCP-48).  CC ref: src/services/mcp/client.ts:1163-1169.
+func TestProtocolClientTruncatesLongInstructions(t *testing.T) {
+	longInstructions := strings.Repeat("x", MaxMCPDescriptionLength+100)
+	transport := &truncationTestTransport{instructions: longInstructions}
+	client := NewProtocolClient(transport)
+	result, err := client.Initialize(context.Background(), DefaultInitializeOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(result.Instructions, "… [truncated]") {
+		t.Fatalf("instructions not truncated, len=%d suffix=%q", len(result.Instructions), result.Instructions[len(result.Instructions)-20:])
+	}
+	if len(result.Instructions) > MaxMCPDescriptionLength+len("… [truncated]") {
+		t.Fatalf("instructions too long after truncation: len=%d", len(result.Instructions))
+	}
+}
+
+// TestProtocolClientDoesNotTruncateShortInstructions verifies short
+// instructions are left unchanged (MCP-48).
+func TestProtocolClientDoesNotTruncateShortInstructions(t *testing.T) {
+	transport := &truncationTestTransport{instructions: "short"}
+	client := NewProtocolClient(transport)
+	result, err := client.Initialize(context.Background(), DefaultInitializeOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Instructions != "short" {
+		t.Fatalf("instructions = %q", result.Instructions)
+	}
+}
+
 func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func mustJSONBytes(t *testing.T, value any) string {
 	t.Helper()
 	data, err := json.Marshal(value)
 	if err != nil {

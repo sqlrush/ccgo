@@ -515,3 +515,57 @@ func TestBuildConfiguredToolSetsReturnsProjectConfigErrors(t *testing.T) {
 		t.Fatalf("toolsets = %#v", result.ToolSets)
 	}
 }
+
+// TestDoesEnterpriseMCPConfigExistAbsent verifies missing path returns false (MCP-27).
+func TestDoesEnterpriseMCPConfigExistAbsent(t *testing.T) {
+	dir := t.TempDir()
+	if DoesEnterpriseMCPConfigExist(filepath.Join(dir, "nonexistent.json")) {
+		t.Fatal("expected false for nonexistent file")
+	}
+}
+
+// TestDoesEnterpriseMCPConfigExistPresent verifies existing file returns true (MCP-27).
+func TestDoesEnterpriseMCPConfigExistPresent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed-mcp.json")
+	if err := os.WriteFile(path, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !DoesEnterpriseMCPConfigExist(path) {
+		t.Fatal("expected true for existing file")
+	}
+}
+
+// TestLoadEnterpriseMCPConfigMissingReturnsEmpty verifies missing file is
+// silently handled (MCP-27).
+func TestLoadEnterpriseMCPConfigMissingReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	result, err := LoadEnterpriseMCPConfig(filepath.Join(dir, "missing.json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Servers) != 0 {
+		t.Fatalf("expected empty servers, got %v", result.Servers)
+	}
+}
+
+// TestLoadEnterpriseMCPConfigLoadsServers verifies managed-mcp.json servers
+// are loaded with enterprise scope (MCP-27).
+func TestLoadEnterpriseMCPConfigLoadsServers(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed-mcp.json")
+	if err := os.WriteFile(path, []byte(`{"mcpServers":{"corp-tools":{"command":"corp-mcp","args":[]}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := LoadEnterpriseMCPConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	srv, ok := result.Servers["corp-tools"]
+	if !ok {
+		t.Fatalf("expected corp-tools server, got %v", result.Servers)
+	}
+	if srv.Scope != ScopeEnterprise {
+		t.Fatalf("scope = %q, want enterprise", srv.Scope)
+	}
+}

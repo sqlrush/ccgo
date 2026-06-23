@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 
 	"ccgo/internal/contracts"
@@ -116,12 +118,45 @@ func projectConfigDirs(cwd string) []string {
 	return dirs
 }
 
-func appendNonMissingErrors(out []ValidationError, errors []ValidationError) []ValidationError {
-	for _, err := range errors {
+func appendNonMissingErrors(out []ValidationError, errs []ValidationError) []ValidationError {
+	for _, err := range errs {
 		if err.Message == "MCP config file not found" {
 			continue
 		}
 		out = append(out, err)
 	}
 	return out
+}
+
+// DoesEnterpriseMCPConfigExist returns true when a managed-mcp.json file is
+// present at EnterpriseMCPPath().  Used to gate user/project scope loading and
+// block mcp add when enterprise config is active (MCP-27).
+// CC ref: src/services/mcp/config.ts:1080 (doesEnterpriseMcpConfigExist).
+func DoesEnterpriseMCPConfigExist(enterprisePath string) bool {
+	if enterprisePath == "" {
+		return false
+	}
+	_, err := os.Stat(enterprisePath)
+	return err == nil
+}
+
+// LoadEnterpriseMCPConfig reads managed-mcp.json and returns the contained
+// servers.  Missing file returns an empty result without error (expected case).
+// Malformed files return an error.
+// CC ref: src/services/mcp/config.ts:996-1012 (getMcpConfigsByScope 'enterprise').
+func LoadEnterpriseMCPConfig(enterprisePath string) (LoadResult, error) {
+	if enterprisePath == "" {
+		return LoadResult{Servers: map[string]contracts.MCPServer{}}, nil
+	}
+	parsed, err := ParseConfigFile(enterprisePath, ParseOptions{Scope: ScopeEnterprise, FilePath: enterprisePath})
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return LoadResult{Servers: map[string]contracts.MCPServer{}}, nil
+		}
+		return LoadResult{}, err
+	}
+	if parsed.Config == nil {
+		return LoadResult{Servers: map[string]contracts.MCPServer{}, Errors: parsed.Errors}, nil
+	}
+	return LoadResult{Servers: parsed.Config.MCPServers, Errors: parsed.Errors}, nil
 }

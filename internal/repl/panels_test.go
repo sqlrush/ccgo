@@ -47,3 +47,33 @@ func TestDoctorReport(t *testing.T) {
 		t.Fatalf("doctor report missing checks: %q", out)
 	}
 }
+
+// TestMCPStatusPanelEmpty verifies the empty state message (MCP-53, F8-C03).
+func TestMCPStatusPanelEmpty(t *testing.T) {
+	out := mcpStatusPanel(nil)
+	if !strings.Contains(out, "No MCP servers") {
+		t.Fatalf("empty panel = %q", out)
+	}
+}
+
+// TestMCPStatusPanelShowsEntries verifies that server entries are shown with
+// name, transport, target, and status (MCP-53, F8-C03).
+func TestMCPStatusPanelShowsEntries(t *testing.T) {
+	entries := []MCPServerEntry{
+		{Name: "git-mcp", Transport: "stdio", Target: "/usr/bin/git-mcp", Status: "connected"},
+		{Name: "remote-x", Transport: "http", Target: "https://x.example/mcp", Status: "error", Error: "connection refused"},
+	}
+	out := mcpStatusPanel(entries)
+	if !strings.Contains(out, "git-mcp") {
+		t.Fatalf("panel missing git-mcp: %q", out)
+	}
+	if !strings.Contains(out, "remote-x") {
+		t.Fatalf("panel missing remote-x: %q", out)
+	}
+	if !strings.Contains(out, "connected") {
+		t.Fatalf("panel missing 'connected' status: %q", out)
+	}
+	if !strings.Contains(out, "connection refused") {
+		t.Fatalf("panel missing error detail: %q", out)
+	}
+}

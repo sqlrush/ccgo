@@ -223,6 +223,12 @@ func serverToDocument(server contracts.MCPServer) map[string]any {
 
 // mcpAdd implements the `claude mcp add` subcommand.
 func mcpAdd(args []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
+	// MCP-27: enterprise MCP config has exclusive control — block all adds.
+	// CC ref: src/services/mcp/config.ts:650-653.
+	if mcp.DoesEnterpriseMCPConfigExist(env.enterpriseMCPPath()) {
+		fmt.Fprintln(stderr, "ccgo mcp add: enterprise MCP configuration is active and has exclusive control over MCP servers")
+		return 1
+	}
 	name, server, scope, err := parseAddArgs(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo mcp add: %v\n", err)
