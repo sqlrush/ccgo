@@ -10537,6 +10537,161 @@ func TestRunnerContextSlashCommandReturnsReport(t *testing.T) {
 	}
 }
 
+// ─── CLI-FLAG-40: --json-schema wired into BuildRequest ──────────────────────
+
+func TestBuildRequestOutputSchemaInjectsFormatIntoOutputConfig(t *testing.T) {
+	// When OutputSchema is set, output_config.format must be populated.
+	runner := Runner{
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 100,
+		OutputSchema: contracts.JSONSchema{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{"type": "string"},
+			},
+		},
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, runner.Model)
+	if err != nil {
+		t.Fatalf("BuildRequest: %v", err)
+	}
+	if req.OutputConfig == nil {
+		t.Fatal("OutputConfig should not be nil when OutputSchema is set")
+	}
+	format, ok := req.OutputConfig["format"].(map[string]any)
+	if !ok {
+		t.Fatalf("OutputConfig[format] = %T, want map[string]any", req.OutputConfig["format"])
+	}
+	if format["type"] != "json_schema" {
+		t.Errorf("OutputConfig[format][type] = %q, want %q", format["type"], "json_schema")
+	}
+	if _, ok := format["json_schema"]; !ok {
+		t.Error("OutputConfig[format][json_schema] should be present")
+	}
+}
+
+func TestBuildRequestOutputSchemaCombinesWithEffortLevel(t *testing.T) {
+	// When both EffortLevel and OutputSchema are set, both keys appear in OutputConfig.
+	runner := Runner{
+		Model:        "claude-3-5-sonnet-20241022",
+		MaxTokens:    100,
+		EffortLevel:  "high",
+		OutputSchema: contracts.JSONSchema{"type": "object"},
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, runner.Model)
+	if err != nil {
+		t.Fatalf("BuildRequest: %v", err)
+	}
+	if req.OutputConfig == nil {
+		t.Fatal("OutputConfig should not be nil when EffortLevel and OutputSchema are both set")
+	}
+	if _, ok := req.OutputConfig["effort"]; !ok {
+		t.Error("OutputConfig[effort] should be present when EffortLevel is set")
+	}
+	if _, ok := req.OutputConfig["format"]; !ok {
+		t.Error("OutputConfig[format] should be present when OutputSchema is set")
+	}
+}
+
+func TestBuildRequestNoOutputSchemaLeavesOutputConfigNil(t *testing.T) {
+	// When OutputSchema is empty and EffortLevel is empty, OutputConfig should be nil.
+	runner := Runner{
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 100,
+	}
+	req, err := runner.BuildRequest([]contracts.Message{messages.UserText("hi")}, runner.Model)
+	if err != nil {
+		t.Fatalf("BuildRequest: %v", err)
+	}
+	if req.OutputConfig != nil {
+		t.Errorf("OutputConfig should be nil when no effort or schema; got %v", req.OutputConfig)
+	}
+}
+
+// ─── CLI-FLAG-44: MCPPermissionAsker ─────────────────────────────────────────
+
+func TestMCPPermissionAskerAllowsWhenToolReturnsAllow(t *testing.T) {
+	allowTool := tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        "perm_tool",
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		},
+		CallFunc: func(_ tool.Context, _ json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{Content: `{"behavior":"allow"}`}, nil
+		},
+	}
+	registry, err := tool.NewRegistry(allowTool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asker := &MCPPermissionAsker{ToolName: "perm_tool", Registry: registry}
+	decision, err := asker.Ask(context.Background(), tool.PermissionAskRequest{
+		ToolName: "Bash",
+		Input:    map[string]any{"command": "ls"},
+	})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if decision.Behavior != contracts.PermissionAllow {
+		t.Errorf("Behavior = %q, want %q", decision.Behavior, contracts.PermissionAllow)
+	}
+}
+
+func TestMCPPermissionAskerDeniesWhenToolReturnsDeny(t *testing.T) {
+	denyTool := tool.FuncTool{
+		DefinitionValue: contracts.ToolDefinition{
+			Name:        "perm_tool",
+			InputSchema: contracts.JSONSchema{"type": "object"},
+		},
+		CallFunc: func(_ tool.Context, _ json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {
+			return contracts.ToolResult{Content: `{"behavior":"deny","message":"blocked"}`}, nil
+		},
+	}
+	registry, err := tool.NewRegistry(denyTool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asker := &MCPPermissionAsker{ToolName: "perm_tool", Registry: registry}
+	decision, err := asker.Ask(context.Background(), tool.PermissionAskRequest{
+		ToolName: "Bash",
+	})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if decision.Behavior != contracts.PermissionDeny {
+		t.Errorf("Behavior = %q, want %q", decision.Behavior, contracts.PermissionDeny)
+	}
+	if decision.Message != "blocked" {
+		t.Errorf("Message = %q, want %q", decision.Message, "blocked")
+	}
+}
+
+func TestMCPPermissionAskerDeniesWhenToolNotFound(t *testing.T) {
+	registry, err := tool.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	asker := &MCPPermissionAsker{ToolName: "missing_tool", Registry: registry}
+	decision, askErr := asker.Ask(context.Background(), tool.PermissionAskRequest{ToolName: "Bash"})
+	if askErr == nil {
+		t.Error("Ask should return error when tool is not found")
+	}
+	if decision.Behavior != contracts.PermissionDeny {
+		t.Errorf("Behavior = %q, want %q (fail-safe deny)", decision.Behavior, contracts.PermissionDeny)
+	}
+}
+
+func TestMCPPermissionAskerDeniesWhenRegistryNil(t *testing.T) {
+	asker := &MCPPermissionAsker{ToolName: "perm_tool", Registry: nil}
+	decision, err := asker.Ask(context.Background(), tool.PermissionAskRequest{ToolName: "Bash"})
+	if err != nil {
+		t.Fatalf("Ask with nil registry: %v", err)
+	}
+	if decision.Behavior != contracts.PermissionDeny {
+		t.Errorf("Behavior = %q, want deny (fail-safe)", decision.Behavior)
+	}
+}
+
 func TestMain(m *testing.M) {
 	if shouldRunConversationLSPHelper() {
 		os.Setenv("GO_WANT_CONVERSATION_LSP_HELPER", "1")

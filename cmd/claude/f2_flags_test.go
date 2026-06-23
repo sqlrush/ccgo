@@ -18,6 +18,7 @@ import (
 
 	"ccgo/internal/bootstrap"
 	"ccgo/internal/contracts"
+	"ccgo/internal/conversation"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -909,5 +910,158 @@ func TestForkSessionCreatesNewID(t *testing.T) {
 	}
 	if string(runner.SessionID) == "" {
 		t.Error("--fork-session should produce a non-empty new session ID")
+	}
+}
+
+// ─── CLI-FLAG-40: --json-schema wired to runner.OutputSchema ─────────────────
+
+func TestJSONSchemaWiredToRunner(t *testing.T) {
+	testEnv(t)
+	schema := `{"type":"object","properties":{"name":{"type":"string"}}}`
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	runner, err := headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		JSONSchema:     schema,
+	})
+	if err != nil {
+		t.Fatalf("headlessRunner: %v", err)
+	}
+	if len(runner.OutputSchema) == 0 {
+		t.Fatal("runner.OutputSchema should be set when --json-schema is provided")
+	}
+	if runner.OutputSchema["type"] != "object" {
+		t.Errorf("OutputSchema[type] = %v, want %q", runner.OutputSchema["type"], "object")
+	}
+	// The structured-outputs beta header must be present.
+	found := false
+	for _, h := range runner.BetaHeaders {
+		if h == "structured-outputs-2025-12-15" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("BetaHeaders %v should contain structured-outputs-2025-12-15", runner.BetaHeaders)
+	}
+}
+
+func TestJSONSchemaInvalidJSONReturnsError(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	_, err = headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		JSONSchema:     "not-valid-json",
+	})
+	if err == nil {
+		t.Fatal("headlessRunner should return error for invalid --json-schema JSON")
+	}
+	if !strings.Contains(err.Error(), "--json-schema") {
+		t.Errorf("error should mention --json-schema; got: %v", err)
+	}
+}
+
+// ─── CLI-FLAG-44: --permission-prompt-tool wired to executor.Asker ───────────
+
+func TestPermissionPromptToolWiredToExecutorAsker(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	runner, err := headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode:      "default",
+		PermissionPromptTool: "my_perm_tool",
+	})
+	if err != nil {
+		t.Fatalf("headlessRunner: %v", err)
+	}
+	if runner.Tools.Asker == nil {
+		t.Fatal("runner.Tools.Asker should be set when --permission-prompt-tool is provided")
+	}
+	asker, ok := runner.Tools.Asker.(*conversation.MCPPermissionAsker)
+	if !ok {
+		t.Fatalf("Asker should be *conversation.MCPPermissionAsker, got %T", runner.Tools.Asker)
+	}
+	if asker.ToolName != "my_perm_tool" {
+		t.Errorf("MCPPermissionAsker.ToolName = %q, want %q", asker.ToolName, "my_perm_tool")
+	}
+}
+
+// ─── CLI-FLAG-27: --agent wired to runner model/system prompt ─────────────────
+
+func TestAgentFromInlineAgentsFlagAppliesPrompt(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	agentsJSON := `{"reviewer":{"prompt":"You are a strict code reviewer.","model":""}}`
+	runner, err := headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		Agent:          "reviewer",
+		Agents:         agentsJSON,
+	})
+	if err != nil {
+		t.Fatalf("headlessRunner: %v", err)
+	}
+	if !strings.Contains(runner.SystemPrompt, "You are a strict code reviewer.") {
+		t.Errorf("SystemPrompt should contain agent prompt; got: %q", runner.SystemPrompt)
+	}
+}
+
+func TestAgentFromInlineAgentsFlagAppliesModel(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	agentsJSON := `{"myagent":{"prompt":"be helpful","model":"claude-3-haiku-20240307"}}`
+	runner, err := headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		Agent:          "myagent",
+		Agents:         agentsJSON,
+	})
+	if err != nil {
+		t.Fatalf("headlessRunner: %v", err)
+	}
+	if runner.Model != "claude-3-haiku-20240307" {
+		t.Errorf("runner.Model = %q, want %q", runner.Model, "claude-3-haiku-20240307")
+	}
+}
+
+func TestAgentFromDiskFile(t *testing.T) {
+	testEnv(t)
+	dir := t.TempDir()
+	agentsDir := filepath.Join(dir, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: codebot\nmodel: claude-opus-4\ndescription: A code bot\n---\nYou are codebot, a specialized code assistant.\n"
+	if err := os.WriteFile(filepath.Join(agentsDir, "codebot.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	state.SetCWD(dir)
+	runner, err := headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		Agent:          "codebot",
+	})
+	if err != nil {
+		t.Fatalf("headlessRunner: %v", err)
+	}
+	if runner.Model != "claude-opus-4" {
+		t.Errorf("runner.Model = %q, want %q from agent file", runner.Model, "claude-opus-4")
+	}
+	if !strings.Contains(runner.SystemPrompt, "You are codebot") {
+		t.Errorf("SystemPrompt should contain agent prompt; got: %q", runner.SystemPrompt)
 	}
 }

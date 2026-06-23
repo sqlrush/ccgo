@@ -128,6 +128,11 @@ type Runner struct {
 	// Valid values: "low", "medium", "high", "max". Empty means unset.
 	// CC ref: utils/effort.ts resolveAppliedEffort; betas.ts EFFORT_BETA_HEADER.
 	EffortLevel string
+	// OutputSchema is the JSON schema for structured output (CLI-FLAG-40, --json-schema).
+	// When non-nil, output_config.format is set to {type:"json_schema", json_schema: schema}
+	// and the structured-outputs-2025-12-15 beta header is added to BetaHeaders.
+	// CC ref: src/services/api/claude.ts:1577-1586; src/constants/betas.ts:8.
+	OutputSchema contracts.JSONSchema
 	// AlwaysThinkingEnabled forces thinking for every request (CFG-33).
 	// When true and the model supports thinking, a default thinking budget is used.
 	// CC ref: settings/types.ts alwaysThinkingEnabled.

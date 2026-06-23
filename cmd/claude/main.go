@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"ccgo/internal/agentfile"
 	"ccgo/internal/api/anthropic"
 	"ccgo/internal/auth"
 	"ccgo/internal/bootstrap"
@@ -3998,12 +3999,26 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.MCP.LocalSettings.MCPServers = nil
 		runner.MCP.PluginServers = nil
 	}
-	// F2-C04: --permission-prompt-tool stores the MCP tool name for permission delegation.
-	// CC ref: src/main.tsx:--permission-prompt-tool.
-	// ⚠️ Full delegation is not wired (requires MCP tool dispatcher at permission ask time);
-	// storing it in env makes it observable for tests and future wiring.
+	// CLI-FLAG-40: --json-schema injects a structured output schema into the API request.
+	// When set, output_config.format = {type:"json_schema", json_schema:<schema>} and the
+	// structured-outputs-2025-12-15 beta header is added.
+	// CC ref: src/services/api/claude.ts:1577-1586; src/constants/betas.ts:8.
+	if options.JSONSchema != "" {
+		var schema contracts.JSONSchema
+		if err := json.Unmarshal([]byte(options.JSONSchema), &schema); err != nil {
+			return conversation.Runner{}, fmt.Errorf("--json-schema: invalid JSON: %w", err)
+		}
+		runner.OutputSchema = schema
+		runner.BetaHeaders = append(runner.BetaHeaders, "structured-outputs-2025-12-15")
+	}
+	// CLI-FLAG-44: --permission-prompt-tool delegates permission asks to a named MCP tool.
+	// CC ref: src/main.tsx:--permission-prompt-tool; src/cli/structuredIO.ts:623.
 	if options.PermissionPromptTool != "" {
 		_ = os.Setenv("CLAUDE_PERMISSION_PROMPT_TOOL", options.PermissionPromptTool)
+		runner.Tools.Asker = &conversation.MCPPermissionAsker{
+			ToolName: strings.TrimSpace(options.PermissionPromptTool),
+			Registry: runner.Tools.Registry,
+		}
 	}
 	// F2-C04: --max-budget-usd sets a cost ceiling; turn loop checks this after each turn.
 	// CC ref: src/main.tsx:--max-budget-usd.
@@ -4034,6 +4049,25 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	// CC ref: src/main.tsx:--disable-slash-commands.
 	if options.DisableSlashCommands {
 		runner.SkillDirs = nil
+	}
+
+	// CLI-FLAG-27/28: --agent looks up a named agent from the project or user agent dirs and
+	// applies its model and system prompt. --agents provides inline JSON agent definitions as
+	// a fallback when the named agent is not found on disk.
+	// CC ref: src/main.tsx:--agent; src/agents/registry.ts lookupAgent.
+	if options.Agent != "" {
+		agentPrompt, agentModel := resolveAgentSettings(
+			strings.TrimSpace(options.Agent),
+			strings.TrimSpace(options.Agents),
+			runner.WorkingDirectory,
+		)
+		if agentModel != "" {
+			runner.Model = agentModel
+		}
+		if agentPrompt != "" {
+			options.AppendSystem = joinNonEmpty(options.AppendSystem, agentPrompt)
+		}
+		_ = os.Setenv("CLAUDE_CODE_AGENT", strings.TrimSpace(options.Agent))
 	}
 
 	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
@@ -4175,6 +4209,54 @@ func combineSystemPrompt(systemPrompt string, appendSystem string) string {
 		return base
 	default:
 		return extra
+	}
+}
+
+// resolveAgentSettings looks up the named agent from disk (project dir first,
+// then user dir) and, if not found, from the inlineAgentsJSON string.
+// Returns the agent's system prompt and model (either may be empty).
+// CLI-FLAG-27/28: --agent and --agents.
+// CC ref: src/main.tsx:--agent; src/agents/registry.ts lookupAgent.
+func resolveAgentSettings(name, inlineAgentsJSON, cwd string) (prompt, model string) {
+	// 1. Try disk: project agents dir, then user agents dir.
+	projectDir := agentfile.ProjectDir(cwd)
+	userDir, _ := agentfile.UserDir()
+	agents, err := agentfile.List(projectDir, userDir)
+	if err == nil {
+		for _, a := range agents {
+			if strings.EqualFold(a.Name, name) {
+				return a.Prompt, a.Model
+			}
+		}
+	}
+	// 2. Fall back to inline JSON definitions provided via --agents.
+	if inlineAgentsJSON == "" {
+		return "", ""
+	}
+	var defs map[string]struct {
+		Prompt string `json:"prompt"`
+		Model  string `json:"model"`
+	}
+	if jsonErr := json.Unmarshal([]byte(inlineAgentsJSON), &defs); jsonErr != nil {
+		return "", ""
+	}
+	if def, ok := defs[name]; ok {
+		return def.Prompt, def.Model
+	}
+	return "", ""
+}
+
+// joinNonEmpty concatenates two strings with "\n\n" separator, skipping blank parts.
+func joinNonEmpty(a, b string) string {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	switch {
+	case a != "" && b != "":
+		return a + "\n\n" + b
+	case a != "":
+		return a
+	default:
+		return b
 	}
 }
 

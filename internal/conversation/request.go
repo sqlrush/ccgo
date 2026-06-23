@@ -116,10 +116,20 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 			request.Thinking = thinking
 		}
 	}
-	// CFG-32: effortLevel is sent as output_config.effort (requires effort-2025-11-24 beta).
-	// CC ref: utils/effort.ts configureEffortParams; services/api/claude.ts:447-456.
+	// Build OutputConfig: merge effort (CFG-32) and json_schema format (CLI-FLAG-40).
+	// CC ref: utils/effort.ts configureEffortParams; services/api/claude.ts:447-456, 1577-1586.
+	outputConfig := map[string]any{}
 	if effortLevel := strings.TrimSpace(r.EffortLevel); effortLevel != "" {
-		request.OutputConfig = map[string]any{"effort": effortLevel}
+		outputConfig["effort"] = effortLevel
+	}
+	if len(r.OutputSchema) > 0 {
+		outputConfig["format"] = map[string]any{
+			"type":        "json_schema",
+			"json_schema": r.OutputSchema,
+		}
+	}
+	if len(outputConfig) > 0 {
+		request.OutputConfig = outputConfig
 	}
 	return request, nil
 }
