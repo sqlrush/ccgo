@@ -103,7 +103,7 @@ func newTurnLoopForRunner(ctx context.Context, term Terminal, base conversation.
 // newProductionRouter builds the canonical CommandRouter wired by RunInteractiveWithOptions.
 // It is extracted so that the parity test can enumerate registered names without
 // duplicating the registration list.
-func newProductionRouter(cwd string) *CommandRouter {
+func newProductionRouter(cwd string, registry []contracts.Command) *CommandRouter {
 	router := NewCommandRouter()
 	router.Register("resume", resumeHandler(cwd))
 	router.Register("continue", resumeHandler(cwd))
@@ -120,6 +120,9 @@ func newProductionRouter(cwd string) *CommandRouter {
 	}))
 	router.Register("ide", ideHandler(nil)) // nil → defaultIDEDetect
 	router.Register("memory", memoryHandler(cwd))
+	router.Register("help", helpHandler(registry))
+	router.Register("doctor", doctorHandler(cwd, ""))
+	router.Register("model", modelHandler())
 	return router
 }
 
@@ -199,7 +202,7 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 
 	// Wire the command router so /resume (and future live-effect commands) are
 	// handled without falling through to the model.
-	router := newProductionRouter(base.WorkingDirectory)
+	router := newProductionRouter(base.WorkingDirectory, opts.Registry)
 	loop.onCommand = func(input string) (CommandOutcome, bool) {
 		cc := CommandContext{
 			Screen:  &loop.screen,

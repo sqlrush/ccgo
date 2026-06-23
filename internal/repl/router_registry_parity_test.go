@@ -16,7 +16,7 @@ import (
 // return "Unknown skill: <name>". The same class of drift previously bit
 // /permissions and /agents.
 func TestProductionRouterCommandsAreInBuiltinRegistry(t *testing.T) {
-	router := newProductionRouter("")
+	router := newProductionRouter("", nil)
 	registry := commands.FromSources(commands.Sources{Builtins: commands.BuiltinCommands()})
 
 	for _, name := range router.Names() {
@@ -41,7 +41,7 @@ func TestProductionRouterCommandsAreInBuiltinRegistry(t *testing.T) {
 // This is the inverse guard: it catches registry entries that are missing a
 // runtime handler entirely.
 func TestBuiltinRegistryCommandsHaveRouterOrExecutor(t *testing.T) {
-	router := newProductionRouter("")
+	router := newProductionRouter("", nil)
 	routerNames := make(map[string]struct{})
 	for _, n := range router.Names() {
 		routerNames[n] = struct{}{}
