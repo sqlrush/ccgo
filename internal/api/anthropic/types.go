@@ -11,18 +11,19 @@ const DefaultVersion = "2023-06-01"
 const DefaultBaseURL = "https://api.anthropic.com"
 
 type Request struct {
-	Model       string                 `json:"model"`
-	MaxTokens   int                    `json:"max_tokens"`
-	Messages    []contracts.APIMessage `json:"messages"`
-	System      any                    `json:"system,omitempty"`
-	Tools       []ToolDefinition       `json:"tools,omitempty"`
-	ToolChoice  any                    `json:"tool_choice,omitempty"`
-	Temperature *float64               `json:"temperature,omitempty"`
-	TopP        *float64               `json:"top_p,omitempty"`
-	TopK        *int                   `json:"top_k,omitempty"`
-	Metadata    map[string]any         `json:"metadata,omitempty"`
-	Thinking    map[string]any         `json:"thinking,omitempty"`
-	Stream      bool                   `json:"stream,omitempty"`
+	Model        string                 `json:"model"`
+	MaxTokens    int                    `json:"max_tokens"`
+	Messages     []contracts.APIMessage `json:"messages"`
+	System       any                    `json:"system,omitempty"`
+	Tools        []ToolDefinition       `json:"tools,omitempty"`
+	ToolChoice   any                    `json:"tool_choice,omitempty"`
+	Temperature  *float64               `json:"temperature,omitempty"`
+	TopP         *float64               `json:"top_p,omitempty"`
+	TopK         *int                   `json:"top_k,omitempty"`
+	Metadata     map[string]any         `json:"metadata,omitempty"`
+	Thinking     map[string]any         `json:"thinking,omitempty"`
+	OutputConfig map[string]any         `json:"output_config,omitempty"` // CC: output_config.effort (effort-2025-11-24 beta)
+	Stream       bool                   `json:"stream,omitempty"`
 
 	// ToolSearchActive indicates that deferred tool search is active for this
 	// request; DynamicBetaHeaders will include ToolSearchBetaHeader when true.

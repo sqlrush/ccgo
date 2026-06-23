@@ -104,6 +104,12 @@ var knownSettingsJSONKeys = []string{
 	"telemetryExport",
 	"autoUpdatesChannel",
 	"plugins",
+	"verbose",
+	"minimumVersion",
+	"claudeMdExcludes",
+	"autoMemoryEnabled",
+	"autoMemoryDirectory",
+	"plansDirectory",
 }
 
 func (s Settings) MarshalJSON() ([]byte, error) {

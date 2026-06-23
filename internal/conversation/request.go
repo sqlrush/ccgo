@@ -106,9 +106,20 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 		request.Tools = anthropic.ToolsFromContracts(definitions)
 	}
 	if capability, ok := modelpkg.DefaultRegistry().Resolve(model); ok {
-		if thinking := thinkingRequestConfig(capability, r.ThinkingBudgetTokens, r.maxTokens()); thinking != nil {
+		// CFG-33: alwaysThinkingEnabled forces a default thinking budget when the
+		// model supports thinking and no explicit budget is already configured.
+		budgetTokens := r.ThinkingBudgetTokens
+		if r.AlwaysThinkingEnabled && budgetTokens <= 0 {
+			budgetTokens = defaultThinkingBudgetTokens
+		}
+		if thinking := thinkingRequestConfig(capability, budgetTokens, r.maxTokens()); thinking != nil {
 			request.Thinking = thinking
 		}
+	}
+	// CFG-32: effortLevel is sent as output_config.effort (requires effort-2025-11-24 beta).
+	// CC ref: utils/effort.ts configureEffortParams; services/api/claude.ts:447-456.
+	if effortLevel := strings.TrimSpace(r.EffortLevel); effortLevel != "" {
+		request.OutputConfig = map[string]any{"effort": effortLevel}
 	}
 	return request, nil
 }

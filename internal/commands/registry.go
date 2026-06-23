@@ -328,6 +328,13 @@ func BuiltinCommands() []contracts.Command {
 func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 	skillDirs := skills.ProjectSkillDirs(cwd)
 	skillDirs = append(skillDirs, skills.UserSkillDirs()...)
+	// SKILL-03: load managed (policy) skills unless CLAUDE_CODE_DISABLE_POLICY_SKILLS is set.
+	// Managed skills are prepended (lowest priority) so they can be overridden by user/project skills.
+	// CC ref: skills/loadSkillsDir.ts (CLAUDE_CODE_DISABLE_POLICY_SKILLS env gate).
+	managedDirs := skills.ManagedSkillDirs()
+	if len(managedDirs) > 0 {
+		skillDirs = append(managedDirs, skillDirs...)
+	}
 	loaded := skills.LoadSkillDirs(skillDirs, contracts.CommandSourceSkills)
 	loaded = append(loaded, skills.LoadLegacyCommandSkills(cwd)...)
 	loaded = append(loaded, skills.LoadUserLegacyCommandSkills()...)

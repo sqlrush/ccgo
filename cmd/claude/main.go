@@ -379,6 +379,12 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 
 	mergedSettings := runnerMergedSettings(runner)
 
+	// CFG-13: cleanupPeriodDays — remove old transcript files at startup.
+	// CC ref: utils/settings/types.ts cleanupPeriodDays.
+	if mergedSettings.CleanupPeriodDays != nil {
+		_ = session.CleanupOldTranscripts(*mergedSettings.CleanupPeriodDays)
+	}
+
 	// Load persisted prompt history (best-effort; nil on any error).
 	var promptHistory []session.HistoryEntry
 	if histEntries, err := session.LoadHistory(
@@ -3526,6 +3532,45 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	if runner.MCP != nil {
 		merged := runner.MCP.MergedSettings()
 		runner.FastMode = merged.FastMode != nil && *merged.FastMode
+		// CFG-32: effortLevel from settings sets the initial effort level.
+		// CC ref: utils/effort.ts getInitialEffortSetting.
+		if merged.EffortLevel != "" {
+			runner.EffortLevel = merged.EffortLevel
+		}
+		// CFG-33: alwaysThinkingEnabled forces thinking on every request.
+		if merged.AlwaysThinkingEnabled != nil && *merged.AlwaysThinkingEnabled {
+			runner.AlwaysThinkingEnabled = true
+		}
+		// CFG-07: availableModels enforces model whitelist when set by enterprise.
+		// CC ref: utils/settings/types.ts availableModels; model selection validation.
+		if err := checkAvailableModels(runner.Model, merged.AvailableModels); err != nil {
+			return conversation.Runner{}, err
+		}
+		// CFG-08: modelOverrides remaps model IDs (e.g. to Bedrock ARNs).
+		// CC ref: utils/settings/types.ts modelOverrides.
+		if remapped := applyModelOverrides(runner.Model, merged.ModelOverrides); remapped != runner.Model {
+			runner.Model = remapped
+		}
+		// CFG-46: minimumVersion enforces a minimum version constraint.
+		// CC ref: utils/settings/types.ts minimumVersion.
+		if err := checkMinimumVersion(merged.MinimumVersion); err != nil {
+			return conversation.Runner{}, err
+		}
+		// CFG-18: language preference — inject into system prompt.
+		// CC ref: constants/prompts.ts getLanguageSection.
+		if merged.Language != "" {
+			runner.Language = merged.Language
+		}
+		// CFG-16: includeGitInstructions — controls git sections in system prompt.
+		// CC ref: utils/gitSettings.ts shouldIncludeGitInstructions.
+		if merged.IncludeGitInstructions != nil {
+			runner.IncludeGitInstructions = merged.IncludeGitInstructions
+		}
+		// CFG-53: verbose — enables detailed debug output.
+		// CC ref: tools/ConfigTool/supportedSettings.ts verbose.
+		if merged.Verbose != nil && *merged.Verbose {
+			runner.Verbose = true
+		}
 	}
 	if options.MaxTokens < 0 {
 		return conversation.Runner{}, fmt.Errorf("invalid --max-tokens %d; must be non-negative", options.MaxTokens)
@@ -3541,7 +3586,12 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 	runner.UseStreaming = options.Stream
 	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
-	if claudeCtx := loadClaudeMdContext(runner.WorkingDirectory); claudeCtx != "" {
+	// CFG-44: claudeMdExcludes patterns are read from merged settings.
+	var claudeMdExcludes []string
+	if runner.MCP != nil {
+		claudeMdExcludes = runner.MCP.MergedSettings().ClaudeMdExcludes
+	}
+	if claudeCtx := loadClaudeMdContext(runner.WorkingDirectory, claudeMdExcludes...); claudeCtx != "" {
 		if runner.SystemPrompt != "" {
 			runner.SystemPrompt = runner.SystemPrompt + "\n\n" + claudeCtx
 		} else {
@@ -3641,10 +3691,12 @@ func combineSystemPrompt(systemPrompt string, appendSystem string) string {
 // loadClaudeMdContext loads the scoped CLAUDE.md hierarchy for cwd and returns
 // the concatenated content of all discovered documents (imports expanded, in
 // precedence order). Returns an empty string when no CLAUDE.md files exist.
+// excludePatterns is applied per CFG-44 (claudeMdExcludes).
 // Errors are treated as non-fatal: the function logs to stderr and returns "".
-func loadClaudeMdContext(cwd string) string {
+func loadClaudeMdContext(cwd string, excludePatterns ...string) string {
 	opts := memory.LoadOptions{
-		Scope: memory.DefaultScopeOptions(cwd),
+		Scope:           memory.DefaultScopeOptions(cwd),
+		ExcludePatterns: excludePatterns,
 	}
 	docs, err := memory.LoadScopedClaudeContext(opts)
 	if err != nil {
@@ -4701,4 +4753,96 @@ func extractTextPromptFromMessage(msg contracts.Message) string {
 // remote transports (HTTP/SSE/WS) that should use exponential-backoff reconnect.
 func shouldReconnect(transport string) bool {
 	return reconnect.ShouldReconnect(transport)
+}
+
+// checkAvailableModels returns an error when availableModels is non-empty and the
+// requested model is not in the whitelist. Called in headlessRunner (CFG-07).
+// CC ref: utils/settings/types.ts availableModels.
+func checkAvailableModels(modelName string, availableModels []string) error {
+	if len(availableModels) == 0 {
+		return nil
+	}
+	for _, allowed := range availableModels {
+		if strings.EqualFold(strings.TrimSpace(allowed), strings.TrimSpace(modelName)) {
+			return nil
+		}
+	}
+	return fmt.Errorf("model %q is not in the enterprise availableModels list: %v", modelName, availableModels)
+}
+
+// applyModelOverrides remaps a model name using the modelOverrides map (CFG-08).
+// Returns the original name when no override is configured.
+// CC ref: utils/settings/types.ts modelOverrides (Bedrock ARN remapping).
+func applyModelOverrides(modelName string, overrides map[string]string) string {
+	if len(overrides) == 0 {
+		return modelName
+	}
+	for src, dst := range overrides {
+		if strings.EqualFold(strings.TrimSpace(src), strings.TrimSpace(modelName)) {
+			return strings.TrimSpace(dst)
+		}
+	}
+	return modelName
+}
+
+// checkMinimumVersion returns an error when the running version is below
+// the minimum required version from managed settings (CFG-46).
+// Uses a simple lexicographic semver comparison (sufficient for X.Y.Z strings).
+// CC ref: utils/settings/types.ts minimumVersion.
+func checkMinimumVersion(minimumVersion string) error {
+	minimumVersion = strings.TrimSpace(minimumVersion)
+	if minimumVersion == "" {
+		return nil
+	}
+	current := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	minimum := strings.TrimPrefix(minimumVersion, "v")
+	if compareSemver(current, minimum) < 0 {
+		return fmt.Errorf("this version (%s) is below the required minimum version (%s); please upgrade claude", current, minimum)
+	}
+	return nil
+}
+
+// compareSemver returns -1, 0, or 1 for a < b, a == b, a > b.
+// Handles X.Y.Z[-suffix] semver strings. Non-parseable parts fall back to
+// lexicographic comparison. Sufficient for version gate enforcement.
+func compareSemver(a, b string) int {
+	pa := parseSemverParts(a)
+	pb := parseSemverParts(b)
+	for i := 0; i < 3; i++ {
+		va, vb := 0, 0
+		if i < len(pa) {
+			va = pa[i]
+		}
+		if i < len(pb) {
+			vb = pb[i]
+		}
+		if va < vb {
+			return -1
+		}
+		if va > vb {
+			return 1
+		}
+	}
+	return 0
+}
+
+func parseSemverParts(v string) []int {
+	// Strip pre-release suffix (e.g. "-dev", "-alpha.1")
+	if idx := strings.IndexByte(v, '-'); idx >= 0 {
+		v = v[:idx]
+	}
+	parts := strings.SplitN(v, ".", 3)
+	out := make([]int, 0, 3)
+	for _, p := range parts {
+		n := 0
+		for _, c := range p {
+			if c >= '0' && c <= '9' {
+				n = n*10 + int(c-'0')
+			} else {
+				break
+			}
+		}
+		out = append(out, n)
+	}
+	return out
 }

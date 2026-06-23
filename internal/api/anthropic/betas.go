@@ -12,8 +12,9 @@ const (
 	StructuredOutputsBetaHeader   = "structured-outputs-2025-11-13"
 	FastModeBetaHeader            = "fast-mode-2025-01-24"
 	CacheEditingBetaHeader        = "cache-editing-2025-01-24"
-	ToolSearchBetaHeader          = "advanced-tool-use-2025-11-20"  // CC: TOOL_SEARCH_BETA_HEADER_1P (betas.ts:9)
+	ToolSearchBetaHeader          = "advanced-tool-use-2025-11-20"    // CC: TOOL_SEARCH_BETA_HEADER_1P (betas.ts:9)
 	InterleavedThinkingBetaHeader = "interleaved-thinking-2025-05-14" // CC: INTERLEAVED_THINKING_BETA_HEADER (betas.ts:2)
+	EffortBetaHeader              = "effort-2025-11-24"               // CC: EFFORT_BETA_HEADER (betas.ts:15)
 )
 
 func MergeBetaHeaders(groups ...[]string) []string {
@@ -72,7 +73,22 @@ func dynamicBetaHeadersForRequest(request Request) []string {
 	if request.ToolSearchActive {
 		betas = append(betas, ToolSearchBetaHeader)
 	}
+	// Effort level requires the effort beta header.
+	// CC ref: effort.ts configureEffortParams; betas.ts:15 EFFORT_BETA_HEADER.
+	if requestUsesEffort(request.OutputConfig) {
+		betas = append(betas, EffortBetaHeader)
+	}
 	return betas
+}
+
+// requestUsesEffort returns true when the output_config map contains an
+// "effort" key, meaning the caller wants to send an effort level to the API.
+func requestUsesEffort(outputConfig map[string]any) bool {
+	if len(outputConfig) == 0 {
+		return false
+	}
+	_, ok := outputConfig["effort"]
+	return ok
 }
 
 func dynamicBetaHeadersForCountTokensRequest(modelName string, messages []contracts.APIMessage, system any, tools []ToolDefinition) []string {

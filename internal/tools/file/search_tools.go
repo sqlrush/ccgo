@@ -1356,6 +1356,15 @@ func callGrep(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSink) (contr
 		SortExplicit:          sortExplicit,
 	}
 	noIgnore := grepNoIgnore(input, unrestricted)
+	// CFG-39: respectGitignore=false in settings forces no-ignore for Grep as well.
+	// CC ref: utils/settings/types.ts respectGitignore.
+	if !noIgnore {
+		if settings, ok := ctx.Metadata[tool.MetadataSettingsKey].(contracts.Settings); ok {
+			if settings.RespectGitignore != nil && !*settings.RespectGitignore {
+				noIgnore = true
+			}
+		}
+	}
 	ignoreVCS := grepIgnoreVCS(input)
 	ignoreDot := grepIgnoreDot(input)
 	follow := grepFollow(input)
@@ -4184,6 +4193,15 @@ func grepContextLines(input grepInput) (int, int) {
 
 func globWalkOptions(ctx tool.Context, root string) searchWalkOptions {
 	useIgnoreFiles := !envTruthyDefault("CLAUDE_CODE_GLOB_NO_IGNORE", true)
+	// CFG-39: respectGitignore=false in settings disables .gitignore for Glob.
+	// CC ref: utils/glob.ts:98 (CLAUDE_CODE_GLOB_NO_IGNORE env var path).
+	if useIgnoreFiles {
+		if settings, ok := ctx.Metadata[tool.MetadataSettingsKey].(contracts.Settings); ok {
+			if settings.RespectGitignore != nil && !*settings.RespectGitignore {
+				useIgnoreFiles = false
+			}
+		}
+	}
 	return searchWalkOptions{
 		UseGitIgnoreFiles: useIgnoreFiles,
 		UseIgnoreFiles:    useIgnoreFiles,

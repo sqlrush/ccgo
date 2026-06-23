@@ -238,6 +238,27 @@ func MergeSettings(settings ...contracts.Settings) contracts.Settings {
 		if s.Extra != nil {
 			out.Extra = mergeAnyMap(out.Extra, s.Extra)
 		}
+		// CFG-53: verbose — last (highest-priority) non-nil value wins.
+		if s.Verbose != nil {
+			out.Verbose = clonePtr(s.Verbose)
+		}
+		// CFG-46: minimumVersion — last (highest-priority) non-empty value wins.
+		if s.MinimumVersion != "" {
+			out.MinimumVersion = s.MinimumVersion
+		}
+		// CFG-44: claudeMdExcludes — concatenate and deduplicate across layers.
+		out.ClaudeMdExcludes = mergeStrings(out.ClaudeMdExcludes, s.ClaudeMdExcludes)
+		// CFG-42: autoMemoryEnabled / autoMemoryDirectory — last value wins.
+		if s.AutoMemoryEnabled != nil {
+			out.AutoMemoryEnabled = clonePtr(s.AutoMemoryEnabled)
+		}
+		if s.AutoMemoryDirectory != "" {
+			out.AutoMemoryDirectory = s.AutoMemoryDirectory
+		}
+		// CFG-43: plansDirectory — last value wins.
+		if s.PlansDirectory != "" {
+			out.PlansDirectory = s.PlansDirectory
+		}
 	}
 	return out
 }

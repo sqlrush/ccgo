@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"ccgo/internal/config"
 	"ccgo/internal/platform"
 )
 
@@ -34,6 +35,31 @@ func UserSkillDirs() []string {
 	var out []string
 	seen := map[string]struct{}{}
 	return appendSkillRoots(out, seen, filepath.Join(platform.ClaudeHomeDir(), "skills"))
+}
+
+// ManagedSkillDirs returns the skill directories from the managed (policy) path.
+// Returns nil when the CLAUDE_CODE_DISABLE_POLICY_SKILLS environment variable is set.
+// CC ref: skills/loadSkillsDir.ts (SKILL-03).
+func ManagedSkillDirs() []string {
+	if isEnvTruthy(os.Getenv("CLAUDE_CODE_DISABLE_POLICY_SKILLS")) {
+		return nil
+	}
+	managedDir := config.ManagedSettingsDir()
+	if managedDir == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]struct{}{}
+	return appendSkillRoots(out, seen, filepath.Join(managedDir, ".claude", "skills"))
+}
+
+// isEnvTruthy reports whether an environment variable value is truthy (1/true/yes/on).
+func isEnvTruthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 func DiscoverSkillDirsForPaths(paths []string, cwd string) []string {

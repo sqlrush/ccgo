@@ -66,6 +66,20 @@ func FromSettings(settings contracts.Settings) []tool.Hook {
 	})
 }
 
+// FromSettingsFiltered builds hooks from settings but skips the AllowManagedHooksOnly
+// check — the caller is responsible for having already selected the right layer.
+// DisableAllHooks is still honoured.
+// CC ref: utils/settings/types.ts allowManagedHooksOnly (CFG-26).
+func FromSettingsFiltered(settings contracts.Settings) []tool.Hook {
+	if settings.DisableAllHooks != nil && *settings.DisableAllHooks {
+		return nil
+	}
+	return FromRaw(settings.Hooks, Options{
+		AllowedHTTPHookURLs:    settings.AllowedHTTPHookURLs,
+		HTTPHookAllowedEnvVars: settings.HTTPHookAllowedEnvVars,
+	})
+}
+
 func FromRaw(raw map[string]any, options Options) []tool.Hook {
 	if len(raw) == 0 {
 		return nil

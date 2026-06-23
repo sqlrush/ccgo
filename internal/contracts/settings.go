@@ -68,6 +68,22 @@ type Settings struct {
 	TelemetryExport                 *TelemetryExportSetting     `json:"telemetryExport,omitempty"`
 	AutoUpdatesChannel              string                      `json:"autoUpdatesChannel,omitempty"`
 	Plugins                         map[string]any              `json:"plugins,omitempty"`
+	// CFG-53: verbose enables detailed debug/diagnostic output.
+	// CC ref: tools/ConfigTool/supportedSettings.ts verbose; global config key.
+	Verbose                         *bool                       `json:"verbose,omitempty"`
+	// CFG-46: minimumVersion enforces a minimum required version of the client.
+	// CC ref: utils/settings/types.ts minimumVersion.
+	MinimumVersion                  string                      `json:"minimumVersion,omitempty"`
+	// CFG-44: claudeMdExcludes lists glob patterns for CLAUDE.md files to exclude.
+	// CC ref: utils/settings/types.ts claudeMdExcludes.
+	ClaudeMdExcludes                []string                    `json:"claudeMdExcludes,omitempty"`
+	// CFG-42: autoMemoryEnabled and autoMemoryDirectory control automatic memory writes.
+	// CC ref: utils/settings/types.ts autoMemoryEnabled / autoMemoryDirectory.
+	AutoMemoryEnabled               *bool                       `json:"autoMemoryEnabled,omitempty"`
+	AutoMemoryDirectory             string                      `json:"autoMemoryDirectory,omitempty"`
+	// CFG-43: plansDirectory sets the directory for plan files.
+	// CC ref: utils/settings/types.ts plansDirectory.
+	PlansDirectory                  string                      `json:"plansDirectory,omitempty"`
 	Extra                           map[string]any              `json:"-"`
 }
 

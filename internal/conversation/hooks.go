@@ -19,7 +19,18 @@ func (r Runner) configuredHooks(settings contracts.Settings) []tool.Hook {
 	if r.MCP != nil && config.IsRestrictedToPluginOnly(r.MCP.PolicySettings, config.CustomizationSurfaceHooks) {
 		hookSettings = r.MCP.PolicySettings
 	}
-	hooks := hookpkg.FromSettings(hookSettings)
+	// CFG-26: allowManagedHooksOnly — when set, only run hooks from managed
+	// (policy) settings layer, discarding user/project/local hooks.
+	// CC ref: utils/settings/types.ts allowManagedHooksOnly.
+	if settings.AllowManagedHooksOnly != nil && *settings.AllowManagedHooksOnly {
+		if r.MCP != nil {
+			// Use only the managed/policy settings hooks.
+			hookSettings = r.MCP.PolicySettings
+		} else {
+			hookSettings = contracts.Settings{}
+		}
+	}
+	hooks := hookpkg.FromSettingsFiltered(hookSettings)
 	hooks = append(hooks, r.pluginToolHooks(settings)...)
 	return hooks
 }

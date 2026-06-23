@@ -59,6 +59,10 @@ func DiscoverClaudeFiles(cwd string) ([]ClaudeFile, error) {
 type LoadOptions struct {
 	Scope  ScopeOptions
 	Import ImportOptions
+	// ExcludePatterns is an optional list of glob patterns applied against each
+	// CLAUDE.md file's absolute path. Files matching any pattern are skipped.
+	// CC ref: settings/types.ts claudeMdExcludes (CFG-44).
+	ExcludePatterns []string
 }
 
 // LoadScopedClaudeContext discovers all scoped CLAUDE.md sources in
@@ -66,6 +70,21 @@ type LoadOptions struct {
 // imported docs immediately before their host doc. The per-file BaseDir is
 // set to the host file's directory so that relative import paths resolve
 // correctly, while AllowedRoot from opts.Import constrains traversal.
+// claudeMdExcluded reports whether a CLAUDE.md file path matches any of the
+// exclude patterns (CFG-44). Uses filepath.Match for glob matching.
+func claudeMdExcluded(path string, patterns []string) bool {
+	for _, pattern := range patterns {
+		// Match against full path and also basename for simple patterns.
+		if ok, _ := filepath.Match(pattern, path); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(pattern, filepath.Base(path)); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func LoadScopedClaudeContext(opts LoadOptions) ([]Document, error) {
 	files, err := DiscoverScopedClaudeFiles(opts.Scope)
 	if err != nil {
@@ -73,6 +92,10 @@ func LoadScopedClaudeContext(opts LoadOptions) ([]Document, error) {
 	}
 	var docs []Document
 	for _, f := range files {
+		// CFG-44: skip files that match any claudeMdExcludes pattern.
+		if claudeMdExcluded(f.Path, opts.ExcludePatterns) {
+			continue
+		}
 		info, err := os.Stat(f.Path)
 		if err != nil {
 			// File disappeared between discovery and read — skip silently.
