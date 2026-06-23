@@ -255,6 +255,139 @@ func TestQueryCtxCancelStopsQuery(t *testing.T) {
 	}
 }
 
+// ── F1-C06: keep_alive / control_cancel_request / update_environment_variables ─
+
+// TestDispatchLineKeepAliveIsIgnored verifies that a keep_alive message does
+// not produce a response and does not crash.
+// CC ref: controlSchemas.ts:621-627.
+func TestDispatchLineKeepAliveIsIgnored(t *testing.T) {
+	var out bytes.Buffer
+	enc := NewEncoder(&out)
+	ctrl := NewController(nil, nil)
+	asker := newControlAsker(enc.WriteRequest, func() string { return "x" })
+
+	dispatchLine(`{"type":"keep_alive"}`, ctrl, asker, enc)
+	// No output should be written.
+	if out.Len() != 0 {
+		t.Fatalf("keep_alive must produce no output, got: %q", out.String())
+	}
+}
+
+// TestDispatchLineUpdateEnvironmentVariablesIsIgnored verifies that an
+// update_environment_variables message is silently accepted.
+// CC ref: controlSchemas.ts:629-636.
+func TestDispatchLineUpdateEnvironmentVariablesIsIgnored(t *testing.T) {
+	var out bytes.Buffer
+	enc := NewEncoder(&out)
+	ctrl := NewController(nil, nil)
+	asker := newControlAsker(enc.WriteRequest, func() string { return "x" })
+
+	dispatchLine(`{"type":"update_environment_variables","variables":{"FOO":"bar"}}`, ctrl, asker, enc)
+	if out.Len() != 0 {
+		t.Fatalf("update_environment_variables must produce no output, got: %q", out.String())
+	}
+}
+
+// TestDispatchLineControlCancelRequestCancelsAsker verifies that a
+// control_cancel_request with a pending request_id delivers a deny decision
+// to the waiting Ask() call.
+// CC ref: controlSchemas.ts:612-619.
+func TestDispatchLineControlCancelRequestCancelsAsker(t *testing.T) {
+	var out bytes.Buffer
+	enc := NewEncoder(&out)
+	ctrl := NewController(nil, nil)
+
+	idGen := func() string { return "req-77" }
+	asker := newControlAsker(enc.WriteRequest, idGen)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Start an Ask in a goroutine (will block waiting for a response).
+	decisionCh := make(chan contracts.PermissionDecision, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		d, err := asker.Ask(ctx, tool.PermissionAskRequest{ToolName: "Bash", ToolUseID: "u-77"})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		decisionCh <- d
+	}()
+
+	// Drain the can_use_tool request emitted on out so the asker can proceed.
+	outDec := NewDecoder(&out)
+	// Wait briefly for the request to appear.
+	time.Sleep(50 * time.Millisecond)
+	_ = outDec // request was emitted; we don't need to read it for this test.
+
+	// Send a control_cancel_request for the pending request_id.
+	dispatchLine(`{"type":"control_cancel_request","request_id":"req-77"}`, ctrl, asker, enc)
+
+	// The Ask should unblock with a deny.
+	select {
+	case d := <-decisionCh:
+		if d.Behavior != contracts.PermissionDeny {
+			t.Fatalf("expected deny after cancel, got %v", d.Behavior)
+		}
+	case err := <-errCh:
+		t.Fatalf("Ask returned error: %v", err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("Ask did not unblock after control_cancel_request")
+	}
+}
+
+// TestSDKStatusMessageShape verifies the SDKStatusMessage struct serialises to
+// the correct CC-wire shape (type=="system", subtype=="status").
+// CC ref: coreSchemas.ts:1533-1542 (SDKStatusMessageSchema).
+func TestSDKStatusMessageShape(t *testing.T) {
+	msg := SDKStatusMessage{
+		Type:      "system",
+		Subtype:   "status",
+		Status:    "compacting",
+		SessionID: "sess-1",
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["type"] != "system" {
+		t.Errorf("type = %v want system", got["type"])
+	}
+	if got["subtype"] != "status" {
+		t.Errorf("subtype = %v want status", got["subtype"])
+	}
+	if got["status"] != "compacting" {
+		t.Errorf("status = %v want compacting", got["status"])
+	}
+	if got["session_id"] != "sess-1" {
+		t.Errorf("session_id = %v want sess-1", got["session_id"])
+	}
+}
+
+// TestEncoderWriteEventEmitsNDJSON verifies that WriteEvent serialises any value
+// as a single NDJSON line ending with \n.
+func TestEncoderWriteEventEmitsNDJSON(t *testing.T) {
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+	msg := SDKStatusMessage{Type: "system", Subtype: "status", Status: "idle"}
+	if err := enc.WriteEvent(msg); err != nil {
+		t.Fatalf("WriteEvent: %v", err)
+	}
+	line := buf.String()
+	if !strings.HasSuffix(line, "\n") {
+		t.Errorf("WriteEvent output must end with newline, got %q", line)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &got); err != nil {
+		t.Errorf("WriteEvent output is not valid JSON: %q", line)
+	}
+}
+
 // TestQueryCanUseTool_ResponseDeliveredToAsker verifies the can_use_tool
 // round-trip: when a tool triggers Ask, the asker emits a control_request and
 // the read-loop delivers the matching control_response to asker.Resolve.

@@ -189,6 +189,15 @@ func readControlLoop(ctx context.Context, r io.Reader, c *Controller, asker *con
 }
 
 // dispatchLine decodes one NDJSON line and routes it to the appropriate handler.
+// Handled message types:
+//   - "control_request"        → Controller.Handle, write response.
+//   - "control_response"       → asker.Resolve (can_use_tool reply).
+//   - "control_cancel_request" → cancel a pending asker request by request_id.
+//   - "keep_alive"             → silently ignored (no response required).
+//   - "update_environment_variables" → silently accepted (no env mutation in-process).
+//
+// CC ref: controlSchemas.ts:612-636 (control_cancel_request, keep_alive,
+// update_environment_variables).
 func dispatchLine(line string, c *Controller, asker *controlAsker, enc *Encoder) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
@@ -213,6 +222,24 @@ func dispatchLine(line string, c *Controller, asker *controlAsker, enc *Encoder)
 	case "control_response":
 		// Decode as ControlResponse (can_use_tool reply) and resolve the asker.
 		resolveFromRaw(raw, asker)
+
+	case "control_cancel_request":
+		// Cancel a pending asker request (e.g. a can_use_tool that was sent but
+		// the SDK consumer no longer needs an answer).
+		// CC ref: controlSchemas.ts:612-619.
+		var reqID string
+		if r, ok := raw["request_id"]; ok {
+			_ = json.Unmarshal(r, &reqID)
+		}
+		if reqID != "" {
+			asker.Cancel(reqID)
+		}
+
+	case "keep_alive", "update_environment_variables":
+		// keep_alive: both ends may send this to maintain a long-lived connection.
+		// update_environment_variables: accepted but not applied in-process.
+		// CC ref: controlSchemas.ts:621-636.
+		// No response sent.
 	}
 }
 

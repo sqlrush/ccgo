@@ -137,3 +137,26 @@ func (e *Encoder) WriteRequest(req ControlRequest) error {
 	}
 	return nil
 }
+
+// WriteEvent serialises an arbitrary value as a single NDJSON line.
+// Used for SDK output events (e.g. SDKStatusMessage, sdk_event) where the
+// caller supplies a fully-formed struct or map.
+// CC ref: coreSchemas.ts:1533-1542 (SDKStatusMessage / system/status).
+func (e *Encoder) WriteEvent(v any) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := e.enc.Encode(v); err != nil {
+		return fmt.Errorf("sdk: write event: %w", err)
+	}
+	return nil
+}
+
+// SDKStatusMessage is the CC-wire shape for system/status NDJSON events.
+// Emitted when a long-running session state changes (e.g. compacting).
+// CC ref: coreSchemas.ts:1533-1542 (SDKStatusMessageSchema).
+type SDKStatusMessage struct {
+	Type      string `json:"type"`    // always "system"
+	Subtype   string `json:"subtype"` // always "status"
+	Status    string `json:"status"`  // e.g. "compacting", "idle", "running"
+	SessionID string `json:"session_id,omitempty"`
+}

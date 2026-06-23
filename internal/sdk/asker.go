@@ -106,3 +106,25 @@ func (a *controlAsker) Resolve(requestID string, decision contracts.PermissionDe
 		}
 	}
 }
+
+// Cancel removes a pending can_use_tool request without delivering a decision.
+// Called by the SDK read-loop when a control_cancel_request arrives.
+// CC ref: controlSchemas.ts:612-619.
+// The pending Ask() returns ctx.Err() (or context.Canceled) because its channel
+// is removed — the select in Ask will fall through to ctx.Done() on the next
+// context cancellation, or simply remain blocked until its own ctx is done.
+// For immediate unblocking we close the channel with a deny decision so Ask()
+// returns promptly with a deny rather than hanging.
+func (a *controlAsker) Cancel(requestID string) {
+	a.mu.Lock()
+	ch := a.waiting[requestID]
+	delete(a.waiting, requestID)
+	a.mu.Unlock()
+	if ch != nil {
+		// Deliver a deny decision so the pending Ask() can return immediately.
+		select {
+		case ch <- contracts.PermissionDecision{Behavior: contracts.PermissionDeny}:
+		default:
+		}
+	}
+}
