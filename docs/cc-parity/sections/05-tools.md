@@ -32,7 +32,7 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-BASH-04 | BashOutput 读取后台命令输出 | AUTO | 前置:后台 Bash 命令已启动;操作:BashOutput `{id}`;预期:返回 stdout/stderr 快照及状态 | src/tools/BashTool/BashTool.tsx | ✅ 通过 |
 | TOOL-BASH-05 | KillBash/TaskStop 取消后台命令 | AUTO | 前置:后台 Bash 命令已启动;操作:KillBash `{id}`;预期:命令被终止，后续 BashOutput 反映 cancelled 状态 | src/tools/TaskStopTool/TaskStopTool.ts（aliases:KillShell） | ✅ 通过 |
 | TOOL-BASH-06 | Bash dangerouslyDisableSandbox=true 跳过沙箱 | AUTO | 前置:沙箱已启用;操作:Bash `{command:"...",dangerouslyDisableSandbox:true}`;预期:命令在沙箱外执行（无 sandbox policy 限制） | src/tools/BashTool/BashTool.tsx:242 | ✅ 通过 |
-| TOOL-BASH-07 | Bash 超大 stdout 截断（32 MB）| AUTO | 前置:命令产生超过 32MB 输出;操作:Bash 大量输出命令;预期:输出被从末尾截断，Content 不超过阈值 | src/tools/BashTool/BashTool.tsx:731（64MB copy 上限） src/utils/stringUtils.ts:88（2^25 chars） | ✅ 通过（W-Batch-C commit PLACEHOLDER）|
+| TOOL-BASH-07 | Bash 超大 stdout 截断（32 MB）| AUTO | 前置:命令产生超过 32MB 输出;操作:Bash 大量输出命令;预期:输出被从末尾截断，Content 不超过阈值 | src/tools/BashTool/BashTool.tsx:731（64MB copy 上限） src/utils/stringUtils.ts:88（2^25 chars） | ✅ 通过（W-Batch-C commit e735e5e）|
 | TOOL-BASH-08 | Bash sleep 命令被拦截提示使用 run_in_background | AUTO | 前置:MONITOR_TOOL 特性开启;操作:Bash `{command:"sleep 10"}`;预期:工具返回阻塞提示，建议用 run_in_background | src/tools/BashTool/BashTool.tsx:525-530 | ❌ 缺失（ccgo 无此 sleep 拦截逻辑） |
 | TOOL-BASH-09 | Bash 保持 cwd 跨调用（shell 状态持久化）| AUTO | 前置:仓库;操作:Bash `cd /tmp`，再 Bash `pwd`;预期:第二次输出 /tmp | src/tools/BashTool/BashTool.tsx（getCwd/setCwd） | ✅ 通过 |
 | TOOL-GLOB-01 | Glob 按通配符模式匹配文件 | AUTO | 前置:仓库含多个 .go 文件;操作:Glob `{pattern:"**/*.go"}`;预期:返回所有 .go 路径列表 | src/tools/GlobTool/GlobTool.ts | ✅ 通过 |
@@ -50,9 +50,9 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-WEB-05 | WebSearch allowed_domains 限制只返回指定域名结果 | AUTO | 前置:网络可用;操作:WebSearch `{query:"...",allowed_domains:["golang.org"]}`;预期:结果只含 golang.org 来源 | src/tools/WebSearchTool/WebSearchTool.ts:29-32 | ✅ 通过 |
 | TOOL-WEB-06 | WebSearch blocked_domains 过滤结果 | AUTO | 前置:网络可用;操作:WebSearch `{blocked_domains:["spam.com"]}`;预期:结果不含被屏蔽域名 | src/tools/WebSearchTool/WebSearchTool.ts:33-37 | ✅ 通过 |
 | TOOL-TASK-01 | Agent（Task）工具同步启动子 agent 并返回结果 | AUTO | 前置:仓库;操作:Task `{description:"...",prompt:"echo hi"}` 无 run_in_background;预期:阻塞直到子 agent 完成，返回完整结果 | src/tools/AgentTool/AgentTool.tsx | ✅ 通过 |
-| TOOL-TASK-02 | Task run_in_background=true 异步启动后台 agent | AUTO | 前置:仓库;操作:Task `{run_in_background:true,...}`;预期:立即返回 task_id，后台继续执行 | src/tools/AgentTool/AgentTool.tsx:87,567 | ✅ 通过（W-Batch-C commit PLACEHOLDER）|
+| TOOL-TASK-02 | Task run_in_background=true 异步启动后台 agent | AUTO | 前置:仓库;操作:Task `{run_in_background:true,...}`;预期:立即返回 task_id，后台继续执行 | src/tools/AgentTool/AgentTool.tsx:87,567 | ✅ 通过（W-Batch-C commit e735e5e）|
 | TOOL-TASK-03 | Task isolation=worktree 创建隔离 git worktree | AUTO | 前置:git 仓库;操作:Task `{isolation:"worktree",...}`;预期:子 agent 在独立 worktree 中运行，主仓库不受影响 | src/tools/AgentTool/AgentTool.tsx:430-431 | ✅ 通过 |
-| TOOL-TASK-04 | Task model 参数覆盖子 agent 模型 | AUTO | 前置:仓库;操作:Task `{model:"haiku",...}`;预期:子 agent 使用 haiku 模型（而非默认模型） | src/tools/AgentTool/AgentTool.tsx:86,418 | ✅ 通过（W-Batch-C commit PLACEHOLDER）|
+| TOOL-TASK-04 | Task model 参数覆盖子 agent 模型 | AUTO | 前置:仓库;操作:Task `{model:"haiku",...}`;预期:子 agent 使用 haiku 模型（而非默认模型） | src/tools/AgentTool/AgentTool.tsx:86,418 | ✅ 通过（W-Batch-C commit e735e5e）|
 | TOOL-TASK-05 | Task subagent_type 指定内置 agent 类型 | AUTO | 前置:仓库，已注册内置 agents;操作:Task `{subagent_type:"general-purpose",...}`;预期:子 agent 使用对应类型的配置（prompt/tools） | src/tools/AgentTool/AgentTool.tsx:85 | ✅ 通过 |
 | TOOL-TASK-06 | TaskOutput 读取运行中后台 agent 的输出快照 | AUTO | 前置:已启动后台 Task;操作:TaskOutput `{task_id:"..."}`;预期:返回已产生的 stdout 及任务状态 | src/tools/TaskOutputTool/TaskOutputTool.tsx | ✅ 通过 |
 | TOOL-TASK-07 | KillTask 终止后台 agent | AUTO | 前置:已启动后台 Task;操作:KillTask `{task_id:"..."}`;预期:任务被取消，状态变为 cancelled | src/tools/AgentTool/AgentTool.tsx，TaskStopTool | ✅ 通过 |
@@ -70,7 +70,7 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-SKILL-03 | Skill 动态列出当前可用 skill（prompt 内容）| AUTO | 前置:存在多个 skill 文件;操作:拉取 SkillTool prompt;预期:prompt 含所有可用 skill 名称列表 | src/tools/SkillTool/SkillTool.ts | ✅ 通过 |
 | TOOL-TSEARCH-01 | ToolSearch 按关键词搜索工具定义 | AUTO | 前置:工具注册表已加载;操作:ToolSearch `{query:"bash shell"}`;预期:返回 Bash 工具的 schema 定义 | src/tools/ToolSearchTool/ToolSearchTool.ts | ✅ 通过 |
 | TOOL-TSEARCH-02 | ToolSearch select: 精确按名称获取工具 schema | AUTO | 前置:工具注册表;操作:ToolSearch `{query:"select:Read,Edit"}`;预期:返回 Read 和 Edit 的完整 schema | src/tools/ToolSearchTool/ToolSearchTool.ts | ✅ 通过 |
-| TOOL-LSP-01 | LSP goToDefinition 跳转定义 | AUTO | 前置:LSP server 已启动连接;操作:LSP `{operation:"goToDefinition",filePath,line,character}`;预期:返回定义位置 | src/tools/LSPTool/LSPTool.ts:441 | ⚠️ 已建未接（W-Batch-C commit PLACEHOLDER）— dispatch seam 已接线：NavigationParams + dispatchLSP 已实现，mock 测试覆盖；runtime 注入 MetadataLSPNavigationKey 后即可工作；无运行中语言服务器时优雅降级为"not supported" |
+| TOOL-LSP-01 | LSP goToDefinition 跳转定义 | AUTO | 前置:LSP server 已启动连接;操作:LSP `{operation:"goToDefinition",filePath,line,character}`;预期:返回定义位置 | src/tools/LSPTool/LSPTool.ts:441 | ⚠️ 已建未接（W-Batch-C commit e735e5e）— dispatch seam 已接线：NavigationParams + dispatchLSP 已实现，mock 测试覆盖；runtime 注入 MetadataLSPNavigationKey 后即可工作；无运行中语言服务器时优雅降级为"not supported" |
 | TOOL-LSP-02 | LSP findReferences 查找引用 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"findReferences",...}`;预期:返回所有引用位置 | src/tools/LSPTool/LSPTool.ts:449 | ⚠️ 已建未接（同 TOOL-LSP-01，dispatch seam 已实现）|
 | TOOL-LSP-03 | LSP hover 查看符号文档 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"hover",...}`;预期:返回 hover markdown 文档 | src/tools/LSPTool/LSPTool.ts:456-458 | ⚠️ 已建未接（同 TOOL-LSP-01，dispatch seam 已实现）|
 | TOOL-LSP-04 | LSP documentSymbol 列出文件符号 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"documentSymbol",...}`;预期:返回文件内函数/类等符号列表 | src/tools/LSPTool/LSPTool.ts | ⚠️ 已建未接（同 TOOL-LSP-01，dispatch seam 已实现）|
