@@ -185,6 +185,12 @@ type Loop struct {
 	// text) used to seed HistorySearchOverlay (OVL-07). Set via SetPromptHistory;
 	// nil when history search is disabled.
 	promptHistoryEntries []string
+
+	// extendedKeys, when true, enables the Kitty keyboard protocol (REPL-60).
+	// Set via SetExtendedKeys before Run; controls whether ExtendedKeys=true is
+	// passed to tui.ScreenLifecycle.EnterInteractive.
+	// CC ref: src/ink/ink.tsx:1430.
+	extendedKeys bool
 }
 
 // SetAgentRegistry wires the shared AgentRegistry for background task tracking.
@@ -211,6 +217,11 @@ func (l *Loop) SetRegistry(cmds []contracts.Command) { l.registry = cmds }
 // SetCWD sets the working directory used by QuickOpenOverlay when the user
 // types "@" in the prompt (OVL-05/06). Must be called before Run.
 func (l *Loop) SetCWD(cwd string) { l.cwd = cwd }
+
+// SetExtendedKeys enables or disables the Kitty keyboard protocol (REPL-60).
+// When enabled, tui.TerminalModeOptions.ExtendedKeys=true is passed to
+// EnterInteractive so the terminal receives ESC[>4m. Must be called before Run.
+func (l *Loop) SetExtendedKeys(enabled bool) { l.extendedKeys = enabled }
 
 // SetPromptHistory seeds the HistorySearchOverlay (OVL-07) with previously
 // submitted prompt display strings (newest-first). Must be called before Run.
@@ -275,7 +286,9 @@ func (l *Loop) Run(ctx context.Context) error {
 	defer l.denyPendingAsks()
 	defer l.denyPendingQuestions()
 
-	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true}
+	// REPL-60: ExtendedKeys enables the Kitty keyboard protocol (ESC[>4m) when
+	// the terminal supports it. Sourced from InteractiveOptions.ExtendedKeys.
+	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true, ExtendedKeys: l.extendedKeys}
 	if err := l.term.WriteString(l.life.EnterInteractive(opts)); err != nil {
 		return err
 	}
@@ -700,7 +713,7 @@ func (l *Loop) launchExternalEditor(draft string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	runErr := cmd.Run()
-	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true}
+	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true, ExtendedKeys: l.extendedKeys}
 	_ = l.term.WriteString(l.life.EnterInteractive(opts))
 	if runErr != nil {
 		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: "external editor: " + runErr.Error()})

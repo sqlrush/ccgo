@@ -277,6 +277,8 @@ func TestBuildConfiguredToolSetsMergesSourcesAndBuildsToolsets(t *testing.T) {
 			MCPServers: map[string]contracts.MCPServer{
 				"shared-global": {Command: "local"},
 			},
+			// MCP-24: approve both .mcp.json servers so the filter passes them through.
+			EnabledMCPJSONServers: []string{"shared-project", "chain-only"},
 		},
 		PluginServers: map[string]contracts.MCPServer{
 			"plugin-only": {Command: "plugin", PluginSource: "demo"},

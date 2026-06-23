@@ -7895,9 +7895,16 @@ func (r Runner) createMessage(ctx context.Context, request anthropic.Request) (*
 				return acc.Add(event)
 			}); err != nil {
 				if !seenStreamEvent {
+					// LOOP-50: apply the non-streaming fallback timeout so the
+					// fallback CreateMessage call does not hang indefinitely.
+					// CC ref: services/api/claude.ts:807-811
+					// (getNonstreamingFallbackTimeoutMs).
+					timeout := anthropic.NonstreamingFallbackTimeout()
+					fbCtx, cancel := context.WithTimeout(ctx, timeout)
+					defer cancel()
 					fallbackRequest := request
 					fallbackRequest.Stream = false
-					return r.Client.CreateMessage(ctx, fallbackRequest)
+					return r.Client.CreateMessage(fbCtx, fallbackRequest)
 				}
 				return nil, err
 			}

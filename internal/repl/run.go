@@ -144,6 +144,13 @@ type InteractiveOptions struct {
 	// Manager instead of static configured-only data.
 	// G11: live MCP connection manager wiring.
 	MCPManager *mcp.Manager
+
+	// ExtendedKeys, when true, enables the Kitty keyboard protocol
+	// (ESC[>4m) so Shift+Enter and other composite key sequences are
+	// recognised unambiguously. Sourced from mergedSettings at startup; should
+	// only be enabled on terminals that advertise Kitty support.
+	// REPL-60. CC ref: src/ink/ink.tsx:1430.
+	ExtendedKeys bool
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -384,6 +391,10 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	if opts.EditorMode == "vim" {
 		loop.screen.SetVimEnabled(true)
 		loop.refreshBaseStatus()
+	}
+	// REPL-60: enable Kitty keyboard protocol when the caller requests it.
+	if opts.ExtendedKeys {
+		loop.SetExtendedKeys(true)
 	}
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)

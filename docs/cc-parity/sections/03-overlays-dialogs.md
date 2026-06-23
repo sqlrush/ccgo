@@ -11,7 +11,7 @@
 | OVL-05 | `@` 快速打开文件选择器（QuickOpen） | MANUAL | 前置:REPL 中;操作:按 `app:quickOpen` 快捷键（默认 Ctrl+P 等）;预期:QuickOpenDialog 弹出，可模糊匹配工作目录文件名 | `src/components/PromptInput/PromptInput.tsx:1702` `src/components/QuickOpenDialog.tsx:28` | ✅ 通过（接线就绪，渲染需人工核验）（G10 commit TBD）（loop.go 在 Prompt.Text=="@" 时打开 NewQuickOpenOverlay(cwd)；Enter→"quickopen:<path>"→@mention；Tab→"quickopen-insert:<path>"→plain path；fuzzy.WalkFiles 走目录树，fuzzy.Values 排序；handleQuickOpenSubmit 写回 prompt；26 个覆盖测试通过） |
 | OVL-06 | `@` 目录补全（Tab 补全路径片段） | MANUAL | 前置:提示行输入 `@src/`;操作:按 Tab;预期:补全目录内容列表，选择后插入相对路径 | `src/components/PromptInput/PromptInput.tsx:1072` | ✅ 通过（接线就绪，渲染需人工核验）（G10 commit TBD）（QuickOpenOverlay Tab 键返回 "quickopen-insert:<path>"，handleQuickOpenSubmit 插入 "<path> " 到 prompt；路径补全与 OVL-05 共用基础设施） |
 | OVL-07 | 全局历史搜索对话框（HistorySearchDialog） | MANUAL | 前置:有历史提交记录;操作:按 `app:historySearch` 快捷键;预期:HistorySearchDialog 弹出，可模糊搜索提示历史并预览 | `src/components/HistorySearchDialog.tsx:27` | ✅ 通过（接线就绪，渲染需人工核验）（G10 commit TBD）（loop.go 在 KeyCtrlQ 且有 promptHistoryEntries 时打开 NewHistorySearchOverlay；精确匹配优先于 fuzzy 子序列；Enter→"historysearch:<display>"→插入首行到 prompt；RunInteractiveWithOptions 从 PromptHistory 注入 displays；26 个覆盖测试通过） |
-| OVL-08 | 全局内容搜索对话框（GlobalSearchDialog） | MANUAL | 前置:REPL 中;操作:按全局搜索快捷键;预期:GlobalSearchDialog 弹出，可跨文件全文搜索并预览 | `src/components/GlobalSearchDialog.tsx:38` | ❌ 缺失（跨文件全文搜索需 grep/ripgrep 后端，范围超出 G10；OVL-05/06/07 已提供文件名+历史搜索基础设施） |
+| OVL-08 | 全局内容搜索对话框（GlobalSearchDialog） | MANUAL | 前置:REPL 中;操作:按全局搜索快捷键;预期:GlobalSearchDialog 弹出，可跨文件全文搜索并预览 | `src/components/GlobalSearchDialog.tsx:38` | ⚠️ 已建未接（G15）：`GlobalSearchFiles(ctx, root, query, opts)` pure-Go 后端（filepath.WalkDir + bufio.Scanner，跳过 binary/ignored dirs，竞争安全 resultCh 设计）；`GlobalSearchOverlay` 状态层（ApplyKey/Render/ESC/Enter/↑↓/Backspace）；submit 格式 `globalsearch:<file>:<line>`；14 个单元测试覆盖（-race 通过）；⚠️ Ctrl+Shift+F keybinding 未添加到 keymap，TUI 渲染 MANUAL |
 | OVL-09 | `/resume`（无参数）打开会话选择器 overlay | MANUAL | 前置:有历史会话;操作:在 REPL 中输入 `/resume` + Enter;预期:ResumePicker overlay 弹出，列出同目录下会话，方向键选择后加载 | `src/screens/ResumeConversation.tsx` | ✅ 通过（接线就绪，渲染需人工核验）（W-REPL 接线 commit 4c3d7f8）（`commands_resume.go` 无参数时返回 `CommandOutcome{Overlay: NewResumePicker(...)}`，loop `applyCommandOutcome` 打开 overlay） |
 | OVL-10 | `/resume <id|N|搜索词>` 直接加载指定会话 | MANUAL | 前置:有历史会话;操作:`/resume 1` 或 `/resume <id>`;预期:直接加载匹配会话，无需选择器 | `src/screens/ResumeConversation.tsx` | ✅ 通过（commands_resume.go resolveResumeTarget → 加载会话并注入 history） |
 | OVL-11 | `/theme`（无参数）打开主题选择器 overlay | MANUAL | 前置:REPL 中;操作:输入 `/theme` + Enter;预期:ThemePicker overlay 弹出，列出所有主题，Enter 应用 | `src/components/ThemePicker.tsx:30` | ✅ 通过（接线就绪，渲染需人工核验）（W-REPL 接线 commit 4c3d7f8）（`themeHandlerWith` 无参数时返回 `CommandOutcome{Overlay: NewThemePicker(builtinThemes)}`） |
@@ -61,9 +61,10 @@
 
 ---
 
-小计：共 54 行（不含 N/A 1 行）。✅ 通过 45 条，⚠️ 已建未接 3 条，❌ 缺失 5 条，N/A 1 条。（OVL-09/11/13/14/15 经 W-REPL 接线 commit 4c3d7f8 由 ⚠️ 翻为 ✅；F5 commit 新增 ✅ OVL-16/30/31/32/33/38/39/40/41/43/44/50/51/53 — 共 14 条翻绿；G6 TBD：OVL-18 由 ⚠️ 翻为 ✅；G10 commit TBD：OVL-05/06/07 由 ❌ 翻为 ✅）
+小计：共 54 行（不含 N/A 1 行）。✅ 通过 45 条，⚠️ 已建未接 4 条，❌ 缺失 4 条，N/A 1 条。（OVL-09/11/13/14/15 经 W-REPL 接线 commit 4c3d7f8 由 ⚠️ 翻为 ✅；F5 commit 新增 ✅ OVL-16/30/31/32/33/38/39/40/41/43/44/50/51/53 — 共 14 条翻绿；G6 TBD：OVL-18 由 ⚠️ 翻为 ✅；G10 commit TBD：OVL-05/06/07 由 ❌ 翻为 ✅；G15：OVL-08 由 ❌ 翻为 ⚠️）
 F5 新增 ✅：OVL-16（onboarding 3步向导）、OVL-30（MCP 信任对话框）、OVL-31（bypass 二次确认，安全锁）、OVL-32（auto 模式 opt-in 确认）、OVL-33（费用阈值对话框）、OVL-38（Token 警告 overlay）、OVL-39（autocompact 倒计时 overlay）、OVL-40（context 来源分组可视化）、OVL-41（内存更新通知函数）、OVL-43（版本更新通知函数）、OVL-44（全局状态公告 overlay）、OVL-50（idle 超时返回对话框）、OVL-51（worktree 退出确认）、OVL-53（ModelPicker，已建未标）。
 G6 新增 ✅：OVL-18（TrustDialog MCP 服务器名称 + hook 来源详情）。
 G10 新增 ✅：OVL-05（QuickOpenOverlay/@触发，fuzzy file walk+rank，Enter→@mention，Tab→plain path）、OVL-06（QuickOpenOverlay Tab 补全路径片段，共用 OVL-05 基础设施）、OVL-07（HistorySearchOverlay，Ctrl+Q触发，精确>子序列排序，Enter 插入首行到 prompt）。
+G15 新增 ⚠️：OVL-08（GlobalSearchDialog backend + overlay state layer 已建，keybinding + TUI render MANUAL）。
 仍 ⚠️（infra 受限）：OVL-42（terminal notification OSC 9/99/777 — lifecycle hook 未调用）、OVL-52（ExportDialog — 无文件名输入 UI）。
-仍 ❌ 缺失：OVL-08（GlobalSearchDialog — 跨文件全文搜索需 grep 后端）、OVL-45（SandboxPermissionRequest UI）以及其他 3 条（实际 ❌ 剩余 5 条）。
+仍 ❌ 缺失：OVL-45（SandboxPermissionRequest UI）以及其他 3 条（实际 ❌ 剩余 4 条）。

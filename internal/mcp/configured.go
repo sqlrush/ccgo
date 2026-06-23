@@ -62,6 +62,13 @@ func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptio
 			return ConfiguredToolSetResult{}, err
 		}
 		loadErrors = append(loadErrors, projectChain.Errors...)
+		// MCP-24: apply project-scope trust filter before merging .mcp.json
+		// servers. Only connect servers that the user has explicitly approved
+		// (via MCPServerApprovalDialog) unless enableAllProjectMcpServers=true.
+		// Servers from settings.json project/user/local scopes are not filtered
+		// here — only .mcp.json chain servers are subject to approval.
+		// CC ref: src/services/mcpServerApproval.tsx.
+		projectChain.Servers = filterProjectMCPServers(projectChain.Servers, options.LocalSettings)
 		projectServers = MergeServers(projectServers, projectChain.Servers)
 	}
 
@@ -91,6 +98,52 @@ func BuildConfiguredToolSets(ctx context.Context, options ConfiguredToolSetOptio
 		Blocked:    manual.Blocked,
 		ToolSets:   toolsets,
 	}, nil
+}
+
+// filterProjectMCPServers applies the enabledMcpjsonServers / enableAllProjectMcpServers
+// trust filter to project-scope (.mcp.json) servers.
+//
+// Behaviour (mirrors CC src/services/mcpServerApproval.tsx):
+//   - enableAllProjectMcpServers=true  → allow all servers (no filter)
+//   - enabledMcpjsonServers=[…]        → allow only the listed server names
+//   - both absent / empty              → block all .mcp.json servers (not yet approved)
+//   - a server listed in disabledMcpjsonServers → always blocked
+//
+// CC ref: src/services/mcpServerApproval.tsx (isMCPServerTrusted).
+func filterProjectMCPServers(servers map[string]contracts.MCPServer, local contracts.Settings) map[string]contracts.MCPServer {
+	if len(servers) == 0 {
+		return servers
+	}
+	// Build disabled set.
+	disabled := make(map[string]bool, len(local.DisabledMCPJSONServers))
+	for _, name := range local.DisabledMCPJSONServers {
+		disabled[name] = true
+	}
+	// If enableAllProjectMcpServers=true, only honour the disabled list.
+	if local.EnableAllProjectMCPServers != nil && *local.EnableAllProjectMCPServers {
+		if len(disabled) == 0 {
+			return servers
+		}
+		out := make(map[string]contracts.MCPServer, len(servers))
+		for name, srv := range servers {
+			if !disabled[name] {
+				out[name] = srv
+			}
+		}
+		return out
+	}
+	// Use the explicit allow-list.
+	enabled := make(map[string]bool, len(local.EnabledMCPJSONServers))
+	for _, name := range local.EnabledMCPJSONServers {
+		enabled[name] = true
+	}
+	out := make(map[string]contracts.MCPServer, len(servers))
+	for name, srv := range servers {
+		if enabled[name] && !disabled[name] {
+			out[name] = srv
+		}
+	}
+	return out
 }
 
 func mergeMCPPolicySettings(settings ...contracts.Settings) contracts.Settings {

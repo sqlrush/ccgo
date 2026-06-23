@@ -63,6 +63,11 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 		definitions, deferredToolNames, toolSearchActive = filterToolSearchDefinitionsWithDecision(defs, history, decision.Enabled)
 	}
 	apiMessages := msgs.NormalizeForAPI(history)
+	// LOOP-49: strip excess media items (images + documents) when the total
+	// across all messages exceeds the API limit. This mirrors CC:
+	// services/api/claude.ts:956-1015 (stripExcessMediaItems). The call is
+	// placed after NormalizeForAPI so tool_result nesting is already resolved.
+	apiMessages = anthropic.StripExcessMediaItems(apiMessages, anthropic.APIMaxMediaPerRequest)
 	if !toolSearchActive {
 		apiMessages = stripToolReferenceBlocksFromAPIMessages(apiMessages)
 	}

@@ -118,3 +118,19 @@ func FilterFiles(root, q string, opts WalkOptions) []string {
 	files := WalkFiles(root, opts)
 	return Values(files, q)
 }
+
+// IsIgnoredDir reports whether dirName should be skipped during file-tree walks.
+// This is the same logic used by WalkFiles so callers can share it.
+func IsIgnoredDir(dirName string) bool {
+	if dirName == "." {
+		return false
+	}
+	return defaultIgnoredDirs[dirName] || strings.HasPrefix(dirName, ".")
+}
+
+// IsIgnoredExt reports whether the file extension (including the leading dot)
+// corresponds to a known binary/media file that should be skipped during
+// content searches.
+func IsIgnoredExt(ext string) bool {
+	return defaultIgnoredExts[strings.ToLower(ext)]
+}
