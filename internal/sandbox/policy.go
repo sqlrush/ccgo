@@ -37,6 +37,14 @@ type Policy struct {
 	// EnabledPlatforms restricts on which platforms the sandbox is active.
 	// Empty list means "all supported platforms". Matches CC sandbox.enabledPlatforms.
 	EnabledPlatforms []string
+
+	// AutoAllowBashIfSandboxed mirrors CC's sandbox.autoAllowBashIfSandboxed
+	// (sandbox-adapter.ts:471, default true). When true and sandbox is active,
+	// Bash tool calls are implicitly allowed without a permission prompt — the
+	// sandbox itself provides confinement so the user-facing ask is unnecessary.
+	// SBX-35: this field drives the permission-flow bypass; wiring into the
+	// permission engine is done by the caller (REPL / executor layer).
+	AutoAllowBashIfSandboxed bool
 }
 
 // ShouldSandbox decides whether this command must be confined.

@@ -41,8 +41,11 @@ func PolicyFromSettings(s contracts.Settings) Policy {
 //   - DenyWrite: FileEdit deny permission rules (SBX-46)
 //   - DenyRead: FileRead deny permission rules (SBX-47)
 func PolicyFromSettingsAt(s contracts.Settings, originalCwd, currentCwd string) Policy {
-	// CC default: allowUnsandboxedCommands ?? true
-	p := Policy{AllowUnsandboxed: true}
+	// CC defaults: allowUnsandboxedCommands ?? true, autoAllowBashIfSandboxed ?? true
+	p := Policy{
+		AllowUnsandboxed:         true,
+		AutoAllowBashIfSandboxed: true, // SBX-35: default true (sandbox-adapter.ts:471)
+	}
 
 	box := s.Sandbox
 	if box == nil {
@@ -60,6 +63,9 @@ func PolicyFromSettingsAt(s contracts.Settings, originalCwd, currentCwd string) 
 	}
 	if v, ok := boolAt(box, "allowNetworkAccess"); ok {
 		p.AllowNetwork = v
+	}
+	if v, ok := boolAt(box, "autoAllowBashIfSandboxed"); ok {
+		p.AutoAllowBashIfSandboxed = v
 	}
 	if fs, ok := box["filesystem"].(map[string]any); ok {
 		p.AllowWrite = stringsAt(fs, "allowWrite")

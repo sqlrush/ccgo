@@ -108,15 +108,12 @@ func planHandlerWith(curMode contracts.PermissionMode) CommandHandler {
 }
 
 // terminalSetupHandler returns a CommandHandler for /terminal-setup.
-// It prints instructions for configuring Shift+Enter (no OS-level keybinding is
-// installed at runtime — that requires terminal-specific configuration).
+// It detects the active terminal and installs the Shift+Enter keybinding
+// (or Option as Meta for Apple Terminal) by writing to the terminal's
+// configuration files. CC parity: terminalSetup.tsx setupTerminal().
 func terminalSetupHandler() CommandHandler {
 	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
-		msg := "Terminal setup: to enable Shift+Enter for multi-line input, " +
-			"configure your terminal to send the sequence ESC[13;2u " +
-			"(Kitty keyboard protocol). Many modern terminals (Ghostty, Kitty, " +
-			"iTerm2, WezTerm) support this natively. " +
-			"For Apple Terminal, enable the Option+Enter binding in preferences."
+		msg := installTerminalKeybindings()
 		return CommandOutcome{Handled: true, Status: msg}, nil
 	}
 }

@@ -218,7 +218,7 @@ func callPowerShell(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSin
 	if input.runInBackground() {
 		return startBackgroundPowerShell(ctx, input, powerShellTimeout(input), sink)
 	}
-	result := runPowerShellCommand(ctx, strings.TrimSpace(input.Command), powerShellTimeout(input))
+	result := runPowerShellCommand(ctx, strings.TrimSpace(input.Command), powerShellTimeout(input), input.DangerouslyDisableSandbox)
 	return contracts.ToolResult{
 		Content: formatPowerShellContent(result),
 		IsError: result.TimedOut || result.ExitCode != 0,
@@ -315,19 +315,27 @@ func callKillPowerShell(ctx tool.Context, raw json.RawMessage, _ tool.ProgressSi
 	}, nil
 }
 
-func runPowerShellCommand(ctx tool.Context, command string, timeout time.Duration) powerShellResult {
+func runPowerShellCommand(ctx tool.Context, command string, timeout time.Duration, dangerouslyDisableSandbox bool) powerShellResult {
 	start := time.Now()
 	result := powerShellResult{
 		ExitCode:  -1,
 		TimeoutMS: int(timeout / time.Millisecond),
 	}
-	name, ok := powerShellExecutable()
-	if !ok {
-		result.Stderr = "PowerShell executable not found. Install pwsh or powershell to use this tool."
-		result.DurationMS = time.Since(start).Milliseconds()
-		return result
+	policy := sandboxPolicyFromPowerShellContext(ctx)
+	exeName, args := sandboxedPowerShellCommand(command, policy, dangerouslyDisableSandbox)
+
+	// Detect "not found" path: sandboxedPowerShellCommand returns "/bin/sh" with
+	// a "not found" message when powerShellExecutable() is absent.
+	if exeName == "/bin/sh" && !policy.Enabled {
+		_, ok := powerShellExecutable()
+		if !ok {
+			result.Stderr = "PowerShell executable not found. Install pwsh or powershell to use this tool."
+			result.DurationMS = time.Since(start).Milliseconds()
+			return result
+		}
 	}
-	result.Executable = name
+	result.Executable = exeName
+
 	runCtx := ctx.Context
 	if runCtx == nil {
 		runCtx = context.Background()
@@ -335,7 +343,7 @@ func runPowerShellCommand(ctx tool.Context, command string, timeout time.Duratio
 	runCtx, cancel := context.WithTimeout(runCtx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(runCtx, name, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+	cmd := exec.CommandContext(runCtx, exeName, args...)
 	if ctx.WorkingDirectory != "" {
 		cmd.Dir = ctx.WorkingDirectory
 	}
@@ -377,36 +385,40 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 	if state == nil {
 		return contracts.ToolResult{}, fmt.Errorf("background powershell state is not available")
 	}
-	name, ok := powerShellExecutable()
-	if !ok {
-		result := powerShellResult{
+	command := strings.TrimSpace(input.Command)
+	policy := sandboxPolicyFromPowerShellContext(ctx)
+	exeName, exeArgs := sandboxedPowerShellCommand(command, policy, input.DangerouslyDisableSandbox)
+
+	// Detect "not found" path: sandboxedPowerShellCommand uses /bin/sh "not found"
+	// one-liner when pwsh is absent and sandbox is not in effect.
+	if _, ok := powerShellExecutable(); !ok && !policy.Enabled {
+		notFoundResult := powerShellResult{
 			Stderr:     "PowerShell executable not found. Install pwsh or powershell to use this tool.",
 			ExitCode:   -1,
 			TimeoutMS:  int(timeout / time.Millisecond),
 			DurationMS: 0,
 		}
 		return contracts.ToolResult{
-			Content: formatPowerShellContent(result),
+			Content: formatPowerShellContent(notFoundResult),
 			IsError: true,
 			StructuredContent: map[string]any{
 				"type":                        "powershell",
 				"command":                     input.Command,
 				"description":                 input.Description,
 				"stdout":                      "",
-				"stderr":                      result.Stderr,
-				"exit_code":                   result.ExitCode,
+				"stderr":                      notFoundResult.Stderr,
+				"exit_code":                   notFoundResult.ExitCode,
 				"timed_out":                   false,
 				"cancelled":                   false,
-				"duration_ms":                 result.DurationMS,
-				"timeout_ms":                  result.TimeoutMS,
+				"duration_ms":                 notFoundResult.DurationMS,
+				"timeout_ms":                  notFoundResult.TimeoutMS,
 				"executable":                  "",
 				"dangerously_disable_sandbox": input.DangerouslyDisableSandbox,
 			},
 		}, nil
 	}
-	command := strings.TrimSpace(input.Command)
 	runCtx, cancel := context.WithTimeout(context.Background(), timeout)
-	cmd := exec.CommandContext(runCtx, name, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+	cmd := exec.CommandContext(runCtx, exeName, exeArgs...)
 	configurePowerShellCommand(cmd)
 	if ctx.WorkingDirectory != "" {
 		cmd.Dir = ctx.WorkingDirectory
@@ -417,7 +429,7 @@ func startBackgroundPowerShell(ctx tool.Context, input powerShellInput, timeout 
 		Description: input.Description,
 		StartedAt:   time.Now(),
 		TimeoutMS:   int(timeout / time.Millisecond),
-		Executable:  name,
+		Executable:  exeName,
 		Running:     true,
 		ExitCode:    0,
 	}

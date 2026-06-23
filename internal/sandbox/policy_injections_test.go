@@ -263,6 +263,58 @@ func TestUnavailableReasonWhenDisabled(t *testing.T) {
 	}
 }
 
+// TestAutoAllowBashIfSandboxedDefaultTrue verifies SBX-35:
+// PolicyFromSettings defaults AutoAllowBashIfSandboxed to true (mirrors CC:471).
+func TestAutoAllowBashIfSandboxedDefaultTrue(t *testing.T) {
+	s := contracts.Settings{
+		Sandbox: map[string]any{"enabled": true},
+	}
+	p := PolicyFromSettings(s)
+	if !p.AutoAllowBashIfSandboxed {
+		t.Error("SBX-35: AutoAllowBashIfSandboxed must default to true when not specified in settings")
+	}
+}
+
+// TestAutoAllowBashIfSandboxedExplicitFalse verifies SBX-35:
+// Setting autoAllowBashIfSandboxed=false in settings propagates to Policy.
+func TestAutoAllowBashIfSandboxedExplicitFalse(t *testing.T) {
+	s := contracts.Settings{
+		Sandbox: map[string]any{
+			"enabled":                  true,
+			"autoAllowBashIfSandboxed": false,
+		},
+	}
+	p := PolicyFromSettings(s)
+	if p.AutoAllowBashIfSandboxed {
+		t.Error("SBX-35: AutoAllowBashIfSandboxed must be false when settings.sandbox.autoAllowBashIfSandboxed=false")
+	}
+}
+
+// TestAutoAllowBashIfSandboxedExplicitTrue verifies SBX-35:
+// Setting autoAllowBashIfSandboxed=true in settings propagates to Policy.
+func TestAutoAllowBashIfSandboxedExplicitTrue(t *testing.T) {
+	s := contracts.Settings{
+		Sandbox: map[string]any{
+			"enabled":                  true,
+			"autoAllowBashIfSandboxed": true,
+		},
+	}
+	p := PolicyFromSettings(s)
+	if !p.AutoAllowBashIfSandboxed {
+		t.Error("SBX-35: AutoAllowBashIfSandboxed must be true when settings.sandbox.autoAllowBashIfSandboxed=true")
+	}
+}
+
+// TestAutoAllowBashIfSandboxedZeroValuePolicy verifies SBX-35:
+// A zero-value Policy (no settings) has AutoAllowBashIfSandboxed=false (not
+// the default — the default only applies via PolicyFromSettings).
+func TestAutoAllowBashIfSandboxedZeroValuePolicy(t *testing.T) {
+	var p Policy
+	if p.AutoAllowBashIfSandboxed {
+		t.Error("SBX-35: zero-value Policy.AutoAllowBashIfSandboxed must be false")
+	}
+}
+
 // containsPath is a test helper that checks whether paths contains target.
 func containsPath(paths []string, target string) bool {
 	for _, p := range paths {
