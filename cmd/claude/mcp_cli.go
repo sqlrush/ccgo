@@ -13,7 +13,7 @@ import (
 	"ccgo/internal/mcp"
 )
 
-const mcpUsage = "Usage: claude mcp <add|add-json|add-from-claude-desktop|list|get|remove|serve>"
+const mcpUsage = "Usage: claude mcp <add|add-json|add-from-claude-desktop|list|get|remove|reset-project-choices|serve>"
 
 // mcpCLIEnv injects settings file locations so tests avoid the real $HOME.
 type mcpCLIEnv struct {
@@ -71,6 +71,8 @@ func runMCPCommand(args []string, stdout, stderr io.Writer, env mcpCLIEnv) int {
 		return mcpAddFromClaudeDesktop(args[1:], env, stdout, stderr)
 	case "remove":
 		return mcpRemove(args[1:], env, stdout, stderr)
+	case "reset-project-choices":
+		return mcpResetProjectChoices(args[1:], env, stdout, stderr)
 	case "serve":
 		return mcpServe(args[1:], stdout, stderr)
 	default:
@@ -212,6 +214,22 @@ func mcpGet(args []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
 	if s.server.OAuth != nil {
 		fmt.Fprintln(stdout, "  oauth:     enabled")
 	}
+	return 0
+}
+
+// mcpResetProjectChoices implements `claude mcp reset-project-choices`.
+// It removes the project-level MCP server approval/denial records
+// (enableAllProjectMcpServers, enabledMcpjsonServers, disabledMcpjsonServers)
+// from the local settings file, resetting choices for all project .mcp.json servers.
+//
+// CC ref: src/main.tsx:3953 (mcpResetProjectChoicesHandler).
+func mcpResetProjectChoices(_ []string, env mcpCLIEnv, stdout, stderr io.Writer) int {
+	localPath := config.LocalSettingsPath(env.ProjectRoot)
+	if err := config.ResetMCPProjectChoices(localPath); err != nil {
+		fmt.Fprintf(stderr, "ccgo mcp reset-project-choices: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, "Project MCP server choices reset. You will be prompted again for each server.")
 	return 0
 }
 
