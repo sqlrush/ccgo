@@ -396,7 +396,9 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		}
 		if l.onCommand != nil {
 			if outcome, handled := l.onCommand(event.Value); handled {
-				l.applyCommandOutcome(outcome)
+				if l.applyCommandOutcome(outcome) {
+					return true // /exit or /quit requested clean loop exit
+				}
 				break
 			}
 		}
@@ -471,8 +473,9 @@ func (l *Loop) launchExternalEditor(draft string) {
 }
 
 // applyCommandOutcome applies a handled live-effect command's result to the
-// screen and history without sending anything to the model.
-func (l *Loop) applyCommandOutcome(outcome CommandOutcome) {
+// screen and history without sending anything to the model. It returns true
+// when the loop should exit immediately (outcome.Exit is set).
+func (l *Loop) applyCommandOutcome(outcome CommandOutcome) bool {
 	if outcome.ReplaceHistory {
 		l.history = outcome.NewHistory
 		l.screen.SetMessages(historyToScreen(l.history))
@@ -483,6 +486,14 @@ func (l *Loop) applyCommandOutcome(outcome CommandOutcome) {
 	if outcome.Overlay != nil {
 		l.activeOverlay = outcome.Overlay
 	}
+	if outcome.NewMode != "" {
+		l.mode = outcome.NewMode
+		l.refreshBaseStatus()
+		if l.onModeChange != nil {
+			l.onModeChange(l.mode)
+		}
+	}
+	return outcome.Exit
 }
 
 // enqueueAsk adds an ask to the active slot if empty, otherwise to the backlog.

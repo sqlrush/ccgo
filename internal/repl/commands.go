@@ -28,6 +28,12 @@ type CommandOutcome struct {
 	// Overlay, when non-nil, is opened as the active overlay after the command
 	// runs. The loop clears it on Submit or Dismissed.
 	Overlay Overlay
+	// NewMode, when non-empty, switches the REPL permission mode immediately.
+	// The loop refreshes the status bar and fires onModeChange when this is set.
+	NewMode contracts.PermissionMode
+	// Exit, when true, requests that the REPL loop exit cleanly after applying
+	// the outcome. Used by /exit and /quit.
+	Exit bool
 }
 
 // CommandHandler runs a single live-effect slash command.

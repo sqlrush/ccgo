@@ -72,8 +72,24 @@ const (
 	LocalCommandResultDoctor      LocalCommandResultType = "doctor"
 	LocalCommandResultHooks       LocalCommandResultType = "hooks"
 	LocalCommandResultIDE         LocalCommandResultType = "ide"
-	LocalCommandResultAgents      LocalCommandResultType = "agents"
-	LocalCommandResultRewind      LocalCommandResultType = "rewind"
+	LocalCommandResultAgents       LocalCommandResultType = "agents"
+	LocalCommandResultRewind       LocalCommandResultType = "rewind"
+	LocalCommandResultAddDir       LocalCommandResultType = "add-dir"
+	LocalCommandResultPlan         LocalCommandResultType = "plan"
+	LocalCommandResultTermSetup    LocalCommandResultType = "terminal-setup"
+	LocalCommandResultBranch       LocalCommandResultType = "branch"
+	LocalCommandResultRename       LocalCommandResultType = "rename"
+	LocalCommandResultDiff         LocalCommandResultType = "diff"
+	LocalCommandResultCopy         LocalCommandResultType = "copy"
+	LocalCommandResultExit         LocalCommandResultType = "exit"
+	LocalCommandResultFast         LocalCommandResultType = "fast"
+	LocalCommandResultStats        LocalCommandResultType = "stats"
+	LocalCommandResultTag          LocalCommandResultType = "tag"
+	LocalCommandResultTasks        LocalCommandResultType = "tasks"
+	LocalCommandResultKeybindings  LocalCommandResultType = "keybindings"
+	LocalCommandResultReloadPlugin LocalCommandResultType = "reload-plugins"
+	LocalCommandResultColor        LocalCommandResultType = "color"
+	LocalCommandResultStatusLine   LocalCommandResultType = "statusline"
 )
 
 type LocalCommandResult struct {
@@ -273,6 +289,38 @@ func ExecuteBuiltinLocalCommand(registry Registry, cmd contracts.Command, args s
 		return LocalCommandResult{Type: LocalCommandResultAgents, Value: strings.TrimSpace(args)}, true
 	case "rewind":
 		return LocalCommandResult{Type: LocalCommandResultRewind, Value: strings.TrimSpace(args)}, true
+	case "add-dir":
+		return LocalCommandResult{Type: LocalCommandResultAddDir, Value: strings.TrimSpace(args)}, true
+	case "plan":
+		return LocalCommandResult{Type: LocalCommandResultPlan, Value: strings.TrimSpace(args)}, true
+	case "terminal-setup":
+		return LocalCommandResult{Type: LocalCommandResultTermSetup, Value: strings.TrimSpace(args)}, true
+	case "branch":
+		return LocalCommandResult{Type: LocalCommandResultBranch, Value: strings.TrimSpace(args)}, true
+	case "rename":
+		return LocalCommandResult{Type: LocalCommandResultRename, Value: strings.TrimSpace(args)}, true
+	case "diff":
+		return LocalCommandResult{Type: LocalCommandResultDiff, Value: strings.TrimSpace(args)}, true
+	case "copy":
+		return LocalCommandResult{Type: LocalCommandResultCopy, Value: strings.TrimSpace(args)}, true
+	case "exit", "quit":
+		return LocalCommandResult{Type: LocalCommandResultExit, Value: strings.TrimSpace(args)}, true
+	case "fast":
+		return LocalCommandResult{Type: LocalCommandResultFast, Value: strings.TrimSpace(args)}, true
+	case "stats":
+		return LocalCommandResult{Type: LocalCommandResultStats, Value: strings.TrimSpace(args)}, true
+	case "tag":
+		return LocalCommandResult{Type: LocalCommandResultTag, Value: strings.TrimSpace(args)}, true
+	case "tasks":
+		return LocalCommandResult{Type: LocalCommandResultTasks, Value: strings.TrimSpace(args)}, true
+	case "keybindings":
+		return LocalCommandResult{Type: LocalCommandResultKeybindings, Value: strings.TrimSpace(args)}, true
+	case "reload-plugins":
+		return LocalCommandResult{Type: LocalCommandResultReloadPlugin, Value: strings.TrimSpace(args)}, true
+	case "color":
+		return LocalCommandResult{Type: LocalCommandResultColor, Value: strings.TrimSpace(args)}, true
+	case "statusline":
+		return LocalCommandResult{Type: LocalCommandResultStatusLine, Value: strings.TrimSpace(args)}, true
 	default:
 		return LocalCommandResult{}, false
 	}

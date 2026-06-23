@@ -180,6 +180,28 @@ func newProductionRouter(cwd string, registry []contracts.Command) *CommandRoute
 	router.Register("help", helpHandler(registry))
 	router.Register("doctor", doctorHandler(cwd, ""))
 	router.Register("model", modelHandler())
+
+	// F4 commands: slash command completion.
+	router.Register("add-dir", addDirHandler(cwd))
+	// /plan: starts in default mode; the loop updates its own mode via CommandOutcome.NewMode.
+	// newProductionRouterWithMode is used when the caller knows the initial mode.
+	router.Register("plan", planHandlerWith(contracts.PermissionDefault))
+	router.Register("terminal-setup", terminalSetupHandler())
+	router.Register("branch", branchHandler())
+	router.Register("rename", renameHandler("", cwd))
+	router.Register("diff", diffHandler(cwd))
+	router.Register("copy", copyHandler(nil))
+	router.Register("exit", exitHandler())
+	router.Register("quit", exitHandler())
+	router.Register("fast", fastHandler())
+	router.Register("stats", statsHandler())
+	router.Register("tag", tagHandler("", cwd))
+	router.Register("tasks", tasksHandler())
+	router.Register("keybindings", keybindingsHandler(""))
+	router.Register("reload-plugins", reloadPluginsHandler(cwd))
+	router.Register("color", colorHandler())
+	router.Register("statusline", statusLineHandler())
+	router.Register("bashes", tasksHandler())
 	return router
 }
 

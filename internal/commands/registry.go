@@ -322,6 +322,22 @@ func BuiltinCommands() []contracts.Command {
 		{Type: contracts.CommandLocalJSX, Name: "ide", Description: "Detect connected IDEs", ArgumentHint: "[list|open]", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocalJSX, Name: "agents", Description: "List, create, delete, and inspect agent files", ArgumentHint: "[list | create <name> | delete <name> | show <name>]", Source: contracts.CommandSourceBuiltin},
 		{Type: contracts.CommandLocal, Name: "rewind", Description: "Restore files to a previous conversation snapshot", ArgumentHint: "[message-id]", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "add-dir", Description: "Add a new working directory", ArgumentHint: "<path>", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocalJSX, Name: "plan", Description: "Enable plan mode or view the current session plan", ArgumentHint: "[open|<description>]", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "terminal-setup", Description: "Install Shift+Enter key binding for newlines", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "branch", Description: "Create a branch of the current conversation at this point", ArgumentHint: "[name]", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "rename", Description: "Rename the current conversation", ArgumentHint: "[name]", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "diff", Description: "View uncommitted changes and per-turn diffs", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocalJSX, Name: "copy", Description: "Copy Claude's last response to clipboard", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "exit", Aliases: []string{"quit"}, Description: "Exit the REPL", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "fast", Description: "Toggle fast mode (Haiku model only)", ArgumentHint: "[on|off]", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocal, Name: "stats", Description: "Show your Claude Code usage statistics and activity", Source: contracts.CommandSourceBuiltin, SupportsNonInteractive: true},
+		{Type: contracts.CommandLocalJSX, Name: "tag", Description: "Toggle a searchable tag on the current session", ArgumentHint: "<tag-name>", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "tasks", Aliases: []string{"bashes"}, Description: "List and manage background tasks", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocal, Name: "keybindings", Description: "Open or create your keybindings configuration file", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocal, Name: "reload-plugins", Description: "Activate pending plugin changes in the current session", Source: contracts.CommandSourceBuiltin},
+		{Type: contracts.CommandLocalJSX, Name: "color", Description: "Set the prompt bar color for this session", ArgumentHint: "<color|default>", Source: contracts.CommandSourceBuiltin, Immediate: true},
+		{Type: contracts.CommandLocalJSX, Name: "statusline", Description: "Set up Claude Code's status line UI", Source: contracts.CommandSourceBuiltin},
 	})
 }
 
