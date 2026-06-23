@@ -6,7 +6,35 @@ import (
 	"testing"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/tui"
 )
+
+// TestResumeHandlerNoArgOpensOverlay: /resume with no arg must return an Overlay
+// (ResumePicker), not a text Status.
+func TestResumeHandlerNoArgOpensOverlay(t *testing.T) {
+	entries := []resumeEntry{
+		{ID: "abc123", Path: "/p/abc123.jsonl", Title: "First session"},
+		{ID: "def456", Path: "/p/def456.jsonl", Title: "Second session"},
+	}
+	h := resumeHandlerWith(
+		func() ([]resumeEntry, error) { return entries, nil },
+		func(path string, id contracts.ID) ([]contracts.Message, error) { return nil, nil },
+	)
+	screen := tui.NewREPLScreen(80, 24, nil)
+	out, err := h(context.Background(), CommandContext{Screen: &screen})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("Handled must be true")
+	}
+	if out.Overlay == nil {
+		t.Fatal("no-arg /resume must open ResumePicker overlay, got nil Overlay")
+	}
+	if out.Status != "" {
+		t.Fatalf("no-arg /resume must not return Status text, got: %q", out.Status)
+	}
+}
 
 func TestResumeHandlerLoadsByID(t *testing.T) {
 	listed := []resumeEntry{
@@ -45,10 +73,11 @@ func TestResumeHandlerNoArgListsSessions(t *testing.T) {
 		t.Fatalf("handler err: %v", err)
 	}
 	if out.ReplaceHistory {
-		t.Fatal("no-arg resume must not replace history; it lists")
+		t.Fatal("no-arg resume must not replace history; it opens a picker")
 	}
-	if out.Status == "" {
-		t.Fatal("expected a listing in Status")
+	// No-arg /resume now opens the ResumePicker overlay instead of dumping text.
+	if out.Overlay == nil {
+		t.Fatal("expected a ResumePicker overlay for no-arg /resume")
 	}
 }
 

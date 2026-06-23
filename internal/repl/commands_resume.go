@@ -29,7 +29,16 @@ func resumeHandlerWith(list resumeLister, load resumeLoader) CommandHandler {
 		}
 		arg := strings.TrimSpace(cc.Args)
 		if arg == "" {
-			return CommandOutcome{Handled: true, Status: formatResumeList(entries)}, nil
+			// Convert internal resumeEntry slice to the public ResumeEntry type
+			// and open the picker overlay instead of dumping a text list.
+			pickerEntries := make([]ResumeEntry, len(entries))
+			for i, e := range entries {
+				pickerEntries[i] = ResumeEntry{
+					ID:      string(e.ID),
+					Summary: e.Title,
+				}
+			}
+			return CommandOutcome{Handled: true, Overlay: NewResumePicker(pickerEntries)}, nil
 		}
 		entry, ok := resolveResumeTarget(entries, arg)
 		if !ok {
@@ -97,20 +106,4 @@ func resolveResumeTarget(entries []resumeEntry, arg string) (resumeEntry, bool) 
 		}
 	}
 	return resumeEntry{}, false
-}
-
-// formatResumeList renders a numbered list of sessions for display in the REPL.
-func formatResumeList(entries []resumeEntry) string {
-	if len(entries) == 0 {
-		return "No previous sessions found."
-	}
-	lines := []string{"Resumable sessions (use /resume <number|id|search>):"}
-	for i, e := range entries {
-		title := strings.TrimSpace(e.Title)
-		if title == "" {
-			title = string(e.ID)
-		}
-		lines = append(lines, fmt.Sprintf("  %d. %s  (%s)", i+1, title, e.ID))
-	}
-	return strings.Join(lines, "\n")
 }
