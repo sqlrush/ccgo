@@ -115,6 +115,34 @@ func TestFailIfUnavailableFalseRunsUnconfined(t *testing.T) {
 	}
 }
 
+// TestSandboxExcludedCommandSkipsSandbox asserts that a command matching
+// ExcludedCommands bypasses the sandbox (SBX-05 integration).
+func TestSandboxExcludedCommandSkipsSandbox(t *testing.T) {
+	p := sandbox.Policy{
+		Enabled:          true,
+		AllowUnsandboxed: true,
+		ExcludedCommands: []string{"git"},
+	}
+	name, _ := sandboxedShellCommand("git status", p, false)
+	if name != defaultShell() {
+		t.Fatalf("SBX-05: excluded 'git status' must bypass sandbox, got wrapper %q", name)
+	}
+}
+
+// TestSandboxExcludedCompoundCommandSkipsSandbox asserts compound commands
+// where any segment matches ExcludedCommands bypass the sandbox (SBX-06).
+func TestSandboxExcludedCompoundCommandSkipsSandbox(t *testing.T) {
+	p := sandbox.Policy{
+		Enabled:          true,
+		AllowUnsandboxed: true,
+		ExcludedCommands: []string{"git"},
+	}
+	name, _ := sandboxedShellCommand("echo hi && git status", p, false)
+	if name != defaultShell() {
+		t.Fatalf("SBX-06: compound with excluded segment must bypass sandbox, got wrapper %q", name)
+	}
+}
+
 // contains is a tiny helper for the test file only.
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(s) > 0 && stringContains(s, sub))

@@ -40,21 +40,22 @@ func settingsFromBashMetadata(metadata map[string]any) contracts.Settings {
 // sandboxedShellCommand returns the (name, args) to execute command, confined
 // according to p and the dangerouslyDisableSandbox flag.
 //
-// SECURITY: confinement is decided by p.ShouldSandbox, never by the flag alone.
-// The dangerous flag only bypasses when the policy explicitly allows it
-// (AllowUnsandboxed=true). A stray flag cannot silently disable an enabled sandbox.
+// SECURITY: confinement is decided by p.ShouldSandboxCommand (which includes
+// ExcludedCommands analysis), never by the flag alone. The dangerous flag only
+// bypasses when the policy explicitly allows it (AllowUnsandboxed=true). A
+// stray flag cannot silently disable an enabled sandbox.
 //
 // When sandbox is required but unavailable:
 //   - FailIfUnavailable=true  → returns failClosedCommand (exits non-zero; fail-closed)
 //   - FailIfUnavailable=false → returns the raw shell (degraded/best-effort mode)
 func sandboxedShellCommand(command string, p sandbox.Policy, dangerous bool) (string, []string) {
 	name, args := shellCommand(command)
-	if !p.ShouldSandbox(dangerous) {
-		// Sandbox is off (disabled or legitimately bypassed): run as-is.
+	if !p.ShouldSandboxCommand(command, dangerous) {
+		// Sandbox is off (disabled, legitimately bypassed, or excluded command): run as-is.
 		return name, args
 	}
-	if !sandbox.Supported() {
-		// Sandbox required but platform has no enforcement backend.
+	if !sandbox.SupportedForPolicy(p) {
+		// Sandbox required but platform has no enforcement backend (or not in enabledPlatforms).
 		if p.FailIfUnavailable {
 			return failClosedCommand(p)
 		}
