@@ -31,15 +31,17 @@ import (
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
 	"ccgo/internal/permissions"
+	"ccgo/internal/platform"
 	pluginpkg "ccgo/internal/plugins"
 	remotepkg "ccgo/internal/remote"
+	"ccgo/internal/repl"
 	"ccgo/internal/sandbox"
 	"ccgo/internal/session"
-	"ccgo/internal/tool"
-	"ccgo/internal/repl"
 	"ccgo/internal/settingswriter"
+	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
 	tasktools "ccgo/internal/tools/task"
+	"ccgo/internal/tui"
 )
 
 const version = "0.0.0-dev"
@@ -339,10 +341,63 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		config.UserSettingsPath(),
 		config.ProjectSettingsPath(runner.WorkingDirectory),
 	)
+
+	mergedSettings := runnerMergedSettings(runner)
+
+	// Load persisted prompt history (best-effort; nil on any error).
+	var promptHistory []session.HistoryEntry
+	if histEntries, err := session.LoadHistory(
+		session.HistoryPath(),
+		runner.WorkingDirectory,
+		runner.SessionID,
+		500,
+		nil,
+	); err == nil {
+		promptHistory = histEntries
+	}
+
+	// Discover memory files (best-effort).
+	var memoryFiles []string
+	if claudeFiles, err := memory.DiscoverScopedClaudeFiles(memory.ScopeOptions{
+		CWD: runner.WorkingDirectory,
+	}); err == nil {
+		for _, f := range claudeFiles {
+			memoryFiles = append(memoryFiles, f.Path)
+		}
+	}
+
+	// List resumable sessions (best-effort).
+	var resumeEntries []repl.ResumeEntry
+	if sessions, err := session.ListProjectSessions(runner.WorkingDirectory); err == nil {
+		resumeEntries = make([]repl.ResumeEntry, 0, len(sessions))
+		for _, s := range sessions {
+			resumeEntries = append(resumeEntries, repl.ResumeEntry{
+				ID:          string(s.ID),
+				Summary:     s.Title,
+				ProjectPath: s.ProjectPath,
+			})
+		}
+	}
+
+	// Load user keybindings (best-effort; absent file is silently ignored).
+	var customKeymap *tui.Keymap
+	keybindingsPath := filepath.Join(platform.ClaudeHomeDir(), "keybindings.json")
+	if specs, err := tui.LoadKeyBindingSpecs(keybindingsPath); err == nil && len(specs) > 0 {
+		if km, err := tui.KeymapFromSpecs(tui.DefaultKeymap(), specs); err == nil {
+			customKeymap = &km
+		}
+	}
+
 	opts := repl.InteractiveOptions{
-		Settings: writer,
-		Registry: cmdRegistry.Visible(),
-		Mode:     runner.PermissionMode,
+		Settings:      writer,
+		Registry:      cmdRegistry.Visible(),
+		Mode:          runner.PermissionMode,
+		Engine:        engineFromDecider(runner.Permissions),
+		EditorMode:    mergedSettings.EditorMode,
+		PromptHistory: promptHistory,
+		MemoryFiles:   memoryFiles,
+		ResumeEntries: resumeEntries,
+		CustomKeymap:  customKeymap,
 	}
 	if err := repl.RunInteractiveWithOptions(ctx, term, runner, history, opts); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -3471,6 +3526,22 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	runner.APIKeySource = apiKeySource
 	runner.BetaHeaders = append([]string(nil), client.Beta...)
 	return runner, nil
+}
+
+// engineFromDecider extracts the live *permissions.Engine from a PermissionDecider
+// if it wraps an EnginePermissionDecider. Returns nil for other decider types.
+func engineFromDecider(decider tool.PermissionDecider) *permissions.Engine {
+	switch v := decider.(type) {
+	case tool.EnginePermissionDecider:
+		eng := v.Engine
+		return &eng
+	case *tool.EnginePermissionDecider:
+		if v != nil {
+			eng := v.Engine
+			return &eng
+		}
+	}
+	return nil
 }
 
 func runnerPermissionModeFromDecider(decider tool.PermissionDecider) contracts.PermissionMode {

@@ -3,6 +3,7 @@ package repl
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
@@ -264,6 +265,32 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	// Wire the command router so /resume (and future live-effect commands) are
 	// handled without falling through to the model.
 	router := newProductionRouter(base.WorkingDirectory, opts.Registry)
+
+	// When the host supplied prebuilt resume entries, prefer them for the no-arg
+	// picker so the overlay reflects exactly what main.go discovered at startup.
+	// Arg-based lookups still fall through to the disk-backed resume handler.
+	if len(opts.ResumeEntries) > 0 {
+		entries := opts.ResumeEntries
+		fallback := resumeHandler(base.WorkingDirectory)
+		pickerOrFallback := func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
+			if strings.TrimSpace(cc.Args) == "" {
+				return CommandOutcome{Handled: true, Overlay: NewResumePicker(entries)}, nil
+			}
+			return fallback(ctx, cc)
+		}
+		router.Register("resume", pickerOrFallback)
+		router.Register("continue", pickerOrFallback)
+	}
+
+	// When the host supplied prebuilt memory file paths, prefer them for the
+	// /memory selector overlay instead of rediscovering them on disk.
+	if len(opts.MemoryFiles) > 0 {
+		files := opts.MemoryFiles
+		router.Register("memory", memoryHandlerWith(func() ([]string, error) {
+			return files, nil
+		}))
+	}
+
 	loop.onCommand = func(input string) (CommandOutcome, bool) {
 		cc := CommandContext{
 			Screen:  &loop.screen,
