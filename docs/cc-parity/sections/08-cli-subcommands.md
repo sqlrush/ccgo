@@ -4,7 +4,7 @@
 
 | ID | 功能 | 执行层 | 测试（given → when → then） | CC 参照 | 状态 |
 |---|---|---|---|---|---|
-| SUBCMD-DOCTOR-01 | `doctor` 报告安装类型（npm-global/npm-local/native/package-manager/development/unknown） | AUTO | 前置：二进制已安装；操作：`claude doctor`；预期：输出中含安装路径或安装类型字段 | `src/utils/doctorDiagnostic.ts:514`（`getDoctorDiagnostic`）、`src/screens/Doctor.tsx:100` | ⚠️ 已建未接（ccgo 仅输出"Version"/"Ripgrep"/"Settings"三类检查，无安装类型字段；CC 有 6 种 InstallationType） |
+| SUBCMD-DOCTOR-01 | `doctor` 报告安装类型（npm-global/npm-local/native/package-manager/development/unknown） | AUTO | 前置：二进制已安装；操作：`claude doctor`；预期：输出中含安装路径或安装类型字段 | `src/utils/doctorDiagnostic.ts:514`（`getDoctorDiagnostic`）、`src/screens/Doctor.tsx:100` | ✅ 通过（W-Batch-D）：`DetectInstallType()` 解析 6 种安装类型；`internal/doctor.Run()` 添加 "Install type" Check；`ExecutableFn` 注入用于测试；`TestRunChecksInstallTypePresent`/`InFormat` 验证 |
 | SUBCMD-DOCTOR-02 | `doctor` 报告当前版本号 | AUTO | 前置：二进制；操作：`claude doctor`；预期：stdout 含当前版本字符串 | `src/utils/doctorDiagnostic.ts:517`（`version` 字段） | ✅ 通过（ccgo doctor 含 "Version" 检查行，detail=version） |
 | SUBCMD-DOCTOR-03 | `doctor` 检查 ripgrep（rg）是否在 PATH 中 | AUTO | 前置：rg 在 PATH；操作：`claude doctor`；预期：输出含 "rg" 相关 OK 状态 | `src/utils/doctorDiagnostic.ts:589`（`getRipgrepStatus()`） | ✅ 通过（ccgo `internal/doctor` 用 exec.LookPath 检查 rg，有 OK/WARN 两种输出） |
 | SUBCMD-DOCTOR-04 | `doctor` 当 rg 缺失时输出 WARN（而非 ERR），不阻断其他检查 | AUTO | 前置：PATH 中无 rg；操作：`claude doctor`；预期：含 WARN 行，exit 0 | `src/utils/doctorDiagnostic.ts:589` | ✅ 通过（ccgo `StatusWarn` 且 `HasErrors()` 返回 false） |
@@ -67,4 +67,4 @@
 | SUBCMD-INSTALL-03 | `claude install --force` 强制重新安装即使版本未变 | MANUAL | 前置：已安装同版本；操作：`claude install --force`；预期：重新安装，输出成功，不因"已是最新"跳过 | `src/main.tsx:4395`（`--force` option）、`src/commands/install.tsx:19` | ❌ 缺失（ccgo 无 `install` 子命令） |
 | SUBCMD-INSTALL-04 | `claude install` 清理旧 npm 安装（npm-global/npm-local）再安装 native | MANUAL | 前置：系统有遗留 npm 安装；操作：`claude install`；预期：输出 "Cleaning up old npm installations"，npm 安装被移除 | `src/commands/install.tsx:26`（`type: 'cleaning-npm'`）、`cleanupNpmInstallations` | ❌ 缺失（ccgo 无 `install` 子命令） |
 
-小计：55 行，✅ 通过 21，⚠️ 已建未接 1，❌ 缺失 33，N/A 0。
+小计：55 行，✅ 通过 22，⚠️ 已建未接 0，❌ 缺失 33，N/A 0。

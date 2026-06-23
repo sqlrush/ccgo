@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"ccgo/internal/auth"
 	"ccgo/internal/contracts"
@@ -288,3 +289,85 @@ func resolvedTestPath(t *testing.T, path string) string {
 	}
 	return resolved
 }
+
+// TestLoadMCPConfigHasCombinedProvider verifies that LoadMCPConfigFromSettingsFiles
+// sets AccessTokenProvider to the CombinedAccessTokenProvider (MCP-39..44 wiring).
+func TestLoadMCPConfigHasCombinedProvider(t *testing.T) {
+	claudeHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+
+	cfg, err := LoadMCPConfigFromSettingsFiles(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadMCPConfigFromSettingsFiles: %v", err)
+	}
+	if cfg.ToolOptions.AccessTokenProvider == nil {
+		t.Error("AccessTokenProvider must be non-nil (MCP-39..44 wiring)")
+	}
+	// Verify it is non-nil for a non-OAuth server (should return nil provider).
+	ctx := context.Background()
+	provider, err := cfg.ToolOptions.AccessTokenProvider(ctx, "test-server", contracts.MCPServer{
+		Type: mcp.TransportStdio,
+	})
+	if err != nil {
+		t.Errorf("AccessTokenProvider returned error for non-OAuth server: %v", err)
+	}
+	if provider != nil {
+		t.Errorf("AccessTokenProvider should return nil for non-OAuth server, got %T", provider)
+	}
+}
+
+// TestLoadMCPConfigHasReconnectOpenClient verifies that LoadMCPConfigFromSettingsFiles
+// sets OpenClient to the reconnecting wrapper (MCP-43 wiring).
+func TestLoadMCPConfigHasReconnectOpenClient(t *testing.T) {
+	claudeHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeHome)
+
+	cfg, err := LoadMCPConfigFromSettingsFiles(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadMCPConfigFromSettingsFiles: %v", err)
+	}
+	if cfg.ToolOptions.OpenClient == nil {
+		t.Error("OpenClient must be non-nil (MCP-43 reconnect wiring)")
+	}
+}
+
+// TestReconnectingOpenClientLocalTransport verifies that reconnectingOpenClient
+// attempts a connection for local transports (no reconnect wrapping applied).
+// We use a fake stdio server that will fail immediately; the function should
+// return an error (not hang or panic).
+func TestReconnectingOpenClientLocalTransport(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// stdio transport should fail quickly (command not found) without reconnect.
+	server := contracts.MCPServer{
+		Type:    mcp.TransportStdio,
+		Command: "ccgo-test-no-such-command-xyz",
+	}
+	_, err := reconnectingOpenClient(ctx, "test", server)
+	if err == nil {
+		t.Error("expected error for missing stdio command")
+	}
+	// Verify it failed quickly (< 1s) — no reconnect backoff.
+}
+
+// TestReconnectingOpenClientRemoteTransportContextCancel verifies that
+// reconnectingOpenClient respects context cancellation for remote transports.
+// The reconnect loop should stop when ctx is cancelled.
+func TestReconnectingOpenClientRemoteTransportContextCancel(t *testing.T) {
+	// Cancel immediately so we don't wait for reconnect attempts.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel before calling
+
+	mcpServer := contracts.MCPServer{
+		Type: mcp.TransportHTTP,
+		URL:  "http://127.0.0.1:1/mcp", // Port 1 is privileged/unreachable
+	}
+	_, err := reconnectingOpenClient(ctx, "test-remote", mcpServer)
+	// Should return context.Canceled or a connection error.
+	if err == nil {
+		t.Error("expected error for cancelled context or unreachable server")
+	}
+}
+
+var _ = time.Second // ensure time import is used

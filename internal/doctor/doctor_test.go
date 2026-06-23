@@ -137,6 +137,43 @@ func TestFormatShowsStatus(t *testing.T) {
 	}
 }
 
+func TestRunChecksInstallTypePresent(t *testing.T) {
+	// SUBCMD-DOCTOR-01: report must include an install-type check.
+	report := Run(Input{
+		Version:     "1.0.0",
+		CWD:         t.TempDir(),
+		ExecutableFn: func() (string, error) { return "/usr/local/bin/claude", nil },
+	})
+	var sawInstall bool
+	for _, c := range report.Checks {
+		if strings.Contains(strings.ToLower(c.Name), "install") {
+			sawInstall = true
+			if c.Status != StatusOK && c.Status != StatusWarn {
+				t.Fatalf("install-type check should be OK or WARN, got %q detail=%q", c.Status, c.Detail)
+			}
+			if c.Detail == "" {
+				t.Fatal("install-type check must include a non-empty detail (install type or path)")
+			}
+		}
+	}
+	if !sawInstall {
+		t.Fatal("expected an install-type check in the report")
+	}
+}
+
+func TestRunChecksInstallTypeInFormat(t *testing.T) {
+	// SUBCMD-DOCTOR-01: Format output must contain install type information.
+	report := Run(Input{
+		Version:     "1.0.0",
+		CWD:         t.TempDir(),
+		ExecutableFn: func() (string, error) { return "/usr/local/bin/claude", nil },
+	})
+	out := Format(report)
+	if !strings.Contains(strings.ToLower(out), "install") {
+		t.Fatalf("Format output should contain install info: %q", out)
+	}
+}
+
 // lookPathError is a simple error type for faking missing binaries.
 type lookPathError struct{ name string }
 

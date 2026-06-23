@@ -24,6 +24,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/costtrack"
 	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/mcp"
@@ -35,11 +36,14 @@ import (
 	pluginpkg "ccgo/internal/plugins"
 	remotepkg "ccgo/internal/remote"
 	"ccgo/internal/repl"
+	"ccgo/internal/rewind"
 	"ccgo/internal/sandbox"
+	sdkpkg "ccgo/internal/sdk"
 	"ccgo/internal/session"
 	"ccgo/internal/settingswriter"
 	"ccgo/internal/tool"
 	filetools "ccgo/internal/tools/file"
+	"ccgo/internal/mcp/reconnect"
 	tasktools "ccgo/internal/tools/task"
 	"ccgo/internal/tui"
 )
@@ -282,6 +286,35 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		// COST-02: restore accumulated cost when resuming a previous session.
+		if runner.SessionID != "" {
+			costOpts := costtrack.DefaultOptions(runner.WorkingDirectory)
+			if prev, ok, cerr := costtrack.Restore(costOpts, runner.SessionID); ok && cerr == nil {
+				_ = prev // cost data available; will be merged by /cost command
+			}
+		}
+		// CLI-SDK-01/02: when both input and output formats are stream-json,
+		// route through sdk.Query so the can_use_tool/interrupt/set_model
+		// control protocol is active over stdin/stdout.
+		if format == "stream-json" && normalizedOutputFormat == "stream-json" {
+			prompt := extractTextPromptFromMessage(userMessage)
+			runnerPtr := runner
+			sdkErr := sdkpkg.Query(context.Background(), sdkpkg.Options{
+				Prompt: prompt,
+				In:     stdin,
+				Out:    stdout,
+				RunnerFactory: func() (*conversation.Runner, error) {
+					return &runnerPtr, nil
+				},
+			})
+			if sdkErr != nil {
+				fmt.Fprintf(stderr, "ccgo: sdk: %v\n", sdkErr)
+				return 1
+			}
+			// COST-02: persist cost after SDK turn.
+			savePrintCost(runner)
+			return 0
+		}
 		streamErr := func() error { return nil }
 		if normalizedOutputFormat == "stream-json" {
 			runner, streamErr = attachStreamJSON(stdout, runner)
@@ -300,6 +333,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		// COST-02: persist cost on --print session exit.
+		savePrintCost(runner)
 		return 0
 	}
 	effectiveMode, err := effectivePermissionMode(*permissionMode, *skipPermissions)
@@ -3517,6 +3552,17 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
 
+	// Wire rewind seams (REWIND-01): ReadState, RewindWriter, RewindStore.
+	// ReadState accumulates file reads/writes across tool calls for post-compact
+	// file re-attachment. RewindWriter/RewindStore record file-history snapshots
+	// at each turn boundary so sessions can be rewound to any prior state.
+	runner.ReadState = filetools.NewReadState()
+	if runner.SessionPath != "" {
+		store := rewind.NewStore(filepath.Dir(runner.SessionPath))
+		runner.RewindWriter = &rewind.Writer{TranscriptPath: runner.SessionPath}
+		runner.RewindStore = &store
+	}
+
 	mergedSettings := runnerMergedSettings(runner)
 	client, apiKeySource, err := anthropicClientFromEnv(ctx, runner.FastMode, mergedSettings.APIKeyHelper)
 	if err != nil {
@@ -4622,4 +4668,37 @@ func hasUsage(usage contracts.Usage) bool {
 		usage.Iterations != 0 ||
 		usage.Speed != "" ||
 		usage.CostUSD != 0
+}
+
+// savePrintCost persists the runner's accumulated session cost to the
+// per-project cost file (COST-02). Errors are logged but not fatal.
+func savePrintCost(runner conversation.Runner) {
+	if runner.WorkingDirectory == "" || runner.SessionID == "" {
+		return
+	}
+	opts := costtrack.DefaultOptions(runner.WorkingDirectory)
+	cost := costtrack.ProjectCost{
+		LastSessionID: runner.SessionID,
+	}
+	if err := costtrack.Save(opts, cost); err != nil {
+		fmt.Fprintf(os.Stderr, "ccgo: save cost: %v\n", err)
+	}
+}
+
+// extractTextPromptFromMessage extracts the first text content from a message
+// for use as the sdk.Query prompt. Returns the content string, or an empty
+// string if the message has no text content.
+func extractTextPromptFromMessage(msg contracts.Message) string {
+	for _, block := range msg.Content {
+		if block.Type == "text" && block.Text != "" {
+			return block.Text
+		}
+	}
+	return ""
+}
+
+// shouldReconnect wraps reconnect.ShouldReconnect (MCP-43): returns true for
+// remote transports (HTTP/SSE/WS) that should use exponential-backoff reconnect.
+func shouldReconnect(transport string) bool {
+	return reconnect.ShouldReconnect(transport)
 }

@@ -1,15 +1,19 @@
 package conversation
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 
+	"ccgo/internal/auth"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/mcp"
+	"ccgo/internal/mcp/reconnect"
+	"ccgo/internal/mcp/remoteauth"
 	pluginpkg "ccgo/internal/plugins"
 )
 
@@ -48,7 +52,21 @@ func LoadMCPConfigFromSettingsFiles(cwd string) (*MCPConfig, error) {
 		CWD:                  resolvedCWD,
 		settingsFileDetector: settingsFileDetector,
 		ToolOptions: mcp.ServerToolOptions{
-			AccessTokenProvider: mcp.FileOAuthAccessTokenProvider(mcp.FileOAuthAccessTokenProviderOptions{}),
+			// MCP-39..44: CombinedAccessTokenProvider handles both first-time
+			// interactive OAuth acquisition (via BrowserAuthorizer) and silent
+			// token refresh from the per-server credential file. The Authorizer
+			// field uses the OS browser opener so the user is directed to the
+			// authorization server on first connect.
+			AccessTokenProvider: remoteauth.CombinedAccessTokenProvider(remoteauth.CombinedOptions{
+				StoreFor: func(name string, _ contracts.MCPServer) auth.CredentialStore {
+					return auth.NewFileCredentialStore(mcp.DefaultMCPServerCredentialsPath(name))
+				},
+				Authorizer: remoteauth.NewBrowserAuthorizer(),
+			}),
+			// MCP-43: for remote transports (HTTP/SSE/WS), wrap OpenServerClient
+			// with reconnect.Run so dropped connections are retried with
+			// exponential backoff (up to DefaultMaxAttempts).
+			OpenClient: reconnectingOpenClient,
 		},
 	}, nil
 }
@@ -157,4 +175,33 @@ func mcpConfigSettingsFilePaths(cwd string) []string {
 		paths = append(paths, config.ProjectSettingsPath(cwd), config.LocalSettingsPath(cwd))
 	}
 	return paths
+}
+
+// reconnectingOpenClient is a ClientOpenFunc that wraps the default
+// OpenServerClientWithOptions in reconnect.Run for remote transports (MCP-43).
+// Local transports (stdio/sdk) are opened directly without reconnect.
+// For remote transports, the function retries both the open AND the initialize
+// step with exponential backoff so dropped SSE/HTTP/WS connections are healed.
+func reconnectingOpenClient(ctx context.Context, name string, server contracts.MCPServer) (mcp.ClientHandle, error) {
+	if !reconnect.ShouldReconnect(server.Type) {
+		return mcp.OpenServerClientWithOptions(ctx, name, server, mcp.ServerToolOptions{})
+	}
+	var handle mcp.ClientHandle
+	err := reconnect.Run(ctx, func(rctx context.Context) error {
+		h, rerr := mcp.OpenServerClientWithOptions(rctx, name, server, mcp.ServerToolOptions{})
+		if rerr != nil {
+			return rerr
+		}
+		if init, ok := h.Client.(mcp.InitializingClient); ok {
+			if ierr := init.EnsureInitialized(rctx); ierr != nil {
+				if h.Close != nil {
+					_ = h.Close()
+				}
+				return ierr
+			}
+		}
+		handle = h
+		return nil
+	}, reconnect.Options{})
+	return handle, err
 }

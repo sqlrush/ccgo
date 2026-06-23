@@ -42,6 +42,18 @@ func (r Report) HasErrors() bool {
 	return false
 }
 
+// InstallationType mirrors CC's 6 install categories (doctorDiagnostic.ts:514).
+type InstallationType string
+
+const (
+	InstallTypeNpmGlobal      InstallationType = "npm-global"
+	InstallTypeNpmLocal       InstallationType = "npm-local"
+	InstallTypeNative         InstallationType = "native"
+	InstallTypePackageManager InstallationType = "package-manager"
+	InstallTypeDevelopment    InstallationType = "development"
+	InstallTypeUnknown        InstallationType = "unknown"
+)
+
 // Input carries injected signals so tests are deterministic and network-free.
 type Input struct {
 	// Version is the binary version string (e.g. "0.0.0-dev").
@@ -61,6 +73,45 @@ type Input struct {
 
 	// ProjectSettingsPath overrides the project settings path; defaults to CWD/.claude/settings.json.
 	ProjectSettingsPath string
+
+	// ExecutableFn returns the path to the running binary; defaults to os.Executable when nil.
+	// Injected in tests for deterministic install-type detection.
+	ExecutableFn func() (string, error)
+}
+
+// DetectInstallType classifies the running binary path into one of CC's 6
+// install categories (doctorDiagnostic.ts:514). It uses the provided
+// executableFn (or os.Executable when nil) to obtain the binary path.
+func DetectInstallType(executableFn func() (string, error)) (InstallationType, string) {
+	fn := executableFn
+	if fn == nil {
+		fn = os.Executable
+	}
+	exePath, err := fn()
+	if err != nil {
+		return InstallTypeUnknown, ""
+	}
+	exePath = strings.ToLower(exePath)
+
+	switch {
+	case strings.Contains(exePath, "node_modules/.bin") || strings.Contains(exePath, "node_modules\\.bin"):
+		return InstallTypeNpmLocal, exePath
+	case strings.Contains(exePath, "/npm/") || strings.Contains(exePath, "\\npm\\") ||
+		strings.Contains(exePath, "npm-global") || strings.Contains(exePath, "\\appdata\\roaming\\npm"):
+		return InstallTypeNpmGlobal, exePath
+	case strings.Contains(exePath, "/homebrew/") || strings.Contains(exePath, "/linuxbrew/") ||
+		strings.Contains(exePath, "/nix/store/") || strings.Contains(exePath, "/macports/"):
+		return InstallTypePackageManager, exePath
+	case strings.Contains(exePath, "/go/bin/") || strings.Contains(exePath, "\\go\\bin\\") ||
+		strings.Contains(exePath, "/go-build") || strings.Contains(exePath, "\\go-build") ||
+		strings.HasSuffix(exePath, ".test"):
+		return InstallTypeDevelopment, exePath
+	case strings.Contains(exePath, "/usr/local/bin/") || strings.Contains(exePath, "/usr/bin/") ||
+		strings.Contains(exePath, "/opt/") || strings.Contains(exePath, "\\program files\\"):
+		return InstallTypeNative, exePath
+	default:
+		return InstallTypeUnknown, exePath
+	}
 }
 
 // Run performs all diagnostic checks and returns a Report.
@@ -136,6 +187,18 @@ func Run(in Input) Report {
 			})
 		}
 	}
+
+	// Install-type check (SUBCMD-DOCTOR-01): classify the running binary.
+	installType, exePath := DetectInstallType(in.ExecutableFn)
+	detail := string(installType)
+	if exePath != "" {
+		detail = fmt.Sprintf("%s (%s)", installType, exePath)
+	}
+	checks = append(checks, Check{
+		Name:   "Install type",
+		Status: StatusOK,
+		Detail: detail,
+	})
 
 	return Report{Checks: checks}
 }

@@ -114,7 +114,7 @@
 | CLI-SUBCMD-52 | `claude self-hosted-runner`（SELF_HOSTED_RUNNER feature gate）自托管 runner | N/A | — | `src/entrypoints/cli.tsx:238`（`feature('SELF_HOSTED_RUNNER')`） | N/A（云端栈 OUT-of-scope §10） |
 | CLI-SUBCMD-53 | `--claude-in-chrome-mcp`（内部快速路径）Chrome 扩展 MCP server | N/A | — | `src/entrypoints/cli.tsx:72` | N/A（Chrome 扩展内部快速路径，OUT-of-scope §10） |
 | CLI-SUBCMD-54 | `--chrome-native-host` Chrome 原生消息宿主 | AUTO | 前置：二进制；操作：`claude --chrome-native-host`（带 Chrome native messaging 协议消息）；预期：正确的 JSON 消息处理 | `src/entrypoints/cli.tsx:79` | ✅ 通过（ccgo `cmd/claude/main.go:178`） |
-| CLI-SDK-01 | SDK/control 模式：暴露可 import 的 `Query()` 入口 | AUTO | 前置：二进制；操作：以 SDK/control 模式调用（control_request/response NDJSON）；预期：control_request 驱动一个回合 | `src/entrypoints/agentSdkTypes.ts:112` | ⚠️ 已建未接（`internal/sdk.Query` 已建+已测；ccgo `cmd/claude/main.go` 无对应子命令或标志入口，无法从 CLI 触发） |
-| CLI-SDK-02 | SDK 模式：`canUseTool` / `interrupt` / `set_model` 控制请求 | AUTO | 前置：SDK control 模式；操作：发送 `set_model` 控制请求；预期：模型被切换 | `src/entrypoints/sdk/controlSchemas.ts` | ⚠️ 已建未接（`internal/sdk.Controller` 实现了 Handle，但无 CLI 入口触发） |
+| CLI-SDK-01 | SDK/control 模式：暴露可 import 的 `Query()` 入口 | AUTO | 前置：二进制；操作：以 SDK/control 模式调用（control_request/response NDJSON）；预期：control_request 驱动一个回合 | `src/entrypoints/agentSdkTypes.ts:112` | ✅ 通过（W-Batch-D）：`--print --input-format stream-json --output-format stream-json` 触发 `sdk.Query`；NDJSON over stdin/stdout；`TestSDKStreamJSONRoutesPrintToSDKQuery` 验证 |
+| CLI-SDK-02 | SDK 模式：`canUseTool` / `interrupt` / `set_model` 控制请求 | AUTO | 前置：SDK control 模式；操作：发送 `set_model` 控制请求；预期：模型被切换 | `src/entrypoints/sdk/controlSchemas.ts` | ✅ 通过（W-Batch-D）：SDK entry 触发后 `sdk.Controller` 完整接线；`can_use_tool`/`interrupt`/`set_model` 均走 `sdk.Query` 的 read-loop |
 
-小计: 112 项 — ✅ 48 / ⚠️ 3 / ❌ 44 / N·A 17
+小计: 112 项 — ✅ 50 / ⚠️ 1 / ❌ 44 / N·A 17
