@@ -235,6 +235,12 @@ type Runner struct {
 	// without adding new typed fields to Runner. Keys added here take
 	// precedence over auto-generated metadata with the same key.
 	ExtraToolMetadata map[string]any
+
+	// MCPManager, when non-nil, holds the live connection manager for this
+	// session. The /mcp slash panel reads live status (connected/failed/disabled)
+	// from it. SDK Controller mcp_* subtypes are wired to it via sdk.Options.
+	// G11: live MCP connection manager.
+	MCPManager *mcp.Manager
 }
 
 type MCPConfig struct {

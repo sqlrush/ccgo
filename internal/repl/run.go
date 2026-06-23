@@ -8,6 +8,7 @@ import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
@@ -120,6 +121,12 @@ type InteractiveOptions struct {
 	// "mcp:yes:*", and "mcp:no:*" are written to this file.
 	// CC ref: src/services/mcpServerApproval.tsx (F8-C04).
 	MCPApprovalPath string
+
+	// MCPManager, when non-nil, provides live connection status for the /mcp
+	// slash panel. The panel shows connected/failed/disabled statuses from the
+	// Manager instead of static configured-only data.
+	// G11: live MCP connection manager wiring.
+	MCPManager *mcp.Manager
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -239,6 +246,12 @@ func newProductionRouter(cwd string, registry []contracts.Command) *CommandRoute
 // newProductionRouterWithRegistry is like newProductionRouter but also wires an
 // AgentRegistry so that /tasks and /bashes read live background-task state.
 func newProductionRouterWithRegistry(cwd string, registry []contracts.Command, agReg agentRegistrySnapshotter) *CommandRouter {
+	return newProductionRouterFull(cwd, registry, agReg, nil)
+}
+
+// newProductionRouterFull is the full production router that wires an
+// AgentRegistry and optionally a live MCPManager for the /mcp panel.
+func newProductionRouterFull(cwd string, registry []contracts.Command, agReg agentRegistrySnapshotter, mcpMgr *mcp.Manager) *CommandRouter {
 	router := NewCommandRouter()
 	router.Register("resume", resumeHandler(cwd))
 	router.Register("continue", resumeHandler(cwd))
@@ -284,6 +297,9 @@ func newProductionRouterWithRegistry(cwd string, registry []contracts.Command, a
 	// AUTH-LOGIN-01/02: /login and /logout run the OAuth flow / clear creds.
 	router.Register("login", loginHandler())
 	router.Register("logout", logoutHandler())
+	// /mcp: shows live MCP server status from the Manager when available.
+	// G11: live connection manager wired here.
+	router.Register("mcp", mcpHandlerWith(mcpMgr))
 	return router
 }
 
@@ -399,7 +415,8 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 
 	// Wire the command router so /resume (and future live-effect commands) are
 	// handled without falling through to the model.
-	router := newProductionRouterWithRegistry(base.WorkingDirectory, opts.Registry, opts.AgentRegistry)
+	// G11: pass MCPManager so /mcp shows live connection status.
+	router := newProductionRouterFull(base.WorkingDirectory, opts.Registry, opts.AgentRegistry, opts.MCPManager)
 
 	// When the host supplied prebuilt resume entries, prefer them for the no-arg
 	// picker so the overlay reflects exactly what main.go discovered at startup.

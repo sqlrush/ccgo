@@ -7054,6 +7054,10 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 			return "Unknown MCP subcommand: " + strings.Join(args, " ") + "\n" + mcpCommandUsage()
 		}
 	}
+	// When a live Manager is available, merge connection statuses into the listing.
+	if r.MCPManager != nil {
+		return r.formatMCPCommandSummaryWithManager()
+	}
 	servers := r.mcpServers()
 	if len(servers) == 0 {
 		return "No MCP servers configured."
@@ -7066,6 +7070,41 @@ func (r Runner) formatMCPCommandSummary(raw string) string {
 			status = fmt.Sprintf(" [blocked: %s]", server.Policy.Reason)
 		}
 		lines = append(lines, fmt.Sprintf("- %s (%s): %s%s", server.Name, mcpServerTransport(server.Config), mcpServerTarget(server.Config), status))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// formatMCPCommandSummaryWithManager renders the /mcp status panel with live
+// connection status from the Manager. Called when r.MCPManager != nil.
+// G11: CC ref: src/commands/mcp/mcp.tsx:83 (MCPSettings panel).
+func (r Runner) formatMCPCommandSummaryWithManager() string {
+	liveStatuses := r.MCPManager.Status()
+	if len(liveStatuses) == 0 {
+		return "No MCP servers configured."
+	}
+	// Build a lookup of static config for transport+target metadata.
+	configLookup := make(map[string]mcpServerSummary)
+	for _, s := range r.mcpServers() {
+		configLookup[s.Name] = s
+	}
+	var lines []string
+	lines = append(lines, "MCP servers:")
+	for _, live := range liveStatuses {
+		transport := "unknown"
+		target := ""
+		if cfg, ok := configLookup[live.Name]; ok {
+			transport = mcpServerTransport(cfg.Config)
+			target = mcpServerTarget(cfg.Config)
+		}
+		statusStr := live.Status
+		if live.Error != "" {
+			statusStr = live.Status + ": " + live.Error
+		}
+		if target != "" {
+			lines = append(lines, fmt.Sprintf("- %s [%s] %s — %s", live.Name, transport, target, statusStr))
+		} else {
+			lines = append(lines, fmt.Sprintf("- %s [%s] — %s", live.Name, transport, statusStr))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
