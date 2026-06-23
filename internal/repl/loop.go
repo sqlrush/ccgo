@@ -84,9 +84,15 @@ type Loop struct {
 	// is updated (mirrors onPermissionShown).
 	onTurnDone func()
 
-	// onRulePersisted is a test seam; nil in production. Called for each
-	// PermissionUpdate that would be persisted by an "allow always" choice.
+	// onRulePersisted is called for each PermissionUpdate successfully written
+	// by an "allow always" choice. In production RunInteractiveWithOptions wires
+	// this to refresh the live engine; it also serves as a test seam.
 	onRulePersisted func(contracts.PermissionUpdate)
+
+	// onModeChange is called after Shift+Tab cycles the permission mode.
+	// RunInteractiveWithOptions wires this to apply a "setMode" update to the
+	// live engine pointer so subsequent turns use the new mode.
+	onModeChange func(contracts.PermissionMode)
 
 	// onOverlaySubmit is a host/test seam called when an overlay submission is
 	// handled internally (resume:/theme:/memory:/trust: prefixes). Nil in tests
@@ -290,6 +296,9 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	if key.Type == tui.KeyShiftTab {
 		l.mode = cycleMode(l.mode)
 		l.refreshBaseStatus()
+		if l.onModeChange != nil {
+			l.onModeChange(l.mode)
+		}
 		return false
 	}
 

@@ -2,12 +2,14 @@ package repl
 
 import (
 	"context"
+	"encoding/json"
 
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
 	"ccgo/internal/permissions"
+	"ccgo/internal/tool"
 )
 
 // newTurnLoop builds a Loop wired to run real conversation turns. Callers may
@@ -151,6 +153,15 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		_ = base.RunSessionEndHooks(context.Background(), conversation.SessionEndPromptInputExit)
 	}()
 
+	// W-C05: when a live engine pointer is provided, replace base.Permissions
+	// with a thin wrapper that delegates DecideTool to *eng on every call.
+	// This means every StartTurn closure's "r := base" copy still reads from
+	// the pointer, so Shift+Tab mode changes and allow-always persists take
+	// effect on subsequent turns without re-creating the runner.
+	if opts.Engine != nil {
+		base.Permissions = ptrEngineDecider{eng: opts.Engine}
+	}
+
 	loop := newTurnLoopForRunner(ctx, term, base, history)
 	if opts.Settings != nil {
 		loop.SetSettingsWriter(opts.Settings)
@@ -162,6 +173,27 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	loop.onOverlaySubmit = opts.OnOverlay
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)
+	}
+
+	// W-C05: wire Shift+Tab mode changes and allow-always persist into the live
+	// engine pointer so every subsequent StartTurn uses the updated mode/rules.
+	if opts.Engine != nil {
+		eng := opts.Engine
+		loop.onModeChange = func(mode contracts.PermissionMode) {
+			next, err := eng.ApplyUpdate(contracts.PermissionUpdate{
+				Type: "setMode",
+				Mode: mode,
+			})
+			if err == nil {
+				*eng = next
+			}
+		}
+		loop.onRulePersisted = func(update contracts.PermissionUpdate) {
+			next, err := eng.ApplyUpdate(update)
+			if err == nil {
+				*eng = next
+			}
+		}
 	}
 
 	// Wire the command router so /resume (and future live-effect commands) are
@@ -181,4 +213,18 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	}
 
 	return loop.Run(ctx)
+}
+
+// ptrEngineDecider is a thin tool.PermissionDecider that delegates every
+// DecideTool call to the engine stored behind the pointer. Because it holds
+// a pointer (not a value), copying it via "r := base" in the StartTurn
+// closure still reads from the live engine — so Shift+Tab mode changes and
+// allow-always persists take effect on the next turn without recreating the
+// runner.
+type ptrEngineDecider struct {
+	eng *permissions.Engine
+}
+
+func (d ptrEngineDecider) DecideTool(t tool.Tool, raw json.RawMessage, ctx tool.Context) (contracts.PermissionDecision, error) {
+	return tool.NewEnginePermissionDecider(*d.eng).DecideTool(t, raw, ctx)
 }
