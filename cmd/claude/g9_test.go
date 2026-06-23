@@ -22,6 +22,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,31 +124,60 @@ func TestMCPResetProjectChoicesIdempotent(t *testing.T) {
 
 // ── CLI-SUBCMD-36: install (structure check) ─────────────────────────────────
 
+// newG9FakeReleaseServer returns an httptest.Server serving a minimal fake
+// release endpoint so install tests don't hit the real GCS bucket.
+func newG9FakeReleaseServer(t *testing.T, ver string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Channel endpoint: /{channel} → version
+		switch r.URL.Path {
+		case "/latest", "/stable":
+			fmt.Fprint(w, ver)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 // TestInstallSubcommandExists verifies that `claude install` is wired and
-// returns exit 0 with informational output (no live infra required).
+// reports the latest version via the fake release server.
 func TestInstallSubcommandExists(t *testing.T) {
+	// Use a fake release server to avoid live network calls.
+	// The server only serves the version check; binary download will fail (404)
+	// which is acceptable — we only verify command dispatch, not full install.
+	srv := newG9FakeReleaseServer(t, "2.0.0")
+	t.Setenv("CLAUDE_RELEASE_BASE_URL", srv.URL)
+
 	var out, errb bytes.Buffer
-	// Invoke via run() — no args beyond subcommand so no credentials needed.
 	code := run([]string{"install"}, strings.NewReader(""), &out, &errb)
-	// install exits 0 (informational stub).
-	if code != 0 {
-		t.Fatalf("install exit=%d stderr=%q", code, errb.String())
+	// May exit 0 (already up to date) or 1 (download failed from fake server).
+	// Must not be 2 (flag-parse error) and must mention "install" in output.
+	if code == 2 {
+		t.Fatalf("install flag-parse error; stderr=%q", errb.String())
 	}
-	if !strings.Contains(out.String(), "install") {
-		t.Fatalf("expected install output, got %q", out.String())
+	combined := out.String() + errb.String()
+	if !strings.Contains(strings.ToLower(combined), "install") &&
+		!strings.Contains(strings.ToLower(combined), "version") {
+		t.Fatalf("expected install/version output, got stdout=%q stderr=%q", out.String(), errb.String())
 	}
 }
 
 // TestInstallSubcommandTargetArg verifies that `claude install stable` parses
-// the target argument without error.
+// the target argument without flag error.
 func TestInstallSubcommandTargetArg(t *testing.T) {
+	srv := newG9FakeReleaseServer(t, "1.9.0")
+	t.Setenv("CLAUDE_RELEASE_BASE_URL", srv.URL)
+
 	var out, errb bytes.Buffer
 	code := run([]string{"install", "stable"}, strings.NewReader(""), &out, &errb)
-	if code != 0 {
-		t.Fatalf("install stable exit=%d stderr=%q", code, errb.String())
+	if code == 2 {
+		t.Fatalf("install stable flag-parse error; stderr=%q", errb.String())
 	}
-	if !strings.Contains(out.String(), "stable") {
-		t.Fatalf("expected 'stable' in output, got %q", out.String())
+	combined := out.String() + errb.String()
+	if !strings.Contains(combined, "stable") && !strings.Contains(combined, "1.9.0") {
+		t.Fatalf("expected 'stable' or '1.9.0' in output, got stdout=%q stderr=%q", out.String(), errb.String())
 	}
 }
 

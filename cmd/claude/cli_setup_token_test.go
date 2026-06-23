@@ -3,8 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgo/internal/auth"
 )
@@ -101,16 +104,25 @@ func TestInstallCommandRegistered(t *testing.T) {
 }
 
 func TestInstallCommandWithoutNetworkFails(t *testing.T) {
-	// With no live release server, install should fail gracefully (not panic),
-	// printing a clear message. We test with a stub that returns an error.
-	ctx, cancel := context.WithTimeout(context.Background(), 100)
+	// With a server that returns errors, install should fail gracefully (not panic).
+	// We point CLAUDE_RELEASE_BASE_URL at a local error server so no real network
+	// calls are made.
+	errSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(errSrv.Close)
+	t.Setenv("CLAUDE_RELEASE_BASE_URL", errSrv.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer
-	// Pass an unreachable URL via environment; the implementation should
-	// report ⚠️ clearly.
 	code := runInstallCLI(ctx, []string{}, &stdout, &stderr)
-	// Must not be 2 (flag error); may be 0 or 1.
+	// Must exit non-zero (server error → cannot install).
+	if code == 0 {
+		t.Fatalf("expected non-zero exit on server error, got 0; stdout=%q", stdout.String())
+	}
+	// Must not be 2 (flag parse error).
 	if code == 2 {
 		t.Fatalf("flag-parse error in install; stderr: %q", stderr.String())
 	}

@@ -99,11 +99,7 @@ func runSetupTokenCLIWithOptions(ctx context.Context, opts setupTokenOptions, st
 
 // runInstallCLI implements "claude install [target]" (F3-C05 /
 // SUBCMD-INSTALL-01 through SUBCMD-INSTALL-04).
-//
-// The actual binary download and native-install path require live release
-// infrastructure (⚠️). This implementation provides the command structure,
-// flag parsing, and informational output. The install logic stubs the download
-// step with a clear message directing users to the official installer.
+// It parses flags and delegates to runInstallCLIv2 with production defaults.
 func runInstallCLI(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -131,17 +127,9 @@ func runInstallCLI(ctx context.Context, args []string, stdout io.Writer, stderr 
 		target = fs.Arg(0)
 	}
 
-	fmt.Fprintf(stdout, "claude install: target=%s force=%v\n", target, *forceFlag)
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "⚠️  Native binary download requires live release infrastructure.")
-	fmt.Fprintln(stdout, "   This command reports install state but does not perform a download.")
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "Current installation:")
-	installType := resolveInstallType()
-	fmt.Fprintf(stdout, "  Install type: %s\n", installType)
-	fmt.Fprintf(stdout, "  Version:      %s\n", version)
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "To install the official native binary, visit:")
-	fmt.Fprintln(stdout, "  https://claude.ai/download")
-	return 0
+	_ = ctx // ctx available for future cancellation support
+	return runInstallCLIv2(fs.Args(), installOptions{
+		Target: target,
+		Force:  *forceFlag,
+	}, stdout, stderr)
 }

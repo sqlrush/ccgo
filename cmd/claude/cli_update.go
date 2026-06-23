@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ccgo/internal/updater"
 )
 
 // installEntry describes one detected installation of the binary.
@@ -30,6 +32,12 @@ type updateOptions struct {
 	PackageManager string
 	// MultipleInstallations lists all detected binary paths when >1 exist.
 	MultipleInstallations []installEntry
+	// ReleaseBaseURL overrides the GCS release server URL for testing.
+	// Empty means use updater.ResolveBaseURL() (env var or production default).
+	ReleaseBaseURL string
+	// TargetPath overrides the destination binary path for testing.
+	// Empty means use the running binary's path (os.Executable).
+	TargetPath string
 }
 
 // detectInstallMethod returns a best-effort description of how the claude
@@ -163,12 +171,68 @@ func runUpdateCLIv2(args []string, opts updateOptions, stdout, stderr io.Writer)
 		return 0
 	}
 
-	// Generic fallback for native/npm/go/manual installs.
+	// Native install: perform real version check + download (SUBCMD-UPDATE-03).
+	if installType == "native" {
+		return runNativeUpdate(opts, stdout, stderr)
+	}
+
+	// Generic fallback for npm/go/manual installs.
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "To update claude, use your package manager:")
 	fmt.Fprintln(stdout, "  • Homebrew:  brew upgrade claude-code")
 	fmt.Fprintln(stdout, "  • Go source: go install ccgo@latest")
 	fmt.Fprintln(stdout, "  • Other:     refer to your distribution's instructions")
+	return 0
+}
+
+// runNativeUpdate performs a real version-check + download + atomic-replace for
+// native binary installations. It uses opts.ReleaseBaseURL if set (tests), or
+// the production GCS URL via updater.ResolveBaseURL().
+func runNativeUpdate(opts updateOptions, stdout, stderr io.Writer) int {
+	baseURL := opts.ReleaseBaseURL
+	if baseURL == "" {
+		baseURL = updater.ResolveBaseURL()
+	}
+
+	channel := opts.Channel
+	if channel == "" {
+		channel = "latest"
+	}
+
+	fmt.Fprintf(stdout, "Checking release server for %s version...\n", channel)
+
+	latestVer, err := updater.CheckLatestVersion(channel, baseURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: failed to check for updates: %v\n", err)
+		fmt.Fprintln(stderr, "Try running 'claude doctor' for diagnostics.")
+		return 1
+	}
+
+	if latestVer == opts.Ver {
+		fmt.Fprintf(stdout, "Claude is up to date (%s)\n", opts.Ver)
+		return 0
+	}
+
+	fmt.Fprintf(stdout, "Update available: %s → %s\n", opts.Ver, latestVer)
+	fmt.Fprintln(stdout, "Downloading update...")
+
+	targetPath := opts.TargetPath
+	if targetPath == "" {
+		var exeErr error
+		targetPath, exeErr = os.Executable()
+		if exeErr != nil {
+			fmt.Fprintf(stderr, "Error: cannot determine binary path: %v\n", exeErr)
+			return 1
+		}
+	}
+
+	if err := updater.DownloadAndInstall(latestVer, baseURL, targetPath); err != nil {
+		fmt.Fprintf(stderr, "Error: update failed: %v\n", err)
+		fmt.Fprintln(stderr, "Try running 'claude doctor' for diagnostics.")
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "Successfully updated to %s\n", latestVer)
 	return 0
 }
 
