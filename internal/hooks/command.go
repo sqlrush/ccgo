@@ -687,7 +687,7 @@ func applyHookSpecificOutput(result *tool.HookResult, phase string, hookSpecific
 				result.PermissionDecision = &contracts.PermissionDecision{Behavior: contracts.PermissionDeny, Message: message}
 			}
 		}
-	case tool.HookPostToolUse, tool.HookUserPromptSubmit, tool.HookStop,
+	case tool.HookPostToolUse, tool.HookPostToolUseFailure, tool.HookUserPromptSubmit, tool.HookStop,
 		tool.HookSubagentStop, tool.HookPreCompact, tool.HookSessionStart,
 		tool.HookSessionEnd, tool.HookNotification, tool.HookSubagentStart,
 		tool.HookPostCompact, tool.HookStopFailure:

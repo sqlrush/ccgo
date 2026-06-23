@@ -145,6 +145,16 @@ const (
 	// the lsp.NavigationClient interface.
 	MetadataLSPNavigationKey = "ccgo.lsp.navigation"
 
+	// MetadataTeamRunnerKey holds an *orchestration.TeamRunner for the current
+	// session. When present, TeamDispatch and TeamCoordinate drive real model
+	// turns via TeamRunner.RunTeammate instead of the append-only stub path.
+	MetadataTeamRunnerKey = "ccgo.team_runner"
+
+	// HookPostToolUseFailure is fired by the executor when a tool execution
+	// returns an error (distinct from PostToolUse which fires on success).
+	// CC ref: src/utils/hooks.ts:1619, coreSchemas.ts:448 (HOOK-21).
+	HookPostToolUseFailure = "PostToolUseFailure"
+
 	HookPreToolUse        = "PreToolUse"
 	HookPostToolUse       = "PostToolUse"
 	HookPermissionRequest = "PermissionRequest"

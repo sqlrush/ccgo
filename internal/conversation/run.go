@@ -262,6 +262,10 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	// do NOT increment toolRounds so they cannot starve the genuine tool-call budget.
 	toolRounds := 0
 	firstSend := true
+	// stopHookActive is true when the previous end_turn triggered a Stop hook that
+	// forced continuation (HOOK-31). It is threaded into the next Stop hook call so
+	// hooks can detect they are nested and avoid infinite re-triggering.
+	stopHookActive := false
 	for {
 		// The tool-round budget caps the number of model requests in a tool
 		// loop, so it is checked BEFORE each send. Only genuine tool-execution
@@ -283,6 +287,10 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 		result.ModelsAttempt = append(result.ModelsAttempt, attempts...)
 		result.APIDuration += apiDuration
 		if err != nil {
+			// HOOK-32: StopFailure — fire when the API send fails. The model never
+			// produced a valid response (rate limit, auth failure, etc.) so stop hooks
+			// would be meaningless. We fire StopFailure then return the error.
+			runner.runStopFailureHooks(ctx, err.Error())
 			return result, err
 		}
 
@@ -395,9 +403,34 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 			if err := runner.maybeExtractSessionMemory(ctx, result.Messages); err != nil {
 				return result, err
 			}
-			if err := runner.runStopHooks(ctx, response.Model, response.StopReason, response.StopSequence, assistant); err != nil {
-				return result, err
+			if err := runner.runStopHooksWithActive(ctx, response.Model, response.StopReason, response.StopSequence, assistant, stopHookActive); err != nil {
+				if stopHookActive {
+					// Already in a stop-hook-triggered continuation — surface the
+					// error rather than recursing infinitely.
+					return result, err
+				}
+				// HOOK-31: Stop hook continuation — a blocking Stop hook signals
+				// "do not stop; continue the conversation". Inject the hook's block
+				// message as a new user message and re-enter the loop so the model
+				// is called again. The next iteration passes stopHookActive=true so
+				// nested stop hooks are aware of the re-entrant context.
+				// CC ref: src/query.ts handleStopHooks (stop-hook-forced continuation).
+				continuationPrompt := err.Error()
+				if continuationPrompt == "" {
+					continuationPrompt = "Stop hook requested continuation."
+				}
+				continueMsg := msgs.UserText(continuationPrompt)
+				continueMsg.SessionID = runner.SessionID
+				history, continueMsg = appendMessage(history, continueMsg)
+				result.Messages = append(result.Messages, continueMsg)
+				if appendErr := runner.appendTranscript(continueMsg); appendErr != nil {
+					return result, appendErr
+				}
+				runner.emit(Event{Type: EventUserMessage, Message: &continueMsg})
+				stopHookActive = true
+				continue // Re-enter the loop: sends the new user message to the model.
 			}
+			stopHookActive = false
 			return result, nil
 		}
 		// Only genuine tool-execution rounds count against the budget (the

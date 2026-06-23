@@ -212,6 +212,9 @@ func newProductionRouter(cwd string, registry []contracts.Command) *CommandRoute
 	router.Register("color", colorHandler())
 	router.Register("statusline", statusLineHandler())
 	router.Register("bashes", tasksHandler())
+	// AUTH-LOGIN-01/02: /login and /logout run the OAuth flow / clear creds.
+	router.Register("login", loginHandler())
+	router.Register("logout", logoutHandler())
 	return router
 }
 

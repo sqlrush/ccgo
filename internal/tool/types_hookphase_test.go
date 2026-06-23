@@ -4,12 +4,13 @@ import "testing"
 
 func TestLifecycleHookPhaseConstants(t *testing.T) {
 	cases := map[string]string{
-		HookSessionStart:  "SessionStart",
-		HookSessionEnd:    "SessionEnd",
-		HookNotification:  "Notification",
-		HookSubagentStart: "SubagentStart",
-		HookPostCompact:   "PostCompact",
-		HookStopFailure:   "StopFailure",
+		HookSessionStart:       "SessionStart",
+		HookSessionEnd:         "SessionEnd",
+		HookNotification:       "Notification",
+		HookSubagentStart:      "SubagentStart",
+		HookPostCompact:        "PostCompact",
+		HookStopFailure:        "StopFailure",
+		HookPostToolUseFailure: "PostToolUseFailure",
 	}
 	for got, want := range cases {
 		if got != want {

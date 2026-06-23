@@ -123,6 +123,18 @@ func (r Runner) runSubagentStartHooks(ctx context.Context, payload map[string]an
 	return nil
 }
 
+// runStopFailureHooks fires StopFailure hooks when the model turn ends with
+// an error (API failure, context exceeded, etc.). CC fires this event when
+// the model never produced a valid response (e.g. rate limits, 413 errors).
+// Errors from these hooks are intentionally discarded: the primary failure
+// is the API error and hooks are best-effort observers.
+// CC ref: src/query.ts:1174,1181,1263 (HOOK-32).
+func (r Runner) runStopFailureHooks(ctx context.Context, errMsg string) {
+	_, _ = r.runConversationHooks(ctx, tool.HookStopFailure, map[string]any{
+		"error": errMsg,
+	})
+}
+
 func (r Runner) runPostCompactHooks(ctx context.Context, trigger compactpkg.Trigger, summary string) error {
 	_, err := r.runConversationHooks(ctx, tool.HookPostCompact, map[string]any{
 		"trigger":         string(trigger),

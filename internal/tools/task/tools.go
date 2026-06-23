@@ -1870,12 +1870,31 @@ func callTeamDispatch(ctx tool.Context, raw json.RawMessage, sink tool.ProgressS
 		}); err != nil {
 			return contracts.ToolResult{}, err
 		}
-		assignments = append(assignments, map[string]any{
+		entry := map[string]any{
 			"task_id":       assignment.TaskID,
 			"sidechain_id":  assignment.TaskID,
 			"message_uuid":  string(message.UUID),
 			"message_chars": len(assignment.Message),
-		})
+		}
+		// TEAM-01: when a TeamRunner is injected, drive a real model turn for
+		// each assignment so members don't just receive an appended message — they
+		// actually run a conversation loop and produce a reply that is persisted
+		// to their sidechain by TeamRunner.RunTeammate.
+		state, stateErr := findTaskState(manager, assignment.TaskID)
+		if stateErr == nil {
+			tm := orchestration.Teammate{
+				SidechainID: assignment.TaskID,
+				AgentType:   state.Metadata.AgentType,
+				Model:       state.Metadata.AgentModel,
+			}
+			if outcome, ran, runErr := runTeammateFromMetadata(ctx.Context, ctx.Metadata, manager, tm, dispatchMessage); ran {
+				if runErr != nil {
+					return contracts.ToolResult{}, fmt.Errorf("team dispatch: run teammate %s: %w", assignment.TaskID, runErr)
+				}
+				entry["turn_summary"] = outcome.Summary
+			}
+		}
+		assignments = append(assignments, entry)
 	}
 	structured := structuredTeamState(team)
 	structured["type"] = "team_dispatch"
@@ -2091,6 +2110,20 @@ func callTeamCoordinate(ctx tool.Context, raw json.RawMessage, sink tool.Progres
 	}); err != nil {
 		return contracts.ToolResult{}, err
 	}
+	// TEAM-01: when a TeamRunner is injected, drive a real model turn for the
+	// coordinator. The turn result is persisted via TeamRunner.Persist.
+	coordinatorSummary := ""
+	tm := orchestration.Teammate{
+		SidechainID: coordinator.ID,
+		AgentType:   coordinator.Metadata.AgentType,
+		Model:       coordinator.Metadata.AgentModel,
+	}
+	if outcome, ran, runErr := runTeammateFromMetadata(ctx.Context, ctx.Metadata, manager, tm, briefing); ran {
+		if runErr != nil {
+			return contracts.ToolResult{}, fmt.Errorf("team coordinate: run coordinator %s: %w", coordinator.ID, runErr)
+		}
+		coordinatorSummary = outcome.Summary
+	}
 	coordinator, err = findTaskState(manager, coordinator.ID)
 	if err != nil {
 		return contracts.ToolResult{}, err
@@ -2102,6 +2135,9 @@ func callTeamCoordinate(ctx tool.Context, raw json.RawMessage, sink tool.Progres
 	structured["message_uuid"] = string(message.UUID)
 	structured["message_chars"] = len(input.Message)
 	structured["briefing_chars"] = len(briefing)
+	if coordinatorSummary != "" {
+		structured["coordinator_summary"] = coordinatorSummary
+	}
 	_ = tool.SendProgress(sink, "", "team_coordinated", map[string]any{
 		"team_id":        team.ID,
 		"coordinator_id": coordinator.ID,
@@ -4489,4 +4525,53 @@ func taskAgentForType(subagentType string, agents []tool.AgentInfo) (tool.AgentI
 		}
 	}
 	return tool.AgentInfo{}, false
+}
+
+// teamRunnerFromMetadata extracts an *orchestration.TeamRunner from the tool
+// metadata. Returns nil when the key is absent or the value has the wrong type.
+func teamRunnerFromMetadata(metadata map[string]any) *orchestration.TeamRunner {
+	if metadata == nil {
+		return nil
+	}
+	v, ok := metadata[tool.MetadataTeamRunnerKey]
+	if !ok {
+		return nil
+	}
+	tr, ok := v.(*orchestration.TeamRunner)
+	if !ok {
+		return nil
+	}
+	return tr
+}
+
+// sidechainHistoryForRunner loads the conversation history for a sidechain so
+// it can be passed as prior context to a TeamRunner.RunTeammate call.
+// Returns an empty slice if the sidechain has no messages or cannot be loaded.
+func sidechainHistoryForRunner(manager session.SidechainManager, sidechainID string) []contracts.Message {
+	conv, err := session.BuildSidechainConversation(manager.Runtime.SessionPath, manager.Runtime.SessionID, sidechainID)
+	if err != nil || len(conv.Messages) == 0 {
+		return nil
+	}
+	// Return an immutable copy so callers cannot mutate the transcript slice.
+	out := make([]contracts.Message, len(conv.Messages))
+	copy(out, conv.Messages)
+	return out
+}
+
+// runTeammateFromMetadata is a convenience wrapper: it extracts the TeamRunner
+// from metadata and, if present, runs a real model turn for tm with the given
+// prompt. The sidechain history is loaded automatically as prior context.
+// Returns (outcome, true) when a runner was available and the turn ran;
+// (zero, false) when no runner is configured (caller falls back to append-only).
+func runTeammateFromMetadata(ctx context.Context, metadata map[string]any, manager session.SidechainManager, tm orchestration.Teammate, prompt string) (orchestration.Outcome, bool, error) {
+	tr := teamRunnerFromMetadata(metadata)
+	if tr == nil {
+		return orchestration.Outcome{}, false, nil
+	}
+	history := sidechainHistoryForRunner(manager, tm.SidechainID)
+	outcome, err := tr.RunTeammate(ctx, tm, history, prompt)
+	if err != nil {
+		return orchestration.Outcome{}, true, fmt.Errorf("team runner: %w", err)
+	}
+	return outcome, true, nil
 }

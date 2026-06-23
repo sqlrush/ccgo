@@ -110,6 +110,14 @@ func NewKeychainCredentialStore(path string) CredentialStore {
 	return &keychainCredentialStore{kc: newMacOSKeychainStore(), file: file}
 }
 
+// NewDefaultCredentialStore returns the OS-preferred credential store with
+// the default credentials path. This is a convenience alias for
+// NewKeychainCredentialStore("") that callers outside the auth package can
+// use without having to know about the empty-path convention.
+func NewDefaultCredentialStore() CredentialStore {
+	return NewKeychainCredentialStore("")
+}
+
 func (s *keychainCredentialStore) usingKeychain() bool {
 	return s.kc != nil && s.kc.Available()
 }

@@ -162,11 +162,42 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 			result.Content = err.Error()
 		}
 		result.IsError = true
+		// HOOK-21: PostToolUseFailure — fire when the tool execution (or its
+		// PostToolUse hooks) produced an error. CC fires a distinct event on
+		// tool failure so callers can observe failures separately from successes.
+		e.runPostToolUseFailureHooks(ctx, use, t, raw, result, err, sink)
 		_ = SendProgress(sink, use.ID, "failed", map[string]any{"tool": t.Name(), "error": err.Error()})
 		return result, err
 	}
 	_ = SendProgress(sink, use.ID, "completed", map[string]any{"tool": t.Name()})
 	return result, nil
+}
+
+// runPostToolUseFailureHooks fires HookPostToolUseFailure hooks when a tool
+// execution fails. Errors from these hooks are intentionally discarded: the
+// primary tool error is already set and the failure hooks are best-effort
+// observers (mirrors CC executePostToolUseFailureHooks fire-and-forget pattern).
+func (e Executor) runPostToolUseFailureHooks(ctx Context, use contracts.ToolUse, t Tool, raw json.RawMessage, result contracts.ToolResult, callErr error, sink ProgressSink) {
+	errText := ""
+	if callErr != nil {
+		errText = callErr.Error()
+	}
+	for idx, hook := range e.hooksForPhase(HookPostToolUseFailure) {
+		_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUseFailure, idx, "hook_started", nil)
+		_, herr := hook.RunToolHook(ctx, HookEvent{
+			Phase:    HookPostToolUseFailure,
+			ToolUse:  use,
+			ToolName: t.Name(),
+			Input:    raw,
+			Result:   &result,
+			Error:    errText,
+		})
+		if herr != nil {
+			_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUseFailure, idx, "hook_failed", map[string]any{"error": herr.Error()})
+			continue
+		}
+		_ = e.sendHookProgress(sink, use.ID, t, HookPostToolUseFailure, idx, "hook_completed", nil)
+	}
 }
 
 func (e Executor) validationErrorWithSchemaHint(ctx Context, t Tool, err error) error {

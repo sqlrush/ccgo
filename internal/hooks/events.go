@@ -12,7 +12,7 @@ import (
 // of its matcher. Mirrors CC utils/hooks.ts:1615-1670.
 func MatchQuery(phase string, payload map[string]any) (string, bool) {
 	switch phase {
-	case tool.HookPreToolUse, tool.HookPostToolUse,
+	case tool.HookPreToolUse, tool.HookPostToolUse, tool.HookPostToolUseFailure,
 		tool.HookPermissionRequest, tool.HookPermissionDenied:
 		return payloadString(payload, "tool_name"), true
 	case tool.HookSessionStart:
@@ -38,7 +38,7 @@ func MatchQuery(phase string, payload map[string]any) (string, bool) {
 // lifecycle event (not a per-tool-call or permission event).
 func IsLifecyclePhase(phase string) bool {
 	switch phase {
-	case tool.HookPreToolUse, tool.HookPostToolUse,
+	case tool.HookPreToolUse, tool.HookPostToolUse, tool.HookPostToolUseFailure,
 		tool.HookPermissionRequest, tool.HookPermissionDenied:
 		return false
 	default:
