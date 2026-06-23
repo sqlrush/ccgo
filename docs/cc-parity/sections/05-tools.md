@@ -33,7 +33,7 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-BASH-05 | KillBash/TaskStop 取消后台命令 | AUTO | 前置:后台 Bash 命令已启动;操作:KillBash `{id}`;预期:命令被终止，后续 BashOutput 反映 cancelled 状态 | src/tools/TaskStopTool/TaskStopTool.ts（aliases:KillShell） | ✅ 通过 |
 | TOOL-BASH-06 | Bash dangerouslyDisableSandbox=true 跳过沙箱 | AUTO | 前置:沙箱已启用;操作:Bash `{command:"...",dangerouslyDisableSandbox:true}`;预期:命令在沙箱外执行（无 sandbox policy 限制） | src/tools/BashTool/BashTool.tsx:242 | ✅ 通过 |
 | TOOL-BASH-07 | Bash 超大 stdout 截断（32 MB）| AUTO | 前置:命令产生超过 32MB 输出;操作:Bash 大量输出命令;预期:输出被从末尾截断，Content 不超过阈值 | src/tools/BashTool/BashTool.tsx:731（64MB copy 上限） src/utils/stringUtils.ts:88（2^25 chars） | ✅ 通过（W-Batch-C commit e735e5e）|
-| TOOL-BASH-08 | Bash sleep 命令被拦截提示使用 run_in_background | AUTO | 前置:MONITOR_TOOL 特性开启;操作:Bash `{command:"sleep 10"}`;预期:工具返回阻塞提示，建议用 run_in_background | src/tools/BashTool/BashTool.tsx:525-530 | ❌ 缺失（ccgo 无此 sleep 拦截逻辑） |
+| TOOL-BASH-08 | Bash sleep 命令被拦截提示使用 run_in_background | AUTO | 前置:MONITOR_TOOL 特性开启;操作:Bash `{command:"sleep 10"}`;预期:工具返回阻塞提示，建议用 run_in_background | src/tools/BashTool/BashTool.tsx:525-530 | ✅ 通过（F7 commit da665b4）— `detectBlockedBashSleepPattern` 已实现并在 `validateBash` 中检测独立 sleep ≥2s；测试覆盖于 bash/tools_test.go:158-159 |
 | TOOL-BASH-09 | Bash 保持 cwd 跨调用（shell 状态持久化）| AUTO | 前置:仓库;操作:Bash `cd /tmp`，再 Bash `pwd`;预期:第二次输出 /tmp | src/tools/BashTool/BashTool.tsx（getCwd/setCwd） | ✅ 通过 |
 | TOOL-GLOB-01 | Glob 按通配符模式匹配文件 | AUTO | 前置:仓库含多个 .go 文件;操作:Glob `{pattern:"**/*.go"}`;预期:返回所有 .go 路径列表 | src/tools/GlobTool/GlobTool.ts | ✅ 通过 |
 | TOOL-GLOB-02 | Glob 超过 100 个结果时截断并标注 truncated=true | AUTO | 前置:目录含 200+ 文件;操作:Glob `{pattern:"**/*"}`;预期:返回最多 100 个路径，truncated=true | src/tools/GlobTool/GlobTool.ts:157-172 | ✅ 通过 |
@@ -75,8 +75,8 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-LSP-03 | LSP hover 查看符号文档 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"hover",...}`;预期:返回 hover markdown 文档 | src/tools/LSPTool/LSPTool.ts:456-458 | ⚠️ 已建未接（同 TOOL-LSP-01，dispatch seam 已实现）|
 | TOOL-LSP-04 | LSP documentSymbol 列出文件符号 | AUTO | 前置:LSP server 已连接;操作:LSP `{operation:"documentSymbol",...}`;预期:返回文件内函数/类等符号列表 | src/tools/LSPTool/LSPTool.ts | ⚠️ 已建未接（同 TOOL-LSP-01，dispatch seam 已实现）|
 | TOOL-LSP-05 | LSPDiagnostics 读取 LSP 诊断信息（错误/警告）| AUTO | 前置:LSP server 已产生诊断;操作:LSPDiagnostics `{severity:"error"}`;预期:返回当前会话的 error 级诊断 | src/services/lsp/LSPDiagnosticRegistry.ts:193 | ⚠️ 已建未接（LSPDiagnostics 工具在 advanced_tools.go 中仅当 settings.Advanced.LSP=true 时注册；ccgo lsp.Store 诊断写入路径依赖 LSP server manager，后者尚未完整接线到运行时）|
-| TOOL-WORKTREE-01 | EnterWorktree 创建 git worktree 并切换 session cwd | MANUAL | 前置:git 仓库;操作:触发 EnterWorktree `{name:"my-branch"}`;预期:创建新 worktree，session cwd 切换到该 worktree 路径 | src/tools/EnterWorktreeTool/EnterWorktreeTool.ts | ❌ 缺失（ccgo 无 EnterWorktreeTool；worktree 隔离只通过 Task isolation 参数支持，无独立工具）|
-| TOOL-WORKTREE-02 | ExitWorktree 结束 worktree 会话，可选 keep/remove | MANUAL | 前置:session 在 worktree 中;操作:ExitWorktree `{action:"keep"}`;预期:session cwd 恢复原路径，worktree 保留或删除 | src/tools/ExitWorktreeTool/ExitWorktreeTool.ts | ❌ 缺失（ccgo 无 ExitWorktreeTool）|
+| TOOL-WORKTREE-01 | EnterWorktree 创建 git worktree 并切换 session cwd | MANUAL | 前置:git 仓库;操作:触发 EnterWorktree `{name:"my-branch"}`;预期:创建新 worktree，session cwd 切换到该 worktree 路径 | src/tools/EnterWorktreeTool/EnterWorktreeTool.ts | ✅ 通过（F7 commit da665b4）— internal/tools/worktree/tools.go: git worktree add --detach，slug 验证，already-in-worktree guard；StructuredContent 含 worktree_path/original_cwd；11 项测试覆盖；session cwd mutation 由调用方通过 StructuredContent 完成（⚠️ REPL runtime 尚未自动重设 ctx.WorkingDirectory，需人工核验）|
+| TOOL-WORKTREE-02 | ExitWorktree 结束 worktree 会话，可选 keep/remove | MANUAL | 前置:session 在 worktree 中;操作:ExitWorktree `{action:"keep"}`;预期:session cwd 恢复原路径，worktree 保留或删除 | src/tools/ExitWorktreeTool/ExitWorktreeTool.ts | ✅ 通过（F7 commit da665b4）— action=keep/remove，remove 时检查 git status --porcelain 和 rev-list unpushed commits，脏树拒绝除非 discard_changes=true；同上 ⚠️ runtime cwd 重设需人工核验|
 | TOOL-CONFIG-01 | Config get 读取配置项当前值 | AUTO | 前置:配置已存在;操作:Config `{setting:"theme"}`;预期:返回当前 theme 值 | src/tools/ConfigTool/ConfigTool.ts:111-142 | ❌ 缺失（ccgo 无 ConfigTool；该工具在 CC 中为 ant-only `process.env.USER_TYPE==="ant"` 特性）|
 | TOOL-CONFIG-02 | Config set 更新配置项 | AUTO | 前置:配置可写;操作:Config `{setting:"theme",value:"dark"}`;预期:配置被更新，返回 previousValue 和 newValue | src/tools/ConfigTool/ConfigTool.ts:148-211 | ❌ 缺失（同 TOOL-CONFIG-01）|
 | TOOL-BRIEF-01 | Brief 发送通知消息给用户（含可选附件）| MANUAL | 前置:proactive/Kairos 模式活跃;操作:Brief `{message:"任务完成",status:"proactive"}`;预期:用户看到通知消息，含附件预览 | src/tools/BriefTool/BriefTool.ts | ✅ 通过 |
@@ -90,19 +90,17 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-TEAM-01 | TeamCreate 创建 multi-agent team | AUTO | 前置:已启动多个 Task;操作:TeamCreate `{task_ids:[...]}`;预期:返回 team_id，team 成员关联 | src/tools/TeamCreateTool/TeamCreateTool.ts | ✅ 通过 |
 | TOOL-TEAM-02 | TeamDispatch 向 team 成员分发任务 | AUTO | 前置:team 已创建;操作:TeamDispatch `{team_id,assignments:[...]}`;预期:各成员收到分配的任务 | src/tools/AgentTool/agentToolUtils.ts，task/tools.go:1849 | ✅ 通过 |
 | TOOL-REMOTE-01 | RemoteTrigger 触发远程云端 agent（N/A）| N/A | — | src/tools/RemoteTriggerTool/RemoteTriggerTool.ts | N/A（云端栈 OUT-of-scope §10；ccgo RemoteTriggerTool 已注册但仅为 schema stub）|
-| TOOL-STRUCTURED-01 | StructuredOutput（SyntheticOutput）提交 SDK 结构化输出 | AUTO | 前置:SDK 控制协议会话;操作:StructuredOutput `{...}`;预期:输出 NDJSON control_response | src/tools/SyntheticOutputTool/SyntheticOutputTool.ts | ❌ 缺失（ccgo 无 StructuredOutput 工具；SyntheticOutputTool 在 CC 中为 SDK 控制路径专用）|
-| TOOL-TASKCRUD-01 | TaskCreate 在 TodoV2 模式创建任务（ant-only）| AUTO | 前置:USER_TYPE=ant，TodoV2 enabled;操作:TaskCreate `{subject,description}`;预期:返回 task.id | src/tools/TaskCreateTool/TaskCreateTool.ts | ❌ 缺失（ccgo 无 TaskCreate/Get/Update/List；该套工具 CC ant-only + TodoV2 特性门控）|
-| TOOL-TASKCRUD-02 | TaskGet/TaskUpdate/TaskList（ant-only）| AUTO | 前置:TodoV2 enabled;操作:TaskGet/Update/List;预期:正常 CRUD | src/tools/TaskGetTool，TaskUpdateTool，TaskListTool | ❌ 缺失（同 TOOL-TASKCRUD-01）|
+| TOOL-STRUCTURED-01 | StructuredOutput（SyntheticOutput）提交 SDK 结构化输出 | AUTO | 前置:SDK 控制协议会话;操作:StructuredOutput `{...}`;预期:输出 NDJSON control_response | src/tools/SyntheticOutputTool/SyntheticOutputTool.ts | ✅ 通过（F7 commit da665b4）— internal/tools/task/structured_output.go: 名称"StructuredOutput"，always-allow 权限，ReadOnly/ConcurrencySafe=true，MaxResultSize=100K，输入必须为 JSON object，Content="Structured output provided successfully"，StructuredContent=输入字段；测试覆盖于 task/ package|
+| TOOL-TASKCRUD-01 | TaskCreate 在 TodoV2 模式创建任务（ant-only）| AUTO | 前置:USER_TYPE=ant，TodoV2 enabled;操作:TaskCreate `{subject,description}`;预期:返回 task.id | src/tools/TaskCreateTool/TaskCreateTool.ts | N/A（ant-only + TodoV2 特性门控，ccgo 不实现；F7 明确标记 N/A）|
+| TOOL-TASKCRUD-02 | TaskGet/TaskUpdate/TaskList（ant-only）| AUTO | 前置:TodoV2 enabled;操作:TaskGet/Update/List;预期:正常 CRUD | src/tools/TaskGetTool，TaskUpdateTool，TaskListTool | N/A（同 TOOL-TASKCRUD-01）|
 | TOOL-PS-01 | PowerShell 执行 PowerShell 命令（Windows）| AUTO | 前置:Windows 环境;操作:PowerShell `{command:"Get-Date"}`;预期:返回当前日期，exit 0 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过（ccgo 有 NewPowerShellTool/Output/Kill；Unix 下优雅退出）|
 | TOOL-PS-02 | PowerShellOutput/KillPowerShell 读取/终止后台 PS 任务 | AUTO | 前置:PowerShell run_in_background;操作:PowerShellOutput/Kill;预期:行为与 BashOutput/KillBash 对称 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过 |
 
-小计：**61 行**，其中 ✅ 通过 48，⚠️ 已建未接 5，❌ 缺失 8，N/A 1。（W-Batch-C: +3 ✅: TOOL-TASK-02/04, TOOL-BASH-07; TOOL-LSP-01~04 dispatch seam 接线，仍 ⚠️ 需运行中语言服务器；W-C13: +3 ✅接线就绪: TOOL-ASK-01/03, TOOL-PLAN-02 渲染需人工核验）
+小计：**61 行**，其中 ✅ 通过 52，⚠️ 已建未接 5，❌ 缺失 1（TOOL-CONFIG-01/02 ant-only），N/A 3。（W-Batch-C: +3 ✅: TOOL-TASK-02/04, TOOL-BASH-07; TOOL-LSP-01~04 dispatch seam 接线，仍 ⚠️ 需运行中语言服务器；W-C13: +3 ✅接线就绪: TOOL-ASK-01/03, TOOL-PLAN-02 渲染需人工核验；F7 commit da665b4: +4 ✅: TOOL-BASH-08 已确认实现, TOOL-WORKTREE-01/02, TOOL-STRUCTURED-01; TOOL-TASKCRUD-01/02 → N/A）
 
 **⚠️ 已建未接（更新后）：**
 1. `TOOL-LSP-01~04`：dispatch seam 已实现（NavigationParams + dispatchLSP + NavigationClient 接口 + mock 测试覆盖）；runtime 在 tool.Context.Metadata 注入 MetadataLSPNavigationKey 后即可端到端工作；无运行中语言服务器时优雅降级。
 2. `TOOL-LSP-05`：LSPDiagnostics 工具已注册，LSP server manager 运行时接线待完成。
 
-**❌ 缺失（前 3）：**
-1. `TOOL-WORKTREE-01/02`：无 `EnterWorktreeTool`/`ExitWorktreeTool`，独立 worktree session 切换完全缺失。
-2. `TOOL-STRUCTURED-01`：无 `StructuredOutput` 工具，SDK 控制协议结构化输出路径缺失。
-3. `TOOL-BASH-08`：Bash `sleep` 命令拦截逻辑缺失，模型可能无谓持有 shell 进程而非使用 `Sleep` 工具。
+**❌ 缺失（ant-only，out-of-scope）：**
+1. `TOOL-CONFIG-01/02`：ant-only 特性（`process.env.USER_TYPE==="ant"`），ccgo 不实现。
