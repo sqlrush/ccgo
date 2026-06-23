@@ -133,6 +133,12 @@ type Loop struct {
 
 	// mode is the current permission mode, cycled by Shift+Tab.
 	mode contracts.PermissionMode
+
+	// streamingBuf accumulates assistant text from text_delta / thinking_delta
+	// EventStreamEvent events so the screen shows incremental output (REPL-21).
+	// Cleared when EventAssistantMessage arrives (the full message supersedes it).
+	streamingBuf    string
+	streamingActive bool // true while a streaming assistant message is live on screen
 }
 
 // SetSettingsWriter wires the settings writer used to persist "allow always"
@@ -273,8 +279,57 @@ func (l *Loop) applyEvent(ev conversation.Event) {
 		l.screen.AppendMessage(tui.Message{Role: tui.RoleTool, Text: text})
 		return
 	}
+	// REPL-21: accumulate text_delta / thinking_delta events into a live
+	// streaming assistant message rather than waiting for the full
+	// EventAssistantMessage. The screen message is updated in-place on each
+	// delta so the user sees incremental output as tokens arrive.
+	if ev.Type == conversation.EventStreamEvent {
+		l.applyStreamingDelta(ev)
+		return
+	}
+	// When the final EventAssistantMessage arrives, clear the streaming state
+	// so the completed message replaces the live placeholder cleanly.
+	if ev.Type == conversation.EventAssistantMessage {
+		if l.streamingActive {
+			l.streamingBuf = ""
+			l.streamingActive = false
+		}
+	}
 	if msg, ok := messageFromEvent(ev); ok {
 		l.screen.AppendMessage(msg)
+	}
+}
+
+// applyStreamingDelta handles an EventStreamEvent by extracting any text or
+// thinking delta and appending it to the live streaming buffer. On the first
+// delta it appends a new assistant message; on subsequent deltas it updates
+// that message in place. Non-delta events (message_start, content_block_stop,
+// etc.) are silently ignored at the render layer (REPL-21).
+func (l *Loop) applyStreamingDelta(ev conversation.Event) {
+	if ev.StreamEvent == nil {
+		return
+	}
+	se := ev.StreamEvent
+	if se.Type != "content_block_delta" || se.Delta == nil {
+		return
+	}
+	var chunk string
+	switch se.Delta["type"] {
+	case "text_delta":
+		chunk, _ = se.Delta["text"].(string)
+	case "thinking_delta":
+		chunk, _ = se.Delta["thinking"].(string)
+	}
+	if chunk == "" {
+		return
+	}
+	l.streamingBuf += chunk
+	msg := tui.Message{Role: tui.RoleAssistant, Text: l.streamingBuf}
+	if !l.streamingActive {
+		l.screen.AppendMessage(msg)
+		l.streamingActive = true
+	} else {
+		l.screen.UpdateLastMessage(msg)
 	}
 }
 

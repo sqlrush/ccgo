@@ -459,7 +459,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		streamErr := func() error { return nil }
 		if normalizedOutputFormat == "stream-json" {
-			runner, streamErr = attachStreamJSON(stdout, runner)
+			runner, streamErr = attachStreamJSON(stdout, runner, *includePartialMessages)
 		}
 		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
@@ -4730,6 +4730,7 @@ type printStreamEvent struct {
 	TokenWarning    *printStreamTokenWarning `json:"token_warning,omitempty"`
 	Compact         any                      `json:"compact,omitempty"`
 	StreamEvent     *anthropic.StreamEvent   `json:"stream_event,omitempty"`
+	IsPartial       bool                     `json:"is_partial,omitempty"`
 	Model           string                   `json:"model,omitempty"`
 	ModelsAttempted []string                 `json:"models_attempted,omitempty"`
 	Error           string                   `json:"error,omitempty"`
@@ -4787,7 +4788,12 @@ type printStreamMCPServer struct {
 	PluginSource string `json:"plugin_source,omitempty"`
 }
 
-func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversation.Runner, func() error) {
+// attachStreamJSON wires an NDJSON stream-json event handler onto runner.
+// When includePartialMessages is true, each text_delta EventStreamEvent also
+// emits a synthetic {"type":"assistant_message","is_partial":true} event
+// carrying the accumulated text so far — matching CC's --include-partial-messages
+// behaviour (F2-C04 / partial-messages in 01-headless.md).
+func attachStreamJSON(stdout io.Writer, runner conversation.Runner, includePartialMessages bool) (conversation.Runner, func() error) {
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
 	eventErr = encoder.Encode(printStreamEvent{
@@ -4809,6 +4815,12 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 		OutputStyles:   runner.AvailableOutputStyleNames(),
 		Model:          runner.Model,
 	})
+
+	// partialBuf accumulates text delta chunks when includePartialMessages is
+	// true, so each synthetic partial assistant_message carries the full text
+	// received so far (not just the latest chunk).
+	var partialBuf string
+
 	runner.OnEvent = func(event conversation.Event) {
 		if eventErr != nil {
 			return
@@ -4827,6 +4839,43 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 				eventErr = fmt.Errorf("sdk: write system/status: %w", err)
 				return
 			}
+		}
+		// --include-partial-messages: on each text_delta emit a synthetic
+		// assistant_message event with the accumulated text so far, so SDK
+		// consumers can display streaming output incrementally.
+		if includePartialMessages && event.Type == conversation.EventStreamEvent && event.StreamEvent != nil {
+			se := event.StreamEvent
+			if se.Type == "content_block_delta" && se.Delta != nil {
+				var chunk string
+				switch se.Delta["type"] {
+				case "text_delta":
+					chunk, _ = se.Delta["text"].(string)
+				case "thinking_delta":
+					chunk, _ = se.Delta["thinking"].(string)
+				}
+				if chunk != "" {
+					partialBuf += chunk
+					partialMsg := contracts.Message{
+						Type: contracts.MessageAssistant,
+						Content: []contracts.ContentBlock{
+							{Type: contracts.ContentText, Text: partialBuf},
+						},
+					}
+					partialEvent := printStreamEvent{
+						Type:      conversation.EventAssistantMessage,
+						IsPartial: true,
+						Message:   &partialMsg,
+					}
+					if err := encoder.Encode(partialEvent); err != nil {
+						eventErr = fmt.Errorf("stream-json: write partial assistant_message: %w", err)
+						return
+					}
+				}
+			}
+		}
+		// Clear partial buffer when the final assistant message arrives.
+		if event.Type == conversation.EventAssistantMessage {
+			partialBuf = ""
 		}
 		eventErr = writePrintStreamEvent(encoder, event)
 	}

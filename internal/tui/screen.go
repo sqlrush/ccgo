@@ -145,6 +145,19 @@ func (s *REPLScreen) AppendMessage(message Message) {
 	s.Viewport.ScrollToBottom()
 }
 
+// UpdateLastMessage replaces the last message in the transcript with msg.
+// It is a no-op when the transcript is empty. Used by the streaming delta
+// render path to update a live assistant message in place as text_delta
+// events arrive (REPL-21).
+func (s *REPLScreen) UpdateLastMessage(msg Message) {
+	if len(s.Messages) == 0 {
+		return
+	}
+	s.Messages[len(s.Messages)-1] = msg
+	s.rebuildViewport()
+	s.Viewport.ScrollToBottom()
+}
+
 func (s *REPLScreen) ClearConversation() {
 	s.Messages = nil
 	s.SelectedViewportLine = -1
