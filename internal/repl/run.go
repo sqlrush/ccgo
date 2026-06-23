@@ -25,6 +25,11 @@ func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, h
 	loop := NewLoop(term, nil)
 	loop.history = history
 	loop.StartTurn = func(input string) {
+		// Apply pending model switch from /fast or /model picker (CMD-FAST-01).
+		// modelRef is set by RunInteractiveWithOptions when onModelChange fires.
+		if loop.modelRef != nil && *loop.modelRef != "" {
+			base.Model = *loop.modelRef
+		}
 		// Record submitted prompt to ~/.claude/history.jsonl (best-effort).
 		_ = recorder.Record(input)
 		user := messages.UserText(input)
@@ -115,6 +120,18 @@ type InteractiveOptions struct {
 	// (resume:/theme:/memory:/trust: prefixes). Nil is fine.
 	OnOverlay func(string)
 
+	// OnModelChange, when non-nil, is called each time the user switches model
+	// (via /fast or /model picker). The caller can use this to keep any
+	// out-of-REPL bookkeeping (e.g. runner.Model in main.go) in sync.
+	// The REPL loop itself handles within-session model switching via modelRef.
+	// CMD-FAST-01.
+	OnModelChange func(string)
+
+	// OnTurnResult, when non-nil, is called after each successful turn with the
+	// full turn Result. Production code wires this to accumulate cost
+	// (result.Usage) into runner.AccumulatedUsage for COST-02 persistence.
+	OnTurnResult func(conversation.Result)
+
 	// MCPApprovalPath is the local settings file path where project-scope MCP
 	// trust decisions (from MCPServerApprovalDialog) are persisted.
 	// When non-empty, overlay submissions matching "mcp:yes_all:*",
@@ -203,6 +220,10 @@ func newTurnLoopForRunnerWithHistory(ctx context.Context, term Terminal, base co
 	loop := NewLoopFromHistoryEntries(term, promptHistory)
 	loop.history = history
 	loop.StartTurn = func(input string) {
+		// Apply pending model switch from /fast or /model picker (CMD-FAST-01).
+		if loop.modelRef != nil && *loop.modelRef != "" {
+			base.Model = *loop.modelRef
+		}
 		_ = recorder.Record(input)
 		user := messages.UserText(input)
 		turnHistory := append([]contracts.Message(nil), loop.history...)
@@ -407,6 +428,18 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		}
 	}
 
+	// CMD-FAST-01: wire model-switch seam so /fast and /model picker actually
+	// update the runner model for subsequent turns. A shared modelVal is set by
+	// onModelChange and applied by StartTurn before each r := base copy.
+	var modelVal string
+	loop.modelRef = &modelVal
+	loop.onModelChange = func(m string) {
+		modelVal = m
+		if opts.OnModelChange != nil {
+			opts.OnModelChange(m)
+		}
+	}
+
 	// Wire the AgentRegistry (if provided) into the loop so it can poll for
 	// completed background agents between turns and surface them to the user.
 	if opts.AgentRegistry != nil {
@@ -417,6 +450,30 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	// handled without falling through to the model.
 	// G11: pass MCPManager so /mcp shows live connection status.
 	router := newProductionRouterFull(base.WorkingDirectory, opts.Registry, opts.AgentRegistry, opts.MCPManager)
+
+	// CMD-FAST-01: re-register /fast with a real model setter that calls
+	// onModelChange so the switch actually takes effect on subsequent turns
+	// (production wiring — overrides the nil-setter stub in the default router).
+	router.Register("fast", fastHandlerWith(func(m string) error {
+		loop.onModelChange(m)
+		return nil
+	}))
+
+	// CMD-FAST-01: extend onOverlaySubmit to handle "model:<name>" from the
+	// /model picker overlay. The loop already routes model: to onOverlaySubmit;
+	// we intercept it here to call onModelChange so the switch takes effect.
+	prevOverlaySubmit := loop.onOverlaySubmit
+	loop.onOverlaySubmit = func(submit string) {
+		if strings.HasPrefix(submit, "model:") {
+			name := strings.TrimPrefix(submit, "model:")
+			if name != "" {
+				loop.onModelChange(name)
+			}
+		}
+		if prevOverlaySubmit != nil {
+			prevOverlaySubmit(submit)
+		}
+	}
 
 	// When the host supplied prebuilt resume entries, prefer them for the no-arg
 	// picker so the overlay reflects exactly what main.go discovered at startup.
@@ -454,6 +511,12 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 			return CommandOutcome{Handled: true, Status: "Error: " + err.Error()}, true
 		}
 		return outcome, outcome.Handled
+	}
+
+	// COST-02: wire turn-result callback so each successful turn's usage is
+	// forwarded to the caller (main.go accumulates into runner.AccumulatedUsage).
+	if opts.OnTurnResult != nil {
+		loop.onTurnResult = opts.OnTurnResult
 	}
 
 	// Wire Notification hooks: fire when a permission dialog is shown (the

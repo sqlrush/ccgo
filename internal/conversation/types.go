@@ -249,6 +249,13 @@ type Runner struct {
 	// from it. SDK Controller mcp_* subtypes are wired to it via sdk.Options.
 	// G11: live MCP connection manager.
 	MCPManager *mcp.Manager
+
+	// AccumulatedUsage holds the sum of all turn Usage values for this session.
+	// It is updated by the interactive REPL loop after each successful turn and
+	// persisted by savePrintCost at session end (COST-02).
+	// On resume, main.go merges the prior session's cost into this field so that
+	// /cost and cost.json always reflect the full session total.
+	AccumulatedUsage contracts.Usage
 }
 
 type MCPConfig struct {

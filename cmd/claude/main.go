@@ -430,10 +430,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return 1
 		}
 		// COST-02: restore accumulated cost when resuming a previous session.
+		// Merge the prior session total into runner.AccumulatedUsage so that
+		// /cost and savePrintCost include the full historical total.
 		if runner.SessionID != "" {
 			costOpts := costtrack.DefaultOptions(runner.WorkingDirectory)
 			if prev, ok, cerr := costtrack.Restore(costOpts, runner.SessionID); ok && cerr == nil {
-				_ = prev // cost data available; will be merged by /cost command
+				runner.AccumulatedUsage = contracts.Usage{
+					CostUSD:      prev.LastCost,
+					InputTokens:  prev.LastTotalInputTokens,
+					OutputTokens: prev.LastTotalOutputTokens,
+				}
 			}
 		}
 		// CLI-SDK-01/02: when both input and output formats are stream-json,
@@ -623,11 +629,28 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		ResumeEntries:   resumeEntries,
 		CustomKeymap:    customKeymap,
 		MCPApprovalPath: config.LocalSettingsPath(runner.WorkingDirectory),
+		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
+		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
+		OnModelChange: func(m string) {
+			runner.Model = m
+		},
+		// COST-02: accumulate per-turn usage into runner.AccumulatedUsage so that
+		// savePrintCost (called below) persists the full session total.
+		OnTurnResult: func(result conversation.Result) {
+			u := result.Usage
+			runner.AccumulatedUsage.CostUSD += u.CostUSD
+			runner.AccumulatedUsage.InputTokens += u.InputTokens
+			runner.AccumulatedUsage.OutputTokens += u.OutputTokens
+			runner.AccumulatedUsage.CacheCreationInputTokens += u.CacheCreationInputTokens
+			runner.AccumulatedUsage.CacheReadInputTokens += u.CacheReadInputTokens
+		},
 	}
 	if err := repl.RunInteractiveWithOptions(ctx, term, runner, history, opts); err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
+	// COST-02: persist the accumulated session cost after the interactive session ends.
+	savePrintCost(runner)
 	return 0
 }
 
@@ -5403,8 +5426,12 @@ func savePrintCost(runner conversation.Runner) {
 		return
 	}
 	opts := costtrack.DefaultOptions(runner.WorkingDirectory)
+	u := runner.AccumulatedUsage
 	cost := costtrack.ProjectCost{
-		LastSessionID: runner.SessionID,
+		LastSessionID:         runner.SessionID,
+		LastCost:              u.CostUSD,
+		LastTotalInputTokens:  u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens,
+		LastTotalOutputTokens: u.OutputTokens,
 	}
 	if err := costtrack.Save(opts, cost); err != nil {
 		fmt.Fprintf(os.Stderr, "ccgo: save cost: %v\n", err)

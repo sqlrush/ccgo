@@ -584,12 +584,80 @@ func (r Runner) toolMetadata() map[string]any {
 	if r.AgentRegistry != nil {
 		metadata[tool.MetadataAgentRegistryKey] = r.AgentRegistry
 	}
+	// Inject a TeamRunner so callTeamDispatch/callTeamCoordinate execute real
+	// model turns instead of falling back to the append-only stub path
+	// (TEAM-01 / ORCH-23 / ORCH-24). Only injected when SessionPath is set
+	// (required by Persist to write sidechain transcripts).
+	if r.SessionPath != "" {
+		metadata[tool.MetadataTeamRunnerKey] = r.buildTeamRunner()
+	}
 	// Merge ExtraToolMetadata last so caller-supplied keys take precedence over
 	// auto-generated ones (e.g. QuestionAsker injected by the TUI loop).
 	for k, v := range r.ExtraToolMetadata {
 		metadata[k] = v
 	}
 	return metadata
+}
+
+// buildTeamRunner constructs a *orchestration.TeamRunner backed by this runner's
+// config. The Factory creates a per-teammate runner (with model override) that
+// wraps RunTurn; Persist writes resulting messages to the teammate's sidechain
+// transcript (TEAM-01 / ORCH-23 / ORCH-24).
+func (r Runner) buildTeamRunner() *orchestration.TeamRunner {
+	sessionPath := r.SessionPath
+	sessionID := r.SessionID
+	// Capture a runner copy for the factory closure. The copy is immutable
+	// (conversation.Runner is a value type) so concurrency is safe.
+	runnerCopy := r
+	factory := func(agentType, model string) (orchestration.RunTurnFunc, error) {
+		tr := runnerCopy
+		if model != "" {
+			tr.Model = model
+		}
+		return func(ctx context.Context, history []contracts.Message, user contracts.Message) (orchestration.TurnResult, error) {
+			result, err := tr.RunTurn(ctx, history, user)
+			if err != nil {
+				return orchestration.TurnResult{}, err
+			}
+			return orchestration.TurnResult{
+				Messages:   result.Messages,
+				Assistant:  result.Assistant,
+				StopReason: result.StopReason,
+			}, nil
+		}, nil
+	}
+	persist := func(sidechainID string, msgs []contracts.Message) error {
+		for _, msg := range msgs {
+			// Only persist assistant messages to the sidechain; user messages
+			// are already present from the dispatch step.
+			if msg.Type != contracts.MessageAssistant {
+				continue
+			}
+			tm := session.TranscriptMessage{
+				Type:        string(msg.Type),
+				UUID:        msg.UUID,
+				SessionID:   sessionID,
+				IsSidechain: true,
+				AgentID:     sidechainID,
+				Timestamp:   nowISO8601(),
+				Message:     &msg,
+			}
+			if err := session.AppendSidechainMessage(sessionPath, sessionID, sidechainID, tm); err != nil {
+				return fmt.Errorf("team runner persist %s: %w", sidechainID, err)
+			}
+		}
+		return nil
+	}
+	return &orchestration.TeamRunner{
+		Factory: factory,
+		Persist: persist,
+	}
+}
+
+// nowISO8601 returns the current UTC time in RFC3339Nano format, used for
+// sidechain transcript message timestamps in buildTeamRunner.
+func nowISO8601() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
 }
 
 func (r Runner) policySettings() contracts.Settings {

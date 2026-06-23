@@ -106,6 +106,11 @@ type Loop struct {
 	// is updated (mirrors onPermissionShown).
 	onTurnDone func()
 
+	// onTurnResult, when non-nil, is called with the successful turn result
+	// after history is updated. Used by RunInteractiveWithOptions to accumulate
+	// cost across turns for COST-02 persistence.
+	onTurnResult func(conversation.Result)
+
 	// onRulePersisted is called for each PermissionUpdate successfully written
 	// by an "allow always" choice. In production RunInteractiveWithOptions wires
 	// this to refresh the live engine; it also serves as a test seam.
@@ -119,6 +124,11 @@ type Loop struct {
 	// onModelChange is a seam called when a command outcome requests a model
 	// switch (e.g. /fast switches to Haiku). Nil in production until wired.
 	onModelChange func(model string)
+
+	// modelRef, when non-nil, holds the current model override. StartTurn reads
+	// *modelRef before copying base so model switches (via /fast or /model picker)
+	// take effect on the next turn without rebuilding the runner (CMD-FAST-01).
+	modelRef *string
 
 	// titleWriter is a seam for writing OSC-0 terminal title sequences.
 	// When non-nil it is called instead of writing directly to the terminal.
@@ -494,6 +504,9 @@ func (l *Loop) finishTurn(out turnOutcome) {
 	copy(newHistory, l.history)
 	copy(newHistory[len(l.history):], out.result.Messages)
 	l.history = newHistory
+	if l.onTurnResult != nil {
+		l.onTurnResult(out.result)
+	}
 	if l.onTurnDone != nil {
 		l.onTurnDone()
 	}
