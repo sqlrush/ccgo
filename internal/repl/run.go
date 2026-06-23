@@ -119,6 +119,7 @@ func newProductionRouter(cwd string) *CommandRouter {
 		return s
 	}))
 	router.Register("ide", ideHandler(nil)) // nil → defaultIDEDetect
+	router.Register("memory", memoryHandler(cwd))
 	return router
 }
 
