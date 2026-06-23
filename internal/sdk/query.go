@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"ccgo/internal/contracts"
@@ -33,6 +34,16 @@ type Options struct {
 	// RunnerFactory builds (or fetches) the conversation runner.
 	// cmd/claude supplies a default via bootstrap.State.ConversationRunner().
 	RunnerFactory func() (*conversation.Runner, error)
+
+	// ── G1 live-backend callbacks ─────────────────────────────────────────────
+	// When nil, Query injects a default from the runner (if feasible) or the
+	// Controller falls back to its ⚠️ "not supported" response.
+
+	// RewindFiles, when non-nil, is called by the rewind_files subtype handler
+	// instead of the default (which returns canRewind:false). Callers that have
+	// a live rewind store wire this via rewind.Rewind.
+	// CC ref: controlSchemas.ts:308-328 (SDK-34).
+	RewindFiles func(userMessageID string, dryRun bool) (*RewindFilesResult, error)
 }
 
 // Query runs a single conversation turn under the SDK control protocol.
@@ -85,11 +96,70 @@ func Query(ctx context.Context, opts Options) error {
 	asker := newControlAsker(enc.WriteRequest, nextID)
 	runner.Tools.Asker = asker
 
-	// Controller: handles interrupt (cancel the turn) and set_model.
-	controller := NewController(
-		func() { cancelTurn(errInterrupted) },
-		func(m string) error { runner.Model = m; return nil },
-	)
+	// ── G1: wire real callbacks from runner subsystems ─────────────────────────
+
+	// set_permission_mode → update runner.PermissionMode.
+	// CC ref: bridgeMessaging.ts:328-358; controlSchemas.ts:124-135 (SDK-30).
+	setPermissionMode := func(mode contracts.PermissionMode) error {
+		runner.PermissionMode = mode
+		return nil
+	}
+
+	// get_context_usage → return accumulated usage from the runner's history.
+	// We track usage via the OnEvent hook: each assistant message carries Usage.
+	// Accumulate into a mutex-protected total so the callback is goroutine-safe.
+	usageMu := &usageMutex{}
+	getContextUsage := func() (*ContextUsage, error) {
+		u := usageMu.get()
+		return &ContextUsage{
+			Categories:  []ContextCategory{},
+			TotalTokens: u.InputTokens + u.OutputTokens,
+			MaxTokens:   runner.MaxTokens,
+			Percentage:  contextUsagePercentage(u.InputTokens+u.OutputTokens, runner.MaxTokens),
+			GridRows:    [][]any{},
+			Model:       runner.Model,
+			MemoryFiles: []any{},
+			MCPTools:    []any{},
+			Agents:      []any{},
+		}, nil
+	}
+
+	// mcp_status → enumerate servers from runner.MCP static config.
+	// No live connection manager in a single-shot SDK session — return "configured".
+	// CC ref: controlSchemas.ts:157-173 (SDK-32).
+	mcpStatus := func() ([]MCPServerStatus, error) {
+		return mcpStatusFromRunner(runner), nil
+	}
+
+	// get_settings → merge runner.MCP settings layers.
+	// CC ref: controlSchemas.ts:475-519 (SDK-45).
+	getSettings := func() (*SettingsResult, error) {
+		return settingsFromRunner(runner), nil
+	}
+
+	// rewind_files → use caller-provided callback (e.g. rewind.Rewind) if set,
+	// otherwise fall back to canRewind:false (no store available).
+	// CC ref: controlSchemas.ts:308-328 (SDK-34).
+	var rewindFiles func(string, bool) (*RewindFilesResult, error)
+	if opts.RewindFiles != nil {
+		rewindFiles = opts.RewindFiles
+	}
+
+	// Controller: handles all control subtypes with live backend callbacks.
+	controller := &Controller{
+		interrupt:         func() { cancelTurn(errInterrupted) },
+		setModel:          func(m string) error { runner.Model = m; return nil },
+		setPermissionMode: setPermissionMode,
+		getContextUsage:   getContextUsage,
+		mcpStatus:         mcpStatus,
+		getSettings:       getSettings,
+		rewindFiles:       rewindFiles,
+		// Subtypes without a live backend in a single-shot SDK session:
+		// cancelAsyncMessage, seedReadState, hookCallback, mcpMessage,
+		// mcpSetServers, mcpReconnect, mcpToggle, reloadPlugins,
+		// applyFlagSettings, stopTask, elicitation remain nil — Controller
+		// returns its ⚠️ "not supported" responses (matching CC bridgeMessaging.ts:339).
+	}
 
 	// Read-loop goroutine: decodes inbound NDJSON from In, routes
 	// control_request to Controller (interrupt/set_model) and
@@ -104,9 +174,13 @@ func Query(ctx context.Context, opts Options) error {
 		close(loopDone)
 	}
 
-	// Wire events: emit each conversation event as an sdk_event line on Out
-	// so the SDK client can observe turn progress.
+	// Wire events: emit each conversation event as an sdk_event line on Out.
+	// Also track accumulated usage so get_context_usage reflects real tokens.
 	runner.OnEvent = func(ev conversation.Event) {
+		// Accumulate usage from assistant messages (carries LLM billing data).
+		if ev.Message != nil && ev.Message.Usage != nil {
+			usageMu.accumulate(*ev.Message.Usage)
+		}
 		payload := map[string]any{"type": string(ev.Type)}
 		if ev.Model != "" {
 			payload["model"] = ev.Model
@@ -276,4 +350,98 @@ func resolveFromRaw(raw map[string]json.RawMessage, asker *controlAsker) {
 	}
 
 	asker.Resolve(requestID, decision)
+}
+
+// ── G1 helpers ────────────────────────────────────────────────────────────────
+
+// usageMutex safely accumulates LLM usage across concurrent OnEvent callbacks.
+type usageMutex struct {
+	mu    sync.Mutex
+	total contracts.Usage
+}
+
+func (u *usageMutex) accumulate(usage contracts.Usage) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.total.InputTokens += usage.InputTokens
+	u.total.OutputTokens += usage.OutputTokens
+	u.total.CacheCreationInputTokens += usage.CacheCreationInputTokens
+	u.total.CacheReadInputTokens += usage.CacheReadInputTokens
+}
+
+func (u *usageMutex) get() contracts.Usage {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.total
+}
+
+// contextUsagePercentage returns the fraction [0,1] of total/max tokens.
+// Returns 0 when maxTokens is zero (unknown capacity).
+func contextUsagePercentage(total, maxTokens int) float64 {
+	if maxTokens <= 0 {
+		return 0
+	}
+	p := float64(total) / float64(maxTokens)
+	if p > 1 {
+		return 1
+	}
+	return p
+}
+
+// mcpStatusFromRunner builds an MCPServerStatus list from the runner's static
+// MCP configuration. No live connection manager exists in a single-shot SDK
+// session — all servers are reported as "configured".
+// CC ref: controlSchemas.ts:157-173; coreSchemas.ts:167-220 (SDK-32).
+func mcpStatusFromRunner(runner *conversation.Runner) []MCPServerStatus {
+	if runner.MCP == nil {
+		return []MCPServerStatus{}
+	}
+	merged := runner.MCP.MergedSettings()
+	if len(merged.MCPServers) == 0 {
+		return []MCPServerStatus{}
+	}
+	out := make([]MCPServerStatus, 0, len(merged.MCPServers))
+	for name, srv := range merged.MCPServers {
+		out = append(out, MCPServerStatus{
+			Name:   name,
+			Status: "configured",
+			Scope:  srv.Scope,
+		})
+	}
+	return out
+}
+
+// settingsFromRunner builds a SettingsResult from the runner's MCP settings
+// layers.  The "effective" field is the merged view; sources lists each layer.
+// CC ref: controlSchemas.ts:475-519 (SDK-45).
+func settingsFromRunner(runner *conversation.Runner) *SettingsResult {
+	if runner.MCP == nil {
+		return &SettingsResult{
+			Effective: map[string]any{},
+			Sources:   []SettingsSource{},
+		}
+	}
+	merged := runner.MCP.MergedSettings()
+	effective := settingsToMap(merged)
+	sources := []SettingsSource{
+		{Source: "user", Settings: settingsToMap(runner.MCP.UserSettings)},
+		{Source: "project", Settings: settingsToMap(runner.MCP.ProjectSettings)},
+		{Source: "local", Settings: settingsToMap(runner.MCP.LocalSettings)},
+		{Source: "policy", Settings: settingsToMap(runner.MCP.PolicySettings)},
+	}
+	return &SettingsResult{Effective: effective, Sources: sources}
+}
+
+// settingsToMap serialises a contracts.Settings value to a map[string]any via
+// JSON round-trip. This is simple and correct for the get_settings wire format.
+func settingsToMap(s any) map[string]any {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
 }

@@ -4731,6 +4731,21 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner) (conversatio
 		if eventErr != nil {
 			return
 		}
+		// SDK-55: emit system/status "compacting" before the compact event so that
+		// SDK consumers can display a "compacting…" indicator.
+		// CC ref: coreSchemas.ts:1533-1542 (SDKStatusMessageSchema).
+		if event.Type == conversation.EventCompact {
+			statusMsg := sdkpkg.SDKStatusMessage{
+				Type:      "system",
+				Subtype:   "status",
+				Status:    "compacting",
+				SessionID: string(runner.SessionID),
+			}
+			if err := encoder.Encode(statusMsg); err != nil {
+				eventErr = fmt.Errorf("sdk: write system/status: %w", err)
+				return
+			}
+		}
 		eventErr = writePrintStreamEvent(encoder, event)
 	}
 	return runner, func() error { return eventErr }
