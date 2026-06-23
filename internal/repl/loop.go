@@ -562,7 +562,7 @@ func (l *Loop) SetMode(mode contracts.PermissionMode) {
 // memory:/trust:). It returns true when the submit was handled internally and
 // should NOT be forwarded to the model. onOverlaySubmit is a host/test seam.
 func (l *Loop) handleOverlaySubmit(submit string) bool {
-	for _, prefix := range []string{"resume:", "theme:", "memory:", "trust:"} {
+	for _, prefix := range []string{"resume:", "theme:", "memory:", "trust:", "model:"} {
 		if strings.HasPrefix(submit, prefix) {
 			if l.onOverlaySubmit != nil {
 				l.onOverlaySubmit(submit)
