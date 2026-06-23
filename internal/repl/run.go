@@ -9,7 +9,9 @@ import (
 	"ccgo/internal/conversation"
 	"ccgo/internal/messages"
 	"ccgo/internal/permissions"
+	"ccgo/internal/session"
 	"ccgo/internal/tool"
+	"ccgo/internal/tui"
 )
 
 // newTurnLoop builds a Loop wired to run real conversation turns. Callers may
@@ -78,6 +80,20 @@ type InteractiveOptions struct {
 	// Trust, when non-nil, shows the trust dialog at startup.
 	Trust *TrustInfo
 
+	// PromptHistory seeds Up-arrow / Ctrl+R navigation with previously submitted
+	// prompts loaded from ~/.claude/history.jsonl. May be nil; nil means only
+	// in-session history is available.
+	PromptHistory []session.HistoryEntry
+
+	// EditorMode, when set to "vim", enables vim keybindings in the prompt input.
+	// Sourced from mergedSettings.EditorMode at startup.
+	EditorMode string
+
+	// CustomKeymap, when non-nil, overrides specific bindings on top of
+	// DefaultKeymap. Loaded from ~/.claude/keybindings.json at startup; nil if
+	// the file is absent.
+	CustomKeymap *tui.Keymap
+
 	// OnOverlay is called when an overlay submission is handled internally
 	// (resume:/theme:/memory:/trust: prefixes). Nil is fine.
 	OnOverlay func(string)
@@ -98,6 +114,39 @@ func RunInteractive(ctx context.Context, term Terminal, base conversation.Runner
 func newTurnLoopForRunner(ctx context.Context, term Terminal, base conversation.Runner, history []contracts.Message) *Loop {
 	recorder := NewHistoryRecorder(base.WorkingDirectory, base.SessionID)
 	return newTurnLoop(ctx, term, base, history, recorder)
+}
+
+// newTurnLoopForRunnerWithHistory is like newTurnLoopForRunner but seeds the
+// loop's prompt input with persisted history entries so Up-arrow / Ctrl+R
+// navigation surfaces prior prompts from the first keystroke.
+func newTurnLoopForRunnerWithHistory(ctx context.Context, term Terminal, base conversation.Runner, history []contracts.Message, promptHistory []session.HistoryEntry) *Loop {
+	recorder := NewHistoryRecorder(base.WorkingDirectory, base.SessionID)
+	loop := NewLoopFromHistoryEntries(term, promptHistory)
+	loop.history = history
+	loop.StartTurn = func(input string) {
+		_ = recorder.Record(input)
+		user := messages.UserText(input)
+		turnHistory := append([]contracts.Message(nil), loop.history...)
+		turnCtx, turnCancel := context.WithCancel(ctx)
+		loop.SetTurnCancel(turnCancel)
+		go func() {
+			defer turnCancel()
+			r := base // copy by value; do not mutate the shared base
+			r.OnEvent = func(ev conversation.Event) {
+				select {
+				case loop.eventCh <- ev:
+				case <-turnCtx.Done():
+				}
+			}
+			r.Tools.Asker = loopAsker{askCh: loop.askCh}
+			result, err := r.RunTurn(turnCtx, turnHistory, user)
+			select {
+			case loop.doneCh <- turnOutcome{result: result, err: err}:
+			case <-ctx.Done():
+			}
+		}()
+	}
+	return loop
 }
 
 // newProductionRouter builds the canonical CommandRouter wired by RunInteractiveWithOptions.
@@ -166,7 +215,12 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		base.Permissions = ptrEngineDecider{eng: opts.Engine}
 	}
 
-	loop := newTurnLoopForRunner(ctx, term, base, history)
+	var loop *Loop
+	if len(opts.PromptHistory) > 0 {
+		loop = newTurnLoopForRunnerWithHistory(ctx, term, base, history, opts.PromptHistory)
+	} else {
+		loop = newTurnLoopForRunner(ctx, term, base, history)
+	}
 	if opts.Settings != nil {
 		loop.SetSettingsWriter(opts.Settings)
 	}
@@ -175,6 +229,13 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	}
 	loop.SetMode(opts.Mode)
 	loop.onOverlaySubmit = opts.OnOverlay
+	if opts.CustomKeymap != nil {
+		loop.screen.Keymap = *opts.CustomKeymap
+	}
+	if opts.EditorMode == "vim" {
+		loop.screen.SetVimEnabled(true)
+		loop.refreshBaseStatus()
+	}
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)
 	}

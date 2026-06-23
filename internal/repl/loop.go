@@ -12,6 +12,7 @@ import (
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	"ccgo/internal/tui"
 )
@@ -132,6 +133,27 @@ func NewLoop(t Terminal, history []string) *Loop {
 	return &Loop{
 		term:     t,
 		screen:   tui.NewREPLScreen(w, h, history),
+		dialog:   tui.NewDialogRuntime(),
+		inputCh:  make(chan tui.Key, 64),
+		eventCh:  make(chan conversation.Event, 256),
+		askCh:    make(chan askRequest, 4),
+		doneCh:   make(chan turnOutcome, 1),
+		resizeCh: make(chan resizeEvent, 1),
+		width:    w,
+		height:   h,
+	}
+}
+
+// NewLoopFromHistoryEntries creates a Loop seeded with persisted prompt history
+// entries. The entries back Up-arrow / Ctrl+R navigation from the first keystroke.
+func NewLoopFromHistoryEntries(t Terminal, entries []session.HistoryEntry) *Loop {
+	w, h, err := t.Size()
+	if err != nil || w <= 0 || h <= 0 {
+		w, h = 80, 24
+	}
+	return &Loop{
+		term:     t,
+		screen:   tui.NewREPLScreenFromHistoryEntries(w, h, entries),
 		dialog:   tui.NewDialogRuntime(),
 		inputCh:  make(chan tui.Key, 64),
 		eventCh:  make(chan conversation.Event, 256),
