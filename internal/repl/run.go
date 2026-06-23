@@ -151,6 +151,31 @@ type InteractiveOptions struct {
 	// only be enabled on terminals that advertise Kitty support.
 	// REPL-60. CC ref: src/ink/ink.tsx:1430.
 	ExtendedKeys bool
+
+	// SyntaxHighlightingDisabled mirrors settings.SyntaxHighlightingDisabled.
+	// When true, diff output is rendered without ANSI color codes.
+	// CC ref: utils/settings/types.ts syntaxHighlightingDisabled.
+	SyntaxHighlightingDisabled bool
+
+	// SpinnerConfig carries render-affecting spinner settings (tips, verb).
+	// Sourced from mergedSettings.SpinnerTipsEnabled / SpinnerVerbs at startup.
+	// CC ref: src/services/tips/tipScheduler.ts spinnerTipsEnabled.
+	SpinnerConfig SpinnerConfig
+
+	// TerminalTitleFromRename, when true, causes /rename to also update the
+	// terminal tab title via an OSC-0 sequence.
+	// CC ref: utils/settings/types.ts terminalTitleFromRename.
+	TerminalTitleFromRename bool
+
+	// Theme selects the ANSI colour scheme for the status bar.
+	// Mirrors settings.Theme: "dark" (default), "light", "dark-daltonism", "light-daltonism".
+	// CC ref: utils/settings/types.ts theme.
+	Theme string
+
+	// StatusLineCommand is the shell command from settings.StatusLine.Command.
+	// When non-empty, its stdout is used as the status bar content.
+	// CC ref: utils/settings/types.ts statusLine:{type:"command",command:string}.
+	StatusLineCommand string
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -396,6 +421,19 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	if opts.ExtendedKeys {
 		loop.SetExtendedKeys(true)
 	}
+	// CFG-35: wire syntax highlighting preference. Color is enabled by default;
+	// disabled when settings.SyntaxHighlightingDisabled=true.
+	loop.SetSyntaxHighlightColor(!opts.SyntaxHighlightingDisabled)
+	// CFG-37: wire spinner tips/verb settings from mergedSettings.
+	loop.SetSpinnerConfig(opts.SpinnerConfig)
+	// CFG-51: wire theme so the status bar uses the appropriate colour scheme.
+	if opts.Theme != "" {
+		loop.screen.Theme = opts.Theme
+	}
+	// CFG-19: wire statusLine command so its stdout populates the status bar.
+	if opts.StatusLineCommand != "" {
+		loop.SetStatusLineCommand(opts.StatusLineCommand)
+	}
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)
 	}
@@ -469,6 +507,23 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		loop.onModelChange(m)
 		return nil
 	}))
+
+	// CFG-36: re-register /rename with the terminal-title seam when
+	// terminalTitleFromRename is enabled. The loop's titleWriter writes an
+	// OSC-0 sequence to the terminal. Production wiring below.
+	var titleSetterForRename func(string)
+	if opts.TerminalTitleFromRename {
+		titleSetterForRename = func(name string) {
+			loop.setTerminalTitle(name)
+		}
+	}
+	router.Register("rename", renameHandlerWithTitle(
+		writeCustomTitle,
+		base.SessionID,
+		base.WorkingDirectory,
+		opts.TerminalTitleFromRename,
+		titleSetterForRename,
+	))
 
 	// CMD-FAST-01: extend onOverlaySubmit to handle "model:<name>" from the
 	// /model picker overlay. The loop already routes model: to onOverlaySubmit;

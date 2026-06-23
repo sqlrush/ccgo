@@ -191,6 +191,24 @@ type Loop struct {
 	// passed to tui.ScreenLifecycle.EnterInteractive.
 	// CC ref: src/ink/ink.tsx:1430.
 	extendedKeys bool
+
+	// syntaxHighlightColor mirrors the inverse of settings.SyntaxHighlightingDisabled.
+	// When false, diff output is rendered without ANSI color codes.
+	// CC ref: utils/settings/types.ts syntaxHighlightingDisabled.
+	syntaxHighlightColor bool
+
+	// spinnerCfg holds render-affecting spinner settings (tips, verb).
+	// Set via SetSpinnerConfig; zero value disables tips.
+	spinnerCfg SpinnerConfig
+
+	// statusLineCmd, when non-empty, is the shell command whose stdout is
+	// used as the status bar content. Set via SetStatusLineCommand.
+	// CC ref: utils/settings/types.ts statusLine:{type:"command",command:string}.
+	statusLineCmd string
+
+	// statusLineCmdRunner executes statusLineCmd and returns its output.
+	// Defaults to RunStatusLineCommand; can be overridden in tests.
+	statusLineCmdRunner func(cmd string) (string, error)
 }
 
 // SetAgentRegistry wires the shared AgentRegistry for background task tracking.
@@ -217,6 +235,20 @@ func (l *Loop) SetRegistry(cmds []contracts.Command) { l.registry = cmds }
 // SetCWD sets the working directory used by QuickOpenOverlay when the user
 // types "@" in the prompt (OVL-05/06). Must be called before Run.
 func (l *Loop) SetCWD(cwd string) { l.cwd = cwd }
+
+// SetSyntaxHighlightColor sets whether diff output is rendered with ANSI color.
+// Pass false when settings.SyntaxHighlightingDisabled=true.
+// CC ref: utils/settings/types.ts syntaxHighlightingDisabled.
+func (l *Loop) SetSyntaxHighlightColor(enabled bool) { l.syntaxHighlightColor = enabled }
+
+// SetSpinnerConfig wires spinner tip/verb settings from mergedSettings.
+// CC ref: src/services/tips/tipScheduler.ts spinnerTipsEnabled.
+func (l *Loop) SetSpinnerConfig(cfg SpinnerConfig) { l.spinnerCfg = cfg }
+
+// SetStatusLineCommand wires the shell command whose stdout is used as the
+// status bar content. Set from mergedSettings.StatusLine.Command.
+// CC ref: utils/settings/types.ts statusLine:{type:"command",command:string}.
+func (l *Loop) SetStatusLineCommand(cmd string) { l.statusLineCmd = cmd }
 
 // SetExtendedKeys enables or disables the Kitty keyboard protocol (REPL-60).
 // When enabled, tui.TerminalModeOptions.ExtendedKeys=true is passed to
@@ -434,7 +466,7 @@ func (l *Loop) applyEvent(ev conversation.Event) {
 		l.lastToolUse = ev.ToolUse
 	}
 	if ev.Type == conversation.EventToolResult {
-		text := renderToolResultText(l.lastToolUse, ev.ToolResult)
+		text := RenderToolResultTextWithColorOpt(l.lastToolUse, ev.ToolResult, l.syntaxHighlightColor)
 		l.screen.AppendMessage(tui.Message{Role: tui.RoleTool, Text: text})
 		return
 	}
@@ -1036,10 +1068,21 @@ func (l *Loop) denyPendingQuestions() {
 	}
 }
 
-// refreshBaseStatus recomputes baseStatus from the current mode + vim state
-// and, when the spinner is not running, propagates it to screen.Status immediately.
+// refreshBaseStatus recomputes baseStatus from the current mode + vim state,
+// incorporating statusLine command output when configured.
+// When the spinner is not running, propagates immediately to screen.Status.
 func (l *Loop) refreshBaseStatus() {
-	l.baseStatus = modeIndicator(l.mode, l.screen.VimEnabled, l.screen.VimMode)
+	base := modeIndicator(l.mode, l.screen.VimEnabled, l.screen.VimMode)
+	if l.statusLineCmd != "" {
+		runner := l.statusLineCmdRunner
+		if runner == nil {
+			runner = RunStatusLineCommand
+		}
+		if out, err := runner(l.statusLineCmd); err == nil && out != "" {
+			base = out
+		}
+	}
+	l.baseStatus = base
 	if !l.running {
 		l.screen.Status = l.baseStatus
 	}
@@ -1048,7 +1091,7 @@ func (l *Loop) refreshBaseStatus() {
 func (l *Loop) startSpinner() {
 	now := time.Now()
 	l.baseStatus = l.screen.Status
-	l.spinner = NewSpinner(now)
+	l.spinner = NewSpinnerWithConfig(now, l.spinnerCfg)
 	ticker := time.NewTicker(spinnerInterval)
 	l.tickCh = ticker.C
 	l.stopTick = ticker.Stop

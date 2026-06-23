@@ -179,6 +179,31 @@ func writeCustomTitle(sessionDir string, sessionID contracts.ID, title string) e
 	return err
 }
 
+// renameHandlerWithTitle is like renameHandlerWith but also sets the terminal
+// title when terminalTitleFromRename is true.
+// CC ref: utils/settings/types.ts terminalTitleFromRename — /rename updates terminal tab title.
+func renameHandlerWithTitle(w transcriptTitleWriter, sessionID contracts.ID, sessionDir string, terminalTitleFromRename bool, setTitle func(string)) CommandHandler {
+	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
+		name := strings.TrimSpace(cc.Args)
+		if name == "" {
+			return CommandOutcome{
+				Handled: true,
+				Status:  "Usage: /rename <name> — rename the current session",
+			}, nil
+		}
+		if err := w(sessionDir, sessionID, name); err != nil {
+			return CommandOutcome{}, fmt.Errorf("rename: %w", err)
+		}
+		if terminalTitleFromRename && setTitle != nil {
+			setTitle(name)
+		}
+		return CommandOutcome{
+			Handled: true,
+			Status:  fmt.Sprintf("Session renamed to %q.", name),
+		}, nil
+	}
+}
+
 // renameHandler is the production handler using the real transcript file.
 func renameHandler(sessionID contracts.ID, sessionDir string) CommandHandler {
 	return renameHandlerWith(writeCustomTitle, sessionID, sessionDir)
@@ -447,22 +472,61 @@ func reloadPluginsHandler(cwd string) CommandHandler {
 	}
 }
 
-// colorHandler returns a CommandHandler for /color.
-// ⚠️ The TUI screen does not have a color-scheme field; returns an info message.
-func colorHandler() CommandHandler {
+// agentColorNames mirrors CC's AGENT_COLORS list (src/tools/AgentTool/agentColorManager.ts).
+var agentColorNames = map[string]bool{
+	"blue": true, "green": true, "yellow": true, "red": true,
+	"cyan": true, "magenta": true, "orange": true, "pink": true,
+	"purple": true, "white": true,
+}
+
+// agentColorResetNames mirrors CC's RESET_ALIASES (src/commands/color/color.ts).
+var agentColorResetNames = map[string]bool{
+	"default": true, "reset": true, "none": true, "gray": true, "grey": true,
+}
+
+// colorHandlerWith returns a CommandHandler for /color backed by an optional
+// persistence func. Passing nil skips persistence (session-only change).
+// CC ref: src/commands/color/color.ts — /color sets the agent's session colour.
+func colorHandlerWith(persist func(string) error) CommandHandler {
 	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
-		arg := strings.TrimSpace(cc.Args)
+		arg := strings.ToLower(strings.TrimSpace(cc.Args))
 		if arg == "" {
 			return CommandOutcome{
 				Handled: true,
-				Status:  "Usage: /color <color|default> — set the prompt bar color for this session. (Note: color customization requires terminal color support.)",
+				Status:  "Usage: /color <color|default> — set the session color for this agent.",
 			}, nil
 		}
-		return CommandOutcome{
-			Handled: true,
-			Status:  fmt.Sprintf("⚠️  Prompt color %q requested — runtime color theming is not yet wired to the TUI screen.", arg),
-		}, nil
+		if agentColorResetNames[arg] {
+			if cc.Screen != nil {
+				cc.Screen.SessionColor = ""
+			}
+			if persist != nil {
+				_ = persist("") // best-effort
+			}
+			return CommandOutcome{Handled: true, Status: "Session color reset to default."}, nil
+		}
+		if !agentColorNames[arg] {
+			colors := "blue, green, yellow, red, cyan, magenta, orange, pink, purple, white"
+			return CommandOutcome{
+				Handled: true,
+				Status:  fmt.Sprintf("Unknown color %q. Available: %s, default", arg, colors),
+			}, nil
+		}
+		if cc.Screen != nil {
+			cc.Screen.SessionColor = arg
+		}
+		if persist != nil {
+			_ = persist(arg) // best-effort
+		}
+		return CommandOutcome{Handled: true, Status: fmt.Sprintf("Session color set to %q.", arg)}, nil
 	}
+}
+
+// colorHandler returns the production CommandHandler for /color.
+// Session colour is applied live to the screen; no persistence needed for
+// session-only semantics (matching CC's in-session colour assignment).
+func colorHandler() CommandHandler {
+	return colorHandlerWith(nil)
 }
 
 // statusLineHandler returns a CommandHandler for /statusline.

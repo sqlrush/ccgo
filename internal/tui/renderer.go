@@ -115,7 +115,7 @@ func (r Renderer) Render(frame Frame) string {
 	for _, line := range body {
 		lines = append(lines, padOrTrim(line, width))
 	}
-	lines = append(lines, RenderStatusLine(frame.Status, width))
+	lines = append(lines, RenderStatusLineWithSessionColor(frame.Status, width, frame.Theme, frame.SessionColor))
 	lines = append(lines, promptLines...)
 
 	var out strings.Builder

@@ -138,10 +138,85 @@ func writeTextStyleTransition(out *strings.Builder, current *TextStyle, next Tex
 }
 
 func RenderStatusLine(status string, width int) string {
+	return RenderStatusLineWithTheme(status, width, "")
+}
+
+// RenderStatusLineWithCommand renders the status bar incorporating custom command
+// output. When cmdOutput is non-empty, it is appended to the status string before
+// rendering. This supports the statusLine setting (type:"command") from CC.
+// CC ref: utils/settings/types.ts statusLine:{type:"command",command:string}.
+func RenderStatusLineWithCommand(cmdOutput string, width int, theme string) string {
+	if strings.TrimSpace(cmdOutput) == "" {
+		return RenderStatusLineWithTheme("", width, theme)
+	}
+	return RenderStatusLineWithTheme(strings.TrimSpace(cmdOutput), width, theme)
+}
+
+// sessionColorANSI maps a session color name to an ANSI SGR sequence.
+// CC ref: src/tools/AgentTool/agentColorManager.ts AGENT_COLORS list.
+func sessionColorANSI(color string) string {
+	switch strings.ToLower(strings.TrimSpace(color)) {
+	case "blue":
+		return "\x1b[34m"
+	case "green":
+		return "\x1b[32m"
+	case "yellow":
+		return "\x1b[33m"
+	case "red":
+		return "\x1b[31m"
+	case "cyan":
+		return "\x1b[36m"
+	case "magenta":
+		return "\x1b[35m"
+	case "orange":
+		return "\x1b[38;5;214m"
+	case "pink":
+		return "\x1b[38;5;213m"
+	case "purple":
+		return "\x1b[35m"
+	case "white":
+		return "\x1b[37m"
+	default:
+		return ""
+	}
+}
+
+// RenderStatusLineWithSessionColor renders the status bar with optional session
+// colour indicator. When sessionColor is non-empty and recognised, a small
+// coloured bullet is prepended to the status text.
+// CC ref: src/commands/color/color.ts — /color sets agent session colour.
+func RenderStatusLineWithSessionColor(status string, width int, theme string, sessionColor string) string {
+	if strings.TrimSpace(sessionColor) != "" {
+		ansi := sessionColorANSI(sessionColor)
+		if ansi != "" {
+			indicator := ansi + "●\x1b[0m "
+			if strings.TrimSpace(status) == "" {
+				status = "ready"
+			}
+			return RenderStatusLineWithTheme(indicator+strings.TrimSpace(status), width, theme)
+		}
+	}
+	return RenderStatusLineWithTheme(status, width, theme)
+}
+
+// RenderStatusLineWithTheme renders the status bar with ANSI styling chosen by theme.
+// Dark (or empty/default) → reverse-video (standard dark terminal appearance).
+// Light → bold + underline (legible on light backgrounds without color inversion).
+// CC ref: utils/settings/types.ts theme — controls colour palette.
+func RenderStatusLineWithTheme(status string, width int, theme string) string {
 	if strings.TrimSpace(status) == "" {
 		status = "ready"
 	}
-	return reverseVideo(padOrTrim(" "+status, width))
+	padded := padOrTrim(" "+status, width)
+	switch theme {
+	case "light", "light-daltonism":
+		// Bold + underline for light backgrounds — avoids color inversion which
+		// renders poorly on white/pale terminals.
+		return "\x1b[1;4m" + padded + "\x1b[0m"
+	default:
+		// Dark (dark, dark-daltonism, or any unrecognised value) → reverse-video.
+		return reverseVideo(padded)
+	}
 }
 
 func RenderPromptLine(prompt PromptState, width int) string {

@@ -49,6 +49,14 @@ type Frame struct {
 	Dialog        *Dialog
 	ReverseSearch *ReverseSearchState
 	ShowCursor    bool
+	// Theme selects the ANSI colour scheme for the status bar.
+	// Mirrors settings.Theme: "dark" (default), "light", "dark-daltonism", "light-daltonism".
+	// CC ref: utils/settings/types.ts theme.
+	Theme         string
+	// SessionColor is the agent/session colour set by /color (swarm multi-agent).
+	// When non-empty, a colour indicator prefix is added to the status bar.
+	// CC ref: src/commands/color/color.ts — /color sets the agent's session colour.
+	SessionColor  string
 }
 
 type ReverseSearchState struct {

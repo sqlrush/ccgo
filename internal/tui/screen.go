@@ -47,6 +47,14 @@ type REPLScreen struct {
 	Height                int
 	Messages              []Message
 	Status                string
+	// Theme controls the ANSI colour scheme used by the status bar.
+	// Mirrors settings.Theme: "dark" (default), "light", "dark-daltonism", "light-daltonism".
+	// CC ref: utils/settings/types.ts theme.
+	Theme                 string
+	// SessionColor is the agent/session colour set by /color (swarm multi-agent).
+	// When non-empty, a colour indicator prefix is added to the status bar.
+	// CC ref: src/commands/color/color.ts — /color sets the agent's session colour.
+	SessionColor          string
 	Prompt                PromptState
 	Dialog                *Dialog
 	Keymap                Keymap
@@ -550,6 +558,8 @@ func (s *REPLScreen) Frame() Frame {
 		Height:        s.Height,
 		BodyLines:     s.Viewport.Visible(),
 		Status:        s.Status,
+		Theme:         s.Theme,
+		SessionColor:  s.SessionColor,
 		Prompt:        s.Prompt,
 		Dialog:        s.Dialog,
 		ReverseSearch: reverseSearch,
