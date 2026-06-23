@@ -2,6 +2,7 @@ package repl
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -305,6 +306,150 @@ func TestTasksHandlerReturnsMessage(t *testing.T) {
 	}
 	if strings.TrimSpace(out.Status) == "" {
 		t.Fatal("expected non-empty tasks output")
+	}
+}
+
+// TestLastAssistantTextExtractsLastMessage verifies that lastAssistantText
+// returns the text from the last assistant message.
+func TestLastAssistantTextExtractsLastMessage(t *testing.T) {
+	history := []contracts.Message{
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "hello"},
+			},
+		},
+		{
+			Type: contracts.MessageAssistant,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "first response"},
+			},
+		},
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "follow-up"},
+			},
+		},
+		{
+			Type: contracts.MessageAssistant,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "last response"},
+			},
+		},
+	}
+	got := lastAssistantText(history)
+	if got != "last response" {
+		t.Fatalf("expected 'last response', got %q", got)
+	}
+}
+
+// TestLastAssistantTextEmptyOnNoAssistant verifies empty string on missing assistant.
+func TestLastAssistantTextEmptyOnNoAssistant(t *testing.T) {
+	history := []contracts.Message{
+		{
+			Type: contracts.MessageUser,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "hello"},
+			},
+		},
+	}
+	got := lastAssistantText(history)
+	if got != "" {
+		t.Fatalf("expected empty string, got %q", got)
+	}
+}
+
+// TestCopyHandlerCopiesLastAssistantText verifies that copyHandler passes the
+// last assistant message text to the injected writer.
+func TestCopyHandlerCopiesLastAssistantText(t *testing.T) {
+	var captured string
+	writer := func(text string) error {
+		captured = text
+		return nil
+	}
+	h := copyHandler(writer)
+	history := []contracts.Message{
+		{
+			Type: contracts.MessageAssistant,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "assistant said this"},
+			},
+		},
+	}
+	out, err := h(context.Background(), CommandContext{History: history})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if captured != "assistant said this" {
+		t.Fatalf("expected captured text %q, got %q", "assistant said this", captured)
+	}
+}
+
+// TestCopyHandlerMissingClipboardToolGraceful verifies that a writer error is
+// handled gracefully — Handled=true with a status mentioning "clipboard".
+func TestCopyHandlerMissingClipboardToolGraceful(t *testing.T) {
+	writer := func(text string) error {
+		return fmt.Errorf("all tools failed")
+	}
+	h := copyHandler(writer)
+	history := []contracts.Message{
+		{
+			Type: contracts.MessageAssistant,
+			Content: []contracts.ContentBlock{
+				{Type: contracts.ContentText, Text: "some text"},
+			},
+		},
+	}
+	out, err := h(context.Background(), CommandContext{History: history})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatalf("expected Handled=true, got false")
+	}
+	if !strings.Contains(strings.ToLower(out.Status), "clipboard") {
+		t.Fatalf("expected 'clipboard' in status, got %q", out.Status)
+	}
+}
+
+// TestFastHandlerWithSetterCallsHaiku verifies that fastHandlerWith calls the
+// setter with the Haiku model ID.
+func TestFastHandlerWithSetterCallsHaiku(t *testing.T) {
+	var called string
+	setter := func(model string) error {
+		called = model
+		return nil
+	}
+	h := fastHandlerWith(setter)
+	out, err := h(context.Background(), CommandContext{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if called != haikuModel {
+		t.Fatalf("expected setter called with %q, got %q", haikuModel, called)
+	}
+}
+
+// TestFastHandlerNilSetterReturnsMessage verifies that nil setter returns
+// an informational message with Handled=true.
+func TestFastHandlerNilSetterReturnsMessage(t *testing.T) {
+	h := fastHandlerWith(nil)
+	out, err := h(context.Background(), CommandContext{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if strings.TrimSpace(out.Status) == "" {
+		t.Fatal("expected non-empty status message")
 	}
 }
 

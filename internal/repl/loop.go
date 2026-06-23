@@ -116,6 +116,19 @@ type Loop struct {
 	// live engine pointer so subsequent turns use the new mode.
 	onModeChange func(contracts.PermissionMode)
 
+	// onModelChange is a seam called when a command outcome requests a model
+	// switch (e.g. /fast switches to Haiku). Nil in production until wired.
+	onModelChange func(model string)
+
+	// titleWriter is a seam for writing OSC-0 terminal title sequences.
+	// When non-nil it is called instead of writing directly to the terminal.
+	// Nil in tests that don't exercise title writes.
+	titleWriter func(title string)
+
+	// thinkingActive tracks whether a thinking_delta streaming sequence is
+	// currently in progress. Reset in finishTurn.
+	thinkingActive bool
+
 	// onOverlaySubmit is a host/test seam called when an overlay submission is
 	// handled internally (resume:/theme:/memory:/trust: prefixes). Nil in tests
 	// that don't exercise the overlay action routing.
@@ -420,8 +433,16 @@ func (l *Loop) applyStreamingDelta(ev conversation.Event) {
 	switch se.Delta["type"] {
 	case "text_delta":
 		chunk, _ = se.Delta["text"].(string)
+		// Exiting thinking mode when text tokens arrive (REPL-23).
+		if l.thinkingActive {
+			l.exitThinkingMode()
+		}
 	case "thinking_delta":
 		chunk, _ = se.Delta["thinking"].(string)
+		// Entering thinking mode on first thinking delta (REPL-23).
+		if !l.thinkingActive {
+			l.enterThinkingMode()
+		}
 	}
 	if chunk == "" {
 		return
@@ -440,7 +461,9 @@ func (l *Loop) applyStreamingDelta(ev conversation.Event) {
 // error message on failure, then clears the running flag.
 func (l *Loop) finishTurn(out turnOutcome) {
 	l.running = false
+	l.thinkingActive = false
 	l.stopSpinner()
+	l.setTerminalTitle("")
 	if out.err != nil {
 		if !errors.Is(out.err, context.Canceled) {
 			l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: out.err.Error()})
@@ -659,7 +682,39 @@ func (l *Loop) applyCommandOutcome(outcome CommandOutcome) bool {
 		// confirmation dialogs intentionally — they are explicit user commands.
 		l.applyModeChange(outcome.NewMode)
 	}
+	if outcome.NewModel != "" && l.onModelChange != nil {
+		l.onModelChange(outcome.NewModel)
+	}
 	return outcome.Exit
+}
+
+// setTerminalTitle writes an OSC-0 terminal title sequence. If titleWriter is
+// wired it is called; otherwise the sequence is written directly to the terminal
+// via WriteString. Empty title clears the title bar.
+func (l *Loop) setTerminalTitle(title string) {
+	var seq string
+	if title == "" {
+		seq = tui.ClearTerminalTitleSequence()
+	} else {
+		seq = tui.TerminalTitleSequence(title)
+	}
+	if l.titleWriter != nil {
+		l.titleWriter(seq)
+		return
+	}
+	_ = l.term.WriteString(seq)
+}
+
+// enterThinkingMode switches the spinner to thinking mode.
+func (l *Loop) enterThinkingMode() {
+	l.spinner = l.spinner.WithThinkingMode(time.Now())
+	l.thinkingActive = true
+}
+
+// exitThinkingMode resets the spinner to normal working mode.
+func (l *Loop) exitThinkingMode() {
+	l.spinner = NewSpinner(l.spinner.start)
+	l.thinkingActive = false
 }
 
 // enqueueAsk adds an ask to the active slot if empty, otherwise to the backlog.
@@ -918,6 +973,7 @@ func (l *Loop) startSpinner() {
 	l.tickCh = ticker.C
 	l.stopTick = ticker.Stop
 	l.screen.Status = l.spinner.Line(now)
+	l.setTerminalTitle("Claude — thinking…")
 }
 
 func (l *Loop) stopSpinner() {

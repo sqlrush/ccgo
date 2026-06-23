@@ -31,6 +31,9 @@ type CommandOutcome struct {
 	// NewMode, when non-empty, switches the REPL permission mode immediately.
 	// The loop refreshes the status bar and fires onModeChange when this is set.
 	NewMode contracts.PermissionMode
+	// NewModel, when non-empty, requests a model switch via the loop's onModelChange
+	// seam. The loop calls onModelChange(NewModel) if the seam is wired.
+	NewModel string
 	// Exit, when true, requests that the REPL loop exit cleanly after applying
 	// the outcome. Used by /exit and /quit.
 	Exit bool

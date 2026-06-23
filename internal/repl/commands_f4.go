@@ -285,16 +285,39 @@ func exitHandler() CommandHandler {
 	}
 }
 
+// haikuModel is the model ID used by /fast to switch to the fastest model tier.
+const haikuModel = "claude-haiku-4-5"
+
+// modelSetterFunc is the DI function type for switching the active model.
+type modelSetterFunc func(model string) error
+
+// fastHandlerWith returns a CommandHandler for /fast backed by the given
+// modelSetter. When setter is nil (production case where wiring is not yet
+// available), an informational message is returned instead of switching models.
+func fastHandlerWith(setter modelSetterFunc) CommandHandler {
+	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
+		if setter == nil {
+			return CommandOutcome{
+				Handled: true,
+				Status:  "⚠️  /fast (Haiku model toggle) requires runtime model-switch infrastructure. Use /model claude-haiku-4-5 to switch models manually.",
+			}, nil
+		}
+		if err := setter(haikuModel); err != nil {
+			return CommandOutcome{Handled: true, Status: "fast: " + err.Error()}, nil
+		}
+		return CommandOutcome{
+			Handled:  true,
+			Status:   fmt.Sprintf("Switched to fast model (%s).", haikuModel),
+			NewModel: haikuModel,
+		}, nil
+	}
+}
+
 // fastHandler returns a CommandHandler for /fast.
 // ⚠️ Full fast-mode (Haiku model toggle) requires model-switch infra wired to
 // the live runner; returns an informational message.
 func fastHandler() CommandHandler {
-	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
-		return CommandOutcome{
-			Handled: true,
-			Status:  "⚠️  /fast (Haiku model toggle) requires runtime model-switch infrastructure. Use /model claude-haiku-4-5 to switch models manually.",
-		}, nil
-	}
+	return fastHandlerWith(nil)
 }
 
 // statsHandler returns a CommandHandler for /stats that shows session message counts.

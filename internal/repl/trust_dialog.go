@@ -15,6 +15,14 @@ type TrustInfo struct {
 	HasMCPServers   bool
 	HasHooks        bool
 	HasAPIKeyHelper bool
+	// MCPServerNames holds the explicit names of detected MCP servers.
+	// When non-empty, the dialog shows "MCP servers: name1, name2" instead of
+	// the generic "MCP servers" label (OVL-18).
+	MCPServerNames []string
+	// HookSources holds the file paths where detected hooks originate.
+	// When non-empty, the dialog shows "Hooks from: path1, path2" instead of
+	// the generic "Hooks" label (OVL-18).
+	HookSources []string
 }
 
 // TrustDialog is the first-run "trust this folder?" overlay.
@@ -64,10 +72,18 @@ func (d *TrustDialog) detectedSources() []string {
 		out = append(out, "Bash permission rules")
 	}
 	if d.info.HasMCPServers {
-		out = append(out, "MCP servers")
+		if len(d.info.MCPServerNames) > 0 {
+			out = append(out, "MCP servers: "+strings.Join(d.info.MCPServerNames, ", "))
+		} else {
+			out = append(out, "MCP servers")
+		}
 	}
 	if d.info.HasHooks {
-		out = append(out, "Hooks")
+		if len(d.info.HookSources) > 0 {
+			out = append(out, "Hooks from: "+strings.Join(d.info.HookSources, ", "))
+		} else {
+			out = append(out, "Hooks")
+		}
 	}
 	if d.info.HasAPIKeyHelper {
 		out = append(out, "API key helper")
