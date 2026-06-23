@@ -24,7 +24,7 @@
 | REPL-18 | Enter 提交 | MANUAL | 前置：输入非空文本；操作：按 Enter；预期：文本提交、模型调用开始 | `src/components/PromptInput/PromptInput.tsx` | ✅ 通过 |
 | REPL-19 | 空提示符忽略 Enter | MANUAL | 前置：提示符为空；操作：按 Enter；预期：不提交（不调用模型） | `src/screens/REPL.tsx:326` | ✅ 通过 |
 | REPL-20 | Ctrl+R 历史增量反向搜索 | MANUAL | 前置：有历史；操作：按 Ctrl+R，输入搜索词；预期：实时过滤历史匹配项；Enter 选中并填入提示符 | `src/hooks/useHistorySearch.ts` | ✅ 通过 |
-| REPL-21 | 流式渲染——助手响应逐 token 实时追加 | MANUAL | 前置：提交 prompt；操作：等待模型流式输出；预期：每到一个 text_delta 立即显示新内容，不等整轮完成 | `src/screens/REPL.tsx:1461` | ❌ 缺失（ccgo loop 仅处理 `EventAssistantMessage`（整轮），不处理 `EventStreamEvent` / text_delta；`internal/repl/render.go:43`） |
+| REPL-21 | 流式渲染——助手响应逐 token 实时追加 | MANUAL | 前置：提交 prompt；操作：等待模型流式输出；预期：每到一个 text_delta 立即显示新内容，不等整轮完成 | `src/screens/REPL.tsx:1461` | ✅（接线就绪，TTY 绘制人工核验）— G3 commit 89a916a：`Loop.applyStreamingDelta` 在每个 text_delta/thinking_delta 更新 `streamingBuf` 并调用 `screen.UpdateLastMessage`；单元测试覆盖 buffer 累积 + 就地更新 + 最终消息重置 |
 | REPL-22 | Spinner 动画（turn 进行中） | MANUAL | 前置：提交 prompt；操作：等待模型响应；预期：状态行显示 Braille-dot 动画旋转 + 时间/动词 | `src/components/Spinner.tsx:62` | ✅ 通过（`internal/repl/spinner.go` Braille-dot + 100ms ticker） |
 | REPL-23 | "thinking…" 专用 spinner 模式（extended thinking） | MANUAL | 前置：启用 extended thinking；操作：提交需要深度思考的请求；预期：spinner 显示 "thinking…" 字样，完成后显示思考耗时（≥2s 展示） | `src/components/Spinner.tsx:123` | ❌ 缺失（ccgo spinner 无 thinking 模式；`internal/repl/render.go` 不处理 thinking block 的流式事件） |
 | REPL-24 | BriefIdleStatus——流式文本可见时隐藏 spinner | MANUAL | 前置：模型流式输出长文本；操作：观察界面；预期：streaming text 出现后 spinner 隐藏（文本本身即反馈） | `src/screens/REPL.tsx:1683` | ❌ 缺失（ccgo 无 streaming text 显示，spinner 与文本无互斥逻辑） |
