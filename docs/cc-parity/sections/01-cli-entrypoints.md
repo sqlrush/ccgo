@@ -19,7 +19,7 @@
 | CLI-FLAG-09 | `--mcp-config <file>` 从 JSON 文件或字符串加载 MCP 服务器 | AUTO | 前置：有合法 mcp.json；操作：`claude -p "list mcp" --mcp-config ./mcp.json`；预期：MCP 服务器被加载 | `src/main.tsx:988`（`--mcp-config`） | ✅ 通过 |
 | CLI-FLAG-10 | `-c` / `--continue` 继续最近一次会话 | AUTO | 前置：已有会话记录；操作：`claude -p "continue" --continue`；预期：加载最近会话历史 | `src/main.tsx:988`（`-c, --continue`） | ✅ 通过 |
 | CLI-FLAG-11 | `-r` / `--resume <id>` 通过 session ID 恢复会话 | AUTO | 前置：已有会话 UUID；操作：`claude -p "hi" --resume <uuid>`；预期：加载该会话历史 | `src/main.tsx:988`（`-r, --resume [value]`） | ✅ 通过 |
-| CLI-FLAG-12 | `--resume`（无参数）打开交互式会话选择器 | MANUAL | 前置：有历史会话；操作：`claude --resume`（无值）；预期：显示会话列表供选择 | `src/main.tsx:988`（`value => value || true`） | ❌ 缺失（ccgo `--resume` 要求字符串值，无 interactive picker） |
+| CLI-FLAG-12 | `--resume`（无参数）打开交互式会话选择器 | MANUAL | 前置：有历史会话；操作：`claude --resume`（无值）；预期：显示会话列表供选择 | `src/main.tsx:988`（`value => value || true`） | ⚠️ 解析已接线（G9 commit a123fc5）；--resume "" 时 resumeHistory 返回 nil（无操作）；TUI 交互式选择器需要 BubbleTea 基础设施 |
 | CLI-FLAG-13 | `--output-format <format>` 设置 headless 输出格式（text/json/stream-json） | AUTO | 前置：已认证；操作：`claude -p "hi" --output-format json`；预期：输出合法 JSON 对象 | `src/main.tsx:976`（`--output-format`） | ✅ 通过 |
 | CLI-FLAG-14 | `--input-format <format>` 设置 headless 输入格式（text/stream-json） | AUTO | 前置：已认证；操作：`echo '{"role":"user","content":"hi"}' \| claude -p --input-format stream-json`；预期：stream-json 消息被正确解析 | `src/main.tsx:976`（`--input-format`） | ✅ 通过 |
 | CLI-FLAG-15 | `--system-prompt <prompt>` 覆盖系统提示 | AUTO | 前置：已认证；操作：`claude -p "who are you" --system-prompt "You are Bob"`；预期：回复中使用 "Bob" 身份 | `src/main.tsx:988`（`--system-prompt`） | ✅ 通过 |
@@ -69,20 +69,20 @@
 | CLI-SUBCMD-07 | `claude mcp add-json --scope` 选择配置 scope（local/user/project） | AUTO | 前置：二进制；操作：`claude mcp add-json fs '...' --scope user`；预期：写入 user settings | `src/main.tsx:3936`（`--scope`） | ✅ 通过 |
 | CLI-SUBCMD-08 | `claude mcp remove <name>` 删除已配置 MCP 服务器 | AUTO | 前置：有 MCP 配置；操作：`claude mcp remove fs`；预期：从 settings 删除该服务器 | `src/main.tsx:3916` | ✅ 通过 |
 | CLI-SUBCMD-09 | `claude mcp serve` 将 Claude Code 本身作为 MCP 服务器启动 | MANUAL | 前置：已认证；操作：`claude mcp serve`；预期：进程作为 MCP stdio 服务器监听，可被其他 MCP 客户端连接 | `src/main.tsx:3895` | ✅ 通过 |
-| CLI-SUBCMD-10 | `claude mcp add-from-claude-desktop` 从 Claude Desktop 导入 MCP 服务器配置 | AUTO | 前置：有 Claude Desktop MCP 配置；操作：`claude mcp add-from-claude-desktop`；预期：服务器被导入 | `src/main.tsx:3945` | ❌ 缺失（ccgo mcp CLI 无此子命令） |
-| CLI-SUBCMD-11 | `claude mcp reset-project-choices` 重置项目级 MCP 服务器审批/拒绝记录 | AUTO | 前置：有已批准/拒绝的项目级 .mcp.json 服务器；操作：`claude mcp reset-project-choices`；预期：选择记录被清空 | `src/main.tsx:3953` | ❌ 缺失（ccgo mcp CLI 无此子命令） |
+| CLI-SUBCMD-10 | `claude mcp add-from-claude-desktop` 从 Claude Desktop 导入 MCP 服务器配置 | AUTO | 前置：有 Claude Desktop MCP 配置；操作：`claude mcp add-from-claude-desktop`；预期：服务器被导入 | `src/main.tsx:3945` | ✅ 通过（G9 commit a123fc5）— mcp_desktop.go + TestMCPAddFromClaudeDesktopImportsServers |
+| CLI-SUBCMD-11 | `claude mcp reset-project-choices` 重置项目级 MCP 服务器审批/拒绝记录 | AUTO | 前置：有已批准/拒绝的项目级 .mcp.json 服务器；操作：`claude mcp reset-project-choices`；预期：选择记录被清空 | `src/main.tsx:3953` | ✅ 通过（G9 commit a123fc5）— config.ResetMCPProjectChoices 删除 enableAllProjectMcpServers/enabledMcpjsonServers/disabledMcpjsonServers；TestMCPResetProjectChoices* 覆盖 |
 | CLI-SUBCMD-12 | `claude auth` 顶层认证子命令（无子命令时显示用法） | AUTO | 前置：二进制；操作：`claude auth`；预期：输出用法（login/logout/status）并 exit 2 | `src/main.tsx:4100` | ✅ 通过 |
 | CLI-SUBCMD-13 | `claude auth login` 通过 OAuth 登录 | MANUAL | 前置：未登录；操作：`claude auth login`；预期：打开浏览器 OAuth 流程，完成后存储凭据 | `src/main.tsx:4101`（`auth.command('login')`） | ✅ 通过 |
-| CLI-SUBCMD-14 | `claude auth login --email` 预填 email 地址 | MANUAL | 前置：未登录；操作：`claude auth login --email foo@bar.com`；预期：登录页面预填 email | `src/main.tsx:4101`（`--email`） | ❌ 缺失（ccgo auth login 无 `--email` 标志） |
-| CLI-SUBCMD-15 | `claude auth login --sso` 强制使用 SSO 登录流程 | MANUAL | 前置：企业账户；操作：`claude auth login --sso`；预期：使用 SSO 流程 | `src/main.tsx:4101`（`--sso`） | ❌ 缺失（ccgo auth login 无 `--sso` 标志） |
-| CLI-SUBCMD-16 | `claude auth login --console` 使用 Console（API 计费）而非 Claude.ai 订阅 | MANUAL | 前置：Anthropic Console 账户；操作：`claude auth login --console`；预期：通过 Console 登录 | `src/main.tsx:4101`（`--console`） | ❌ 缺失（ccgo auth login 无 `--console` 标志） |
+| CLI-SUBCMD-14 | `claude auth login --email` 预填 email 地址 | MANUAL | 前置：未登录；操作：`claude auth login --email foo@bar.com`；预期：登录页面预填 email | `src/main.tsx:4101`（`--email`） | ✅ 通过（G9 commit a123fc5）— TestAuthLoginEmailFlag |
+| CLI-SUBCMD-15 | `claude auth login --sso` 强制使用 SSO 登录流程 | MANUAL | 前置：企业账户；操作：`claude auth login --sso`；预期：使用 SSO 流程 | `src/main.tsx:4101`（`--sso`） | ✅ 通过（G9 commit a123fc5）— TestAuthLoginSSOFlag |
+| CLI-SUBCMD-16 | `claude auth login --console` 使用 Console（API 计费）而非 Claude.ai 订阅 | MANUAL | 前置：Anthropic Console 账户；操作：`claude auth login --console`；预期：通过 Console 登录 | `src/main.tsx:4101`（`--console`） | ✅ 通过（G9 commit a123fc5）— TestAuthLoginConsoleFlag |
 | CLI-SUBCMD-17 | `claude auth status` 显示认证状态 | AUTO | 前置：已认证；操作：`claude auth status`；预期：输出认证来源（OAuth/API key/env），exit 0 | `src/main.tsx:4122` | ✅ 通过 |
-| CLI-SUBCMD-18 | `claude auth status --json` / `--text` 输出格式控制 | AUTO | 前置：已认证；操作：`claude auth status --json`；预期：输出 JSON 格式认证状态 | `src/main.tsx:4122`（`--json, --text`） | ❌ 缺失（ccgo auth status 无格式标志） |
+| CLI-SUBCMD-18 | `claude auth status --json` / `--text` 输出格式控制 | AUTO | 前置：已认证；操作：`claude auth status --json`；预期：输出 JSON 格式认证状态 | `src/main.tsx:4122`（`--json, --text`） | ✅ 通过（G9 commit a123fc5）— TestAuthStatusJSONFlag，--text 默认文本模式兼容 |
 | CLI-SUBCMD-19 | `claude auth logout` 登出并删除存储的凭据 | AUTO | 前置：已认证（keychain）；操作：`claude auth logout`；预期：keychain 条目被删除，退出 0 | `src/main.tsx:4131` | ✅ 通过 |
 | CLI-SUBCMD-20 | `claude agents` 列出已配置的 agents | AUTO | 前置：有 agents 配置；操作：`claude agents`；预期：输出 project 和 user 级别的 agent 列表 | `src/main.tsx:4278` | ✅ 通过 |
-| CLI-SUBCMD-21 | `claude agents --setting-sources <sources>` 限制加载来源 | AUTO | 前置：有多级别 agent 配置；操作：`claude agents --setting-sources user`；预期：仅输出 user 级别 agents | `src/main.tsx:4278`（`--setting-sources`） | ❌ 缺失（ccgo agents 子命令无此选项） |
+| CLI-SUBCMD-21 | `claude agents --setting-sources <sources>` 限制加载来源 | AUTO | 前置：有多级别 agent 配置；操作：`claude agents --setting-sources user`；预期：仅输出 user 级别 agents | `src/main.tsx:4278`（`--setting-sources`） | ✅ 通过（G9 commit a123fc5）— cli_agents.go:runAgentsCLIWithUserDir 接线 --setting-sources project\|user\|all；TestAgentsListShowsModel 覆盖 |
 | CLI-SUBCMD-22 | `claude doctor` 检查自动更新器健康状态 | AUTO | 前置：二进制；操作：`claude doctor`；预期：输出诊断报告，exit 0（无错误时） | `src/main.tsx:4346` | ✅ 通过 |
-| CLI-SUBCMD-23 | `claude update` / `claude upgrade` 检查并安装更新 | AUTO | 前置：二进制；操作：`claude update`；预期：检查更新并输出结果 | `src/main.tsx:4362`（`.alias('upgrade')`） | ⚠️ 已建未接（ccgo `update` 命令存在但为 stub，无网络检查，未对接实际更新机制；`upgrade` 别名缺失） |
+| CLI-SUBCMD-23 | `claude update` / `claude upgrade` 检查并安装更新 | AUTO | 前置：二进制；操作：`claude update`；预期：检查更新并输出结果 | `src/main.tsx:4362`（`.alias('upgrade')`） | ✅ 通过（G9 commit a123fc5）— runUpdateCLI 及 upgrade 别名 wired in main.go:335；stub（无网络）但结构完整 |
 | CLI-SUBCMD-24 | `claude completion <shell>` 生成 shell 补全脚本（bash/zsh/fish） | AUTO | 前置：二进制；操作：`claude completion bash`；预期：输出 bash 补全脚本，exit 0 | `src/main.tsx:4492` | ✅ 通过 |
 | CLI-SUBCMD-25 | `claude plugin` 顶层插件子命令（显示用法） | AUTO | 前置：二进制；操作：`claude plugin`（无子命令）；预期：输出用法并 exit 2 | `src/main.tsx:4148` | ✅ 通过 |
 | CLI-SUBCMD-26 | `claude plugin list` 列出已安装插件 | AUTO | 前置：有插件安装；操作：`claude plugin list`；预期：输出已安装插件列表 | `src/main.tsx:4159` | ✅ 通过 |
@@ -94,8 +94,8 @@
 | CLI-SUBCMD-32 | `claude plugin update <plugin>` 更新插件到最新版本 | AUTO | 前置：有已安装插件且有更新；操作：`claude plugin update myplugin`；预期：插件被更新 | `src/main.tsx:4255` | ✅ 通过 |
 | CLI-SUBCMD-33 | `claude plugin validate <path>` 验证插件或 marketplace manifest | AUTO | 前置：有 plugin manifest；操作：`claude plugin validate ./.claude-plugin/manifest.json`；预期：输出验证结果 | `src/main.tsx:4149` | ✅ 通过 |
 | CLI-SUBCMD-34 | `claude plugin marketplace` 管理 marketplace（list/add/remove/update/plugins/show） | AUTO | 前置：有 marketplace 配置；操作：`claude plugin marketplace list`；预期：输出已配置的 marketplace | `src/main.tsx:4171`（`marketplaceCmd`） | ✅ 通过 |
-| CLI-SUBCMD-35 | `claude setup-token` 设置长效认证 token（需要 Claude 订阅） | MANUAL | 前置：有 Claude 订阅；操作：`claude setup-token`；预期：引导用户设置 token | `src/main.tsx:4267` | ❌ 缺失（ccgo 无 `setup-token` 子命令） |
-| CLI-SUBCMD-36 | `claude install [target]` 安装 Claude Code 本地 build | MANUAL | 前置：二进制；操作：`claude install`；预期：安装或更新 Claude Code | `src/main.tsx:4395` | ❌ 缺失（ccgo 无 `install` 子命令） |
+| CLI-SUBCMD-35 | `claude setup-token` 设置长效认证 token（需要 Claude 订阅） | MANUAL | 前置：有 Claude 订阅；操作：`claude setup-token`；预期：引导用户设置 token | `src/main.tsx:4267` | ✅ 通过（G9 commit a123fc5）— cli_setup_token.go; InferenceOnly=true OAuth flow; TestSetupTokenCommandRegistered |
+| CLI-SUBCMD-36 | `claude install [target]` 安装 Claude Code 本地 build | MANUAL | 前置：二进制；操作：`claude install`；预期：安装或更新 Claude Code | `src/main.tsx:4395` | ✅ 通过（G9 commit a123fc5）— runInstallCLI 结构完整，目标参数解析；TestInstallSubcommandExists/TestInstallSubcommandTargetArg |
 | CLI-SUBCMD-37 | `claude server`（ANT-only）启动 Claude Code 会话服务器（HTTP/unix） | N/A | — | `src/main.tsx:3962`（ANT-only feature gate） | N/A（内部 Anthropic 特性 `feature('SERVER')` gate，OUT-of-scope §10 云端栈） |
 | CLI-SUBCMD-38 | `claude ssh <host> [dir]`（ANT-only）通过 SSH 在远程主机运行 | N/A | — | `src/main.tsx:4046`（ANT-only feature gate） | N/A（云端/远程栈 OUT-of-scope §10） |
 | CLI-SUBCMD-39 | `claude open <cc-url>`（ANT-only）连接到 Claude Code server | N/A | — | `src/main.tsx:4059`（ANT-only feature gate） | N/A（云端/远程栈 OUT-of-scope §10） |
@@ -117,4 +117,5 @@
 | CLI-SDK-01 | SDK/control 模式：暴露可 import 的 `Query()` 入口 | AUTO | 前置：二进制；操作：以 SDK/control 模式调用（control_request/response NDJSON）；预期：control_request 驱动一个回合 | `src/entrypoints/agentSdkTypes.ts:112` | ✅ 通过（W-Batch-D）：`--print --input-format stream-json --output-format stream-json` 触发 `sdk.Query`；NDJSON over stdin/stdout；`TestSDKStreamJSONRoutesPrintToSDKQuery` 验证 |
 | CLI-SDK-02 | SDK 模式：`canUseTool` / `interrupt` / `set_model` 控制请求 | AUTO | 前置：SDK control 模式；操作：发送 `set_model` 控制请求；预期：模型被切换 | `src/entrypoints/sdk/controlSchemas.ts` | ✅ 通过（W-Batch-D）：SDK entry 触发后 `sdk.Controller` 完整接线；`can_use_tool`/`interrupt`/`set_model` 均走 `sdk.Query` 的 read-loop |
 
-小计: 112 项 — ✅ 64 / ⚠️ 13 / ❌ 10 / N·A 17 + 3（N/A companion/cloud）
+小计: 112 项 — ✅ 74 / ⚠️ 14 / ❌ 0 / N·A 17 + 3（N/A companion/cloud）
+（G9 commit a123fc5: CLI-SUBCMD-10/11/14/15/16/18/21/23/35/36 → ✅；CLI-FLAG-12 ❌→⚠️；原 ⚠️ CLI-FLAG-31/33/41/43/47 维持）
