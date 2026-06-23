@@ -1369,6 +1369,11 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	if err != nil {
 		return contracts.ToolResult{}, err
 	}
+	// input.Model overrides the agentfile model when set (TOOL-TASK-04 / ORCH-05).
+	effectiveModel := agent.Model
+	if input.Model != "" {
+		effectiveModel = input.Model
+	}
 	run, err := runtime.Start(session.SidechainOptions{
 		ID:                  taskID,
 		AgentType:           input.SubagentType,
@@ -1379,7 +1384,7 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		Description:         input.Description,
 		AgentPath:           agent.Path,
 		AgentPrompt:         agent.Prompt,
-		AgentModel:          agent.Model,
+		AgentModel:          effectiveModel,
 		AgentPermissionMode: string(agent.PermissionMode),
 		AgentAllowedTools:   append([]string(nil), agent.AllowedTools...),
 	})
@@ -1427,15 +1432,16 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		return contracts.ToolResult{}, err
 	}
 	structured := map[string]any{
-		"success":       true,
-		"type":          "task",
-		"status":        session.SidechainStatusRunning,
-		"run":           input.Run,
-		"sidechain_id":  run.ID,
-		"subagent_type": input.SubagentType,
-		"description":   input.Description,
-		"path":          run.Path,
-		"worktree_path": worktree.Path,
+		"success":            true,
+		"type":               "task",
+		"status":             session.SidechainStatusRunning,
+		"run":                input.Run,
+		"run_in_background":  input.RunBackground,
+		"sidechain_id":       run.ID,
+		"subagent_type":      input.SubagentType,
+		"description":        input.Description,
+		"path":               run.Path,
+		"worktree_path":      worktree.Path,
 	}
 	if worktree.Owned {
 		structured["worktree_owned"] = true
@@ -1455,8 +1461,12 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	if hasAgent && agent.Prompt != "" {
 		structured["agent_prompt_chars"] = len(agent.Prompt)
 	}
-	if hasAgent && agent.Model != "" {
-		structured["agent_model"] = agent.Model
+	// Report the effective model (input override takes precedence over agentfile model).
+	if effectiveModel != "" {
+		structured["agent_model"] = effectiveModel
+	}
+	if input.Model != "" {
+		structured["model_override"] = input.Model
 	}
 	if hasAgent && agent.PermissionMode != "" {
 		structured["agent_permission_mode"] = string(agent.PermissionMode)

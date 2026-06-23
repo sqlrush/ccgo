@@ -15,6 +15,7 @@ import (
 	"ccgo/internal/mcp"
 	"ccgo/internal/memory"
 	nativepkg "ccgo/internal/native"
+	"ccgo/internal/orchestration"
 	"ccgo/internal/rewind"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -186,6 +187,13 @@ type Runner struct {
 	// RewindStore, when non-nil, holds the content-addressed backup store used by
 	// RewindWriter.Capture. Must be set together with RewindWriter.
 	RewindStore *rewind.Store
+
+	// AgentRegistry tracks in-process background agents started via Task
+	// run_in_background=true (ORCH-03). When non-nil, background tasks are
+	// dispatched to this registry and callers return immediately with
+	// status:"async_launched". When nil, a session-local registry is allocated
+	// automatically on first use.
+	AgentRegistry *orchestration.AgentRegistry
 }
 
 type MCPConfig struct {

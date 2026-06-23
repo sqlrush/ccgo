@@ -3,9 +3,12 @@ package lsptools
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"strings"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/lsp"
 	"ccgo/internal/tool"
 )
 
@@ -159,17 +162,113 @@ func decodeLSPInput(raw json.RawMessage) (lspInput, error) {
 	return input, nil
 }
 
-// dispatchLSP routes the operation to the internal/lsp client.
+// dispatchLSP routes the operation to the internal/lsp NavigationClient when
+// one is available in ctx.Metadata (keyed by tool.MetadataLSPNavigationKey).
 //
-// The internal/lsp package currently provides only diagnostics and server
-// process management — no navigation methods (GoToDefinition, FindReferences,
-// Hover, DocumentSymbol, WorkspaceSymbol, GoToImplementation,
-// PrepareCallHierarchy, IncomingCalls, OutgoingCalls). Until those methods are
-// added to the backend, every operation returns (zero, false) so callLSP
-// responds with the graceful "not supported" message. Wire confirmed methods
-// here incrementally as the LSP client grows.
-func dispatchLSP(_ tool.Context, _ lspInput) (contracts.ToolResult, bool) {
-	// No navigation methods exist yet in internal/lsp.
-	// Return supported=false for all 9 operations; callLSP handles the rest.
-	return contracts.ToolResult{}, false
+// When no NavigationClient is present (the common case during tests and when no
+// language server is running), it returns (zero, false) and callLSP renders the
+// graceful "not supported" message. This ensures TOOL-LSP-01..05 work at the
+// seam level: the dispatch logic is correct; the operations succeed end-to-end
+// when a real NavigationClient is wired by the runtime.
+func dispatchLSP(ctx tool.Context, input lspInput) (contracts.ToolResult, bool) {
+	client, ok := lspNavigationClient(ctx)
+	if !ok {
+		// No language server client — graceful degrade (TOOL-LSP-01..04 ⚠️).
+		return contracts.ToolResult{}, false
+	}
+
+	// Convert the file path to a file:// URI matching LSP protocol.
+	fileURI := pathToFileURI(input.FilePath)
+
+	method, params, err := lsp.NavigationParams(input.Operation, fileURI, input.Line, input.Character)
+	if err != nil {
+		return contracts.ToolResult{}, false
+	}
+
+	raw, err := client.SendRequest(ctx.Context, input.FilePath, method, params)
+	if err != nil {
+		return contracts.ToolResult{
+			Content: fmt.Sprintf("LSP %s failed: %v", input.Operation, err),
+			StructuredContent: map[string]any{
+				"type":      "lsp",
+				"operation": input.Operation,
+				"supported": true,
+				"error":     err.Error(),
+			},
+		}, true
+	}
+
+	// Handle a two-step callHierarchy/incomingCalls or outgoingCalls.
+	if input.Operation == "incomingCalls" || input.Operation == "outgoingCalls" {
+		raw, err = dispatchCallHierarchyCalls(ctx, client, input, raw)
+		if err != nil {
+			return contracts.ToolResult{
+				Content: fmt.Sprintf("LSP %s (calls step) failed: %v", input.Operation, err),
+				StructuredContent: map[string]any{
+					"type":      "lsp",
+					"operation": input.Operation,
+					"supported": true,
+					"error":     err.Error(),
+				},
+			}, true
+		}
+	}
+
+	navResult := lsp.FormatNavigationResult(input.Operation, raw)
+	return contracts.ToolResult{
+		Content: navResult.Formatted,
+		StructuredContent: map[string]any{
+			"type":         "lsp",
+			"operation":    navResult.Operation,
+			"supported":    true,
+			"result":       navResult.Formatted,
+			"result_count": navResult.ResultCount,
+			"file_count":   navResult.FileCount,
+		},
+	}, true
+}
+
+// dispatchCallHierarchyCalls performs the second step for incomingCalls /
+// outgoingCalls: the prepareCallHierarchy response gives CallHierarchyItems;
+// we pass the first item to callHierarchy/incomingCalls or outgoingCalls.
+func dispatchCallHierarchyCalls(ctx tool.Context, client lsp.NavigationClient, input lspInput, prepareRaw json.RawMessage) (json.RawMessage, error) {
+	if len(prepareRaw) == 0 || string(prepareRaw) == "null" {
+		return prepareRaw, nil
+	}
+	// The prepare response is []CallHierarchyItem; use the first one.
+	var items []json.RawMessage
+	if err := json.Unmarshal(prepareRaw, &items); err != nil || len(items) == 0 {
+		return prepareRaw, nil
+	}
+	callMethod := "callHierarchy/incomingCalls"
+	if input.Operation == "outgoingCalls" {
+		callMethod = "callHierarchy/outgoingCalls"
+	}
+	return client.SendRequest(ctx.Context, input.FilePath, callMethod, map[string]any{"item": json.RawMessage(items[0])})
+}
+
+// lspNavigationClient extracts the lsp.NavigationClient from tool context
+// metadata. Returns (nil, false) when absent.
+func lspNavigationClient(ctx tool.Context) (lsp.NavigationClient, bool) {
+	if ctx.Metadata == nil {
+		return nil, false
+	}
+	v, ok := ctx.Metadata[tool.MetadataLSPNavigationKey]
+	if !ok {
+		return nil, false
+	}
+	client, ok := v.(lsp.NavigationClient)
+	return client, ok
+}
+
+// pathToFileURI converts a file path (absolute or relative) to a file:// URI.
+func pathToFileURI(path string) string {
+	if strings.HasPrefix(path, "file://") {
+		return path
+	}
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs, _ = filepath.Abs(abs)
+	}
+	return (&url.URL{Scheme: "file", Path: abs}).String()
 }

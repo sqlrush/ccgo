@@ -12,6 +12,7 @@ import (
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/orchestration"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 )
@@ -1627,6 +1628,128 @@ func TestTaskToolDefinitionIsPermissionSafeButOrdered(t *testing.T) {
 	}
 	if task.IsDestructive(nil) {
 		t.Fatalf("Task should not be destructive")
+	}
+}
+
+// TestTaskToolModelOverrideWritesToSidechainMetadata verifies TOOL-TASK-04 / ORCH-05:
+// when input.Model is set, the effective model stored in sidechain metadata
+// is the input model, not the agentfile model.
+func TestTaskToolModelOverrideWritesToSidechainMetadata(t *testing.T) {
+	// Provide an agentfile with model=sonnet; input overrides with haiku.
+	ctx, transcriptPath := taskContextWithAgents(t, []tool.AgentInfo{{
+		Name:  "general-purpose",
+		Model: "sonnet",
+	}})
+	executor := taskExecutor(t)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_model_override",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"test","prompt":"do stuff","subagent_type":"general-purpose","model":"haiku"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %#v", result)
+	}
+	// Structured content must reflect the override.
+	if result.StructuredContent["agent_model"] != "haiku" {
+		t.Fatalf("agent_model = %v, want haiku", result.StructuredContent["agent_model"])
+	}
+	if result.StructuredContent["model_override"] != "haiku" {
+		t.Fatalf("model_override = %v, want haiku", result.StructuredContent["model_override"])
+	}
+	// Sidechain metadata must carry the override model so the runner uses it.
+	states, err := session.ListSidechainStates(transcriptPath, ctx.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 sidechain, got %d", len(states))
+	}
+	if states[0].Metadata.AgentModel != "haiku" {
+		t.Fatalf("sidechain AgentModel = %q, want haiku", states[0].Metadata.AgentModel)
+	}
+}
+
+// TestTaskToolRunBackgroundSetsStructuredFlag verifies TOOL-TASK-02 / ORCH-03:
+// when run_in_background=true the structured result carries run_in_background=true
+// so the conversation layer can route it to the AgentRegistry.
+func TestTaskToolRunBackgroundSetsStructuredFlag(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bg_task",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"bg test","prompt":"run in bg","subagent_type":"general-purpose","run_in_background":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error: %v", result.Content)
+	}
+	if result.StructuredContent["run_in_background"] != true {
+		t.Fatalf("run_in_background not set in structured content: %#v", result.StructuredContent)
+	}
+	if result.StructuredContent["type"] != "task" {
+		t.Fatalf("type = %v, want task", result.StructuredContent["type"])
+	}
+}
+
+// TestBackgroundTaskRunInBackgroundFlag verifies that the structured result from
+// callTask carries run_in_background=true when the input requests it, so the
+// conversation layer (maybeRunTaskSubagent) can detect and route to AgentRegistry.
+func TestBackgroundTaskRunInBackgroundFlag(t *testing.T) {
+	ctx, _ := taskContext(t)
+	executor := taskExecutor(t)
+
+	// run_in_background without run — should still record the flag.
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bg_flag",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"flag test","prompt":"check flag","subagent_type":"general-purpose","run_in_background":true}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error: %v", result.Content)
+	}
+	if v, _ := result.StructuredContent["run_in_background"].(bool); !v {
+		t.Fatalf("expected run_in_background=true in structured content, got %#v", result.StructuredContent["run_in_background"])
+	}
+}
+
+// TestAgentRegistryBackgroundDispatch verifies the AgentRegistry dispatch
+// path used by background task launch (ORCH-03): the registry goroutine
+// runs, stores the outcome, and Harvest returns it.
+func TestAgentRegistryBackgroundDispatch(t *testing.T) {
+	reg := orchestration.NewAgentRegistry()
+	done := make(chan struct{})
+	reg.StartBackground("bg-1", func(_ context.Context) orchestration.Outcome {
+		defer close(done)
+		return orchestration.Outcome{Summary: "background done"}
+	})
+	// Should be running immediately.
+	snap := reg.Snapshot()
+	if len(snap) != 1 || snap[0].ID != "bg-1" {
+		t.Fatalf("snapshot after start = %#v", snap)
+	}
+	// Wait for the goroutine.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background goroutine did not complete")
+	}
+	out, ok := reg.Harvest("bg-1")
+	if !ok {
+		t.Fatal("Harvest returned false, expected done agent")
+	}
+	if out.Summary != "background done" {
+		t.Fatalf("summary = %q, want %q", out.Summary, "background done")
 	}
 }
 

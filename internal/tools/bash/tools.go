@@ -24,6 +24,11 @@ const (
 	maxTimeoutMillis      = 600_000
 	processInterruptGrace = 200 * time.Millisecond
 	blockedSleepGuidance  = "Run blocking commands in the background with run_in_background: true -- you'll get a completion notification when done. Use BashOutput to read streaming output from a background command. If you genuinely need a delay, keep it under 2 seconds."
+
+	// maxBashOutputChars matches CC's EndTruncatingAccumulator limit (2^25 chars,
+	// src/utils/stringUtils.ts:88). Output beyond this limit is truncated from the
+	// end and a marker is appended.
+	maxBashOutputChars = 1 << 25 // 33 554 432
 )
 
 var bashSemanticNumberLiteralRE = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
@@ -1223,6 +1228,20 @@ func signalBashProcessGroup(cmd *exec.Cmd, signal syscall.Signal) error {
 	return err
 }
 
+// truncateBashOutput truncates s to at most maxBashOutputChars characters,
+// appending a marker that reports how many KB were removed. This matches CC's
+// EndTruncatingAccumulator (src/utils/stringUtils.ts:186-188).
+// Returns (original, 0) when no truncation occurs.
+func truncateBashOutput(s string) (string, int) {
+	if len(s) <= maxBashOutputChars {
+		return s, 0
+	}
+	removed := len(s) - maxBashOutputChars
+	removedKB := (removed + 1023) / 1024 // round up to nearest KB
+	truncated := s[:maxBashOutputChars]
+	return truncated + fmt.Sprintf("\n... [output truncated - %dKB removed]", removedKB), removedKB
+}
+
 func formatBashContent(result bashResult) string {
 	var b strings.Builder
 	if result.Stdout != "" {
@@ -1234,7 +1253,10 @@ func formatBashContent(result bashResult) string {
 		}
 		b.WriteString(result.Stderr)
 	}
-	content := strings.TrimRight(b.String(), "\n")
+	combined := b.String()
+	// Truncate oversized output before trimming/annotating, matching CC behaviour.
+	combined, _ = truncateBashOutput(combined)
+	content := strings.TrimRight(combined, "\n")
 	if result.TimedOut {
 		return appendStatusLine(content, fmt.Sprintf("Command timed out after %dms.", result.TimeoutMS))
 	}

@@ -11,6 +11,7 @@ import (
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/orchestration"
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
@@ -27,6 +28,34 @@ func (r Runner) maybeRunTaskSubagent(ctx context.Context, use contracts.ToolUse,
 		result.Content = "task result requested subagent run but did not include sidechain_id"
 		return
 	}
+
+	// run_in_background=true: dispatch asynchronously to the AgentRegistry and
+	// return immediately with status:"async_launched" (ORCH-03 / TOOL-TASK-02).
+	// r.AgentRegistry is guaranteed non-nil because RunTurn initialises it before
+	// making the value copy that eventually calls this function.
+	if isBackgroundTask(result.StructuredContent) && r.AgentRegistry != nil {
+		r.AgentRegistry.StartBackground(sidechainID, func(bgCtx context.Context) orchestration.Outcome {
+			outcome, err := r.runTaskSubagentOnce(bgCtx, sidechainID)
+			if err != nil {
+				return orchestration.Outcome{Err: fmt.Errorf("background task %s: %w", sidechainID, err)}
+			}
+			return orchestration.Outcome{Summary: outcome.Summary}
+		})
+		desc, _ := result.StructuredContent["description"].(string)
+		result.Content = fmt.Sprintf("Task launched in background: %s\nSidechain ID: %s\nUse TaskOutput to check status.", desc, sidechainID)
+		result.StructuredContent["status"] = "async_launched"
+		result.StructuredContent["async_launched"] = true
+		r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
+			ToolUseID: use.ID,
+			Type:      "task_agent_background_launched",
+			Data: map[string]any{
+				"task_id":      sidechainID,
+				"sidechain_id": sidechainID,
+			},
+		}})
+		return
+	}
+
 	r.emit(Event{Type: EventToolProgress, ToolProgress: &contracts.ToolProgress{
 		ToolUseID: use.ID,
 		Type:      "task_agent_started",
@@ -311,8 +340,21 @@ func taskToolRunRequested(structured map[string]any) bool {
 	if kind, _ := structured["type"].(string); kind != "task" {
 		return false
 	}
-	value, _ := structured["run"].(bool)
-	return value
+	// run=true triggers synchronous execution.
+	// run_in_background=true triggers asynchronous execution via AgentRegistry.
+	run, _ := structured["run"].(bool)
+	runBackground, _ := structured["run_in_background"].(bool)
+	return run || runBackground
+}
+
+// isBackgroundTask reports whether the task result was started with
+// run_in_background=true, signalling that it should be dispatched asynchronously.
+func isBackgroundTask(structured map[string]any) bool {
+	if structured == nil {
+		return false
+	}
+	v, _ := structured["run_in_background"].(bool)
+	return v
 }
 
 func taskToolResultString(structured map[string]any, keys ...string) string {

@@ -21,12 +21,21 @@ type ServerProcessOptions struct {
 	FrameLimit        int64
 }
 
+// ServerProcess represents a running LSP server subprocess. It provides
+// bidirectional communication via stdin (requests) and stdout (responses +
+// diagnostics notifications). An internal RPCMux multiplexes stdout so that
+// both SendRequest callers and the diagnostics handler receive their messages.
 type ServerProcess struct {
 	cmd               *exec.Cmd
 	cancel            context.CancelFunc
 	done              chan ServerProcessResult
 	stdin             io.WriteCloser
 	managerStatusPath string
+
+	// mux multiplexes stdout messages: responses go to SendRequest callers,
+	// notifications go to the diagnostics snapshot writer. Initialised by
+	// StartServerProcess.
+	mux *RPCMux
 }
 
 type ServerProcessResult struct {

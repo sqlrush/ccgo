@@ -1058,3 +1058,92 @@ func strconvQuote(value string) string {
 	}
 	return string(data)
 }
+
+// TestTruncateBashOutputShortOutput verifies that short output is returned unchanged.
+func TestTruncateBashOutputShortOutput(t *testing.T) {
+	short := strings.Repeat("a", 100)
+	got, removedKB := truncateBashOutput(short)
+	if got != short {
+		t.Fatalf("expected unchanged short output, got len=%d", len(got))
+	}
+	if removedKB != 0 {
+		t.Fatalf("expected removedKB=0, got %d", removedKB)
+	}
+}
+
+// TestTruncateBashOutputAtLimit verifies that output exactly at the limit is unchanged.
+func TestTruncateBashOutputAtLimit(t *testing.T) {
+	exactly := strings.Repeat("b", maxBashOutputChars)
+	got, removedKB := truncateBashOutput(exactly)
+	if got != exactly {
+		t.Fatalf("expected unchanged output at limit, got len=%d", len(got))
+	}
+	if removedKB != 0 {
+		t.Fatalf("expected removedKB=0, got %d", removedKB)
+	}
+}
+
+// TestTruncateBashOutputExceedsLimit verifies that output beyond the limit is truncated
+// and the marker is appended with KB count, matching CC's EndTruncatingAccumulator format.
+func TestTruncateBashOutputExceedsLimit(t *testing.T) {
+	// One byte over the limit.
+	overBy := 1
+	big := strings.Repeat("x", maxBashOutputChars+overBy)
+	got, removedKB := truncateBashOutput(big)
+	if removedKB == 0 {
+		t.Fatal("expected removedKB > 0 for oversized input")
+	}
+	if len(got) <= maxBashOutputChars {
+		// got includes the marker, which makes it slightly longer than the content
+		// portion but must contain only the first maxBashOutputChars chars of data.
+		if !strings.HasPrefix(got, strings.Repeat("x", maxBashOutputChars)) {
+			t.Fatal("expected first maxBashOutputChars chars preserved")
+		}
+	}
+	if !strings.Contains(got, "[output truncated") {
+		t.Fatalf("expected truncation marker in output, got: %q", got[max(0, len(got)-100):])
+	}
+	if !strings.Contains(got, "KB removed]") {
+		t.Fatalf("expected 'KB removed]' in marker, got: %q", got[max(0, len(got)-100):])
+	}
+}
+
+// TestTruncateBashOutputLarge verifies behaviour with a large oversized input.
+func TestTruncateBashOutputLarge(t *testing.T) {
+	// 2x the limit.
+	big := strings.Repeat("z", maxBashOutputChars*2)
+	got, removedKB := truncateBashOutput(big)
+	// Content portion must start with the correct prefix.
+	if !strings.HasPrefix(got, strings.Repeat("z", maxBashOutputChars)) {
+		t.Fatal("prefix mismatch: first maxBashOutputChars chars not preserved")
+	}
+	// removedKB should reflect the removed portion.
+	wantRemovedKB := (maxBashOutputChars + 1023) / 1024
+	if removedKB < wantRemovedKB {
+		t.Fatalf("removedKB = %d, want >= %d", removedKB, wantRemovedKB)
+	}
+	if !strings.Contains(got, "[output truncated") {
+		t.Fatal("expected truncation marker")
+	}
+}
+
+// TestFormatBashContentTruncation verifies that formatBashContent truncates stdout
+// exceeding maxBashOutputChars, preserving the truncation marker in the formatted output.
+func TestFormatBashContentTruncation(t *testing.T) {
+	big := strings.Repeat("A", maxBashOutputChars+1024*100) // 100KB over limit
+	result := formatBashContent(bashResult{Stdout: big, Stderr: "", ExitCode: 0})
+	if !strings.Contains(result, "[output truncated") {
+		t.Fatalf("expected truncation marker in formatBashContent output")
+	}
+	// Must not contain the full oversized input as-is.
+	if len(result) >= len(big) {
+		t.Fatalf("expected output shorter than input (got %d >= %d)", len(result), len(big))
+	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

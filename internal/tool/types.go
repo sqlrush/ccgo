@@ -134,6 +134,16 @@ const (
 	MetadataAvailableAgentsKey     = "ccgo.available_agents"
 	MetadataToolRegistryKey        = "ccgo.tool.registry"
 	MetadataMessagesKey            = "ccgo.messages"
+	// MetadataAgentRegistryKey holds an *orchestration.AgentRegistry for the
+	// current session. Background tasks (run_in_background=true) are dispatched
+	// via this registry so callers are not blocked.
+	MetadataAgentRegistryKey = "ccgo.agent_registry"
+
+	// MetadataLSPNavigationKey holds an lsp.NavigationClient for the current
+	// session. When present, the LSP tool dispatches navigation requests through
+	// this client instead of returning "not supported". The value must satisfy
+	// the lsp.NavigationClient interface.
+	MetadataLSPNavigationKey = "ccgo.lsp.navigation"
 
 	HookPreToolUse        = "PreToolUse"
 	HookPostToolUse       = "PostToolUse"

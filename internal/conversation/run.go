@@ -33,6 +33,7 @@ import (
 	msgs "ccgo/internal/messages"
 	modelpkg "ccgo/internal/model"
 	nativepkg "ccgo/internal/native"
+	"ccgo/internal/orchestration"
 	"ccgo/internal/outputstyles"
 	"ccgo/internal/permissions"
 	pluginpkg "ccgo/internal/plugins"
@@ -59,6 +60,11 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	r.maybeWriteIntegrationsManifest()
 	r.maybeWriteLSPManagerStatus()
 	r.maybeStartLSPServers(ctx)
+	// Ensure a shared AgentRegistry is available for background task dispatch
+	// (ORCH-03). Initialised here so the pointer is stable across all turns.
+	if r.AgentRegistry == nil {
+		r.AgentRegistry = orchestration.NewAgentRegistry()
+	}
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
@@ -527,6 +533,11 @@ func (r Runner) toolMetadata() map[string]any {
 	// session-scoped tracker. Used for post-compact file reattachment (COMPACT-05).
 	if r.ReadState != nil {
 		metadata[filetools.MetadataReadStateKey] = r.ReadState
+	}
+	// Inject the AgentRegistry so task tools can harvest background-agent results
+	// via TaskOutput (ORCH-03 / TOOL-TASK-02).
+	if r.AgentRegistry != nil {
+		metadata[tool.MetadataAgentRegistryKey] = r.AgentRegistry
 	}
 	return metadata
 }
