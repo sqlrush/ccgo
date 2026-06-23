@@ -3,13 +3,24 @@ package conversation
 import (
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
+	pluginpkg "ccgo/internal/plugins"
 )
 
 func (c *MCPConfig) MergedSettings() contracts.Settings {
 	if c == nil {
 		return contracts.Settings{}
 	}
-	return config.MergeSettings(c.UserSettings, c.ProjectSettings, c.LocalSettings, c.PolicySettings)
+	// PLUGIN-20: plugin settings.json contributes "agent" as the lowest-priority
+	// base (below user/project/local/policy). Mirrors CC getPluginSettingsBase().
+	// CC ref: utils/settings/settingsCache.ts:66-79; utils/settings/settings.ts:660-668.
+	pluginBase := contracts.Settings{}
+	if c.CWD != "" {
+		pluginBase = pluginpkg.PluginSettingsBase(pluginpkg.InstalledPluginDirs(c.CWD), contracts.Settings{
+			EnabledPlugins:         c.UserSettings.EnabledPlugins,
+			ExtraKnownMarketplaces: c.UserSettings.ExtraKnownMarketplaces,
+		})
+	}
+	return config.MergeSettings(pluginBase, c.UserSettings, c.ProjectSettings, c.LocalSettings, c.PolicySettings)
 }
 
 func (c *MCPConfig) SettingsSources() []config.SourceSettings {
