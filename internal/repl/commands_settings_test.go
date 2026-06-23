@@ -95,10 +95,30 @@ func TestThemeHandlerEmptyArg(t *testing.T) {
 		t.Fatalf("empty arg: %v", err)
 	}
 	if !out.Handled {
-		t.Fatal("must be handled even with empty arg (shows usage)")
+		t.Fatal("must be handled even with empty arg (opens picker)")
 	}
 	if written {
 		t.Fatal("empty arg must not write")
+	}
+}
+
+// TestThemeHandlerNoArgOpensOverlay: /theme with no arg opens ThemePicker overlay.
+func TestThemeHandlerNoArgOpensOverlay(t *testing.T) {
+	var set settingsSetter = func(key string, value any) error { return nil }
+	h := themeHandlerWith(set)
+	screen := tui.NewREPLScreen(80, 24, nil)
+	out, err := h(context.Background(), CommandContext{Args: "", Screen: &screen})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("Handled must be true")
+	}
+	if out.Overlay == nil {
+		t.Fatal("/theme with no arg must return ThemePicker overlay, got nil")
+	}
+	if out.Status != "" {
+		t.Fatalf("/theme with no arg must not return Status text, got: %q", out.Status)
 	}
 }
 

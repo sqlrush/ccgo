@@ -13,6 +13,9 @@ import (
 // Tests: a fake recorder.
 type settingsSetter func(key string, value any) error
 
+// builtinThemes mirrors the CC theme list from src/commands/theme/index.ts.
+var builtinThemes = []string{"dark", "light", "dark-daltonism", "light-daltonism", "default"}
+
 // validEffortLevels are the allowed values for effortLevel (CC utils/effort.ts:14).
 var validEffortLevels = map[string]bool{
 	"low":    true,
@@ -65,10 +68,7 @@ func themeHandlerWith(set settingsSetter) CommandHandler {
 	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
 		arg := strings.TrimSpace(cc.Args)
 		if arg == "" {
-			return CommandOutcome{
-				Handled: true,
-				Status:  "Usage: /theme <name>",
-			}, nil
+			return CommandOutcome{Handled: true, Overlay: NewThemePicker(builtinThemes)}, nil
 		}
 		if err := set("theme", arg); err != nil {
 			return CommandOutcome{}, fmt.Errorf("set theme: %w", err)
