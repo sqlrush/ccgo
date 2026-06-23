@@ -52,16 +52,31 @@ func (a *controlAsker) Ask(ctx context.Context, req tool.PermissionAskRequest) (
 		a.mu.Unlock()
 	}()
 
+	payload := map[string]any{
+		"subtype":      "can_use_tool",
+		"tool_name":    req.ToolName,
+		"tool_use_id":  string(req.ToolUseID),
+		"blocked_path": req.Path,
+		"description":  req.Description,
+		// CC-required fields from controlSchemas.ts:106-122.
+		"input": req.Input,
+	}
+	if req.DisplayName != "" {
+		payload["display_name"] = req.DisplayName
+	}
+	if req.AgentID != "" {
+		payload["agent_id"] = req.AgentID
+	}
+	if req.Title != "" {
+		payload["title"] = req.Title
+	}
+	if len(req.PermissionSuggestions) > 0 {
+		payload["permission_suggestions"] = req.PermissionSuggestions
+	}
 	ctrl := ControlRequest{
 		Type:      "control_request",
 		RequestID: id,
-		Request: map[string]any{
-			"subtype":      "can_use_tool",
-			"tool_name":    req.ToolName,
-			"tool_use_id":  string(req.ToolUseID),
-			"blocked_path": req.Path,
-			"description":  req.Description,
-		},
+		Request:   payload,
 	}
 	if err := a.send(ctrl); err != nil {
 		return contracts.PermissionDecision{}, fmt.Errorf("sdk: send can_use_tool: %w", err)

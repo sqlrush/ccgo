@@ -23,6 +23,18 @@ type Request struct {
 	Metadata    map[string]any         `json:"metadata,omitempty"`
 	Thinking    map[string]any         `json:"thinking,omitempty"`
 	Stream      bool                   `json:"stream,omitempty"`
+
+	// ToolSearchActive indicates that deferred tool search is active for this
+	// request; DynamicBetaHeaders will include ToolSearchBetaHeader when true.
+	// Not serialized to JSON — used only for beta-header selection.
+	// CC reference: betas.ts TOOL_SEARCH_BETA_HEADER_1P; claude.ts:1174-1182.
+	ToolSearchActive bool `json:"-"`
+
+	// UseGlobalCacheScope indicates that global (cross-user) prompt caching
+	// is enabled; DynamicBetaHeaders ensures PromptCachingScopeBetaHeader is
+	// included and buildRequest attaches scope:"global" to system blocks.
+	// CC reference: betas.ts:shouldUseGlobalCacheScope; claude.ts:1207-1229.
+	UseGlobalCacheScope bool `json:"-"`
 }
 
 type CountTokensRequest struct {

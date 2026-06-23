@@ -75,12 +75,32 @@ func (r Runner) buildRequest(ctx context.Context, history []contracts.Message, m
 		})
 	}
 	request := anthropic.Request{
-		Model:     model,
-		MaxTokens: r.maxTokens(),
-		Messages:  apiMessages,
+		Model:            model,
+		MaxTokens:        r.maxTokens(),
+		Messages:         apiMessages,
+		ToolSearchActive: toolSearchActive,
+		Metadata:         buildAPIMetadata(r.SessionID),
+	}
+	// Global cache scope: enabled for first-party Anthropic base URLs unless
+	// experimental betas are disabled. CC ref: betas.ts:shouldUseGlobalCacheScope;
+	// claude.ts:1207-1229 (system prompt scope:"global" attachment).
+	if isFirstPartyAnthropicBaseURL(os.Getenv("ANTHROPIC_BASE_URL")) &&
+		!session.IsEnvTruthy(os.Getenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")) {
+		request.UseGlobalCacheScope = true
 	}
 	if system := r.systemPromptWithOutputStyle(); system != "" {
-		request.System = system
+		// When both prompt caching and global scope are active, wrap the system
+		// prompt in a ContentBlock array with scope:"global" so the API can
+		// cache it cross-user. CC ref: buildSystemPromptBlocks (claude.ts:3213).
+		if r.EnablePromptCaching && request.UseGlobalCacheScope {
+			request.System = []contracts.ContentBlock{{
+				Type:         contracts.ContentText,
+				Text:         system,
+				CacheControl: &contracts.CacheControl{Type: "ephemeral", Scope: "global"},
+			}}
+		} else {
+			request.System = system
+		}
 	}
 	if len(definitions) > 0 {
 		request.Tools = anthropic.ToolsFromContracts(definitions)

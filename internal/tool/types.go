@@ -36,12 +36,21 @@ type PermissionDecider interface {
 }
 
 // PermissionAskRequest describes a tool call awaiting an interactive decision.
+// Fields marked CC-ref mirror the can_use_tool control_request payload shape
+// from controlSchemas.ts:106-122.
 type PermissionAskRequest struct {
 	ToolUseID   contracts.ID
 	ToolName    string
 	Path        string
 	Description string
 	Decision    contracts.PermissionDecision
+
+	// CC-ref: controlSchemas.ts:106-122 can_use_tool payload fields.
+	Input                 map[string]any                    // full tool input map
+	PermissionSuggestions []contracts.PermissionUpdate      // optional suggestions
+	DisplayName           string                            // human-readable tool name
+	AgentID               string                            // agent that requested the tool
+	Title                 string                            // short title for the permission dialog
 }
 
 // PermissionAsker resolves an "ask" permission decision interactively.

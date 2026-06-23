@@ -232,3 +232,75 @@ func TestControlAskerConcurrentRequestsCorrelate(t *testing.T) {
 		}
 	}
 }
+
+// TestControlAskerIncludesCCRequiredFields verifies that the can_use_tool payload
+// includes CC-required fields: input, permission_suggestions, display_name,
+// agent_id, title. CC ref: controlSchemas.ts:106-122 (SDKControlPermissionRequestSchema).
+func TestControlAskerIncludesCCRequiredFields(t *testing.T) {
+	out := make(chan ControlRequest, 1)
+	asker := newControlAsker(
+		func(req ControlRequest) error { out <- req; return nil },
+		func() string { return "req-cc" },
+	)
+
+	go func() {
+		_, _ = asker.Ask(context.Background(), tool.PermissionAskRequest{
+			ToolUseID:   "u-cc",
+			ToolName:    "Write",
+			Path:        "/tmp/foo",
+			Description: "write file",
+			Input:       map[string]any{"path": "/tmp/foo", "content": "hello"},
+			DisplayName: "Write File",
+			AgentID:     "agent-007",
+			Title:       "Allow write?",
+			PermissionSuggestions: []contracts.PermissionUpdate{
+				{Type: "tool", Destination: "session", Behavior: contracts.PermissionAllow},
+			},
+		})
+	}()
+
+	select {
+	case req := <-out:
+		// input must be present and non-nil.
+		inputRaw, hasInput := req.Request["input"]
+		if !hasInput {
+			t.Fatal("can_use_tool payload missing 'input' field")
+		}
+		inputMap, ok := inputRaw.(map[string]any)
+		if !ok {
+			t.Fatalf("input should be map[string]any, got %T", inputRaw)
+		}
+		if inputMap["path"] != "/tmp/foo" {
+			t.Fatalf("input.path = %v want /tmp/foo", inputMap["path"])
+		}
+
+		displayName, _ := req.Request["display_name"].(string)
+		if displayName != "Write File" {
+			t.Errorf("display_name = %q want 'Write File'", displayName)
+		}
+
+		agentID, _ := req.Request["agent_id"].(string)
+		if agentID != "agent-007" {
+			t.Errorf("agent_id = %q want 'agent-007'", agentID)
+		}
+
+		title, _ := req.Request["title"].(string)
+		if title != "Allow write?" {
+			t.Errorf("title = %q want 'Allow write?'", title)
+		}
+
+		suggestions, hassugg := req.Request["permission_suggestions"]
+		if !hassugg {
+			t.Error("permission_suggestions missing when set")
+		}
+		sugg, ok := suggestions.([]contracts.PermissionUpdate)
+		if !ok || len(sugg) == 0 {
+			t.Errorf("permission_suggestions should be non-empty []PermissionUpdate, got %T", suggestions)
+		}
+
+		// Resolve so the goroutine can exit cleanly.
+		asker.Resolve(req.RequestID, contracts.PermissionDecision{Behavior: contracts.PermissionAllow})
+	case <-time.After(2 * time.Second):
+		t.Fatal("no can_use_tool request emitted")
+	}
+}

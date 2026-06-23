@@ -1,6 +1,9 @@
 package sdk
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // Controller dispatches inbound control requests to live session callbacks.
 // Wire contract: CC bridgeMessaging.ts:362-371 (interrupt), :306-315 (set_model).
@@ -33,7 +36,17 @@ func (c *Controller) Handle(req ControlRequest) ControlResponse {
 		return SuccessResponse(req.RequestID, map[string]any{"model": model})
 
 	case "initialize":
-		return SuccessResponse(req.RequestID, map[string]any{"capabilities": []string{"interrupt", "set_model", "can_use_tool"}})
+		// Return the full CC-required initialize response shape.
+		// CC ref: bridgeMessaging.ts:286-303; controlSchemas.ts:77-95.
+		return SuccessResponse(req.RequestID, map[string]any{
+			"capabilities":           []string{"interrupt", "set_model", "can_use_tool"},
+			"commands":               []any{},
+			"models":                 []any{},
+			"account":                map[string]any{},
+			"output_style":           "normal",
+			"available_output_styles": []string{"normal"},
+			"pid":                    os.Getpid(),
+		})
 
 	default:
 		return ErrorResponse(req.RequestID, fmt.Sprintf("unsupported control subtype %q", req.Subtype()))
