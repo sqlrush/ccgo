@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -347,8 +349,71 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		l.running = true
 		l.StartTurn(event.Value)
 		l.startSpinner()
+
+	case tui.ScreenEventStashPrompt:
+		// Stash/unstash was already applied by screen.ApplyKey (applyStashPrompt).
+		// This case exists so the event is acknowledged, not silently dropped.
+
+	case tui.ScreenEventToggleTranscript:
+		// The screen manages its own transcript-visibility flag; this case exists
+		// so the event is handled rather than dropped.
+
+	case tui.ScreenEventFocusIn:
+		l.screen.Focused = true
+
+	case tui.ScreenEventFocusOut:
+		l.screen.Focused = false
+
+	case tui.ScreenEventExternalEditor:
+		l.launchExternalEditor(event.Value)
 	}
 	return false
+}
+
+// launchExternalEditor opens $EDITOR (falling back to $VISUAL, then "vi") with a
+// temp file seeded with draft. On success the prompt text is replaced with the
+// edited content. Errors are surfaced as a system message; they never abort the
+// loop.
+func (l *Loop) launchExternalEditor(draft string) {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	tmp, err := os.CreateTemp("", "ccgo-prompt-*.txt")
+	if err != nil {
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: "external editor: " + err.Error()})
+		return
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.WriteString(draft); err != nil {
+		_ = tmp.Close()
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: "external editor write: " + err.Error()})
+		return
+	}
+	_ = tmp.Close()
+
+	// Restore terminal before handing off; re-enter interactive after.
+	_ = l.term.WriteString(l.life.ExitInteractive())
+	cmd := exec.Command(editor, tmp.Name())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	runErr := cmd.Run()
+	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true}
+	_ = l.term.WriteString(l.life.EnterInteractive(opts))
+	if runErr != nil {
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: "external editor: " + runErr.Error()})
+		return
+	}
+	content, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: "external editor read: " + err.Error()})
+		return
+	}
+	l.screen.Prompt.Text = strings.TrimRight(string(content), "\n")
 }
 
 // applyCommandOutcome applies a handled live-effect command's result to the
