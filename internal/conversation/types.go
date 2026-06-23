@@ -124,6 +124,26 @@ type Runner struct {
 	SystemPrompt              string
 	MaxTokens                 int
 	ThinkingBudgetTokens      int
+	// EffortLevel sets the effort level sent in output_config.effort (CFG-32).
+	// Valid values: "low", "medium", "high", "max". Empty means unset.
+	// CC ref: utils/effort.ts resolveAppliedEffort; betas.ts EFFORT_BETA_HEADER.
+	EffortLevel string
+	// AlwaysThinkingEnabled forces thinking for every request (CFG-33).
+	// When true and the model supports thinking, a default thinking budget is used.
+	// CC ref: settings/types.ts alwaysThinkingEnabled.
+	AlwaysThinkingEnabled bool
+	// Language injects a preferred-language section into the system prompt (CFG-18).
+	// When non-empty, Claude is instructed to respond in this language.
+	// CC ref: constants/prompts.ts getLanguageSection; settings/types.ts language.
+	Language string
+	// IncludeGitInstructions controls whether git instructions are included in the
+	// system prompt sections that reference git usage (CFG-16). Defaults to true.
+	// When false, git-related sections are omitted from the system prompt.
+	// CC ref: utils/gitSettings.ts shouldIncludeGitInstructions.
+	IncludeGitInstructions *bool
+	// Verbose enables detailed debug output (CFG-53).
+	// CC ref: tools/ConfigTool/supportedSettings.ts verbose; global config key.
+	Verbose bool
 	MaxToolRounds             int
 	UseStreaming              bool
 	EnablePromptCaching       bool
@@ -194,6 +214,13 @@ type Runner struct {
 	// status:"async_launched". When nil, a session-local registry is allocated
 	// automatically on first use.
 	AgentRegistry *orchestration.AgentRegistry
+
+	// ExtraToolMetadata holds additional key-value pairs that are merged into
+	// the tool execution context metadata on every turn. Callers use this to
+	// inject per-session dependencies (e.g. tool.QuestionAsker for the TUI)
+	// without adding new typed fields to Runner. Keys added here take
+	// precedence over auto-generated metadata with the same key.
+	ExtraToolMetadata map[string]any
 }
 
 type MCPConfig struct {

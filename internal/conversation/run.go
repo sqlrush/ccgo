@@ -539,6 +539,11 @@ func (r Runner) toolMetadata() map[string]any {
 	if r.AgentRegistry != nil {
 		metadata[tool.MetadataAgentRegistryKey] = r.AgentRegistry
 	}
+	// Merge ExtraToolMetadata last so caller-supplied keys take precedence over
+	// auto-generated ones (e.g. QuestionAsker injected by the TUI loop).
+	for k, v := range r.ExtraToolMetadata {
+		metadata[k] = v
+	}
 	return metadata
 }
 
@@ -5570,6 +5575,18 @@ func (r Runner) MergedSettings() contracts.Settings {
 
 func (r Runner) systemPromptWithOutputStyle() string {
 	base := strings.TrimSpace(r.SystemPrompt)
+	// CFG-18: inject language preference section when configured.
+	// CC ref: constants/prompts.ts getLanguageSection (line 142-149).
+	if lang := strings.TrimSpace(r.Language); lang != "" {
+		section := "# Language\nAlways respond in " + lang + ". Use " + lang +
+			" for all explanations, comments, and communications with the user. " +
+			"Technical terms and code identifiers should remain in their original form."
+		if base == "" {
+			base = section
+		} else {
+			base = base + "\n\n" + section
+		}
+	}
 	style, ok := r.outputStyleConfig()
 	if !ok {
 		return base
@@ -5579,6 +5596,16 @@ func (r Runner) systemPromptWithOutputStyle() string {
 		return section
 	}
 	return base + "\n\n" + section
+}
+
+// ShouldIncludeGitInstructions reports whether git-related instructions should
+// be included in system prompt sections (CFG-16). Mirrors CC gitSettings.ts
+// shouldIncludeGitInstructions: defaults to true when not explicitly set.
+func (r Runner) ShouldIncludeGitInstructions() bool {
+	if r.IncludeGitInstructions != nil {
+		return *r.IncludeGitInstructions
+	}
+	return true
 }
 
 func (r Runner) outputStyleConfig() (outputstyles.Config, bool) {

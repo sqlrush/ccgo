@@ -12,6 +12,7 @@ import (
 	"ccgo/internal/permissions"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
+	asktools "ccgo/internal/tools/ask"
 	"ccgo/internal/tui"
 )
 
@@ -39,6 +40,9 @@ func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, h
 				}
 			}
 			r.Tools.Asker = loopAsker{askCh: loop.askCh}
+			// Inject the interactive question asker so AskUserQuestion can
+			// present its overlay via the REPL loop (TOOL-ASK-01/03).
+			r.ExtraToolMetadata = mergeQuestionAsker(r.ExtraToolMetadata, loop.questionCh)
 			result, err := r.RunTurn(turnCtx, turnHistory, user)
 			select {
 			case loop.doneCh <- turnOutcome{result: result, err: err}:
@@ -140,6 +144,9 @@ func newTurnLoopForRunnerWithHistory(ctx context.Context, term Terminal, base co
 				}
 			}
 			r.Tools.Asker = loopAsker{askCh: loop.askCh}
+			// Inject the interactive question asker so AskUserQuestion can
+			// present its overlay via the REPL loop (TOOL-ASK-01/03).
+			r.ExtraToolMetadata = mergeQuestionAsker(r.ExtraToolMetadata, loop.questionCh)
 			result, err := r.RunTurn(turnCtx, turnHistory, user)
 			select {
 			case loop.doneCh <- turnOutcome{result: result, err: err}:
@@ -312,6 +319,19 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	}
 
 	return loop.Run(ctx)
+}
+
+// mergeQuestionAsker returns a copy of extra (which may be nil) with the
+// loopQuestionAsker injected under MetadataQuestionAskerKey. This is called
+// once per turn so each turn's r.ExtraToolMetadata is independent and
+// immutable after construction (no mutation of the shared base map).
+func mergeQuestionAsker(extra map[string]any, qCh chan questionRequest) map[string]any {
+	out := make(map[string]any, len(extra)+1)
+	for k, v := range extra {
+		out[k] = v
+	}
+	out[asktools.MetadataQuestionAskerKey] = loopQuestionAsker{questionCh: qCh}
+	return out
 }
 
 // ptrEngineDecider is a thin tool.PermissionDecider that delegates every

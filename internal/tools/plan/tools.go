@@ -104,11 +104,19 @@ func NewExitPlanModeTool() tool.Tool {
 		PromptFunc: func(tool.PromptContext) (string, error) {
 			return "Requests approval to exit plan mode and begin coding. This tool does NOT take the plan as a parameter — it reads the plan you wrote to disk. Only call it when you have finished planning.", nil
 		},
-		PermissionFunc: func(_ tool.Context, _ json.RawMessage) (contracts.PermissionDecision, error) {
-			// Ask routes through Executor.Asker; Phase 2 renders the plan preview.
+		PermissionFunc: func(ctx tool.Context, _ json.RawMessage) (contracts.PermissionDecision, error) {
+			// Read the plan from disk so the interactive dialog can display it
+			// for review (TOOL-PLAN-02). If no plan file exists yet we fall back
+			// to the bare prompt — the headless auto-approve path is unaffected.
+			sessionPath, _ := ctx.Metadata[tool.MetadataSessionPathKey].(string)
+			plan, _ := ReadPlan(sessionPath, ctx.SessionID)
+			msg := "Exit plan mode? Review and approve your plan to begin coding."
+			if strings.TrimSpace(plan) != "" {
+				msg += "\n\nPlan:\n" + plan
+			}
 			return contracts.PermissionDecision{
 				Behavior: contracts.PermissionAsk,
-				Message:  "Exit plan mode?",
+				Message:  msg,
 			}, nil
 		},
 		CallFunc: func(ctx tool.Context, _ json.RawMessage, _ tool.ProgressSink) (contracts.ToolResult, error) {

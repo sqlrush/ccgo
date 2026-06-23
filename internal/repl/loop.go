@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -46,6 +47,7 @@ type Loop struct {
 	inputCh    chan tui.Key
 	eventCh    chan conversation.Event
 	askCh      chan askRequest
+	questionCh chan questionRequest
 	doneCh     chan turnOutcome
 	resizeCh   chan resizeEvent
 	tickCh     <-chan time.Time
@@ -60,6 +62,11 @@ type Loop struct {
 	history   []contracts.Message
 	activeAsk *askRequest
 	askQueue  []askRequest
+
+	// activeQuestion, when non-nil, holds the pending question whose reply
+	// channel is waiting. It is set by showQuestion and cleared when the
+	// overlay submits or is dismissed.
+	activeQuestion *questionRequest
 
 	// activeOverlay, when non-nil, receives all key events before normal
 	// prompt handling.  Cleared when the overlay submits or is dismissed.
@@ -81,6 +88,11 @@ type Loop struct {
 	// showPermission so tests can synchronize input delivery after the dialog is
 	// rendered.
 	onPermissionShown func()
+
+	// onQuestionShown is a test seam; nil in production. Called at the end of
+	// showQuestion so tests can synchronize input delivery after the overlay is
+	// rendered.
+	onQuestionShown func()
 
 	// onPermissionAskNotify, when non-nil, is called in a goroutine each time a
 	// permission dialog is displayed. Production code wires this to
@@ -137,16 +149,17 @@ func NewLoop(t Terminal, history []string) *Loop {
 		w, h = 80, 24
 	}
 	return &Loop{
-		term:     t,
-		screen:   tui.NewREPLScreen(w, h, history),
-		dialog:   tui.NewDialogRuntime(),
-		inputCh:  make(chan tui.Key, 64),
-		eventCh:  make(chan conversation.Event, 256),
-		askCh:    make(chan askRequest, 4),
-		doneCh:   make(chan turnOutcome, 1),
-		resizeCh: make(chan resizeEvent, 1),
-		width:    w,
-		height:   h,
+		term:       t,
+		screen:     tui.NewREPLScreen(w, h, history),
+		dialog:     tui.NewDialogRuntime(),
+		inputCh:    make(chan tui.Key, 64),
+		eventCh:    make(chan conversation.Event, 256),
+		askCh:      make(chan askRequest, 4),
+		questionCh: make(chan questionRequest, 4),
+		doneCh:     make(chan turnOutcome, 1),
+		resizeCh:   make(chan resizeEvent, 1),
+		width:      w,
+		height:     h,
 	}
 }
 
@@ -158,16 +171,17 @@ func NewLoopFromHistoryEntries(t Terminal, entries []session.HistoryEntry) *Loop
 		w, h = 80, 24
 	}
 	return &Loop{
-		term:     t,
-		screen:   tui.NewREPLScreenFromHistoryEntries(w, h, entries),
-		dialog:   tui.NewDialogRuntime(),
-		inputCh:  make(chan tui.Key, 64),
-		eventCh:  make(chan conversation.Event, 256),
-		askCh:    make(chan askRequest, 4),
-		doneCh:   make(chan turnOutcome, 1),
-		resizeCh: make(chan resizeEvent, 1),
-		width:    w,
-		height:   h,
+		term:       t,
+		screen:     tui.NewREPLScreenFromHistoryEntries(w, h, entries),
+		dialog:     tui.NewDialogRuntime(),
+		inputCh:    make(chan tui.Key, 64),
+		eventCh:    make(chan conversation.Event, 256),
+		askCh:      make(chan askRequest, 4),
+		questionCh: make(chan questionRequest, 4),
+		doneCh:     make(chan turnOutcome, 1),
+		resizeCh:   make(chan resizeEvent, 1),
+		width:      w,
+		height:     h,
 	}
 }
 
@@ -183,6 +197,7 @@ func (l *Loop) Run(ctx context.Context) error {
 	}
 	defer restore()
 	defer l.denyPendingAsks()
+	defer l.denyPendingQuestions()
 
 	opts := tui.TerminalModeOptions{BracketedPaste: true, FocusEvents: true}
 	if err := l.term.WriteString(l.life.EnterInteractive(opts)); err != nil {
@@ -213,6 +228,11 @@ func (l *Loop) Run(ctx context.Context) error {
 			}
 		case ar := <-l.askCh:
 			l.enqueueAsk(ar)
+			if err := l.render(); err != nil {
+				return err
+			}
+		case qr := <-l.questionCh:
+			l.showQuestion(qr)
 			if err := l.render(); err != nil {
 				return err
 			}
@@ -307,6 +327,12 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		if handled {
 			if res.Dismissed {
 				l.activeOverlay = nil
+				// If a question overlay was dismissed (Esc), cancel the pending
+				// question so the asker goroutine is not left blocked.
+				if l.activeQuestion != nil {
+					l.activeQuestion.reply <- questionReply{err: fmt.Errorf("question dismissed")}
+					l.activeQuestion = nil
+				}
 			} else if res.Submit != "" {
 				l.activeOverlay = nil
 				if handled := l.handleOverlaySubmit(res.Submit); !handled {
@@ -592,9 +618,18 @@ func (l *Loop) SetMode(mode contracts.PermissionMode) {
 }
 
 // handleOverlaySubmit consumes structured overlay results (resume:/theme:/
-// memory:/trust:). It returns true when the submit was handled internally and
-// should NOT be forwarded to the model. onOverlaySubmit is a host/test seam.
+// memory:/trust:/question:). It returns true when the submit was handled
+// internally and should NOT be forwarded to the model. onOverlaySubmit is a
+// host/test seam.
 func (l *Loop) handleOverlaySubmit(submit string) bool {
+	// Route question answers back to the waiting question asker.
+	if selected, ok := decodeQuestionAnswer(submit); ok {
+		if l.activeQuestion != nil {
+			l.activeQuestion.reply <- questionReply{selected: selected}
+			l.activeQuestion = nil
+		}
+		return true
+	}
 	for _, prefix := range []string{"resume:", "theme:", "memory:", "trust:", "model:"} {
 		if strings.HasPrefix(submit, prefix) {
 			if l.onOverlaySubmit != nil {
@@ -604,6 +639,35 @@ func (l *Loop) handleOverlaySubmit(submit string) bool {
 		}
 	}
 	return false // "/command" and plain text fall through to the model/command pipeline
+}
+
+// showQuestion sets activeOverlay to a questionOverlay and records the
+// pending request so that the overlay submission can return the answer.
+// onQuestionShown (if set) is called last so tests can gate input delivery.
+func (l *Loop) showQuestion(qr questionRequest) {
+	l.activeQuestion = &qr
+	l.activeOverlay = newQuestionOverlay(qr.q)
+	if l.onQuestionShown != nil {
+		l.onQuestionShown()
+	}
+}
+
+// denyPendingQuestions unblocks any waiting question asker goroutines when
+// the loop exits. It cancels activeQuestion and drains questionCh.
+func (l *Loop) denyPendingQuestions() {
+	errVal := fmt.Errorf("question asker: loop exited")
+	if l.activeQuestion != nil {
+		l.activeQuestion.reply <- questionReply{err: errVal}
+		l.activeQuestion = nil
+	}
+	for {
+		select {
+		case qr := <-l.questionCh:
+			qr.reply <- questionReply{err: errVal}
+		default:
+			return
+		}
+	}
 }
 
 // refreshBaseStatus recomputes baseStatus from the current mode + vim state

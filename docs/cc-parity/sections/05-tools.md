@@ -59,11 +59,11 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-TODO-01 | TodoWrite 写入 todos 数组 | AUTO | 前置:仓库;操作:TodoWrite `{todos:[{content:"...",status:"pending",activeForm:"..."}]}`;预期:工具结果含 oldTodos/newTodos | src/tools/TodoWriteTool/TodoWriteTool.ts | ✅ 通过 |
 | TOOL-TODO-02 | TodoWrite 拒绝同时有 2 个 in_progress todo | AUTO | 前置:仓库;操作:TodoWrite 含 2 个 status=in_progress 条目;预期:校验失败，报错"only one todo can be in_progress" | src/tools/TodoWriteTool/TodoWriteTool.ts | ✅ 通过 |
 | TOOL-TODO-03 | TodoWrite 所有 todo 完成时清空列表 | AUTO | 前置:仓库;操作:TodoWrite 所有条目 status=completed;预期:内部存储清空（newTodos=[]） | src/tools/TodoWriteTool/TodoWriteTool.ts:63-64 | ✅ 通过 |
-| TOOL-ASK-01 | AskUserQuestion 弹出多选题对话框 | MANUAL | 前置:交互 REPL;操作:触发 AskUserQuestion `{questions:[{question:"...",options:[...]}]}`;预期:TUI 显示 chip 对话框，用户选择后结果填入 answers | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx | ⚠️ 已建未接（工具已注册 + schema 已实现；headless 下 QuestionAsker 缺席返回错误而不挂起；TUI 对话框 wiring 待 P2）|
+| TOOL-ASK-01 | AskUserQuestion 弹出多选题对话框 | MANUAL | 前置:交互 REPL;操作:触发 AskUserQuestion `{questions:[{question:"...",options:[...]}]}`;预期:TUI 显示 chip 对话框，用户选择后结果填入 answers | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx | ✅ 通过（接线就绪，渲染需人工核验）— loopQuestionAsker 已接入 REPL loop (internal/repl/question_asker.go); questionOverlay 渲染单/多选题 (internal/repl/question_overlay.go); mergeQuestionAsker 在每个 turn 注入 MetadataQuestionAskerKey (internal/repl/run.go); wiring+state 层测试覆盖；像素渲染需人工核验 (W-C13)|
 | TOOL-ASK-02 | AskUserQuestion 1-4 道题，每题 2-4 个选项 | AUTO | 前置:仓库;操作:AskUserQuestion 含 5 道题;预期:校验失败，报"1-4 questions" | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx:62-63 | ✅ 通过 |
-| TOOL-ASK-03 | AskUserQuestion multiSelect=true 允许多选 | MANUAL | 前置:交互 REPL;操作:AskUserQuestion `{multiSelect:true}`;预期:对话框允许勾选多个选项，答案逗号分隔 | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx:22 | ⚠️ 已建未接（schema 已支持 multiSelect；TUI 渲染未接线） |
+| TOOL-ASK-03 | AskUserQuestion multiSelect=true 允许多选 | MANUAL | 前置:交互 REPL;操作:AskUserQuestion `{multiSelect:true}`;预期:对话框允许勾选多个选项，答案逗号分隔 | src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx:22 | ✅ 通过（接线就绪，渲染需人工核验）— questionOverlay 以 Space 切换勾选、Enter 确认；TestLoopQuestionAskerMultiSelect 验证多选路由；像素渲染需人工核验 (W-C13)|
 | TOOL-PLAN-01 | EnterPlanMode 切换到 plan 模式 | AUTO | 前置:仓库;操作:触发 EnterPlanMode（无参数）;预期:工具返回"Entered plan mode"，权限模式切换为 plan | src/tools/EnterPlanModeTool/EnterPlanModeTool.ts | ✅ 通过 |
-| TOOL-PLAN-02 | ExitPlanMode 从 plan 模式退出并请求批准 | MANUAL | 前置:已进入 plan 模式，有 plan 文件;操作:ExitPlanMode;预期:TUI 弹出批准对话框，批准后切换回 default 模式 | src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts | ⚠️ 已建未接（ExitPlanModeTool 已实现 plan 文件读写；TUI 审批对话框未接线，headless 下直接返回 OK） |
+| TOOL-PLAN-02 | ExitPlanMode 从 plan 模式退出并请求批准 | MANUAL | 前置:已进入 plan 模式，有 plan 文件;操作:ExitPlanMode;预期:TUI 弹出批准对话框，批准后切换回 default 模式 | src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts | ✅ 通过（接线就绪，渲染需人工核验）— ExitPlanMode.PermissionFunc 现在从磁盘读取 plan 并将内容注入到 PermissionAsk.Message，使现有 loopAsker/dialog 在审批对话框中显示计划；TestExitPlanModePermissionMessageIncludesPlan 验证内容注入；交互审批对话框外观需人工核验 (W-C13)|
 | TOOL-PLAN-03 | ExitPlanMode headless 模式自动批准 | AUTO | 前置:已进入 plan 模式（headless `--print`）;操作:ExitPlanMode;预期:返回批准确认，模式恢复 | src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts | ✅ 通过 |
 | TOOL-SKILL-01 | Skill 按名称调用可用的 prompt skill | AUTO | 前置:存在 `.claude/commands/foo.md`;操作:Skill `{skill:"foo",args:"bar"}`;预期:以 args 为输入执行 foo 的 forked agent，返回结果 | src/tools/SkillTool/SkillTool.ts | ✅ 通过 |
 | TOOL-SKILL-02 | Skill 调用不存在的 skill 名时报错 | AUTO | 前置:无对应 skill 文件;操作:Skill `{skill:"nonexistent"}`;预期:工具报错"skill not found" | src/tools/SkillTool/SkillTool.ts | ✅ 通过 |
@@ -96,7 +96,7 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-PS-01 | PowerShell 执行 PowerShell 命令（Windows）| AUTO | 前置:Windows 环境;操作:PowerShell `{command:"Get-Date"}`;预期:返回当前日期，exit 0 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过（ccgo 有 NewPowerShellTool/Output/Kill；Unix 下优雅退出）|
 | TOOL-PS-02 | PowerShellOutput/KillPowerShell 读取/终止后台 PS 任务 | AUTO | 前置:PowerShell run_in_background;操作:PowerShellOutput/Kill;预期:行为与 BashOutput/KillBash 对称 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过 |
 
-小计：**61 行**，其中 ✅ 通过 45，⚠️ 已建未接 8，❌ 缺失 8，N/A 1。（W-Batch-C: +3 ✅: TOOL-TASK-02/04, TOOL-BASH-07; TOOL-LSP-01~04 dispatch seam 接线，仍 ⚠️ 需运行中语言服务器）
+小计：**61 行**，其中 ✅ 通过 48，⚠️ 已建未接 5，❌ 缺失 8，N/A 1。（W-Batch-C: +3 ✅: TOOL-TASK-02/04, TOOL-BASH-07; TOOL-LSP-01~04 dispatch seam 接线，仍 ⚠️ 需运行中语言服务器；W-C13: +3 ✅接线就绪: TOOL-ASK-01/03, TOOL-PLAN-02 渲染需人工核验）
 
 **⚠️ 已建未接（更新后）：**
 1. `TOOL-LSP-01~04`：dispatch seam 已实现（NavigationParams + dispatchLSP + NavigationClient 接口 + mock 测试覆盖）；runtime 在 tool.Context.Metadata 注入 MetadataLSPNavigationKey 后即可端到端工作；无运行中语言服务器时优雅降级。
