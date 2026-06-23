@@ -17,6 +17,7 @@ type LoginOptions struct {
 	LoginWithClaudeAI bool
 	OrgUUID           string
 	LoginHint         string
+	LoginMethod       string // "sso" or "" for default (AUTH-CLI-04)
 	InferenceOnly     bool
 	Now               func() time.Time
 	// OnURL is called with the authorize URL so the caller can print the
@@ -58,6 +59,7 @@ func RunLoginFlow(ctx context.Context, opts LoginOptions) (Credentials, error) {
 		InferenceOnly:     opts.InferenceOnly,
 		OrgUUID:           opts.OrgUUID,
 		LoginHint:         opts.LoginHint,
+		LoginMethod:       opts.LoginMethod,
 		Config:            config,
 	})
 	if err != nil {

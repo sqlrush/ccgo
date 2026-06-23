@@ -4680,14 +4680,15 @@ func TestAuthStatusLoggedOut(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"auth", "status"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit = %d stderr=%s", code, stderr.String())
-	}
 	got := stdout.String()
 	// If the developer has keychain credentials, skip rather than fail —
 	// the keychain is outside test control and this is a best-effort check.
 	if strings.Contains(got, "Authenticated") {
 		t.Skip("developer keychain appears to hold credentials; skipping negative assertion")
+	}
+	// CC exits 1 when not authenticated (mirrors CC: process.exit(loggedIn ? 0 : 1)).
+	if code != 1 {
+		t.Fatalf("expected exit 1 when not authenticated, got %d; stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(got, "Not authenticated") {
 		t.Fatalf("expected 'Not authenticated' in output, got %q", got)

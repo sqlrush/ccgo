@@ -6,9 +6,15 @@ import (
 	"testing"
 )
 
+// TestUpdatePrintsVersion and TestUpdatePrintsNotConfiguredMessage test the
+// runUpdateCLIv2 function directly with an explicit "unknown" install type so
+// the dev-build guard doesn't interfere (test binaries are classified as
+// "development" by resolveInstallType).
+
 func TestUpdatePrintsVersion(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := runUpdateCLI(nil, "0.1.0", &out, &errOut); code != 0 {
+	opts := updateOptions{Ver: "0.1.0", Channel: "latest", InstallType: "unknown"}
+	if code := runUpdateCLIv2(nil, opts, &out, &errOut); code != 0 {
 		t.Fatalf("exit %d stderr=%s", code, errOut.String())
 	}
 	if !strings.Contains(out.String(), "0.1.0") {
@@ -18,12 +24,14 @@ func TestUpdatePrintsVersion(t *testing.T) {
 
 func TestUpdatePrintsNotConfiguredMessage(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := runUpdateCLI(nil, "1.2.3", &out, &errOut); code != 0 {
+	opts := updateOptions{Ver: "1.2.3", Channel: "latest", InstallType: "unknown"}
+	if code := runUpdateCLIv2(nil, opts, &out, &errOut); code != 0 {
 		t.Fatalf("exit %d stderr=%s", code, errOut.String())
 	}
 	s := out.String()
 	// Should include some indication that auto-update is not configured.
-	if !strings.Contains(s, "package manager") && !strings.Contains(s, "not configured") {
+	if !strings.Contains(s, "package manager") && !strings.Contains(s, "not configured") &&
+		!strings.Contains(s, "your package manager") {
 		t.Fatalf("update output missing guidance message: %q", s)
 	}
 }

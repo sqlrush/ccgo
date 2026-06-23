@@ -54,6 +54,24 @@ const (
 	InstallTypeUnknown        InstallationType = "unknown"
 )
 
+// Installation represents one detected binary installation.
+type Installation struct {
+	Type InstallationType
+	Path string
+}
+
+// DetectMultipleInstallations classifies each path in the given list and
+// returns a slice of Installation entries. Useful for warning when multiple
+// install types are present simultaneously (SUBCMD-DOCTOR-08).
+func DetectMultipleInstallations(paths []string) []Installation {
+	out := make([]Installation, 0, len(paths))
+	for _, p := range paths {
+		it, _ := DetectInstallType(func() (string, error) { return p, nil })
+		out = append(out, Installation{Type: it, Path: p})
+	}
+	return out
+}
+
 // Input carries injected signals so tests are deterministic and network-free.
 type Input struct {
 	// Version is the binary version string (e.g. "0.0.0-dev").
@@ -77,6 +95,14 @@ type Input struct {
 	// ExecutableFn returns the path to the running binary; defaults to os.Executable when nil.
 	// Injected in tests for deterministic install-type detection.
 	ExecutableFn func() (string, error)
+
+	// AdditionalBinaryPaths, when non-nil, is used instead of PATH-discovery to
+	// detect multiple installations (SUBCMD-DOCTOR-08). Injected in tests.
+	AdditionalBinaryPaths []string
+
+	// MCPConfigContent, when non-nil, is the raw bytes of .mcp.json to parse
+	// (SUBCMD-DOCTOR-13). When nil and CWD is set, the file is read from disk.
+	MCPConfigContent []byte
 }
 
 // DetectInstallType classifies the running binary path into one of CC's 6
@@ -199,6 +225,57 @@ func Run(in Input) Report {
 		Status: StatusOK,
 		Detail: detail,
 	})
+
+	// Multiple-installations check (SUBCMD-DOCTOR-08).
+	// When AdditionalBinaryPaths is injected use those; otherwise skip the
+	// expensive PATH scan so the check is network/exec-free by default.
+	if len(in.AdditionalBinaryPaths) > 0 {
+		installs := DetectMultipleInstallations(in.AdditionalBinaryPaths)
+		if len(installs) > 1 {
+			var parts []string
+			for _, inst := range installs {
+				parts = append(parts, fmt.Sprintf("%s at %s", inst.Type, inst.Path))
+			}
+			checks = append(checks, Check{
+				Name:   "Multiple installations",
+				Status: StatusWarn,
+				Detail: "Multiple Claude installations detected: " + strings.Join(parts, "; "),
+			})
+		} else if len(installs) == 1 {
+			checks = append(checks, Check{
+				Name:   "Multiple installations",
+				Status: StatusOK,
+				Detail: fmt.Sprintf("Single installation: %s at %s", installs[0].Type, installs[0].Path),
+			})
+		}
+	}
+
+	// MCP config parse check (SUBCMD-DOCTOR-13).
+	mcpBytes := in.MCPConfigContent
+	if mcpBytes == nil && in.CWD != "" {
+		mcpPath := fmt.Sprintf("%s/.mcp.json", in.CWD)
+		data, err := readFile(mcpPath)
+		if err == nil {
+			mcpBytes = data
+		}
+		// Non-existent .mcp.json is fine — no check needed.
+	}
+	if mcpBytes != nil {
+		var raw map[string]any
+		if err := json.Unmarshal(mcpBytes, &raw); err != nil {
+			checks = append(checks, Check{
+				Name:   "MCP config (.mcp.json)",
+				Status: StatusWarn,
+				Detail: fmt.Sprintf("parse error in .mcp.json: %v", err),
+			})
+		} else {
+			checks = append(checks, Check{
+				Name:   "MCP config (.mcp.json)",
+				Status: StatusOK,
+				Detail: ".mcp.json is valid JSON",
+			})
+		}
+	}
 
 	return Report{Checks: checks}
 }

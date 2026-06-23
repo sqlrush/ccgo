@@ -328,11 +328,22 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "doctor") {
 		return runDoctorCommand(flags.Args()[1:], state.CWD(), stdout, stderr)
 	}
-	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "update") {
+	// "update" and "upgrade" alias (SUBCMD-UPDATE-07 / F3-C03).
+	if !*printMode && len(flags.Args()) > 0 &&
+		(strings.EqualFold(flags.Args()[0], "update") || strings.EqualFold(flags.Args()[0], "upgrade")) {
 		return runUpdateCLI(flags.Args()[1:], version, stdout, stderr)
 	}
 	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "completion") {
 		return runCompletionCLI(flags.Args()[1:], stdout, stderr)
+	}
+	// "setup-token" (F3-C05 / SUBCMD-SETUP-TOKEN-01).
+	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "setup-token") {
+		store := auth.NewKeychainCredentialStore("")
+		return runSetupTokenCLI(context.Background(), flags.Args()[1:], store, stdin, stdout, stderr)
+	}
+	// "install" (F3-C05 / SUBCMD-INSTALL-01).
+	if !*printMode && len(flags.Args()) > 0 && strings.EqualFold(flags.Args()[0], "install") {
+		return runInstallCLI(context.Background(), flags.Args()[1:], stdout, stderr)
 	}
 	if *printMode {
 		normalizedOutputFormat, err := normalizeOutputFormat(*outputFormat)
@@ -679,10 +690,20 @@ func runAuthCLI(ctx context.Context, _ *bootstrap.State, args []string, stdin io
 	case "logout":
 		return runAuthLogout(ctx, store, stderr, stdout)
 	case "status":
+		// Parse --json flag for auth status (F3-C02 / AUTH-CLI-07).
+		statusFlags := flag.NewFlagSet("auth status", flag.ContinueOnError)
+		statusFlags.SetOutput(stderr)
+		jsonMode := statusFlags.Bool("json", false, "output JSON")
+		if err := statusFlags.Parse(args[1:]); err != nil {
+			if err == flag.ErrHelp {
+				return 0
+			}
+			return 2
+		}
 		// apiKeyHelper is sourced from runner merged settings when available;
 		// the auth subcommand has no runner, so we pass "" which covers
 		// env-var → keychain → file — the same precedence as headlessRunner.
-		return runAuthStatus(ctx, "" /* apiKeyHelperCmd */, stdout, stderr)
+		return runAuthStatus(ctx, "" /* apiKeyHelperCmd */, stdout, stderr, *jsonMode)
 	default:
 		fmt.Fprintf(stderr, "ccgo auth: unknown subcommand %q (login|logout|status)\n", args[0])
 		return 2
@@ -692,17 +713,29 @@ func runAuthCLI(ctx context.Context, _ *bootstrap.State, args []string, stdin io
 // runAuthLogin implements "claude auth login" with a gray-zone consent gate.
 // The user must explicitly confirm before any OAuth flow starts. Consent can
 // be bypassed non-interactively with the --yes / -y flag.
+//
+// F3-C01: supports --console (API billing), --claudeai (default), --sso, --email.
 func runAuthLogin(ctx context.Context, args []string, store auth.CredentialStore, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-	// Parse --yes / -y consent-bypass flag.
 	loginFlags := flag.NewFlagSet("auth login", flag.ContinueOnError)
 	loginFlags.SetOutput(stderr)
 	yesFlag := loginFlags.Bool("yes", false, "skip the consent prompt")
 	loginFlags.BoolVar(yesFlag, "y", false, "skip the consent prompt")
+	consoleFlag := loginFlags.Bool("console", false, "use Console/API billing login (platform.claude.com)")
+	claudeAIFlag := loginFlags.Bool("claudeai", false, "use claude.ai login (default)")
+	ssoFlag := loginFlags.Bool("sso", false, "force SSO login method")
+	emailFlag := loginFlags.String("email", "", "pre-fill email/login_hint on the login page")
 	if err := loginFlags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
 		return 2
+	}
+
+	// Mutual exclusion: --console and --claudeai cannot be combined.
+	if *consoleFlag && *claudeAIFlag {
+		fmt.Fprintln(stderr, "ccgo auth: --console and --claudeai cannot be used together")
+		fmt.Fprintln(stdout, "ccgo auth: --console and --claudeai cannot be used together")
+		return 1
 	}
 
 	// Gray-zone consent gate: print the notice and require explicit confirmation.
@@ -713,8 +746,6 @@ func runAuthLogin(ctx context.Context, args []string, store auth.CredentialStore
 		fmt.Fprint(stdout, "Continue? [y/N] ")
 		line, err := bufio.NewReader(stdin).ReadString('\n')
 		if err != nil {
-			// Read error (e.g. EOF on non-interactive stdin) → treat as denied
-			// to avoid proceeding with login on ambiguous input.
 			fmt.Fprintln(stderr, "ccgo auth: login cancelled (no consent)")
 			return 1
 		}
@@ -725,10 +756,21 @@ func runAuthLogin(ctx context.Context, args []string, store auth.CredentialStore
 		}
 	}
 
+	// --console selects Console/API billing; --claudeai (or default) selects claude.ai.
+	loginWithClaudeAI := !*consoleFlag
+
+	loginMethod := ""
+	if *ssoFlag {
+		loginMethod = "sso"
+	}
+
 	creds, err := auth.RunLoginFlow(ctx, auth.LoginOptions{
 		Browser:           auth.NewOSBrowserOpener(),
 		Store:             store,
-		LoginWithClaudeAI: true,
+		LoginWithClaudeAI: loginWithClaudeAI,
+		LoginHint:         strings.TrimSpace(*emailFlag),
+		LoginMethod:       loginMethod,
+		OrgUUID:           "",
 		OnURL: func(u string) {
 			fmt.Fprintf(stdout, "If your browser did not open, visit:\n%s\n", u)
 		},
@@ -757,21 +799,25 @@ func runAuthLogout(ctx context.Context, store auth.CredentialStore, stderr io.Wr
 //
 //	apiKeyHelper (when configured) → env vars → keychain → credentials file
 //
-// The token/key value is NEVER printed — only the source label.
-func runAuthStatus(ctx context.Context, apiKeyHelperCmd string, stdout io.Writer, stderr io.Writer) int {
+// When jsonMode is true (--json flag) it outputs a JSON object matching CC's
+// authStatus shape (AUTH-CLI-07 / F3-C02). Token/key values are NEVER printed.
+func runAuthStatus(ctx context.Context, apiKeyHelperCmd string, stdout io.Writer, stderr io.Writer, jsonMode bool) int {
 	creds, _, err := credentialsFromEnvOrStore(ctx, apiKeyHelperCmd)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo auth: %v\n", err)
 		return 1
 	}
+
+	loggedIn := creds.Source != auth.SourceNone
+
+	if jsonMode {
+		return runAuthStatusJSON(creds, apiKeyHelperCmd, loggedIn, stdout)
+	}
+
 	switch creds.Source {
 	case auth.SourceOAuth:
 		fmt.Fprintln(stdout, "Authenticated via OAuth (keychain).")
 	case auth.SourceAPIKey:
-		// Distinguish between helper and environment sources when possible.
-		// After resolution the Credentials struct doesn't carry sub-source, so
-		// we infer: if the env var is set we know it came from there (helper
-		// takes precedence but leaves no distinct marker in Credentials).
 		if strings.TrimSpace(apiKeyHelperCmd) != "" {
 			fmt.Fprintln(stdout, "Authenticated via API key (apiKeyHelper or environment).")
 		} else if strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) != "" {
@@ -782,7 +828,54 @@ func runAuthStatus(ctx context.Context, apiKeyHelperCmd string, stdout io.Writer
 	default:
 		fmt.Fprintln(stdout, "Not authenticated. Run `claude auth login` or set ANTHROPIC_API_KEY.")
 	}
-	return 0
+	if loggedIn {
+		return 0
+	}
+	return 1
+}
+
+// authStatusJSON is the JSON shape for "claude auth status --json" (F3-C02 / AUTH-CLI-07).
+// Mirrors CC's authStatus JSON output (auth.ts:296-316).
+type authStatusJSON struct {
+	LoggedIn       bool   `json:"loggedIn"`
+	AuthMethod     string `json:"authMethod"`
+	APIKeySource   string `json:"apiKeySource,omitempty"`
+	Email          string `json:"email,omitempty"`
+	OrgID          string `json:"orgId,omitempty"`
+	SubscriptionType string `json:"subscriptionType,omitempty"`
+}
+
+// runAuthStatusJSON emits the JSON form of auth status, mirroring CC's output.
+func runAuthStatusJSON(creds auth.Credentials, apiKeyHelperCmd string, loggedIn bool, stdout io.Writer) int {
+	out := authStatusJSON{LoggedIn: loggedIn}
+
+	switch creds.Source {
+	case auth.SourceOAuth:
+		out.AuthMethod = "claude.ai"
+	case auth.SourceAPIKey:
+		if strings.TrimSpace(apiKeyHelperCmd) != "" {
+			out.AuthMethod = "api_key_helper"
+			out.APIKeySource = "apiKeyHelper"
+		} else if strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) != "" {
+			out.AuthMethod = "api_key"
+			out.APIKeySource = "ANTHROPIC_API_KEY"
+		} else {
+			out.AuthMethod = "api_key"
+		}
+	default:
+		out.AuthMethod = "none"
+	}
+
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		fmt.Fprintf(stdout, `{"loggedIn":%v,"authMethod":"none"}`, loggedIn)
+		return 1
+	}
+	fmt.Fprintf(stdout, "%s\n", data)
+	if loggedIn {
+		return 0
+	}
+	return 1
 }
 
 func runPluginCLI(ctx context.Context, state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
