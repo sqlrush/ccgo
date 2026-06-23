@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
@@ -71,3 +72,52 @@ func TestRunSessionEndHooks(t *testing.T) {
 }
 
 var _ = tool.HookSessionStart // keep import if unused above
+
+// TestRunSessionEndHooksBounded verifies that RunSessionEndHooks returns within
+// the bounded timeout even when the hook command is slow.
+// CC ref: src/utils/hooks.ts:175-182 (HOOK-29).
+func TestRunSessionEndHooksBounded(t *testing.T) {
+	r := Runner{
+		WorkingDirectory: t.TempDir(),
+		SessionID:        "sess_end_timeout",
+		settingsOverride: &contracts.Settings{
+			Hooks: map[string]any{
+				"SessionEnd": []any{map[string]any{
+					"hooks": []any{map[string]any{
+						"type":    "command",
+						"command": "sleep 5",
+						"timeout": 60, // hook's own timeout is long; the SessionEnd cap should win
+					}},
+				}},
+			},
+		},
+	}
+	t.Setenv("CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS", "300")
+	start := time.Now()
+	_ = r.RunSessionEndHooks(context.Background(), SessionEndPromptInputExit)
+	elapsed := time.Since(start)
+	// Should return within ~300ms + buffer, not 5s.
+	if elapsed > 2*time.Second {
+		t.Fatalf("RunSessionEndHooks took %v, expected <2s (bounded at 300ms)", elapsed)
+	}
+}
+
+// TestGetSessionEndHookTimeoutMSEnvOverride verifies the env var override for
+// the SessionEnd hook timeout.
+func TestGetSessionEndHookTimeoutMSEnvOverride(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS", "500")
+	got := getSessionEndHookTimeoutMS()
+	if got != 500*time.Millisecond {
+		t.Fatalf("expected 500ms, got %v", got)
+	}
+}
+
+// TestGetSessionEndHookTimeoutMSDefault verifies the default is 1500ms when
+// the env var is not set.
+func TestGetSessionEndHookTimeoutMSDefault(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS", "")
+	got := getSessionEndHookTimeoutMS()
+	if got != 1500*time.Millisecond {
+		t.Fatalf("expected 1500ms, got %v", got)
+	}
+}

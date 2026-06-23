@@ -150,6 +150,18 @@ const (
 	// turns via TeamRunner.RunTeammate instead of the append-only stub path.
 	MetadataTeamRunnerKey = "ccgo.team_runner"
 
+	// MetadataIsInteractiveKey is a bool set to true in ctx.Metadata when the
+	// session is running in interactive (TUI) mode. Used by the workspace-trust
+	// guard (HOOK-62): hooks are skipped when interactive+untrusted.
+	// CC ref: src/utils/hooks.ts:286-296 (shouldSkipHookDueToTrust).
+	MetadataIsInteractiveKey = "ccgo.interactive"
+
+	// MetadataWorkspaceTrustedKey is a bool set in ctx.Metadata to indicate
+	// whether the workspace trust dialog has been accepted. When the key is
+	// absent the value defaults to true (headless/SDK trust is implicit).
+	// CC ref: src/utils/hooks.ts:286-296 (shouldSkipHookDueToTrust).
+	MetadataWorkspaceTrustedKey = "ccgo.workspace.trusted"
+
 	// HookPostToolUseFailure is fired by the executor when a tool execution
 	// returns an error (distinct from PostToolUse which fires on success).
 	// CC ref: src/utils/hooks.ts:1619, coreSchemas.ts:448 (HOOK-21).
@@ -188,6 +200,11 @@ type HookResult struct {
 	UpdatedInput       json.RawMessage
 	PermissionDecision *contracts.PermissionDecision
 	Metadata           map[string]any
+	// Async is set when hook output contains {"async":true}.
+	// CC ref: src/utils/hooks.ts:168-176 (HOOK-12).
+	Async bool
+	// AsyncTimeout is the optional async timeout in milliseconds from hook output.
+	AsyncTimeout int
 }
 
 type Hook interface {

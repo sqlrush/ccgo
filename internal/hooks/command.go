@@ -24,6 +24,24 @@ import (
 const defaultCommandHookTimeout = 10 * time.Minute
 const defaultHTTPHookTimeout = 10 * time.Minute
 
+// isInteractiveFromCtx returns true when the session is running in interactive
+// (TUI) mode. CC ref: src/utils/hooks.ts:286-296 (shouldSkipHookDueToTrust).
+func isInteractiveFromCtx(ctx tool.Context) bool {
+	v, _ := ctx.Metadata[tool.MetadataIsInteractiveKey].(bool)
+	return v
+}
+
+// workspaceTrustedFromCtx returns true when workspace trust is accepted.
+// When the key is absent the result is true (headless/SDK: trust is implicit).
+// CC ref: src/utils/hooks.ts:286-296 (shouldSkipHookDueToTrust).
+func workspaceTrustedFromCtx(ctx tool.Context) bool {
+	v, ok := ctx.Metadata[tool.MetadataWorkspaceTrustedKey].(bool)
+	if !ok {
+		return true
+	}
+	return v
+}
+
 type CommandHook struct {
 	Phase           string
 	Matcher         string
@@ -338,6 +356,11 @@ func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.H
 	if event.Phase != h.Phase {
 		return tool.HookResult{}, nil
 	}
+	// HOOK-62: In interactive mode, ALL hooks require workspace trust.
+	// CC ref: src/utils/hooks.ts:286-296 (shouldSkipHookDueToTrust).
+	if isInteractiveFromCtx(ctx) && !workspaceTrustedFromCtx(ctx) {
+		return tool.HookResult{}, nil
+	}
 	// For lifecycle phases (SessionStart, SessionEnd, Notification, etc.) the
 	// matcher is applied externally by filterByMatcher against the payload key
 	// (source/reason/notification_type), not against event.ToolName. Only check
@@ -365,6 +388,11 @@ func (h CommandHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.H
 
 func (h HTTPHook) RunToolHook(ctx tool.Context, event tool.HookEvent) (tool.HookResult, error) {
 	if event.Phase != h.Phase {
+		return tool.HookResult{}, nil
+	}
+	// HOOK-62: In interactive mode, ALL hooks require workspace trust.
+	// CC ref: src/utils/hooks.ts:286-296 (shouldSkipHookDueToTrust).
+	if isInteractiveFromCtx(ctx) && !workspaceTrustedFromCtx(ctx) {
 		return tool.HookResult{}, nil
 	}
 	// For lifecycle phases the matcher is applied externally by filterByMatcher;
@@ -626,6 +654,15 @@ func hookResultFromJSON(phase string, raw string) (tool.HookResult, bool) {
 	var object map[string]any
 	if err := json.Unmarshal([]byte(raw), &object); err != nil {
 		return tool.HookResult{}, false
+	}
+	// HOOK-12: Detect {"async":true} — hook wants to detach.
+	// CC ref: src/utils/hooks.ts:168-176.
+	if asyncVal, ok := object["async"].(bool); ok && asyncVal {
+		timeout := 0
+		if tv, ok := object["asyncTimeout"].(float64); ok {
+			timeout = int(tv)
+		}
+		return tool.HookResult{Async: true, AsyncTimeout: timeout}, true
 	}
 	result := tool.HookResult{}
 	if value, ok := object["systemMessage"].(string); ok && strings.TrimSpace(value) != "" {

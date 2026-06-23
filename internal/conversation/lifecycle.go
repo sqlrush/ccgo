@@ -3,10 +3,29 @@ package conversation
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"ccgo/internal/tool"
 )
+
+// sessionEndHookTimeoutMSDefault is the default bounded timeout for SessionEnd
+// hooks. CC ref: src/utils/hooks.ts:175-182 (HOOK-29).
+const sessionEndHookTimeoutMSDefault = 1500
+
+// getSessionEndHookTimeoutMS returns the SessionEnd hook timeout. The env var
+// CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS overrides the default.
+func getSessionEndHookTimeoutMS() time.Duration {
+	raw := os.Getenv("CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS")
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			return time.Duration(parsed) * time.Millisecond
+		}
+	}
+	return sessionEndHookTimeoutMSDefault * time.Millisecond
+}
 
 // SessionStartSource identifies why a session is starting.
 type SessionStartSource string
@@ -51,10 +70,15 @@ func (r Runner) RunSessionStartHooks(ctx context.Context, source SessionStartSou
 	return strings.TrimSpace(result.Message), nil
 }
 
-// RunSessionEndHooks fires SessionEnd hooks (best-effort).
-// Reason becomes the matchQuery for hook matcher filtering.
+// RunSessionEndHooks fires SessionEnd hooks (best-effort) with a bounded
+// timeout. The timeout defaults to 1500 ms but can be overridden by the
+// CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS env var.
+// CC ref: src/utils/hooks.ts:175-182 (HOOK-29).
 func (r Runner) RunSessionEndHooks(ctx context.Context, reason SessionEndReason) error {
-	_, err := r.runConversationHooks(ctx, tool.HookSessionEnd, map[string]any{
+	timeout := getSessionEndHookTimeoutMS()
+	endCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	_, err := r.runConversationHooks(endCtx, tool.HookSessionEnd, map[string]any{
 		"reason": string(reason),
 	})
 	return err
