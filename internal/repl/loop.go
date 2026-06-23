@@ -361,6 +361,9 @@ func (l *Loop) applyCommandOutcome(outcome CommandOutcome) {
 	if outcome.Status != "" {
 		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: outcome.Status})
 	}
+	if outcome.Overlay != nil {
+		l.activeOverlay = outcome.Overlay
+	}
 }
 
 // enqueueAsk adds an ask to the active slot if empty, otherwise to the backlog.

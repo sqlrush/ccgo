@@ -25,6 +25,9 @@ type CommandOutcome struct {
 	NewHistory     []contracts.Message
 	Status         string
 	SendToModel    bool
+	// Overlay, when non-nil, is opened as the active overlay after the command
+	// runs. The loop clears it on Submit or Dismissed.
+	Overlay Overlay
 }
 
 // CommandHandler runs a single live-effect slash command.
