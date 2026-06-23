@@ -1374,6 +1374,11 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 	if input.Model != "" {
 		effectiveModel = input.Model
 	}
+	// ORCH-13: agentfile background:true forces the task to run as a background task
+	// regardless of the run_in_background input field.
+	if hasAgent && agent.Background {
+		input.RunBackground = true
+	}
 	run, err := runtime.Start(session.SidechainOptions{
 		ID:                  taskID,
 		AgentType:           input.SubagentType,
@@ -1387,6 +1392,9 @@ func callTask(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		AgentModel:          effectiveModel,
 		AgentPermissionMode: string(agent.PermissionMode),
 		AgentAllowedTools:   append([]string(nil), agent.AllowedTools...),
+		// ORCH-35: propagate the agentfile omitClaudeMd flag to the sidechain
+		// metadata so the sub-agent runner can strip CLAUDE.md from the system prompt.
+		AgentOmitClaudeMd: hasAgent && agent.OmitClaudeMd,
 	})
 	if err != nil {
 		if worktree.Owned {

@@ -1753,6 +1753,94 @@ func TestAgentRegistryBackgroundDispatch(t *testing.T) {
 	}
 }
 
+// TestAgentfileIsolationWorktreeRequestsWorktree verifies ORCH-12: when an
+// AgentInfo has Isolation=="worktree", taskInputRequestsWorktree returns true
+// even when the caller did not explicitly set the worktree input field.
+func TestAgentfileIsolationWorktreeRequestsWorktree(t *testing.T) {
+	ctx, _ := taskContext(t)
+	ctx.Metadata[tool.MetadataAvailableAgentsKey] = []tool.AgentInfo{
+		{Name: "isolated-agent", Isolation: "worktree"},
+	}
+	input := taskInput{SubagentType: "isolated-agent"} // WorktreeSet=false
+	if !taskInputRequestsWorktree(ctx, input) {
+		t.Error("taskInputRequestsWorktree should return true when agent has Isolation=worktree")
+	}
+}
+
+// TestAgentfileIsolationEmptyDoesNotForceWorktree verifies that an agent with
+// no isolation field does not trigger automatic worktree creation.
+func TestAgentfileIsolationEmptyDoesNotForceWorktree(t *testing.T) {
+	ctx, _ := taskContext(t)
+	ctx.Metadata[tool.MetadataAvailableAgentsKey] = []tool.AgentInfo{
+		{Name: "plain-agent", Isolation: ""},
+	}
+	input := taskInput{SubagentType: "plain-agent"}
+	// With no worktree settings in metadata, should be false.
+	if taskInputRequestsWorktree(ctx, input) {
+		t.Error("taskInputRequestsWorktree should return false when agent has no Isolation")
+	}
+}
+
+// TestAgentfileBackgroundForcesSidechainRunBackground verifies ORCH-13:
+// when an AgentInfo has Background==true the Task tool records the sidechain
+// with run_in_background=true in the structured result regardless of input.
+func TestAgentfileBackgroundForcesSidechainRunBackground(t *testing.T) {
+	ctx, _ := taskContext(t)
+	ctx.Metadata[tool.MetadataAvailableAgentsKey] = []tool.AgentInfo{
+		{Name: "bg-agent", Background: true},
+	}
+	executor := taskExecutor(t)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_bg_agent",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"bg","prompt":"run","subagent_type":"bg-agent"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error: %v", result.Content)
+	}
+	if v, _ := result.StructuredContent["run_in_background"].(bool); !v {
+		t.Errorf("expected run_in_background=true in structured content (forced by agentfile background:true), got %#v", result.StructuredContent["run_in_background"])
+	}
+}
+
+// TestAgentfileOmitClaudeMdPropagatedToSidechain verifies ORCH-35: when an
+// AgentInfo has OmitClaudeMd==true the sidechain metadata records
+// agentOmitClaudeMd=true so the sub-agent runner can strip CLAUDE.md.
+func TestAgentfileOmitClaudeMdPropagatedToSidechain(t *testing.T) {
+	ctx, transcriptPath := taskContext(t)
+	ctx.Metadata[tool.MetadataAvailableAgentsKey] = []tool.AgentInfo{
+		{Name: "lean-agent", OmitClaudeMd: true},
+	}
+	executor := taskExecutor(t)
+	result, err := executor.Execute(ctx, contracts.ToolUse{
+		ID:    "toolu_lean",
+		Name:  "Task",
+		Input: json.RawMessage(`{"description":"lean","prompt":"go","subagent_type":"lean-agent"}`),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error: %v", result.Content)
+	}
+	taskID, _ := result.StructuredContent["sidechain_id"].(string)
+	if taskID == "" {
+		t.Fatal("sidechain_id missing from structured content")
+	}
+	// The sidechain metadata must carry agentOmitClaudeMd=true.
+	// FindSidechainState takes the transcript path (MetadataSessionPathKey value).
+	state, err := session.FindSidechainState(transcriptPath, ctx.SessionID, taskID)
+	if err != nil {
+		t.Fatalf("FindSidechainState: %v", err)
+	}
+	if !state.Metadata.AgentOmitClaudeMd {
+		t.Error("sidechain metadata AgentOmitClaudeMd should be true when agentfile has omitClaudeMd:true")
+	}
+}
+
 func containsEnum(values []any, want string) bool {
 	for _, value := range values {
 		if value == want {

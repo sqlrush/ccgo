@@ -21,6 +21,16 @@ type AgentInfo struct {
 	Model          string
 	PermissionMode contracts.PermissionMode
 	AllowedTools   []string
+	// Isolation specifies the default isolation mode for the agent ("worktree" or "").
+	// ORCH-12: when "worktree", a git worktree is created automatically even if the
+	// caller did not explicitly request one.
+	Isolation string
+	// Background, when true, causes the agent to always run as a background task.
+	// ORCH-13: overrides run_in_background in the task input.
+	Background bool
+	// OmitClaudeMd, when true, instructs the sub-agent runner to omit the
+	// CLAUDE.md hierarchy from the system prompt (ORCH-35).
+	OmitClaudeMd bool
 }
 
 type Context struct {

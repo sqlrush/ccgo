@@ -913,6 +913,74 @@ func TestForkSessionCreatesNewID(t *testing.T) {
 	}
 }
 
+// TestSessionIDWithContinueWithoutForkSessionErrors verifies SESS-08:
+// --session-id combined with --continue (or --resume) without --fork-session
+// must produce an error instead of silently reusing conflicting IDs.
+// CC ref: src/main.tsx:1279-1284.
+func TestSessionIDWithContinueWithoutForkSessionErrors(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	_, err = headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		SessionID:      "some-uuid",
+		Continue:       true,
+		ForkSession:    false, // missing --fork-session
+	})
+	if err == nil {
+		t.Fatal("expected error when --session-id used with --continue without --fork-session")
+	}
+	if !strings.Contains(err.Error(), "fork-session") {
+		t.Errorf("error should mention fork-session; got: %v", err)
+	}
+}
+
+// TestSessionIDWithResumeWithoutForkSessionErrors verifies SESS-08 for --resume variant.
+func TestSessionIDWithResumeWithoutForkSessionErrors(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	_, err = headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		SessionID:      "some-uuid",
+		Resume:         "abc-session-id",
+		ForkSession:    false, // missing --fork-session
+	})
+	if err == nil {
+		t.Fatal("expected error when --session-id used with --resume without --fork-session")
+	}
+	if !strings.Contains(err.Error(), "fork-session") {
+		t.Errorf("error should mention fork-session; got: %v", err)
+	}
+}
+
+// TestSessionIDWithForkSessionAndContinueAllowed verifies SESS-08 complement:
+// --session-id + --continue + --fork-session is permitted (no validation error from headlessRunner).
+func TestSessionIDWithForkSessionAndContinueAllowed(t *testing.T) {
+	testEnv(t)
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatalf("bootstrap.New: %v", err)
+	}
+	// headlessRunner itself should not error; the resume step will fail because
+	// there are no sessions, but headlessRunner validation passes.
+	_, err = headlessRunner(context.Background(), state, cliOptions{
+		PermissionMode: "default",
+		SessionID:      "override-uuid",
+		Continue:       true,
+		ForkSession:    true,
+	})
+	// headlessRunner may succeed even if later resume fails — that is fine.
+	// The key invariant is that we do NOT get the "fork-session" validation error.
+	if err != nil && strings.Contains(err.Error(), "--session-id can only be used") {
+		t.Errorf("should not produce validation error with --fork-session present; got: %v", err)
+	}
+}
+
 // ─── CLI-FLAG-40: --json-schema wired to runner.OutputSchema ─────────────────
 
 func TestJSONSchemaWiredToRunner(t *testing.T) {

@@ -3962,6 +3962,13 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.AlwaysThinkingEnabled = false
 	}
 
+	// SESS-08: --session-id combined with --continue or --resume requires
+	// --fork-session; without it the caller would silently reuse both the
+	// original session ID *and* a custom one — an impossible state.
+	// CC ref: src/main.tsx:1279-1284.
+	if options.SessionID != "" && (options.Continue || strings.TrimSpace(options.Resume) != "") && !options.ForkSession {
+		return conversation.Runner{}, fmt.Errorf("--session-id can only be used with --continue or --resume if --fork-session is also specified")
+	}
 	// F2-C02: --session-id overrides the session ID set by bootstrap.
 	// CC ref: src/main.tsx:--session-id.
 	if options.SessionID != "" {
@@ -4071,6 +4078,9 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 
 	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
+	// ORCH-35: BaseSystemPrompt stores the system prompt before claudeMd is
+	// appended, so sub-agents with omitClaudeMd:true can use a claudeMd-free prompt.
+	runner.BaseSystemPrompt = runner.SystemPrompt
 	// CFG-44: claudeMdExcludes patterns are read from merged settings.
 	var claudeMdExcludes []string
 	if runner.MCP != nil {

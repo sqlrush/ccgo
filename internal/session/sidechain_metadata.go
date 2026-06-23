@@ -22,6 +22,9 @@ type SidechainMetadata struct {
 	AgentModel            string   `json:"agentModel,omitempty"`
 	AgentPermissionMode   string   `json:"agentPermissionMode,omitempty"`
 	AgentAllowedTools     []string `json:"agentAllowedTools,omitempty"`
+	// AgentOmitClaudeMd, when true, instructs the sub-agent runner to exclude
+	// CLAUDE.md content from the system prompt (ORCH-35).
+	AgentOmitClaudeMd bool `json:"agentOmitClaudeMd,omitempty"`
 }
 
 func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
@@ -49,6 +52,7 @@ func (m *SidechainMetadata) UnmarshalJSON(data []byte) error {
 	metadata.AgentModel = firstStringField(fields, sidechainLifecycleAgentModelFields...)
 	metadata.AgentPermissionMode = firstStringField(fields, sidechainLifecycleAgentPermissionModeFields...)
 	metadata.AgentAllowedTools = firstStringSliceField(fields, sidechainLifecycleAgentAllowedToolsFields...)
+	metadata.AgentOmitClaudeMd = firstBoolField(fields, "agentOmitClaudeMd", "agent_omit_claude_md")
 	*m = metadata
 	return nil
 }
@@ -75,7 +79,8 @@ func (m SidechainMetadata) Empty() bool {
 		m.AgentPrompt == "" &&
 		m.AgentModel == "" &&
 		m.AgentPermissionMode == "" &&
-		len(m.AgentAllowedTools) == 0
+		len(m.AgentAllowedTools) == 0 &&
+		!m.AgentOmitClaudeMd
 }
 
 func WriteSidechainMetadata(path string, metadata SidechainMetadata) error {

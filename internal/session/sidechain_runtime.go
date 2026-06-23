@@ -50,6 +50,9 @@ type SidechainOptions struct {
 	AgentModel          string
 	AgentPermissionMode string
 	AgentAllowedTools   []string
+	// AgentOmitClaudeMd, when true, instructs the sub-agent runner to exclude
+	// CLAUDE.md content from the system prompt (ORCH-35).
+	AgentOmitClaudeMd bool
 }
 
 func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) {
@@ -90,6 +93,7 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 			AgentModel:          options.AgentModel,
 			AgentPermissionMode: options.AgentPermissionMode,
 			AgentAllowedTools:   append([]string(nil), options.AgentAllowedTools...),
+			AgentOmitClaudeMd:   options.AgentOmitClaudeMd,
 		},
 	}
 	if !run.Metadata.Empty() {
@@ -120,6 +124,7 @@ func (r SidechainRuntime) Start(options SidechainOptions) (SidechainRun, error) 
 			"agentModel":                 options.AgentModel,
 			"agentPermissionMode":        options.AgentPermissionMode,
 			"agentAllowedTools":          append([]string(nil), options.AgentAllowedTools...),
+			"agentOmitClaudeMd":          options.AgentOmitClaudeMd,
 		},
 	}); err != nil {
 		return SidechainRun{}, err

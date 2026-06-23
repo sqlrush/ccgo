@@ -158,7 +158,14 @@ func (r Runner) runTaskSubagentOnce(ctx context.Context, sidechainID string) (ta
 	if worktreePath := strings.TrimSpace(state.Metadata.WorktreePath); worktreePath != "" {
 		subRunner.WorkingDirectory = worktreePath
 	}
-	subRunner.SystemPrompt = taskSubagentSystemPrompt(r.SystemPrompt, state.Metadata.AgentPrompt)
+	// ORCH-35: when the agentfile declares omitClaudeMd:true, the sub-agent receives
+	// the base system prompt (without the CLAUDE.md hierarchy).  This mirrors CC's
+	// shouldOmitClaudeMd guard in runAgent.ts:387-398.
+	baseForSubagent := r.SystemPrompt
+	if state.Metadata.AgentOmitClaudeMd && r.BaseSystemPrompt != "" {
+		baseForSubagent = r.BaseSystemPrompt
+	}
+	subRunner.SystemPrompt = taskSubagentSystemPrompt(baseForSubagent, state.Metadata.AgentPrompt)
 	if mode := strings.TrimSpace(state.Metadata.AgentPermissionMode); mode != "" {
 		subRunner.Permissions = taskSubagentPermissionMode(subRunner.Permissions, mode)
 	}

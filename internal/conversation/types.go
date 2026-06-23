@@ -122,6 +122,11 @@ type Runner struct {
 	Model                     string
 	FallbackModels            []string
 	SystemPrompt              string
+	// BaseSystemPrompt holds the system prompt without the CLAUDE.md content.
+	// It is set alongside SystemPrompt when claudeMd is injected, allowing
+	// sub-agents with OmitClaudeMd=true to use a prompt free of CLAUDE.md rules.
+	// ORCH-35: CC ref: src/tools/AgentTool/runAgent.ts shouldOmitClaudeMd.
+	BaseSystemPrompt string
 	MaxTokens                 int
 	ThinkingBudgetTokens      int
 	// EffortLevel sets the effort level sent in output_config.effort (CFG-32).

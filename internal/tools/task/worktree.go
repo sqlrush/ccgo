@@ -36,6 +36,13 @@ func taskInputRequestsWorktree(ctx tool.Context, input taskInput) bool {
 	if input.WorktreeSet {
 		return input.Worktree
 	}
+	// ORCH-12: agentfile isolation:worktree makes the agent always use worktree
+	// isolation even when the caller did not explicitly request it.
+	if agent, ok := taskAgentForType(input.SubagentType, availableTaskAgents(ctx.Metadata)); ok {
+		if agent.Isolation == "worktree" {
+			return true
+		}
+	}
 	return taskDefaultWorktreeEnabled(ctx)
 }
 

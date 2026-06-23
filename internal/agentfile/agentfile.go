@@ -17,15 +17,18 @@ import (
 // AgentFile represents a parsed .claude/agents/*.md file.
 // All fields are immutable — callers must not modify the struct after creation.
 type AgentFile struct {
-	Name        string
-	Description string
-	Tools       []string
-	Model       string
-	Effort      string
-	Color       string
-	Memory      string
-	Prompt      string
-	Path        string // absolute path, empty when not loaded from disk
+	Name         string
+	Description  string
+	Tools        []string
+	Model        string
+	Effort       string
+	Color        string
+	Memory       string
+	Isolation    string // "worktree" causes the agent to run in an isolated git worktree by default
+	Background   bool   // when true the agent always runs as a background task
+	OmitClaudeMd bool   // when true the agent's system prompt omits the CLAUDE.md hierarchy
+	Prompt       string
+	Path         string // absolute path, empty when not loaded from disk
 }
 
 // validName matches agent names that are safe as file names and identifiers.
@@ -53,14 +56,17 @@ func Parse(name string, content []byte) (AgentFile, error) {
 	}
 
 	return AgentFile{
-		Name:        name,
-		Description: strings.TrimSpace(fm["description"]),
-		Tools:       parseToolList(fm["tools"]),
-		Model:       strings.TrimSpace(fm["model"]),
-		Effort:      strings.TrimSpace(fm["effort"]),
-		Color:       strings.TrimSpace(fm["color"]),
-		Memory:      strings.TrimSpace(fm["memory"]),
-		Prompt:      body,
+		Name:         name,
+		Description:  strings.TrimSpace(fm["description"]),
+		Tools:        parseToolList(fm["tools"]),
+		Model:        strings.TrimSpace(fm["model"]),
+		Effort:       strings.TrimSpace(fm["effort"]),
+		Color:        strings.TrimSpace(fm["color"]),
+		Memory:       strings.TrimSpace(fm["memory"]),
+		Isolation:    parseIsolation(fm["isolation"]),
+		Background:   parseBoolField(fm["background"]),
+		OmitClaudeMd: parseBoolField(fm["omitClaudeMd"]),
+		Prompt:       body,
 	}, nil
 }
 
@@ -102,6 +108,17 @@ func Format(a AgentFile) string {
 		sb.WriteString("memory: ")
 		sb.WriteString(a.Memory)
 		sb.WriteByte('\n')
+	}
+	if a.Isolation != "" {
+		sb.WriteString("isolation: ")
+		sb.WriteString(a.Isolation)
+		sb.WriteByte('\n')
+	}
+	if a.Background {
+		sb.WriteString("background: true\n")
+	}
+	if a.OmitClaudeMd {
+		sb.WriteString("omitClaudeMd: true\n")
 	}
 	sb.WriteString("---\n")
 	sb.WriteString(a.Prompt)
@@ -203,6 +220,22 @@ func validateNameForFS(name string) error {
 		return fmt.Errorf("agentfile: invalid name %q (must match [a-zA-Z0-9_-]+)", name)
 	}
 	return nil
+}
+
+// parseIsolation validates and normalises the isolation frontmatter value.
+// Only "worktree" is accepted; anything else is silently ignored.
+func parseIsolation(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "worktree" {
+		return "worktree"
+	}
+	return ""
+}
+
+// parseBoolField parses "true"/"false" frontmatter values (case-insensitive).
+// Returns true only for the literal string "true".
+func parseBoolField(raw string) bool {
+	return strings.EqualFold(strings.TrimSpace(raw), "true")
 }
 
 // parseToolList splits a comma-separated tools string (e.g. "Read, Grep, Bash")
