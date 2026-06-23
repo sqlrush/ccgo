@@ -134,12 +134,32 @@ func allConfiguredServers(env mcpCLIEnv) (map[string]scopedServer, error) {
 
 // mcpList prints all configured MCP servers sorted by name.
 // Sensitive header values and auth tokens are redacted in output.
+//
+// When an enterprise MCP config (managed-mcp.json) exists, only enterprise
+// servers are shown — matching CC behaviour (src/services/mcp/config.ts:1083).
 func mcpList(env mcpCLIEnv, stdout, stderr io.Writer) int {
-	servers, err := allConfiguredServers(env)
-	if err != nil {
-		fmt.Fprintf(stderr, "ccgo mcp list: %v\n", err)
-		return 1
+	var servers map[string]scopedServer
+
+	if mcp.DoesEnterpriseMCPConfigExist(env.enterpriseMCPPath()) {
+		// Enterprise config present: show only enterprise servers (MCP-27).
+		result, err := mcp.LoadEnterpriseMCPConfig(env.enterpriseMCPPath())
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo mcp list: load enterprise config: %v\n", err)
+			return 1
+		}
+		servers = make(map[string]scopedServer, len(result.Servers))
+		for name, srv := range result.Servers {
+			servers[name] = scopedServer{scope: mcp.ScopeEnterprise, server: srv}
+		}
+	} else {
+		var err error
+		servers, err = allConfiguredServers(env)
+		if err != nil {
+			fmt.Fprintf(stderr, "ccgo mcp list: %v\n", err)
+			return 1
+		}
 	}
+
 	if len(servers) == 0 {
 		fmt.Fprintln(stdout, "No MCP servers configured.")
 		return 0

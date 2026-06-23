@@ -176,3 +176,66 @@ func TestMCPAddAllowedWithoutEnterpriseConfig(t *testing.T) {
 		t.Fatalf("expected success output containing server name: %q", out.String())
 	}
 }
+
+// TestMCPListEnterpriseModeShowsOnlyEnterpriseServers verifies that when
+// managed-mcp.json exists, `mcp list` returns only enterprise servers and
+// omits user/project servers (MCP-27).
+// CC ref: src/services/mcp/config.ts:1083.
+func TestMCPListEnterpriseModeShowsOnlyEnterpriseServers(t *testing.T) {
+	env := newMCPTestEnv(t)
+
+	// Write user-level server (should be hidden in enterprise mode).
+	writeSettings(t, env.UserPath, map[string]any{
+		"user-server": map[string]any{"command": "npx", "args": []any{"user-mcp"}},
+	})
+
+	// Write enterprise managed-mcp.json with a single server.
+	entPath := filepath.Join(t.TempDir(), "managed-mcp.json")
+	entData, err := json.Marshal(map[string]any{
+		"mcpServers": map[string]any{
+			"enterprise-server": map[string]any{"command": "ent-mcp", "args": []any{"--stdio"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entPath, entData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.EnterpriseMCPPath = entPath
+
+	var out, errb bytes.Buffer
+	if code := runMCPCommand([]string{"list"}, &out, &errb, env); code != 0 {
+		t.Fatalf("list exit=%d stderr=%q", code, errb.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "enterprise-server") {
+		t.Fatalf("enterprise server missing from list: %q", got)
+	}
+	if strings.Contains(got, "user-server") {
+		t.Fatalf("user server should be hidden in enterprise mode: %q", got)
+	}
+	// Scope label should be "enterprise".
+	if !strings.Contains(got, "enterprise") {
+		t.Fatalf("expected enterprise scope label in output: %q", got)
+	}
+}
+
+// TestMCPListNoEnterpriseFallsBackToAllServers verifies that when no
+// managed-mcp.json exists, all configured user/project servers are shown (MCP-27 negative path).
+func TestMCPListNoEnterpriseFallsBackToAllServers(t *testing.T) {
+	env := newMCPTestEnv(t)
+	env.EnterpriseMCPPath = filepath.Join(t.TempDir(), "absent-managed-mcp.json")
+
+	writeSettings(t, env.UserPath, map[string]any{
+		"user-server": map[string]any{"command": "npx", "args": []any{"user-mcp"}},
+	})
+
+	var out, errb bytes.Buffer
+	if code := runMCPCommand([]string{"list"}, &out, &errb, env); code != 0 {
+		t.Fatalf("list exit=%d stderr=%q", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "user-server") {
+		t.Fatalf("user server should appear when no enterprise config: %q", out.String())
+	}
+}

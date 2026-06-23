@@ -201,6 +201,7 @@ type Runner struct {
 	LSPServerDefinitions      []lsppkg.ServerDefinition
 	LSPStartupDocuments       []lsppkg.OpenDocument
 	LSPProcesses              map[string]*lsppkg.ServerProcess
+	LSPNavigationManager      *lsppkg.SessionNavigationManager
 	BridgeDirectServer        *bridgepkg.DirectServer
 	BridgeDirectAddr          string
 	BridgeDirectToken         string

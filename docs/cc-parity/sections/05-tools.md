@@ -96,7 +96,7 @@ CC 注册的全部内置工具：Read / Write / Edit / NotebookEdit / Bash / Bas
 | TOOL-PS-01 | PowerShell 执行 PowerShell 命令（Windows）| AUTO | 前置:Windows 环境;操作:PowerShell `{command:"Get-Date"}`;预期:返回当前日期，exit 0 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过（ccgo 有 NewPowerShellTool/Output/Kill；Unix 下优雅退出）|
 | TOOL-PS-02 | PowerShellOutput/KillPowerShell 读取/终止后台 PS 任务 | AUTO | 前置:PowerShell run_in_background;操作:PowerShellOutput/Kill;预期:行为与 BashOutput/KillBash 对称 | src/tools/PowerShellTool/PowerShellTool.tsx | ✅ 通过 |
 
-小计：**61 行**，其中 ✅ 通过 57，⚠️ 已建未接 0，❌ 缺失 1（TOOL-CONFIG-01/02 ant-only），N/A 3。（W-Batch-C: +3 ✅: TOOL-TASK-02/04, TOOL-BASH-07; W-C13: +3 ✅: TOOL-ASK-01/03, TOOL-PLAN-02; F7 commit da665b4: +4 ✅: TOOL-BASH-08, TOOL-WORKTREE-01/02, TOOL-STRUCTURED-01; commit b070112: WORKTREE cwd 传播; G18: +5 ✅: TOOL-LSP-01~05 ConcreteNavigationClient stub round-trip 端到端验证）
+小计：**61 行**，其中 ✅ 通过 57，⚠️ 已建未接 0，❌ 缺失 1（TOOL-CONFIG-01/02 ant-only），N/A 3。（W-Batch-C: +3 ✅: TOOL-TASK-02/04, TOOL-BASH-07; W-C13: +3 ✅: TOOL-ASK-01/03, TOOL-PLAN-02; F7 commit da665b4: +4 ✅: TOOL-BASH-08, TOOL-WORKTREE-01/02, TOOL-STRUCTURED-01; commit b070112: WORKTREE cwd 传播; G18: +5 ✅: TOOL-LSP-01~05 ConcreteNavigationClient stub round-trip 端到端验证; G23: SessionNavigationManager 实现 NavigationClient 接口，按文件扩展名路由到对应语言服务器，懒启动各自进程；Runner.LSPNavigationManager 在 maybeStartLSPServers 中初始化，toolMetadata() 注入 MetadataLSPNavigationKey；5 个单元测试覆盖路由、懒启动唯一性、Close 清理）
 
 **❌ 缺失（ant-only，out-of-scope）：**
 1. `TOOL-CONFIG-01/02`：ant-only 特性（`process.env.USER_TYPE==="ant"`），ccgo 不实现。

@@ -591,6 +591,11 @@ func (r Runner) toolMetadata() map[string]any {
 	if r.SessionPath != "" {
 		metadata[tool.MetadataTeamRunnerKey] = r.buildTeamRunner()
 	}
+	// Inject the SessionNavigationManager so LSP navigation tools can route
+	// requests to the correct language server (TOOL-LSP-NAV / G23).
+	if r.LSPNavigationManager != nil {
+		metadata[tool.MetadataLSPNavigationKey] = r.LSPNavigationManager
+	}
 	// Merge ExtraToolMetadata last so caller-supplied keys take precedence over
 	// auto-generated ones (e.g. QuestionAsker injected by the TUI loop).
 	for k, v := range r.ExtraToolMetadata {
@@ -2013,6 +2018,12 @@ func (r *Runner) maybeStartLSPServers(ctx context.Context) {
 	definitions := r.lspServerDefinitions()
 	if len(definitions) == 0 {
 		return
+	}
+	// Create a SessionNavigationManager for tool-layer navigation requests.
+	// It lazily starts its own server connections (independent from the
+	// diagnostics ServerProcess), so there is no startup cost here.
+	if r.LSPNavigationManager == nil {
+		r.LSPNavigationManager = lsppkg.NewSessionNavigationManager(definitions, r.WorkingDirectory)
 	}
 	diagnosticsPath := lsppkg.SessionDiagnosticsPath(r.SessionPath, r.SessionID)
 	managerPath := lsppkg.SessionManagerStatusPath(r.SessionPath, r.SessionID)

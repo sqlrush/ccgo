@@ -249,6 +249,11 @@ func TestLSPServerProcessHelper(t *testing.T) {
 	case "helper-sleep":
 		time.Sleep(10 * time.Second)
 		os.Exit(0)
+	case "helper-nav-session":
+		if runNavSession() != nil {
+			os.Exit(10)
+		}
+		os.Exit(0)
 	default:
 		os.Exit(2)
 	}
@@ -312,6 +317,64 @@ func runLSPSession() error {
 		return err
 	}
 	return WriteFramedMessage(os.Stdout, []byte(`{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///work/main.go","diagnostics":[{"severity":1,"message":"session broken"}]}}`))
+}
+
+// runNavSession implements a minimal LSP server that handles the initialize
+// handshake plus one textDocument/hover request. Used by session manager tests.
+func runNavSession() error {
+	reader := bufio.NewReader(os.Stdin)
+	// 1. Receive initialize request.
+	initPayload, err := ReadFramedMessage(reader, defaultFrameLimit)
+	if err != nil {
+		return err
+	}
+	// Parse the request id so we echo it back.
+	var initReq struct {
+		ID int `json:"id"`
+	}
+	if jsonErr := json.Unmarshal(initPayload, &initReq); jsonErr != nil {
+		return jsonErr
+	}
+	initResp, jsonErr := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      initReq.ID,
+		"result":  map[string]any{"capabilities": map[string]any{"textDocumentSync": 1}},
+	})
+	if jsonErr != nil {
+		return jsonErr
+	}
+	if err := WriteFramedMessage(os.Stdout, initResp); err != nil {
+		return err
+	}
+	// 2. Receive initialized notification.
+	if _, err := ReadFramedMessage(reader, defaultFrameLimit); err != nil {
+		return err
+	}
+	// 3. Read requests until stdin closes.
+	for {
+		payload, err := ReadFramedMessage(reader, defaultFrameLimit)
+		if err != nil {
+			return nil // EOF – clean exit
+		}
+		var req struct {
+			ID     int    `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(payload, &req); err != nil {
+			continue
+		}
+		resp, jsonErr := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req.ID,
+			"result":  map[string]any{"contents": "nav-result"},
+		})
+		if jsonErr != nil {
+			return jsonErr
+		}
+		if err := WriteFramedMessage(os.Stdout, resp); err != nil {
+			return err
+		}
+	}
 }
 
 func loadCapturedMessages(t *testing.T, path string) []map[string]any {

@@ -689,8 +689,17 @@ func (l *Loop) handleKey(key tui.Key) bool {
 				break
 			}
 		}
+		// REPL-49: "!" prefix mode — treat the rest as a bash command to run.
+		// CC ref: src/components/PromptInput/inputModes.ts (bash prefix).
+		input := event.Value
+		if strings.HasPrefix(input, "!") {
+			cmd := strings.TrimSpace(strings.TrimPrefix(input, "!"))
+			if cmd != "" {
+				input = "Run the following bash command: " + cmd
+			}
+		}
 		l.running = true
-		l.StartTurn(event.Value)
+		l.StartTurn(input)
 		l.startSpinner()
 
 	case tui.ScreenEventStashPrompt:
@@ -923,6 +932,12 @@ func (l *Loop) runLineMode(ctx context.Context) error {
 		line, err := reader.ReadString('\n')
 		line = strings.TrimRight(line, "\r\n")
 		if line != "" && l.StartTurn != nil {
+			// REPL-49: "!" prefix routes input as a bash command.
+			if strings.HasPrefix(line, "!") {
+				if cmd := strings.TrimSpace(strings.TrimPrefix(line, "!")); cmd != "" {
+					line = "Run the following bash command: " + cmd
+				}
+			}
 			l.StartTurn(line)
 		}
 		if err == io.EOF {
