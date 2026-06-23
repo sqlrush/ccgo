@@ -319,6 +319,22 @@ func newProductionRouterFull(cwd string, registry []contracts.Command, agReg age
 		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
 		return s
 	}))
+	// CMD-CONFIG-01: register /config on the REPL router so it doesn't fall
+	// through to the model. Returns a text summary of key settings.
+	router.Register("config", configHandler(func() contracts.Settings {
+		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
+		return s
+	}, cwd))
+	// CMD-PLUGIN-01: register /plugin on the REPL router so it doesn't fall
+	// through to the model. Returns a text summary of configured plugins.
+	router.Register("plugin", pluginHandler(func() contracts.Settings {
+		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
+		return s
+	}))
+	router.Register("plugins", pluginHandler(func() contracts.Settings {
+		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
+		return s
+	}))
 	router.Register("ide", ideHandler(nil)) // nil → defaultIDEDetect
 	router.Register("memory", memoryHandler(cwd))
 	router.Register("help", helpHandler(registry))
@@ -507,6 +523,21 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		loop.onModelChange(m)
 		return nil
 	}))
+
+	// CMD-BRANCH-01: re-register /branch with a real forker that forks the
+	// current session transcript. When the session ID or working dir is empty,
+	// branchHandlerWith falls back to the nil-forker info message.
+	if base.SessionID != "" && base.WorkingDirectory != "" {
+		srcID := base.SessionID
+		root := base.WorkingDirectory
+		router.Register("branch", branchHandlerWith(func(title string) (sessionForkerResult, error) {
+			result, err := session.ForkSession(srcID, root, title)
+			if err != nil {
+				return sessionForkerResult{}, err
+			}
+			return sessionForkerResult{SessionID: result.SessionID, Title: result.Title}, nil
+		}, srcID))
+	}
 
 	// CFG-36: re-register /rename with the terminal-title seam when
 	// terminalTitleFromRename is enabled. The loop's titleWriter writes an

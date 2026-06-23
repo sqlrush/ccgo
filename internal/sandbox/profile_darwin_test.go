@@ -67,3 +67,33 @@ func TestWrapDarwinUsesSandboxExec(t *testing.T) {
 		t.Fatalf("wrapped args lost the original command: %v", args)
 	}
 }
+
+// TestBuildSeatbeltProfileDomainPolicyComment verifies SBX-48:
+// When AllowedDomains or DeniedDomains are set, the profile includes
+// comment lines documenting the policy-layer intent.
+// Per-domain enforcement requires a proxy layer (seatbelt has no DNS-level rules).
+func TestBuildSeatbeltProfileDomainPolicyComment(t *testing.T) {
+	p := Policy{
+		Enabled:       true,
+		AllowedDomains: []string{"api.github.com", "registry.npmjs.org"},
+		DeniedDomains:  []string{"evil.com"},
+	}
+	profile := buildSeatbeltProfile(p, "/tmp/work")
+	// The profile must document the configured domains via comments.
+	if !strings.Contains(profile, "api.github.com") {
+		t.Fatalf("SBX-48: profile must include allowed domain 'api.github.com'; got:\n%s", profile)
+	}
+	if !strings.Contains(profile, "evil.com") {
+		t.Fatalf("SBX-48: profile must include denied domain 'evil.com'; got:\n%s", profile)
+	}
+}
+
+// TestBuildSeatbeltProfileNoDomainCommentWhenEmpty verifies that no spurious
+// domain comment is emitted when AllowedDomains and DeniedDomains are empty.
+func TestBuildSeatbeltProfileNoDomainCommentWhenEmpty(t *testing.T) {
+	p := Policy{Enabled: true}
+	profile := buildSeatbeltProfile(p, "/tmp/work")
+	if strings.Contains(profile, "allowed-domains:") || strings.Contains(profile, "denied-domains:") {
+		t.Fatalf("SBX-48: profile must not emit domain comments when no domains configured:\n%s", profile)
+	}
+}

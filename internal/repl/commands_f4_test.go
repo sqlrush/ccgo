@@ -518,3 +518,83 @@ func TestCommandOutcomeExitExitsLoop(t *testing.T) {
 	}
 }
 
+
+// TestBranchHandlerWithNoTranscriptReturnsWarning verifies that /branch when
+// there is no session transcript (nil forker) returns an informational message.
+func TestBranchHandlerWithNilForkerReturnsInfo(t *testing.T) {
+	h := branchHandlerWith(nil, "")
+	out, err := h(context.Background(), CommandContext{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if strings.TrimSpace(out.Status) == "" {
+		t.Fatal("expected non-empty status")
+	}
+}
+
+// TestBranchHandlerWithForkerSucceeds verifies that /branch calls the forker
+// and returns a success message containing the fork session ID.
+func TestBranchHandlerWithForkerSucceeds(t *testing.T) {
+	called := false
+	var gotTitle string
+	fakeForker := func(title string) (sessionForkerResult, error) {
+		called = true
+		gotTitle = title
+		return sessionForkerResult{SessionID: "fork-1234", Title: "My Branch (Branch)"}, nil
+	}
+	h := branchHandlerWith(fakeForker, "")
+	out, err := h(context.Background(), CommandContext{Args: "My Branch"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if !called {
+		t.Fatal("forker was not called")
+	}
+	if gotTitle != "My Branch" {
+		t.Fatalf("forker called with %q, want %q", gotTitle, "My Branch")
+	}
+	if !strings.Contains(out.Status, "fork-1234") && !strings.Contains(out.Status, "Branch") {
+		t.Fatalf("status must mention fork session or branch; got %q", out.Status)
+	}
+}
+
+// TestBranchHandlerWithForkerError verifies that /branch returns a user-facing
+// error message when the forker fails.
+func TestBranchHandlerWithForkerError(t *testing.T) {
+	fakeForker := func(title string) (sessionForkerResult, error) {
+		return sessionForkerResult{}, fmt.Errorf("disk full")
+	}
+	h := branchHandlerWith(fakeForker, "")
+	out, err := h(context.Background(), CommandContext{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if !strings.Contains(out.Status, "disk full") {
+		t.Fatalf("expected error in status, got %q", out.Status)
+	}
+}
+
+// TestBranchHandlerBackwardCompatibility verifies that the zero-arg branchHandler()
+// still returns Handled=true (backward-compat; no session context → info message).
+func TestBranchHandlerBackwardCompatibility(t *testing.T) {
+	h := branchHandler()
+	out, err := h(context.Background(), CommandContext{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Handled {
+		t.Fatal("expected Handled=true")
+	}
+	if strings.TrimSpace(out.Status) == "" {
+		t.Fatal("expected non-empty status")
+	}
+}

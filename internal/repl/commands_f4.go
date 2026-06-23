@@ -118,15 +118,54 @@ func terminalSetupHandler() CommandHandler {
 	}
 }
 
-// branchHandler returns a CommandHandler for /branch.
-// ⚠️ Full branch/sidechain infra is out of scope; returns an informational message.
-func branchHandler() CommandHandler {
+// sessionForkerResult is returned by a sessionForker to the branchHandler.
+type sessionForkerResult struct {
+	SessionID contracts.ID
+	Title     string
+}
+
+// sessionForker is the DI function type for forking the current session.
+// It is called with the user-provided title (may be empty).
+// Production code provides a closure over the live session ID and root.
+type sessionForker func(title string) (sessionForkerResult, error)
+
+// branchHandlerWith returns a CommandHandler for /branch backed by the given
+// forker. When forker is nil (no live session context), an informational
+// message is returned.
+//
+// CC parity: src/commands/branch/branch.ts — createFork copies the current
+// session transcript, rewrites sessionId, and saves with a custom title.
+func branchHandlerWith(forker sessionForker, originalSessionID contracts.ID) CommandHandler {
 	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
+		if forker == nil {
+			return CommandOutcome{
+				Handled: true,
+				Status:  "No active session transcript — /branch requires a running REPL session. Use /resume to load a previous session first.",
+			}, nil
+		}
+		title := strings.TrimSpace(cc.Args)
+		result, err := forker(title)
+		if err != nil {
+			return CommandOutcome{
+				Handled: true,
+				Status:  "Failed to branch conversation: " + err.Error(),
+			}, nil
+		}
+		hint := ""
+		if originalSessionID != "" {
+			hint = fmt.Sprintf("\nTo resume the original: /resume %s", originalSessionID)
+		}
 		return CommandOutcome{
 			Handled: true,
-			Status:  "⚠️  /branch (conversation branching) requires sidechain infrastructure that is not yet implemented. Use git branches for code branching instead.",
+			Status:  fmt.Sprintf("Branched conversation %q. You are now in the branch (session %s).%s", result.Title, result.SessionID, hint),
 		}, nil
 	}
+}
+
+// branchHandler returns a CommandHandler for /branch without a live session
+// context. Production code wires branchHandlerWith via RunInteractiveWithOptions.
+func branchHandler() CommandHandler {
+	return branchHandlerWith(nil, "")
 }
 
 // renameHandlerWith returns a CommandHandler for /rename backed by the given writer.
