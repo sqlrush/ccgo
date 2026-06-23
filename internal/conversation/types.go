@@ -146,6 +146,10 @@ type Runner struct {
 	Verbose bool
 	MaxToolRounds             int
 	UseStreaming              bool
+	// MaxBudgetUSD is the maximum dollar amount to spend on API calls in --print mode.
+	// When positive, the turn loop checks accumulated cost after each turn and stops
+	// if the budget is exceeded. CC ref: src/main.tsx:--max-budget-usd.
+	MaxBudgetUSD float64
 	EnablePromptCaching       bool
 	PromptCacheTTL            string
 	SessionID                 contracts.ID

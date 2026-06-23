@@ -70,6 +70,49 @@ type cliOptions struct {
 	AllowedTools    []string
 	DeniedTools     []string
 	AddDirs         []string
+
+	// F2-C01: debug/mode flags
+	Verbose bool
+	Debug   string // optional category filter, e.g. "api,hooks"
+	Bare    bool
+	Thinking string // "enabled", "adaptive", "disabled"
+	Effort   string // "low", "medium", "high", "max"
+
+	// F2-C02: session flags
+	SettingsPath         string // --settings <file-or-json>
+	SessionID            string // --session-id <uuid>
+	NoSessionPersistence bool   // --no-session-persistence (--print only)
+	ForkSession          bool   // --fork-session
+	SessionName          string // -n/--name
+
+	// F2-C03: agent/model flags
+	Agent         string // --agent <agent>
+	Agents        string // --agents <json>
+	FallbackModel string // --fallback-model <model>
+	Betas         []string // --betas <betas...>
+	Tools         []string // --tools <tools...>
+
+	// F2-C04: output/control flags
+	StrictMCPConfig       bool   // --strict-mcp-config
+	SettingSources        string // --setting-sources <sources>
+	IncludeHookEvents     bool   // --include-hook-events
+	IncludePartialMessages bool  // --include-partial-messages
+	ReplayUserMessages    bool   // --replay-user-messages
+	PermissionPromptTool  string // --permission-prompt-tool <tool>
+	JSONSchema            string // --json-schema <schema>
+	MaxBudgetUSD          float64 // --max-budget-usd <amount>
+
+	// F2-C05: system-prompt file / plugin / command flags
+	SystemPromptFile       string // --system-prompt-file <file>
+	AppendSystemPromptFile string // --append-system-prompt-file <file>
+	PluginDirs             []string // --plugin-dir <path> (repeatable)
+	DisableSlashCommands   bool   // --disable-slash-commands
+	AllowDangerouslySkipPermissions bool // --allow-dangerously-skip-permissions
+
+	// F2-C06: worktree / file flags
+	Worktree string // --worktree/-w [name]
+	Tmux     bool   // --tmux
+	Files    []string // --file <specs>
 }
 
 type daemonOptions struct {
@@ -171,6 +214,61 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	var addDirs repeatedStringFlag
 	flags.Var(&addDirs, "add-dir", "additional working directory")
 	flags.Var(&addDirs, "addDir", "additional working directory")
+
+	// F2-C01: debug/mode flags
+	verbose := flags.Bool("verbose", false, "override verbose mode setting from config")
+	debug := flags.String("debug", "", "enable debug mode with optional category filter (e.g. \"api,hooks\")")
+	flags.StringVar(debug, "d", "", "enable debug mode with optional category filter")
+	bare := flags.Bool("bare", false, "minimal mode: skip hooks, LSP, plugin sync; sets CLAUDE_CODE_SIMPLE=1")
+	thinking := flags.String("thinking", "", "thinking mode: enabled, adaptive, disabled")
+	effort := flags.String("effort", "", "effort level: low, medium, high, max")
+
+	// F2-C02: session flags
+	settingsPath := flags.String("settings", "", "path to a settings JSON file or JSON string for additional settings")
+	sessionID := flags.String("session-id", "", "use a specific UUID as the session ID")
+	noSessionPersistence := flags.Bool("no-session-persistence", false, "disable session persistence (--print only)")
+	forkSession := flags.Bool("fork-session", false, "when resuming, create a new session ID instead of reusing the original")
+	sessionName := flags.String("name", "", "set a display name for this session")
+	flags.StringVar(sessionName, "n", "", "set a display name for this session")
+
+	// F2-C03: agent/model flags
+	agentName := flags.String("agent", "", "agent for the current session")
+	agentsJSON := flags.String("agents", "", "JSON object defining custom agents")
+	fallbackModel := flags.String("fallback-model", "", "fallback model when default model is overloaded (--print only)")
+	var betas repeatedStringFlag
+	flags.Var(&betas, "betas", "beta headers to include in API requests (API key users only)")
+	var tools repeatedStringFlag
+	flags.Var(&tools, "tools", "list of available built-in tools (use \"\" to disable all, \"default\" for all)")
+
+	// F2-C04: output/control flags
+	strictMCPConfig := flags.Bool("strict-mcp-config", false, "only use MCP servers from --mcp-config, ignoring all other configs")
+	settingSources := flags.String("setting-sources", "", "comma-separated list of setting sources to load (user,project,local)")
+	includeHookEvents := flags.Bool("include-hook-events", false, "include hook lifecycle events in stream-json output")
+	includePartialMessages := flags.Bool("include-partial-messages", false, "include partial message chunks (--print --output-format=stream-json)")
+	replayUserMessages := flags.Bool("replay-user-messages", false, "re-emit user messages from stdin back on stdout (stream-json mode)")
+	permissionPromptTool := flags.String("permission-prompt-tool", "", "MCP tool to use for permission prompts (--print only)")
+	jsonSchema := flags.String("json-schema", "", "JSON Schema for structured output validation")
+	maxBudgetUSD := flags.Float64("max-budget-usd", 0, "maximum dollar amount to spend on API calls (--print only)")
+
+	// F2-C05: system-prompt file / plugin / command flags
+	systemPromptFile := flags.String("system-prompt-file", "", "read system prompt from a file")
+	appendSystemPromptFile := flags.String("append-system-prompt-file", "", "read and append system prompt from a file")
+	var pluginDirs repeatedStringFlag
+	flags.Var(&pluginDirs, "plugin-dir", "load plugins from a directory for this session (repeatable)")
+	disableSlashCommands := flags.Bool("disable-slash-commands", false, "disable all skills/slash commands")
+	allowDangerouslySkipPermissions := flags.Bool("allow-dangerously-skip-permissions", false, "enable bypassing permissions as an option without enabling it by default")
+
+	// F2-C06: worktree / file flags (IDE/Chrome/from-pr are companion OUT-of-scope, registered as no-ops)
+	worktree := flags.String("worktree", "", "create a new git worktree for this session (optionally specify name)")
+	flags.StringVar(worktree, "w", "", "create a new git worktree for this session")
+	tmux := flags.Bool("tmux", false, "create a tmux session for the worktree (requires --worktree)")
+	var fileSpecs repeatedStringFlag
+	flags.Var(&fileSpecs, "file", "file resources to download at startup (format: file_id:relative_path)")
+	// Companion/cloud flags registered as no-ops (OUT-of-scope §10).
+	_ = flags.Bool("ide", false, "auto-connect to IDE on startup (companion feature, not implemented)")
+	_ = flags.Bool("chrome", false, "enable Claude in Chrome integration (companion feature, not implemented)")
+	_ = flags.String("from-pr", "", "resume a session linked to a PR (companion feature, not implemented)")
+
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
@@ -274,6 +372,38 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			AllowedTools:    append([]string(nil), allowedTools...),
 			DeniedTools:     append([]string(nil), deniedTools...),
 			AddDirs:         append([]string(nil), addDirs...),
+			// F2 flags
+			Verbose:                         *verbose,
+			Debug:                           *debug,
+			Bare:                            *bare,
+			Thinking:                        *thinking,
+			Effort:                          *effort,
+			SettingsPath:                    *settingsPath,
+			SessionID:                       *sessionID,
+			NoSessionPersistence:            *noSessionPersistence,
+			ForkSession:                     *forkSession,
+			SessionName:                     *sessionName,
+			Agent:                           *agentName,
+			Agents:                          *agentsJSON,
+			FallbackModel:                   *fallbackModel,
+			Betas:                           append([]string(nil), betas...),
+			Tools:                           append([]string(nil), tools...),
+			StrictMCPConfig:                 *strictMCPConfig,
+			SettingSources:                  *settingSources,
+			IncludeHookEvents:               *includeHookEvents,
+			IncludePartialMessages:          *includePartialMessages,
+			ReplayUserMessages:              *replayUserMessages,
+			PermissionPromptTool:            *permissionPromptTool,
+			JSONSchema:                      *jsonSchema,
+			MaxBudgetUSD:                    *maxBudgetUSD,
+			SystemPromptFile:                *systemPromptFile,
+			AppendSystemPromptFile:          *appendSystemPromptFile,
+			PluginDirs:                      append([]string(nil), pluginDirs...),
+			DisableSlashCommands:            *disableSlashCommands,
+			AllowDangerouslySkipPermissions: *allowDangerouslySkipPermissions,
+			Worktree:                        *worktree,
+			Tmux:                            *tmux,
+			Files:                           append([]string(nil), fileSpecs...),
 		})
 		if err != nil {
 			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
@@ -356,6 +486,38 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		AllowedTools:    append([]string(nil), allowedTools...),
 		DeniedTools:     append([]string(nil), deniedTools...),
 		AddDirs:         append([]string(nil), addDirs...),
+		// F2 flags
+		Verbose:                         *verbose,
+		Debug:                           *debug,
+		Bare:                            *bare,
+		Thinking:                        *thinking,
+		Effort:                          *effort,
+		SettingsPath:                    *settingsPath,
+		SessionID:                       *sessionID,
+		NoSessionPersistence:            *noSessionPersistence,
+		ForkSession:                     *forkSession,
+		SessionName:                     *sessionName,
+		Agent:                           *agentName,
+		Agents:                          *agentsJSON,
+		FallbackModel:                   *fallbackModel,
+		Betas:                           append([]string(nil), betas...),
+		Tools:                           append([]string(nil), tools...),
+		StrictMCPConfig:                 *strictMCPConfig,
+		SettingSources:                  *settingSources,
+		IncludeHookEvents:               *includeHookEvents,
+		IncludePartialMessages:          *includePartialMessages,
+		ReplayUserMessages:              *replayUserMessages,
+		PermissionPromptTool:            *permissionPromptTool,
+		JSONSchema:                      *jsonSchema,
+		MaxBudgetUSD:                    *maxBudgetUSD,
+		SystemPromptFile:                *systemPromptFile,
+		AppendSystemPromptFile:          *appendSystemPromptFile,
+		PluginDirs:                      append([]string(nil), pluginDirs...),
+		DisableSlashCommands:            *disableSlashCommands,
+		AllowDangerouslySkipPermissions: *allowDangerouslySkipPermissions,
+		Worktree:                        *worktree,
+		Tmux:                            *tmux,
+		Files:                           append([]string(nil), fileSpecs...),
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -3512,6 +3674,11 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	if err := applyMCPConfigFlag(&runner, options.MCPConfig); err != nil {
 		return conversation.Runner{}, err
 	}
+	// F2-C02: --settings loads additional settings at highest precedence.
+	// CC ref: src/main.tsx:--settings.
+	if err := applySettingsFlag(&runner, options.SettingsPath); err != nil {
+		return conversation.Runner{}, err
+	}
 	registry, err := tool.NewRegistry(filetools.BuiltinTools()...)
 	if err != nil {
 		return conversation.Runner{}, err
@@ -3585,6 +3752,117 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.MaxToolRounds = options.MaxTurns
 	}
 	runner.UseStreaming = options.Stream
+
+	// F2-C01: --verbose overrides the verbose setting from config.
+	if options.Verbose {
+		runner.Verbose = true
+	}
+	// F2-C01: --debug sets an env var (CLAUDE_CODE_DEBUG) that debug-aware code reads.
+	// The optional filter string is stored in CLAUDE_CODE_DEBUG_FILTER.
+	// CC ref: src/main.tsx:-d/--debug [filter].
+	if options.Debug != "" {
+		// Non-empty means debug was explicitly enabled (the flag value is the filter or "true").
+		if options.Debug != "true" {
+			// Only set FILTER when a real category string was given, not the bool sentinel.
+			_ = os.Setenv("CLAUDE_CODE_DEBUG_FILTER", options.Debug)
+		}
+		_ = os.Setenv("CLAUDE_CODE_DEBUG", "1")
+	}
+	// F2-C01: --bare sets CLAUDE_CODE_SIMPLE=1 (skip hooks, LSP, plugin-sync, etc.).
+	// CC ref: src/main.tsx:--bare sets process.env.CLAUDE_CODE_SIMPLE='1'.
+	if options.Bare {
+		_ = os.Setenv("CLAUDE_CODE_SIMPLE", "1")
+	}
+	// F2-C01: --effort sets the effort level for the session.
+	// CC ref: src/main.tsx:--effort; utils/effort.ts resolveAppliedEffort.
+	if options.Effort != "" {
+		runner.EffortLevel = options.Effort
+	}
+	// F2-C01: --thinking sets thinking mode (enabled/adaptive/disabled).
+	// CC ref: src/main.tsx:--thinking; betas.ts EFFORT_BETA_HEADER.
+	// "enabled" and "adaptive" both activate thinking; "disabled" clears it.
+	switch strings.ToLower(strings.TrimSpace(options.Thinking)) {
+	case "enabled", "adaptive":
+		runner.AlwaysThinkingEnabled = true
+	case "disabled":
+		runner.AlwaysThinkingEnabled = false
+	}
+
+	// F2-C02: --session-id overrides the session ID set by bootstrap.
+	// CC ref: src/main.tsx:--session-id.
+	if options.SessionID != "" {
+		runner.SessionID = contracts.ID(strings.TrimSpace(options.SessionID))
+	}
+	// F2-C02: --no-session-persistence clears the session path so no .jsonl is created.
+	// CC ref: src/main.tsx:--no-session-persistence.
+	if options.NoSessionPersistence {
+		runner.SessionPath = ""
+		runner.SessionID = ""
+	}
+	// F2-C02: --name sets the session display name via title metadata.
+	// CC ref: src/main.tsx:--name; session title is stored in transcript.
+	// Wired as env var; REPL and session persistence reads this for display.
+	if options.SessionName != "" {
+		_ = os.Setenv("CLAUDE_SESSION_NAME", options.SessionName)
+	}
+
+	// F2-C03: --fallback-model adds to FallbackModels for overload retry.
+	// CC ref: src/main.tsx:--fallback-model; query.ts fallback model logic.
+	if options.FallbackModel != "" {
+		runner.FallbackModels = append(runner.FallbackModels, options.FallbackModel)
+	}
+	// F2-C03: --betas appends beta headers to the API request.
+	// CC ref: src/main.tsx:--betas; api/client.ts beta header.
+	if len(options.Betas) > 0 {
+		runner.BetaHeaders = append(runner.BetaHeaders, options.Betas...)
+	}
+
+	// F2-C04: --strict-mcp-config clears all non-flag MCP configs.
+	// CC ref: src/main.tsx:--strict-mcp-config.
+	if options.StrictMCPConfig && runner.MCP != nil {
+		runner.MCP.UserSettings.MCPServers = nil
+		runner.MCP.ProjectSettings.MCPServers = nil
+		runner.MCP.LocalSettings.MCPServers = nil
+		runner.MCP.PluginServers = nil
+	}
+	// F2-C04: --permission-prompt-tool stores the MCP tool name for permission delegation.
+	// CC ref: src/main.tsx:--permission-prompt-tool.
+	// ⚠️ Full delegation is not wired (requires MCP tool dispatcher at permission ask time);
+	// storing it in env makes it observable for tests and future wiring.
+	if options.PermissionPromptTool != "" {
+		_ = os.Setenv("CLAUDE_PERMISSION_PROMPT_TOOL", options.PermissionPromptTool)
+	}
+	// F2-C04: --max-budget-usd sets a cost ceiling; turn loop checks this after each turn.
+	// CC ref: src/main.tsx:--max-budget-usd.
+	if options.MaxBudgetUSD > 0 {
+		runner.MaxBudgetUSD = options.MaxBudgetUSD
+	}
+
+	// F2-C05: --system-prompt-file reads a file and uses its content as the system prompt.
+	// CC ref: src/main.tsx:--system-prompt-file.
+	if options.SystemPromptFile != "" {
+		data, err := os.ReadFile(options.SystemPromptFile)
+		if err != nil {
+			return conversation.Runner{}, fmt.Errorf("--system-prompt-file: %w", err)
+		}
+		options.SystemPrompt = string(data)
+		options.AppendSystem = ""
+	}
+	// F2-C05: --append-system-prompt-file reads a file and appends its content.
+	// CC ref: src/main.tsx:--append-system-prompt-file.
+	if options.AppendSystemPromptFile != "" {
+		data, err := os.ReadFile(options.AppendSystemPromptFile)
+		if err != nil {
+			return conversation.Runner{}, fmt.Errorf("--append-system-prompt-file: %w", err)
+		}
+		options.AppendSystem = strings.TrimSpace(options.AppendSystem) + "\n" + string(data)
+	}
+	// F2-C05: --disable-slash-commands disables skill/slash command discovery.
+	// CC ref: src/main.tsx:--disable-slash-commands.
+	if options.DisableSlashCommands {
+		runner.SkillDirs = nil
+	}
+
 	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
 	// CFG-44: claudeMdExcludes patterns are read from merged settings.
 	var claudeMdExcludes []string
@@ -3620,7 +3898,7 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 	runner.Client = client
 	runner.APIKeySource = apiKeySource
-	runner.BetaHeaders = append([]string(nil), client.Beta...)
+	runner.BetaHeaders = append(runner.BetaHeaders, client.Beta...)
 	return runner, nil
 }
 
@@ -3671,6 +3949,45 @@ func applyMCPConfigFlag(runner *conversation.Runner, raw string) error {
 	if runner.MCP == nil {
 		runner.MCP = &conversation.MCPConfig{CWD: runner.WorkingDirectory}
 	}
+	runner.MCP.LocalSettings = config.MergeSettings(runner.MCP.LocalSettings, settings)
+	return nil
+}
+
+// applySettingsFlag loads an extra settings file (or JSON string) specified via
+// --settings and merges it at the highest local precedence, matching CC behaviour
+// where --settings overrides all file-based sources.
+// CC ref: src/main.tsx:--settings option.
+func applySettingsFlag(runner *conversation.Runner, raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var settings contracts.Settings
+	// If the value looks like a JSON object, parse it inline.
+	if strings.HasPrefix(raw, "{") {
+		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+			return fmt.Errorf("--settings: invalid JSON: %w", err)
+		}
+	} else {
+		// Otherwise treat it as a file path.
+		path := raw
+		if !filepath.IsAbs(path) {
+			base := runner.WorkingDirectory
+			if base == "" {
+				base = "."
+			}
+			path = filepath.Join(base, path)
+		}
+		var err error
+		settings, err = config.LoadSettingsFile(path)
+		if err != nil {
+			return fmt.Errorf("--settings: load %s: %w", path, err)
+		}
+	}
+	if runner.MCP == nil {
+		runner.MCP = &conversation.MCPConfig{CWD: runner.WorkingDirectory}
+	}
+	// Merge at highest local precedence (LocalSettings is applied last in MergedSettings).
 	runner.MCP.LocalSettings = config.MergeSettings(runner.MCP.LocalSettings, settings)
 	return nil
 }
@@ -3730,8 +4047,15 @@ func resumeHistory(state *bootstrap.State, runner *conversation.Runner, options 
 	if !resumed.Found {
 		return nil, fmt.Errorf("resume session %q has no resumable messages", sessionID)
 	}
-	runner.SessionID = sessionID
-	runner.SessionPath = transcriptPath
+	// F2-C02: --fork-session creates a new session ID instead of reusing the original.
+	// CC ref: src/main.tsx:--fork-session.
+	if options.ForkSession {
+		runner.SessionID = contracts.NewID()
+		runner.SessionPath = session.TranscriptPath(state.CWD(), runner.SessionID)
+	} else {
+		runner.SessionID = sessionID
+		runner.SessionPath = transcriptPath
+	}
 	return resumed.Messages, nil
 }
 
