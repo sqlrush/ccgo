@@ -349,11 +349,18 @@ func (l *Loop) handleKey(key tui.Key) bool {
 
 	// Shift+Tab cycles the permission mode and refreshes the status line.
 	// Intercept before screen.ApplyKey so the screen does not consume the key.
+	// Security gate: switching to BypassPermissions or Auto requires explicit
+	// confirmation via a dialog; the mode change is deferred until the user
+	// accepts (handleOverlaySubmit routes "bypass:accept" and "auto:accept").
 	if key.Type == tui.KeyShiftTab {
-		l.mode = cycleMode(l.mode)
-		l.refreshBaseStatus()
-		if l.onModeChange != nil {
-			l.onModeChange(l.mode)
+		next := cycleMode(l.mode)
+		switch next {
+		case contracts.PermissionBypassPermissions:
+			l.activeOverlay = NewBypassConfirmDialog()
+		case contracts.PermissionAuto:
+			l.activeOverlay = NewAutoModeOptInDialog()
+		default:
+			l.applyModeChange(next)
 		}
 		return false
 	}
@@ -487,11 +494,9 @@ func (l *Loop) applyCommandOutcome(outcome CommandOutcome) bool {
 		l.activeOverlay = outcome.Overlay
 	}
 	if outcome.NewMode != "" {
-		l.mode = outcome.NewMode
-		l.refreshBaseStatus()
-		if l.onModeChange != nil {
-			l.onModeChange(l.mode)
-		}
+		// slash commands that set a mode (e.g. /plan) bypass the Shift+Tab
+		// confirmation dialogs intentionally — they are explicit user commands.
+		l.applyModeChange(outcome.NewMode)
 	}
 	return outcome.Exit
 }
@@ -628,10 +633,23 @@ func (l *Loop) SetMode(mode contracts.PermissionMode) {
 	l.refreshBaseStatus()
 }
 
+// applyModeChange sets the new mode, refreshes the status bar, and fires
+// onModeChange. It is the single path through which all mode switches happen
+// so that the security confirmation gate (bypass/auto dialogs) is the only
+// other code path that can reach this.
+func (l *Loop) applyModeChange(mode contracts.PermissionMode) {
+	l.mode = mode
+	l.refreshBaseStatus()
+	if l.onModeChange != nil {
+		l.onModeChange(l.mode)
+	}
+}
+
 // handleOverlaySubmit consumes structured overlay results (resume:/theme:/
-// memory:/trust:/question:). It returns true when the submit was handled
-// internally and should NOT be forwarded to the model. onOverlaySubmit is a
-// host/test seam.
+// memory:/trust:/question:/bypass:/auto:/mcp:/cost:/tokenwarn:/compact:/
+// ctx:/notices:/idle:/worktree:/onboard:).
+// It returns true when the submit was handled internally and should NOT be
+// forwarded to the model. onOverlaySubmit is a host/test seam.
 func (l *Loop) handleOverlaySubmit(submit string) bool {
 	// Route question answers back to the waiting question asker.
 	if selected, ok := decodeQuestionAnswer(submit); ok {
@@ -641,7 +659,48 @@ func (l *Loop) handleOverlaySubmit(submit string) bool {
 		}
 		return true
 	}
-	for _, prefix := range []string{"resume:", "theme:", "memory:", "trust:", "model:"} {
+
+	// Security: bypass-permissions confirmation gate.
+	// "bypass:accept" → actually perform the mode switch to bypassPermissions.
+	// "bypass:decline" → silently discard; stay on current mode.
+	if submit == "bypass:accept" {
+		l.applyModeChange(contracts.PermissionBypassPermissions)
+		return true
+	}
+	if submit == "bypass:decline" {
+		// Mode switch was cancelled; nothing to do.
+		return true
+	}
+
+	// Auto-mode opt-in gate.
+	// "auto:accept" → switch to auto mode.
+	// "auto:decline" → stay on current mode.
+	if submit == "auto:accept" {
+		l.applyModeChange(contracts.PermissionAuto)
+		return true
+	}
+	if submit == "auto:decline" {
+		return true
+	}
+
+	// Informational dismissals — all handled internally with no model call.
+	for _, prefix := range []string{
+		"cost:", "tokenwarn:", "compact:", "ctx:", "notices:", "idle:",
+	} {
+		if strings.HasPrefix(submit, prefix) {
+			if l.onOverlaySubmit != nil {
+				l.onOverlaySubmit(submit)
+			}
+			return true
+		}
+	}
+
+	// Overlay-action prefixes forwarded to the host seam (resume:/theme:/
+	// memory:/trust:/model:/mcp:/worktree:/onboard:).
+	for _, prefix := range []string{
+		"resume:", "theme:", "memory:", "trust:", "model:",
+		"mcp:", "worktree:", "onboard:",
+	} {
 		if strings.HasPrefix(submit, prefix) {
 			if l.onOverlaySubmit != nil {
 				l.onOverlaySubmit(submit)
