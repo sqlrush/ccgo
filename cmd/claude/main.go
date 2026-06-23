@@ -4176,7 +4176,19 @@ func resolveResumeTarget(cwd string, resumeValue string, continueMode bool) (con
 		return id, path, nil
 	}
 	id := contracts.ID(resumeValue)
-	return id, session.TranscriptPath(cwd, id), nil
+	localPath := session.TranscriptPath(cwd, id)
+	if _, err := os.Stat(localPath); err == nil {
+		return id, localPath, nil
+	}
+	// Fall back: search all project directories.
+	globalPath, found, err := session.FindSessionGlobally(resumeValue)
+	if err != nil {
+		return "", "", fmt.Errorf("searching for session %q: %w", resumeValue, err)
+	}
+	if found {
+		return id, globalPath, nil
+	}
+	return id, localPath, nil
 }
 
 func parseToolRules(raw ...string) []string {

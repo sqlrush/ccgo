@@ -337,3 +337,56 @@ func writeRawSession(t *testing.T, path string, lines []string) {
 		t.Fatal(err)
 	}
 }
+
+func TestFindSessionGloballyFound(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", tmpHome)
+	projectDir := filepath.Join(tmpHome, "projects", "proj1")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessID := "test-session-abc"
+	sessFile := filepath.Join(projectDir, sessID+".jsonl")
+	if err := os.WriteFile(sessFile, []byte(`{"type":"user"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path, found, err := FindSessionGlobally(sessID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if path != sessFile {
+		t.Fatalf("expected path %q, got %q", sessFile, path)
+	}
+}
+
+func TestFindSessionGloballyNotFound(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", tmpHome)
+	projectDir := filepath.Join(tmpHome, "projects", "proj1")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path, found, err := FindSessionGlobally("nonexistent-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatalf("expected found=false, got path %q", path)
+	}
+}
+
+func TestFindSessionGloballyEmptyProjectsDir(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", tmpHome)
+	// projects dir does not exist
+	path, found, err := FindSessionGlobally("any-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatalf("expected found=false, got path %q", path)
+	}
+}

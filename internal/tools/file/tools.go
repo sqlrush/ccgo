@@ -27,6 +27,7 @@ import (
 	tasktools "ccgo/internal/tools/task"
 	todotools "ccgo/internal/tools/todo"
 	webtools "ccgo/internal/tools/web"
+	worktreetools "ccgo/internal/tools/worktree"
 )
 
 const maxReadImageBytes = 10 * 1024 * 1024
@@ -224,6 +225,9 @@ func BuiltinTools() []tool.Tool {
 		plantools.NewEnterPlanModeTool(),
 		plantools.NewExitPlanModeTool(),
 		lsptools.NewLSPTool(),
+		tasktools.NewStructuredOutputTool(),
+		worktreetools.NewEnterWorktreeTool(),
+		worktreetools.NewExitWorktreeTool(),
 	}
 }
 

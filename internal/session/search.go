@@ -9,6 +9,7 @@ import (
 
 	"ccgo/internal/contracts"
 	msgs "ccgo/internal/messages"
+	"ccgo/internal/platform"
 )
 
 type SessionInfo struct {
@@ -292,4 +293,30 @@ func truncateLine(text string, maxRunes int) string {
 		return string(runes[:maxRunes])
 	}
 	return string(runes[:maxRunes-3]) + "..."
+}
+
+// FindSessionGlobally searches all project directories under the Claude home
+// for a session file matching sessionID. Returns the absolute path and true
+// when found.
+func FindSessionGlobally(sessionID string) (string, bool, error) {
+	homeDir := platform.ClaudeHomeDir()
+	projectsDir := filepath.Join(homeDir, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	target := strings.TrimSpace(sessionID) + ".jsonl"
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		candidate := filepath.Join(projectsDir, entry.Name(), target)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, true, nil
+		}
+	}
+	return "", false, nil
 }
