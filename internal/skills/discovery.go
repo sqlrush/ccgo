@@ -87,6 +87,15 @@ func DiscoverSkillDirsForPaths(paths []string, cwd string) []string {
 	return out
 }
 
+// AppendSkillRootsFromDir returns the skill directories found under
+// addDir/.claude/skills/. This is used for --add-dir skill discovery
+// (SKILL-04). CC ref: src/utils/skills/skillChangeDetector.ts:223-234.
+func AppendSkillRootsFromDir(addDir string) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	return appendSkillRoots(out, seen, filepath.Join(addDir, ".claude", "skills"))
+}
+
 func appendSkillRoots(out []string, seen map[string]struct{}, skillsDir string) []string {
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil {

@@ -2,6 +2,7 @@ package skills
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	slashpath "path"
@@ -49,6 +50,10 @@ func LoadSkillDir(root string, source contracts.CommandSource) (Skill, error) {
 	}
 	userInvocable := parseBoolDefault(frontmatterField(frontmatter, "user-invocable", "user_invocable", "userInvocable"), true)
 	paths := parseSkillPaths(frontmatterField(frontmatter, "paths"))
+	// SKILL-21: parse inline hooks from frontmatter.
+	// Value must be a JSON-encoded map (valid YAML inline scalar).
+	// CC ref: skills/loadSkillsDir.ts:parseHooksFromFrontmatter.
+	hooks := parseHooksFrontmatter(frontmatterField(frontmatter, "hooks"))
 
 	command := contracts.Command{
 		Type:                    contracts.CommandPrompt,
@@ -73,6 +78,7 @@ func LoadSkillDir(root string, source contracts.CommandSource) (Skill, error) {
 		ContentLength:           len(body),
 		ProgressMessage:         "running",
 		HasUserSpecifiedDetails: hasDescription,
+		Hooks:                   hooks,
 	}
 
 	return Skill{
@@ -509,4 +515,23 @@ func parseSkillPaths(raw string) []string {
 func renderSkillContent(root string, body string) string {
 	body = strings.ReplaceAll(body, "${CLAUDE_SKILL_DIR}", root)
 	return fmt.Sprintf("Base directory for this skill: %s\n\n%s", root, body)
+}
+
+// parseHooksFrontmatter parses the `hooks` frontmatter field.
+// The value must be a JSON-encoded object (e.g. {"PreToolUse":[...]}).
+// Invalid or empty values are silently ignored (returns nil).
+// CC ref: skills/loadSkillsDir.ts:parseHooksFromFrontmatter (SKILL-21).
+func parseHooksFrontmatter(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

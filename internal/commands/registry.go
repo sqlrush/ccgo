@@ -53,7 +53,7 @@ func Load(opts Options) Registry {
 		sources.DynamicSkillPrompts = nil
 		sources.DynamicSkills = nil
 	} else if !opts.DisableProjectSkills && opts.CWD != "" && len(sources.ProjectSkills) == 0 && len(sources.ProjectSkillPrompts) == 0 {
-		sources.ProjectSkillPrompts = loadProjectSkillPrompts(opts.CWD)
+		sources.ProjectSkillPrompts = loadProjectSkillPromptsWithSettings(opts.CWD, opts.Settings)
 	}
 	if opts.CWD != "" && len(sources.PluginCommands) == 0 && len(sources.PluginSkillPrompts) == 0 && len(sources.PluginSkills) == 0 {
 		sources.PluginSkillPrompts, sources.PluginCommands = loadProjectPluginCommands(opts.CWD, opts.Settings)
@@ -342,6 +342,15 @@ func BuiltinCommands() []contracts.Command {
 }
 
 func loadProjectSkillPrompts(cwd string) []PromptTemplate {
+	return loadProjectSkillPromptsWithSettings(cwd, contracts.Settings{})
+}
+
+// loadProjectSkillPromptsWithSettings discovers skill prompts for the project,
+// including skills from --add-dir extra directories.
+// SKILL-04: extra directories from settings.Permissions.AdditionalDirectories
+// have their .claude/skills/ subdirectories scanned for skills.
+// CC ref: src/utils/skills/skillChangeDetector.ts:223-234.
+func loadProjectSkillPromptsWithSettings(cwd string, settings contracts.Settings) []PromptTemplate {
 	skillDirs := skills.ProjectSkillDirs(cwd)
 	skillDirs = append(skillDirs, skills.UserSkillDirs()...)
 	// SKILL-03: load managed (policy) skills unless CLAUDE_CODE_DISABLE_POLICY_SKILLS is set.
@@ -350,6 +359,17 @@ func loadProjectSkillPrompts(cwd string) []PromptTemplate {
 	managedDirs := skills.ManagedSkillDirs()
 	if len(managedDirs) > 0 {
 		skillDirs = append(managedDirs, skillDirs...)
+	}
+	// SKILL-04: discover skills from additional directories (--add-dir).
+	if settings.Permissions != nil {
+		for _, addDir := range settings.Permissions.AdditionalDirectories {
+			addDir = filepath.Clean(addDir)
+			if addDir == "" {
+				continue
+			}
+			extraDirs := skills.AppendSkillRootsFromDir(addDir)
+			skillDirs = append(skillDirs, extraDirs...)
+		}
 	}
 	loaded := skills.LoadSkillDirs(skillDirs, contracts.CommandSourceSkills)
 	loaded = append(loaded, skills.LoadLegacyCommandSkills(cwd)...)
@@ -540,6 +560,7 @@ func cloneCommand(cmd contracts.Command) contracts.Command {
 	cmd.Paths = append([]string(nil), cmd.Paths...)
 	cmd.Availability = append([]string(nil), cmd.Availability...)
 	cmd.UserConfig = cloneAnyMap(cmd.UserConfig)
+	cmd.Hooks = cloneAnyMap(cmd.Hooks)
 	return cmd
 }
 

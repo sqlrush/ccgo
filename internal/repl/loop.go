@@ -207,6 +207,9 @@ func (l *Loop) Run(ctx context.Context) error {
 
 	go l.readInput(ctx)
 	startResizeListener(ctx, l.term, l.resizeCh)
+	// REPL-56: SIGCONT → force redraw after process is resumed from Ctrl+Z.
+	// CC ref: src/ink/ink.tsx:960.
+	startSIGCONTListener(ctx, l.term, l.resizeCh)
 
 	if err := l.render(); err != nil {
 		return err

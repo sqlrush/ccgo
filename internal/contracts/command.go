@@ -48,4 +48,9 @@ type Command struct {
 	Availability            []string       `json:"availability,omitempty"`
 	UserConfig              map[string]any `json:"user_config,omitempty"`
 	HasUserSpecifiedDetails bool           `json:"has_user_specified_details,omitempty"`
+	// Hooks holds the inline hooks configuration defined in a SKILL.md
+	// frontmatter `hooks:` key. When non-nil, the agent loop merges these
+	// hooks with the session hooks for the duration of the skill invocation.
+	// CC ref: skills/loadSkillsDir.ts:parseHooksFromFrontmatter (SKILL-21).
+	Hooks                   map[string]any `json:"hooks,omitempty"`
 }

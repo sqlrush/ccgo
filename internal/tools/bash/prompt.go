@@ -3,15 +3,54 @@ package bashtools
 import (
 	"strings"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
 )
+
+// defaultCommitAttribution is the default Co-Authored-By trailer injected into
+// git commit instructions when the user has not disabled attribution.
+// CC ref: src/utils/attribution.ts:getAttributionTexts (CFG-14/15).
+const defaultCommitAttribution = "Co-Authored-By: Claude <noreply@anthropic.com>"
+
+// commitAttributionText returns the attribution trailer to inject into git
+// commit instructions, respecting the attribution / includeCoAuthoredBy
+// settings hierarchy.
+//
+//   - settings.Attribution.Commit overrides everything (empty string = disable).
+//   - settings.IncludeCoAuthoredBy == false disables the default trailer.
+//   - Otherwise the default trailer is used.
+//
+// CC ref: src/utils/attribution.ts:getAttributionTexts (CFG-14/CFG-15).
+func commitAttributionText(settings contracts.Settings) string {
+	if settings.Attribution != nil {
+		if settings.Attribution.Commit != nil {
+			return *settings.Attribution.Commit
+		}
+	}
+	if settings.IncludeCoAuthoredBy != nil && !*settings.IncludeCoAuthoredBy {
+		return ""
+	}
+	return defaultCommitAttribution
+}
+
+// settingsFromPromptContext extracts the merged Settings from PromptContext
+// metadata, falling back to zero-value Settings when absent.
+func settingsFromPromptContext(ctx tool.PromptContext) contracts.Settings {
+	if s, ok := ctx.Metadata[tool.MetadataSettingsKey].(contracts.Settings); ok {
+		return s
+	}
+	return contracts.Settings{}
+}
 
 // BashPrompt composes the full Bash tool prompt, mirroring Claude Code's
 // getSimplePrompt() (src/tools/BashTool/prompt.ts:275-369) and
 // getCommitAndPRInstructions() (src/tools/BashTool/prompt.ts:42-161).
 // The git/PR workflow, quoting rules, tool-preference guidance, and
 // banned-command list are reproduced so model behaviour matches CC.
-func BashPrompt(_ tool.PromptContext) (string, error) {
+// Attribution (CFG-14/CFG-15) is injected from settings.
+func BashPrompt(ctx tool.PromptContext) (string, error) {
+	settings := settingsFromPromptContext(ctx)
+	attribution := commitAttributionText(settings)
 	var b strings.Builder
 	b.WriteString("Executes a given bash command and returns its output.\n")
 	b.WriteString("\n")
@@ -22,7 +61,7 @@ func BashPrompt(_ tool.PromptContext) (string, error) {
 	b.WriteString("\n")
 	b.WriteString(bashInstructionsSection())
 	b.WriteString("\n")
-	b.WriteString(bashGitSection())
+	b.WriteString(bashGitSection(attribution))
 	b.WriteString("\n")
 	b.WriteString(bashPRSection())
 	return strings.TrimRight(b.String(), "\n"), nil
@@ -82,7 +121,8 @@ func bashInstructionsSection() string {
 
 // bashGitSection reproduces the # Committing changes with git block from
 // prompt.ts:81-125, including the Git Safety Protocol bullets.
-func bashGitSection() string {
+// attribution is the Co-Authored-By trailer to inject; empty means omit.
+func bashGitSection(attribution string) string {
 	lines := []string{
 		"# Committing changes with git",
 		"",
@@ -110,7 +150,7 @@ func bashGitSection() string {
 		"  - Ensure it accurately reflects the changes and their purpose",
 		"3. Run the following commands in parallel:",
 		"   - Add relevant untracked files to the staging area.",
-		"   - Create the commit with a message.",
+		commitWithAttributionLine(attribution),
 		"   - Run git status after the commit completes to verify success.",
 		"   Note: git status depends on the commit completing, so run it sequentially after the commit.",
 		"4. If the commit fails due to pre-commit hook: fix the issue and create a NEW commit",
@@ -135,6 +175,16 @@ func bashGitSection() string {
 
 // bashPRSection reproduces the # Creating pull requests and # Other common
 // operations blocks from prompt.ts:127-160.
+// commitWithAttributionLine returns the "Create the commit" step description,
+// optionally including the Co-Authored-By attribution trailer.
+// CC ref: src/tools/BashTool/prompt.ts:111-116 (commitAttribution injection).
+func commitWithAttributionLine(attribution string) string {
+	if strings.TrimSpace(attribution) == "" {
+		return "   - Create the commit with a message."
+	}
+	return "   - Create the commit with a message ending with:\n   " + attribution
+}
+
 func bashPRSection() string {
 	lines := []string{
 		"# Creating pull requests",

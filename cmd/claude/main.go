@@ -1012,13 +1012,92 @@ func runPluginInstallCLI(state *bootstrap.State, args []string, stdout io.Writer
 		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
 		return 1
 	}
-	result, err := pluginpkg.InstallMarketplacePluginInScope(strings.TrimSpace(flags.Arg(0)), state.CWD(), scope, settings)
+	pluginArg := strings.TrimSpace(flags.Arg(0))
+	sourceType := pluginCLIInferMarketplaceSourceType(pluginArg)
+
+	// PLUGIN-21: direct npm install (packageName starts with @ or inferred as npm).
+	// PLUGIN-22: direct GitHub shorthand install (owner/repo format).
+	// CC ref: src/utils/plugins/pluginLoader.ts:installFromNpm / installFromGitHub.
+	switch sourceType {
+	case "npm":
+		return runPluginInstallDirectNpm(pluginArg, state.CWD(), scope, stdout, stderr)
+	case "github":
+		return runPluginInstallDirectGitHub(pluginArg, state.CWD(), scope, stdout, stderr)
+	default:
+		// Fall through to marketplace lookup.
+	}
+
+	result, err := pluginpkg.InstallMarketplacePluginInScope(pluginArg, state.CWD(), scope, settings)
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
 		return 1
 	}
 	writePluginInstallResult(stdout, result)
 	return 0
+}
+
+// runPluginInstallDirectNpm installs a plugin from npm directly.
+// PLUGIN-21. ⚠️ Requires live npm binary — tested with stub in plugins package.
+func runPluginInstallDirectNpm(packageName string, cwd string, scope string, stdout io.Writer, stderr io.Writer) int {
+	if scope == "" {
+		scope = "project"
+	}
+	targetPluginsDir, err := pluginInstallDirForScope(cwd, scope)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
+		return 1
+	}
+	// Use the package name (without version) as the directory name.
+	dirName := pluginpkg.SafePluginInstallDirName(pluginpkg.LoadedPlugin{Name: packageName})
+	targetPath := filepath.Join(targetPluginsDir, dirName)
+	if err := pluginpkg.InstallFromNpm(packageName, targetPath, pluginpkg.InstallFromNpmOptions{}); err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin install: npm install %s: %v\n", packageName, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Installed npm plugin %s → %s\n", packageName, targetPath)
+	return 0
+}
+
+// runPluginInstallDirectGitHub installs a plugin from a GitHub shorthand.
+// PLUGIN-22.
+func runPluginInstallDirectGitHub(repo string, cwd string, scope string, stdout io.Writer, stderr io.Writer) int {
+	if scope == "" {
+		scope = "project"
+	}
+	targetPluginsDir, err := pluginInstallDirForScope(cwd, scope)
+	if err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin install: %v\n", err)
+		return 1
+	}
+	// Use the repository name part (after last /) as directory name.
+	parts := strings.Split(repo, "/")
+	dirBase := parts[len(parts)-1]
+	if dirBase == "" {
+		dirBase = "plugin"
+	}
+	dirName := pluginpkg.SafePluginInstallDirName(pluginpkg.LoadedPlugin{Name: dirBase})
+	targetPath := filepath.Join(targetPluginsDir, dirName)
+	if err := pluginpkg.InstallFromGitHub(repo, targetPath, "", ""); err != nil {
+		fmt.Fprintf(stderr, "ccgo plugin install: github install %s: %v\n", repo, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Installed GitHub plugin %s → %s\n", repo, targetPath)
+	return 0
+}
+
+// pluginInstallDirForScope returns the plugins directory for a given scope.
+func pluginInstallDirForScope(cwd string, scope string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "project", "local", "":
+		if cwd == "" {
+			return "", fmt.Errorf("working directory is unavailable")
+		}
+		return filepath.Join(cwd, ".claude", "plugins"), nil
+	case "user":
+		return filepath.Join(platform.ClaudeHomeDir(), "plugins"), nil
+	default:
+		return "", fmt.Errorf("scope %q is not supported; use project, user, or local", scope)
+	}
 }
 
 func runPluginUpdateCLI(state *bootstrap.State, args []string, stdout io.Writer, stderr io.Writer) int {
