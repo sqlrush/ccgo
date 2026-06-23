@@ -16,7 +16,7 @@
 | HOOK-09 | hook stdout 返回 `{"decision":"approve"}` → 权限允许 | AUTO | 前置:配置 PermissionRequest hook `echo '{"decision":"approve"}'`; 操作:触发需要权限的工具; 预期:权限被自动批准 | `src/utils/hooks.ts:558-588` | ✅ 通过 |
 | HOOK-10 | hook stdout 返回 `{"systemMessage":"..."}` → 追加到对话上下文 | AUTO | 前置:配置 PreToolUse hook 输出 `{"systemMessage":"context info"}`; 操作:触发工具; 预期:对话中追加了该文本作为额外上下文 | `src/utils/hooks.ts:592-660` | ✅ 通过 |
 | HOOK-11 | hook stdout 非 JSON（纯文本）→ 作为 message 显示，不阻断 | AUTO | 前置:配置 hook `echo "plain text"`; 操作:触发; 预期:plain text 作为消息展示，流程继续 | `src/utils/hooks.ts:399-451` | ✅ 通过 |
-| HOOK-12 | `async:true` JSON 输出 → hook 后台化，主流程不等待 | AUTO | 前置:配置命令 hook 输出 `{"async":true}`; 操作:触发 PreToolUse; 预期:hook 进入后台注册表，主流程继续；asyncTimeout 可选 | `src/utils/hooks.ts:168-176,types/hooks.ts:170-176` | ✅ 通过（F9）：`hookResultFromJSON` 识别 `"async":true`；`AsyncHookRegistry` goroutine-safe 注册（`hooks/async.go`）；`tool.HookResult` 新增 `Async`/`AsyncTimeout` 字段 |
+| HOOK-12 | `async:true` JSON 输出 → hook 后台化，主流程不等待 | AUTO | 前置:配置命令 hook 输出 `{"async":true}`; 操作:触发 PreToolUse; 预期:hook 进入后台注册表，主流程继续；asyncTimeout 可选 | `src/utils/hooks.ts:168-176,types/hooks.ts:170-176` | ✅ 通过（G12 commit 8813a8d）：runtime 接线：`Resolution.AsyncHooks` 列表传播；`runConversationHooks` 将 async 结果 enqueue 到 `Runner.AsyncHookRegistry`（非阻塞）；`RunTurn` 在 turn 边界调用 `registry.Wait(ctx)`；`AsyncHookRegistry.Cancel` 支持 SDK-35；`-race` 通过（`TestAsyncHookEnqueuedNonBlocking` / `TestAsyncHookWaitedAtTurnBoundary` / `TestAsyncHookCancelRace` 等） |
 | HOOK-13 | `matcher` 字段：精确名/`\|`-分隔列表/正则表达式过滤 hook | AUTO | 前置:PreToolUse hook matcher=`"Bash\|Read"`; 操作:分别触发 Bash、Read、Edit 工具; 预期:Bash/Read 触发 hook，Edit 不触发 | `src/utils/hooks.ts:1681-1686` | ✅ 通过 |
 | HOOK-14 | 无 matcher（或 `"*"`）→ 匹配所有工具 | AUTO | 前置:PreToolUse hook 无 matcher; 操作:依次触发多个工具; 预期:每次均执行 hook | `src/utils/hooks.ts:1681-1686` | ✅ 通过 |
 | HOOK-15 | 多 hook 并行执行 + deny>ask>allow 权限聚合 | AUTO | 前置:配置三个 PreToolUse hook，分别返回 `allow`/`ask`/`deny`; 操作:触发; 预期:最终 decision 为 `deny`（最高优先级）；三个 hook 并发运行 | `src/utils/hooks.ts:2820-2847`,`internal/hooks/resolve.go:31` | ✅ 通过 |
@@ -70,4 +70,4 @@
 | HOOK-63 | hook 进度事件（`hook_started`/`hook_completed`/`hook_failed`/`hook_blocked`）向 UI 发送 | AUTO | 前置:配置命令 hook; 操作:触发并捕获事件流; 预期:事件序列包含对应 `EventToolProgress` 事件 | `src/utils/hooks/hookEvents.ts:1` | ✅ 通过（`conversation/hooks.go:144,148,152-155`,`tool/executor.go:413,416,426,436`） |
 | HOOK-64 | HTTP hook `allowedEnvVars` + `httpHookAllowedEnvVars` 控制请求头中可用的环境变量 | AUTO | 前置:HTTP hook headers 含 `$TOKEN` 变量，settings 配 `allowedEnvVars:["TOKEN"]`; 操作:触发; 预期:header 中替换了 `TOKEN` 值；未在列表中的变量被替换为空字符串 | `src/utils/hooks/execHttpHook.ts:1` | ✅ 通过（`command.go:763-799`） |
 
-小计：共 64 行。✅ 通过：47；⚠️ 已建未接：1；❌ 缺失：1；N/A：15。（HOOK-27/30/35/54 经 W-Batch-A 由 ⚠️ 翻为 ✅；HOOK-21/31/32 经 F6b 由 ❌ 翻为 ✅；HOOK-12/29/62 经 F9 由 ❌ 翻为 ✅）
+小计：共 64 行。✅ 通过：47；⚠️ 已建未接：1；❌ 缺失：1；N/A：15。（HOOK-27/30/35/54 经 W-Batch-A 由 ⚠️ 翻为 ✅；HOOK-21/31/32 经 F6b 由 ❌ 翻为 ✅；HOOK-12/29/62 经 F9 由 ❌ 翻为 ✅；HOOK-12 runtime 经 G12 commit 8813a8d 完整接线）
