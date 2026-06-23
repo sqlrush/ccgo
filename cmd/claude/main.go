@@ -4863,9 +4863,37 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner, includeParti
 	// received so far (not just the latest chunk).
 	var partialBuf string
 
+	// SDK-59: track whether an LLM event has been seen so we can emit
+	// session_state_changed/running before the first LLM event and
+	// session_state_changed/idle in the teardown function.
+	// CC ref: coreSchemas.ts:1735-1748 (SDKSessionStateChangedMessageSchema).
+	// Use a sync.Once so the "running" event is emitted exactly once even if
+	// multiple LLM events fire concurrently (safe under -race).
+	var emitRunningOnce sync.Once
+	var emittedRunning bool
+
+	emitSessionState := func(state string) {
+		_ = encoder.Encode(sdkSessionStateChangedEvent{
+			Type:      "system",
+			Subtype:   "session_state_changed",
+			State:     state,
+			SessionID: string(runner.SessionID),
+		})
+	}
+
 	runner.OnEvent = func(event conversation.Event) {
 		if eventErr != nil {
 			return
+		}
+		// SDK-59: emit session_state_changed/running on the first LLM event
+		// (assistant_message or stream_event signals LLM invocation started).
+		// We do NOT emit for user-only events (like slash commands / /clear).
+		// CC ref: coreSchemas.ts:1735-1748 (SDKSessionStateChangedMessageSchema).
+		if isLLMEvent(event.Type) {
+			emitRunningOnce.Do(func() {
+				emittedRunning = true
+				emitSessionState("running")
+			})
 		}
 		// SDK-55: emit system/status "compacting" before the compact event so that
 		// SDK consumers can display a "compacting…" indicator.
@@ -4921,7 +4949,36 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner, includeParti
 		}
 		eventErr = writePrintStreamEvent(encoder, event)
 	}
-	return runner, func() error { return eventErr }
+	return runner, func() error {
+		// SDK-59: emit session_state_changed/idle after the turn completes,
+		// but only if we previously emitted "running" (i.e. an LLM turn ran).
+		// Slash commands (like /clear) that only emit user_message do NOT
+		// trigger running/idle transitions.
+		if emittedRunning {
+			emitSessionState("idle")
+		}
+		return eventErr
+	}
+}
+
+// isLLMEvent reports whether an event type signals that the LLM has been
+// invoked (i.e. the session is actively processing an assistant response).
+// SDK-59 uses this to emit session_state_changed/running on the first LLM event.
+// CC ref: coreSchemas.ts:1735-1748 (SDKSessionStateChangedMessageSchema).
+func isLLMEvent(eventType conversation.EventType) bool {
+	switch eventType {
+	case conversation.EventAssistantMessage,
+		conversation.EventStreamEvent,
+		conversation.EventToolUse,
+		conversation.EventToolResult,
+		conversation.EventToolProgress,
+		conversation.EventRetry,
+		conversation.EventTokenWarning,
+		conversation.EventCompact:
+		return true
+	default:
+		return false
+	}
 }
 
 func runnerToolNames(runner conversation.Runner) []string {
@@ -5105,10 +5162,78 @@ func runnerPolicySettings(runner conversation.Runner) contracts.Settings {
 	return runner.MCP.PolicySettings
 }
 
+// sdkHookStartedEvent is the CC-wire shape for system/hook_started events.
+// CC ref: coreSchemas.ts:1604-1614 (SDKHookStartedMessageSchema, SDK-65).
+type sdkHookStartedEvent struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	HookID    string `json:"hook_id"`
+	HookName  string `json:"hook_name"`
+	HookEvent string `json:"hook_event"`
+	SessionID string `json:"session_id,omitempty"`
+}
+
+// sdkHookResponseEvent is the CC-wire shape for system/hook_response events.
+// CC ref: coreSchemas.ts:1631-1646 (SDKHookResponseMessageSchema, SDK-65).
+type sdkHookResponseEvent struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	HookID    string `json:"hook_id"`
+	HookName  string `json:"hook_name"`
+	HookEvent string `json:"hook_event"`
+	Output    string `json:"output"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	ExitCode  *int   `json:"exit_code,omitempty"`
+	Outcome   string `json:"outcome"` // success | error | cancelled
+	SessionID string `json:"session_id,omitempty"`
+}
+
+// sdkSessionStateChangedEvent is the CC-wire shape for system/session_state_changed.
+// CC ref: coreSchemas.ts:1735-1748 (SDKSessionStateChangedMessageSchema, SDK-59).
+type sdkSessionStateChangedEvent struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	State     string `json:"state"` // idle | running | requires_action
+	SessionID string `json:"session_id,omitempty"`
+}
+
+// hookProgressType reports whether a ToolProgress event represents a hook
+// lifecycle event and returns the hook phase and progress type.
+// Hook events have ToolUseID starting with "hook_" and a scope=="conversation"
+// data field (set by Runner.emitConversationHookProgress).
+// CC ref: coreSchemas.ts:1604-1646 (SDK-65).
+func hookProgressPhase(tp *contracts.ToolProgress) (phase string, isHook bool) {
+	if tp == nil {
+		return "", false
+	}
+	data := tp.Data
+	if data == nil {
+		return "", false
+	}
+	scope, _ := data["scope"].(string)
+	if scope != "conversation" {
+		return "", false
+	}
+	phase, _ = data["phase"].(string)
+	return phase, phase != ""
+}
+
 func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {
 	if !printStreamEventVisible(event.Type) {
 		return nil
 	}
+
+	// SDK-65: hook lifecycle events are emitted in CC's system/hook_* wire format
+	// instead of the generic tool_progress format. This matches CC's
+	// SDKHookStartedMessageSchema / SDKHookResponseMessageSchema.
+	if event.Type == conversation.EventToolProgress && event.ToolProgress != nil {
+		phase, isHook := hookProgressPhase(event.ToolProgress)
+		if isHook {
+			return writeHookLifecycleEvent(encoder, event.ToolProgress, phase)
+		}
+	}
+
 	out := printStreamEvent{
 		Type:         event.Type,
 		Message:      event.Message,
@@ -5133,6 +5258,99 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 	}
 	return encoder.Encode(out)
 }
+
+// writeHookLifecycleEvent emits CC-compatible system/hook_* events for a hook
+// tool-progress event. The mapping from ccgo's ToolProgress.Type to CC subtypes:
+//
+//	hook_started  → system/hook_started
+//	hook_completed → system/hook_response (outcome=success)
+//	hook_failed   → system/hook_response (outcome=error)
+//	hook_blocked  → system/hook_response (outcome=cancelled)
+//
+// CC ref: coreSchemas.ts:1604-1646 (SDK-65).
+func writeHookLifecycleEvent(encoder *json.Encoder, tp *contracts.ToolProgress, phase string) error {
+	hookIndex := 0
+	if v, ok := tp.Data["hook_index"]; ok {
+		switch n := v.(type) {
+		case int:
+			hookIndex = n
+		case float64:
+			hookIndex = int(n)
+		}
+	}
+	hookID := fmt.Sprintf("hook_%s_%d", phase, hookIndex)
+
+	switch tp.Type {
+	case "hook_started":
+		return encoder.Encode(sdkHookStartedEvent{
+			Type:      "system",
+			Subtype:   "hook_started",
+			HookID:    hookID,
+			HookName:  phase,
+			HookEvent: phase,
+		})
+	case "hook_completed":
+		output := ""
+		if msg, ok := tp.Data["message"].(string); ok {
+			output = msg
+		}
+		return encoder.Encode(sdkHookResponseEvent{
+			Type:      "system",
+			Subtype:   "hook_response",
+			HookID:    hookID,
+			HookName:  phase,
+			HookEvent: phase,
+			Output:    output,
+			Stdout:    output,
+			Stderr:    "",
+			Outcome:   "success",
+		})
+	case "hook_failed":
+		errMsg := ""
+		if e, ok := tp.Data["error"].(string); ok {
+			errMsg = e
+		}
+		return encoder.Encode(sdkHookResponseEvent{
+			Type:      "system",
+			Subtype:   "hook_response",
+			HookID:    hookID,
+			HookName:  phase,
+			HookEvent: phase,
+			Output:    errMsg,
+			Stdout:    "",
+			Stderr:    errMsg,
+			Outcome:   "error",
+		})
+	case "hook_blocked":
+		msg := ""
+		if m, ok := tp.Data["message"].(string); ok {
+			msg = m
+		}
+		return encoder.Encode(sdkHookResponseEvent{
+			Type:      "system",
+			Subtype:   "hook_response",
+			HookID:    hookID,
+			HookName:  phase,
+			HookEvent: phase,
+			Output:    msg,
+			Stdout:    "",
+			Stderr:    msg,
+			Outcome:   "cancelled",
+		})
+	default:
+		// Unknown hook progress type: fall through to generic tool_progress.
+		out := printStreamEvent{
+			Type:         event_toolProgress,
+			ToolUseID:    tp.ToolUseID,
+			ProgressType: tp.Type,
+			Data:         tp.Data,
+		}
+		return encoder.Encode(out)
+	}
+}
+
+// event_toolProgress is a typed alias to avoid importing conversation in helpers.
+const event_toolProgress conversation.EventType = conversation.EventToolProgress
 
 func printStreamEventVisible(eventType conversation.EventType) bool {
 	switch eventType {

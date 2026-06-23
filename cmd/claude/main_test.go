@@ -2152,8 +2152,12 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 		t.Fatalf("anthropic-beta = %q", betaHeader)
 	}
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-	if len(lines) != 4 {
-		t.Fatalf("lines = %#v", lines)
+	// SDK-59: session_state_changed (running + idle) events are now emitted
+	// for LLM turns, so the total event count is 6:
+	// system/init, user_message, system/session_state_changed(running),
+	// assistant_message, system/session_state_changed(idle), result.
+	if len(lines) != 6 {
+		t.Fatalf("expected 6 lines (init+user+running+assistant+idle+result), got %d:\n%#v", len(lines), lines)
 	}
 	var events []map[string]any
 	for _, line := range lines {
@@ -2163,6 +2167,8 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 		}
 		events = append(events, event)
 	}
+
+	// events[0] = system/init
 	if events[0]["type"] != "system" || events[0]["subtype"] != "init" {
 		t.Fatalf("init event = %#v", events[0])
 	}
@@ -2207,17 +2213,33 @@ func TestRunPrintStreamJSONOutput(t *testing.T) {
 	if !ok || len(tools) == 0 {
 		t.Fatalf("init tools = %#v", events[0]["tools"])
 	}
-	if events[1]["type"] != "user_message" || events[2]["type"] != "assistant_message" || events[3]["type"] != "result" {
-		t.Fatalf("events = %#v", events)
+
+	// events[1] = user_message, events[2] = session_state_changed/running,
+	// events[3] = assistant_message, events[4] = session_state_changed/idle,
+	// events[5] = result.
+	if events[1]["type"] != "user_message" {
+		t.Fatalf("events[1] = %#v", events[1])
 	}
-	if events[3]["result"] != "stream ok" || events[3]["is_error"] != false || events[3]["num_turns"] != float64(1) {
-		t.Fatalf("result event = %#v", events[3])
+	if events[2]["type"] != "system" || events[2]["subtype"] != "session_state_changed" || events[2]["state"] != "running" {
+		t.Fatalf("events[2] (session_state_changed/running) = %#v", events[2])
 	}
-	if _, ok := events[3]["duration_ms"].(float64); !ok {
-		t.Fatalf("result duration_ms = %#v", events[3]["duration_ms"])
+	if events[3]["type"] != "assistant_message" {
+		t.Fatalf("events[3] = %#v", events[3])
 	}
-	if _, ok := events[3]["duration_api_ms"].(float64); !ok {
-		t.Fatalf("result duration_api_ms = %#v", events[3]["duration_api_ms"])
+	if events[4]["type"] != "system" || events[4]["subtype"] != "session_state_changed" || events[4]["state"] != "idle" {
+		t.Fatalf("events[4] (session_state_changed/idle) = %#v", events[4])
+	}
+	if events[5]["type"] != "result" {
+		t.Fatalf("events[5] = %#v", events[5])
+	}
+	if events[5]["result"] != "stream ok" || events[5]["is_error"] != false || events[5]["num_turns"] != float64(1) {
+		t.Fatalf("result event = %#v", events[5])
+	}
+	if _, ok := events[5]["duration_ms"].(float64); !ok {
+		t.Fatalf("result duration_ms = %#v", events[5]["duration_ms"])
+	}
+	if _, ok := events[5]["duration_api_ms"].(float64); !ok {
+		t.Fatalf("result duration_api_ms = %#v", events[5]["duration_api_ms"])
 	}
 }
 
@@ -3454,6 +3476,8 @@ func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	// SDK-65: hook lifecycle events are emitted as system/hook_* (CC wire format)
+	// not as tool_progress. Check for system/hook_started and system/hook_response.
 	var sawHookStarted bool
 	var sawHookCompleted bool
 	var sawResult bool
@@ -3465,23 +3489,21 @@ func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 			t.Fatalf("invalid json line %q: %v", line, err)
 		}
 		switch event["type"] {
-		case "tool_progress":
-			if event["tool_use_id"] != "hook_UserPromptSubmit" {
+		case "system":
+			// SDK-65: hook events now emit system/hook_started and system/hook_response.
+			subtype, _ := event["subtype"].(string)
+			hookEvent, _ := event["hook_event"].(string)
+			if hookEvent != "UserPromptSubmit" {
 				continue
 			}
-			data, ok := event["data"].(map[string]any)
-			if !ok {
-				t.Fatalf("progress data = %#v", event["data"])
-			}
-			if data["phase"] != "UserPromptSubmit" || data["scope"] != "conversation" || data["hook_index"] != float64(0) {
-				t.Fatalf("progress event = %#v", event)
-			}
-			switch event["progress_type"] {
+			switch subtype {
 			case "hook_started":
 				sawHookStarted = true
-			case "hook_completed":
-				sawHookCompleted = true
-				hookCompletedIndex = idx
+			case "hook_response":
+				if event["outcome"] == "success" {
+					sawHookCompleted = true
+					hookCompletedIndex = idx
+				}
 			}
 		case "user_message":
 			if userMessageIndex < 0 {
@@ -3494,7 +3516,7 @@ func TestRunPrintStreamJSONIncludesToolProgress(t *testing.T) {
 		}
 	}
 	if !sawHookStarted || !sawHookCompleted {
-		t.Fatalf("missing hook progress in %q", stdout.String())
+		t.Fatalf("missing hook system/hook_started or system/hook_response in %q", stdout.String())
 	}
 	if hookCompletedIndex < 0 || userMessageIndex < 0 || hookCompletedIndex > userMessageIndex {
 		t.Fatalf("event order hook_completed=%d user_message=%d stdout=%q", hookCompletedIndex, userMessageIndex, stdout.String())
@@ -4702,6 +4724,242 @@ func TestAuthStatusLoggedOut(t *testing.T) {
 // TestAuthLoginRequiresConsent verifies that "claude auth login" (without --yes)
 // presents the gray-zone consent prompt and does NOT start the login flow when
 // the user declines (empty/no input on stdin → "n").
+// ── SDK-65: hook lifecycle events in CC wire format ──────────────────────────
+
+// TestWritePrintStreamEventHookStartedEmitsCCSystemHookStarted verifies that
+// an EventToolProgress with progress_type=="hook_started" emits a CC-compatible
+// system/hook_started event (not a tool_progress event).
+// CC ref: coreSchemas.ts:1604-1614 (SDKHookStartedMessageSchema, SDK-65).
+func TestWritePrintStreamEventHookStartedEmitsCCSystemHookStarted(t *testing.T) {
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type: conversation.EventToolProgress,
+		ToolProgress: &contracts.ToolProgress{
+			ToolUseID: contracts.ID("hook_PreToolUse"),
+			Type:      "hook_started",
+			Data: map[string]any{
+				"phase":      "PreToolUse",
+				"hook_index": 0,
+				"scope":      "conversation",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "system" {
+		t.Fatalf("expected type=system, got %q in %#v", event["type"], event)
+	}
+	if event["subtype"] != "hook_started" {
+		t.Fatalf("expected subtype=hook_started, got %q in %#v", event["subtype"], event)
+	}
+	if event["hook_event"] != "PreToolUse" {
+		t.Fatalf("expected hook_event=PreToolUse, got %q in %#v", event["hook_event"], event)
+	}
+	hookID, ok := event["hook_id"].(string)
+	if !ok || hookID == "" {
+		t.Fatalf("expected non-empty hook_id, got %#v", event["hook_id"])
+	}
+	hookName, ok := event["hook_name"].(string)
+	if !ok || hookName == "" {
+		t.Fatalf("expected non-empty hook_name, got %#v", event["hook_name"])
+	}
+}
+
+// TestWritePrintStreamEventHookCompletedEmitsSystemHookResponse verifies that
+// hook_completed maps to system/hook_response with outcome=="success".
+// CC ref: coreSchemas.ts:1631-1646 (SDKHookResponseMessageSchema, SDK-65).
+func TestWritePrintStreamEventHookCompletedEmitsSystemHookResponse(t *testing.T) {
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type: conversation.EventToolProgress,
+		ToolProgress: &contracts.ToolProgress{
+			ToolUseID: contracts.ID("hook_Stop"),
+			Type:      "hook_completed",
+			Data: map[string]any{
+				"phase":      "Stop",
+				"hook_index": 1,
+				"scope":      "conversation",
+				"message":    "hook output",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "system" || event["subtype"] != "hook_response" {
+		t.Fatalf("expected system/hook_response, got %#v", event)
+	}
+	if event["outcome"] != "success" {
+		t.Fatalf("expected outcome=success, got %q in %#v", event["outcome"], event)
+	}
+}
+
+// TestWritePrintStreamEventHookFailedEmitsSystemHookResponseError verifies that
+// hook_failed maps to system/hook_response with outcome=="error".
+func TestWritePrintStreamEventHookFailedEmitsSystemHookResponseError(t *testing.T) {
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type: conversation.EventToolProgress,
+		ToolProgress: &contracts.ToolProgress{
+			ToolUseID: contracts.ID("hook_PreToolUse"),
+			Type:      "hook_failed",
+			Data: map[string]any{
+				"phase":      "PreToolUse",
+				"hook_index": 0,
+				"scope":      "conversation",
+				"error":      "command failed",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "system" || event["subtype"] != "hook_response" {
+		t.Fatalf("expected system/hook_response, got %#v", event)
+	}
+	if event["outcome"] != "error" {
+		t.Fatalf("expected outcome=error, got %q in %#v", event["outcome"], event)
+	}
+}
+
+// TestWritePrintStreamEventHookBlockedEmitsSystemHookResponseCancelled verifies that
+// hook_blocked maps to system/hook_response with outcome=="cancelled".
+func TestWritePrintStreamEventHookBlockedEmitsSystemHookResponseCancelled(t *testing.T) {
+	var stdout bytes.Buffer
+	encoder := json.NewEncoder(&stdout)
+	err := writePrintStreamEvent(encoder, conversation.Event{
+		Type: conversation.EventToolProgress,
+		ToolProgress: &contracts.ToolProgress{
+			ToolUseID: contracts.ID("hook_UserPromptSubmit"),
+			Type:      "hook_blocked",
+			Data: map[string]any{
+				"phase":      "UserPromptSubmit",
+				"hook_index": 0,
+				"scope":      "conversation",
+				"message":    "blocked",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &event); err != nil {
+		t.Fatalf("invalid json %q: %v", stdout.String(), err)
+	}
+	if event["type"] != "system" || event["subtype"] != "hook_response" {
+		t.Fatalf("expected system/hook_response, got %#v", event)
+	}
+	if event["outcome"] != "cancelled" {
+		t.Fatalf("expected outcome=cancelled, got %q in %#v", event["outcome"], event)
+	}
+}
+
+// ── SDK-59: session_state_changed events ─────────────────────────────────────
+
+// TestAttachStreamJSONEmitsSessionStateChangedOnLLMTurn verifies that
+// attachStreamJSON emits session_state_changed/running when the first LLM event
+// arrives and the teardown function emits session_state_changed/idle.
+// CC ref: coreSchemas.ts:1735-1748 (SDKSessionStateChangedMessageSchema, SDK-59).
+func TestAttachStreamJSONEmitsSessionStateChangedOnLLMTurn(t *testing.T) {
+	var stdout bytes.Buffer
+	runner := conversation.Runner{
+		SessionID: "sess_state_test",
+	}
+	// Simulate a real LLM turn by triggering an assistant message event.
+	runner, streamErrFn := attachStreamJSON(&stdout, runner, false)
+
+	// Simulate LLM turn: emit an assistant message event (triggers "running").
+	if runner.OnEvent != nil {
+		runner.OnEvent(conversation.Event{
+			Type: conversation.EventAssistantMessage,
+			Message: &contracts.Message{
+				Type: contracts.MessageAssistant,
+			},
+		})
+	}
+
+	// Call teardown (emits "idle").
+	if err := streamErrFn(); err != nil {
+		t.Fatalf("teardown error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var sawRunning, sawIdle bool
+	for _, line := range lines {
+		var ev map[string]any
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		if ev["type"] == "system" && ev["subtype"] == "session_state_changed" {
+			switch ev["state"] {
+			case "running":
+				sawRunning = true
+			case "idle":
+				sawIdle = true
+			}
+		}
+	}
+	if !sawRunning {
+		t.Fatalf("expected session_state_changed/running in output: %q", stdout.String())
+	}
+	if !sawIdle {
+		t.Fatalf("expected session_state_changed/idle in output: %q", stdout.String())
+	}
+}
+
+// TestAttachStreamJSONNoSessionStateChangedForSlashCommands verifies that
+// session_state_changed events are NOT emitted for slash commands (like /clear)
+// that don't involve LLM calls (no assistant message events).
+func TestAttachStreamJSONNoSessionStateChangedForSlashCommands(t *testing.T) {
+	var stdout bytes.Buffer
+	runner := conversation.Runner{
+		SessionID: "sess_slash_test",
+	}
+	runner, streamErrFn := attachStreamJSON(&stdout, runner, false)
+
+	// Simulate slash command: only emit user_message (no LLM events).
+	if runner.OnEvent != nil {
+		msg := contracts.Message{Type: contracts.MessageUser}
+		runner.OnEvent(conversation.Event{
+			Type:    conversation.EventUserMessage,
+			Message: &msg,
+		})
+	}
+
+	// Call teardown.
+	if err := streamErrFn(); err != nil {
+		t.Fatalf("teardown error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	for _, line := range lines {
+		var ev map[string]any
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		if ev["type"] == "system" && ev["subtype"] == "session_state_changed" {
+			t.Fatalf("unexpected session_state_changed event for slash command: %q", line)
+		}
+	}
+}
+
 func TestAuthLoginRequiresConsent(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ANTHROPIC_API_KEY", "")
