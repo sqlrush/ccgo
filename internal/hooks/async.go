@@ -20,6 +20,12 @@ type asyncEntry struct {
 	phase    string
 	hookName string
 	done     chan struct{}
+	closeOnce sync.Once
+}
+
+// closeEntry closes the done channel exactly once, safe to call from any goroutine.
+func (e *asyncEntry) closeDone() {
+	e.closeOnce.Do(func() { close(e.done) })
 }
 
 // NewAsyncHookRegistry returns a new empty AsyncHookRegistry.
@@ -40,7 +46,7 @@ func (r *AsyncHookRegistry) Register(phase, hookName string, fn func()) string {
 	r.entries[id] = entry
 	r.mu.Unlock()
 	go func() {
-		defer close(entry.done)
+		defer entry.closeDone()
 		fn()
 	}()
 	return id
@@ -61,6 +67,26 @@ func (r *AsyncHookRegistry) Wait(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// Cancel cancels a registered async hook by id, signalling the done channel
+// immediately (so any Wait caller no longer blocks on this entry). The
+// underlying goroutine may still run to completion — we simply detach the
+// entry from the registry and unblock any waiters.
+// Returns true if the id was found and cancelled, false if unknown.
+// CC ref: controlSchemas.ts:330-349 cancel_async_message (SDK-35).
+func (r *AsyncHookRegistry) Cancel(id string) bool {
+	r.mu.Lock()
+	entry, ok := r.entries[id]
+	if ok {
+		delete(r.entries, id)
+	}
+	r.mu.Unlock()
+	if ok {
+		entry.closeDone()
+		return true
+	}
+	return false
 }
 
 // Len returns the number of registered async hooks (including completed ones).

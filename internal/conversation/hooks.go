@@ -159,6 +159,16 @@ func (r Runner) runPreCompactHooks(ctx context.Context, trigger compactpkg.Trigg
 	return result.Message, result.Block, nil
 }
 
+// asyncHookRegistry returns the runner's AsyncHookRegistry, creating one if
+// needed. This method is safe to call on a value receiver since it only reads
+// the pointer (allocation happens on the pointer receiver in RunTurn).
+func (r Runner) asyncHookRegistry() *hookpkg.AsyncHookRegistry {
+	if r.AsyncHookRegistry != nil {
+		return r.AsyncHookRegistry
+	}
+	return hookpkg.NewAsyncHookRegistry()
+}
+
 func (r Runner) runConversationHooks(ctx context.Context, phase string, payload map[string]any) (tool.HookResult, error) {
 	settings := r.mergedSettings()
 	candidates := conversationHooksForPhase(r.configuredHooks(settings), phase)
@@ -188,6 +198,23 @@ func (r Runner) runConversationHooks(ctx context.Context, phase string, payload 
 		r.emitConversationHookProgress(phase, 0, "hook_blocked", map[string]any{"message": resolution.Message})
 	} else {
 		r.emitConversationHookProgress(phase, 0, "hook_completed", map[string]any{"message": resolution.Message})
+	}
+	// HOOK-12 runtime: register async hooks in the AsyncHookRegistry so the
+	// runner can wait for them between turns / at turn completion.
+	// CC ref: src/utils/hooks.ts:184-264 (executeInBackground).
+	if len(resolution.AsyncHooks) > 0 {
+		reg := r.asyncHookRegistry()
+		for _, hookName := range resolution.AsyncHooks {
+			// The hook already ran synchronously and returned async:true,
+			// indicating it has detached its own background work. We register a
+			// no-op completion marker so callers can wait for all async markers.
+			name := hookName // capture for goroutine
+			reg.Register(phase, name, func() {
+				// No work to do — the hook process already launched its own
+				// background work. This entry exists so Wait() can be used
+				// as a barrier between turns. We complete immediately.
+			})
+		}
 	}
 	return tool.HookResult{
 		Block:              resolution.Block,

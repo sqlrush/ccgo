@@ -66,6 +66,43 @@ func TestAgentRegistrySnapshotImmutability(t *testing.T) {
 	close(done)
 }
 
+// TestAgentRegistryCancelRemovesEntry verifies that Cancel removes a running
+// agent from the registry and returns true. (SDK-43 stop_task).
+func TestAgentRegistryCancelRemovesEntry(t *testing.T) {
+	reg := NewAgentRegistry()
+	done := make(chan struct{})
+	reg.StartBackground("d1", func(ctx context.Context) Outcome {
+		<-done
+		return Outcome{Summary: "never harvested"}
+	})
+
+	snap := reg.Snapshot()
+	if len(snap) != 1 || snap[0].ID != "d1" {
+		t.Fatalf("expected 1 entry, got %+v", snap)
+	}
+
+	if !reg.Cancel("d1") {
+		t.Fatal("Cancel should return true for known running agent")
+	}
+
+	snap2 := reg.Snapshot()
+	if len(snap2) != 0 {
+		t.Fatalf("expected 0 entries after Cancel, got %+v", snap2)
+	}
+
+	// Unblocking the goroutine so it exits cleanly.
+	close(done)
+}
+
+// TestAgentRegistryCancelReturnsFalseForUnknown verifies that Cancel returns
+// false for an unknown id.
+func TestAgentRegistryCancelReturnsFalseForUnknown(t *testing.T) {
+	reg := NewAgentRegistry()
+	if reg.Cancel("nonexistent") {
+		t.Fatal("Cancel should return false for unknown id")
+	}
+}
+
 func TestAgentRegistryConcurrent(t *testing.T) {
 	reg := NewAgentRegistry()
 	const n = 20

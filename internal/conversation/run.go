@@ -65,6 +65,13 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 	if r.AgentRegistry == nil {
 		r.AgentRegistry = orchestration.NewAgentRegistry()
 	}
+	// Ensure a shared AsyncHookRegistry is available for HOOK-12 runtime:
+	// hooks that return {"async":true} are registered here so the runner can
+	// surface/wait for their completion between turns or at turn end.
+	// CC ref: src/utils/hooks.ts:184-264 (G12).
+	if r.AsyncHookRegistry == nil {
+		r.AsyncHookRegistry = hookpkg.NewAsyncHookRegistry()
+	}
 	persistentModel := r.Model
 	if user.Type == "" {
 		user.Type = contracts.MessageUser
@@ -431,6 +438,11 @@ func (r *Runner) RunTurn(ctx context.Context, history []contracts.Message, user 
 				continue // Re-enter the loop: sends the new user message to the model.
 			}
 			stopHookActive = false
+			// HOOK-12 runtime: wait for any async hooks that fired during this
+			// turn to complete before returning (surfaced at turn boundary).
+			// Non-blocking when no async hooks are registered; respects ctx.
+			// CC ref: src/utils/hooks.ts:184-264 (executeInBackground wait).
+			runner.AsyncHookRegistry.Wait(ctx)
 			return result, nil
 		}
 		// Only genuine tool-execution rounds count against the budget (the

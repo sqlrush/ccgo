@@ -53,6 +53,25 @@ type Options struct {
 	// enumeration (G1 behaviour) or the ⚠️ unregistered response.
 	// CC ref: controlSchemas.ts:157-173/374-451 (SDK-32/38/39/41/42).
 	MCPManager *mcp.Manager
+
+	// ── G12 async registry callbacks ──────────────────────────────────────────
+
+	// AsyncHookRegistry, when non-nil, is used to resolve cancel_async_message
+	// (SDK-35): Cancel(messageUUID) removes the async hook entry from the
+	// registry and unblocks any waiters.
+	// When nil, Query extracts it from runner.AsyncHookRegistry after the
+	// runner is built.
+	// CC ref: controlSchemas.ts:330-349 (SDK-35).
+	AsyncHookRegistry interface {
+		Cancel(id string) bool
+	}
+
+	// OnEnvMutation, when non-nil, is called for each update_environment_variables
+	// message received on In. The callback receives the full variables map and may
+	// apply them (e.g. os.Setenv per entry). When nil the message is accepted but
+	// no mutation occurs (⚠️ same as the pre-G12 behaviour).
+	// CC ref: controlSchemas.ts:629-636 (SDK-49).
+	OnEnvMutation func(variables map[string]string)
 }
 
 // Query runs a single conversation turn under the SDK control protocol.
@@ -203,15 +222,43 @@ func Query(ctx context.Context, opts Options) error {
 		}
 	}
 
+	// G12: wire cancel_async_message → AsyncHookRegistry.Cancel (SDK-35).
+	// Prefer caller-provided registry; fall back to runner's own registry.
+	asyncReg := opts.AsyncHookRegistry
+	if asyncReg == nil && runner.AsyncHookRegistry != nil {
+		asyncReg = runner.AsyncHookRegistry
+	}
+	var cancelAsyncMessage func(messageUUID string) (bool, error)
+	if asyncReg != nil {
+		reg := asyncReg
+		cancelAsyncMessage = func(messageUUID string) (bool, error) {
+			return reg.Cancel(messageUUID), nil
+		}
+	}
+
+	// G12: wire stop_task → AgentRegistry.Cancel (SDK-43).
+	var stopTask func(taskID string) error
+	if runner.AgentRegistry != nil {
+		agentReg := runner.AgentRegistry
+		stopTask = func(taskID string) error {
+			if !agentReg.Cancel(taskID) {
+				return fmt.Errorf("stop_task: agent %q not found", taskID)
+			}
+			return nil
+		}
+	}
+
 	// Controller: handles all control subtypes with live backend callbacks.
 	controller := &Controller{
-		interrupt:         func() { cancelTurn(errInterrupted) },
-		setModel:          func(m string) error { runner.Model = m; return nil },
-		setPermissionMode: setPermissionMode,
-		getContextUsage:   getContextUsage,
-		mcpStatus:         mcpStatus,
-		getSettings:       getSettings,
-		rewindFiles:       rewindFiles,
+		interrupt:          func() { cancelTurn(errInterrupted) },
+		setModel:           func(m string) error { runner.Model = m; return nil },
+		setPermissionMode:  setPermissionMode,
+		getContextUsage:    getContextUsage,
+		mcpStatus:          mcpStatus,
+		getSettings:        getSettings,
+		rewindFiles:        rewindFiles,
+		cancelAsyncMessage: cancelAsyncMessage,
+		stopTask:           stopTask,
 		// G11: live MCP manager callbacks (non-nil when MCPManager is set).
 		mcpMessage:   mcpMessage,
 		mcpSetServers: mcpSetServers,
@@ -228,7 +275,7 @@ func Query(ctx context.Context, opts Options) error {
 	if opts.In != nil {
 		go func() {
 			defer close(loopDone)
-			readControlLoop(turnCtx, opts.In, controller, asker, enc)
+			readControlLoop(turnCtx, opts.In, controller, asker, enc, opts.OnEnvMutation)
 		}()
 	} else {
 		close(loopDone)
@@ -278,11 +325,12 @@ var errInterrupted = errors.New("sdk: interrupted by control request")
 // readControlLoop reads raw NDJSON from r line-by-line. For each line it:
 //   - If type == "control_request" → Controller.Handle, writes response to enc.
 //   - If type == "control_response" → resolves a pending can_use_tool via asker.Resolve.
+//   - If type == "update_environment_variables" → calls onEnvMutation if non-nil.
 //
 // The read goroutine exits when r returns EOF or ctx is done.
 // To support ctx cancellation while blocked on a slow/pipe reader, the loop
 // runs blocking reads in a separate goroutine and selects on ctx.Done().
-func readControlLoop(ctx context.Context, r io.Reader, c *Controller, asker *controlAsker, enc *Encoder) {
+func readControlLoop(ctx context.Context, r io.Reader, c *Controller, asker *controlAsker, enc *Encoder, onEnvMutation func(map[string]string)) {
 	type lineResult struct {
 		line string
 		err  error
@@ -313,7 +361,7 @@ func readControlLoop(ctx context.Context, r io.Reader, c *Controller, asker *con
 		case res := <-lineCh:
 			trimmed := strings.TrimSpace(res.line)
 			if trimmed != "" {
-				dispatchLine(trimmed, c, asker, enc)
+				dispatchLine(trimmed, c, asker, enc, onEnvMutation)
 			}
 			if res.err != nil {
 				return
@@ -328,11 +376,11 @@ func readControlLoop(ctx context.Context, r io.Reader, c *Controller, asker *con
 //   - "control_response"       → asker.Resolve (can_use_tool reply).
 //   - "control_cancel_request" → cancel a pending asker request by request_id.
 //   - "keep_alive"             → silently ignored (no response required).
-//   - "update_environment_variables" → silently accepted (no env mutation in-process).
+//   - "update_environment_variables" → calls onEnvMutation if non-nil (SDK-49).
 //
 // CC ref: controlSchemas.ts:612-636 (control_cancel_request, keep_alive,
 // update_environment_variables).
-func dispatchLine(line string, c *Controller, asker *controlAsker, enc *Encoder) {
+func dispatchLine(line string, c *Controller, asker *controlAsker, enc *Encoder, onEnvMutation func(map[string]string)) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		return // silently drop malformed lines
@@ -369,11 +417,23 @@ func dispatchLine(line string, c *Controller, asker *controlAsker, enc *Encoder)
 			asker.Cancel(reqID)
 		}
 
-	case "keep_alive", "update_environment_variables":
-		// keep_alive: both ends may send this to maintain a long-lived connection.
-		// update_environment_variables: accepted but not applied in-process.
-		// CC ref: controlSchemas.ts:621-636.
+	case "keep_alive":
+		// Both ends may send this to maintain a long-lived connection.
+		// CC ref: controlSchemas.ts:621-627.
 		// No response sent.
+
+	case "update_environment_variables":
+		// SDK-49: apply environment variable mutations via callback if provided.
+		// When onEnvMutation is nil, the message is accepted silently (⚠️ no
+		// in-process mutation). CC ref: controlSchemas.ts:629-636.
+		if onEnvMutation != nil {
+			if v, ok := raw["variables"]; ok {
+				var vars map[string]string
+				if err := json.Unmarshal(v, &vars); err == nil && len(vars) > 0 {
+					onEnvMutation(vars)
+				}
+			}
+		}
 	}
 }
 

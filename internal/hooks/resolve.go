@@ -19,6 +19,11 @@ type Resolution struct {
 	PermissionDecision *contracts.PermissionDecision
 	UpdatedInput       json.RawMessage
 	Metadata           map[string]any
+	// AsyncHooks lists names of hooks that returned {"async":true} (HOOK-12).
+	// The runner should register these in AsyncHookRegistry so they can be
+	// waited for between turns or at turn completion.
+	// CC ref: src/utils/hooks.ts:168-176.
+	AsyncHooks []string
 }
 
 type hookOutcome struct {
@@ -90,6 +95,12 @@ func Resolve(ctx tool.Context, hooks []tool.Hook, event tool.HookEvent) (Resolut
 				}
 			}
 		}
+		// Propagate async markers — collect hook command/name for the registry.
+		// CC ref: src/utils/hooks.ts:168-176 HOOK-12 async detach.
+		if hr.Async {
+			name := hookIdentifier(hooks[i])
+			res.AsyncHooks = append(res.AsyncHooks, name)
+		}
 	}
 
 	res.Message = strings.Join(res.AdditionalContext, "\n")
@@ -100,6 +111,23 @@ func Resolve(ctx tool.Context, hooks []tool.Hook, event tool.HookEvent) (Resolut
 		}
 	}
 	return res, nil
+}
+
+// hookIdentifier returns a human-readable name for an async hook entry.
+// Used to populate Resolution.AsyncHooks for the AsyncHookRegistry.
+func hookIdentifier(hook tool.Hook) string {
+	switch h := hook.(type) {
+	case CommandHook:
+		cmd := h.Command
+		if len(cmd) > 40 {
+			cmd = cmd[:40] + "…"
+		}
+		return fmt.Sprintf("command:%s", cmd)
+	case HTTPHook:
+		return fmt.Sprintf("http:%s", h.URL)
+	default:
+		return fmt.Sprintf("hook:%T", hook)
+	}
 }
 
 // Matches reports whether the hook's matcher accepts the given query string.

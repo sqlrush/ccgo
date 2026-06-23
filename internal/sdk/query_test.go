@@ -266,7 +266,7 @@ func TestDispatchLineKeepAliveIsIgnored(t *testing.T) {
 	ctrl := NewController(nil, nil)
 	asker := newControlAsker(enc.WriteRequest, func() string { return "x" })
 
-	dispatchLine(`{"type":"keep_alive"}`, ctrl, asker, enc)
+	dispatchLine(`{"type":"keep_alive"}`, ctrl, asker, enc, nil)
 	// No output should be written.
 	if out.Len() != 0 {
 		t.Fatalf("keep_alive must produce no output, got: %q", out.String())
@@ -282,7 +282,7 @@ func TestDispatchLineUpdateEnvironmentVariablesIsIgnored(t *testing.T) {
 	ctrl := NewController(nil, nil)
 	asker := newControlAsker(enc.WriteRequest, func() string { return "x" })
 
-	dispatchLine(`{"type":"update_environment_variables","variables":{"FOO":"bar"}}`, ctrl, asker, enc)
+	dispatchLine(`{"type":"update_environment_variables","variables":{"FOO":"bar"}}`, ctrl, asker, enc, nil)
 	if out.Len() != 0 {
 		t.Fatalf("update_environment_variables must produce no output, got: %q", out.String())
 	}
@@ -322,7 +322,7 @@ func TestDispatchLineControlCancelRequestCancelsAsker(t *testing.T) {
 	_ = outDec // request was emitted; we don't need to read it for this test.
 
 	// Send a control_cancel_request for the pending request_id.
-	dispatchLine(`{"type":"control_cancel_request","request_id":"req-77"}`, ctrl, asker, enc)
+	dispatchLine(`{"type":"control_cancel_request","request_id":"req-77"}`, ctrl, asker, enc, nil)
 
 	// The Ask should unblock with a deny.
 	select {
@@ -415,7 +415,7 @@ func TestQueryCanUseTool_ResponseDeliveredToAsker(t *testing.T) {
 	// Start the read-loop.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	go readControlLoop(ctx, inPR, ctrl, asker, enc)
+	go readControlLoop(ctx, inPR, ctrl, asker, enc, nil)
 
 	// Trigger Ask in a goroutine (simulates a tool calling PermissionAsker.Ask).
 	decisionCh := make(chan contracts.PermissionDecision, 1)

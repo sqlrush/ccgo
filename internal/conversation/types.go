@@ -10,6 +10,7 @@ import (
 	compactpkg "ccgo/internal/compact"
 	"ccgo/internal/config"
 	"ccgo/internal/contracts"
+	hookpkg "ccgo/internal/hooks"
 	integrationspkg "ccgo/internal/integrations"
 	lsppkg "ccgo/internal/lsp"
 	"ccgo/internal/mcp"
@@ -228,6 +229,13 @@ type Runner struct {
 	// status:"async_launched". When nil, a session-local registry is allocated
 	// automatically on first use.
 	AgentRegistry *orchestration.AgentRegistry
+
+	// AsyncHookRegistry tracks hooks that returned {"async":true} and are
+	// running in the background (HOOK-12 runtime). When non-nil, async hooks
+	// are enqueued here instead of blocking the turn. When nil, a registry is
+	// allocated automatically on first use.
+	// CC ref: src/utils/hooks.ts:184-264 (executeInBackground).
+	AsyncHookRegistry *hookpkg.AsyncHookRegistry
 
 	// ExtraToolMetadata holds additional key-value pairs that are merged into
 	// the tool execution context metadata on every turn. Callers use this to

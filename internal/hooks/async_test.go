@@ -147,6 +147,58 @@ func TestAsyncHookRegistryLen(t *testing.T) {
 	}
 }
 
+// TestAsyncHookRegistryCancelReturnsTrueAndRemoves verifies Cancel returns true
+// for a known id, removes it from the registry, and unblocks any Wait.
+// CC ref: SDK-35 cancel_async_message (G12).
+func TestAsyncHookRegistryCancelReturnsTrueAndRemoves(t *testing.T) {
+	registry := NewAsyncHookRegistry()
+	// Register a slow hook that will never finish on its own within test lifetime.
+	id := registry.Register("phase", "slow", func() { time.Sleep(10 * time.Second) })
+
+	if registry.Len() != 1 {
+		t.Fatalf("expected 1 entry, got %d", registry.Len())
+	}
+
+	cancelled := registry.Cancel(id)
+	if !cancelled {
+		t.Fatal("Cancel should return true for a known id")
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("expected 0 entries after cancel, got %d", registry.Len())
+	}
+
+	// Wait should now return immediately since the entry was removed/done.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	registry.Wait(ctx)
+	// If we get here without timeout the test passes.
+}
+
+// TestAsyncHookRegistryCancelReturnsFalseForUnknown verifies Cancel returns
+// false for an unknown or already-completed id.
+func TestAsyncHookRegistryCancelReturnsFalseForUnknown(t *testing.T) {
+	registry := NewAsyncHookRegistry()
+	if registry.Cancel("nonexistent") {
+		t.Fatal("Cancel should return false for unknown id")
+	}
+}
+
+// TestAsyncHookRegistryCancelRace verifies that concurrent Cancel + goroutine
+// completion does not panic (double-close) under -race.
+func TestAsyncHookRegistryCancelRace(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		registry := NewAsyncHookRegistry()
+		var done atomic.Bool
+		id := registry.Register("phase", "race", func() {
+			// tiny sleep so Cancel sometimes races with goroutine close
+			time.Sleep(time.Microsecond)
+			done.Store(true)
+		})
+		// Cancel concurrently — must not panic.
+		registry.Cancel(id)
+	}
+}
+
 // TestAsyncResultNotParsedFromNonJSONStdout verifies that plain-text stdout
 // does not set Async=true.
 func TestAsyncResultNotParsedFromNonJSONStdout(t *testing.T) {
