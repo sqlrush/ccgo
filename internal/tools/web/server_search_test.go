@@ -48,6 +48,30 @@ func TestWebSearchUsesServerToolWhenConfigured(t *testing.T) {
 	}
 }
 
+// TestWebSearchSurfacesInterleavedText verifies that ServerSearchResponse.Text
+// (model-generated text emitted alongside search blocks) is included in the
+// formatted output, not silently discarded.
+func TestWebSearchSurfacesInterleavedText(t *testing.T) {
+	srv := &fakeServerSearch{resp: ServerSearchResponse{
+		Results: []searchResult{{Title: "Go 1.26", URL: "https://go.dev/blog", Snippet: "release"}},
+		Text:    "Here is some interleaved summary text from the model.",
+	}}
+	toolImpl := NewWebSearchTool()
+	raw, _ := json.Marshal(map[string]any{"query": "go 1.26 release"})
+	ctx := tool.Context{
+		Context:  context.Background(),
+		Metadata: map[string]any{MetadataServerSearchClientKey: srv},
+	}
+	res, err := toolImpl.Call(ctx, raw, tool.NopProgressSink())
+	if err != nil {
+		t.Fatalf("Call err: %v", err)
+	}
+	content, _ := res.Content.(string)
+	if !strings.Contains(content, "interleaved summary text") {
+		t.Fatalf("resp.Text not surfaced in output; got: %q", content)
+	}
+}
+
 // TestWebSearchFallsBackWhenNoServerClient verifies serverSearchClient returns
 // nil when the injection key is absent, ensuring the scrape path is taken by
 // callWebSearch (no network needed — we only check the accessor).
