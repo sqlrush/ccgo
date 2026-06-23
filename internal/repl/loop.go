@@ -13,6 +13,7 @@ import (
 
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
+	"ccgo/internal/orchestration"
 	"ccgo/internal/session"
 	"ccgo/internal/tool"
 	"ccgo/internal/tui"
@@ -139,7 +140,33 @@ type Loop struct {
 	// Cleared when EventAssistantMessage arrives (the full message supersedes it).
 	streamingBuf    string
 	streamingActive bool // true while a streaming assistant message is live on screen
+
+	// agentReg is the shared AgentRegistry for background task tracking.
+	// Set via SetAgentRegistry; nil when background tasks are not in use.
+	agentReg agentRegistryHarvester
+
+	// bgCheckCh carries polling ticks that prompt the loop to check whether any
+	// background agents have finished. Sent from a goroutine when the registry
+	// transitions an agent to done/failed.
+	bgCheckCh chan struct{}
+
+	// onBGNotice is a test seam called (in the loop goroutine) each time a
+	// background-agent completion notice is written to the screen. Nil in production.
+	onBGNotice func(msg string)
 }
+
+// SetAgentRegistry wires the shared AgentRegistry for background task tracking.
+// Once set, the loop polls the registry between turns and surfaces completed
+// agents as system messages. Call before Run.
+func (l *Loop) SetAgentRegistry(reg agentRegistryHarvester) {
+	l.agentReg = reg
+	if reg != nil {
+		l.bgCheckCh = make(chan struct{}, 1)
+	}
+}
+
+// AgentRegistry returns the registry wired via SetAgentRegistry (may be nil).
+func (l *Loop) AgentRegistry() agentRegistryHarvester { return l.agentReg }
 
 // SetSettingsWriter wires the settings writer used to persist "allow always"
 // permission rules. Called from run.go during Task 13 wiring.
@@ -217,6 +244,14 @@ func (l *Loop) Run(ctx context.Context) error {
 	// CC ref: src/ink/ink.tsx:960.
 	startSIGCONTListener(ctx, l.term, l.resizeCh)
 
+	// When a background registry is wired, start a watcher goroutine that polls
+	// every 500 ms and signals bgCheckCh when any agent finishes. The signal is
+	// non-blocking (channel is buffered-1) so the watcher never blocks even if
+	// the loop is busy.
+	if l.agentReg != nil {
+		go l.watchBackgroundAgents(ctx)
+	}
+
 	if err := l.render(); err != nil {
 		return err
 	}
@@ -265,6 +300,74 @@ func (l *Loop) Run(ctx context.Context) error {
 			if err := l.render(); err != nil {
 				return err
 			}
+		case <-l.bgCheckCh:
+			l.drainFinishedAgents()
+			if err := l.render(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// watchBackgroundAgents polls the AgentRegistry at ~500 ms intervals and sends
+// a non-blocking signal on bgCheckCh whenever at least one agent has finished.
+// It runs in its own goroutine and exits when ctx is cancelled.
+func (l *Loop) watchBackgroundAgents(ctx context.Context) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if l.agentReg == nil {
+				return
+			}
+			for _, s := range l.agentReg.Snapshot() {
+				if s.State == orchestration.AgentDone || s.State == orchestration.AgentFailed {
+					// Signal the main loop (non-blocking; one pending signal is enough).
+					select {
+					case l.bgCheckCh <- struct{}{}:
+					default:
+					}
+					break
+				}
+			}
+		}
+	}
+}
+
+// drainFinishedAgents harvests every finished background agent from the registry
+// and appends a system-message notice to the screen. Called in the loop goroutine
+// so it is data-race free with other loop state.
+func (l *Loop) drainFinishedAgents() {
+	if l.agentReg == nil {
+		return
+	}
+	for _, s := range l.agentReg.Snapshot() {
+		if s.State != orchestration.AgentDone && s.State != orchestration.AgentFailed {
+			continue
+		}
+		outcome, ok := l.agentReg.Harvest(s.ID)
+		if !ok {
+			continue
+		}
+		var msg string
+		if s.State == orchestration.AgentFailed || outcome.Err != nil {
+			errStr := "unknown error"
+			if outcome.Err != nil {
+				errStr = outcome.Err.Error()
+			}
+			msg = fmt.Sprintf("background task %s failed: %s", s.ID, errStr)
+		} else {
+			msg = fmt.Sprintf("background task %s completed", s.ID)
+			if outcome.Summary != "" {
+				msg += ": " + outcome.Summary
+			}
+		}
+		l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: msg})
+		if l.onBGNotice != nil {
+			l.onBGNotice(msg)
 		}
 	}
 }

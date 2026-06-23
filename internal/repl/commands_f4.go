@@ -359,15 +359,40 @@ func tagHandler(sessionID contracts.ID, sessionDir string) CommandHandler {
 	}
 }
 
-// tasksHandler returns a CommandHandler for /tasks.
-// ⚠️ Background task infrastructure is not implemented in ccgo.
-func tasksHandler() CommandHandler {
+// tasksHandlerWithRegistry returns a CommandHandler for /tasks that reads
+// in-flight and completed background agents from the given AgentRegistry.
+// When registry is nil the handler returns a graceful "no background tasks" message.
+func tasksHandlerWithRegistry(registry agentRegistrySnapshotter) CommandHandler {
 	return func(ctx context.Context, cc CommandContext) (CommandOutcome, error) {
+		if registry == nil {
+			return CommandOutcome{
+				Handled: true,
+				Status:  "no background tasks (registry not available)",
+			}, nil
+		}
+		snap := registry.Snapshot()
+		if len(snap) == 0 {
+			return CommandOutcome{
+				Handled: true,
+				Status:  "Background tasks: no background tasks",
+			}, nil
+		}
+		var sb strings.Builder
+		sb.WriteString("Background tasks:\n")
+		for _, s := range snap {
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", s.ID, s.State))
+		}
 		return CommandOutcome{
 			Handled: true,
-			Status:  "⚠️  /tasks (background task management) requires background task infrastructure that is not yet implemented in ccgo.",
+			Status:  strings.TrimRight(sb.String(), "\n"),
 		}, nil
 	}
+}
+
+// tasksHandler returns a CommandHandler for /tasks without a registry
+// (production code wires the registry via tasksHandlerWithRegistry).
+func tasksHandler() CommandHandler {
+	return tasksHandlerWithRegistry(nil)
 }
 
 // keybindingsHandler returns a CommandHandler for /keybindings that shows the path

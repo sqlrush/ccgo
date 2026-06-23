@@ -32,6 +32,7 @@ import (
 	"ccgo/internal/memory"
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
+	orchestrationpkg "ccgo/internal/orchestration"
 	"ccgo/internal/permissions"
 	"ccgo/internal/platform"
 	pluginpkg "ccgo/internal/plugins"
@@ -603,7 +604,15 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 	}
 
+	// Pre-create a shared AgentRegistry so the REPL loop and the Task tool share
+	// the same instance. The runner lazily initialises its own registry on the first
+	// RunTurn call; injecting it here ensures any background tasks started during
+	// the first turn are visible to the REPL's /tasks command and loop surfacing.
+	sharedRegistry := orchestrationpkg.NewAgentRegistry()
+	runner.AgentRegistry = sharedRegistry
+
 	opts := repl.InteractiveOptions{
+		AgentRegistry:   sharedRegistry,
 		Settings:        writer,
 		Registry:        cmdRegistry.Visible(),
 		Mode:            runner.PermissionMode,

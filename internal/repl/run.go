@@ -63,6 +63,12 @@ func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, h
 // settings writer (for persisted rules), the command registry (slash menu), the
 // initial mode, and the data backing the resume/theme/memory overlays.
 type InteractiveOptions struct {
+	// AgentRegistry is the shared background-task registry. When non-nil the
+	// loop polls it between turns and surfaces finished agents as system messages.
+	// The production wiring in main.go creates one shared instance and passes the
+	// same pointer to both the task tool (via runner.AgentRegistry) and the REPL.
+	AgentRegistry agentRegistryHarvester
+
 	// Engine is the live permission engine used for in-session rule updates.
 	// May be nil — persistence via Settings still works without it.
 	Engine *permissions.Engine
@@ -227,6 +233,12 @@ func newTurnLoopForRunnerWithHistory(ctx context.Context, term Terminal, base co
 // It is extracted so that the parity test can enumerate registered names without
 // duplicating the registration list.
 func newProductionRouter(cwd string, registry []contracts.Command) *CommandRouter {
+	return newProductionRouterWithRegistry(cwd, registry, nil)
+}
+
+// newProductionRouterWithRegistry is like newProductionRouter but also wires an
+// AgentRegistry so that /tasks and /bashes read live background-task state.
+func newProductionRouterWithRegistry(cwd string, registry []contracts.Command, agReg agentRegistrySnapshotter) *CommandRouter {
 	router := NewCommandRouter()
 	router.Register("resume", resumeHandler(cwd))
 	router.Register("continue", resumeHandler(cwd))
@@ -262,12 +274,13 @@ func newProductionRouter(cwd string, registry []contracts.Command) *CommandRoute
 	router.Register("fast", fastHandler())
 	router.Register("stats", statsHandler())
 	router.Register("tag", tagHandler("", cwd))
-	router.Register("tasks", tasksHandler())
+	// /tasks and /bashes: backed by the shared AgentRegistry when available.
+	router.Register("tasks", tasksHandlerWithRegistry(agReg))
+	router.Register("bashes", tasksHandlerWithRegistry(agReg))
 	router.Register("keybindings", keybindingsHandler(""))
 	router.Register("reload-plugins", reloadPluginsHandler(cwd))
 	router.Register("color", colorHandler())
 	router.Register("statusline", statusLineHandler())
-	router.Register("bashes", tasksHandler())
 	// AUTH-LOGIN-01/02: /login and /logout run the OAuth flow / clear creds.
 	router.Register("login", loginHandler())
 	router.Register("logout", logoutHandler())
@@ -360,9 +373,15 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		}
 	}
 
+	// Wire the AgentRegistry (if provided) into the loop so it can poll for
+	// completed background agents between turns and surface them to the user.
+	if opts.AgentRegistry != nil {
+		loop.SetAgentRegistry(opts.AgentRegistry)
+	}
+
 	// Wire the command router so /resume (and future live-effect commands) are
 	// handled without falling through to the model.
-	router := newProductionRouter(base.WorkingDirectory, opts.Registry)
+	router := newProductionRouterWithRegistry(base.WorkingDirectory, opts.Registry, opts.AgentRegistry)
 
 	// When the host supplied prebuilt resume entries, prefer them for the no-arg
 	// picker so the overlay reflects exactly what main.go discovered at startup.
