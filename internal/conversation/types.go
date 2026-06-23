@@ -52,8 +52,13 @@ const (
 	EventTokenWarning       EventType = "token_warning"
 	EventCompact            EventType = "compact"
 	EventStreamEvent        EventType = "stream_event"
-	EventDeferredPoolChange EventType = "tengu_deferred_tools_pool_change"
-	EventToolSearchDecision EventType = "tengu_tool_search_mode_decision"
+	EventDeferredPoolChange  EventType = "tengu_deferred_tools_pool_change"
+	EventToolSearchDecision  EventType = "tengu_tool_search_mode_decision"
+	// EventLocalCommandOutput is emitted when a local slash command (e.g. /cost)
+	// produces output. In stream-json mode it is surfaced as a local_command_output
+	// sdk_event so SDK consumers can display it.
+	// CC ref: src/entrypoints/sdk/coreSchemas.ts:1590-1602 (SDK-66).
+	EventLocalCommandOutput EventType = "local_command_output"
 )
 
 type TokenWarning struct {
@@ -95,6 +100,12 @@ type ToolSearchModeDecision struct {
 	CharThreshold                int
 }
 
+// LocalCommandOutput holds the output produced by a local slash command (SDK-66).
+// CC ref: src/entrypoints/sdk/coreSchemas.ts:1590-1602 (SDKLocalCommandOutputMessage).
+type LocalCommandOutput struct {
+	Content string
+}
+
 type Event struct {
 	Type                    EventType
 	Message                 *contracts.Message
@@ -107,8 +118,11 @@ type Event struct {
 	StreamEvent             *anthropic.StreamEvent
 	DeferredToolsPoolChange *DeferredToolsPoolChange
 	ToolSearchModeDecision  *ToolSearchModeDecision
-	Model                   string
-	Error                   error
+	// LocalCommandOutput carries the text produced by a local slash command.
+	// Set when Type == EventLocalCommandOutput (SDK-66).
+	LocalCommandOutput *LocalCommandOutput
+	Model              string
+	Error              error
 }
 
 type Runner struct {

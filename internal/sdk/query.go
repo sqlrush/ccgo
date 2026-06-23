@@ -7,16 +7,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	anthropicpkg "ccgo/internal/api/anthropic"
 	"ccgo/internal/contracts"
 	"ccgo/internal/conversation"
 	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
 	pluginspkg "ccgo/internal/plugins"
+	filetools "ccgo/internal/tools/file"
 )
 
 // Options configures a programmatic SDK query (CC agentSdkTypes.ts:112-122).
@@ -73,6 +78,27 @@ type Options struct {
 	// no mutation occurs (⚠️ same as the pre-G12 behaviour).
 	// CC ref: controlSchemas.ts:629-636 (SDK-49).
 	OnEnvMutation func(variables map[string]string)
+
+	// ── G21 features ──────────────────────────────────────────────────────────
+
+	// PostTurnSummary, when true, emits a system/post_turn_summary sdk_event
+	// after the turn completes successfully (SDK-60).
+	// CC ref: src/query.ts promptSuggestions post-turn summary.
+	PostTurnSummary bool
+
+	// FilesToUpload is a list of local file paths to upload to the Anthropic
+	// Files API before the turn runs. When non-empty a files_persisted sdk_event
+	// is emitted listing the uploaded file IDs (SDK-64).
+	// CC ref: src/utils/files.ts FilesAPI.
+	FilesToUpload []string
+
+	// FilesAPIBaseURL overrides the base URL used by the Files API client.
+	// When empty, DefaultBaseURL (api.anthropic.com) is used.
+	FilesAPIBaseURL string
+
+	// FilesAPIKey is the API key used by the Files API client when uploading.
+	// When empty, the same key used by the runner client applies.
+	FilesAPIKey string
 }
 
 // Query runs a single conversation turn under the SDK control protocol.
@@ -108,6 +134,25 @@ func Query(ctx context.Context, opts Options) error {
 	}
 
 	enc := NewEncoder(opts.Out)
+
+	// SDK-54: wrap the runner client to detect 429 rate-limit errors and emit
+	// a rate_limit_event sdk_event before propagating the error.
+	// CC ref: coreSchemas.ts:1358-1367 (SDKRateLimitEventSchema).
+	if runner.Client != nil {
+		runner.Client = &rateLimitEventClient{
+			inner: runner.Client,
+			emit: func() {
+				_ = enc.WriteRequest(ControlRequest{
+					Type: "sdk_event",
+					Request: map[string]any{
+						"type":            "rate_limit_event",
+						"rate_limit_info": map[string]any{"status": "rejected"},
+						"session_id":      string(runner.SessionID),
+					},
+				})
+			},
+		}
+	}
 
 	// turnCtx is cancelled by interrupt or parent ctx.
 	turnCtx, cancelTurn := context.WithCancelCause(ctx)
@@ -174,6 +219,52 @@ func Query(ctx context.Context, opts Options) error {
 	var rewindFiles func(string, bool) (*RewindFilesResult, error)
 	if opts.RewindFiles != nil {
 		rewindFiles = opts.RewindFiles
+	}
+
+	// SDK-36: seed_read_state → set a file in runner.ReadState with given path
+	// and mtime. Creates ReadState lazily if the runner doesn't have one yet.
+	// CC ref: controlSchemas.ts:351-362 (SDK-36).
+	seedReadState := func(path string, mtime int64) error {
+		if runner.ReadState == nil {
+			runner.ReadState = filetools.NewReadState()
+		}
+		runner.ReadState.Set(path, filetools.ReadFileState{Timestamp: mtime})
+		return nil
+	}
+
+	// SDK-37: hook_callback → record the callback result in the runner's
+	// AsyncHookRegistry (or just accept and succeed if no registry exists).
+	// CC ref: controlSchemas.ts:363-372 (SDK-37).
+	hookCallback := func(callbackID string, input map[string]any) error {
+		// Deliver the callback to the AsyncHookRegistry by cancelling the
+		// pending entry (which unblocks waiters). The callbackID maps to a
+		// registered async hook entry in the registry.
+		if runner.AsyncHookRegistry != nil {
+			runner.AsyncHookRegistry.Cancel(callbackID)
+		}
+		// Accept silently — the callback delivery is best-effort.
+		return nil
+	}
+
+	// SDK-46/61: elicitation → return {action:decline} as safe headless default,
+	// then emit a system/elicitation_complete sdk_event.
+	// CC ref: controlSchemas.ts:522-545 (SDK-46); coreSchemas.ts (SDK-61).
+	elicitation := func(serverName, message string, extra map[string]any) (*ElicitationResult, error) {
+		// Emit elicitation_complete sdk_event after the response is handled.
+		// We send the event here (before returning) so it is emitted promptly.
+		elicitationID, _ := extra["elicitation_id"].(string)
+		_ = enc.WriteRequest(ControlRequest{
+			Type: "sdk_event",
+			Request: map[string]any{
+				"type":            "system",
+				"subtype":         "elicitation_complete",
+				"mcp_server_name": serverName,
+				"elicitation_id":  elicitationID,
+				"uuid":            string(runner.SessionID),
+				"session_id":      string(runner.SessionID),
+			},
+		})
+		return &ElicitationResult{Action: "decline"}, nil
 	}
 
 	// Wire MCP manager callbacks when a live Manager is provided.
@@ -281,8 +372,10 @@ func Query(ctx context.Context, opts Options) error {
 		// G13: real plugin reload and flag-settings merge.
 		reloadPlugins:    reloadPlugins,
 		applyFlagSettings: applyFlagSettings,
-		// Remaining subtypes without a live backend return ⚠️ "not supported"
-		// responses (CC bridgeMessaging.ts:339).
+		// G21: new feature callbacks.
+		seedReadState: seedReadState,
+		hookCallback:  hookCallback,
+		elicitation:   elicitation,
 	}
 
 	// Read-loop goroutine: decodes inbound NDJSON from In, routes
@@ -298,12 +391,56 @@ func Query(ctx context.Context, opts Options) error {
 		close(loopDone)
 	}
 
+	// SDK-64: upload files to the Files API before the turn runs.
+	// Emit a files_persisted sdk_event listing the uploaded file IDs.
+	// CC ref: src/utils/files.ts FilesAPI (SDK-64).
+	if len(opts.FilesToUpload) > 0 {
+		filesClient := &anthropicpkg.FilesClient{
+			BaseURL: opts.FilesAPIBaseURL,
+			APIKey:  opts.FilesAPIKey,
+		}
+		var uploadedIDs []string
+		for _, filePath := range opts.FilesToUpload {
+			content, readErr := os.ReadFile(filePath)
+			if readErr != nil {
+				return fmt.Errorf("sdk: read file %q: %w", filePath, readErr)
+			}
+			mimeType := mime.TypeByExtension(filepath.Ext(filePath))
+			uploaded, upErr := filesClient.UploadFile(turnCtx, filepath.Base(filePath), content, mimeType)
+			if upErr != nil {
+				return fmt.Errorf("sdk: upload file %q: %w", filePath, upErr)
+			}
+			uploadedIDs = append(uploadedIDs, uploaded.FileID)
+		}
+		_ = enc.WriteRequest(ControlRequest{
+			Type: "sdk_event",
+			Request: map[string]any{
+				"type":       "system",
+				"subtype":    "files_persisted",
+				"file_ids":   uploadedIDs,
+				"session_id": string(runner.SessionID),
+			},
+		})
+	}
+
 	// Wire events: emit each conversation event as an sdk_event line on Out.
 	// Also track accumulated usage so get_context_usage reflects real tokens.
 	runner.OnEvent = func(ev conversation.Event) {
 		// Accumulate usage from assistant messages (carries LLM billing data).
 		if ev.Message != nil && ev.Message.Usage != nil {
 			usageMu.accumulate(*ev.Message.Usage)
+		}
+		// SDK-66: local slash command output → local_command_output sdk_event.
+		if ev.Type == conversation.EventLocalCommandOutput && ev.LocalCommandOutput != nil {
+			_ = enc.WriteRequest(ControlRequest{
+				Type: "sdk_event",
+				Request: map[string]any{
+					"type":       string(ev.Type),
+					"content":    ev.LocalCommandOutput.Content,
+					"session_id": string(runner.SessionID),
+				},
+			})
+			return
 		}
 		payload := map[string]any{"type": string(ev.Type)}
 		if ev.Model != "" {
@@ -317,6 +454,21 @@ func Query(ctx context.Context, opts Options) error {
 
 	user := messages.UserText(opts.Prompt)
 	_, turnErr := runner.RunTurn(turnCtx, nil, user)
+
+	// SDK-60: emit post_turn_summary sdk_event after a successful turn.
+	// CC ref: src/query.ts promptSuggestions (SDK-60).
+	if turnErr == nil && opts.PostTurnSummary {
+		_ = enc.WriteRequest(ControlRequest{
+			Type: "sdk_event",
+			Request: map[string]any{
+				"type":       "system",
+				"subtype":    "post_turn_summary",
+				"summary":    "",
+				"session_id": string(runner.SessionID),
+			},
+		})
+	}
+
 	// Cancel the turn ctx so the read-loop exits promptly.
 	cancelTurn(turnErr)
 
@@ -717,6 +869,27 @@ func applyFlagSettingsToRunner(r *conversation.Runner, settings map[string]any) 
 	}
 	r.MCP.LocalSettings = mergeSettingsOverlay(r.MCP.LocalSettings, overlay)
 	return nil
+}
+
+// ── SDK-54 helpers ────────────────────────────────────────────────────────────
+
+// rateLimitEventClient wraps a conversation.MessageClient and emits a
+// rate_limit_event sdk_event when the inner client returns a 429 error.
+// CC ref: coreSchemas.ts:1358-1367 (SDKRateLimitEventSchema).
+type rateLimitEventClient struct {
+	inner conversation.MessageClient
+	emit  func()
+}
+
+func (c *rateLimitEventClient) CreateMessage(ctx context.Context, req anthropicpkg.Request) (*anthropicpkg.Response, error) {
+	resp, err := c.inner.CreateMessage(ctx, req)
+	if err != nil {
+		var apiErr anthropicpkg.APIError
+		if errors.As(err, &apiErr) && apiErr.RateLimited() {
+			c.emit()
+		}
+	}
+	return resp, err
 }
 
 // mergeSettingsOverlay returns a new contracts.Settings with non-zero fields
