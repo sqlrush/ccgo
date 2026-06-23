@@ -27,6 +27,7 @@ import (
 	daemonpkg "ccgo/internal/daemon"
 	integrationspkg "ccgo/internal/integrations"
 	"ccgo/internal/mcp"
+	"ccgo/internal/memory"
 	"ccgo/internal/messages"
 	"ccgo/internal/model"
 	"ccgo/internal/permissions"
@@ -3450,6 +3451,13 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	}
 	runner.UseStreaming = options.Stream
 	runner.SystemPrompt = combineSystemPrompt(options.SystemPrompt, options.AppendSystem)
+	if claudeCtx := loadClaudeMdContext(runner.WorkingDirectory); claudeCtx != "" {
+		if runner.SystemPrompt != "" {
+			runner.SystemPrompt = runner.SystemPrompt + "\n\n" + claudeCtx
+		} else {
+			runner.SystemPrompt = claudeCtx
+		}
+	}
 	if runner.SessionPath == "" && runner.SessionID != "" {
 		runner.SessionPath = session.TranscriptPath(runner.WorkingDirectory, runner.SessionID)
 	}
@@ -3511,6 +3519,28 @@ func combineSystemPrompt(systemPrompt string, appendSystem string) string {
 	default:
 		return extra
 	}
+}
+
+// loadClaudeMdContext loads the scoped CLAUDE.md hierarchy for cwd and returns
+// the concatenated content of all discovered documents (imports expanded, in
+// precedence order). Returns an empty string when no CLAUDE.md files exist.
+// Errors are treated as non-fatal: the function logs to stderr and returns "".
+func loadClaudeMdContext(cwd string) string {
+	opts := memory.LoadOptions{
+		Scope: memory.DefaultScopeOptions(cwd),
+	}
+	docs, err := memory.LoadScopedClaudeContext(opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to load CLAUDE.md context: %v\n", err)
+		return ""
+	}
+	var parts []string
+	for _, doc := range docs {
+		if trimmed := strings.TrimSpace(doc.Content); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func resumeHistory(state *bootstrap.State, runner *conversation.Runner, options cliOptions) ([]contracts.Message, error) {

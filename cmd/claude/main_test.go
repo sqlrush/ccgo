@@ -1127,6 +1127,29 @@ func TestHeadlessRunnerLoadsCLIProvidedMCPConfig(t *testing.T) {
 	}
 }
 
+func TestHeadlessRunnerInjectsCLAUDEMdIntoSystemPrompt(t *testing.T) {
+	project := t.TempDir()
+	claudeMdContent := "RULE: always respond in JSON"
+	if err := os.WriteFile(filepath.Join(project, "CLAUDE.md"), []byte(claudeMdContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+
+	state, err := bootstrap.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SetCWD(project)
+	runner, err := headlessRunner(context.Background(), state, cliOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(runner.SystemPrompt, claudeMdContent) {
+		t.Fatalf("SystemPrompt does not contain CLAUDE.md content.\nGot: %q", runner.SystemPrompt)
+	}
+}
+
 func TestRunPrintReadsJSONInputFormatPrompt(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
