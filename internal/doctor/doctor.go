@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -103,6 +104,27 @@ type Input struct {
 	// MCPConfigContent, when non-nil, is the raw bytes of .mcp.json to parse
 	// (SUBCMD-DOCTOR-13). When nil and CWD is set, the file is read from disk.
 	MCPConfigContent []byte
+
+	// ConfigInstallMethod, when non-empty, is the installMethod value from the
+	// global config file (CC: getGlobalConfig().installMethod). When it disagrees
+	// with the detected install type, a WARN check is emitted (SUBCMD-DOCTOR-09).
+	// Known values: "local", "native", "global", "unknown".
+	ConfigInstallMethod string
+
+	// LinuxGlobPatterns holds the set of glob patterns found in sandbox permission
+	// rules. On Linux these patterns are silently ignored, so they warrant a WARN
+	// (SUBCMD-DOCTOR-11). The check runs when ForceLinuxGlobCheck is true or when
+	// runtime.GOOS=="linux" and len(LinuxGlobPatterns)>0.
+	LinuxGlobPatterns []string
+
+	// ForceLinuxGlobCheck, when true, runs the LinuxGlobPatterns check regardless
+	// of the runtime OS. Used in tests to verify the check on non-Linux CI.
+	ForceLinuxGlobCheck bool
+
+	// StaleLockFiles, when non-empty, lists stale PID lock files found under
+	// ~/.local/state/claude/locks/ (SUBCMD-DOCTOR-12). A WARN check is emitted.
+	// In production this is detected by FindStaleLockFiles; tests inject directly.
+	StaleLockFiles []string
 }
 
 // DetectInstallType classifies the running binary path into one of CC's 6
@@ -277,7 +299,93 @@ func Run(in Input) Report {
 		}
 	}
 
+	// Config/reality mismatch check (SUBCMD-DOCTOR-09).
+	// CC stores installMethod in global config; ccgo exposes it via Input.ConfigInstallMethod.
+	// Only check when the field is explicitly set — empty means "not recorded".
+	if in.ConfigInstallMethod != "" && in.ConfigInstallMethod != "unknown" {
+		checks = append(checks, configMismatchCheck(installType, in.ConfigInstallMethod))
+	}
+
+	// Linux sandbox glob-pattern warning (SUBCMD-DOCTOR-11).
+	// On Linux, glob patterns in sandbox Edit/Read permission rules are silently
+	// ignored by the kernel's landlock interface, so we surface a WARN.
+	if len(in.LinuxGlobPatterns) > 0 && (runtime.GOOS == "linux" || in.ForceLinuxGlobCheck) {
+		checks = append(checks, globPatternCheck(in.LinuxGlobPatterns))
+	}
+
+	// Stale PID lock files check (SUBCMD-DOCTOR-12).
+	// ccgo does not maintain a PID lock system itself, but it can detect leftover
+	// lock files from previous sessions and report them.
+	if len(in.StaleLockFiles) > 0 {
+		checks = append(checks, staleLockCheck(in.StaleLockFiles))
+	}
+
 	return Report{Checks: checks}
+}
+
+// configMismatchCheck returns a Check for SUBCMD-DOCTOR-09.
+// It compares the runtime-detected install type with the value recorded in the
+// global config file. A mismatch warrants a fix pointer.
+func configMismatchCheck(detected InstallationType, configured string) Check {
+	// Map CC's config values to our install type strings.
+	// CC values: "local"→npm-local, "native"→native, "global"→npm-global, "unknown"→unknown.
+	mismatch := false
+	switch configured {
+	case "local":
+		mismatch = detected != InstallTypeNpmLocal
+	case "native":
+		mismatch = detected != InstallTypeNative
+	case "global":
+		mismatch = detected != InstallTypeNpmGlobal
+	}
+	if !mismatch {
+		return Check{
+			Name:   "Config/install mismatch",
+			Status: StatusOK,
+			Detail: fmt.Sprintf("detected install type %q matches config installMethod %q", detected, configured),
+		}
+	}
+	return Check{
+		Name:   "Config/install mismatch",
+		Status: StatusWarn,
+		Detail: fmt.Sprintf(
+			"detected install type %q but config installMethod is %q — run claude install to update configuration",
+			detected, configured,
+		),
+	}
+}
+
+// globPatternCheck returns a WARN Check for Linux sandbox glob patterns (SUBCMD-DOCTOR-11).
+func globPatternCheck(patterns []string) Check {
+	display := patterns
+	if len(display) > 3 {
+		display = patterns[:3]
+	}
+	remaining := len(patterns) - len(display)
+	patternList := strings.Join(display, ", ")
+	if remaining > 0 {
+		patternList = fmt.Sprintf("%s (%d more)", patternList, remaining)
+	}
+	return Check{
+		Name:   "Sandbox glob patterns",
+		Status: StatusWarn,
+		Detail: fmt.Sprintf(
+			"Glob patterns in sandbox permission rules are not fully supported on Linux. Found %d pattern(s): %s. On Linux, glob patterns in Edit/Read rules will be ignored.",
+			len(patterns), patternList,
+		),
+	}
+}
+
+// staleLockCheck returns a WARN Check for stale PID lock files (SUBCMD-DOCTOR-12).
+func staleLockCheck(files []string) Check {
+	return Check{
+		Name:   "Stale lock files",
+		Status: StatusWarn,
+		Detail: fmt.Sprintf(
+			"Found %d stale PID lock file(s) in ~/.local/state/claude/locks/ — these can be safely removed.",
+			len(files),
+		),
+	}
 }
 
 // settingsCheck reads and parses a settings JSON file, returning a Check.

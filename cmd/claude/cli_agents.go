@@ -16,6 +16,12 @@ import (
 // Flag: --setting-sources project|user|all  — restrict output to given scope(s).
 // Returns 0 on success, 1 on error.
 func runAgentsCLI(cwd string, args []string, stdout, stderr io.Writer) int {
+	return runAgentsCLIWithUserDir(cwd, "", args, stdout, stderr)
+}
+
+// runAgentsCLIWithUserDir is like runAgentsCLI but allows overriding the home
+// directory root for testability. When userDirRoot is empty, ~/.claude/agents is used.
+func runAgentsCLIWithUserDir(cwd, userDirRoot string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("claude agents", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	settingSources := fs.String("setting-sources", "all", "Restrict output to given scope(s): project, user, or all")
@@ -43,12 +49,14 @@ func runAgentsCLI(cwd string, args []string, stdout, stderr io.Writer) int {
 		return agentsCLIShow(cwd, subArgs, stdout, stderr)
 	default:
 		// list (no subcommand or "list")
-		return agentsCLIList(cwd, *settingSources, stdout, stderr)
+		return agentsCLIList(cwd, userDirRoot, *settingSources, stdout, stderr)
 	}
 }
 
 // agentsCLIList lists agents from project and/or user scope.
-func agentsCLIList(cwd string, sources string, stdout, stderr io.Writer) int {
+// userDirRoot, when non-empty, overrides the home directory root so tests can
+// inject a temp directory without touching ~/.claude.
+func agentsCLIList(cwd, userDirRoot string, sources string, stdout, stderr io.Writer) int {
 	sources = strings.ToLower(strings.TrimSpace(sources))
 	showProject := sources == "all" || sources == "project" || sources == ""
 	showUser := sources == "all" || sources == "user" || sources == ""
@@ -66,7 +74,7 @@ func agentsCLIList(cwd string, sources string, stdout, stderr io.Writer) int {
 	}
 
 	if showUser {
-		userDir, err := agentfile.UserDir()
+		userDir, err := resolveAgentUserDir(userDirRoot)
 		if err == nil {
 			agents, err := agentfile.List(userDir)
 			if err != nil {
@@ -79,6 +87,15 @@ func agentsCLIList(cwd string, sources string, stdout, stderr io.Writer) int {
 
 	printAgentList(stdout, projectAgents, userAgents)
 	return 0
+}
+
+// resolveAgentUserDir returns the user-scoped agents directory.
+// When root is non-empty, it returns <root>/.claude/agents instead of ~/.claude/agents.
+func resolveAgentUserDir(root string) (string, error) {
+	if root != "" {
+		return root + "/.claude/agents", nil
+	}
+	return agentfile.UserDir()
 }
 
 // agentsCLICreate creates a new agent file in the project scope.
@@ -159,34 +176,72 @@ func agentsCLIShow(cwd, name string, stdout, stderr io.Writer) int {
 }
 
 // printAgentList prints agents grouped by scope to w.
+// It shows the model field when present (SUBCMD-AGENTS-04) and marks agents
+// that are shadowed by a higher-priority same-named agent (SUBCMD-AGENTS-05).
+// Priority order: project > user. Project agents win over user agents.
 func printAgentList(w io.Writer, project, user []agentfile.AgentFile) {
-	fmt.Fprintln(w, "Agents:")
-	fmt.Fprintln(w)
+	// Build a set of project agent names so we can detect user-agent shadows.
+	projectNames := make(map[string]bool, len(project))
+	for _, a := range project {
+		projectNames[strings.ToLower(a.Name)] = true
+	}
+
+	totalActive := 0
+	hasAny := len(project) > 0 || len(user) > 0
+
+	if !hasAny {
+		fmt.Fprintln(w, "(none)")
+		return
+	}
+
+	// Count active (non-shadowed) agents for header.
+	for range project {
+		totalActive++
+	}
+	for _, a := range user {
+		if !projectNames[strings.ToLower(a.Name)] {
+			totalActive++
+		}
+	}
+	fmt.Fprintf(w, "%d active agents\n\n", totalActive)
+
 	fmt.Fprintln(w, "Project agents:")
 	if len(project) == 0 {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		for _, a := range project {
-			desc := a.Description
-			if desc == "" {
-				desc = "(no description)"
-			}
-			fmt.Fprintf(w, "  %s — %s\n", a.Name, desc)
+			fmt.Fprintf(w, "  %s\n", formatAgentLine(a))
 		}
 	}
 	fmt.Fprintln(w)
+
 	fmt.Fprintln(w, "User agents:")
 	if len(user) == 0 {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		for _, a := range user {
-			desc := a.Description
-			if desc == "" {
-				desc = "(no description)"
+			if projectNames[strings.ToLower(a.Name)] {
+				fmt.Fprintf(w, "  (shadowed by project) %s\n", formatAgentLine(a))
+			} else {
+				fmt.Fprintf(w, "  %s\n", formatAgentLine(a))
 			}
-			fmt.Fprintf(w, "  %s — %s\n", a.Name, desc)
 		}
 	}
+}
+
+// formatAgentLine renders a single agent line: "name [· model] — description".
+func formatAgentLine(a agentfile.AgentFile) string {
+	var parts []string
+	parts = append(parts, a.Name)
+	if a.Model != "" {
+		parts = append(parts, "· "+a.Model)
+	}
+	label := strings.Join(parts, " ")
+	desc := a.Description
+	if desc == "" {
+		desc = "(no description)"
+	}
+	return label + " — " + desc
 }
 
 // printAgentDetail prints detailed info for a single agent to w.

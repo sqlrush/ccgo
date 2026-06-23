@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
@@ -147,8 +148,9 @@ complete -c claude -l output-format -a "text json stream-json" -d "output format
 complete -c claude -l permission-mode -a "default acceptEdits bypassPermissions" -d "permission mode"
 `
 
-// runCompletionCLI implements "claude completion <shell>".
-// It writes a static completion script for bash, zsh, or fish to stdout.
+// runCompletionCLI implements "claude completion <shell> [--output <file>]".
+// It writes a static completion script for bash, zsh, or fish to stdout,
+// or to a file when --output is given (SUBCMD-COMPLETION-06).
 // Returns 0 on success, 1 on error.
 func runCompletionCLI(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -157,10 +159,24 @@ func runCompletionCLI(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// Parse flags after the shell argument.
 	shell := strings.ToLower(args[0])
+	rest := args[1:]
+
+	var outputFile string
+	for i := 0; i < len(rest); i++ {
+		if rest[i] == "--output" && i+1 < len(rest) {
+			outputFile = rest[i+1]
+			i++
+		} else if strings.HasPrefix(rest[i], "--output=") {
+			outputFile = strings.TrimPrefix(rest[i], "--output=")
+		}
+	}
+
+	var script string
 	switch shell {
 	case "bash":
-		fmt.Fprintf(stdout, bashCompletionTemplate,
+		script = fmt.Sprintf(bashCompletionTemplate,
 			strings.Join(completionSubcommands, " "),
 			strings.Join(completionTopFlags, " "),
 		)
@@ -173,7 +189,7 @@ func runCompletionCLI(args []string, stdout, stderr io.Writer) int {
 		for _, f := range completionTopFlags {
 			flagLines = append(flagLines, fmt.Sprintf("        '%s'", f))
 		}
-		fmt.Fprintf(stdout, zshCompletionTemplate,
+		script = fmt.Sprintf(zshCompletionTemplate,
 			strings.Join(subLines, "\n"),
 			strings.Join(flagLines, "\n"),
 		)
@@ -187,7 +203,7 @@ func runCompletionCLI(args []string, stdout, stderr io.Writer) int {
 			name := strings.TrimLeft(f, "-")
 			flagLines = append(flagLines, fmt.Sprintf("complete -c claude -l %s", name))
 		}
-		fmt.Fprintf(stdout, fishCompletionTemplate,
+		script = fmt.Sprintf(fishCompletionTemplate,
 			strings.Join(subLines, "\n"),
 			strings.Join(flagLines, "\n"),
 		)
@@ -197,5 +213,14 @@ func runCompletionCLI(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	if outputFile != "" {
+		if err := os.WriteFile(outputFile, []byte(script), 0o644); err != nil {
+			fmt.Fprintf(stderr, "completion: cannot write to %q: %v\n", outputFile, err)
+			return 1
+		}
+		return 0
+	}
+
+	fmt.Fprint(stdout, script)
 	return 0
 }
