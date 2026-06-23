@@ -31,10 +31,10 @@
 | CMD-CONFIG-01 | `/config` 打开配置面板（交互模式）或显示当前配置摘要（headless） | MANUAL | 前置:REPL 中; 操作:`/config`; 预期:打开交互式配置面板，可浏览并修改设置项 | `src/commands/config/index.ts:5` / `commands.ts:268` | ⚠️ 已建未接（headless 下输出 `formatConfigSummary()` 文本；交互模式下无配置面板 overlay，无法修改设置） |
 | CMD-LOGIN-01 | `/login` 触发 OAuth 登录流程 | MANUAL | 前置:未登录; 操作:`/login`; 预期:启动浏览器 OAuth 流程，获取并存储 token | `src/commands/login/index.ts` / `commands.ts:337` | ⚠️ 已建未接（返回 `Result.Login=true`，打印"请在终端执行 `claude auth login`"；未实现 OAuth 重定向流程） |
 | CMD-MCP-01 | `/mcp` 显示 MCP 服务器状态列表 | AUTO | 前置:有 MCP 服务器配置; 操作:`/mcp`; 预期:输出各 MCP 服务器名称、状态和工具数量 | `src/commands/mcp/index.ts:5` / `commands.ts:287` | ⚠️ 已建未接（输出 `formatMCPCommandSummary()` 文本；无交互式 enable/disable overlay，无法通过 `/mcp enable <name>` 操作） |
-| CMD-MEMORY-01 | `/memory` 打开内存文件编辑器 | MANUAL | 前置:有 CLAUDE.md 等内存文件; 操作:`/memory`; 预期:打开交互式文件选择器，可选择并编辑内存文件 | `src/commands/memory/index.ts:5` / `commands.ts:288` | ⚠️ 已建未接（headless 下输出 `formatMemorySummary()` 文本列表；无编辑器 overlay；交互模式下也不打开选择器） |
-| CMD-MODEL-01 | `/model [name]` 显示或切换当前 AI 模型 | MANUAL | 前置:REPL 中; 操作:`/model`（无参数）; 预期:打开模型选择器 overlay，可交互选择模型 | `src/commands/model/index.ts:5` / `commands.ts:290` | ⚠️ 已建未接（输出当前模型名文本；无交互式模型选择 overlay；带参数时行为未验证） |
+| CMD-MEMORY-01 | `/memory` 打开内存文件编辑器 | MANUAL | 前置:有 CLAUDE.md 等内存文件; 操作:`/memory`; 预期:打开交互式文件选择器，可选择并编辑内存文件 | `src/commands/memory/index.ts:5` / `commands.ts:288` | ✅ 通过（接线就绪，渲染需人工核验）（W-REPL 接线 commit 4c3d7f8）（`memoryHandler` 注册于 production router；无参数时打开 `NewMemorySelector` overlay；headless 文本路径保留） |
+| CMD-MODEL-01 | `/model [name]` 显示或切换当前 AI 模型 | MANUAL | 前置:REPL 中; 操作:`/model`（无参数）; 预期:打开模型选择器 overlay，可交互选择模型 | `src/commands/model/index.ts:5` / `commands.ts:290` | ✅ 通过（接线就绪，渲染需人工核验）（W-REPL 接线 commit 4c3d7f8）（`modelHandler` 注册于 production router；无参数时打开 `NewModelPicker(builtinModels)` overlay；带参数的运行时切换仍待接线） |
 | CMD-PLUGIN-01 | `/plugin` 打开插件管理界面 | MANUAL | 前置:REPL 中; 操作:`/plugin`; 预期:打开插件浏览/管理 overlay，可安装或禁用插件 | `src/commands/plugin/index.tsx:4` / `commands.ts:293` | ⚠️ 已建未接（输出 `formatPluginSummary()` 文本；无插件管理 overlay） |
-| CMD-RESUME-02 | `/resume`（无参数）打开交互式会话选择器 | MANUAL | 前置:有历史会话; 操作:`/resume`; 预期:弹出会话列表选择器，方向键+回车加载目标会话 | `src/commands/resume/index.ts:5` / `commands.ts:298` | ⚠️ 已建未接（无参数时路由到 `resumeHandler`，列出会话文本后等待参数；无 TUI 选择器 overlay） |
+| CMD-RESUME-02 | `/resume`（无参数）打开交互式会话选择器 | MANUAL | 前置:有历史会话; 操作:`/resume`; 预期:弹出会话列表选择器，方向键+回车加载目标会话 | `src/commands/resume/index.ts:5` / `commands.ts:298` | ✅ 通过（接线就绪，渲染需人工核验）（W-REPL 接线 commit 4c3d7f8）（无参数时 `resumeHandlerWith` 返回 `CommandOutcome{Overlay: NewResumePicker(...)}`；带参数仍走 `resolveResumeTarget` 加载） |
 | CMD-IDE-01 | `/ide` 检测并连接已打开的 IDE | MANUAL | 前置:有 IDE 进程运行; 操作:`/ide`; 预期:检测到 IDE 连接信息并显示，或提示未找到 IDE | `src/commands/ide/index.ts:5` / `commands.ts:282` | ⚠️ 已建未接（`defaultIDEDetect()` 为硬编码 stub，始终返回 nil；"deferred for a future task" 注释） |
 | CMD-ADDIR-01 | `/add-dir <path>` 将目录添加到受信任路径列表 | AUTO | 前置:任意; 操作:`/add-dir /some/path`; 预期:路径写入 settings 的 additionalDirectories，工具可访问该目录 | `src/commands/add-dir/index.ts:5` / `commands.ts:259` | ❌ 缺失（ccgo `BuiltinCommands()` 中无注册；无对应处理器） |
 | CMD-REWIND-01 | `/rewind` 回滚到某条消息前的文件快照状态 | MANUAL | 前置:有文件修改历史; 操作:`/rewind`; 预期:打开消息选择器，确认后将文件恢复到该消息之前的状态 | `src/commands/rewind/index.ts:5` / `commands.ts:310` | ❌ 缺失（`repl/rewind_command.go` 中有 `RewindToMessage()` 函数实现，但无 slash 命令注册；不可通过 `/rewind` 触发） |
@@ -78,4 +78,4 @@
 | CMD-ADVISOR-01 | `/advisor` ANT 内部 advisor 功能 | — | — | `src/commands/advisor.ts:98` / `commands.ts:260` | N/A（ANT 内部功能 OUT OF SCOPE §10） |
 | CMD-STATUSLINE-01 | `/statusline` 切换状态栏显示 | MANUAL | 前置:REPL 中; 操作:`/statusline`; 预期:状态栏显示/隐藏切换 | `src/commands/statusline.tsx:10` / `commands.ts:303` | ❌ 缺失（ccgo 中无注册） |
 
-小计: 65 项 — ✅ 24 / ⚠️ 8 / ❌ 16 / N/A 17
+小计: 65 项 — ✅ 27 / ⚠️ 5 / ❌ 16 / N/A 17（CMD-RESUME-02/CMD-MEMORY-01/CMD-MODEL-01 经 W-REPL 接线 commit 4c3d7f8 由 ⚠️ 翻为 ✅，渲染需人工核验）
