@@ -352,6 +352,24 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)
 	}
 
+	// OVL-05/06: Wire the working directory so the QuickOpen overlay can walk
+	// project files when the user types "@" in the prompt.
+	if base.WorkingDirectory != "" {
+		loop.SetCWD(base.WorkingDirectory)
+	}
+
+	// OVL-07: Wire prompt history entries (display strings) so the HistorySearch
+	// overlay (Ctrl+Q) can fuzzy-search prior prompts.
+	if len(opts.PromptHistory) > 0 {
+		displays := make([]string, 0, len(opts.PromptHistory))
+		for _, e := range opts.PromptHistory {
+			if e.Display != "" {
+				displays = append(displays, e.Display)
+			}
+		}
+		loop.SetPromptHistory(displays)
+	}
+
 	// W-C05: wire Shift+Tab mode changes and allow-always persist into the live
 	// engine pointer so every subsequent StartTurn uses the updated mode/rules.
 	if opts.Engine != nil {

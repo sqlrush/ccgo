@@ -166,6 +166,15 @@ type Loop struct {
 	// onBGNotice is a test seam called (in the loop goroutine) each time a
 	// background-agent completion notice is written to the screen. Nil in production.
 	onBGNotice func(msg string)
+
+	// cwd is the working directory used by QuickOpenOverlay when the user presses
+	// "@" in the prompt. Set via SetCWD; defaults to "" (overlay disabled).
+	cwd string
+
+	// promptHistoryEntries is the flattened list of prior prompt entries (display
+	// text) used to seed HistorySearchOverlay (OVL-07). Set via SetPromptHistory;
+	// nil when history search is disabled.
+	promptHistoryEntries []string
 }
 
 // SetAgentRegistry wires the shared AgentRegistry for background task tracking.
@@ -188,6 +197,17 @@ func (l *Loop) SetSettingsWriter(w ruleWriter) { l.settings = w }
 // SetRegistry sets the command list used to populate the slash-command overlay.
 // Call this from run.go once the command registry is loaded.
 func (l *Loop) SetRegistry(cmds []contracts.Command) { l.registry = cmds }
+
+// SetCWD sets the working directory used by QuickOpenOverlay when the user
+// types "@" in the prompt (OVL-05/06). Must be called before Run.
+func (l *Loop) SetCWD(cwd string) { l.cwd = cwd }
+
+// SetPromptHistory seeds the HistorySearchOverlay (OVL-07) with previously
+// submitted prompt display strings (newest-first). Must be called before Run.
+func (l *Loop) SetPromptHistory(entries []string) {
+	copied := append([]string(nil), entries...)
+	l.promptHistoryEntries = copied
+}
 
 func NewLoop(t Terminal, history []string) *Loop {
 	w, h, err := t.Size()
@@ -531,6 +551,15 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		}
 	}
 
+	// OVL-07: Intercept Ctrl+Q before the screen sees it to open the
+	// HistorySearchOverlay (fuzzy history search dialog). Ctrl+Q is parsed by the
+	// input layer (KeyCtrlQ) but not bound in the default keymap, making it a safe
+	// trigger. Only opens when prompt history is loaded.
+	if key.Type == tui.KeyCtrlQ && l.activeOverlay == nil && len(l.promptHistoryEntries) > 0 {
+		l.activeOverlay = NewHistorySearchOverlay(l.promptHistoryEntries)
+		return false
+	}
+
 	// Shift+Tab cycles the permission mode and refreshes the status line.
 	// Intercept before screen.ApplyKey so the screen does not consume the key.
 	// Security gate: switching to BypassPermissions or Auto requires explicit
@@ -554,6 +583,15 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	// Open the slash menu when the prompt text is exactly "/" (first keystroke).
 	if l.activeOverlay == nil && l.registry != nil && l.screen.Prompt.Text == "/" {
 		l.activeOverlay = NewSlashMenu(l.registry, "")
+	}
+
+	// OVL-05/06: Open the QuickOpen file picker when the prompt text is exactly "@".
+	// The overlay inserts the selected path back into the prompt with an @ prefix
+	// (mention) or as a plain path (Tab). Requires cwd to be set.
+	if l.activeOverlay == nil && l.cwd != "" && l.screen.Prompt.Text == "@" {
+		l.activeOverlay = NewQuickOpenOverlay(l.cwd)
+		// Clear the "@" trigger character so the overlay starts clean.
+		l.screen.Prompt.Text = ""
 	}
 
 	if l.activeAsk != nil &&
@@ -896,6 +934,22 @@ func (l *Loop) handleOverlaySubmit(submit string) bool {
 		return true
 	}
 	if submit == "auto:decline" {
+		return true
+	}
+
+	// OVL-05/06: QuickOpen file picker inserts a path into the prompt buffer.
+	// "quickopen:<path>"        → "@<path> " (@ mention)
+	// "quickopen-insert:<path>" → "<path> " (plain path)
+	if handleQuickOpenSubmit(&l.screen.Prompt.Text, submit) {
+		// Position cursor at the end of the inserted text.
+		l.screen.Prompt.Cursor = len([]rune(l.screen.Prompt.Text))
+		return true
+	}
+
+	// OVL-07: HistorySearch inserts the selected prompt into the prompt buffer.
+	// "historysearch:<display>" → first-line of display text
+	if handleHistorySearchSubmit(&l.screen.Prompt.Text, submit) {
+		l.screen.Prompt.Cursor = len([]rune(l.screen.Prompt.Text))
 		return true
 	}
 
