@@ -36,6 +36,14 @@ func buildSeatbeltProfile(p Policy, cwd string) string {
 		b.WriteString("(deny network*)\n")
 		b.WriteString("(allow network* (local ip \"localhost:*\"))\n")
 	}
+	// SBX-49: AllowUnixSockets — emit per-path outbound rules.
+	// macOS seatbelt supports (allow network-outbound (path "/path/to.sock")).
+	// NOTE: per-domain enforcement (SBX-48 AllowedDomains/DeniedDomains) is not
+	// expressible in seatbelt — it requires a proxy layer; those fields are
+	// policy-layer only (⚠️ kernel/proxy-blocked for domain enforcement).
+	for _, sock := range p.AllowUnixSockets {
+		b.WriteString(`(allow network-outbound (path "` + escapeSB(sock) + `"))` + "\n")
+	}
 	return b.String()
 }
 

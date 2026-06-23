@@ -125,6 +125,19 @@ type Input struct {
 	// ~/.local/state/claude/locks/ (SUBCMD-DOCTOR-12). A WARN check is emitted.
 	// In production this is detected by FindStaleLockFiles; tests inject directly.
 	StaleLockFiles []string
+
+	// SandboxEnabled, when true, indicates the user has sandbox.enabled=true.
+	// When true, sandbox diagnostic checks are emitted (SBX-38/SBX-39).
+	SandboxEnabled bool
+
+	// SandboxUnavailableReason, when non-empty, is the human-readable reason
+	// why the sandbox is unavailable despite being enabled (SBX-38/SBX-39).
+	// Populated by sandbox.UnavailableReason + sandbox.DepCheck diagnostics.
+	SandboxUnavailableReason string
+
+	// SandboxDepWarnings holds degraded-but-functional dependency warnings
+	// (e.g. missing ripgrep) from sandbox.DepCheck. Emitted as WARN checks.
+	SandboxDepWarnings []string
 }
 
 // DetectInstallType classifies the running binary path into one of CC's 6
@@ -320,6 +333,12 @@ func Run(in Input) Report {
 		checks = append(checks, staleLockCheck(in.StaleLockFiles))
 	}
 
+	// Sandbox diagnostic check (SBX-38/SBX-39).
+	// Only surface when sandbox is explicitly enabled (no noise for users who don't use it).
+	if in.SandboxEnabled {
+		checks = append(checks, sandboxCheck(in.SandboxUnavailableReason, in.SandboxDepWarnings))
+	}
+
 	return Report{Checks: checks}
 }
 
@@ -385,6 +404,31 @@ func staleLockCheck(files []string) Check {
 			"Found %d stale PID lock file(s) in ~/.local/state/claude/locks/ — these can be safely removed.",
 			len(files),
 		),
+	}
+}
+
+// sandboxCheck returns a Check for sandbox availability (SBX-38/SBX-39).
+// unavailableReason is non-empty when the sandbox is configured but cannot run.
+// depWarnings lists degraded (non-fatal) dependency messages.
+func sandboxCheck(unavailableReason string, depWarnings []string) Check {
+	if unavailableReason != "" {
+		return Check{
+			Name:   "Sandbox",
+			Status: StatusWarn,
+			Detail: unavailableReason,
+		}
+	}
+	if len(depWarnings) > 0 {
+		return Check{
+			Name:   "Sandbox",
+			Status: StatusWarn,
+			Detail: strings.Join(depWarnings, "; "),
+		}
+	}
+	return Check{
+		Name:   "Sandbox",
+		Status: StatusOK,
+		Detail: "sandbox enabled and available",
 	}
 }
 

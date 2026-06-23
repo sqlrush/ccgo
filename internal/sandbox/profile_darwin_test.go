@@ -28,6 +28,32 @@ func TestBuildSeatbeltProfileDenyDefault(t *testing.T) {
 	}
 }
 
+// TestBuildSeatbeltProfileAllowUnixSockets verifies SBX-49:
+// AllowUnixSockets paths are emitted as (allow network-outbound (path "...")) rules.
+func TestBuildSeatbeltProfileAllowUnixSockets(t *testing.T) {
+	p := Policy{
+		Enabled:          true,
+		AllowUnixSockets: []string{"/var/run/docker.sock", "/run/containerd.sock"},
+	}
+	profile := buildSeatbeltProfile(p, "/tmp/work")
+	for _, sock := range p.AllowUnixSockets {
+		want := `(allow network-outbound (path "` + sock + `"))`
+		if !strings.Contains(profile, want) {
+			t.Fatalf("SBX-49: profile missing unix-socket rule for %q\nprofile:\n%s", sock, profile)
+		}
+	}
+}
+
+// TestBuildSeatbeltProfileNoUnixSockets verifies that when AllowUnixSockets is
+// empty the profile contains no spurious (allow network-outbound (path ...)) rules.
+func TestBuildSeatbeltProfileNoUnixSockets(t *testing.T) {
+	p := Policy{Enabled: true}
+	profile := buildSeatbeltProfile(p, "/tmp/work")
+	if strings.Contains(profile, `(allow network-outbound (path`) {
+		t.Fatalf("SBX-49: profile must not emit unix-socket rules when AllowUnixSockets is empty:\n%s", profile)
+	}
+}
+
 func TestWrapDarwinUsesSandboxExec(t *testing.T) {
 	name, args, err := Wrap("/bin/zsh", []string{"-c", "echo hi"}, Policy{Enabled: true})
 	if err != nil {
