@@ -44,6 +44,11 @@ func newTurnLoop(ctx context.Context, term Terminal, base conversation.Runner, h
 			// present its overlay via the REPL loop (TOOL-ASK-01/03).
 			r.ExtraToolMetadata = mergeQuestionAsker(r.ExtraToolMetadata, loop.questionCh)
 			result, err := r.RunTurn(turnCtx, turnHistory, user)
+			// Propagate cwd changes from EnterWorktree/ExitWorktree so subsequent
+			// turns see the updated working directory (WORKTREE-CWD-01).
+			if newCWD := cwdFromWorktreeResults(result.ToolResults); newCWD != "" {
+				base.WorkingDirectory = newCWD
+			}
 			select {
 			case loop.doneCh <- turnOutcome{result: result, err: err}:
 			case <-ctx.Done():
@@ -148,6 +153,11 @@ func newTurnLoopForRunnerWithHistory(ctx context.Context, term Terminal, base co
 			// present its overlay via the REPL loop (TOOL-ASK-01/03).
 			r.ExtraToolMetadata = mergeQuestionAsker(r.ExtraToolMetadata, loop.questionCh)
 			result, err := r.RunTurn(turnCtx, turnHistory, user)
+			// Propagate cwd changes from EnterWorktree/ExitWorktree so subsequent
+			// turns see the updated working directory (WORKTREE-CWD-01).
+			if newCWD := cwdFromWorktreeResults(result.ToolResults); newCWD != "" {
+				base.WorkingDirectory = newCWD
+			}
 			select {
 			case loop.doneCh <- turnOutcome{result: result, err: err}:
 			case <-ctx.Done():
@@ -368,4 +378,34 @@ type ptrEngineDecider struct {
 
 func (d ptrEngineDecider) DecideTool(t tool.Tool, raw json.RawMessage, ctx tool.Context) (contracts.PermissionDecision, error) {
 	return tool.NewEnginePermissionDecider(*d.eng).DecideTool(t, raw, ctx)
+}
+
+// cwdFromWorktreeResults scans tool results for EnterWorktree/ExitWorktree
+// outcomes and returns the new working directory that should apply to subsequent
+// turns. EnterWorktree results carry "worktree_path" (the new cwd); ExitWorktree
+// results carry "original_cwd" (the restored cwd). The last matching result wins
+// so that a turn with both tools produces the correct final directory.
+// Returns "" when no worktree tool ran or no cwd change is needed (WORKTREE-CWD-01).
+func cwdFromWorktreeResults(results []contracts.ToolResult) string {
+	newCWD := ""
+	for _, r := range results {
+		if r.IsError || r.StructuredContent == nil {
+			continue
+		}
+		sc := r.StructuredContent
+		// ExitWorktree: action key is present, new cwd is original_cwd.
+		if _, hasAction := sc["action"]; hasAction {
+			if cwd, ok := sc["original_cwd"].(string); ok && cwd != "" {
+				newCWD = cwd
+			}
+			continue
+		}
+		// EnterWorktree: worktree_branch key is present, new cwd is worktree_path.
+		if _, hasBranch := sc["worktree_branch"]; hasBranch {
+			if path, ok := sc["worktree_path"].(string); ok && path != "" {
+				newCWD = path
+			}
+		}
+	}
+	return newCWD
 }

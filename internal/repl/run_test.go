@@ -177,3 +177,98 @@ func TestRunInteractiveCancelsTurnOnExit(t *testing.T) {
 		t.Fatal("turn goroutine leaked: CreateMessage was not cancelled within 2s")
 	}
 }
+
+// TestCwdFromWorktreeResults verifies that cwdFromWorktreeResults correctly
+// extracts the new working directory from EnterWorktree and ExitWorktree
+// StructuredContent payloads (WORKTREE-CWD-01).
+func TestCwdFromWorktreeResults(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		results []contracts.ToolResult
+		want    string
+	}{
+		{
+			name:    "empty results",
+			results: nil,
+			want:    "",
+		},
+		{
+			name: "unrelated tool result ignored",
+			results: []contracts.ToolResult{
+				{Content: "some output", StructuredContent: map[string]any{"other": "data"}},
+			},
+			want: "",
+		},
+		{
+			name: "EnterWorktree result returns worktree_path",
+			results: []contracts.ToolResult{
+				{
+					StructuredContent: map[string]any{
+						"worktree_path":   "/tmp/.ccgo-worktrees/sess-myfeature",
+						"worktree_branch": "HEAD",
+						"original_cwd":    "/tmp/repo",
+						"message":         "Created worktree.",
+					},
+				},
+			},
+			want: "/tmp/.ccgo-worktrees/sess-myfeature",
+		},
+		{
+			name: "ExitWorktree result returns original_cwd",
+			results: []contracts.ToolResult{
+				{
+					StructuredContent: map[string]any{
+						"original_cwd":  "/tmp/repo",
+						"worktree_path": "/tmp/.ccgo-worktrees/sess-myfeature",
+						"action":        "keep",
+						"message":       "Exited worktree.",
+					},
+				},
+			},
+			want: "/tmp/repo",
+		},
+		{
+			name: "error result is skipped",
+			results: []contracts.ToolResult{
+				{
+					IsError: true,
+					StructuredContent: map[string]any{
+						"worktree_path":   "/tmp/.ccgo-worktrees/sess-err",
+						"worktree_branch": "HEAD",
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "last worktree result wins when multiple present",
+			results: []contracts.ToolResult{
+				{
+					StructuredContent: map[string]any{
+						"worktree_path":   "/tmp/.ccgo-worktrees/sess-first",
+						"worktree_branch": "HEAD",
+						"original_cwd":    "/tmp/repo",
+					},
+				},
+				{
+					StructuredContent: map[string]any{
+						"original_cwd":  "/tmp/repo",
+						"worktree_path": "/tmp/.ccgo-worktrees/sess-first",
+						"action":        "remove",
+					},
+				},
+			},
+			want: "/tmp/repo",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := cwdFromWorktreeResults(tc.results)
+			if got != tc.want {
+				t.Errorf("cwdFromWorktreeResults() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
