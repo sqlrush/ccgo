@@ -25,6 +25,7 @@ const (
 	ContentToolResult          ContentBlockType = "tool_result"
 	ContentImage               ContentBlockType = "image"
 	ContentThinking            ContentBlockType = "thinking"
+	ContentRedactedThinking    ContentBlockType = "redacted_thinking" // CC: messages.ts redacted_thinking pass-through
 	ContentCacheEdits          ContentBlockType = "cache_edits"
 	ContentServerToolUse       ContentBlockType = "server_tool_use"
 	ContentWebSearchToolResult ContentBlockType = "web_search_tool_result"
@@ -44,6 +45,9 @@ type ContentBlock struct {
 	CacheReference string           `json:"cache_reference,omitempty"`
 	Edits          []CacheEdit      `json:"edits,omitempty"`
 	Signature      string           `json:"signature,omitempty"`
+	// Data holds the opaque payload for redacted_thinking blocks.
+	// CC ref: messages.ts redacted_thinking block pass-through.
+	Data           string           `json:"data,omitempty"`
 }
 
 func (b *ContentBlock) UnmarshalJSON(data []byte) error {
@@ -62,6 +66,10 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		CacheReference string           `json:"cache_reference"`
 		Edits          []CacheEdit      `json:"edits"`
 		Signature      string           `json:"signature"`
+		// Data is json.RawMessage so that non-string "data" values in unrelated
+		// JSON objects do not cause Unmarshal to fail with a type error.
+		// The actual string is extracted below only for redacted_thinking blocks.
+		Data           json.RawMessage  `json:"data"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -72,6 +80,13 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	text := aux.Text
 	if canonicalType == ContentThinking && aux.Thinking != "" {
 		text = aux.Thinking
+	}
+	// Extract the opaque string payload for redacted_thinking blocks. Using
+	// json.RawMessage in the aux struct means non-string "data" values in
+	// unrelated JSON (e.g. objects) do not cause the overall Unmarshal to fail.
+	var dataStr string
+	if canonicalType == ContentRedactedThinking && len(aux.Data) > 0 {
+		_ = json.Unmarshal(aux.Data, &dataStr)
 	}
 	*b = ContentBlock{
 		Type:           canonicalType,
@@ -87,6 +102,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		CacheReference: aux.CacheReference,
 		Edits:          aux.Edits,
 		Signature:      aux.Signature,
+		Data:           dataStr,
 	}
 
 	fields := map[string]json.RawMessage{}
@@ -124,8 +140,10 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalJSON encodes ContentBlock to JSON, emitting thinking blocks with the
-// canonical Anthropic wire format: {"type":"thinking","thinking":"<reasoning>","signature":"<sig>"}.
+// MarshalJSON encodes ContentBlock to JSON using canonical Anthropic wire formats:
+//   - thinking blocks: {"type":"thinking","thinking":"<reasoning>","signature":"<sig>"}
+//   - redacted_thinking blocks: {"type":"redacted_thinking","data":"<opaque>"}
+//
 // All other block types are encoded via the default struct-tag marshaling so
 // their output is byte-identical to what encoding/json would produce on its own.
 func (b ContentBlock) MarshalJSON() ([]byte, error) {
@@ -139,6 +157,18 @@ func (b ContentBlock) MarshalJSON() ([]byte, error) {
 			Type:      b.Type,
 			Thinking:  b.Text,
 			Signature: b.Signature,
+		})
+	}
+	if b.Type == ContentRedactedThinking {
+		// Pass through as-is with the opaque data field.
+		// CC ref: messages.ts redacted_thinking normalizeContent pass-through.
+		type redactedThinkingBlock struct {
+			Type ContentBlockType `json:"type"`
+			Data string           `json:"data,omitempty"`
+		}
+		return json.Marshal(redactedThinkingBlock{
+			Type: b.Type,
+			Data: b.Data,
 		})
 	}
 	// Use a type alias to avoid infinite recursion while preserving all struct tags.
@@ -308,6 +338,8 @@ func canonicalContentBlockType(value string) ContentBlockType {
 		return ContentText
 	case "thinking", "reasoning", "thought", "chain_of_thought", "chainofthought":
 		return ContentThinking
+	case "redacted_thinking", "redactedthinking":
+		return ContentRedactedThinking
 	case "tool_use", "tooluse", "tool_call", "toolcall", "function_call", "functioncall":
 		return ContentToolUse
 	case "tool_result", "toolresult", "tool_response", "toolresponse", "tool_output", "tooloutput", "function_result", "functionresult":

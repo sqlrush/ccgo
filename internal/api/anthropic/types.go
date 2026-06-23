@@ -21,9 +21,10 @@ type Request struct {
 	TopP         *float64               `json:"top_p,omitempty"`
 	TopK         *int                   `json:"top_k,omitempty"`
 	Metadata     map[string]any         `json:"metadata,omitempty"`
-	Thinking     map[string]any         `json:"thinking,omitempty"`
-	OutputConfig map[string]any         `json:"output_config,omitempty"` // CC: output_config.effort (effort-2025-11-24 beta)
-	Stream       bool                   `json:"stream,omitempty"`
+	Thinking          map[string]any         `json:"thinking,omitempty"`
+	OutputConfig      map[string]any         `json:"output_config,omitempty"`      // CC: output_config.effort (effort-2025-11-24 beta)
+	ContextManagement map[string]any         `json:"context_management,omitempty"` // CC: CONTEXT_MANAGEMENT_BETA_HEADER (betas.ts:5)
+	Stream            bool                   `json:"stream,omitempty"`
 
 	// ToolSearchActive indicates that deferred tool search is active for this
 	// request; DynamicBetaHeaders will include ToolSearchBetaHeader when true.

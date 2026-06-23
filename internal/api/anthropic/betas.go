@@ -12,9 +12,11 @@ const (
 	StructuredOutputsBetaHeader   = "structured-outputs-2025-11-13"
 	FastModeBetaHeader            = "fast-mode-2025-01-24"
 	CacheEditingBetaHeader        = "cache-editing-2025-01-24"
-	ToolSearchBetaHeader          = "advanced-tool-use-2025-11-20"    // CC: TOOL_SEARCH_BETA_HEADER_1P (betas.ts:9)
-	InterleavedThinkingBetaHeader = "interleaved-thinking-2025-05-14" // CC: INTERLEAVED_THINKING_BETA_HEADER (betas.ts:2)
-	EffortBetaHeader              = "effort-2025-11-24"               // CC: EFFORT_BETA_HEADER (betas.ts:15)
+	ToolSearchBetaHeader          = "advanced-tool-use-2025-11-20"      // CC: TOOL_SEARCH_BETA_HEADER_1P (betas.ts:9)
+	InterleavedThinkingBetaHeader = "interleaved-thinking-2025-05-14"   // CC: INTERLEAVED_THINKING_BETA_HEADER (betas.ts:2)
+	EffortBetaHeader              = "effort-2025-11-24"                 // CC: EFFORT_BETA_HEADER (betas.ts:15)
+	TaskBudgetsBetaHeader         = "task-budgets-2026-03-13"           // CC: TASK_BUDGETS_BETA_HEADER (betas.ts:14)
+	ContextManagementBetaHeader   = "context-management-2025-06-27"     // CC: CONTEXT_MANAGEMENT_BETA_HEADER (betas.ts:5)
 )
 
 func MergeBetaHeaders(groups ...[]string) []string {
@@ -78,6 +80,21 @@ func dynamicBetaHeadersForRequest(request Request) []string {
 	if requestUsesEffort(request.OutputConfig) {
 		betas = append(betas, EffortBetaHeader)
 	}
+	// Interleaved thinking beta: auto-added when the request has thinking enabled.
+	// CC ref: betas.ts:4 INTERLEAVED_THINKING_BETA_HEADER; betas.ts:258-261.
+	if requestUsesThinking(request.Thinking) {
+		betas = append(betas, InterleavedThinkingBetaHeader)
+	}
+	// Context management beta: added when context_management field is set.
+	// CC ref: betas.ts:5 CONTEXT_MANAGEMENT_BETA_HEADER; claude.ts:1718-1722.
+	if len(request.ContextManagement) > 0 {
+		betas = append(betas, ContextManagementBetaHeader)
+	}
+	// Task budgets beta: added when output_config.task_budget is set.
+	// CC ref: betas.ts:14 TASK_BUDGETS_BETA_HEADER; claude.ts:479-501.
+	if requestUsesTaskBudget(request.OutputConfig) {
+		betas = append(betas, TaskBudgetsBetaHeader)
+	}
 	return betas
 }
 
@@ -88,6 +105,24 @@ func requestUsesEffort(outputConfig map[string]any) bool {
 		return false
 	}
 	_, ok := outputConfig["effort"]
+	return ok
+}
+
+// requestUsesThinking returns true when the thinking map is non-empty, meaning
+// extended (interleaved) thinking is enabled for this request.
+// CC ref: betas.ts:4 INTERLEAVED_THINKING_BETA_HEADER; betas.ts:258-261.
+func requestUsesThinking(thinking map[string]any) bool {
+	return len(thinking) > 0
+}
+
+// requestUsesTaskBudget returns true when the output_config map contains a
+// "task_budget" key, meaning the caller wants to send a task budget to the API.
+// CC ref: betas.ts:14 TASK_BUDGETS_BETA_HEADER; claude.ts:479-501.
+func requestUsesTaskBudget(outputConfig map[string]any) bool {
+	if len(outputConfig) == 0 {
+		return false
+	}
+	_, ok := outputConfig["task_budget"]
 	return ok
 }
 

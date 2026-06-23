@@ -348,6 +348,17 @@ func (c *Client) newJSONRequestWithDump(ctx context.Context, path string, payloa
 	if err != nil {
 		return nil, "", err
 	}
+	// Merge CLAUDE_CODE_EXTRA_BODY into the request body when set.
+	// Only applied to /v1/messages requests (i.e. Request payloads), not to
+	// count_tokens or other endpoints. CC ref: claude.ts:272-330 getExtraBodyParams.
+	if _, ok := payload.(Request); ok {
+		if extra := getExtraBody(); len(extra) > 0 {
+			data, err = mergeExtraBody(data, extra)
+			if err != nil {
+				return nil, "", fmt.Errorf("merging CLAUDE_CODE_EXTRA_BODY: %w", err)
+			}
+		}
+	}
 	dumpTimestamp := c.dumpRequest(path, data)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url(path), bytes.NewReader(data))
 	if err != nil {
