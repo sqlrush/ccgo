@@ -3547,7 +3547,7 @@ func TestWritePrintStreamEventTokenWarningUsesSnakeCasePayload(t *testing.T) {
 				IsAboveAutoCompactThreshold: true,
 			},
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3599,7 +3599,7 @@ func TestWritePrintStreamEventCompactUsesLightweightMetadata(t *testing.T) {
 	err := writePrintStreamEvent(encoder, conversation.Event{
 		Type:    conversation.EventCompact,
 		Compact: &compactpkg.Result{Plan: plan, Usage: contracts.Usage{InputTokens: 10, OutputTokens: 2}},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3638,7 +3638,7 @@ func TestWritePrintStreamEventRetryIncludesModelBreadcrumb(t *testing.T) {
 			NextModel:   "haiku",
 			Fallback:    true,
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3677,7 +3677,7 @@ func TestWritePrintStreamEventRetryIncludesAPIErrorMetadata(t *testing.T) {
 			NextModel:   "haiku",
 			Fallback:    true,
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4744,7 +4744,7 @@ func TestWritePrintStreamEventHookStartedEmitsCCSystemHookStarted(t *testing.T) 
 				"scope":      "conversation",
 			},
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4789,7 +4789,7 @@ func TestWritePrintStreamEventHookCompletedEmitsSystemHookResponse(t *testing.T)
 				"message":    "hook output",
 			},
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4822,7 +4822,7 @@ func TestWritePrintStreamEventHookFailedEmitsSystemHookResponseError(t *testing.
 				"error":      "command failed",
 			},
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4855,7 +4855,7 @@ func TestWritePrintStreamEventHookBlockedEmitsSystemHookResponseCancelled(t *tes
 				"message":    "blocked",
 			},
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4883,7 +4883,7 @@ func TestAttachStreamJSONEmitsSessionStateChangedOnLLMTurn(t *testing.T) {
 		SessionID: "sess_state_test",
 	}
 	// Simulate a real LLM turn by triggering an assistant message event.
-	runner, streamErrFn := attachStreamJSON(&stdout, runner, false)
+	runner, streamErrFn := attachStreamJSON(&stdout, runner, false, false)
 
 	// Simulate LLM turn: emit an assistant message event (triggers "running").
 	if runner.OnEvent != nil {
@@ -4932,7 +4932,7 @@ func TestAttachStreamJSONNoSessionStateChangedForSlashCommands(t *testing.T) {
 	runner := conversation.Runner{
 		SessionID: "sess_slash_test",
 	}
-	runner, streamErrFn := attachStreamJSON(&stdout, runner, false)
+	runner, streamErrFn := attachStreamJSON(&stdout, runner, false, false)
 
 	// Simulate slash command: only emit user_message (no LLM events).
 	if runner.OnEvent != nil {

@@ -41,7 +41,7 @@ func TestAttachStreamJSONPartialMessages_WithFlag(t *testing.T) {
 		SessionID: "sess-partial",
 	}
 
-	runner, getErr := attachStreamJSON(&buf, runner, true)
+	runner, getErr := attachStreamJSON(&buf, runner, true, false)
 
 	runner.OnEvent(makeStreamTextDeltaEvent("Hello"))
 	runner.OnEvent(makeStreamTextDeltaEvent(", world"))
@@ -76,7 +76,7 @@ func TestAttachStreamJSONPartialMessages_WithoutFlag(t *testing.T) {
 		SessionID: "sess-no-partial",
 	}
 
-	runner, getErr := attachStreamJSON(&buf, runner, false)
+	runner, getErr := attachStreamJSON(&buf, runner, false, false)
 
 	runner.OnEvent(makeStreamTextDeltaEvent("Hello"))
 	runner.OnEvent(makeStreamTextDeltaEvent(", world"))

@@ -67,6 +67,14 @@ func PolicyFromSettingsAt(s contracts.Settings, originalCwd, currentCwd string) 
 	if v, ok := boolAt(box, "autoAllowBashIfSandboxed"); ok {
 		p.AutoAllowBashIfSandboxed = v
 	}
+	// SBX-52: enableWeakerNestedSandbox — CC sandbox-adapter.ts:376.
+	if v, ok := boolAt(box, "enableWeakerNestedSandbox"); ok {
+		p.EnableWeakerNestedSandbox = v
+	}
+	// SBX-53: enableWeakerNetworkIsolation — CC sandbox-adapter.ts:377.
+	if v, ok := boolAt(box, "enableWeakerNetworkIsolation"); ok {
+		p.EnableWeakerNetworkIsolation = v
+	}
 	if fs, ok := box["filesystem"].(map[string]any); ok {
 		p.AllowWrite = stringsAt(fs, "allowWrite")
 		p.DenyWrite = stringsAt(fs, "denyWrite")

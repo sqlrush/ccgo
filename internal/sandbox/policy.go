@@ -45,6 +45,18 @@ type Policy struct {
 	// SBX-35: this field drives the permission-flow bypass; wiring into the
 	// permission engine is done by the caller (REPL / executor layer).
 	AutoAllowBashIfSandboxed bool
+
+	// EnableWeakerNestedSandbox, when true, reduces sandbox constraints for nested
+	// sub-agent sandboxes. Some operations (e.g. sub-agents spawning their own
+	// sandboxed children) require relaxed profiles to avoid double-confinement
+	// failures. CC ref: sandbox-adapter.ts:376 (enableWeakerNestedSandbox, SBX-52).
+	EnableWeakerNestedSandbox bool
+
+	// EnableWeakerNetworkIsolation, when true, allows macOS system daemons
+	// (e.g. trustd, syspolicyd) additional network access. This is required when
+	// TLS certificate validation or system policy checks are triggered inside the
+	// sandbox. CC ref: sandbox-adapter.ts:377 (enableWeakerNetworkIsolation, SBX-53).
+	EnableWeakerNetworkIsolation bool
 }
 
 // ShouldSandbox decides whether this command must be confined.

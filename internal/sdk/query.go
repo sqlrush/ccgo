@@ -20,6 +20,7 @@ import (
 	"ccgo/internal/conversation"
 	"ccgo/internal/mcp"
 	"ccgo/internal/messages"
+	"ccgo/internal/orchestration"
 	pluginspkg "ccgo/internal/plugins"
 	filetools "ccgo/internal/tools/file"
 )
@@ -99,6 +100,30 @@ type Options struct {
 	// FilesAPIKey is the API key used by the Files API client when uploading.
 	// When empty, the same key used by the runner client applies.
 	FilesAPIKey string
+
+	// ── G27 features ──────────────────────────────────────────────────────────
+
+	// AuthStatus, when non-nil, causes sdk.Query to emit a single auth_status
+	// sdk_event reflecting the provided snapshot immediately before the turn.
+	// This mirrors CC's post-initialize auth_status emission (print.ts:1112-1123,
+	// 4504-4516) so SDK consumers see the current credential state.
+	// CC ref: coreSchemas.ts:1661-1670 (SDKAuthStatusMessageSchema, SDK-57).
+	AuthStatus *AuthStatusSnapshot
+}
+
+// AuthStatusSnapshot holds the current credential / auth-flow state for SDK-57.
+// It mirrors CC's AwsAuthStatus shape (awsAuthStatusManager.ts) extended for
+// all credential sources (OAuth, API-key, cloud providers).
+// CC ref: src/entrypoints/sdk/coreSchemas.ts:1661-1670.
+type AuthStatusSnapshot struct {
+	// IsAuthenticating is true while an interactive OAuth or cloud-provider
+	// auth refresh is in progress.
+	IsAuthenticating bool
+	// Output accumulates progress lines emitted during the auth flow (e.g.
+	// "Opening browser…", "Waiting for callback…").
+	Output []string
+	// Error, when non-empty, describes an auth failure.
+	Error string
 }
 
 // Query runs a single conversation turn under the SDK control protocol.
@@ -329,6 +354,11 @@ func Query(ctx context.Context, opts Options) error {
 	}
 
 	// G12: wire stop_task → AgentRegistry.Cancel (SDK-43).
+	// G27: also wire task_notification emission via StartBackgroundWithNotify.
+	// When the runner's AgentRegistry is set, we replace it with a notification-
+	// aware wrapper that emits system/task_notification sdk_events on Out when any
+	// background task reaches a terminal state.
+	// CC ref: coreSchemas.ts:1694-1713 (SDKTaskNotificationMessageSchema, SDK-58).
 	var stopTask func(taskID string) error
 	if runner.AgentRegistry != nil {
 		agentReg := runner.AgentRegistry
@@ -338,6 +368,28 @@ func Query(ctx context.Context, opts Options) error {
 			}
 			return nil
 		}
+		// Wrap the registry so future StartBackground calls emit task_notification.
+		// The notifying registry intercepts StartBackground via the type-assert path
+		// in tools/task_agent.go. We inject a global notify callback onto the
+		// registry via SetOnTaskDone; existing tasks are unaffected.
+		agentReg.SetOnTaskDone(func(id string, state orchestration.AgentState, out orchestration.Outcome) {
+			status := "completed"
+			if state == orchestration.AgentFailed {
+				status = "failed"
+			}
+			_ = enc.WriteRequest(ControlRequest{
+				Type: "sdk_event",
+				Request: map[string]any{
+					"type":       "system",
+					"subtype":    "task_notification",
+					"task_id":    id,
+					"status":     status,
+					"output_file": "",
+					"summary":    out.Summary,
+					"session_id": string(runner.SessionID),
+				},
+			})
+		})
 	}
 
 	// G13: wire reload_plugins → plugins.LoadPluginDirsWithSettings (SDK-40).
@@ -420,6 +472,26 @@ func Query(ctx context.Context, opts Options) error {
 				"file_ids":   uploadedIDs,
 				"session_id": string(runner.SessionID),
 			},
+		})
+	}
+
+	// SDK-57: emit auth_status sdk_event reflecting current credential state.
+	// CC ref: print.ts:1112-1123 (subscribe) + 4504-4516 (initial snapshot).
+	// Emitted once before the turn, matching CC's post-initialize snapshot behaviour.
+	if opts.AuthStatus != nil {
+		s := opts.AuthStatus
+		authPayload := map[string]any{
+			"type":             "auth_status",
+			"isAuthenticating": s.IsAuthenticating,
+			"output":           s.Output,
+			"session_id":       string(runner.SessionID),
+		}
+		if s.Error != "" {
+			authPayload["error"] = s.Error
+		}
+		_ = enc.WriteRequest(ControlRequest{
+			Type:    "sdk_event",
+			Request: authPayload,
 		})
 	}
 

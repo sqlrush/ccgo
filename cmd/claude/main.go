@@ -466,7 +466,18 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		streamErr := func() error { return nil }
 		if normalizedOutputFormat == "stream-json" {
-			runner, streamErr = attachStreamJSON(stdout, runner, *includePartialMessages)
+			runner, streamErr = attachStreamJSON(stdout, runner, *includePartialMessages, *includeHookEvents)
+		}
+		// CLI-FLAG-43: --replay-user-messages echoes the user message back on stdout
+		// in the stream-json output so SDK consumers see the prompt they sent.
+		// CC ref: src/main.tsx:--replay-user-messages; print.ts replay behaviour.
+		if normalizedOutputFormat == "stream-json" && *replayUserMessages {
+			replayEnc := json.NewEncoder(stdout)
+			msgCopy := userMessage
+			_ = replayEnc.Encode(printStreamEvent{
+				Type:    conversation.EventUserMessage,
+				Message: &msgCopy,
+			})
 		}
 		result, err := runner.RunTurn(context.Background(), history, userMessage)
 		if err != nil {
@@ -4104,6 +4115,36 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		runner.SkillDirs = nil
 	}
 
+	// CLI-FLAG-47: --plugin-dir adds extra plugin directories for this session.
+	// Each directory is treated as a plugin root: its MCP servers are merged into
+	// runner.MCP.PluginServers and its <dir>/skills sub-directory is added to
+	// runner.SkillDirs for slash-command discovery.
+	// CC ref: src/main.tsx:--plugin-dir (adds to installedPluginRoots).
+	if len(options.PluginDirs) > 0 {
+		pluginMergedSettings := runnerMergedSettings(runner)
+		extraServers := pluginpkg.LoadMCPServersWithSettings(options.PluginDirs, pluginMergedSettings)
+		if len(extraServers) > 0 {
+			if runner.MCP == nil {
+				runner.MCP = &conversation.MCPConfig{CWD: runner.WorkingDirectory}
+			}
+			for name, server := range extraServers {
+				if runner.MCP.PluginServers == nil {
+					runner.MCP.PluginServers = make(map[string]contracts.MCPServer)
+				}
+				runner.MCP.PluginServers[name] = server
+			}
+		}
+		// Add the <plugin-dir>/skills sub-directory to the runner skill-dir scan
+		// so that slash commands defined in the plugin are discoverable.
+		// This matches CC's behaviour where installedPluginRoots are scanned for skills.
+		for _, dir := range options.PluginDirs {
+			skillsDir := filepath.Join(dir, "skills")
+			if info, statErr := os.Stat(skillsDir); statErr == nil && info.IsDir() {
+				runner.SkillDirs = append(runner.SkillDirs, skillsDir)
+			}
+		}
+	}
+
 	// CLI-FLAG-27/28: --agent looks up a named agent from the project or user agent dirs and
 	// applies its model and system prompt. --agents provides inline JSON agent definitions as
 	// a fallback when the named agent is not found on disk.
@@ -4849,7 +4890,10 @@ type printStreamMCPServer struct {
 // emits a synthetic {"type":"assistant_message","is_partial":true} event
 // carrying the accumulated text so far — matching CC's --include-partial-messages
 // behaviour (F2-C04 / partial-messages in 01-headless.md).
-func attachStreamJSON(stdout io.Writer, runner conversation.Runner, includePartialMessages bool) (conversation.Runner, func() error) {
+// When includeHookEvents is true, hook lifecycle events with any scope (not just
+// "conversation") are emitted — matching CC's --include-hook-events behaviour
+// (CLI-FLAG-41). This enables pre_turn/post_turn/setup hook events in the stream.
+func attachStreamJSON(stdout io.Writer, runner conversation.Runner, includePartialMessages, includeHookEvents bool) (conversation.Runner, func() error) {
 	encoder := json.NewEncoder(stdout)
 	var eventErr error
 	eventErr = encoder.Encode(printStreamEvent{
@@ -4961,7 +5005,7 @@ func attachStreamJSON(stdout io.Writer, runner conversation.Runner, includeParti
 		if event.Type == conversation.EventAssistantMessage {
 			partialBuf = ""
 		}
-		eventErr = writePrintStreamEvent(encoder, event)
+		eventErr = writePrintStreamEvent(encoder, event, includeHookEvents)
 	}
 	return runner, func() error {
 		// SDK-59: emit session_state_changed/idle after the turn completes,
@@ -5240,7 +5284,12 @@ type sdkSessionStateChangedEvent struct {
 // Hook events have ToolUseID starting with "hook_" and a scope=="conversation"
 // data field (set by Runner.emitConversationHookProgress).
 // CC ref: coreSchemas.ts:1604-1646 (SDK-65).
-func hookProgressPhase(tp *contracts.ToolProgress) (phase string, isHook bool) {
+// hookProgressPhase extracts the hook phase from a ToolProgress event.
+// When includeHookEvents is true (--include-hook-events flag), hooks with any
+// scope are included. By default, only "conversation"-scoped hook events are
+// emitted (they are the ones relevant to the active turn).
+// CC ref: src/main.tsx:1231 (setAllHookEventsEnabled when includeHookEvents).
+func hookProgressPhase(tp *contracts.ToolProgress, includeHookEvents bool) (phase string, isHook bool) {
 	if tp == nil {
 		return "", false
 	}
@@ -5249,14 +5298,18 @@ func hookProgressPhase(tp *contracts.ToolProgress) (phase string, isHook bool) {
 		return "", false
 	}
 	scope, _ := data["scope"].(string)
-	if scope != "conversation" {
+	if !includeHookEvents && scope != "conversation" {
+		return "", false
+	}
+	// Only emit if the event has a recognisable hook phase tag.
+	if scope == "" {
 		return "", false
 	}
 	phase, _ = data["phase"].(string)
 	return phase, phase != ""
 }
 
-func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) error {
+func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event, includeHookEvents bool) error {
 	if !printStreamEventVisible(event.Type) {
 		return nil
 	}
@@ -5264,10 +5317,18 @@ func writePrintStreamEvent(encoder *json.Encoder, event conversation.Event) erro
 	// SDK-65: hook lifecycle events are emitted in CC's system/hook_* wire format
 	// instead of the generic tool_progress format. This matches CC's
 	// SDKHookStartedMessageSchema / SDKHookResponseMessageSchema.
+	// CLI-FLAG-41: when --include-hook-events is set, hooks with non-conversation
+	// scopes (pre_turn, post_turn, etc.) are also emitted.
 	if event.Type == conversation.EventToolProgress && event.ToolProgress != nil {
-		phase, isHook := hookProgressPhase(event.ToolProgress)
+		phase, isHook := hookProgressPhase(event.ToolProgress, includeHookEvents)
 		if isHook {
 			return writeHookLifecycleEvent(encoder, event.ToolProgress, phase)
+		}
+		// Hook ToolProgress events that are not emitted (wrong scope / no phase)
+		// are completely suppressed — they must not fall through to the generic
+		// tool_progress path, which would expose internal hook scope details.
+		if isHookToolProgress(event.ToolProgress) {
+			return nil
 		}
 	}
 
@@ -5388,6 +5449,18 @@ func writeHookLifecycleEvent(encoder *json.Encoder, tp *contracts.ToolProgress, 
 
 // event_toolProgress is a typed alias to avoid importing conversation in helpers.
 const event_toolProgress conversation.EventType = conversation.EventToolProgress
+
+// isHookToolProgress reports whether a ToolProgress event is a hook lifecycle
+// event (i.e. it has a non-empty scope field in its data map). Hook events must
+// either be emitted as system/hook_* (when scope+phase are valid) or suppressed
+// entirely. They must never fall through to the generic tool_progress output.
+func isHookToolProgress(tp *contracts.ToolProgress) bool {
+	if tp == nil || tp.Data == nil {
+		return false
+	}
+	scope, _ := tp.Data["scope"].(string)
+	return scope != ""
+}
 
 func printStreamEventVisible(eventType conversation.EventType) bool {
 	switch eventType {

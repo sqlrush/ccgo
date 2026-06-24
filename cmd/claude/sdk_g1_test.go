@@ -30,7 +30,7 @@ func TestAttachStreamJSONEmitsStatusOnCompact_G1(t *testing.T) {
 		SessionID: "sess-g1",
 	}
 
-	runner, getErr := attachStreamJSON(&buf, runner, false)
+	runner, getErr := attachStreamJSON(&buf, runner, false, false)
 
 	// Simulate a compact event (this is what RunTurn emits when auto-compact fires).
 	runner.OnEvent(conversation.Event{
