@@ -6483,8 +6483,68 @@ func TestTerminalNotificationSequences(t *testing.T) {
 		t.Fatalf("ghostty = %q, want %q", ghostty, wantGhostty)
 	}
 
-	if bell := TerminalBellSequence(); bell != OSCTerminator {
-		t.Fatalf("bell = %q", bell)
+	// TerminalBellSequence must return the BEL character (\a / 0x07).
+	if bell := TerminalBellSequence(); bell != "\a" {
+		t.Fatalf("bell = %q, want \\a", bell)
+	}
+}
+
+// TestTurnNotificationSequencesChannels verifies REPL-59:
+// TurnNotificationSequences respects the preferredNotifChannel setting.
+// CC ref: src/services/notifier.ts sendToChannel / utils/configConstants.ts.
+func TestTurnNotificationSequencesChannels(t *testing.T) {
+	title, msg := "Claude", "Turn complete"
+
+	// "terminal_bell": only BEL (\a).
+	bell := TurnNotificationSequences(title, msg, "terminal_bell")
+	if len(bell) != 1 || bell[0] != "\a" {
+		t.Fatalf("terminal_bell: got %#v, want [\"\\a\"]", bell)
+	}
+
+	// "notifications_disabled": empty.
+	disabled := TurnNotificationSequences(title, msg, "notifications_disabled")
+	if len(disabled) != 0 {
+		t.Fatalf("notifications_disabled: got %#v, want []", disabled)
+	}
+
+	// "iterm2": one iTerm2 OSC sequence.
+	it2 := TurnNotificationSequences(title, msg, "iterm2")
+	if len(it2) != 1 {
+		t.Fatalf("iterm2: got %d seqs, want 1", len(it2))
+	}
+	if !strings.Contains(it2[0], OSCITerm2) {
+		t.Fatalf("iterm2: seq %q missing OSC iterm2 code", it2[0])
+	}
+
+	// "iterm2_with_bell": iTerm2 + BEL.
+	it2b := TurnNotificationSequences(title, msg, "iterm2_with_bell")
+	if len(it2b) != 2 {
+		t.Fatalf("iterm2_with_bell: got %d seqs, want 2", len(it2b))
+	}
+	lastBell := it2b[len(it2b)-1]
+	if lastBell != "\a" {
+		t.Fatalf("iterm2_with_bell: last seq = %q, want \\a", lastBell)
+	}
+
+	// "" / "auto": TerminalNotificationSequences (≥1 seq).
+	auto := TurnNotificationSequences(title, msg, "")
+	if len(auto) == 0 {
+		t.Fatal("auto channel must return at least one notification sequence")
+	}
+
+	// "ghostty": one Ghostty OSC sequence.
+	ghostty := TurnNotificationSequences(title, msg, "ghostty")
+	if len(ghostty) != 1 {
+		t.Fatalf("ghostty: got %d seqs, want 1", len(ghostty))
+	}
+	if !strings.Contains(ghostty[0], OSCGhostty) {
+		t.Fatalf("ghostty: seq %q missing OSC ghostty code", ghostty[0])
+	}
+
+	// "kitty": Kitty notification sequences (multiple).
+	kitty := TurnNotificationSequences(title, msg, "kitty")
+	if len(kitty) == 0 {
+		t.Fatal("kitty channel must return at least one sequence")
 	}
 }
 

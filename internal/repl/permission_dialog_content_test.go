@@ -76,6 +76,51 @@ func TestToolSpecificDialogContentEdit(t *testing.T) {
 	}
 }
 
+// TestToolSpecificDialogContentEditShowsDiff verifies PERM-TOOL-02:
+// when the Edit tool's Input map provides old_string/new_string, the
+// permission dialog shows a unified diff so the user sees the change
+// they are approving.
+func TestToolSpecificDialogContentEditShowsDiff(t *testing.T) {
+	req := tool.PermissionAskRequest{
+		ToolName: "Edit",
+		Path:     "/src/main.go",
+		Input: map[string]any{
+			"file_path":  "/src/main.go",
+			"old_string": "return nil",
+			"new_string": "return err",
+		},
+	}
+	content := toolSpecificDialogContent(req)
+	// The diff must include both the removed and added lines.
+	if !contains(content, "return nil") {
+		t.Fatalf("Edit diff must show old_string (removed): %q", content)
+	}
+	if !contains(content, "return err") {
+		t.Fatalf("Edit diff must show new_string (added): %q", content)
+	}
+	// Must also include the file path.
+	if !contains(content, "/src/main.go") {
+		t.Fatalf("Edit diff must include file path: %q", content)
+	}
+}
+
+// TestToolSpecificDialogContentWriteShowsDiff verifies that Write tool
+// permission dialogs show the new content (no old_string).
+func TestToolSpecificDialogContentWriteShowsDiff(t *testing.T) {
+	req := tool.PermissionAskRequest{
+		ToolName: "Write",
+		Path:     "/out.go",
+		Input: map[string]any{
+			"file_path": "/out.go",
+			"content":   "package main\n\nfunc main() {}\n",
+		},
+	}
+	content := toolSpecificDialogContent(req)
+	if !contains(content, "package main") {
+		t.Fatalf("Write diff must show new content: %q", content)
+	}
+}
+
 func TestToolSpecificDialogContentRead(t *testing.T) {
 	req := tool.PermissionAskRequest{
 		ToolName:    "Read",

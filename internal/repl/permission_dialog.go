@@ -1,10 +1,12 @@
 package repl
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 
 	"ccgo/internal/contracts"
+	"ccgo/internal/native"
 	"ccgo/internal/tool"
 )
 
@@ -12,12 +14,13 @@ import (
 // ask request, matching the tool-specific UX from CC:
 //   - Bash/PowerShell: show the full command text
 //   - WebFetch: show the host/domain extracted from the URL
-//   - Edit/Write: show the file path
+//   - Edit/Write: show a unified diff when old/new strings are available,
+//     otherwise show the file path
 //   - Other tools: fall through to the raw description
 //
 // PERM-TOOL-02: tool-specific permission dialog content.
 // CC ref: src/components/permissions/BashPermissionRequest/BashPermissionRequest.tsx
-//         src/components/permissions/WebFetchPermissionRequest/WebFetchPermissionRequest.tsx
+//         src/components/permissions/FileEditPermissionRequest/FileEditPermissionRequest.tsx
 func toolSpecificDialogContent(req tool.PermissionAskRequest) string {
 	switch req.ToolName {
 	case "Bash", "PowerShell":
@@ -39,6 +42,15 @@ func toolSpecificDialogContent(req tool.PermissionAskRequest) string {
 		}
 		return "Fetch"
 	case "Edit", "Write", "FileEdit", "FileWrite", "NotebookEdit", "SedEdit":
+		// PERM-TOOL-02: render a unified diff when old/new content is available
+		// in the Input map. This lets the user see what change they are approving.
+		// CC ref: FileEditPermissionRequest shows the patch diff.
+		if diff := editDiffFromInput(req); diff != "" {
+			if req.Path != "" {
+				return fmt.Sprintf("File: %s\n%s", req.Path, diff)
+			}
+			return diff
+		}
 		content := req.Path
 		if content == "" {
 			content = req.Description
@@ -53,6 +65,40 @@ func toolSpecificDialogContent(req tool.PermissionAskRequest) string {
 		}
 		return req.ToolName
 	}
+}
+
+// editDiffFromInput extracts old_string/new_string (or content for Write) from
+// req.Input and returns a plain unified diff string for display in the
+// permission dialog. Returns "" when not applicable.
+func editDiffFromInput(req tool.PermissionAskRequest) string {
+	if len(req.Input) == 0 {
+		return ""
+	}
+	// Re-marshal the Input map to JSON so we can decode it into the typed struct.
+	raw, err := json.Marshal(req.Input)
+	if err != nil {
+		return ""
+	}
+	var in editToolInput
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return ""
+	}
+	oldText := in.OldString
+	newText := in.NewString
+	if newText == "" && in.Content != "" {
+		newText = in.Content
+	}
+	if oldText == "" && newText == "" {
+		return ""
+	}
+	cd := native.BuildColorDiff(oldText, newText, native.ColorDiffOptions{
+		Path:  in.FilePath,
+		Color: false, // no ANSI in dialog content
+	})
+	if cd.Unified != "" {
+		return cd.Unified
+	}
+	return ""
 }
 
 const (

@@ -944,8 +944,45 @@ func TerminalNotificationSequences(title, message string) []string {
 	return seqs
 }
 
+// TerminalBellSequence returns the terminal BEL character (\a / 0x07).
+// Inside tmux this triggers tmux's bell-action (window flag).
+// CC ref: src/ink/useTerminalNotification.ts notifyBell.
 func TerminalBellSequence() string {
-	return OSCTerminator
+	return "\a"
+}
+
+// TurnNotificationSequences returns the sequences to write to the terminal when
+// a turn completes and the terminal is unfocused, respecting the configured
+// preferredNotifChannel setting.
+//
+// Channel values (CC ref: utils/configConstants.ts NOTIFICATION_CHANNELS):
+//   - "" or "auto": send OSC 9/99/777 sequences
+//   - "iterm2": send iTerm2 OSC 9 only
+//   - "iterm2_with_bell": send iTerm2 OSC 9 + BEL
+//   - "terminal_bell": send BEL only
+//   - "kitty": send Kitty OSC 99 only
+//   - "ghostty": send Ghostty OSC 777 only
+//   - "notifications_disabled": send nothing
+//
+// REPL-59: OS notification / terminal bell on turn complete.
+// CC ref: src/services/notifier.ts sendToChannel.
+func TurnNotificationSequences(title, message, channel string) []string {
+	switch channel {
+	case "iterm2":
+		return []string{ITerm2NotificationSequence(message, title)}
+	case "iterm2_with_bell":
+		return []string{ITerm2NotificationSequence(message, title), TerminalBellSequence()}
+	case "terminal_bell":
+		return []string{TerminalBellSequence()}
+	case "kitty":
+		return KittyNotificationSequences(message, title, 1)
+	case "ghostty":
+		return []string{GhosttyNotificationSequence(message, title)}
+	case "notifications_disabled":
+		return nil
+	default: // "auto" or ""
+		return TerminalNotificationSequences(title, message)
+	}
 }
 
 func TabStatusSequence(fields TabStatusFields) string {

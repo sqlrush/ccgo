@@ -675,6 +675,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			}
 			return ""
 		}(),
+		// REPL-59: wire preferredNotifChannel so OS notification/bell respects the setting.
+		// CC ref: utils/configConstants.ts NOTIFICATION_CHANNELS.
+		PreferredNotifChannel: mergedSettings.PreferredNotifChannel,
 		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
 		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
 		OnModelChange: func(m string) {

@@ -188,6 +188,13 @@ type InteractiveOptions struct {
 	// when the user types "@", instead of walking the filesystem.
 	// CFG-40: CC ref: utils/settings/types.ts fileSuggestion:{type:"command",command:string}.
 	FileSuggestionCmd string
+
+	// PreferredNotifChannel selects the notification/bell channel used when a turn
+	// completes and the terminal is unfocused.
+	// Values: "" | "auto" (OSC 9/99/777) | "terminal_bell" (\a) | "iterm2" |
+	//         "iterm2_with_bell" | "kitty" | "ghostty" | "notifications_disabled".
+	// REPL-59: CC ref: utils/configConstants.ts NOTIFICATION_CHANNELS.
+	PreferredNotifChannel string
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -657,14 +664,16 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 			"Awaiting permission for "+toolName, "")
 	}
 
-	// OVL-42: Send OSC 9/99/777 terminal notification when a turn completes
-	// and the terminal is unfocused (user may be in another app). Errors are
-	// discarded so a broken terminal cannot interrupt the REPL.
+	// OVL-42 / REPL-59: Send terminal notification / bell when a turn completes
+	// and the terminal is unfocused (user may be in another app). The channel
+	// is selected by PreferredNotifChannel (mirrors settings.preferredNotifChannel).
+	// Errors are discarded so a broken terminal cannot interrupt the REPL.
+	notifChannel := opts.PreferredNotifChannel
 	loop.onTurnDoneNotify = func(unfocused bool) {
 		if !unfocused {
 			return
 		}
-		seqs := tui.TerminalNotificationSequences("Claude", "Turn complete")
+		seqs := tui.TurnNotificationSequences("Claude", "Turn complete", notifChannel)
 		for _, seq := range seqs {
 			_ = term.WriteString(seq)
 		}

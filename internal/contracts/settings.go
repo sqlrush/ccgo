@@ -45,6 +45,12 @@ type Settings struct {
 	Language                        string                      `json:"language,omitempty"`
 	SkipWebFetchPreflight           *bool                       `json:"skipWebFetchPreflight,omitempty"`
 	Sandbox                         map[string]any              `json:"sandbox,omitempty"`
+	// PreferredNotifChannel selects the OS notification/terminal-bell channel
+	// used when a turn completes and the terminal is unfocused.
+	// Values: "auto" (default) | "iterm2" | "iterm2_with_bell" | "terminal_bell"
+	//         | "kitty" | "ghostty" | "notifications_disabled".
+	// CC ref: utils/config.ts:214 preferredNotifChannel.
+	PreferredNotifChannel           string                      `json:"preferredNotifChannel,omitempty"`
 	FeedbackSurveyRate              *float64                    `json:"feedbackSurveyRate,omitempty"`
 	SpinnerTipsEnabled              *bool                       `json:"spinnerTipsEnabled,omitempty"`
 	SpinnerVerbs                    *SpinnerVerbsSetting        `json:"spinnerVerbs,omitempty"`
