@@ -182,6 +182,12 @@ type InteractiveOptions struct {
 	// first prompt. Sourced from mergedSettings.CompanyAnnouncements (policy layer).
 	// CC ref: utils/settings/types.ts companyAnnouncements; screens/REPL.tsx startup.
 	CompanyAnnouncements []string
+
+	// FileSuggestionCmd is the shell command from settings.FileSuggestion.Command.
+	// When non-empty, its stdout (one path per line) populates the QuickOpen overlay
+	// when the user types "@", instead of walking the filesystem.
+	// CFG-40: CC ref: utils/settings/types.ts fileSuggestion:{type:"command",command:string}.
+	FileSuggestionCmd string
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -473,6 +479,10 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	// CFG-19: wire statusLine command so its stdout populates the status bar.
 	if opts.StatusLineCommand != "" {
 		loop.SetStatusLineCommand(opts.StatusLineCommand)
+	}
+	// CFG-40: wire fileSuggestion command so its output populates the QuickOpen overlay.
+	if opts.FileSuggestionCmd != "" {
+		loop.SetFileSuggestionCmd(opts.FileSuggestionCmd)
 	}
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)

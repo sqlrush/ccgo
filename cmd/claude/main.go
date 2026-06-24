@@ -423,6 +423,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		// CLI-FLAG-34: create git worktree when --worktree is provided.
+		if err := createWorktreeIfRequested(cliOptions{Worktree: *worktree}, &runner.WorkingDirectory); err != nil {
+			fmt.Fprintf(stderr, "ccgo: %v\n", err)
+			return 1
+		}
 		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 		if err != nil {
 			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
@@ -553,6 +558,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
+	// CLI-FLAG-34: create git worktree when --worktree is provided.
+	if err := createWorktreeIfRequested(cliOptions{Worktree: *worktree}, &runner.WorkingDirectory); err != nil {
+		fmt.Fprintf(stderr, "ccgo: %v\n", err)
+		return 1
+	}
 	history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -657,6 +667,14 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		// CFG-48: display enterprise announcements at session startup.
 		// CC ref: utils/settings/types.ts companyAnnouncements; LogoV2.tsx:82-86.
 		CompanyAnnouncements: mergedSettings.CompanyAnnouncements,
+		// CFG-40: wire fileSuggestion command so its output populates the QuickOpen overlay.
+		// CC ref: utils/settings/types.ts fileSuggestion:{type:"command",command:string}.
+		FileSuggestionCmd: func() string {
+			if mergedSettings.FileSuggestion != nil && mergedSettings.FileSuggestion.Type == "command" {
+				return mergedSettings.FileSuggestion.Command
+			}
+			return ""
+		}(),
 		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
 		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
 		OnModelChange: func(m string) {

@@ -236,7 +236,22 @@ type Loop struct {
 	// statusLineCmdRunner executes statusLineCmd and returns its output.
 	// Defaults to RunStatusLineCommand; can be overridden in tests.
 	statusLineCmdRunner func(cmd string) (string, error)
+
+	// fileSuggestionCmd, when non-empty, is the shell command whose stdout (one
+	// path per line) populates the QuickOpen overlay instead of walking the
+	// filesystem. Set via SetFileSuggestionCmd.
+	// CFG-40: CC ref: utils/settings/types.ts fileSuggestion:{type:"command",...}.
+	fileSuggestionCmd string
+
+	// lastEscTime records when the most recent Esc key was pressed.
+	// Used by the ESC double-press detector (REPL-30) to open MessageSelector.
+	lastEscTime time.Time
 }
+
+// escDoublePressWindow is the maximum interval between two ESC presses that
+// triggers the MessageSelector overlay (REPL-30).
+// CC ref: src/components/PromptInput/PromptInput.tsx:1254.
+const escDoublePressWindow = 800 * time.Millisecond
 
 // SetAgentRegistry wires the shared AgentRegistry for background task tracking.
 // Once set, the loop polls the registry between turns and surfaces completed
@@ -689,6 +704,28 @@ func (l *Loop) handleKey(key tui.Key) bool {
 		return false
 	}
 
+	// REPL-30: ESC double-press on empty prompt opens MessageSelector overlay.
+	// CC ref: src/components/PromptInput/PromptInput.tsx:1254.
+	if key.Type == tui.KeyEsc && l.activeOverlay == nil && l.screen.Prompt.Text == "" {
+		now := time.Now()
+		if !l.lastEscTime.IsZero() && now.Sub(l.lastEscTime) <= escDoublePressWindow && len(l.history) > 0 {
+			// Build text entries from history messages.
+			screenMsgs := historyToScreen(l.history)
+			entries := make([]string, 0, len(screenMsgs))
+			for _, msg := range screenMsgs {
+				if msg.Text != "" {
+					entries = append(entries, msg.Text)
+				}
+			}
+			if len(entries) > 0 {
+				l.activeOverlay = NewMessageSelectorOverlay(entries)
+				l.lastEscTime = time.Time{}
+				return false
+			}
+		}
+		l.lastEscTime = now
+	}
+
 	event := l.screen.ApplyKey(key)
 
 	// Open the slash menu when the prompt text is exactly "/" (first keystroke).
@@ -699,8 +736,14 @@ func (l *Loop) handleKey(key tui.Key) bool {
 	// OVL-05/06: Open the QuickOpen file picker when the prompt text is exactly "@".
 	// The overlay inserts the selected path back into the prompt with an @ prefix
 	// (mention) or as a plain path (Tab). Requires cwd to be set.
+	// CFG-40: when fileSuggestionCmd is set, populate the overlay with command output
+	// instead of walking the filesystem. Falls back to filesystem walk on error.
 	if l.activeOverlay == nil && l.cwd != "" && l.screen.Prompt.Text == "@" {
-		l.activeOverlay = NewQuickOpenOverlay(l.cwd)
+		if paths := l.fileSuggestionFiles(); paths != nil {
+			l.activeOverlay = newQuickOpenOverlayWithFiles(paths)
+		} else {
+			l.activeOverlay = NewQuickOpenOverlay(l.cwd)
+		}
 		// Clear the "@" trigger character so the overlay starts clean.
 		l.screen.Prompt.Text = ""
 	}
@@ -1280,7 +1323,9 @@ func (l *Loop) stopSpinner() {
 }
 
 func (l *Loop) tick() {
-	if l.running {
+	// REPL-24: suppress spinner updates while streaming text is visible.
+	// CC ref: src/screens/REPL.tsx:1683 — spinner hidden when text streaming.
+	if l.running && !l.streamingActive {
 		l.screen.Status = l.spinner.Line(time.Now())
 	}
 }

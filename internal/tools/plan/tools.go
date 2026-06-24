@@ -25,6 +25,26 @@ func PlanFilePath(sessionPath string, sessionID contracts.ID) string {
 	return filepath.Join(dir, name+".plan.md")
 }
 
+// PlanFilePathFromSettings returns where the active plan markdown is stored for a
+// session, honoring an optional plansDirectory override from settings.
+// When plansDir is non-empty, the plan file is placed in that directory instead
+// of sessionPath.
+// CFG-43: CC ref: utils/settings/types.ts plansDirectory.
+func PlanFilePathFromSettings(sessionPath, plansDir string, sessionID contracts.ID) string {
+	dir := strings.TrimSpace(plansDir)
+	if dir == "" {
+		dir = strings.TrimSpace(sessionPath)
+	}
+	if dir == "" {
+		dir = "."
+	}
+	name := string(sessionID)
+	if name == "" {
+		name = "plan"
+	}
+	return filepath.Join(dir, name+".plan.md")
+}
+
 // WritePlan persists the plan markdown for a session to disk.
 func WritePlan(sessionPath string, sessionID contracts.ID, plan string) error {
 	path := PlanFilePath(sessionPath, sessionID)
