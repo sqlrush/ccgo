@@ -278,6 +278,18 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return 2
 	}
 
+	// CLI-FLAG-12: detect when --resume was explicitly set with no value.
+	// CC maps `--resume` (no value) to boolean true and opens the picker.
+	// We detect the explicit-but-empty case via flags.Visit after Parse.
+	// CC ref: src/main.tsx `-r, --resume [value]` (value => value || true).
+	resumeExplicit := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "resume" {
+			resumeExplicit = true
+		}
+	})
+	openResumePicker := resumeExplicit && strings.TrimSpace(*resume) == ""
+
 	if *showVersion {
 		fmt.Fprintf(stdout, "%s (ccgo)\n", version)
 		return 0
@@ -459,6 +471,14 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 				Out:    stdout,
 				RunnerFactory: func() (*conversation.Runner, error) {
 					return &runnerPtr, nil
+				},
+				// SDK-49: update_environment_variables → apply to the process
+				// environment so subsequent tool calls see the updated vars.
+				// CC ref: src/entrypoints/sdk/controlSchemas.ts:629-636.
+				OnEnvMutation: func(vars map[string]string) {
+					for k, v := range vars {
+						_ = os.Setenv(k, v)
+					}
 				},
 			})
 			if sdkErr != nil {
@@ -678,6 +698,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		// REPL-59: wire preferredNotifChannel so OS notification/bell respects the setting.
 		// CC ref: utils/configConstants.ts NOTIFICATION_CHANNELS.
 		PreferredNotifChannel: mergedSettings.PreferredNotifChannel,
+		// CLI-FLAG-12: open the resume picker at startup when --resume is passed
+		// without a session ID. CC maps empty --resume to boolean true which opens
+		// the picker immediately before the first prompt.
+		// CC ref: src/main.tsx `-r, --resume [value]` (value => value || true).
+		OpenResumePicker: openResumePicker,
 		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
 		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
 		OnModelChange: func(m string) {
@@ -3926,6 +3951,13 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	if err != nil {
 		return conversation.Runner{}, err
 	}
+	// CLI-FLAG-33: --setting-sources filters which settings files are loaded.
+	// Only sources named in the comma-separated list are kept; others are zeroed.
+	// CC ref: src/utils/settings/constants.ts parseSettingSourcesFlag;
+	// bootstrap/state.ts setAllowedSettingSources controls which files are read.
+	if options.SettingSources != "" {
+		applySettingSourcesFilter(runner.MCP, options.SettingSources)
+	}
 	if err := applyMCPConfigFlag(&runner, options.MCPConfig); err != nil {
 		return conversation.Runner{}, err
 	}
@@ -3939,11 +3971,20 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		return conversation.Runner{}, err
 	}
 	runner.Tools = tool.NewExecutor(registry)
+	// CLI-FLAG-31: --tools specifies the whitelist of available built-in tools.
+	// Any tool not named in the list is added to DeniedTools so the permission
+	// decider blocks it. CC ref: src/utils/permissions/permissionSetup.ts
+	// baseToolsCli: builds disallow filter from all tools not in the base set.
+	// Special value "default" (empty list) means all tools are available.
+	deniedToolsFromFlag := append([]string(nil), options.DeniedTools...)
+	if len(options.Tools) > 0 {
+		deniedToolsFromFlag = append(deniedToolsFromFlag, toolsNotInWhitelist(registry.Names(), parseToolRules(options.Tools...))...)
+	}
 	runner.Permissions, err = permissionDeciderFromSettings(
 		runner.MCP,
 		strings.TrimSpace(options.PermissionMode),
 		parseToolRules(options.AllowedTools...),
-		parseToolRules(options.DeniedTools...),
+		deniedToolsFromFlag,
 		parsePathList(options.AddDirs),
 	)
 	if err != nil {
@@ -4502,6 +4543,50 @@ func resolveResumeTarget(cwd string, resumeValue string, continueMode bool) (con
 
 func parseToolRules(raw ...string) []string {
 	return commands.ParseToolList(raw)
+}
+
+// applySettingSourcesFilter removes settings entries for sources not named in
+// the comma-separated sources string. Policy settings (managed layer) are never
+// removed. Valid source names: "user", "project", "local".
+// CC ref: src/utils/settings/constants.ts parseSettingSourcesFlag.
+func applySettingSourcesFilter(mcpConfig *conversation.MCPConfig, sources string) {
+	if mcpConfig == nil || strings.TrimSpace(sources) == "" {
+		return
+	}
+	allowed := make(map[string]bool)
+	for _, part := range strings.Split(sources, ",") {
+		allowed[strings.TrimSpace(part)] = true
+	}
+	if !allowed["user"] {
+		mcpConfig.UserSettings = contracts.Settings{}
+	}
+	if !allowed["project"] {
+		mcpConfig.ProjectSettings = contracts.Settings{}
+	}
+	if !allowed["local"] {
+		mcpConfig.LocalSettings = contracts.Settings{}
+	}
+}
+
+// toolsNotInWhitelist returns the subset of allNames not present in whitelist.
+// It implements the CLI-FLAG-31 --tools deny logic: any tool whose canonical
+// (lower-case) name is not in the whitelist set is returned for denial.
+// CC ref: src/utils/permissions/permissionSetup.ts baseToolsCli deny filter.
+func toolsNotInWhitelist(allNames []string, whitelist []string) []string {
+	if len(whitelist) == 0 {
+		return nil
+	}
+	allowed := make(map[string]bool, len(whitelist))
+	for _, name := range whitelist {
+		allowed[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+	var denied []string
+	for _, name := range allNames {
+		if !allowed[strings.ToLower(name)] {
+			denied = append(denied, name)
+		}
+	}
+	return denied
 }
 
 func parsePathList(values []string) []string {

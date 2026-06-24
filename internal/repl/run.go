@@ -195,6 +195,14 @@ type InteractiveOptions struct {
 	//         "iterm2_with_bell" | "kitty" | "ghostty" | "notifications_disabled".
 	// REPL-59: CC ref: utils/configConstants.ts NOTIFICATION_CHANNELS.
 	PreferredNotifChannel string
+
+	// OpenResumePicker, when true, causes the REPL to open the resume picker
+	// overlay at startup (before the first prompt). This corresponds to the CC
+	// behaviour of `claude --resume` (no value): the flag becomes a boolean and
+	// the picker is shown immediately so the user can select a session.
+	// ResumeEntries must be non-empty for the picker to be meaningful.
+	// CLI-FLAG-12: CC ref: src/main.tsx `-r, --resume [value]` (value => value || true).
+	OpenResumePicker bool
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -493,6 +501,13 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	}
 	if opts.Trust != nil {
 		loop.activeOverlay = NewTrustDialog(*opts.Trust)
+	}
+	// CLI-FLAG-12: open resume picker at startup when --resume is passed without
+	// a session ID (becomes boolean true in CC; ccgo signals via OpenResumePicker).
+	// The picker is only meaningful when ResumeEntries are populated.
+	// CC ref: src/main.tsx `-r, --resume [value]` (value => value || true).
+	if opts.OpenResumePicker && len(opts.ResumeEntries) > 0 {
+		loop.activeOverlay = NewResumePicker(opts.ResumeEntries)
 	}
 
 	// OVL-05/06: Wire the working directory so the QuickOpen overlay can walk
