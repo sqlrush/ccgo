@@ -246,6 +246,18 @@ type Loop struct {
 	// lastEscTime records when the most recent Esc key was pressed.
 	// Used by the ESC double-press detector (REPL-30) to open MessageSelector.
 	lastEscTime time.Time
+
+	// surveyState holds the feedback survey overlay state (CFG-49).
+	// Initialised from opts.FeedbackSurveyRate in RunInteractiveWithOptions.
+	// Rate=0 (default) means the survey is never triggered.
+	// CC ref: utils/settings/types.ts feedbackSurveyRate.
+	surveyState tui.SurveyOverlayState
+
+	// promptSuggestionState holds the prompt suggestion state (CFG-50).
+	// Initialised from opts.PromptSuggestionEnabled in RunInteractiveWithOptions.
+	// Enabled=false (default) means suggestions are never shown.
+	// CC ref: utils/settings/types.ts promptSuggestionEnabled.
+	promptSuggestionState tui.PromptSuggestionState
 }
 
 // escDoublePressWindow is the maximum interval between two ESC presses that
@@ -623,6 +635,29 @@ func (l *Loop) finishTurn(out turnOutcome) {
 	if l.onTurnDone != nil {
 		l.onTurnDone()
 	}
+}
+
+// triggerSurveyIfDue checks whether a feedback survey should be shown after a
+// completed turn and, if so, transitions surveyState to visible and sets
+// activeOverlay to the rendered survey dialog.
+//
+// CFG-49 production call site: called from finishTurn after a successful turn
+// so the survey fires at the rate configured by settings.feedbackSurveyRate.
+// A rate of 0 (the default) means the survey is never triggered.
+func (l *Loop) triggerSurveyIfDue() {
+	if l.activeOverlay != nil {
+		// Don't stack overlays; skip if something else is already showing.
+		return
+	}
+	next, triggered := l.surveyState.MaybeTrigger(
+		tui.SurveyKindFeedback,
+		[]string{"Great", "Needs work", "Dismiss"},
+	)
+	if !triggered {
+		return
+	}
+	l.surveyState = next
+	l.activeOverlay = &surveyDialogOverlay{state: &l.surveyState}
 }
 
 // readInput segments the terminal byte stream into keys and posts them.

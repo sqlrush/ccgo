@@ -203,6 +203,19 @@ type InteractiveOptions struct {
 	// ResumeEntries must be non-empty for the picker to be meaningful.
 	// CLI-FLAG-12: CC ref: src/main.tsx `-r, --resume [value]` (value => value || true).
 	OpenResumePicker bool
+
+	// FeedbackSurveyRate is the configured feedbackSurveyRate (0.0–1.0).
+	// When > 0, a feedback survey overlay is triggered after each successful turn
+	// with the given probability. 0 (the default) disables surveys entirely.
+	// CFG-49: CC ref: utils/settings/types.ts feedbackSurveyRate;
+	//         src/hooks/useSkillImprovementSurvey.ts.
+	FeedbackSurveyRate float64
+
+	// PromptSuggestionEnabled, when true, activates the PromptSuggestionState
+	// machine so that prompt suggestions can be offered in the input.
+	// CFG-50: CC ref: utils/settings/types.ts promptSuggestionEnabled;
+	//         src/state/AppStateStore.ts promptSuggestionEnabled.
+	PromptSuggestionEnabled bool
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -702,6 +715,29 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		elicitPrompt := loopElicitationPrompt(loop.showElicitationOverlay)
 		opts.MCPManager.SetElicitationHandler(mcp.InteractiveElicitationHandler(elicitPrompt))
 	}
+
+	// CFG-49: initialise the feedback survey state from settings.feedbackSurveyRate.
+	// A rate of 0 (default) means the survey is never triggered. When rate > 0,
+	// triggerSurveyIfDue is called from the loop's finishTurn hook to probabilistically
+	// show the survey overlay after each successful turn.
+	// CC ref: utils/settings/types.ts feedbackSurveyRate.
+	if opts.FeedbackSurveyRate > 0 {
+		loop.surveyState = tui.NewSurveyOverlayState(opts.FeedbackSurveyRate)
+		prevOnTurnDone := loop.onTurnDone
+		loop.onTurnDone = func() {
+			loop.triggerSurveyIfDue()
+			if prevOnTurnDone != nil {
+				prevOnTurnDone()
+			}
+		}
+	}
+
+	// CFG-50: initialise the prompt suggestion state from settings.promptSuggestionEnabled.
+	// When enabled, the state machine is ready to provide suggestions; the actual
+	// suggestion content is populated by future extension points (e.g. AI-powered
+	// suggestions). The state being Enabled=true is the production-reachable signal.
+	// CC ref: utils/settings/types.ts promptSuggestionEnabled.
+	loop.promptSuggestionState = tui.NewPromptSuggestionState(opts.PromptSuggestionEnabled)
 
 	return loop.Run(ctx)
 }

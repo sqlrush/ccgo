@@ -440,6 +440,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "ccgo: %v\n", err)
 			return 1
 		}
+		// CLI-FLAG-35: create tmux session for the worktree when --tmux is provided.
+		// Graceful degrade: if tmux binary is absent, log a warning and continue.
+		if err := createTmuxSessionIfRequested(cliOptions{Tmux: *tmux}, *worktree, runner.WorkingDirectory, defaultTmuxRunner); err != nil {
+			fmt.Fprintf(stderr, "ccgo: --tmux: %v (continuing without tmux)\n", err)
+		}
 		history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 		if err != nil {
 			_ = writePrintError(stdout, runner, err, normalizedOutputFormat, time.Since(startedAt), 0, nil)
@@ -583,6 +588,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
 		return 1
 	}
+	// CLI-FLAG-35: create tmux session for the worktree when --tmux is provided.
+	// Graceful degrade: if tmux binary is absent, log a warning and continue.
+	if err := createTmuxSessionIfRequested(cliOptions{Tmux: *tmux}, *worktree, runner.WorkingDirectory, defaultTmuxRunner); err != nil {
+		fmt.Fprintf(stderr, "ccgo: --tmux: %v (continuing without tmux)\n", err)
+	}
 	history, err := resumeHistory(state, &runner, cliOptions{Resume: *resume, Continue: *continueMode})
 	if err != nil {
 		fmt.Fprintf(stderr, "ccgo: %v\n", err)
@@ -703,6 +713,17 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		// the picker immediately before the first prompt.
 		// CC ref: src/main.tsx `-r, --resume [value]` (value => value || true).
 		OpenResumePicker: openResumePicker,
+		// CFG-49: wire feedbackSurveyRate so the survey overlay fires probabilistically.
+		// CC ref: utils/settings/types.ts feedbackSurveyRate; useSkillImprovementSurvey.ts.
+		FeedbackSurveyRate: func() float64 {
+			if mergedSettings.FeedbackSurveyRate != nil {
+				return *mergedSettings.FeedbackSurveyRate
+			}
+			return 0
+		}(),
+		// CFG-50: wire promptSuggestionEnabled so the suggestion state is initialised.
+		// CC ref: utils/settings/types.ts promptSuggestionEnabled; AppStateStore.ts.
+		PromptSuggestionEnabled: mergedSettings.PromptSuggestionEnabled != nil && *mergedSettings.PromptSuggestionEnabled,
 		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
 		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
 		OnModelChange: func(m string) {
