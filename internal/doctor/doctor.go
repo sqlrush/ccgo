@@ -1,15 +1,18 @@
 // Package doctor implements deterministic, local-only health checks for ccgo.
 // It is shared by /doctor (slash command) and `claude doctor` (CLI subcommand).
-// No network calls, no auth checks — filesystem + exec.LookPath only.
+// Core checks are network-free; an opt-in network check is available via
+// Input.NetworkCheckEndpoint (SUBCMD-DOCTOR-10).
 package doctor
 
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Status represents the outcome of a single diagnostic check.
@@ -138,6 +141,18 @@ type Input struct {
 	// SandboxDepWarnings holds degraded-but-functional dependency warnings
 	// (e.g. missing ripgrep) from sandbox.DepCheck. Emitted as WARN checks.
 	SandboxDepWarnings []string
+
+	// NetworkCheckEndpoint, when non-empty, enables an opt-in network
+	// connectivity check (SUBCMD-DOCTOR-10). A HEAD request is made to the
+	// given URL; the check is skipped when this field is empty (default) to
+	// preserve network-free behaviour.
+	// CC ref: src/screens/Doctor.tsx:131 distTagsPromise + getDoctorDiagnostic.
+	NetworkCheckEndpoint string
+
+	// NetworkCheckFn, when non-nil, is used instead of a real HTTP HEAD request.
+	// Injected in tests so no real network calls are needed.
+	// Signature: func(url string) error — nil return means reachable.
+	NetworkCheckFn func(url string) error
 }
 
 // DetectInstallType classifies the running binary path into one of CC's 6
@@ -339,7 +354,47 @@ func Run(in Input) Report {
 		checks = append(checks, sandboxCheck(in.SandboxUnavailableReason, in.SandboxDepWarnings))
 	}
 
+	// Opt-in network connectivity check (SUBCMD-DOCTOR-10).
+	// Only runs when NetworkCheckEndpoint is explicitly set (default off).
+	// CC ref: src/screens/Doctor.tsx:131 distTagsPromise / getDoctorDiagnostic().
+	if endpoint := strings.TrimSpace(in.NetworkCheckEndpoint); endpoint != "" {
+		checks = append(checks, networkConnectivityCheck(endpoint, in.NetworkCheckFn))
+	}
+
 	return Report{Checks: checks}
+}
+
+// DefaultNetworkCheckFn performs a HEAD request with a 5-second timeout.
+// Used as the production network probe when NetworkCheckFn is nil.
+func DefaultNetworkCheckFn(url string) error {
+	c := &http.Client{Timeout: 5 * time.Second}
+	resp, err := c.Head(url) //nolint:noctx — doctor check, not user data path
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+// networkConnectivityCheck probes the given endpoint and returns a Check.
+// probeFn is called instead of a real HTTP request when non-nil (enables tests).
+func networkConnectivityCheck(endpoint string, probeFn func(string) error) Check {
+	fn := probeFn
+	if fn == nil {
+		fn = DefaultNetworkCheckFn
+	}
+	if err := fn(endpoint); err != nil {
+		return Check{
+			Name:   "Network connectivity",
+			Status: StatusWarn,
+			Detail: fmt.Sprintf("cannot reach %s: %v", endpoint, err),
+		}
+	}
+	return Check{
+		Name:   "Network connectivity",
+		Status: StatusOK,
+		Detail: fmt.Sprintf("%s reachable", endpoint),
+	}
 }
 
 // configMismatchCheck returns a Check for SUBCMD-DOCTOR-09.

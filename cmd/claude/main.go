@@ -4283,6 +4283,29 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 		}
 	}
 
+	// CFG-41: worktree.auto — when the setting is enabled, auto-create a git
+	// worktree for this session using the session ID as the branch name.
+	// This runs AFTER the session ID is established so the name is stable.
+	// CC ref: utils/settings/types.ts worktree:{auto:boolean}.
+	// Note: --worktree flag takes precedence; skip auto if flag already set.
+	if options.Worktree == "" {
+		if err := applyWorktreeAutoSetting(mergedSettings, runner.SessionID, &runner.WorkingDirectory); err != nil {
+			return runner, fmt.Errorf("worktree.auto: %w", err)
+		}
+	}
+
+	// CFG-42: autoMemoryEnabled / autoMemoryDirectory — when autoMemoryEnabled is
+	// true and autoMemoryDirectory is set, wire runner.RelevantMemoryDir so the
+	// memory directory is included in the system prompt and model can write to it.
+	// CC ref: src/memdir/paths.ts getAutoMemPath; getAutoMemEntrypoint.
+	// The actual memory writes happen when the model calls the file-write tool
+	// on files under this directory (same as CC's MEMORY.md pattern).
+	if runner.RelevantMemoryDir == "" {
+		if dir := resolveAutoMemoryDir(mergedSettings, runner.WorkingDirectory); dir != "" {
+			runner.RelevantMemoryDir = dir
+		}
+	}
+
 	// CLI-FLAG-38: --file <file_id:relative_path> downloads files from the Anthropic
 	// Files API to disk before the session starts.
 	// CC ref: src/services/api/filesApi.ts downloadSessionFiles; main.tsx:1304-1330.

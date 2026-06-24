@@ -5,6 +5,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"ccgo/internal/contracts"
 )
 
 // createWorktreeIfRequested creates a git worktree when options.Worktree is non-empty.
@@ -37,4 +40,30 @@ func createWorktreeIfRequested(options cliOptions, wd *string) error {
 
 	*wd = worktreePath
 	return nil
+}
+
+// applyWorktreeAutoSetting checks the worktree.auto setting and, when enabled,
+// automatically creates a git worktree for the session (CFG-41).
+// The worktree name is derived from the session ID (first 8 chars) or a
+// timestamp fallback so it is unique per session.
+// CC ref: utils/settings/types.ts worktree:{auto:boolean}.
+func applyWorktreeAutoSetting(merged contracts.Settings, sessionID contracts.ID, wd *string) error {
+	if merged.Worktree == nil || merged.Worktree.Auto == nil || !*merged.Worktree.Auto {
+		return nil
+	}
+	// Derive a short deterministic name from the session ID.
+	name := worktreeAutoName(string(sessionID))
+	return createWorktreeIfRequested(cliOptions{Worktree: name}, wd)
+}
+
+// worktreeAutoName returns a short safe worktree branch name from a session ID
+// or a timestamp fallback when the session ID is empty.
+func worktreeAutoName(sessionID string) string {
+	if len(sessionID) >= 8 {
+		return "auto-" + sessionID[:8]
+	}
+	if sessionID != "" {
+		return "auto-" + sessionID
+	}
+	return "auto-" + time.Now().UTC().Format("20060102-150405")
 }

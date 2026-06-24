@@ -28,6 +28,8 @@ const (
 	DialogGeneric    DialogKind = ""
 	DialogPermission DialogKind = "permission"
 	DialogTask       DialogKind = "task"
+	// DialogSurvey is a feedback/skill survey overlay (CFG-49).
+	DialogSurvey     DialogKind = "survey"
 )
 
 type Dialog struct {
