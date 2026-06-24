@@ -176,6 +176,12 @@ type InteractiveOptions struct {
 	// When non-empty, its stdout is used as the status bar content.
 	// CC ref: utils/settings/types.ts statusLine:{type:"command",command:string}.
 	StatusLineCommand string
+
+	// CompanyAnnouncements holds enterprise announcement messages to display at
+	// REPL startup (CFG-48). Each string is printed as a banner line before the
+	// first prompt. Sourced from mergedSettings.CompanyAnnouncements (policy layer).
+	// CC ref: utils/settings/types.ts companyAnnouncements; screens/REPL.tsx startup.
+	CompanyAnnouncements []string
 }
 
 // buildOverlaySubmitHandler composes a single overlay-submit handler that
@@ -412,6 +418,14 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 	defer func() {
 		_ = base.RunSessionEndHooks(context.Background(), conversation.SessionEndPromptInputExit)
 	}()
+
+	// CFG-48: display company announcement messages at startup.
+	// CC ref: screens/REPL.tsx companyAnnouncements block; utils/settings/types.ts.
+	for _, msg := range opts.CompanyAnnouncements {
+		if msg != "" {
+			_ = term.WriteString("[Announcement] " + msg + "\n")
+		}
+	}
 
 	// W-C05: when a live engine pointer is provided, replace base.Permissions
 	// with a thin wrapper that delegates DecideTool to *eng on every call.

@@ -642,18 +642,21 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	}
 
 	opts := repl.InteractiveOptions{
-		AgentRegistry:   sharedRegistry,
-		Settings:        writer,
-		Registry:        cmdRegistry.Visible(),
-		Mode:            runner.PermissionMode,
-		Engine:          engineFromDecider(runner.Permissions),
-		EditorMode:      mergedSettings.EditorMode,
-		PromptHistory:   promptHistory,
-		MemoryFiles:     memoryFiles,
-		ResumeEntries:   resumeEntries,
-		CustomKeymap:    customKeymap,
-		MCPApprovalPath: config.LocalSettingsPath(runner.WorkingDirectory),
-		MCPManager:      mcpMgr,
+		AgentRegistry:        sharedRegistry,
+		Settings:             writer,
+		Registry:             cmdRegistry.Visible(),
+		Mode:                 runner.PermissionMode,
+		Engine:               engineFromDecider(runner.Permissions),
+		EditorMode:           mergedSettings.EditorMode,
+		PromptHistory:        promptHistory,
+		MemoryFiles:          memoryFiles,
+		ResumeEntries:        resumeEntries,
+		CustomKeymap:         customKeymap,
+		MCPApprovalPath:      config.LocalSettingsPath(runner.WorkingDirectory),
+		MCPManager:           mcpMgr,
+		// CFG-48: display enterprise announcements at session startup.
+		// CC ref: utils/settings/types.ts companyAnnouncements; LogoV2.tsx:82-86.
+		CompanyAnnouncements: mergedSettings.CompanyAnnouncements,
 		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
 		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
 		OnModelChange: func(m string) {

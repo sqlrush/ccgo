@@ -36,6 +36,7 @@ func PolicyFromSettings(s contracts.Settings) Policy {
 //   - DenyWrite: all settings.json / settings.local.json paths (SBX-40)
 //   - DenyWrite: .claude/skills in originalCwd (and currentCwd if different) (SBX-41)
 //   - DenyWrite: existing bare-repo files (HEAD/objects/refs/hooks/config) in cwd (SBX-42)
+//   - AllowWrite: main repo path when cwd is a git worktree (SBX-44)
 //   - AllowWrite: permissions.additionalDirectories (SBX-45)
 //   - AllowWrite: FileEdit allow permission rules (SBX-46)
 //   - DenyWrite: FileEdit deny permission rules (SBX-46)
@@ -119,6 +120,17 @@ func PolicyFromSettingsAt(s contracts.Settings, originalCwd, currentCwd string) 
 		}
 	}
 
+	// SBX-44: Git worktree detection — allow write to main repo path.
+	// In a worktree, .git is a file (not a directory) containing
+	// "gitdir: /path/to/main/repo/.git/worktrees/name".
+	// The main repo path is needed for git operations (HEAD, objects, refs).
+	// CC ref: sandbox-adapter.ts:282-287, 390-438.
+	for _, dir := range uniqueDirs(originalCwd, currentCwd) {
+		if mainRepo := detectWorktreeMainRepo(dir); mainRepo != "" && mainRepo != dir {
+			p.AllowWrite = append(p.AllowWrite, mainRepo)
+		}
+	}
+
 	// SBX-45: permissions.additionalDirectories → AllowWrite
 	if s.Permissions != nil {
 		for _, dir := range s.Permissions.AdditionalDirectories {
@@ -145,6 +157,49 @@ func PolicyFromSettingsAt(s contracts.Settings, originalCwd, currentCwd string) 
 	}
 
 	return p
+}
+
+// detectWorktreeMainRepo detects whether dir is a git worktree and, if so,
+// returns the absolute path of the main repository root.
+// In a worktree, .git is a file (not a directory) containing a line like:
+//
+//	gitdir: /path/to/main/repo/.git/worktrees/worktree-name
+//
+// The main repo path is the portion of gitdir before "/.git/worktrees/".
+// Returns "" when dir is not a worktree or detection fails.
+//
+// SBX-44: CC ref: sandbox-adapter.ts:417-438 (detectWorktreeMainRepo).
+func detectWorktreeMainRepo(dir string) string {
+	gitPath := filepath.Join(dir, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil || info.IsDir() {
+		// Not a file → not a worktree (or no .git at all)
+		return ""
+	}
+	data, err := os.ReadFile(gitPath)
+	if err != nil {
+		return ""
+	}
+	// Parse "gitdir: /path/to/.git/worktrees/name"
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "gitdir:") {
+			continue
+		}
+		gitdir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
+		if !filepath.IsAbs(gitdir) {
+			gitdir = filepath.Join(dir, gitdir)
+		}
+		gitdir = filepath.Clean(gitdir)
+		// Match the /.git/worktrees/ segment to extract main repo path.
+		marker := string(filepath.Separator) + ".git" + string(filepath.Separator) + "worktrees" + string(filepath.Separator)
+		idx := strings.LastIndex(gitdir, marker)
+		if idx < 0 {
+			return ""
+		}
+		return gitdir[:idx]
+	}
+	return ""
 }
 
 // bareRepoFileNames are the files git uses to identify a bare repository.

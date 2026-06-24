@@ -3,7 +3,9 @@ package bashtools
 import (
 	"testing"
 
+	"ccgo/internal/contracts"
 	"ccgo/internal/sandbox"
+	"ccgo/internal/tool"
 )
 
 // TestSandboxedCommandWrapsWhenEnabled asserts that when the sandbox is enabled
@@ -140,6 +142,70 @@ func TestSandboxExcludedCompoundCommandSkipsSandbox(t *testing.T) {
 	name, _ := sandboxedShellCommand("echo hi && git status", p, false)
 	if name != defaultShell() {
 		t.Fatalf("SBX-06: compound with excluded segment must bypass sandbox, got wrapper %q", name)
+	}
+}
+
+// TestCFG20_SandboxSettingsWiredViaBashTool verifies CFG-20:
+// settings.sandbox is fully wired to the Bash tool's sandbox enforcement path.
+// sandboxPolicyFromContext reads contracts.Settings from tool metadata and
+// PolicyFromSettings maps sandbox.enabled → Policy.Enabled — the same settings
+// value that sandbox-adapter.ts reads in CC (CC ref: utils/settings/types.ts:255+).
+func TestCFG20_SandboxSettingsWiredViaBashTool(t *testing.T) {
+	t.Parallel()
+
+	// Given: metadata carrying settings with sandbox.enabled=true
+	ctx := tool.Context{
+		Metadata: map[string]any{
+			tool.MetadataSettingsKey: contracts.Settings{
+				Sandbox: map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	// When: sandboxPolicyFromContext is called (the path callBash takes)
+	policy := sandboxPolicyFromContext(ctx)
+
+	// Then: Policy.Enabled reflects the settings value
+	if !policy.Enabled {
+		t.Fatal("CFG-20: settings.sandbox.enabled=true must yield Policy.Enabled=true")
+	}
+}
+
+// TestSBX58_PolicyRebuiltPerCall verifies SBX-58:
+// sandboxPolicyFromContext rebuilds the policy from metadata on every call,
+// so a settings change between two Bash tool calls is reflected in the new Policy
+// without any explicit refreshConfig() mechanism.
+//
+// This is ccgo's answer to CC's refreshConfig(): rather than mutable module
+// state, the policy is derived from the live tool.Context metadata injected
+// freshly for each turn/call.
+// CC ref: sandbox-adapter.ts:798,920,941 refreshConfig().
+func TestSBX58_PolicyRebuiltPerCall(t *testing.T) {
+	t.Parallel()
+	// First call: sandbox disabled in settings.
+	ctx1 := tool.Context{
+		Metadata: map[string]any{
+			tool.MetadataSettingsKey: contracts.Settings{
+				Sandbox: map[string]any{"enabled": false},
+			},
+		},
+	}
+	p1 := sandboxPolicyFromContext(ctx1)
+	if p1.Enabled {
+		t.Fatal("SBX-58: policy from ctx1 must have Enabled=false")
+	}
+
+	// Second call: sandbox enabled. Policy must reflect updated settings.
+	ctx2 := tool.Context{
+		Metadata: map[string]any{
+			tool.MetadataSettingsKey: contracts.Settings{
+				Sandbox: map[string]any{"enabled": true},
+			},
+		},
+	}
+	p2 := sandboxPolicyFromContext(ctx2)
+	if !p2.Enabled {
+		t.Fatal("SBX-58: policy from ctx2 must have Enabled=true (settings changed)")
 	}
 }
 

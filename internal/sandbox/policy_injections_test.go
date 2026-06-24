@@ -315,6 +315,94 @@ func TestAutoAllowBashIfSandboxedZeroValuePolicy(t *testing.T) {
 	}
 }
 
+// TestDetectWorktreeMainRepo_NotWorktree verifies SBX-44:
+// When .git is a directory (normal repo), detectWorktreeMainRepo returns "".
+func TestDetectWorktreeMainRepo_NotWorktree(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectWorktreeMainRepo(dir); got != "" {
+		t.Fatalf("expected empty for normal repo, got %q", got)
+	}
+}
+
+// TestDetectWorktreeMainRepo_NoGit verifies SBX-44:
+// When .git does not exist, detectWorktreeMainRepo returns "".
+func TestDetectWorktreeMainRepo_NoGit(t *testing.T) {
+	dir := t.TempDir()
+	if got := detectWorktreeMainRepo(dir); got != "" {
+		t.Fatalf("expected empty when no .git, got %q", got)
+	}
+}
+
+// TestDetectWorktreeMainRepo_Worktree verifies SBX-44:
+// When .git is a file with a valid gitdir pointing into /.git/worktrees/, the
+// main repo path is extracted correctly.
+func TestDetectWorktreeMainRepo_Worktree(t *testing.T) {
+	// Build a fake worktree layout:
+	//   mainRepo/   (the main repo root)
+	//   worktreeDir/.git  → file with "gitdir: mainRepo/.git/worktrees/wt1"
+	mainRepo := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	gitdirTarget := filepath.Join(mainRepo, ".git", "worktrees", "wt1")
+	gitFileContent := "gitdir: " + gitdirTarget + "\n"
+	if err := os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte(gitFileContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := detectWorktreeMainRepo(worktreeDir)
+	if got != mainRepo {
+		t.Fatalf("SBX-44: expected main repo %q, got %q", mainRepo, got)
+	}
+}
+
+// TestPolicyFromSettingsWorktreeAllowWrite verifies SBX-44:
+// When cwd is a git worktree, PolicyFromSettingsAt injects main repo path into AllowWrite.
+func TestPolicyFromSettingsWorktreeAllowWrite(t *testing.T) {
+	// Build a fake worktree layout.
+	mainRepo := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	gitdirTarget := filepath.Join(mainRepo, ".git", "worktrees", "wt1")
+	gitFileContent := "gitdir: " + gitdirTarget + "\n"
+	if err := os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte(gitFileContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := contracts.Settings{
+		Sandbox: map[string]any{"enabled": true},
+	}
+	p := PolicyFromSettingsAt(s, worktreeDir, worktreeDir)
+	if !containsPath(p.AllowWrite, mainRepo) {
+		t.Fatalf("SBX-44: AllowWrite must contain main repo %q for worktree; got %v", mainRepo, p.AllowWrite)
+	}
+}
+
+// TestPolicyFromSettingsWorktreeNotDuplicated verifies SBX-44:
+// When the resolved main repo path equals cwd, AllowWrite is NOT updated
+// (the guard `mainRepo != dir` prevents self-allow).
+func TestPolicyFromSettingsWorktreeNotDuplicated(t *testing.T) {
+	// .git file points to dir/.git/worktrees/x → resolves to dir itself.
+	dir := t.TempDir()
+	gitdirTarget := filepath.Join(dir, ".git", "worktrees", "x")
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+gitdirTarget), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := contracts.Settings{
+		Sandbox: map[string]any{"enabled": true},
+	}
+	p := PolicyFromSettingsAt(s, dir, dir)
+	// dir should NOT appear in AllowWrite (mainRepo == dir → guard fires).
+	for _, w := range p.AllowWrite {
+		if w == dir {
+			t.Fatalf("SBX-44: AllowWrite must NOT self-include dir; got %v", p.AllowWrite)
+		}
+	}
+}
+
 // containsPath is a test helper that checks whether paths contains target.
 func containsPath(paths []string, target string) bool {
 	for _, p := range paths {

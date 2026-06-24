@@ -596,6 +596,10 @@ func (r Runner) toolMetadata() map[string]any {
 	if r.LSPNavigationManager != nil {
 		metadata[tool.MetadataLSPNavigationKey] = r.LSPNavigationManager
 	}
+	// CFG-38: propagate skipWebFetchPreflight setting so WebFetch respects it.
+	// CC ref: utils/settings/types.ts:255+ (skipWebFetchPreflight).
+	injectWebFetchSkipPreflight(metadata, settings.SkipWebFetchPreflight)
+
 	// Merge ExtraToolMetadata last so caller-supplied keys take precedence over
 	// auto-generated ones (e.g. QuestionAsker injected by the TUI loop).
 	for k, v := range r.ExtraToolMetadata {
