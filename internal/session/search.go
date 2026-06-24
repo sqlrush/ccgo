@@ -295,6 +295,87 @@ func truncateLine(text string, maxRunes int) string {
 	return string(runes[:maxRunes-3]) + "..."
 }
 
+// ListAllProjectSessions lists sessions from every project directory under the
+// Claude home directory (~/.claude/projects/*). Results are merged and sorted
+// newest-first by last modification time.
+//
+// SESS-09/10: cross-project resume picker — backs the /resume overlay when no
+// project-scoped directory is provided (e.g. at global startup).
+func ListAllProjectSessions() ([]SessionInfo, error) {
+	homeDir := platform.ClaudeHomeDir()
+	projectsDir := filepath.Join(homeDir, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var all []SessionInfo
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		// Treat the hashed project directory as a pseudo-root by passing its
+		// full path; ListProjectSessions reads <root>/.claude/projects/... but
+		// here we already have the hashed dir, so we pass the parent of the
+		// projects directory and use a custom listing instead.
+		dirPath := filepath.Join(projectsDir, entry.Name())
+		sessions, err := listSessionsFromDir(dirPath)
+		if err != nil {
+			continue // silently skip unreadable directories
+		}
+		all = append(all, sessions...)
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		return all[i].Modified.After(all[j].Modified)
+	})
+	return all, nil
+}
+
+// listSessionsFromDir reads all .jsonl files in dirPath as session files.
+// It is the low-level loader used by ListAllProjectSessions to enumerate a
+// hashed project directory directly.
+func listSessionsFromDir(dirPath string) ([]SessionInfo, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var sessions []SessionInfo
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
+			continue
+		}
+		path := filepath.Join(dirPath, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		id := contracts.ID(strings.TrimSuffix(entry.Name(), ".jsonl"))
+		title := ""
+		projectPath := ""
+		gitBranch := ""
+		if index, err := LoadTranscriptIndex(path, id); err == nil {
+			title = index.Title
+			projectPath = index.ProjectPath
+			gitBranch = index.GitBranch
+		}
+		sessions = append(sessions, SessionInfo{
+			ID:          id,
+			Path:        path,
+			Title:       title,
+			ProjectPath: projectPath,
+			GitBranch:   gitBranch,
+			Modified:    info.ModTime(),
+			Size:        info.Size(),
+		})
+	}
+	return sessions, nil
+}
+
 // FindSessionGlobally searches all project directories under the Claude home
 // for a session file matching sessionID. Returns the absolute path and true
 // when found.

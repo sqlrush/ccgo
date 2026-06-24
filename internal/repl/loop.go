@@ -45,12 +45,13 @@ type Loop struct {
 	life   tui.ScreenLifecycle
 	dialog *tui.DialogRuntime
 
-	inputCh    chan tui.Key
-	eventCh    chan conversation.Event
-	askCh      chan askRequest
-	questionCh chan questionRequest
-	doneCh     chan turnOutcome
-	resizeCh   chan resizeEvent
+	inputCh        chan tui.Key
+	eventCh        chan conversation.Event
+	askCh          chan askRequest
+	questionCh     chan questionRequest
+	elicitationCh  chan elicitationPending
+	doneCh         chan turnOutcome
+	resizeCh       chan resizeEvent
 	tickCh     <-chan time.Time
 	stopTick   func()
 	spinner    Spinner
@@ -68,6 +69,11 @@ type Loop struct {
 	// channel is waiting. It is set by showQuestion and cleared when the
 	// overlay submits or is dismissed.
 	activeQuestion *questionRequest
+
+	// activeElicitation, when non-nil, holds the pending elicitation whose reply
+	// channel is waiting. Cleared when the overlay submits or is dismissed.
+	// G29: MCP-34/35 elicitation bridge.
+	activeElicitation *elicitationPending
 
 	// activeOverlay, when non-nil, receives all key events before normal
 	// prompt handling.  Cleared when the overlay submits or is dismissed.
@@ -94,6 +100,11 @@ type Loop struct {
 	// showQuestion so tests can synchronize input delivery after the overlay is
 	// rendered.
 	onQuestionShown func()
+
+	// onElicitationShown is a test seam; nil in production. Called at the end of
+	// showElicitation so tests can synchronize input delivery after the overlay
+	// is rendered. G29: MCP-34/35 elicitation bridge.
+	onElicitationShown func()
 
 	// onPermissionAskNotify, when non-nil, is called in a goroutine each time a
 	// permission dialog is displayed. Production code wires this to
@@ -295,17 +306,18 @@ func NewLoop(t Terminal, history []string) *Loop {
 		w, h = 80, 24
 	}
 	return &Loop{
-		term:       t,
-		screen:     tui.NewREPLScreen(w, h, history),
-		dialog:     tui.NewDialogRuntime(),
-		inputCh:    make(chan tui.Key, 64),
-		eventCh:    make(chan conversation.Event, 256),
-		askCh:      make(chan askRequest, 4),
-		questionCh: make(chan questionRequest, 4),
-		doneCh:     make(chan turnOutcome, 1),
-		resizeCh:   make(chan resizeEvent, 1),
-		width:      w,
-		height:     h,
+		term:          t,
+		screen:        tui.NewREPLScreen(w, h, history),
+		dialog:        tui.NewDialogRuntime(),
+		inputCh:       make(chan tui.Key, 64),
+		eventCh:       make(chan conversation.Event, 256),
+		askCh:         make(chan askRequest, 4),
+		questionCh:    make(chan questionRequest, 4),
+		elicitationCh: make(chan elicitationPending, 4),
+		doneCh:        make(chan turnOutcome, 1),
+		resizeCh:      make(chan resizeEvent, 1),
+		width:         w,
+		height:        h,
 	}
 }
 
@@ -317,17 +329,18 @@ func NewLoopFromHistoryEntries(t Terminal, entries []session.HistoryEntry) *Loop
 		w, h = 80, 24
 	}
 	return &Loop{
-		term:       t,
-		screen:     tui.NewREPLScreenFromHistoryEntries(w, h, entries),
-		dialog:     tui.NewDialogRuntime(),
-		inputCh:    make(chan tui.Key, 64),
-		eventCh:    make(chan conversation.Event, 256),
-		askCh:      make(chan askRequest, 4),
-		questionCh: make(chan questionRequest, 4),
-		doneCh:     make(chan turnOutcome, 1),
-		resizeCh:   make(chan resizeEvent, 1),
-		width:      w,
-		height:     h,
+		term:          t,
+		screen:        tui.NewREPLScreenFromHistoryEntries(w, h, entries),
+		dialog:        tui.NewDialogRuntime(),
+		inputCh:       make(chan tui.Key, 64),
+		eventCh:       make(chan conversation.Event, 256),
+		askCh:         make(chan askRequest, 4),
+		questionCh:    make(chan questionRequest, 4),
+		elicitationCh: make(chan elicitationPending, 4),
+		doneCh:        make(chan turnOutcome, 1),
+		resizeCh:      make(chan resizeEvent, 1),
+		width:         w,
+		height:        h,
 	}
 }
 
@@ -344,6 +357,7 @@ func (l *Loop) Run(ctx context.Context) error {
 	defer restore()
 	defer l.denyPendingAsks()
 	defer l.denyPendingQuestions()
+	defer l.denyPendingElicitations()
 
 	// REPL-60: ExtendedKeys enables the Kitty keyboard protocol (ESC[>4m) when
 	// the terminal supports it. Sourced from InteractiveOptions.ExtendedKeys.
@@ -392,6 +406,11 @@ func (l *Loop) Run(ctx context.Context) error {
 			}
 		case qr := <-l.questionCh:
 			l.showQuestion(qr)
+			if err := l.render(); err != nil {
+				return err
+			}
+		case ep := <-l.elicitationCh:
+			l.showElicitation(ep)
 			if err := l.render(); err != nil {
 				return err
 			}
@@ -1112,8 +1131,15 @@ func (l *Loop) handleOverlaySubmit(submit string) bool {
 		"elicitation:", "config:", "perm:",
 	} {
 		if strings.HasPrefix(submit, prefix) {
-			if l.onElicitationReply != nil && strings.HasPrefix(submit, "elicitation:") {
-				l.onElicitationReply(submit)
+			if strings.HasPrefix(submit, "elicitation:") {
+				// G29: deliver to the blocking loopElicitationPrompt goroutine.
+				if l.activeElicitation != nil {
+					l.activeElicitation.reply <- submit
+					l.activeElicitation = nil
+				}
+				if l.onElicitationReply != nil {
+					l.onElicitationReply(submit)
+				}
 			}
 			if l.onOverlaySubmit != nil {
 				l.onOverlaySubmit(submit)
@@ -1161,6 +1187,52 @@ func (l *Loop) denyPendingQuestions() {
 		select {
 		case qr := <-l.questionCh:
 			qr.reply <- questionReply{err: errVal}
+		default:
+			return
+		}
+	}
+}
+
+// elicitationPending holds a pending MCP elicitation/create request and the
+// channel used to deliver the user's reply back to the blocking prompt goroutine.
+// G29: MCP-34/35 elicitation bridge.
+type elicitationPending struct {
+	ov    *elicitationOverlay
+	reply chan string // receives "elicitation:<action>" submit token
+}
+
+// showElicitation sets activeOverlay to the elicitation overlay and records the
+// pending request so the submit handler can unblock the waiting goroutine.
+// onElicitationShown (if set) is called last so tests can gate input delivery.
+func (l *Loop) showElicitation(ep elicitationPending) {
+	l.activeElicitation = &ep
+	l.activeOverlay = ep.ov
+	if l.onElicitationShown != nil {
+		l.onElicitationShown()
+	}
+}
+
+// showElicitationOverlay is the production bridge function passed to
+// loopElicitationPrompt. It sends the overlay to elicitationCh (non-blocking
+// for the caller goroutine) and returns a channel that receives the reply
+// from handleOverlaySubmit once the user makes a choice.
+func (l *Loop) showElicitationOverlay(ov *elicitationOverlay) <-chan string {
+	reply := make(chan string, 1)
+	l.elicitationCh <- elicitationPending{ov: ov, reply: reply}
+	return reply
+}
+
+// denyPendingElicitations cancels any blocked elicitation goroutine when the
+// loop exits, sending a "elicitation:cancel" reply so the caller does not leak.
+func (l *Loop) denyPendingElicitations() {
+	if l.activeElicitation != nil {
+		l.activeElicitation.reply <- "elicitation:cancel"
+		l.activeElicitation = nil
+	}
+	for {
+		select {
+		case ep := <-l.elicitationCh:
+			ep.reply <- "elicitation:cancel"
 		default:
 			return
 		}

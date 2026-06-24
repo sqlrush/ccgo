@@ -31,6 +31,11 @@ type ServerToolOptions struct {
 	MaxResultChars      int
 	DisableResources    bool
 	DisablePrompts      bool
+	// ElicitationHandler, when non-nil, is wired into the ProtocolClient as an
+	// inbound request handler so that elicitation/create requests from the MCP
+	// server are routed to the interactive UI front-end.
+	// G29: MCP-34/35 elicitation bridge.
+	ElicitationHandler ElicitationHandler
 }
 
 type ServerToolSet struct {
@@ -132,6 +137,11 @@ func newProtocolClientWithOptions(transport RPCTransport, options ServerToolOpti
 	client := NewProtocolClient(transport)
 	if len(options.ClientRoots) > 0 {
 		client.SetRoots(options.ClientRoots)
+	}
+	// G29: MCP-34/35 — wire elicitation handler so inbound elicitation/create
+	// requests from the server are routed to the interactive UI front-end.
+	if options.ElicitationHandler != nil {
+		client.SetRequestHandler(ElicitationRequestHandler(options.ElicitationHandler, nil))
 	}
 	return client
 }

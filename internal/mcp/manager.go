@@ -269,6 +269,32 @@ func (m *Manager) SetServers(ctx context.Context, newServers map[string]contract
 	}, nil
 }
 
+// elicitationRequestHandler is the interface satisfied by ProtocolClient so we
+// can set the elicitation request handler without importing the concrete type.
+type elicitationRequestHandler interface {
+	SetRequestHandler(RPCRequestHandler)
+}
+
+// SetElicitationHandler wires an ElicitationHandler into every currently-
+// connected client that implements elicitationRequestHandler (i.e. *ProtocolClient).
+// Call this after Start() and after the interactive REPL loop is ready to
+// show overlay dialogs. Future reconnects do not automatically inherit the
+// handler; callers should re-call after Reconnect if needed.
+// G29: MCP-34/35 elicitation bridge.
+func (m *Manager) SetElicitationHandler(handler ElicitationHandler) {
+	rpcHandler := ElicitationRequestHandler(handler, nil)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, entry := range m.servers {
+		if entry.client == nil {
+			continue
+		}
+		if setter, ok := entry.client.(elicitationRequestHandler); ok {
+			setter.SetRequestHandler(rpcHandler)
+		}
+	}
+}
+
 // Client returns the live mcp.Client for the named server.
 // Returns an error if the server is unknown, disabled, or in a failed state.
 func (m *Manager) Client(name string) (Client, error) {

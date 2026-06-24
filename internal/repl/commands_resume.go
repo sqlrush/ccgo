@@ -84,6 +84,29 @@ func resumeHandler(cwd string) CommandHandler {
 	)
 }
 
+// ResumeEntriesFromAllProjects lists sessions from every project directory under
+// the Claude home directory and converts them to ResumeEntry values suitable for
+// populating a ResumePicker overlay. Results are sorted newest-first.
+//
+// SESS-09/10: cross-project resume picker — used at startup when the caller wants
+// to show a global session list rather than a project-scoped one.
+func ResumeEntriesFromAllProjects() ([]ResumeEntry, error) {
+	infos, err := session.ListAllProjectSessions()
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]ResumeEntry, 0, len(infos))
+	for _, info := range infos {
+		entries = append(entries, ResumeEntry{
+			ID:          string(info.ID),
+			Summary:     info.Title,
+			ProjectPath: info.ProjectPath,
+			ModifiedUnix: info.Modified.Unix(),
+		})
+	}
+	return entries, nil
+}
+
 // resolveResumeTarget matches arg against the entry list using three strategies:
 // exact ID match, 1-based index, then case-insensitive substring of title or ID.
 func resolveResumeTarget(entries []resumeEntry, arg string) (resumeEntry, bool) {

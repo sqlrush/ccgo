@@ -660,6 +660,15 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 		}
 	}
 
+	// G29: MCP-34/35 elicitation bridge — wire the interactive elicitation handler
+	// into the MCPManager so that elicitation/create requests from MCP servers open
+	// the overlay in the REPL and return the user's decision.
+	// CC ref: src/components/mcp/ElicitationDialog.tsx.
+	if opts.MCPManager != nil {
+		elicitPrompt := loopElicitationPrompt(loop.showElicitationOverlay)
+		opts.MCPManager.SetElicitationHandler(mcp.InteractiveElicitationHandler(elicitPrompt))
+	}
+
 	return loop.Run(ctx)
 }
 
