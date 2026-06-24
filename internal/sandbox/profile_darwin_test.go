@@ -97,3 +97,44 @@ func TestBuildSeatbeltProfileNoDomainCommentWhenEmpty(t *testing.T) {
 		t.Fatalf("SBX-48: profile must not emit domain comments when no domains configured:\n%s", profile)
 	}
 }
+
+// TestBuildSeatbeltProfileWithProxyPort verifies SBX-48: when a proxy port is
+// supplied, the seatbelt profile restricts direct network access to the proxy's
+// loopback port only, forcing all traffic through the domain-filtering proxy.
+func TestBuildSeatbeltProfileWithProxyPort(t *testing.T) {
+	p := Policy{
+		Enabled:        true,
+		AllowedDomains: []string{"api.github.com"},
+		DeniedDomains:  []string{"evil.com"},
+	}
+	const proxyPort = 54321
+	profile := buildSeatbeltProfileWithProxy(p, "/tmp/work", proxyPort)
+
+	// Must deny default network.
+	if !strings.Contains(profile, "(deny network*)") {
+		t.Errorf("SBX-48 proxy profile must contain '(deny network*)'; got:\n%s", profile)
+	}
+	// Must allow outbound only to the proxy port.
+	wantRule := `(allow network-outbound (remote ip "localhost:54321"))`
+	if !strings.Contains(profile, wantRule) {
+		t.Errorf("SBX-48 proxy profile must allow only proxy port loopback:\nwant: %s\ngot:\n%s", wantRule, profile)
+	}
+	// Must NOT emit a blanket (allow network*).
+	if strings.Contains(profile, "(allow network*)") {
+		t.Errorf("SBX-48 proxy profile must not emit blanket '(allow network*)'; got:\n%s", profile)
+	}
+	// Must document the configured domains.
+	if !strings.Contains(profile, "api.github.com") {
+		t.Errorf("SBX-48: proxy profile must document allowed domain; got:\n%s", profile)
+	}
+}
+
+// TestBuildSeatbeltProfileWithProxyPortZeroFallsBack verifies that proxyPort=0
+// uses the normal AllowNetwork rule (no proxy-port injection).
+func TestBuildSeatbeltProfileWithProxyPortZeroFallsBack(t *testing.T) {
+	p := Policy{Enabled: true, AllowNetwork: true}
+	profile := buildSeatbeltProfileWithProxy(p, "/tmp/work", 0)
+	if !strings.Contains(profile, "(allow network*)") {
+		t.Errorf("profile with AllowNetwork=true and proxyPort=0 must contain '(allow network*)'; got:\n%s", profile)
+	}
+}

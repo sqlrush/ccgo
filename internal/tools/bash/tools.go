@@ -1066,7 +1066,15 @@ func runBashCommand(ctx tool.Context, command string, timeout time.Duration, dan
 
 	policy := sandboxPolicyFromContext(ctx)
 	name, args := sandboxedShellCommand(command, policy, dangerouslyDisableSandbox)
+	// SBX-48: start domain-filtering proxy when policy has per-domain rules.
+	proxyVars, stopProxy, proxyErr := startProxyForPolicy(policy)
+	if proxyErr != nil && policy.FailIfUnavailable {
+		cancel()
+		return bashResult{ExitCode: 1, Stderr: proxyErr.Error()}
+	}
+	defer stopProxy()
 	cmd := exec.CommandContext(runCtx, name, args...)
+	cmd.Env = envWithProxyVars(proxyVars)
 	configureBashCommand(cmd)
 	if dir := bashEffectiveCWD(ctx); dir != "" {
 		cmd.Dir = dir
@@ -1110,7 +1118,14 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	runCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	policy := sandboxPolicyFromContext(ctx)
 	name, args := sandboxedShellCommand(command, policy, input.DangerouslyDisableSandbox)
+	// SBX-48: start domain-filtering proxy for background commands too.
+	proxyVars, stopProxy, proxyErr := startProxyForPolicy(policy)
+	if proxyErr != nil && policy.FailIfUnavailable {
+		cancel()
+		return contracts.ToolResult{}, proxyErr
+	}
 	cmd := exec.CommandContext(runCtx, name, args...)
+	cmd.Env = envWithProxyVars(proxyVars)
 	configureBashCommand(cmd)
 	if dir := bashEffectiveCWD(ctx); dir != "" {
 		cmd.Dir = dir
@@ -1134,12 +1149,14 @@ func startBackgroundBash(ctx tool.Context, input bashInput, timeout time.Duratio
 	})
 	if err := cmd.Start(); err != nil {
 		cancel()
+		stopProxy()
 		return contracts.ToolResult{}, err
 	}
 	state.Add(task)
 	sendBashBackgroundProgress(sink, "bash_background_started", task.Snapshot())
 	go func() {
 		defer cancel()
+		defer stopProxy() // SBX-48: proxy must outlive the background command
 		err := cmd.Wait()
 		durationMS := time.Since(task.StartedAt).Milliseconds()
 		timedOut := errors.Is(runCtx.Err(), context.DeadlineExceeded)

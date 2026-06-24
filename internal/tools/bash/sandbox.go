@@ -1,8 +1,12 @@
 package bashtools
 
 import (
+	"fmt"
+	"os"
+
 	"ccgo/internal/contracts"
 	"ccgo/internal/sandbox"
+	"ccgo/internal/sandbox/netproxy"
 	"ccgo/internal/tool"
 )
 
@@ -93,4 +97,46 @@ func failClosedCommand(_ sandbox.Policy) (string, []string) {
 // post-command cleanup of bare-repo stubs planted by the sandbox (SBX-43).
 func scrubBareGitRepoFiles(dir string) {
 	sandbox.ScrubBareGitRepoFiles(dir)
+}
+
+// startProxyForPolicy starts a domain-filtering HTTP proxy when the Policy has
+// per-domain network rules (AllowedDomains or DeniedDomains is non-empty) and
+// the sandbox is active.
+//
+// SBX-48: the proxy is the enforcement layer for per-domain network filtering.
+// macOS seatbelt and Linux landlock cannot express DNS-level rules at the kernel
+// level; the proxy fills that gap for HTTP/HTTPS traffic.
+//
+// Returns:
+//   - envVars: the proxy env vars to inject into the sandboxed command's Env.
+//     If no proxy is needed, returns nil (caller should use os.Environ()).
+//   - stop: must be called (via defer) after the command completes.
+//   - err: non-nil only on proxy listen failure; callers should log and continue
+//     unfiltered (best-effort) unless p.FailIfUnavailable.
+//
+// The returned envVars are meant to be appended to os.Environ() so the
+// sandboxed process routes all HTTP/HTTPS traffic through the local filter.
+func startProxyForPolicy(p sandbox.Policy) (envVars []string, stop func(), err error) {
+	noop := func() {}
+	if !netproxy.NeedsProxy(p.AllowedDomains, p.DeniedDomains) {
+		return nil, noop, nil
+	}
+	_, vars, stopFn, startErr := netproxy.StartForSandbox(p.AllowedDomains, p.DeniedDomains)
+	if startErr != nil {
+		return nil, noop, fmt.Errorf("sandbox: start domain-filtering proxy: %w", startErr)
+	}
+	return vars, stopFn, nil
+}
+
+// envWithProxyVars returns a copy of the current process environment with the
+// given proxy vars appended. If proxyVars is nil or empty, it returns
+// os.Environ() unchanged. The result is safe to assign to exec.Cmd.Env.
+func envWithProxyVars(proxyVars []string) []string {
+	base := os.Environ()
+	if len(proxyVars) == 0 {
+		return base
+	}
+	merged := make([]string, len(base), len(base)+len(proxyVars))
+	copy(merged, base)
+	return append(merged, proxyVars...)
 }

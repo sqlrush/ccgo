@@ -1,6 +1,8 @@
 package bashtools
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"ccgo/internal/contracts"
@@ -206,6 +208,76 @@ func TestSBX58_PolicyRebuiltPerCall(t *testing.T) {
 	p2 := sandboxPolicyFromContext(ctx2)
 	if !p2.Enabled {
 		t.Fatal("SBX-58: policy from ctx2 must have Enabled=true (settings changed)")
+	}
+}
+
+// TestSBX48_StartProxyForPolicyNoProxy verifies that startProxyForPolicy returns
+// nil env vars and a noop stop when the policy has no domain rules.
+func TestSBX48_StartProxyForPolicyNoProxy(t *testing.T) {
+	p := sandbox.Policy{Enabled: true, AllowNetwork: true}
+	envVars, stop, err := startProxyForPolicy(p)
+	if err != nil {
+		t.Fatalf("SBX-48: startProxyForPolicy with no domains returned error: %v", err)
+	}
+	defer stop()
+	if envVars != nil {
+		t.Errorf("SBX-48: no domain rules → envVars must be nil, got %v", envVars)
+	}
+}
+
+// TestSBX48_StartProxyForPolicyWithDomains verifies that startProxyForPolicy
+// returns proxy env vars (HTTP_PROXY etc.) when AllowedDomains is non-empty.
+// This confirms the proxy wiring is prod-reachable (not nil-DI).
+func TestSBX48_StartProxyForPolicyWithDomains(t *testing.T) {
+	p := sandbox.Policy{
+		Enabled:        true,
+		AllowedDomains: []string{"api.github.com"},
+	}
+	envVars, stop, err := startProxyForPolicy(p)
+	if err != nil {
+		t.Fatalf("SBX-48: startProxyForPolicy with domains returned error: %v", err)
+	}
+	defer stop()
+	if len(envVars) == 0 {
+		t.Fatal("SBX-48: AllowedDomains set → envVars must be non-empty (proxy started)")
+	}
+	// Must include HTTP_PROXY and HTTPS_PROXY.
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"} {
+		found := false
+		for _, e := range envVars {
+			if strings.HasPrefix(e, key+"=") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("SBX-48: env missing %s (proxy vars not injected)", key)
+		}
+	}
+}
+
+// TestSBX48_EnvWithProxyVarsNilPassthrough verifies that envWithProxyVars(nil)
+// returns os.Environ() unchanged.
+func TestSBX48_EnvWithProxyVarsNilPassthrough(t *testing.T) {
+	got := envWithProxyVars(nil)
+	want := os.Environ()
+	if len(got) != len(want) {
+		t.Errorf("SBX-48: envWithProxyVars(nil) len = %d, want %d (os.Environ)", len(got), len(want))
+	}
+}
+
+// TestSBX48_EnvWithProxyVarsMerges verifies that proxy vars are appended to
+// os.Environ() when provided.
+func TestSBX48_EnvWithProxyVarsMerges(t *testing.T) {
+	extra := []string{"HTTP_PROXY=http://127.0.0.1:9999"}
+	got := envWithProxyVars(extra)
+	base := os.Environ()
+	if len(got) != len(base)+1 {
+		t.Errorf("SBX-48: envWithProxyVars merged len = %d, want %d", len(got), len(base)+1)
+	}
+	last := got[len(got)-1]
+	if last != extra[0] {
+		t.Errorf("SBX-48: proxy var not at end: got %q, want %q", last, extra[0])
 	}
 }
 
