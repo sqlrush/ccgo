@@ -1,9 +1,59 @@
 package repl
 
 import (
+	"fmt"
+	"net/url"
+
 	"ccgo/internal/contracts"
 	"ccgo/internal/tool"
 )
+
+// toolSpecificDialogContent returns enriched dialog content for a permission
+// ask request, matching the tool-specific UX from CC:
+//   - Bash/PowerShell: show the full command text
+//   - WebFetch: show the host/domain extracted from the URL
+//   - Edit/Write: show the file path
+//   - Other tools: fall through to the raw description
+//
+// PERM-TOOL-02: tool-specific permission dialog content.
+// CC ref: src/components/permissions/BashPermissionRequest/BashPermissionRequest.tsx
+//         src/components/permissions/WebFetchPermissionRequest/WebFetchPermissionRequest.tsx
+func toolSpecificDialogContent(req tool.PermissionAskRequest) string {
+	switch req.ToolName {
+	case "Bash", "PowerShell":
+		// Show the full command.
+		if req.Description != "" {
+			return fmt.Sprintf("Command: %s", req.Description)
+		}
+		return req.ToolName
+	case "WebFetch":
+		// Extract domain from description (usually the URL).
+		if req.Description != "" {
+			if u, err := url.Parse(req.Description); err == nil && u.Host != "" {
+				return fmt.Sprintf("Host: %s\nURL: %s", u.Host, req.Description)
+			}
+		}
+		// Fall back to raw description.
+		if req.Description != "" {
+			return req.Description
+		}
+		return "Fetch"
+	case "Edit", "Write", "FileEdit", "FileWrite", "NotebookEdit", "SedEdit":
+		content := req.Path
+		if content == "" {
+			content = req.Description
+		}
+		if req.Path != "" && req.Description != "" && req.Path != req.Description {
+			return fmt.Sprintf("File: %s\n%s", req.Path, req.Description)
+		}
+		return content
+	default:
+		if req.Description != "" {
+			return req.Description
+		}
+		return req.ToolName
+	}
+}
 
 const (
 	actionAllowOnce = "Allow once"

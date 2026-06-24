@@ -312,19 +312,25 @@ func newProductionRouterFull(cwd string, registry []contracts.Command, agReg age
 	router.Register("theme", themeHandler())
 	router.Register("effort", effortHandler())
 	router.Register("vim", vimHandler())
-	router.Register("permissions", permissionsHandler())
-	router.Register("allowed-tools", permissionsHandler())
+	// PERM-PERSIST-06 (G24): /permissions with no args opens the interactive overlay;
+	// with subcommands (allow/deny/ask/remove) still performs text-based mutation.
+	router.Register("permissions", permissionsOverlayHandlerWith(config.UserSettingsPath(), config.AddPermissionRule, config.RemovePermissionRule))
+	router.Register("allowed-tools", permissionsOverlayHandlerWith(config.UserSettingsPath(), config.AddPermissionRule, config.RemovePermissionRule))
 	router.Register("export", exportHandler(cwd))
 	router.Register("hooks", hooksHandler(func() contracts.Settings {
 		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
 		return s
 	}))
-	// CMD-CONFIG-01: register /config on the REPL router so it doesn't fall
-	// through to the model. Returns a text summary of key settings.
-	router.Register("config", configHandler(func() contracts.Settings {
-		s, _ := config.LoadSettingsFile(config.UserSettingsPath())
-		return s
-	}, cwd))
+	// CMD-CONFIG-01 (G24): /config opens interactive overlay (navigate+toggle settings).
+	// Falls back to text summary when settings cannot be loaded.
+	router.Register("config", configHandlerWithOverlay(func() ([]configSettingEntry, error) {
+		s, err := config.LoadSettingsFile(config.UserSettingsPath())
+		if err != nil {
+			return nil, err
+		}
+		verbose := s.Verbose != nil && *s.Verbose
+		return defaultConfigEntriesFromSettings(s.Model, s.Theme, verbose), nil
+	}, nil))
 	// CMD-PLUGIN-01: register /plugin on the REPL router so it doesn't fall
 	// through to the model. Returns a text summary of configured plugins.
 	router.Register("plugin", pluginHandler(func() contracts.Settings {
@@ -366,9 +372,9 @@ func newProductionRouterFull(cwd string, registry []contracts.Command, agReg age
 	// AUTH-LOGIN-01/02: /login and /logout run the OAuth flow / clear creds.
 	router.Register("login", loginHandler())
 	router.Register("logout", logoutHandler())
-	// /mcp: shows live MCP server status from the Manager when available.
-	// G11: live connection manager wired here.
-	router.Register("mcp", mcpHandlerWith(mcpMgr))
+	// /mcp (G24): interactive overlay when Manager available (enable/disable/reconnect);
+	// falls back to text when nil. G11: live connection manager wired here.
+	router.Register("mcp", mcpOverlayHandlerWith(mcpMgr))
 	return router
 }
 

@@ -144,6 +144,11 @@ type Loop struct {
 	// that don't exercise the overlay action routing.
 	onOverlaySubmit func(string)
 
+	// onElicitationReply, when non-nil, is called with the "elicitation:<action>"
+	// submit token so the blocking ElicitationPrompt goroutine can receive the reply.
+	// Set by the production wiring that bridges the overlay to the MCP client.
+	onElicitationReply func(string)
+
 	// onCommand is a test/host seam for routing live-effect slash commands.
 	// When non-nil, it is called before StartTurn for every prompt submission.
 	// If it returns (outcome, true), the outcome is applied and the model is
@@ -847,11 +852,13 @@ func (l *Loop) showNext() {
 func (l *Loop) showPermission(ar askRequest) {
 	l.activeAsk = &ar
 	actions := permissionActions(ar.req)
+	// PERM-TOOL-02 (G24): enrich Description with tool-specific content so the
+	// dialog shows the full command (Bash), URL domain (WebFetch), or path (Edit).
 	l.dialog.RequestPermission(tui.PermissionRequest{
 		ID:          string(ar.req.ToolUseID),
 		ToolName:    ar.req.ToolName,
 		Path:        ar.req.Path,
-		Description: ar.req.Description,
+		Description: toolSpecificDialogContent(ar.req),
 		Actions:     actions.Actions,
 	})
 	l.dialog.ApplyToScreen(&l.screen, l.screen.Status)
@@ -1031,6 +1038,22 @@ func (l *Loop) handleOverlaySubmit(submit string) bool {
 		"cost:", "tokenwarn:", "compact:", "ctx:", "notices:", "idle:",
 	} {
 		if strings.HasPrefix(submit, prefix) {
+			if l.onOverlaySubmit != nil {
+				l.onOverlaySubmit(submit)
+			}
+			return true
+		}
+	}
+
+	// G24: elicitation, config, perm overlay results are handled internally.
+	// Route to onOverlaySubmit seam for test observation; never fall to model.
+	for _, prefix := range []string{
+		"elicitation:", "config:", "perm:",
+	} {
+		if strings.HasPrefix(submit, prefix) {
+			if l.onElicitationReply != nil && strings.HasPrefix(submit, "elicitation:") {
+				l.onElicitationReply(submit)
+			}
 			if l.onOverlaySubmit != nil {
 				l.onOverlaySubmit(submit)
 			}
