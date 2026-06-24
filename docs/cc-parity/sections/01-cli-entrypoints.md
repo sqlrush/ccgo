@@ -41,7 +41,7 @@
 | CLI-FLAG-31 | `--tools <tools>` 指定可用内置工具集合 | AUTO | 前置：已认证；操作：`claude -p "read file" --tools "Read,Bash"`；预期：仅 Read 和 Bash 工具可用 | `src/main.tsx:988`（`--tools`） | ⚠️ 解析已接线（F2 commit TBD）；工具过滤逻辑（从 --tools 构建工具执行器子集）需要额外基础设施 |
 | CLI-FLAG-32 | `--strict-mcp-config` 仅使用 --mcp-config 中的 MCP 服务器，忽略其他配置 | AUTO | 前置：已认证，有用户/项目 MCP 配置；操作：`claude -p "list mcp" --mcp-config ./m.json --strict-mcp-config`；预期：仅加载 m.json 中的服务器 | `src/main.tsx:1000`（`--strict-mcp-config`） | ✅ 通过（F2 commit TBD） |
 | CLI-FLAG-33 | `--setting-sources <sources>` 逗号分隔加载的设置来源（user/project/local） | AUTO | 前置：已认证；操作：`claude -p "hi" --setting-sources user`；预期：仅加载 user 级别设置 | `src/main.tsx:1000`（`--setting-sources`） | ⚠️ 解析已接线（F2 commit TBD）；设置源过滤（仅加载指定 sources）需要 MCP 配置层改造 |
-| CLI-FLAG-34 | `--worktree [-w]` 为会话创建新 git worktree（可选命名） | MANUAL | 前置：git 仓库；操作：`claude --worktree`；预期：创建新 worktree 并在其中启动 REPL | `src/main.tsx:3811`（`-w, --worktree`） | ⚠️ 解析已接线（F2 commit TBD）；实际 git worktree 创建为 MANUAL 功能，需要 worktree 基础设施 |
+| CLI-FLAG-34 | `--worktree [-w]` 为会话创建新 git worktree（可选命名） | MANUAL | 前置：git 仓库；操作：`claude --worktree`；预期：创建新 worktree 并在其中启动 REPL | `src/main.tsx:3811`（`-w, --worktree`） | ✅ 通过（G31 commit 9862c9e）（`cmd/claude/cli_worktree_g31.go:createWorktreeIfRequested()` 调用 `git worktree add --detach`，更新 cwd 并接线至 headless + interactive run 路径；`TestCreateWorktreeIfRequested_NoOp` + `TestCreateWorktreeIfRequested_CreatesWorktree`（真实临时 git 仓库）覆盖） |
 | CLI-FLAG-35 | `--tmux` 为 worktree 创建 tmux 会话（配合 --worktree） | MANUAL | 前置：git 仓库，tmux 可用；操作：`claude --worktree --tmux`；预期：在 tmux 会话中启动 REPL | `src/main.tsx:3812`（`--tmux`） | ⚠️ 解析已接线（F2 commit TBD）；实际 tmux 会话创建为 MANUAL 功能，需要 tmux 集成 |
 | CLI-FLAG-36 | `--ide` 自动连接 IDE（启动时若恰好只有一个有效 IDE） | MANUAL | 前置：已认证，IDE 扩展运行中；操作：`claude --ide`；预期：自动连接 IDE | `src/main.tsx:1000`（`--ide`） | N/A（companion/cloud OUT-of-scope） |
 | CLI-FLAG-37 | `--chrome` / `--no-chrome` 启用/禁用 Claude in Chrome 集成 | MANUAL | 前置：Chrome 扩展已安装；操作：`claude --chrome`；预期：Chrome 集成被激活 | `src/main.tsx:1006`（`--chrome, --no-chrome`） | N/A（companion/cloud OUT-of-scope） |
@@ -117,5 +117,5 @@
 | CLI-SDK-01 | SDK/control 模式：暴露可 import 的 `Query()` 入口 | AUTO | 前置：二进制；操作：以 SDK/control 模式调用（control_request/response NDJSON）；预期：control_request 驱动一个回合 | `src/entrypoints/agentSdkTypes.ts:112` | ✅ 通过（W-Batch-D）：`--print --input-format stream-json --output-format stream-json` 触发 `sdk.Query`；NDJSON over stdin/stdout；`TestSDKStreamJSONRoutesPrintToSDKQuery` 验证 |
 | CLI-SDK-02 | SDK 模式：`canUseTool` / `interrupt` / `set_model` 控制请求 | AUTO | 前置：SDK control 模式；操作：发送 `set_model` 控制请求；预期：模型被切换 | `src/entrypoints/sdk/controlSchemas.ts` | ✅ 通过（W-Batch-D）：SDK entry 触发后 `sdk.Controller` 完整接线；`can_use_tool`/`interrupt`/`set_model` 均走 `sdk.Query` 的 read-loop |
 
-小计: 112 项 — ✅ 78 / ⚠️ 10 / ❌ 0 / N·A 17 + 3（N/A companion/cloud）
-（G30：CLI-FLAG-38 ⚠️→✅（Files API download via standard API key）；G27：CLI-FLAG-41/43/47 ⚠️→✅；G9 commit a123fc5: CLI-SUBCMD-10/11/14/15/16/18/21/23/35/36 → ✅；CLI-FLAG-12 ❌→⚠️；原 ⚠️ CLI-FLAG-31/33 维持）
+小计: 112 项 — ✅ 79 / ⚠️ 9 / ❌ 0 / N·A 17 + 3（N/A companion/cloud）
+（G30：CLI-FLAG-38 ⚠️→✅（Files API download via standard API key）；G27：CLI-FLAG-41/43/47 ⚠️→✅；G9 commit a123fc5: CLI-SUBCMD-10/11/14/15/16/18/21/23/35/36 → ✅；CLI-FLAG-12 ❌→⚠️；原 ⚠️ CLI-FLAG-31/33 维持；G31 commit 9862c9e：CLI-FLAG-34 ⚠️→✅（git worktree add --detach 真实接线））
