@@ -96,3 +96,93 @@ func TestIDEHandlerNilDetectUsesDefault(t *testing.T) {
 		t.Fatalf("expected 'No IDE detected' with nil detect, got: %q", out.Status)
 	}
 }
+
+// TestDefaultIDEDetectCursorEnvVar verifies defaultIDEDetect detects Cursor via
+// CURSOR_TRACE_ID environment variable (CMD-IDE-01 / G30).
+func TestDefaultIDEDetectCursorEnvVar(t *testing.T) {
+	t.Setenv("CURSOR_TRACE_ID", "trace-abc")
+	t.Setenv("VSCODE_PID", "")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	t.Setenv("TERM_PROGRAM", "")
+	t.Setenv("WINDSURF_TRACE_ID", "")
+	t.Setenv("TERMINAL_EMULATOR", "")
+	got := defaultIDEDetect()
+	if !sliceContains(got, "Cursor") {
+		t.Errorf("CURSOR_TRACE_ID set but 'Cursor' not in results: %v", got)
+	}
+}
+
+// TestDefaultIDEDetectVSCodePID verifies VS Code detection via VSCODE_PID.
+func TestDefaultIDEDetectVSCodePID(t *testing.T) {
+	t.Setenv("CURSOR_TRACE_ID", "")
+	t.Setenv("VSCODE_PID", "12345")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	t.Setenv("TERM_PROGRAM", "")
+	t.Setenv("WINDSURF_TRACE_ID", "")
+	t.Setenv("TERMINAL_EMULATOR", "")
+	got := defaultIDEDetect()
+	if !sliceContains(got, "VS Code") {
+		t.Errorf("VSCODE_PID set but 'VS Code' not in results: %v", got)
+	}
+}
+
+// TestDefaultIDEDetectVSCodeTermProgram verifies VS Code detection via TERM_PROGRAM=vscode.
+func TestDefaultIDEDetectVSCodeTermProgram(t *testing.T) {
+	t.Setenv("CURSOR_TRACE_ID", "")
+	t.Setenv("VSCODE_PID", "")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	t.Setenv("TERM_PROGRAM", "vscode")
+	t.Setenv("WINDSURF_TRACE_ID", "")
+	t.Setenv("TERMINAL_EMULATOR", "")
+	got := defaultIDEDetect()
+	if !sliceContains(got, "VS Code") {
+		t.Errorf("TERM_PROGRAM=vscode set but 'VS Code' not in results: %v", got)
+	}
+}
+
+// TestDefaultIDEDetectJetBrains verifies JetBrains detection via TERMINAL_EMULATOR.
+func TestDefaultIDEDetectJetBrains(t *testing.T) {
+	t.Setenv("CURSOR_TRACE_ID", "")
+	t.Setenv("VSCODE_PID", "")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	t.Setenv("TERM_PROGRAM", "")
+	t.Setenv("WINDSURF_TRACE_ID", "")
+	t.Setenv("TERMINAL_EMULATOR", "JetBrains-JediTerm")
+	got := defaultIDEDetect()
+	if !sliceContains(got, "JetBrains") {
+		t.Errorf("TERMINAL_EMULATOR=JetBrains-JediTerm set but 'JetBrains' not in results: %v", got)
+	}
+}
+
+// TestDefaultIDEDetectNoneDetected verifies defaultIDEDetect returns empty when
+// no IDE env vars are set.
+func TestDefaultIDEDetectNoneDetected(t *testing.T) {
+	t.Setenv("CURSOR_TRACE_ID", "")
+	t.Setenv("VSCODE_PID", "")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	t.Setenv("TERM_PROGRAM", "")
+	t.Setenv("WINDSURF_TRACE_ID", "")
+	t.Setenv("TERMINAL_EMULATOR", "")
+	got := defaultIDEDetect()
+	if len(got) != 0 {
+		t.Errorf("no IDE env vars set but got %v", got)
+	}
+}
+
+// TestDefaultIDEDetectCursorNotDuplicatedAsVSCode verifies that when Cursor is
+// detected via CURSOR_TRACE_ID AND TERM_PROGRAM=vscode, only Cursor is reported.
+func TestDefaultIDEDetectCursorNotDuplicatedAsVSCode(t *testing.T) {
+	t.Setenv("CURSOR_TRACE_ID", "trace-xyz")
+	t.Setenv("VSCODE_PID", "")
+	t.Setenv("VSCODE_IPC_HOOK_CLI", "")
+	t.Setenv("TERM_PROGRAM", "vscode")
+	t.Setenv("WINDSURF_TRACE_ID", "")
+	t.Setenv("TERMINAL_EMULATOR", "")
+	got := defaultIDEDetect()
+	if sliceContains(got, "VS Code") {
+		t.Errorf("Cursor terminal should not also report 'VS Code': %v", got)
+	}
+	if !sliceContains(got, "Cursor") {
+		t.Errorf("expected 'Cursor' in results: %v", got)
+	}
+}

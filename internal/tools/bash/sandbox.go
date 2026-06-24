@@ -88,3 +88,9 @@ func failClosedCommand(_ sandbox.Policy) (string, []string) {
 	name, _ := shellCommand("")
 	return name, shellArgsFor("echo 'sandbox required but unavailable' >&2; exit 1")
 }
+
+// scrubBareGitRepoFiles delegates to sandbox.ScrubBareGitRepoFiles for
+// post-command cleanup of bare-repo stubs planted by the sandbox (SBX-43).
+func scrubBareGitRepoFiles(dir string) {
+	sandbox.ScrubBareGitRepoFiles(dir)
+}

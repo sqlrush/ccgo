@@ -946,9 +946,20 @@ func callBash(ctx tool.Context, raw json.RawMessage, sink tool.ProgressSink) (co
 		return startBackgroundBash(ctx, input, timeout, sink)
 	}
 	command := strings.TrimSpace(input.Command)
+	// SBX-43: record the effective cwd before the command so ScrubBareGitRepoFiles
+	// removes any bare-repo stubs planted by the sandbox (CC ref: sandbox-adapter.ts:963).
+	cwdBeforeCommand := bashEffectiveCWD(ctx)
 	result := runBashCommand(ctx, command, timeout, input.DangerouslyDisableSandbox)
 	if !result.TimedOut && !result.Cancelled {
 		updateBashCWD(ctx, command)
+	}
+	// SBX-43: post-command cleanup — remove bare-repo stubs the sandbox may have created.
+	// Only runs when sandbox was actually active for this command.
+	if cwdBeforeCommand != "" {
+		p := sandboxPolicyFromContext(ctx)
+		if p.ShouldSandboxCommand(command, input.DangerouslyDisableSandbox) {
+			scrubBareGitRepoFiles(cwdBeforeCommand)
+		}
 	}
 	return contracts.ToolResult{
 		Content: formatBashContent(result),

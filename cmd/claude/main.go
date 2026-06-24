@@ -4206,6 +4206,32 @@ func headlessRunner(ctx context.Context, state *bootstrap.State, options cliOpti
 	runner.Client = client
 	runner.APIKeySource = apiKeySource
 	runner.BetaHeaders = append(runner.BetaHeaders, client.Beta...)
+
+	// SBX-35: AutoAllowBashIfSandboxed — when sandbox is enabled and autoAllowBashIfSandboxed
+	// is true, Bash tool calls skip the permission prompt (the sandbox itself confines them).
+	// CC ref: src/utils/sandbox/sandbox-adapter.ts:471.
+	{
+		policySettingsForSandbox := contracts.Settings{}
+		if runner.MCP != nil {
+			policySettingsForSandbox = runner.MCP.PolicySettings
+		}
+		sandboxPolicy := sandbox.PolicyFromSettings(policySettingsForSandbox)
+		if sandboxPolicy.Enabled && sandboxPolicy.AutoAllowBashIfSandboxed {
+			runner.Tools.SandboxBashAutoAllow = true
+		}
+	}
+
+	// CLI-FLAG-38: --file <file_id:relative_path> downloads files from the Anthropic
+	// Files API to disk before the session starts.
+	// CC ref: src/services/api/filesApi.ts downloadSessionFiles; main.tsx:1304-1330.
+	// Note: CC requires CLAUDE_CODE_SESSION_ACCESS_TOKEN (cloud-session ingress).
+	// ccgo uses the standard API key via FilesClient — same endpoint, local-friendly.
+	if len(options.Files) > 0 {
+		fc := &anthropic.FilesClient{APIKey: client.APIKey}
+		if err := downloadFileSpecs(ctx, fc, options.Files, runner.WorkingDirectory); err != nil {
+			return runner, fmt.Errorf("--file: %w", err)
+		}
+	}
 	return runner, nil
 }
 
@@ -5148,6 +5174,31 @@ func mergeMCPPolicySettingsForInit(settings ...contracts.Settings) contracts.Set
 		out.DeniedMCPServers = append(out.DeniedMCPServers, setting.DeniedMCPServers...)
 	}
 	return out
+}
+
+// downloadFileSpecs downloads Files API resources specified via --file flags.
+// Each spec has the form "file_id:relative/path".  Files are saved relative to
+// cwd.  All downloads are attempted; the first error aborts and is returned.
+// CC ref: src/services/api/filesApi.ts downloadSessionFiles (CLI-FLAG-38).
+func downloadFileSpecs(ctx context.Context, fc *anthropic.FilesClient, specs []string, cwd string) error {
+	for _, spec := range specs {
+		fileID, relPath, ok := anthropic.ParseFileSpec(spec)
+		if !ok {
+			return fmt.Errorf("invalid --file spec %q (want file_id:relative/path)", spec)
+		}
+		data, err := fc.DownloadFile(ctx, fileID)
+		if err != nil {
+			return fmt.Errorf("download %s: %w", fileID, err)
+		}
+		dst := filepath.Join(cwd, relPath)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("--file mkdir %s: %w", filepath.Dir(dst), err)
+		}
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
+			return fmt.Errorf("--file write %s: %w", dst, err)
+		}
+	}
+	return nil
 }
 
 // buildInteractiveMCPManager constructs a live mcp.Manager from the runner's

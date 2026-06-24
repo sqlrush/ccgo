@@ -33,6 +33,13 @@ type Executor struct {
 	ResultStoreDir string
 	Hooks          []Hook
 	Asker          PermissionAsker
+	// SandboxBashAutoAllow implements SBX-35: AutoAllowBashIfSandboxed.
+	// When true and the tool is Bash/BashOutput/KillBash, a PermissionAsk
+	// decision is promoted to PermissionAllow — the sandbox itself provides
+	// confinement so the interactive ask is unnecessary.
+	// Set this to sandbox.Policy.AutoAllowBashIfSandboxed && sandbox.Policy.Enabled.
+	// CC ref: src/utils/sandbox/sandbox-adapter.ts:471 (autoAllowBashIfSandboxed).
+	SandboxBashAutoAllow bool
 }
 
 func NewExecutor(registry *Registry) Executor {
@@ -77,6 +84,17 @@ func (e Executor) Execute(ctx Context, use contracts.ToolUse, sink ProgressSink)
 	if err != nil {
 		_ = SendProgress(sink, use.ID, "failed", map[string]any{"tool": t.Name(), "error": err.Error()})
 		return ErrorResult(use, err), err
+	}
+	// SBX-35: AutoAllowBashIfSandboxed — when the sandbox is active and the
+	// executor has SandboxBashAutoAllow set, promote a PermissionAsk for Bash
+	// tools to PermissionAllow.  The sandbox itself provides confinement so the
+	// interactive ask is unnecessary.
+	// CC ref: src/utils/sandbox/sandbox-adapter.ts:471 (autoAllowBashIfSandboxed).
+	if decision.Behavior == contracts.PermissionAsk && e.SandboxBashAutoAllow && isBashToolName(t.Name()) {
+		decision = contracts.PermissionDecision{
+			Behavior:       contracts.PermissionAllow,
+			DecisionReason: "sandbox auto-allow: sandbox active and autoAllowBashIfSandboxed=true",
+		}
 	}
 	if decision.Behavior == contracts.PermissionDeny {
 		permissionErr := PermissionError{Decision: decision}
@@ -691,6 +709,13 @@ func (e Executor) limitResult(t Tool, use contracts.ToolUse, result contracts.To
 	result.Meta["full_output_path"] = path
 	result.Meta["full_output_bytes"] = len(content)
 	return result
+}
+
+// isBashToolName returns true when name is one of the Bash tool family names
+// (Bash, BashOutput, KillBash). Used by SBX-35 AutoAllowBashIfSandboxed bypass.
+// CC ref: src/utils/sandbox/sandbox-adapter.ts:471.
+func isBashToolName(name string) bool {
+	return name == "Bash" || name == "BashOutput" || name == "KillBash"
 }
 
 func sanitizeResultFileName(name string) string {

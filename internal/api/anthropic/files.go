@@ -36,6 +36,57 @@ type UploadedFile struct {
 	Filename string `json:"filename"`
 }
 
+// DownloadFile retrieves the raw content of a previously uploaded file by its
+// file_id from the Files API.  The endpoint is GET /v1/files/{file_id}/content.
+// CC ref: src/services/api/filesApi.ts:downloadFile (CLI-FLAG-38).
+func (c *FilesClient) DownloadFile(ctx context.Context, fileID string) ([]byte, error) {
+	baseURL := strings.TrimRight(c.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = strings.TrimRight(DefaultBaseURL, "/")
+	}
+	url := baseURL + "/v1/files/" + fileID + "/content"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("files api download: build request: %w", err)
+	}
+	req.Header.Set("anthropic-version", DefaultVersion)
+	if c.APIKey != "" {
+		req.Header.Set("x-api-key", c.APIKey)
+	}
+
+	httpClient := c.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("files api download: http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("files api download: read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("files api download: status %d: %s", resp.StatusCode, body)
+	}
+	return body, nil
+}
+
+// ParseFileSpec parses a single "--file" spec of the form "file_id:relative/path".
+// Returns ("", "", false) if the format is invalid.
+// CC ref: src/services/api/filesApi.ts:parseFileSpecs (CLI-FLAG-38).
+func ParseFileSpec(spec string) (fileID, relativePath string, ok bool) {
+	idx := strings.IndexByte(spec, ':')
+	if idx <= 0 || idx == len(spec)-1 {
+		return "", "", false
+	}
+	return spec[:idx], spec[idx+1:], true
+}
+
 // UploadFile uploads content as filename with the given MIME type and returns
 // the file metadata from the API. When mimeType is empty,
 // "application/octet-stream" is used.

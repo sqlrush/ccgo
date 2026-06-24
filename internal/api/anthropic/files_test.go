@@ -95,6 +95,94 @@ func TestFilesClientUploadFileNonOK(t *testing.T) {
 	}
 }
 
+// TestFilesClientDownloadFile verifies DownloadFile sends GET /v1/files/{id}/content
+// and returns the response body (CLI-FLAG-38).
+func TestFilesClientDownloadFile(t *testing.T) {
+	const wantFileID = "file-abc123"
+	const wantContent = "hello from the Files API"
+	var receivedAPIKey, receivedPath string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAPIKey = r.Header.Get("x-api-key")
+		receivedPath = r.URL.Path
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s want GET", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(wantContent))
+	}))
+	defer srv.Close()
+
+	client := &FilesClient{
+		BaseURL:    srv.URL,
+		APIKey:     "sk-test-download",
+		HTTPClient: srv.Client(),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	got, err := client.DownloadFile(ctx, wantFileID)
+	if err != nil {
+		t.Fatalf("DownloadFile returned error: %v", err)
+	}
+	if string(got) != wantContent {
+		t.Errorf("content = %q want %q", got, wantContent)
+	}
+	wantPath := "/v1/files/" + wantFileID + "/content"
+	if receivedPath != wantPath {
+		t.Errorf("path = %q want %q", receivedPath, wantPath)
+	}
+	if receivedAPIKey != "sk-test-download" {
+		t.Errorf("x-api-key = %q want sk-test-download", receivedAPIKey)
+	}
+}
+
+// TestFilesClientDownloadFileNonOK verifies DownloadFile returns an error on non-2xx (CLI-FLAG-38).
+func TestFilesClientDownloadFileNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := &FilesClient{BaseURL: srv.URL, HTTPClient: srv.Client()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.DownloadFile(ctx, "file-missing")
+	if err == nil {
+		t.Fatal("DownloadFile should error on 404")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("error should mention 404, got: %v", err)
+	}
+}
+
+// TestParseFileSpec verifies ParseFileSpec parses "file_id:path" specs (CLI-FLAG-38).
+func TestParseFileSpec(t *testing.T) {
+	cases := []struct {
+		spec         string
+		wantFileID   string
+		wantPath     string
+		wantOK       bool
+	}{
+		{"file-abc:doc.txt", "file-abc", "doc.txt", true},
+		{"file-xyz:sub/dir/file.pdf", "file-xyz", "sub/dir/file.pdf", true},
+		{"nocolon", "", "", false},
+		{":emptyid", "", "", false},
+		{"file-abc:", "", "", false},
+	}
+	for _, tc := range cases {
+		fileID, relPath, ok := ParseFileSpec(tc.spec)
+		if ok != tc.wantOK {
+			t.Errorf("ParseFileSpec(%q) ok=%v want %v", tc.spec, ok, tc.wantOK)
+		}
+		if ok && (fileID != tc.wantFileID || relPath != tc.wantPath) {
+			t.Errorf("ParseFileSpec(%q) = %q,%q want %q,%q", tc.spec, fileID, relPath, tc.wantFileID, tc.wantPath)
+		}
+	}
+}
+
 func TestFilesClientDefaultMimeType(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
