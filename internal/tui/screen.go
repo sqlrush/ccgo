@@ -31,6 +31,7 @@ const (
 	ScreenEventFocusIn          ScreenEventType = "focus_in"
 	ScreenEventFocusOut         ScreenEventType = "focus_out"
 	ScreenEventViewportSelected ScreenEventType = "viewport_selected"
+	ScreenEventGlobalSearch     ScreenEventType = "global_search"
 )
 
 type ScreenEvent struct {
@@ -253,6 +254,8 @@ func (s *REPLScreen) ApplyKey(key Key) ScreenEvent {
 	case ActionReverseSearch:
 		s.OpenReverseSearch("")
 		return ScreenEvent{Type: ScreenEventReverseSearch}
+	case ActionGlobalSearch:
+		return ScreenEvent{Type: ScreenEventGlobalSearch}
 	case ActionCancel:
 		return ScreenEvent{Type: ScreenEventCancelled}
 	default:

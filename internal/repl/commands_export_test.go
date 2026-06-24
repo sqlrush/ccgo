@@ -32,15 +32,23 @@ func TestExportHandlerWritesFile(t *testing.T) {
 	}
 }
 
-func TestExportHandlerDefaultFilename(t *testing.T) {
+// TestExportHandlerNoArgOpensDialog verifies that /export without an argument
+// opens the ExportDialog overlay (OVL-52) instead of auto-writing.
+func TestExportHandlerNoArgOpensDialog(t *testing.T) {
 	cwd := t.TempDir()
 	h := exportHandler(cwd)
 	out, err := h(context.Background(), CommandContext{Args: "", CWD: cwd, History: nil})
-	if err != nil || !out.Handled {
-		t.Fatalf("export default: %v %+v", err, out)
+	if err != nil {
+		t.Fatalf("export no-arg: unexpected error: %v", err)
 	}
-	if !strings.Contains(out.Status, ".txt") {
-		t.Fatalf("expected a filename in status: %q", out.Status)
+	if !out.Handled {
+		t.Fatalf("export no-arg: must be Handled")
+	}
+	if out.Overlay == nil {
+		t.Fatal("export no-arg: should return an ExportDialog overlay")
+	}
+	if _, ok := out.Overlay.(*exportDialogOverlay); !ok {
+		t.Fatalf("export no-arg: overlay type %T want *exportDialogOverlay", out.Overlay)
 	}
 }
 

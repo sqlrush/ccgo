@@ -344,3 +344,35 @@ func (o *GlobalSearchOverlay) startSearch() {
 func globalSearchSubmit(m GlobalSearchMatch) string {
 	return fmt.Sprintf("globalsearch:%s:%d", m.File, m.Line)
 }
+
+// handleGlobalSearchSubmit processes a "globalsearch:<file>:<line>" submit
+// value from GlobalSearchOverlay. It inserts "@<file> " into the prompt buffer
+// so the user can reference the matched file. Returns true when the submit was
+// consumed. This mirrors the QuickOpen path: the user inspects the insertion
+// and can edit or submit it.
+//
+// OVL-08 state→loop seam.
+func handleGlobalSearchSubmit(prompt *string, submit string) bool {
+	if !strings.HasPrefix(submit, "globalsearch:") {
+		return false
+	}
+	rest := strings.TrimPrefix(submit, "globalsearch:")
+	// Extract file path (everything before the last colon which holds the line number).
+	idx := strings.LastIndex(rest, ":")
+	var file string
+	if idx >= 0 {
+		file = rest[:idx]
+	} else {
+		file = rest
+	}
+	if file == "" {
+		return true
+	}
+	// Insert "@<file> " as a mention in the prompt.
+	if *prompt == "" {
+		*prompt = "@" + file + " "
+	} else {
+		*prompt = *prompt + " @" + file + " "
+	}
+	return true
+}

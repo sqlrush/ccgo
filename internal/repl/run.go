@@ -633,6 +633,19 @@ func RunInteractiveWithOptions(ctx context.Context, term Terminal, base conversa
 			"Awaiting permission for "+toolName, "")
 	}
 
+	// OVL-42: Send OSC 9/99/777 terminal notification when a turn completes
+	// and the terminal is unfocused (user may be in another app). Errors are
+	// discarded so a broken terminal cannot interrupt the REPL.
+	loop.onTurnDoneNotify = func(unfocused bool) {
+		if !unfocused {
+			return
+		}
+		seqs := tui.TerminalNotificationSequences("Claude", "Turn complete")
+		for _, seq := range seqs {
+			_ = term.WriteString(seq)
+		}
+	}
+
 	return loop.Run(ctx)
 }
 

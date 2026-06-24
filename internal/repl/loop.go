@@ -111,6 +111,12 @@ type Loop struct {
 	// cost across turns for COST-02 persistence.
 	onTurnResult func(conversation.Result)
 
+	// onTurnDoneNotify, when non-nil, is called after a successful turn when
+	// the terminal is unfocused (screen.Focused == false). Production wires
+	// this to emit OSC 9/99/777 terminal notification sequences (OVL-42).
+	// Tests may wire a recorder to verify the seam fires.
+	onTurnDoneNotify func(unfocused bool)
+
 	// onRulePersisted is called for each PermissionUpdate successfully written
 	// by an "allow always" choice. In production RunInteractiveWithOptions wires
 	// this to refresh the live engine; it also serves as a test seam.
@@ -186,6 +192,11 @@ type Loop struct {
 	// "@" in the prompt. Set via SetCWD; defaults to "" (overlay disabled).
 	cwd string
 
+	// searchRoot is the root directory for GlobalSearchOverlay (OVL-08).
+	// Defaults to cwd when set via SetCWD; overridable via SetSearchRoot.
+	// Empty string disables the global search overlay.
+	searchRoot string
+
 	// promptHistoryEntries is the flattened list of prior prompt entries (display
 	// text) used to seed HistorySearchOverlay (OVL-07). Set via SetPromptHistory;
 	// nil when history search is disabled.
@@ -239,7 +250,18 @@ func (l *Loop) SetRegistry(cmds []contracts.Command) { l.registry = cmds }
 
 // SetCWD sets the working directory used by QuickOpenOverlay when the user
 // types "@" in the prompt (OVL-05/06). Must be called before Run.
-func (l *Loop) SetCWD(cwd string) { l.cwd = cwd }
+// SetCWD sets the current working directory for QuickOpenOverlay and, when
+// searchRoot has not been explicitly set, also seeds the global search root.
+func (l *Loop) SetCWD(cwd string) {
+	l.cwd = cwd
+	if l.searchRoot == "" {
+		l.searchRoot = cwd
+	}
+}
+
+// SetSearchRoot overrides the root directory used by GlobalSearchOverlay
+// (OVL-08). When empty the global search overlay is disabled.
+func (l *Loop) SetSearchRoot(root string) { l.searchRoot = root }
 
 // SetSyntaxHighlightColor sets whether diff output is rendered with ANSI color.
 // Pass false when settings.SyntaxHighlightingDisabled=true.
@@ -557,6 +579,13 @@ func (l *Loop) finishTurn(out turnOutcome) {
 	if l.onTurnResult != nil {
 		l.onTurnResult(out.result)
 	}
+	if l.onTurnDoneNotify != nil {
+		// OVL-42: fire the notification seam; pass whether the terminal is
+		// unfocused so production can send OSC notification only when needed.
+		// Called synchronously here; the production lambda in RunInteractiveWithOptions
+		// is cheap (string concat + WriteString) so no goroutine is needed.
+		l.onTurnDoneNotify(!l.screen.Focused)
+	}
 	if l.onTurnDone != nil {
 		l.onTurnDone()
 	}
@@ -723,6 +752,13 @@ func (l *Loop) handleKey(key tui.Key) bool {
 
 	case tui.ScreenEventExternalEditor:
 		l.launchExternalEditor(event.Value)
+
+	case tui.ScreenEventGlobalSearch:
+		// OVL-08: open GlobalSearchOverlay (Ctrl+\). Only opens when
+		// searchRoot is set and no other overlay is active.
+		if l.activeOverlay == nil && l.searchRoot != "" {
+			l.activeOverlay = NewGlobalSearchOverlay(l.searchRoot)
+		}
 	}
 	return false
 }
@@ -1030,6 +1066,31 @@ func (l *Loop) handleOverlaySubmit(submit string) bool {
 	// "historysearch:<display>" → first-line of display text
 	if handleHistorySearchSubmit(&l.screen.Prompt.Text, submit) {
 		l.screen.Prompt.Cursor = len([]rune(l.screen.Prompt.Text))
+		return true
+	}
+
+	// OVL-08: GlobalSearch submits "globalsearch:<file>:<line>". Insert the
+	// file path into the prompt (as a @mention) for the user to act on.
+	if handleGlobalSearchSubmit(&l.screen.Prompt.Text, submit) {
+		l.screen.Prompt.Cursor = len([]rune(l.screen.Prompt.Text))
+		return true
+	}
+
+	// OVL-52: ExportDialog submits "export:<filename>". Write the transcript
+	// to <cwd>/<filename>.txt directly (side-effect in production; test seam
+	// via l.onOverlaySubmit which is called with the status message).
+	if strings.HasPrefix(submit, "export:") {
+		name := strings.TrimPrefix(submit, "export:")
+		cc := CommandContext{History: l.history}
+		out, err := writeExport(cc, l.cwd, name)
+		if err != nil {
+			l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: err.Error()})
+		} else if out.Status != "" {
+			l.screen.AppendMessage(tui.Message{Role: tui.RoleSystem, Text: out.Status})
+		}
+		if l.onOverlaySubmit != nil {
+			l.onOverlaySubmit(submit)
+		}
 		return true
 	}
 

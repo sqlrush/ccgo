@@ -46,6 +46,7 @@ const (
 	ActionFocusPrevious    Action = "focus_previous"
 	ActionConfirmSelection Action = "confirm_selection"
 	ActionReverseSearch    Action = "reverse_search"
+	ActionGlobalSearch     Action = "global_search"
 )
 
 type Keymap struct {
@@ -97,7 +98,8 @@ func DefaultKeymap() Keymap {
 		KeyPageDown:   ActionPageDown,
 		KeyTab:        ActionFocusNext,
 		KeyShiftTab:   ActionFocusPrevious,
-		KeyCtrlR:      ActionReverseSearch,
+		KeyCtrlR:          ActionReverseSearch,
+		KeyCtrlBackslash:  ActionGlobalSearch,
 	}, ChordBindings: map[string]Action{
 		encodeChordKey([]KeyType{KeyCtrlX, KeyCtrlE}): ActionExternalEditor,
 		encodeChordKey([]KeyType{KeyCtrlX, KeyCtrlK}): ActionKillAgents,

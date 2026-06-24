@@ -930,6 +930,20 @@ func GhosttyNotificationSequence(message string, title string) string {
 	return OSCSequence(OSCGhostty, "notify", title, message)
 }
 
+// TerminalNotificationSequences returns the OSC sequences to send a
+// desktop/terminal notification via all three major supported providers:
+// iTerm2 (OSC 9), Kitty (OSC 99), and Ghostty (OSC 777).
+// The caller should write all returned strings to the terminal.
+// OVL-42: CC ref: src/services/notifier.ts — sends OSC to preferred provider.
+func TerminalNotificationSequences(title, message string) []string {
+	seqs := []string{
+		ITerm2NotificationSequence(message, title),
+		GhosttyNotificationSequence(message, title),
+	}
+	seqs = append(seqs, KittyNotificationSequences(message, title, 1)...)
+	return seqs
+}
+
 func TerminalBellSequence() string {
 	return OSCTerminator
 }
