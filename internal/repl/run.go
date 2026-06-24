@@ -323,6 +323,8 @@ func newProductionRouterFull(cwd string, registry []contracts.Command, agReg age
 	}))
 	// CMD-CONFIG-01 (G24): /config opens interactive overlay (navigate+toggle settings).
 	// Falls back to text summary when settings cannot be loaded.
+	// G25: pass a real writer so bool-toggle changes are persisted to
+	// config.UserSettingsPath() via config.SetSettingsValue.
 	router.Register("config", configHandlerWithOverlay(func() ([]configSettingEntry, error) {
 		s, err := config.LoadSettingsFile(config.UserSettingsPath())
 		if err != nil {
@@ -330,7 +332,9 @@ func newProductionRouterFull(cwd string, registry []contracts.Command, agReg age
 		}
 		verbose := s.Verbose != nil && *s.Verbose
 		return defaultConfigEntriesFromSettings(s.Model, s.Theme, verbose), nil
-	}, nil))
+	}, func(key, val string) error {
+		return config.SetSettingsValue(config.UserSettingsPath(), key, val)
+	}))
 	// CMD-PLUGIN-01: register /plugin on the REPL router so it doesn't fall
 	// through to the model. Returns a text summary of configured plugins.
 	router.Register("plugin", pluginHandler(func() contracts.Settings {

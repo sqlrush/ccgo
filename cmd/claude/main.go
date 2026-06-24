@@ -617,6 +617,19 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	sharedRegistry := orchestrationpkg.NewAgentRegistry()
 	runner.AgentRegistry = sharedRegistry
 
+	// CMD-MCP-01 (G25 audit fix): build and start a live MCP connection Manager
+	// from the runner's MCP server configuration so the /mcp overlay can show
+	// live connection status and dispatch enable/disable/reconnect actions.
+	// The manager is started asynchronously — dial failures set per-server
+	// status to "failed" but do not block the REPL from opening.
+	// When runner.MCP is nil (no MCP servers configured), mcpMgr stays nil
+	// and the /mcp overlay falls back to its text summary.
+	mcpMgr := buildInteractiveMCPManager(runner.MCP)
+	runner.MCPManager = mcpMgr
+	if mcpMgr != nil {
+		go func() { _ = mcpMgr.Start(ctx) }()
+	}
+
 	opts := repl.InteractiveOptions{
 		AgentRegistry:   sharedRegistry,
 		Settings:        writer,
@@ -629,6 +642,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		ResumeEntries:   resumeEntries,
 		CustomKeymap:    customKeymap,
 		MCPApprovalPath: config.LocalSettingsPath(runner.WorkingDirectory),
+		MCPManager:      mcpMgr,
 		// CMD-FAST-01: keep the outer runner.Model in sync with model switches
 		// (/fast, /model picker) for post-session bookkeeping (savePrintCost etc).
 		OnModelChange: func(m string) {
@@ -5087,6 +5101,29 @@ func mergeMCPPolicySettingsForInit(settings ...contracts.Settings) contracts.Set
 		out.DeniedMCPServers = append(out.DeniedMCPServers, setting.DeniedMCPServers...)
 	}
 	return out
+}
+
+// buildInteractiveMCPManager constructs a live mcp.Manager from the runner's
+// MCP configuration for use by the interactive REPL's /mcp overlay.
+// It collects all policy-allowed servers (user + project + local + plugin),
+// reusing the same ClientOpenFunc already stored in cfg.ToolOptions.OpenClient.
+// Returns nil when cfg is nil or no servers are configured.
+// Callers must call Manager.Start before use.
+func buildInteractiveMCPManager(cfg *conversation.MCPConfig) *mcp.Manager {
+	if cfg == nil {
+		return nil
+	}
+	states := runnerMCPServerStates(cfg)
+	servers := make(map[string]contracts.MCPServer, len(states))
+	for name, state := range states {
+		if state.Status == "configured" {
+			servers[name] = state.Server
+		}
+	}
+	if len(servers) == 0 {
+		return nil
+	}
+	return mcp.NewManager(servers, cfg.ToolOptions.OpenClient)
 }
 
 func runnerSlashCommandNames(runner conversation.Runner) []string {
